@@ -1,12 +1,12 @@
 # How a team uses strata
 
 This page shows one platform team and one profile through a release cycle.
-Every command runs offline against the files in `examples/`. Build the tool
+Each command runs offline against the files in `examples/`. Build the tool
 first with `cargo build --release`. When you connect to Palette, replace the
 file paths with live refs: a profile uid or `<name>@<version>`.
 
 The cast. The team keeps one repository per pack, one per profile, and one
-per cluster, and runs four tiers that are each a Palette project:
+per cluster. It runs four tiers. Each tier is a Palette project:
 
 | thing              | name in this page                          |
 |--------------------|--------------------------------------------|
@@ -20,7 +20,7 @@ per cluster, and runs four tiers that are each a Palette project:
 alias strata=target/release/strata
 ```
 
-## Conventions the team agrees once
+## Conventions the team agrees on once
 
 1. **Where snapshots live.** In the profile repository, at
    `releases/<version>/<tier>.json`. The release workflow adds the file in the
@@ -30,9 +30,9 @@ alias strata=target/release/strata
    tier's project before every live command. One tier, one project, one uid.
 3. **Exit codes drive the pipeline.** `0` means identical, or unchanged for
    `verify`. `1` means different, or drifted. `2` means the tool could not
-   answer; treat it as a failed job, never as "no change".
-4. **A published version is never edited.** If a change is needed, bump the
-   version. `verify` is how the team finds out when this rule is broken.
+   answer. Treat `2` as a failed job, never as "no change".
+4. **A published version is never edited.** If a change is necessary, bump
+   the version. `verify` tells the team when this rule is broken.
 
 ## Day 1: record the first release
 
@@ -50,9 +50,10 @@ What you see on stderr:
 strata: wrote releases/1.0.0/dev.json (root aee66c68d829)
 ```
 
-What it is: the record of the release. The file holds the Merkle root, one
-node hash per pack, the canonical values, the raw values and manifests, and
-the clusters that used the version at that moment. Commit it.
+What it is: the record of the release. The file holds the Merkle root and
+one node hash per pack. It holds the canonical values, the raw values, and
+the manifests. It lists the clusters that used the version at that moment.
+Commit the file.
 
 Do the same after each tier apply in the `release` workflow:
 `releases/1.0.0/test.json`, `stage.json`, `prod.json`.
@@ -88,14 +89,14 @@ What the reviewer sees at the top of the comment:
 ```
 
 How to read one row. `IDENTITY` means the layer points at a different pack
-version. `UPSTREAM` means the pack's digest changed. `AUTHORED` means the
-values or manifests on the profile changed; here it is the new default values
-that came with the new pack versions. The collapsible block under the table
-lists every changed value, for example `kubeadmconfig.dns.imageTag: "v1.13.1"
--> "v1.14.2"`.
+version. `UPSTREAM` means the digest of the pack changed. `AUTHORED` means
+the values or manifests on the profile changed. Here the new pack versions
+bring new default values. The collapsible block under the table lists each
+changed value, for example `kubeadmconfig.dns.imageTag: "v1.13.1" ->
+"v1.14.2"`.
 
 The impact column is the sentence the approver needs. Two layers say
-`node repave`. This release replaces every node.
+`node repave`. This release replaces each node.
 
 Then record the new version, as on day 1:
 
@@ -115,7 +116,8 @@ jq -e '.summary.maxImpact != "repave"' report.json || gh pr edit "$PR" --add-lab
 ```
 
 Rule: a `repave` label requires a second approver on the `prod` environment.
-The pipeline sets the label; humans do not have to read the values to know.
+The pipeline sets the label. A reviewer does not need to read the values to
+know.
 
 To list only the layers that cause the repave:
 
@@ -155,10 +157,10 @@ consumers  0 -> 0 clusters
       impact: in-place addon upgrade
 ```
 
-How to read it. Every infra layer is `unchanged`. One add-on has `AUTHORED`
-only: same pack, new manifest. The impact is `in-place`, so no node is
-replaced. `maxImpact` in the JSON is `in-place`, so the pipeline does not add
-the `repave` label. This is what a small, safe release looks like.
+How to read it. Each infra layer is `unchanged`. One add-on has `AUTHORED`
+only: the same pack with a new manifest. The impact is `in-place`, so no
+node is replaced. `maxImpact` in the JSON is `in-place`, so the pipeline does
+not add the `repave` label. This is a small, safe release.
 
 ## Day 4: promote through the tiers
 
@@ -178,16 +180,16 @@ Promotion check, in the workflow after the `prod` apply:
 strata compare releases/1.1.1/test.json releases/1.1.1/prod.json || exit 1
 ```
 
-Expected: `IDENTICAL`, exit `0`. The same release went to every tier. Any
-other result stops the release, because prod would not be running what test
+Expected: `IDENTICAL`, exit `0`. The same release went to each tier. Any
+other result stops the release. Prod must run the release that test
 approved.
 
-One difference is by design. The release build rewrites pack pins from the
-`packs-dev` registry to `packs`, so `dev` versus `test` shows `IDENTITY
-UPSTREAM` on every pack, with no `AUTHORED` and no value lines. That pattern
-is the signature of a clean promotion: same configuration, different
-registry. An `AUTHORED` flag in that comparison means a value changed on the
-way to the release registry, and that is a bug to chase.
+One difference is intended. The release build rewrites pack pins from the
+`packs-dev` registry to `packs`. So `dev` versus `test` shows `IDENTITY
+UPSTREAM` on each pack, with no `AUTHORED` and no value lines. This pattern
+shows a clean promotion: the same configuration and a different registry. An
+`AUTHORED` flag in that comparison means a value changed during the
+promotion. Find the cause before you continue.
 
 ## Day 5: the cluster repository moves a tier
 
@@ -202,11 +204,11 @@ pull request body.
 strata compare releases/1.1.0/test.json releases/1.1.1/test.json --format markdown
 ```
 
-The cluster reviewer reads the impact column and nothing else. `in-place`
-means approve. `repave` means schedule a window first.
+The cluster reviewer reads the impact column first. `in-place` means
+approve. `repave` means schedule a maintenance window first.
 
-What is not there yet: comparing the record against what the cluster is
-running now. A cluster's applied profile templates use the same pack shape and
+Not available yet: a comparison of the record against what the cluster runs
+now. The applied profile templates of a cluster use the same pack shape. They
 are the planned next input.
 
 ## Every night: prove that published versions did not change
@@ -241,10 +243,10 @@ What you see when someone edited the published version in the Palette UI:
 DRIFT: published version aws-pxk@1.1.1 differs from the copy recorded <recorded time>
 ```
 
-What to do on `DRIFT`: open an issue with the report, and restore the rule.
-The fix is a new version that carries the change through the pipeline. The
-edited object is not repaired in place, because the record is the truth and
-the live object is the deviation.
+What to do on `DRIFT`: open an issue with the report. Then restore the rule.
+The fix is a new version that carries the change through the pipeline. Do
+not repair the edited object in place. The record is the truth. The live
+object is the deviation.
 
 ## Before end of life: the consumer check
 
@@ -263,9 +265,9 @@ Offline: `jq .source.consumers examples/profiles/aws-pxk@1.1.1.json`
 }
 ```
 
-Delete only when `count` is `0`. Any listed cluster uid must move to a newer
-version first. The nightly `verify` run refreshes this list, so the latest
-record is never older than a day.
+Delete only when `count` is `0`. Each listed cluster must move to a newer
+version first. The nightly `verify` run refreshes this list. The latest
+record is never more than one day old.
 
 ## Confirm how Palette treats an edit to a published version
 
