@@ -15,10 +15,10 @@
 set -euo pipefail
 
 here=$(cd "$(dirname "$0")" && pwd)
-# The Rust binary when built, else the bash reference implementation; override with PPD=<path>.
+# The built binary (release, then debug); override with PPD=<path>.
 tool=${PPD:-}
 if [ -z "$tool" ]; then
-  for c in "$here/../target/release/palette-profile-diff" "$here/../target/debug/palette-profile-diff" "$here/../bash/palette-profile-diff"; do
+  for c in "$here/../target/release/palette-profile-diff" "$here/../target/debug/palette-profile-diff"; do
     [ -x "$c" ] && { tool=$c; break; }
   done
 fi

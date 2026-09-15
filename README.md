@@ -5,6 +5,12 @@ change happened, not just that something did. One static Rust binary; the output
 is a colored terminal report, a markdown pull request comment, or a versioned,
 self-describing JSON document built for machine and AI consumption.
 
+**Start here: [docs/walkthrough.md](docs/walkthrough.md)** shows a platform
+team using the tool through one release cycle: record a release, review a
+bump, promote through tiers, prove immutability every night, and check
+consumers before end of life. Every command in it runs offline against
+`examples/`.
+
 ```
 palette-profile-diff my-profile@1.2.0 my-profile@1.3.0
 palette-profile-diff 64f0…a1 64f0…b2 --full
@@ -52,6 +58,10 @@ life. In the pipeline prototype plan this tool is one of the scripts that
 | profile `main` and `release`   | `snapshot` after each apply, kept as the record of the release           |
 | cluster `bump`                 | the diff between the tier's current and proposed profile versions, with the repave impact the reviewer needs |
 | scheduled                      | `verify` over every recorded snapshot: tools enforce immutability, not text |
+| before end of life             | `snapshot` and read `source.consumers`; delete only at zero               |
+
+The procedures, with commands and what each output means, are in
+[docs/walkthrough.md](docs/walkthrough.md).
 
 ## Output formats
 
@@ -163,21 +173,10 @@ is synthesized.
 
 ## Tests
 
-`cargo test` runs unit tests and end-to-end tests over raw-API-shaped
-fixtures with no network. One of them checks parity with the bash reference:
-identical roots and per-pack hashes on the fixtures. `just test` runs both
-suites.
-
-## The bash reference implementation
-
-`bash/palette-profile-diff` is the first implementation, kept as the
-reference for the hash scheme and the report layout. It needs curl, jq, and
-python3 with PyYAML. The two agree on the fixtures and on the example data,
-with three known edges where the YAML parsers differ: PyYAML reads `yes`,
-`no`, `on`, `off` as booleans and the Rust parser reads them as strings;
-PyYAML accepts duplicate mapping keys and the Rust parser rejects them as
-unparseable; and exponent-form floats print differently. Compare snapshots
-with one implementation; `tool.impl` in every snapshot says which wrote it.
+`cargo test` (or `just test`) runs unit tests and end-to-end tests over
+raw-API-shaped fixtures with no network: snapshot shape, canonicalization,
+every kind of change in the report, the JSON document, markdown, the color
+policy, and exit codes.
 
 ## Known gaps
 

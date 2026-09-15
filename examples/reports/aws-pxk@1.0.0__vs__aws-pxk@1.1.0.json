@@ -5,7 +5,7 @@
     "version": "0.2.0",
     "impl": "rust"
   },
-  "generatedAt": "2026-09-15T17:51:21Z",
+  "generatedAt": "2026-09-15T19:11:10Z",
   "legend": {
     "identity": "The pack reference changed: name, layer, type, tag, version, packUid or registryUid. The release points at a different pack build.",
     "upstream": "The digest on the pack reference changed: pack content moved under the hood, possibly under the same version. Which field fed it is hash.upstreamSource in the snapshot.",
@@ -46,7 +46,7 @@
       "clusters": [],
       "count": 0
     },
-    "fetchedAt": "2026-09-15T17:51:21Z"
+    "fetchedAt": "2026-09-15T19:11:10Z"
   },
   "b": {
     "ref": "/home/brett/repos/spectrocloud/palette-profile-diff/examples/profiles/raw/aws-pxk@1.1.0",
@@ -64,7 +64,7 @@
       "clusters": [],
       "count": 0
     },
-    "fetchedAt": "2026-09-15T17:51:21Z"
+    "fetchedAt": "2026-09-15T19:11:10Z"
   },
   "same": false,
   "rootA": "aee66c68d82976126ca3bec6fee4d8499816852e68e1d6c14f7b24d2f97b32a2",

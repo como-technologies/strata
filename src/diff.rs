@@ -362,6 +362,12 @@ pub fn leaf_diff(a: &Value, b: &Value) -> Vec<Leaf> {
     let (mut la, mut lb) = (Leaves::new(), Leaves::new());
     flatten(a, &mut Vec::new(), &mut la);
     flatten(b, &mut Vec::new(), &mut lb);
+    // An empty or scalar document on one side against a structured document on the other reads
+    // as additions or removals of the structure, not as a change at the root path.
+    if la.keys().chain(lb.keys()).any(|k| !k.is_empty()) {
+        la.remove("");
+        lb.remove("");
+    }
     let mut keys: Vec<&String> = la.keys().chain(lb.keys()).collect();
     keys.sort();
     keys.dedup();
@@ -670,6 +676,17 @@ mod tests {
             d[0].segments,
             vec![json!("env"), json!({"name": "B"}), json!("value")]
         );
+    }
+
+    #[test]
+    fn empty_or_null_root_against_structure_shows_only_the_structure() {
+        for empty in [json!({}), json!(null), json!([])] {
+            let d = leaf_diff(&empty, &json!({"a": {"b": 1}}));
+            assert_eq!(d.len(), 1, "from {empty}");
+            assert_eq!((d[0].op, d[0].path.as_str()), (Op::Added, "a.b"));
+            let d = leaf_diff(&json!({"a": {"b": 1}}), &empty);
+            assert_eq!((d[0].op, d[0].path.as_str()), (Op::Removed, "a.b"));
+        }
     }
 
     #[test]

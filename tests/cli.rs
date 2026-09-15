@@ -1,16 +1,14 @@
-//! End-to-end tests over the bash reference fixtures (no network).
+//! End-to-end tests over raw-API-shaped fixtures (no network).
 
-use std::path::{Path, PathBuf};
+mod common;
+
+use std::path::PathBuf;
 use std::process::Command;
 
 const ESC: char = '\x1b';
 
 fn bin() -> PathBuf {
     PathBuf::from(env!("CARGO_BIN_EXE_palette-profile-diff"))
-}
-
-fn root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
 }
 
 struct Run {
@@ -51,17 +49,7 @@ struct Fx {
 fn fixtures() -> Fx {
     let dir = tempfile::tempdir().unwrap();
     let raw = dir.path().join("fx");
-    let gen = root().join("bash/test/make-fixtures.sh");
-    let st = Command::new("bash")
-        .arg(&gen)
-        .arg(&raw)
-        .output()
-        .expect("fixture generator runs");
-    assert!(
-        st.status.success(),
-        "make-fixtures failed: {}",
-        String::from_utf8_lossy(&st.stderr)
-    );
+    common::make_fixtures(&raw);
     let snap = |name: &str| -> String {
         let out = dir.path().join(format!("{name}.json"));
         let r = run(&[
@@ -353,65 +341,5 @@ fn schema_subcommand_prints_json_schema() {
         let v: serde_json::Value = serde_json::from_str(&r.out).unwrap();
         assert!(v["$schema"].is_string());
         assert!(v["properties"]["schema"].is_object());
-    }
-}
-
-/// The bash reference implementation must produce the same roots and node hashes.
-#[test]
-fn parity_with_bash_reference() {
-    let bash_tool = root().join("bash/palette-profile-diff");
-    let deps_ok = Command::new("python3")
-        .args(["-c", "import yaml"])
-        .output()
-        .map(|o| o.status.success())
-        .unwrap_or(false)
-        && Command::new("jq")
-            .arg("--version")
-            .output()
-            .map(|o| o.status.success())
-            .unwrap_or(false);
-    if !deps_ok || !bash_tool.exists() {
-        eprintln!("skipping parity test: bash reference dependencies missing");
-        return;
-    }
-    let fx = fixtures();
-    for name in ["a", "b"] {
-        let out = Path::new(&fx.a)
-            .parent()
-            .unwrap()
-            .join(format!("bash-{name}.json"));
-        let st = Command::new("bash")
-            .arg(&bash_tool)
-            .args([
-                "snapshot",
-                "--from-raw",
-                fx.raw.join(name).to_str().unwrap(),
-                "-o",
-                out.to_str().unwrap(),
-            ])
-            .env("PPD_QUIET", "1")
-            .output()
-            .unwrap();
-        assert!(
-            st.status.success(),
-            "bash snapshot failed: {}",
-            String::from_utf8_lossy(&st.stderr)
-        );
-        let rust = json(if name == "a" { &fx.a } else { &fx.b });
-        let bash = json(out.to_str().unwrap());
-        assert_eq!(
-            rust["root"], bash["root"],
-            "root differs for fixture {name}"
-        );
-        assert_eq!(rust["variablesHash"], bash["variablesHash"]);
-        for (rp, bp) in rust["packs"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .zip(bash["packs"].as_array().unwrap())
-        {
-            assert_eq!(rp["key"], bp["key"]);
-            assert_eq!(rp["hash"], bp["hash"], "pack {} hashes differ", rp["key"]);
-        }
     }
 }

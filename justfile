@@ -6,10 +6,9 @@ default: build
 build:
     cargo build --release
 
-# Rust unit + integration tests, then the bash reference implementation's suite
+# Rust unit + integration tests
 test:
     cargo test
-    bash/test/run.sh
 
 lint:
     cargo fmt --check
