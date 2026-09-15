@@ -7,3 +7,6 @@ _entity.raw.json
 # local credentials never belong here
 .env
 *.env
+
+# build output
+/target

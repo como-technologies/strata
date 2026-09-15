@@ -1,8 +1,9 @@
 aws-pxk@1.1.0 (64e0000000000000000000b2)  ->  aws-pxk@1.1.1 (64e0000000000000000000c3)
-root       79087d4403da -> 8781c39de5a5   CHANGED
+root       8a8a64d3f95d -> 088136c929bd   CHANGED
 consumers  0 -> 0 clusters
 
   variables CHANGED
+        - : {}
         + platform_owner.defaultValue: ""
         + platform_owner.description: ""
         + platform_owner.displayName: "Platform owner"
@@ -12,6 +13,7 @@ consumers  0 -> 0 clusters
         + platform_owner.inputType: "text"
         + platform_owner.isSensitive: false
         + platform_owner.name: "platform_owner"
+        + platform_owner.options: []
         + platform_owner.regex: ""
         + platform_owner.required: true
 

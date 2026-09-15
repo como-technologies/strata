@@ -1,55 +1,69 @@
 # palette-profile-diff
 
 Diff two Spectro Cloud Palette cluster profile versions and say *what kind* of
-change happened, not just that something did. Bash + curl + jq, with a small
-embedded Python step (PyYAML) that turns pack values and manifests into
-canonical JSON and hashes them.
+change happened, not just that something did. One static Rust binary; the output
+is a colored terminal report, a markdown pull request comment, or a versioned,
+self-describing JSON document built for machine and AI consumption.
 
 ```
 palette-profile-diff my-profile@1.2.0 my-profile@1.3.0
 palette-profile-diff 64f0…a1 64f0…b2 --full
-palette-profile-diff snapshot my-profile@1.2.0 -o my-profile-1.2.0.json   # the record step
-palette-profile-diff verify my-profile-1.2.0.json                          # immutability check
+palette-profile-diff compare A B --format markdown        # pull request comment
+palette-profile-diff compare A B --format json            # for scripts and AI clients
+palette-profile-diff snapshot my-profile@1.2.0 -o rel.json # the record step
+palette-profile-diff verify rel.json                       # immutability check
+palette-profile-diff schema diff                           # JSON Schema of the diff document
 ```
 
-Set `PALETTE_API_KEY`, and `PALETTE_PROJECT_UID` for project-scoped profiles.
-`PALETTE_API` overrides the base URL for self-hosted Palette.
+Build with `cargo build --release` (or `just build`); the binary is
+`target/release/palette-profile-diff`. Set `PALETTE_API_KEY`, and
+`PALETTE_PROJECT_UID` for project-scoped profiles. `PALETTE_API` overrides the
+base URL for self-hosted Palette. Values missing from the environment are read
+from `~/.palette.env`.
+
+## The model
+
+Each pack on a profile is a Merkle node with three sub-hashes, so a report can
+name which one moved:
+
+| flag       | hashed from                                                  | Palette concept                              | 12-factor reading                          |
+|------------|--------------------------------------------------------------|----------------------------------------------|--------------------------------------------|
+| `IDENTITY` | pack name, layer, type, tag, version, packUid, registryUid    | which pack version the layer references      | the release points at a different build    |
+| `UPSTREAM` | the `digest` on the profile's pack ref                        | pack content in the registry                 | the build changed under the same version, which the lifecycle outline forbids |
+| `AUTHORED` | canonical values YAML, attached manifest contents, params     | the pack's values and manifests on the profile | release-level config                       |
+
+`node = sha256(identity + upstream + authored)`, and
+`root = sha256(variablesHash, [key, node] in profile order)`. Two profiles with
+the same root are the same release: exit 0 and `IDENTICAL`. Any difference
+exits 1. Errors exit 2. Profile variables are hashed separately; they are the
+per-deploy config interface, not part of any pack.
 
 ## Where it sits in the lifecycle model
 
 The lifecycle outline (draft 0.1) treats a profile version as a *release*: a
-published definition artifact with a name and a version that is never changed
-after publication, with a build/test/sign/publish/record pipeline and a
-consumer check before end of life. This tool is the mechanism behind three of
-those statements.
+published definition artifact that is never changed after publication, with a
+build/test/sign/publish/record pipeline and a consumer check before end of
+life. In the pipeline prototype plan this tool is one of the scripts that
+`just` and CI both call:
 
-| outline                                          | tool                                                                      |
-|--------------------------------------------------|---------------------------------------------------------------------------|
-| pipeline step **record**                         | `snapshot` writes the published version's Merkle root and canonical contents |
-| **a published artifact is immutable; tools enforce this** | `verify` re-fetches the same uid and exits 1 if the recorded root moved |
-| **identity: name, version, digest, or all three?** | all three, as separate hashes per pack, so the report says which one moved |
-| **consumers and blast radius**                   | consumer count from the profile's `inUseClusterUids`; `impact:` hint per changed layer |
-| fact to confirm: **in-place edit to a published profile version** | `snapshot`, edit in the UI, `verify` |
+| where                          | what                                                                     |
+|--------------------------------|--------------------------------------------------------------------------|
+| profile `pr`                   | `--format markdown` between the last published version and the candidate, posted as the PR comment: the named evidence at the gate |
+| profile `main` and `release`   | `snapshot` after each apply, kept as the record of the release           |
+| cluster `bump`                 | the diff between the tier's current and proposed profile versions, with the repave impact the reviewer needs |
+| scheduled                      | `verify` over every recorded snapshot: tools enforce immutability, not text |
 
-### Terms
+## Output formats
 
-Palette terms are used where Palette has one. Three flags are ours; the table
-maps them to the nearest Palette concept and to the outline's 12-factor frame.
-
-| our term   | hashed from                                                  | Palette concept                              | 12-factor reading                          |
-|------------|--------------------------------------------------------------|----------------------------------------------|--------------------------------------------|
-| `IDENTITY` | pack name, layer, type, tag, version, packUid, registryUid    | which pack version the layer references      | the release points at a different build    |
-| `UPSTREAM` | the `digest` on the profile's pack ref                        | pack content in the registry                 | the build changed under the same version, which the outline forbids |
-| `AUTHORED` | canonical values YAML, attached manifest contents, params     | the pack's values and manifests on the profile | release-level config                       |
-
-Profile variables are hashed separately (`variablesHash`). They are the
-per-deploy config interface, not part of any pack.
-
-## What the report means
+**terminal** (default) is colored when stdout is a terminal: repave impacts
+red, cluster-wide yellow, in-place cyan; added green, removed red, changed
+yellow; old values red, new values green; unchanged packs dimmed. Piped output
+is plain. `--color=always` forces it, `--color=never` or `--no-color` disables
+it, and `NO_COLOR` and `CLICOLOR_FORCE` are honored.
 
 ```
 lab-profile@1.2.0 (64f0000000000000000000a1)  ->  lab-profile@1.3.0 (64f0000000000000000000b2)
-root       73c75fb7dba6 -> 3f25b888f168   CHANGED
+root       73c75fb7dba6 -> d5c5d079f15f   CHANGED
 consumers  0 -> 2 clusters
 
   variables CHANGED
@@ -74,43 +88,61 @@ consumers  0 -> 2 clusters
 - [addon] external-dns               0.14.0             REMOVED
 ```
 
-Each pack is a Merkle node: `node = sha256(identity + upstream + authored)`,
-and `root = sha256(variablesHash, [key, node] in profile order)`. Two profiles
-with the same root are the same release. The report prints `IDENTICAL` and
-exits 0; any difference exits 1; errors exit 2.
+**markdown** is a pull request comment: a header table, a result line with
+the maximum impact, one table row per pack, and a collapsible `diff` block per
+changed pack. `--full` appends unified diffs of raw values and changed
+manifests.
 
-`impact:` lines are hints derived from the layer and the flags. OS or
-Kubernetes identity changes mean a node repave; addon edits are in-place. They
-are not a Palette API answer.
+**json** is the document described below. It is never colored and never
+truncated.
 
-## Colors
+## The JSON document, for scripts and AI clients
 
-The report is colored when stdout is a terminal: repave impacts red,
-cluster-wide yellow, in-place cyan; added green, removed red, changed yellow;
-old values red and new values green; unchanged packs dimmed. Piped or
-redirected output is plain, which is why the example reports are plain.
-`--color=always` forces it (pipe into `less -R`), `--color=never` or
-`--no-color` disables it, and the `NO_COLOR` and `CLICOLOR_FORCE` environment
-conventions are honored. `--json` is never colored. With `--full`, the unified
-diffs use GNU diff's own coloring when it supports `--color`.
+`--format json` prints `palette-profile-diff/1`. It is designed to be read
+cold by a program or a language model without the docs:
+
+- `schema` and `tool` identify the document and the implementation.
+- `legend` explains the three flags, every `status`, every `op`, and every
+  `impact` level in plain sentences.
+- `summary` answers the common questions first: packs added, removed,
+  changed, unchanged; how many identity, upstream, and authored moves;
+  whether variables changed; and `maxImpact`, the most severe level across
+  all packs.
+- `packs[]` carries, per pack, `status`, the three booleans, `impact` as a
+  `level` plus the sentence the terminal prints, both sides' version, tag,
+  pack uid, registry uid, digest, values hash and node hash, `values.diff[]`
+  as leaves, and `manifests[]` changes with content hashes.
+- Every leaf has `op`, a dotted `path`, the same path as `segments` (strings
+  for keys, integers for indexes, `{"name": ...}` for items of a list whose
+  members all carry a unique `name`), and `old` and `new` values.
+- `a` and `b` are the two snapshot sources, with uids, versions, consumer
+  counts, and fetch times.
+
+`palette-profile-diff schema diff` and `schema snapshot` print the JSON Schema
+of each document. Impact levels, in ascending severity: `none`, `sync`,
+`in-place`, `cluster-wide`, `may-repave`, `repave`. The `impact` text is a
+hint derived from the layer and the flags, not a Palette API answer.
 
 ## Canonicalization
 
 Palette rewrites values on read: whitespace, key order, expanded
 `{{.spectro.var.X}}` templates. Text diffs churn on that; these hashes do not,
-because values and manifests are parsed as YAML and re-serialized with sorted
-keys before hashing. Values that do not parse as YAML (unquoted Go templates,
-for example) are hashed as trimmed text and the report says so. `--full`
-prints a unified diff for every changed pack's raw values and for every
-changed manifest.
+because values and manifests are parsed as YAML and re-serialized as JSON with
+sorted keys before hashing. Values that do not parse as YAML, such as an
+unquoted Go template, are hashed as trimmed text and the report says so;
+`--full` prints a unified diff for those and for every changed manifest.
+
+Lists whose items all carry a unique `name` are addressed by name in leaf
+paths, so an inserted item shows as one addition rather than shifted
+neighbors. Other lists are positional.
 
 ## Snapshots
 
-`snapshot` writes one JSON file per profile with the hashes, the canonical
-values, the raw values and manifests, and the consumer list at the time. Keep
-it next to the release record, or feed it back to `compare` or `verify` later.
-`--raw-dir DIR` also keeps the three raw API responses, and `--from-raw DIR`
-rebuilds a snapshot from them offline.
+`snapshot` writes one JSON file per profile (`palette-profile-snapshot/1`)
+with the hashes, the canonical values, the raw values and manifests, and the
+consumer list at the time. Keep it next to the release record, or feed it back
+to `compare` or `verify` later. `--raw-dir DIR` also keeps the three raw API
+responses, and `--from-raw DIR` rebuilds a snapshot from them offline.
 
 Endpoints used per profile:
 
@@ -127,26 +159,38 @@ records which under `source.template`.
 `examples/fetch-examples.sh` pulls real packs from the Public Repo registry at
 several versions, builds three profiles from them, and writes snapshots and
 reports under `examples/`. See `examples/README.md` for what is real and what
-is synthesized there.
+is synthesized.
 
 ## Tests
 
-`test/run.sh` builds raw-API-shaped fixtures with no network and asserts on
-the report, the JSON output, and exit codes.
+`cargo test` runs unit tests and end-to-end tests over raw-API-shaped
+fixtures with no network. One of them checks parity with the bash reference:
+identical roots and per-pack hashes on the fixtures. `just test` runs both
+suites.
+
+## The bash reference implementation
+
+`bash/palette-profile-diff` is the first implementation, kept as the
+reference for the hash scheme and the report layout. It needs curl, jq, and
+python3 with PyYAML. The two agree on the fixtures and on the example data,
+with three known edges where the YAML parsers differ: PyYAML reads `yes`,
+`no`, `on`, `off` as booleans and the Rust parser reads them as strings;
+PyYAML accepts duplicate mapping keys and the Rust parser rejects them as
+unparseable; and exponent-form floats print differently. Compare snapshots
+with one implementation; `tool.impl` in every snapshot says which wrote it.
 
 ## Known gaps
 
 - The `digest` Palette stamps on a profile's pack ref has not been checked
-  against a live profile to confirm it tracks registry content. The tenant used
-  on 2026-09-15 had no cluster profiles to look at. The snapshot records which
-  field fed `UPSTREAM` under `hash.upstreamSource`, so this can be confirmed
-  from the first real profile. It belongs with the outline's section 14 facts.
-- Array diffs are positional. An image inserted in the middle of a list shows
-  as one added index plus shifted neighbors rather than one insertion.
-- Scalars longer than 120 characters are truncated in the text report;
-  `--full` and `--json` carry the whole value.
+  against a live profile to confirm it tracks registry content. The tenant
+  used on 2026-09-15 had no cluster profiles to look at. The snapshot records
+  which field fed `UPSTREAM` under `hash.upstreamSource`. For packs built by
+  the pipeline, the OCI manifest digest in the immutable ECR repositories is
+  the better source and is the planned replacement.
 - Only profiles are supported as refs. A cluster's applied profile templates
-  (`spec.clusterProfileTemplates` on the cluster) use the same pack ref shape
-  and are the natural next input, giving release-vs-run drift.
+  use the same pack ref shape and are the natural next input, giving
+  release-vs-run drift.
 - Pack presets and schema are not hashed; a selected preset shows up as a
   values change anyway.
+- Scalars longer than 120 characters are truncated in the text reports; the
+  JSON document and `--full` carry the whole value.

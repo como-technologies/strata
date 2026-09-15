@@ -1,0 +1,399 @@
+//! The snapshot document (schema palette-profile-snapshot/1): one profile version with its Merkle
+//! root, per-pack hashes, canonical values and raw contents. Byte-compatible with the snapshots
+//! written by the bash reference implementation.
+
+use std::collections::BTreeMap;
+use std::path::Path;
+
+use anyhow::{bail, Context, Result};
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
+use serde_json::{json, Map, Value};
+
+use crate::api::RawProfile;
+use crate::canon::{canon_yaml, canonical_json, hash_yaml, sha256_hex, Canon};
+
+pub const SNAPSHOT_SCHEMA: &str = "palette-profile-snapshot/1";
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct Snapshot {
+    /// Always "palette-profile-snapshot/1"
+    pub schema: String,
+    pub tool: Tool,
+    pub source: Source,
+    /// Profile variables, normalized and sorted by name
+    pub variables: Vec<Value>,
+    /// sha256 of the canonical JSON of `variables`
+    pub variables_hash: String,
+    /// Packs in profile order
+    pub packs: Vec<Pack>,
+    /// sha256 of canonical JSON {"packs": [[key, node]...], "variables": variablesHash}
+    pub root: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct Tool {
+    pub name: String,
+    pub version: String,
+    /// "rust" or "bash"; absent in snapshots from the first bash release
+    #[serde(default, skip_serializing_if = "Option::is_none", rename = "impl")]
+    pub implementation: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct Source {
+    /// The ref the snapshot was taken from, as given on the command line
+    #[serde(rename = "ref")]
+    pub reference: String,
+    pub uid: String,
+    pub name: String,
+    pub version: String,
+    pub cloud_type: String,
+    /// Profile type: cluster, infra, add-on, system
+    #[serde(rename = "type")]
+    pub kind: String,
+    /// "published" or "draft": the template the packs were read from
+    pub template: String,
+    #[serde(default)]
+    pub tags: BTreeMap<String, String>,
+    /// Clusters using this profile version at snapshot time
+    #[serde(default)]
+    pub consumers: Consumers,
+    pub fetched_at: String,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
+pub struct Consumers {
+    pub clusters: Vec<String>,
+    pub count: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct Pack {
+    /// "<layer>/<name>", the Merkle node key
+    pub key: String,
+    pub layer: String,
+    pub name: String,
+    #[serde(rename = "type")]
+    pub kind: String,
+    pub tag: String,
+    pub version: String,
+    pub pack_uid: String,
+    pub registry_uid: String,
+    /// The digest Palette stamps on the pack ref of the profile template
+    pub ref_digest: String,
+    /// The digest of the pack in its registry, from the packs/manifests endpoint
+    pub registry_digest: String,
+    pub params: Value,
+    /// Raw values YAML as returned by the API
+    pub values: String,
+    /// The values parsed as YAML and converted to JSON; null when unparseable
+    pub values_canon: Value,
+    /// sha256 of canonical JSON of valuesCanon, or of the trimmed text when unparseable
+    pub values_hash: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub values_parse_error: Option<String>,
+    /// Attached manifests sorted by name
+    pub manifests: Vec<Manifest>,
+    pub hash: PackHash,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct Manifest {
+    pub name: String,
+    pub uid: String,
+    pub digest: String,
+    pub content: String,
+    pub content_hash: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub content_parse_error: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct PackHash {
+    /// sha256 over name, layer, type, tag, version, packUid, registryUid
+    pub identity: String,
+    /// sha256 of upstreamRaw
+    pub upstream: String,
+    /// The digest that fed `upstream`
+    pub upstream_raw: String,
+    /// "packRef.digest", "packSummary.digest", or "none"
+    pub upstream_source: String,
+    /// sha256 over valuesHash, [manifest name, contentHash]..., params
+    pub authored: String,
+    /// sha256(identity + upstream + authored)
+    pub node: String,
+}
+
+fn s(v: &Value, ptr: &str) -> String {
+    v.pointer(ptr)
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_string()
+}
+
+fn arr(v: &Value, ptr: &str) -> Vec<Value> {
+    v.pointer(ptr)
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default()
+}
+
+fn or(v: String, default: &str) -> String {
+    if v.is_empty() {
+        default.to_string()
+    } else {
+        v
+    }
+}
+
+fn first_nonempty(candidates: &[String]) -> String {
+    candidates
+        .iter()
+        .find(|c| !c.is_empty())
+        .cloned()
+        .unwrap_or_default()
+}
+
+fn str_or(v: &Value, key: &str, default: &str) -> Value {
+    Value::String(
+        v.get(key)
+            .and_then(Value::as_str)
+            .unwrap_or(default)
+            .to_string(),
+    )
+}
+
+fn bool_or(v: &Value, key: &str) -> Value {
+    Value::Bool(v.get(key).and_then(Value::as_bool).unwrap_or(false))
+}
+
+/// Same field set and defaults as the bash extraction, so hashes agree across implementations.
+fn normalize_variable(v: &Value) -> Value {
+    let options: Vec<Value> = v
+        .get("options")
+        .and_then(Value::as_array)
+        .map(|opts| {
+            opts.iter()
+                .map(|o| {
+                    json!({
+                        "label": str_or(o, "label", ""),
+                        "value": str_or(o, "value", ""),
+                        "description": str_or(o, "description", ""),
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    json!({
+        "name": v.get("name").cloned().unwrap_or(Value::Null),
+        "displayName": str_or(v, "displayName", ""),
+        "description": str_or(v, "description", ""),
+        "format": str_or(v, "format", "string"),
+        "defaultValue": str_or(v, "defaultValue", ""),
+        "regex": str_or(v, "regex", ""),
+        "required": bool_or(v, "required"),
+        "immutable": bool_or(v, "immutable"),
+        "hidden": bool_or(v, "hidden"),
+        "isSensitive": bool_or(v, "isSensitive"),
+        "inputType": str_or(v, "inputType", "text"),
+        "options": options,
+    })
+}
+
+impl Snapshot {
+    pub fn from_raw(raw: &RawProfile, reference: &str, fetched_at: &str) -> Result<Snapshot> {
+        let prof = &raw.profile;
+        let published = arr(prof, "/spec/published/packs");
+        let (tpl_packs, tpl_ptr, template) = if !published.is_empty() {
+            (published, "/spec/published", "published")
+        } else {
+            (arr(prof, "/spec/draft/packs"), "/spec/draft", "draft")
+        };
+        let mpacks = arr(&raw.manifests, "/spec/packs");
+
+        let tags: BTreeMap<String, String> = prof
+            .pointer("/metadata/labels")
+            .and_then(Value::as_object)
+            .map(|o| {
+                o.iter()
+                    .filter_map(|(k, v)| v.as_str().map(|s| (k.clone(), s.to_string())))
+                    .collect()
+            })
+            .unwrap_or_default();
+        let clusters: Vec<String> = arr(prof, "/status/inUseClusterUids")
+            .iter()
+            .filter_map(|v| v.as_str().map(str::to_string))
+            .collect();
+        let source = Source {
+            reference: reference.to_string(),
+            uid: s(prof, "/metadata/uid"),
+            name: s(prof, "/metadata/name"),
+            version: s(prof, "/spec/version"),
+            cloud_type: s(prof, &format!("{tpl_ptr}/cloudType")),
+            kind: s(prof, &format!("{tpl_ptr}/type")),
+            template: template.to_string(),
+            tags,
+            consumers: Consumers {
+                count: clusters.len(),
+                clusters,
+            },
+            fetched_at: fetched_at.to_string(),
+        };
+
+        let mut variables: Vec<Value> = arr(&raw.variables, "/variables")
+            .iter()
+            .map(normalize_variable)
+            .collect();
+        variables.sort_by_key(|v| s(v, "/name"));
+        let variables_hash = sha256_hex(&canonical_json(&Value::Array(variables.clone())));
+
+        let mut packs = Vec::with_capacity(tpl_packs.len());
+        for pk in &tpl_packs {
+            let name = s(pk, "/name");
+            let mm = mpacks
+                .iter()
+                .find(|m| s(m, "/metadata/name") == name || s(m, "/spec/name") == name)
+                .cloned()
+                .unwrap_or(Value::Null);
+            let layer = or(s(pk, "/layer"), "addon");
+            let kind = or(s(pk, "/type"), "spectro");
+            let tag = s(pk, "/tag");
+            let version = first_nonempty(&[s(pk, "/version"), s(&mm, "/spec/version")]);
+            let pack_uid = s(pk, "/packUid");
+            let registry_uid = s(pk, "/registryUid");
+            let ref_digest = s(pk, "/digest");
+            let registry_digest = s(&mm, "/spec/digest");
+            let params = pk
+                .get("params")
+                .cloned()
+                .filter(Value::is_object)
+                .unwrap_or_else(|| Value::Object(Map::new()));
+            let values = first_nonempty(&[s(pk, "/values"), s(&mm, "/spec/values")]);
+
+            let mut manifests: Vec<Manifest> = arr(&mm, "/spec/manifests")
+                .iter()
+                .map(|m| {
+                    let content = s(m, "/content");
+                    let (content_hash, content_parse_error) = hash_yaml(&content);
+                    Manifest {
+                        name: s(m, "/name"),
+                        uid: s(m, "/uid"),
+                        digest: s(m, "/digest"),
+                        content,
+                        content_hash,
+                        content_parse_error,
+                    }
+                })
+                .collect();
+            manifests.sort_by(|a, b| a.name.cmp(&b.name));
+
+            let (values_canon, values_hash, values_parse_error) = match canon_yaml(&values) {
+                Canon::Parsed(v) => {
+                    let h = sha256_hex(&canonical_json(&v));
+                    (v, h, None)
+                }
+                Canon::Unparseable(e) => (Value::Null, sha256_hex(values.trim()), Some(e)),
+            };
+
+            let identity = sha256_hex(&canonical_json(&json!({
+                "name": name, "layer": layer, "type": kind, "tag": tag, "version": version,
+                "packUid": pack_uid, "registryUid": registry_uid,
+            })));
+            let (upstream_raw, upstream_source) = if !ref_digest.is_empty() {
+                (ref_digest.clone(), "packRef.digest")
+            } else if !registry_digest.is_empty() {
+                (registry_digest.clone(), "packSummary.digest")
+            } else {
+                (String::new(), "none")
+            };
+            let upstream = sha256_hex(&upstream_raw);
+            let authored = sha256_hex(&canonical_json(&json!({
+                "values": values_hash,
+                "manifests": manifests.iter().map(|m| json!([m.name, m.content_hash])).collect::<Vec<_>>(),
+                "params": params,
+            })));
+            let node = sha256_hex(&format!("{identity}{upstream}{authored}"));
+
+            packs.push(Pack {
+                key: format!("{layer}/{name}"),
+                layer,
+                name,
+                kind,
+                tag,
+                version,
+                pack_uid,
+                registry_uid,
+                ref_digest,
+                registry_digest,
+                params,
+                values,
+                values_canon,
+                values_hash,
+                values_parse_error,
+                manifests,
+                hash: PackHash {
+                    identity,
+                    upstream,
+                    upstream_raw,
+                    upstream_source: upstream_source.to_string(),
+                    authored,
+                    node,
+                },
+            });
+        }
+
+        let root = sha256_hex(&canonical_json(&json!({
+            "variables": variables_hash,
+            "packs": packs.iter().map(|p| json!([p.key, p.hash.node])).collect::<Vec<_>>(),
+        })));
+
+        Ok(Snapshot {
+            schema: SNAPSHOT_SCHEMA.to_string(),
+            tool: Tool {
+                name: crate::TOOL_NAME.to_string(),
+                version: crate::TOOL_VERSION.to_string(),
+                implementation: Some(crate::TOOL_IMPL.to_string()),
+            },
+            source,
+            variables,
+            variables_hash,
+            packs,
+            root,
+        })
+    }
+
+    pub fn load(path: &Path) -> Result<Snapshot> {
+        let text =
+            std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
+        let v: Value = serde_json::from_str(&text).with_context(|| {
+            format!(
+                "'{}' is not a palette-profile-diff snapshot",
+                path.display()
+            )
+        })?;
+        if v.get("schema").and_then(Value::as_str) != Some(SNAPSHOT_SCHEMA) {
+            bail!(
+                "'{}' is not a palette-profile-diff snapshot",
+                path.display()
+            );
+        }
+        serde_json::from_value(v)
+            .with_context(|| format!("'{}' does not match {}", path.display(), SNAPSHOT_SCHEMA))
+    }
+
+    pub fn to_json(&self, compact: bool) -> Result<String> {
+        let mut s = if compact {
+            serde_json::to_string(self)?
+        } else {
+            serde_json::to_string_pretty(self)?
+        };
+        s.push('\n');
+        Ok(s)
+    }
+}

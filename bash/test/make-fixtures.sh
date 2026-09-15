@@ -10,11 +10,19 @@ set -euo pipefail
 root=${1:?usage: make-fixtures.sh OUTDIR}
 mkdir -p "$root/a" "$root/a2" "$root/b"
 
+# comment-only values, as the real ubuntu-aws pack ships: canonical form must be null
 OS_VALUES=$(cat <<'YAML'
-kubeadmconfig:
-  preKubeadmCommands:
-    - echo "Executing pre kube admin config commands"
-    - update-ca-certificates
+
+# Spectro Golden images include most of the hardening standards recommended by CIS benchmarking
+
+# Uncomment below section to
+# 1. Include custom files to be copied over to the nodes and/or
+# 2. Execute list of commands before or after kubeadm init/join is executed
+#
+# kubeadmconfig:
+#   preKubeadmCommands:
+#   - echo "Executing pre kube admin config commands"
+#   - update-ca-certificates
 YAML
 )
 K8S_VALUES_A=$(cat <<'YAML'

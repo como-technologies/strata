@@ -24,9 +24,9 @@ Generated 2026-09-15 by fetch-examples.sh from the Spectro Cloud Public Repo reg
 
 ## Profiles synthesized from those packs
 
-- `aws-pxk@1.0.0` root `12ccf27fe446`: ubuntu-aws 20.04, kubernetes 1.35.3, cni-cilium-oss 1.19.6, csi-aws-ebs 1.63.1, cert-manager 1.21.1
-- `aws-pxk@1.1.0` root `79087d4403da`: ubuntu-aws 24.04, kubernetes 1.36.2, cni-cilium-oss 1.20.1, csi-aws-ebs 1.65.0, cert-manager 1.21.1
-- `aws-pxk@1.1.1` root `8781c39de5a5`: ubuntu-aws 24.04, kubernetes 1.36.2, cni-cilium-oss 1.20.1, csi-aws-ebs 1.65.0, cert-manager 1.21.1
+- `aws-pxk@1.0.0` root `aee66c68d829`: ubuntu-aws 20.04, kubernetes 1.35.3, cni-cilium-oss 1.19.6, csi-aws-ebs 1.63.1, cert-manager 1.21.1
+- `aws-pxk@1.1.0` root `8a8a64d3f95d`: ubuntu-aws 24.04, kubernetes 1.36.2, cni-cilium-oss 1.20.1, csi-aws-ebs 1.65.0, cert-manager 1.21.1
+- `aws-pxk@1.1.1` root `088136c929bd`: ubuntu-aws 24.04, kubernetes 1.36.2, cni-cilium-oss 1.20.1, csi-aws-ebs 1.65.0, cert-manager 1.21.1
 
 ## Reports
 

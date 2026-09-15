@@ -207,7 +207,8 @@ def canon_yaml(text):
         return {"ok": True, "doc": None}
     try:
         docs = [norm(d) for d in yaml.safe_load_all(text)]
-        return {"ok": True, "doc": docs[0] if len(docs) == 1 else docs}
+        # zero documents (comment-only text) is "no values", the same as empty text
+        return {"ok": True, "doc": None if not docs else (docs[0] if len(docs) == 1 else docs)}
     except Exception as e:
         return {"ok": False, "error": str(e).splitlines()[0][:200]}
 

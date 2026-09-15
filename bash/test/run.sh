@@ -25,6 +25,8 @@ check "os pack falls back to registry digest" '[ "$(jq -r ".packs[] | select(.na
 check "k8s pack uses pack ref digest"         '[ "$(jq -r ".packs[] | select(.name==\"kubernetes\") | .hash.upstreamSource" "$tmp/a.json")" = packRef.digest ]'
 check "unparseable values recorded"           'jq -e ".packs[] | select(.name==\"metrics-server\") | .valuesParseError" "$tmp/a.json" >/dev/null'
 
+check "comment-only values canonicalize to null" '[ "$(jq -c ".packs[] | select(.name==\"ubuntu-aws\") | .valuesCanon" "$tmp/a.json")" = null ]'
+
 # canonicalization: reordered YAML must not move the root
 check "reordered YAML gives identical root" '[ "$(jq -r .root "$tmp/a.json")" = "$(jq -r .root "$tmp/a2.json")" ]'
 

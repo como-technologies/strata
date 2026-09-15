@@ -13,7 +13,7 @@ examples/
   packs/<name>/_summaries.json  GET /v1/packs?filters=spec.name=<name>, filtered to the Public Repo
   profiles/raw/<profile>@<ver>/ profile.json, manifests.json, variables.json in the shapes the tool reads
   profiles/<profile>@<ver>.json snapshots (Merkle root, per-pack hashes, canonical values)
-  reports/                   compare output between the profiles
+  reports/                   compare output: text reports and one palette-profile-diff/1 JSON document
 ```
 
 ## What is real and what is synthesized
@@ -62,7 +62,7 @@ upgrade looks like when you can see it.
 ```
 export PALETTE_API_KEY=...            # or SPECTROCLOUD_APIKEY, or put it in ~/.palette.env
 export PALETTE_PROJECT_UID=...        # optional
-./examples/fetch-examples.sh
+cargo build --release && ./examples/fetch-examples.sh   # or: just examples-fetch
 ```
 
 Knobs: `PACKS="kubernetes cni-cilium-oss"`, `VERSIONS_PER_PACK=5`, `CLOUD=azure`,

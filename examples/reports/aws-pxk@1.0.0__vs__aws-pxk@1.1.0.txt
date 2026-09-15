@@ -1,5 +1,5 @@
 aws-pxk@1.0.0 (64e0000000000000000000a1)  ->  aws-pxk@1.1.0 (64e0000000000000000000b2)
-root       12ccf27fe446 -> 79087d4403da   CHANGED
+root       aee66c68d829 -> 8a8a64d3f95d   CHANGED
 consumers  0 -> 0 clusters
 
   variables unchanged
@@ -24,7 +24,7 @@ consumers  0 -> 0 clusters
       impact: node repave (Kubernetes version change)
 ~ [cni  ] cni-cilium-oss             1.19.6 -> 1.20.1   IDENTITY UPSTREAM AUTHORED
       upstream digest  sha256:3d866 -> sha256:917d9   (packRef.digest)
-      values: 46 changed, 42 added, 16 removed
+      values: 46 changed, 48 added, 18 removed
         ~ charts.cilium.authentication.mutual.spire.install.agent.image.repository: "us-docker.pkg.dev/palette-images/packs/cilium/1.19.6/spire-agent" -> "us-docker.pkg.dev/palette-images/packs/cilium/1.20.1/spire-agent"
         ~ charts.cilium.authentication.mutual.spire.install.agent.image.tag: "1.9.6" -> "1.15.2"
         ~ charts.cilium.authentication.mutual.spire.install.initImage.repository: "us-docker.pkg.dev/palette-images/packs/cilium/1.19.6/busybox" -> "us-docker.pkg.dev/palette-images/packs/cilium/1.20.1/busybox"
@@ -41,11 +41,17 @@ consumers  0 -> 0 clusters
         - charts.cilium.clustermesh.apiserver.tls.admin.cert: ""
         - charts.cilium.clustermesh.apiserver.tls.admin.key: ""
         ~ charts.cilium.clustermesh.apiserver.tls.auto.certValidityDuration: 1095 -> 365
+        + charts.cilium.clustermesh.apiserver.tls.auto.privateKey: {}
         + charts.cilium.clustermesh.apiserver.tls.auto.schedule: "0 0 1 */4 *"
+        + charts.cilium.clustermesh.apiserver.tls.auto.server.extraDnsNames: []
+        + charts.cilium.clustermesh.apiserver.tls.auto.server.extraIpAddresses: []
+        + charts.cilium.clustermesh.apiserver.tls.auto.subject: {}
         - charts.cilium.clustermesh.apiserver.tls.enableSecrets: true
         - charts.cilium.clustermesh.apiserver.tls.remote.cert: ""
         - charts.cilium.clustermesh.apiserver.tls.remote.key: ""
         - charts.cilium.clustermesh.apiserver.tls.server.cert: ""
+        - charts.cilium.clustermesh.apiserver.tls.server.extraDnsNames: []
+        - charts.cilium.clustermesh.apiserver.tls.server.extraIpAddresses: []
         - charts.cilium.clustermesh.apiserver.tls.server.key: ""
         + charts.cilium.clustermesh.defaultGlobalNamespace: true
         - charts.cilium.clustermesh.enableMCSAPISupport: false
@@ -81,6 +87,8 @@ consumers  0 -> 0 clusters
         ~ charts.cilium.hubble.relay.image.repository: "us-docker.pkg.dev/palette-images/packs/cilium/1.19.6/hubble-relay" -> "us-docker.pkg.dev/palette-images/packs/cilium/1.20.1/hubble-relay"
         ~ charts.cilium.hubble.relay.image.tag: "v1.19.6" -> "v1.20.1"
         + charts.cilium.hubble.relay.securityContext.readOnlyRootFilesystem: true
+        + charts.cilium.hubble.tls.auto.privateKey: {}
+        + charts.cilium.hubble.tls.auto.subject: {}
         ~ charts.cilium.hubble.ui.backend.image.repository: "us-docker.pkg.dev/palette-images/packs/cilium/1.19.6/hubble-ui-backend" -> "us-docker.pkg.dev/palette-images/packs/cilium/1.20.1/hubble-ui-backend"
         - charts.cilium.hubble.ui.backend.livenessProbe.enabled: false
         - charts.cilium.hubble.ui.backend.readinessProbe.enabled: false
@@ -149,7 +157,7 @@ consumers  0 -> 0 clusters
         ~ charts.aws-ebs-csi-driver.sidecars.snapshotter.image.tag: "v8.6.0-eksbuild.4" -> "v8.6.0-eksbuild.6"
         ~ charts.aws-ebs-csi-driver.sidecars.volumemodifier.image.repository: "us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/1.63.1/volume-modifier-for-k8s" -> "us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/1.65.0/volume-modifier-for-k8s"
         ~ charts.aws-ebs-csi-driver.sidecars.volumemodifier.image.tag: "v0.9.5-eksbuild.4" -> "v0.9.5-eksbuild.6"
-        ~ pack.content.charts[0].version: "2.63.1" -> "2.65.0"
+        ~ pack.content.charts[name=aws-ebs-csi-driver].version: "2.63.1" -> "2.65.0"
         ~ pack.content.images[0].image: "us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/1.63.1/aws-ebs-csi-driver:v1.63.1" -> "us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/1.65.0/aws-ebs-csi-driver:v1.65.0"
         ~ pack.content.images[1].image: "us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/1.63.1/external-provisioner:v6.3.0-eksbuild.3" -> "us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/1.65.0/external-provisioner:v6.3.0-eksbuild.5"
         ~ pack.content.images[2].image: "us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/1.63.1/external-attacher:v4.12.0-eksbuild.4" -> "us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/1.65.0/external-attacher:v4.12.0-eksbuild.6"

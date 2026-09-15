@@ -15,7 +15,13 @@
 set -euo pipefail
 
 here=$(cd "$(dirname "$0")" && pwd)
-tool="$here/../palette-profile-diff"
+# The Rust binary when built, else the bash reference implementation; override with PPD=<path>.
+tool=${PPD:-}
+if [ -z "$tool" ]; then
+  for c in "$here/../target/release/palette-profile-diff" "$here/../target/debug/palette-profile-diff" "$here/../bash/palette-profile-diff"; do
+    [ -x "$c" ] && { tool=$c; break; }
+  done
+fi
 out=${EXAMPLES_DIR:-$here}
 API="${PALETTE_API:-https://api.spectrocloud.com}"
 PACKS=${PACKS:-"ubuntu-aws kubernetes cni-cilium-oss csi-aws-ebs cert-manager metrics-server"}
@@ -26,6 +32,8 @@ today=$(date -u +%F)
 
 die() { echo "fetch-examples: $*" >&2; exit 2; }
 log() { echo "fetch-examples: $*" >&2; }
+[ -n "$tool" ] && [ -x "$tool" ] || die "no palette-profile-diff binary found; run cargo build --release or set PPD=<path>"
+log "using $tool"
 
 if [ -z "${OFFLINE:-}" ]; then
   [ -f "$HOME/.palette.env" ] && . "$HOME/.palette.env"
