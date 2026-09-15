@@ -1,0 +1,36 @@
+# Examples index
+
+Generated 2026-09-15 by fetch-examples.sh from the Spectro Cloud Public Repo registry.
+
+## Packs pulled
+
+| pack | layer | version | tag | packUid | digest |
+|------|-------|---------|-----|---------|--------|
+| cert-manager | addon | 1.20.3 | 1.20.3 | `6a512fa905e996584d052e4e` | `sha256:5547783a210f` |
+| cert-manager | addon | 1.21.0 | 1.21.0 | `6a6bd41716c3cbf97a8b7f57` | `sha256:b85d5db1e159` |
+| cert-manager | addon | 1.21.1 | 1.21.1 | `6a75f43fd410c3b56c0d4e51` | `sha256:50dd2cad9e52` |
+| cni-cilium-oss | cni | 1.19.6 | 1.19.6 | `6a6bd41816c3cbf980e528b9` | `sha256:3d8661bc3a7e` |
+| cni-cilium-oss | cni | 1.20.0 | 1.20.0 | `6a75f440d410c3b571e81350` | `sha256:9cb0442a04ea` |
+| cni-cilium-oss | cni | 1.20.1 | 1.20.1 | `6aa410eb144aaec799b5c0fa` | `sha256:917d9de9a696` |
+| csi-aws-ebs | csi | 1.63.1 | 1.63.1 | `6a75f441d410c3b5762fed2d` | `sha256:4a1cb27d13a6` |
+| csi-aws-ebs | csi | 1.64.0 | 1.64.0 | `6a9d8e38f39026aa0c23cfe1` | `sha256:d9110382b131` |
+| csi-aws-ebs | csi | 1.65.0 | 1.65.0 | `6aa410ec144aaec79d547a9e` | `sha256:bd09e8b4187b` |
+| kubernetes | k8s | 1.35.3 | 1.35.3 | `69f778872d19e4c57df8f630` | `sha256:ff3df77ebc9c` |
+| kubernetes | k8s | 1.35.6 | 1.35.6 | `6a6bd41b16c3cbf99cd5fc21` | `sha256:85e06d1a6a1c` |
+| kubernetes | k8s | 1.36.2 | 1.36.2 | `6a6bd41b16c3cbf9999ad3be` | `sha256:c4f7f20f40c7` |
+| ubuntu-aws | os | 20.04 | LTS__20.4.x | `626808ffd9c586788e0be610` | `sha256:d7aee32a7be4` |
+| ubuntu-aws | os | 22.04 | LTS__22.04 | `63bd0373764141c6622c3062` | `sha256:269435bb0d94` |
+| ubuntu-aws | os | 24.04 | LTS__24.x | `6917446d9da9b9852faf5f60` | `sha256:2df05daa4eb4` |
+
+## Profiles synthesized from those packs
+
+- `aws-pxk@1.0.0` root `12ccf27fe446`: ubuntu-aws 20.04, kubernetes 1.35.3, cni-cilium-oss 1.19.6, csi-aws-ebs 1.63.1, cert-manager 1.21.1
+- `aws-pxk@1.1.0` root `79087d4403da`: ubuntu-aws 24.04, kubernetes 1.36.2, cni-cilium-oss 1.20.1, csi-aws-ebs 1.65.0, cert-manager 1.21.1
+- `aws-pxk@1.1.1` root `8781c39de5a5`: ubuntu-aws 24.04, kubernetes 1.36.2, cni-cilium-oss 1.20.1, csi-aws-ebs 1.65.0, cert-manager 1.21.1
+
+## Reports
+
+- `reports/aws-pxk@1.0.0__vs__aws-pxk@1.0.0.txt`
+- `reports/aws-pxk@1.0.0__vs__aws-pxk@1.1.0.json`
+- `reports/aws-pxk@1.0.0__vs__aws-pxk@1.1.0.txt`
+- `reports/aws-pxk@1.1.0__vs__aws-pxk@1.1.1.txt`

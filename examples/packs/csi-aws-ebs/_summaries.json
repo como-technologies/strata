@@ -1,0 +1,1431 @@
+[
+  {
+    "metadata": {
+      "annotations": {
+        "latestVersion": "false",
+        "ownerUid": "sysadmin",
+        "permissions": "pack.get,pack.list",
+        "scope": "system",
+        "scopeVisibility": "21"
+      },
+      "creationTimestamp": "2022-10-23T20:00:17.302Z",
+      "deletionTimestamp": "0001-01-01T00:00:00.000Z",
+      "lastModifiedTimestamp": "2022-10-23T20:00:17.302Z",
+      "name": "csi-aws-ebs",
+      "uid": "63559d51c3ffd889f42a15ec"
+    },
+    "spec": {
+      "annotations": {
+        "description": "Amazon Elastic Block Store (EBS) CSI driver",
+        "docsURL": "https://docs.spectrocloud.com/integrations/csi",
+        "source": "spectrocloud",
+        "system_state": "deprecated"
+      },
+      "cloudTypes": [
+        "eks",
+        "aws"
+      ],
+      "digest": "sha256:8d1ea59a93aab6b45893b3c45a20c2d059648924100477c102032a69c12ea49e",
+      "displayName": "Amazon EBS CSI",
+      "layer": "csi",
+      "logoUrl": "https://registry.spectrocloud.com/v1/csi-aws-ebs/blobs/sha256:f86813591b3b63b3afcf0a604a7c8c715660448585e89174908f3c6a421ad8d8?type=image/png",
+      "manifests": null,
+      "name": "csi-aws-ebs",
+      "registryUid": "5eecc89d0b150045ae661cef",
+      "type": "spectro",
+      "version": "1.10.0"
+    },
+    "status": null
+  },
+  {
+    "metadata": {
+      "annotations": {
+        "latestVersion": "false",
+        "ownerUid": "sysadmin",
+        "permissions": "pack.get,pack.list",
+        "scope": "system",
+        "scopeVisibility": "21"
+      },
+      "creationTimestamp": "2022-12-28T15:00:14.676Z",
+      "deletionTimestamp": "0001-01-01T00:00:00.000Z",
+      "lastModifiedTimestamp": "2022-12-28T15:00:14.676Z",
+      "name": "csi-aws-ebs",
+      "uid": "63ac59fe082ebe80e6f2b0a5"
+    },
+    "spec": {
+      "annotations": {
+        "description": "Amazon Elastic Block Store (EBS) CSI driver",
+        "docsURL": "https://docs.spectrocloud.com/integrations/csi",
+        "source": "spectrocloud",
+        "system_state": "deprecated"
+      },
+      "cloudTypes": [
+        "eks",
+        "aws"
+      ],
+      "digest": "sha256:6ab632b13ba4c19e7d0357fb0c5245301dcd7cdfb4c55909fa6e928399723911",
+      "displayName": "Amazon EBS CSI",
+      "layer": "csi",
+      "logoUrl": "https://registry.spectrocloud.com/v1/csi-aws-ebs/blobs/sha256:f86813591b3b63b3afcf0a604a7c8c715660448585e89174908f3c6a421ad8d8?type=image/png",
+      "manifests": null,
+      "name": "csi-aws-ebs",
+      "registryUid": "5eecc89d0b150045ae661cef",
+      "type": "spectro",
+      "version": "1.12.0"
+    },
+    "status": null
+  },
+  {
+    "metadata": {
+      "annotations": {
+        "latestVersion": "false",
+        "ownerUid": "sysadmin",
+        "permissions": "pack.get,pack.list",
+        "scope": "system",
+        "scopeVisibility": "21"
+      },
+      "creationTimestamp": "2023-03-19T12:02:18.026Z",
+      "deletionTimestamp": "0001-01-01T00:00:00.000Z",
+      "lastModifiedTimestamp": "2023-03-19T12:02:18.026Z",
+      "name": "csi-aws-ebs",
+      "uid": "6416f9ca2c0e8b7d92ac6906"
+    },
+    "spec": {
+      "annotations": {
+        "description": "Amazon Elastic Block Store (EBS) CSI driver",
+        "docsURL": "https://docs.spectrocloud.com/integrations/csi",
+        "source": "spectrocloud",
+        "system_state": "deprecated"
+      },
+      "cloudTypes": [
+        "eks",
+        "aws"
+      ],
+      "digest": "sha256:1ad820a791978c9d160fe455b8217455ded45cacd90702a3ff76fb3e86828963",
+      "displayName": "Amazon EBS CSI",
+      "layer": "csi",
+      "logoUrl": "https://registry.spectrocloud.com/v1/csi-aws-ebs/blobs/sha256:f86813591b3b63b3afcf0a604a7c8c715660448585e89174908f3c6a421ad8d8?type=image/png",
+      "manifests": null,
+      "name": "csi-aws-ebs",
+      "registryUid": "5eecc89d0b150045ae661cef",
+      "type": "spectro",
+      "version": "1.16.0"
+    },
+    "status": null
+  },
+  {
+    "metadata": {
+      "annotations": {
+        "latestVersion": "false",
+        "ownerUid": "sysadmin",
+        "permissions": "pack.get,pack.list",
+        "scope": "system",
+        "scopeVisibility": "21"
+      },
+      "creationTimestamp": "2023-05-23T07:09:56.022Z",
+      "deletionTimestamp": "0001-01-01T00:00:00.000Z",
+      "lastModifiedTimestamp": "2023-05-23T07:09:56.022Z",
+      "name": "csi-aws-ebs",
+      "uid": "646c66c4aadf34e433120937"
+    },
+    "spec": {
+      "annotations": {
+        "description": "Amazon Elastic Block Store (EBS) CSI driver",
+        "docsURL": "https://docs.spectrocloud.com/integrations/csi",
+        "source": "spectrocloud",
+        "system_state": "deprecated"
+      },
+      "cloudTypes": [
+        "eks",
+        "aws"
+      ],
+      "digest": "sha256:3d4ab88214ea408b13c2c6f779a0a287fb803477f86cc31183f633ac14408bd4",
+      "displayName": "Amazon EBS CSI",
+      "layer": "csi",
+      "logoUrl": "https://registry.spectrocloud.com/v1/csi-aws-ebs/blobs/sha256:f86813591b3b63b3afcf0a604a7c8c715660448585e89174908f3c6a421ad8d8?type=image/png",
+      "manifests": null,
+      "name": "csi-aws-ebs",
+      "registryUid": "5eecc89d0b150045ae661cef",
+      "type": "spectro",
+      "version": "1.17.0"
+    },
+    "status": null
+  },
+  {
+    "metadata": {
+      "annotations": {
+        "latestVersion": "false",
+        "ownerUid": "sysadmin",
+        "permissions": "pack.get,pack.list",
+        "scope": "system",
+        "scopeVisibility": "21"
+      },
+      "creationTimestamp": "2023-08-27T06:45:41.735Z",
+      "deletionTimestamp": "0001-01-01T00:00:00.000Z",
+      "lastModifiedTimestamp": "2023-08-27T06:45:41.735Z",
+      "name": "csi-aws-ebs",
+      "uid": "64eaf1151a2af69624d12a41"
+    },
+    "spec": {
+      "annotations": {
+        "description": "Amazon Elastic Block Store (EBS) CSI driver",
+        "docsURL": "https://docs.spectrocloud.com/integrations/csi",
+        "source": "spectrocloud",
+        "system_state": "deprecated"
+      },
+      "cloudTypes": [
+        "eks",
+        "aws"
+      ],
+      "digest": "sha256:de472ebfd0d24f61ab0abfa20124b782ffd974985b1596d39d80b81ba55ef961",
+      "displayName": "Amazon EBS CSI",
+      "layer": "csi",
+      "logoUrl": "https://registry.spectrocloud.com/v1/csi-aws-ebs/blobs/sha256:f86813591b3b63b3afcf0a604a7c8c715660448585e89174908f3c6a421ad8d8?type=image/png",
+      "manifests": null,
+      "name": "csi-aws-ebs",
+      "registryUid": "5eecc89d0b150045ae661cef",
+      "type": "spectro",
+      "version": "1.20.0"
+    },
+    "status": null
+  },
+  {
+    "metadata": {
+      "annotations": {
+        "latestVersion": "false",
+        "ownerUid": "sysadmin",
+        "permissions": "pack.get,pack.list",
+        "scope": "system",
+        "scopeVisibility": "21"
+      },
+      "creationTimestamp": "2023-10-03T13:17:56.678Z",
+      "deletionTimestamp": "0001-01-01T00:00:00.000Z",
+      "lastModifiedTimestamp": "2023-10-03T13:17:56.678Z",
+      "name": "csi-aws-ebs",
+      "uid": "651c1484f55d6318a0b4d98d"
+    },
+    "spec": {
+      "annotations": {
+        "description": "Amazon Elastic Block Store (EBS) CSI driver",
+        "docsURL": "https://docs.spectrocloud.com/integrations/csi",
+        "source": "spectrocloud",
+        "system_state": "deprecated"
+      },
+      "cloudTypes": [
+        "eks",
+        "aws"
+      ],
+      "digest": "sha256:0ea6b6ae75a4e987dae9a7ee0e43c75d94a8732efdcc4904dffbbe380daad8fc",
+      "displayName": "Amazon EBS CSI",
+      "layer": "csi",
+      "logoUrl": "https://registry.spectrocloud.com/v1/csi-aws-ebs/blobs/sha256:f86813591b3b63b3afcf0a604a7c8c715660448585e89174908f3c6a421ad8d8?type=image/png",
+      "manifests": null,
+      "name": "csi-aws-ebs",
+      "registryUid": "5eecc89d0b150045ae661cef",
+      "type": "spectro",
+      "version": "1.22.0"
+    },
+    "status": null
+  },
+  {
+    "metadata": {
+      "annotations": {
+        "latestVersion": "false",
+        "ownerUid": "sysadmin",
+        "permissions": "pack.get,pack.list",
+        "scope": "system",
+        "scopeVisibility": "21"
+      },
+      "creationTimestamp": "2024-01-07T06:41:37.059Z",
+      "deletionTimestamp": "0001-01-01T00:00:00.000Z",
+      "lastModifiedTimestamp": "2024-01-07T06:41:37.059Z",
+      "name": "csi-aws-ebs",
+      "uid": "659a47a18b7673a6cd81cfdb"
+    },
+    "spec": {
+      "annotations": {
+        "description": "Amazon Elastic Block Store (EBS) CSI driver",
+        "docsURL": "https://docs.spectrocloud.com/integrations/csi",
+        "source": "spectrocloud",
+        "system_state": "deprecated"
+      },
+      "cloudTypes": [
+        "eks",
+        "aws"
+      ],
+      "digest": "sha256:b349194ba0d33c56e2cd238a9a3349e877dbdce99510ba0562a703eae41b07ee",
+      "displayName": "Amazon EBS CSI",
+      "layer": "csi",
+      "logoUrl": "https://registry.spectrocloud.com/v1/csi-aws-ebs/blobs/sha256:f86813591b3b63b3afcf0a604a7c8c715660448585e89174908f3c6a421ad8d8?type=image/png",
+      "manifests": null,
+      "name": "csi-aws-ebs",
+      "registryUid": "5eecc89d0b150045ae661cef",
+      "type": "spectro",
+      "version": "1.24.0"
+    },
+    "status": null
+  },
+  {
+    "metadata": {
+      "annotations": {
+        "latestVersion": "false",
+        "ownerUid": "sysadmin",
+        "permissions": "pack.get,pack.list",
+        "scope": "system",
+        "scopeVisibility": "21"
+      },
+      "creationTimestamp": "2024-04-15T06:11:02.471Z",
+      "deletionTimestamp": "0001-01-01T00:00:00.000Z",
+      "lastModifiedTimestamp": "2024-04-15T06:11:02.471Z",
+      "name": "csi-aws-ebs",
+      "uid": "661cc4f60aa79b75afba6d4b"
+    },
+    "spec": {
+      "annotations": {
+        "description": "Amazon Elastic Block Store (EBS) CSI driver",
+        "docsURL": "https://docs.spectrocloud.com/integrations/csi",
+        "source": "spectrocloud",
+        "system_state": "deprecated"
+      },
+      "cloudTypes": [
+        "eks",
+        "aws"
+      ],
+      "digest": "sha256:5429bf21666fb74e135f3e6c9e8a975c0bb90f58c559b920847fc2f6416d8f2a",
+      "displayName": "Amazon EBS CSI",
+      "layer": "csi",
+      "logoUrl": "https://registry.spectrocloud.com/v1/csi-aws-ebs/blobs/sha256:f86813591b3b63b3afcf0a604a7c8c715660448585e89174908f3c6a421ad8d8?type=image/png",
+      "manifests": null,
+      "name": "csi-aws-ebs",
+      "registryUid": "5eecc89d0b150045ae661cef",
+      "type": "spectro",
+      "version": "1.26.1"
+    },
+    "status": null
+  },
+  {
+    "metadata": {
+      "annotations": {
+        "latestVersion": "false",
+        "ownerUid": "sysadmin",
+        "permissions": "pack.get,pack.list",
+        "scope": "system",
+        "scopeVisibility": "21"
+      },
+      "creationTimestamp": "2024-06-16T06:07:25.738Z",
+      "deletionTimestamp": "0001-01-01T00:00:00.000Z",
+      "lastModifiedTimestamp": "2024-06-16T06:07:25.738Z",
+      "name": "csi-aws-ebs",
+      "uid": "666e811d86330a62a133511f"
+    },
+    "spec": {
+      "annotations": {
+        "description": "Amazon Elastic Block Store (EBS) CSI driver",
+        "docsURL": "https://docs.spectrocloud.com/integrations/csi",
+        "source": "spectrocloud",
+        "system_state": "deprecated"
+      },
+      "cloudTypes": [
+        "eks",
+        "aws"
+      ],
+      "digest": "sha256:a4c981ceadd872a50438c8239a15e53c8e6a3ae3860578cc659e8a714b136dc7",
+      "displayName": "Amazon EBS CSI",
+      "layer": "csi",
+      "logoUrl": "https://registry.spectrocloud.com/v1/csi-aws-ebs/blobs/sha256:f86813591b3b63b3afcf0a604a7c8c715660448585e89174908f3c6a421ad8d8?type=image/png",
+      "manifests": null,
+      "name": "csi-aws-ebs",
+      "registryUid": "5eecc89d0b150045ae661cef",
+      "type": "spectro",
+      "version": "1.28.0"
+    },
+    "status": null
+  },
+  {
+    "metadata": {
+      "annotations": {
+        "latestVersion": "false",
+        "ownerUid": "sysadmin",
+        "permissions": "pack.get,pack.list",
+        "scope": "system",
+        "scopeVisibility": "21"
+      },
+      "creationTimestamp": "2024-07-20T16:33:55.674Z",
+      "deletionTimestamp": "0001-01-01T00:00:00.000Z",
+      "lastModifiedTimestamp": "2024-07-20T16:33:55.674Z",
+      "name": "csi-aws-ebs",
+      "uid": "669be6f355ed407c3f09a9e5"
+    },
+    "spec": {
+      "annotations": {
+        "description": "Amazon Elastic Block Store (EBS) CSI driver",
+        "docsURL": "https://docs.spectrocloud.com/integrations/csi",
+        "source": "spectrocloud",
+        "system_state": "deprecated"
+      },
+      "cloudTypes": [
+        "eks",
+        "aws"
+      ],
+      "digest": "sha256:7904764da4e4f8032a52891b8ed2bdb7e9cb78a9e504c13e2c7c5e7efc044ded",
+      "displayName": "Amazon EBS CSI",
+      "layer": "csi",
+      "logoUrl": "https://registry.spectrocloud.com/v1/csi-aws-ebs/blobs/sha256:f86813591b3b63b3afcf0a604a7c8c715660448585e89174908f3c6a421ad8d8?type=image/png",
+      "manifests": null,
+      "name": "csi-aws-ebs",
+      "registryUid": "5eecc89d0b150045ae661cef",
+      "type": "spectro",
+      "version": "1.30.0"
+    },
+    "status": null
+  },
+  {
+    "metadata": {
+      "annotations": {
+        "latestVersion": "false",
+        "ownerUid": "sysadmin",
+        "permissions": "pack.get,pack.list",
+        "scope": "system",
+        "scopeVisibility": "21"
+      },
+      "creationTimestamp": "2024-08-17T15:36:02.712Z",
+      "deletionTimestamp": "0001-01-01T00:00:00.000Z",
+      "lastModifiedTimestamp": "2024-08-17T15:36:02.712Z",
+      "name": "csi-aws-ebs",
+      "uid": "66c0c362cd3c6822e6708912"
+    },
+    "spec": {
+      "annotations": {
+        "description": "Amazon Elastic Block Store (EBS) CSI driver",
+        "docsURL": "https://docs.spectrocloud.com/integrations/csi",
+        "source": "spectrocloud",
+        "system_state": "deprecated"
+      },
+      "cloudTypes": [
+        "eks",
+        "aws"
+      ],
+      "digest": "sha256:1993f943647eb9d98acaec5529ff15729f2540f1ac41b99060d9302eab10dccb",
+      "displayName": "Amazon EBS CSI",
+      "layer": "csi",
+      "logoUrl": "https://registry.spectrocloud.com/v1/csi-aws-ebs/blobs/sha256:f86813591b3b63b3afcf0a604a7c8c715660448585e89174908f3c6a421ad8d8?type=image/png",
+      "manifests": null,
+      "name": "csi-aws-ebs",
+      "registryUid": "5eecc89d0b150045ae661cef",
+      "type": "spectro",
+      "version": "1.33.0"
+    },
+    "status": null
+  },
+  {
+    "metadata": {
+      "annotations": {
+        "latestVersion": "false",
+        "ownerUid": "sysadmin",
+        "permissions": "pack.get,pack.list",
+        "scope": "system",
+        "scopeVisibility": "21"
+      },
+      "creationTimestamp": "2024-10-13T16:10:25.616Z",
+      "deletionTimestamp": "0001-01-01T00:00:00.000Z",
+      "lastModifiedTimestamp": "2024-10-13T16:10:25.616Z",
+      "name": "csi-aws-ebs",
+      "uid": "670bf0f13deb3ad3b1a3fdb8"
+    },
+    "spec": {
+      "annotations": {
+        "description": "Amazon Elastic Block Store (EBS) CSI driver",
+        "docsURL": "https://docs.spectrocloud.com/integrations/csi",
+        "source": "spectrocloud",
+        "system_state": "deprecated"
+      },
+      "cloudTypes": [
+        "eks",
+        "aws"
+      ],
+      "digest": "sha256:851069b79201fab8eba19e2a211fe15b91808540fb9e4e9d73f3fcc0668f732f",
+      "displayName": "Amazon EBS CSI",
+      "layer": "csi",
+      "logoUrl": "https://registry.spectrocloud.com/v1/csi-aws-ebs/blobs/sha256:f86813591b3b63b3afcf0a604a7c8c715660448585e89174908f3c6a421ad8d8?type=image/png",
+      "manifests": null,
+      "name": "csi-aws-ebs",
+      "registryUid": "5eecc89d0b150045ae661cef",
+      "type": "spectro",
+      "version": "1.35.0"
+    },
+    "status": null
+  },
+  {
+    "metadata": {
+      "annotations": {
+        "latestVersion": "false",
+        "ownerUid": "sysadmin",
+        "permissions": "pack.get,pack.list",
+        "scope": "system",
+        "scopeVisibility": "21"
+      },
+      "creationTimestamp": "2025-01-19T16:30:54.672Z",
+      "deletionTimestamp": "0001-01-01T00:00:00.000Z",
+      "lastModifiedTimestamp": "2025-01-19T16:30:54.672Z",
+      "name": "csi-aws-ebs",
+      "uid": "678d28bee2561ecc24c1da64"
+    },
+    "spec": {
+      "annotations": {
+        "description": "Amazon Elastic Block Store (EBS) CSI driver",
+        "docsURL": "https://docs.spectrocloud.com/integrations/csi",
+        "source": "spectrocloud",
+        "system_state": "deprecated"
+      },
+      "cloudTypes": [
+        "eks",
+        "aws"
+      ],
+      "digest": "sha256:968478275da34fb264dd22c53e32622e98f3c4fffb513fbe0e5d933a9fa5936a",
+      "displayName": "Amazon EBS CSI",
+      "layer": "csi",
+      "logoUrl": "https://registry.spectrocloud.com/v1/csi-aws-ebs/blobs/sha256:f86813591b3b63b3afcf0a604a7c8c715660448585e89174908f3c6a421ad8d8?type=image/png",
+      "manifests": null,
+      "name": "csi-aws-ebs",
+      "registryUid": "5eecc89d0b150045ae661cef",
+      "type": "spectro",
+      "version": "1.37.0"
+    },
+    "status": null
+  },
+  {
+    "metadata": {
+      "annotations": {
+        "latestVersion": "false",
+        "ownerUid": "sysadmin",
+        "permissions": "pack.get,pack.list",
+        "scope": "system",
+        "scopeVisibility": "21"
+      },
+      "creationTimestamp": "2025-02-16T17:47:33.335Z",
+      "deletionTimestamp": "0001-01-01T00:00:00.000Z",
+      "lastModifiedTimestamp": "2025-02-16T17:47:33.335Z",
+      "name": "csi-aws-ebs",
+      "uid": "67b224b58ab50a5e81eaa0df"
+    },
+    "spec": {
+      "annotations": {
+        "description": "Amazon Elastic Block Store (EBS) CSI driver",
+        "docsURL": "https://docs.spectrocloud.com/integrations/csi",
+        "source": "spectrocloud"
+      },
+      "cloudTypes": [
+        "eks",
+        "aws"
+      ],
+      "digest": "sha256:578fc99fada309be15a3e00dccbad36decc73da9a42f47a74def64041e0517bc",
+      "displayName": "Amazon EBS CSI",
+      "layer": "csi",
+      "logoUrl": "https://registry.spectrocloud.com/v1/csi-aws-ebs/blobs/sha256:f86813591b3b63b3afcf0a604a7c8c715660448585e89174908f3c6a421ad8d8?type=image/png",
+      "manifests": null,
+      "name": "csi-aws-ebs",
+      "registryUid": "5eecc89d0b150045ae661cef",
+      "type": "spectro",
+      "version": "1.39.0"
+    },
+    "status": null
+  },
+  {
+    "metadata": {
+      "annotations": {
+        "latestVersion": "false",
+        "ownerUid": "sysadmin",
+        "permissions": "pack.get,pack.list",
+        "scope": "system",
+        "scopeVisibility": "21"
+      },
+      "creationTimestamp": "2025-04-19T18:05:23.500Z",
+      "deletionTimestamp": "0001-01-01T00:00:00.000Z",
+      "lastModifiedTimestamp": "2025-04-19T18:05:23.500Z",
+      "name": "csi-aws-ebs",
+      "uid": "6803e5e3d7d1020e9becd38f"
+    },
+    "spec": {
+      "annotations": {
+        "description": "Amazon Elastic Block Store (EBS) CSI driver",
+        "docsURL": "https://docs.spectrocloud.com/integrations/csi",
+        "source": "spectrocloud"
+      },
+      "cloudTypes": [
+        "eks",
+        "aws"
+      ],
+      "digest": "sha256:369193690eff1e936a051803f09cfb2a4d0c98dcc26daff6ac6a5f400fe6a38f",
+      "displayName": "Amazon EBS CSI",
+      "layer": "csi",
+      "logoUrl": "https://registry.spectrocloud.com/v1/csi-aws-ebs/blobs/sha256:f86813591b3b63b3afcf0a604a7c8c715660448585e89174908f3c6a421ad8d8?type=image/png",
+      "manifests": null,
+      "name": "csi-aws-ebs",
+      "registryUid": "5eecc89d0b150045ae661cef",
+      "type": "spectro",
+      "version": "1.41.0"
+    },
+    "status": null
+  },
+  {
+    "metadata": {
+      "annotations": {
+        "latestVersion": "false",
+        "ownerUid": "sysadmin",
+        "permissions": "pack.get,pack.list",
+        "scope": "system",
+        "scopeVisibility": "21"
+      },
+      "creationTimestamp": "2025-07-19T15:46:31.868Z",
+      "deletionTimestamp": "0001-01-01T00:00:00.000Z",
+      "lastModifiedTimestamp": "2025-07-19T15:46:31.868Z",
+      "name": "csi-aws-ebs",
+      "uid": "687bbdd7511462ef75ba7ee1"
+    },
+    "spec": {
+      "annotations": {
+        "airgap": "true",
+        "architecture": "amd64,arm64",
+        "description": "Amazon Elastic Block Store (EBS) CSI driver",
+        "docsURL": "https://docs.spectrocloud.com/integrations/csi",
+        "source": "spectrocloud"
+      },
+      "cloudTypes": [
+        "eks",
+        "aws"
+      ],
+      "digest": "sha256:f593198b36f89a26b0a89163839cfcd18e5516198a6fefb68e9cb8757f6d4503",
+      "displayName": "Amazon EBS CSI",
+      "layer": "csi",
+      "logoUrl": "https://registry.spectrocloud.com/v1/csi-aws-ebs/blobs/sha256:f86813591b3b63b3afcf0a604a7c8c715660448585e89174908f3c6a421ad8d8?type=image/png",
+      "manifests": null,
+      "name": "csi-aws-ebs",
+      "registryUid": "5eecc89d0b150045ae661cef",
+      "type": "spectro",
+      "version": "1.43.0"
+    },
+    "status": null
+  },
+  {
+    "metadata": {
+      "annotations": {
+        "latestVersion": "false",
+        "ownerUid": "sysadmin",
+        "permissions": "pack.get,pack.list",
+        "scope": "system",
+        "scopeVisibility": "21"
+      },
+      "creationTimestamp": "2025-08-17T14:42:33.995Z",
+      "deletionTimestamp": "0001-01-01T00:00:00.000Z",
+      "lastModifiedTimestamp": "2025-08-17T14:42:33.995Z",
+      "name": "csi-aws-ebs",
+      "uid": "68a1ea59018f23c3902ac880"
+    },
+    "spec": {
+      "annotations": {
+        "airgap": "true",
+        "architecture": "amd64,arm64",
+        "description": "Amazon Elastic Block Store (EBS) CSI driver",
+        "docsURL": "https://docs.spectrocloud.com/integrations/csi",
+        "source": "spectrocloud"
+      },
+      "cloudTypes": [
+        "eks",
+        "aws"
+      ],
+      "digest": "sha256:6cc5788ed9be70ecaa0338f5445cdc31d154c0848805c175d0777578da4474ff",
+      "displayName": "Amazon EBS CSI",
+      "layer": "csi",
+      "logoUrl": "https://registry.spectrocloud.com/v1/csi-aws-ebs/blobs/sha256:f86813591b3b63b3afcf0a604a7c8c715660448585e89174908f3c6a421ad8d8?type=image/png",
+      "manifests": null,
+      "name": "csi-aws-ebs",
+      "registryUid": "5eecc89d0b150045ae661cef",
+      "type": "spectro",
+      "version": "1.46.0"
+    },
+    "status": null
+  },
+  {
+    "metadata": {
+      "annotations": {
+        "latestVersion": "false",
+        "ownerUid": "sysadmin",
+        "permissions": "pack.get,pack.list",
+        "scope": "system",
+        "scopeVisibility": "21"
+      },
+      "creationTimestamp": "2025-10-03T15:31:24.327Z",
+      "deletionTimestamp": "0001-01-01T00:00:00.000Z",
+      "lastModifiedTimestamp": "2025-10-03T15:31:24.327Z",
+      "name": "csi-aws-ebs",
+      "uid": "68dfec4c8ce8d5f7d18a017d"
+    },
+    "spec": {
+      "annotations": {
+        "airgap": "true",
+        "architecture": "amd64,arm64",
+        "description": "Amazon Elastic Block Store (EBS) CSI driver",
+        "docsURL": "https://docs.spectrocloud.com/integrations/csi",
+        "revision": "20250930",
+        "source": "spectrocloud"
+      },
+      "cloudTypes": [
+        "eks",
+        "aws"
+      ],
+      "digest": "sha256:1472098ede34fed83ae76c6b2f5c9f6642b813cab5d97ac27b9cd45d070daaf8",
+      "displayName": "Amazon EBS CSI",
+      "layer": "csi",
+      "logoUrl": "https://registry.spectrocloud.com/v1/csi-aws-ebs/blobs/sha256:f86813591b3b63b3afcf0a604a7c8c715660448585e89174908f3c6a421ad8d8?type=image/png",
+      "manifests": null,
+      "name": "csi-aws-ebs",
+      "registryUid": "5eecc89d0b150045ae661cef",
+      "type": "spectro",
+      "version": "1.48.0"
+    },
+    "status": null
+  },
+  {
+    "metadata": {
+      "annotations": {
+        "latestVersion": "false",
+        "ownerUid": "sysadmin",
+        "permissions": "pack.get,pack.list",
+        "scope": "system",
+        "scopeVisibility": "21"
+      },
+      "creationTimestamp": "2022-05-05T07:18:32.705Z",
+      "deletionTimestamp": "0001-01-01T00:00:00.000Z",
+      "lastModifiedTimestamp": "2022-05-05T07:18:32.705Z",
+      "name": "csi-aws-ebs",
+      "uid": "62737a4862f9f233a79c43c8"
+    },
+    "spec": {
+      "annotations": {
+        "description": "Amazon Elastic Block Store (EBS) CSI driver",
+        "docsURL": "https://docs.spectrocloud.com/integrations/csi",
+        "source": "spectrocloud",
+        "system_state": "deprecated"
+      },
+      "cloudTypes": [
+        "eks",
+        "aws"
+      ],
+      "digest": "sha256:0f5d683c8ab8d0762435562c5dc0e0bd6a5b8135fab32615467e567eb02a8961",
+      "displayName": "Amazon EBS CSI",
+      "layer": "csi",
+      "logoUrl": "https://registry.spectrocloud.com/v1/csi-aws-ebs/blobs/sha256:f86813591b3b63b3afcf0a604a7c8c715660448585e89174908f3c6a421ad8d8?type=image/png",
+      "manifests": null,
+      "name": "csi-aws-ebs",
+      "registryUid": "5eecc89d0b150045ae661cef",
+      "type": "spectro",
+      "version": "1.5.1"
+    },
+    "status": null
+  },
+  {
+    "metadata": {
+      "annotations": {
+        "latestVersion": "false",
+        "ownerUid": "sysadmin",
+        "permissions": "pack.get,pack.list",
+        "scope": "system",
+        "scopeVisibility": "21"
+      },
+      "creationTimestamp": "2025-11-22T15:50:38.035Z",
+      "deletionTimestamp": "0001-01-01T00:00:00.000Z",
+      "lastModifiedTimestamp": "2025-11-22T15:50:38.035Z",
+      "name": "csi-aws-ebs",
+      "uid": "6921dbcec8f8ca0892d7f4ac"
+    },
+    "spec": {
+      "annotations": {
+        "airgap": "true",
+        "architecture": "amd64,arm64",
+        "description": "Amazon Elastic Block Store (EBS) CSI driver",
+        "docsURL": "https://docs.spectrocloud.com/integrations/csi",
+        "revision": "20251119",
+        "source": "spectrocloud"
+      },
+      "cloudTypes": [
+        "eks",
+        "aws"
+      ],
+      "digest": "sha256:54d9a1f7ee27be79c2050760c994943ab62dee1a9580e447b0ab01af5ae75346",
+      "displayName": "Amazon EBS CSI",
+      "layer": "csi",
+      "logoUrl": "https://registry.spectrocloud.com/v1/csi-aws-ebs/blobs/sha256:f86813591b3b63b3afcf0a604a7c8c715660448585e89174908f3c6a421ad8d8?type=image/png",
+      "manifests": null,
+      "name": "csi-aws-ebs",
+      "registryUid": "5eecc89d0b150045ae661cef",
+      "type": "spectro",
+      "version": "1.51.0"
+    },
+    "status": null
+  },
+  {
+    "metadata": {
+      "annotations": {
+        "latestVersion": "false",
+        "ownerUid": "sysadmin",
+        "permissions": "pack.get,pack.list",
+        "scope": "system",
+        "scopeVisibility": "21"
+      },
+      "creationTimestamp": "2026-01-18T16:02:41.236Z",
+      "deletionTimestamp": "0001-01-01T00:00:00.000Z",
+      "lastModifiedTimestamp": "2026-01-18T16:02:41.236Z",
+      "name": "csi-aws-ebs",
+      "uid": "696d0421567d3e0ab0a508a4"
+    },
+    "spec": {
+      "annotations": {
+        "airgap": "true",
+        "architecture": "amd64,arm64",
+        "description": "Amazon Elastic Block Store (EBS) CSI driver",
+        "docsURL": "https://docs.spectrocloud.com/integrations/csi",
+        "revision": "20251231",
+        "source": "spectrocloud"
+      },
+      "cloudTypes": [
+        "eks",
+        "aws"
+      ],
+      "digest": "sha256:1131c5a62216925cdbe23cb8d69293a53b8e90a95117c048731cb3a3b548a7fc",
+      "displayName": "Amazon EBS CSI",
+      "layer": "csi",
+      "logoUrl": "https://registry.spectrocloud.com/v1/csi-aws-ebs/blobs/sha256:f86813591b3b63b3afcf0a604a7c8c715660448585e89174908f3c6a421ad8d8?type=image/png",
+      "manifests": null,
+      "name": "csi-aws-ebs",
+      "registryUid": "5eecc89d0b150045ae661cef",
+      "type": "spectro",
+      "version": "1.53.0"
+    },
+    "status": null
+  },
+  {
+    "metadata": {
+      "annotations": {
+        "latestVersion": "false",
+        "ownerUid": "sysadmin",
+        "permissions": "pack.get,pack.list",
+        "scope": "system",
+        "scopeVisibility": "21"
+      },
+      "creationTimestamp": "2026-01-23T15:05:08.208Z",
+      "deletionTimestamp": "0001-01-01T00:00:00.000Z",
+      "lastModifiedTimestamp": "2026-01-23T15:05:08.208Z",
+      "name": "csi-aws-ebs",
+      "uid": "69738e2447eca4e9df89f3e8"
+    },
+    "spec": {
+      "annotations": {
+        "airgap": "true",
+        "architecture": "amd64,arm64",
+        "description": "Amazon Elastic Block Store (EBS) CSI driver",
+        "docsURL": "https://docs.spectrocloud.com/integrations/csi",
+        "revision": "20260109",
+        "source": "spectrocloud"
+      },
+      "cloudTypes": [
+        "eks",
+        "aws"
+      ],
+      "digest": "sha256:26010cf7af17f40be16f2c6c4cb30f4d6132a734b61311181606b854f8fd5eff",
+      "displayName": "Amazon EBS CSI",
+      "layer": "csi",
+      "logoUrl": "https://registry.spectrocloud.com/v1/csi-aws-ebs/blobs/sha256:f86813591b3b63b3afcf0a604a7c8c715660448585e89174908f3c6a421ad8d8?type=image/png",
+      "manifests": null,
+      "name": "csi-aws-ebs",
+      "registryUid": "5eecc89d0b150045ae661cef",
+      "type": "spectro",
+      "version": "1.54.0"
+    },
+    "status": null
+  },
+  {
+    "metadata": {
+      "annotations": {
+        "latestVersion": "false",
+        "ownerUid": "sysadmin",
+        "permissions": "pack.get,pack.list",
+        "scope": "system",
+        "scopeVisibility": "21"
+      },
+      "creationTimestamp": "2026-02-14T13:06:00.196Z",
+      "deletionTimestamp": "0001-01-01T00:00:00.000Z",
+      "lastModifiedTimestamp": "2026-02-14T13:06:00.196Z",
+      "name": "csi-aws-ebs",
+      "uid": "699073384b0c74448631eba1"
+    },
+    "spec": {
+      "annotations": {
+        "airgap": "true",
+        "architecture": "amd64,arm64",
+        "description": "Amazon Elastic Block Store (EBS) CSI driver",
+        "docsURL": "https://docs.spectrocloud.com/integrations/csi",
+        "revision": "20260211",
+        "source": "spectrocloud"
+      },
+      "cloudTypes": [
+        "eks",
+        "aws"
+      ],
+      "digest": "sha256:142fd2011157d0b187a1a80db13529a9c6bb59585b621e7bc54287794235ca8b",
+      "displayName": "Amazon EBS CSI",
+      "layer": "csi",
+      "logoUrl": "https://registry.spectrocloud.com/v1/csi-aws-ebs/blobs/sha256:f86813591b3b63b3afcf0a604a7c8c715660448585e89174908f3c6a421ad8d8?type=image/png",
+      "manifests": null,
+      "name": "csi-aws-ebs",
+      "registryUid": "5eecc89d0b150045ae661cef",
+      "type": "spectro",
+      "version": "1.55.0"
+    },
+    "status": null
+  },
+  {
+    "metadata": {
+      "annotations": {
+        "latestVersion": "false",
+        "ownerUid": "sysadmin",
+        "permissions": "pack.get,pack.list",
+        "scope": "system",
+        "scopeVisibility": "21"
+      },
+      "creationTimestamp": "2026-03-13T14:32:21.262Z",
+      "deletionTimestamp": "0001-01-01T00:00:00.000Z",
+      "lastModifiedTimestamp": "2026-03-13T14:32:21.262Z",
+      "name": "csi-aws-ebs",
+      "uid": "69b41ff572b86d95672d717a"
+    },
+    "spec": {
+      "annotations": {
+        "airgap": "true",
+        "architecture": "amd64,arm64",
+        "description": "Amazon Elastic Block Store (EBS) CSI driver",
+        "docsURL": "https://docs.spectrocloud.com/integrations/csi",
+        "revision": "20260305",
+        "source": "spectrocloud"
+      },
+      "cloudTypes": [
+        "eks",
+        "aws"
+      ],
+      "digest": "sha256:3b0280b0eaca59007113b525538a93ed736a41580e800c01764f4ad8e5a475ed",
+      "displayName": "Amazon EBS CSI",
+      "layer": "csi",
+      "logoUrl": "https://registry.spectrocloud.com/v1/csi-aws-ebs/blobs/sha256:f86813591b3b63b3afcf0a604a7c8c715660448585e89174908f3c6a421ad8d8?type=image/png",
+      "manifests": null,
+      "name": "csi-aws-ebs",
+      "registryUid": "5eecc89d0b150045ae661cef",
+      "type": "spectro",
+      "version": "1.56.0"
+    },
+    "status": null
+  },
+  {
+    "metadata": {
+      "annotations": {
+        "latestVersion": "false",
+        "ownerUid": "sysadmin",
+        "permissions": "pack.get,pack.list",
+        "scope": "system",
+        "scopeVisibility": "21"
+      },
+      "creationTimestamp": "2026-04-05T14:49:58.602Z",
+      "deletionTimestamp": "0001-01-01T00:00:00.000Z",
+      "lastModifiedTimestamp": "2026-04-05T14:49:58.602Z",
+      "name": "csi-aws-ebs",
+      "uid": "69d276966792525f1933d5fa"
+    },
+    "spec": {
+      "annotations": {
+        "airgap": "true",
+        "architecture": "amd64,arm64",
+        "description": "Amazon Elastic Block Store (EBS) CSI driver",
+        "docsURL": "https://docs.spectrocloud.com/integrations/csi",
+        "revision": "20260305",
+        "source": "spectrocloud"
+      },
+      "cloudTypes": [
+        "eks",
+        "aws"
+      ],
+      "digest": "sha256:90e1957ea444cb082fce322e740123e9d4837c6d6be54f3b15478cf78c2f9545",
+      "displayName": "Amazon EBS CSI",
+      "layer": "csi",
+      "logoUrl": "https://registry.spectrocloud.com/v1/csi-aws-ebs/blobs/sha256:f86813591b3b63b3afcf0a604a7c8c715660448585e89174908f3c6a421ad8d8?type=image/png",
+      "manifests": null,
+      "name": "csi-aws-ebs",
+      "registryUid": "5eecc89d0b150045ae661cef",
+      "type": "spectro",
+      "version": "1.57.1"
+    },
+    "status": null
+  },
+  {
+    "metadata": {
+      "annotations": {
+        "latestVersion": "false",
+        "ownerUid": "sysadmin",
+        "permissions": "pack.get,pack.list",
+        "scope": "system",
+        "scopeVisibility": "21"
+      },
+      "creationTimestamp": "2026-04-24T15:01:31.935Z",
+      "deletionTimestamp": "0001-01-01T00:00:00.000Z",
+      "lastModifiedTimestamp": "2026-04-24T15:01:31.935Z",
+      "name": "csi-aws-ebs",
+      "uid": "69eb85cbc678e39cdc655692"
+    },
+    "spec": {
+      "annotations": {
+        "airgap": "true",
+        "architecture": "amd64,arm64",
+        "description": "Amazon Elastic Block Store (EBS) CSI driver",
+        "docsURL": "https://docs.spectrocloud.com/integrations/csi",
+        "revision": "20260416",
+        "source": "spectrocloud"
+      },
+      "cloudTypes": [
+        "eks",
+        "aws"
+      ],
+      "digest": "sha256:d04c823f217b16937794f7ca2dc280a5c27527a17c15f0f202e8a92f295f7bcb",
+      "displayName": "Amazon EBS CSI",
+      "layer": "csi",
+      "logoUrl": "https://registry.spectrocloud.com/v1/csi-aws-ebs/blobs/sha256:f86813591b3b63b3afcf0a604a7c8c715660448585e89174908f3c6a421ad8d8?type=image/png",
+      "manifests": null,
+      "name": "csi-aws-ebs",
+      "registryUid": "5eecc89d0b150045ae661cef",
+      "type": "spectro",
+      "version": "1.58.0"
+    },
+    "status": null
+  },
+  {
+    "metadata": {
+      "annotations": {
+        "latestVersion": "false",
+        "ownerUid": "sysadmin",
+        "permissions": "pack.get,pack.list",
+        "scope": "system",
+        "scopeVisibility": "21"
+      },
+      "creationTimestamp": "2026-05-08T15:21:14.034Z",
+      "deletionTimestamp": "0001-01-01T00:00:00.000Z",
+      "lastModifiedTimestamp": "2026-05-08T15:21:14.034Z",
+      "name": "csi-aws-ebs",
+      "uid": "69fdff6a1cf3d3dad7996f21"
+    },
+    "spec": {
+      "annotations": {
+        "airgap": "true",
+        "architecture": "amd64,arm64",
+        "description": "Amazon Elastic Block Store (EBS) CSI driver",
+        "docsURL": "https://docs.spectrocloud.com/integrations/csi",
+        "revision": "20260507",
+        "source": "spectrocloud"
+      },
+      "cloudTypes": [
+        "eks",
+        "aws"
+      ],
+      "digest": "sha256:e94b68231d2aea0be25651e173ecee63b0f428cce49ccdf578d7cb2d77b6300c",
+      "displayName": "Amazon EBS CSI",
+      "layer": "csi",
+      "logoUrl": "https://registry.spectrocloud.com/v1/csi-aws-ebs/blobs/sha256:f86813591b3b63b3afcf0a604a7c8c715660448585e89174908f3c6a421ad8d8?type=image/png",
+      "manifests": null,
+      "name": "csi-aws-ebs",
+      "registryUid": "5eecc89d0b150045ae661cef",
+      "type": "spectro",
+      "version": "1.59.0"
+    },
+    "status": null
+  },
+  {
+    "metadata": {
+      "annotations": {
+        "latestVersion": "false",
+        "ownerUid": "sysadmin",
+        "permissions": "pack.get,pack.list",
+        "scope": "system",
+        "scopeVisibility": "21"
+      },
+      "creationTimestamp": "2026-05-22T14:44:12.265Z",
+      "deletionTimestamp": "0001-01-01T00:00:00.000Z",
+      "lastModifiedTimestamp": "2026-05-22T14:44:12.265Z",
+      "name": "csi-aws-ebs",
+      "uid": "6a106bbc5a19cb06f59fe002"
+    },
+    "spec": {
+      "annotations": {
+        "airgap": "true",
+        "architecture": "amd64,arm64",
+        "description": "Amazon Elastic Block Store (EBS) CSI driver",
+        "docsURL": "https://docs.spectrocloud.com/integrations/csi",
+        "revision": "20260521",
+        "source": "spectrocloud"
+      },
+      "cloudTypes": [
+        "eks",
+        "aws"
+      ],
+      "digest": "sha256:af97dec989ba3f3199568a8131039046d69deb877f61e4c0d844a3b64588037d",
+      "displayName": "Amazon EBS CSI",
+      "layer": "csi",
+      "logoUrl": "https://registry.spectrocloud.com/v1/csi-aws-ebs/blobs/sha256:f86813591b3b63b3afcf0a604a7c8c715660448585e89174908f3c6a421ad8d8?type=image/png",
+      "manifests": null,
+      "name": "csi-aws-ebs",
+      "registryUid": "5eecc89d0b150045ae661cef",
+      "type": "spectro",
+      "version": "1.60.0"
+    },
+    "status": null
+  },
+  {
+    "metadata": {
+      "annotations": {
+        "latestVersion": "false",
+        "ownerUid": "sysadmin",
+        "permissions": "pack.get,pack.list",
+        "scope": "system",
+        "scopeVisibility": "21"
+      },
+      "creationTimestamp": "2026-06-12T13:30:40.307Z",
+      "deletionTimestamp": "0001-01-01T00:00:00.000Z",
+      "lastModifiedTimestamp": "2026-06-12T13:30:40.307Z",
+      "name": "csi-aws-ebs",
+      "uid": "6a2c0a00529ef49e6651206f"
+    },
+    "spec": {
+      "annotations": {
+        "airgap": "true",
+        "architecture": "amd64,arm64",
+        "description": "Amazon Elastic Block Store (EBS) CSI driver",
+        "docsURL": "https://docs.spectrocloud.com/integrations/csi",
+        "revision": "20260611",
+        "source": "spectrocloud"
+      },
+      "cloudTypes": [
+        "eks",
+        "aws"
+      ],
+      "digest": "sha256:7902b2ae0f331d6ac8f0a8d2aa3e472c11f0687ce028a2f0644efd749443efa3",
+      "displayName": "Amazon EBS CSI",
+      "layer": "csi",
+      "logoUrl": "https://registry.spectrocloud.com/v1/csi-aws-ebs/blobs/sha256:f86813591b3b63b3afcf0a604a7c8c715660448585e89174908f3c6a421ad8d8?type=image/png",
+      "manifests": null,
+      "name": "csi-aws-ebs",
+      "registryUid": "5eecc89d0b150045ae661cef",
+      "type": "spectro",
+      "version": "1.60.1"
+    },
+    "status": null
+  },
+  {
+    "metadata": {
+      "annotations": {
+        "latestVersion": "false",
+        "ownerUid": "sysadmin",
+        "permissions": "pack.get,pack.list",
+        "scope": "system",
+        "scopeVisibility": "21"
+      },
+      "creationTimestamp": "2026-06-19T13:37:54.221Z",
+      "deletionTimestamp": "0001-01-01T00:00:00.000Z",
+      "lastModifiedTimestamp": "2026-06-19T13:37:54.221Z",
+      "name": "csi-aws-ebs",
+      "uid": "6a354632be0d8453aee36d0b"
+    },
+    "spec": {
+      "annotations": {
+        "airgap": "true",
+        "architecture": "amd64,arm64",
+        "description": "Amazon Elastic Block Store (EBS) CSI driver",
+        "docsURL": "https://docs.spectrocloud.com/integrations/csi",
+        "revision": "20260617",
+        "source": "spectrocloud"
+      },
+      "cloudTypes": [
+        "eks",
+        "aws"
+      ],
+      "digest": "sha256:c16b1992794438090c03eaa53a97e525112705d2629de6e7be20fd85f67bde57",
+      "displayName": "Amazon EBS CSI",
+      "layer": "csi",
+      "logoUrl": "https://registry.spectrocloud.com/v1/csi-aws-ebs/blobs/sha256:f86813591b3b63b3afcf0a604a7c8c715660448585e89174908f3c6a421ad8d8?type=image/png",
+      "manifests": null,
+      "name": "csi-aws-ebs",
+      "registryUid": "5eecc89d0b150045ae661cef",
+      "type": "spectro",
+      "version": "1.61.1"
+    },
+    "status": null
+  },
+  {
+    "metadata": {
+      "annotations": {
+        "latestVersion": "false",
+        "ownerUid": "sysadmin",
+        "permissions": "pack.get,pack.list",
+        "scope": "system",
+        "scopeVisibility": "21"
+      },
+      "creationTimestamp": "2026-06-28T16:24:11.749Z",
+      "deletionTimestamp": "0001-01-01T00:00:00.000Z",
+      "lastModifiedTimestamp": "2026-06-28T16:24:11.749Z",
+      "name": "csi-aws-ebs",
+      "uid": "6a414aab24a8446c59a878ea"
+    },
+    "spec": {
+      "annotations": {
+        "airgap": "true",
+        "architecture": "amd64,arm64",
+        "description": "Amazon Elastic Block Store (EBS) CSI driver",
+        "docsURL": "https://docs.spectrocloud.com/integrations/csi",
+        "revision": "20260624",
+        "source": "spectrocloud"
+      },
+      "cloudTypes": [
+        "eks",
+        "aws"
+      ],
+      "digest": "sha256:c24b9078a702ead27d22ad84d7dc38a05a88ab542539000462f139c69f8e0b44",
+      "displayName": "Amazon EBS CSI",
+      "layer": "csi",
+      "logoUrl": "https://registry.spectrocloud.com/v1/csi-aws-ebs/blobs/sha256:f86813591b3b63b3afcf0a604a7c8c715660448585e89174908f3c6a421ad8d8?type=image/png",
+      "manifests": null,
+      "name": "csi-aws-ebs",
+      "registryUid": "5eecc89d0b150045ae661cef",
+      "type": "spectro",
+      "version": "1.62.0"
+    },
+    "status": null
+  },
+  {
+    "metadata": {
+      "annotations": {
+        "latestVersion": "false",
+        "ownerUid": "sysadmin",
+        "permissions": "pack.get,pack.list",
+        "scope": "system",
+        "scopeVisibility": "21"
+      },
+      "creationTimestamp": "2026-08-01T17:32:51.763Z",
+      "deletionTimestamp": "0001-01-01T00:00:00.000Z",
+      "lastModifiedTimestamp": "2026-08-01T17:32:51.763Z",
+      "name": "csi-aws-ebs",
+      "uid": "6a6e2dc316c3d017495a155d"
+    },
+    "spec": {
+      "annotations": {
+        "airgap": "true",
+        "architecture": "amd64,arm64",
+        "description": "Amazon Elastic Block Store (EBS) CSI driver",
+        "docsURL": "https://docs.spectrocloud.com/integrations/csi",
+        "revision": "20260729",
+        "source": "spectrocloud"
+      },
+      "cloudTypes": [
+        "eks",
+        "aws"
+      ],
+      "digest": "sha256:5cfe44adb1d4ca4dd7e1d0333b95d3caacc3d7802f37189b120d6108fa30a32f",
+      "displayName": "Amazon EBS CSI",
+      "layer": "csi",
+      "logoUrl": "https://registry.spectrocloud.com/v1/csi-aws-ebs/blobs/sha256:f86813591b3b63b3afcf0a604a7c8c715660448585e89174908f3c6a421ad8d8?type=image/png",
+      "manifests": null,
+      "name": "csi-aws-ebs",
+      "registryUid": "5eecc89d0b150045ae661cef",
+      "type": "spectro",
+      "version": "1.63.0"
+    },
+    "status": null
+  },
+  {
+    "metadata": {
+      "annotations": {
+        "latestVersion": "false",
+        "ownerUid": "sysadmin",
+        "permissions": "pack.get,pack.list",
+        "scope": "system",
+        "scopeVisibility": "21"
+      },
+      "creationTimestamp": "2026-08-07T15:05:37.662Z",
+      "deletionTimestamp": "0001-01-01T00:00:00.000Z",
+      "lastModifiedTimestamp": "2026-08-07T15:05:37.662Z",
+      "name": "csi-aws-ebs",
+      "uid": "6a75f441d410c3b5762fed2d"
+    },
+    "spec": {
+      "annotations": {
+        "airgap": "true",
+        "architecture": "amd64,arm64",
+        "description": "Amazon Elastic Block Store (EBS) CSI driver",
+        "docsURL": "https://docs.spectrocloud.com/integrations/csi",
+        "revision": "20260805",
+        "source": "spectrocloud"
+      },
+      "cloudTypes": [
+        "eks",
+        "aws"
+      ],
+      "digest": "sha256:4a1cb27d13a6b02e29b481b283485d7677033880b0593df0959fdd66a2507f48",
+      "displayName": "Amazon EBS CSI",
+      "layer": "csi",
+      "logoUrl": "https://registry.spectrocloud.com/v1/csi-aws-ebs/blobs/sha256:f86813591b3b63b3afcf0a604a7c8c715660448585e89174908f3c6a421ad8d8?type=image/png",
+      "manifests": null,
+      "name": "csi-aws-ebs",
+      "presets": [],
+      "registryUid": "5eecc89d0b150045ae661cef",
+      "schema": [],
+      "template": {
+        "parameters": {
+          "inputParameters": [],
+          "outputParameters": []
+        }
+      },
+      "type": "spectro",
+      "values": "pack:\n  content:\n    images:\n      - image: us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/1.63.1/aws-ebs-csi-driver:v1.63.1\n      - image: us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/1.63.1/external-provisioner:v6.3.0-eksbuild.3\n      - image: us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/1.63.1/external-attacher:v4.12.0-eksbuild.4\n      - image: us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/1.63.1/external-resizer:v2.2.1-eksbuild.2\n      - image: us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/1.63.1/livenessprobe:v2.19.0-eksbuild.4\n      - image: us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/1.63.1/node-driver-registrar:v2.17.0-eksbuild.4\n      - image: us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/1.63.1/external-snapshotter/csi-snapshotter:v8.6.0-eksbuild.4\n      - image: us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/1.63.1/volume-modifier-for-k8s:v0.9.5-eksbuild.4\n    charts:\n      - repo: https://kubernetes-sigs.github.io/aws-ebs-csi-driver\n        name: aws-ebs-csi-driver\n        version: 2.63.1\n  namespace: \"kube-system\"\ncharts:\n  aws-ebs-csi-driver:\n    storageClasses:\n      # Default Storage Class\n      - name: spectro-storage-class\n        # annotation metadata\n        annotations:\n          storageclass.kubernetes.io/is-default-class: \"true\"\n          # label metadata\n          # labels:\n          #   my-label-is: supercool\n          # defaults to WaitForFirstConsumer\n        volumeBindingMode: WaitForFirstConsumer\n        # defaults to Delete\n        reclaimPolicy: Delete\n        parameters:\n          # File system type: xfs, ext2, ext3, ext4\n          csi.storage.k8s.io/fstype: \"ext4\"\n          # EBS volume type: io1, io2, gp2, gp3, sc1, st1, standard\n          type: \"gp2\"\n          # I/O operations per second per GiB. Required when io1 or io2 volume type is specified.\n          # iopsPerGB: \"\"\n          # Applicable only when io1 or io2 volume type is specified\n          # allowAutoIOPSPerGBIncrease: false\n          # I/O operations per second. Applicable only for gp3 volumes.\n          # iops: \"\"\n          # Throughput in MiB/s. Applicable only for gp3 volumes.\n          # throughput: \"\"\n          # Whether the volume should be encrypted or not\n          # encrypted: \"\"\n          # The full ARN of the key to use when encrypting the volume. When not specified, the default KMS key is used.\n          # kmsKeyId: \"\"\n    # Additional Storage Class \n    # - name: addon-storage-class\n    # annotations:\n    #   storageclass.kubernetes.io/is-default-class: \"false\"\n    # labels:\n    #   my-label-is: supercool\n    # volumeBindingMode: WaitForFirstConsumer\n    # reclaimPolicy: Delete\n    # parameters:\n    # csi.storage.k8s.io/fstype: \"ext4\"\n    # type: \"gp2\"\n    # iopsPerGB: \"\"\n    # allowAutoIOPSPerGBIncrease: false\n    # iops: \"\"\n    # throughput: \"\"\n    # encrypted: \"\"\n    # kmsKeyId: \"\"\n\n    image:\n      repository: us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/1.63.1/aws-ebs-csi-driver\n      # Overrides the image tag whose default is v{{ .Chart.AppVersion }}\n      tag: \"v1.63.1\"\n      pullPolicy: IfNotPresent\n    # -- Custom labels to add into metadata\n    customLabels: {}\n    # k8s-app: aws-ebs-csi-driver\n\n    # Instruct the AWS SDK to use AWS FIPS endpoints, and deploy container built with Boring Crypto (a FIPS-validated cryptographic library) instead of the Go default\n    #\n    # The EBS CSI Driver FIPS images have not undergone FIPS certification, and no official guarantee is made about the compliance of these images under the FIPS standard\n    # Users relying on these images for FIPS compliance should perform their own independent evaluation\n    fips: false\n    sidecars:\n      provisioner:\n        env: []\n        image:\n          pullPolicy: IfNotPresent\n          repository: us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/1.63.1/external-provisioner\n          tag: \"v6.3.0-eksbuild.3\"\n        logLevel: 2\n        # Additional parameters provided by csi-provisioner.\n        additionalArgs: []\n        # Grant additional permissions to csi-provisioner\n        additionalClusterRoleRules:\n        resources: {}\n        # Tune leader lease election for csi-provisioner.\n        # Leader election is on by default.\n        leaderElection:\n          enabled: true\n          # Optional values to tune lease behavior.\n          # The arguments provided must be in an acceptable time.ParseDuration format.\n          # Ref: https://pkg.go.dev/flag#Duration\n          # leaseDuration: \"15s\"\n          # renewDeadline: \"10s\"\n          # retryPeriod: \"5s\"\n        securityContext:\n          seccompProfile:\n            type: RuntimeDefault\n          readOnlyRootFilesystem: true\n          allowPrivilegeEscalation: false\n      attacher:\n        env: []\n        image:\n          pullPolicy: IfNotPresent\n          repository: us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/1.63.1/external-attacher\n          tag: \"v4.12.0-eksbuild.4\"\n        # Tune leader lease election for csi-attacher.\n        # Leader election is on by default.\n        leaderElection:\n          enabled: true\n          # Optional values to tune lease behavior.\n          # The arguments provided must be in an acceptable time.ParseDuration format.\n          # Ref: https://pkg.go.dev/flag#Duration\n          # leaseDuration: \"15s\"\n          # renewDeadline: \"10s\"\n          # retryPeriod: \"5s\"\n        logLevel: 2\n        # Additional parameters provided by csi-attacher.\n        additionalArgs: []\n        # Grant additional permissions to csi-attacher\n        additionalClusterRoleRules: []\n        resources: {}\n        securityContext:\n          seccompProfile:\n            type: RuntimeDefault\n          readOnlyRootFilesystem: true\n          allowPrivilegeEscalation: false\n      snapshotter:\n        # Enables the snapshotter sidecar even if the snapshot CRDs are not installed\n        forceEnable: true\n        env: []\n        image:\n          pullPolicy: IfNotPresent\n          repository: us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/1.63.1/external-snapshotter/csi-snapshotter\n          tag: \"v8.6.0-eksbuild.4\"\n        logLevel: 2\n        # Additional parameters provided by csi-snapshotter.\n        additionalArgs: []\n        # Grant additional permissions to csi-snapshotter\n        additionalClusterRoleRules: []\n        resources: {}\n        securityContext:\n          seccompProfile:\n            type: RuntimeDefault\n          readOnlyRootFilesystem: true\n          allowPrivilegeEscalation: false\n      metadataLabeler:\n        # ALPHA: Enable the metadata-labeler sidecar to label Kubernetes Nodes with\n        # information from the EC2 API (e.g. number of ENIs)\n        # Also requires using metadata-labeler as the node's metadata source\n        enabled: false\n        logLevel: 2\n        # Additional parameters provided by metadataLabeler.\n        additionalArgs: []\n        resources: {}\n        securityContext:\n          readOnlyRootFilesystem: true\n          allowPrivilegeEscalation: false\n      livenessProbe:\n        image:\n          pullPolicy: IfNotPresent\n          repository: us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/1.63.1/livenessprobe\n          tag: \"v2.19.0-eksbuild.4\"\n        # Additional parameters provided by livenessprobe.\n        additionalArgs: []\n        resources: {}\n        securityContext:\n          readOnlyRootFilesystem: true\n          allowPrivilegeEscalation: false\n      resizer:\n        env: []\n        image:\n          pullPolicy: IfNotPresent\n          repository: us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/1.63.1/external-resizer\n          tag: \"v2.2.1-eksbuild.2\"\n        # Tune leader lease election for csi-resizer.\n        # Leader election is on by default.\n        leaderElection:\n          enabled: true\n          # Optional values to tune lease behavior.\n          # The arguments provided must be in an acceptable time.ParseDuration format.\n          # Ref: https://pkg.go.dev/flag#Duration\n          # leaseDuration: \"15s\"\n          # renewDeadline: \"10s\"\n          # retryPeriod: \"5s\"\n        logLevel: 2\n        # Additional parameters provided by csi-resizer.\n        additionalArgs: []\n        # Grant additional permissions to csi-resizer\n        additionalClusterRoleRules: []\n        resources: {}\n        securityContext:\n          seccompProfile:\n            type: RuntimeDefault\n          readOnlyRootFilesystem: true\n          allowPrivilegeEscalation: false\n      nodeDriverRegistrar:\n        env: []\n        image:\n          pullPolicy: IfNotPresent\n          repository: us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/1.63.1/node-driver-registrar\n          tag: \"v2.17.0-eksbuild.4\"\n        logLevel: 2\n        # The port the health probe is bound to.\n        healthPort: 9809\n        # Additional parameters provided by node-driver-registrar.\n        additionalArgs: []\n        resources: {}\n        securityContext:\n          readOnlyRootFilesystem: true\n          allowPrivilegeEscalation: false\n        livenessProbe:\n          httpGet:\n            path: /healthz\n            port: healthz-ndr\n          initialDelaySeconds: 30\n          periodSeconds: 90\n          timeoutSeconds: 15\n      volumemodifier:\n        env: []\n        image:\n          pullPolicy: IfNotPresent\n          repository: us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/1.63.1/volume-modifier-for-k8s\n          tag: \"v0.9.5-eksbuild.4\"\n        leaderElection:\n          enabled: true\n          # Optional values to tune lease behavior.\n          # The arguments provided must be in an acceptable time.ParseDuration format.\n          # Ref: https://pkg.go.dev/flag#Duration\n          # leaseDuration: \"15s\"\n          # renewDeadline: \"10s\"\n          # retryPeriod: \"5s\"\n        logLevel: 2\n        # Additional parameters provided by volume-modifier-for-k8s.\n        additionalArgs: []\n        resources: {}\n        # Add additional volume mounts on the volumemodifier container with sidecars.volumemodifier.volumeMounts\n        volumeMounts: []\n        # And add mount paths for those additional volumes:\n        # - name: custom-dir\n        #   mountPath: /mount/path\n        securityContext:\n          seccompProfile:\n            type: RuntimeDefault\n          readOnlyRootFilesystem: true\n          allowPrivilegeEscalation: false\n    proxy:\n      http_proxy:\n      no_proxy:\n    imagePullSecrets: []\n    nameOverride:\n    fullnameOverride:\n    awsAccessSecret:\n      name: aws-secret\n      keyId: key_id\n      accessKey: access_key\n    controller:\n      batching: true\n      volumeModificationFeature:\n        enabled: false\n      # Enable support for node-local volumes that use pre-attached EBS volumes\n      enableNodeLocalVolumes: false\n      # Additional parameters provided by aws-ebs-csi-driver controller.\n      additionalArgs: []\n      sdkDebugLog: false\n      loggingFormat: text\n      affinity:\n        nodeAffinity:\n          preferredDuringSchedulingIgnoredDuringExecution:\n            - weight: 1\n              preference:\n                matchExpressions:\n                  - key: eks.amazonaws.com/compute-type\n                    operator: NotIn\n                    values:\n                      - fargate\n                      - auto\n                      - hybrid\n        podAntiAffinity:\n          preferredDuringSchedulingIgnoredDuringExecution:\n            - podAffinityTerm:\n                labelSelector:\n                  matchExpressions:\n                    - key: app\n                      operator: In\n                      values:\n                        - ebs-csi-controller\n                topologyKey: kubernetes.io/hostname\n              weight: 100\n      # The default filesystem type of the volume to provision when fstype is unspecified in the StorageClass.\n      # If the default is not set and fstype is unset in the StorageClass, then no fstype will be set\n      defaultFsType: ext4\n      env: []\n      # Use envFrom to reference ConfigMaps and Secrets across all containers in the deployment\n      envFrom: []\n      # If set, add pv/pvc metadata to plugin create and modify requests as parameters.\n      extraCreateMetadata: true\n      # Extra volume tags to attach to each dynamically provisioned volume.\n      # ---\n      # extraVolumeTags:\n      #   key1: value1\n      #   key2: value2\n      extraVolumeTags: {}\n      httpEndpoint:\n      # (deprecated) The TCP network address where the prometheus metrics endpoint\n      # will run (example: `:8080` which corresponds to port 8080 on local host).\n      # The default is empty string, which means metrics endpoint is disabled.\n      # ---\n      enableMetrics: false\n      # If metrics are enabled, add prometheus.io/scrape and prometheus.io/port\n      # annotations to the metrics services.\n      enablePrometheusAnnotations: true\n      serviceMonitor:\n        # Enables the ServiceMonitor resource even if the prometheus-operator CRDs are not installed\n        forceEnable: false\n        # Additional labels for ServiceMonitor object\n        labels: {}\n        interval: \"15s\"\n      # If set to true, AWS API call metrics will be exported to the following\n      # TCP endpoint: \"0.0.0.0:3301\"\n      # ---\n      # ID of the Kubernetes cluster used for tagging provisioned EBS volumes (optional).\n      k8sTagClusterId:\n      logLevel: 2\n      userAgentExtra: \"helm\"\n      nodeSelector: {}\n      deploymentAnnotations: {}\n      podAnnotations: {}\n      podLabels: {}\n      podDisruptionBudget:\n        # Warning: Disabling PodDisruptionBudget may lead to delays in stateful workloads starting due to controller\n        # pod restarts or evictions.\n        enabled: true\n        # unhealthyPodEvictionPolicy:\n        # Configure the maxUnavailable or minAvailable for the PDB\n        # If either parameter is non-null, no default is used for both\n        # maxUnavailable:\n        # minAvailable:\n      priorityClassName: system-cluster-critical\n      # AWS region to use. If not specified then the region will be looked up via the AWS EC2 metadata\n      # service.\n      # ---\n      # region: us-east-1\n      region:\n      replicaCount: 2\n      revisionHistoryLimit: 10\n      socketDirVolume:\n        emptyDir: {}\n      updateStrategy:\n        type: RollingUpdate\n        rollingUpdate:\n          maxUnavailable: 1\n      # type: RollingUpdate\n      # rollingUpdate:\n      #   maxSurge: 0\n      #   maxUnavailable: 1\n      resources:\n        requests:\n          cpu: 10m\n          memory: 40Mi\n        limits:\n          memory: 256Mi\n          cpu: 100m\n      serviceAccount:\n        # A service account will be created for you if set to true. Set to false if you want to use your own.\n        create: true\n        name: ebs-csi-controller-sa\n        annotations: {}\n        ## Enable if EKS IAM for SA is used\n        # eks.amazonaws.com/role-arn: arn:<partition>:iam::<account>:role/ebs-csi-role\n        automountServiceAccountToken: true\n      tolerations:\n        - key: CriticalAddonsOnly\n          operator: Exists\n        - effect: NoExecute\n          operator: Exists\n          tolerationSeconds: 300\n      # TSCs without the label selector stanza\n      #\n      # Example:\n      #\n      # topologySpreadConstraints:\n      #  - maxSkew: 1\n      #    topologyKey: topology.kubernetes.io/zone\n      #    whenUnsatisfiable: ScheduleAnyway\n      #  - maxSkew: 1\n      #    topologyKey: kubernetes.io/hostname\n      #    whenUnsatisfiable: ScheduleAnyway\n      topologySpreadConstraints: []\n      # securityContext on the controller pod\n      securityContext:\n        runAsNonRoot: true\n        runAsUser: 1000\n        runAsGroup: 1000\n        fsGroup: 1000\n      # Add additional volume mounts on the controller with controller.volumes and controller.volumeMounts\n      volumes: []\n      # Add additional volumes to be mounted onto the controller:\n      # - name: custom-dir\n      #   hostPath:\n      #     path: /path/to/dir\n      #     type: Directory\n      volumeMounts: []\n      # And add mount paths for those additional volumes:\n      # - name: custom-dir\n      #   mountPath: /mount/path\n      # ---\n      # securityContext on the controller container (see sidecars for securityContext on sidecar containers)\n      containerSecurityContext:\n        seccompProfile:\n          type: RuntimeDefault\n        readOnlyRootFilesystem: true\n        allowPrivilegeEscalation: false\n      initContainers: []\n      # containers to be run before the controller's container starts.\n      #\n      # Example:\n      #\n      # - name: wait\n      #   image: public.ecr.aws/amazonlinux/amazonlinux\n      #   command: [ 'sh', '-c', \"sleep 20\" ]\n      # Enable opentelemetry tracing for the plugin running on the daemonset\n      otelTracing: {}\n      #  otelServiceName: ebs-csi-controller\n      #  otelExporterEndpoint: \"http://localhost:4317\"\n\n      # dnsConfig for the controller pods\n      dnsConfig: {}\n    node:\n      # Enable SELinux-only optimizations on the EBS CSI Driver node pods\n      # Must only be set true if all linux nodes in the DaemonSet have SELinux enabled\n      selinux: false\n      env: []\n      envFrom: []\n      kubeletPath: /var/lib/kubelet\n      loggingFormat: text\n      logLevel: 2\n      enableMetrics: false\n      # If metrics are enabled, add prometheus.io/scrape and prometheus.io/port\n      # annotations to the metrics services.\n      enablePrometheusAnnotations: true\n      serviceMonitor:\n        # Enables the ServiceMonitor resource even if the prometheus-operator CRDs are not installed\n        forceEnable: false\n        # Additional labels for ServiceMonitor object\n        labels: {}\n        interval: \"15s\"\n      priorityClassName:\n      additionalArgs: []\n      affinity:\n        nodeAffinity:\n          requiredDuringSchedulingIgnoredDuringExecution:\n            nodeSelectorTerms:\n              - matchExpressions:\n                  - key: eks.amazonaws.com/compute-type\n                    operator: NotIn\n                    values:\n                      - fargate\n                      - auto\n                      - hybrid\n      nodeSelector: {}\n      daemonSetAnnotations: {}\n      podAnnotations: {}\n      podLabels: {}\n      terminationGracePeriodSeconds: 30\n      tolerateAllTaints: true\n      tolerations:\n        - operator: Exists\n          effect: NoExecute\n          tolerationSeconds: 300\n      resources:\n        requests:\n          cpu: 10m\n          memory: 40Mi\n        limits:\n          memory: 256Mi\n          cpu: 100m\n      revisionHistoryLimit: 10\n      probeDirVolume:\n        emptyDir: {}\n      serviceAccount:\n        create: true\n        name: ebs-csi-node-sa\n        annotations: {}\n        ## Enable if EKS IAM for SA is used\n        # eks.amazonaws.com/role-arn: arn:<partition>:iam::<account>:role/ebs-csi-role\n        automountServiceAccountToken: true\n        # Disable mutating permissions for the node service account.\n        # When enabled, some features of the EBS CSI Driver node pods will not function, such as taint removal.\n        # Primarily useful in particularly security-sensitive environments, or on multi-tenant clusters that isolate tenants by node.\n        disableMutation: false\n      # Enable the linux daemonset creation\n      enableLinux: true\n      enableWindows: true\n      # Comma separated list of metadata sources that override the default used by the EBS CSI Driver. Valid sources include 'imds', 'kubernetes', and (ALPHA) 'metadata-labeler'\n      metadataSources:\n      # Warning: This option will be removed in a future release. It is a temporary workaround for users unable to immediately migrate off of older kernel versions.\n      # Formats XFS volumes with bigtime=0,inobtcount=0,reflink=0, for mounting onto nodes with linux kernel version <= 5.4.\n      # Note that XFS volumes formatted with this option will only have timestamp records until 2038.\n      legacyXFS: false\n      # The number of attachment slots to reserve for system use (and not to be used for CSI volumes)\n      # When this parameter is not specified (or set to -1), the EBS CSI Driver will attempt to determine the number of reserved slots via heuristic\n      # Cannot be specified at the same time as `node.volumeAttachLimit`\n      reservedVolumeAttachments:\n      # The \"maximum number of attachable volumes\" per node\n      # Cannot be specified at the same time as `node.reservedVolumeAttachments`\n      volumeAttachLimit:\n      updateStrategy:\n        type: RollingUpdate\n        rollingUpdate:\n          maxUnavailable: \"10%\"\n      hostNetwork: false\n      # securityContext on the node pod\n      securityContext:\n        # The node pod must be run as root to bind to the registration/driver sockets\n        runAsNonRoot: false\n        runAsUser: 0\n        runAsGroup: 0\n        fsGroup: 0\n      # allows you to deploy aws-ebs-csi-node daemonset to separate namespace (make sure namespace exists before deploy)\n      namespaceOverride: \"\"\n      # Add additional volume mounts on the node pods with node.volumes and node.volumeMounts\n      volumes: []\n      # Add additional volumes to be mounted onto the node pods:\n      # - name: custom-dir\n      #   hostPath:\n      #     path: /path/to/dir\n      #     type: Directory\n      volumeMounts: []\n      # And add mount paths for those additional volumes:\n      # - name: custom-dir\n      #   mountPath: /mount/path\n      # ---\n      # securityContext on the node container (see sidecars for securityContext on sidecar containers)\n      # Privileged containers always run as `Unconfined`, which means that they are not restricted by a seccomp profile.\n      containerSecurityContext:\n        readOnlyRootFilesystem: true\n        privileged: true\n      initContainers: []\n      # containers to be run before the csi-node's container starts.\n      #\n      # Example:\n      #\n      # - name: wait\n      #   image: public.ecr.aws/amazonlinux/amazonlinux\n      #   command: [ 'sh', '-c', \"sleep 20\" ]\n      # Enable opentelemetry tracing for the plugin running on the daemonset\n      otelTracing: {}\n      #  otelServiceName: ebs-csi-node\n      #  otelExporterEndpoint: \"http://localhost:4317\"\n\n      # dnsConfig for the node pods\n      dnsConfig: {}\n    additionalDaemonSets:\n    # Additional node DaemonSets, using the node config structure\n    # See docs/additional-daemonsets.md for more information\n    #\n    # example:\n    #   nodeSelector:\n    #     node.kubernetes.io/instance-type: c5.large\n    #   volumeAttachLimit: 15\n\n    # Enable compatibility for the A1 instance family via use of an AL2-based image in a separate DaemonSet\n    # a1CompatibilityDaemonSet: true\n    # storageClasses: []\n    # Add StorageClass resources like:\n    # - name: ebs-sc\n    #   # annotation metadata\n    #   annotations:\n    #     storageclass.kubernetes.io/is-default-class: \"true\"\n    #   # label metadata\n    #   labels:\n    #     my-label-is: supercool\n    #   # defaults to WaitForFirstConsumer\n    #   volumeBindingMode: WaitForFirstConsumer\n    #   # defaults to Delete\n    #   reclaimPolicy: Retain\n    #   parameters:\n    #     encrypted: \"true\"\n    defaultStorageClass:\n      enabled: false\n    volumeSnapshotClasses: []\n    # Add VolumeSnapshotClass resources like:\n    # - name: ebs-vsc\n    #   # annotation metadata\n    #   annotations:\n    #     snapshot.storage.kubernetes.io/is-default-class: \"true\"\n    #   # label metadata\n    #   labels:\n    #     my-label-is: supercool\n    #   # deletionPolicy must be specified\n    #   deletionPolicy: Delete\n    #   parameters:\n\n    # Use old CSIDriver without an fsGroupPolicy set\n    # Intended for use with older clusters that cannot easily replace the CSIDriver object\n    # This parameter should always be false for new installations\n    useOldCSIDriver: false\n    # Deploy EBS CSI Driver without controller and associated resources\n    nodeComponentOnly: false\n    # nodeAllocatableUpdatePeriodSeconds updates the node's max attachable volume count by directing Kubelet to periodically call NodeGetInfo at the configured interval.\n    # Kubernetes enforces a minimum update interval of 10 seconds. A value of -1 uses a automatically determined value dependent on metadata sources.\n    # This parameter is supported in Kubernetes 1.33+ and requires the MutableCSINodeAllocatableCount feature gate to be enabled in kubelet and kube-apiserver.\n    nodeAllocatableUpdatePeriodSeconds: 10\n    # Set maximum verbosity for logs of each container and other recommended debugging parameters such as enabling AWS SDK debug logging\n    debugLogs: false\n",
+      "version": "1.63.1"
+    },
+    "status": null
+  },
+  {
+    "metadata": {
+      "annotations": {
+        "latestVersion": "false",
+        "ownerUid": "sysadmin",
+        "permissions": "pack.get,pack.list",
+        "scope": "system",
+        "scopeVisibility": "21"
+      },
+      "creationTimestamp": "2026-09-06T16:00:56.675Z",
+      "deletionTimestamp": "0001-01-01T00:00:00.000Z",
+      "lastModifiedTimestamp": "2026-09-06T16:00:56.675Z",
+      "name": "csi-aws-ebs",
+      "uid": "6a9d8e38f39026aa0c23cfe1"
+    },
+    "spec": {
+      "annotations": {
+        "airgap": "true",
+        "architecture": "amd64,arm64",
+        "description": "Amazon Elastic Block Store (EBS) CSI driver",
+        "docsURL": "https://docs.spectrocloud.com/integrations/csi",
+        "revision": "20260831",
+        "source": "spectrocloud"
+      },
+      "cloudTypes": [
+        "eks",
+        "aws"
+      ],
+      "digest": "sha256:d9110382b131770fcf0f711f43a0ad662e523012deeda1d474adb576410ea865",
+      "displayName": "Amazon EBS CSI",
+      "layer": "csi",
+      "logoUrl": "https://registry.spectrocloud.com/v1/csi-aws-ebs/blobs/sha256:f86813591b3b63b3afcf0a604a7c8c715660448585e89174908f3c6a421ad8d8?type=image/png",
+      "manifests": null,
+      "name": "csi-aws-ebs",
+      "presets": [],
+      "registryUid": "5eecc89d0b150045ae661cef",
+      "schema": [],
+      "template": {
+        "parameters": {
+          "inputParameters": [],
+          "outputParameters": []
+        }
+      },
+      "type": "spectro",
+      "values": "pack:\n  content:\n    images:\n      - image: us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/1.64.0/aws-ebs-csi-driver:v1.64.0\n      - image: us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/1.64.0/external-provisioner:v6.3.0-eksbuild.4\n      - image: us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/1.64.0/external-attacher:v4.12.0-eksbuild.5\n      - image: us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/1.64.0/external-resizer:v2.2.1-eksbuild.3\n      - image: us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/1.64.0/livenessprobe:v2.19.0-eksbuild.5\n      - image: us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/1.64.0/node-driver-registrar:v2.17.0-eksbuild.5\n      - image: us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/1.64.0/external-snapshotter/csi-snapshotter:v8.6.0-eksbuild.5\n      - image: us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/1.64.0/volume-modifier-for-k8s:v0.9.5-eksbuild.5\n    charts:\n      - repo: https://kubernetes-sigs.github.io/aws-ebs-csi-driver\n        name: aws-ebs-csi-driver\n        version: 2.64.0\n  namespace: \"kube-system\"\ncharts:\n  aws-ebs-csi-driver:\n    storageClasses:\n      # Default Storage Class\n      - name: spectro-storage-class\n        # annotation metadata\n        annotations:\n          storageclass.kubernetes.io/is-default-class: \"true\"\n          # label metadata\n          # labels:\n          #   my-label-is: supercool\n          # defaults to WaitForFirstConsumer\n        volumeBindingMode: WaitForFirstConsumer\n        # defaults to Delete\n        reclaimPolicy: Delete\n        parameters:\n          # File system type: xfs, ext2, ext3, ext4\n          csi.storage.k8s.io/fstype: \"ext4\"\n          # EBS volume type: io1, io2, gp2, gp3, sc1, st1, standard\n          type: \"gp2\"\n          # I/O operations per second per GiB. Required when io1 or io2 volume type is specified.\n          # iopsPerGB: \"\"\n          # Applicable only when io1 or io2 volume type is specified\n          # allowAutoIOPSPerGBIncrease: false\n          # I/O operations per second. Applicable only for gp3 volumes.\n          # iops: \"\"\n          # Throughput in MiB/s. Applicable only for gp3 volumes.\n          # throughput: \"\"\n          # Whether the volume should be encrypted or not\n          # encrypted: \"\"\n          # The full ARN of the key to use when encrypting the volume. When not specified, the default KMS key is used.\n          # kmsKeyId: \"\"\n    # Additional Storage Class \n    # - name: addon-storage-class\n    # annotations:\n    #   storageclass.kubernetes.io/is-default-class: \"false\"\n    # labels:\n    #   my-label-is: supercool\n    # volumeBindingMode: WaitForFirstConsumer\n    # reclaimPolicy: Delete\n    # parameters:\n    # csi.storage.k8s.io/fstype: \"ext4\"\n    # type: \"gp2\"\n    # iopsPerGB: \"\"\n    # allowAutoIOPSPerGBIncrease: false\n    # iops: \"\"\n    # throughput: \"\"\n    # encrypted: \"\"\n    # kmsKeyId: \"\"\n\n    image:\n      repository: us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/1.64.0/aws-ebs-csi-driver\n      # Overrides the image tag whose default is v{{ .Chart.AppVersion }}\n      tag: \"v1.64.0\"\n      pullPolicy: IfNotPresent\n    # -- Custom labels to add into metadata\n    customLabels: {}\n    # k8s-app: aws-ebs-csi-driver\n\n    # Instruct the AWS SDK to use AWS FIPS endpoints, and deploy container built with Boring Crypto (a FIPS-validated cryptographic library) instead of the Go default\n    #\n    # The EBS CSI Driver FIPS images have not undergone FIPS certification, and no official guarantee is made about the compliance of these images under the FIPS standard\n    # Users relying on these images for FIPS compliance should perform their own independent evaluation\n    fips: false\n    sidecars:\n      provisioner:\n        env: []\n        image:\n          pullPolicy: IfNotPresent\n          repository: us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/1.64.0/external-provisioner\n          tag: \"v6.3.0-eksbuild.4\"\n        logLevel: 2\n        # Additional parameters provided by csi-provisioner.\n        additionalArgs: []\n        # Grant additional permissions to csi-provisioner\n        additionalClusterRoleRules:\n        resources: {}\n        # Tune leader lease election for csi-provisioner.\n        # Leader election is on by default.\n        leaderElection:\n          enabled: true\n          # Optional values to tune lease behavior.\n          # The arguments provided must be in an acceptable time.ParseDuration format.\n          # Ref: https://pkg.go.dev/flag#Duration\n          # leaseDuration: \"15s\"\n          # renewDeadline: \"10s\"\n          # retryPeriod: \"5s\"\n        securityContext:\n          seccompProfile:\n            type: RuntimeDefault\n          readOnlyRootFilesystem: true\n          allowPrivilegeEscalation: false\n      attacher:\n        env: []\n        image:\n          pullPolicy: IfNotPresent\n          repository: us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/1.64.0/external-attacher\n          tag: \"v4.12.0-eksbuild.5\"\n        # Tune leader lease election for csi-attacher.\n        # Leader election is on by default.\n        leaderElection:\n          enabled: true\n          # Optional values to tune lease behavior.\n          # The arguments provided must be in an acceptable time.ParseDuration format.\n          # Ref: https://pkg.go.dev/flag#Duration\n          # leaseDuration: \"15s\"\n          # renewDeadline: \"10s\"\n          # retryPeriod: \"5s\"\n        logLevel: 2\n        # Additional parameters provided by csi-attacher.\n        additionalArgs: []\n        # Grant additional permissions to csi-attacher\n        additionalClusterRoleRules: []\n        resources: {}\n        securityContext:\n          seccompProfile:\n            type: RuntimeDefault\n          readOnlyRootFilesystem: true\n          allowPrivilegeEscalation: false\n      snapshotter:\n        # Enables the snapshotter sidecar even if the snapshot CRDs are not installed\n        forceEnable: true\n        env: []\n        image:\n          pullPolicy: IfNotPresent\n          repository: us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/1.64.0/external-snapshotter/csi-snapshotter\n          tag: \"v8.6.0-eksbuild.5\"\n        logLevel: 2\n        # Additional parameters provided by csi-snapshotter.\n        additionalArgs: []\n        # Grant additional permissions to csi-snapshotter\n        additionalClusterRoleRules: []\n        resources: {}\n        securityContext:\n          seccompProfile:\n            type: RuntimeDefault\n          readOnlyRootFilesystem: true\n          allowPrivilegeEscalation: false\n      metadataLabeler:\n        # ALPHA: Enable the metadata-labeler sidecar to label Kubernetes Nodes with\n        # information from the EC2 API (e.g. number of ENIs)\n        # Also requires using metadata-labeler as the node's metadata source\n        enabled: false\n        logLevel: 2\n        # Additional parameters provided by metadataLabeler.\n        additionalArgs: []\n        resources: {}\n        securityContext:\n          readOnlyRootFilesystem: true\n          allowPrivilegeEscalation: false\n      livenessProbe:\n        image:\n          pullPolicy: IfNotPresent\n          repository: us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/1.64.0/livenessprobe\n          tag: \"v2.19.0-eksbuild.5\"\n        # Additional parameters provided by livenessprobe.\n        additionalArgs: []\n        resources: {}\n        securityContext:\n          readOnlyRootFilesystem: true\n          allowPrivilegeEscalation: false\n      resizer:\n        env: []\n        image:\n          pullPolicy: IfNotPresent\n          repository: us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/1.64.0/external-resizer\n          tag: \"v2.2.1-eksbuild.3\"\n        # Tune leader lease election for csi-resizer.\n        # Leader election is on by default.\n        leaderElection:\n          enabled: true\n          # Optional values to tune lease behavior.\n          # The arguments provided must be in an acceptable time.ParseDuration format.\n          # Ref: https://pkg.go.dev/flag#Duration\n          # leaseDuration: \"15s\"\n          # renewDeadline: \"10s\"\n          # retryPeriod: \"5s\"\n        logLevel: 2\n        # Additional parameters provided by csi-resizer.\n        additionalArgs: []\n        # Grant additional permissions to csi-resizer\n        additionalClusterRoleRules: []\n        resources: {}\n        securityContext:\n          seccompProfile:\n            type: RuntimeDefault\n          readOnlyRootFilesystem: true\n          allowPrivilegeEscalation: false\n      nodeDriverRegistrar:\n        env: []\n        image:\n          pullPolicy: IfNotPresent\n          repository: us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/1.64.0/node-driver-registrar\n          tag: \"v2.17.0-eksbuild.5\"\n        logLevel: 2\n        # The port the health probe is bound to.\n        healthPort: 9809\n        # Additional parameters provided by node-driver-registrar.\n        additionalArgs: []\n        resources: {}\n        securityContext:\n          readOnlyRootFilesystem: true\n          allowPrivilegeEscalation: false\n        livenessProbe:\n          httpGet:\n            path: /healthz\n            port: healthz-ndr\n          initialDelaySeconds: 30\n          periodSeconds: 90\n          timeoutSeconds: 15\n      volumemodifier:\n        env: []\n        image:\n          pullPolicy: IfNotPresent\n          repository: us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/1.64.0/volume-modifier-for-k8s\n          tag: \"v0.9.5-eksbuild.5\"\n        leaderElection:\n          enabled: true\n          # Optional values to tune lease behavior.\n          # The arguments provided must be in an acceptable time.ParseDuration format.\n          # Ref: https://pkg.go.dev/flag#Duration\n          # leaseDuration: \"15s\"\n          # renewDeadline: \"10s\"\n          # retryPeriod: \"5s\"\n        logLevel: 2\n        # Additional parameters provided by volume-modifier-for-k8s.\n        additionalArgs: []\n        resources: {}\n        # Add additional volume mounts on the volumemodifier container with sidecars.volumemodifier.volumeMounts\n        volumeMounts: []\n        # And add mount paths for those additional volumes:\n        # - name: custom-dir\n        #   mountPath: /mount/path\n        securityContext:\n          seccompProfile:\n            type: RuntimeDefault\n          readOnlyRootFilesystem: true\n          allowPrivilegeEscalation: false\n    proxy:\n      http_proxy:\n      no_proxy:\n    imagePullSecrets: []\n    nameOverride:\n    fullnameOverride:\n    awsAccessSecret:\n      name: aws-secret\n      keyId: key_id\n      accessKey: access_key\n    controller:\n      batching: true\n      volumeModificationFeature:\n        enabled: false\n      # Enable support for node-local volumes that use pre-attached EBS volumes\n      enableNodeLocalVolumes: false\n      # Additional parameters provided by aws-ebs-csi-driver controller.\n      additionalArgs: []\n      sdkDebugLog: false\n      loggingFormat: text\n      affinity:\n        nodeAffinity:\n          preferredDuringSchedulingIgnoredDuringExecution:\n            - weight: 1\n              preference:\n                matchExpressions:\n                  - key: eks.amazonaws.com/compute-type\n                    operator: NotIn\n                    values:\n                      - fargate\n                      - auto\n                      - hybrid\n        podAntiAffinity:\n          preferredDuringSchedulingIgnoredDuringExecution:\n            - podAffinityTerm:\n                labelSelector:\n                  matchExpressions:\n                    - key: app\n                      operator: In\n                      values:\n                        - ebs-csi-controller\n                topologyKey: kubernetes.io/hostname\n              weight: 100\n      # The default filesystem type of the volume to provision when fstype is unspecified in the StorageClass.\n      # If the default is not set and fstype is unset in the StorageClass, then no fstype will be set\n      defaultFsType: ext4\n      env: []\n      # Use envFrom to reference ConfigMaps and Secrets across all containers in the deployment\n      envFrom: []\n      # If set, add pv/pvc metadata to plugin create and modify requests as parameters.\n      extraCreateMetadata: true\n      # Extra volume tags to attach to each dynamically provisioned volume.\n      # ---\n      # extraVolumeTags:\n      #   key1: value1\n      #   key2: value2\n      extraVolumeTags: {}\n      httpEndpoint:\n      # (deprecated) The TCP network address where the prometheus metrics endpoint\n      # will run (example: `:8080` which corresponds to port 8080 on local host).\n      # The default is empty string, which means metrics endpoint is disabled.\n      # ---\n      enableMetrics: false\n      # If metrics are enabled, add prometheus.io/scrape and prometheus.io/port\n      # annotations to the metrics services.\n      enablePrometheusAnnotations: true\n      serviceMonitor:\n        # Enables the ServiceMonitor resource even if the prometheus-operator CRDs are not installed\n        forceEnable: false\n        # Additional labels for ServiceMonitor object\n        labels: {}\n        interval: \"15s\"\n      # If set to true, AWS API call metrics will be exported to the following\n      # TCP endpoint: \"0.0.0.0:3301\"\n      # ---\n      # ID of the Kubernetes cluster used for tagging provisioned EBS volumes (optional).\n      k8sTagClusterId:\n      logLevel: 2\n      userAgentExtra: \"helm\"\n      nodeSelector: {}\n      deploymentAnnotations: {}\n      podAnnotations: {}\n      podLabels: {}\n      podDisruptionBudget:\n        # Warning: Disabling PodDisruptionBudget may lead to delays in stateful workloads starting due to controller\n        # pod restarts or evictions.\n        enabled: true\n        # unhealthyPodEvictionPolicy:\n        # Configure the maxUnavailable or minAvailable for the PDB\n        # If either parameter is non-null, no default is used for both\n        # maxUnavailable:\n        # minAvailable:\n      priorityClassName: system-cluster-critical\n      # AWS region to use. If not specified then the region will be looked up via the AWS EC2 metadata\n      # service.\n      # ---\n      # region: us-east-1\n      region:\n      replicaCount: 2\n      revisionHistoryLimit: 10\n      socketDirVolume:\n        emptyDir: {}\n      updateStrategy:\n        type: RollingUpdate\n        rollingUpdate:\n          maxUnavailable: 1\n      # type: RollingUpdate\n      # rollingUpdate:\n      #   maxSurge: 0\n      #   maxUnavailable: 1\n      resources:\n        requests:\n          cpu: 10m\n          memory: 40Mi\n        limits:\n          memory: 256Mi\n          cpu: 100m\n      serviceAccount:\n        # A service account will be created for you if set to true. Set to false if you want to use your own.\n        create: true\n        name: ebs-csi-controller-sa\n        annotations: {}\n        ## Enable if EKS IAM for SA is used\n        # eks.amazonaws.com/role-arn: arn:<partition>:iam::<account>:role/ebs-csi-role\n        automountServiceAccountToken: true\n      tolerations:\n        - key: CriticalAddonsOnly\n          operator: Exists\n        - effect: NoExecute\n          operator: Exists\n          tolerationSeconds: 300\n      # TSCs without the label selector stanza\n      #\n      # Example:\n      #\n      # topologySpreadConstraints:\n      #  - maxSkew: 1\n      #    topologyKey: topology.kubernetes.io/zone\n      #    whenUnsatisfiable: ScheduleAnyway\n      #  - maxSkew: 1\n      #    topologyKey: kubernetes.io/hostname\n      #    whenUnsatisfiable: ScheduleAnyway\n      topologySpreadConstraints: []\n      # securityContext on the controller pod\n      securityContext:\n        runAsNonRoot: true\n        runAsUser: 1000\n        runAsGroup: 1000\n        fsGroup: 1000\n      # Add additional volume mounts on the controller with controller.volumes and controller.volumeMounts\n      volumes: []\n      # Add additional volumes to be mounted onto the controller:\n      # - name: custom-dir\n      #   hostPath:\n      #     path: /path/to/dir\n      #     type: Directory\n      volumeMounts: []\n      # And add mount paths for those additional volumes:\n      # - name: custom-dir\n      #   mountPath: /mount/path\n      # ---\n      # securityContext on the controller container (see sidecars for securityContext on sidecar containers)\n      containerSecurityContext:\n        seccompProfile:\n          type: RuntimeDefault\n        readOnlyRootFilesystem: true\n        allowPrivilegeEscalation: false\n      initContainers: []\n      # containers to be run before the controller's container starts.\n      #\n      # Example:\n      #\n      # - name: wait\n      #   image: public.ecr.aws/amazonlinux/amazonlinux\n      #   command: [ 'sh', '-c', \"sleep 20\" ]\n      # Enable opentelemetry tracing for the plugin running on the daemonset\n      otelTracing: {}\n      #  otelServiceName: ebs-csi-controller\n      #  otelExporterEndpoint: \"http://localhost:4317\"\n\n      # dnsConfig for the controller pods\n      dnsConfig: {}\n    node:\n      # Enable SELinux-only optimizations on the EBS CSI Driver node pods\n      # Must only be set true if all linux nodes in the DaemonSet have SELinux enabled\n      selinux: false\n      env: []\n      envFrom: []\n      kubeletPath: /var/lib/kubelet\n      loggingFormat: text\n      logLevel: 2\n      enableMetrics: false\n      # If metrics are enabled, add prometheus.io/scrape and prometheus.io/port\n      # annotations to the metrics services.\n      enablePrometheusAnnotations: true\n      serviceMonitor:\n        # Enables the ServiceMonitor resource even if the prometheus-operator CRDs are not installed\n        forceEnable: false\n        # Additional labels for ServiceMonitor object\n        labels: {}\n        interval: \"15s\"\n      priorityClassName:\n      additionalArgs: []\n      affinity:\n        nodeAffinity:\n          requiredDuringSchedulingIgnoredDuringExecution:\n            nodeSelectorTerms:\n              - matchExpressions:\n                  - key: eks.amazonaws.com/compute-type\n                    operator: NotIn\n                    values:\n                      - fargate\n                      - auto\n                      - hybrid\n      nodeSelector: {}\n      daemonSetAnnotations: {}\n      podAnnotations: {}\n      podLabels: {}\n      terminationGracePeriodSeconds: 30\n      tolerateAllTaints: true\n      tolerations:\n        - operator: Exists\n          effect: NoExecute\n          tolerationSeconds: 300\n      resources:\n        requests:\n          cpu: 10m\n          memory: 40Mi\n        limits:\n          memory: 256Mi\n          cpu: 100m\n      revisionHistoryLimit: 10\n      probeDirVolume:\n        emptyDir: {}\n      serviceAccount:\n        create: true\n        name: ebs-csi-node-sa\n        annotations: {}\n        ## Enable if EKS IAM for SA is used\n        # eks.amazonaws.com/role-arn: arn:<partition>:iam::<account>:role/ebs-csi-role\n        automountServiceAccountToken: true\n        # Disable mutating permissions for the node service account.\n        # When enabled, some features of the EBS CSI Driver node pods will not function, such as taint removal.\n        # Primarily useful in particularly security-sensitive environments, or on multi-tenant clusters that isolate tenants by node.\n        disableMutation: false\n      # Enable the linux daemonset creation\n      enableLinux: true\n      enableWindows: true\n      # Comma separated list of metadata sources that override the default used by the EBS CSI Driver. Valid sources include 'imds', 'kubernetes', and (ALPHA) 'metadata-labeler'\n      metadataSources:\n      # Warning: This option will be removed in a future release. It is a temporary workaround for users unable to immediately migrate off of older kernel versions.\n      # Formats XFS volumes with bigtime=0,inobtcount=0,reflink=0, for mounting onto nodes with linux kernel version <= 5.4.\n      # Note that XFS volumes formatted with this option will only have timestamp records until 2038.\n      legacyXFS: false\n      # The number of attachment slots to reserve for system use (and not to be used for CSI volumes)\n      # When this parameter is not specified (or set to -1), the EBS CSI Driver will attempt to determine the number of reserved slots via heuristic\n      # Cannot be specified at the same time as `node.volumeAttachLimit`\n      reservedVolumeAttachments:\n      # The \"maximum number of attachable volumes\" per node\n      # Cannot be specified at the same time as `node.reservedVolumeAttachments`\n      volumeAttachLimit:\n      updateStrategy:\n        type: RollingUpdate\n        rollingUpdate:\n          maxUnavailable: \"10%\"\n      hostNetwork: false\n      # securityContext on the node pod\n      securityContext:\n        # The node pod must be run as root to bind to the registration/driver sockets\n        runAsNonRoot: false\n        runAsUser: 0\n        runAsGroup: 0\n        fsGroup: 0\n      # allows you to deploy aws-ebs-csi-node daemonset to separate namespace (make sure namespace exists before deploy)\n      namespaceOverride: \"\"\n      # Add additional volume mounts on the node pods with node.volumes and node.volumeMounts\n      volumes: []\n      # Add additional volumes to be mounted onto the node pods:\n      # - name: custom-dir\n      #   hostPath:\n      #     path: /path/to/dir\n      #     type: Directory\n      volumeMounts: []\n      # And add mount paths for those additional volumes:\n      # - name: custom-dir\n      #   mountPath: /mount/path\n      # ---\n      # securityContext on the node container (see sidecars for securityContext on sidecar containers)\n      # Privileged containers always run as `Unconfined`, which means that they are not restricted by a seccomp profile.\n      containerSecurityContext:\n        readOnlyRootFilesystem: true\n        privileged: true\n      initContainers: []\n      # containers to be run before the csi-node's container starts.\n      #\n      # Example:\n      #\n      # - name: wait\n      #   image: public.ecr.aws/amazonlinux/amazonlinux\n      #   command: [ 'sh', '-c', \"sleep 20\" ]\n      # Enable opentelemetry tracing for the plugin running on the daemonset\n      otelTracing: {}\n      #  otelServiceName: ebs-csi-node\n      #  otelExporterEndpoint: \"http://localhost:4317\"\n\n      # dnsConfig for the node pods\n      dnsConfig: {}\n    additionalDaemonSets:\n    # Additional node DaemonSets, using the node config structure\n    # See docs/additional-daemonsets.md for more information\n    #\n    # example:\n    #   nodeSelector:\n    #     node.kubernetes.io/instance-type: c5.large\n    #   volumeAttachLimit: 15\n\n    # Enable compatibility for the A1 instance family via use of an AL2-based image in a separate DaemonSet\n    # a1CompatibilityDaemonSet: true\n    # storageClasses: []\n    # Add StorageClass resources like:\n    # - name: ebs-sc\n    #   # annotation metadata\n    #   annotations:\n    #     storageclass.kubernetes.io/is-default-class: \"true\"\n    #   # label metadata\n    #   labels:\n    #     my-label-is: supercool\n    #   # defaults to WaitForFirstConsumer\n    #   volumeBindingMode: WaitForFirstConsumer\n    #   # defaults to Delete\n    #   reclaimPolicy: Retain\n    #   parameters:\n    #     encrypted: \"true\"\n    defaultStorageClass:\n      enabled: false\n    volumeSnapshotClasses: []\n    # Add VolumeSnapshotClass resources like:\n    # - name: ebs-vsc\n    #   # annotation metadata\n    #   annotations:\n    #     snapshot.storage.kubernetes.io/is-default-class: \"true\"\n    #   # label metadata\n    #   labels:\n    #     my-label-is: supercool\n    #   # deletionPolicy must be specified\n    #   deletionPolicy: Delete\n    #   parameters:\n\n    # Use old CSIDriver without an fsGroupPolicy set\n    # Intended for use with older clusters that cannot easily replace the CSIDriver object\n    # This parameter should always be false for new installations\n    useOldCSIDriver: false\n    # Deploy EBS CSI Driver without controller and associated resources\n    nodeComponentOnly: false\n    # nodeAllocatableUpdatePeriodSeconds updates the node's max attachable volume count by directing Kubelet to periodically call NodeGetInfo at the configured interval.\n    # Kubernetes enforces a minimum update interval of 10 seconds. A value of -1 uses a automatically determined value dependent on metadata sources.\n    # This parameter is supported in Kubernetes 1.33+ and requires the MutableCSINodeAllocatableCount feature gate to be enabled in kubelet and kube-apiserver.\n    nodeAllocatableUpdatePeriodSeconds: 10\n    # Set maximum verbosity for logs of each container and other recommended debugging parameters such as enabling AWS SDK debug logging\n    debugLogs: false\n",
+      "version": "1.64.0"
+    },
+    "status": null
+  },
+  {
+    "metadata": {
+      "annotations": {
+        "latestVersion": "true",
+        "ownerUid": "sysadmin",
+        "permissions": "pack.get,pack.list",
+        "scope": "system",
+        "scopeVisibility": "21"
+      },
+      "creationTimestamp": "2026-09-11T14:32:12.028Z",
+      "deletionTimestamp": "0001-01-01T00:00:00.000Z",
+      "lastModifiedTimestamp": "2026-09-11T14:32:12.028Z",
+      "name": "csi-aws-ebs",
+      "uid": "6aa410ec144aaec79d547a9e"
+    },
+    "spec": {
+      "annotations": {
+        "airgap": "true",
+        "architecture": "amd64,arm64",
+        "description": "Amazon Elastic Block Store (EBS) CSI driver",
+        "docsURL": "https://docs.spectrocloud.com/integrations/csi",
+        "revision": "20260831",
+        "source": "spectrocloud"
+      },
+      "cloudTypes": [
+        "eks",
+        "aws"
+      ],
+      "digest": "sha256:bd09e8b4187bdef2e5f1fca88203ecd0504224087a0cd97e41a42f0a3930601c",
+      "displayName": "Amazon EBS CSI",
+      "layer": "csi",
+      "logoUrl": "https://registry.spectrocloud.com/v1/csi-aws-ebs/blobs/sha256:f86813591b3b63b3afcf0a604a7c8c715660448585e89174908f3c6a421ad8d8?type=image/png",
+      "manifests": null,
+      "name": "csi-aws-ebs",
+      "presets": [],
+      "registryUid": "5eecc89d0b150045ae661cef",
+      "schema": [],
+      "template": {
+        "parameters": {
+          "inputParameters": [],
+          "outputParameters": []
+        }
+      },
+      "type": "spectro",
+      "values": "pack:\n  content:\n    images:\n      - image: us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/1.65.0/aws-ebs-csi-driver:v1.65.0\n      - image: us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/1.65.0/external-provisioner:v6.3.0-eksbuild.5\n      - image: us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/1.65.0/external-attacher:v4.12.0-eksbuild.6\n      - image: us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/1.65.0/external-resizer:v2.2.1-eksbuild.4\n      - image: us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/1.65.0/livenessprobe:v2.19.0-eksbuild.6\n      - image: us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/1.65.0/node-driver-registrar:v2.17.0-eksbuild.6\n      - image: us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/1.65.0/external-snapshotter/csi-snapshotter:v8.6.0-eksbuild.6\n      - image: us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/1.65.0/volume-modifier-for-k8s:v0.9.5-eksbuild.6\n    charts:\n      - repo: https://kubernetes-sigs.github.io/aws-ebs-csi-driver\n        name: aws-ebs-csi-driver\n        version: 2.65.0\n  namespace: \"kube-system\"\ncharts:\n  aws-ebs-csi-driver:\n    storageClasses:\n      # Default Storage Class\n      - name: spectro-storage-class\n        # annotation metadata\n        annotations:\n          storageclass.kubernetes.io/is-default-class: \"true\"\n          # label metadata\n          # labels:\n          #   my-label-is: supercool\n          # defaults to WaitForFirstConsumer\n        volumeBindingMode: WaitForFirstConsumer\n        # defaults to Delete\n        reclaimPolicy: Delete\n        parameters:\n          # File system type: xfs, ext2, ext3, ext4\n          csi.storage.k8s.io/fstype: \"ext4\"\n          # EBS volume type: io1, io2, gp2, gp3, sc1, st1, standard\n          type: \"gp2\"\n          # I/O operations per second per GiB. Required when io1 or io2 volume type is specified.\n          # iopsPerGB: \"\"\n          # Applicable only when io1 or io2 volume type is specified\n          # allowAutoIOPSPerGBIncrease: false\n          # I/O operations per second. Applicable only for gp3 volumes.\n          # iops: \"\"\n          # Throughput in MiB/s. Applicable only for gp3 volumes.\n          # throughput: \"\"\n          # Whether the volume should be encrypted or not\n          # encrypted: \"\"\n          # The full ARN of the key to use when encrypting the volume. When not specified, the default KMS key is used.\n          # kmsKeyId: \"\"\n    # Additional Storage Class \n    # - name: addon-storage-class\n    # annotations:\n    #   storageclass.kubernetes.io/is-default-class: \"false\"\n    # labels:\n    #   my-label-is: supercool\n    # volumeBindingMode: WaitForFirstConsumer\n    # reclaimPolicy: Delete\n    # parameters:\n    # csi.storage.k8s.io/fstype: \"ext4\"\n    # type: \"gp2\"\n    # iopsPerGB: \"\"\n    # allowAutoIOPSPerGBIncrease: false\n    # iops: \"\"\n    # throughput: \"\"\n    # encrypted: \"\"\n    # kmsKeyId: \"\"\n\n    image:\n      repository: us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/1.65.0/aws-ebs-csi-driver\n      # Overrides the image tag whose default is v{{ .Chart.AppVersion }}\n      tag: \"v1.65.0\"\n      pullPolicy: IfNotPresent\n    # -- Custom labels to add into metadata\n    customLabels: {}\n    # k8s-app: aws-ebs-csi-driver\n\n    # Instruct the AWS SDK to use AWS FIPS endpoints, and deploy container built with Boring Crypto (a FIPS-validated cryptographic library) instead of the Go default\n    #\n    # The EBS CSI Driver FIPS images have not undergone FIPS certification, and no official guarantee is made about the compliance of these images under the FIPS standard\n    # Users relying on these images for FIPS compliance should perform their own independent evaluation\n    fips: false\n    sidecars:\n      provisioner:\n        env: []\n        image:\n          pullPolicy: IfNotPresent\n          repository: us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/1.65.0/external-provisioner\n          tag: \"v6.3.0-eksbuild.5\"\n        logLevel: 2\n        # Additional parameters provided by csi-provisioner.\n        additionalArgs: []\n        # Grant additional permissions to csi-provisioner\n        additionalClusterRoleRules:\n        resources: {}\n        # Tune leader lease election for csi-provisioner.\n        # Leader election is on by default.\n        leaderElection:\n          enabled: true\n          # Optional values to tune lease behavior.\n          # The arguments provided must be in an acceptable time.ParseDuration format.\n          # Ref: https://pkg.go.dev/flag#Duration\n          # leaseDuration: \"15s\"\n          # renewDeadline: \"10s\"\n          # retryPeriod: \"5s\"\n        securityContext:\n          seccompProfile:\n            type: RuntimeDefault\n          readOnlyRootFilesystem: true\n          allowPrivilegeEscalation: false\n      attacher:\n        env: []\n        image:\n          pullPolicy: IfNotPresent\n          repository: us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/1.65.0/external-attacher\n          tag: \"v4.12.0-eksbuild.6\"\n        # Tune leader lease election for csi-attacher.\n        # Leader election is on by default.\n        leaderElection:\n          enabled: true\n          # Optional values to tune lease behavior.\n          # The arguments provided must be in an acceptable time.ParseDuration format.\n          # Ref: https://pkg.go.dev/flag#Duration\n          # leaseDuration: \"15s\"\n          # renewDeadline: \"10s\"\n          # retryPeriod: \"5s\"\n        logLevel: 2\n        # Additional parameters provided by csi-attacher.\n        additionalArgs: []\n        # Grant additional permissions to csi-attacher\n        additionalClusterRoleRules: []\n        resources: {}\n        securityContext:\n          seccompProfile:\n            type: RuntimeDefault\n          readOnlyRootFilesystem: true\n          allowPrivilegeEscalation: false\n      snapshotter:\n        # Enables the snapshotter sidecar even if the snapshot CRDs are not installed\n        forceEnable: true\n        env: []\n        image:\n          pullPolicy: IfNotPresent\n          repository: us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/1.65.0/external-snapshotter/csi-snapshotter\n          tag: \"v8.6.0-eksbuild.6\"\n        logLevel: 2\n        # Additional parameters provided by csi-snapshotter.\n        additionalArgs: []\n        # Grant additional permissions to csi-snapshotter\n        additionalClusterRoleRules: []\n        resources: {}\n        securityContext:\n          seccompProfile:\n            type: RuntimeDefault\n          readOnlyRootFilesystem: true\n          allowPrivilegeEscalation: false\n      metadataLabeler:\n        # ALPHA: Enable the metadata-labeler sidecar to label Kubernetes Nodes with\n        # information from the EC2 API (e.g. number of ENIs)\n        # Also requires using metadata-labeler as the node's metadata source\n        enabled: false\n        logLevel: 2\n        # Additional parameters provided by metadataLabeler.\n        additionalArgs: []\n        resources: {}\n        securityContext:\n          readOnlyRootFilesystem: true\n          allowPrivilegeEscalation: false\n      livenessProbe:\n        image:\n          pullPolicy: IfNotPresent\n          repository: us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/1.65.0/livenessprobe\n          tag: \"v2.19.0-eksbuild.6\"\n        # Additional parameters provided by livenessprobe.\n        additionalArgs: []\n        resources: {}\n        securityContext:\n          readOnlyRootFilesystem: true\n          allowPrivilegeEscalation: false\n      resizer:\n        env: []\n        image:\n          pullPolicy: IfNotPresent\n          repository: us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/1.65.0/external-resizer\n          tag: \"v2.2.1-eksbuild.4\"\n        # Tune leader lease election for csi-resizer.\n        # Leader election is on by default.\n        leaderElection:\n          enabled: true\n          # Optional values to tune lease behavior.\n          # The arguments provided must be in an acceptable time.ParseDuration format.\n          # Ref: https://pkg.go.dev/flag#Duration\n          # leaseDuration: \"15s\"\n          # renewDeadline: \"10s\"\n          # retryPeriod: \"5s\"\n        logLevel: 2\n        # Additional parameters provided by csi-resizer.\n        additionalArgs: []\n        # Grant additional permissions to csi-resizer\n        additionalClusterRoleRules: []\n        resources: {}\n        securityContext:\n          seccompProfile:\n            type: RuntimeDefault\n          readOnlyRootFilesystem: true\n          allowPrivilegeEscalation: false\n      nodeDriverRegistrar:\n        env: []\n        image:\n          pullPolicy: IfNotPresent\n          repository: us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/1.65.0/node-driver-registrar\n          tag: \"v2.17.0-eksbuild.6\"\n        logLevel: 2\n        # The port the health probe is bound to.\n        healthPort: 9809\n        # Additional parameters provided by node-driver-registrar.\n        additionalArgs: []\n        resources: {}\n        securityContext:\n          readOnlyRootFilesystem: true\n          allowPrivilegeEscalation: false\n        livenessProbe:\n          httpGet:\n            path: /healthz\n            port: healthz-ndr\n          initialDelaySeconds: 30\n          periodSeconds: 90\n          timeoutSeconds: 15\n      volumemodifier:\n        env: []\n        image:\n          pullPolicy: IfNotPresent\n          repository: us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/1.65.0/volume-modifier-for-k8s\n          tag: \"v0.9.5-eksbuild.6\"\n        leaderElection:\n          enabled: true\n          # Optional values to tune lease behavior.\n          # The arguments provided must be in an acceptable time.ParseDuration format.\n          # Ref: https://pkg.go.dev/flag#Duration\n          # leaseDuration: \"15s\"\n          # renewDeadline: \"10s\"\n          # retryPeriod: \"5s\"\n        logLevel: 2\n        # Additional parameters provided by volume-modifier-for-k8s.\n        additionalArgs: []\n        resources: {}\n        # Add additional volume mounts on the volumemodifier container with sidecars.volumemodifier.volumeMounts\n        volumeMounts: []\n        # And add mount paths for those additional volumes:\n        # - name: custom-dir\n        #   mountPath: /mount/path\n        securityContext:\n          seccompProfile:\n            type: RuntimeDefault\n          readOnlyRootFilesystem: true\n          allowPrivilegeEscalation: false\n    proxy:\n      http_proxy:\n      no_proxy:\n    imagePullSecrets: []\n    nameOverride:\n    fullnameOverride:\n    awsAccessSecret:\n      name: aws-secret\n      keyId: key_id\n      accessKey: access_key\n    controller:\n      batching: true\n      volumeModificationFeature:\n        enabled: false\n      # Enable support for node-local volumes that use pre-attached EBS volumes\n      enableNodeLocalVolumes: false\n      # Additional parameters provided by aws-ebs-csi-driver controller.\n      additionalArgs: []\n      sdkDebugLog: false\n      loggingFormat: text\n      affinity:\n        nodeAffinity:\n          preferredDuringSchedulingIgnoredDuringExecution:\n            - weight: 1\n              preference:\n                matchExpressions:\n                  - key: eks.amazonaws.com/compute-type\n                    operator: NotIn\n                    values:\n                      - fargate\n                      - auto\n                      - hybrid\n        podAntiAffinity:\n          preferredDuringSchedulingIgnoredDuringExecution:\n            - podAffinityTerm:\n                labelSelector:\n                  matchExpressions:\n                    - key: app\n                      operator: In\n                      values:\n                        - ebs-csi-controller\n                topologyKey: kubernetes.io/hostname\n              weight: 100\n      # The default filesystem type of the volume to provision when fstype is unspecified in the StorageClass.\n      # If the default is not set and fstype is unset in the StorageClass, then no fstype will be set\n      defaultFsType: ext4\n      env: []\n      # Use envFrom to reference ConfigMaps and Secrets across all containers in the deployment\n      envFrom: []\n      # If set, add pv/pvc metadata to plugin create and modify requests as parameters.\n      extraCreateMetadata: true\n      # Extra volume tags to attach to each dynamically provisioned volume.\n      # ---\n      # extraVolumeTags:\n      #   key1: value1\n      #   key2: value2\n      extraVolumeTags: {}\n      httpEndpoint:\n      # (deprecated) The TCP network address where the prometheus metrics endpoint\n      # will run (example: `:8080` which corresponds to port 8080 on local host).\n      # The default is empty string, which means metrics endpoint is disabled.\n      # ---\n      enableMetrics: false\n      # If metrics are enabled, add prometheus.io/scrape and prometheus.io/port\n      # annotations to the metrics services.\n      enablePrometheusAnnotations: true\n      serviceMonitor:\n        # Enables the ServiceMonitor resource even if the prometheus-operator CRDs are not installed\n        forceEnable: false\n        # Additional labels for ServiceMonitor object\n        labels: {}\n        interval: \"15s\"\n      # If set to true, AWS API call metrics will be exported to the following\n      # TCP endpoint: \"0.0.0.0:3301\"\n      # ---\n      # ID of the Kubernetes cluster used for tagging provisioned EBS volumes (optional).\n      k8sTagClusterId:\n      logLevel: 2\n      userAgentExtra: \"helm\"\n      nodeSelector: {}\n      deploymentAnnotations: {}\n      podAnnotations: {}\n      podLabels: {}\n      podDisruptionBudget:\n        # Warning: Disabling PodDisruptionBudget may lead to delays in stateful workloads starting due to controller\n        # pod restarts or evictions.\n        enabled: true\n        # unhealthyPodEvictionPolicy:\n        # Configure the maxUnavailable or minAvailable for the PDB\n        # If either parameter is non-null, no default is used for both\n        # maxUnavailable:\n        # minAvailable:\n      priorityClassName: system-cluster-critical\n      # AWS region to use. If not specified then the region will be looked up via the AWS EC2 metadata\n      # service.\n      # ---\n      # region: us-east-1\n      region:\n      replicaCount: 2\n      revisionHistoryLimit: 10\n      socketDirVolume:\n        emptyDir: {}\n      updateStrategy:\n        type: RollingUpdate\n        rollingUpdate:\n          maxUnavailable: 1\n      # type: RollingUpdate\n      # rollingUpdate:\n      #   maxSurge: 0\n      #   maxUnavailable: 1\n      resources:\n        requests:\n          cpu: 10m\n          memory: 40Mi\n        limits:\n          memory: 256Mi\n          cpu: 100m\n      serviceAccount:\n        # A service account will be created for you if set to true. Set to false if you want to use your own.\n        create: true\n        name: ebs-csi-controller-sa\n        annotations: {}\n        ## Enable if EKS IAM for SA is used\n        # eks.amazonaws.com/role-arn: arn:<partition>:iam::<account>:role/ebs-csi-role\n        automountServiceAccountToken: true\n      tolerations:\n        - key: CriticalAddonsOnly\n          operator: Exists\n        - effect: NoExecute\n          operator: Exists\n          tolerationSeconds: 300\n      # TSCs without the label selector stanza\n      #\n      # Example:\n      #\n      # topologySpreadConstraints:\n      #  - maxSkew: 1\n      #    topologyKey: topology.kubernetes.io/zone\n      #    whenUnsatisfiable: ScheduleAnyway\n      #  - maxSkew: 1\n      #    topologyKey: kubernetes.io/hostname\n      #    whenUnsatisfiable: ScheduleAnyway\n      topologySpreadConstraints: []\n      # securityContext on the controller pod\n      securityContext:\n        runAsNonRoot: true\n        runAsUser: 1000\n        runAsGroup: 1000\n        fsGroup: 1000\n      # Add additional volume mounts on the controller with controller.volumes and controller.volumeMounts\n      volumes: []\n      # Add additional volumes to be mounted onto the controller:\n      # - name: custom-dir\n      #   hostPath:\n      #     path: /path/to/dir\n      #     type: Directory\n      volumeMounts: []\n      # And add mount paths for those additional volumes:\n      # - name: custom-dir\n      #   mountPath: /mount/path\n      # ---\n      # securityContext on the controller container (see sidecars for securityContext on sidecar containers)\n      containerSecurityContext:\n        seccompProfile:\n          type: RuntimeDefault\n        readOnlyRootFilesystem: true\n        allowPrivilegeEscalation: false\n      initContainers: []\n      # containers to be run before the controller's container starts.\n      #\n      # Example:\n      #\n      # - name: wait\n      #   image: public.ecr.aws/amazonlinux/amazonlinux\n      #   command: [ 'sh', '-c', \"sleep 20\" ]\n      # Enable opentelemetry tracing for the plugin running on the daemonset\n      otelTracing: {}\n      #  otelServiceName: ebs-csi-controller\n      #  otelExporterEndpoint: \"http://localhost:4317\"\n\n      # dnsConfig for the controller pods\n      dnsConfig: {}\n    node:\n      # Enable SELinux-only optimizations on the EBS CSI Driver node pods\n      # Must only be set true if all linux nodes in the DaemonSet have SELinux enabled\n      selinux: false\n      env: []\n      envFrom: []\n      kubeletPath: /var/lib/kubelet\n      loggingFormat: text\n      logLevel: 2\n      enableMetrics: false\n      # If metrics are enabled, add prometheus.io/scrape and prometheus.io/port\n      # annotations to the metrics services.\n      enablePrometheusAnnotations: true\n      serviceMonitor:\n        # Enables the ServiceMonitor resource even if the prometheus-operator CRDs are not installed\n        forceEnable: false\n        # Additional labels for ServiceMonitor object\n        labels: {}\n        interval: \"15s\"\n      priorityClassName:\n      additionalArgs: []\n      affinity:\n        nodeAffinity:\n          requiredDuringSchedulingIgnoredDuringExecution:\n            nodeSelectorTerms:\n              - matchExpressions:\n                  - key: eks.amazonaws.com/compute-type\n                    operator: NotIn\n                    values:\n                      - fargate\n                      - auto\n                      - hybrid\n      nodeSelector: {}\n      daemonSetAnnotations: {}\n      podAnnotations: {}\n      podLabels: {}\n      terminationGracePeriodSeconds: 30\n      tolerateAllTaints: true\n      tolerations:\n        - operator: Exists\n          effect: NoExecute\n          tolerationSeconds: 300\n      resources:\n        requests:\n          cpu: 10m\n          memory: 40Mi\n        limits:\n          memory: 256Mi\n          cpu: 100m\n      revisionHistoryLimit: 10\n      probeDirVolume:\n        emptyDir: {}\n      serviceAccount:\n        create: true\n        name: ebs-csi-node-sa\n        annotations: {}\n        ## Enable if EKS IAM for SA is used\n        # eks.amazonaws.com/role-arn: arn:<partition>:iam::<account>:role/ebs-csi-role\n        automountServiceAccountToken: true\n        # Disable mutating permissions for the node service account.\n        # When enabled, some features of the EBS CSI Driver node pods will not function, such as taint removal.\n        # Primarily useful in particularly security-sensitive environments, or on multi-tenant clusters that isolate tenants by node.\n        disableMutation: false\n      # Enable the linux daemonset creation\n      enableLinux: true\n      enableWindows: true\n      # Comma separated list of metadata sources that override the default used by the EBS CSI Driver. Valid sources include 'imds', 'kubernetes', and (ALPHA) 'metadata-labeler'\n      metadataSources:\n      # Warning: This option will be removed in a future release. It is a temporary workaround for users unable to immediately migrate off of older kernel versions.\n      # Formats XFS volumes with bigtime=0,inobtcount=0,reflink=0, for mounting onto nodes with linux kernel version <= 5.4.\n      # Note that XFS volumes formatted with this option will only have timestamp records until 2038.\n      legacyXFS: false\n      # The number of attachment slots to reserve for system use (and not to be used for CSI volumes)\n      # When this parameter is not specified (or set to -1), the EBS CSI Driver will attempt to determine the number of reserved slots via heuristic\n      # Cannot be specified at the same time as `node.volumeAttachLimit`\n      reservedVolumeAttachments:\n      # The \"maximum number of attachable volumes\" per node\n      # Cannot be specified at the same time as `node.reservedVolumeAttachments`\n      volumeAttachLimit:\n      updateStrategy:\n        type: RollingUpdate\n        rollingUpdate:\n          maxUnavailable: \"10%\"\n      hostNetwork: false\n      # securityContext on the node pod\n      securityContext:\n        # The node pod must be run as root to bind to the registration/driver sockets\n        runAsNonRoot: false\n        runAsUser: 0\n        runAsGroup: 0\n        fsGroup: 0\n      # allows you to deploy aws-ebs-csi-node daemonset to separate namespace (make sure namespace exists before deploy)\n      namespaceOverride: \"\"\n      # Add additional volume mounts on the node pods with node.volumes and node.volumeMounts\n      volumes: []\n      # Add additional volumes to be mounted onto the node pods:\n      # - name: custom-dir\n      #   hostPath:\n      #     path: /path/to/dir\n      #     type: Directory\n      volumeMounts: []\n      # And add mount paths for those additional volumes:\n      # - name: custom-dir\n      #   mountPath: /mount/path\n      # ---\n      # securityContext on the node container (see sidecars for securityContext on sidecar containers)\n      # Privileged containers always run as `Unconfined`, which means that they are not restricted by a seccomp profile.\n      containerSecurityContext:\n        readOnlyRootFilesystem: true\n        privileged: true\n      initContainers: []\n      # containers to be run before the csi-node's container starts.\n      #\n      # Example:\n      #\n      # - name: wait\n      #   image: public.ecr.aws/amazonlinux/amazonlinux\n      #   command: [ 'sh', '-c', \"sleep 20\" ]\n      # Enable opentelemetry tracing for the plugin running on the daemonset\n      otelTracing: {}\n      #  otelServiceName: ebs-csi-node\n      #  otelExporterEndpoint: \"http://localhost:4317\"\n\n      # dnsConfig for the node pods\n      dnsConfig: {}\n    additionalDaemonSets:\n    # Additional node DaemonSets, using the node config structure\n    # See docs/additional-daemonsets.md for more information\n    #\n    # example:\n    #   nodeSelector:\n    #     node.kubernetes.io/instance-type: c5.large\n    #   volumeAttachLimit: 15\n\n    # Enable compatibility for the A1 instance family via use of an AL2-based image in a separate DaemonSet\n    # a1CompatibilityDaemonSet: true\n    # storageClasses: []\n    # Add StorageClass resources like:\n    # - name: ebs-sc\n    #   # annotation metadata\n    #   annotations:\n    #     storageclass.kubernetes.io/is-default-class: \"true\"\n    #   # label metadata\n    #   labels:\n    #     my-label-is: supercool\n    #   # defaults to WaitForFirstConsumer\n    #   volumeBindingMode: WaitForFirstConsumer\n    #   # defaults to Delete\n    #   reclaimPolicy: Retain\n    #   parameters:\n    #     encrypted: \"true\"\n    defaultStorageClass:\n      enabled: false\n    volumeSnapshotClasses: []\n    # Add VolumeSnapshotClass resources like:\n    # - name: ebs-vsc\n    #   # annotation metadata\n    #   annotations:\n    #     snapshot.storage.kubernetes.io/is-default-class: \"true\"\n    #   # label metadata\n    #   labels:\n    #     my-label-is: supercool\n    #   # deletionPolicy must be specified\n    #   deletionPolicy: Delete\n    #   parameters:\n\n    # Use old CSIDriver without an fsGroupPolicy set\n    # Intended for use with older clusters that cannot easily replace the CSIDriver object\n    # This parameter should always be false for new installations\n    useOldCSIDriver: false\n    # Deploy EBS CSI Driver without controller and associated resources\n    nodeComponentOnly: false\n    # nodeAllocatableUpdatePeriodSeconds updates the node's max attachable volume count by directing Kubelet to periodically call NodeGetInfo at the configured interval.\n    # Kubernetes enforces a minimum update interval of 10 seconds. A value of -1 uses a automatically determined value dependent on metadata sources.\n    # This parameter is supported in Kubernetes 1.33+ and requires the MutableCSINodeAllocatableCount feature gate to be enabled in kubelet and kube-apiserver.\n    nodeAllocatableUpdatePeriodSeconds: 10\n    # Set maximum verbosity for logs of each container and other recommended debugging parameters such as enabling AWS SDK debug logging\n    debugLogs: false\n",
+      "version": "1.65.0"
+    },
+    "status": null
+  },
+  {
+    "metadata": {
+      "annotations": {
+        "latestVersion": "false",
+        "ownerUid": "sysadmin",
+        "permissions": "pack.get,pack.list",
+        "scope": "system",
+        "scopeVisibility": "21"
+      },
+      "creationTimestamp": "2022-08-17T08:20:50.568Z",
+      "deletionTimestamp": "0001-01-01T00:00:00.000Z",
+      "lastModifiedTimestamp": "2022-08-17T08:20:50.568Z",
+      "name": "csi-aws-ebs",
+      "uid": "62fca4e216b4105316bb7600"
+    },
+    "spec": {
+      "annotations": {
+        "description": "Amazon Elastic Block Store (EBS) CSI driver",
+        "docsURL": "https://docs.spectrocloud.com/integrations/csi",
+        "source": "spectrocloud",
+        "system_state": "deprecated"
+      },
+      "cloudTypes": [
+        "eks",
+        "aws"
+      ],
+      "digest": "sha256:c58522cfc0e8b66906dc54388ab638a87b9652eefb5478f346a152d02b2def7b",
+      "displayName": "Amazon EBS CSI",
+      "layer": "csi",
+      "logoUrl": "https://registry.spectrocloud.com/v1/csi-aws-ebs/blobs/sha256:f86813591b3b63b3afcf0a604a7c8c715660448585e89174908f3c6a421ad8d8?type=image/png",
+      "manifests": null,
+      "name": "csi-aws-ebs",
+      "registryUid": "5eecc89d0b150045ae661cef",
+      "type": "spectro",
+      "version": "1.8.0"
+    },
+    "status": null
+  }
+]

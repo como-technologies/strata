@@ -1,0 +1,190 @@
+[
+  {
+    "metadata": {
+      "annotations": {
+        "latestVersion": "false",
+        "ownerUid": "sysadmin",
+        "permissions": "pack.get,pack.list",
+        "scope": "system",
+        "scopeVisibility": "21"
+      },
+      "creationTimestamp": "2020-09-11T06:30:12.505Z",
+      "deletionTimestamp": "0001-01-01T00:00:00.000Z",
+      "lastModifiedTimestamp": "2020-09-11T06:30:12.505Z",
+      "name": "ubuntu-aws",
+      "uid": "5f5b1974ff4ae5d765c3b3fc"
+    },
+    "spec": {
+      "annotations": {
+        "osName": "ubuntu",
+        "os_spectro_version": "0",
+        "os_version": "u-1804",
+        "skipK8sInstall": "true",
+        "sshUsername": "ubuntu",
+        "system_state": "deprecated"
+      },
+      "cloudTypes": [
+        "aws"
+      ],
+      "digest": "sha256:629ea8eb449da1b3f588186710275408971dcf782a208e2021d2401b57a202a7",
+      "displayName": "Ubuntu (AWS)",
+      "group": "LTS",
+      "layer": "os",
+      "logoUrl": "https://registry.spectrocloud.com/v1/ubuntu-aws/blobs/sha256:09a727f9005b79c69d8e60e12ce130880c63131315b49e7fb4cc44e53d34dc7a?type=image/png",
+      "manifests": null,
+      "name": "ubuntu-aws",
+      "registryUid": "5eecc89d0b150045ae661cef",
+      "type": "spectro",
+      "version": "18.04"
+    },
+    "status": null
+  },
+  {
+    "metadata": {
+      "annotations": {
+        "latestVersion": "false",
+        "ownerUid": "sysadmin",
+        "permissions": "pack.get,pack.list",
+        "scope": "system",
+        "scopeVisibility": "21"
+      },
+      "creationTimestamp": "2022-04-26T15:00:15.289Z",
+      "deletionTimestamp": "0001-01-01T00:00:00.000Z",
+      "lastModifiedTimestamp": "2022-04-26T15:00:15.289Z",
+      "name": "ubuntu-aws",
+      "uid": "626808ffd9c586788e0be610"
+    },
+    "spec": {
+      "annotations": {
+        "osName": "ubuntu",
+        "os_spectro_version": "0",
+        "os_version": "u-2004",
+        "skipK8sInstall": "true",
+        "source": "spectrocloud",
+        "sshUsername": "ubuntu"
+      },
+      "cloudTypes": [
+        "aws"
+      ],
+      "digest": "sha256:d7aee32a7be434bba2a2d1ca8b6c559053844cc2da2d7cde82c306baba4394d0",
+      "displayName": "Ubuntu (AWS)",
+      "group": "LTS",
+      "layer": "os",
+      "logoUrl": "https://registry.spectrocloud.com/v1/ubuntu-aws/blobs/sha256:09a727f9005b79c69d8e60e12ce130880c63131315b49e7fb4cc44e53d34dc7a?type=image/png",
+      "manifests": null,
+      "name": "ubuntu-aws",
+      "presets": [],
+      "registryUid": "5eecc89d0b150045ae661cef",
+      "schema": [],
+      "template": {
+        "parameters": {
+          "inputParameters": [],
+          "outputParameters": []
+        }
+      },
+      "type": "spectro",
+      "values": "\n# Spectro Golden images includes most of the hardening standards recommended by CIS benchmarking v1.5\n\n# Uncomment below section to\n# 1. Include custom files to be copied over to the nodes and/or\n# 2. Execute list of commands before or after kubeadm init/join is executed\n#\n#kubeadmconfig:\n#  preKubeadmCommands:\n#  - echo \"Executing pre kube admin config commands\"\n#  - update-ca-certificates\n#  - 'systemctl restart containerd; sleep 3'\n#  - 'while [ ! -S /var/run/containerd/containerd.sock ]; do echo \"Waiting for containerd...\"; sleep 1; done'\n#  postKubeadmCommands:\n#  - echo \"Executing post kube admin config commands\"\n#  files:\n#  - targetPath: /usr/local/share/ca-certificates/mycom.crt\n#    targetOwner: \"root:root\"\n#    targetPermissions: \"0644\"\n#    content: |\n#      -----BEGIN CERTIFICATE-----\n#      MIICyzCCAbOgAwIBAgIBADANBgkqhkiG9w0BAQsFADAVMRMwEQYDVQQDEwprdWJl\n#      cm5ldGVzMB4XDTIwMDkyMjIzNDMyM1oXDTMwMDkyMDIzNDgyM1owFTETMBEGA1UE\n#      AxMKa3ViZXJuZXRlczCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAMdA\n#      nZYs1el/6f9PgV/aO9mzy7MvqaZoFnqO7Qi4LZfYzixLYmMUzi+h8/RLPFIoYLiz\n#      qiDn+P8c9I1uxB6UqGrBt7dkXfjrUZPs0JXEOX9U/6GFXL5C+n3AUlAxNCS5jobN\n#      fbLt7DH3WoT6tLcQefTta2K+9S7zJKcIgLmBlPNDijwcQsbenSwDSlSLkGz8v6N2\n#      7SEYNCV542lbYwn42kbcEq2pzzAaCqa5uEPsR9y+uzUiJpv5tDHUdjbFT8tme3vL\n#      9EdCPODkqtMJtCvz0hqd5SxkfeC2L+ypaiHIxbwbWe7GtliROvz9bClIeGY7gFBK\n#      jZqpLdbBVjo0NZBTJFUCAwEAAaMmMCQwDgYDVR0PAQH/BAQDAgKkMBIGA1UdEwEB\n#      /wQIMAYBAf8CAQAwDQYJKoZIhvcNAQELBQADggEBADIKoE0P+aVJGV9LWGLiOhki\n#      HFv/vPPAQ2MPk02rLjWzCaNrXD7aPPgT/1uDMYMHD36u8rYyf4qPtB8S5REWBM/Y\n#      g8uhnpa/tGsaqO8LOFj6zsInKrsXSbE6YMY6+A8qvv5lPWpJfrcCVEo2zOj7WGoJ\n#      ixi4B3fFNI+wih8/+p4xW+n3fvgqVYHJ3zo8aRLXbXwztp00lXurXUyR8EZxyR+6\n#      b+IDLmHPEGsY9KOZ9VLLPcPhx5FR9njFyXvDKmjUMJJgUpRkmsuU1mCFC+OHhj56\n#      IkLaSJf6z/p2a3YjTxvHNCqFMLbJ2FvJwYCRzsoT2wm2oulnUAMWPI10vdVM+Nc=\n#      -----END CERTIFICATE-----",
+      "version": "20.04"
+    },
+    "status": null
+  },
+  {
+    "metadata": {
+      "annotations": {
+        "latestVersion": "false",
+        "ownerUid": "sysadmin",
+        "permissions": "pack.get,pack.list",
+        "scope": "system",
+        "scopeVisibility": "21"
+      },
+      "creationTimestamp": "2023-01-10T06:19:31.406Z",
+      "deletionTimestamp": "0001-01-01T00:00:00.000Z",
+      "lastModifiedTimestamp": "2023-01-10T06:19:31.406Z",
+      "name": "ubuntu-aws",
+      "uid": "63bd0373764141c6622c3062"
+    },
+    "spec": {
+      "annotations": {
+        "osName": "ubuntu",
+        "os_spectro_version": "0",
+        "os_version": "u-2204",
+        "skipK8sInstall": "true",
+        "sshUsername": "ubuntu"
+      },
+      "cloudTypes": [
+        "aws"
+      ],
+      "digest": "sha256:269435bb0d948bc9a5a37323b07e1751ab8a6d549774233c60411ccfb8beace7",
+      "displayName": "Ubuntu (AWS)",
+      "group": "LTS",
+      "layer": "os",
+      "logoUrl": "https://registry.spectrocloud.com/v1/ubuntu-aws/blobs/sha256:09a727f9005b79c69d8e60e12ce130880c63131315b49e7fb4cc44e53d34dc7a?type=image/png",
+      "manifests": null,
+      "name": "ubuntu-aws",
+      "presets": [],
+      "registryUid": "5eecc89d0b150045ae661cef",
+      "schema": [],
+      "template": {
+        "parameters": {
+          "inputParameters": [],
+          "outputParameters": []
+        }
+      },
+      "type": "spectro",
+      "values": "\n# Spectro Golden images includes most of the hardening as per CIS Ubuntu Linux 22.04 LTS Server L1 v1.0.0 standards\n\n# Uncomment below section to\n# 1. Include custom files to be copied over to the nodes and/or\n# 2. Execute list of commands before or after kubeadm init/join is executed\n#\n#kubeadmconfig:\n#  preKubeadmCommands:\n#  - echo \"Executing pre kube admin config commands\"\n#  - update-ca-certificates\n#  - 'systemctl restart containerd; sleep 3'\n#  - 'while [ ! -S /var/run/containerd/containerd.sock ]; do echo \"Waiting for containerd...\"; sleep 1; done'\n#  postKubeadmCommands:\n#  - echo \"Executing post kube admin config commands\"\n#  files:\n#  - targetPath: /usr/local/share/ca-certificates/mycom.crt\n#    targetOwner: \"root:root\"\n#    targetPermissions: \"0644\"\n#    content: |\n#      -----BEGIN CERTIFICATE-----\n#      MIICyzCCAbOgAwIBAgIBADANBgkqhkiG9w0BAQsFADAVMRMwEQYDVQQDEwprdWJl\n#      cm5ldGVzMB4XDTIwMDkyMjIzNDMyM1oXDTMwMDkyMDIzNDgyM1owFTETMBEGA1UE\n#      AxMKa3ViZXJuZXRlczCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAMdA\n#      nZYs1el/6f9PgV/aO9mzy7MvqaZoFnqO7Qi4LZfYzixLYmMUzi+h8/RLPFIoYLiz\n#      qiDn+P8c9I1uxB6UqGrBt7dkXfjrUZPs0JXEOX9U/6GFXL5C+n3AUlAxNCS5jobN\n#      fbLt7DH3WoT6tLcQefTta2K+9S7zJKcIgLmBlPNDijwcQsbenSwDSlSLkGz8v6N2\n#      7SEYNCV542lbYwn42kbcEq2pzzAaCqa5uEPsR9y+uzUiJpv5tDHUdjbFT8tme3vL\n#      9EdCPODkqtMJtCvz0hqd5SxkfeC2L+ypaiHIxbwbWe7GtliROvz9bClIeGY7gFBK\n#      jZqpLdbBVjo0NZBTJFUCAwEAAaMmMCQwDgYDVR0PAQH/BAQDAgKkMBIGA1UdEwEB\n#      /wQIMAYBAf8CAQAwDQYJKoZIhvcNAQELBQADggEBADIKoE0P+aVJGV9LWGLiOhki\n#      HFv/vPPAQ2MPk02rLjWzCaNrXD7aPPgT/1uDMYMHD36u8rYyf4qPtB8S5REWBM/Y\n#      g8uhnpa/tGsaqO8LOFj6zsInKrsXSbE6YMY6+A8qvv5lPWpJfrcCVEo2zOj7WGoJ\n#      ixi4B3fFNI+wih8/+p4xW+n3fvgqVYHJ3zo8aRLXbXwztp00lXurXUyR8EZxyR+6\n#      b+IDLmHPEGsY9KOZ9VLLPcPhx5FR9njFyXvDKmjUMJJgUpRkmsuU1mCFC+OHhj56\n#      IkLaSJf6z/p2a3YjTxvHNCqFMLbJ2FvJwYCRzsoT2wm2oulnUAMWPI10vdVM+Nc=\n#      -----END CERTIFICATE-----",
+      "version": "22.04"
+    },
+    "status": null
+  },
+  {
+    "metadata": {
+      "annotations": {
+        "latestVersion": "true",
+        "ownerUid": "sysadmin",
+        "permissions": "pack.get,pack.list",
+        "scope": "system",
+        "scopeVisibility": "21"
+      },
+      "creationTimestamp": "2025-11-14T15:02:05.428Z",
+      "deletionTimestamp": "0001-01-01T00:00:00.000Z",
+      "lastModifiedTimestamp": "2025-11-14T15:02:05.428Z",
+      "name": "ubuntu-aws",
+      "uid": "6917446d9da9b9852faf5f60"
+    },
+    "spec": {
+      "annotations": {
+        "airgap": "true",
+        "architecture": "arm64,amd64",
+        "osName": "ubuntu",
+        "os_spectro_version": "0",
+        "os_version": "u-2404",
+        "revision": "20251114",
+        "skipK8sInstall": "true",
+        "sshUsername": "ubuntu"
+      },
+      "cloudTypes": [
+        "aws"
+      ],
+      "digest": "sha256:2df05daa4eb4bf3298a7c1dbda7b36dc57e51d292308bcc441d4a3655f746a02",
+      "displayName": "Ubuntu (AWS)",
+      "group": "LTS",
+      "layer": "os",
+      "logoUrl": "https://registry.spectrocloud.com/v1/ubuntu-aws/blobs/sha256:09a727f9005b79c69d8e60e12ce130880c63131315b49e7fb4cc44e53d34dc7a?type=image/png",
+      "manifests": null,
+      "name": "ubuntu-aws",
+      "presets": [],
+      "registryUid": "5eecc89d0b150045ae661cef",
+      "schema": [],
+      "template": {
+        "parameters": {
+          "inputParameters": [],
+          "outputParameters": []
+        }
+      },
+      "type": "spectro",
+      "values": "\n# Spectro Golden images includes most of the hardening as per CIS Ubuntu Linux 24.04 LTS Server L1 v1.0.0 standards\n\n# Uncomment below section to\n# 1. Include custom files to be copied over to the nodes and/or\n# 2. Execute list of commands before or after kubeadm init/join is executed\n#\n#kubeadmconfig:\n#  preKubeadmCommands:\n#  - echo \"Executing pre kube admin config commands\"\n#  - update-ca-certificates\n#  - 'systemctl restart containerd; sleep 3'\n#  - 'while [ ! -S /var/run/containerd/containerd.sock ]; do echo \"Waiting for containerd...\"; sleep 1; done'\n#  postKubeadmCommands:\n#  - echo \"Executing post kube admin config commands\"\n#  files:\n#  - targetPath: /usr/local/share/ca-certificates/mycom.crt\n#    targetOwner: \"root:root\"\n#    targetPermissions: \"0644\"\n#    content: |\n#      -----BEGIN CERTIFICATE-----\n#      MIICyzCCAbOgAwIBAgIBADANBgkqhkiG9w0BAQsFADAVMRMwEQYDVQQDEwprdWJl\n#      cm5ldGVzMB4XDTIwMDkyMjIzNDMyM1oXDTMwMDkyMDIzNDgyM1owFTETMBEGA1UE\n#      AxMKa3ViZXJuZXRlczCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAMdA\n#      nZYs1el/6f9PgV/aO9mzy7MvqaZoFnqO7Qi4LZfYzixLYmMUzi+h8/RLPFIoYLiz\n#      qiDn+P8c9I1uxB6UqGrBt7dkXfjrUZPs0JXEOX9U/6GFXL5C+n3AUlAxNCS5jobN\n#      fbLt7DH3WoT6tLcQefTta2K+9S7zJKcIgLmBlPNDijwcQsbenSwDSlSLkGz8v6N2\n#      7SEYNCV542lbYwn42kbcEq2pzzAaCqa5uEPsR9y+uzUiJpv5tDHUdjbFT8tme3vL\n#      9EdCPODkqtMJtCvz0hqd5SxkfeC2L+ypaiHIxbwbWe7GtliROvz9bClIeGY7gFBK\n#      jZqpLdbBVjo0NZBTJFUCAwEAAaMmMCQwDgYDVR0PAQH/BAQDAgKkMBIGA1UdEwEB\n#      /wQIMAYBAf8CAQAwDQYJKoZIhvcNAQELBQADggEBADIKoE0P+aVJGV9LWGLiOhki\n#      HFv/vPPAQ2MPk02rLjWzCaNrXD7aPPgT/1uDMYMHD36u8rYyf4qPtB8S5REWBM/Y\n#      g8uhnpa/tGsaqO8LOFj6zsInKrsXSbE6YMY6+A8qvv5lPWpJfrcCVEo2zOj7WGoJ\n#      ixi4B3fFNI+wih8/+p4xW+n3fvgqVYHJ3zo8aRLXbXwztp00lXurXUyR8EZxyR+6\n#      b+IDLmHPEGsY9KOZ9VLLPcPhx5FR9njFyXvDKmjUMJJgUpRkmsuU1mCFC+OHhj56\n#      IkLaSJf6z/p2a3YjTxvHNCqFMLbJ2FvJwYCRzsoT2wm2oulnUAMWPI10vdVM+Nc=\n#      -----END CERTIFICATE-----",
+      "version": "24.04"
+    },
+    "status": null
+  }
+]

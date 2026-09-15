@@ -1,0 +1,9 @@
+# transient files written by the tool and the example fetcher
+.packs.json
+*.tmp
+_entity.raw.json
+*.jsonl
+
+# local credentials never belong here
+.env
+*.env

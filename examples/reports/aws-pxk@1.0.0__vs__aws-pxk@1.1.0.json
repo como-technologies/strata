@@ -1,0 +1,982 @@
+{
+  "tool": "palette-profile-diff",
+  "a": {
+    "cloudType": "aws",
+    "consumers": {
+      "clusters": [],
+      "count": 0
+    },
+    "fetchedAt": "2026-09-15T17:12:43Z",
+    "name": "aws-pxk",
+    "ref": "/home/brett/repos/spectrocloud/profile-diff/examples/profiles/raw/aws-pxk@1.0.0",
+    "tags": {
+      "built": "2026-09-15",
+      "source": "palette-profile-diff examples"
+    },
+    "template": "published",
+    "type": "cluster",
+    "uid": "64e0000000000000000000a1",
+    "version": "1.0.0"
+  },
+  "b": {
+    "cloudType": "aws",
+    "consumers": {
+      "clusters": [],
+      "count": 0
+    },
+    "fetchedAt": "2026-09-15T17:12:44Z",
+    "name": "aws-pxk",
+    "ref": "/home/brett/repos/spectrocloud/profile-diff/examples/profiles/raw/aws-pxk@1.1.0",
+    "tags": {
+      "built": "2026-09-15",
+      "source": "palette-profile-diff examples"
+    },
+    "template": "published",
+    "type": "cluster",
+    "uid": "64e0000000000000000000b2",
+    "version": "1.1.0"
+  },
+  "rootA": "12ccf27fe446e2c0277f261d0f403f592d3ad105bac8492dde33d13322bf28c2",
+  "rootB": "79087d4403da0f2960866261ee169abea9317d528e39889ac2ad9e713c620997",
+  "same": false,
+  "variables": {
+    "changed": false,
+    "diff": []
+  },
+  "orderChanged": false,
+  "packs": [
+    {
+      "key": "addon/cert-manager",
+      "status": "unchanged",
+      "layer": "addon",
+      "name": "cert-manager",
+      "a": {
+        "tag": "1.21.1",
+        "version": "1.21.1",
+        "packUid": "6a75f43fd410c3b56c0d4e51",
+        "registryUid": "5eecc89d0b150045ae661cef",
+        "upstream": "sha256:50dd2cad9e52e2e0494d8f3cddee77d19acf709623890d514c1bda5264ee1dd9",
+        "upstreamSource": "packRef.digest"
+      },
+      "b": {
+        "tag": "1.21.1",
+        "version": "1.21.1",
+        "packUid": "6a75f43fd410c3b56c0d4e51",
+        "registryUid": "5eecc89d0b150045ae661cef",
+        "upstream": "sha256:50dd2cad9e52e2e0494d8f3cddee77d19acf709623890d514c1bda5264ee1dd9",
+        "upstreamSource": "packRef.digest"
+      },
+      "identity": false,
+      "upstream": false,
+      "authored": false,
+      "valuesChanged": false,
+      "valuesTextOnly": false,
+      "valuesDiff": [],
+      "manifests": [],
+      "blast": ""
+    },
+    {
+      "key": "cni/cni-cilium-oss",
+      "status": "changed",
+      "layer": "cni",
+      "name": "cni-cilium-oss",
+      "a": {
+        "tag": "1.19.6",
+        "version": "1.19.6",
+        "packUid": "6a6bd41816c3cbf980e528b9",
+        "registryUid": "5eecc89d0b150045ae661cef",
+        "upstream": "sha256:3d8661bc3a7ee274b5e472d1dbaa52f1d9676d5a3afd838f1e4f583a6409e55b",
+        "upstreamSource": "packRef.digest"
+      },
+      "b": {
+        "tag": "1.20.1",
+        "version": "1.20.1",
+        "packUid": "6aa410eb144aaec799b5c0fa",
+        "registryUid": "5eecc89d0b150045ae661cef",
+        "upstream": "sha256:917d9de9a696a86de1faf2899bc702636b2b1976896c6a3c22f709b3d81b215b",
+        "upstreamSource": "packRef.digest"
+      },
+      "identity": true,
+      "upstream": true,
+      "authored": true,
+      "valuesChanged": true,
+      "valuesTextOnly": false,
+      "valuesDiff": [
+        {
+          "op": "~",
+          "path": "charts.cilium.authentication.mutual.spire.install.agent.image.repository",
+          "old": "us-docker.pkg.dev/palette-images/packs/cilium/1.19.6/spire-agent",
+          "new": "us-docker.pkg.dev/palette-images/packs/cilium/1.20.1/spire-agent"
+        },
+        {
+          "op": "~",
+          "path": "charts.cilium.authentication.mutual.spire.install.agent.image.tag",
+          "old": "1.9.6",
+          "new": "1.15.2"
+        },
+        {
+          "op": "~",
+          "path": "charts.cilium.authentication.mutual.spire.install.initImage.repository",
+          "old": "us-docker.pkg.dev/palette-images/packs/cilium/1.19.6/busybox",
+          "new": "us-docker.pkg.dev/palette-images/packs/cilium/1.20.1/busybox"
+        },
+        {
+          "op": "~",
+          "path": "charts.cilium.authentication.mutual.spire.install.initImage.tag",
+          "old": "v1.37.0",
+          "new": "v1.38.0"
+        },
+        {
+          "op": "~",
+          "path": "charts.cilium.authentication.mutual.spire.install.server.image.repository",
+          "old": "us-docker.pkg.dev/palette-images/packs/cilium/1.19.6/spire-server",
+          "new": "us-docker.pkg.dev/palette-images/packs/cilium/1.20.1/spire-server"
+        },
+        {
+          "op": "~",
+          "path": "charts.cilium.authentication.mutual.spire.install.server.image.tag",
+          "old": "1.9.6",
+          "new": "1.15.2"
+        },
+        {
+          "op": "+",
+          "path": "charts.cilium.certgen.enforceCAValidityThroughoutLeavesDuration",
+          "new": true
+        },
+        {
+          "op": "~",
+          "path": "charts.cilium.certgen.image.repository",
+          "old": "us-docker.pkg.dev/palette-images/packs/cilium/1.19.6/certgen",
+          "new": "us-docker.pkg.dev/palette-images/packs/cilium/1.20.1/certgen"
+        },
+        {
+          "op": "~",
+          "path": "charts.cilium.certgen.image.tag",
+          "old": "v0.4.6",
+          "new": "v0.4.9"
+        },
+        {
+          "op": "+",
+          "path": "charts.cilium.clustermesh.apiserver.etcdQPS",
+          "new": 50
+        },
+        {
+          "op": "~",
+          "path": "charts.cilium.clustermesh.apiserver.image.repository",
+          "old": "us-docker.pkg.dev/palette-images/packs/cilium/1.19.6/clustermesh-apiserver",
+          "new": "us-docker.pkg.dev/palette-images/packs/cilium/1.20.1/clustermesh-apiserver"
+        },
+        {
+          "op": "~",
+          "path": "charts.cilium.clustermesh.apiserver.image.tag",
+          "old": "v1.19.6",
+          "new": "v1.20.1"
+        },
+        {
+          "op": "+",
+          "path": "charts.cilium.clustermesh.apiserver.kvstoremesh.etcdQPS",
+          "new": 100
+        },
+        {
+          "op": "-",
+          "path": "charts.cilium.clustermesh.apiserver.tls.admin.cert",
+          "old": ""
+        },
+        {
+          "op": "-",
+          "path": "charts.cilium.clustermesh.apiserver.tls.admin.key",
+          "old": ""
+        },
+        {
+          "op": "~",
+          "path": "charts.cilium.clustermesh.apiserver.tls.auto.certValidityDuration",
+          "old": 1095,
+          "new": 365
+        },
+        {
+          "op": "+",
+          "path": "charts.cilium.clustermesh.apiserver.tls.auto.schedule",
+          "new": "0 0 1 */4 *"
+        },
+        {
+          "op": "-",
+          "path": "charts.cilium.clustermesh.apiserver.tls.enableSecrets",
+          "old": true
+        },
+        {
+          "op": "-",
+          "path": "charts.cilium.clustermesh.apiserver.tls.remote.cert",
+          "old": ""
+        },
+        {
+          "op": "-",
+          "path": "charts.cilium.clustermesh.apiserver.tls.remote.key",
+          "old": ""
+        },
+        {
+          "op": "-",
+          "path": "charts.cilium.clustermesh.apiserver.tls.server.cert",
+          "old": ""
+        },
+        {
+          "op": "-",
+          "path": "charts.cilium.clustermesh.apiserver.tls.server.key",
+          "old": ""
+        },
+        {
+          "op": "+",
+          "path": "charts.cilium.clustermesh.defaultGlobalNamespace",
+          "new": true
+        },
+        {
+          "op": "-",
+          "path": "charts.cilium.clustermesh.enableMCSAPISupport",
+          "old": false
+        },
+        {
+          "op": "+",
+          "path": "charts.cilium.datapathPlugins.enabled",
+          "new": false
+        },
+        {
+          "op": "+",
+          "path": "charts.cilium.datapathPlugins.stateDir",
+          "new": "/var/run/cilium/plugins"
+        },
+        {
+          "op": "+",
+          "path": "charts.cilium.devices",
+          "new": ""
+        },
+        {
+          "op": "-",
+          "path": "charts.cilium.encryption.ipsec.encryptedOverlay",
+          "old": false
+        },
+        {
+          "op": "-",
+          "path": "charts.cilium.encryption.strictMode.allowRemoteNodeIdentities",
+          "old": false
+        },
+        {
+          "op": "-",
+          "path": "charts.cilium.encryption.strictMode.cidr",
+          "old": ""
+        },
+        {
+          "op": "-",
+          "path": "charts.cilium.encryption.strictMode.enabled",
+          "old": false
+        },
+        {
+          "op": "+",
+          "path": "charts.cilium.encryption.ztunnel.ca.type",
+          "new": "internal"
+        },
+        {
+          "op": "~",
+          "path": "charts.cilium.encryption.ztunnel.image.digest",
+          "old": null,
+          "new": ""
+        },
+        {
+          "op": "~",
+          "path": "charts.cilium.encryption.ztunnel.image.repository",
+          "old": "us-docker.pkg.dev/palette-images/packs/cilium/1.19.6/ztunnel",
+          "new": "us-docker.pkg.dev/palette-images/packs/cilium/1.20.1/ztunnel"
+        },
+        {
+          "op": "~",
+          "path": "charts.cilium.encryption.ztunnel.image.tag",
+          "old": "1.28.0-distroless",
+          "new": "v1.0.0"
+        },
+        {
+          "op": "+",
+          "path": "charts.cilium.encryption.ztunnel.minReadySeconds",
+          "new": 0
+        },
+        {
+          "op": "~",
+          "path": "charts.cilium.endpointPolicyUpdateTimeoutDuration",
+          "old": null,
+          "new": ""
+        },
+        {
+          "op": "+",
+          "path": "charts.cilium.envoy.clusterMaxPendingRequests",
+          "new": 1024
+        },
+        {
+          "op": "~",
+          "path": "charts.cilium.envoy.image.repository",
+          "old": "us-docker.pkg.dev/palette-images/packs/cilium/1.19.6/cilium-envoy",
+          "new": "us-docker.pkg.dev/palette-images/packs/cilium/1.20.1/cilium-envoy"
+        },
+        {
+          "op": "~",
+          "path": "charts.cilium.envoy.image.tag",
+          "old": "v1.36.9-1782267392-edeb3f2af56c37c407efa1f63f0b32f595399bbc",
+          "new": "v1.37.5-1786810558-766ccfb37260a43e9d228837aa84ce3faf9f64e7"
+        },
+        {
+          "op": "+",
+          "path": "charts.cilium.envoy.livenessProbe.initialDelaySeconds",
+          "new": 0
+        },
+        {
+          "op": "+",
+          "path": "charts.cilium.envoy.livenessProbe.timeoutSeconds",
+          "new": 5
+        },
+        {
+          "op": "+",
+          "path": "charts.cilium.envoy.log.accessLogEnabled",
+          "new": true
+        },
+        {
+          "op": "+",
+          "path": "charts.cilium.envoy.minReadySeconds",
+          "new": 0
+        },
+        {
+          "op": "+",
+          "path": "charts.cilium.envoy.nodeLocality.enabled",
+          "new": false
+        },
+        {
+          "op": "+",
+          "path": "charts.cilium.envoy.readinessProbe.initialDelaySeconds",
+          "new": 0
+        },
+        {
+          "op": "+",
+          "path": "charts.cilium.envoy.readinessProbe.timeoutSeconds",
+          "new": 5
+        },
+        {
+          "op": "+",
+          "path": "charts.cilium.envoy.startupProbe.initialDelaySeconds",
+          "new": 5
+        },
+        {
+          "op": "+",
+          "path": "charts.cilium.envoy.startupProbe.timeoutSeconds",
+          "new": 5
+        },
+        {
+          "op": "+",
+          "path": "charts.cilium.envoy.xdsMode",
+          "new": null
+        },
+        {
+          "op": "+",
+          "path": "charts.cilium.gatewayAPI.useRemoteAddress",
+          "new": true
+        },
+        {
+          "op": "+",
+          "path": "charts.cilium.hubble.hostUsers",
+          "new": null
+        },
+        {
+          "op": "-",
+          "path": "charts.cilium.hubble.redact.kafka.apiKey",
+          "old": true
+        },
+        {
+          "op": "~",
+          "path": "charts.cilium.hubble.relay.image.repository",
+          "old": "us-docker.pkg.dev/palette-images/packs/cilium/1.19.6/hubble-relay",
+          "new": "us-docker.pkg.dev/palette-images/packs/cilium/1.20.1/hubble-relay"
+        },
+        {
+          "op": "~",
+          "path": "charts.cilium.hubble.relay.image.tag",
+          "old": "v1.19.6",
+          "new": "v1.20.1"
+        },
+        {
+          "op": "+",
+          "path": "charts.cilium.hubble.relay.securityContext.readOnlyRootFilesystem",
+          "new": true
+        },
+        {
+          "op": "~",
+          "path": "charts.cilium.hubble.ui.backend.image.repository",
+          "old": "us-docker.pkg.dev/palette-images/packs/cilium/1.19.6/hubble-ui-backend",
+          "new": "us-docker.pkg.dev/palette-images/packs/cilium/1.20.1/hubble-ui-backend"
+        },
+        {
+          "op": "-",
+          "path": "charts.cilium.hubble.ui.backend.livenessProbe.enabled",
+          "old": false
+        },
+        {
+          "op": "-",
+          "path": "charts.cilium.hubble.ui.backend.readinessProbe.enabled",
+          "old": false
+        },
+        {
+          "op": "+",
+          "path": "charts.cilium.hubble.ui.backend.securityContext.capabilities.drop[0]",
+          "new": "ALL"
+        },
+        {
+          "op": "~",
+          "path": "charts.cilium.hubble.ui.frontend.image.repository",
+          "old": "us-docker.pkg.dev/palette-images/packs/cilium/1.19.6/hubble-ui",
+          "new": "us-docker.pkg.dev/palette-images/packs/cilium/1.20.1/hubble-ui"
+        },
+        {
+          "op": "+",
+          "path": "charts.cilium.hubble.ui.frontend.securityContext.capabilities.drop[0]",
+          "new": "ALL"
+        },
+        {
+          "op": "+",
+          "path": "charts.cilium.hubble.ui.securityContext.runAsNonRoot",
+          "new": true
+        },
+        {
+          "op": "+",
+          "path": "charts.cilium.hubble.ui.securityContext.seccompProfile.type",
+          "new": "RuntimeDefault"
+        },
+        {
+          "op": "~",
+          "path": "charts.cilium.image.repository",
+          "old": "us-docker.pkg.dev/palette-images/packs/cilium/1.19.6/cilium",
+          "new": "us-docker.pkg.dev/palette-images/packs/cilium/1.20.1/cilium"
+        },
+        {
+          "op": "~",
+          "path": "charts.cilium.image.tag",
+          "old": "v1.19.6",
+          "new": "v1.20.1"
+        },
+        {
+          "op": "+",
+          "path": "charts.cilium.ingressController.hostNetwork.httpPort",
+          "new": 0
+        },
+        {
+          "op": "+",
+          "path": "charts.cilium.ingressController.hostNetwork.httpsPort",
+          "new": 0
+        },
+        {
+          "op": "+",
+          "path": "charts.cilium.ingressController.hostNetwork.tlsPassthroughPort",
+          "new": 0
+        },
+        {
+          "op": "+",
+          "path": "charts.cilium.ingressController.useRemoteAddress",
+          "new": true
+        },
+        {
+          "op": "+",
+          "path": "charts.cilium.ingressController.xffNumTrustedHops",
+          "new": 0
+        },
+        {
+          "op": "+",
+          "path": "charts.cilium.k8s.apiServerURLs",
+          "new": null
+        },
+        {
+          "op": "+",
+          "path": "charts.cilium.k8sClusterNetworkPolicy.enabled",
+          "new": false
+        },
+        {
+          "op": "+",
+          "path": "charts.cilium.minReadySeconds",
+          "new": 0
+        },
+        {
+          "op": "+",
+          "path": "charts.cilium.nativeRoutingCIDRFromClusterPool",
+          "new": false
+        },
+        {
+          "op": "+",
+          "path": "charts.cilium.nodePort.enableDynamicSourceLookup",
+          "new": false
+        },
+        {
+          "op": "~",
+          "path": "charts.cilium.nodeinit.image.repository",
+          "old": "us-docker.pkg.dev/palette-images/packs/cilium/1.19.6/startup-script",
+          "new": "us-docker.pkg.dev/palette-images/packs/cilium/1.20.1/startup-script"
+        },
+        {
+          "op": "~",
+          "path": "charts.cilium.nodeinit.image.tag",
+          "old": "1763560095-8f36c34",
+          "new": "1782916218-36ae25f"
+        },
+        {
+          "op": "+",
+          "path": "charts.cilium.nodeinit.minReadySeconds",
+          "new": 0
+        },
+        {
+          "op": "+",
+          "path": "charts.cilium.operator.hostUsers",
+          "new": true
+        },
+        {
+          "op": "~",
+          "path": "charts.cilium.operator.image.repository",
+          "old": "us-docker.pkg.dev/palette-images/packs/cilium/1.19.6/operator",
+          "new": "us-docker.pkg.dev/palette-images/packs/cilium/1.20.1/operator"
+        },
+        {
+          "op": "~",
+          "path": "charts.cilium.operator.image.tag",
+          "old": "v1.19.6",
+          "new": "v1.20.1"
+        },
+        {
+          "op": "+",
+          "path": "charts.cilium.preferIpv6",
+          "new": false
+        },
+        {
+          "op": "~",
+          "path": "charts.cilium.preflight.envoy.image.tag",
+          "old": "v1.36.9-1782267392-edeb3f2af56c37c407efa1f63f0b32f595399bbc",
+          "new": "v1.37.5-1786810558-766ccfb37260a43e9d228837aa84ce3faf9f64e7"
+        },
+        {
+          "op": "~",
+          "path": "charts.cilium.preflight.image.repository",
+          "old": "us-docker.pkg.dev/palette-images/packs/cilium/1.19.6/cilium",
+          "new": "us-docker.pkg.dev/palette-images/packs/cilium/1.20.1/cilium"
+        },
+        {
+          "op": "~",
+          "path": "charts.cilium.preflight.image.tag",
+          "old": "v1.19.6",
+          "new": "v1.20.1"
+        },
+        {
+          "op": "-",
+          "path": "charts.cilium.preflight.tofqdnsPreCache",
+          "old": ""
+        },
+        {
+          "op": "+",
+          "path": "charts.cilium.standaloneDnsProxy.minReadySeconds",
+          "new": 5
+        },
+        {
+          "op": "~",
+          "path": "pack.content.images[0].image",
+          "old": "us-docker.pkg.dev/palette-images/packs/cilium/1.19.6/cilium:v1.19.6",
+          "new": "us-docker.pkg.dev/palette-images/packs/cilium/1.20.1/cilium:v1.20.1"
+        },
+        {
+          "op": "~",
+          "path": "pack.content.images[10].image",
+          "old": "us-docker.pkg.dev/palette-images/packs/cilium/1.19.6/startup-script:1763560095-8f36c34",
+          "new": "us-docker.pkg.dev/palette-images/packs/cilium/1.20.1/startup-script:1782916218-36ae25f"
+        },
+        {
+          "op": "~",
+          "path": "pack.content.images[11].image",
+          "old": "us-docker.pkg.dev/palette-images/packs/cilium/1.19.6/clustermesh-apiserver:v1.19.6",
+          "new": "us-docker.pkg.dev/palette-images/packs/cilium/1.20.1/clustermesh-apiserver:v1.20.1"
+        },
+        {
+          "op": "~",
+          "path": "pack.content.images[12].image",
+          "old": "us-docker.pkg.dev/palette-images/packs/cilium/1.19.6/busybox:v1.37.0",
+          "new": "us-docker.pkg.dev/palette-images/packs/cilium/1.20.1/busybox:v1.38.0"
+        },
+        {
+          "op": "~",
+          "path": "pack.content.images[13].image",
+          "old": "us-docker.pkg.dev/palette-images/packs/cilium/1.19.6/spire-agent:1.9.6",
+          "new": "us-docker.pkg.dev/palette-images/packs/cilium/1.20.1/spire-agent:1.15.2"
+        },
+        {
+          "op": "~",
+          "path": "pack.content.images[14].image",
+          "old": "us-docker.pkg.dev/palette-images/packs/cilium/1.19.6/spire-server:1.9.6",
+          "new": "us-docker.pkg.dev/palette-images/packs/cilium/1.20.1/spire-server:1.15.2"
+        },
+        {
+          "op": "~",
+          "path": "pack.content.images[15].image",
+          "old": "us-docker.pkg.dev/palette-images/packs/cilium/1.19.6/ztunnel:1.28.0-distroless",
+          "new": "us-docker.pkg.dev/palette-images/packs/cilium/1.20.1/ztunnel:v1.0.0"
+        },
+        {
+          "op": "~",
+          "path": "pack.content.images[1].image",
+          "old": "us-docker.pkg.dev/palette-images/packs/cilium/1.19.6/certgen:v0.4.6",
+          "new": "us-docker.pkg.dev/palette-images/packs/cilium/1.20.1/certgen:v0.4.9"
+        },
+        {
+          "op": "~",
+          "path": "pack.content.images[2].image",
+          "old": "us-docker.pkg.dev/palette-images/packs/cilium/1.19.6/hubble-relay:v1.19.6",
+          "new": "us-docker.pkg.dev/palette-images/packs/cilium/1.20.1/hubble-relay:v1.20.1"
+        },
+        {
+          "op": "~",
+          "path": "pack.content.images[3].image",
+          "old": "us-docker.pkg.dev/palette-images/packs/cilium/1.19.6/hubble-ui-backend:v0.13.5",
+          "new": "us-docker.pkg.dev/palette-images/packs/cilium/1.20.1/hubble-ui-backend:v0.13.5"
+        },
+        {
+          "op": "~",
+          "path": "pack.content.images[4].image",
+          "old": "us-docker.pkg.dev/palette-images/packs/cilium/1.19.6/hubble-ui:v0.13.5",
+          "new": "us-docker.pkg.dev/palette-images/packs/cilium/1.20.1/hubble-ui:v0.13.5"
+        },
+        {
+          "op": "~",
+          "path": "pack.content.images[5].image",
+          "old": "us-docker.pkg.dev/palette-images/packs/cilium/1.19.6/cilium-envoy:v1.36.9-1782267392-edeb3f2af56c37c407efa1f63f0b32f595399bbc",
+          "new": "us-docker.pkg.dev/palette-images/packs/cilium/1.20.1/cilium-envoy:v1.37.5-1786810558-766ccfb37260a43e9d228837aa84ce3faf9f64e7"
+        },
+        {
+          "op": "~",
+          "path": "pack.content.images[6].image",
+          "old": "us-docker.pkg.dev/palette-images/packs/cilium/1.19.6/operator:v1.19.6",
+          "new": "us-docker.pkg.dev/palette-images/packs/cilium/1.20.1/operator:v1.20.1"
+        },
+        {
+          "op": "~",
+          "path": "pack.content.images[7].image",
+          "old": "us-docker.pkg.dev/palette-images/packs/cilium/1.19.6/operator-generic:v1.19.6",
+          "new": "us-docker.pkg.dev/palette-images/packs/cilium/1.20.1/operator-generic:v1.20.1"
+        },
+        {
+          "op": "~",
+          "path": "pack.content.images[8].image",
+          "old": "us-docker.pkg.dev/palette-images/packs/cilium/1.19.6/operator-aws:v1.19.6",
+          "new": "us-docker.pkg.dev/palette-images/packs/cilium/1.20.1/operator-aws:v1.20.1"
+        },
+        {
+          "op": "~",
+          "path": "pack.content.images[9].image",
+          "old": "us-docker.pkg.dev/palette-images/packs/cilium/1.19.6/operator-azure:v1.19.6",
+          "new": "us-docker.pkg.dev/palette-images/packs/cilium/1.20.1/operator-azure:v1.20.1"
+        }
+      ],
+      "manifests": [],
+      "blast": "cluster-wide infra addon update"
+    },
+    {
+      "key": "csi/csi-aws-ebs",
+      "status": "changed",
+      "layer": "csi",
+      "name": "csi-aws-ebs",
+      "a": {
+        "tag": "1.63.1",
+        "version": "1.63.1",
+        "packUid": "6a75f441d410c3b5762fed2d",
+        "registryUid": "5eecc89d0b150045ae661cef",
+        "upstream": "sha256:4a1cb27d13a6b02e29b481b283485d7677033880b0593df0959fdd66a2507f48",
+        "upstreamSource": "packRef.digest"
+      },
+      "b": {
+        "tag": "1.65.0",
+        "version": "1.65.0",
+        "packUid": "6aa410ec144aaec79d547a9e",
+        "registryUid": "5eecc89d0b150045ae661cef",
+        "upstream": "sha256:bd09e8b4187bdef2e5f1fca88203ecd0504224087a0cd97e41a42f0a3930601c",
+        "upstreamSource": "packRef.digest"
+      },
+      "identity": true,
+      "upstream": true,
+      "authored": true,
+      "valuesChanged": true,
+      "valuesTextOnly": false,
+      "valuesDiff": [
+        {
+          "op": "~",
+          "path": "charts.aws-ebs-csi-driver.image.repository",
+          "old": "us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/1.63.1/aws-ebs-csi-driver",
+          "new": "us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/1.65.0/aws-ebs-csi-driver"
+        },
+        {
+          "op": "~",
+          "path": "charts.aws-ebs-csi-driver.image.tag",
+          "old": "v1.63.1",
+          "new": "v1.65.0"
+        },
+        {
+          "op": "~",
+          "path": "charts.aws-ebs-csi-driver.sidecars.attacher.image.repository",
+          "old": "us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/1.63.1/external-attacher",
+          "new": "us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/1.65.0/external-attacher"
+        },
+        {
+          "op": "~",
+          "path": "charts.aws-ebs-csi-driver.sidecars.attacher.image.tag",
+          "old": "v4.12.0-eksbuild.4",
+          "new": "v4.12.0-eksbuild.6"
+        },
+        {
+          "op": "~",
+          "path": "charts.aws-ebs-csi-driver.sidecars.livenessProbe.image.repository",
+          "old": "us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/1.63.1/livenessprobe",
+          "new": "us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/1.65.0/livenessprobe"
+        },
+        {
+          "op": "~",
+          "path": "charts.aws-ebs-csi-driver.sidecars.livenessProbe.image.tag",
+          "old": "v2.19.0-eksbuild.4",
+          "new": "v2.19.0-eksbuild.6"
+        },
+        {
+          "op": "~",
+          "path": "charts.aws-ebs-csi-driver.sidecars.nodeDriverRegistrar.image.repository",
+          "old": "us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/1.63.1/node-driver-registrar",
+          "new": "us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/1.65.0/node-driver-registrar"
+        },
+        {
+          "op": "~",
+          "path": "charts.aws-ebs-csi-driver.sidecars.nodeDriverRegistrar.image.tag",
+          "old": "v2.17.0-eksbuild.4",
+          "new": "v2.17.0-eksbuild.6"
+        },
+        {
+          "op": "~",
+          "path": "charts.aws-ebs-csi-driver.sidecars.provisioner.image.repository",
+          "old": "us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/1.63.1/external-provisioner",
+          "new": "us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/1.65.0/external-provisioner"
+        },
+        {
+          "op": "~",
+          "path": "charts.aws-ebs-csi-driver.sidecars.provisioner.image.tag",
+          "old": "v6.3.0-eksbuild.3",
+          "new": "v6.3.0-eksbuild.5"
+        },
+        {
+          "op": "~",
+          "path": "charts.aws-ebs-csi-driver.sidecars.resizer.image.repository",
+          "old": "us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/1.63.1/external-resizer",
+          "new": "us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/1.65.0/external-resizer"
+        },
+        {
+          "op": "~",
+          "path": "charts.aws-ebs-csi-driver.sidecars.resizer.image.tag",
+          "old": "v2.2.1-eksbuild.2",
+          "new": "v2.2.1-eksbuild.4"
+        },
+        {
+          "op": "~",
+          "path": "charts.aws-ebs-csi-driver.sidecars.snapshotter.image.repository",
+          "old": "us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/1.63.1/external-snapshotter/csi-snapshotter",
+          "new": "us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/1.65.0/external-snapshotter/csi-snapshotter"
+        },
+        {
+          "op": "~",
+          "path": "charts.aws-ebs-csi-driver.sidecars.snapshotter.image.tag",
+          "old": "v8.6.0-eksbuild.4",
+          "new": "v8.6.0-eksbuild.6"
+        },
+        {
+          "op": "~",
+          "path": "charts.aws-ebs-csi-driver.sidecars.volumemodifier.image.repository",
+          "old": "us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/1.63.1/volume-modifier-for-k8s",
+          "new": "us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/1.65.0/volume-modifier-for-k8s"
+        },
+        {
+          "op": "~",
+          "path": "charts.aws-ebs-csi-driver.sidecars.volumemodifier.image.tag",
+          "old": "v0.9.5-eksbuild.4",
+          "new": "v0.9.5-eksbuild.6"
+        },
+        {
+          "op": "~",
+          "path": "pack.content.charts[0].version",
+          "old": "2.63.1",
+          "new": "2.65.0"
+        },
+        {
+          "op": "~",
+          "path": "pack.content.images[0].image",
+          "old": "us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/1.63.1/aws-ebs-csi-driver:v1.63.1",
+          "new": "us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/1.65.0/aws-ebs-csi-driver:v1.65.0"
+        },
+        {
+          "op": "~",
+          "path": "pack.content.images[1].image",
+          "old": "us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/1.63.1/external-provisioner:v6.3.0-eksbuild.3",
+          "new": "us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/1.65.0/external-provisioner:v6.3.0-eksbuild.5"
+        },
+        {
+          "op": "~",
+          "path": "pack.content.images[2].image",
+          "old": "us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/1.63.1/external-attacher:v4.12.0-eksbuild.4",
+          "new": "us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/1.65.0/external-attacher:v4.12.0-eksbuild.6"
+        },
+        {
+          "op": "~",
+          "path": "pack.content.images[3].image",
+          "old": "us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/1.63.1/external-resizer:v2.2.1-eksbuild.2",
+          "new": "us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/1.65.0/external-resizer:v2.2.1-eksbuild.4"
+        },
+        {
+          "op": "~",
+          "path": "pack.content.images[4].image",
+          "old": "us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/1.63.1/livenessprobe:v2.19.0-eksbuild.4",
+          "new": "us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/1.65.0/livenessprobe:v2.19.0-eksbuild.6"
+        },
+        {
+          "op": "~",
+          "path": "pack.content.images[5].image",
+          "old": "us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/1.63.1/node-driver-registrar:v2.17.0-eksbuild.4",
+          "new": "us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/1.65.0/node-driver-registrar:v2.17.0-eksbuild.6"
+        },
+        {
+          "op": "~",
+          "path": "pack.content.images[6].image",
+          "old": "us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/1.63.1/external-snapshotter/csi-snapshotter:v8.6.0-eksbuild.4",
+          "new": "us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/1.65.0/external-snapshotter/csi-snapshotter:v8.6.0-eksbuild.6"
+        },
+        {
+          "op": "~",
+          "path": "pack.content.images[7].image",
+          "old": "us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/1.63.1/volume-modifier-for-k8s:v0.9.5-eksbuild.4",
+          "new": "us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/1.65.0/volume-modifier-for-k8s:v0.9.5-eksbuild.6"
+        }
+      ],
+      "manifests": [],
+      "blast": "cluster-wide infra addon update"
+    },
+    {
+      "key": "k8s/kubernetes",
+      "status": "changed",
+      "layer": "k8s",
+      "name": "kubernetes",
+      "a": {
+        "tag": "1.35.3",
+        "version": "1.35.3",
+        "packUid": "69f778872d19e4c57df8f630",
+        "registryUid": "5eecc89d0b150045ae661cef",
+        "upstream": "sha256:ff3df77ebc9c6f81cb1059efc49918c11665042388027e2c75fc6ce6dfd627d6",
+        "upstreamSource": "packRef.digest"
+      },
+      "b": {
+        "tag": "1.36.2",
+        "version": "1.36.2",
+        "packUid": "6a6bd41b16c3cbf9999ad3be",
+        "registryUid": "5eecc89d0b150045ae661cef",
+        "upstream": "sha256:c4f7f20f40c7f0fea9bb709d83174172df0184e84f3075de3d6a04dfb8867332",
+        "upstreamSource": "packRef.digest"
+      },
+      "identity": true,
+      "upstream": true,
+      "authored": true,
+      "valuesChanged": true,
+      "valuesTextOnly": false,
+      "valuesDiff": [
+        {
+          "op": "~",
+          "path": "kubeadmconfig.dns.imageTag",
+          "old": "v1.13.1",
+          "new": "v1.14.2"
+        },
+        {
+          "op": "~",
+          "path": "kubeadmconfig.etcd.local.imageTag",
+          "old": "3.6.6-0",
+          "new": "3.6.8-0"
+        },
+        {
+          "op": "~",
+          "path": "kubeadmconfig.files[2].content",
+          "old": "apiVersion: apiserver.config.k8s.io/v1\nkind: AdmissionConfiguration\nplugins:\n- name: PodSecurity\n  configuration:\n    apiVersion: pod-security.admission.config.k8s.io/v1\n    kind: PodSecurityConfiguration\n    defaults:\n      enforce: \"baseline\"\n      enforce-version: \"v1.35\"\n      audit: \"baseline\"\n      audit-version: \"v1.35\"\n      warn: \"restricted\"\n      warn-version: \"v1.35\"\n    exemptions:\n      # Array of authenticated usernames to exempt.\n      usernames: []\n      # Array of runtime class names to exempt.\n      runtimeClasses: []\n      # Array of namespaces to exempt.\n      namespaces: [kube-system]\n",
+          "new": "apiVersion: apiserver.config.k8s.io/v1\nkind: AdmissionConfiguration\nplugins:\n- name: PodSecurity\n  configuration:\n    apiVersion: pod-security.admission.config.k8s.io/v1\n    kind: PodSecurityConfiguration\n    defaults:\n      enforce: \"baseline\"\n      enforce-version: \"v1.36\"\n      audit: \"baseline\"\n      audit-version: \"v1.36\"\n      warn: \"restricted\"\n      warn-version: \"v1.36\"\n    exemptions:\n      # Array of authenticated usernames to exempt.\n      usernames: []\n      # Array of runtime class names to exempt.\n      runtimeClasses: []\n      # Array of namespaces to exempt.\n      namespaces: [kube-system]\n"
+        },
+        {
+          "op": "~",
+          "path": "pack.content.images[0].image",
+          "old": "us-docker.pkg.dev/palette-images/k8s/coredns/coredns:v1.13.1",
+          "new": "us-docker.pkg.dev/palette-images/k8s/coredns/coredns:v1.14.2"
+        },
+        {
+          "op": "+",
+          "path": "pack.content.images[10].image",
+          "new": "registry.k8s.io/pause:3.10.2"
+        },
+        {
+          "op": "~",
+          "path": "pack.content.images[1].image",
+          "old": "us-docker.pkg.dev/palette-images/k8s/etcd:3.6.6-0",
+          "new": "us-docker.pkg.dev/palette-images/k8s/etcd:3.6.8-0"
+        },
+        {
+          "op": "~",
+          "path": "pack.content.images[2].image",
+          "old": "us-docker.pkg.dev/palette-images/k8s/kube-apiserver:v1.35.3",
+          "new": "us-docker.pkg.dev/palette-images/k8s/kube-apiserver:v1.36.2"
+        },
+        {
+          "op": "~",
+          "path": "pack.content.images[3].image",
+          "old": "us-docker.pkg.dev/palette-images/k8s/kube-controller-manager:v1.35.3",
+          "new": "us-docker.pkg.dev/palette-images/k8s/kube-controller-manager:v1.36.2"
+        },
+        {
+          "op": "~",
+          "path": "pack.content.images[4].image",
+          "old": "us-docker.pkg.dev/palette-images/k8s/kube-proxy:v1.35.3",
+          "new": "us-docker.pkg.dev/palette-images/k8s/kube-proxy:v1.36.2"
+        },
+        {
+          "op": "~",
+          "path": "pack.content.images[5].image",
+          "old": "us-docker.pkg.dev/palette-images/k8s/kube-scheduler:v1.35.3",
+          "new": "us-docker.pkg.dev/palette-images/k8s/kube-scheduler:v1.36.2"
+        },
+        {
+          "op": "+",
+          "path": "pack.content.images[9].image",
+          "new": "registry.k8s.io/pause:3.10.1"
+        }
+      ],
+      "manifests": [],
+      "blast": "node repave (Kubernetes version change)"
+    },
+    {
+      "key": "os/ubuntu-aws",
+      "status": "changed",
+      "layer": "os",
+      "name": "ubuntu-aws",
+      "a": {
+        "tag": "LTS__20.4.x",
+        "version": "20.04",
+        "packUid": "626808ffd9c586788e0be610",
+        "registryUid": "5eecc89d0b150045ae661cef",
+        "upstream": "sha256:d7aee32a7be434bba2a2d1ca8b6c559053844cc2da2d7cde82c306baba4394d0",
+        "upstreamSource": "packRef.digest"
+      },
+      "b": {
+        "tag": "LTS__24.x",
+        "version": "24.04",
+        "packUid": "6917446d9da9b9852faf5f60",
+        "registryUid": "5eecc89d0b150045ae661cef",
+        "upstream": "sha256:2df05daa4eb4bf3298a7c1dbda7b36dc57e51d292308bcc441d4a3655f746a02",
+        "upstreamSource": "packRef.digest"
+      },
+      "identity": true,
+      "upstream": true,
+      "authored": false,
+      "valuesChanged": false,
+      "valuesTextOnly": false,
+      "valuesDiff": [],
+      "manifests": [],
+      "blast": "node repave (OS image change)"
+    }
+  ]
+}

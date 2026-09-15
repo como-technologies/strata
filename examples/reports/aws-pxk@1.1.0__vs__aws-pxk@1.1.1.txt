@@ -1,0 +1,24 @@
+aws-pxk@1.1.0 (64e000000000)  ->  aws-pxk@1.1.1 (64e000000000)
+root       79087d4403da -> 8781c39de5a5   CHANGED
+consumers  0 -> 0 clusters
+
+  variables CHANGED
+        + platform_owner.defaultValue: ""
+        + platform_owner.description: ""
+        + platform_owner.displayName: "Platform owner"
+        + platform_owner.format: "string"
+        + platform_owner.hidden: false
+        + platform_owner.immutable: false
+        + platform_owner.inputType: "text"
+        + platform_owner.isSensitive: false
+        + platform_owner.name: "platform_owner"
+        + platform_owner.regex: ""
+        + platform_owner.required: true
+
+  [os   ] ubuntu-aws                 24.04              unchanged
+  [k8s  ] kubernetes                 1.36.2             unchanged
+  [cni  ] cni-cilium-oss             1.20.1             unchanged
+  [csi  ] csi-aws-ebs                1.65.0             unchanged
+~ [addon] cert-manager               1.21.1             AUTHORED
+      + manifest namespace-labels
+      impact: in-place addon upgrade

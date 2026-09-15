@@ -1,0 +1,1292 @@
+{
+  "cloudTypes": [
+    "aws",
+    "azure",
+    "vsphere",
+    "gcp",
+    "maas",
+    "apache-cloudstack"
+  ],
+  "layer": "k8s",
+  "logoUrl": "https://registry.spectrocloud.com/v1/kubernetes/blobs/sha256:f7f2e8d6a6d22890524a0e6f327e2c7684ffe9b9ed6dc8b798d7b68f343d4367?type=image/png",
+  "name": "kubernetes",
+  "packValues": [
+    {
+      "annotations": {
+        "airgap": "true",
+        "architecture": "amd64,arm64",
+        "docsURL": "https://docs.spectrocloud.com/integrations/kubernetes",
+        "k8s_spectro_version": "0",
+        "k8s_version": "k-1353",
+        "revision": "20260420",
+        "source": "spectrocloud"
+      },
+      "dependencies": [],
+      "packUid": "69f778872d19e4c57df8f630",
+      "presets": [
+        {
+          "add": "kubeadmconfig:\n  controllerManager:\n    extraArgs:\n      bind-address: \"127.0.0.1\"\n",
+          "displayName": "Use loopback address",
+          "group": "Kube Controller Manager",
+          "name": "loopback-ctrlmgr",
+          "remove": []
+        },
+        {
+          "add": "kubeadmconfig:\n  controllerManager:\n    extraArgs:\n      bind-address: \"0.0.0.0\"\n",
+          "displayName": "Use insecure bind address",
+          "group": "Kube Controller Manager",
+          "name": "insecure-ctrlmgr",
+          "remove": []
+        },
+        {
+          "add": "kubeadmconfig:\n  scheduler:\n    extraArgs:\n      bind-address: \"127.0.0.1\"\n",
+          "displayName": "Use loopback address",
+          "group": "Kube Scheduler",
+          "name": "loopback-scheduler",
+          "remove": []
+        },
+        {
+          "add": "kubeadmconfig:\n  scheduler:\n    extraArgs:\n      bind-address: \"0.0.0.0\"\n      \n",
+          "displayName": "Use insecure bind address",
+          "group": "Kube Scheduler",
+          "name": "insecure-scheduler",
+          "remove": []
+        },
+        {
+          "add": "cloud:\n  azure:\n    diskEncryptionSetID: \"\"  \n    \n",
+          "displayName": "Enable Encryption using Customer-managed Key",
+          "group": "Azure Disk Encryption Set",
+          "name": "enable-azure-disk-encryption",
+          "remove": []
+        },
+        {
+          "add": "",
+          "displayName": "Disable Encryption using Customer-managed Key",
+          "group": "Azure Disk Encryption Set",
+          "name": "disable-azure-disk-encryption",
+          "remove": [
+            "cloud"
+          ]
+        }
+      ],
+      "schema": [],
+      "template": {
+        "parameters": {
+          "inputParameters": [
+            {
+              "displayName": "OIDC Identity Provider",
+              "format": "radio",
+              "listOptions": null,
+              "name": "identityProvider",
+              "options": {
+                "noauth": {
+                  "dependencies": [],
+                  "description": "This selection may disable authentication on add-ons that rely on an OIDC Identity Provider risking insecure access and is not advised on production environments",
+                  "label": "None"
+                },
+                "none": {
+                  "dependencies": [],
+                  "description": "The OIDC Identity Provider can be configured inline within the pack values when this option is selected",
+                  "label": "Custom"
+                },
+                "palette": {
+                  "dependencies": [],
+                  "label": "Palette"
+                },
+                "tenant": {
+                  "dependencies": [],
+                  "label": "Inherit from Tenant"
+                }
+              },
+              "targetKey": "pack.palette.config.dashboard.identityProvider",
+              "type": "string",
+              "value": "none"
+            }
+          ],
+          "outputParameters": []
+        }
+      },
+      "values": "# spectrocloud.com/enabled-presets: Kube Controller Manager:loopback-ctrlmgr,Kube Scheduler:loopback-scheduler,Azure Disk Encryption Set:disable-azure-disk-encryption\npack:\n  content:\n    images:\n      - image: us-docker.pkg.dev/palette-images/k8s/coredns/coredns:v1.13.1\n      - image: us-docker.pkg.dev/palette-images/k8s/etcd:3.6.6-0\n      - image: us-docker.pkg.dev/palette-images/k8s/kube-apiserver:v1.35.3\n      - image: us-docker.pkg.dev/palette-images/k8s/kube-controller-manager:v1.35.3\n      - image: us-docker.pkg.dev/palette-images/k8s/kube-proxy:v1.35.3\n      - image: us-docker.pkg.dev/palette-images/k8s/kube-scheduler:v1.35.3\n      - image: us-docker.pkg.dev/palette-images/k8s/pause:3.9\n      - image: us-docker.pkg.dev/palette-images/k8s/pause:3.8\n      - image: us-docker.pkg.dev/palette-images/k8s/pause:3.10\n  #CIDR Range for Pods in cluster\n  # Note : This must not overlap with any of the host or service network\n  podCIDR: \"192.168.0.0/16\"\n  #CIDR notation IP range from which to assign service cluster IPs\n  # Note : This must not overlap with any IP ranges assigned to nodes for pods.\n  serviceClusterIpRange: \"10.96.0.0/12\"\n  # serviceDomain: \"cluster.local\"\n\nkubeadmconfig:\n  apiServer:\n    extraArgs:\n      # Note : secure-port flag is used during kubeadm init. Do not change this flag on a running cluster\n      secure-port: \"6443\"\n      anonymous-auth: \"true\"\n      profiling: \"false\"\n      disable-admission-plugins: \"AlwaysAdmit\"\n      default-not-ready-toleration-seconds: \"60\"\n      default-unreachable-toleration-seconds: \"60\"\n      enable-admission-plugins: \"AlwaysPullImages,NamespaceLifecycle,ServiceAccount,NodeRestriction,PodSecurity\"\n      admission-control-config-file: \"/etc/kubernetes/pod-security-standard.yaml\"\n      audit-log-path: /var/log/apiserver/audit.log\n      audit-policy-file: /etc/kubernetes/audit-policy.yaml\n      audit-log-maxage: \"30\"\n      audit-log-maxbackup: \"10\"\n      audit-log-maxsize: \"100\"\n      authorization-mode: RBAC,Node\n      kubelet-certificate-authority: \"/etc/kubernetes/pki/ca.crt\"\n      tls-cipher-suites: \"TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305,TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305,TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384\"\n    extraVolumes:\n      - name: audit-log\n        hostPath: /var/log/apiserver\n        mountPath: /var/log/apiserver\n        pathType: DirectoryOrCreate\n      - name: audit-policy\n        hostPath: /etc/kubernetes/audit-policy.yaml\n        mountPath: /etc/kubernetes/audit-policy.yaml\n        readOnly: true\n        pathType: File\n      - name: pod-security-standard\n        hostPath: /etc/kubernetes/pod-security-standard.yaml\n        mountPath: /etc/kubernetes/pod-security-standard.yaml\n        readOnly: true\n        pathType: File\n  controllerManager:\n    extraArgs:\n      profiling: \"false\"\n      terminated-pod-gc-threshold: \"25\"\n      use-service-account-credentials: \"true\"\n      feature-gates: \"RotateKubeletServerCertificate=true\"\n  scheduler:\n    extraArgs:\n      profiling: \"false\"\n  dns:\n    type: CoreDNS\n    imageRepository: us-docker.pkg.dev/palette-images/k8s/coredns\n    imageTag: v1.13.1\n  etcd:\n    local:\n      imageRepository: us-docker.pkg.dev/palette-images/k8s\n      imageTag: 3.6.6-0\n  imageRepository: us-docker.pkg.dev/palette-images/k8s\n  kubeletExtraArgs:\n    read-only-port: \"0\"\n    event-qps: \"0\"\n    feature-gates: \"RotateKubeletServerCertificate=true\"\n    protect-kernel-defaults: \"true\"\n    rotate-server-certificates: \"true\"\n    tls-cipher-suites: \"TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305,TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305,TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384\"\n  files:\n    - path: hardening/audit-policy.yaml\n      targetPath: /etc/kubernetes/audit-policy.yaml\n      targetOwner: \"root:root\"\n      targetPermissions: \"0600\"\n    - path: hardening/90-kubelet.conf\n      targetPath: /etc/sysctl.d/90-kubelet.conf\n      targetOwner: \"root:root\"\n      targetPermissions: \"0600\"\n    - targetPath: /etc/kubernetes/pod-security-standard.yaml\n      targetOwner: \"root:root\"\n      targetPermissions: \"0600\"\n      content: |\n        apiVersion: apiserver.config.k8s.io/v1\n        kind: AdmissionConfiguration\n        plugins:\n        - name: PodSecurity\n          configuration:\n            apiVersion: pod-security.admission.config.k8s.io/v1\n            kind: PodSecurityConfiguration\n            defaults:\n              enforce: \"baseline\"\n              enforce-version: \"v1.35\"\n              audit: \"baseline\"\n              audit-version: \"v1.35\"\n              warn: \"restricted\"\n              warn-version: \"v1.35\"\n            exemptions:\n              # Array of authenticated usernames to exempt.\n              usernames: []\n              # Array of runtime class names to exempt.\n              runtimeClasses: []\n              # Array of namespaces to exempt.\n              namespaces: [kube-system]\n\n  preKubeadmCommands:\n    # For enabling 'protect-kernel-defaults' flag to kubelet, kernel parameters changes are required\n    - 'echo \"====> Applying kernel parameters for Kubelet\"'\n    - 'sysctl -p /etc/sysctl.d/90-kubelet.conf'\n    - 'test -f /etc/containerd/ca.crt && cp /etc/containerd/ca.crt /usr/local/share/ca-certificates/container.crt && update-ca-certificates && systemctl restart containerd'\n  \n  postKubeadmCommands:\n    - 'chmod 600 /var/lib/kubelet/config.yaml'\n    # - 'echo \"List of post kubeadm commands to be executed\"'\n\n# Client configuration to add OIDC based authentication flags in kubeconfig\n#clientConfig:\n  #oidc-issuer-url: \"{{ .spectro.pack.kubernetes.kubeadmconfig.apiServer.extraArgs.oidc-issuer-url }}\"\n  #oidc-client-id: \"{{ .spectro.pack.kubernetes.kubeadmconfig.apiServer.extraArgs.oidc-client-id }}\"\n  #oidc-client-secret: \"{{ .spectro.pack.kubernetes.kubeadmconfig.apiServer.extraArgs.oidc-client-secret }}\"\n  #oidc-extra-scope: profile,email\n"
+    },
+    {
+      "annotations": {
+        "airgap": "true",
+        "architecture": "amd64,arm64",
+        "docsURL": "https://docs.spectrocloud.com/integrations/kubernetes",
+        "k8s_spectro_version": "0",
+        "k8s_version": "k-1356",
+        "revision": "20260728",
+        "source": "spectrocloud"
+      },
+      "dependencies": [],
+      "packUid": "6a6bd41b16c3cbf99cd5fc21",
+      "presets": [
+        {
+          "add": "kubeadmconfig:\n  controllerManager:\n    extraArgs:\n      bind-address: \"127.0.0.1\"\n",
+          "displayName": "Use loopback address",
+          "group": "Kube Controller Manager",
+          "name": "loopback-ctrlmgr",
+          "remove": []
+        },
+        {
+          "add": "kubeadmconfig:\n  controllerManager:\n    extraArgs:\n      bind-address: \"0.0.0.0\"\n",
+          "displayName": "Use insecure bind address",
+          "group": "Kube Controller Manager",
+          "name": "insecure-ctrlmgr",
+          "remove": []
+        },
+        {
+          "add": "kubeadmconfig:\n  scheduler:\n    extraArgs:\n      bind-address: \"127.0.0.1\"\n",
+          "displayName": "Use loopback address",
+          "group": "Kube Scheduler",
+          "name": "loopback-scheduler",
+          "remove": []
+        },
+        {
+          "add": "kubeadmconfig:\n  scheduler:\n    extraArgs:\n      bind-address: \"0.0.0.0\"\n      \n",
+          "displayName": "Use insecure bind address",
+          "group": "Kube Scheduler",
+          "name": "insecure-scheduler",
+          "remove": []
+        },
+        {
+          "add": "cloud:\n  azure:\n    diskEncryptionSetID: \"\"  \n    \n",
+          "displayName": "Enable Encryption using Customer-managed Key",
+          "group": "Azure Disk Encryption Set",
+          "name": "enable-azure-disk-encryption",
+          "remove": []
+        },
+        {
+          "add": "",
+          "displayName": "Disable Encryption using Customer-managed Key",
+          "group": "Azure Disk Encryption Set",
+          "name": "disable-azure-disk-encryption",
+          "remove": [
+            "cloud"
+          ]
+        }
+      ],
+      "schema": [],
+      "template": {
+        "parameters": {
+          "inputParameters": [
+            {
+              "displayName": "OIDC Identity Provider",
+              "format": "radio",
+              "listOptions": null,
+              "name": "identityProvider",
+              "options": {
+                "noauth": {
+                  "dependencies": [],
+                  "description": "This selection may disable authentication on add-ons that rely on an OIDC Identity Provider risking insecure access and is not advised on production environments",
+                  "label": "None"
+                },
+                "none": {
+                  "dependencies": [],
+                  "description": "The OIDC Identity Provider can be configured inline within the pack values when this option is selected",
+                  "label": "Custom"
+                },
+                "palette": {
+                  "dependencies": [],
+                  "label": "Palette"
+                },
+                "tenant": {
+                  "dependencies": [],
+                  "label": "Inherit from Tenant"
+                }
+              },
+              "targetKey": "pack.palette.config.dashboard.identityProvider",
+              "type": "string",
+              "value": "none"
+            }
+          ],
+          "outputParameters": []
+        }
+      },
+      "values": "# spectrocloud.com/enabled-presets: Kube Controller Manager:loopback-ctrlmgr,Kube Scheduler:loopback-scheduler,Azure Disk Encryption Set:disable-azure-disk-encryption\npack:\n  content:\n    images:\n      - image: us-docker.pkg.dev/palette-images/k8s/coredns/coredns:v1.13.1\n      - image: us-docker.pkg.dev/palette-images/k8s/etcd:3.6.6-0\n      - image: us-docker.pkg.dev/palette-images/k8s/kube-apiserver:v1.35.6\n      - image: us-docker.pkg.dev/palette-images/k8s/kube-controller-manager:v1.35.6\n      - image: us-docker.pkg.dev/palette-images/k8s/kube-proxy:v1.35.6\n      - image: us-docker.pkg.dev/palette-images/k8s/kube-scheduler:v1.35.6\n      - image: us-docker.pkg.dev/palette-images/k8s/pause:3.9\n      - image: us-docker.pkg.dev/palette-images/k8s/pause:3.8\n      - image: us-docker.pkg.dev/palette-images/k8s/pause:3.10\n      - image: registry.k8s.io/pause:3.10.1\n      - image: registry.k8s.io/pause:3.10.2\n  #CIDR Range for Pods in cluster\n  # Note : This must not overlap with any of the host or service network\n  podCIDR: \"192.168.0.0/16\"\n  #CIDR notation IP range from which to assign service cluster IPs\n  # Note : This must not overlap with any IP ranges assigned to nodes for pods.\n  serviceClusterIpRange: \"10.96.0.0/12\"\n  # serviceDomain: \"cluster.local\"\n\nkubeadmconfig:\n  apiServer:\n    extraArgs:\n      # Note : secure-port flag is used during kubeadm init. Do not change this flag on a running cluster\n      secure-port: \"6443\"\n      anonymous-auth: \"true\"\n      profiling: \"false\"\n      disable-admission-plugins: \"AlwaysAdmit\"\n      default-not-ready-toleration-seconds: \"60\"\n      default-unreachable-toleration-seconds: \"60\"\n      enable-admission-plugins: \"AlwaysPullImages,NamespaceLifecycle,ServiceAccount,NodeRestriction,PodSecurity\"\n      admission-control-config-file: \"/etc/kubernetes/pod-security-standard.yaml\"\n      audit-log-path: /var/log/apiserver/audit.log\n      audit-policy-file: /etc/kubernetes/audit-policy.yaml\n      audit-log-maxage: \"30\"\n      audit-log-maxbackup: \"10\"\n      audit-log-maxsize: \"100\"\n      authorization-mode: RBAC,Node\n      kubelet-certificate-authority: \"/etc/kubernetes/pki/ca.crt\"\n      tls-cipher-suites: \"TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305,TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305,TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384\"\n    extraVolumes:\n      - name: audit-log\n        hostPath: /var/log/apiserver\n        mountPath: /var/log/apiserver\n        pathType: DirectoryOrCreate\n      - name: audit-policy\n        hostPath: /etc/kubernetes/audit-policy.yaml\n        mountPath: /etc/kubernetes/audit-policy.yaml\n        readOnly: true\n        pathType: File\n      - name: pod-security-standard\n        hostPath: /etc/kubernetes/pod-security-standard.yaml\n        mountPath: /etc/kubernetes/pod-security-standard.yaml\n        readOnly: true\n        pathType: File\n  controllerManager:\n    extraArgs:\n      profiling: \"false\"\n      terminated-pod-gc-threshold: \"25\"\n      use-service-account-credentials: \"true\"\n      feature-gates: \"RotateKubeletServerCertificate=true\"\n  scheduler:\n    extraArgs:\n      profiling: \"false\"\n  dns:\n    type: CoreDNS\n    imageRepository: us-docker.pkg.dev/palette-images/k8s/coredns\n    imageTag: v1.13.1\n  etcd:\n    local:\n      imageRepository: us-docker.pkg.dev/palette-images/k8s\n      imageTag: 3.6.6-0\n  imageRepository: us-docker.pkg.dev/palette-images/k8s\n  kubeletExtraArgs:\n    read-only-port: \"0\"\n    event-qps: \"0\"\n    feature-gates: \"RotateKubeletServerCertificate=true\"\n    protect-kernel-defaults: \"true\"\n    rotate-server-certificates: \"true\"\n    tls-cipher-suites: \"TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305,TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305,TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384\"\n  files:\n    - path: hardening/audit-policy.yaml\n      targetPath: /etc/kubernetes/audit-policy.yaml\n      targetOwner: \"root:root\"\n      targetPermissions: \"0600\"\n    - path: hardening/90-kubelet.conf\n      targetPath: /etc/sysctl.d/90-kubelet.conf\n      targetOwner: \"root:root\"\n      targetPermissions: \"0600\"\n    - targetPath: /etc/kubernetes/pod-security-standard.yaml\n      targetOwner: \"root:root\"\n      targetPermissions: \"0600\"\n      content: |\n        apiVersion: apiserver.config.k8s.io/v1\n        kind: AdmissionConfiguration\n        plugins:\n        - name: PodSecurity\n          configuration:\n            apiVersion: pod-security.admission.config.k8s.io/v1\n            kind: PodSecurityConfiguration\n            defaults:\n              enforce: \"baseline\"\n              enforce-version: \"v1.35\"\n              audit: \"baseline\"\n              audit-version: \"v1.35\"\n              warn: \"restricted\"\n              warn-version: \"v1.35\"\n            exemptions:\n              # Array of authenticated usernames to exempt.\n              usernames: []\n              # Array of runtime class names to exempt.\n              runtimeClasses: []\n              # Array of namespaces to exempt.\n              namespaces: [kube-system]\n\n  preKubeadmCommands:\n    # For enabling 'protect-kernel-defaults' flag to kubelet, kernel parameters changes are required\n    - 'echo \"====> Applying kernel parameters for Kubelet\"'\n    - 'sysctl -p /etc/sysctl.d/90-kubelet.conf'\n    - 'test -f /etc/containerd/ca.crt && cp /etc/containerd/ca.crt /usr/local/share/ca-certificates/container.crt && update-ca-certificates && systemctl restart containerd'\n  \n  postKubeadmCommands:\n    - 'chmod 600 /var/lib/kubelet/config.yaml'\n    # - 'echo \"List of post kubeadm commands to be executed\"'\n\n# Client configuration to add OIDC based authentication flags in kubeconfig\n#clientConfig:\n  #oidc-issuer-url: \"{{ .spectro.pack.kubernetes.kubeadmconfig.apiServer.extraArgs.oidc-issuer-url }}\"\n  #oidc-client-id: \"{{ .spectro.pack.kubernetes.kubeadmconfig.apiServer.extraArgs.oidc-client-id }}\"\n  #oidc-client-secret: \"{{ .spectro.pack.kubernetes.kubeadmconfig.apiServer.extraArgs.oidc-client-secret }}\"\n  #oidc-extra-scope: profile,email\n"
+    },
+    {
+      "annotations": {
+        "airgap": "true",
+        "architecture": "amd64,arm64",
+        "docsURL": "https://docs.spectrocloud.com/integrations/kubernetes",
+        "k8s_spectro_version": "0",
+        "k8s_version": "k-1362",
+        "revision": "20260728",
+        "source": "spectrocloud"
+      },
+      "dependencies": [],
+      "packUid": "6a6bd41b16c3cbf9999ad3be",
+      "presets": [
+        {
+          "add": "kubeadmconfig:\n  controllerManager:\n    extraArgs:\n      bind-address: \"127.0.0.1\"\n",
+          "displayName": "Use loopback address",
+          "group": "Kube Controller Manager",
+          "name": "loopback-ctrlmgr",
+          "remove": []
+        },
+        {
+          "add": "kubeadmconfig:\n  controllerManager:\n    extraArgs:\n      bind-address: \"0.0.0.0\"\n",
+          "displayName": "Use insecure bind address",
+          "group": "Kube Controller Manager",
+          "name": "insecure-ctrlmgr",
+          "remove": []
+        },
+        {
+          "add": "kubeadmconfig:\n  scheduler:\n    extraArgs:\n      bind-address: \"127.0.0.1\"\n",
+          "displayName": "Use loopback address",
+          "group": "Kube Scheduler",
+          "name": "loopback-scheduler",
+          "remove": []
+        },
+        {
+          "add": "kubeadmconfig:\n  scheduler:\n    extraArgs:\n      bind-address: \"0.0.0.0\"\n      \n",
+          "displayName": "Use insecure bind address",
+          "group": "Kube Scheduler",
+          "name": "insecure-scheduler",
+          "remove": []
+        },
+        {
+          "add": "cloud:\n  azure:\n    diskEncryptionSetID: \"\"  \n    \n",
+          "displayName": "Enable Encryption using Customer-managed Key",
+          "group": "Azure Disk Encryption Set",
+          "name": "enable-azure-disk-encryption",
+          "remove": []
+        },
+        {
+          "add": "",
+          "displayName": "Disable Encryption using Customer-managed Key",
+          "group": "Azure Disk Encryption Set",
+          "name": "disable-azure-disk-encryption",
+          "remove": [
+            "cloud"
+          ]
+        }
+      ],
+      "schema": [],
+      "template": {
+        "parameters": {
+          "inputParameters": [
+            {
+              "displayName": "OIDC Identity Provider",
+              "format": "radio",
+              "listOptions": null,
+              "name": "identityProvider",
+              "options": {
+                "noauth": {
+                  "dependencies": [],
+                  "description": "This selection may disable authentication on add-ons that rely on an OIDC Identity Provider risking insecure access and is not advised on production environments",
+                  "label": "None"
+                },
+                "none": {
+                  "dependencies": [],
+                  "description": "The OIDC Identity Provider can be configured inline within the pack values when this option is selected",
+                  "label": "Custom"
+                },
+                "palette": {
+                  "dependencies": [],
+                  "label": "Palette"
+                },
+                "tenant": {
+                  "dependencies": [],
+                  "label": "Inherit from Tenant"
+                }
+              },
+              "targetKey": "pack.palette.config.dashboard.identityProvider",
+              "type": "string",
+              "value": "none"
+            }
+          ],
+          "outputParameters": []
+        }
+      },
+      "values": "# spectrocloud.com/enabled-presets: Kube Controller Manager:loopback-ctrlmgr,Kube Scheduler:loopback-scheduler,Azure Disk Encryption Set:disable-azure-disk-encryption\npack:\n  content:\n    images:\n      - image: us-docker.pkg.dev/palette-images/k8s/coredns/coredns:v1.14.2\n      - image: us-docker.pkg.dev/palette-images/k8s/etcd:3.6.8-0\n      - image: us-docker.pkg.dev/palette-images/k8s/kube-apiserver:v1.36.2\n      - image: us-docker.pkg.dev/palette-images/k8s/kube-controller-manager:v1.36.2\n      - image: us-docker.pkg.dev/palette-images/k8s/kube-proxy:v1.36.2\n      - image: us-docker.pkg.dev/palette-images/k8s/kube-scheduler:v1.36.2\n      - image: us-docker.pkg.dev/palette-images/k8s/pause:3.9\n      - image: us-docker.pkg.dev/palette-images/k8s/pause:3.8\n      - image: us-docker.pkg.dev/palette-images/k8s/pause:3.10\n      - image: registry.k8s.io/pause:3.10.1\n      - image: registry.k8s.io/pause:3.10.2\n  #CIDR Range for Pods in cluster\n  # Note : This must not overlap with any of the host or service network\n  podCIDR: \"192.168.0.0/16\"\n  #CIDR notation IP range from which to assign service cluster IPs\n  # Note : This must not overlap with any IP ranges assigned to nodes for pods.\n  serviceClusterIpRange: \"10.96.0.0/12\"\n  # serviceDomain: \"cluster.local\"\n\nkubeadmconfig:\n  apiServer:\n    extraArgs:\n      # Note : secure-port flag is used during kubeadm init. Do not change this flag on a running cluster\n      secure-port: \"6443\"\n      anonymous-auth: \"true\"\n      profiling: \"false\"\n      disable-admission-plugins: \"AlwaysAdmit\"\n      default-not-ready-toleration-seconds: \"60\"\n      default-unreachable-toleration-seconds: \"60\"\n      enable-admission-plugins: \"AlwaysPullImages,NamespaceLifecycle,ServiceAccount,NodeRestriction,PodSecurity\"\n      admission-control-config-file: \"/etc/kubernetes/pod-security-standard.yaml\"\n      audit-log-path: /var/log/apiserver/audit.log\n      audit-policy-file: /etc/kubernetes/audit-policy.yaml\n      audit-log-maxage: \"30\"\n      audit-log-maxbackup: \"10\"\n      audit-log-maxsize: \"100\"\n      authorization-mode: RBAC,Node\n      kubelet-certificate-authority: \"/etc/kubernetes/pki/ca.crt\"\n      tls-cipher-suites: \"TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305,TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305,TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384\"\n    extraVolumes:\n      - name: audit-log\n        hostPath: /var/log/apiserver\n        mountPath: /var/log/apiserver\n        pathType: DirectoryOrCreate\n      - name: audit-policy\n        hostPath: /etc/kubernetes/audit-policy.yaml\n        mountPath: /etc/kubernetes/audit-policy.yaml\n        readOnly: true\n        pathType: File\n      - name: pod-security-standard\n        hostPath: /etc/kubernetes/pod-security-standard.yaml\n        mountPath: /etc/kubernetes/pod-security-standard.yaml\n        readOnly: true\n        pathType: File\n  controllerManager:\n    extraArgs:\n      profiling: \"false\"\n      terminated-pod-gc-threshold: \"25\"\n      use-service-account-credentials: \"true\"\n      feature-gates: \"RotateKubeletServerCertificate=true\"\n  scheduler:\n    extraArgs:\n      profiling: \"false\"\n  dns:\n    type: CoreDNS\n    imageRepository: us-docker.pkg.dev/palette-images/k8s/coredns\n    imageTag: v1.14.2\n  etcd:\n    local:\n      imageRepository: us-docker.pkg.dev/palette-images/k8s\n      imageTag: 3.6.8-0\n  imageRepository: us-docker.pkg.dev/palette-images/k8s\n  kubeletExtraArgs:\n    read-only-port: \"0\"\n    event-qps: \"0\"\n    feature-gates: \"RotateKubeletServerCertificate=true\"\n    protect-kernel-defaults: \"true\"\n    rotate-server-certificates: \"true\"\n    tls-cipher-suites: \"TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305,TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305,TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384\"\n  files:\n    - path: hardening/audit-policy.yaml\n      targetPath: /etc/kubernetes/audit-policy.yaml\n      targetOwner: \"root:root\"\n      targetPermissions: \"0600\"\n    - path: hardening/90-kubelet.conf\n      targetPath: /etc/sysctl.d/90-kubelet.conf\n      targetOwner: \"root:root\"\n      targetPermissions: \"0600\"\n    - targetPath: /etc/kubernetes/pod-security-standard.yaml\n      targetOwner: \"root:root\"\n      targetPermissions: \"0600\"\n      content: |\n        apiVersion: apiserver.config.k8s.io/v1\n        kind: AdmissionConfiguration\n        plugins:\n        - name: PodSecurity\n          configuration:\n            apiVersion: pod-security.admission.config.k8s.io/v1\n            kind: PodSecurityConfiguration\n            defaults:\n              enforce: \"baseline\"\n              enforce-version: \"v1.36\"\n              audit: \"baseline\"\n              audit-version: \"v1.36\"\n              warn: \"restricted\"\n              warn-version: \"v1.36\"\n            exemptions:\n              # Array of authenticated usernames to exempt.\n              usernames: []\n              # Array of runtime class names to exempt.\n              runtimeClasses: []\n              # Array of namespaces to exempt.\n              namespaces: [kube-system]\n\n  preKubeadmCommands:\n    # For enabling 'protect-kernel-defaults' flag to kubelet, kernel parameters changes are required\n    - 'echo \"====> Applying kernel parameters for Kubelet\"'\n    - 'sysctl -p /etc/sysctl.d/90-kubelet.conf'\n    - 'test -f /etc/containerd/ca.crt && cp /etc/containerd/ca.crt /usr/local/share/ca-certificates/container.crt && update-ca-certificates && systemctl restart containerd'\n  \n  postKubeadmCommands:\n    - 'chmod 600 /var/lib/kubelet/config.yaml'\n    # - 'echo \"List of post kubeadm commands to be executed\"'\n\n# Client configuration to add OIDC based authentication flags in kubeconfig\n#clientConfig:\n  #oidc-issuer-url: \"{{ .spectro.pack.kubernetes.kubeadmconfig.apiServer.extraArgs.oidc-issuer-url }}\"\n  #oidc-client-id: \"{{ .spectro.pack.kubernetes.kubeadmconfig.apiServer.extraArgs.oidc-client-id }}\"\n  #oidc-client-secret: \"{{ .spectro.pack.kubernetes.kubeadmconfig.apiServer.extraArgs.oidc-client-secret }}\"\n  #oidc-extra-scope: profile,email\n"
+    }
+  ],
+  "registryUid": "5eecc89d0b150045ae661cef",
+  "tags": [
+    {
+      "packUid": "6a6bd41b16c3cbf9999ad3be",
+      "parentTags": null,
+      "tag": "1.x",
+      "version": "1.36.2"
+    },
+    {
+      "packUid": "6a6bd41b16c3cbf9999ad3be",
+      "parentTags": [
+        "1.36.x",
+        "1.x"
+      ],
+      "tag": "1.36.2",
+      "version": "1.36.2"
+    },
+    {
+      "packUid": "6a6bd41b16c3cbf9999ad3be",
+      "parentTags": [
+        "1.x"
+      ],
+      "tag": "1.36.x",
+      "version": "1.36.2"
+    },
+    {
+      "packUid": "6a6bd41b16c3cbf99cd5fc21",
+      "parentTags": [
+        "1.x"
+      ],
+      "tag": "1.35.x",
+      "version": "1.35.6"
+    },
+    {
+      "packUid": "6a6bd41b16c3cbf99cd5fc21",
+      "parentTags": [
+        "1.35.x",
+        "1.x"
+      ],
+      "tag": "1.35.6",
+      "version": "1.35.6"
+    },
+    {
+      "packUid": "69f778872d19e4c57df8f630",
+      "parentTags": [
+        "1.35.x",
+        "1.x"
+      ],
+      "tag": "1.35.3",
+      "version": "1.35.3"
+    },
+    {
+      "packUid": "69bd61f86c618b0646653572",
+      "parentTags": [
+        "1.35.x",
+        "1.x"
+      ],
+      "tag": "1.35.2",
+      "version": "1.35.2"
+    },
+    {
+      "packUid": "6a47cf75691babe64273262b",
+      "parentTags": [
+        "1.x"
+      ],
+      "tag": "1.34.x",
+      "version": "1.34.9"
+    },
+    {
+      "packUid": "6a47cf75691babe64273262b",
+      "parentTags": [
+        "1.34.x",
+        "1.x"
+      ],
+      "tag": "1.34.9",
+      "version": "1.34.9"
+    },
+    {
+      "packUid": "69f778882d19e4c57f9d9786",
+      "parentTags": [
+        "1.34.x",
+        "1.x"
+      ],
+      "tag": "1.34.6",
+      "version": "1.34.6"
+    },
+    {
+      "packUid": "69b41ff672b86d95746b400d",
+      "parentTags": [
+        "1.34.x",
+        "1.x"
+      ],
+      "tag": "1.34.5",
+      "version": "1.34.5"
+    },
+    {
+      "packUid": "697cc56d5bc882b10d3aadcd",
+      "parentTags": [
+        "1.34.x",
+        "1.x"
+      ],
+      "tag": "1.34.2",
+      "version": "1.34.2"
+    },
+    {
+      "packUid": "69b41ff672b86d957a979ce1",
+      "parentTags": [
+        "1.33.x",
+        "1.x"
+      ],
+      "tag": "1.33.9",
+      "version": "1.33.9"
+    },
+    {
+      "packUid": "69a1b09701ac940c8bcbc63e",
+      "parentTags": [
+        "1.33.x",
+        "1.x"
+      ],
+      "tag": "1.33.7",
+      "version": "1.33.7"
+    },
+    {
+      "packUid": "6942396a0689b4353677d0da",
+      "parentTags": [
+        "1.33.x",
+        "1.x"
+      ],
+      "tag": "1.33.6",
+      "version": "1.33.6"
+    },
+    {
+      "packUid": "68e9231dc80c14719389a149",
+      "parentTags": [
+        "1.33.x",
+        "1.x"
+      ],
+      "tag": "1.33.5",
+      "version": "1.33.5"
+    },
+    {
+      "packUid": "68cec1b67a7a695d1ab47ffb",
+      "parentTags": [
+        "1.33.x",
+        "1.x"
+      ],
+      "tag": "1.33.4",
+      "version": "1.33.4"
+    },
+    {
+      "packUid": "6a6bd41b16c3cbf99e9542b8",
+      "parentTags": [
+        "1.x"
+      ],
+      "tag": "1.33.x",
+      "version": "1.33.13"
+    },
+    {
+      "packUid": "6a6bd41b16c3cbf99e9542b8",
+      "parentTags": [
+        "1.33.x",
+        "1.x"
+      ],
+      "tag": "1.33.13",
+      "version": "1.33.13"
+    },
+    {
+      "packUid": "69f778882d19e4c582d8430e",
+      "parentTags": [
+        "1.33.x",
+        "1.x"
+      ],
+      "tag": "1.33.10",
+      "version": "1.33.10"
+    },
+    {
+      "packUid": "6904d0f387a48931441c66be",
+      "parentTags": [
+        "1.32.x",
+        "1.x"
+      ],
+      "tag": "1.32.9",
+      "version": "1.32.9"
+    },
+    {
+      "packUid": "68cec1b67a7a695d1cc79061",
+      "parentTags": [
+        "1.32.x",
+        "1.x"
+      ],
+      "tag": "1.32.8",
+      "version": "1.32.8"
+    },
+    {
+      "packUid": "68a1ea65018f23c3f48dce53",
+      "parentTags": [
+        "1.32.x",
+        "1.x"
+      ],
+      "tag": "1.32.6",
+      "version": "1.32.6"
+    },
+    {
+      "packUid": "687bbdf5511462f044b2c727",
+      "parentTags": [
+        "1.32.x",
+        "1.x"
+      ],
+      "tag": "1.32.4",
+      "version": "1.32.4"
+    },
+    {
+      "packUid": "683b1c1b9a0cfb2f1927cebb",
+      "parentTags": [
+        "1.32.x",
+        "1.x"
+      ],
+      "tag": "1.32.3",
+      "version": "1.32.3"
+    },
+    {
+      "packUid": "67d5a2a05a30d541dd50de4f",
+      "parentTags": [
+        "1.32.x",
+        "1.x"
+      ],
+      "tag": "1.32.2",
+      "version": "1.32.2"
+    },
+    {
+      "packUid": "69b41ff672b86d95771c1484",
+      "parentTags": [
+        "1.x"
+      ],
+      "tag": "1.32.x",
+      "version": "1.32.13"
+    },
+    {
+      "packUid": "69b41ff672b86d95771c1484",
+      "parentTags": [
+        "1.32.x",
+        "1.x"
+      ],
+      "tag": "1.32.13",
+      "version": "1.32.13"
+    },
+    {
+      "packUid": "698600c04b0c6903fd7e9816",
+      "parentTags": [
+        "1.32.x",
+        "1.x"
+      ],
+      "tag": "1.32.11",
+      "version": "1.32.11"
+    },
+    {
+      "packUid": "6942396b0689b435387a14cd",
+      "parentTags": [
+        "1.32.x",
+        "1.x"
+      ],
+      "tag": "1.32.10",
+      "version": "1.32.10"
+    },
+    {
+      "packUid": "67b224bf8ab50a5ee312bfca",
+      "parentTags": [
+        "1.32.x",
+        "1.x"
+      ],
+      "tag": "1.32.1",
+      "version": "1.32.1"
+    },
+    {
+      "packUid": "687bbdf6511462f04b3f3be7",
+      "parentTags": [
+        "1.31.x",
+        "1.x"
+      ],
+      "tag": "1.31.8",
+      "version": "1.31.8"
+    },
+    {
+      "packUid": "683b1c1e9a0cfb2f2c8e470a",
+      "parentTags": [
+        "1.31.x",
+        "1.x"
+      ],
+      "tag": "1.31.7",
+      "version": "1.31.7"
+    },
+    {
+      "packUid": "67d5a2a05a30d541e14142f0",
+      "parentTags": [
+        "1.31.x",
+        "1.x"
+      ],
+      "tag": "1.31.6",
+      "version": "1.31.6"
+    },
+    {
+      "packUid": "67b224bf8ab50a5eea4e8158",
+      "parentTags": [
+        "1.31.x",
+        "1.x"
+      ],
+      "tag": "1.31.5",
+      "version": "1.31.5"
+    },
+    {
+      "packUid": "678d28c9e2561ecc856410b6",
+      "parentTags": [
+        "1.31.x",
+        "1.x"
+      ],
+      "tag": "1.31.4",
+      "version": "1.31.4"
+    },
+    {
+      "packUid": "6942396b0689b4353b3f3595",
+      "parentTags": [
+        "1.x"
+      ],
+      "tag": "1.31.x",
+      "version": "1.31.14"
+    },
+    {
+      "packUid": "6942396b0689b4353b3f3595",
+      "parentTags": [
+        "1.31.x",
+        "1.x"
+      ],
+      "tag": "1.31.14",
+      "version": "1.31.14"
+    },
+    {
+      "packUid": "6904d0f387a4893147a64259",
+      "parentTags": [
+        "1.31.x",
+        "1.x"
+      ],
+      "tag": "1.31.13",
+      "version": "1.31.13"
+    },
+    {
+      "packUid": "68cec1b77a7a695d20c52a6a",
+      "parentTags": [
+        "1.31.x",
+        "1.x"
+      ],
+      "tag": "1.31.12",
+      "version": "1.31.12"
+    },
+    {
+      "packUid": "68a1ea65018f23c3f84eb7fb",
+      "parentTags": [
+        "1.31.x",
+        "1.x"
+      ],
+      "tag": "1.31.10",
+      "version": "1.31.10"
+    },
+    {
+      "packUid": "675f0d2a84c223de26804006",
+      "parentTags": [
+        "1.31.x",
+        "1.x"
+      ],
+      "tag": "1.31.1",
+      "version": "1.31.1"
+    },
+    {
+      "packUid": "67b224c08ab50a5eef0c9a88",
+      "parentTags": [
+        "1.30.x",
+        "1.x"
+      ],
+      "tag": "1.30.9",
+      "version": "1.30.9"
+    },
+    {
+      "packUid": "678d28cae2561ecc8f7b49a1",
+      "parentTags": [
+        "1.30.x",
+        "1.x"
+      ],
+      "tag": "1.30.8",
+      "version": "1.30.8"
+    },
+    {
+      "packUid": "675f0d2a84c223de360775a4",
+      "parentTags": [
+        "1.30.x",
+        "1.x"
+      ],
+      "tag": "1.30.6",
+      "version": "1.30.6"
+    },
+    {
+      "packUid": "670bf1063deb3ad4d71eb16c",
+      "parentTags": [
+        "1.30.x",
+        "1.x"
+      ],
+      "tag": "1.30.5",
+      "version": "1.30.5"
+    },
+    {
+      "packUid": "66e5b3920aa1ff971ae392c6",
+      "parentTags": [
+        "1.30.x",
+        "1.x"
+      ],
+      "tag": "1.30.4",
+      "version": "1.30.4"
+    },
+    {
+      "packUid": "68a1ea66018f23c3fceeeafb",
+      "parentTags": [
+        "1.x"
+      ],
+      "tag": "1.30.x",
+      "version": "1.30.14"
+    },
+    {
+      "packUid": "68a1ea66018f23c3fceeeafb",
+      "parentTags": [
+        "1.30.x",
+        "1.x"
+      ],
+      "tag": "1.30.14",
+      "version": "1.30.14"
+    },
+    {
+      "packUid": "687bbdfe511462f07b2a31a6",
+      "parentTags": [
+        "1.30.x",
+        "1.x"
+      ],
+      "tag": "1.30.12",
+      "version": "1.30.12"
+    },
+    {
+      "packUid": "683b1c1f9a0cfb2f357ec518",
+      "parentTags": [
+        "1.30.x",
+        "1.x"
+      ],
+      "tag": "1.30.11",
+      "version": "1.30.11"
+    },
+    {
+      "packUid": "67d5a2a15a30d541ec4211af",
+      "parentTags": [
+        "1.30.x",
+        "1.x"
+      ],
+      "tag": "1.30.10",
+      "version": "1.30.10"
+    },
+    {
+      "packUid": "670bf1063deb3ad4d5a1dc5e",
+      "parentTags": [
+        "1.29.x",
+        "1.x"
+      ],
+      "tag": "1.29.9",
+      "version": "1.29.9"
+    },
+    {
+      "packUid": "66e5b3920aa1ff971584aa49",
+      "parentTags": [
+        "1.29.x",
+        "1.x"
+      ],
+      "tag": "1.29.8",
+      "version": "1.29.8"
+    },
+    {
+      "packUid": "66c0c36fcd3c68232494e0c2",
+      "parentTags": [
+        "1.29.x",
+        "1.x"
+      ],
+      "tag": "1.29.7",
+      "version": "1.29.7"
+    },
+    {
+      "packUid": "669be6ff55ed407c8f516fe0",
+      "parentTags": [
+        "1.29.x",
+        "1.x"
+      ],
+      "tag": "1.29.6",
+      "version": "1.29.6"
+    },
+    {
+      "packUid": "666e812486330a630062f5d1",
+      "parentTags": [
+        "1.29.x",
+        "1.x"
+      ],
+      "tag": "1.29.4",
+      "version": "1.29.4"
+    },
+    {
+      "packUid": "67d5a2a05a30d541df7e4030",
+      "parentTags": [
+        "1.x"
+      ],
+      "tag": "1.29.x",
+      "version": "1.29.14"
+    },
+    {
+      "packUid": "67d5a2a05a30d541df7e4030",
+      "parentTags": [
+        "1.29.x",
+        "1.x"
+      ],
+      "tag": "1.29.14",
+      "version": "1.29.14"
+    },
+    {
+      "packUid": "67b224bf8ab50a5ee7a8ed53",
+      "parentTags": [
+        "1.29.x",
+        "1.x"
+      ],
+      "tag": "1.29.13",
+      "version": "1.29.13"
+    },
+    {
+      "packUid": "678d28c9e2561ecc88a49f86",
+      "parentTags": [
+        "1.29.x",
+        "1.x"
+      ],
+      "tag": "1.29.12",
+      "version": "1.29.12"
+    },
+    {
+      "packUid": "675f0d2984c223de22b66954",
+      "parentTags": [
+        "1.29.x",
+        "1.x"
+      ],
+      "tag": "1.29.10",
+      "version": "1.29.10"
+    },
+    {
+      "packUid": "661cc50b0aa79b77ade281f9",
+      "parentTags": [
+        "1.29.x",
+        "1.x"
+      ],
+      "tag": "1.29.0",
+      "version": "1.29.0"
+    },
+    {
+      "packUid": "666e812586330a6307065c01",
+      "parentTags": [
+        "1.28.x",
+        "1.x"
+      ],
+      "tag": "1.28.9",
+      "version": "1.28.9"
+    },
+    {
+      "packUid": "659a47b28b7673a7dff73658",
+      "parentTags": [
+        "1.28.x",
+        "1.x"
+      ],
+      "tag": "1.28.3",
+      "version": "1.28.3"
+    },
+    {
+      "packUid": "653812d30a0e0a379faef1a4",
+      "parentTags": [
+        "1.28.x",
+        "1.x"
+      ],
+      "tag": "1.28.2",
+      "version": "1.28.2"
+    },
+    {
+      "packUid": "675f0d2a84c223de2a849ebe",
+      "parentTags": [
+        "1.x"
+      ],
+      "tag": "1.28.x",
+      "version": "1.28.15"
+    },
+    {
+      "packUid": "675f0d2a84c223de2a849ebe",
+      "parentTags": [
+        "1.28.x",
+        "1.x"
+      ],
+      "tag": "1.28.15",
+      "version": "1.28.15"
+    },
+    {
+      "packUid": "670bf1063deb3ad4d99bc16d",
+      "parentTags": [
+        "1.28.x",
+        "1.x"
+      ],
+      "tag": "1.28.14",
+      "version": "1.28.14"
+    },
+    {
+      "packUid": "66e5b3920aa1ff972016071c",
+      "parentTags": [
+        "1.28.x",
+        "1.x"
+      ],
+      "tag": "1.28.13",
+      "version": "1.28.13"
+    },
+    {
+      "packUid": "66c0c370cd3c6823260e5531",
+      "parentTags": [
+        "1.28.x",
+        "1.x"
+      ],
+      "tag": "1.28.12",
+      "version": "1.28.12"
+    },
+    {
+      "packUid": "669be6ff55ed407c939bbc55",
+      "parentTags": [
+        "1.28.x",
+        "1.x"
+      ],
+      "tag": "1.28.11",
+      "version": "1.28.11"
+    },
+    {
+      "packUid": "659a47b28b7673a7e36076aa",
+      "parentTags": [
+        "1.27.x",
+        "1.x"
+      ],
+      "tag": "1.27.7",
+      "version": "1.27.7"
+    },
+    {
+      "packUid": "651c1484f55d6318cada0f6d",
+      "parentTags": [
+        "1.27.x",
+        "1.x"
+      ],
+      "tag": "1.27.5",
+      "version": "1.27.5"
+    },
+    {
+      "packUid": "66c0c370cd3c68232a68e32e",
+      "parentTags": [
+        "1.x"
+      ],
+      "tag": "1.27.x",
+      "version": "1.27.16"
+    },
+    {
+      "packUid": "66c0c370cd3c68232a68e32e",
+      "parentTags": [
+        "1.27.x",
+        "1.x"
+      ],
+      "tag": "1.27.16",
+      "version": "1.27.16"
+    },
+    {
+      "packUid": "669be6ff55ed407c91fa4259",
+      "parentTags": [
+        "1.27.x",
+        "1.x"
+      ],
+      "tag": "1.27.15",
+      "version": "1.27.15"
+    },
+    {
+      "packUid": "666e812586330a630aa9d7de",
+      "parentTags": [
+        "1.27.x",
+        "1.x"
+      ],
+      "tag": "1.27.13",
+      "version": "1.27.13"
+    },
+    {
+      "packUid": "661cc5100aa79b7823099ba6",
+      "parentTags": [
+        "1.27.x",
+        "1.x"
+      ],
+      "tag": "1.27.11",
+      "version": "1.27.11"
+    },
+    {
+      "packUid": "64ac0da2a40b9397c1b17459",
+      "parentTags": [
+        "1.27.x",
+        "1.x"
+      ],
+      "tag": "1.27.1",
+      "version": "1.27.1"
+    },
+    {
+      "packUid": "651c1484f55d6318cfd73ed2",
+      "parentTags": [
+        "1.26.x",
+        "1.x"
+      ],
+      "tag": "1.26.8",
+      "version": "1.26.8"
+    },
+    {
+      "packUid": "64eaf1161a2af696faee3858",
+      "parentTags": [
+        "1.26.x",
+        "1.x"
+      ],
+      "tag": "1.26.5",
+      "version": "1.26.5"
+    },
+    {
+      "packUid": "646c66c4aadf34e48c77dc38",
+      "parentTags": [
+        "1.26.x",
+        "1.x"
+      ],
+      "tag": "1.26.4",
+      "version": "1.26.4"
+    },
+    {
+      "packUid": "646c66c4aadf34e4c5131482",
+      "parentTags": [
+        "1.26.x",
+        "1.x"
+      ],
+      "tag": "1.26.3",
+      "version": "1.26.3"
+    },
+    {
+      "packUid": "661cc50f0aa79b780d404307",
+      "parentTags": [
+        "1.x"
+      ],
+      "tag": "1.26.x",
+      "version": "1.26.15"
+    },
+    {
+      "packUid": "661cc50f0aa79b780d404307",
+      "parentTags": [
+        "1.26.x",
+        "1.x"
+      ],
+      "tag": "1.26.15",
+      "version": "1.26.15"
+    },
+    {
+      "packUid": "661cc50d0aa79b77e129000a",
+      "parentTags": [
+        "1.26.x",
+        "1.x"
+      ],
+      "tag": "1.26.12",
+      "version": "1.26.12"
+    },
+    {
+      "packUid": "659a47b28b7673a7e56225d6",
+      "parentTags": [
+        "1.26.x",
+        "1.x"
+      ],
+      "tag": "1.26.10",
+      "version": "1.26.10"
+    },
+    {
+      "packUid": "63fdd104199bafb6536cba4f",
+      "parentTags": [
+        "1.26.x",
+        "1.x"
+      ],
+      "tag": "1.26.1",
+      "version": "1.26.1"
+    },
+    {
+      "packUid": "646c66c4aadf34e49a7c6c67",
+      "parentTags": [
+        "1.25.x",
+        "1.x"
+      ],
+      "tag": "1.25.9",
+      "version": "1.25.9"
+    },
+    {
+      "packUid": "646c66c4aadf34e493e653e0",
+      "parentTags": [
+        "1.25.x",
+        "1.x"
+      ],
+      "tag": "1.25.8",
+      "version": "1.25.8"
+    },
+    {
+      "packUid": "63fdd101199bafb648a066aa",
+      "parentTags": [
+        "1.25.x",
+        "1.x"
+      ],
+      "tag": "1.25.6",
+      "version": "1.25.6"
+    },
+    {
+      "packUid": "63bd0372764141c65b5bd057",
+      "parentTags": [
+        "1.25.x",
+        "1.x"
+      ],
+      "tag": "1.25.4",
+      "version": "1.25.4"
+    },
+    {
+      "packUid": "661cc50d0aa79b77d41dd4b9",
+      "parentTags": [
+        "1.x"
+      ],
+      "tag": "1.25.x",
+      "version": "1.25.16"
+    },
+    {
+      "packUid": "661cc50d0aa79b77d41dd4b9",
+      "parentTags": [
+        "1.25.x",
+        "1.x"
+      ],
+      "tag": "1.25.16",
+      "version": "1.25.16"
+    },
+    {
+      "packUid": "659a47b38b7673a7e973b9b2",
+      "parentTags": [
+        "1.25.x",
+        "1.x"
+      ],
+      "tag": "1.25.15",
+      "version": "1.25.15"
+    },
+    {
+      "packUid": "651c1484f55d6318cceae520",
+      "parentTags": [
+        "1.25.x",
+        "1.x"
+      ],
+      "tag": "1.25.13",
+      "version": "1.25.13"
+    },
+    {
+      "packUid": "64eaf1161a2af69701cb4e72",
+      "parentTags": [
+        "1.25.x",
+        "1.x"
+      ],
+      "tag": "1.25.10",
+      "version": "1.25.10"
+    },
+    {
+      "packUid": "6332ad8c281de30d29bae12b",
+      "parentTags": [
+        "1.24.x",
+        "1.x"
+      ],
+      "tag": "1.24.3",
+      "version": "1.24.3"
+    },
+    {
+      "packUid": "661cc5100aa79b7833f49227",
+      "parentTags": [
+        "1.x"
+      ],
+      "tag": "1.24.x",
+      "version": "1.24.17"
+    },
+    {
+      "packUid": "661cc5100aa79b7833f49227",
+      "parentTags": [
+        "1.24.x",
+        "1.x"
+      ],
+      "tag": "1.24.17",
+      "version": "1.24.17"
+    },
+    {
+      "packUid": "672f93fdcbb7e6d8fdf66a75",
+      "parentTags": [
+        "1.24.x",
+        "1.x"
+      ],
+      "tag": "1.24.16",
+      "version": "1.24.16"
+    },
+    {
+      "packUid": "64eaf1161a2af69722802fce",
+      "parentTags": [
+        "1.24.x",
+        "1.x"
+      ],
+      "tag": "1.24.14",
+      "version": "1.24.14"
+    },
+    {
+      "packUid": "646c66c4aadf34e498ea72c9",
+      "parentTags": [
+        "1.24.x",
+        "1.x"
+      ],
+      "tag": "1.24.13",
+      "version": "1.24.13"
+    },
+    {
+      "packUid": "63fdd100199bafb646ba1a9e",
+      "parentTags": [
+        "1.24.x",
+        "1.x"
+      ],
+      "tag": "1.24.10",
+      "version": "1.24.10"
+    },
+    {
+      "packUid": "609111cab52edfd69aad5749",
+      "parentTags": [
+        "1.19.x",
+        "1.x"
+      ],
+      "tag": "1.19.9",
+      "version": "1.19.9"
+    },
+    {
+      "packUid": "60618dbe7819a97354f94abb",
+      "parentTags": [
+        "1.19.x",
+        "1.x"
+      ],
+      "tag": "1.19.8",
+      "version": "1.19.8"
+    },
+    {
+      "packUid": "601ecea78735339a5548b9a0",
+      "parentTags": [
+        "1.19.x",
+        "1.x"
+      ],
+      "tag": "1.19.7",
+      "version": "1.19.7"
+    },
+    {
+      "packUid": "601ecea78735339a59044232",
+      "parentTags": [
+        "1.19.x",
+        "1.x"
+      ],
+      "tag": "1.19.6",
+      "version": "1.19.6"
+    },
+    {
+      "packUid": "5fd5bbff049a15f18085d673",
+      "parentTags": [
+        "1.19.x",
+        "1.x"
+      ],
+      "tag": "1.19.5",
+      "version": "1.19.5"
+    },
+    {
+      "packUid": "5fd5bbff049a15f17e2386bd",
+      "parentTags": [
+        "1.19.x",
+        "1.x"
+      ],
+      "tag": "1.19.4",
+      "version": "1.19.4"
+    }
+  ]
+}
