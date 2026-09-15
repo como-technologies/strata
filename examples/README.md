@@ -1,7 +1,7 @@
 # Examples
 
 Real packs from Spectro Cloud's **Public Repo** registry at several versions, plus
-cluster profiles built from them so `palette-profile-diff` has something real to diff
+cluster profiles built from them so `strata` has something real to diff
 without touching a tenant.
 
 ```
@@ -13,7 +13,7 @@ examples/
   packs/<name>/_summaries.json  GET /v1/packs?filters=spec.name=<name>, filtered to the Public Repo
   profiles/raw/<profile>@<ver>/ profile.json, manifests.json, variables.json in the shapes the tool reads
   profiles/<profile>@<ver>.json snapshots (Merkle root, per-pack hashes, canonical values)
-  reports/                   compare output: text reports and one palette-profile-diff/1 JSON document
+  reports/                   compare output: text reports and one strata-diff/1 JSON document
 ```
 
 ## What is real and what is synthesized

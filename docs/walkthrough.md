@@ -1,4 +1,4 @@
-# How a team uses palette-profile-diff
+# How a team uses strata
 
 This page shows one platform team and one profile through a release cycle.
 Every command runs offline against the files in `examples/`. Build the tool
@@ -13,10 +13,10 @@ The cast, from the pipeline prototype plan:
 | profile            | `aws-pxk`, an AWS infra profile            |
 | tiers              | `dev`, `test`, `stage`, `prod`; each tier is one Palette project |
 | cluster repository | `cluster-workload-a`, which pins one `aws-pxk` version per tier |
-| the tool           | `palette-profile-diff`, called `ppd` below |
+| the tool           | `strata`, run from `target/release/strata` |
 
 ```
-alias ppd=target/release/palette-profile-diff
+alias strata=target/release/strata
 ```
 
 ## Conventions the team agrees once
@@ -40,13 +40,13 @@ Trigger: the `main` workflow applied `aws-pxk` 1.0.0 to project `dev`.
 Who: the workflow, right after `terraform apply`.
 
 ```
-PALETTE_PROJECT_UID=$DEV_PROJECT ppd snapshot aws-pxk@1.0.0 -o releases/1.0.0/dev.json
+PALETTE_PROJECT_UID=$DEV_PROJECT strata snapshot aws-pxk@1.0.0 -o releases/1.0.0/dev.json
 ```
 
 What you see on stderr:
 
 ```
-palette-profile-diff: wrote releases/1.0.0/dev.json (root aee66c68d829)
+strata: wrote releases/1.0.0/dev.json (root aee66c68d829)
 ```
 
 What it is: the record of the release. The file holds the Merkle root, one
@@ -66,11 +66,11 @@ Who: the workflow, right after the apply. It compares the previous record to
 the new version and posts the result on the merged pull request.
 
 ```
-PALETTE_PROJECT_UID=$DEV_PROJECT ppd compare releases/1.0.0/dev.json aws-pxk@1.1.0 --format markdown > report.md
+PALETTE_PROJECT_UID=$DEV_PROJECT strata compare releases/1.0.0/dev.json aws-pxk@1.1.0 --format markdown > report.md
 gh pr comment "$PR" --body-file report.md
 ```
 
-Offline: `ppd compare examples/profiles/aws-pxk@1.0.0.json examples/profiles/aws-pxk@1.1.0.json --format markdown`
+Offline: `strata compare examples/profiles/aws-pxk@1.0.0.json examples/profiles/aws-pxk@1.1.0.json --format markdown`
 
 What the reviewer sees at the top of the comment:
 
@@ -99,7 +99,7 @@ The impact column is the sentence the approver needs. Two layers say
 Then record the new version, as on day 1:
 
 ```
-PALETTE_PROJECT_UID=$DEV_PROJECT ppd snapshot aws-pxk@1.1.0 -o releases/1.1.0/dev.json
+PALETTE_PROJECT_UID=$DEV_PROJECT strata snapshot aws-pxk@1.1.0 -o releases/1.1.0/dev.json
 ```
 
 ### Let the pipeline enforce a rule from the JSON
@@ -108,7 +108,7 @@ The same comparison as JSON is for scripts and for AI review. The `summary`
 block answers the policy question in one field.
 
 ```
-ppd compare releases/1.0.0/dev.json releases/1.1.0/dev.json --format json > report.json
+strata compare releases/1.0.0/dev.json releases/1.1.0/dev.json --format json > report.json
 jq -r .summary.maxImpact report.json          # repave
 jq -e '.summary.maxImpact != "repave"' report.json || gh pr edit "$PR" --add-label repave
 ```
@@ -132,7 +132,7 @@ kubernetes: node repave (Kubernetes version change)
 Trigger: an engineer attaches a manifest to `cert-manager` and adds a profile
 variable. No pack version changes. The version becomes 1.1.1.
 
-Offline: `ppd compare examples/profiles/aws-pxk@1.1.0.json examples/profiles/aws-pxk@1.1.1.json`
+Offline: `strata compare examples/profiles/aws-pxk@1.1.0.json examples/profiles/aws-pxk@1.1.1.json`
 
 ```
 aws-pxk@1.1.0 (64e0000000000000000000b2)  ->  aws-pxk@1.1.1 (64e0000000000000000000c3)
@@ -166,15 +166,15 @@ then `stage`, then `prod`, each behind its environment gate. After each apply
 it records the tier:
 
 ```
-PALETTE_PROJECT_UID=$TEST_PROJECT  ppd snapshot aws-pxk@1.1.1 -o releases/1.1.1/test.json
-PALETTE_PROJECT_UID=$STAGE_PROJECT ppd snapshot aws-pxk@1.1.1 -o releases/1.1.1/stage.json
-PALETTE_PROJECT_UID=$PROD_PROJECT  ppd snapshot aws-pxk@1.1.1 -o releases/1.1.1/prod.json
+PALETTE_PROJECT_UID=$TEST_PROJECT  strata snapshot aws-pxk@1.1.1 -o releases/1.1.1/test.json
+PALETTE_PROJECT_UID=$STAGE_PROJECT strata snapshot aws-pxk@1.1.1 -o releases/1.1.1/stage.json
+PALETTE_PROJECT_UID=$PROD_PROJECT  strata snapshot aws-pxk@1.1.1 -o releases/1.1.1/prod.json
 ```
 
 Promotion check, in the workflow after the `prod` apply:
 
 ```
-ppd compare releases/1.1.1/test.json releases/1.1.1/prod.json || exit 1
+strata compare releases/1.1.1/test.json releases/1.1.1/prod.json || exit 1
 ```
 
 Expected: `IDENTICAL`, exit `0`. The same release went to every tier. Any
@@ -198,7 +198,7 @@ Who: the bump workflow adds the comparison of the two profile records to the
 pull request body.
 
 ```
-ppd compare releases/1.1.0/test.json releases/1.1.1/test.json --format markdown
+strata compare releases/1.1.0/test.json releases/1.1.1/test.json --format markdown
 ```
 
 The cluster reviewer reads the impact column and nothing else. `in-place`
@@ -217,7 +217,7 @@ Who: the workflow, over every record in the repository.
 ```
 for f in releases/*/*.json; do
   tier=$(basename "$f" .json)
-  PALETTE_PROJECT_UID=$(project_uid_for "$tier") ppd verify "$f" --quiet || echo "DRIFT in $f"
+  PALETTE_PROJECT_UID=$(project_uid_for "$tier") strata verify "$f" --quiet || echo "DRIFT in $f"
 done
 ```
 
@@ -250,7 +250,7 @@ the live object is the deviation.
 Trigger: the team wants to delete `aws-pxk` 1.0.0 from a project.
 
 ```
-PALETTE_PROJECT_UID=$PROD_PROJECT ppd snapshot aws-pxk@1.0.0 | jq .source.consumers
+PALETTE_PROJECT_UID=$PROD_PROJECT strata snapshot aws-pxk@1.0.0 | jq .source.consumers
 ```
 
 Offline: `jq .source.consumers examples/profiles/aws-pxk@1.1.1.json`
@@ -271,9 +271,9 @@ record is never older than a day.
 Section 14 of the outline lists a fact to confirm: what Palette does on an
 in-place edit to a published profile version. This is the procedure:
 
-1. `ppd snapshot <profile>@<version> -o before.json`
+1. `strata snapshot <profile>@<version> -o before.json`
 2. Edit one value of that version in the Palette UI and save.
-3. `ppd verify before.json`
+3. `strata verify before.json`
 
 Record the result in the outline. If `verify` exits `1`, Palette allowed the
 edit and the nightly job is the guard. If Palette created a new version
@@ -283,14 +283,14 @@ instead, `verify` exits `0` and the new version shows up in the listing.
 
 | question                                              | command                                                        | exit 0 means            | exit 1 means                     |
 |-------------------------------------------------------|----------------------------------------------------------------|-------------------------|----------------------------------|
-| What changed between two versions?                    | `ppd compare A B`                                              | identical               | different, read the report       |
-| What does the approver need to see?                   | `ppd compare A B --format markdown`                            | same                    | same                             |
-| Does this release repave nodes?                       | `ppd compare A B --json \| jq -r .summary.maxImpact`           | prints the level        |                                  |
-| Record this release                                   | `ppd snapshot <name>@<version> -o releases/<version>/<tier>.json` | written              |                                  |
-| Did test and prod get the same release?               | `ppd compare releases/V/test.json releases/V/prod.json`        | yes                     | no, stop the release             |
-| Was a published version edited?                       | `ppd verify releases/V/<tier>.json`                            | unchanged               | drifted, open an issue           |
-| Can we delete this version?                           | `ppd snapshot <ref> \| jq .source.consumers.count`             | `0` means yes           |                                  |
-| What does the JSON mean?                              | `ppd schema diff`                                              | prints the JSON Schema  |                                  |
+| What changed between two versions?                    | `strata compare A B`                                              | identical               | different, read the report       |
+| What does the approver need to see?                   | `strata compare A B --format markdown`                            | same                    | same                             |
+| Does this release repave nodes?                       | `strata compare A B --json \| jq -r .summary.maxImpact`           | prints the level        |                                  |
+| Record this release                                   | `strata snapshot <name>@<version> -o releases/<version>/<tier>.json` | written              |                                  |
+| Did test and prod get the same release?               | `strata compare releases/V/test.json releases/V/prod.json`        | yes                     | no, stop the release             |
+| Was a published version edited?                       | `strata verify releases/V/<tier>.json`                            | unchanged               | drifted, open an issue           |
+| Can we delete this version?                           | `strata snapshot <ref> \| jq .source.consumers.count`             | `0` means yes           |                                  |
+| What does the JSON mean?                              | `strata schema diff`                                              | prints the JSON Schema  |                                  |
 
 ## What the tool does not do yet
 

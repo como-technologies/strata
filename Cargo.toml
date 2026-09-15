@@ -1,5 +1,5 @@
 [package]
-name = "palette-profile-diff"
+name = "strata"
 version = "0.2.0"
 edition = "2021"
 description = "Merkle-style diff of Spectro Cloud Palette cluster profile versions"

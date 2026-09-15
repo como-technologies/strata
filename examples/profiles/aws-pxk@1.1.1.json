@@ -1,12 +1,12 @@
 {
-  "schema": "palette-profile-snapshot/1",
+  "schema": "strata-snapshot/1",
   "tool": {
-    "name": "palette-profile-diff",
+    "name": "strata",
     "version": "0.2.0",
     "impl": "rust"
   },
   "source": {
-    "ref": "/home/brett/repos/spectrocloud/palette-profile-diff/examples/profiles/raw/aws-pxk@1.1.1",
+    "ref": "examples/profiles/raw/aws-pxk@1.1.1",
     "uid": "64e0000000000000000000c3",
     "name": "aws-pxk",
     "version": "1.1.1",
@@ -15,13 +15,13 @@
     "template": "published",
     "tags": {
       "built": "2026-09-15",
-      "source": "palette-profile-diff examples"
+      "source": "strata examples"
     },
     "consumers": {
       "clusters": [],
       "count": 0
     },
-    "fetchedAt": "2026-09-15T19:11:10Z"
+    "fetchedAt": "2026-09-15T19:17:54Z"
   },
   "variables": [
     {

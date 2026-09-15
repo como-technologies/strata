@@ -1,4 +1,4 @@
-//! The snapshot document (schema palette-profile-snapshot/1): one profile version with its Merkle
+//! The snapshot document (schema strata-snapshot/1): one profile version with its Merkle
 //! root, per-pack hashes, canonical values and raw contents. Byte-compatible with the snapshots
 //! written by the bash reference implementation.
 
@@ -13,12 +13,12 @@ use serde_json::{json, Map, Value};
 use crate::api::RawProfile;
 use crate::canon::{canon_yaml, canonical_json, hash_yaml, sha256_hex, Canon};
 
-pub const SNAPSHOT_SCHEMA: &str = "palette-profile-snapshot/1";
+pub const SNAPSHOT_SCHEMA: &str = "strata-snapshot/1";
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct Snapshot {
-    /// Always "palette-profile-snapshot/1"
+    /// Always "strata-snapshot/1"
     pub schema: String,
     pub tool: Tool,
     pub source: Source,
@@ -371,17 +371,10 @@ impl Snapshot {
     pub fn load(path: &Path) -> Result<Snapshot> {
         let text =
             std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
-        let v: Value = serde_json::from_str(&text).with_context(|| {
-            format!(
-                "'{}' is not a palette-profile-diff snapshot",
-                path.display()
-            )
-        })?;
+        let v: Value = serde_json::from_str(&text)
+            .with_context(|| format!("'{}' is not a strata snapshot", path.display()))?;
         if v.get("schema").and_then(Value::as_str) != Some(SNAPSHOT_SCHEMA) {
-            bail!(
-                "'{}' is not a palette-profile-diff snapshot",
-                path.display()
-            );
+            bail!("'{}' is not a strata snapshot", path.display());
         }
         serde_json::from_value(v)
             .with_context(|| format!("'{}' does not match {}", path.display(), SNAPSHOT_SCHEMA))

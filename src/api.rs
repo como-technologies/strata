@@ -137,7 +137,7 @@ impl Client {
     }
 
     pub fn fetch_raw(&self, uid: &str, save_dir: Option<&Path>, quiet: bool) -> Result<RawProfile> {
-        if !quiet && std::env::var_os("PPD_QUIET").is_none() {
+        if !quiet && std::env::var_os("STRATA_QUIET").is_none() {
             eprintln!("{}: fetching profile {uid}", crate::TOOL_NAME);
         }
         let profile = self.get_json(&format!("/v1/clusterprofiles/{uid}"))?;

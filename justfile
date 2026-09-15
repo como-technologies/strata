@@ -2,7 +2,7 @@
 
 default: build
 
-# Release binary at target/release/palette-profile-diff
+# Release binary at target/release/strata
 build:
     cargo build --release
 
@@ -16,8 +16,8 @@ lint:
 
 # Rebuild examples/ from the cached registry responses (no API key needed)
 examples: build
-    OFFLINE=1 PPD=target/release/palette-profile-diff examples/fetch-examples.sh
+    OFFLINE=1 STRATA_BIN=target/release/strata examples/fetch-examples.sh
 
 # Pull fresh packs from the Public Repo and rebuild examples/ (needs PALETTE_API_KEY)
 examples-fetch: build
-    PPD=target/release/palette-profile-diff examples/fetch-examples.sh
+    STRATA_BIN=target/release/strata examples/fetch-examples.sh

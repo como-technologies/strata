@@ -8,7 +8,7 @@ use std::process::Command;
 const ESC: char = '\x1b';
 
 fn bin() -> PathBuf {
-    PathBuf::from(env!("CARGO_BIN_EXE_palette-profile-diff"))
+    PathBuf::from(env!("CARGO_BIN_EXE_strata"))
 }
 
 struct Run {
@@ -19,7 +19,7 @@ struct Run {
 
 fn run_in(args: &[&str], envs: &[(&str, &str)], clear: &[&str]) -> Run {
     let mut c = Command::new(bin());
-    c.args(args).env("PPD_QUIET", "1");
+    c.args(args).env("STRATA_QUIET", "1");
     for k in clear {
         c.env_remove(k);
     }
@@ -92,7 +92,7 @@ fn has_line(text: &str, re: &str) -> bool {
 fn snapshot_shape_and_upstream_sources() {
     let fx = fixtures();
     let a = json(&fx.a);
-    assert_eq!(a["schema"], "palette-profile-snapshot/1");
+    assert_eq!(a["schema"], "strata-snapshot/1");
     assert_eq!(a["tool"]["impl"], "rust");
     assert_eq!(a["packs"].as_array().unwrap().len(), 7);
     let pack = |n: &str| {
@@ -186,7 +186,7 @@ fn json_document_is_self_describing() {
     assert_eq!(r.code, 1);
     assert!(!r.out.contains(ESC));
     let d: serde_json::Value = serde_json::from_str(&r.out).unwrap();
-    assert_eq!(d["schema"], "palette-profile-diff/1");
+    assert_eq!(d["schema"], "strata-diff/1");
     assert_eq!(d["same"], false);
     assert!(d["legend"]["impact"]["repave"].is_string());
     assert!(d["legend"]["upstream"].is_string());
@@ -320,7 +320,7 @@ fn bad_inputs_exit_two() {
     let not_snapshot = fx.raw.join("a/profile.json");
     let r = run(&["compare", not_snapshot.to_str().unwrap(), &fx.b]);
     assert_eq!(r.code, 2);
-    assert!(r.err.contains("not a palette-profile-diff snapshot"));
+    assert!(r.err.contains("not a strata snapshot"));
     let home = tempfile::tempdir().unwrap();
     let r = run_in(
         &["verify", &fx.a],

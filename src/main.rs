@@ -1,4 +1,4 @@
-//! palette-profile-diff: Merkle-style diff of Spectro Cloud Palette cluster profile versions.
+//! strata: Merkle-style diff of Spectro Cloud Palette cluster profile versions.
 //!
 //! Every pack on a profile gets three sub-hashes so a report names the kind of change:
 //! identity (which pack build the layer references), upstream (the digest Palette stamps on the
@@ -21,7 +21,7 @@ use clap::{Args, Parser, Subcommand, ValueEnum};
 use crate::color::{ColorMode, Paint};
 use crate::snapshot::Snapshot;
 
-pub const TOOL_NAME: &str = "palette-profile-diff";
+pub const TOOL_NAME: &str = "strata";
 pub const TOOL_VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const TOOL_IMPL: &str = "rust";
 
@@ -186,7 +186,7 @@ pub fn now_utc() -> String {
 }
 
 fn log(quiet: bool, msg: &str) {
-    if !quiet && std::env::var_os("PPD_QUIET").is_none() {
+    if !quiet && std::env::var_os("STRATA_QUIET").is_none() {
         eprintln!("{TOOL_NAME}: {msg}");
     }
 }

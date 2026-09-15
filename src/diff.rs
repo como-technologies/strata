@@ -1,4 +1,4 @@
-//! The diff document (schema palette-profile-diff/1): two snapshots compared. Self-describing on
+//! The diff document (schema strata-diff/1): two snapshots compared. Self-describing on
 //! purpose: every enum is spelled out, a legend explains the flags and impact levels, and a summary
 //! block answers the common questions without walking the packs.
 
@@ -11,12 +11,12 @@ use serde_json::{json, Value};
 use crate::canon::canonical_json;
 use crate::snapshot::{Pack, Snapshot, Source, Tool};
 
-pub const DIFF_SCHEMA: &str = "palette-profile-diff/1";
+pub const DIFF_SCHEMA: &str = "strata-diff/1";
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct Diff {
-    /// Always "palette-profile-diff/1"
+    /// Always "strata-diff/1"
     pub schema: String,
     pub tool: Tool,
     pub generated_at: String,

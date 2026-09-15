@@ -1,9 +1,11 @@
-# palette-profile-diff
+# strata
 
-Diff two Spectro Cloud Palette cluster profile versions and say *what kind* of
-change happened, not just that something did. One static Rust binary; the output
-is a colored terminal report, a markdown pull request comment, or a versioned,
-self-describing JSON document built for machine and AI consumption.
+A Spectro Cloud Palette cluster profile is a stack of layers. Strata records
+each published version of that stack and diffs two of them, saying *what
+kind* of change happened, not just that something did. One static Rust
+binary; the output is a colored terminal report, a markdown pull request
+comment, or a versioned, self-describing JSON document built for machine and
+AI consumption.
 
 **Start here: [docs/walkthrough.md](docs/walkthrough.md)** shows a platform
 team using the tool through one release cycle: record a release, review a
@@ -12,17 +14,17 @@ consumers before end of life. Every command in it runs offline against
 `examples/`.
 
 ```
-palette-profile-diff my-profile@1.2.0 my-profile@1.3.0
-palette-profile-diff 64f0…a1 64f0…b2 --full
-palette-profile-diff compare A B --format markdown        # pull request comment
-palette-profile-diff compare A B --format json            # for scripts and AI clients
-palette-profile-diff snapshot my-profile@1.2.0 -o rel.json # the record step
-palette-profile-diff verify rel.json                       # immutability check
-palette-profile-diff schema diff                           # JSON Schema of the diff document
+strata my-profile@1.2.0 my-profile@1.3.0
+strata 64f0…a1 64f0…b2 --full
+strata compare A B --format markdown        # pull request comment
+strata compare A B --format json            # for scripts and AI clients
+strata snapshot my-profile@1.2.0 -o rel.json # the record step
+strata verify rel.json                       # immutability check
+strata schema diff                           # JSON Schema of the diff document
 ```
 
 Build with `cargo build --release` (or `just build`); the binary is
-`target/release/palette-profile-diff`. Set `PALETTE_API_KEY`, and
+`target/release/strata`. Set `PALETTE_API_KEY`, and
 `PALETTE_PROJECT_UID` for project-scoped profiles. `PALETTE_API` overrides the
 base URL for self-hosted Palette. Values missing from the environment are read
 from `~/.palette.env`.
@@ -108,7 +110,7 @@ truncated.
 
 ## The JSON document, for scripts and AI clients
 
-`--format json` prints `palette-profile-diff/1`. It is designed to be read
+`--format json` prints `strata-diff/1`. It is designed to be read
 cold by a program or a language model without the docs:
 
 - `schema` and `tool` identify the document and the implementation.
@@ -128,7 +130,7 @@ cold by a program or a language model without the docs:
 - `a` and `b` are the two snapshot sources, with uids, versions, consumer
   counts, and fetch times.
 
-`palette-profile-diff schema diff` and `schema snapshot` print the JSON Schema
+`strata schema diff` and `schema snapshot` print the JSON Schema
 of each document. Impact levels, in ascending severity: `none`, `sync`,
 `in-place`, `cluster-wide`, `may-repave`, `repave`. The `impact` text is a
 hint derived from the layer and the flags, not a Palette API answer.
@@ -148,7 +150,7 @@ neighbors. Other lists are positional.
 
 ## Snapshots
 
-`snapshot` writes one JSON file per profile (`palette-profile-snapshot/1`)
+`snapshot` writes one JSON file per profile (`strata-snapshot/1`)
 with the hashes, the canonical values, the raw values and manifests, and the
 consumer list at the time. Keep it next to the release record, or feed it back
 to `compare` or `verify` later. `--raw-dir DIR` also keeps the three raw API

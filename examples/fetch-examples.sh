@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Pull real packs from Spectro Cloud's "Public Repo" registry at several versions, save them
 # under examples/packs/, synthesize raw-API-shaped cluster profiles from them, and run
-# palette-profile-diff over those profiles to produce snapshots and reports.
+# strata over those profiles to produce snapshots and reports.
 #
 # Read-only against the tenant: GET requests only. Needs PALETTE_API_KEY (or
 # SPECTROCLOUD_APIKEY); ~/.palette.env is sourced if present. PALETTE_PROJECT_UID is optional.
@@ -15,10 +15,10 @@
 set -euo pipefail
 
 here=$(cd "$(dirname "$0")" && pwd)
-# The built binary (release, then debug); override with PPD=<path>.
-tool=${PPD:-}
+# The built binary (release, then debug); override with STRATA_BIN=<path>.
+tool=${STRATA_BIN:-}
 if [ -z "$tool" ]; then
-  for c in "$here/../target/release/palette-profile-diff" "$here/../target/debug/palette-profile-diff"; do
+  for c in "$here/../target/release/strata" "$here/../target/debug/strata"; do
     [ -x "$c" ] && { tool=$c; break; }
   done
 fi
@@ -32,7 +32,7 @@ today=$(date -u +%F)
 
 die() { echo "fetch-examples: $*" >&2; exit 2; }
 log() { echo "fetch-examples: $*" >&2; }
-[ -n "$tool" ] && [ -x "$tool" ] || die "no palette-profile-diff binary found; run cargo build --release or set PPD=<path>"
+[ -n "$tool" ] && [ -x "$tool" ] || die "no strata binary found; run cargo build --release or set STRATA_BIN=<path>"
 log "using $tool"
 
 if [ -z "${OFFLINE:-}" ]; then
@@ -130,7 +130,7 @@ for d in "$out"/packs/*/; do
 done
 
 # ------------------------------------------------------------------ 3. synthesize profiles
-# Real pack content (values, digests, packUids) wrapped in the API shapes palette-profile-diff
+# Real pack content (values, digests, packUids) wrapped in the API shapes strata
 # reads: V1ClusterProfile, V1ClusterProfilePacksManifests, V1Variables. The pack ref digest is
 # set from the registry pack digest; on a real profile Palette stamps that field itself.
 versions_of() { ls "$out/packs/$1" 2>/dev/null | grep -v '^_' | sed 's/\.json$//' | sort -V; }
@@ -149,7 +149,7 @@ write_profile() { # name version uid packfiles... (extra manifests/variables via
   jq -n --arg n "$pname" --arg v "$pver" --arg uid "$puid" --arg today "$today" --slurpfile pk "$dir/.packs.json" '
     ($pk[0]) as $packs |
     {apiVersion: "v1", kind: "ClusterProfile",
-     metadata: {name: $n, uid: $uid, labels: {"source": "palette-profile-diff examples", "built": $today}},
+     metadata: {name: $n, uid: $uid, labels: {"source": "strata examples", "built": $today}},
      spec: {version: $v,
             published: {cloudType: "aws", type: "cluster",
                         packs: [$packs[] | {name, layer, type, tag, version, packUid, registryUid,
@@ -195,9 +195,10 @@ p3=$(EXTRA_MANIFEST_PACK="${first_addon:-kubernetes}" \
      write_profile aws-pxk 1.1.1 64e0000000000000000000c3 "${NEWER[@]}")
 
 # ------------------------------------------------------------------ 4. snapshots and reports
-export PPD_QUIET=1
+export STRATA_QUIET=1
 for d in "$p1" "$p2" "$p3"; do
-  "$tool" snapshot --from-raw "$d" -o "$out/profiles/$(basename "$d").json"
+  # the ref is recorded in the snapshot; keep it relative so the files do not carry a machine path
+  "$tool" snapshot --from-raw "$d" "examples/profiles/raw/$(basename "$d")" -o "$out/profiles/$(basename "$d").json"
 done
 report() { # a b suffix extra-args...
   local a=$1 b=$2 suffix=$3; shift 3
