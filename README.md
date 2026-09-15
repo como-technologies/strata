@@ -1,11 +1,23 @@
 # strata
 
-A Spectro Cloud Palette cluster profile is a stack of layers. Strata records
-each published version of that stack and diffs two of them, saying *what
-kind* of change happened, not just that something did. One static Rust
-binary; the output is a colored terminal report, a markdown pull request
-comment, or a versioned, self-describing JSON document built for machine and
-AI consumption.
+A Spectro Cloud Palette cluster profile is a stack of layers: OS, Kubernetes,
+CNI, CSI, and add-ons, each a pack with a version, a digest, and its values.
+Strata treats every published version of that stack as an immutable release
+and makes it a thing a team can handle like any other build artifact:
+
+- **record** a published version as a snapshot: a Merkle root over the
+  layers, three hashes per layer for what it points at, what it contains, and
+  how it is configured, plus the canonical contents and the clusters using it
+- **compare** two versions and say *what kind* of change happened in each
+  layer and what it does to running clusters, not just that something changed
+- **verify** that a published version still matches its record, so
+  immutability is enforced by a tool and not by a sentence in a document
+
+Think of it as build, release, run: a pack is a build, a profile version is
+a release, and a cluster is a run. Strata is the record, the review, and the
+audit of the release. One static Rust binary; the output is a colored
+terminal report, a markdown pull request comment, or a versioned,
+self-describing JSON document built for machine and AI consumption.
 
 **Start here: [docs/walkthrough.md](docs/walkthrough.md)** shows a platform
 team using the tool through one release cycle: record a release, review a
@@ -34,10 +46,10 @@ from `~/.palette.env`.
 Each pack on a profile is a Merkle node with three sub-hashes, so a report can
 name which one moved:
 
-| flag       | hashed from                                                  | Palette concept                              | 12-factor reading                          |
+| flag       | hashed from                                                  | Palette concept                              | what it means for the release              |
 |------------|--------------------------------------------------------------|----------------------------------------------|--------------------------------------------|
 | `IDENTITY` | pack name, layer, type, tag, version, packUid, registryUid    | which pack version the layer references      | the release points at a different build    |
-| `UPSTREAM` | the `digest` on the profile's pack ref                        | pack content in the registry                 | the build changed under the same version, which the lifecycle outline forbids |
+| `UPSTREAM` | the `digest` on the profile's pack ref                        | pack content in the registry                 | the build changed under the same version, which a published build must never do |
 | `AUTHORED` | canonical values YAML, attached manifest contents, params     | the pack's values and manifests on the profile | release-level config                       |
 
 `node = sha256(identity + upstream + authored)`, and
@@ -46,21 +58,40 @@ the same root are the same release: exit 0 and `IDENTICAL`. Any difference
 exits 1. Errors exit 2. Profile variables are hashed separately; they are the
 per-deploy config interface, not part of any pack.
 
-## Where it sits in the lifecycle model
+## The way of working it supports
 
-The lifecycle outline (draft 0.1) treats a profile version as a *release*: a
-published definition artifact that is never changed after publication, with a
-build/test/sign/publish/record pipeline and a consumer check before end of
-life. In the pipeline prototype plan this tool is one of the scripts that
-`just` and CI both call:
+The team is adopting one way to describe everything Palette manages. There
+are two kinds of thing. A *definition* has a name and a version; it is
+published and never changed afterward. An *instance* is deployed, changes
+over time, and is reconciled to a definition. Packs and profiles are
+definitions; clusters are instances. Configuration that changes per
+deployment stays out of the build. A published artifact is immutable, and a
+tool enforces that, not a sentence in a document. Every level has an owner, a
+pipeline of build, test, sign, publish, and record, approval gates with named
+approvers and named evidence, and an end of life that checks for consumers
+before anything is deleted.
 
-| where                          | what                                                                     |
-|--------------------------------|--------------------------------------------------------------------------|
-| profile `pr`                   | `--format markdown` between the last published version and the candidate, posted as the PR comment: the named evidence at the gate |
-| profile `main` and `release`   | `snapshot` after each apply, kept as the record of the release           |
-| cluster `bump`                 | the diff between the tier's current and proposed profile versions, with the repave impact the reviewer needs |
-| scheduled                      | `verify` over every recorded snapshot: tools enforce immutability, not text |
-| before end of life             | `snapshot` and read `source.consumers`; delete only at zero               |
+The delivery pipeline that goes with it: one repository per pack, one per
+profile, one per cluster. Four tiers, dev, test, stage, and prod, each a
+Palette project and a deployment environment with its own reviewers. A merge
+to a profile repository publishes a new profile version to dev and never
+edits an existing one; a tag promotes that same version through the other
+tiers behind approval gates. When a pack is published, every profile that
+uses it gets a pull request that bumps the pin; when a profile version is
+published, every cluster that uses it gets one that bumps the tier.
+Everything is a script that a developer runs locally and CI runs the same
+way.
+
+Strata is one of those scripts. It supplies what that model asks for and
+Palette does not provide on its own:
+
+| moment                                   | what strata does                                                          |
+|------------------------------------------|---------------------------------------------------------------------------|
+| a profile bump is under review           | `compare --format markdown` between the last published version and the new one, posted on the pull request as the evidence the approver reads |
+| a profile version has just been published | `snapshot`, kept in the profile repository as the record of the release  |
+| a cluster tier is about to move          | `compare` between the tier's current and proposed versions, with the repave impact the reviewer needs |
+| on a schedule                            | `verify` over every recorded snapshot: the immutability rule, enforced     |
+| before end of life                       | `snapshot` and read `source.consumers`; delete only at zero               |
 
 The procedures, with commands and what each output means, are in
 [docs/walkthrough.md](docs/walkthrough.md).
@@ -183,9 +214,9 @@ policy, and exit codes.
 ## Known gaps
 
 - The `digest` Palette stamps on a profile's pack ref has not been checked
-  against a live profile to confirm it tracks registry content. The tenant
-  used on 2026-09-15 had no cluster profiles to look at. The snapshot records
-  which field fed `UPSTREAM` under `hash.upstreamSource`. For packs built by
+  against a live profile to confirm it tracks registry content; no tenant
+  with a cluster profile has been available. The snapshot records which field
+  fed `UPSTREAM` under `hash.upstreamSource`. For packs built by
   the pipeline, the OCI manifest digest in the immutable ECR repositories is
   the better source and is the planned replacement.
 - Only profiles are supported as refs. A cluster's applied profile templates

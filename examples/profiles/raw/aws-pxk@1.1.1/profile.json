@@ -5,8 +5,7 @@
     "name": "aws-pxk",
     "uid": "64e0000000000000000000c3",
     "labels": {
-      "source": "strata examples",
-      "built": "2026-09-15"
+      "source": "strata examples"
     }
   },
   "spec": {

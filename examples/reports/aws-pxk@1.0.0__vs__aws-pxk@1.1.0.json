@@ -5,7 +5,7 @@
     "version": "0.2.0",
     "impl": "rust"
   },
-  "generatedAt": "2026-09-15T19:17:54Z",
+  "generatedAt": "2026-09-15T19:19:16Z",
   "legend": {
     "identity": "The pack reference changed: name, layer, type, tag, version, packUid or registryUid. The release points at a different pack build.",
     "upstream": "The digest on the pack reference changed: pack content moved under the hood, possibly under the same version. Which field fed it is hash.upstreamSource in the snapshot.",
@@ -39,14 +39,13 @@
     "type": "cluster",
     "template": "published",
     "tags": {
-      "built": "2026-09-15",
       "source": "strata examples"
     },
     "consumers": {
       "clusters": [],
       "count": 0
     },
-    "fetchedAt": "2026-09-15T19:17:54Z"
+    "fetchedAt": "2026-09-15T19:19:16Z"
   },
   "b": {
     "ref": "examples/profiles/raw/aws-pxk@1.1.0",
@@ -57,14 +56,13 @@
     "type": "cluster",
     "template": "published",
     "tags": {
-      "built": "2026-09-15",
       "source": "strata examples"
     },
     "consumers": {
       "clusters": [],
       "count": 0
     },
-    "fetchedAt": "2026-09-15T19:17:54Z"
+    "fetchedAt": "2026-09-15T19:19:16Z"
   },
   "same": false,
   "rootA": "aee66c68d82976126ca3bec6fee4d8499816852e68e1d6c14f7b24d2f97b32a2",

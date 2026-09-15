@@ -5,7 +5,8 @@ Every command runs offline against the files in `examples/`. Build the tool
 first with `cargo build --release`. When you connect to Palette, replace the
 file paths with live refs: a profile uid or `<name>@<version>`.
 
-The cast, from the pipeline prototype plan:
+The cast. The team keeps one repository per pack, one per profile, and one
+per cluster, and runs four tiers that are each a Palette project:
 
 | thing              | name in this page                          |
 |--------------------|--------------------------------------------|
@@ -227,7 +228,7 @@ again, and compares roots.
 What you see when the rule held:
 
 ```
-OK: published version aws-pxk@1.1.1 is unchanged since 2026-09-15T17:51:21Z
+OK: published version aws-pxk@1.1.1 is unchanged since <recorded time>
 ```
 
 What you see when someone edited the published version in the Palette UI:
@@ -237,7 +238,7 @@ What you see when someone edited the published version in the Palette UI:
       values: 1 changed, 0 added, 0 removed
         ~ charts.cert-manager.replicaCount: 1 -> 2
       impact: in-place addon upgrade
-DRIFT: published version aws-pxk@1.1.1 differs from the copy recorded 2026-09-15T17:51:21Z
+DRIFT: published version aws-pxk@1.1.1 differs from the copy recorded <recorded time>
 ```
 
 What to do on `DRIFT`: open an issue with the report, and restore the rule.
@@ -266,18 +267,20 @@ Delete only when `count` is `0`. Any listed cluster uid must move to a newer
 version first. The nightly `verify` run refreshes this list, so the latest
 record is never older than a day.
 
-## The sandbox experiment from the lifecycle outline
+## Confirm how Palette treats an edit to a published version
 
-Section 14 of the outline lists a fact to confirm: what Palette does on an
-in-place edit to a published profile version. This is the procedure:
+One Palette behavior is still unconfirmed, and the nightly check depends on
+it: what happens when someone edits a published profile version in place.
+Confirm it in a sandbox tenant:
 
 1. `strata snapshot <profile>@<version> -o before.json`
 2. Edit one value of that version in the Palette UI and save.
 3. `strata verify before.json`
 
-Record the result in the outline. If `verify` exits `1`, Palette allowed the
-edit and the nightly job is the guard. If Palette created a new version
-instead, `verify` exits `0` and the new version shows up in the listing.
+Write the result down with the team's model notes. If `verify` exits `1`,
+Palette allowed the edit and the nightly job is the guard. If Palette created
+a new version instead, `verify` exits `0` and the new version shows up in the
+listing.
 
 ## Cheat sheet
 

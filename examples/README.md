@@ -1,8 +1,8 @@
 # Examples
 
 Real packs from Spectro Cloud's **Public Repo** registry at several versions, plus
-cluster profiles built from them so `strata` has something real to diff
-without touching a tenant.
+cluster profiles built from them so `strata` has real releases to record,
+compare, and verify without touching a tenant.
 
 ```
 examples/
@@ -35,7 +35,7 @@ The three profiles:
 | `aws-pxk@1.1.0`  | same packs, infra layers at the newest pulled version                     | `IDENTITY` and `UPSTREAM` moves, values diffs between real defaults |
 | `aws-pxk@1.1.1`  | same as 1.1.0 plus one attached manifest and one profile variable         | `AUTHORED` only, no pack change |
 
-## What was pulled (2026-09-15)
+## What was pulled
 
 Newest three versions of each pack in the Public Repo registry, values included:
 

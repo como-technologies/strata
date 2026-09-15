@@ -187,6 +187,5 @@
   },
   "dependencies": [],
   "manifests": [],
-  "fetched": "2026-09-15",
   "source": "GET /v1/packs?filters=spec.name=cni-cilium-oss and GET /v1/packs/cni-cilium-oss/registries/5eecc89d0b150045ae661cef, Spectro Cloud Public Repo"
 }

@@ -2,7 +2,7 @@
 name = "strata"
 version = "0.2.0"
 edition = "2021"
-description = "Merkle-style diff of Spectro Cloud Palette cluster profile versions"
+description = "Record, compare, and verify Spectro Cloud Palette cluster profile versions as immutable, layered releases"
 publish = false
 
 [dependencies]

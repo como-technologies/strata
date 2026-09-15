@@ -1,9 +1,12 @@
-//! strata: Merkle-style diff of Spectro Cloud Palette cluster profile versions.
+//! strata: record, compare, and verify Spectro Cloud Palette cluster profile versions as
+//! immutable, layered releases.
 //!
-//! Every pack on a profile gets three sub-hashes so a report names the kind of change:
-//! identity (which pack build the layer references), upstream (the digest Palette stamps on the
-//! pack ref), and authored (values, manifests, params). node = sha256(identity + upstream +
-//! authored); root = sha256(variablesHash, [key, node] in profile order).
+//! A profile is a stack of layers (packs). Every layer gets three sub-hashes so a report names the
+//! kind of change: identity (which pack build the layer references), upstream (the digest Palette
+//! stamps on the pack ref), and authored (values, manifests, params). node = sha256(identity +
+//! upstream + authored); root = sha256(variablesHash, [key, node] in profile order). A snapshot
+//! is the record of one published version; compare reads two records; verify checks a record
+//! against the live profile.
 
 mod api;
 mod canon;
@@ -31,8 +34,10 @@ const SUBCOMMANDS: &[&str] = &["compare", "snapshot", "verify", "schema", "help"
 #[command(
     name = TOOL_NAME,
     version,
-    about = "Merkle-style diff of Spectro Cloud Palette cluster profile versions",
-    long_about = "Compare two Palette cluster profile versions and say what kind of change happened.\n\n\
+    about = "Record, compare, and verify Palette cluster profile versions as immutable, layered releases",
+    long_about = "A Palette cluster profile is a stack of layers. Strata records each published version as a\n\
+snapshot, compares two versions and says what kind of change happened in each layer, and verifies\n\
+that a published version still matches its record.\n\n\
 Each pack gets three sub-hashes: IDENTITY (name, layer, type, tag, version, packUid, registryUid),\n\
 UPSTREAM (the digest on the pack ref) and AUTHORED (canonical values YAML, manifests, params).\n\
 A profile's root hash covers its variables and its packs in order; same root, same release.\n\n\
