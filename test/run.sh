@@ -7,6 +7,7 @@ tmp=$(mktemp -d "${TMPDIR:-/tmp}/ppd-test.XXXXXX")
 trap 'rm -rf "$tmp"' EXIT
 
 pass=0; fail=0
+ESC=$(printf '\033')
 check() { # name, shell condition
   if eval "$2"; then pass=$((pass + 1)); else fail=$((fail + 1)); echo "FAIL: $1"; fi
 }
@@ -61,6 +62,22 @@ check "variable added"                   'grep -q "+ db_password.name" "$tmp/dif
 set +e; "$tool" compare --full "$tmp/a.json" "$tmp/b.json" > "$tmp/full.txt"; set -e
 check "--full shows values unified diff"   'grep -q -- "--- a: addon/metrics-server values" "$tmp/full.txt" && grep -q -- "+      - --metric-resolution=15s" "$tmp/full.txt"'
 check "--full shows manifest unified diff" 'grep -q -- "--- a: addon/prometheus-operator manifest extra-rules" "$tmp/full.txt" && grep -q -- "+          for: 10m" "$tmp/full.txt"'
+
+# color: off when piped, on when forced, never in --json, and escapes are the only difference
+check "no escapes when piped"            '! grep -q "$ESC\[" "$tmp/diff.txt"'
+set +e; "$tool" compare --color=always "$tmp/a.json" "$tmp/b.json" > "$tmp/color.txt"; set -e
+check "--color=always emits escapes"     'grep -q "$ESC\[" "$tmp/color.txt"'
+check "colored report matches plain once stripped" '[ "$(sed "s/$ESC\[[0-9;]*m//g" "$tmp/color.txt")" = "$(cat "$tmp/diff.txt")" ]'
+set +e; "$tool" compare --color=never "$tmp/a.json" "$tmp/b.json" > "$tmp/nocolor.txt"; set -e
+check "--color=never emits none"         '! grep -q "$ESC\[" "$tmp/nocolor.txt"'
+set +e; CLICOLOR_FORCE=1 "$tool" compare "$tmp/a.json" "$tmp/b.json" > "$tmp/force.txt"; set -e
+check "CLICOLOR_FORCE turns color on"    'grep -q "$ESC\[" "$tmp/force.txt"'
+set +e; NO_COLOR=1 CLICOLOR_FORCE=1 "$tool" compare "$tmp/a.json" "$tmp/b.json" > "$tmp/nc.txt"; set -e
+check "NO_COLOR wins over CLICOLOR_FORCE" '! grep -q "$ESC\[" "$tmp/nc.txt"'
+set +e; "$tool" compare --color=always --json "$tmp/a.json" "$tmp/b.json" > "$tmp/cj.json"; set -e
+check "--json never colored"             '! grep -q "$ESC\[" "$tmp/cj.json" && [ "$(jq -r .same "$tmp/cj.json")" = false ]'
+set +e; "$tool" compare --color=bogus "$tmp/a.json" "$tmp/b.json" >/dev/null 2>"$tmp/err.txt"; rc=$?; set -e
+check "--color=bogus rejected (exit 2)"  '[ "$rc" -eq 2 ] && grep -q "auto, always, or never" "$tmp/err.txt"'
 
 # --json
 set +e; "$tool" compare --json "$tmp/a.json" "$tmp/b.json" > "$tmp/diff.json"; set -e

@@ -48,7 +48,7 @@ per-deploy config interface, not part of any pack.
 ## What the report means
 
 ```
-lab-profile@1.2.0 (64f000000000)  ->  lab-profile@1.3.0 (64f000000000)
+lab-profile@1.2.0 (64f0000000000000000000a1)  ->  lab-profile@1.3.0 (64f0000000000000000000b2)
 root       73c75fb7dba6 -> 3f25b888f168   CHANGED
 consumers  0 -> 2 clusters
 
@@ -82,6 +82,17 @@ exits 0; any difference exits 1; errors exit 2.
 `impact:` lines are hints derived from the layer and the flags. OS or
 Kubernetes identity changes mean a node repave; addon edits are in-place. They
 are not a Palette API answer.
+
+## Colors
+
+The report is colored when stdout is a terminal: repave impacts red,
+cluster-wide yellow, in-place cyan; added green, removed red, changed yellow;
+old values red and new values green; unchanged packs dimmed. Piped or
+redirected output is plain, which is why the example reports are plain.
+`--color=always` forces it (pipe into `less -R`), `--color=never` or
+`--no-color` disables it, and the `NO_COLOR` and `CLICOLOR_FORCE` environment
+conventions are honored. `--json` is never colored. With `--full`, the unified
+diffs use GNU diff's own coloring when it supports `--color`.
 
 ## Canonicalization
 

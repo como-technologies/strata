@@ -6,9 +6,9 @@
       "clusters": [],
       "count": 0
     },
-    "fetchedAt": "2026-09-15T17:12:43Z",
+    "fetchedAt": "2026-09-15T17:29:29Z",
     "name": "aws-pxk",
-    "ref": "/home/brett/repos/spectrocloud/profile-diff/examples/profiles/raw/aws-pxk@1.0.0",
+    "ref": "/home/brett/repos/spectrocloud/palette-profile-diff/examples/profiles/raw/aws-pxk@1.0.0",
     "tags": {
       "built": "2026-09-15",
       "source": "palette-profile-diff examples"
@@ -24,9 +24,9 @@
       "clusters": [],
       "count": 0
     },
-    "fetchedAt": "2026-09-15T17:12:44Z",
+    "fetchedAt": "2026-09-15T17:29:29Z",
     "name": "aws-pxk",
-    "ref": "/home/brett/repos/spectrocloud/profile-diff/examples/profiles/raw/aws-pxk@1.1.0",
+    "ref": "/home/brett/repos/spectrocloud/palette-profile-diff/examples/profiles/raw/aws-pxk@1.1.0",
     "tags": {
       "built": "2026-09-15",
       "source": "palette-profile-diff examples"

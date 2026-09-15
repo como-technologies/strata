@@ -21,6 +21,22 @@ PROG="${0##*/}"
 die() { printf '%s: %s\n' "$PROG" "$*" >&2; exit 2; }
 log() { [ -n "${PPD_QUIET:-}" ] || printf '%s\n' "$*" >&2; }
 
+# Color: --color=auto (default) means "stdout is a terminal", honoring NO_COLOR and CLICOLOR_FORCE.
+COLOR=auto
+ESC=$(printf '\033')
+set_color() {
+  case $1 in auto|always|never) COLOR=$1 ;; *) die "--color takes auto, always, or never" ;; esac
+}
+color_on() {
+  case $COLOR in always) return 0 ;; never) return 1 ;; esac
+  [ -n "${NO_COLOR:-}" ] && return 1
+  [ -n "${CLICOLOR_FORCE:-}" ] && return 0
+  [ -t 1 ]
+}
+paint() { # sgr-code text
+  if color_on; then printf '%s[%sm%s%s[0m' "$ESC" "$1" "$2" "$ESC"; else printf '%s' "$2"; fi
+}
+
 usage() {
   cat <<EOF
 $PROG $VERSION - diff two Palette cluster profiles, Merkle style
@@ -40,6 +56,9 @@ Usage:
 Options:
   --json       print the machine-readable diff instead of the text report
   --full       also print unified diffs of raw values and changed manifests
+  --color[=auto|always|never], --no-color
+               color the report; auto (default) colors only when stdout is a terminal
+               and honors NO_COLOR and CLICOLOR_FORCE
   -o FILE      write the snapshot to FILE instead of stdout
   --raw-dir D  save the raw API responses under D (profile/manifests/variables.json)
   --from-raw D build a snapshot from raw API responses saved under D (offline)
@@ -331,16 +350,28 @@ JQ
 
 # ---------------------------------------------------------------- jq: diff JSON -> text report
 JQ_RENDER=$(cat <<'JQ'
+def esc(code): if $color then $esc + "[" + code + "m" + . + $esc + "[0m" else . end;
+def bold: esc("1");      def dim: esc("2");
+def red: esc("31");      def green: esc("32");    def yellow: esc("33");
+def blue: esc("34");     def magenta: esc("35");  def cyan: esc("36");
+def bred: esc("1;31");   def bgreen: esc("1;32"); def byellow: esc("1;33");
+
 def short: if . == null or . == "" then "-" else .[0:12] end;
 def rank: ({"os": 0, "k8s": 1, "cni": 2, "csi": 3, "addon": 4}[.]) // 9;
 def rpad(n): tostring | if length >= n then . else . + (" " * (n - length)) end;
-def flags: [ (select(.identity) | "IDENTITY"), (select(.upstream) | "UPSTREAM"), (select(.authored) | "AUTHORED") ] | join(" ");
 def show: tojson | if length > 120 then .[0:100] + "... (\(length) chars, see --full)" else . end;
+def opmark: if . == "~" then ("~" | yellow) elif . == "+" then ("+" | green) elif . == "-" then ("-" | red) else . end;
+def flags: [ (select(.identity) | "IDENTITY" | blue), (select(.upstream) | "UPSTREAM" | magenta), (select(.authored) | "AUTHORED" | yellow) ] | join(" ");
 def vline:
-  "\(.op) \(.path)"
-  + (if .op == "~" then ": \(.old | show) -> \(.new | show)"
-     elif .op == "+" then ": \(.new | show)"
-     else ": \(.old | show)" end);
+  "\(.op | opmark) \(.path)"
+  + (if .op == "~" then ": \(.old | show | red) -> \(.new | show | green)"
+     elif .op == "+" then ": \(.new | show | green)"
+     else ": \(.old | show | red)" end);
+def impact:
+  if test("repave") then bred
+  elif test("cluster-wide") then yellow
+  elif test("in-place") then cyan
+  else dim end;
 
 def packline:
   (if .status == "added" then "+" elif .status == "removed" then "-" elif .status == "changed" then "~" else " " end) as $m
@@ -348,33 +379,36 @@ def packline:
      elif .status == "removed" then .a.version
      elif .identity and (.a.version != .b.version) then "\(.a.version) -> \(.b.version)"
      else .a.version end) as $ver
-  | (if .status == "added" then "ADDED"
-     elif .status == "removed" then "REMOVED"
-     elif .status == "unchanged" then "unchanged"
-     else flags end) as $st
-  | "\($m) [\(.layer | rpad(5))] \(.name | rpad(26)) \($ver | rpad(18)) \($st)";
+  | if .status == "unchanged" then
+      ("  [\(.layer | rpad(5))] \(.name | rpad(26)) \($ver | rpad(18)) unchanged" | dim)
+    else
+      (if .status == "added" then ("ADDED" | bgreen)
+       elif .status == "removed" then ("REMOVED" | bred)
+       else flags end) as $st
+      | "\($m | opmark) [\(.layer | rpad(5))] \(.name | rpad(26) | bold) \($ver | rpad(18)) \($st)"
+    end;
 
 def packdetail:
   (select(.upstream == true)
-     | "      upstream digest  \(.a.upstream | short) -> \(.b.upstream | short)   (\(.b.upstreamSource))"),
+     | "      upstream digest  \(.a.upstream | short | red) -> \(.b.upstream | short | green)   \("(\(.b.upstreamSource))" | dim)"),
   (select(.valuesChanged == true and ((.valuesDiff // []) | length) > 0)
      | "      values: \(.valuesDiff | map(select(.op == "~")) | length) changed, \(.valuesDiff | map(select(.op == "+")) | length) added, \(.valuesDiff | map(select(.op == "-")) | length) removed",
        (.valuesDiff[] | "        " + vline)),
   (select(.valuesChanged == true and .valuesTextOnly == true)
-     | "      values changed (not parseable as YAML on one side; use --full for a unified diff)"),
-  ((.manifests // [])[] | "      \(.op) manifest \(.name)"),
-  (select((.blast // "") != "") | "      impact: \(.blast)");
+     | ("      values changed (not parseable as YAML on one side; use --full for a unified diff)" | yellow)),
+  ((.manifests // [])[] | "      \(.op | opmark) manifest \(.name)"),
+  (select((.blast // "") != "") | "      impact: " + (.blast | impact));
 
 [
-  "\(.a.name)@\(.a.version) (\(.a.uid | short))  ->  \(.b.name)@\(.b.version) (\(.b.uid | short))",
-  "root       \(.rootA | short) -> \(.rootB | short)   \(if .same then "IDENTICAL" else "CHANGED" end)",
+  "\(.a.name | bold)@\(.a.version | bold) (\(.a.uid // "-" | dim))  ->  \(.b.name | bold)@\(.b.version | bold) (\(.b.uid // "-" | dim))",
+  "root       \(.rootA | short | dim) -> \(.rootB | short | dim)   \(if .same then ("IDENTICAL" | bgreen) else ("CHANGED" | bred) end)",
   "consumers  \(.a.consumers.count // 0) -> \(.b.consumers.count // 0) clusters",
   "",
-  "  variables \(if .variables.changed then "CHANGED" else "unchanged" end)",
+  "  variables \(if .variables.changed then ("CHANGED" | byellow) else ("unchanged" | dim) end)",
   (.variables.diff[] | "        " + vline),
   "",
   (.packs | sort_by([(.layer | rank), .name])[] | packline, packdetail),
-  (select(.orderChanged) | "", "  note: pack order changed between the two profiles")
+  (select(.orderChanged) | "", ("  note: pack order changed between the two profiles" | yellow))
 ] | .[]
 JQ
 )
@@ -438,18 +472,20 @@ cmd_snapshot() {
 
 full_diffs() { # snapA snapB diffJson
   local a=$1 b=$2 d=$3 key name
+  local -a dopt=(-u)
+  if color_on && diff --color=always /dev/null /dev/null >/dev/null 2>&1; then dopt+=(--color=always); fi
   jq -r '.packs[] | select(.status == "changed") | select(.valuesChanged or ((.manifests | length) > 0)) | .key' "$d" \
   | while IFS= read -r key; do
       if [ "$(jq -r --arg k "$key" '.packs[] | select(.key == $k) | .valuesChanged' "$d")" = true ]; then
         echo
-        diff -u --label "a: $key values" --label "b: $key values" \
+        diff "${dopt[@]}" --label "a: $key values" --label "b: $key values" \
           <(jq -r --arg k "$key" '.packs[] | select(.key == $k) | .values' "$a") \
           <(jq -r --arg k "$key" '.packs[] | select(.key == $k) | .values' "$b") || true
       fi
       jq -r --arg k "$key" '.packs[] | select(.key == $k) | .manifests[] | select(.op == "~") | .name' "$d" \
       | while IFS= read -r name; do
           echo
-          diff -u --label "a: $key manifest $name" --label "b: $key manifest $name" \
+          diff "${dopt[@]}" --label "a: $key manifest $name" --label "b: $key manifest $name" \
             <(jq -r --arg k "$key" --arg n "$name" '.packs[] | select(.key == $k) | .manifests[] | select(.name == $n) | .content' "$a") \
             <(jq -r --arg k "$key" --arg n "$name" '.packs[] | select(.key == $k) | .manifests[] | select(.name == $n) | .content' "$b") || true
         done
@@ -462,6 +498,9 @@ cmd_compare() {
     case $1 in
       --json) json=1; shift ;;
       --full) full=1; shift ;;
+      --color) set_color always; shift ;;
+      --color=*) set_color "${1#--color=}"; shift ;;
+      --no-color) set_color never; shift ;;
       -h|--help) usage; exit 0 ;;
       -*) die "unknown option: $1" ;;
       *) if [ -z "$a" ]; then a=$1; elif [ -z "$b" ]; then b=$1; else die "unexpected argument: $1"; fi; shift ;;
@@ -476,7 +515,7 @@ cmd_compare() {
   if [ -n "$json" ]; then
     cat "$d"
   else
-    jq -r "$JQ_RENDER" "$d"
+    jq -r --arg esc "$ESC" --argjson color "$(color_on && echo true || echo false)" "$JQ_RENDER" "$d"
     [ -n "$full" ] && full_diffs "$sa" "$sb" "$d"
   fi
   if [ "$(jq -r .same "$d")" = true ]; then return 0; else return 1; fi
@@ -490,6 +529,9 @@ cmd_verify() {
   while [ $# -gt 0 ]; do
     case $1 in
       --json) json=1; shift ;;
+      --color) set_color always; shift ;;
+      --color=*) set_color "${1#--color=}"; shift ;;
+      --no-color) set_color never; shift ;;
       -h|--help) usage; exit 0 ;;
       -*) die "unknown option: $1" ;;
       *) [ -z "$snap" ] || die "unexpected argument: $1"; snap=$1; shift ;;
@@ -504,10 +546,10 @@ cmd_verify() {
   name=$(jq -r '.source.name' "$snap"); ver=$(jq -r '.source.version' "$snap"); at=$(jq -r '.source.fetchedAt' "$snap")
   log "verifying $name@$ver ($uid) against live; recorded $at"
   if cmd_compare ${json:+--json} "$snap" "$uid"; then
-    [ -n "$json" ] || echo "OK: published version $name@$ver is unchanged since $at"
+    [ -n "$json" ] || echo "$(paint '1;32' OK): published version $name@$ver is unchanged since $at"
     return 0
   else
-    [ -n "$json" ] || echo "DRIFT: published version $name@$ver differs from the copy recorded $at"
+    [ -n "$json" ] || echo "$(paint '1;31' DRIFT): published version $name@$ver differs from the copy recorded $at"
     return 1
   fi
 }
