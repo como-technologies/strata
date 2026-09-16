@@ -30,7 +30,8 @@ Each pack gets three sub-hashes: IDENTITY (name, layer, type, tag, version, pack
 UPSTREAM (the digest on the pack ref) and AUTHORED (canonical values YAML, manifests, params).\n\
 A profile's root hash covers its variables and its packs in order; same root, same release.\n\n\
 Refs: a profile uid, <name>@<version>, <name>@latest (the highest version in the scope), or a\n\
-snapshot file written by `snapshot`.\n\
+snapshot file written by `snapshot`. A snapshot records the project it was taken in, and verify\n\
+checks it there unless --project says otherwise.\n\
 Environment: PALETTE_API_KEY (or SPECTROCLOUD_APIKEY), PALETTE_PROJECT_UID (optional),\n\
 PALETTE_API (default https://api.spectrocloud.com), STRATA_RETRIES (default 3; retries on HTTP 5xx,\n\
 429 and transport errors, with backoff). Missing values are read from ~/.palette.env.\n\n\
@@ -58,9 +59,10 @@ enum Cmd {
     Compare(CompareArgs),
     /// Fetch one profile and write its snapshot: Merkle root, per-pack hashes, canonical contents
     Snapshot(SnapshotArgs),
-    /// Re-fetch a snapshot's profile; exit 1 if the published version was edited in place
+    /// Re-fetch each record's profile; exit 1 if a published version was edited in place. Several
+    /// files or a pattern print one line per record and a summary
     Verify(VerifyArgs),
-    /// Print the JSON Schema of the snapshot or the diff document
+    /// Print the JSON Schema of the snapshot, diff, or verify-summary document
     Schema {
         #[arg(value_enum)]
         kind: SchemaKind,
@@ -148,8 +150,14 @@ struct SnapshotArgs {
 
 #[derive(Args)]
 struct VerifyArgs {
-    /// Snapshot file written earlier by `snapshot`
-    snapshot: PathBuf,
+    /// Snapshot files written earlier by `snapshot`. A quoted pattern such as 'releases/**/*.json'
+    /// is expanded by strata. One file prints the full report; more, or a pattern, print one line
+    /// per record and a summary
+    #[arg(required = true)]
+    snapshots: Vec<String>,
+    /// Check every record in this project instead of the project each record was taken in
+    #[arg(long)]
+    project: Option<String>,
     #[command(flatten)]
     out: OutputArgs,
 }
@@ -192,6 +200,7 @@ impl From<ColorArg> for ColorMode {
 enum SchemaKind {
     Snapshot,
     Diff,
+    VerifySummary,
 }
 
 fn main() -> ExitCode {
@@ -233,8 +242,12 @@ fn progress(quiet: bool) -> Progress {
     Progress::new(quiet || std::env::var_os("STRATA_QUIET").is_some())
 }
 
-fn connect(progress: Progress) -> Result<Palette<Retry<HttpApi>>> {
-    let config = Config::from_env()?;
+/// A client from the environment; `project` replaces `PALETTE_PROJECT_UID` when given.
+fn connect(progress: Progress, project: Option<&str>) -> Result<Palette<Retry<HttpApi>>> {
+    let mut config = Config::from_env()?;
+    if let Some(p) = project {
+        config.project_uid = Some(p.to_string());
+    }
     let policy = RetryPolicy::new(config.retries);
     Ok(Palette::new(Retry::new(
         HttpApi::new(config),
@@ -254,8 +267,18 @@ fn exit_for(same: bool) -> ExitCode {
 fn cmd_compare(a: &CompareArgs) -> Result<ExitCode> {
     let progress = a.out.progress();
     let now = now_utc();
-    let sa = ops::snapshot_for(&Ref::parse(&a.a), || connect(progress), &now, &progress)?;
-    let sb = ops::snapshot_for(&Ref::parse(&a.b), || connect(progress), &now, &progress)?;
+    let sa = ops::snapshot_for(
+        &Ref::parse(&a.a),
+        || connect(progress, None),
+        &now,
+        &progress,
+    )?;
+    let sb = ops::snapshot_for(
+        &Ref::parse(&a.b),
+        || connect(progress, None),
+        &now,
+        &progress,
+    )?;
     let d = ops::compare(&sa, &sb, &now);
     print!("{}", a.out.renderer().render(&d, &sa, &sb, a.full)?);
     Ok(exit_for(d.same))
@@ -275,7 +298,7 @@ fn cmd_snapshot(a: &SnapshotArgs) -> Result<ExitCode> {
                 message: "snapshot needs a profile ref or --from-raw DIR".to_string(),
             })?;
             let reference = Ref::parse(text);
-            let palette = connect(progress)?;
+            let palette = connect(progress, None)?;
             let uid = match &reference {
                 Ref::Snapshot(_) | Ref::Uid(_) => text.to_string(),
                 Ref::NameVersion { name, version } => palette.resolve(name, version)?,
@@ -284,7 +307,7 @@ fn cmd_snapshot(a: &SnapshotArgs) -> Result<ExitCode> {
             if let Some(dir) = &a.raw_dir {
                 raw.save_dir(dir)?;
             }
-            Snapshot::from_raw(&raw, text, &now)?
+            Snapshot::from_raw(&raw, text, &now)?.with_project(palette.project_uid())
         }
     };
     let text = snap.to_json(a.compact)?;
@@ -305,10 +328,59 @@ fn cmd_snapshot(a: &SnapshotArgs) -> Result<ExitCode> {
     Ok(ExitCode::SUCCESS)
 }
 
+fn is_pattern(s: &str) -> bool {
+    s.contains(['*', '?', '['])
+}
+
+/// The record files named by the arguments, with patterns expanded by strata so a quoted glob
+/// works from any shell or scheduler. A pattern that matches nothing is an error.
+fn expand_records(args: &[String]) -> Result<Vec<PathBuf>> {
+    let mut out = Vec::new();
+    for arg in args {
+        if !is_pattern(arg) {
+            out.push(PathBuf::from(arg));
+            continue;
+        }
+        let matches: Vec<PathBuf> = glob::glob(arg)
+            .map_err(|e| Error::Pattern {
+                pattern: arg.clone(),
+                message: format!("is not a valid pattern: {}", e.msg),
+            })?
+            .filter_map(std::result::Result::ok)
+            .filter(|p| p.is_file())
+            .collect();
+        if matches.is_empty() {
+            return Err(Error::Pattern {
+                pattern: arg.clone(),
+                message: "matched no files".to_string(),
+            });
+        }
+        out.extend(matches);
+    }
+    Ok(out)
+}
+
 fn cmd_verify(a: &VerifyArgs) -> Result<ExitCode> {
     let progress = a.out.progress();
-    let recorded = Snapshot::load(&a.snapshot)?;
-    let palette = connect(progress)?;
+    let paths = expand_records(&a.snapshots)?;
+    let bulk = a.snapshots.len() > 1 || a.snapshots.iter().any(|s| is_pattern(s));
+    if bulk {
+        let s = ops::verify_many(
+            &paths,
+            a.project.as_deref(),
+            |scope| connect(progress, scope),
+            &now_utc(),
+            &progress,
+        );
+        print!("{}", a.out.renderer().render_verify_summary(&s)?);
+        return Ok(ExitCode::from(s.exit_code()));
+    }
+    let recorded = Snapshot::load(&paths[0])?;
+    let scope = a
+        .project
+        .as_deref()
+        .or(Some(recorded.source.project_uid.as_str()).filter(|p| !p.is_empty()));
+    let palette = connect(progress, scope)?;
     let v = ops::verify(&recorded, &palette, &now_utc(), &progress)?;
     let renderer = a.out.renderer();
     print!("{}", renderer.render(&v.diff, &recorded, &v.live, false)?);
@@ -327,6 +399,7 @@ fn cmd_schema(kind: SchemaKind) -> Result<ExitCode> {
     let schema = match kind {
         SchemaKind::Snapshot => schemars::schema_for!(Snapshot),
         SchemaKind::Diff => schemars::schema_for!(diff::Diff),
+        SchemaKind::VerifySummary => schemars::schema_for!(ops::VerifySummary),
     };
     println!("{}", serde_json::to_string_pretty(&schema)?);
     Ok(ExitCode::SUCCESS)

@@ -60,9 +60,10 @@ most severe level as `maxImpact`.
 `strata snapshot` writes one JSON file per profile version. The schema id is
 `strata-snapshot/1`. The file holds:
 
-- `source`: the ref, the uid, the name, the version, the cloud type, the
-  profile type, the template that was used (`published` or `draft`), the
-  tags, the consumer clusters, and the fetch time
+- `source`: the ref, the uid, the project the snapshot was taken in (empty
+  for tenant scope), the name, the version, the cloud type, the profile type,
+  the template that was used (`published` or `draft`), the tags, the consumer
+  clusters, and the fetch time
 - `variables` and `variablesHash`
 - `packs[]`: for each pack, the identity fields, the two digests, the raw
   values, the canonical values, the values hash, the manifests with content

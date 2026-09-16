@@ -16,6 +16,7 @@ path = "src/main.rs"
 [dependencies]
 chrono = "0.4"
 clap = { version = "4", features = ["derive"] }
+glob = "0.3"
 hex = "0.4"
 schemars = "1"
 serde = { version = "1", features = ["derive"] }

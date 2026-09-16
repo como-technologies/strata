@@ -30,6 +30,7 @@ strata compare A B --format markdown            # the pull request comment
 strata compare A B --format json                # for scripts and AI clients
 strata snapshot my-profile@1.2.0 -o rel.json    # record a release
 strata verify rel.json                          # the immutability check
+strata verify 'releases/**/*.json'              # every record: one line each, one summary
 strata schema diff                              # JSON Schema of the diff document
 ```
 
@@ -44,7 +45,9 @@ status is `0` for identical or unchanged, `1` for different or drifted, and
 1. Run `cargo build --release`, or `just build`. The binary is
    `target/release/strata`.
 2. Set `PALETTE_API_KEY`.
-3. Set `PALETTE_PROJECT_UID` for project-scoped profiles.
+3. Set `PALETTE_PROJECT_UID` for project-scoped profiles. A snapshot records
+   the project it was taken in, and `verify` checks each record there, so a
+   scheduled job needs no per-project setup. `--project` overrides it.
 4. Set `PALETTE_API` for a self-hosted Palette. The default is
    `https://api.spectrocloud.com`.
 5. Set `STRATA_RETRIES` to change how many times a failed request is retried.

@@ -105,6 +105,38 @@ model can read it without these pages:
 The JSON is never colored and never truncated. `--compact` writes it on one
 line. `strata schema diff` prints the JSON Schema of the document.
 
+## The verify summary
+
+`strata verify` with several files, or with a quoted pattern such as
+`'releases/**/*.json'`, checks each record in the project it was taken in and
+prints one line per record and one line of counts:
+
+```
+OK     releases/1.1.1/dev.json   aws-pxk@1.1.1  unchanged since 2026-09-16T01:56:23Z
+DRIFT  releases/1.1.1/prod.json  aws-pxk@1.1.1  differs from the copy recorded 2026-09-16T02:10:41Z; max impact in-place, 1 packs changed
+ERROR  releases/1.0.0/dev.json   aws-pxk@1.0.0  GET /v1/clusterprofiles/64e0000000000000000000a1 failed with HTTP 404: {"code":"ResourceNotFound"}
+3 records: 1 unchanged, 1 drifted, 1 errors
+```
+
+A record that cannot be read or checked is an `ERROR` line; the other records
+are still checked. The exit status is `0` when every record is unchanged, `1`
+when any drifted, and `2` when any could not be checked. `--project` checks
+every record in one project instead. `--format markdown` writes the same
+lines as a table.
+
+`--format json` writes the document `strata-verify-summary/1`:
+
+- `legend.status` explains `unchanged`, `drifted`, and `error`.
+- `summary` gives `records`, `unchanged`, `drifted`, `errors`, and `status`,
+  which is the exit status in words.
+- `records[]` has one entry per file in the order given: `path`, `status`,
+  `name`, `version`, `uid`, `projectUid`, `recordedAt`, `rootRecorded`, and
+  `rootLive`. A drifted record adds `maxImpact`, `packsChanged`, and the full
+  `diff` document. A failed record adds the `error` object described below.
+
+`strata schema verify-summary` prints its JSON Schema. One file on its own
+prints the full report and verdict line described above.
+
 ### Errors in JSON mode
 
 When `--format json` or `--json` is selected and the command fails, stderr

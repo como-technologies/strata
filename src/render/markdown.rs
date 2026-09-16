@@ -1,12 +1,13 @@
 //! The pull request comment.
 
 use super::{
-    dash, plain_flags, short, show, traits_suffix, variable_lines, version_display, Renderer,
-    VarLine,
+    counts_line, dash, plain_flags, record_detail, record_label, short, show, traits_suffix,
+    variable_lines, version_display, Renderer, VarLine,
 };
 use crate::color::Paint;
 use crate::diff::{Diff, Leaf, Op, Status, Verify, VerifyStatus};
 use crate::error::Result;
+use crate::ops::{RecordStatus, VerifySummary};
 use crate::snapshot::{Snapshot, Source};
 
 /// Renders markdown for a pull request comment.
@@ -184,5 +185,25 @@ impl Renderer for MarkdownRenderer {
                 format!("\n**DRIFT**: published version `{name}@{ver}` differs from the copy recorded {at}")
             }
         })
+    }
+
+    fn render_verify_summary(&self, s: &VerifySummary) -> Result<String> {
+        let mut o = format!("### verify: {}\n\n", counts_line(s));
+        o.push_str("| status | record | profile | detail |\n|---|---|---|---|\n");
+        for r in &s.records {
+            let word = match r.status {
+                RecordStatus::Unchanged => "OK",
+                RecordStatus::Drifted => "DRIFT",
+                RecordStatus::Error => "ERROR",
+            };
+            o.push_str(&format!(
+                "| {word} | `{}` | `{}` | {} |\n",
+                escape(&r.path),
+                record_label(&r.name, &r.version),
+                escape(&record_detail(r))
+            ));
+        }
+        o.push('\n');
+        Ok(o)
     }
 }

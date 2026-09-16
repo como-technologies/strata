@@ -21,11 +21,20 @@ const LISTING: &str = "/v1/dashboard/clusterprofiles/metadata";
 pub trait PaletteApi {
     /// GET `path` (for example `/v1/clusterprofiles/{uid}`) and parse the body as JSON.
     fn get_json(&self, path: &str) -> Result<Value>;
+
+    /// The project the requests are scoped to, when they are; snapshots record it.
+    fn project_uid(&self) -> Option<&str> {
+        None
+    }
 }
 
 impl<A: PaletteApi + ?Sized> PaletteApi for &A {
     fn get_json(&self, path: &str) -> Result<Value> {
         (**self).get_json(path)
+    }
+
+    fn project_uid(&self) -> Option<&str> {
+        (**self).project_uid()
     }
 }
 
@@ -93,6 +102,10 @@ impl PaletteApi for HttpApi {
             path: path.to_string(),
             source,
         })
+    }
+
+    fn project_uid(&self) -> Option<&str> {
+        self.config.project_uid.as_deref()
     }
 }
 
@@ -201,6 +214,10 @@ impl<A: PaletteApi> PaletteApi for Retry<A> {
             }
         }
     }
+
+    fn project_uid(&self) -> Option<&str> {
+        self.inner.project_uid()
+    }
 }
 
 /// Canned responses keyed by path. Paths not registered answer 404.
@@ -210,6 +227,7 @@ pub struct MemoryApi {
     fail: HashMap<String, (u16, String)>,
     transient: RefCell<HashMap<String, Transient>>,
     calls: RefCell<HashMap<String, u32>>,
+    project_uid: Option<String>,
 }
 
 /// A failure that goes away after `remaining` calls.
@@ -276,6 +294,12 @@ impl MemoryApi {
     pub fn calls(&self, path: &str) -> u32 {
         self.calls.borrow().get(path).copied().unwrap_or(0)
     }
+
+    /// Report `uid` as the project scope, as the HTTP client does for `PALETTE_PROJECT_UID`.
+    pub fn in_project(mut self, uid: impl Into<String>) -> Self {
+        self.project_uid = Some(uid.into());
+        self
+    }
 }
 
 impl PaletteApi for MemoryApi {
@@ -306,6 +330,10 @@ impl PaletteApi for MemoryApi {
             body: r#"{"code":"ResourceNotFound"}"#.to_string(),
             retry_after: None,
         })
+    }
+
+    fn project_uid(&self) -> Option<&str> {
+        self.project_uid.as_deref()
     }
 }
 
@@ -375,6 +403,11 @@ impl<A: PaletteApi> Palette<A> {
     /// The underlying API.
     pub fn api(&self) -> &A {
         &self.api
+    }
+
+    /// The project the API is scoped to, if any; snapshots taken through it record this.
+    pub fn project_uid(&self) -> Option<&str> {
+        self.api.project_uid()
     }
 
     /// Find the uid of `name` at `version` in the current scope. The version [`LATEST`] picks

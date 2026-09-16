@@ -347,3 +347,128 @@ fn zero_retries_means_one_attempt() {
     assert_eq!(api.calls(&profile_path()), 1);
     assert!(slept.borrow().is_empty());
 }
+
+// ---- project scope and bulk verify ------------------------------------------------------------
+
+use std::path::PathBuf;
+
+use strata::ops::{RecordStatus, SummaryStatus};
+
+#[test]
+fn snapshot_for_records_the_project_scope_of_the_client() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let api = serve(MemoryApi::new(), dir.path(), "a", UID_A);
+    let scoped = ops::snapshot_for(
+        &Ref::Uid(UID_A.into()),
+        || Ok(Palette::new(api.clone().in_project("p1"))),
+        "t0",
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert_eq!(scoped.source.project_uid, "p1");
+    let tenant = ops::snapshot_for(
+        &Ref::Uid(UID_A.into()),
+        || Ok(Palette::new(api.clone())),
+        "t0",
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert_eq!(tenant.source.project_uid, "");
+    assert_eq!(
+        scoped.root, tenant.root,
+        "the scope is metadata, not part of the root"
+    );
+
+    // a record written before the field existed loads with an empty scope
+    let mut v: Value = serde_json::from_str(&scoped.to_json(true).unwrap()).unwrap();
+    v["source"]
+        .as_object_mut()
+        .unwrap()
+        .remove("projectUid")
+        .expect("the field is written");
+    let old = dir.path().join("old.json");
+    fs::write(&old, v.to_string()).unwrap();
+    assert_eq!(Snapshot::load(&old).unwrap().source.project_uid, "");
+}
+
+#[test]
+fn verify_many_checks_each_record_in_its_own_scope_and_counts_the_outcomes() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let base = ops::snapshot_from_dir(&dir.path().join("a"), "a", "t0").unwrap();
+    let write = |name: &str, snap: Snapshot| -> PathBuf {
+        let p = dir.path().join(name);
+        fs::write(&p, snap.to_json(true).unwrap()).unwrap();
+        p
+    };
+    let rec_p1 = write("p1.json", base.clone().with_project(Some("p1")));
+    let rec_p2 = write("p2.json", base.clone().with_project(Some("p2")));
+    let not_a_record = dir.path().join("a/profile.json");
+
+    // project p1 still serves A's content; in p2 the live object has B's content, an in-place edit
+    let live_p1 = serve(MemoryApi::new(), dir.path(), "a", UID_A);
+    let live_p2 = serve(MemoryApi::new(), dir.path(), "b", UID_A);
+    let scopes: RefCell<Vec<Option<String>>> = RefCell::new(Vec::new());
+    let connect = |project: Option<&str>| {
+        scopes.borrow_mut().push(project.map(str::to_string));
+        Ok(Palette::new(match project {
+            Some("p1") => live_p1.clone(),
+            _ => live_p2.clone(),
+        }))
+    };
+
+    let paths = [rec_p1.clone(), rec_p2.clone(), not_a_record.clone()];
+    let s = ops::verify_many(&paths, None, connect, "t1", &Progress::silent());
+    assert_eq!(s.schema, "strata-verify-summary/1");
+    let statuses: Vec<RecordStatus> = s.records.iter().map(|r| r.status).collect();
+    assert_eq!(
+        statuses,
+        vec![
+            RecordStatus::Unchanged,
+            RecordStatus::Drifted,
+            RecordStatus::Error
+        ]
+    );
+    assert_eq!(
+        (
+            s.summary.records,
+            s.summary.unchanged,
+            s.summary.drifted,
+            s.summary.errors
+        ),
+        (3, 1, 1, 1)
+    );
+    assert_eq!(s.summary.status, SummaryStatus::Error);
+    assert_eq!(s.exit_code(), 2, "an error outranks a drift");
+    assert_eq!(
+        *scopes.borrow(),
+        vec![Some("p1".to_string()), Some("p2".to_string())],
+        "one client per scope, and a file that is not a record never connects"
+    );
+    let drifted = &s.records[1];
+    assert_eq!(drifted.path, rec_p2.display().to_string());
+    assert_eq!(drifted.project_uid, "p2");
+    assert_eq!(drifted.max_impact, Some(strata::diff::ImpactLevel::Repave));
+    assert!(drifted
+        .diff
+        .as_ref()
+        .expect("a drifted record carries its diff")
+        .packs
+        .iter()
+        .any(|p| p.name == "kubernetes" && p.identity));
+    assert!(
+        s.records[0].diff.is_none(),
+        "an unchanged record carries no diff"
+    );
+    let failed = &s.records[2];
+    assert_eq!(failed.error.as_ref().unwrap()["kind"], "not-snapshot");
+    assert!(failed.name.is_empty());
+
+    // an explicit project overrides every recorded scope, so one client serves every record
+    scopes.borrow_mut().clear();
+    let s = ops::verify_many(&paths[..2], Some("p9"), connect, "t1", &Progress::silent());
+    assert_eq!(*scopes.borrow(), vec![Some("p9".to_string())]);
+    assert_eq!(s.summary.status, SummaryStatus::Drifted);
+    assert_eq!(s.exit_code(), 1);
+}

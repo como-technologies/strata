@@ -10,6 +10,7 @@ use serde_json::Value;
 use crate::color::Paint;
 use crate::diff::{Diff, Leaf, PackDiff, Status, VariableSummary, VariablesByName, Verify};
 use crate::error::Result;
+use crate::ops::VerifySummary;
 use crate::snapshot::{Snapshot, Source};
 
 pub use json::JsonRenderer;
@@ -38,6 +39,51 @@ pub trait Renderer {
     fn verdict(&self, _v: &Verify, _recorded: &Source) -> Option<String> {
         None
     }
+
+    /// Render the outcome of `verify` over several records.
+    fn render_verify_summary(&self, s: &VerifySummary) -> Result<String>;
+}
+
+/// `name@version`, or `-` when the record could not be read.
+pub(crate) fn record_label(name: &str, version: &str) -> String {
+    if name.is_empty() {
+        "-".to_string()
+    } else {
+        format!("{name}@{version}")
+    }
+}
+
+/// The sentence after a record's status.
+pub(crate) fn record_detail(r: &crate::ops::VerifiedRecord) -> String {
+    use crate::ops::RecordStatus;
+    match r.status {
+        RecordStatus::Unchanged => format!("unchanged since {}", r.recorded_at),
+        RecordStatus::Drifted => format!(
+            "differs from the copy recorded {}; max impact {}, {} packs changed",
+            r.recorded_at,
+            r.max_impact
+                .and_then(|l| serde_json::to_value(l).ok())
+                .and_then(|v| v.as_str().map(str::to_string))
+                .unwrap_or_default(),
+            r.packs_changed.unwrap_or(0)
+        ),
+        RecordStatus::Error => r
+            .error
+            .as_ref()
+            .and_then(|e| e.get("message"))
+            .and_then(Value::as_str)
+            .unwrap_or("could not be checked")
+            .to_string(),
+    }
+}
+
+/// `3 records: 2 unchanged, 1 drifted, 0 errors`.
+pub(crate) fn counts_line(s: &VerifySummary) -> String {
+    let c = &s.summary;
+    format!(
+        "{} records: {} unchanged, {} drifted, {} errors",
+        c.records, c.unchanged, c.drifted, c.errors
+    )
 }
 
 /// The renderer for a format.

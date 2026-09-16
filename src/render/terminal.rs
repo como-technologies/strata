@@ -1,9 +1,13 @@
 //! The terminal report: plain when piped, colored on a terminal.
 
-use super::{dash, short, show, traits_suffix, variable_lines, version_display, Renderer, VarLine};
+use super::{
+    counts_line, dash, record_detail, record_label, short, show, traits_suffix, variable_lines,
+    version_display, Renderer, VarLine,
+};
 use crate::color::Paint;
 use crate::diff::{Diff, ImpactLevel, Leaf, Op, PackDiff, Status, Verify, VerifyStatus};
 use crate::error::Result;
+use crate::ops::{RecordStatus, VerifySummary};
 use crate::snapshot::{Snapshot, Source};
 
 /// Renders the text report.
@@ -206,5 +210,26 @@ impl Renderer for TerminalRenderer {
                 p.bred("DRIFT")
             ),
         })
+    }
+
+    fn render_verify_summary(&self, s: &VerifySummary) -> Result<String> {
+        let p = &self.paint;
+        let mut out = String::new();
+        for r in &s.records {
+            let word = match r.status {
+                RecordStatus::Unchanged => p.bgreen("OK   "),
+                RecordStatus::Drifted => p.bred("DRIFT"),
+                RecordStatus::Error => p.byellow("ERROR"),
+            };
+            out.push_str(&format!(
+                "{word}  {}  {}  {}\n",
+                r.path,
+                p.bold(&record_label(&r.name, &r.version)),
+                record_detail(r)
+            ));
+        }
+        out.push_str(&counts_line(s));
+        out.push('\n');
+        Ok(out)
     }
 }

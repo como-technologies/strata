@@ -32,7 +32,8 @@ alias strata=target/release/strata
    `releases/<version>/<project>.json`, committed with the release. The
    `examples/profiles/` files stand in for these below.
 2. **Which project a command talks to.** Set `PALETTE_PROJECT_UID` to the
-   project before every live command. One project, one uid.
+   project before every live command. One project, one uid. The snapshot
+   records it, so `verify` later finds the project on its own.
 3. **Exit codes drive automation.** `0` means identical, or unchanged for
    `verify`. `1` means different, or drifted. `2` means the tool could not
    answer. Treat `2` as a failed job, never as "no change".
@@ -217,24 +218,29 @@ Trigger: a scheduled job.
 Who: the job, over every record in the repository.
 
 ```
-for f in releases/*/*.json; do
-  project=$(basename "$f" .json)
-  PALETTE_PROJECT_UID=$(project_uid_for "$project") strata verify "$f" --quiet || echo "DRIFT in $f"
-done
+strata verify 'releases/**/*.json' --format json > verify.json || echo "not clean"
 ```
 
-`project_uid_for` is the team's own lookup from a project name to its uid.
+What `verify` does: for each record it reads the uid and the project from
+the file, fetches that profile again in that project, and compares roots.
+The job needs one API key and nothing else. Exit `0` means every record is
+unchanged, `1` means at least one drifted, `2` means at least one could not
+be checked.
 
-What `verify` does: it reads the uid from the record, fetches that profile
-again, and compares roots.
-
-What you see when the rule held:
+What you see on the terminal, without `--format json`:
 
 ```
-OK: published version aws-pxk@1.1.1 is unchanged since <recorded time>
+OK     releases/1.1.1/dev.json   aws-pxk@1.1.1  unchanged since <recorded time>
+DRIFT  releases/1.1.1/prod.json  aws-pxk@1.1.1  differs from the copy recorded <recorded time>; max impact in-place, 1 packs changed
+2 records: 1 unchanged, 1 drifted, 0 errors
 ```
 
-What you see when someone edited the published version in the Palette UI:
+The JSON document carries the full comparison for each drifted record. To
+read one drifted record as a report, run `verify` on that file alone:
+
+```
+strata verify releases/1.1.1/prod.json
+```
 
 ```
 ~ [addon] cert-manager               1.21.1             AUTHORED
@@ -296,6 +302,7 @@ listing.
 | Record the newest published version                   | `strata snapshot <name>@latest -o rel.json`                       | written; `source.version` says which |                       |
 | Did dev and prod get the same release?                | `strata compare releases/V/dev.json releases/V/prod.json`         | yes                     | no, stop the promotion           |
 | Was a published version edited?                       | `strata verify releases/V/<project>.json`                         | unchanged               | drifted, open an issue           |
+| Were any published versions edited?                   | `strata verify 'releases/**/*.json'`                              | all unchanged           | some drifted; `2` means a record could not be checked |
 | Can we delete this version?                           | `strata snapshot <ref> \| jq .source.consumers.count`             | `0` means yes           |                                  |
 | What does the JSON mean?                              | `strata schema diff`                                              | prints the JSON Schema  |                                  |
 

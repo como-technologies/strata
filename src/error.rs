@@ -30,6 +30,14 @@ pub enum Error {
         /// The `Retry-After` header in whole seconds, when Palette sent one.
         retry_after: Option<u64>,
     },
+    /// A file pattern on the command line is invalid or matched nothing.
+    #[error("'{pattern}' {message}")]
+    Pattern {
+        /// The pattern as given.
+        pattern: String,
+        /// What is wrong with it.
+        message: String,
+    },
     /// A setting from the environment has a value strata cannot use.
     #[error("{variable}: expected {expected}, got '{value}'")]
     InvalidSetting {
@@ -118,6 +126,7 @@ impl Error {
             Error::MissingCredential { .. } => "missing-credential",
             Error::Api { .. } => "api",
             Error::InvalidSetting { .. } => "invalid-setting",
+            Error::Pattern { .. } => "pattern",
             Error::Transport { .. } => "transport",
             Error::NotJson { .. } => "not-json",
             Error::ProfileNotFound { .. } => "profile-not-found",
@@ -150,6 +159,9 @@ impl Error {
             } => {
                 m.insert("path".into(), Value::from(p.as_str()));
                 m.insert("status".into(), Value::from(*status));
+            }
+            Error::Pattern { pattern, .. } => {
+                m.insert("pattern".into(), Value::from(pattern.as_str()));
             }
             Error::InvalidSetting {
                 variable, value, ..
@@ -207,6 +219,10 @@ mod tests {
                 variable: "STRATA_RETRIES",
                 value: "lots".into(),
                 expected: "a whole number",
+            },
+            Error::Pattern {
+                pattern: "releases/**/*.json".into(),
+                message: "matched no files".into(),
             },
             Error::Transport {
                 path: "/v1/x".into(),
@@ -281,5 +297,6 @@ mod tests {
         assert_eq!(by_kind("snapshot-schema")["schema"], "strata-snapshot/1");
         assert_eq!(by_kind("invalid-setting")["variable"], "STRATA_RETRIES");
         assert_eq!(by_kind("invalid-setting")["value"], "lots");
+        assert_eq!(by_kind("pattern")["pattern"], "releases/**/*.json");
     }
 }

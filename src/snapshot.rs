@@ -57,6 +57,10 @@ pub struct Source {
     pub reference: String,
     /// Profile uid.
     pub uid: String,
+    /// The Palette project the snapshot was taken in; empty for tenant scope. `verify` checks the
+    /// record in this project unless told otherwise.
+    #[serde(default)]
+    pub project_uid: String,
     /// Profile name.
     pub name: String,
     /// Profile version string.
@@ -368,6 +372,7 @@ impl Snapshot {
         let source = Source {
             reference: reference.to_string(),
             uid: s(prof, "/metadata/uid"),
+            project_uid: String::new(),
             name: s(prof, "/metadata/name"),
             version: s(prof, "/spec/version"),
             cloud_type: s(prof, &format!("{tpl_ptr}/cloudType")),
@@ -411,6 +416,13 @@ impl Snapshot {
             packs,
             root,
         })
+    }
+
+    /// Record the project scope the snapshot was taken in; `None` is tenant scope. The scope is
+    /// metadata: it does not enter the root.
+    pub fn with_project(mut self, project_uid: Option<&str>) -> Snapshot {
+        self.source.project_uid = project_uid.unwrap_or("").to_string();
+        self
     }
 
     /// Read a snapshot file, checking its schema id.

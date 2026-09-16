@@ -375,8 +375,73 @@ fn bad_inputs_exit_two() {
 }
 
 #[test]
+fn verify_over_many_records_prints_one_line_each_and_a_summary_document() {
+    let fx = fixtures();
+    let home = tempfile::tempdir().unwrap();
+    let no_creds = [("HOME", home.path().to_str().unwrap())];
+    let clear = ["PALETTE_API_KEY", "SPECTROCLOUD_APIKEY"];
+    let r = run_in(&["verify", &fx.a, &fx.b], &no_creds, &clear);
+    assert_eq!(r.code, 2, "{}", r.err);
+    let lines: Vec<&str> = r.out.lines().collect();
+    assert_eq!(
+        lines.len(),
+        3,
+        "one line per record and one summary line:\n{}",
+        r.out
+    );
+    assert!(
+        lines[0].starts_with("ERROR") && lines[0].contains(&fx.a),
+        "{}",
+        lines[0]
+    );
+    assert!(
+        lines[1].starts_with("ERROR") && lines[1].contains("lab-profile@1.3.0"),
+        "{}",
+        lines[1]
+    );
+    assert!(
+        lines[2].contains("2 records") && lines[2].contains("2 errors"),
+        "{}",
+        lines[2]
+    );
+    assert!(
+        r.err.is_empty(),
+        "per-record errors live in the report, not on stderr: {}",
+        r.err
+    );
+
+    let r = run_in(
+        &["verify", "--format", "json", &fx.a, &fx.b],
+        &no_creds,
+        &clear,
+    );
+    assert_eq!(r.code, 2);
+    let d: serde_json::Value = serde_json::from_str(&r.out).unwrap();
+    assert_eq!(d["schema"], "strata-verify-summary/1");
+    assert_eq!(d["summary"]["records"], 2);
+    assert_eq!(d["summary"]["errors"], 2);
+    assert_eq!(d["summary"]["status"], "error");
+    assert_eq!(d["records"][0]["status"], "error");
+    assert_eq!(d["records"][0]["error"]["kind"], "missing-credential");
+    assert_eq!(d["records"][1]["name"], "lab-profile");
+    assert!(d["legend"]["status"]["drifted"].is_string());
+
+    // strata expands a quoted pattern itself, so any shell or scheduler can pass one
+    let dir = std::path::Path::new(&fx.a).parent().unwrap();
+    let pattern = format!("{}/*.json", dir.display());
+    let r = run_in(&["verify", "--json", &pattern], &no_creds, &clear);
+    let d: serde_json::Value = serde_json::from_str(&r.out).unwrap();
+    assert_eq!(d["summary"]["records"], 3, "a, a2 and b");
+    // a pattern that matches nothing is an error, never a silent success
+    let none = format!("{}/nothing-*.json", dir.display());
+    let r = run_in(&["verify", &none], &no_creds, &clear);
+    assert_eq!(r.code, 2);
+    assert!(r.err.contains("matched no files"), "{}", r.err);
+}
+
+#[test]
 fn schema_subcommand_prints_json_schema() {
-    for kind in ["snapshot", "diff"] {
+    for kind in ["snapshot", "diff", "verify-summary"] {
         let r = run(&["schema", kind]);
         assert_eq!(r.code, 0, "{}", r.err);
         let v: serde_json::Value = serde_json::from_str(&r.out).unwrap();
