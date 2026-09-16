@@ -245,11 +245,9 @@ run.
 
 - `UPSTREAM` comes from the digest Palette stamps on the pack ref. The live
   example showed it equal to the registry digest for `spectro` packs from the
-  Public Repo; Helm and OCI packs are unchecked. Reading the digest from the
-  pack's own registry is planned.
+  Public Repo. Helm and OCI packs are unchecked; if their pack-ref digests
+  turn out to differ, strata will read those from the registry instead.
 - A cluster snapshot records variable definitions, not the values a cluster
   was given.
-- Strata does not hash pack presets or the pack schema. A selected preset
-  shows as a values change.
 - The text reports truncate values longer than 120 characters. The JSON
   document and `--full` carry the full value.

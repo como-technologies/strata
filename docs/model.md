@@ -38,6 +38,18 @@ from the registry a day earlier. So `UPSTREAM` moves with the pack version's
 content, and the fallback order, pack-ref digest first and registry digest
 second, needs no change. Helm and OCI packs were not part of the run.
 
+### Pack schema and presets
+
+Strata hashes neither the pack schema nor the preset definitions, and it does
+not need to. Palette does not store them on a profile: in the live run, the
+pack refs and the manifests entries of a published profile carried no schema
+and no presets, although the registry lists 20 presets for `cni-cilium-oss`
+and 6 for `kubernetes`. They belong to the pack version in the registry, so a
+change to them under the same version is a change to the pack's content, and
+the pack-ref digest that feeds `UPSTREAM` tracks that content. A preset that a
+profile applies ends up in the pack's values, which `AUTHORED` covers. The
+hash scheme, and with it `strata-snapshot/1`, stays as it is.
+
 ### Editing a published version in place
 
 The same run edited version 1.0.1 of its profile in place through the API,

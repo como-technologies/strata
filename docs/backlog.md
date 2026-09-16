@@ -32,32 +32,28 @@ A cluster carries its applied profiles in the same shape strata already parses: 
 - [x] `strata schema snapshot` includes the new fields
 - [x] Walkthrough day 5 shows the real command and output
 
-## Read the UPSTREAM digest from the pack's registry
+## Confirm pack-ref digests for Helm and OCI packs
 
-labels: feature
+labels: investigation
 
 ### Background
 
-`UPSTREAM` today hashes the `digest` Palette stamps on the pack ref, with the registry summary digest as fallback (`Pack::from_api` in `src/snapshot.rs`, recorded in `hash.upstreamSource`). Both values come from Palette. For a pack in an OCI registry the authoritative fact is the manifest digest the registry itself reports for `<name>:<version>`. Reading it makes `UPSTREAM` independent of what Palette's field tracks (see the investigation issue) and turns "same version, different content" into a detected violation of the immutability rule, whichever registry holds the pack.
+`UPSTREAM` hashes the `digest` Palette stamps on each pack ref (`Pack::from_api` in `src/snapshot.rs`, recorded in `hash.upstreamSource`). The live example settled what that field tracks for `spectro` packs from a pack registry: it equals the digest the registry reports for the pack version (#3, `docs/model.md`). So strata does not need to read the digest from the registry for those packs, which was this issue's original plan.
 
-Palette knows several registry kinds: pack registries (`/v1/registries/pack`), OCI registries with `basic` or `ecr` authentication (`/v1/registries/oci`), and Helm registries. Strata must not assume any one of them, any registry product, or any cloud provider. The registry kind and endpoint come from the registry object the pack ref's `registryUid` points at. Credentials never come from Palette.
+Palette also pins packs from Helm registries and OCI registries (`/v1/registries/helm`, `/v1/registries/oci`), and the live run used neither. If Palette stamps those pack refs with something other than the registry's content digest, `UPSTREAM` would miss a change under the same version for them. Checking takes one profile, with no cluster.
 
 ### Plan
 
-1. `src/config.rs`: an `UpstreamSource` enum (`palette`, `registry`) selected by `--upstream-source`, default `palette`.
-2. `src/registry.rs`: a `Registry` trait with `content_digest(name, version) -> Result<String>`, one implementation per registry kind that exposes a content digest, and a `MemoryRegistry` for tests. OCI first: `HEAD /v2/<name>/manifests/<tag>` and the `Docker-Content-Digest` header, with basic auth or a bearer token from the standard token flow. A registry kind with no implementation is an error that names the kind, never a fallback.
-3. Endpoint and kind from `GET /v1/registries/metadata` and the registry object. Credentials from a Docker-style `config.json` keyed by registry host (`--registry-auth <file>`, default the Docker config path), so any login flow or credential helper works.
-4. `src/snapshot.rs`: when `registry` is selected, resolve each pack's `<host>/<name>:<version>` and set `hash.upstreamRaw` to the digest and `hash.upstreamSource` to `registry.digest`.
-5. Tests: `MemoryRegistry` returning two digests for the same tag across two snapshots; assert `UPSTREAM` only. A registry kind without an implementation is an error.
-6. `docs/model.md`: document the source order and the new value of `upstreamSource`.
+1. `examples/live/terraform`: an add-on profile version, attached to nothing, with one pack from a Helm registry and one from an OCI registry that the tenant can see.
+2. `examples/live/verify.sh`: snapshot it and add its packs to the digest table in `summary.md`, with each pack's registry kind.
+3. `docs/model.md`: state the result per registry kind under "What the pack-ref digest tracks".
+4. Only for a kind whose digests differ: read `UPSTREAM` from that registry instead, behind `--upstream-source registry`. OCI through `HEAD /v2/<name>/manifests/<tag>` and `Docker-Content-Digest`, credentials from a Docker-style `config.json`, and an unreadable registry an error with exit 2, never a fallback. Nothing may name a registry product or a cloud provider.
 
 ### Acceptance criteria
 
-- [ ] `strata snapshot <ref> --upstream-source registry` records `hash.upstreamSource = "registry.digest"` for every pack
-- [ ] Pushing the same version with different content to any OCI registry shows `UPSTREAM` with no `IDENTITY` or `AUTHORED`
-- [ ] A registry that cannot be reached, or a registry kind strata cannot read, is an error with exit 2, never a silent fallback
-- [ ] Nothing in the implementation names a registry product or a cloud provider
-- [ ] Tests cover both sources and the failure
+- [ ] The live example's summary shows the pack-ref and registry digests of a Helm pack and an OCI pack
+- [ ] `docs/model.md` states what the pack-ref digest tracks for each registry kind
+- [ ] Registry reading exists only for the kinds whose digests differ, with tests; or, if none differ, this issue closes with the evidence
 
 ## Confirm what Palette's pack-ref digest tracks
 
@@ -345,9 +341,9 @@ Strata does not hash pack presets or the pack schema. A selected preset shows as
 
 ### Acceptance criteria
 
-- [ ] `docs/model.md` states the rule for presets and schema
-- [ ] If the scheme changed, old snapshots still load and `compare` reports the schema mismatch clearly
-- [ ] The "Known limits" entry is removed
+- [x] `docs/model.md` states the rule for presets and schema
+- [x] If the scheme changed, old snapshots still load and `compare` reports the schema mismatch clearly
+- [x] The "Known limits" entry is removed
 
 ## Publish the library crate
 

@@ -423,6 +423,6 @@ the guard.
 
 ## What the tool does not do yet
 
-- Read the `UPSTREAM` digest from the pack's own registry. Today it comes
-  from the digest Palette stamps on the pack ref, which the live example
-  showed equal to the registry digest for `spectro` packs.
+- Confirm `UPSTREAM` for Helm and OCI packs. It comes from the digest
+  Palette stamps on the pack ref, which the live example showed equal to the
+  registry digest for `spectro` packs; Helm and OCI packs are unchecked.
