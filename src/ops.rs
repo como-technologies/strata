@@ -555,7 +555,7 @@ fn pair_reasons(d: &Diff, a: &Snapshot, b: &Snapshot, policy: Policy) -> (Vec<St
                 if pd.upstream && !pd.identity {
                     reasons.push(format!(
                         "pack {} UPSTREAM in the same registry: {} -> {}",
-                        pd.key, &x.hash.upstream_raw, &y.hash.upstream_raw
+                        pd.key, x.hash.upstream_raw, y.hash.upstream_raw
                     ));
                 }
             }
