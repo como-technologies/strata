@@ -893,7 +893,7 @@ fn consumers_lists_each_cluster_with_name_project_and_state_from_its_own_project
         .render_consumers(&r)
         .unwrap();
     assert!(
-        text.starts_with("lab-profile@1.3.0 (64f0000000000000000000b2): 2 consumers\n"),
+        text.starts_with("lab-profile@1.3.0 (uid 64f0000000000000000000b2): 2 consumers\n"),
         "{text}"
     );
     assert!(text.contains("alpha"), "{text}");
@@ -946,7 +946,7 @@ fn a_profile_without_consumers_exits_zero_and_fetches_no_cluster() {
         .unwrap();
     assert_eq!(
         text,
-        "lab-profile@1.2.0 (64f0000000000000000000a1): no consumers\n"
+        "lab-profile@1.2.0 (uid 64f0000000000000000000a1): no consumers\n"
     );
 }
 
@@ -1086,7 +1086,7 @@ fn list_names_each_profile_and_cluster_as_a_ref_in_sorted_order() {
     let text = render::renderer(Format::Terminal, Paint::off(), false)
         .render_list(&l)
         .unwrap();
-    assert!(text.starts_with("project lab (p1)\n"), "{text}");
+    assert!(text.starts_with("project lab (uid p1)\n"), "{text}");
     assert!(text.contains("\n3 profiles\n"), "{text}");
     assert!(text.contains("  lab-profile@1.10.0  u3  aws\n"), "{text}");
     assert!(

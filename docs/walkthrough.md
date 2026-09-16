@@ -179,7 +179,7 @@ variable. No pack version changes. The version becomes 1.1.1.
 Offline: `strata compare examples/profiles/aws-pxk@1.1.0.json examples/profiles/aws-pxk@1.1.1.json`
 
 ```
-aws-pxk@1.1.0 (64e0000000000000000000b2)  ->  aws-pxk@1.1.1 (64e0000000000000000000c3)
+aws-pxk@1.1.0 (uid 64e0000000000000000000b2)  ->  aws-pxk@1.1.1 (uid 64e0000000000000000000c3)
 root       8a8a64d3f95d -> 088136c929bd   CHANGED
 consumers  0 -> 0 clusters
 
@@ -270,7 +270,7 @@ PALETTE_PROJECT_UID=$PROD_PROJECT strata compare releases/1.1.0/prod.json cluste
 Offline: `strata compare examples/profiles/aws-pxk@1.1.0.json examples/clusters/workload-a.json`
 
 ```
-aws-pxk@1.1.0 (64e0000000000000000000b2)  ->  aws-pxk@1.1.0 on cluster workload-a (64e0000000000000000000d1)
+aws-pxk@1.1.0 (uid 64e0000000000000000000b2)  ->  aws-pxk@1.1.0 on cluster workload-a (uid 64e0000000000000000000d1)
 root       8a8a64d3f95d -> 8a8a64d3f95d   IDENTICAL
 ```
 
@@ -298,7 +298,7 @@ this cluster. The `-` lines are what the cluster does not have yet:
 Offline: `strata compare examples/profiles/aws-pxk@1.1.1.json examples/clusters/workload-a.json`
 
 ```
-aws-pxk@1.1.1 (64e0000000000000000000c3)  ->  aws-pxk@1.1.0 on cluster workload-a (64e0000000000000000000d1)
+aws-pxk@1.1.1 (uid 64e0000000000000000000c3)  ->  aws-pxk@1.1.0 on cluster workload-a (uid 64e0000000000000000000d1)
 root       088136c929bd -> 8a8a64d3f95d   CHANGED
 consumers  0 -> 0 clusters
 
@@ -381,7 +381,7 @@ cluster in its own project for its state. It needs a live tenant. What you
 see when two clusters still use it, and one cannot be read with this key:
 
 ```
-aws-pxk@1.0.0 (64e0000000000000000000a1): 2 consumers
+aws-pxk@1.0.0 (uid 64e0000000000000000000a1): 2 consumers
   workload-a  64f1000000000000000000e1  project 64f20000000000000000a0f1  Running
   workload-b  64f1000000000000000000e2  project 64f20000000000000000a0f1  unknown  (GET /v1/spectroclusters/64f1000000000000000000e2 failed with HTTP 403: ...)
 ```

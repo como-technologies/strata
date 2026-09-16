@@ -186,7 +186,7 @@ impl Renderer for TerminalRenderer {
         let p = &self.paint;
         let mut out: Vec<String> = Vec::new();
         out.push(format!(
-            "{} ({})  ->  {} ({})",
+            "{} (uid {})  ->  {} (uid {})",
             p.bold(&d.a.title()),
             p.dim(dash(d.a.shown_uid())),
             p.bold(&d.b.title()),

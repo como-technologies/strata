@@ -7,7 +7,7 @@ scripts and AI clients. `--json` is short for `--format json`.
 ## The terminal report
 
 ```
-lab-profile@1.2.0 (64f0000000000000000000a1)  ->  lab-profile@1.3.0 (64f0000000000000000000b2)
+lab-profile@1.2.0 (uid 64f0000000000000000000a1)  ->  lab-profile@1.3.0 (uid 64f0000000000000000000b2)
 root       73c75fb7dba6 -> d5c5d079f15f   CHANGED
 consumers  0 -> 2 clusters
 
@@ -178,7 +178,7 @@ and project are used, and the list is always fetched live. A cluster ref is
 an error.
 
 ```
-aws-pxk@1.0.0 (64e0000000000000000000a1): 2 consumers
+aws-pxk@1.0.0 (uid 64e0000000000000000000a1): 2 consumers
   workload-a  64f1000000000000000000e1  project 64f20000000000000000a0f1  Running
   workload-b  64f1000000000000000000e2  project -  unknown  (GET /v1/spectroclusters/64f1000000000000000000e2 failed with HTTP 404: ...)
 ```
@@ -201,7 +201,7 @@ every project the key can see. Name the kinds to list, such as
 kind, it lists profiles and clusters.
 
 ```
-project strata-test (6aaab0567993b0008ad902db)
+project strata-test (uid 6aaab0567993b0008ad902db)
 
 2 profiles
   strata-live-profile@1.0.0  6aaab2f6da23e353e96e8c69  aws
@@ -222,7 +222,7 @@ ref, so this is how to find the profile versions that carry one:
 
 ```
 $ strata list --pack cilium
-project strata-test (6aaab0567993b0008ad902db)
+project strata-test (uid 6aaab0567993b0008ad902db)
 
 2 profiles with a pack matching 'cilium'
   strata-live-profile@1.0.0  6aaab2f6da23e353e96e8c69  aws  cluster  1 consumer

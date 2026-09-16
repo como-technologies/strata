@@ -1,4 +1,4 @@
-aws-pxk@1.1.0 (64e0000000000000000000b2)  ->  aws-pxk@1.1.0 on cluster workload-a (64e0000000000000000000d1)
+aws-pxk@1.1.0 (uid 64e0000000000000000000b2)  ->  aws-pxk@1.1.0 on cluster workload-a (uid 64e0000000000000000000d1)
 root       8a8a64d3f95d -> 8a8a64d3f95d   IDENTICAL
 consumers  0 -> 0 clusters
 

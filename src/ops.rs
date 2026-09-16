@@ -123,7 +123,7 @@ pub fn verify<A: PaletteApi>(
         return Err(Error::NoUid);
     }
     progress.note(&format!(
-        "verifying {} ({uid}) against live; recorded {}",
+        "verifying {} (uid {uid}) against live; recorded {}",
         recorded.source.title(),
         recorded.source.fetched_at
     ));

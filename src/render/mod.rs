@@ -53,12 +53,12 @@ pub trait Renderer {
     fn render_list(&self, l: &Listing) -> Result<String>;
 }
 
-/// `project lab (p1)`, `project p1` when the name is unknown, or `tenant scope`.
+/// `project lab (uid p1)`, `project p1` when the name is unknown, or `tenant scope`.
 pub(crate) fn list_scope(l: &Listing) -> String {
     match (l.project_uid.as_str(), l.project_name.as_str()) {
         ("", _) => "tenant scope".to_string(),
         (uid, "") => format!("project {uid}"),
-        (uid, name) => format!("project {name} ({uid})"),
+        (uid, name) => format!("project {name} (uid {uid})"),
     }
 }
 
@@ -95,11 +95,11 @@ pub(crate) fn entry_error(error: Option<&Value>) -> Option<&str> {
     error.and_then(|e| e.get("message")).and_then(Value::as_str)
 }
 
-/// `lab-profile@1.3.0 (uid): 2 consumers`, or `...: no consumers`.
+/// `lab-profile@1.3.0 (uid <uid>): 2 consumers`, or `...: no consumers`.
 pub(crate) fn consumers_heading(r: &ConsumersReport) -> String {
     let count = consumer_count(r.count);
     format!(
-        "{}@{} ({}): {count}",
+        "{}@{} (uid {}): {count}",
         r.profile.name,
         r.profile.version,
         dash(&r.profile.uid)
