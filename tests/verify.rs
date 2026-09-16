@@ -156,3 +156,169 @@ fn raw_profile_from_directory_matches_the_api_path() {
     assert_eq!(from_raw.root, from_api.root);
     assert_eq!(from_api.source.consumers.count, 2);
 }
+
+// ---- retries ---------------------------------------------------------------------------------
+
+use std::cell::RefCell;
+use std::rc::Rc;
+use std::time::Duration;
+
+use strata::api::{PaletteApi, Retry, RetryPolicy};
+use strata::snapshot::Snapshot;
+
+/// A retrying wrapper over a borrowed API, with a recorder in place of `sleep`.
+fn retrying(api: &MemoryApi, retries: u32) -> (Retry<&MemoryApi>, Rc<RefCell<Vec<Duration>>>) {
+    let slept = Rc::new(RefCell::new(Vec::new()));
+    let s = slept.clone();
+    let retry = Retry::with_sleep(
+        api,
+        RetryPolicy::new(retries),
+        Progress::silent(),
+        move |d| s.borrow_mut().push(d),
+    );
+    (retry, slept)
+}
+
+fn profile_path() -> String {
+    format!("/v1/clusterprofiles/{UID_A}")
+}
+
+#[test]
+fn a_503_twice_then_success_yields_a_snapshot() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let api = serve(MemoryApi::new(), dir.path(), "a", UID_A).failing_n_times(
+        profile_path(),
+        2,
+        503,
+        "busy",
+    );
+    let (retry, slept) = retrying(&api, 3);
+    let snap = ops::snapshot_for(
+        &Ref::Uid(UID_A.into()),
+        || Ok(Palette::new(retry)),
+        "t0",
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert_eq!(snap.source.uid, UID_A);
+    assert_eq!(api.calls(&profile_path()), 3);
+    assert_eq!(
+        *slept.borrow(),
+        vec![Duration::from_secs(1), Duration::from_secs(2)],
+        "exponential backoff from one second"
+    );
+}
+
+#[test]
+fn a_permanent_500_fails_with_the_last_error_after_the_configured_attempts() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let api = serve(MemoryApi::new(), dir.path(), "a", UID_A).failing_n_times(
+        profile_path(),
+        99,
+        500,
+        "broken",
+    );
+    let (retry, slept) = retrying(&api, 3);
+    let palette = Palette::new(retry);
+    let err = palette
+        .fetch_profile(UID_A, &Progress::silent())
+        .unwrap_err();
+    assert!(matches!(err, Error::Api { status: 500, .. }), "{err}");
+    assert_eq!(err.exit_code(), 2);
+    assert_eq!(
+        api.calls(&profile_path()),
+        4,
+        "one attempt plus three retries"
+    );
+    assert_eq!(slept.borrow().len(), 3);
+}
+
+#[test]
+fn retry_after_is_honored_on_429() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let api = serve(MemoryApi::new(), dir.path(), "a", UID_A)
+        .failing_n_times(profile_path(), 1, 429, "slow down")
+        .with_retry_after(profile_path(), 2);
+    let (retry, slept) = retrying(&api, 3);
+    let raw = Palette::new(retry)
+        .fetch_profile(UID_A, &Progress::silent())
+        .unwrap();
+    assert!(Snapshot::from_raw(&raw, UID_A, "t0").is_ok());
+    assert_eq!(*slept.borrow(), vec![Duration::from_secs(2)]);
+}
+
+#[test]
+fn other_4xx_are_not_retried() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let api = serve(MemoryApi::new(), dir.path(), "a", UID_A).failing_n_times(
+        profile_path(),
+        5,
+        404,
+        "gone",
+    );
+    let (retry, slept) = retrying(&api, 3);
+    let err = Palette::new(retry)
+        .fetch_profile(UID_A, &Progress::silent())
+        .unwrap_err();
+    assert!(matches!(err, Error::Api { status: 404, .. }), "{err}");
+    assert_eq!(api.calls(&profile_path()), 1);
+    assert!(slept.borrow().is_empty());
+}
+
+/// Drops the connection `n` times, then delegates. Transport errors come from the network layer,
+/// so the in-memory API cannot produce them; any [`PaletteApi`] can sit under [`Retry`].
+struct Flaky<'a> {
+    inner: &'a MemoryApi,
+    drops: RefCell<u32>,
+}
+
+impl PaletteApi for Flaky<'_> {
+    fn get_json(&self, path: &str) -> strata::Result<Value> {
+        let mut left = self.drops.borrow_mut();
+        if *left > 0 {
+            *left -= 1;
+            return Err(Error::Transport {
+                path: path.to_string(),
+                message: "connection reset".into(),
+            });
+        }
+        self.inner.get_json(path)
+    }
+}
+
+#[test]
+fn transport_errors_are_retried() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let api = serve(MemoryApi::new(), dir.path(), "a", UID_A);
+    let flaky = Flaky {
+        inner: &api,
+        drops: RefCell::new(2),
+    };
+    let retry = Retry::with_sleep(flaky, RetryPolicy::new(2), Progress::silent(), |_| {});
+    assert!(Palette::new(retry)
+        .fetch_profile(UID_A, &Progress::silent())
+        .is_ok());
+}
+
+#[test]
+fn zero_retries_means_one_attempt() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let api = serve(MemoryApi::new(), dir.path(), "a", UID_A).failing_n_times(
+        profile_path(),
+        1,
+        503,
+        "busy",
+    );
+    let (retry, slept) = retrying(&api, 0);
+    assert!(Palette::new(retry)
+        .fetch_profile(UID_A, &Progress::silent())
+        .is_err());
+    assert_eq!(api.calls(&profile_path()), 1);
+    assert!(slept.borrow().is_empty());
+}

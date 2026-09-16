@@ -13,6 +13,8 @@ pub const DEFAULT_BASE_URL: &str = "https://api.spectrocloud.com";
 const KEY_VARS: [&str; 2] = ["PALETTE_API_KEY", "SPECTROCLOUD_APIKEY"];
 const URL_VARS: [&str; 2] = ["PALETTE_API", "SPECTROCLOUD_HOST"];
 const PROJECT_VARS: [&str; 1] = ["PALETTE_PROJECT_UID"];
+const RETRIES_VAR: &str = "STRATA_RETRIES";
+const DEFAULT_RETRIES: u32 = 3;
 
 /// Connection settings for one Palette tenant or project.
 #[derive(Debug, Clone)]
@@ -25,6 +27,8 @@ pub struct Config {
     pub project_uid: Option<String>,
     /// Per-request timeout.
     pub timeout: Duration,
+    /// Retries after a failed attempt on a transient error; `STRATA_RETRIES`, default 3.
+    pub retries: u32,
 }
 
 impl Config {
@@ -35,6 +39,7 @@ impl Config {
             base_url: normalize_url(base_url.into()),
             project_uid: None,
             timeout: Duration::from_secs(120),
+            retries: DEFAULT_RETRIES,
         }
     }
 
@@ -45,7 +50,7 @@ impl Config {
     }
 
     /// Read `PALETTE_API_KEY` (or `SPECTROCLOUD_APIKEY`), `PALETTE_API` (or `SPECTROCLOUD_HOST`),
-    /// and `PALETTE_PROJECT_UID` from the environment, then from `~/.palette.env`.
+    /// `PALETTE_PROJECT_UID`, and `STRATA_RETRIES` from the environment, then from `~/.palette.env`.
     pub fn from_env() -> Result<Self> {
         Self::from_lookup(|key| env_nonempty(key).or_else(|| dotenv_lookup(key)))
     }
@@ -60,6 +65,13 @@ impl Config {
         let base_url = first(&URL_VARS).unwrap_or_else(|| DEFAULT_BASE_URL.to_string());
         let mut cfg = Config::new(base_url, api_key);
         cfg.project_uid = first(&PROJECT_VARS);
+        if let Some(v) = lookup(RETRIES_VAR) {
+            cfg.retries = v.trim().parse().map_err(|_| Error::InvalidSetting {
+                variable: RETRIES_VAR,
+                value: v.clone(),
+                expected: "a whole number of retries",
+            })?;
+        }
         Ok(cfg)
     }
 }
@@ -141,6 +153,31 @@ mod tests {
         .unwrap();
         assert_eq!(cfg.base_url, DEFAULT_BASE_URL);
         assert_eq!(cfg.project_uid.as_deref(), Some("p1"));
+    }
+
+    #[test]
+    fn retries_default_to_three_and_read_strata_retries() {
+        let cfg = Config::from_lookup(lookup(&[("PALETTE_API_KEY", "k")])).unwrap();
+        assert_eq!(cfg.retries, 3);
+        let cfg = Config::from_lookup(lookup(&[("PALETTE_API_KEY", "k"), ("STRATA_RETRIES", "0")]))
+            .unwrap();
+        assert_eq!(cfg.retries, 0);
+        let err = Config::from_lookup(lookup(&[
+            ("PALETTE_API_KEY", "k"),
+            ("STRATA_RETRIES", "lots"),
+        ]))
+        .unwrap_err();
+        assert!(
+            matches!(
+                err,
+                Error::InvalidSetting {
+                    variable: "STRATA_RETRIES",
+                    ..
+                }
+            ),
+            "{err}"
+        );
+        assert!(err.to_string().contains("'lots'"));
     }
 
     #[test]

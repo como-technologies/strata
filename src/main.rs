@@ -6,7 +6,7 @@ use std::process::ExitCode;
 
 use clap::{Args, Parser, Subcommand, ValueEnum};
 
-use strata::api::{HttpApi, Palette};
+use strata::api::{HttpApi, Palette, Retry, RetryPolicy};
 use strata::color::{ColorMode, Paint};
 use strata::config::Config;
 use strata::error::{Error, Result};
@@ -31,7 +31,8 @@ UPSTREAM (the digest on the pack ref) and AUTHORED (canonical values YAML, manif
 A profile's root hash covers its variables and its packs in order; same root, same release.\n\n\
 Refs: a profile uid, <name>@<version>, or a snapshot file written by `snapshot`.\n\
 Environment: PALETTE_API_KEY (or SPECTROCLOUD_APIKEY), PALETTE_PROJECT_UID (optional),\n\
-PALETTE_API (default https://api.spectrocloud.com). Missing values are read from ~/.palette.env.\n\n\
+PALETTE_API (default https://api.spectrocloud.com), STRATA_RETRIES (default 3; retries on HTTP 5xx,\n\
+429 and transport errors, with backoff). Missing values are read from ~/.palette.env.\n\n\
 Exit status: 0 identical (verify: unchanged), 1 different (verify: drifted), 2 error."
 )]
 struct Cli {
@@ -231,8 +232,14 @@ fn progress(quiet: bool) -> Progress {
     Progress::new(quiet || std::env::var_os("STRATA_QUIET").is_some())
 }
 
-fn connect() -> Result<Palette<HttpApi>> {
-    Ok(Palette::new(HttpApi::new(Config::from_env()?)))
+fn connect(progress: Progress) -> Result<Palette<Retry<HttpApi>>> {
+    let config = Config::from_env()?;
+    let policy = RetryPolicy::new(config.retries);
+    Ok(Palette::new(Retry::new(
+        HttpApi::new(config),
+        policy,
+        progress,
+    )))
 }
 
 fn exit_for(same: bool) -> ExitCode {
@@ -246,8 +253,8 @@ fn exit_for(same: bool) -> ExitCode {
 fn cmd_compare(a: &CompareArgs) -> Result<ExitCode> {
     let progress = a.out.progress();
     let now = now_utc();
-    let sa = ops::snapshot_for(&Ref::parse(&a.a), connect, &now, &progress)?;
-    let sb = ops::snapshot_for(&Ref::parse(&a.b), connect, &now, &progress)?;
+    let sa = ops::snapshot_for(&Ref::parse(&a.a), || connect(progress), &now, &progress)?;
+    let sb = ops::snapshot_for(&Ref::parse(&a.b), || connect(progress), &now, &progress)?;
     let d = ops::compare(&sa, &sb, &now);
     print!("{}", a.out.renderer().render(&d, &sa, &sb, a.full)?);
     Ok(exit_for(d.same))
@@ -267,7 +274,7 @@ fn cmd_snapshot(a: &SnapshotArgs) -> Result<ExitCode> {
                 message: "snapshot needs a profile ref or --from-raw DIR".to_string(),
             })?;
             let reference = Ref::parse(text);
-            let palette = connect()?;
+            let palette = connect(progress)?;
             let uid = match &reference {
                 Ref::Snapshot(_) | Ref::Uid(_) => text.to_string(),
                 Ref::NameVersion { name, version } => palette.resolve(name, version)?,
@@ -300,7 +307,7 @@ fn cmd_snapshot(a: &SnapshotArgs) -> Result<ExitCode> {
 fn cmd_verify(a: &VerifyArgs) -> Result<ExitCode> {
     let progress = a.out.progress();
     let recorded = Snapshot::load(&a.snapshot)?;
-    let palette = connect()?;
+    let palette = connect(progress)?;
     let v = ops::verify(&recorded, &palette, &now_utc(), &progress)?;
     let renderer = a.out.renderer();
     print!("{}", renderer.render(&v.diff, &recorded, &v.live, false)?);

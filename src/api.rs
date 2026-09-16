@@ -1,9 +1,11 @@
 //! Access to the Palette API behind one trait, so that every operation can run against canned
 //! responses in tests and against HTTP in production.
 
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
+use std::time::Duration;
 
 use serde_json::Value;
 
@@ -17,7 +19,13 @@ pub trait PaletteApi {
     fn get_json(&self, path: &str) -> Result<Value>;
 }
 
-/// The HTTP implementation.
+impl<A: PaletteApi + ?Sized> PaletteApi for &A {
+    fn get_json(&self, path: &str) -> Result<Value> {
+        (**self).get_json(path)
+    }
+}
+
+/// The HTTP implementation. One attempt per call; wrap it in [`Retry`] for more.
 pub struct HttpApi {
     config: Config,
     agent: ureq::Agent,
@@ -51,6 +59,11 @@ impl PaletteApi for HttpApi {
             message: e.to_string(),
         })?;
         let status = resp.status().as_u16();
+        let retry_after = retry_after_seconds(
+            resp.headers()
+                .get("retry-after")
+                .and_then(|v| v.to_str().ok()),
+        );
         let body = resp
             .body_mut()
             .with_config()
@@ -69,6 +82,7 @@ impl PaletteApi for HttpApi {
                     .take(300)
                     .collect::<String>()
                     .replace('\n', " "),
+                retry_after,
             });
         }
         serde_json::from_str(&body).map_err(|source| Error::NotJson {
@@ -78,11 +92,129 @@ impl PaletteApi for HttpApi {
     }
 }
 
+/// `Retry-After` as whole seconds. The HTTP-date form is not supported and reads as absent.
+fn retry_after_seconds(header: Option<&str>) -> Option<u64> {
+    header.and_then(|h| h.trim().parse().ok())
+}
+
+/// How many times to retry a failed GET and how long to wait between attempts.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RetryPolicy {
+    /// Attempts after the first. Zero means one attempt.
+    pub retries: u32,
+    /// Wait before the first retry; each later wait doubles.
+    pub base_delay: Duration,
+    /// The longest computed wait. A `Retry-After` header is honored as sent.
+    pub max_delay: Duration,
+}
+
+impl RetryPolicy {
+    /// `retries` retries, starting at one second and capped at thirty.
+    pub fn new(retries: u32) -> Self {
+        RetryPolicy {
+            retries,
+            base_delay: Duration::from_secs(1),
+            max_delay: Duration::from_secs(30),
+        }
+    }
+
+    /// The wait before retry number `attempt` (zero-based), or the server's `Retry-After`.
+    pub fn delay(&self, attempt: u32, retry_after: Option<u64>) -> Duration {
+        match retry_after {
+            Some(secs) => Duration::from_secs(secs),
+            None => self
+                .base_delay
+                .saturating_mul(2u32.saturating_pow(attempt))
+                .min(self.max_delay),
+        }
+    }
+}
+
+/// Retries transient failures of any [`PaletteApi`]: HTTP 5xx, 429, and transport errors.
+/// Other errors return at once. Every retry is announced on [`Progress`].
+pub struct Retry<A> {
+    inner: A,
+    policy: RetryPolicy,
+    progress: Progress,
+    sleep: Box<dyn Fn(Duration)>,
+}
+
+impl<A: PaletteApi> Retry<A> {
+    /// Wrap `inner`, sleeping on the current thread between attempts.
+    pub fn new(inner: A, policy: RetryPolicy, progress: Progress) -> Self {
+        Self::with_sleep(inner, policy, progress, std::thread::sleep)
+    }
+
+    /// Wrap `inner` with a caller-supplied wait, so tests can record delays instead of sleeping.
+    pub fn with_sleep(
+        inner: A,
+        policy: RetryPolicy,
+        progress: Progress,
+        sleep: impl Fn(Duration) + 'static,
+    ) -> Self {
+        Retry {
+            inner,
+            policy,
+            progress,
+            sleep: Box::new(sleep),
+        }
+    }
+
+    /// The wrapped API.
+    pub fn inner(&self) -> &A {
+        &self.inner
+    }
+}
+
+fn is_transient(e: &Error) -> bool {
+    match e {
+        Error::Transport { .. } => true,
+        Error::Api { status, .. } => *status == 429 || (500..600).contains(status),
+        _ => false,
+    }
+}
+
+impl<A: PaletteApi> PaletteApi for Retry<A> {
+    fn get_json(&self, path: &str) -> Result<Value> {
+        let mut attempt = 0;
+        loop {
+            match self.inner.get_json(path) {
+                Ok(v) => return Ok(v),
+                Err(e) if attempt < self.policy.retries && is_transient(&e) => {
+                    let retry_after = match &e {
+                        Error::Api { retry_after, .. } => *retry_after,
+                        _ => None,
+                    };
+                    let delay = self.policy.delay(attempt, retry_after);
+                    attempt += 1;
+                    self.progress.note(&format!(
+                        "{e}; retry {attempt} of {} in {delay:?}",
+                        self.policy.retries
+                    ));
+                    (self.sleep)(delay);
+                }
+                Err(e) => return Err(e),
+            }
+        }
+    }
+}
+
 /// Canned responses keyed by path. Paths not registered answer 404.
 #[derive(Debug, Default, Clone)]
 pub struct MemoryApi {
     ok: HashMap<String, Value>,
     fail: HashMap<String, (u16, String)>,
+    transient: RefCell<HashMap<String, Transient>>,
+    calls: RefCell<HashMap<String, u32>>,
+}
+
+/// A failure that goes away after `remaining` calls.
+#[derive(Debug, Clone)]
+struct Transient {
+    remaining: u32,
+    status: u16,
+    body: String,
+    retry_after: Option<u64>,
 }
 
 impl MemoryApi {
@@ -107,21 +239,68 @@ impl MemoryApi {
         self.fail.insert(path.into(), (status, body.into()));
         self
     }
+
+    /// Answer `path` with an HTTP error `n` times, then with whatever else is registered.
+    pub fn failing_n_times(
+        self,
+        path: impl Into<String>,
+        n: u32,
+        status: u16,
+        body: impl Into<String>,
+    ) -> Self {
+        self.transient.borrow_mut().insert(
+            path.into(),
+            Transient {
+                remaining: n,
+                status,
+                body: body.into(),
+                retry_after: None,
+            },
+        );
+        self
+    }
+
+    /// Add a `Retry-After` of `seconds` to the transient failures registered for `path`.
+    pub fn with_retry_after(self, path: impl Into<String>, seconds: u64) -> Self {
+        if let Some(t) = self.transient.borrow_mut().get_mut(&path.into()) {
+            t.retry_after = Some(seconds);
+        }
+        self
+    }
+
+    /// How many times `path` was requested.
+    pub fn calls(&self, path: &str) -> u32 {
+        self.calls.borrow().get(path).copied().unwrap_or(0)
+    }
 }
 
 impl PaletteApi for MemoryApi {
     fn get_json(&self, path: &str) -> Result<Value> {
+        *self.calls.borrow_mut().entry(path.to_string()).or_insert(0) += 1;
+        if let Some(t) = self.transient.borrow_mut().get_mut(path) {
+            if t.remaining > 0 {
+                t.remaining -= 1;
+                return Err(Error::Api {
+                    path: path.to_string(),
+                    status: t.status,
+                    body: t.body.clone(),
+                    retry_after: t.retry_after,
+                });
+            }
+        }
         if let Some((status, body)) = self.fail.get(path) {
             return Err(Error::Api {
                 path: path.to_string(),
                 status: *status,
                 body: body.clone(),
+                retry_after: None,
             });
         }
         self.ok.get(path).cloned().ok_or_else(|| Error::Api {
             path: path.to_string(),
             status: 404,
             body: r#"{"code":"ResourceNotFound"}"#.to_string(),
+            retry_after: None,
         })
     }
 }
@@ -296,6 +475,27 @@ mod tests {
             r#"GET /v1/x failed with HTTP 401: {"code":"MissingAuthHeader"}"#
         );
         assert_eq!(err.exit_code(), 2);
+    }
+
+    #[test]
+    fn retry_after_header_parses_whole_seconds_only() {
+        assert_eq!(retry_after_seconds(Some("2")), Some(2));
+        assert_eq!(retry_after_seconds(Some(" 10 ")), Some(10));
+        assert_eq!(
+            retry_after_seconds(Some("Wed, 21 Oct 2015 07:28:00 GMT")),
+            None
+        );
+        assert_eq!(retry_after_seconds(None), None);
+    }
+
+    #[test]
+    fn retry_policy_backs_off_exponentially_up_to_the_maximum() {
+        let p = RetryPolicy::new(5);
+        assert_eq!(p.delay(0, None), Duration::from_secs(1));
+        assert_eq!(p.delay(1, None), Duration::from_secs(2));
+        assert_eq!(p.delay(2, None), Duration::from_secs(4));
+        assert_eq!(p.delay(9, None), p.max_delay);
+        assert_eq!(p.delay(0, Some(7)), Duration::from_secs(7));
     }
 
     #[test]

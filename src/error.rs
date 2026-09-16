@@ -27,6 +27,18 @@ pub enum Error {
         status: u16,
         /// The first part of the response body, one line.
         body: String,
+        /// The `Retry-After` header in whole seconds, when Palette sent one.
+        retry_after: Option<u64>,
+    },
+    /// A setting from the environment has a value strata cannot use.
+    #[error("{variable}: expected {expected}, got '{value}'")]
+    InvalidSetting {
+        /// The variable name.
+        variable: &'static str,
+        /// The value as given.
+        value: String,
+        /// What would have been accepted.
+        expected: &'static str,
     },
     /// The request did not complete.
     #[error("GET {path}: {message}")]
@@ -105,6 +117,7 @@ impl Error {
         match self {
             Error::MissingCredential { .. } => "missing-credential",
             Error::Api { .. } => "api",
+            Error::InvalidSetting { .. } => "invalid-setting",
             Error::Transport { .. } => "transport",
             Error::NotJson { .. } => "not-json",
             Error::ProfileNotFound { .. } => "profile-not-found",
@@ -119,7 +132,7 @@ impl Error {
     }
 
     /// The machine-readable form: `kind`, `message`, and the variant's own fields (`path`,
-    /// `status`, `name`, `version`, `schema`, `variable`, `alternate`) when it has them.
+    /// `status`, `name`, `version`, `schema`, `variable`, `alternate`, `value`) when it has them.
     pub fn to_json(&self) -> Value {
         let mut m = Map::new();
         m.insert("kind".into(), Value::from(self.kind()));
@@ -137,6 +150,12 @@ impl Error {
             } => {
                 m.insert("path".into(), Value::from(p.as_str()));
                 m.insert("status".into(), Value::from(*status));
+            }
+            Error::InvalidSetting {
+                variable, value, ..
+            } => {
+                m.insert("variable".into(), Value::from(*variable));
+                m.insert("value".into(), Value::from(value.as_str()));
             }
             Error::Transport { path: p, .. } | Error::NotJson { path: p, .. } => {
                 m.insert("path".into(), Value::from(p.as_str()));
@@ -182,6 +201,12 @@ mod tests {
                 path: "/v1/x".into(),
                 status: 503,
                 body: "busy".into(),
+                retry_after: Some(2),
+            },
+            Error::InvalidSetting {
+                variable: "STRATA_RETRIES",
+                value: "lots".into(),
+                expected: "a whole number",
             },
             Error::Transport {
                 path: "/v1/x".into(),
@@ -237,18 +262,24 @@ mod tests {
             assert_eq!(j["kind"], e.kind());
             assert_eq!(j["message"], e.to_string());
         }
-        let api = &one_of_each()[1];
-        assert_eq!(api.to_json()["status"], 503);
-        assert_eq!(api.to_json()["path"], "/v1/x");
-        let cred = &one_of_each()[0];
-        assert_eq!(cred.to_json()["variable"], "PALETTE_API_KEY");
-        assert_eq!(cred.to_json()["alternate"], "SPECTROCLOUD_APIKEY");
+        let by_kind = |k: &str| {
+            one_of_each()
+                .into_iter()
+                .find(|e| e.kind() == k)
+                .unwrap()
+                .to_json()
+        };
+        assert_eq!(by_kind("api")["status"], 503);
+        assert_eq!(by_kind("api")["path"], "/v1/x");
+        assert_eq!(by_kind("missing-credential")["variable"], "PALETTE_API_KEY");
         assert_eq!(
-            one_of_each()[5].to_json()["path"],
-            "profile.json",
-            "NotSnapshot exposes its path"
+            by_kind("missing-credential")["alternate"],
+            "SPECTROCLOUD_APIKEY"
         );
-        assert_eq!(one_of_each()[4].to_json()["name"], "aws-pxk");
-        assert_eq!(one_of_each()[6].to_json()["schema"], "strata-snapshot/1");
+        assert_eq!(by_kind("not-snapshot")["path"], "profile.json");
+        assert_eq!(by_kind("profile-not-found")["name"], "aws-pxk");
+        assert_eq!(by_kind("snapshot-schema")["schema"], "strata-snapshot/1");
+        assert_eq!(by_kind("invalid-setting")["variable"], "STRATA_RETRIES");
+        assert_eq!(by_kind("invalid-setting")["value"], "lots");
     }
 }

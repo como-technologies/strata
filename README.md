@@ -45,6 +45,10 @@ status is `0` for identical or unchanged, `1` for different or drifted, and
 3. Set `PALETTE_PROJECT_UID` for project-scoped profiles.
 4. Set `PALETTE_API` for a self-hosted Palette. The default is
    `https://api.spectrocloud.com`.
+5. Set `STRATA_RETRIES` to change how many times a failed request is retried.
+   The default is 3. Strata retries HTTP 5xx, 429, and transport errors with
+   a doubling wait from one second, and honors `Retry-After`. Other errors
+   are not retried.
 
 Strata reads values that are not in the environment from `~/.palette.env`.
 
