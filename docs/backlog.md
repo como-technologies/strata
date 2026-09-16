@@ -452,10 +452,10 @@ Teams that adopt candidate files start from profiles that are already published.
 
 ### Acceptance criteria
 
-- [ ] `strata candidate <record>.json -o profile.yaml` writes a file that `snapshot --from-candidate` turns into the record's root
-- [ ] `--files-dir` writes values and manifests to files and references them
-- [ ] The live example uses the command
-- [ ] After an in-place edit of the published version, `same-release` between the candidate's snapshot and the version fails and names the edited leaf
+- [x] `strata candidate <record>.json -o profile.yaml` writes a file that `snapshot --from-candidate` turns into the record's root
+- [x] `--files-dir` writes values and manifests to files and references them
+- [x] The live example uses the command
+- [x] After an in-place edit of the published version, `same-release` between the candidate's snapshot and the version fails and names the edited leaf
 
 ## Keep the project scope in raw directories
 
