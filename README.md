@@ -60,6 +60,13 @@ Targets: `x86_64-unknown-linux-musl`, `aarch64-unknown-linux-musl`,
 `aarch64-apple-darwin`, `x86_64-apple-darwin`. The Linux binaries have no
 shared library dependencies.
 
+While this repository is private, anonymous downloads fail. Download with an
+authenticated `gh` instead, then check and install as above:
+
+```
+gh release download $v --repo como-technologies/strata --pattern strata-$t --pattern SHA256SUMS
+```
+
 To check who built a file, verify its signature with
 [cosign](https://github.com/sigstore/cosign). The release workflow signs
 through its own identity, so the check pins the repository and the workflow:
