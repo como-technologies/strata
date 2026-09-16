@@ -2384,3 +2384,104 @@ fn a_candidate_stops_matching_a_version_edited_in_place_and_same_release_names_t
         "names the edited leaf: {reasons:?}"
     );
 }
+
+// ---- versions changed under the same uid ---------------------------------------------------------
+
+/// Fixture `name`'s three raw files under `uid`, with `edit` applied to the profile document.
+fn serve_edited(raw_root: &Path, name: &str, uid: &str, edit: impl Fn(&mut Value)) -> MemoryApi {
+    let mut profile = read(&raw_root.join(name).join("profile.json"));
+    edit(&mut profile);
+    serve(MemoryApi::new(), raw_root, name, uid).with(format!("/v1/clusterprofiles/{uid}"), profile)
+}
+
+#[test]
+fn verify_reports_a_version_overwritten_under_the_same_uid_even_when_the_root_matches() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let recorded = ops::snapshot_from_dir(&dir.path().join("a"), "a", "t0").unwrap();
+    assert_eq!(recorded.source.version, "1.2.0");
+    // a legacy version bump: the same uid and content, now called 1.2.1
+    let live = serve_edited(dir.path(), "a", UID_A, |p| {
+        p["spec"]["version"] = Value::from("1.2.1");
+    });
+
+    let v = ops::verify(
+        &recorded,
+        &Palette::new(live.clone()),
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert_eq!(v.live.root, recorded.root, "the content did not change");
+    assert!(!v.unchanged, "the recorded version no longer exists");
+    let ver = v.diff.verify.as_ref().unwrap();
+    assert_eq!(ver.status, VerifyStatus::Drifted);
+    assert_eq!(ver.overwritten_by.as_deref(), Some("lab-profile@1.2.1"));
+    let verdict = render::renderer(Format::Terminal, Paint::off(), false)
+        .verdict(ver, &recorded.source)
+        .unwrap();
+    assert!(
+        verdict.starts_with("DRIFT:") && verdict.contains("now names lab-profile@1.2.1"),
+        "{verdict}"
+    );
+
+    let path = dir.path().join("a.json");
+    fs::write(&path, recorded.to_json(true).unwrap()).unwrap();
+    let s = ops::verify_many(
+        &[path],
+        None,
+        |_| Ok(Palette::new(live.clone())),
+        "t1",
+        &Progress::silent(),
+    );
+    assert_eq!(
+        (s.records[0].status, s.exit_code()),
+        (RecordStatus::Drifted, 1)
+    );
+    let lines = render::renderer(Format::Terminal, Paint::off(), false)
+        .render_verify_summary(&s)
+        .unwrap();
+    assert!(lines.contains("now names lab-profile@1.2.1"), "{lines}");
+}
+
+#[test]
+fn compare_says_when_both_sides_are_one_profile_version_with_different_content() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let a = ops::snapshot_from_dir(&dir.path().join("a"), "a", "t0").unwrap();
+    // version a edited in place: same uid and version, b's kubernetes values
+    let edited = ops::snapshot_for(
+        &Ref::Uid(UID_A.into()),
+        || {
+            Ok(Palette::new(serve_edited(dir.path(), "a", UID_A, |p| {
+                p["spec"]["published"]["packs"][1]["values"] =
+                    Value::from("pack:\n  k8sHardening: false\n");
+            })))
+        },
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert_eq!(
+        (edited.source.uid.as_str(), edited.source.version.as_str()),
+        (a.source.uid.as_str(), a.source.version.as_str())
+    );
+    let d = ops::compare(&a, &edited, "t2");
+    assert!(!d.same);
+    assert!(d.edited_in_place, "one uid and version, two contents");
+    let text = render::renderer(Format::Terminal, Paint::off(), false)
+        .render(&d, &a, &edited, false)
+        .unwrap();
+    assert!(
+        text.contains("both sides are lab-profile@1.2.0 (uid 64f0000000000000000000a1): the version was edited in place"),
+        "{text}"
+    );
+    let md = render::renderer(Format::Markdown, Paint::off(), false)
+        .render(&d, &a, &edited, false)
+        .unwrap();
+    assert!(md.contains("the version was edited in place"), "{md}");
+
+    let b = ops::snapshot_from_dir(&dir.path().join("b"), "b", "t0").unwrap();
+    assert!(!ops::compare(&a, &b, "t2").edited_in_place, "two versions");
+    assert!(!ops::compare(&a, &a, "t2").edited_in_place, "same content");
+}

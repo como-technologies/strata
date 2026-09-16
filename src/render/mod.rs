@@ -159,6 +159,32 @@ pub(crate) fn record_label(name: &str, version: &str) -> String {
 }
 
 /// The sentence after a record's status.
+fn overwritten_by(r: &crate::ops::VerifiedRecord) -> Option<&str> {
+    r.diff
+        .as_ref()
+        .and_then(|d| d.verify.as_ref())
+        .and_then(|v| v.overwritten_by.as_deref())
+}
+
+/// `both sides are name@version (uid u): the version was edited in place`, for a diff whose sides
+/// name one profile version with different content.
+pub(crate) fn edited_in_place_note(d: &Diff) -> Option<String> {
+    d.edited_in_place.then(|| {
+        let clusters = d.a.cluster.is_some() || d.b.cluster.is_some();
+        format!(
+            "both sides are {}@{} (uid {}): the version was edited in place{}",
+            d.a.name,
+            d.a.version,
+            d.a.uid,
+            if clusters {
+                ", or changed on a cluster"
+            } else {
+                ""
+            }
+        )
+    })
+}
+
 fn record_values_changed(r: &crate::ops::VerifiedRecord) -> usize {
     r.cluster_variables.as_ref().map_or(0, |c| c.values.len())
 }
@@ -168,6 +194,12 @@ pub(crate) fn record_detail(r: &crate::ops::VerifiedRecord) -> String {
     match r.status {
         RecordStatus::Unchanged => format!(
             "unchanged since {}{}",
+            r.recorded_at,
+            values_changed_suffix(record_values_changed(r))
+        ),
+        RecordStatus::Drifted if overwritten_by(r).is_some() => format!(
+            "now names {}: the version recorded {} was overwritten in place{}",
+            overwritten_by(r).unwrap_or_default(),
             r.recorded_at,
             values_changed_suffix(record_values_changed(r))
         ),

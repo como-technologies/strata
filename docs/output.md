@@ -35,7 +35,10 @@ consumers  0 -> 2 clusters
 
 The first line names the two sides and their uids. A side taken from a
 cluster reads `name@version on cluster <name>` and shows the cluster uid. The second line shows
-the two roots and `IDENTICAL` or `CHANGED`. The third line shows the consumer
+the two roots and `IDENTICAL` or `CHANGED`. When both sides name the same
+profile uid and version and their roots still differ, a `note` line follows:
+`both sides are <name>@<version> (uid <uid>): the version was edited in place`.
+Between two clusters it adds `or changed on a cluster`. The third line shows the consumer
 counts. Then come the variables, in name order: one line for an added or
 removed variable with its traits (`required`, `sensitive`, `hidden`,
 `immutable`), and one line per changed field of a changed variable. When both
@@ -87,6 +90,8 @@ model can read it without these pages:
 - `schema`, `tool`, and `generatedAt` identify the document.
 - `legend` explains the three flags, each `status`, each `op`, and each
   impact level in plain sentences.
+- `editedInPlace` is true when both sides name the same profile uid and
+  version and their roots differ.
 - `summary` gives `packsAdded`, `packsRemoved`, `packsChanged`,
   `packsUnchanged`, `identityChanges`, `upstreamChanges`, `authoredChanges`,
   `variablesChanged`, and `maxImpact`.
@@ -113,7 +118,13 @@ model can read it without these pages:
   the path as a list: strings for keys, integers for indexes, and
   `{"name": ...}` for named list items.
 - `verify` is present after `strata verify`. It holds `status`, `uid`,
-  `recordedAt`, and `checkedAt`. For a cluster record, `clusterValuesChanged`
+  `recordedAt`, and `checkedAt`. For a profile record whose uid now names
+  another version, `overwrittenBy` holds that `name@version`: the recorded
+  version was overwritten in place, as a version bump without the provider's
+  `immutable-clusterprofiles` flag does, so the status is `drifted` even when
+  the roots match. The verdict reads `DRIFT: published version <name>@<version>
+  now names <name>@<new version>: the version recorded <time> was overwritten
+  in place`. For a cluster record, `clusterValuesChanged`
   counts the variable values that differ from the record.
 
 A cluster record whose root is unchanged but whose variable values differ is

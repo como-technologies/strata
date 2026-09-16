@@ -141,7 +141,12 @@ pub fn verify<A: PaletteApi>(
         None => Snapshot::from_raw(&palette.fetch_profile(uid, progress)?, uid, checked_at)?,
     }
     .with_project(palette.project_uid());
-    let unchanged = recorded.root == live.root;
+    let overwritten_by = (recorded.source.cluster.is_none()
+        && !live.source.version.is_empty()
+        && (&live.source.name, &live.source.version)
+            != (&recorded.source.name, &recorded.source.version))
+        .then(|| format!("{}@{}", live.source.name, live.source.version));
+    let unchanged = recorded.root == live.root && overwritten_by.is_none();
     let verify = Verify {
         status: if unchanged {
             VerifyStatus::Unchanged
@@ -151,6 +156,7 @@ pub fn verify<A: PaletteApi>(
         uid: uid.to_string(),
         recorded_at: recorded.source.fetched_at.clone(),
         checked_at: checked_at.to_string(),
+        overwritten_by,
         cluster_values_changed: 0,
     };
     let mut diff = diff::compute(recorded, &live, checked_at, Some(verify));

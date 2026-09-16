@@ -2,9 +2,9 @@
 
 use super::{
     chain_verdict, cluster_value, consumer_count, consumers_heading, counts_line, dash,
-    entry_error, list_count, list_scope, pack_version, pair_detail, pair_word, record_detail,
-    record_label, short, show, subject, traits_suffix, values_changed_suffix, variable_lines,
-    version_display, Renderer, VarLine,
+    edited_in_place_note, entry_error, list_count, list_scope, pack_version, pair_detail,
+    pair_word, record_detail, record_label, short, show, subject, traits_suffix,
+    values_changed_suffix, variable_lines, version_display, Renderer, VarLine,
 };
 use crate::color::Paint;
 use crate::diff::{
@@ -223,6 +223,9 @@ impl Renderer for TerminalRenderer {
                 p.bred("CHANGED")
             }
         ));
+        if let Some(note) = edited_in_place_note(d) {
+            out.push(format!("note       {}", p.byellow(&note)));
+        }
         out.push(format!(
             "consumers  {} -> {} clusters",
             d.a.consumers.count, d.b.consumers.count
@@ -271,11 +274,18 @@ impl Renderer for TerminalRenderer {
                 p.bgreen("OK"),
                 values_changed_suffix(v.cluster_values_changed)
             ),
-            VerifyStatus::Drifted => format!(
-                "{}: {what} differs from the copy recorded {at}{}",
-                p.bred("DRIFT"),
-                values_changed_suffix(v.cluster_values_changed)
-            ),
+            VerifyStatus::Drifted => match &v.overwritten_by {
+                Some(now) => format!(
+                    "{}: {what} now names {now}: the version recorded {at} was overwritten in place{}",
+                    p.bred("DRIFT"),
+                    values_changed_suffix(v.cluster_values_changed)
+                ),
+                None => format!(
+                    "{}: {what} differs from the copy recorded {at}{}",
+                    p.bred("DRIFT"),
+                    values_changed_suffix(v.cluster_values_changed)
+                ),
+            },
         })
     }
 

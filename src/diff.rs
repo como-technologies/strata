@@ -33,6 +33,10 @@ pub struct Diff {
     pub b: Source,
     /// True when the Merkle roots are equal: same release
     pub same: bool,
+    /// True when both sides name the same profile uid and version but their roots differ: the
+    /// version was edited in place, or, between two clusters, changed on one of them.
+    #[serde(default)]
+    pub edited_in_place: bool,
     /// Root of A.
     pub root_a: String,
     /// Root of B.
@@ -420,6 +424,11 @@ pub struct Verify {
     pub recorded_at: String,
     /// When the live profile was fetched.
     pub checked_at: String,
+    /// For a profile record whose uid now names another version: that `name@version`. The
+    /// recorded version was overwritten in place, so `status` is drifted even when the roots
+    /// match.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub overwritten_by: Option<String>,
     /// For a cluster record: how many values the cluster gives its variables differ from the
     /// record. They do not change `status`.
     #[serde(default, skip_serializing_if = "is_zero")]
@@ -980,6 +989,10 @@ pub fn compute(a: &Snapshot, b: &Snapshot, generated_at: &str, verify: Option<Ve
         a: a.source.clone(),
         b: b.source.clone(),
         same: a.root == b.root,
+        edited_in_place: a.root != b.root
+            && !a.source.uid.is_empty()
+            && a.source.uid == b.source.uid
+            && a.source.version == b.source.version,
         root_a: a.root.clone(),
         root_b: b.root.clone(),
         summary,
