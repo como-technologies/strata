@@ -430,10 +430,10 @@ A cluster snapshot records each applied profile's variable definitions and leave
 
 ### Acceptance criteria
 
-- [ ] A cluster snapshot records non-sensitive variable values outside the root; sensitive values appear in no document
-- [ ] Comparing two cluster snapshots with different values shows the changes and still reports equal roots when the release is the same
-- [ ] `strata schema snapshot` and `strata schema diff` include the new fields
-- [ ] `verify` on a cluster record names a variable value changed since the record was taken, and `docs/output.md` states whether that alone is `DRIFT`
+- [x] A cluster snapshot records non-sensitive variable values outside the root; sensitive values appear in no document
+- [x] Comparing two cluster snapshots with different values shows the changes and still reports equal roots when the release is the same
+- [x] `strata schema snapshot` and `strata schema diff` include the new fields
+- [x] `verify` on a cluster record names a variable value changed since the record was taken, and `docs/output.md` states whether that alone is `DRIFT`
 
 ## Write a candidate file from a published profile
 
