@@ -33,7 +33,9 @@ strata verify rel.json                          # the immutability check
 strata schema diff                              # JSON Schema of the diff document
 ```
 
-A ref is a profile uid, `<name>@<version>`, or a snapshot file. The exit
+A ref is a profile uid, `<name>@<version>`, or a snapshot file.
+`<name>@latest` is the highest version of that name in the scope, by natural
+order, so `22.04` is above `20.04` and `1.30.6` above `1.29.10`. The exit
 status is `0` for identical or unchanged, `1` for different or drifted, and
 `2` for an error.
 

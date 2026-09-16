@@ -12,6 +12,10 @@ use serde_json::Value;
 use crate::config::Config;
 use crate::error::{Error, Result};
 use crate::progress::Progress;
+use crate::reference::LATEST;
+use crate::version;
+
+const LISTING: &str = "/v1/dashboard/clusterprofiles/metadata";
 
 /// One GET of a JSON document from Palette. Implementations add authentication and scoping.
 pub trait PaletteApi {
@@ -373,11 +377,13 @@ impl<A: PaletteApi> Palette<A> {
         &self.api
     }
 
-    /// Find the uid of `name` at `version` in the current scope.
+    /// Find the uid of `name` at `version` in the current scope. The version [`LATEST`] picks
+    /// the highest version, see [`Palette::resolve_latest`].
     pub fn resolve(&self, name: &str, version: &str) -> Result<String> {
-        let listing = self
-            .api
-            .get_json("/v1/dashboard/clusterprofiles/metadata")?;
+        if version == LATEST {
+            return self.resolve_latest(name);
+        }
+        let listing = self.api.get_json(LISTING)?;
         listing
             .get("items")
             .and_then(Value::as_array)
@@ -392,6 +398,29 @@ impl<A: PaletteApi> Palette<A> {
             .ok_or_else(|| Error::ProfileNotFound {
                 name: name.to_string(),
                 version: version.to_string(),
+            })
+    }
+
+    /// Find the uid of the highest version of `name` in the current scope, by
+    /// [`version::compare`]. A name with no versions is [`Error::ProfileNotFound`].
+    pub fn resolve_latest(&self, name: &str) -> Result<String> {
+        let listing = self.api.get_json(LISTING)?;
+        listing
+            .get("items")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter(|it| it.pointer("/metadata/name").and_then(Value::as_str) == Some(name))
+            .filter_map(|it| {
+                let version = it.pointer("/spec/version")?.as_str()?;
+                let uid = it.pointer("/metadata/uid")?.as_str()?;
+                Some((version, uid))
+            })
+            .max_by(|(x, _), (y, _)| version::compare(x, y))
+            .map(|(_, uid)| uid.to_string())
+            .ok_or_else(|| Error::ProfileNotFound {
+                name: name.to_string(),
+                version: LATEST.to_string(),
             })
     }
 
@@ -445,6 +474,24 @@ mod tests {
         let err = p.resolve("aws-pxk", "9.9.9").unwrap_err();
         assert!(matches!(err, Error::ProfileNotFound { .. }));
         assert!(err.to_string().contains("'aws-pxk' with version '9.9.9'"));
+    }
+
+    #[test]
+    fn latest_resolves_to_the_highest_version_by_natural_order() {
+        let listing = json!({"items": [
+            {"metadata": {"name": "aws-pxk", "uid": "u1"}, "spec": {"version": "1.9.0"}},
+            {"metadata": {"name": "aws-pxk", "uid": "u2"}, "spec": {"version": "1.10.0"}},
+            {"metadata": {"name": "aws-pxk", "uid": "u0"}, "spec": {"version": "1.2.0"}},
+            {"metadata": {"name": "other", "uid": "u3"}, "spec": {"version": "9.0.0"}},
+        ]});
+        let p =
+            Palette::new(MemoryApi::new().with("/v1/dashboard/clusterprofiles/metadata", listing));
+        assert_eq!(p.resolve_latest("aws-pxk").unwrap(), "u2");
+        assert_eq!(p.resolve("aws-pxk", "latest").unwrap(), "u2");
+        let err = p.resolve_latest("nope").unwrap_err();
+        assert!(matches!(err, Error::ProfileNotFound { .. }), "{err}");
+        assert!(err.to_string().contains("'nope'"));
+        assert!(err.to_string().contains("'latest'"));
     }
 
     #[test]

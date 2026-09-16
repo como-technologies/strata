@@ -29,7 +29,8 @@ that a published version still matches its record.\n\n\
 Each pack gets three sub-hashes: IDENTITY (name, layer, type, tag, version, packUid, registryUid),\n\
 UPSTREAM (the digest on the pack ref) and AUTHORED (canonical values YAML, manifests, params).\n\
 A profile's root hash covers its variables and its packs in order; same root, same release.\n\n\
-Refs: a profile uid, <name>@<version>, or a snapshot file written by `snapshot`.\n\
+Refs: a profile uid, <name>@<version>, <name>@latest (the highest version in the scope), or a\n\
+snapshot file written by `snapshot`.\n\
 Environment: PALETTE_API_KEY (or SPECTROCLOUD_APIKEY), PALETTE_PROJECT_UID (optional),\n\
 PALETTE_API (default https://api.spectrocloud.com), STRATA_RETRIES (default 3; retries on HTTP 5xx,\n\
 429 and transport errors, with backoff). Missing values are read from ~/.palette.env.\n\n\
@@ -113,9 +114,9 @@ impl OutputArgs {
 
 #[derive(Args)]
 struct CompareArgs {
-    /// Profile uid, <name>@<version>, or snapshot file
+    /// Profile uid, <name>@<version> or <name>@latest, or snapshot file
     a: String,
-    /// Profile uid, <name>@<version>, or snapshot file
+    /// Profile uid, <name>@<version> or <name>@latest, or snapshot file
     b: String,
     /// Also print unified diffs of raw values and changed manifests
     #[arg(long)]
@@ -126,7 +127,7 @@ struct CompareArgs {
 
 #[derive(Args)]
 struct SnapshotArgs {
-    /// Profile uid or <name>@<version> (omit with --from-raw)
+    /// Profile uid, <name>@<version> or <name>@latest (omit with --from-raw)
     r#ref: Option<String>,
     /// Write the snapshot here instead of stdout
     #[arg(short, long)]

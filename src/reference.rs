@@ -3,16 +3,20 @@
 use std::fmt;
 use std::path::{Path, PathBuf};
 
+/// The version that stands for the highest published version of a name: `<name>@latest`.
+pub const LATEST: &str = "latest";
+
 /// A way to name a profile version on the command line.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Ref {
     /// A snapshot file written earlier by `snapshot`.
     Snapshot(PathBuf),
-    /// `<name>@<version>`, resolved through the dashboard listing.
+    /// `<name>@<version>`, resolved through the dashboard listing. The version [`LATEST`] picks
+    /// the highest version of that name in the scope, by natural order.
     NameVersion {
         /// Profile name.
         name: String,
-        /// Profile version string.
+        /// Profile version string, or [`LATEST`].
         version: String,
     },
     /// A profile uid.

@@ -144,6 +144,31 @@ fn snapshot_for_resolves_names_and_never_connects_for_files() {
     assert!(matches!(missing, Error::ProfileNotFound { .. }));
 }
 
+const UID_B: &str = "64f0000000000000000000b2";
+
+#[test]
+fn name_at_latest_records_the_resolved_version_and_keeps_latest_in_the_ref() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let listing = serde_json::json!({"items": [
+        {"metadata": {"name": "lab-profile", "uid": UID_B}, "spec": {"version": "1.3.0"}},
+        {"metadata": {"name": "lab-profile", "uid": UID_A}, "spec": {"version": "1.2.0"}},
+    ]});
+    let api = serve(MemoryApi::new(), dir.path(), "a", UID_A);
+    let api =
+        serve(api, dir.path(), "b", UID_B).with("/v1/dashboard/clusterprofiles/metadata", listing);
+    let snap = ops::snapshot_for(
+        &Ref::parse_with("lab-profile@latest", |_| false),
+        || Ok(Palette::new(api.clone())),
+        "t0",
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert_eq!(snap.source.reference, "lab-profile@latest");
+    assert_eq!(snap.source.version, "1.3.0");
+    assert_eq!(snap.source.uid, UID_B);
+}
+
 #[test]
 fn raw_profile_from_directory_matches_the_api_path() {
     let dir = tempfile::tempdir().unwrap();

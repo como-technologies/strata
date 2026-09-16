@@ -84,7 +84,9 @@ Strata reads these endpoints for one profile:
 - `GET /v1/clusterprofiles/{uid}/packs/manifests`: registry digests and
   manifest contents
 - `GET /v1/clusterprofiles/{uid}/variables`: profile variables
-- `GET /v1/dashboard/clusterprofiles/metadata`: resolves `<name>@<version>`
+- `GET /v1/dashboard/clusterprofiles/metadata`: resolves `<name>@<version>`,
+  and `<name>@latest` to the highest version by natural order: runs of digits
+  compare as numbers, the rest as text
 
 A profile without a published template falls back to its draft. The snapshot
 records the choice in `source.template`.

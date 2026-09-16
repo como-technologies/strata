@@ -3,7 +3,8 @@
 This page shows one platform team and one profile through a release cycle.
 Each command runs offline against the files in `examples/`. Build the tool
 first with `cargo build --release`. When you connect to Palette, replace the
-file paths with live refs: a profile uid or `<name>@<version>`.
+file paths with live refs: a profile uid, `<name>@<version>`, or
+`<name>@latest` for the highest version in the scope.
 
 The cast. The team in this page publishes its profile with Terraform. Strata
 does not know that and does not need to. The same commands work when a team
@@ -293,6 +294,7 @@ listing.
 | What does the approver need to see?                   | `strata compare A B --format markdown`                            | same                    | same                             |
 | Does this release repave nodes?                       | `strata compare A B --json \| jq -r .summary.maxImpact`           | prints the level        |                                  |
 | Record this release                                   | `strata snapshot <name>@<version> -o releases/<version>/<project>.json` | written           |                                  |
+| Record the newest published version                   | `strata snapshot <name>@latest -o rel.json`                       | written; `source.version` says which |                       |
 | Did dev and prod get the same release?                | `strata compare releases/V/dev.json releases/V/prod.json`         | yes                     | no, stop the promotion           |
 | Was a published version edited?                       | `strata verify releases/V/<project>.json`                         | unchanged               | drifted, open an issue           |
 | Can we delete this version?                           | `strata snapshot <ref> \| jq .source.consumers.count`             | `0` means yes           |                                  |

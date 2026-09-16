@@ -11,6 +11,7 @@
 //! - [`config`] and [`api`]: how to reach Palette. [`api::PaletteApi`] is the trait; [`api::HttpApi`]
 //!   talks HTTP and [`api::MemoryApi`] serves canned responses for tests.
 //! - [`reference`]: what a user-supplied ref means (snapshot file, `name@version`, uid).
+//! - [`version`]: natural ordering of version strings, behind `name@latest`.
 //! - [`canon`]: canonical form and hashing.
 //! - [`snapshot`]: the `strata-snapshot/1` document and how it is built from raw API responses.
 //! - [`diff`]: the `strata-diff/1` document, the leaf diff, and the impact rules.
@@ -29,6 +30,7 @@ pub mod progress;
 pub mod reference;
 pub mod render;
 pub mod snapshot;
+pub mod version;
 
 pub use error::{Error, Result};
 
