@@ -29,6 +29,7 @@ strata my-profile@1.2.0 my-profile@1.3.0        # compare two versions
 strata compare A B --format markdown            # the pull request comment
 strata compare A B --format json                # for scripts and AI clients
 strata snapshot my-profile@1.2.0 -o rel.json    # record a release
+strata snapshot --from-candidate my-profile.yaml -o candidate.json  # before it exists in Palette
 strata compare rel.json cluster:<uid>/my-profile  # does the cluster run that release?
 strata consumers my-profile@1.0.0               # which clusters still use it? exit 1 if any
 strata verify rel.json                          # the immutability check
@@ -116,7 +117,7 @@ release.
 
 | moment                              | what strata does                                                                 |
 |-------------------------------------|----------------------------------------------------------------------------------|
-| a profile change is under review    | `compare --format markdown` between the last published version and the new one. The comment is the evidence the approver reads. |
+| a profile change is under review    | `snapshot --from-candidate` on the file under review, then `compare --format markdown` against the last record. The comment is the evidence the approver reads, before anything is published. |
 | a profile version is published      | `snapshot`. Keep the file with the release.                                      |
 | a cluster is about to move versions | `compare` between the current and the proposed versions. The report shows the repave impact. |
 | a cluster should run its release    | `compare` between the record and `cluster:<uid>/<profile>`. `IDENTICAL` means the cluster runs what was released. |
@@ -212,7 +213,9 @@ request, and builds the Linux binary with the same step a release uses.
   live profile. No tenant with a cluster profile has been available. Each
   snapshot records which field fed `UPSTREAM` in `hash.upstreamSource`. The
   digest the pack's own registry reports is the better source, whichever
-  registry that is. It is the planned replacement.
+  registry that is. It is the planned replacement. A candidate snapshot uses
+  the registry digest, so its root equals the published version's only when
+  the two digests agree.
 - The cluster endpoints follow the Palette SDK models and have not been
   checked against a live cluster yet. A cluster snapshot records variable
   definitions, not the values a cluster was given.

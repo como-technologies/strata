@@ -12,6 +12,7 @@
 //!   talks HTTP and [`api::MemoryApi`] serves canned responses for tests.
 //! - [`reference`]: what a user-supplied ref means (snapshot file, `name@version`, uid).
 //! - [`version`]: natural ordering of version strings, behind `name@latest`.
+//! - [`candidate`]: a profile version described by a file, before it exists in Palette.
 //! - [`canon`]: canonical form and hashing.
 //! - [`snapshot`]: the `strata-snapshot/1` document and how it is built from raw API responses.
 //! - [`diff`]: the `strata-diff/1` document, the leaf diff, and the impact rules.
@@ -19,6 +20,7 @@
 //! - [`ops`]: the operations the CLI exposes, free of argument parsing and exit codes.
 
 pub mod api;
+pub mod candidate;
 pub mod canon;
 pub mod color;
 pub mod config;

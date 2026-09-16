@@ -94,6 +94,67 @@ Strata reads these endpoints for one profile:
 A profile without a published template falls back to its draft. The snapshot
 records the choice in `source.template`.
 
+## Candidates: the release before it exists
+
+At review time the new profile version is not in Palette yet. A candidate
+file describes it, and `strata snapshot --from-candidate <file>` builds its
+snapshot. Strata looks each pack up in its registry for what Palette fills in
+on publication, and builds the documents a published profile with that
+content returns. So the candidate hashes as the published version will, and
+`strata same-release candidate.json record.json` after publication proves
+that the approved release is the published one.
+
+The file is YAML or JSON. `strata schema candidate` prints its JSON Schema.
+
+```yaml
+name: aws-pxk
+version: 1.1.1
+type: cluster              # default cluster
+cloudType: aws
+registry: Public Repo      # or registryUid; a layer can override either
+layers:
+  - name: ubuntu-aws
+    version: "24.04"       # quote versions YAML would read as numbers
+  - name: kubernetes
+    version: 1.36.2
+    valuesFile: values/kubernetes.yaml   # relative to this file
+  - name: cert-manager
+    version: 1.21.1
+    manifests:
+      - name: namespace-labels
+        contentFile: manifests/namespace-labels.yaml
+variables:
+  - name: platform_owner
+    displayName: Platform owner
+    required: true
+```
+
+For each layer:
+
+- `name`, `version`, and a registry are required. The registry is `registry`
+  by name or `registryUid`, on the layer or at the top.
+- `values` inline or `valuesFile`, not both. With neither, the layer gets the
+  pack's default values from the registry.
+- `layer` defaults to the registry's. `tag` defaults to the tag equal to the
+  version, else the first tag of that version. An explicit `tag` must exist.
+- `params` is a map. `manifests[]` each have a `name` and `content` inline or
+  `contentFile`.
+
+Unknown fields are an error, so a misspelled `valuesfile` is not silently
+ignored. Problems in the file, and values or manifest files that cannot be
+read, are found before any request. The registry lookups are:
+
+- `GET /v1/registries/metadata`: a registry name to its uid
+- `GET /v1/packs?filters=spec.name=<name>`: the pack uid, digest, layer, type,
+  and default values of the version in that registry
+- `GET /v1/packs/<name>/registries/<uid>`: the tags of that version
+
+A version or tag the registry does not have is `pack-not-found`; a registry
+name that is not visible is `registry-not-found`. The snapshot has
+`source.template` `candidate` and no uid. The pack-ref digest of a published
+profile is not confirmed to equal the registry digest; until it is, a
+candidate's root can differ from the published root by `UPSTREAM` alone.
+
 ## Clusters: release versus run
 
 A cluster carries a copy of each profile version applied to it. Strata hashes

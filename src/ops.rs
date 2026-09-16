@@ -57,6 +57,27 @@ where
     }
 }
 
+/// Build a snapshot of a candidate file: read and check it (no network), then resolve its packs
+/// through the [`Palette`] that `connect` returns. The snapshot has `source.template` `candidate`
+/// and no uid.
+pub fn snapshot_from_candidate<A, F>(
+    path: &Path,
+    connect: F,
+    fetched_at: &str,
+    progress: &Progress,
+) -> Result<Snapshot>
+where
+    A: PaletteApi,
+    F: FnOnce() -> Result<Palette<A>>,
+{
+    let loaded = crate::candidate::load(path)?;
+    let palette = connect()?;
+    let raw = crate::candidate::resolve(&loaded, &palette, progress)?;
+    let mut snap = Snapshot::from_raw(&raw, &path.display().to_string(), fetched_at)?;
+    snap.source.template = crate::candidate::TEMPLATE.to_string();
+    Ok(snap.with_project(palette.project_uid()))
+}
+
 /// Build a snapshot from raw API responses saved on disk. A directory with `cluster.json` is a
 /// cluster's; a `reference` of the form `cluster:<uid>/<profile>` then selects the profile.
 pub fn snapshot_from_dir(dir: &Path, reference: &str, fetched_at: &str) -> Result<Snapshot> {

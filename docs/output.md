@@ -203,7 +203,8 @@ carries one line and the exit status is `2`, as always:
 
 `kind` is a stable kebab-case name: `missing-credential`, `api`,
 `invalid-setting`, `pattern`, `transport`, `not-json`, `profile-not-found`,
-`cluster-profile-not-found`, `profile-ref-required`, `not-snapshot`,
+`cluster-profile-not-found`, `profile-ref-required`, `candidate-invalid`,
+`pack-not-found`, `registry-not-found`, `not-snapshot`,
 `snapshot-schema`, `no-uid`,
 `io`, `empty-file`, `file-not-json`, or `serialize`. `message` is the
 sentence the terminal shows. The other fields are the variant's own:
@@ -217,6 +218,10 @@ sentence the terminal shows. The other fields are the variant's own:
 - `name` and `version` for `profile-not-found`
 - `cluster`, `profile`, and `applied` for `cluster-profile-not-found`
 - `reference` for `profile-ref-required`
+- `path` for `candidate-invalid`
+- `name`, `version`, `registry`, and `tag` when one was given, for
+  `pack-not-found`
+- `registry` and `available` for `registry-not-found`
 - `path` and `schema` for `snapshot-schema`
 
 Without JSON selected, stderr is the sentence prefixed with `strata:`.

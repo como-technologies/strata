@@ -600,12 +600,62 @@ fn consumers_refuses_a_cluster_ref_with_a_structured_error() {
 }
 
 #[test]
+fn snapshot_from_candidate_reports_local_problems_without_credentials() {
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join("profile.yaml");
+    std::fs::write(
+        &file,
+        "name: aws-pxk\nversion: 1.2.0\nregistry: Public Repo\nlayers:\n  - name: kubernetes\n    version: 1.36.2\n    valuesFile: values/k8s.yaml\n",
+    )
+    .unwrap();
+    let home = tempfile::tempdir().unwrap();
+    let r = run_in(
+        &["snapshot", "--from-candidate", file.to_str().unwrap()],
+        &[("HOME", home.path().to_str().unwrap())],
+        &["PALETTE_API_KEY", "SPECTROCLOUD_APIKEY"],
+    );
+    assert_eq!(r.code, 2);
+    assert!(
+        r.err.contains("values/k8s.yaml"),
+        "names the missing file, not the credential: {}",
+        r.err
+    );
+
+    let r = run(&[
+        "snapshot",
+        "--from-candidate",
+        file.to_str().unwrap(),
+        "--from-raw",
+        "x",
+    ]);
+    assert_eq!(
+        r.code, 2,
+        "a candidate and raw responses are two different sources"
+    );
+}
+
+#[test]
 fn schema_subcommand_prints_json_schema() {
-    for kind in ["snapshot", "diff", "verify-summary", "chain", "consumers"] {
+    for kind in [
+        "snapshot",
+        "diff",
+        "verify-summary",
+        "chain",
+        "consumers",
+        "candidate",
+    ] {
         let r = run(&["schema", kind]);
         assert_eq!(r.code, 0, "{}", r.err);
         let v: serde_json::Value = serde_json::from_str(&r.out).unwrap();
         assert!(v["$schema"].is_string());
+        if kind == "candidate" {
+            let layer = &v["$defs"]["CandidateLayer"]["properties"];
+            assert!(
+                layer["valuesFile"].is_object() && layer["tag"].is_object(),
+                "{v}"
+            );
+            continue;
+        }
         assert!(v["properties"]["schema"].is_object());
         if kind == "snapshot" {
             let cluster = &v["$defs"]["ClusterSource"]["properties"];

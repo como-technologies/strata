@@ -69,18 +69,44 @@ Do the same each time a version is published to another project:
 ## Day 2: a pack bump arrives
 
 Trigger: four infra packs have new versions. A pull request bumps the pins
-and sets `aws-pxk` to 1.1.0. It merges, and 1.1.0 is published to `dev`.
+in the team's candidate file for `aws-pxk` and sets the version to 1.1.0.
+Nothing is published yet.
 
-Who: the job that published it. It compares the previous record to the new
-version and posts the result on the merged pull request. `gh` is this team's
-code host CLI. Any host that renders markdown works.
+The candidate file names each layer's pack and version. A layer without
+values gets the pack's defaults. `docs/model.md` describes the format.
+
+```yaml
+name: aws-pxk
+version: 1.1.0
+cloudType: aws
+registry: Public Repo
+layers:
+  - name: ubuntu-aws
+    version: "24.04"
+  - name: kubernetes
+    version: 1.36.2
+  - name: cni-cilium-oss
+    version: 1.20.1
+  - name: csi-aws-ebs
+    version: 1.65.0
+  - name: cert-manager
+    version: 1.21.1
+```
+
+Who: the pull request job, before anyone approves. It builds the candidate's
+snapshot, compares it with the last record, and posts one comment with a
+`repave` label when the impact calls for it.
 
 ```
-PALETTE_PROJECT_UID=$DEV_PROJECT strata compare releases/1.0.0/dev.json aws-pxk@1.1.0 --format markdown > report.md
-gh pr comment "$PR" --body-file report.md
+strata snapshot --from-candidate aws-pxk.yaml -o candidate.json
+scripts/pr-comment.sh releases/1.0.0/dev.json candidate.json
 ```
 
 Offline: `strata compare examples/profiles/aws-pxk@1.0.0.json examples/profiles/aws-pxk@1.1.0.json --format markdown`
+
+A candidate snapshot needs the registry lookups, so the offline command
+compares the published example instead. It has the root the candidate
+produces.
 
 What the reviewer sees at the top of the comment:
 
@@ -106,11 +132,17 @@ changed value, for example `kubeadmconfig.dns.imageTag: "v1.13.1" ->
 The impact column is the sentence the approver needs. Two layers say
 `node repave`. This release replaces each node.
 
-Then record the new version, as on day 1:
+After approval the pull request merges and 1.1.0 is published to `dev`.
+Record it, as on day 1, and prove that what was published is what was
+approved, with the candidate rebuilt from the merged file:
 
 ```
 PALETTE_PROJECT_UID=$DEV_PROJECT strata snapshot aws-pxk@1.1.0 -o releases/1.1.0/dev.json
+strata snapshot --from-candidate aws-pxk.yaml -o candidate.json
+strata same-release candidate.json releases/1.1.0/dev.json
 ```
+
+`SAME RELEASE` means the published version is the one the reviewer saw.
 
 ### Let a script enforce a rule from the JSON
 
@@ -389,8 +421,6 @@ listing.
 
 ## What the tool does not do yet
 
-- Snapshot a candidate from local files before it is published. Today the
-  comparison runs after the version is published.
 - Read the `UPSTREAM` digest from the pack's own registry. Today it comes
   from the digest Palette stamps on the pack ref, which the team has not yet
   confirmed against a live profile.

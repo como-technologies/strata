@@ -985,3 +985,368 @@ fn consumers_takes_a_profile_and_refuses_a_cluster() {
     .unwrap();
     assert_eq!(r.profile.uid, UID_A);
 }
+
+// ---- candidates ------------------------------------------------------------------------------
+
+/// The registry endpoints strata reads for one pack, as the examples cached them from a live
+/// tenant: the version listing filtered by name, and the pack entity with its tags.
+fn serve_registry_pack(
+    api: MemoryApi,
+    name: &str,
+    summaries: Value,
+    entity: Value,
+    registry: &str,
+) -> MemoryApi {
+    let count = summaries.as_array().map(Vec::len).unwrap_or(0);
+    api.with(
+        format!("/v1/packs?filters=spec.name={name}&limit=100&offset=0"),
+        serde_json::json!({"items": summaries, "listmeta": {"count": count}}),
+    )
+    .with(format!("/v1/packs/{name}/registries/{registry}"), entity)
+}
+
+fn write_yaml(path: &Path, doc: &Value) {
+    fs::write(path, serde_yaml::to_string(doc).unwrap()).unwrap();
+}
+
+fn never_connect() -> strata::Result<Palette<MemoryApi>> {
+    panic!("local errors are found before connecting")
+}
+
+#[test]
+fn a_candidate_built_from_real_registry_responses_has_the_root_of_the_published_profile() {
+    let examples = Path::new(env!("CARGO_MANIFEST_DIR")).join("examples");
+    let dir = tempfile::tempdir().unwrap();
+    for version in ["1.0.0", "1.1.0", "1.1.1"] {
+        let raw = examples
+            .join("profiles/raw")
+            .join(format!("aws-pxk@{version}"));
+        let profile = read(&raw.join("profile.json"));
+        let manifests = read(&raw.join("manifests.json"));
+        let registry = profile["spec"]["published"]["packs"][0]["registryUid"]
+            .as_str()
+            .unwrap()
+            .to_string();
+
+        let mut api = MemoryApi::new().with(
+            "/v1/registries/metadata",
+            serde_json::json!({"items": [{"name": "Public Repo", "uid": registry, "kind": "pack"}]}),
+        );
+        let mut layers = Vec::new();
+        for pack in profile["spec"]["published"]["packs"].as_array().unwrap() {
+            let name = pack["name"].as_str().unwrap();
+            let d = examples.join("packs").join(name);
+            api = serve_registry_pack(
+                api,
+                name,
+                read(&d.join("_summaries.json")),
+                read(&d.join("_entity.json")),
+                &registry,
+            );
+            // only the version is given; layer, tag, packUid, digest, and default values come
+            // from the registry, and the manifest the example attaches is carried inline
+            let mut layer = serde_json::json!({"name": name, "version": pack["version"]});
+            let attached: Vec<Value> = manifests["spec"]["packs"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .filter(|m| m["spec"]["name"] == name)
+                .flat_map(|m| {
+                    m["spec"]["manifests"]
+                        .as_array()
+                        .cloned()
+                        .unwrap_or_default()
+                })
+                .map(|m| serde_json::json!({"name": m["name"], "content": m["content"]}))
+                .collect();
+            if !attached.is_empty() {
+                layer["manifests"] = Value::Array(attached);
+            }
+            layers.push(layer);
+        }
+        let candidate = serde_json::json!({
+            "name": "aws-pxk", "version": version, "cloudType": "aws", "registry": "Public Repo",
+            "layers": layers,
+            "variables": read(&raw.join("variables.json"))["variables"],
+        });
+        let file = dir.path().join(format!("aws-pxk@{version}.yaml"));
+        write_yaml(&file, &candidate);
+
+        let snap = ops::snapshot_from_candidate(
+            &file,
+            || Ok(Palette::new(api.clone())),
+            "t0",
+            &Progress::silent(),
+        )
+        .unwrap();
+        let published = read(
+            &examples
+                .join("profiles")
+                .join(format!("aws-pxk@{version}.json")),
+        );
+        assert_eq!(
+            snap.root,
+            published["root"].as_str().unwrap(),
+            "aws-pxk@{version}: the candidate is the release that gets published"
+        );
+        assert_eq!(snap.source.template, "candidate");
+        assert_eq!(snap.source.uid, "");
+        assert_eq!(
+            (snap.source.name.as_str(), snap.source.version.as_str()),
+            ("aws-pxk", version)
+        );
+        assert_eq!(snap.source.reference, file.display().to_string());
+    }
+}
+
+/// Registry responses for every pack of fixture `b`, so a candidate that spells out b's values
+/// and manifests resolves to b's packs.
+fn serve_registry_for_b(dir: &Path) -> MemoryApi {
+    let profile = read(&dir.join("b").join("profile.json"));
+    let manifests = read(&dir.join("b").join("manifests.json"));
+    let mut api = MemoryApi::new();
+    for pack in profile["spec"]["published"]["packs"].as_array().unwrap() {
+        let name = pack["name"].as_str().unwrap();
+        let entry = manifests["spec"]["packs"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|m| m["spec"]["name"] == name)
+            .unwrap();
+        let summary = serde_json::json!({
+            "metadata": {"uid": pack["packUid"]},
+            "spec": {"name": name, "version": pack["version"], "registryUid": "reg-public",
+                     "digest": entry["spec"]["digest"], "layer": pack["layer"], "type": "spectro",
+                     "values": "registry: defaults"},
+        });
+        let entity = serde_json::json!({"tags": [
+            {"tag": "floating.x", "packUid": pack["packUid"]},
+            {"tag": pack["tag"], "packUid": pack["packUid"]},
+        ]});
+        api = serve_registry_pack(
+            api,
+            name,
+            serde_json::json!([summary]),
+            entity,
+            "reg-public",
+        );
+    }
+    api
+}
+
+#[test]
+fn a_candidate_carries_values_and_manifests_inline_or_from_files_next_to_it() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let recorded_b = ops::snapshot_from_dir(&dir.path().join("b"), "b", "t0").unwrap();
+    let profile = read(&dir.path().join("b").join("profile.json"));
+    let manifests = read(&dir.path().join("b").join("manifests.json"));
+
+    let cand = dir.path().join("candidate");
+    fs::create_dir_all(cand.join("values")).unwrap();
+    fs::create_dir_all(cand.join("manifests")).unwrap();
+    let mut layers = Vec::new();
+    for pack in profile["spec"]["published"]["packs"].as_array().unwrap() {
+        let name = pack["name"].as_str().unwrap();
+        let mut layer =
+            serde_json::json!({"name": name, "version": pack["version"], "layer": pack["layer"]});
+        if name == "kubernetes" {
+            fs::write(
+                cand.join("values/kubernetes.yaml"),
+                pack["values"].as_str().unwrap(),
+            )
+            .unwrap();
+            layer["valuesFile"] = serde_json::json!("values/kubernetes.yaml");
+        } else {
+            layer["values"] = pack["values"].clone();
+        }
+        let entry = manifests["spec"]["packs"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|m| m["spec"]["name"] == name)
+            .unwrap();
+        let mut ms = Vec::new();
+        for m in entry["spec"]["manifests"].as_array().unwrap() {
+            let mname = m["name"].as_str().unwrap();
+            let file = format!("manifests/{mname}.yaml");
+            fs::write(cand.join(&file), m["content"].as_str().unwrap()).unwrap();
+            ms.push(serde_json::json!({"name": mname, "contentFile": file}));
+        }
+        if !ms.is_empty() {
+            layer["manifests"] = Value::Array(ms);
+        }
+        layers.push(layer);
+    }
+    let file = cand.join("profile.yaml");
+    write_yaml(
+        &file,
+        &serde_json::json!({
+            "name": "lab-profile", "version": "1.3.0", "type": "cluster", "cloudType": "aws",
+            "registryUid": "reg-public", "layers": layers,
+            "variables": read(&dir.path().join("b").join("variables.json"))["variables"],
+        }),
+    );
+    let api = serve_registry_for_b(dir.path());
+    let snap = ops::snapshot_from_candidate(
+        &file,
+        || Ok(Palette::new(api.clone())),
+        "t0",
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert_eq!(snap.root, recorded_b.root);
+    assert!(ops::compare(&recorded_b, &snap, "t1").same);
+
+    // a layer that leaves values out gets the registry defaults, which differ from b's
+    let mut doc: Value = serde_yaml::from_str(&fs::read_to_string(&file).unwrap()).unwrap();
+    doc["layers"][4].as_object_mut().unwrap().remove("values");
+    let defaults = cand.join("defaults.yaml");
+    write_yaml(&defaults, &doc);
+    let snap = ops::snapshot_from_candidate(
+        &defaults,
+        || Ok(Palette::new(api.clone())),
+        "t0",
+        &Progress::silent(),
+    )
+    .unwrap();
+    let d = ops::compare(&recorded_b, &snap, "t1");
+    let changed: Vec<&str> = d
+        .packs
+        .iter()
+        .filter(|p| p.authored)
+        .map(|p| p.name.as_str())
+        .collect();
+    assert_eq!(changed, vec!["prometheus-operator"]);
+}
+
+#[test]
+fn candidate_errors_name_what_is_wrong() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let api = serve_registry_for_b(dir.path());
+    let cand = dir.path().join("errors");
+    fs::create_dir_all(&cand).unwrap();
+    let write = |name: &str, doc: Value| -> std::path::PathBuf {
+        let p = cand.join(name);
+        write_yaml(&p, &doc);
+        p
+    };
+    let k8s = |extra: Value| {
+        let mut l = serde_json::json!({"name": "kubernetes", "version": "1.30.2"});
+        for (k, v) in extra.as_object().unwrap() {
+            l[k] = v.clone();
+        }
+        serde_json::json!({"name": "p", "version": "1", "registryUid": "reg-public", "layers": [l]})
+    };
+
+    // local problems are found before connecting
+    let f = write(
+        "missing-values.yaml",
+        k8s(serde_json::json!({"valuesFile": "values/nope.yaml"})),
+    );
+    let err =
+        ops::snapshot_from_candidate(&f, never_connect, "t0", &Progress::silent()).unwrap_err();
+    assert!(
+        matches!(&err, Error::Io { path, .. } if path.ends_with("values/nope.yaml")),
+        "{err}"
+    );
+    assert_eq!(err.exit_code(), 2);
+
+    let f = write(
+        "both.yaml",
+        k8s(serde_json::json!({"values": "a: 1", "valuesFile": "v.yaml"})),
+    );
+    let err =
+        ops::snapshot_from_candidate(&f, never_connect, "t0", &Progress::silent()).unwrap_err();
+    assert!(matches!(err, Error::CandidateInvalid { .. }), "{err}");
+    assert!(err.to_string().contains("kubernetes"), "{err}");
+
+    let f = write(
+        "typo.yaml",
+        k8s(serde_json::json!({"valuesfile": "v.yaml"})),
+    );
+    let err =
+        ops::snapshot_from_candidate(&f, never_connect, "t0", &Progress::silent()).unwrap_err();
+    assert!(matches!(err, Error::CandidateInvalid { .. }), "{err}");
+    assert!(err.to_string().contains("valuesfile"), "{err}");
+
+    let f = write(
+        "no-registry.yaml",
+        serde_json::json!({"name": "p", "version": "1", "layers": [{"name": "kubernetes", "version": "1.30.2"}]}),
+    );
+    let err =
+        ops::snapshot_from_candidate(&f, never_connect, "t0", &Progress::silent()).unwrap_err();
+    assert!(matches!(err, Error::CandidateInvalid { .. }), "{err}");
+
+    // registry problems need the registry
+    let f = write(
+        "unknown-version.yaml",
+        k8s(serde_json::json!({"version": "9.9.9"})),
+    );
+    let err = ops::snapshot_from_candidate(
+        &f,
+        || Ok(Palette::new(api.clone())),
+        "t0",
+        &Progress::silent(),
+    )
+    .unwrap_err();
+    match &err {
+        Error::PackNotFound {
+            name,
+            version,
+            registry,
+            ..
+        } => {
+            assert_eq!(
+                (name.as_str(), version.as_str(), registry.as_str()),
+                ("kubernetes", "9.9.9", "reg-public")
+            );
+        }
+        other => panic!("unexpected {other}"),
+    }
+    assert_eq!(err.kind(), "pack-not-found");
+
+    let f = write("unknown-tag.yaml", k8s(serde_json::json!({"tag": "2.x"})));
+    let err = ops::snapshot_from_candidate(
+        &f,
+        || Ok(Palette::new(api.clone())),
+        "t0",
+        &Progress::silent(),
+    )
+    .unwrap_err();
+    assert!(matches!(err, Error::PackNotFound { .. }), "{err}");
+    assert!(err.to_string().contains("2.x"), "{err}");
+
+    let named = api.clone().with(
+        "/v1/registries/metadata",
+        serde_json::json!({"items": [{"name": "Public Repo", "uid": "reg-public"}, {"name": "Internal", "uid": "reg-int"}]}),
+    );
+    let f = write(
+        "unknown-registry.yaml",
+        serde_json::json!({"name": "p", "version": "1", "registry": "Nope", "layers": [{"name": "kubernetes", "version": "1.30.2"}]}),
+    );
+    let err = ops::snapshot_from_candidate(
+        &f,
+        || Ok(Palette::new(named.clone())),
+        "t0",
+        &Progress::silent(),
+    )
+    .unwrap_err();
+    assert!(matches!(err, Error::RegistryNotFound { .. }), "{err}");
+    assert!(err.to_string().contains("Public Repo, Internal"), "{err}");
+
+    // an explicit tag is used when the pack version has it
+    let f = write(
+        "floating.yaml",
+        k8s(serde_json::json!({"tag": "floating.x"})),
+    );
+    let snap = ops::snapshot_from_candidate(
+        &f,
+        || Ok(Palette::new(api.clone())),
+        "t0",
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert_eq!(snap.packs[0].tag, "floating.x");
+}

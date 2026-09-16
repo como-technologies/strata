@@ -88,6 +88,34 @@ pub enum Error {
         /// The ref as given.
         reference: String,
     },
+    /// A candidate file does not parse or breaks a rule of the format.
+    #[error("'{}': {message}", path.display())]
+    CandidateInvalid {
+        /// The candidate file.
+        path: PathBuf,
+        /// What is wrong.
+        message: String,
+    },
+    /// A candidate layer names a pack version, or a tag, that its registry does not have.
+    #[error("no pack '{name}' at version '{version}'{} in registry '{registry}'", tag.as_ref().map(|t| format!(" with tag '{t}'")).unwrap_or_default())]
+    PackNotFound {
+        /// Pack name.
+        name: String,
+        /// Pack version.
+        version: String,
+        /// The tag asked for, when one was.
+        tag: Option<String>,
+        /// The registry, as the candidate names it.
+        registry: String,
+    },
+    /// A candidate names a registry that is not visible with this key.
+    #[error("no registry named '{registry}' is visible; registries: {}", available.join(", "))]
+    RegistryNotFound {
+        /// The registry name asked for.
+        registry: String,
+        /// The registry names that are visible.
+        available: Vec<String>,
+    },
     /// The file exists but is not a strata snapshot.
     #[error("'{0}' is not a strata snapshot")]
     NotSnapshot(PathBuf),
@@ -148,6 +176,9 @@ impl Error {
             Error::ProfileNotFound { .. } => "profile-not-found",
             Error::ClusterProfileNotFound { .. } => "cluster-profile-not-found",
             Error::ProfileRefRequired { .. } => "profile-ref-required",
+            Error::CandidateInvalid { .. } => "candidate-invalid",
+            Error::PackNotFound { .. } => "pack-not-found",
+            Error::RegistryNotFound { .. } => "registry-not-found",
             Error::NotSnapshot(_) => "not-snapshot",
             Error::SnapshotSchema { .. } => "snapshot-schema",
             Error::NoUid => "no-uid",
@@ -160,7 +191,7 @@ impl Error {
 
     /// The machine-readable form: `kind`, `message`, and the variant's own fields (`path`,
     /// `status`, `name`, `version`, `schema`, `variable`, `alternate`, `value`, `cluster`,
-    /// `profile`, `applied`, `reference`) when it has them.
+    /// `profile`, `applied`, `reference`, `tag`, `registry`, `available`) when it has them.
     pub fn to_json(&self) -> Value {
         let mut m = Map::new();
         m.insert("kind".into(), Value::from(self.kind()));
@@ -199,6 +230,27 @@ impl Error {
                 m.insert("cluster".into(), Value::from(cluster.as_str()));
                 m.insert("profile".into(), Value::from(profile.as_str()));
                 m.insert("applied".into(), Value::from(applied.clone()));
+            }
+            Error::CandidateInvalid { path: p, .. } => path(&mut m, p),
+            Error::PackNotFound {
+                name,
+                version,
+                tag,
+                registry,
+            } => {
+                m.insert("name".into(), Value::from(name.as_str()));
+                m.insert("version".into(), Value::from(version.as_str()));
+                if let Some(t) = tag {
+                    m.insert("tag".into(), Value::from(t.as_str()));
+                }
+                m.insert("registry".into(), Value::from(registry.as_str()));
+            }
+            Error::RegistryNotFound {
+                registry,
+                available,
+            } => {
+                m.insert("registry".into(), Value::from(registry.as_str()));
+                m.insert("available".into(), Value::from(available.clone()));
             }
             Error::ProfileRefRequired { reference } => {
                 m.insert("reference".into(), Value::from(reference.as_str()));
@@ -275,6 +327,20 @@ mod tests {
             Error::ProfileRefRequired {
                 reference: "cluster:c1".into(),
             },
+            Error::CandidateInvalid {
+                path: "profile.yaml".into(),
+                message: "a candidate needs at least one layer".into(),
+            },
+            Error::PackNotFound {
+                name: "kubernetes".into(),
+                version: "9.9.9".into(),
+                tag: Some("2.x".into()),
+                registry: "Public Repo".into(),
+            },
+            Error::RegistryNotFound {
+                registry: "Nope".into(),
+                available: vec!["Public Repo".into()],
+            },
             Error::NotSnapshot("profile.json".into()),
             Error::SnapshotSchema {
                 path: "old.json".into(),
@@ -344,5 +410,15 @@ mod tests {
         );
         assert_eq!(cp["applied"], serde_json::json!(["infra", "addons"]));
         assert_eq!(by_kind("profile-ref-required")["reference"], "cluster:c1");
+        assert_eq!(by_kind("candidate-invalid")["path"], "profile.yaml");
+        let pnf = by_kind("pack-not-found");
+        assert_eq!(
+            (pnf["name"].clone(), pnf["tag"].clone()),
+            ("kubernetes".into(), "2.x".into())
+        );
+        assert_eq!(
+            by_kind("registry-not-found")["available"],
+            serde_json::json!(["Public Repo"])
+        );
     }
 }

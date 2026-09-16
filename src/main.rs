@@ -79,7 +79,7 @@ enum Cmd {
     SameRelease(SameReleaseArgs),
     /// List the clusters that use a profile version, with name, project, and state; exit 1 when any do
     Consumers(ConsumersArgs),
-    /// Print the JSON Schema of the snapshot, diff, verify-summary, chain, or consumers document
+    /// Print the JSON Schema of a document: snapshot, diff, verify-summary, chain, consumers, or the candidate file
     Schema {
         #[arg(value_enum)]
         kind: SchemaKind,
@@ -158,6 +158,9 @@ struct SnapshotArgs {
     /// Build from raw API responses saved earlier (profile.json or cluster.json, with manifests.json and variables.json), no network
     #[arg(long)]
     from_raw: Option<PathBuf>,
+    /// Build from a candidate file before the version exists in Palette; packs are looked up in their registries. See `strata schema candidate`
+    #[arg(long, conflicts_with_all = ["from_raw", "raw_dir", "ref"])]
+    from_candidate: Option<PathBuf>,
     /// Compact JSON on one line instead of pretty-printed
     #[arg(long)]
     compact: bool,
@@ -248,6 +251,7 @@ enum SchemaKind {
     VerifySummary,
     Chain,
     Consumers,
+    Candidate,
 }
 
 fn main() -> ExitCode {
@@ -336,12 +340,15 @@ fn cmd_compare(a: &CompareArgs) -> Result<ExitCode> {
 fn cmd_snapshot(a: &SnapshotArgs) -> Result<ExitCode> {
     let progress = progress(a.quiet);
     let now = now_utc();
-    let snap = match &a.from_raw {
-        Some(dir) => {
+    let snap = match (&a.from_candidate, &a.from_raw) {
+        (Some(file), _) => {
+            ops::snapshot_from_candidate(file, || connect(progress, None), &now, &progress)?
+        }
+        (None, Some(dir)) => {
             let reference = a.r#ref.clone().unwrap_or_else(|| dir.display().to_string());
             ops::snapshot_from_dir(dir, &reference, &now)?
         }
-        None => {
+        (None, None) => {
             let text = a.r#ref.as_deref().ok_or_else(|| Error::Transport {
                 path: String::new(),
                 message: "snapshot needs a profile ref or --from-raw DIR".to_string(),
@@ -492,6 +499,7 @@ fn cmd_schema(kind: SchemaKind) -> Result<ExitCode> {
         SchemaKind::VerifySummary => schemars::schema_for!(ops::VerifySummary),
         SchemaKind::Chain => schemars::schema_for!(ops::Chain),
         SchemaKind::Consumers => schemars::schema_for!(ops::ConsumersReport),
+        SchemaKind::Candidate => schemars::schema_for!(strata::candidate::Candidate),
     };
     println!("{}", serde_json::to_string_pretty(&schema)?);
     Ok(ExitCode::SUCCESS)
