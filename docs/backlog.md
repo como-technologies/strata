@@ -25,8 +25,8 @@ A cluster carries its applied profiles in the same shape strata already parses: 
 
 ### Acceptance criteria
 
-- [ ] `strata compare <record>.json cluster:<uid>` prints `IDENTICAL` and exits 0 for a cluster that runs the recorded version
-- [ ] The same command against a cluster on an older version shows the changed layers and exits 1
+- [x] `strata compare <record>.json cluster:<uid>` prints `IDENTICAL` and exits 0 for a cluster that runs the recorded version
+- [x] The same command against a cluster on an older version shows the changed layers and exits 1
 - [x] `cluster:<uid>/<profile>` selects one attached profile; an unknown profile name is an error with exit 2
 - [x] `source.cluster` carries the cluster uid, its name, and the applied profiles; `source.type` keeps the profile type
 - [x] `strata schema snapshot` includes the new fields
@@ -77,10 +77,10 @@ The `UPSTREAM` flag relies on the `digest` field of a profile's pack ref (`V1Pac
 
 ### Acceptance criteria
 
-- [ ] `docs/model.md` states what `refDigest` tracks, with the sandbox evidence
-- [ ] `docs/model.md` states what Palette does on an in-place edit of a published version
-- [ ] `hash.upstreamSource` fallback order matches the finding
-- [ ] The "Known limits" entry in the README is removed or rewritten
+- [x] `docs/model.md` states what `refDigest` tracks, with the sandbox evidence
+- [x] `docs/model.md` states what Palette does on an in-place edit of a published version
+- [x] `hash.upstreamSource` fallback order matches the finding
+- [x] The "Known limits" entry in the README is removed or rewritten
 
 ## Snapshot a candidate from local files before it is published
 
@@ -102,7 +102,7 @@ At review time the candidate profile version does not exist in Palette yet, so t
 ### Acceptance criteria
 
 - [x] `strata snapshot --from-candidate profile.yaml -o candidate.json` needs pack lookups only; no profile has to exist
-- [ ] Once the version is published, the candidate root equals the root of the snapshot taken from Palette
+- [x] Once the version is published, the candidate root equals the root of the snapshot taken from Palette
 - [x] Missing values files and unknown pack versions are errors with exit 2
 - [x] `source.template` is `candidate`
 - [x] The file format is documented and assumes no repository layout
@@ -304,7 +304,7 @@ labels: feature
 
 ### Acceptance criteria
 
-- [ ] `strata consumers aws-pxk@1.0.0` lists each consumer with name, project, and state
+- [x] `strata consumers aws-pxk@1.0.0` lists each consumer with name, project, and state
 - [x] Exit 0 when there are no consumers, 1 when there are, so a delete step can branch on it
 - [x] `--format json` writes `strata-consumers/1`
 
