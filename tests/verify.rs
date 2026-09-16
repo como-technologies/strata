@@ -189,19 +189,32 @@ use std::rc::Rc;
 use std::time::Duration;
 
 use strata::api::{PaletteApi, Retry, RetryPolicy};
+use strata::config::Config;
 use strata::snapshot::Snapshot;
 
 /// A retrying wrapper over a borrowed API, with a recorder in place of `sleep`.
 fn retrying(api: &MemoryApi, retries: u32) -> (Retry<&MemoryApi>, Rc<RefCell<Vec<Duration>>>) {
+    retrying_with(api, RetryPolicy::new(retries))
+}
+
+/// [`retrying`] with a policy of the caller's.
+fn retrying_with(
+    api: &MemoryApi,
+    policy: RetryPolicy,
+) -> (Retry<&MemoryApi>, Rc<RefCell<Vec<Duration>>>) {
     let slept = Rc::new(RefCell::new(Vec::new()));
     let s = slept.clone();
-    let retry = Retry::with_sleep(
-        api,
-        RetryPolicy::new(retries),
-        Progress::silent(),
-        move |d| s.borrow_mut().push(d),
-    );
+    let retry = Retry::with_sleep(api, policy, Progress::silent(), move |d| {
+        s.borrow_mut().push(d)
+    });
     (retry, slept)
+}
+
+/// Fixture `a` served under [`UID_A`], with one 429 carrying `Retry-After: seconds` first.
+fn throttled_once(raw_root: &Path, seconds: u64) -> MemoryApi {
+    serve(MemoryApi::new(), raw_root, "a", UID_A)
+        .failing_n_times(profile_path(), 1, 429, "slow down")
+        .with_retry_after(profile_path(), seconds)
 }
 
 fn profile_path() -> String {
@@ -273,6 +286,77 @@ fn retry_after_is_honored_on_429() {
         .unwrap();
     assert!(Snapshot::from_raw(&raw, UID_A, "t0").is_ok());
     assert_eq!(*slept.borrow(), vec![Duration::from_secs(2)]);
+}
+
+#[test]
+fn a_retry_after_above_the_ceiling_fails_at_once_without_waiting() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let api = throttled_once(dir.path(), 900);
+    let (retry, slept) = retrying(&api, 3);
+    let err = Palette::new(retry)
+        .fetch_profile(UID_A, &Progress::silent())
+        .unwrap_err();
+    assert!(
+        matches!(
+            err,
+            Error::RetryAfterTooLong {
+                status: 429,
+                retry_after: 900,
+                limit: 300,
+                ..
+            }
+        ),
+        "{err}"
+    );
+    assert_eq!(err.kind(), "retry-after-too-long");
+    assert_eq!(err.exit_code(), 2);
+    let message = err.to_string();
+    assert!(
+        message.contains("900") && message.contains("300"),
+        "names what the server asked for and the ceiling: {message}"
+    );
+    assert_eq!(api.calls(&profile_path()), 1, "no second call");
+    assert!(slept.borrow().is_empty(), "nothing slept");
+}
+
+#[test]
+fn a_retry_after_at_the_ceiling_is_honored_as_sent() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let api = throttled_once(dir.path(), 300);
+    let (retry, slept) = retrying(&api, 3);
+    Palette::new(retry)
+        .fetch_profile(UID_A, &Progress::silent())
+        .unwrap();
+    assert_eq!(*slept.borrow(), vec![Duration::from_secs(300)]);
+}
+
+#[test]
+fn the_retry_after_ceiling_comes_from_the_config() {
+    let config = Config::from_lookup(|key| match key {
+        "PALETTE_API_KEY" => Some("k".to_string()),
+        "STRATA_RETRIES" => Some("2".to_string()),
+        "STRATA_MAX_RETRY_AFTER" => Some("900".to_string()),
+        _ => None,
+    })
+    .unwrap();
+    let policy = RetryPolicy::from_config(&config);
+    assert_eq!(policy.retries, 2);
+    assert_eq!(policy.max_retry_after, Duration::from_secs(900));
+
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let api = throttled_once(dir.path(), 900);
+    let (retry, slept) = retrying_with(&api, policy);
+    Palette::new(retry)
+        .fetch_profile(UID_A, &Progress::silent())
+        .unwrap();
+    assert_eq!(
+        *slept.borrow(),
+        vec![Duration::from_secs(900)],
+        "fifteen minutes is within the raised ceiling"
+    );
 }
 
 #[test]

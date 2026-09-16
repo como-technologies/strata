@@ -15,6 +15,8 @@ const URL_VARS: [&str; 2] = ["PALETTE_API", "SPECTROCLOUD_HOST"];
 const PROJECT_VARS: [&str; 1] = ["PALETTE_PROJECT_UID"];
 const RETRIES_VAR: &str = "STRATA_RETRIES";
 const DEFAULT_RETRIES: u32 = 3;
+const MAX_RETRY_AFTER_VAR: &str = "STRATA_MAX_RETRY_AFTER";
+const DEFAULT_MAX_RETRY_AFTER: Duration = Duration::from_secs(300);
 
 /// Connection settings for one Palette tenant or project.
 #[derive(Debug, Clone)]
@@ -29,6 +31,9 @@ pub struct Config {
     pub timeout: Duration,
     /// Retries after a failed attempt on a transient error; `STRATA_RETRIES`, default 3.
     pub retries: u32,
+    /// The longest `Retry-After` strata waits for; a longer one fails the request at once.
+    /// `STRATA_MAX_RETRY_AFTER` in seconds, default five minutes.
+    pub max_retry_after: Duration,
 }
 
 impl Config {
@@ -40,6 +45,7 @@ impl Config {
             project_uid: None,
             timeout: Duration::from_secs(120),
             retries: DEFAULT_RETRIES,
+            max_retry_after: DEFAULT_MAX_RETRY_AFTER,
         }
     }
 
@@ -50,7 +56,8 @@ impl Config {
     }
 
     /// Read `PALETTE_API_KEY` (or `SPECTROCLOUD_APIKEY`), `PALETTE_API` (or `SPECTROCLOUD_HOST`),
-    /// `PALETTE_PROJECT_UID`, and `STRATA_RETRIES` from the environment, then from `~/.palette.env`.
+    /// `PALETTE_PROJECT_UID`, `STRATA_RETRIES`, and `STRATA_MAX_RETRY_AFTER` from the environment,
+    /// then from `~/.palette.env`.
     pub fn from_env() -> Result<Self> {
         Self::from_lookup(|key| env_nonempty(key).or_else(|| dotenv_lookup(key)))
     }
@@ -71,6 +78,14 @@ impl Config {
                 value: v.clone(),
                 expected: "a whole number of retries",
             })?;
+        }
+        if let Some(v) = lookup(MAX_RETRY_AFTER_VAR) {
+            let seconds: u64 = v.trim().parse().map_err(|_| Error::InvalidSetting {
+                variable: MAX_RETRY_AFTER_VAR,
+                value: v.clone(),
+                expected: "a whole number of seconds",
+            })?;
+            cfg.max_retry_after = Duration::from_secs(seconds);
         }
         Ok(cfg)
     }
@@ -178,6 +193,34 @@ mod tests {
             "{err}"
         );
         assert!(err.to_string().contains("'lots'"));
+    }
+
+    #[test]
+    fn the_retry_after_ceiling_defaults_to_five_minutes_and_reads_strata_max_retry_after() {
+        let cfg = Config::from_lookup(lookup(&[("PALETTE_API_KEY", "k")])).unwrap();
+        assert_eq!(cfg.max_retry_after, Duration::from_secs(300));
+        let cfg = Config::from_lookup(lookup(&[
+            ("PALETTE_API_KEY", "k"),
+            ("STRATA_MAX_RETRY_AFTER", "900"),
+        ]))
+        .unwrap();
+        assert_eq!(cfg.max_retry_after, Duration::from_secs(900));
+        let err = Config::from_lookup(lookup(&[
+            ("PALETTE_API_KEY", "k"),
+            ("STRATA_MAX_RETRY_AFTER", "soon"),
+        ]))
+        .unwrap_err();
+        assert!(
+            matches!(
+                err,
+                Error::InvalidSetting {
+                    variable: "STRATA_MAX_RETRY_AFTER",
+                    ..
+                }
+            ),
+            "{err}"
+        );
+        assert!(err.to_string().contains("'soon'"));
     }
 
     #[test]

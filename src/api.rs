@@ -123,17 +123,32 @@ pub struct RetryPolicy {
     pub retries: u32,
     /// Wait before the first retry; each later wait doubles.
     pub base_delay: Duration,
-    /// The longest computed wait. A `Retry-After` header is honored as sent.
+    /// The longest computed wait. A `Retry-After` header is honored as sent, up to
+    /// `max_retry_after`.
     pub max_delay: Duration,
+    /// The longest `Retry-After` honored. A longer one ends the request at once with
+    /// [`Error::RetryAfterTooLong`]: the server said when to come back, and that is later than a
+    /// job should sit waiting.
+    pub max_retry_after: Duration,
 }
 
 impl RetryPolicy {
-    /// `retries` retries, starting at one second and capped at thirty.
+    /// `retries` retries, starting at one second and capped at thirty, honoring a `Retry-After` of
+    /// up to five minutes.
     pub fn new(retries: u32) -> Self {
         RetryPolicy {
             retries,
             base_delay: Duration::from_secs(1),
             max_delay: Duration::from_secs(30),
+            max_retry_after: Duration::from_secs(300),
+        }
+    }
+
+    /// The retries and the `Retry-After` ceiling a [`Config`] asks for.
+    pub fn from_config(config: &Config) -> Self {
+        RetryPolicy {
+            max_retry_after: config.max_retry_after,
+            ..RetryPolicy::new(config.retries)
         }
     }
 
@@ -204,6 +219,17 @@ impl<A: PaletteApi> PaletteApi for Retry<A> {
                         Error::Api { retry_after, .. } => *retry_after,
                         _ => None,
                     };
+                    let limit = self.policy.max_retry_after.as_secs();
+                    if let (Some(secs), Error::Api { status, .. }) = (retry_after, &e) {
+                        if secs > limit {
+                            return Err(Error::RetryAfterTooLong {
+                                path: path.to_string(),
+                                status: *status,
+                                retry_after: secs,
+                                limit,
+                            });
+                        }
+                    }
                     let delay = self.policy.delay(attempt, retry_after);
                     attempt += 1;
                     self.progress.note(&format!(

@@ -101,6 +101,11 @@ cosign verify-blob strata-$t --bundle strata-$t.sigstore.json \
    The default is 3. Strata retries HTTP 5xx, 429, and transport errors with
    a doubling wait from one second, and honors `Retry-After`. Other errors
    are not retried.
+6. Set `STRATA_MAX_RETRY_AFTER` to change the longest `Retry-After` strata
+   waits for, in seconds. The default is 300, five minutes. A longer one ends
+   the command at once with exit `2` and the error kind
+   `retry-after-too-long`, so a scheduled job fails fast and can run again
+   later instead of sleeping until its own timeout.
 
 Strata reads values that are not in the environment from `~/.palette.env`.
 

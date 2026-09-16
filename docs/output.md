@@ -280,7 +280,7 @@ carries one line and the exit status is `2`, as always:
 ```
 
 `kind` is a stable kebab-case name: `missing-credential`, `api`,
-`invalid-setting`, `pattern`, `transport`, `not-json`, `profile-not-found`,
+`retry-after-too-long`, `invalid-setting`, `pattern`, `transport`, `not-json`, `profile-not-found`,
 `cluster-profile-not-found`, `profile-ref-required`, `candidate-invalid`,
 `pack-not-found`, `registry-not-found`, `not-snapshot`, `unsupported-schema`,
 `snapshot-schema`, `no-uid`,
@@ -289,6 +289,8 @@ sentence the terminal shows. The other fields are the variant's own:
 
 - `variable` and `alternate` for `missing-credential`
 - `path` and `status` for `api`
+- `path`, `status`, `retryAfter`, and `limit` for `retry-after-too-long`:
+  the seconds Palette asked strata to wait, and the most it waits
 - `variable` and `value` for `invalid-setting`
 - `pattern` for `pattern`
 - `path` for `transport`, `not-json`, `not-snapshot`, `io`, `empty-file`,

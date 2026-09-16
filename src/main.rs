@@ -45,7 +45,8 @@ cluster:<uid> or cluster:<uid>/<profile> (what a cluster runs), or a snapshot fi
 project it was taken in, and verify checks it there unless --project says otherwise.\n\
 Environment: PALETTE_API_KEY (or SPECTROCLOUD_APIKEY), PALETTE_PROJECT_UID (optional),\n\
 PALETTE_API (default https://api.spectrocloud.com), STRATA_RETRIES (default 3; retries on HTTP 5xx,\n\
-429 and transport errors, with backoff). Missing values are read from ~/.palette.env.\n\n\
+429 and transport errors, with backoff), STRATA_MAX_RETRY_AFTER (default 300; a longer Retry-After\n\
+fails at once). Missing values are read from ~/.palette.env.\n\n\
 Exit status: 0 identical (verify: unchanged, same-release: same), 1 different (verify: drifted,\n\
 same-release: not the same), 2 error."
 )]
@@ -346,7 +347,7 @@ fn connect(progress: Progress, project: Option<&str>) -> Result<Palette<Retry<Ht
     if let Some(p) = project {
         config.project_uid = Some(p.to_string()).filter(|p| !p.is_empty());
     }
-    let policy = RetryPolicy::new(config.retries);
+    let policy = RetryPolicy::from_config(&config);
     Ok(Palette::new(Retry::new(
         HttpApi::new(config),
         policy,

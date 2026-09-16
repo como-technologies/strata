@@ -30,6 +30,20 @@ pub enum Error {
         /// The `Retry-After` header in whole seconds, when Palette sent one.
         retry_after: Option<u64>,
     },
+    /// Palette asked strata to wait longer than it will before retrying.
+    #[error(
+        "GET {path} failed with HTTP {status} and Retry-After {retry_after}s, longer than the {limit}s strata waits (STRATA_MAX_RETRY_AFTER); try again later"
+    )]
+    RetryAfterTooLong {
+        /// Request path.
+        path: String,
+        /// HTTP status code.
+        status: u16,
+        /// The wait Palette asked for, in whole seconds.
+        retry_after: u64,
+        /// The longest wait strata honors, in whole seconds.
+        limit: u64,
+    },
     /// A file pattern on the command line is invalid or matched nothing.
     #[error("'{pattern}' {message}")]
     Pattern {
@@ -180,6 +194,7 @@ impl Error {
         match self {
             Error::MissingCredential { .. } => "missing-credential",
             Error::Api { .. } => "api",
+            Error::RetryAfterTooLong { .. } => "retry-after-too-long",
             Error::InvalidSetting { .. } => "invalid-setting",
             Error::Pattern { .. } => "pattern",
             Error::Transport { .. } => "transport",
@@ -202,7 +217,7 @@ impl Error {
     }
 
     /// The machine-readable form: `kind`, `message`, and the variant's own fields (`path`,
-    /// `status`, `name`, `version`, `schema`, `variable`, `alternate`, `value`, `cluster`,
+    /// `status`, `retryAfter`, `limit`, `name`, `version`, `schema`, `variable`, `alternate`, `value`, `cluster`,
     /// `profile`, `applied`, `reference`, `tag`, `registry`, `available`) when it has them.
     pub fn to_json(&self) -> Value {
         let mut m = Map::new();
@@ -221,6 +236,17 @@ impl Error {
             } => {
                 m.insert("path".into(), Value::from(p.as_str()));
                 m.insert("status".into(), Value::from(*status));
+            }
+            Error::RetryAfterTooLong {
+                path: p,
+                status,
+                retry_after,
+                limit,
+            } => {
+                m.insert("path".into(), Value::from(p.as_str()));
+                m.insert("status".into(), Value::from(*status));
+                m.insert("retryAfter".into(), Value::from(*retry_after));
+                m.insert("limit".into(), Value::from(*limit));
             }
             Error::Pattern { pattern, .. } => {
                 m.insert("pattern".into(), Value::from(pattern.as_str()));
@@ -323,6 +349,12 @@ mod tests {
                 variable: "STRATA_RETRIES",
                 value: "lots".into(),
                 expected: "a whole number",
+            },
+            Error::RetryAfterTooLong {
+                path: "/v1/y".into(),
+                status: 429,
+                retry_after: 900,
+                limit: 300,
             },
             Error::Pattern {
                 pattern: "releases/**/*.json".into(),
@@ -428,6 +460,10 @@ mod tests {
         assert_eq!(by_kind("snapshot-schema")["schema"], "strata-snapshot/1");
         assert_eq!(by_kind("invalid-setting")["variable"], "STRATA_RETRIES");
         assert_eq!(by_kind("invalid-setting")["value"], "lots");
+        assert_eq!(by_kind("retry-after-too-long")["path"], "/v1/y");
+        assert_eq!(by_kind("retry-after-too-long")["status"], 429);
+        assert_eq!(by_kind("retry-after-too-long")["retryAfter"], 900);
+        assert_eq!(by_kind("retry-after-too-long")["limit"], 300);
         assert_eq!(by_kind("pattern")["pattern"], "releases/**/*.json");
         let cp = by_kind("cluster-profile-not-found");
         assert_eq!(
