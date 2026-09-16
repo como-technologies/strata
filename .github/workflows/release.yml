@@ -49,7 +49,8 @@ jobs:
         with:
           path: dist
           merge-multiple: true
-      - uses: sigstore/cosign-installer@v3
+      # installer v4 installs cosign 3, whose bundle format current verifiers read; there is no floating v4 tag
+      - uses: sigstore/cosign-installer@v4.1.2
       - name: checksums and signatures
         working-directory: dist
         run: |

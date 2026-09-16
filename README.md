@@ -68,7 +68,7 @@ gh release download $v --repo como-technologies/strata --pattern strata-$t --pat
 ```
 
 To check who built a file, verify its signature with
-[cosign](https://github.com/sigstore/cosign). The release workflow signs
+[cosign](https://github.com/sigstore/cosign) 3 or later. The release workflow signs
 through its own identity, so the check pins the repository and the workflow:
 
 ```
