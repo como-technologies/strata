@@ -213,10 +213,10 @@ Scripts and AI clients read `--format json` from stdout. An error today is a sen
 
 ### Acceptance criteria
 
-- [ ] `strata compare --json a.json missing.json` writes one JSON line to stderr with `kind` and `message`
-- [ ] Every `Error` variant has a `kind` and a test asserts the mapping is total
-- [ ] Exit codes are unchanged
-- [ ] `docs/output.md` documents the object
+- [x] `strata compare --json a.json missing.json` writes one JSON line to stderr with `kind` and `message`
+- [x] Every `Error` variant has a `kind` and a test asserts the mapping is total
+- [x] Exit codes are unchanged
+- [x] `docs/output.md` documents the object
 
 ## Resolve `name@latest` and sort versions
 
@@ -235,9 +235,9 @@ Scripts often want the newest published version of a profile without knowing its
 
 ### Acceptance criteria
 
-- [ ] `strata snapshot aws-pxk@latest` records the highest version in the scope
-- [ ] `22.04` sorts above `20.04`, `1.30.6` above `1.29.10`, `LTS__24.x` above `LTS__22.04`
-- [ ] A name with no versions is `ProfileNotFound`
+- [x] `strata snapshot aws-pxk@latest` records the highest version in the scope
+- [x] `22.04` sorts above `20.04`, `1.30.6` above `1.29.10`, `LTS__24.x` above `LTS__22.04`
+- [x] A name with no versions is `ProfileNotFound`
 
 ## Retries and rate limits for the Palette API
 
@@ -256,10 +256,37 @@ CI jobs call strata in bursts, and Palette rate-limits. A single 5xx or a 429 mu
 
 ### Acceptance criteria
 
-- [ ] A `MemoryApi` that fails twice with 503 and then succeeds yields a successful snapshot
-- [ ] A permanent 500 exits 2 with the last error after the configured attempts
-- [ ] `Retry-After: 2` is honored
-- [ ] 4xx other than 429 is not retried
+- [x] A `MemoryApi` that fails twice with 503 and then succeeds yields a successful snapshot
+- [x] A permanent 500 exits 2 with the last error after the configured attempts
+- [x] `Retry-After: 2` is honored
+- [x] 4xx other than 429 is not retried
+
+## Fail fast when Retry-After exceeds the wait ceiling
+
+labels: robustness
+
+### Background
+
+Strata retries transient Palette API failures with a doubling wait and honors a `Retry-After` header as sent (#11, `Retry` in `src/api.rs`). A server that knows when capacity returns is the best source for the wait, so capping the value would only spend attempts against a server that already said no. But an unbounded wait has one bad case: a hard throttle or a misconfigured proxy sends `Retry-After: 3600`, and strata sleeps an hour inside a CI job, silently under `--quiet`, until the job's own timeout kills it. That is worse than either failing or capping.
+
+The header means "come back at this time". When that time is further away than a job can reasonably wait, the right reading is to stop now and say so, so the scheduler can re-run later, not to wait less and retry into the same throttle.
+
+### Plan
+
+1. `src/api.rs`: `RetryPolicy` gains `max_retry_after: Duration`, default five minutes. `RetryPolicy::delay` is unchanged.
+2. `src/api.rs`: in the retry loop, when the error carries a `Retry-After` above `max_retry_after`, return at once instead of sleeping.
+3. `src/error.rs`: a `RetryAfterTooLong { path, status, retry_after, limit }` variant with kind `retry-after-too-long`, so the message and the JSON object name the seconds the server asked for and the ceiling. A script can tell "come back later" from a plain API failure.
+4. `src/config.rs`: `STRATA_MAX_RETRY_AFTER` in seconds, read like `STRATA_RETRIES`; an invalid value is `invalid-setting`.
+5. Tests in `tests/verify.rs`: a 429 with `Retry-After: 900` fails after one call with nothing slept; `Retry-After: 2` still waits two seconds; the ceiling from `Config` reaches the policy.
+6. `README.md` and `docs/output.md`: state the default ceiling next to `STRATA_RETRIES` and add the new error kind.
+
+### Acceptance criteria
+
+- [ ] A `Retry-After` at or below the ceiling is honored as sent; above it, the command exits 2 at once with no sleep
+- [ ] The error message names the seconds the server asked for and the ceiling
+- [ ] `--format json` writes kind `retry-after-too-long` with `retryAfter` and `limit`
+- [ ] `STRATA_MAX_RETRY_AFTER=900` raises the ceiling to fifteen minutes
+- [ ] The README states the default ceiling
 
 ## Consumer names and projects
 
@@ -297,10 +324,10 @@ A new profile variable shows as ten leaf lines in the report, one per field (`db
 
 ### Acceptance criteria
 
-- [ ] The terminal report shows `+ variable db_password (required, sensitive)` instead of ten leaf lines
-- [ ] Changed variables show only the changed fields
-- [ ] The JSON document keeps `variables.diff[]` and adds the grouped form
-- [ ] `strata schema diff` includes the new fields
+- [x] The terminal report shows `+ variable db_password (required, sensitive)` instead of ten leaf lines
+- [x] Changed variables show only the changed fields
+- [x] The JSON document keeps `variables.diff[]` and adds the grouped form
+- [x] `strata schema diff` includes the new fields
 
 ## Decide whether presets and the pack schema join the authored hash
 
