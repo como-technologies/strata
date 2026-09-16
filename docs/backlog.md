@@ -528,3 +528,32 @@ The live run showed that Palette accepts an in-place edit of a published version
 - [ ] A drifted record opens exactly one issue with the report, and a later clean run closes it
 - [ ] A record that cannot be checked is reported, never silently skipped
 - [ ] The script runs locally and through the reusable workflow
+
+## List profiles, clusters, and projects
+
+labels: feature
+
+### Background
+
+Every command takes a ref, and strata cannot show which refs exist. `<name>@<version>` resolves through `GET /v1/dashboard/clusterprofiles/metadata`, and a miss prints only `no cluster profile named 'cilium' with version '1.20.1' in this scope`. In that case `cilium` was a pack: the Palette UI shows `Cilium 1.20.1` as a layer of `strata-live-profile` 1.0.0, and the API names the pack `cni-cilium-oss`. The profile name, the cluster uid, and the project uid took three `curl` calls to find.
+
+A pack is not a ref: a snapshot always records a whole profile, so the useful question is which profile versions carry a pack. The listings depend on the scope. With a `ProjectUid` header, the profile listing holds that project's profiles and the project listing holds only that project. Without the header, the profile listing holds tenant profiles only, the cluster listing holds the clusters of every project, and the project listing holds every project the key can see. #18 lets a person type names; this issue shows what there is to name.
+
+### Plan
+
+1. `src/api.rs`: `Palette::profile_listing()`, `Palette::cluster_listing()` from `GET /v1/dashboard/spectroclusters/meta`, and `Palette::project_listing()` from `GET /v1/dashboard/projects/metadata`, returning the documents as `profile_document` does. `resolve` and `resolve_latest` read through `profile_listing()`.
+2. `src/ops.rs`: `list` returning the document `strata-list/1`: the scope's `projectUid` and `projectName`; `profiles[]` with `ref` (`<name>@<version>`), `name`, `version`, `uid`, and `cloudType`; `clusters[]` with `ref` (`cluster:<uid>`), `name`, `uid`, `state`, and `cloudType`; `projects[]` with `name` and `uid`. Profiles sort by name and then natural version order; clusters and projects sort by name. With `--packs`, each profile document is read for `type`, the consumer count, and `packs[]` with `layer`, `name`, `tag`, and `version`; a profile that cannot be read keeps its entry and carries the `error`. Projects are always read at tenant scope.
+3. `src/main.rs`: `strata list [profiles] [clusters] [projects]`, profiles and clusters when no kind is named; `--project <uid>` as `verify` has it; `--packs`; `--pack <text>` keeps the profiles with a pack whose name contains the text, ignoring case, implies `--packs`, and lists profiles only unless kinds are named. Exit 0, or 2 on an error.
+4. `src/render/`: terminal and markdown output grouped by kind, with the ref in the first column so it can be pasted; `strata schema list`.
+5. `src/error.rs`: the `profile-not-found` message says that `strata list` shows the profiles in the scope and `strata list --pack <name>` the profiles that carry a pack of that name.
+6. Tests: `MemoryApi` serving the three listings and profile documents, for sort order, `--pack`, a profile that cannot be read, and tenant scope for projects; CLI tests for `schema list` and the not-found message.
+7. `README.md`, `docs/output.md`, `docs/walkthrough.md`, `docs/model.md`: the command, the document, the scope rules, and `strata-list/1` in the list of schema ids.
+
+### Acceptance criteria
+
+- [ ] `strata list` prints each profile version as a `<name>@<version>` ref and each cluster as a `cluster:<uid>` ref, and `snapshot` takes each ref unchanged
+- [ ] `strata list --pack cilium` names every profile version with a Cilium layer, with the pack's name and version
+- [ ] `strata list projects` lists every project the key can see, with or without `PALETTE_PROJECT_UID`
+- [ ] `--project <uid>` lists another project with no change to the environment
+- [ ] `--format json` writes `strata-list/1`, and `strata schema list` prints its JSON Schema
+- [ ] A `<name>@<version>` that matches nothing points at `strata list`
