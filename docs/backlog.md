@@ -51,9 +51,9 @@ Palette also pins packs from Helm registries and OCI registries (`/v1/registries
 
 ### Acceptance criteria
 
-- [ ] The live example's summary shows the pack-ref and registry digests of a Helm pack and an OCI pack
-- [ ] `docs/model.md` states what the pack-ref digest tracks for each registry kind
-- [ ] Registry reading exists only for the kinds whose digests differ, with tests; or, if none differ, this issue closes with the evidence
+- [x] The live example's summary shows the pack-ref and registry digests of a Helm pack and an OCI pack
+- [x] `docs/model.md` states what the pack-ref digest tracks for each registry kind
+- [x] Registry reading exists only for the kinds whose digests differ, with tests; or, if none differ, this issue closes with the evidence
 
 ## Confirm what Palette's pack-ref digest tracks
 
