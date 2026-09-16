@@ -124,11 +124,11 @@ A team that publishes one version into several Palette projects, or several tena
 
 ### Acceptance criteria
 
-- [ ] `strata same-release a.json b.json c.json` exits 0 when every root is equal
-- [ ] With `--allow registry-move`, a pair that differs only by registry passes; an `AUTHORED` change exits 1 and names the pack and the leaf
-- [ ] A root difference exits 1 and names the two records
-- [ ] `--format json` writes `strata-chain/1`
-- [ ] Walkthrough day 4 uses the command
+- [x] `strata same-release a.json b.json c.json` exits 0 when every root is equal
+- [x] With `--allow registry-move`, a pair that differs only by registry passes; an `AUTHORED` change exits 1 and names the pack and the leaf
+- [x] A root difference exits 1 and names the two records
+- [x] `--format json` writes `strata-chain/1`
+- [x] Walkthrough day 4 uses the command
 
 ## Bulk verify with a summary document
 
@@ -148,10 +148,10 @@ The scheduled immutability check in `docs/walkthrough.md` is a shell loop over r
 
 ### Acceptance criteria
 
-- [ ] `strata verify 'releases/**/*.json'` checks every record in the project it was recorded from
-- [ ] Output is one line per record and, with `--format json`, one summary document
-- [ ] Exit codes: 0 all unchanged, 1 any drift, 2 any error
-- [ ] The scheduled check in the walkthrough is one command
+- [x] `strata verify 'releases/**/*.json'` checks every record in the project it was recorded from
+- [x] Output is one line per record and, with `--format json`, one summary document
+- [x] Exit codes: 0 all unchanged, 1 any drift, 2 any error
+- [x] The scheduled check in the walkthrough is one command
 
 ## Release binaries from CI
 
