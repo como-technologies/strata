@@ -9,27 +9,37 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
 use crate::canon::canonical_json;
+use crate::layer::Layer;
 use crate::snapshot::{Pack, Snapshot, Source, Tool};
 
+/// Schema id written into every diff document.
 pub const DIFF_SCHEMA: &str = "strata-diff/1";
 
+/// Two snapshots compared.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct Diff {
     /// Always "strata-diff/1"
     pub schema: String,
+    /// Which tool wrote the document.
     pub tool: Tool,
+    /// When, RFC 3339 UTC.
     pub generated_at: String,
     /// What the flags, statuses, ops and impact levels mean
     pub legend: Legend,
     /// The two profiles compared; A is the base, B the candidate
     pub a: Source,
+    /// The candidate side.
     pub b: Source,
     /// True when the Merkle roots are equal: same release
     pub same: bool,
+    /// Root of A.
     pub root_a: String,
+    /// Root of B.
     pub root_b: String,
+    /// Counts and the maximum impact.
     pub summary: Summary,
+    /// Profile variables compared.
     pub variables: VariablesDiff,
     /// True when packs present on both sides appear in a different order
     pub order_changed: bool,
@@ -40,17 +50,25 @@ pub struct Diff {
     pub verify: Option<Verify>,
 }
 
+/// Plain-language meaning of every flag and enum value, for readers without the docs.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct Legend {
+    /// The IDENTITY flag.
     pub identity: String,
+    /// The UPSTREAM flag.
     pub upstream: String,
+    /// The AUTHORED flag.
     pub authored: String,
+    /// Each impact level.
     pub impact: BTreeMap<String, String>,
+    /// Each pack status.
     pub status: BTreeMap<String, String>,
+    /// Each leaf op.
     pub op: BTreeMap<String, String>,
 }
 
 impl Legend {
+    /// The legend every document carries.
     pub fn standard() -> Legend {
         let m = |pairs: &[(&str, &str)]| -> BTreeMap<String, String> {
             pairs
@@ -85,50 +103,70 @@ impl Legend {
     }
 }
 
+/// Counts that answer the common questions first.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct Summary {
+    /// Packs only in B.
     pub packs_added: usize,
+    /// Packs only in A.
     pub packs_removed: usize,
+    /// Packs on both sides with a different node hash.
     pub packs_changed: usize,
+    /// Packs on both sides with the same node hash.
     pub packs_unchanged: usize,
     /// Packs whose identity hash moved
     pub identity_changes: usize,
+    /// Packs whose upstream hash moved.
     pub upstream_changes: usize,
+    /// Packs whose authored hash moved.
     pub authored_changes: usize,
+    /// True when the variables hash differs.
     pub variables_changed: bool,
     /// The most severe impact level across all changed packs
     pub max_impact: ImpactLevel,
 }
 
+/// Profile variables compared by name.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct VariablesDiff {
+    /// True when the hashes differ.
     pub changed: bool,
+    /// Variables hash of A.
     pub hash_a: String,
+    /// Variables hash of B.
     pub hash_b: String,
     /// Leaf changes with paths like "<variable name>.<field>"
     pub diff: Vec<Leaf>,
 }
 
+/// What happened to one leaf or manifest.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum Op {
+    /// Present on both sides with different values.
     Changed,
+    /// Present only in B.
     Added,
+    /// Present only in A.
     Removed,
 }
 
+/// One scalar (or empty container) that differs.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct Leaf {
+    /// What happened.
     pub op: Op,
     /// Dotted path; array items as [i], or [name=<value>] when every item has a unique name
     pub path: String,
     /// The same path as segments: strings for keys, integers for indexes, {"name": ...} for named items
     pub segments: Vec<Value>,
+    /// Value in A, absent for additions.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub old: Option<Value>,
+    /// Value in B, absent for removals.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub new: Option<Value>,
 }
@@ -139,144 +177,276 @@ pub struct Leaf {
 )]
 #[serde(rename_all = "kebab-case")]
 pub enum ImpactLevel {
+    /// No change.
     #[default]
     None,
+    /// Only the upstream digest changed; applied on the next profile sync.
     Sync,
+    /// Add-on upgraded or reconfigured in place.
     InPlace,
+    /// CNI or CSI changed; every node affected, may repave.
     ClusterWide,
+    /// OS or Kubernetes configuration changed; Palette may repave.
     MayRepave,
+    /// Nodes are replaced.
     Repave,
 }
 
+/// What a change does to running clusters; a hint from the layer and the flags.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct Impact {
+    /// Severity level.
     pub level: ImpactLevel,
     /// Human sentence, the same text the terminal report prints
     pub text: String,
 }
 
+/// What happened to one pack.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum Status {
+    /// Same node hash on both sides.
     Unchanged,
+    /// Different node hash.
     Changed,
+    /// Only in B.
     Added,
+    /// Only in A.
     Removed,
 }
 
+/// One side of a pack comparison.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct PackSide {
+    /// Tag pinned on the profile.
     pub tag: String,
+    /// Resolved version.
     pub version: String,
+    /// Pack version uid.
     pub pack_uid: String,
+    /// Registry uid.
     pub registry_uid: String,
     /// The raw digest that fed the upstream hash
     pub upstream: String,
+    /// Which field fed it: `packRef.digest`, `packSummary.digest`, or `none`.
     pub upstream_source: String,
+    /// Hash of the canonical values.
     pub values_hash: String,
+    /// Node hash.
     pub node: String,
 }
 
+/// One pack across the two sides.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct PackDiff {
+    /// `<layer>/<name>`.
     pub key: String,
+    /// Palette layer name.
     pub layer: String,
+    /// Pack name.
     pub name: String,
+    /// What happened to the pack.
     pub status: Status,
+    /// Side A; absent when the pack was added.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub a: Option<PackSide>,
+    /// Side B; absent when the pack was removed.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub b: Option<PackSide>,
+    /// The identity hash moved.
     pub identity: bool,
+    /// The upstream hash moved.
     pub upstream: bool,
+    /// The authored hash moved.
     pub authored: bool,
+    /// The params differ.
     pub params_changed: bool,
+    /// What the change does to clusters.
     pub impact: Impact,
+    /// The values compared.
     pub values: ValuesDiff,
+    /// Manifest changes by name.
     pub manifests: Vec<ManifestChange>,
 }
 
+/// The values of one pack compared.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ValuesDiff {
+    /// True when the values hashes differ.
     pub changed: bool,
     /// False when one side's values did not parse as YAML; then only the raw text differs and `diff` is empty
     pub parseable: bool,
+    /// Leaves changed.
     pub changed_count: usize,
+    /// Leaves added.
     pub added_count: usize,
+    /// Leaves removed.
     pub removed_count: usize,
+    /// The leaves, sorted by path.
     pub diff: Vec<Leaf>,
 }
 
+/// One manifest across the two sides.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ManifestChange {
+    /// What happened.
     pub op: Op,
+    /// Manifest name.
     pub name: String,
+    /// Content hash in A.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub hash_a: Option<String>,
+    /// Content hash in B.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub hash_b: Option<String>,
 }
 
+/// The outcome of `verify`, present only in its documents.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct Verify {
+    /// Unchanged or drifted.
     pub status: VerifyStatus,
+    /// Profile uid that was re-fetched.
     pub uid: String,
+    /// When the record was taken.
     pub recorded_at: String,
+    /// When the live profile was fetched.
     pub checked_at: String,
 }
 
+/// Whether a published version still matches its record.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum VerifyStatus {
+    /// Same root.
     Unchanged,
+    /// Different root: the published version was edited, or the record is stale.
     Drifted,
 }
 
-pub fn layer_rank(layer: &str) -> u8 {
-    match layer {
-        "os" => 0,
-        "k8s" => 1,
-        "cni" => 2,
-        "csi" => 3,
-        "addon" => 4,
-        _ => 9,
+/// Which of the three hashes moved for one pack.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct Flags {
+    /// The identity hash moved.
+    pub identity: bool,
+    /// The upstream hash moved.
+    pub upstream: bool,
+    /// The authored hash moved.
+    pub authored: bool,
+}
+
+/// Which layers a rule applies to.
+#[derive(Debug, Clone, Copy)]
+enum Layers {
+    Only(Layer),
+    NodeImage,
+    InfraAddon,
+    Any,
+}
+
+impl Layers {
+    fn matches(self, layer: Layer) -> bool {
+        match self {
+            Layers::Only(l) => layer == l,
+            Layers::NodeImage => matches!(layer, Layer::Kernel | Layer::Os | Layer::K8s),
+            Layers::InfraAddon => matches!(layer, Layer::Cni | Layer::Csi),
+            Layers::Any => true,
+        }
     }
 }
 
-pub fn impact(layer: &str, identity: bool, authored: bool, upstream: bool) -> Impact {
-    let (level, text) = if layer == "os" && identity {
-        (ImpactLevel::Repave, "node repave (OS image change)")
-    } else if layer == "k8s" && identity {
-        (
-            ImpactLevel::Repave,
-            "node repave (Kubernetes version change)",
-        )
-    } else if (layer == "os" || layer == "k8s") && authored {
-        (
-            ImpactLevel::MayRepave,
-            "node/control plane config change, may repave",
-        )
-    } else if (layer == "cni" || layer == "csi") && (identity || authored) {
-        (ImpactLevel::ClusterWide, "cluster-wide infra addon update")
-    } else if identity || authored {
-        (ImpactLevel::InPlace, "in-place addon upgrade")
-    } else if upstream {
-        (
-            ImpactLevel::Sync,
-            "pack content changed under the same tag, applied on next profile sync",
-        )
-    } else {
-        (ImpactLevel::None, "")
-    };
-    Impact {
-        level,
-        text: text.to_string(),
+/// Which flags a rule needs.
+#[derive(Debug, Clone, Copy)]
+enum Needs {
+    Identity,
+    Authored,
+    IdentityOrAuthored,
+    UpstreamOnly,
+}
+
+impl Needs {
+    fn matches(self, f: Flags) -> bool {
+        match self {
+            Needs::Identity => f.identity,
+            Needs::Authored => f.authored,
+            Needs::IdentityOrAuthored => f.identity || f.authored,
+            Needs::UpstreamOnly => f.upstream && !f.identity && !f.authored,
+        }
     }
+}
+
+struct Rule {
+    layers: Layers,
+    needs: Needs,
+    level: ImpactLevel,
+    text: &'static str,
+}
+
+/// The impact rules, first match wins. The order encodes severity: a Kubernetes version bump is a
+/// repave even when its values also changed.
+const RULES: &[Rule] = &[
+    Rule {
+        layers: Layers::Only(Layer::Os),
+        needs: Needs::Identity,
+        level: ImpactLevel::Repave,
+        text: "node repave (OS image change)",
+    },
+    Rule {
+        layers: Layers::Only(Layer::K8s),
+        needs: Needs::Identity,
+        level: ImpactLevel::Repave,
+        text: "node repave (Kubernetes version change)",
+    },
+    Rule {
+        layers: Layers::Only(Layer::Kernel),
+        needs: Needs::Identity,
+        level: ImpactLevel::Repave,
+        text: "node repave (kernel change)",
+    },
+    Rule {
+        layers: Layers::NodeImage,
+        needs: Needs::Authored,
+        level: ImpactLevel::MayRepave,
+        text: "node/control plane config change, may repave",
+    },
+    Rule {
+        layers: Layers::InfraAddon,
+        needs: Needs::IdentityOrAuthored,
+        level: ImpactLevel::ClusterWide,
+        text: "cluster-wide infra addon update",
+    },
+    Rule {
+        layers: Layers::Any,
+        needs: Needs::IdentityOrAuthored,
+        level: ImpactLevel::InPlace,
+        text: "in-place addon upgrade",
+    },
+    Rule {
+        layers: Layers::Any,
+        needs: Needs::UpstreamOnly,
+        level: ImpactLevel::Sync,
+        text: "pack content changed under the same tag, applied on next profile sync",
+    },
+];
+
+/// The impact of a change on a layer, from the rules table.
+pub fn impact(layer: Layer, flags: Flags) -> Impact {
+    RULES
+        .iter()
+        .find(|r| r.layers.matches(layer) && r.needs.matches(flags))
+        .map(|r| Impact {
+            level: r.level,
+            text: r.text.to_string(),
+        })
+        .unwrap_or(Impact {
+            level: ImpactLevel::None,
+            text: String::new(),
+        })
 }
 
 enum Seg {
@@ -358,6 +528,7 @@ fn flatten(v: &Value, path: &mut Vec<Seg>, out: &mut Leaves) {
     }
 }
 
+/// Every scalar or empty container that differs between two JSON documents, sorted by path.
 pub fn leaf_diff(a: &Value, b: &Value) -> Vec<Leaf> {
     let (mut la, mut lb) = (Leaves::new(), Leaves::new());
     flatten(a, &mut Vec::new(), &mut la);
@@ -495,6 +666,7 @@ fn by_name(vars: &[Value]) -> Value {
     Value::Object(m)
 }
 
+/// Compare two snapshots. `verify` is attached when this is the second half of a verification.
 pub fn compute(a: &Snapshot, b: &Snapshot, generated_at: &str, verify: Option<Verify>) -> Diff {
     let pa: BTreeMap<&str, &Pack> = a.packs.iter().map(|p| (p.key.as_str(), p)).collect();
     let pb: BTreeMap<&str, &Pack> = b.packs.iter().map(|p| (p.key.as_str(), p)).collect();
@@ -564,7 +736,14 @@ pub fn compute(a: &Snapshot, b: &Snapshot, generated_at: &str, verify: Option<Ve
                 summary.identity_changes += usize::from(identity);
                 summary.upstream_changes += usize::from(upstream);
                 summary.authored_changes += usize::from(authored);
-                let imp = impact(&x.layer, identity, authored, upstream);
+                let imp = impact(
+                    Layer::parse(&x.layer),
+                    Flags {
+                        identity,
+                        upstream,
+                        authored,
+                    },
+                );
                 if imp.level > summary.max_impact {
                     summary.max_impact = imp.level;
                 }
@@ -588,7 +767,9 @@ pub fn compute(a: &Snapshot, b: &Snapshot, generated_at: &str, verify: Option<Ve
         };
         packs.push(pd);
     }
-    packs.sort_by(|p, q| (layer_rank(&p.layer), &p.name).cmp(&(layer_rank(&q.layer), &q.name)));
+    packs.sort_by(|p, q| {
+        (Layer::parse(&p.layer).rank(), &p.name).cmp(&(Layer::parse(&q.layer).rank(), &q.name))
+    });
 
     let order_a: Vec<&str> = a
         .packs
@@ -703,11 +884,34 @@ mod tests {
         assert!(ImpactLevel::ClusterWide > ImpactLevel::InPlace);
         assert!(ImpactLevel::InPlace > ImpactLevel::Sync);
         assert!(ImpactLevel::Sync > ImpactLevel::None);
-        assert_eq!(impact("k8s", true, true, true).level, ImpactLevel::Repave);
-        assert_eq!(impact("cni", false, false, true).level, ImpactLevel::Sync);
+        let f = |identity, upstream, authored| Flags {
+            identity,
+            upstream,
+            authored,
+        };
         assert_eq!(
-            impact("addon", false, true, false).level,
+            impact(Layer::K8s, f(true, true, true)).level,
+            ImpactLevel::Repave
+        );
+        assert_eq!(
+            impact(Layer::Cni, f(false, true, false)).level,
+            ImpactLevel::Sync
+        );
+        assert_eq!(
+            impact(Layer::Addon, f(false, false, true)).level,
             ImpactLevel::InPlace
+        );
+        assert_eq!(
+            impact(Layer::Os, f(false, false, true)).level,
+            ImpactLevel::MayRepave
+        );
+        assert_eq!(
+            impact(Layer::Other, f(true, false, false)).level,
+            ImpactLevel::InPlace
+        );
+        assert_eq!(
+            impact(Layer::Addon, f(false, false, false)).level,
+            ImpactLevel::None
         );
     }
 }

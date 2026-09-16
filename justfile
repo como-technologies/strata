@@ -21,3 +21,7 @@ examples: build
 # Pull fresh packs from the Public Repo and rebuild examples/ (needs PALETTE_API_KEY)
 examples-fetch: build
     STRATA_BIN=target/release/strata examples/fetch-examples.sh
+
+# Open one GitHub issue per section of docs/backlog.md (needs gh and a GitHub remote)
+backlog-issues:
+    scripts/open-backlog-issues.sh

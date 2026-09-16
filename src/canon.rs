@@ -6,6 +6,7 @@ use serde::Deserialize;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
+/// Lowercase hex SHA-256 of `s`.
 pub fn sha256_hex(s: &str) -> String {
     hex::encode(Sha256::digest(s.as_bytes()))
 }
@@ -51,8 +52,11 @@ fn write_canon(v: &Value, out: &mut String) {
     }
 }
 
+/// The outcome of parsing YAML text.
 pub enum Canon {
+    /// Parsed; one document is the document, several are an array, empty text is null.
     Parsed(Value),
+    /// Not valid YAML for strata's purposes; the first line of the parser's message.
     Unparseable(String),
 }
 

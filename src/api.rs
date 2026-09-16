@@ -1,197 +1,318 @@
-//! Palette API access: the three GETs a profile snapshot needs, plus name@version resolution.
+//! Access to the Palette API behind one trait, so that every operation can run against canned
+//! responses in tests and against HTTP in production.
 
+use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
-use std::time::Duration;
 
-use anyhow::{anyhow, bail, Context, Result};
 use serde_json::Value;
 
-pub const DEFAULT_API: &str = "https://api.spectrocloud.com";
+use crate::config::Config;
+use crate::error::{Error, Result};
+use crate::progress::Progress;
 
-/// The raw API responses a snapshot is built from. Saved as profile.json, manifests.json and
-/// variables.json by --raw-dir and read back by --from-raw.
-pub struct RawProfile {
-    pub profile: Value,
-    pub manifests: Value,
-    pub variables: Value,
+/// One GET of a JSON document from Palette. Implementations add authentication and scoping.
+pub trait PaletteApi {
+    /// GET `path` (for example `/v1/clusterprofiles/{uid}`) and parse the body as JSON.
+    fn get_json(&self, path: &str) -> Result<Value>;
 }
 
-pub struct Client {
-    base: String,
-    key: String,
-    project: Option<String>,
+/// The HTTP implementation.
+pub struct HttpApi {
+    config: Config,
     agent: ureq::Agent,
 }
 
-fn env_nonempty(key: &str) -> Option<String> {
-    std::env::var(key).ok().filter(|v| !v.is_empty())
-}
-
-/// KEY=VALUE lines from ~/.palette.env, with optional `export ` and quotes.
-fn dotenv_lookup(key: &str) -> Option<String> {
-    let home = std::env::var_os("HOME")?;
-    let text = fs::read_to_string(Path::new(&home).join(".palette.env")).ok()?;
-    for line in text.lines() {
-        let line = line.trim();
-        if line.is_empty() || line.starts_with('#') {
-            continue;
-        }
-        let line = line.strip_prefix("export ").unwrap_or(line);
-        if let Some((k, v)) = line.split_once('=') {
-            if k.trim() == key {
-                let v = v.trim().trim_matches('"').trim_matches('\'');
-                if !v.is_empty() {
-                    return Some(v.to_string());
-                }
-            }
-        }
-    }
-    None
-}
-
-fn setting(keys: &[&str]) -> Option<String> {
-    keys.iter()
-        .find_map(|k| env_nonempty(k))
-        .or_else(|| keys.iter().find_map(|k| dotenv_lookup(k)))
-}
-
-impl Client {
-    pub fn from_env() -> Result<Self> {
-        let key = setting(&["PALETTE_API_KEY", "SPECTROCLOUD_APIKEY"]).ok_or_else(|| {
-            anyhow!("PALETTE_API_KEY is required to fetch from Palette (or SPECTROCLOUD_APIKEY, or a line in ~/.palette.env)")
-        })?;
-        let base = setting(&["PALETTE_API", "SPECTROCLOUD_HOST"])
-            .unwrap_or_else(|| DEFAULT_API.to_string());
-        let base = if base.starts_with("http://") || base.starts_with("https://") {
-            base
-        } else {
-            format!("https://{base}")
-        };
+impl HttpApi {
+    /// Build an HTTP client for `config`.
+    pub fn new(config: Config) -> Self {
         let agent: ureq::Agent = ureq::Agent::config_builder()
             .http_status_as_error(false)
-            .timeout_global(Some(Duration::from_secs(120)))
+            .timeout_global(Some(config.timeout))
             .build()
             .into();
-        Ok(Client {
-            base: base.trim_end_matches('/').to_string(),
-            key,
-            project: setting(&["PALETTE_PROJECT_UID"]),
-            agent,
-        })
+        HttpApi { config, agent }
     }
+}
 
-    pub fn get_json(&self, path: &str) -> Result<Value> {
-        let url = format!("{}{}", self.base, path);
+impl PaletteApi for HttpApi {
+    fn get_json(&self, path: &str) -> Result<Value> {
+        let url = format!("{}{}", self.config.base_url, path);
         let mut req = self
             .agent
             .get(url.as_str())
-            .header("ApiKey", self.key.as_str())
+            .header("ApiKey", self.config.api_key.as_str())
             .header("Accept", "application/json");
-        if let Some(p) = &self.project {
+        if let Some(p) = &self.config.project_uid {
             req = req.header("ProjectUid", p.as_str());
         }
-        let mut resp = req.call().with_context(|| format!("GET {path}"))?;
+        let mut resp = req.call().map_err(|e| Error::Transport {
+            path: path.to_string(),
+            message: e.to_string(),
+        })?;
         let status = resp.status().as_u16();
         let body = resp
             .body_mut()
             .with_config()
             .limit(256 * 1024 * 1024)
             .read_to_string()
-            .with_context(|| format!("GET {path}: reading the response body"))?;
+            .map_err(|e| Error::Transport {
+                path: path.to_string(),
+                message: format!("reading the response body: {e}"),
+            })?;
         if !(200..300).contains(&status) {
-            let snippet: String = body
-                .chars()
-                .take(300)
-                .collect::<String>()
-                .replace('\n', " ");
-            bail!("GET {path} failed with HTTP {status}: {snippet}");
+            return Err(Error::Api {
+                path: path.to_string(),
+                status,
+                body: body
+                    .chars()
+                    .take(300)
+                    .collect::<String>()
+                    .replace('\n', " "),
+            });
         }
-        serde_json::from_str(&body).with_context(|| format!("GET {path}: response is not JSON"))
+        serde_json::from_str(&body).map_err(|source| Error::NotJson {
+            path: path.to_string(),
+            source,
+        })
+    }
+}
+
+/// Canned responses keyed by path. Paths not registered answer 404.
+#[derive(Debug, Default, Clone)]
+pub struct MemoryApi {
+    ok: HashMap<String, Value>,
+    fail: HashMap<String, (u16, String)>,
+}
+
+impl MemoryApi {
+    /// An API that knows no paths.
+    pub fn new() -> Self {
+        Self::default()
     }
 
-    /// `<name>@<version>` is looked up in the dashboard listing; anything else is taken as a uid.
-    pub fn resolve_uid(&self, reference: &str) -> Result<String> {
-        match reference.rsplit_once('@') {
-            Some((name, version)) if !name.is_empty() && !version.is_empty() => {
-                let listing = self.get_json("/v1/dashboard/clusterprofiles/metadata")?;
-                let items = listing
-                    .get("items")
-                    .and_then(Value::as_array)
-                    .cloned()
-                    .unwrap_or_default();
-                items
-                    .iter()
-                    .find(|it| {
-                        it.pointer("/metadata/name").and_then(Value::as_str) == Some(name)
-                            && it.pointer("/spec/version").and_then(Value::as_str) == Some(version)
-                    })
-                    .and_then(|it| it.pointer("/metadata/uid").and_then(Value::as_str))
-                    .map(str::to_string)
-                    .ok_or_else(|| {
-                        anyhow!("no cluster profile named '{name}' with version '{version}' in this scope")
-                    })
+    /// Answer `path` with `value`.
+    pub fn with(mut self, path: impl Into<String>, value: Value) -> Self {
+        self.ok.insert(path.into(), value);
+        self
+    }
+
+    /// Answer `path` with an HTTP error.
+    pub fn failing(
+        mut self,
+        path: impl Into<String>,
+        status: u16,
+        body: impl Into<String>,
+    ) -> Self {
+        self.fail.insert(path.into(), (status, body.into()));
+        self
+    }
+}
+
+impl PaletteApi for MemoryApi {
+    fn get_json(&self, path: &str) -> Result<Value> {
+        if let Some((status, body)) = self.fail.get(path) {
+            return Err(Error::Api {
+                path: path.to_string(),
+                status: *status,
+                body: body.clone(),
+            });
+        }
+        self.ok.get(path).cloned().ok_or_else(|| Error::Api {
+            path: path.to_string(),
+            status: 404,
+            body: r#"{"code":"ResourceNotFound"}"#.to_string(),
+        })
+    }
+}
+
+/// The three raw API responses a snapshot is built from. Saved as `profile.json`, `manifests.json`
+/// and `variables.json` by `--raw-dir` and read back by `--from-raw`.
+#[derive(Debug, Clone)]
+pub struct RawProfile {
+    /// `GET /v1/clusterprofiles/{uid}`
+    pub profile: Value,
+    /// `GET /v1/clusterprofiles/{uid}/packs/manifests`
+    pub manifests: Value,
+    /// `GET /v1/clusterprofiles/{uid}/variables`, or `{"variables": []}` when unavailable
+    pub variables: Value,
+}
+
+impl RawProfile {
+    /// Read the three files from `dir`.
+    pub fn load_dir(dir: &Path) -> Result<RawProfile> {
+        let read = |name: &str| -> Result<Value> {
+            let path = dir.join(name);
+            let text = fs::read_to_string(&path).map_err(|source| Error::Io {
+                path: path.clone(),
+                source,
+            })?;
+            if text.trim().is_empty() {
+                return Err(Error::EmptyFile(path));
             }
-            _ => Ok(reference.to_string()),
-        }
+            serde_json::from_str(&text).map_err(|source| Error::FileNotJson { path, source })
+        };
+        Ok(RawProfile {
+            profile: read("profile.json")?,
+            manifests: read("manifests.json")?,
+            variables: read("variables.json")?,
+        })
     }
 
-    pub fn fetch_raw(&self, uid: &str, save_dir: Option<&Path>, quiet: bool) -> Result<RawProfile> {
-        if !quiet && std::env::var_os("STRATA_QUIET").is_none() {
-            eprintln!("{}: fetching profile {uid}", crate::TOOL_NAME);
+    /// Write the three files under `dir`, creating it.
+    pub fn save_dir(&self, dir: &Path) -> Result<()> {
+        fs::create_dir_all(dir).map_err(|source| Error::Io {
+            path: dir.to_path_buf(),
+            source,
+        })?;
+        for (name, v) in [
+            ("profile.json", &self.profile),
+            ("manifests.json", &self.manifests),
+            ("variables.json", &self.variables),
+        ] {
+            let path = dir.join(name);
+            fs::write(&path, serde_json::to_string_pretty(v)?)
+                .map_err(|source| Error::Io { path, source })?;
         }
-        let profile = self.get_json(&format!("/v1/clusterprofiles/{uid}"))?;
-        let manifests = self.get_json(&format!("/v1/clusterprofiles/{uid}/packs/manifests"))?;
-        let variables = match self.get_json(&format!("/v1/clusterprofiles/{uid}/variables")) {
+        Ok(())
+    }
+}
+
+/// Profile-level operations over any [`PaletteApi`].
+pub struct Palette<A: PaletteApi> {
+    api: A,
+}
+
+impl<A: PaletteApi> Palette<A> {
+    /// Wrap an API.
+    pub fn new(api: A) -> Self {
+        Palette { api }
+    }
+
+    /// The underlying API.
+    pub fn api(&self) -> &A {
+        &self.api
+    }
+
+    /// Find the uid of `name` at `version` in the current scope.
+    pub fn resolve(&self, name: &str, version: &str) -> Result<String> {
+        let listing = self
+            .api
+            .get_json("/v1/dashboard/clusterprofiles/metadata")?;
+        listing
+            .get("items")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .find(|it| {
+                it.pointer("/metadata/name").and_then(Value::as_str) == Some(name)
+                    && it.pointer("/spec/version").and_then(Value::as_str) == Some(version)
+            })
+            .and_then(|it| it.pointer("/metadata/uid").and_then(Value::as_str))
+            .map(str::to_string)
+            .ok_or_else(|| Error::ProfileNotFound {
+                name: name.to_string(),
+                version: version.to_string(),
+            })
+    }
+
+    /// Fetch the three documents for one profile. A missing variables endpoint (404 or 405, as on
+    /// older Palette versions) is treated as "no variables"; other errors propagate.
+    pub fn fetch_profile(&self, uid: &str, progress: &Progress) -> Result<RawProfile> {
+        progress.note(&format!("fetching profile {uid}"));
+        let profile = self.api.get_json(&format!("/v1/clusterprofiles/{uid}"))?;
+        let manifests = self
+            .api
+            .get_json(&format!("/v1/clusterprofiles/{uid}/packs/manifests"))?;
+        let variables = match self
+            .api
+            .get_json(&format!("/v1/clusterprofiles/{uid}/variables"))
+        {
             Ok(v) => v,
-            Err(e) => {
-                if !quiet {
-                    eprintln!(
-                        "{}: note: variables endpoint unavailable for {uid} ({e:#}); treating as none",
-                        crate::TOOL_NAME
-                    );
-                }
+            Err(Error::Api { status, .. }) if status == 404 || status == 405 => {
+                progress.note(&format!(
+                    "note: variables endpoint unavailable for {uid}; treating as none"
+                ));
                 serde_json::json!({ "variables": [] })
             }
+            Err(e) => return Err(e),
         };
-        let raw = RawProfile {
+        Ok(RawProfile {
             profile,
             manifests,
             variables,
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn listing() -> Value {
+        json!({"items": [
+            {"metadata": {"name": "aws-pxk", "uid": "u1"}, "spec": {"version": "1.0.0"}},
+            {"metadata": {"name": "aws-pxk", "uid": "u2"}, "spec": {"version": "1.1.0"}},
+        ]})
+    }
+
+    #[test]
+    fn resolve_finds_the_exact_name_and_version() {
+        let p = Palette::new(
+            MemoryApi::new().with("/v1/dashboard/clusterprofiles/metadata", listing()),
+        );
+        assert_eq!(p.resolve("aws-pxk", "1.1.0").unwrap(), "u2");
+        let err = p.resolve("aws-pxk", "9.9.9").unwrap_err();
+        assert!(matches!(err, Error::ProfileNotFound { .. }));
+        assert!(err.to_string().contains("'aws-pxk' with version '9.9.9'"));
+    }
+
+    #[test]
+    fn fetch_profile_tolerates_a_missing_variables_endpoint_only() {
+        let base = MemoryApi::new()
+            .with("/v1/clusterprofiles/u1", json!({"metadata": {"uid": "u1"}}))
+            .with(
+                "/v1/clusterprofiles/u1/packs/manifests",
+                json!({"spec": {"packs": []}}),
+            );
+        let raw = Palette::new(base.clone())
+            .fetch_profile("u1", &Progress::silent())
+            .unwrap();
+        assert_eq!(raw.variables, json!({"variables": []}));
+
+        let err = Palette::new(base.failing("/v1/clusterprofiles/u1/variables", 500, "boom"))
+            .fetch_profile("u1", &Progress::silent())
+            .unwrap_err();
+        assert!(matches!(err, Error::Api { status: 500, .. }), "{err}");
+    }
+
+    #[test]
+    fn api_errors_carry_path_status_and_body() {
+        let api = MemoryApi::new().failing("/v1/x", 401, r#"{"code":"MissingAuthHeader"}"#);
+        let err = api.get_json("/v1/x").unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            r#"GET /v1/x failed with HTTP 401: {"code":"MissingAuthHeader"}"#
+        );
+        assert_eq!(err.exit_code(), 2);
+    }
+
+    #[test]
+    fn raw_profile_round_trips_through_a_directory() {
+        let dir = tempfile::tempdir().unwrap();
+        let raw = RawProfile {
+            profile: json!({"a": 1}),
+            manifests: json!({"b": 2}),
+            variables: json!({"variables": []}),
         };
-        if let Some(dir) = save_dir {
-            save_raw(&raw, dir)?;
-        }
-        Ok(raw)
+        raw.save_dir(dir.path()).unwrap();
+        let back = RawProfile::load_dir(dir.path()).unwrap();
+        assert_eq!(back.profile, raw.profile);
+        fs::write(dir.path().join("variables.json"), "").unwrap();
+        assert!(matches!(
+            RawProfile::load_dir(dir.path()).unwrap_err(),
+            Error::EmptyFile(_)
+        ));
     }
-}
-
-pub fn save_raw(raw: &RawProfile, dir: &Path) -> Result<()> {
-    fs::create_dir_all(dir).with_context(|| format!("creating {}", dir.display()))?;
-    for (name, v) in [
-        ("profile.json", &raw.profile),
-        ("manifests.json", &raw.manifests),
-        ("variables.json", &raw.variables),
-    ] {
-        fs::write(dir.join(name), serde_json::to_string_pretty(v)?)
-            .with_context(|| format!("writing {}", dir.join(name).display()))?;
-    }
-    Ok(())
-}
-
-pub fn load_raw(dir: &Path) -> Result<RawProfile> {
-    let read = |name: &str| -> Result<Value> {
-        let p = dir.join(name);
-        let text = fs::read_to_string(&p)
-            .with_context(|| format!("missing or unreadable {}", p.display()))?;
-        if text.trim().is_empty() {
-            bail!("{} is empty", p.display());
-        }
-        serde_json::from_str(&text).with_context(|| format!("{} is not JSON", p.display()))
-    };
-    Ok(RawProfile {
-        profile: read("profile.json")?,
-        manifests: read("manifests.json")?,
-        variables: read("variables.json")?,
-    })
 }

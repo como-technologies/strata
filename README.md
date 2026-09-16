@@ -78,12 +78,23 @@ delivery pipeline.
   comment, the JSON document for scripts and AI clients, and colors.
 - [examples/README.md](examples/README.md): real packs and profiles for
   offline use.
+- [docs/backlog.md](docs/backlog.md): the planned work, one section per
+  GitHub issue; `just backlog-issues` opens them.
+
+## Library
+
+The crate is a library with a thin command line on top. A Rust program can
+depend on `strata` and use the same pieces: `api::PaletteApi` with an HTTP
+implementation and an in-memory one for tests, `snapshot::Snapshot`,
+`diff::compute`, `render::Renderer`, and the operations in `ops`. The command
+line adds only argument parsing, printing, and exit codes.
 
 ## Tests
 
-`cargo test`, or `just test`, runs unit tests and end-to-end tests over
-fixtures with the shape of the API responses. The tests do not use the
-network.
+`cargo test`, or `just test`, runs unit tests, library tests against an
+in-memory Palette API, and end-to-end tests of the binary over fixtures with
+the shape of the API responses. The tests do not use the network. CI runs
+`just lint`, `just test`, and `just build` on each push and pull request.
 
 ## Known limits
 

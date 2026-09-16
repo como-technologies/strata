@@ -1,0 +1,30 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: lint, test, build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - uses: extractions/setup-just@v2
+      # CI runs the same recipes a developer runs locally
+      - run: just lint
+      - run: just test
+      - run: just build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: strata-linux-x86_64
+          path: target/release/strata
+          if-no-files-found: error

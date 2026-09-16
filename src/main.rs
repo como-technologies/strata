@@ -1,32 +1,20 @@
-//! strata: record, compare, and verify Spectro Cloud Palette cluster profile versions as
-//! immutable, layered releases.
-//!
-//! A profile is a stack of layers (packs). Every layer gets three sub-hashes so a report names the
-//! kind of change: identity (which pack build the layer references), upstream (the digest Palette
-//! stamps on the pack ref), and authored (values, manifests, params). node = sha256(identity +
-//! upstream + authored); root = sha256(variablesHash, [key, node] in profile order). A snapshot
-//! is the record of one published version; compare reads two records; verify checks a record
-//! against the live profile.
+//! The strata command line: argument parsing, printing, and exit codes. Everything else is in the
+//! library.
 
-mod api;
-mod canon;
-mod color;
-mod diff;
-mod render;
-mod snapshot;
-
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::ExitCode;
 
-use anyhow::{anyhow, Context, Result};
 use clap::{Args, Parser, Subcommand, ValueEnum};
 
-use crate::color::{ColorMode, Paint};
-use crate::snapshot::Snapshot;
-
-pub const TOOL_NAME: &str = "strata";
-pub const TOOL_VERSION: &str = env!("CARGO_PKG_VERSION");
-pub const TOOL_IMPL: &str = "rust";
+use strata::api::{HttpApi, Palette};
+use strata::color::{ColorMode, Paint};
+use strata::config::Config;
+use strata::error::{Error, Result};
+use strata::progress::Progress;
+use strata::reference::Ref;
+use strata::render::{self, Format};
+use strata::snapshot::Snapshot;
+use strata::{diff, ops, TOOL_NAME};
 
 const SUBCOMMANDS: &[&str] = &["compare", "snapshot", "verify", "schema", "help"];
 
@@ -70,13 +58,13 @@ enum Cmd {
 struct OutputArgs {
     /// Output format: terminal (colored text), markdown (PR comment), json (machine-readable)
     #[arg(long, value_enum, default_value = "terminal")]
-    format: Format,
+    format: FormatArg,
     /// Shorthand for --format json
     #[arg(long)]
     json: bool,
     /// Color the terminal report; auto colors only when stdout is a terminal and honors NO_COLOR and CLICOLOR_FORCE
     #[arg(long, value_enum, default_value = "auto", num_args = 0..=1, default_missing_value = "always")]
-    color: ColorMode,
+    color: ColorArg,
     /// Same as --color=never
     #[arg(long)]
     no_color: bool,
@@ -93,15 +81,21 @@ impl OutputArgs {
         if self.json {
             Format::Json
         } else {
-            self.format
+            self.format.into()
         }
     }
     fn paint(&self) -> Paint {
         Paint::resolve(if self.no_color {
             ColorMode::Never
         } else {
-            self.color
+            self.color.into()
         })
+    }
+    fn renderer(&self) -> Box<dyn render::Renderer> {
+        render::renderer(self.format(), self.paint(), self.compact)
+    }
+    fn progress(&self) -> Progress {
+        progress(self.quiet)
     }
 }
 
@@ -148,10 +142,37 @@ struct VerifyArgs {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, ValueEnum)]
-enum Format {
+enum FormatArg {
     Terminal,
     Markdown,
     Json,
+}
+
+impl From<FormatArg> for Format {
+    fn from(f: FormatArg) -> Format {
+        match f {
+            FormatArg::Terminal => Format::Terminal,
+            FormatArg::Markdown => Format::Markdown,
+            FormatArg::Json => Format::Json,
+        }
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, ValueEnum)]
+enum ColorArg {
+    Auto,
+    Always,
+    Never,
+}
+
+impl From<ColorArg> for ColorMode {
+    fn from(c: ColorArg) -> ColorMode {
+        match c {
+            ColorArg::Auto => ColorMode::Auto,
+            ColorArg::Always => ColorMode::Always,
+            ColorArg::Never => ColorMode::Never,
+        }
+    }
 }
 
 #[derive(Clone, Copy, ValueEnum)]
@@ -171,8 +192,8 @@ fn main() -> ExitCode {
     match run(cli) {
         Ok(code) => code,
         Err(e) => {
-            eprintln!("{TOOL_NAME}: {e:#}");
-            ExitCode::from(2)
+            eprintln!("{TOOL_NAME}: {e}");
+            ExitCode::from(e.exit_code())
         }
     }
 }
@@ -186,96 +207,74 @@ fn run(cli: Cli) -> Result<ExitCode> {
     }
 }
 
-pub fn now_utc() -> String {
+fn now_utc() -> String {
     chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string()
 }
 
-fn log(quiet: bool, msg: &str) {
-    if !quiet && std::env::var_os("STRATA_QUIET").is_none() {
-        eprintln!("{TOOL_NAME}: {msg}");
-    }
+fn progress(quiet: bool) -> Progress {
+    Progress::new(quiet || std::env::var_os("STRATA_QUIET").is_some())
 }
 
-/// Resolve a ref to a snapshot: a snapshot file is loaded, anything else is fetched.
-fn snapshot_for(reference: &str, quiet: bool) -> Result<Snapshot> {
-    let path = Path::new(reference);
-    if path.is_file() {
-        return Snapshot::load(path);
-    }
-    let client = api::Client::from_env()?;
-    let uid = client.resolve_uid(reference)?;
-    let raw = client.fetch_raw(&uid, None, quiet)?;
-    Snapshot::from_raw(&raw, reference, &now_utc())
+fn connect() -> Result<Palette<HttpApi>> {
+    Ok(Palette::new(HttpApi::new(Config::from_env()?)))
 }
 
-fn emit(d: &diff::Diff, sa: &Snapshot, sb: &Snapshot, out: &OutputArgs, full: bool) -> Result<()> {
-    let text = match out.format() {
-        Format::Json => {
-            let mut s = if out.compact {
-                serde_json::to_string(d)?
-            } else {
-                serde_json::to_string_pretty(d)?
-            };
-            s.push('\n');
-            s
-        }
-        Format::Terminal => {
-            let p = out.paint();
-            let mut s = render::terminal(d, &p);
-            if full {
-                s.push_str(&render::full_diffs(sa, sb, d, &p, false));
-            }
-            s
-        }
-        Format::Markdown => {
-            let mut s = render::markdown(d);
-            if full {
-                s.push_str(&render::full_diffs(sa, sb, d, &Paint::off(), true));
-            }
-            s
-        }
-    };
-    print!("{text}");
-    Ok(())
-}
-
-fn cmd_compare(a: &CompareArgs) -> Result<ExitCode> {
-    let sa = snapshot_for(&a.a, a.out.quiet)?;
-    let sb = snapshot_for(&a.b, a.out.quiet)?;
-    let d = diff::compute(&sa, &sb, &now_utc(), None);
-    emit(&d, &sa, &sb, &a.out, a.full)?;
-    Ok(if d.same {
+fn exit_for(same: bool) -> ExitCode {
+    if same {
         ExitCode::SUCCESS
     } else {
         ExitCode::from(1)
-    })
+    }
+}
+
+fn cmd_compare(a: &CompareArgs) -> Result<ExitCode> {
+    let progress = a.out.progress();
+    let now = now_utc();
+    let sa = ops::snapshot_for(&Ref::parse(&a.a), connect, &now, &progress)?;
+    let sb = ops::snapshot_for(&Ref::parse(&a.b), connect, &now, &progress)?;
+    let d = ops::compare(&sa, &sb, &now);
+    print!("{}", a.out.renderer().render(&d, &sa, &sb, a.full)?);
+    Ok(exit_for(d.same))
 }
 
 fn cmd_snapshot(a: &SnapshotArgs) -> Result<ExitCode> {
-    let (raw, reference) = if let Some(dir) = &a.from_raw {
-        let reference = a.r#ref.clone().unwrap_or_else(|| dir.display().to_string());
-        (api::load_raw(dir)?, reference)
-    } else {
-        let reference = a
-            .r#ref
-            .clone()
-            .ok_or_else(|| anyhow!("snapshot needs a profile ref or --from-raw DIR"))?;
-        let client = api::Client::from_env()?;
-        let uid = client.resolve_uid(&reference)?;
-        (
-            client.fetch_raw(&uid, a.raw_dir.as_deref(), a.quiet)?,
-            reference,
-        )
+    let progress = progress(a.quiet);
+    let now = now_utc();
+    let snap = match &a.from_raw {
+        Some(dir) => {
+            let reference = a.r#ref.clone().unwrap_or_else(|| dir.display().to_string());
+            ops::snapshot_from_dir(dir, &reference, &now)?
+        }
+        None => {
+            let text = a.r#ref.as_deref().ok_or_else(|| Error::Transport {
+                path: String::new(),
+                message: "snapshot needs a profile ref or --from-raw DIR".to_string(),
+            })?;
+            let reference = Ref::parse(text);
+            let palette = connect()?;
+            let uid = match &reference {
+                Ref::Snapshot(_) | Ref::Uid(_) => text.to_string(),
+                Ref::NameVersion { name, version } => palette.resolve(name, version)?,
+            };
+            let raw = palette.fetch_profile(&uid, &progress)?;
+            if let Some(dir) = &a.raw_dir {
+                raw.save_dir(dir)?;
+            }
+            Snapshot::from_raw(&raw, text, &now)?
+        }
     };
-    let snap = Snapshot::from_raw(&raw, &reference, &now_utc())?;
     let text = snap.to_json(a.compact)?;
     match &a.output {
         Some(path) => {
-            std::fs::write(path, text).with_context(|| format!("writing {}", path.display()))?;
-            log(
-                a.quiet,
-                &format!("wrote {} (root {})", path.display(), &snap.root[..12]),
-            );
+            std::fs::write(path, text).map_err(|source| Error::Io {
+                path: path.clone(),
+                source,
+            })?;
+            progress.note(&format!(
+                "wrote {} (root {})",
+                path.display(),
+                &snap.root[..12]
+            ));
         }
         None => print!("{text}"),
     }
@@ -283,66 +282,21 @@ fn cmd_snapshot(a: &SnapshotArgs) -> Result<ExitCode> {
 }
 
 fn cmd_verify(a: &VerifyArgs) -> Result<ExitCode> {
+    let progress = a.out.progress();
     let recorded = Snapshot::load(&a.snapshot)?;
-    let uid = recorded.source.uid.clone();
-    if uid.is_empty() {
-        return Err(anyhow!("snapshot has no source.uid to verify against"));
+    let palette = connect()?;
+    let v = ops::verify(&recorded, &palette, &now_utc(), &progress)?;
+    let renderer = a.out.renderer();
+    print!("{}", renderer.render(&v.diff, &recorded, &v.live, false)?);
+    if let Some(line) = v
+        .diff
+        .verify
+        .as_ref()
+        .and_then(|ver| renderer.verdict(ver, &recorded.source))
+    {
+        println!("{line}");
     }
-    let (name, ver, at) = (
-        recorded.source.name.clone(),
-        recorded.source.version.clone(),
-        recorded.source.fetched_at.clone(),
-    );
-    log(
-        a.out.quiet,
-        &format!("verifying {name}@{ver} ({uid}) against live; recorded {at}"),
-    );
-    let client = api::Client::from_env()?;
-    let raw = client.fetch_raw(&uid, None, a.out.quiet)?;
-    let checked_at = now_utc();
-    let live = Snapshot::from_raw(&raw, &uid, &checked_at)?;
-    let same = recorded.root == live.root;
-    let verify = diff::Verify {
-        status: if same {
-            diff::VerifyStatus::Unchanged
-        } else {
-            diff::VerifyStatus::Drifted
-        },
-        uid: uid.clone(),
-        recorded_at: at.clone(),
-        checked_at: checked_at.clone(),
-    };
-    let d = diff::compute(&recorded, &live, &checked_at, Some(verify));
-    emit(&d, &recorded, &live, &a.out, false)?;
-    let p = a.out.paint();
-    match a.out.format() {
-        Format::Json => {}
-        Format::Terminal => {
-            if same {
-                println!(
-                    "{}: published version {name}@{ver} is unchanged since {at}",
-                    p.bgreen("OK")
-                );
-            } else {
-                println!(
-                    "{}: published version {name}@{ver} differs from the copy recorded {at}",
-                    p.bred("DRIFT")
-                );
-            }
-        }
-        Format::Markdown => {
-            if same {
-                println!("\n**OK**: published version `{name}@{ver}` is unchanged since {at}");
-            } else {
-                println!("\n**DRIFT**: published version `{name}@{ver}` differs from the copy recorded {at}");
-            }
-        }
-    }
-    Ok(if same {
-        ExitCode::SUCCESS
-    } else {
-        ExitCode::from(1)
-    })
+    Ok(exit_for(v.unchanged))
 }
 
 fn cmd_schema(kind: SchemaKind) -> Result<ExitCode> {

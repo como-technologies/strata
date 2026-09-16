@@ -2,7 +2,7 @@
   "schema": "strata-snapshot/1",
   "tool": {
     "name": "strata",
-    "version": "0.2.0",
+    "version": "0.3.0",
     "impl": "rust"
   },
   "source": {
@@ -20,7 +20,7 @@
       "clusters": [],
       "count": 0
     },
-    "fetchedAt": "2026-09-15T19:19:16Z"
+    "fetchedAt": "2026-09-16T01:56:23Z"
   },
   "variables": [],
   "variablesHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",

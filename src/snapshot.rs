@@ -5,22 +5,26 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use anyhow::{bail, Context, Result};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 
 use crate::api::RawProfile;
 use crate::canon::{canon_yaml, canonical_json, hash_yaml, sha256_hex, Canon};
+use crate::error::{Error, Result};
 
+/// Schema id written into every snapshot.
 pub const SNAPSHOT_SCHEMA: &str = "strata-snapshot/1";
 
+/// One published profile version: its Merkle root, per-pack hashes, canonical values, and raw contents.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct Snapshot {
     /// Always "strata-snapshot/1"
     pub schema: String,
+    /// Which tool wrote the snapshot.
     pub tool: Tool,
+    /// Where it came from.
     pub source: Source,
     /// Profile variables, normalized and sorted by name
     pub variables: Vec<Value>,
@@ -32,61 +36,83 @@ pub struct Snapshot {
     pub root: String,
 }
 
+/// Which tool wrote a document.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct Tool {
+    /// Always "strata".
     pub name: String,
+    /// Crate version.
     pub version: String,
     /// "rust" or "bash"; absent in snapshots from the first bash release
     #[serde(default, skip_serializing_if = "Option::is_none", rename = "impl")]
     pub implementation: Option<String>,
 }
 
+/// Where a snapshot came from.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct Source {
     /// The ref the snapshot was taken from, as given on the command line
     #[serde(rename = "ref")]
     pub reference: String,
+    /// Profile uid.
     pub uid: String,
+    /// Profile name.
     pub name: String,
+    /// Profile version string.
     pub version: String,
+    /// Cloud type of the template, for example `aws`.
     pub cloud_type: String,
     /// Profile type: cluster, infra, add-on, system
     #[serde(rename = "type")]
     pub kind: String,
     /// "published" or "draft": the template the packs were read from
     pub template: String,
+    /// Profile labels.
     #[serde(default)]
     pub tags: BTreeMap<String, String>,
     /// Clusters using this profile version at snapshot time
     #[serde(default)]
     pub consumers: Consumers,
+    /// When the snapshot was taken, RFC 3339 UTC.
     pub fetched_at: String,
 }
 
+/// Clusters using a profile version.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
 pub struct Consumers {
+    /// Cluster uids.
     pub clusters: Vec<String>,
+    /// Number of clusters.
     pub count: usize,
 }
 
+/// One layer of the profile: a pack with its configuration and its hashes.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct Pack {
     /// "<layer>/<name>", the Merkle node key
     pub key: String,
+    /// Palette layer name: os, k8s, cni, csi, addon.
     pub layer: String,
+    /// Pack name.
     pub name: String,
+    /// Pack type: spectro, helm, manifest, oci.
     #[serde(rename = "type")]
     pub kind: String,
+    /// Tag as pinned on the profile.
     pub tag: String,
+    /// Resolved version.
     pub version: String,
+    /// Uid of the pack version in the registry.
     pub pack_uid: String,
+    /// Uid of the registry.
     pub registry_uid: String,
     /// The digest Palette stamps on the pack ref of the profile template
     pub ref_digest: String,
     /// The digest of the pack in its registry, from the packs/manifests endpoint
     pub registry_digest: String,
+    /// Pack params as set on the profile.
     pub params: Value,
     /// Raw values YAML as returned by the API
     pub values: String,
@@ -94,25 +120,35 @@ pub struct Pack {
     pub values_canon: Value,
     /// sha256 of canonical JSON of valuesCanon, or of the trimmed text when unparseable
     pub values_hash: String,
+    /// Why the values did not parse as YAML, when they did not.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub values_parse_error: Option<String>,
     /// Attached manifests sorted by name
     pub manifests: Vec<Manifest>,
+    /// The three sub-hashes and the node hash.
     pub hash: PackHash,
 }
 
+/// A manifest attached to a pack on the profile.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct Manifest {
+    /// Manifest name.
     pub name: String,
+    /// Manifest uid.
     pub uid: String,
+    /// Digest as reported by Palette.
     pub digest: String,
+    /// Raw YAML content.
     pub content: String,
+    /// sha256 of the canonical content, or of the trimmed text when unparseable.
     pub content_hash: String,
+    /// Why the content did not parse as YAML, when it did not.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub content_parse_error: Option<String>,
 }
 
+/// The three sub-hashes and the node hash of one pack.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct PackHash {
@@ -206,7 +242,106 @@ fn normalize_variable(v: &Value) -> Value {
     })
 }
 
+impl Pack {
+    /// Build one pack from its ref on the profile template and the matching entry of the
+    /// packs/manifests response (matched by name; missing entries leave those fields empty).
+    pub fn from_api(pk: &Value, manifests_packs: &[Value]) -> Pack {
+        let name = s(pk, "/name");
+        let mm = manifests_packs
+            .iter()
+            .find(|m| s(m, "/metadata/name") == name || s(m, "/spec/name") == name)
+            .cloned()
+            .unwrap_or(Value::Null);
+        let layer = or(s(pk, "/layer"), "addon");
+        let kind = or(s(pk, "/type"), "spectro");
+        let tag = s(pk, "/tag");
+        let version = first_nonempty(&[s(pk, "/version"), s(&mm, "/spec/version")]);
+        let pack_uid = s(pk, "/packUid");
+        let registry_uid = s(pk, "/registryUid");
+        let ref_digest = s(pk, "/digest");
+        let registry_digest = s(&mm, "/spec/digest");
+        let params = pk
+            .get("params")
+            .cloned()
+            .filter(Value::is_object)
+            .unwrap_or_else(|| Value::Object(Map::new()));
+        let values = first_nonempty(&[s(pk, "/values"), s(&mm, "/spec/values")]);
+
+        let mut manifests: Vec<Manifest> = arr(&mm, "/spec/manifests")
+            .iter()
+            .map(|m| {
+                let content = s(m, "/content");
+                let (content_hash, content_parse_error) = hash_yaml(&content);
+                Manifest {
+                    name: s(m, "/name"),
+                    uid: s(m, "/uid"),
+                    digest: s(m, "/digest"),
+                    content,
+                    content_hash,
+                    content_parse_error,
+                }
+            })
+            .collect();
+        manifests.sort_by(|a, b| a.name.cmp(&b.name));
+
+        let (values_canon, values_hash, values_parse_error) = match canon_yaml(&values) {
+            Canon::Parsed(v) => {
+                let h = sha256_hex(&canonical_json(&v));
+                (v, h, None)
+            }
+            Canon::Unparseable(e) => (Value::Null, sha256_hex(values.trim()), Some(e)),
+        };
+
+        let identity = sha256_hex(&canonical_json(&json!({
+            "name": name, "layer": layer, "type": kind, "tag": tag, "version": version,
+            "packUid": pack_uid, "registryUid": registry_uid,
+        })));
+        let (upstream_raw, upstream_source) = if !ref_digest.is_empty() {
+            (ref_digest.clone(), "packRef.digest")
+        } else if !registry_digest.is_empty() {
+            (registry_digest.clone(), "packSummary.digest")
+        } else {
+            (String::new(), "none")
+        };
+        let upstream = sha256_hex(&upstream_raw);
+        let authored = sha256_hex(&canonical_json(&json!({
+            "values": values_hash,
+            "manifests": manifests.iter().map(|m| json!([m.name, m.content_hash])).collect::<Vec<_>>(),
+            "params": params,
+        })));
+        let node = sha256_hex(&format!("{identity}{upstream}{authored}"));
+
+        Pack {
+            key: format!("{layer}/{name}"),
+            layer,
+            name,
+            kind,
+            tag,
+            version,
+            pack_uid,
+            registry_uid,
+            ref_digest,
+            registry_digest,
+            params,
+            values,
+            values_canon,
+            values_hash,
+            values_parse_error,
+            manifests,
+            hash: PackHash {
+                identity,
+                upstream,
+                upstream_raw,
+                upstream_source: upstream_source.to_string(),
+                authored,
+                node,
+            },
+        }
+    }
+}
+
 impl Snapshot {
+    /// Build a snapshot from the raw API responses of one profile.
     pub fn from_raw(raw: &RawProfile, reference: &str, fetched_at: &str) -> Result<Snapshot> {
         let prof = &raw.profile;
         let published = arr(prof, "/spec/published/packs");
@@ -253,100 +388,10 @@ impl Snapshot {
         variables.sort_by_key(|v| s(v, "/name"));
         let variables_hash = sha256_hex(&canonical_json(&Value::Array(variables.clone())));
 
-        let mut packs = Vec::with_capacity(tpl_packs.len());
-        for pk in &tpl_packs {
-            let name = s(pk, "/name");
-            let mm = mpacks
-                .iter()
-                .find(|m| s(m, "/metadata/name") == name || s(m, "/spec/name") == name)
-                .cloned()
-                .unwrap_or(Value::Null);
-            let layer = or(s(pk, "/layer"), "addon");
-            let kind = or(s(pk, "/type"), "spectro");
-            let tag = s(pk, "/tag");
-            let version = first_nonempty(&[s(pk, "/version"), s(&mm, "/spec/version")]);
-            let pack_uid = s(pk, "/packUid");
-            let registry_uid = s(pk, "/registryUid");
-            let ref_digest = s(pk, "/digest");
-            let registry_digest = s(&mm, "/spec/digest");
-            let params = pk
-                .get("params")
-                .cloned()
-                .filter(Value::is_object)
-                .unwrap_or_else(|| Value::Object(Map::new()));
-            let values = first_nonempty(&[s(pk, "/values"), s(&mm, "/spec/values")]);
-
-            let mut manifests: Vec<Manifest> = arr(&mm, "/spec/manifests")
-                .iter()
-                .map(|m| {
-                    let content = s(m, "/content");
-                    let (content_hash, content_parse_error) = hash_yaml(&content);
-                    Manifest {
-                        name: s(m, "/name"),
-                        uid: s(m, "/uid"),
-                        digest: s(m, "/digest"),
-                        content,
-                        content_hash,
-                        content_parse_error,
-                    }
-                })
-                .collect();
-            manifests.sort_by(|a, b| a.name.cmp(&b.name));
-
-            let (values_canon, values_hash, values_parse_error) = match canon_yaml(&values) {
-                Canon::Parsed(v) => {
-                    let h = sha256_hex(&canonical_json(&v));
-                    (v, h, None)
-                }
-                Canon::Unparseable(e) => (Value::Null, sha256_hex(values.trim()), Some(e)),
-            };
-
-            let identity = sha256_hex(&canonical_json(&json!({
-                "name": name, "layer": layer, "type": kind, "tag": tag, "version": version,
-                "packUid": pack_uid, "registryUid": registry_uid,
-            })));
-            let (upstream_raw, upstream_source) = if !ref_digest.is_empty() {
-                (ref_digest.clone(), "packRef.digest")
-            } else if !registry_digest.is_empty() {
-                (registry_digest.clone(), "packSummary.digest")
-            } else {
-                (String::new(), "none")
-            };
-            let upstream = sha256_hex(&upstream_raw);
-            let authored = sha256_hex(&canonical_json(&json!({
-                "values": values_hash,
-                "manifests": manifests.iter().map(|m| json!([m.name, m.content_hash])).collect::<Vec<_>>(),
-                "params": params,
-            })));
-            let node = sha256_hex(&format!("{identity}{upstream}{authored}"));
-
-            packs.push(Pack {
-                key: format!("{layer}/{name}"),
-                layer,
-                name,
-                kind,
-                tag,
-                version,
-                pack_uid,
-                registry_uid,
-                ref_digest,
-                registry_digest,
-                params,
-                values,
-                values_canon,
-                values_hash,
-                values_parse_error,
-                manifests,
-                hash: PackHash {
-                    identity,
-                    upstream,
-                    upstream_raw,
-                    upstream_source: upstream_source.to_string(),
-                    authored,
-                    node,
-                },
-            });
-        }
+        let packs: Vec<Pack> = tpl_packs
+            .iter()
+            .map(|pk| Pack::from_api(pk, &mpacks))
+            .collect();
 
         let root = sha256_hex(&canonical_json(&json!({
             "variables": variables_hash,
@@ -368,18 +413,25 @@ impl Snapshot {
         })
     }
 
+    /// Read a snapshot file, checking its schema id.
     pub fn load(path: &Path) -> Result<Snapshot> {
-        let text =
-            std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
-        let v: Value = serde_json::from_str(&text)
-            .with_context(|| format!("'{}' is not a strata snapshot", path.display()))?;
+        let text = std::fs::read_to_string(path).map_err(|source| Error::Io {
+            path: path.to_path_buf(),
+            source,
+        })?;
+        let v: Value =
+            serde_json::from_str(&text).map_err(|_| Error::NotSnapshot(path.to_path_buf()))?;
         if v.get("schema").and_then(Value::as_str) != Some(SNAPSHOT_SCHEMA) {
-            bail!("'{}' is not a strata snapshot", path.display());
+            return Err(Error::NotSnapshot(path.to_path_buf()));
         }
-        serde_json::from_value(v)
-            .with_context(|| format!("'{}' does not match {}", path.display(), SNAPSHOT_SCHEMA))
+        serde_json::from_value(v).map_err(|source| Error::SnapshotSchema {
+            path: path.to_path_buf(),
+            schema: SNAPSHOT_SCHEMA,
+            source,
+        })
     }
 
+    /// Serialize, pretty-printed unless `compact`, with a trailing newline.
     pub fn to_json(&self, compact: bool) -> Result<String> {
         let mut s = if compact {
             serde_json::to_string(self)?
