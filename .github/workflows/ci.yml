@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   check:
-    name: lint, test, build
+    name: lint and test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -22,9 +22,18 @@ jobs:
       # CI runs the same recipes a developer runs locally
       - run: just lint
       - run: just test
-      - run: just build
+
+  build:
+    name: build x86_64-unknown-linux-musl
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # the same step the release workflow uses, so CI checks the binary a release would ship
+      - uses: ./.github/actions/build
+        with:
+          target: x86_64-unknown-linux-musl
       - uses: actions/upload-artifact@v4
         with:
-          name: strata-linux-x86_64
-          path: target/release/strata
+          name: strata-x86_64-unknown-linux-musl
+          path: target/x86_64-unknown-linux-musl/release/strata
           if-no-files-found: error

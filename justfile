@@ -6,6 +6,21 @@ default: build
 build:
     cargo build --release
 
+# Release binary for one target at target/<target>/release/strata. Linux targets are static
+# musl builds made in cross's containers; the others build natively with cargo.
+build-target target:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    case "{{target}}" in
+      *linux*) cross build --release --target "{{target}}" ;;
+      *) cargo build --release --target "{{target}}" ;;
+    esac
+
+# Tag the version in Cargo.toml as v<version>; refuses on a dirty tree or an existing tag.
+# Push the tag to start the release workflow.
+release:
+    scripts/tag-release.sh
+
 # Rust unit + integration tests
 test:
     cargo test

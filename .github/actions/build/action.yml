@@ -1,0 +1,24 @@
+name: build strata
+description: Build the release binary for one target. CI and the release workflow both use this, so the artifact CI checks is the one a release ships.
+inputs:
+  target:
+    description: Rust target triple, for example x86_64-unknown-linux-musl
+    required: true
+runs:
+  using: composite
+  steps:
+    - uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: ${{ inputs.target }}
+    - uses: Swatinem/rust-cache@v2
+      with:
+        key: ${{ inputs.target }}
+    - uses: extractions/setup-just@v2
+    # Linux targets are static musl builds; ring needs a musl C toolchain, which cross provides
+    - name: install cross
+      if: contains(inputs.target, 'linux')
+      uses: taiki-e/install-action@v2
+      with:
+        tool: cross
+    - run: just build-target ${{ inputs.target }}
+      shell: bash

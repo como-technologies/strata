@@ -41,10 +41,41 @@ order, so `22.04` is above `20.04` and `1.30.6` above `1.29.10`. The exit
 status is `0` for identical or unchanged, `1` for different or drifted, and
 `2` for an error.
 
+## Install
+
+Each release ships one static binary per platform, a `SHA256SUMS` file, and
+a Sigstore signature for every file. Download, check, and move onto your
+path:
+
+```
+v=v0.4.0; t=x86_64-unknown-linux-musl
+base=https://github.com/como-technologies/strata/releases/download/$v
+curl -fsSLO $base/strata-$t
+curl -fsSLO $base/SHA256SUMS
+sha256sum --check --ignore-missing SHA256SUMS      # macOS: shasum -a 256 --check --ignore-missing SHA256SUMS
+chmod +x strata-$t && sudo mv strata-$t /usr/local/bin/strata
+```
+
+Targets: `x86_64-unknown-linux-musl`, `aarch64-unknown-linux-musl`,
+`aarch64-apple-darwin`, `x86_64-apple-darwin`. The Linux binaries have no
+shared library dependencies.
+
+To check who built a file, verify its signature with
+[cosign](https://github.com/sigstore/cosign). The release workflow signs
+through its own identity, so the check pins the repository and the workflow:
+
+```
+curl -fsSLO $base/strata-$t.sigstore.json
+cosign verify-blob strata-$t --bundle strata-$t.sigstore.json \
+  --certificate-identity-regexp '^https://github.com/como-technologies/strata/\.github/workflows/release\.yml@refs/tags/v' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+```
+
 ## Build and configure
 
 1. Run `cargo build --release`, or `just build`. The binary is
-   `target/release/strata`.
+   `target/release/strata`. `just build-target <triple>` builds one of the
+   release targets the same way the release workflow does.
 2. Set `PALETTE_API_KEY`.
 3. Set `PALETTE_PROJECT_UID` for project-scoped profiles. A snapshot records
    the project it was taken in, and `verify` checks each record there, so a
@@ -103,9 +134,19 @@ line adds only argument parsing, printing, and exit codes.
 ## Tests
 
 `cargo test`, or `just test`, runs unit tests, library tests against an
-in-memory Palette API, and end-to-end tests of the binary over fixtures with
-the shape of the API responses. The tests do not use the network. CI runs
-`just lint`, `just test`, and `just build` on each push and pull request.
+in-memory Palette API, end-to-end tests of the binary over fixtures with the
+shape of the API responses, and tests of the scripts. The tests do not use
+the network. CI runs `just lint` and `just test` on each push and pull
+request, and builds the Linux binary with the same step a release uses.
+
+## Releasing
+
+1. Set the new version in `Cargo.toml` and commit.
+2. Run `just release`. It tags `HEAD` as `v<version>` and refuses on a dirty
+   tree or an existing tag.
+3. Push the tag. The release workflow builds the four binaries, writes
+   `SHA256SUMS`, signs every file, verifies the signatures, and publishes the
+   GitHub release with generated notes.
 
 ## Known limits
 
