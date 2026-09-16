@@ -366,6 +366,6 @@ Strata is already a library with a thin CLI (`src/lib.rs`, `src/ops.rs`). Anothe
 
 ### Acceptance criteria
 
-- [ ] `cargo doc --no-deps` builds with no warnings
-- [ ] Another crate depends on `strata` and builds a snapshot from a `MemoryApi` without the CLI
-- [ ] `docs/model.md` states the semver policy
+- [x] `cargo doc --no-deps` builds with no warnings
+- [x] Another crate depends on `strata` and builds a snapshot from a `MemoryApi` without the CLI
+- [x] `docs/model.md` states the semver policy
