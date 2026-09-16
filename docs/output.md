@@ -192,6 +192,84 @@ status is `0` when no cluster uses the version and `1` when any does.
 `consumers[]` with `uid`, `name`, `projectUid`, `state`, and `error` when
 there is one. `strata schema consumers` prints its JSON Schema.
 
+## The list report
+
+`strata list` prints the refs that the other commands take. It lists the
+profile versions and the clusters in the scope. With `projects`, it also lists
+every project the key can see. Name the kinds to list, such as
+`strata list projects` or `strata list profiles clusters projects`. With no
+kind, it lists profiles and clusters.
+
+```
+project strata-test (6aaab0567993b0008ad902db)
+
+2 profiles
+  strata-live-profile@1.0.0  6aaab2f6da23e353e96e8c69  aws
+  strata-live-profile@1.0.1  6aaab2fbb6a8f072d83984d1  aws
+
+1 cluster
+  cluster:6aaab352da23e35da8a5a544  strata-live-cluster  Running  aws
+```
+
+The first column is the ref. Profiles sort by name, then by natural version
+order. Clusters and projects sort by name.
+
+`--packs` reads each profile version for its type, its consumer count, and its
+packs, with one request for each version. `--pack <text>` keeps the versions
+with a pack whose name contains the text, ignoring case. It turns on
+`--packs`, and it lists only profiles unless you name kinds. A pack is not a
+ref, so this is how to find the profile versions that carry one:
+
+```
+$ strata list --pack cilium
+project strata-test (6aaab0567993b0008ad902db)
+
+2 profiles with a pack matching 'cilium'
+  strata-live-profile@1.0.0  6aaab2f6da23e353e96e8c69  aws  cluster  1 consumer
+    os   ubuntu-aws      24.04
+    k8s  kubernetes      1.36.2
+    cni  cni-cilium-oss  1.20.1
+    csi  csi-aws-ebs     1.65.0
+  strata-live-profile@1.0.1  6aaab2fbb6a8f072d83984d1  aws  cluster  no consumers
+    ...
+```
+
+When a profile pins a pack under another tag name, the tag follows the
+version: `24.04 (tag LTS__24.x)`. A profile version that cannot be read shows
+its error in place of the type. It stays in the list, also with `--pack`,
+because strata cannot tell whether it carries the pack.
+
+Profiles and clusters come from the project in `PALETTE_PROJECT_UID`, or from
+`--project <uid>`. `--project ''` is tenant scope. Palette lists each kind
+differently by scope:
+
+| listing  | in a project           | at tenant scope                 |
+|----------|------------------------|---------------------------------|
+| profiles | the project's profiles | tenant profiles only            |
+| clusters | the project's clusters | the clusters of every project   |
+| projects | that project only      | every project the key can see   |
+
+For that reason `strata list` always reads projects at tenant scope. A cluster
+ref works only in the cluster's own project. When a cluster is in a different
+project from the listing, its line ends with `project <uid>`. Set
+`PALETTE_PROJECT_UID` to that uid before you use the ref.
+
+The listings are `GET /v1/dashboard/clusterprofiles/metadata`,
+`GET /v1/dashboard/spectroclusters/meta`, and
+`GET /v1/dashboard/projects/metadata`. `--packs` adds
+`GET /v1/clusterprofiles/{uid}` for each profile version.
+
+The exit status is `0`, or `2` when a listing cannot be read.
+`--format markdown` writes one table for each kind. `--format json` writes the
+document `strata-list/1`: `projectUid` and `projectName` for the scope, `pack`
+when it is given, and `profiles[]`, `clusters[]`, and `projects[]` for the
+kinds that were listed. A kind that was not listed is absent. A profile has
+`ref`, `name`, `version`, `uid`, and `cloudType`. With `--packs` it also has
+`type`, `consumers`, and `packs[]` with `layer`, `name`, `tag`, and `version`,
+or it has `error`. A cluster has `ref`, `name`, `uid`, `state`, `cloudType`,
+and `projectUid`. A project has `name` and `uid`. `strata schema list` prints
+the JSON Schema.
+
 ### Errors in JSON mode
 
 When `--format json` or `--json` is selected and the command fails, stderr

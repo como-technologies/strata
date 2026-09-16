@@ -10,7 +10,7 @@ use strata::api::{HttpApi, Palette, Retry, RetryPolicy};
 use strata::color::{ColorMode, Paint};
 use strata::config::Config;
 use strata::error::{Error, Result};
-use strata::ops::Policy;
+use strata::ops::{ListKind, ListOptions, Policy};
 use strata::progress::Progress;
 use strata::reference::Ref;
 use strata::render::{self, Format};
@@ -23,6 +23,7 @@ const SUBCOMMANDS: &[&str] = &[
     "verify",
     "same-release",
     "consumers",
+    "list",
     "schema",
     "help",
 ];
@@ -40,7 +41,7 @@ UPSTREAM (the digest on the pack ref) and AUTHORED (canonical values YAML, manif
 A profile's root hash covers its variables and its packs in order; same root, same release.\n\n\
 Refs: a profile uid, <name>@<version>, <name>@latest (the highest version in the scope),\n\
 cluster:<uid> or cluster:<uid>/<profile> (what a cluster runs), or a snapshot file written by\n\
-`snapshot`. A cluster that runs a recorded version has that record's root. A snapshot records the\n\
+`snapshot`. `list` shows the profile and cluster refs in the scope. A cluster that runs a recorded version has that record's root. A snapshot records the\n\
 project it was taken in, and verify checks it there unless --project says otherwise.\n\
 Environment: PALETTE_API_KEY (or SPECTROCLOUD_APIKEY), PALETTE_PROJECT_UID (optional),\n\
 PALETTE_API (default https://api.spectrocloud.com), STRATA_RETRIES (default 3; retries on HTTP 5xx,\n\
@@ -61,6 +62,7 @@ impl Cli {
             Cmd::Verify(a) => a.out.format() == Format::Json,
             Cmd::SameRelease(a) => a.out.format() == Format::Json,
             Cmd::Consumers(a) => a.out.format() == Format::Json,
+            Cmd::List(a) => a.out.format() == Format::Json,
             Cmd::Snapshot(_) | Cmd::Schema { .. } => false,
         }
     }
@@ -79,7 +81,9 @@ enum Cmd {
     SameRelease(SameReleaseArgs),
     /// List the clusters that use a profile version, with name, project, and state; exit 1 when any do
     Consumers(ConsumersArgs),
-    /// Print the JSON Schema of a document: snapshot, diff, verify-summary, chain, consumers, or the candidate file
+    /// List the profile versions and clusters in the scope as refs, and the projects the key can see
+    List(ListArgs),
+    /// Print the JSON Schema of a document: snapshot, diff, verify-summary, chain, consumers, list, or the candidate file
     Schema {
         #[arg(value_enum)]
         kind: SchemaKind,
@@ -203,6 +207,44 @@ struct ConsumersArgs {
     out: OutputArgs,
 }
 
+#[derive(Args)]
+struct ListArgs {
+    /// What to list: profiles, clusters, projects. Without one: profiles and clusters, or only
+    /// profiles with --pack
+    #[arg(value_enum)]
+    kinds: Vec<KindArg>,
+    /// List profiles and clusters in this project instead of PALETTE_PROJECT_UID's. Projects are
+    /// always listed at tenant scope
+    #[arg(long)]
+    project: Option<String>,
+    /// Read each profile version for its type, consumer count, and packs; one request each
+    #[arg(long)]
+    packs: bool,
+    /// Keep the profile versions with a pack whose name contains TEXT, ignoring case; implies --packs
+    #[arg(long, value_name = "TEXT")]
+    pack: Option<String>,
+    #[command(flatten)]
+    out: OutputArgs,
+}
+
+/// What `list` can list.
+#[derive(Clone, Copy, PartialEq, Eq, ValueEnum)]
+enum KindArg {
+    Profiles,
+    Clusters,
+    Projects,
+}
+
+impl From<KindArg> for ListKind {
+    fn from(k: KindArg) -> ListKind {
+        match k {
+            KindArg::Profiles => ListKind::Profiles,
+            KindArg::Clusters => ListKind::Clusters,
+            KindArg::Projects => ListKind::Projects,
+        }
+    }
+}
+
 /// Differences `same-release` can be told to accept.
 #[derive(Clone, Copy, PartialEq, Eq, ValueEnum)]
 enum Allow {
@@ -251,6 +293,7 @@ enum SchemaKind {
     VerifySummary,
     Chain,
     Consumers,
+    List,
     Candidate,
 }
 
@@ -283,6 +326,7 @@ fn run(cli: Cli) -> Result<ExitCode> {
         Cmd::Verify(a) => cmd_verify(&a),
         Cmd::SameRelease(a) => cmd_same_release(&a),
         Cmd::Consumers(a) => cmd_consumers(&a),
+        Cmd::List(a) => cmd_list(&a),
         Cmd::Schema { kind } => cmd_schema(kind),
     }
 }
@@ -295,11 +339,12 @@ fn progress(quiet: bool) -> Progress {
     Progress::new(quiet || std::env::var_os("STRATA_QUIET").is_some())
 }
 
-/// A client from the environment; `project` replaces `PALETTE_PROJECT_UID` when given.
+/// A client from the environment; `project` replaces `PALETTE_PROJECT_UID` when given, and an
+/// empty one is tenant scope.
 fn connect(progress: Progress, project: Option<&str>) -> Result<Palette<Retry<HttpApi>>> {
     let mut config = Config::from_env()?;
     if let Some(p) = project {
-        config.project_uid = Some(p.to_string());
+        config.project_uid = Some(p.to_string()).filter(|p| !p.is_empty());
     }
     let policy = RetryPolicy::new(config.retries);
     Ok(Palette::new(Retry::new(
@@ -492,6 +537,24 @@ fn cmd_consumers(a: &ConsumersArgs) -> Result<ExitCode> {
     Ok(ExitCode::from(r.exit_code()))
 }
 
+fn cmd_list(a: &ListArgs) -> Result<ExitCode> {
+    let progress = a.out.progress();
+    let options = ListOptions {
+        kinds: a.kinds.iter().map(|&k| k.into()).collect(),
+        project: a.project.clone(),
+        packs: a.packs,
+        pack: a.pack.clone(),
+    };
+    let l = ops::list(
+        &options,
+        |scope| connect(progress, scope),
+        &now_utc(),
+        &progress,
+    )?;
+    print!("{}", a.out.renderer().render_list(&l)?);
+    Ok(ExitCode::SUCCESS)
+}
+
 fn cmd_schema(kind: SchemaKind) -> Result<ExitCode> {
     let schema = match kind {
         SchemaKind::Snapshot => schemars::schema_for!(Snapshot),
@@ -499,6 +562,7 @@ fn cmd_schema(kind: SchemaKind) -> Result<ExitCode> {
         SchemaKind::VerifySummary => schemars::schema_for!(ops::VerifySummary),
         SchemaKind::Chain => schemars::schema_for!(ops::Chain),
         SchemaKind::Consumers => schemars::schema_for!(ops::ConsumersReport),
+        SchemaKind::List => schemars::schema_for!(ops::Listing),
         SchemaKind::Candidate => schemars::schema_for!(strata::candidate::Candidate),
     };
     println!("{}", serde_json::to_string_pretty(&schema)?);

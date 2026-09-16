@@ -64,8 +64,9 @@ pub enum Error {
         /// The parse error.
         source: serde_json::Error,
     },
-    /// `name@version` matched nothing in the current scope.
-    #[error("no cluster profile named '{name}' with version '{version}' in this scope")]
+    /// `name@version` matched nothing in the current scope. The message points at `strata list`,
+    /// because the name is often a pack's rather than a profile's.
+    #[error("no cluster profile named '{name}' with version '{version}' in this scope; `strata list` shows the profiles in it, and `strata list --pack {name}` the profiles with a pack of that name")]
     ProfileNotFound {
         /// Profile name.
         name: String,

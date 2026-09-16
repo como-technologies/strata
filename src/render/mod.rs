@@ -10,7 +10,7 @@ use serde_json::Value;
 use crate::color::Paint;
 use crate::diff::{Diff, Leaf, PackDiff, Status, VariableSummary, VariablesByName, Verify};
 use crate::error::Result;
-use crate::ops::{Chain, ConsumersReport, Pair, PairStatus, VerifySummary};
+use crate::ops::{Chain, ConsumersReport, Listing, Pair, PairStatus, VerifySummary};
 use crate::snapshot::{Snapshot, Source};
 
 pub use json::JsonRenderer;
@@ -48,15 +48,56 @@ pub trait Renderer {
 
     /// Render the clusters that use a profile version.
     fn render_consumers(&self, r: &ConsumersReport) -> Result<String>;
+
+    /// Render the profiles, clusters, and projects `list` found.
+    fn render_list(&self, l: &Listing) -> Result<String>;
+}
+
+/// `project lab (p1)`, `project p1` when the name is unknown, or `tenant scope`.
+pub(crate) fn list_scope(l: &Listing) -> String {
+    match (l.project_uid.as_str(), l.project_name.as_str()) {
+        ("", _) => "tenant scope".to_string(),
+        (uid, "") => format!("project {uid}"),
+        (uid, name) => format!("project {name} ({uid})"),
+    }
+}
+
+/// `2 profiles`, `1 profile`, or `no profiles`; with a pack filter, `... with a pack matching 'x'`.
+pub(crate) fn list_count(n: usize, singular: &str, pack: Option<&str>) -> String {
+    let count = match n {
+        0 => format!("no {singular}s"),
+        1 => format!("1 {singular}"),
+        n => format!("{n} {singular}s"),
+    };
+    match pack {
+        Some(text) => format!("{count} with a pack matching '{text}'"),
+        None => count,
+    }
+}
+
+/// `1 consumer`, `2 consumers`, or `no consumers`.
+pub(crate) fn consumer_count(n: usize) -> String {
+    list_count(n, "consumer", None)
+}
+
+/// A listed pack's version, with the tag when the profile pins another name for it:
+/// `24.04 (tag LTS__24.x)`.
+pub(crate) fn pack_version(pk: &crate::ops::ListedPack) -> String {
+    if pk.tag.is_empty() || pk.tag == pk.version {
+        pk.version.clone()
+    } else {
+        format!("{} (tag {})", pk.version, pk.tag)
+    }
+}
+
+/// The error message of a listed entry, when it has one.
+pub(crate) fn entry_error(error: Option<&Value>) -> Option<&str> {
+    error.and_then(|e| e.get("message")).and_then(Value::as_str)
 }
 
 /// `lab-profile@1.3.0 (uid): 2 consumers`, or `...: no consumers`.
 pub(crate) fn consumers_heading(r: &ConsumersReport) -> String {
-    let count = match r.count {
-        0 => "no consumers".to_string(),
-        1 => "1 consumer".to_string(),
-        n => format!("{n} consumers"),
-    };
+    let count = consumer_count(r.count);
     format!(
         "{}@{} ({}): {count}",
         r.profile.name,

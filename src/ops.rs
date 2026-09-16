@@ -14,6 +14,7 @@ use crate::error::{Error, Result};
 use crate::progress::Progress;
 use crate::reference::Ref;
 use crate::snapshot::{Pack, Snapshot, Tool};
+use crate::version;
 
 /// Turn a ref into a snapshot. A snapshot file is loaded; anything else is fetched through the
 /// [`Palette`] that `connect` returns, so comparing two files never needs credentials.
@@ -696,6 +697,38 @@ pub fn same_release(records: &[(String, Snapshot)], policy: Policy, generated_at
     }
 }
 
+/// The string at `ptr` in `v`, or empty.
+fn text(v: &Value, ptr: &str) -> String {
+    v.pointer(ptr)
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_string()
+}
+
+/// The uids of the clusters a profile document says use it: `status.inUseClusterUids`, then any
+/// uid that only `status.inUseClusters` names, in order and without repeats.
+fn consumer_uids(doc: &Value) -> Vec<String> {
+    let mut uids: Vec<String> = doc
+        .pointer("/status/inUseClusterUids")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|v| v.as_str().map(str::to_string))
+        .collect();
+    let named = doc
+        .pointer("/status/inUseClusters")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten();
+    for n in named {
+        let u = text(n, "/uid");
+        if !u.is_empty() && !uids.contains(&u) {
+            uids.push(u);
+        }
+    }
+    uids
+}
+
 /// Schema id of the document `consumers` writes.
 pub const CONSUMERS_SCHEMA: &str = "strata-consumers/1";
 
@@ -803,30 +836,12 @@ where
     let doc = home.profile_document(&uid)?;
     clients.insert(profile_scope, home);
 
-    let text = |v: &Value, ptr: &str| {
-        v.pointer(ptr)
-            .and_then(Value::as_str)
-            .unwrap_or("")
-            .to_string()
-    };
     let named: Vec<Value> = doc
         .pointer("/status/inUseClusters")
         .and_then(Value::as_array)
         .cloned()
         .unwrap_or_default();
-    let mut uids: Vec<String> = doc
-        .pointer("/status/inUseClusterUids")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter_map(|v| v.as_str().map(str::to_string))
-        .collect();
-    for n in &named {
-        let u = text(n, "/uid");
-        if !u.is_empty() && !uids.contains(&u) {
-            uids.push(u);
-        }
-    }
+    let uids = consumer_uids(&doc);
 
     let mut list = Vec::with_capacity(uids.len());
     for cluster in uids {
@@ -878,4 +893,340 @@ where
         count: list.len(),
         consumers: list,
     })
+}
+
+/// Schema id of the document `list` writes.
+pub const LIST_SCHEMA: &str = "strata-list/1";
+
+/// The scope `list` passes to `connect` for tenant scope: no project, whatever the environment
+/// sets.
+pub const TENANT_SCOPE: &str = "";
+
+/// A kind of thing `list` reads.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ListKind {
+    /// Profile versions, each a `<name>@<version>` ref.
+    Profiles,
+    /// Clusters, each a `cluster:<uid>` ref.
+    Clusters,
+    /// Projects, each a uid for `PALETTE_PROJECT_UID` or `--project`.
+    Projects,
+}
+
+/// What `list` reads, and in which scope.
+#[derive(Debug, Clone, Default)]
+pub struct ListOptions {
+    /// The kinds to list. Empty is profiles and clusters, or profiles alone when `pack` is set.
+    pub kinds: Vec<ListKind>,
+    /// The project to list profiles and clusters in, in place of the configured scope.
+    pub project: Option<String>,
+    /// Read each profile document for its type, consumer count, and packs: one request per
+    /// profile version.
+    pub packs: bool,
+    /// Keep only the profiles with a pack whose name contains this text, ignoring case. Implies
+    /// `packs`.
+    pub pack: Option<String>,
+}
+
+impl ListOptions {
+    fn wants(&self, kind: ListKind) -> bool {
+        if self.kinds.is_empty() {
+            kind == ListKind::Profiles || (kind == ListKind::Clusters && self.pack.is_none())
+        } else {
+            self.kinds.contains(&kind)
+        }
+    }
+}
+
+/// One pack of a listed profile.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct ListedPack {
+    /// Palette's layer name, for example `cni`.
+    pub layer: String,
+    /// Pack name, for example `cni-cilium-oss`.
+    pub name: String,
+    /// The tag the profile pins.
+    pub tag: String,
+    /// Pack version.
+    pub version: String,
+}
+
+/// One profile version.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ListedProfile {
+    /// `<name>@<version>`, for `snapshot`, `compare`, and `consumers`.
+    #[serde(rename = "ref")]
+    pub reference: String,
+    /// Profile name.
+    pub name: String,
+    /// Profile version.
+    pub version: String,
+    /// Profile uid.
+    pub uid: String,
+    /// Cloud type, for example `aws`.
+    pub cloud_type: String,
+    /// With packs: the profile type, for example `cluster` or `add-on`.
+    #[serde(default, rename = "type", skip_serializing_if = "Option::is_none")]
+    pub profile_type: Option<String>,
+    /// With packs: the number of clusters that use the version.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub consumers: Option<usize>,
+    /// With packs: the packs in the order the profile holds them.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub packs: Option<Vec<ListedPack>>,
+    /// With packs: why the profile document could not be read, when it could not.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<Value>,
+}
+
+/// One cluster.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ListedCluster {
+    /// `cluster:<uid>`, for `snapshot` and `compare`.
+    #[serde(rename = "ref")]
+    pub reference: String,
+    /// Cluster name.
+    pub name: String,
+    /// Cluster uid.
+    pub uid: String,
+    /// The cluster's `status.state`, for example `Running`.
+    pub state: String,
+    /// Cloud type, for example `aws`.
+    pub cloud_type: String,
+    /// The project the cluster is in; empty for a tenant cluster. The ref works only in this
+    /// project, which a tenant-scope listing can differ from.
+    pub project_uid: String,
+}
+
+/// One project.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct ListedProject {
+    /// Project name.
+    pub name: String,
+    /// Project uid.
+    pub uid: String,
+}
+
+/// The document `list` writes: `strata-list/1`. A kind that was not listed is absent; a kind
+/// that was listed and holds nothing is empty.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct Listing {
+    /// Always "strata-list/1"
+    pub schema: String,
+    /// Which tool wrote the document.
+    pub tool: Tool,
+    /// When, RFC 3339 UTC.
+    pub generated_at: String,
+    /// The project the profiles and clusters were listed in; empty for tenant scope.
+    pub project_uid: String,
+    /// That project's name; empty for tenant scope or when it could not be read.
+    pub project_name: String,
+    /// With `--pack`: the text the pack names were matched against.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pack: Option<String>,
+    /// Profile versions, by name and then natural version order.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub profiles: Option<Vec<ListedProfile>>,
+    /// Clusters, by name.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub clusters: Option<Vec<ListedCluster>>,
+    /// Every project the key can see, by name.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub projects: Option<Vec<ListedProject>>,
+}
+
+/// List what a ref can name: profile versions and clusters in one scope, and the projects the
+/// key can see. Profiles and clusters are read through `connect(options.project)`, where `None`
+/// is the configured scope. Projects are read through `connect(Some(TENANT_SCOPE))`, because in a
+/// project Palette lists only that project. With `packs` or `pack`, each profile document is read
+/// as well; a profile that cannot be read stays in the list with its error, and a listing that
+/// cannot be read is an error.
+pub fn list<A, F>(
+    options: &ListOptions,
+    mut connect: F,
+    generated_at: &str,
+    progress: &Progress,
+) -> Result<Listing>
+where
+    A: PaletteApi,
+    F: FnMut(Option<&str>) -> Result<Palette<A>>,
+{
+    let home = connect(options.project.as_deref())?;
+    let project_uid = home.project_uid().unwrap_or("").to_string();
+
+    let profiles = if options.wants(ListKind::Profiles) {
+        progress.note("listing profiles");
+        Some(list_profiles(&home, options, progress)?)
+    } else {
+        None
+    };
+    let clusters = if options.wants(ListKind::Clusters) {
+        progress.note("listing clusters");
+        Some(list_clusters(&home.cluster_listing()?))
+    } else {
+        None
+    };
+    let projects = if options.wants(ListKind::Projects) {
+        progress.note("listing projects");
+        let tenant = connect(Some(TENANT_SCOPE))?;
+        Some(list_projects(&tenant.project_listing()?))
+    } else {
+        None
+    };
+
+    // The scope's name: from the project listing when it was read, else from the scope itself,
+    // where Palette lists that one project. A name is a convenience, so a failure leaves it empty.
+    let project_name = if project_uid.is_empty() {
+        String::new()
+    } else {
+        let named = match &projects {
+            Some(p) => p.clone(),
+            None => home
+                .project_listing()
+                .map(|doc| list_projects(&doc))
+                .unwrap_or_default(),
+        };
+        named
+            .into_iter()
+            .find(|p| p.uid == project_uid)
+            .map(|p| p.name)
+            .unwrap_or_default()
+    };
+
+    Ok(Listing {
+        schema: LIST_SCHEMA.to_string(),
+        tool: Tool {
+            name: crate::TOOL_NAME.to_string(),
+            version: crate::TOOL_VERSION.to_string(),
+            implementation: Some(crate::TOOL_IMPL.to_string()),
+        },
+        generated_at: generated_at.to_string(),
+        project_uid,
+        project_name,
+        pack: options.pack.clone(),
+        profiles,
+        clusters,
+        projects,
+    })
+}
+
+/// The entries of a listing: its `items` array, or the document itself when it is the array.
+fn items(doc: &Value) -> impl Iterator<Item = &Value> {
+    doc.get("items")
+        .or(Some(doc))
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+}
+
+fn list_profiles<A: PaletteApi>(
+    palette: &Palette<A>,
+    options: &ListOptions,
+    progress: &Progress,
+) -> Result<Vec<ListedProfile>> {
+    let mut profiles: Vec<ListedProfile> = items(&palette.profile_listing()?)
+        .map(|it| {
+            let name = text(it, "/metadata/name");
+            let version = text(it, "/spec/version");
+            ListedProfile {
+                reference: format!("{name}@{version}"),
+                uid: text(it, "/metadata/uid"),
+                cloud_type: text(it, "/spec/cloudType"),
+                name,
+                version,
+                profile_type: None,
+                consumers: None,
+                packs: None,
+                error: None,
+            }
+        })
+        .collect();
+    profiles.sort_by(|a, b| {
+        a.name
+            .cmp(&b.name)
+            .then_with(|| version::compare(&a.version, &b.version))
+            .then_with(|| a.uid.cmp(&b.uid))
+    });
+    if !options.packs && options.pack.is_none() {
+        return Ok(profiles);
+    }
+
+    for p in &mut profiles {
+        progress.note(&format!("reading profile {}", p.reference));
+        let doc = match palette.profile_document(&p.uid) {
+            Ok(doc) => doc,
+            Err(e) => {
+                p.error = Some(e.to_json());
+                continue;
+            }
+        };
+        // A profile that was never published has only a draft, as a snapshot reads it.
+        let template = ["/spec/published", "/spec/draft"]
+            .into_iter()
+            .filter_map(|ptr| doc.pointer(ptr))
+            .find(|t| {
+                t.get("packs")
+                    .and_then(Value::as_array)
+                    .is_some_and(|a| !a.is_empty())
+            })
+            .or_else(|| doc.pointer("/spec/published"));
+        let packs = template
+            .and_then(|t| t.get("packs"))
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .map(|pk| ListedPack {
+                layer: text(pk, "/layer"),
+                name: text(pk, "/name"),
+                tag: text(pk, "/tag"),
+                version: text(pk, "/version"),
+            })
+            .collect();
+        p.profile_type = template.map(|t| text(t, "/type")).filter(|t| !t.is_empty());
+        p.consumers = Some(consumer_uids(&doc).len());
+        p.packs = Some(packs);
+    }
+    if let Some(needle) = &options.pack {
+        let needle = needle.to_lowercase();
+        // A profile that could not be read cannot be ruled out, so it stays with its error.
+        profiles.retain(|p| match &p.packs {
+            Some(packs) => packs
+                .iter()
+                .any(|pk| pk.name.to_lowercase().contains(&needle)),
+            None => p.error.is_some(),
+        });
+    }
+    Ok(profiles)
+}
+
+fn list_clusters(doc: &Value) -> Vec<ListedCluster> {
+    let mut clusters: Vec<ListedCluster> = items(doc)
+        .map(|it| {
+            let uid = text(it, "/metadata/uid");
+            ListedCluster {
+                reference: format!("{}{uid}", crate::reference::CLUSTER_PREFIX),
+                name: text(it, "/metadata/name"),
+                state: text(it, "/status/state"),
+                cloud_type: text(it, "/spec/cloudType"),
+                project_uid: text(it, "/metadata/annotations/projectUid"),
+                uid,
+            }
+        })
+        .collect();
+    clusters.sort_by(|a, b| a.name.cmp(&b.name).then_with(|| a.uid.cmp(&b.uid)));
+    clusters
+}
+
+fn list_projects(doc: &Value) -> Vec<ListedProject> {
+    let mut projects: Vec<ListedProject> = items(doc)
+        .map(|it| ListedProject {
+            name: text(it, "/metadata/name"),
+            uid: text(it, "/metadata/uid"),
+        })
+        .collect();
+    projects.sort_by(|a, b| a.name.cmp(&b.name).then_with(|| a.uid.cmp(&b.uid)));
+    projects
 }

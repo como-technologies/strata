@@ -1,14 +1,14 @@
 //! The pull request comment.
 
 use super::{
-    chain_verdict, consumers_heading, counts_line, dash, pair_detail, pair_word, plain_flags,
-    record_detail, record_label, short, show, subject, traits_suffix, variable_lines,
-    version_display, Renderer, VarLine,
+    chain_verdict, consumer_count, consumers_heading, counts_line, dash, entry_error, list_count,
+    list_scope, pack_version, pair_detail, pair_word, plain_flags, record_detail, record_label,
+    short, show, subject, traits_suffix, variable_lines, version_display, Renderer, VarLine,
 };
 use crate::color::Paint;
 use crate::diff::{Diff, Leaf, Op, Status, Verify, VerifyStatus};
 use crate::error::Result;
-use crate::ops::{Chain, ConsumersReport, RecordStatus, VerifySummary};
+use crate::ops::{Chain, ConsumersReport, Listing, RecordStatus, VerifySummary};
 use crate::snapshot::{Snapshot, Source};
 
 /// Renders markdown for a pull request comment.
@@ -240,6 +240,98 @@ impl Renderer for MarkdownRenderer {
             ));
         }
         o.push('\n');
+        Ok(o)
+    }
+
+    fn render_list(&self, l: &Listing) -> Result<String> {
+        let mut o = format!("### list: {}\n\n", escape(&list_scope(l)));
+        if let Some(profiles) = &l.profiles {
+            let count = list_count(profiles.len(), "profile", l.pack.as_deref());
+            o.push_str(&format!("**{}**\n\n", escape(&count)));
+            let with_packs = profiles
+                .iter()
+                .any(|p| p.packs.is_some() || p.error.is_some());
+            if with_packs && !profiles.is_empty() {
+                o.push_str(
+                    "| ref | uid | cloud | type | consumers | packs |\n|---|---|---|---|---|---|\n",
+                );
+            } else if !profiles.is_empty() {
+                o.push_str("| ref | uid | cloud |\n|---|---|---|\n");
+            }
+            for pr in profiles {
+                o.push_str(&format!(
+                    "| `{}` | `{}` | {} |",
+                    escape(&pr.reference),
+                    escape(&pr.uid),
+                    escape(dash(&pr.cloud_type))
+                ));
+                if with_packs {
+                    let packs = match entry_error(pr.error.as_ref()) {
+                        Some(msg) => format!("error: {msg}"),
+                        None => pr
+                            .packs
+                            .iter()
+                            .flatten()
+                            .map(|pk| format!("{}/{} {}", pk.layer, pk.name, pack_version(pk)))
+                            .collect::<Vec<_>>()
+                            .join("<br>"),
+                    };
+                    o.push_str(&format!(
+                        " {} | {} | {} |",
+                        escape(dash(pr.profile_type.as_deref().unwrap_or(""))),
+                        pr.consumers
+                            .map(consumer_count)
+                            .unwrap_or_else(|| "-".into()),
+                        escape(dash(&packs))
+                    ));
+                }
+                o.push('\n');
+            }
+            o.push('\n');
+        }
+        if let Some(clusters) = &l.clusters {
+            o.push_str(&format!(
+                "**{}**\n\n",
+                list_count(clusters.len(), "cluster", None)
+            ));
+            let elsewhere = clusters.iter().any(|c| c.project_uid != l.project_uid);
+            if elsewhere {
+                o.push_str("| ref | name | state | cloud | project |\n|---|---|---|---|---|\n");
+            } else if !clusters.is_empty() {
+                o.push_str("| ref | name | state | cloud |\n|---|---|---|---|\n");
+            }
+            for c in clusters {
+                o.push_str(&format!(
+                    "| `{}` | {} | {} | {} |",
+                    escape(&c.reference),
+                    escape(dash(&c.name)),
+                    escape(dash(&c.state)),
+                    escape(dash(&c.cloud_type))
+                ));
+                if elsewhere {
+                    o.push_str(&format!(" `{}` |", escape(dash(&c.project_uid))));
+                }
+                o.push('\n');
+            }
+            o.push('\n');
+        }
+        if let Some(projects) = &l.projects {
+            o.push_str(&format!(
+                "**{}**\n\n",
+                list_count(projects.len(), "project", None)
+            ));
+            if !projects.is_empty() {
+                o.push_str("| name | uid |\n|---|---|\n");
+            }
+            for pr in projects {
+                o.push_str(&format!(
+                    "| {} | `{}` |\n",
+                    escape(dash(&pr.name)),
+                    escape(&pr.uid)
+                ));
+            }
+            o.push('\n');
+        }
         Ok(o)
     }
 }

@@ -591,6 +591,27 @@ fn a_cluster_snapshot_from_raw_compares_against_profile_records() {
 }
 
 #[test]
+fn list_needs_credentials_and_takes_only_known_kinds() {
+    let home = tempfile::tempdir().unwrap();
+    let r = run_in(
+        &["list", "--json", "projects"],
+        &[("HOME", home.path().to_str().unwrap())],
+        &["PALETTE_API_KEY", "SPECTROCLOUD_APIKEY"],
+    );
+    assert_eq!(r.code, 2, "{}", r.err);
+    let e: serde_json::Value = serde_json::from_str(r.err.trim()).unwrap();
+    assert_eq!(e["error"]["kind"], "missing-credential");
+
+    let r = run(&["list", "packs"]);
+    assert_eq!(r.code, 2, "{}", r.err);
+    assert!(
+        r.err.contains("invalid value 'packs'") && r.err.contains("profiles, clusters, projects"),
+        "{}",
+        r.err
+    );
+}
+
+#[test]
 fn consumers_refuses_a_cluster_ref_with_a_structured_error() {
     let r = run(&["consumers", "--json", "cluster:c1"]);
     assert_eq!(r.code, 2, "{}", r.err);
@@ -642,6 +663,7 @@ fn schema_subcommand_prints_json_schema() {
         "verify-summary",
         "chain",
         "consumers",
+        "list",
         "candidate",
     ] {
         let r = run(&["schema", kind]);

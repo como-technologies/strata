@@ -25,6 +25,8 @@ offline against `examples/`.
 ## Commands
 
 ```
+strata list                                     # the profile and cluster refs in the scope
+strata list --pack cilium                       # which profile versions carry a pack?
 strata my-profile@1.2.0 my-profile@1.3.0        # compare two versions
 strata compare A B --format markdown            # the pull request comment
 strata compare A B --format json                # for scripts and AI clients
@@ -39,13 +41,13 @@ strata schema diff                              # JSON Schema of the diff docume
 ```
 
 A ref is a profile uid, `<name>@<version>`, `cluster:<uid>`, or a snapshot
-file. `<name>@latest` is the highest version of that name in the scope, by
-natural order, so `22.04` is above `20.04` and `1.30.6` above `1.29.10`.
-`cluster:<uid>` is what a cluster runs: every profile applied to it, in
-order. `cluster:<uid>/<profile>` selects one applied profile by name. A
-cluster that runs a recorded version has the same root as that record. The exit
-status is `0` for identical or unchanged, `1` for different or drifted, and
-`2` for an error.
+file. `strata list` prints the refs in the scope. `<name>@latest` is the
+highest version of that name in the scope, by natural order, so `22.04` is
+above `20.04` and `1.30.6` above `1.29.10`. `cluster:<uid>` is what a cluster
+runs: every profile applied to it, in order. `cluster:<uid>/<profile>` selects
+one applied profile by name. A cluster that runs a recorded version has the
+same root as that record. The exit status is `0` for identical or unchanged,
+`1` for different or drifted, and `2` for an error.
 
 ## Install
 

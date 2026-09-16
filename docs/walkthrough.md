@@ -3,9 +3,10 @@
 This page shows one platform team and one profile through a release cycle.
 Each command runs offline against the files in `examples/`. Build the tool
 first with `cargo build --release`. When you connect to Palette, replace the
-file paths with live refs: a profile uid, `<name>@<version>`,
-`<name>@latest` for the highest version in the scope, or `cluster:<uid>` for
-what a cluster runs.
+file paths with live refs: a profile uid, `<name>@<version>`, `<name>@latest`
+for the highest version in the scope, or `cluster:<uid>` for what a cluster
+runs. `strata list` prints the profile and cluster refs in the scope, and
+`strata list --pack <name>` the profile versions that carry a pack.
 
 The cast. The team in this page publishes its profile with Terraform. Strata
 does not know that and does not need to. The same commands work when a team
@@ -35,6 +36,7 @@ alias strata=target/release/strata
 2. **Which project a command talks to.** Set `PALETTE_PROJECT_UID` to the
    project before every live command. One project, one uid. The snapshot
    records it, so `verify` later finds the project on its own.
+   `strata list projects` prints the uid of each project the key can see.
 3. **Exit codes drive automation.** `0` means identical, or unchanged for
    `verify`. `1` means different, or drifted. `2` means the tool could not
    answer. Treat `2` as a failed job, never as "no change".
@@ -408,6 +410,8 @@ the guard.
 
 | question                                              | command                                                        | exit 0 means            | exit 1 means                     |
 |-------------------------------------------------------|----------------------------------------------------------------|-------------------------|----------------------------------|
+| Which refs can I use here?                            | `strata list`                                                     | listed                  |                                  |
+| Which profile versions carry this pack?               | `strata list --pack <name>`                                       | listed                  |                                  |
 | What changed between two versions?                    | `strata compare A B`                                              | identical               | different, read the report       |
 | What does the approver need to see?                   | `strata compare A B --format markdown`                            | same                    | same                             |
 | Does this release repave nodes?                       | `strata compare A B --json \| jq -r .summary.maxImpact`           | prints the level        |                                  |

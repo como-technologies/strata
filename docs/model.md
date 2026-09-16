@@ -244,14 +244,14 @@ is not part of the API. Each release is tagged `v<version>`.
 
 **The documents.** Each JSON document carries a schema id:
 `strata-snapshot/1`, `strata-diff/1`, `strata-verify-summary/1`,
-`strata-chain/1`, and `strata-consumers/1`. The id changes only when a reader
-of the old id would misread the document: a field removed, renamed, or given a
-new meaning, or a hash computed differently. Adding a field keeps the id.
-Strata ignores fields it does not know, so it reads a record of its own id
-that a later release wrote. `source.projectUid` and `source.cluster` joined
-`strata-snapshot/1` this way. Roots are comparable only within one snapshot
-schema id. Strata refuses a snapshot of another id with `unsupported-schema`,
-which names both ids.
+`strata-chain/1`, `strata-consumers/1`, and `strata-list/1`. The id changes
+only when a reader of the old id would misread the document: a field removed,
+renamed, or given a new meaning, or a hash computed differently. Adding a
+field keeps the id. Strata ignores fields it does not know, so it reads a
+record of its own id that a later release wrote. `source.projectUid` and
+`source.cluster` joined `strata-snapshot/1` this way. Roots are comparable
+only within one snapshot schema id. Strata refuses a snapshot of another id
+with `unsupported-schema`, which names both ids.
 
 **The command line.** Scripts can rely on the exit codes `0`, `1`, and `2`, on
 the JSON documents, and on the error `kind` names. New kinds can appear, and

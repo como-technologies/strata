@@ -1,15 +1,54 @@
 //! The terminal report: plain when piped, colored on a terminal.
 
 use super::{
-    chain_verdict, consumers_heading, counts_line, dash, pair_detail, pair_word, record_detail,
-    record_label, short, show, subject, traits_suffix, variable_lines, version_display, Renderer,
-    VarLine,
+    chain_verdict, consumer_count, consumers_heading, counts_line, dash, entry_error, list_count,
+    list_scope, pack_version, pair_detail, pair_word, record_detail, record_label, short, show,
+    subject, traits_suffix, variable_lines, version_display, Renderer, VarLine,
 };
 use crate::color::Paint;
 use crate::diff::{Diff, ImpactLevel, Leaf, Op, PackDiff, Status, Verify, VerifyStatus};
 use crate::error::Result;
-use crate::ops::{Chain, ConsumersReport, PairStatus, RecordStatus, VerifySummary};
+use crate::ops::{Chain, ConsumersReport, Listing, PairStatus, RecordStatus, VerifySummary};
 use crate::snapshot::{Snapshot, Source};
+
+/// The width of each column: its widest cell, leaving out the last cell of each row, which is
+/// never padded.
+fn column_widths(rows: &[Vec<String>]) -> Vec<usize> {
+    let mut widths = Vec::new();
+    for row in rows {
+        for (i, cell) in row.iter().enumerate().take(row.len().saturating_sub(1)) {
+            if widths.len() <= i {
+                widths.resize(i + 1, 0);
+            }
+            widths[i] = widths[i].max(cell.chars().count());
+        }
+    }
+    widths
+}
+
+/// One table line: cells padded to their column and two spaces apart, the last cell unpadded so
+/// no line ends in spaces. `style` colors a padded cell by its column.
+fn table_line(
+    indent: &str,
+    row: &[String],
+    widths: &[usize],
+    style: impl Fn(usize, &str) -> String,
+) -> String {
+    let last = row.len().saturating_sub(1);
+    let cells: Vec<String> = row
+        .iter()
+        .enumerate()
+        .map(|(i, cell)| {
+            if i < last {
+                let width = widths.get(i).copied().unwrap_or(0);
+                style(i, &format!("{cell:<width$}"))
+            } else {
+                style(i, cell)
+            }
+        })
+        .collect();
+    format!("{indent}{}\n", cells.join("  "))
+}
 
 /// Renders the text report.
 pub struct TerminalRenderer {
@@ -292,6 +331,104 @@ impl Renderer for TerminalRenderer {
                 out.push_str(&format!("  {}", p.dim(&format!("({msg})"))));
             }
             out.push('\n');
+        }
+        Ok(out)
+    }
+
+    fn render_list(&self, l: &Listing) -> Result<String> {
+        let p = &self.paint;
+        let mut out = format!("{}\n", list_scope(l));
+        if let Some(profiles) = &l.profiles {
+            out.push_str(&format!(
+                "\n{}\n",
+                list_count(profiles.len(), "profile", l.pack.as_deref())
+            ));
+            let rows: Vec<Vec<String>> = profiles
+                .iter()
+                .map(|pr| {
+                    let mut row = vec![
+                        pr.reference.clone(),
+                        pr.uid.clone(),
+                        dash(&pr.cloud_type).to_string(),
+                    ];
+                    if let Some(msg) = entry_error(pr.error.as_ref()) {
+                        row.push(format!("({msg})"));
+                    } else if pr.packs.is_some() {
+                        row.push(dash(pr.profile_type.as_deref().unwrap_or("")).to_string());
+                        row.push(consumer_count(pr.consumers.unwrap_or(0)));
+                    }
+                    row
+                })
+                .collect();
+            let widths = column_widths(&rows);
+            for (pr, row) in profiles.iter().zip(&rows) {
+                let failed = pr.error.is_some();
+                out.push_str(&table_line("  ", row, &widths, |i, cell| match i {
+                    0 => p.bold(cell),
+                    1 => p.dim(cell),
+                    3 if failed => p.dim(cell),
+                    _ => cell.to_string(),
+                }));
+                let packs: Vec<Vec<String>> = pr
+                    .packs
+                    .iter()
+                    .flatten()
+                    .map(|pk| vec![pk.layer.clone(), pk.name.clone(), pack_version(pk)])
+                    .collect();
+                let pack_widths = column_widths(&packs);
+                for row in &packs {
+                    out.push_str(&table_line("    ", row, &pack_widths, |i, cell| match i {
+                        0 => p.dim(cell),
+                        _ => cell.to_string(),
+                    }));
+                }
+            }
+        }
+        if let Some(clusters) = &l.clusters {
+            out.push_str(&format!(
+                "\n{}\n",
+                list_count(clusters.len(), "cluster", None)
+            ));
+            let rows: Vec<Vec<String>> = clusters
+                .iter()
+                .map(|c| {
+                    let mut row = vec![
+                        c.reference.clone(),
+                        dash(&c.name).to_string(),
+                        dash(&c.state).to_string(),
+                        dash(&c.cloud_type).to_string(),
+                    ];
+                    if c.project_uid != l.project_uid {
+                        row.push(format!("project {}", dash(&c.project_uid)));
+                    }
+                    row
+                })
+                .collect();
+            let widths = column_widths(&rows);
+            for (c, row) in clusters.iter().zip(&rows) {
+                out.push_str(&table_line("  ", row, &widths, |i, cell| match i {
+                    0 => p.bold(cell),
+                    2 if c.state == "Running" => p.green(cell),
+                    _ => cell.to_string(),
+                }));
+            }
+        }
+        if let Some(projects) = &l.projects {
+            out.push_str(&format!(
+                "\n{}\n",
+                list_count(projects.len(), "project", None)
+            ));
+            let rows: Vec<Vec<String>> = projects
+                .iter()
+                .map(|pr| vec![dash(&pr.name).to_string(), pr.uid.clone()])
+                .collect();
+            let widths = column_widths(&rows);
+            for row in &rows {
+                out.push_str(&table_line("  ", row, &widths, |i, cell| match i {
+                    0 => p.bold(cell),
+                    _ => p.dim(cell),
+                }));
+            }
         }
         Ok(out)
     }

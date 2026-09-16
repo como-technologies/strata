@@ -15,7 +15,9 @@ use crate::progress::Progress;
 use crate::reference::LATEST;
 use crate::version;
 
-const LISTING: &str = "/v1/dashboard/clusterprofiles/metadata";
+const PROFILE_LISTING: &str = "/v1/dashboard/clusterprofiles/metadata";
+const CLUSTER_LISTING: &str = "/v1/dashboard/spectroclusters/meta";
+const PROJECT_LISTING: &str = "/v1/dashboard/projects/metadata";
 
 /// One GET of a JSON document from Palette. Implementations add authentication and scoping.
 pub trait PaletteApi {
@@ -527,7 +529,7 @@ impl<A: PaletteApi> Palette<A> {
         if version == LATEST {
             return self.resolve_latest(name);
         }
-        let listing = self.api.get_json(LISTING)?;
+        let listing = self.profile_listing()?;
         listing
             .get("items")
             .and_then(Value::as_array)
@@ -548,7 +550,7 @@ impl<A: PaletteApi> Palette<A> {
     /// Find the uid of the highest version of `name` in the current scope, by
     /// [`version::compare`]. A name with no versions is [`Error::ProfileNotFound`].
     pub fn resolve_latest(&self, name: &str) -> Result<String> {
-        let listing = self.api.get_json(LISTING)?;
+        let listing = self.profile_listing()?;
         listing
             .get("items")
             .and_then(Value::as_array)
@@ -566,6 +568,26 @@ impl<A: PaletteApi> Palette<A> {
                 name: name.to_string(),
                 version: LATEST.to_string(),
             })
+    }
+
+    /// The profile listing, `GET /v1/dashboard/clusterprofiles/metadata`: `items[]` with each
+    /// version's name, uid, version, and cloud type. In a project it holds that project's
+    /// profiles; at tenant scope, the tenant's own.
+    pub fn profile_listing(&self) -> Result<Value> {
+        self.api.get_json(PROFILE_LISTING)
+    }
+
+    /// The cluster listing, `GET /v1/dashboard/spectroclusters/meta`: an array with each cluster's
+    /// name, uid, cloud type, and state. At tenant scope it holds the clusters of every project.
+    pub fn cluster_listing(&self) -> Result<Value> {
+        self.api.get_json(CLUSTER_LISTING)
+    }
+
+    /// The project listing, `GET /v1/dashboard/projects/metadata`: `items[]` with each project's
+    /// name and uid. At tenant scope it holds every project the key can see; in a project, only
+    /// that project.
+    pub fn project_listing(&self) -> Result<Value> {
+        self.api.get_json(PROJECT_LISTING)
     }
 
     /// GET a variables endpoint; a missing endpoint (404 or 405, as on older Palette versions) is
@@ -658,6 +680,10 @@ mod tests {
         let err = p.resolve("aws-pxk", "9.9.9").unwrap_err();
         assert!(matches!(err, Error::ProfileNotFound { .. }));
         assert!(err.to_string().contains("'aws-pxk' with version '9.9.9'"));
+        assert!(
+            err.to_string().contains("`strata list --pack aws-pxk`"),
+            "a miss points at the listing, since the name may be a pack's: {err}"
+        );
     }
 
     #[test]
