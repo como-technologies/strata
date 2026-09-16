@@ -9,7 +9,8 @@ backlog="$here/docs/backlog.md"
 gh repo view --json nameWithOwner --jq .nameWithOwner >/dev/null 2>&1 \
   || { echo "open-backlog-issues: this repository has no GitHub remote that gh can see" >&2; exit 2; }
 
-existing=$(gh issue list --state all --limit 200 --json title --jq '.[].title')
+# title<TAB>number for every issue, so existing ones are updated in place
+existing=$(gh issue list --state all --limit 200 --json number,title --jq '.[] | "\(.title)\t\(.number)"')
 
 # Labels used in the backlog; created when the repository does not have them yet.
 declare -A LABEL_COLORS=(
@@ -30,17 +31,21 @@ for sec in sections:
     m = re.search(r"^labels:\s*(.+)$", rest, flags=re.M)
     labels = m.group(1).strip() if m else ""
     body = re.sub(r"^labels:.*\n", "", rest, flags=re.M).strip() + "\n"
+    body = re.sub(r"^### ", "## ", body, flags=re.M)  # file uses ### so issue titles stay unique at ##
     f = tempfile.NamedTemporaryFile("w", delete=False, suffix=".md"); f.write(body); f.close()
     print(f"{title.strip()}\t{labels}\t{f.name}")
 PY
-  if grep -Fxq "$title" <<<"$existing"; then
-    echo "skip   $title (exists)"
-    rm -f "$body_file"
-    continue
+  number=$(awk -F'\t' -v t="$title" '$1 == t { print $2; exit }' <<<"$existing")
+  if [ -n "$number" ]; then
+    args=(--body-file "$body_file")
+    [ -n "$labels" ] && args+=(--add-label "$labels")
+    gh issue edit "$number" "${args[@]}" >/dev/null
+    echo "updated #$number $title"
+  else
+    args=(--title "$title" --body-file "$body_file")
+    [ -n "$labels" ] && args+=(--label "$labels")
+    url=$(gh issue create "${args[@]}")
+    echo "opened $title -> $url"
   fi
-  args=(--title "$title" --body-file "$body_file")
-  [ -n "$labels" ] && args+=(--label "$labels")
-  url=$(gh issue create "${args[@]}")
-  echo "opened $title -> $url"
   rm -f "$body_file"
 done
