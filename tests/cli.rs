@@ -175,7 +175,15 @@ fn changed_profiles_report_every_kind_of_change() {
     assert!(t.contains("values changed (not parseable as YAML"));
     assert!(t.contains("variables CHANGED"));
     assert!(t.contains("~ cluster_env.defaultValue: \"dev\" -> \"staging\""));
-    assert!(t.contains("+ db_password.name: \"db_password\""));
+    assert!(
+        t.contains("+ variable db_password (required, sensitive)"),
+        "an added variable is one line, not one per field:\n{t}"
+    );
+    assert!(!t.contains("db_password.name"), "{t}");
+    assert!(
+        !t.contains("cluster_env.name"),
+        "only the changed field of a changed variable shows"
+    );
     assert!(!t.contains(ESC));
 }
 
@@ -227,6 +235,29 @@ fn json_document_is_self_describing() {
     assert_eq!(ms["values"]["parseable"], false);
     assert_eq!(pack("cert-manager")["status"], "added");
     assert_eq!(pack("external-dns")["status"], "removed");
+    assert!(
+        !d["variables"]["diff"].as_array().unwrap().is_empty(),
+        "leaf form stays"
+    );
+    assert_eq!(
+        d["variables"]["changed"], true,
+        "the boolean keeps its meaning"
+    );
+    let vars = &d["variables"]["byName"];
+    assert_eq!(vars["added"].as_array().unwrap().len(), 1);
+    assert_eq!(vars["added"][0]["name"], "db_password");
+    assert_eq!(vars["added"][0]["required"], true);
+    assert_eq!(vars["added"][0]["sensitive"], true);
+    assert_eq!(vars["added"][0]["hidden"], false);
+    assert_eq!(vars["removed"].as_array().unwrap().len(), 0);
+    assert_eq!(vars["changed"].as_array().unwrap().len(), 1);
+    assert_eq!(vars["changed"][0]["name"], "cluster_env");
+    let fields = vars["changed"][0]["fields"].as_array().unwrap();
+    assert_eq!(fields.len(), 1);
+    assert_eq!(fields[0]["path"], "defaultValue");
+    assert_eq!(fields[0]["op"], "changed");
+    assert_eq!(fields[0]["old"], "dev");
+    assert_eq!(fields[0]["new"], "staging");
     let r2 = run(&["compare", "--json", "--compact", &fx.a, &fx.b]);
     assert_eq!(r2.out.trim().lines().count(), 1);
 }
@@ -250,6 +281,16 @@ fn markdown_report_has_table_and_details() {
         .out
         .contains("+ kubeadmconfig.apiServer.extraArgs.profiling: \"false\""));
     assert!(r.out.contains("max impact: `repave`"));
+    assert!(r
+        .out
+        .contains("<details><summary>variables: 1 added, 0 removed, 1 changed</summary>"));
+    assert!(r
+        .out
+        .contains("+ variable db_password (required, sensitive)\n"));
+    assert!(r.out.contains(
+        "- cluster_env.defaultValue: \"dev\"\n+ cluster_env.defaultValue: \"staging\"\n"
+    ));
+    assert!(!r.out.contains("db_password.name"));
     let full = run(&["compare", "--format", "markdown", "--full", &fx.a, &fx.b]);
     assert!(full
         .out
@@ -341,6 +382,13 @@ fn schema_subcommand_prints_json_schema() {
         let v: serde_json::Value = serde_json::from_str(&r.out).unwrap();
         assert!(v["$schema"].is_string());
         assert!(v["properties"]["schema"].is_object());
+        if kind == "diff" {
+            let vars = &v["$defs"]["VariablesDiff"]["properties"];
+            assert!(vars["diff"].is_object() && vars["byName"].is_object());
+            let by_name = &v["$defs"]["VariablesByName"]["properties"];
+            assert!(by_name["added"].is_object() && by_name["changed"].is_object());
+            assert!(v["$defs"]["VariableSummary"]["properties"]["sensitive"].is_object());
+        }
     }
 }
 

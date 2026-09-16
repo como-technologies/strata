@@ -13,7 +13,7 @@ consumers  0 -> 2 clusters
 
   variables CHANGED
         ~ cluster_env.defaultValue: "dev" -> "staging"
-        + db_password.name: "db_password"
+        + variable db_password (required, sensitive)
 
   [os   ] ubuntu-aws                 22.04              unchanged
 ~ [k8s  ] kubernetes                 1.29.4 -> 1.30.2   IDENTITY UPSTREAM AUTHORED
@@ -35,7 +35,10 @@ consumers  0 -> 2 clusters
 
 The first line names the two profiles and their uids. The second line shows
 the two roots and `IDENTICAL` or `CHANGED`. The third line shows the consumer
-counts. Then come the variables. Then comes one line per pack, in layer order.
+counts. Then come the variables, in name order: one line for an added or
+removed variable with its traits (`required`, `sensitive`, `hidden`,
+`immutable`), and one line per changed field of a changed variable. Then comes
+one line per pack, in layer order.
 A changed pack shows its flags. Below it, indented, come the upstream digest,
 the changed values, the manifest changes, and the impact.
 
@@ -61,6 +64,8 @@ Strata obeys the `NO_COLOR` and `CLICOLOR_FORCE` environment variables. With
 - a result line with `IDENTICAL` or `CHANGED`, the maximum impact, the pack
   counts, and the variables state
 - one table row per pack with layer, name, version, flags, and impact
+- one collapsible `diff` block for the variables, with the same lines as
+  the terminal report
 - one collapsible `diff` block per changed pack, with the changed values,
   the upstream digest, and the manifest changes
 
@@ -80,6 +85,10 @@ model can read it without these pages:
 - `a` and `b` are the two snapshot sources, with uid, version, consumer
   count, and fetch time.
 - `variables.diff[]` lists leaf changes with the path `<variable>.<field>`.
+  `variables.byName` groups them: `added[]` and `removed[]` carry `name`,
+  `required`, `sensitive`, `hidden`, and `immutable`; `changed[]` carries the
+  `name` and the changed `fields[]` as leaves with paths relative to the
+  variable, such as `defaultValue`.
 - `packs[]` has one entry per pack key on either side, sorted by layer and
   then by name. Each entry has `status`, the booleans `identity`,
   `upstream`, and `authored`, `paramsChanged`, and `impact` with `level` and

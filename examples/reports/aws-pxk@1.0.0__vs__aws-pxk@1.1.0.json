@@ -5,7 +5,7 @@
     "version": "0.3.0",
     "impl": "rust"
   },
-  "generatedAt": "2026-09-16T01:56:23Z",
+  "generatedAt": "2026-09-16T12:42:06Z",
   "legend": {
     "identity": "The pack reference changed: name, layer, type, tag, version, packUid or registryUid. The release points at a different pack build.",
     "upstream": "The digest on the pack reference changed: pack content moved under the hood, possibly under the same version. Which field fed it is hash.upstreamSource in the snapshot.",
@@ -45,7 +45,7 @@
       "clusters": [],
       "count": 0
     },
-    "fetchedAt": "2026-09-16T01:56:23Z"
+    "fetchedAt": "2026-09-16T12:42:06Z"
   },
   "b": {
     "ref": "examples/profiles/raw/aws-pxk@1.1.0",
@@ -62,7 +62,7 @@
       "clusters": [],
       "count": 0
     },
-    "fetchedAt": "2026-09-16T01:56:23Z"
+    "fetchedAt": "2026-09-16T12:42:06Z"
   },
   "same": false,
   "rootA": "aee66c68d82976126ca3bec6fee4d8499816852e68e1d6c14f7b24d2f97b32a2",
@@ -82,7 +82,12 @@
     "changed": false,
     "hashA": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
     "hashB": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
-    "diff": []
+    "diff": [],
+    "byName": {
+      "added": [],
+      "removed": [],
+      "changed": []
+    }
   },
   "orderChanged": false,
   "packs": [

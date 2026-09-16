@@ -1,6 +1,6 @@
 //! The terminal report: plain when piped, colored on a terminal.
 
-use super::{dash, short, show, version_display, Renderer};
+use super::{dash, short, show, traits_suffix, variable_lines, version_display, Renderer, VarLine};
 use crate::color::Paint;
 use crate::diff::{Diff, ImpactLevel, Leaf, Op, PackDiff, Status, Verify, VerifyStatus};
 use crate::error::Result;
@@ -21,18 +21,41 @@ fn opmark(op: Op, p: &Paint) -> String {
 }
 
 fn vline(l: &Leaf, p: &Paint) -> String {
+    vline_at(&l.path, l, p)
+}
+
+fn vline_at(path: &str, l: &Leaf, p: &Paint) -> String {
     let old = l.old.as_ref().map(show).unwrap_or_else(|| "null".into());
     let new = l.new.as_ref().map(show).unwrap_or_else(|| "null".into());
     match l.op {
         Op::Changed => format!(
             "{} {}: {} -> {}",
             opmark(l.op, p),
-            l.path,
+            path,
             p.red(&old),
             p.green(&new)
         ),
-        Op::Added => format!("{} {}: {}", opmark(l.op, p), l.path, p.green(&new)),
-        Op::Removed => format!("{} {}: {}", opmark(l.op, p), l.path, p.red(&old)),
+        Op::Added => format!("{} {}: {}", opmark(l.op, p), path, p.green(&new)),
+        Op::Removed => format!("{} {}: {}", opmark(l.op, p), path, p.red(&old)),
+    }
+}
+
+/// One line per added or removed variable, one per changed field of a changed variable.
+fn variable_line(v: &VarLine<'_>, p: &Paint) -> String {
+    match v {
+        VarLine::Added(s) => format!(
+            "{} variable {}{}",
+            p.green("+"),
+            p.bold(&s.name),
+            traits_suffix(s)
+        ),
+        VarLine::Removed(s) => format!(
+            "{} variable {}{}",
+            p.red("-"),
+            p.bold(&s.name),
+            traits_suffix(s)
+        ),
+        VarLine::Field(name, l) => vline_at(&format!("{name}.{}", l.path), l, p),
     }
 }
 
@@ -150,8 +173,8 @@ impl Renderer for TerminalRenderer {
                 p.dim("unchanged")
             }
         ));
-        for l in &d.variables.diff {
-            out.push(format!("        {}", vline(l, p)));
+        for v in variable_lines(&d.variables.by_name) {
+            out.push(format!("        {}", variable_line(&v, p)));
         }
         out.push(String::new());
         for pd in &d.packs {

@@ -148,10 +148,7 @@ root       8a8a64d3f95d -> 088136c929bd   CHANGED
 consumers  0 -> 0 clusters
 
   variables CHANGED
-        + platform_owner.displayName: "Platform owner"
-        + platform_owner.name: "platform_owner"
-        + platform_owner.required: true
-        ...
+        + variable platform_owner (required)
 
   [os   ] ubuntu-aws                 24.04              unchanged
   [k8s  ] kubernetes                 1.36.2             unchanged
@@ -162,8 +159,10 @@ consumers  0 -> 0 clusters
       impact: in-place addon upgrade
 ```
 
-How to read it. Each infra layer is `unchanged`. One add-on has `AUTHORED`
-only: the same pack with a new manifest. The impact is `in-place`, so no
+How to read it. The new variable is one line with its traits; a changed
+variable would show only the fields that changed. Each infra layer is
+`unchanged`. One add-on has `AUTHORED` only: the same pack with a new
+manifest. The impact is `in-place`, so no
 node is replaced. `maxImpact` in the JSON is `in-place`, so the script does
 not add the `repave` label. This is a small, safe release.
 

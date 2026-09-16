@@ -8,7 +8,7 @@ mod unified;
 use serde_json::Value;
 
 use crate::color::Paint;
-use crate::diff::{Diff, PackDiff, Status, Verify};
+use crate::diff::{Diff, Leaf, PackDiff, Status, VariableSummary, VariablesByName, Verify};
 use crate::error::Result;
 use crate::snapshot::{Snapshot, Source};
 
@@ -106,5 +106,45 @@ pub(crate) fn version_display(pd: &PackDiff) -> String {
         Status::Removed => av.to_string(),
         _ if pd.identity && av != bv => format!("{av} -> {bv}"),
         _ => av.to_string(),
+    }
+}
+
+/// One printable variable change: a whole variable added or removed, or one changed field.
+pub(crate) enum VarLine<'a> {
+    /// The variable exists only in B.
+    Added(&'a VariableSummary),
+    /// The variable exists only in A.
+    Removed(&'a VariableSummary),
+    /// One field of a variable present on both sides; the leaf path is relative to the variable.
+    Field(&'a str, &'a Leaf),
+}
+
+/// The variable changes in name order, one entry per line the text reports print.
+pub(crate) fn variable_lines(g: &VariablesByName) -> Vec<VarLine<'_>> {
+    let mut lines: Vec<(&str, VarLine<'_>)> = Vec::new();
+    lines.extend(g.added.iter().map(|v| (v.name.as_str(), VarLine::Added(v))));
+    lines.extend(
+        g.removed
+            .iter()
+            .map(|v| (v.name.as_str(), VarLine::Removed(v))),
+    );
+    for c in &g.changed {
+        lines.extend(
+            c.fields
+                .iter()
+                .map(|l| (c.name.as_str(), VarLine::Field(&c.name, l))),
+        );
+    }
+    lines.sort_by_key(|(name, _)| *name);
+    lines.into_iter().map(|(_, l)| l).collect()
+}
+
+/// ` (required, sensitive)`, or nothing when no trait is set.
+pub(crate) fn traits_suffix(v: &VariableSummary) -> String {
+    let t = v.traits();
+    if t.is_empty() {
+        String::new()
+    } else {
+        format!(" ({})", t.join(", "))
     }
 }

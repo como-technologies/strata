@@ -1,6 +1,9 @@
 //! The pull request comment.
 
-use super::{dash, plain_flags, short, show, version_display, Renderer};
+use super::{
+    dash, plain_flags, short, show, traits_suffix, variable_lines, version_display, Renderer,
+    VarLine,
+};
 use crate::color::Paint;
 use crate::diff::{Diff, Leaf, Op, Status, Verify, VerifyStatus};
 use crate::error::Result;
@@ -14,12 +17,24 @@ fn escape(s: &str) -> String {
 }
 
 fn leaf(l: &Leaf) -> String {
+    leaf_at(&l.path, l)
+}
+
+fn leaf_at(path: &str, l: &Leaf) -> String {
     let old = l.old.as_ref().map(show).unwrap_or_else(|| "null".into());
     let new = l.new.as_ref().map(show).unwrap_or_else(|| "null".into());
     match l.op {
-        Op::Changed => format!("- {}: {}\n+ {}: {}\n", l.path, old, l.path, new),
-        Op::Added => format!("+ {}: {}\n", l.path, new),
-        Op::Removed => format!("- {}: {}\n", l.path, old),
+        Op::Changed => format!("- {path}: {old}\n+ {path}: {new}\n"),
+        Op::Added => format!("+ {path}: {new}\n"),
+        Op::Removed => format!("- {path}: {old}\n"),
+    }
+}
+
+fn variable_line(v: &VarLine<'_>) -> String {
+    match v {
+        VarLine::Added(s) => format!("+ variable {}{}\n", s.name, traits_suffix(s)),
+        VarLine::Removed(s) => format!("- variable {}{}\n", s.name, traits_suffix(s)),
+        VarLine::Field(name, l) => leaf_at(&format!("{name}.{}", l.path), l),
     }
 }
 
@@ -90,12 +105,15 @@ impl Renderer for MarkdownRenderer {
         }
         o.push('\n');
         if d.variables.changed {
+            let g = &d.variables.by_name;
             o.push_str(&format!(
-                "<details><summary>variables: {} changes</summary>\n\n```diff\n",
-                d.variables.diff.len()
+                "<details><summary>variables: {} added, {} removed, {} changed</summary>\n\n```diff\n",
+                g.added.len(),
+                g.removed.len(),
+                g.changed.len()
             ));
-            for l in &d.variables.diff {
-                o.push_str(&leaf(l));
+            for v in variable_lines(g) {
+                o.push_str(&variable_line(&v));
             }
             o.push_str("```\n</details>\n\n");
         }
