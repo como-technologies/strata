@@ -417,6 +417,7 @@ the guard.
 | Does this release repave nodes?                       | `strata compare A B --json \| jq -r .summary.maxImpact`           | prints the level        |                                  |
 | Record this release                                   | `strata snapshot <name>@<version> -o releases/<version>/<project>.json` | written           |                                  |
 | Record the newest published version                   | `strata snapshot <name>@latest -o rel.json`                       | written; `source.version` says which |                       |
+| Start a candidate file from a published version       | `strata candidate <name>@<version> -o profile.yaml --files-dir DIR` | written                 |                                  |
 | Does this cluster run its release?                    | `strata compare releases/V/<project>.json cluster:<cluster>/<profile>` | yes                   | no, read the report              |
 | Did dev and prod get the same release?                | `strata same-release releases/V/dev.json releases/V/prod.json`    | yes                     | no, the reasons say why; stop the promotion |
 | Same release, packs re-pinned from another registry?  | `strata same-release --allow registry-move A B`                   | yes                     | a value or a version moved too   |
@@ -427,7 +428,5 @@ the guard.
 
 ## What the tool does not do yet
 
-- Write a candidate file from a published profile; the live example uses a
-  jq filter for now (#21).
 - Report drift from the nightly `verify` on its own; today the nightly job
   prints it (#25).

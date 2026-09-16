@@ -15,6 +15,7 @@ use serde_json::{json, Map, Value};
 use crate::api::{Palette, PaletteApi, RawProfile};
 use crate::error::{Error, Result};
 use crate::progress::Progress;
+use crate::snapshot::Snapshot;
 
 /// The `source.template` of a snapshot built from a candidate file.
 pub const TEMPLATE: &str = "candidate";
@@ -35,16 +36,147 @@ pub struct Candidate {
     #[serde(default)]
     pub cloud_type: String,
     /// The registry for layers that name none, by name.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub registry: Option<String>,
     /// The registry for layers that name none, by uid.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub registry_uid: Option<String>,
     /// The layers, in profile order.
     pub layers: Vec<CandidateLayer>,
     /// Profile variable definitions, as Palette returns them.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub variables: Vec<Value>,
+}
+
+impl Candidate {
+    /// The candidate with the content of a profile record: the same packs in order, each with its
+    /// tag, registry uid, values, params, and manifests spelled out, and the same variables, so
+    /// `snapshot --from-candidate` turns it back into the record's root while the registry still
+    /// serves those pack versions. A cluster record is refused: it is not one profile version.
+    pub fn from_snapshot(snap: &Snapshot) -> Result<Candidate> {
+        if snap.source.cluster.is_some() {
+            return Err(Error::ProfileRefRequired {
+                reference: snap.source.reference.clone(),
+            });
+        }
+        let nonempty = |s: &str| Some(s.to_string()).filter(|s| !s.is_empty());
+        Ok(Candidate {
+            name: snap.source.name.clone(),
+            version: snap.source.version.clone(),
+            kind: snap.source.kind.clone(),
+            cloud_type: snap.source.cloud_type.clone(),
+            registry: None,
+            registry_uid: None,
+            layers: snap
+                .packs
+                .iter()
+                .map(|p| CandidateLayer {
+                    name: p.name.clone(),
+                    version: p.version.clone(),
+                    layer: nonempty(&p.layer),
+                    tag: nonempty(&p.tag),
+                    registry: None,
+                    registry_uid: nonempty(&p.registry_uid),
+                    values: Some(p.values.clone()),
+                    values_file: None,
+                    params: p.params.as_object().cloned().unwrap_or_default(),
+                    manifests: p
+                        .manifests
+                        .iter()
+                        .map(|m| CandidateManifest {
+                            name: m.name.clone(),
+                            content: Some(m.content.clone()),
+                            content_file: None,
+                        })
+                        .collect(),
+                })
+                .collect(),
+            variables: snap.variables.clone(),
+        })
+    }
+}
+
+/// The candidate as YAML.
+pub fn to_yaml(candidate: &Candidate) -> Result<String> {
+    serde_yaml::to_string(candidate).map_err(|e| Error::CandidateInvalid {
+        path: PathBuf::from(&candidate.name),
+        message: e.to_string(),
+    })
+}
+
+/// Write `candidate` as YAML to `path`. With `files_dir`, each layer's values go to
+/// `values/<pack>.yaml` and each manifest to `manifests/<pack>/<manifest>.yaml` under it, and the
+/// candidate references them by paths relative to its own directory, as [`load`] reads them.
+pub fn write(candidate: &Candidate, path: &Path, files_dir: Option<&Path>) -> Result<()> {
+    let mut c = candidate.clone();
+    if let Some(dir) = files_dir {
+        let base = match path.parent() {
+            Some(p) if !p.as_os_str().is_empty() => p.to_path_buf(),
+            _ => PathBuf::from("."),
+        };
+        for layer in &mut c.layers {
+            let pack = file_name(&layer.name);
+            if let Some(values) = layer.values.take() {
+                let file = dir.join("values").join(format!("{pack}.yaml"));
+                write_file(&file, &values)?;
+                layer.values_file = Some(reference(&base, &file)?);
+            }
+            for m in &mut layer.manifests {
+                if let Some(content) = m.content.take() {
+                    let file = dir
+                        .join("manifests")
+                        .join(&pack)
+                        .join(format!("{}.yaml", file_name(&m.name)));
+                    write_file(&file, &content)?;
+                    m.content_file = Some(reference(&base, &file)?);
+                }
+            }
+        }
+    }
+    write_file(path, &to_yaml(&c)?)
+}
+
+/// A name made safe as one path segment.
+fn file_name(name: &str) -> String {
+    name.replace(['/', '\\'], "_")
+}
+
+fn write_file(path: &Path, text: &str) -> Result<()> {
+    let io = |source| Error::Io {
+        path: path.to_path_buf(),
+        source,
+    };
+    if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
+        std::fs::create_dir_all(parent).map_err(io)?;
+    }
+    std::fs::write(path, text).map_err(io)
+}
+
+/// `to` as a path relative to the directory `from`, with `/` separators.
+fn reference(from: &Path, to: &Path) -> Result<String> {
+    let absolute = |p: &Path| {
+        std::path::absolute(p).map_err(|source| Error::Io {
+            path: p.to_path_buf(),
+            source,
+        })
+    };
+    let (from, to) = (absolute(from)?, absolute(to)?);
+    let common = from
+        .components()
+        .zip(to.components())
+        .take_while(|(a, b)| a == b)
+        .count();
+    let mut parts: Vec<String> = from
+        .components()
+        .skip(common)
+        .map(|_| "..".to_string())
+        .collect();
+    parts.extend(
+        to.components()
+            .skip(common)
+            .map(|c| c.as_os_str().to_string_lossy().into_owned()),
+    );
+    Ok(parts.join("/"))
 }
 
 fn default_type() -> String {
@@ -60,29 +192,29 @@ pub struct CandidateLayer {
     /// Pack version.
     pub version: String,
     /// Layer: os, k8s, cni, csi, addon. Defaults to the registry's.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub layer: Option<String>,
     /// The tag to pin: one of the registry's tags for the version, or the version itself. Defaults
     /// to the tag equal to the version, else the first tag of that version.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tag: Option<String>,
     /// The registry, by name; overrides the top-level registry.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub registry: Option<String>,
     /// The registry, by uid; overrides the top-level registry.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub registry_uid: Option<String>,
     /// The values YAML. Leave out both this and `valuesFile` for the pack's default values.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub values: Option<String>,
     /// A file with the values YAML, relative to the candidate file.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub values_file: Option<String>,
     /// Pack params.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Map::is_empty")]
     pub params: Map<String, Value>,
     /// Manifests attached to the pack.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub manifests: Vec<CandidateManifest>,
 }
 
@@ -93,10 +225,10 @@ pub struct CandidateManifest {
     /// Manifest name.
     pub name: String,
     /// The manifest YAML.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub content: Option<String>,
     /// A file with the manifest YAML, relative to the candidate file.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub content_file: Option<String>,
 }
 

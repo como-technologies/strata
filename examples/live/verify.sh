@@ -81,10 +81,10 @@ check consumers-next 0 "#12: nothing runs the newer version" -- \
   "$strata" consumers "$P2"
 
 # ---- #4: candidate
-check candidate-file 0 "turn the newer version's record into a candidate file" -- \
-  bash -c "jq -f '$here/candidate-from-snapshot.jq' next.json > candidate.json"
+check candidate-file 0 "#21: write the newer version's record as a candidate file" -- \
+  "$strata" candidate next.json -o candidate/profile.yaml --files-dir candidate/files
 check snapshot-candidate 0 "#4: snapshot the candidate through registry lookups" -- \
-  "$strata" snapshot --from-candidate candidate.json -o candidate-snapshot.json
+  "$strata" snapshot --from-candidate candidate/profile.yaml -o candidate-snapshot.json
 check candidate-same-release 0 "#4: the candidate's root equals the published root" -- \
   "$strata" same-release candidate-snapshot.json next.json
 

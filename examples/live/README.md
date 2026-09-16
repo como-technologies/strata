@@ -47,7 +47,6 @@ it down when the checks are done, and confirm it is gone.
 | `tf.sh` | runs Terraform with the key and the Palette address strata uses |
 | `tenant.sh` | read-only lookups: the names `terraform.tfvars` needs, a cluster's state, and a pack's digest read from its Helm or OCI registry |
 | `verify.sh` | runs every check and writes `runs/<UTC time>/` |
-| `candidate-from-snapshot.jq` | turns a profile record into a candidate file |
 | `aws-inventory.sh` | what the cluster still has in AWS, for confirming a teardown |
 
 ## Prerequisites
@@ -133,8 +132,12 @@ pass it on, so every step talks to the same Palette.
    export PALETTE_PROJECT_UID=$(examples/live/tf.sh output -raw project_uid)
    examples/live/tf.sh apply -var edit_next_in_place=true
    target/release/strata verify examples/live/runs/<time>/next.json    # DRIFT, exit 1
+   target/release/strata same-release examples/live/runs/<time>/candidate-snapshot.json \
+     strata-live-profile@1.0.1                                         # exit 1, names the edited leaf
    examples/live/tf.sh apply                                            # undo the edit
    ```
+
+   The candidate written before the edit no longer reproduces the version.
 
    `verify.sh` sets `PALETTE_PROJECT_UID` for its own checks; a command run by
    hand needs the export. Undo the edit before running `verify.sh` again:
@@ -221,7 +224,7 @@ These rules come from six observed teardowns of the same kind of cluster:
 | `consumers-release` | 1 | #12: the release version has a consumer |
 | `consumer-is-the-cluster` | 0 | #12: listed with its name, project, and state |
 | `consumers-next` | 0 | #12: nothing runs the newer version |
-| `candidate-file` | 0 | turn the newer version's record into a candidate file |
+| `candidate-file` | 0 | #21: write the newer version's record as a candidate file |
 | `snapshot-candidate` | 0 | #4: snapshot the candidate through registry lookups |
 | `candidate-same-release` | 0 | #4: the candidate's root equals the published root |
 | `verify-release` | 0 | an untouched published version verifies |
@@ -231,16 +234,17 @@ These rules come from six observed teardowns of the same kind of cluster:
 | `registry-digest-helm` | 0 | #2: read the helm pack's digest from the registry itself |
 | `registry-digest-oci` | 0 | #2: read the oci pack's digest from the registry itself |
 
-`candidate-from-snapshot.jq` builds the candidate file from a record: the same
-packs, tags, registries, values, params, manifests, and variables. Its tags
-matter. Palette stores the tag a profile was authored with, and Terraform pins
-the version, `24.04`, where the registry names that Ubuntu version
-`LTS__24.x`. The first live run found that strata rejected a version used as a
-tag; strata now accepts one.
+`strata candidate next.json -o candidate/profile.yaml --files-dir
+candidate/files` writes the candidate file from a record: the same packs,
+tags, registries, params, and variables, with each layer's values and each
+manifest in a file under `candidate/files`. Its tags matter. Palette stores
+the tag a profile was authored with, and Terraform pins the version, `24.04`,
+where the registry names that Ubuntu version `LTS__24.x`. The first live run
+found that strata rejected a version used as a tag; strata now accepts one.
 
 ## The recorded run
 
-Run `20260916T175442Z` on 2026-09-16, with strata built from `main`, in a
+Run `20260916T191828Z` on 2026-09-16, with strata built from `main`, in a
 tenant's `strata-test` project on AWS us-east-2. All 21 checks passed:
 
 | result | check | expected exit | got | what it shows |
@@ -257,7 +261,7 @@ tenant's `strata-test` project on AWS us-east-2. All 21 checks passed:
 | PASS | `consumers-release-json` | 1 | 1 | the same listing as JSON |
 | PASS | `consumer-is-the-cluster` | 0 | 0 | #12: listed with its name, project, and state |
 | PASS | `consumers-next` | 0 | 0 | #12: nothing runs the newer version |
-| PASS | `candidate-file` | 0 | 0 | turn the newer version's record into a candidate file |
+| PASS | `candidate-file` | 0 | 0 | #21: write the newer version's record as a candidate file |
 | PASS | `snapshot-candidate` | 0 | 0 | #4: snapshot the candidate through registry lookups |
 | PASS | `candidate-same-release` | 0 | 0 | #4: the candidate's root equals the published root |
 | PASS | `verify-release` | 0 | 0 | an untouched published version verifies |
@@ -285,7 +289,8 @@ root       7d7689e8321c -> eada36c2e3fd   CHANGED
       impact: cluster-wide infra addon update
 ```
 
-The version the cluster runs lists it, and the candidate reproduces 1.0.1:
+The version the cluster runs lists it, and the candidate written from the
+1.0.1 record, with its values in files, reproduces 1.0.1:
 
 ```
 strata-live-profile@1.0.0 (uid 6aaab2f6da23e353e96e8c69): 1 consumer

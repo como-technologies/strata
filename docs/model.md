@@ -216,6 +216,19 @@ For each layer:
 - `params` is a map. `manifests[]` each have a `name` and `content` inline or
   `contentFile`.
 
+To start from a version that is already published, `strata candidate <ref>
+-o profile.yaml` writes its candidate file. The ref is a profile uid,
+`<name>@<version>`, or a profile record; a cluster is refused. The file pins
+each layer's `tag` and `registryUid` and spells out its `values`, `params`,
+and `manifests`, and carries the variables, so `snapshot --from-candidate`
+turns it back into the version's root while the registry still serves those
+pack versions. `--files-dir DIR` writes each layer's values to
+`DIR/values/<pack>.yaml` and each manifest to
+`DIR/manifests/<pack>/<manifest>.yaml`, referenced from the file, which is
+the form a repository keeps. When the published version is later edited in
+place, `same-release` between the candidate's snapshot and the version fails
+and names the edited leaf.
+
 Unknown fields are an error, so a misspelled `valuesfile` is not silently
 ignored. Problems in the file, and values or manifest files that cannot be
 read, are found before any request. The registry lookups are:

@@ -825,3 +825,46 @@ fn a_project_name_is_looked_up_in_the_project_listing_before_anything_else() {
         "{e}"
     );
 }
+
+#[test]
+fn candidate_writes_a_record_as_a_candidate_file_with_values_and_manifests_in_files() {
+    let fx = fixtures();
+    let out = tempfile::tempdir().unwrap();
+    let file = out.path().join("profile.yaml");
+    let files = out.path().join("files");
+    let r = run(&[
+        "candidate",
+        &fx.b,
+        "-o",
+        file.to_str().unwrap(),
+        "--files-dir",
+        files.to_str().unwrap(),
+    ]);
+    assert_eq!(r.code, 0, "{}", r.err);
+    let doc: serde_json::Value =
+        serde_yaml::from_str(&std::fs::read_to_string(&file).unwrap()).unwrap();
+    assert_eq!(doc["name"], "lab-profile");
+    let recorded = json(&fx.b);
+    let k8s = doc["layers"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|l| l["name"] == "kubernetes")
+        .unwrap();
+    let values =
+        std::fs::read_to_string(out.path().join(k8s["valuesFile"].as_str().unwrap())).unwrap();
+    let recorded_k8s = recorded["packs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|p| p["name"] == "kubernetes")
+        .unwrap();
+    assert_eq!(values, recorded_k8s["values"].as_str().unwrap());
+
+    let r = run(&["candidate", &fx.b]);
+    assert_eq!(r.code, 0, "{}", r.err);
+    assert!(r.out.starts_with("name: lab-profile\n"), "{}", r.out);
+
+    let r = run(&["candidate", &fx.b, "--files-dir", files.to_str().unwrap()]);
+    assert_eq!(r.code, 2, "--files-dir needs -o");
+}

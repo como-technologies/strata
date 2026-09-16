@@ -16,11 +16,12 @@ use strata::progress::Progress;
 use strata::reference::Ref;
 use strata::render::{self, Format};
 use strata::snapshot::Snapshot;
-use strata::{diff, ops, TOOL_NAME};
+use strata::{candidate, diff, ops, TOOL_NAME};
 
 const SUBCOMMANDS: &[&str] = &[
     "compare",
     "snapshot",
+    "candidate",
     "verify",
     "same-release",
     "consumers",
@@ -66,7 +67,7 @@ impl Cli {
             Cmd::SameRelease(a) => a.out.format() == Format::Json,
             Cmd::Consumers(a) => a.out.format() == Format::Json,
             Cmd::List(a) => a.out.format() == Format::Json,
-            Cmd::Snapshot(_) | Cmd::Schema { .. } => false,
+            Cmd::Snapshot(_) | Cmd::Candidate(_) | Cmd::Schema { .. } => false,
         }
     }
 }
@@ -77,6 +78,9 @@ enum Cmd {
     Compare(CompareArgs),
     /// Fetch one profile and write its snapshot: Merkle root, per-pack hashes, canonical contents
     Snapshot(SnapshotArgs),
+    /// Write a profile version or record as a candidate file, which `snapshot --from-candidate`
+    /// turns back into the same root
+    Candidate(CandidateArgs),
     /// Re-fetch each record's profile; exit 1 if a published version was edited in place. Several
     /// files or a pattern print one line per record and a summary
     Verify(VerifyArgs),
@@ -171,6 +175,22 @@ struct SnapshotArgs {
     /// Compact JSON on one line instead of pretty-printed
     #[arg(long)]
     compact: bool,
+    /// Suppress progress messages on stderr
+    #[arg(short, long)]
+    quiet: bool,
+}
+
+#[derive(Args)]
+struct CandidateArgs {
+    /// Profile uid, <name>@<version> or <name>@latest, or a profile record
+    r#ref: String,
+    /// Write the candidate file here instead of stdout
+    #[arg(short, long)]
+    output: Option<PathBuf>,
+    /// Write each layer's values and each manifest to a file under this directory, referenced
+    /// from the candidate file
+    #[arg(long, requires = "output")]
+    files_dir: Option<PathBuf>,
     /// Suppress progress messages on stderr
     #[arg(short, long)]
     quiet: bool,
@@ -332,6 +352,7 @@ fn run(cli: Cli) -> Result<ExitCode> {
     match cli.cmd {
         Cmd::Compare(a) => cmd_compare(&a),
         Cmd::Snapshot(a) => cmd_snapshot(&a),
+        Cmd::Candidate(a) => cmd_candidate(&a),
         Cmd::Verify(a) => cmd_verify(&a),
         Cmd::SameRelease(a) => cmd_same_release(&a),
         Cmd::Consumers(a) => cmd_consumers(&a),
@@ -511,6 +532,35 @@ fn expand_records(args: &[String]) -> Result<Vec<PathBuf>> {
         out.extend(matches);
     }
     Ok(out)
+}
+
+fn cmd_candidate(a: &CandidateArgs) -> Result<ExitCode> {
+    let progress = progress(a.quiet);
+    let reference = Ref::parse(&a.r#ref);
+    if let Ref::Cluster { .. } = reference {
+        return Err(Error::ProfileRefRequired {
+            reference: a.r#ref.clone(),
+        });
+    }
+    let snap = ops::snapshot_for(
+        &reference,
+        || connect(progress, None),
+        &now_utc(),
+        &progress,
+    )?;
+    let c = candidate::Candidate::from_snapshot(&snap)?;
+    match &a.output {
+        Some(path) => {
+            candidate::write(&c, path, a.files_dir.as_deref())?;
+            progress.note(&format!(
+                "wrote {} (root {})",
+                path.display(),
+                &snap.root[..12]
+            ));
+        }
+        None => print!("{}", candidate::to_yaml(&c)?),
+    }
+    Ok(ExitCode::SUCCESS)
 }
 
 fn cmd_verify(a: &VerifyArgs) -> Result<ExitCode> {

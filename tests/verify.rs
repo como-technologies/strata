@@ -2258,3 +2258,129 @@ fn verify_names_a_cluster_value_changed_since_the_record_without_calling_it_drif
     assert!(lines.contains("1 variable value changed"), "{lines}");
     assert!(!serde_json::to_string(&s).unwrap().contains(SECRET_VALUE));
 }
+
+// ---- candidate files written from records ------------------------------------------------------
+
+use strata::candidate::{self, Candidate};
+
+#[test]
+fn a_candidate_written_from_a_record_reproduces_its_root_inline_or_with_files() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let recorded_b = ops::snapshot_from_dir(&dir.path().join("b"), "b", "t0").unwrap();
+    let c = Candidate::from_snapshot(&recorded_b).unwrap();
+    assert!(
+        c.layers
+            .iter()
+            .all(|l| l.tag.is_some() && l.registry_uid.is_some()),
+        "every layer pins its tag and registry"
+    );
+
+    let inline = dir.path().join("inline.yaml");
+    candidate::write(&c, &inline, None).unwrap();
+    let repo = dir.path().join("repo");
+    let with_files = repo.join("profile.yaml");
+    candidate::write(&c, &with_files, Some(&repo.join("files"))).unwrap();
+
+    let doc: Value = serde_yaml::from_str(&fs::read_to_string(&with_files).unwrap()).unwrap();
+    for layer in doc["layers"].as_array().unwrap() {
+        let values_file = layer["valuesFile"].as_str().expect("values go to a file");
+        assert!(layer.get("values").is_none());
+        assert!(
+            values_file.starts_with("files/") && repo.join(values_file).is_file(),
+            "{values_file}"
+        );
+        for m in layer["manifests"].as_array().into_iter().flatten() {
+            let content_file = m["contentFile"].as_str().expect("manifests go to files");
+            assert!(repo.join(content_file).is_file(), "{content_file}");
+        }
+    }
+
+    let api = serve_registry_for_b(dir.path());
+    for file in [&inline, &with_files] {
+        let snap = ops::snapshot_from_candidate(
+            file,
+            || Ok(Palette::new(api.clone())),
+            "t1",
+            &Progress::silent(),
+        )
+        .unwrap();
+        assert_eq!(snap.root, recorded_b.root, "{}", file.display());
+    }
+
+    let on_cluster = ops::snapshot_from_dir(
+        &dir.path().join("cluster-b"),
+        &format!("cluster:{CLUSTER_UID}"),
+        "t0",
+    )
+    .unwrap();
+    assert!(matches!(
+        Candidate::from_snapshot(&on_cluster).unwrap_err(),
+        Error::ProfileRefRequired { .. }
+    ));
+}
+
+#[test]
+fn a_candidate_stops_matching_a_version_edited_in_place_and_same_release_names_the_edit() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let recorded_b = ops::snapshot_from_dir(&dir.path().join("b"), "b", "t0").unwrap();
+    let file = dir.path().join("profile.yaml");
+    candidate::write(&Candidate::from_snapshot(&recorded_b).unwrap(), &file, None).unwrap();
+    let from_candidate = ops::snapshot_from_candidate(
+        &file,
+        || Ok(Palette::new(serve_registry_for_b(dir.path()))),
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+
+    // version b edited in place: one kubernetes value, in the pack ref and the manifests entry
+    let edited_dir = dir.path().join("b-edited");
+    fs::create_dir_all(&edited_dir).unwrap();
+    let edit = |v: &mut Value| {
+        let s = v
+            .as_str()
+            .unwrap()
+            .replace("audit-log-maxage: \"90\"", "audit-log-maxage: \"120\"");
+        *v = Value::from(s);
+    };
+    let mut profile = read(&dir.path().join("b/profile.json"));
+    for p in profile["spec"]["published"]["packs"]
+        .as_array_mut()
+        .unwrap()
+    {
+        if p["name"] == "kubernetes" {
+            edit(&mut p["values"]);
+        }
+    }
+    let mut manifests = read(&dir.path().join("b/manifests.json"));
+    for p in manifests["spec"]["packs"].as_array_mut().unwrap() {
+        if p["spec"]["name"] == "kubernetes" {
+            edit(&mut p["spec"]["values"]);
+        }
+    }
+    fs::write(edited_dir.join("profile.json"), profile.to_string()).unwrap();
+    fs::write(edited_dir.join("manifests.json"), manifests.to_string()).unwrap();
+    fs::copy(
+        dir.path().join("b/variables.json"),
+        edited_dir.join("variables.json"),
+    )
+    .unwrap();
+    let edited = ops::snapshot_from_dir(&edited_dir, "b-edited", "t2").unwrap();
+
+    let chain = ops::same_release(
+        &[
+            ("candidate".to_string(), from_candidate),
+            ("edited".to_string(), edited),
+        ],
+        Policy::Exact,
+        "t3",
+    );
+    assert_eq!(chain.exit_code(), 1);
+    let reasons = &chain.pairs[0].reasons;
+    assert!(
+        reasons.iter().any(|r| r.contains("audit-log-maxage")),
+        "names the edited leaf: {reasons:?}"
+    );
+}

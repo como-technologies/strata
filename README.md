@@ -31,6 +31,7 @@ strata my-profile@1.2.0 my-profile@1.3.0        # compare two versions
 strata compare A B --format markdown            # the pull request comment
 strata compare A B --format json                # for scripts and AI clients
 strata snapshot my-profile@1.2.0 -o rel.json    # record a release
+strata candidate my-profile@1.2.0 -o my-profile.yaml --files-dir my-profile  # start a candidate file from it
 strata snapshot --from-candidate my-profile.yaml -o candidate.json  # before it exists in Palette
 strata compare rel.json cluster:my-cluster/my-profile  # does the cluster run that release?
 strata consumers my-profile@1.0.0               # which clusters still use it? exit 1 if any
