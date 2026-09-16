@@ -27,10 +27,10 @@ A cluster carries its applied profiles in the same shape strata already parses: 
 
 - [ ] `strata compare <record>.json cluster:<uid>` prints `IDENTICAL` and exits 0 for a cluster that runs the recorded version
 - [ ] The same command against a cluster on an older version shows the changed layers and exits 1
-- [ ] `cluster:<uid>/<profile>` selects one attached profile; an unknown profile name is an error with exit 2
-- [ ] `source.cluster` carries the cluster uid, its name, and the applied profiles; `source.type` keeps the profile type
-- [ ] `strata schema snapshot` includes the new fields
-- [ ] Walkthrough day 5 shows the real command and output
+- [x] `cluster:<uid>/<profile>` selects one attached profile; an unknown profile name is an error with exit 2
+- [x] `source.cluster` carries the cluster uid, its name, and the applied profiles; `source.type` keeps the profile type
+- [x] `strata schema snapshot` includes the new fields
+- [x] Walkthrough day 5 shows the real command and output
 
 ## Read the UPSTREAM digest from the pack's registry
 
@@ -101,11 +101,11 @@ At review time the candidate profile version does not exist in Palette yet, so t
 
 ### Acceptance criteria
 
-- [ ] `strata snapshot --from-candidate profile.yaml -o candidate.json` needs pack lookups only; no profile has to exist
+- [x] `strata snapshot --from-candidate profile.yaml -o candidate.json` needs pack lookups only; no profile has to exist
 - [ ] Once the version is published, the candidate root equals the root of the snapshot taken from Palette
-- [ ] Missing values files and unknown pack versions are errors with exit 2
-- [ ] `source.template` is `candidate`
-- [ ] The file format is documented and assumes no repository layout
+- [x] Missing values files and unknown pack versions are errors with exit 2
+- [x] `source.template` is `candidate`
+- [x] The file format is documented and assumes no repository layout
 
 ## Check that several records are the same release
 
@@ -305,8 +305,8 @@ labels: feature
 ### Acceptance criteria
 
 - [ ] `strata consumers aws-pxk@1.0.0` lists each consumer with name, project, and state
-- [ ] Exit 0 when there are no consumers, 1 when there are, so a delete step can branch on it
-- [ ] `--format json` writes `strata-consumers/1`
+- [x] Exit 0 when there are no consumers, 1 when there are, so a delete step can branch on it
+- [x] `--format json` writes `strata-consumers/1`
 
 ## Variables diff at the variable level
 
