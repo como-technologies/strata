@@ -1,0 +1,85 @@
+name: strata comment
+
+# Reusable workflow. A repository calls it from its own pull request workflow to post the
+# comparison of two refs as one comment and set a label from the impact; see the README. It
+# downloads the strata release binary, checks it against SHA256SUMS, and runs
+# scripts/pr-comment.sh from the same tag. Other CI systems run the script directly.
+on:
+  workflow_call:
+    inputs:
+      a:
+        description: The base ref, a snapshot file in the caller's checkout, a profile uid, or name@version
+        required: true
+        type: string
+      b:
+        description: The candidate ref
+        required: true
+        type: string
+      label:
+        description: The label to add when the impact reaches the threshold
+        default: repave
+        type: string
+      threshold:
+        description: The impact level that earns the label (none, sync, in-place, cluster-wide, may-repave, repave)
+        default: repave
+        type: string
+      strata-version:
+        description: The strata release to use, for example v0.4.0
+        required: true
+        type: string
+    secrets:
+      strata-token:
+        description: A token that can read como-technologies/strata (contents read), needed while that repository is private. The caller's own token cannot read another private repository.
+        required: false
+      palette-api-key:
+        description: PALETTE_API_KEY, needed only when a ref is not a snapshot file
+        required: false
+      palette-project-uid:
+        description: PALETTE_PROJECT_UID for refs that are not snapshot files
+        required: false
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  comment:
+    runs-on: ubuntu-latest
+    steps:
+      # the caller's repository, where snapshot files live
+      - uses: actions/checkout@v4
+      # this repository at the requested tag, for the script
+      - uses: actions/checkout@v4
+        with:
+          repository: como-technologies/strata
+          ref: ${{ inputs.strata-version }}
+          path: .strata
+          token: ${{ secrets.strata-token || github.token }}
+      - name: install strata
+        env:
+          GH_TOKEN: ${{ secrets.strata-token || github.token }}
+          VERSION: ${{ inputs.strata-version }}
+        run: |
+          mkdir -p .strata/bin && cd .strata/bin
+          gh release download "$VERSION" --repo como-technologies/strata \
+            --pattern strata-x86_64-unknown-linux-musl --pattern SHA256SUMS
+          sha256sum --check --ignore-missing SHA256SUMS
+          chmod +x strata-x86_64-unknown-linux-musl
+          mv strata-x86_64-unknown-linux-musl strata
+          ./strata --version
+      - name: comment and label
+        env:
+          # the caller's token: it owns the pull request being commented on
+          GH_TOKEN: ${{ github.token }}
+          STRATA_BIN: ${{ github.workspace }}/.strata/bin/strata
+          PALETTE_API_KEY: ${{ secrets.palette-api-key }}
+          PALETTE_PROJECT_UID: ${{ secrets.palette-project-uid }}
+          A: ${{ inputs.a }}
+          B: ${{ inputs.b }}
+          LABEL: ${{ inputs.label }}
+          THRESHOLD: ${{ inputs.threshold }}
+          PR: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          .strata/scripts/pr-comment.sh "$A" "$B" --pr "$PR" --repo "$REPO" \
+            --label "$LABEL" --threshold "$THRESHOLD"

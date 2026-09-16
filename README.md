@@ -110,6 +110,51 @@ release.
 | on a schedule                       | `verify` over each recorded snapshot. This enforces the immutability rule.      |
 | before end of life                  | `snapshot`, then read `source.consumers`. Delete only when the count is zero.   |
 
+## Pull request comments
+
+`scripts/pr-comment.sh A B` runs the comparison, posts it as one comment on
+the pull request, and adds the `repave` label when the maximum impact
+reaches `repave`. On the next push it updates the same comment, which it
+finds by the `<!-- strata -->` marker on the first line, and removes the
+label when the impact no longer reaches the threshold. `--label` and
+`--threshold` change both. `--dry-run` prints the comment and says what it
+would do with the label, without touching the host. The script needs `gh`
+logged in and `jq`. The pull request and repository come from `--pr` and
+`--repo`, or from `gh` when run inside a checkout of the branch. Run locally
+it posts the same comment CI would.
+
+On GitHub Actions, call the reusable workflow instead of copying anything.
+The caller needs `pull-requests: write`:
+
+```yaml
+on: pull_request
+permissions:
+  contents: read
+  pull-requests: write
+jobs:
+  strata:
+    uses: como-technologies/strata/.github/workflows/comment.yml@v0.4.0
+    with:
+      a: releases/1.1.0/dev.json
+      b: releases/1.1.1/dev.json
+      strata-version: v0.4.0
+    secrets:
+      strata-token: ${{ secrets.STRATA_READ_TOKEN }}     # while this repository is private
+      palette-api-key: ${{ secrets.PALETTE_API_KEY }}   # only when a ref is not a snapshot file
+```
+
+The workflow downloads the release binary, checks it against `SHA256SUMS`,
+and runs the script. It comments with the caller's token. Any other CI
+system installs strata and runs the script directly.
+
+While this repository is private, two things are needed before another
+repository can call the workflow. First, allow access in this repository's
+Settings, under Actions, General, Access: "Accessible from repositories in
+the organization". Second, pass `strata-token`: a fine-grained token or a
+GitHub App token with read access to this repository's contents. The
+caller's own token cannot read another private repository, so without it
+the checkout and the download fail.
+
 ## Documentation
 
 - [docs/walkthrough.md](docs/walkthrough.md): one team, one profile, one
