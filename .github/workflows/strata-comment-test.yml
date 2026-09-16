@@ -1,0 +1,12 @@
+name: strata comment test
+on: pull_request
+permissions:
+  contents: read
+  pull-requests: write
+jobs:
+  strata:
+    uses: ./.github/workflows/comment.yml
+    with:
+      a: examples/profiles/aws-pxk@1.0.0.json
+      b: examples/profiles/aws-pxk@1.1.0.json
+      strata-version: v0.4.0
