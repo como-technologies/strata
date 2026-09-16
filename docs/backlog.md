@@ -2,13 +2,15 @@
 
 Each `##` section is one GitHub issue; its `###` headings become `##` in the posted body. `scripts/open-backlog-issues.sh` (or `just backlog-issues`) creates missing issues and updates the body of existing ones by title, so this file is the source of truth. The `labels:` line is read by the script and is not part of the body. Paragraphs are single lines: GitHub renders markdown, hard wraps only add noise.
 
+Strata is a tool, not a pipeline. Nothing here assumes a cloud provider, a registry product, a publishing tool, a CI system, a repository layout, or a set of environments. Where an example needs names, it uses the `examples/` data and calls them examples.
+
 ## Compare a record against a running cluster
 
 labels: feature
 
 ### Background
 
-In the model a cluster is an **instance** that Palette reconciles to a **definition**. The team needs to know when a cluster does not run the profile version its tier file pins, which is the release-versus-run question. Today `strata compare` accepts profile uids, `name@version`, and snapshot files only (`src/reference.rs`), so the walkthrough's cluster step can only compare two profile records.
+A cluster is an instance that Palette reconciles to a profile version. The team needs to know when a cluster does not run the version its record says, which is the release-versus-run question. Today `strata compare` accepts profile uids, `name@version`, and snapshot files only (`src/reference.rs`), so the walkthrough's cluster step can only compare two profile records.
 
 A cluster carries its applied profiles in the same shape strata already parses: `GET /v1/spectroclusters/{uid}` returns `spec.clusterProfileTemplates[]`, each with `packs[]` as `V1PackRef` including `digest`, `values`, `tag`, `version`, `packUid`, `registryUid`. Manifest contents come from `GET /v1/spectroclusters/{uid}/profiles/packs/manifests` (`V1SpectroClusterProfilesPacksManifests.profiles[].spec.packs[]`). Palette's own "profile update available" notification is computed from these same digests.
 
@@ -23,34 +25,38 @@ A cluster carries its applied profiles in the same shape strata already parses: 
 
 ### Acceptance criteria
 
-- [ ] `strata compare releases/1.1.1/prod.json cluster:<uid>` prints `IDENTICAL` and exits 0 for a cluster running 1.1.1
-- [ ] The same command against a cluster on 1.1.0 shows the changed layers and exits 1
+- [ ] `strata compare <record>.json cluster:<uid>` prints `IDENTICAL` and exits 0 for a cluster that runs the recorded version
+- [ ] The same command against a cluster on an older version shows the changed layers and exits 1
 - [ ] `cluster:<uid>/<profile>` selects one attached profile; an unknown profile name is an error with exit 2
 - [ ] `source.type` is `cluster` and the JSON document carries the cluster uid
 - [ ] `strata schema snapshot` includes the new fields
 - [ ] Walkthrough day 5 shows the real command and output
 
-## Read the UPSTREAM digest from the OCI registry
+## Read the UPSTREAM digest from the pack's registry
 
 labels: feature
 
 ### Background
 
-`UPSTREAM` today hashes the `digest` Palette stamps on the pack ref, with the registry summary digest as fallback (`Pack::from_api` in `src/snapshot.rs`, recorded in `hash.upstreamSource`). For packs the pipeline builds, the authoritative fact is the OCI manifest digest in the `packs` and `packs-dev` ECR repositories, which have tag immutability on. Reading that digest directly makes `UPSTREAM` independent of what Palette's field tracks (see the investigation issue) and turns "same version, different digest" into a detected violation of the immutability rule.
+`UPSTREAM` today hashes the `digest` Palette stamps on the pack ref, with the registry summary digest as fallback (`Pack::from_api` in `src/snapshot.rs`, recorded in `hash.upstreamSource`). Both values come from Palette. For a pack in an OCI registry the authoritative fact is the manifest digest the registry itself reports for `<name>:<version>`. Reading it makes `UPSTREAM` independent of what Palette's field tracks (see the investigation issue) and turns "same version, different content" into a detected violation of the immutability rule, whichever registry holds the pack.
+
+Palette knows several registry kinds: pack registries (`/v1/registries/pack`), OCI registries with `basic` or `ecr` authentication (`/v1/registries/oci`), and Helm registries. Strata must not assume any one of them, any registry product, or any cloud provider. The registry kind and endpoint come from the registry object the pack ref's `registryUid` points at. Credentials never come from Palette.
 
 ### Plan
 
-1. `src/config.rs`: an `UpstreamSource` enum (`palette`, `oci`) selected by `--upstream-source`, default `palette`.
-2. `src/oci.rs`: a small `OciRegistry` trait with `manifest_digest(reference) -> Result<String>`, an HTTP implementation using `HEAD /v2/<name>/manifests/<tag>` and the `Docker-Content-Digest` header, and a `MemoryRegistry` for tests. Registry endpoint and credentials come from the Palette registry object (`GET /v1/registries/oci/basic/{uid}`) or from `STRATA_OCI_*` variables for ECR.
-3. `src/snapshot.rs`: when `oci` is selected, resolve each pack's `<registry>/<name>:<version>` and set `hash.upstreamRaw` to the manifest digest and `hash.upstreamSource` to `oci.digest`.
-4. Tests: `MemoryRegistry` returning two digests for the same tag across two snapshots; assert `UPSTREAM` only.
-5. `docs/model.md`: document the source order and the new value of `upstreamSource`.
+1. `src/config.rs`: an `UpstreamSource` enum (`palette`, `registry`) selected by `--upstream-source`, default `palette`.
+2. `src/registry.rs`: a `Registry` trait with `content_digest(name, version) -> Result<String>`, one implementation per registry kind that exposes a content digest, and a `MemoryRegistry` for tests. OCI first: `HEAD /v2/<name>/manifests/<tag>` and the `Docker-Content-Digest` header, with basic auth or a bearer token from the standard token flow. A registry kind with no implementation is an error that names the kind, never a fallback.
+3. Endpoint and kind from `GET /v1/registries/metadata` and the registry object. Credentials from a Docker-style `config.json` keyed by registry host (`--registry-auth <file>`, default the Docker config path), so any login flow or credential helper works.
+4. `src/snapshot.rs`: when `registry` is selected, resolve each pack's `<host>/<name>:<version>` and set `hash.upstreamRaw` to the digest and `hash.upstreamSource` to `registry.digest`.
+5. Tests: `MemoryRegistry` returning two digests for the same tag across two snapshots; assert `UPSTREAM` only. A registry kind without an implementation is an error.
+6. `docs/model.md`: document the source order and the new value of `upstreamSource`.
 
 ### Acceptance criteria
 
-- [ ] `strata snapshot <ref> --upstream-source oci` records `hash.upstreamSource = "oci.digest"` for every pack
-- [ ] Pushing the same version with different content to the sandbox registry shows `UPSTREAM` with no `IDENTITY` or `AUTHORED`
-- [ ] A registry that cannot be reached is an error with exit 2, never a silent fallback
+- [ ] `strata snapshot <ref> --upstream-source registry` records `hash.upstreamSource = "registry.digest"` for every pack
+- [ ] Pushing the same version with different content to any OCI registry shows `UPSTREAM` with no `IDENTITY` or `AUTHORED`
+- [ ] A registry that cannot be reached, or a registry kind strata cannot read, is an error with exit 2, never a silent fallback
+- [ ] Nothing in the implementation names a registry product or a cloud provider
 - [ ] Tests cover both sources and the failure
 
 ## Confirm what Palette's pack-ref digest tracks
@@ -76,50 +82,52 @@ The `UPSTREAM` flag relies on the `digest` field of a profile's pack ref (`V1Pac
 - [ ] `hash.upstreamSource` fallback order matches the finding
 - [ ] The "Known limits" entry in the README is removed or rewritten
 
-## Snapshot a candidate from repository files before it is published
+## Snapshot a candidate from local files before it is published
 
 labels: feature
 
 ### Background
 
-At pull request time the candidate profile version does not exist in Palette yet; the pipeline runs `terraform plan` and the comparison happens after the dev apply. A profile repository holds everything needed to build the snapshot anyway: `profile/profile.yaml` (name, type, version, layers with exact pins and registry) and `profile/values/` (one values file per layer). Building the snapshot from those files moves the evidence onto the pull request itself.
+At review time the candidate profile version does not exist in Palette yet, so today the comparison runs after the version is published and the report arrives after the fact. Everything strata needs is known before publication: the layers with their pack name, version, and registry, and the values and manifests for each layer. A file that strata defines can carry that, whatever tool later publishes the version: Terraform, the API, or the UI. Building the snapshot from that file moves the evidence onto the review itself.
 
 ### Plan
 
-1. `src/candidate.rs`: parse `profile.yaml` and the referenced values files; look each pack up with `GET /v1/packs/{name}/registries/{registryUid}` for `packUid`, and `GET /v1/packs?filters=spec.name=<name>` for the registry digest and default values.
-2. `src/snapshot.rs`: build a `Snapshot` with `source.template = "candidate"`, no uid, `fetchedAt` as usual.
-3. `src/main.rs`: `strata snapshot --from-profile profile/profile.yaml`.
-4. Tests: a fixture profile repository under `tests/fixtures/profile-repo/` and a `MemoryApi` serving the pack lookups; assert the root equals the root built from the equivalent raw API responses.
-5. `docs/walkthrough.md`: move the comparison from "after the dev apply" to the pull request in day 2.
+1. `docs/model.md`: define the candidate file. `name`, `version`, `type`, `cloudType`, `variables`, and `layers[]` with `layer`, `name`, `version`, `registry` (name or uid), `values` as inline text or a file path, and `manifests[]`. It carries only what the snapshot already records.
+2. `src/candidate.rs`: parse the file; look each pack up with `GET /v1/packs/{name}/registries/{registryUid}` for `packUid`, and `GET /v1/packs?filters=spec.name=<name>` for the registry digest and default values.
+3. `src/snapshot.rs`: build a `Snapshot` with `source.template = "candidate"`, no uid, `fetchedAt` as usual.
+4. `src/main.rs`: `strata snapshot --from-candidate <file>`.
+5. Tests: a fixture under `tests/fixtures/candidate/` and a `MemoryApi` serving the pack lookups; assert the root equals the root built from the equivalent raw API responses.
+6. `docs/walkthrough.md`: move the comparison to review time in day 2.
 
 ### Acceptance criteria
 
-- [ ] `strata snapshot --from-profile profile/profile.yaml -o candidate.json` works with only registry access
-- [ ] For a merged version, the candidate root equals the root of the snapshot taken from Palette after the apply
+- [ ] `strata snapshot --from-candidate profile.yaml -o candidate.json` needs pack lookups only; no profile has to exist
+- [ ] Once the version is published, the candidate root equals the root of the snapshot taken from Palette
 - [ ] Missing values files and unknown pack versions are errors with exit 2
 - [ ] `source.template` is `candidate`
+- [ ] The file format is documented and assumes no repository layout
 
-## One command for the promotion check
+## Check that several records are the same release
 
 labels: feature
 
 ### Background
 
-After a release reaches prod, the team compares the test and prod records and expects `IDENTICAL`. Between dev and test the expected pattern is different: the release build rewrites pins from the `packs-dev` registry to `packs`, so every pack shows `IDENTITY UPSTREAM` and none shows `AUTHORED`. Both rules live in `docs/walkthrough.md` day 4 as prose and two manual comparisons.
+A team that publishes one version into several Palette projects, or several tenants, wants to know that each record is the same release. Today that is one `compare` per pair and a reading of each report. One difference can be intended: when a team promotes packs between registries and re-pins the profile, the same version shows `IDENTITY UPSTREAM` on each pack with no `AUTHORED`, because only `registryUid`, `packUid`, and the digest moved. `docs/walkthrough.md` day 4 describes both rules as prose.
 
 ### Plan
 
-1. `src/ops.rs`: `promotion_check(records: &[Snapshot]) -> PromotionReport` that orders records by tier (dev, test, stage, prod), checks dev to test for "registry move only" (every changed pack has `identity && upstream && !authored`, variables unchanged), and checks test, stage, prod pairwise for equal roots.
-2. `src/main.rs`: `strata promote-check releases/<version>/*.json`, tier taken from the file name.
-3. `src/render/`: a terminal line per pair and a `strata-promotion/1` JSON document with a `legend`.
-4. Tests: fixtures with a dev record whose registry uid and digests differ from test, and a prod record with one edited value.
+1. `src/ops.rs`: `same_release(records: &[Snapshot], policy: Policy) -> ChainReport` that compares consecutive records in the order given. `Policy::Exact` requires equal roots. `Policy::RegistryMove` also accepts a pair where every changed pack has `identity && upstream && !authored`, only `registryUid`, `packUid`, and the digest differ, and variables are unchanged.
+2. `src/main.rs`: `strata same-release [--allow registry-move] <record>...`; the order comes from the command line, never from file names.
+3. `src/render/`: a terminal line per pair and a `strata-chain/1` JSON document with a `legend`.
+4. Tests: fixtures with a record whose registry uid and digests differ, and a record with one edited value.
 
 ### Acceptance criteria
 
-- [ ] `strata promote-check releases/1.1.1/*.json` exits 0 when dev to test is a registry move only and test, stage, prod are identical
-- [ ] An `AUTHORED` change between dev and test exits 1 and names the pack and the leaf
-- [ ] A root difference between test and prod exits 1 and names the tiers
-- [ ] `--format json` writes `strata-promotion/1`
+- [ ] `strata same-release a.json b.json c.json` exits 0 when every root is equal
+- [ ] With `--allow registry-move`, a pair that differs only by registry passes; an `AUTHORED` change exits 1 and names the pack and the leaf
+- [ ] A root difference exits 1 and names the two records
+- [ ] `--format json` writes `strata-chain/1`
 - [ ] Walkthrough day 4 uses the command
 
 ## Bulk verify with a summary document
@@ -128,22 +136,22 @@ labels: feature
 
 ### Background
 
-The nightly immutability check in `docs/walkthrough.md` is a shell loop over `releases/*/*.json` that maps tier to project uid by hand and greps for `DRIFT`. One command with one document makes the job a single step and gives the scheduled workflow something to upload.
+The scheduled immutability check in `docs/walkthrough.md` is a shell loop over record files that sets the project for each record by hand and greps for `DRIFT`. One command with one document makes the job a single step and gives any scheduler something to keep. A record does not yet say which project it was taken in, so the loop has to know.
 
 ### Plan
 
-1. `src/main.rs`: `strata verify` accepts several paths and globs.
-2. `src/config.rs`: `--project-map tiers.yaml` mapping tier name to `PALETTE_PROJECT_UID`; the tier is the record's file name.
-3. `src/ops.rs`: `verify_many` returning per-record results; the API client is built once per project.
+1. `src/snapshot.rs`: record the project scope a snapshot was taken in as `source.projectUid`, empty for tenant scope, so a record carries what `verify` needs.
+2. `src/main.rs`: `strata verify` accepts several paths and globs; `--project` overrides the recorded scope for every record.
+3. `src/ops.rs`: `verify_many` returning per-record results; one API client per project scope.
 4. `src/render/`: one terminal line per record, and a `strata-verify-summary/1` JSON document with counts and the drifted records.
 5. Exit 1 if any record drifted, 2 if any record could not be checked.
 
 ### Acceptance criteria
 
-- [ ] `strata verify 'releases/**/*.json' --project-map tiers.yaml` checks every record against its tier's project
+- [ ] `strata verify 'releases/**/*.json'` checks every record in the project it was recorded from
 - [ ] Output is one line per record and, with `--format json`, one summary document
 - [ ] Exit codes: 0 all unchanged, 1 any drift, 2 any error
-- [ ] The scheduled workflow in the walkthrough is one command
+- [ ] The scheduled check in the walkthrough is one command
 
 ## Release binaries from CI
 
@@ -151,7 +159,7 @@ labels: ci
 
 ### Background
 
-A developer and a CI runner must run the same binary. Today `ci.yml` uploads a Linux x86_64 build as a workflow artifact and every laptop builds its own. Static binaries with checksums and signatures make `curl` plus a checksum the install procedure, and match the plan's rule that every published artifact is signed.
+A developer and a CI runner must run the same binary. Today `ci.yml` uploads a Linux x86_64 build as a workflow artifact and every laptop builds its own. Static binaries with checksums and signatures make `curl` plus a checksum the install procedure, and let anyone verify the binary they run.
 
 ### Plan
 
@@ -167,26 +175,26 @@ A developer and a CI runner must run the same binary. Today `ci.yml` uploads a L
 - [ ] The README install procedure works on a clean Linux machine
 - [ ] `ci.yml` and `release.yml` share the build step
 
-## Reusable workflow for pull request comments
+## Post the comparison as a pull request comment
 
 labels: ci
 
 ### Background
 
-Every profile and cluster repository needs the same three steps when a bump pull request opens: run `strata compare --format markdown`, post the result as the pull request comment, and add the `repave` label when `summary.maxImpact` is `repave`. The plan puts shared pipeline logic in the tools repository as reusable workflows, and forbids logic that lives only in YAML.
+Any repository that reviews profile changes wants the same three steps when a pull request opens: run `strata compare --format markdown`, post the result as one comment that updates on each push, and add a label when `summary.maxImpact` reaches a threshold. The markdown works on any code host. The posting step needs a host API, so it belongs in a script that uses the host's CLI, and a repository calls the script from whatever runs its CI.
 
 ### Plan
 
-1. `scripts/pr-comment.sh <A> <B> [--label-threshold repave]`: runs the comparison in both formats, posts or updates one comment (marker `<!-- strata -->`), sets the label from `summary.maxImpact`.
-2. A reusable workflow `strata-comment.yml` in the tools repository that downloads the release binary and calls the script; inputs `a`, `b`, `label`, `threshold`.
-3. Profile and cluster templates call it from their `pr.yml` and `bump.yml`.
+1. `scripts/pr-comment.sh <A> <B> [--label repave] [--threshold repave]`: runs the comparison in both formats, posts or updates one comment (marker `<!-- strata -->`), and sets the label from `summary.maxImpact`. GitHub through `gh` first; the host-specific part is one function, so another host is one more function.
+2. A reusable GitHub Actions workflow in this repository, `.github/workflows/comment.yml`, that downloads the release binary and calls the script; inputs `a`, `b`, `label`, `threshold`. Other CI systems call the script directly.
+3. `README.md`: how to call the script and the workflow.
 
 ### Acceptance criteria
 
-- [ ] A bump pull request shows exactly one strata comment, updated on each push
-- [ ] The `repave` label is added when `maxImpact` is `repave` and removed when it is not
-- [ ] The script runs locally with `gh` and produces the same comment
-- [ ] No profile or cluster repository carries its own copy of the logic
+- [ ] A pull request shows exactly one strata comment, updated on each push
+- [ ] The label is added when `maxImpact` reaches the threshold and removed when it does not
+- [ ] The script runs locally and produces the same comment
+- [ ] A repository needs no copy of the logic, only a call
 
 ## Structured errors in JSON mode
 
@@ -237,7 +245,7 @@ labels: robustness
 
 ### Background
 
-The pipeline calls strata from many jobs, often in bursts after a fan-out. A single 5xx or a rate limit must not fail a release. `HttpApi::get_json` in `src/api.rs` makes one attempt.
+CI jobs call strata in bursts, and Palette rate-limits. A single 5xx or a 429 must not fail a job. `HttpApi::get_json` in `src/api.rs` makes one attempt.
 
 ### Plan
 
@@ -314,20 +322,20 @@ Strata does not hash pack presets or the pack schema. A selected preset shows as
 - [ ] If the scheme changed, old snapshots still load and `compare` reports the schema mismatch clearly
 - [ ] The "Known limits" entry is removed
 
-## Publish the library for the Rust Palette client
+## Publish the library crate
 
 labels: library
 
 ### Background
 
-The plan replaces Terraform with a Rust Palette client later. Strata is already a library with a thin CLI (`src/lib.rs`, `src/ops.rs`), so that client can build snapshots and diffs without the binary once the public API is stable.
+Strata is already a library with a thin CLI (`src/lib.rs`, `src/ops.rs`). Another Rust program, for example a Palette client, a controller, or a review bot, can build snapshots and diffs without the binary once the public API is stable.
 
 ### Plan
 
 1. Review the public surface of `strata::{api, config, snapshot, diff, ops, render}`; mark internals `pub(crate)`.
 2. Write the semver policy: crate version for the API, schema ids for the documents.
 3. `cargo doc` clean with `missing_docs` as an error; examples in the module docs.
-4. Publish to the internal registry or document the git dependency.
+4. Publish to a crate registry or document the git dependency.
 
 ### Acceptance criteria
 
