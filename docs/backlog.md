@@ -383,10 +383,10 @@ Strata scopes requests with `PALETTE_PROJECT_UID` or `--project <uid>`, and name
 
 ### Acceptance criteria
 
-- [ ] `PALETTE_PROJECT=<name>` scopes every command to that project; an unknown name is an error with exit 2 that lists the visible projects
-- [ ] `--project-name` does the same for `verify`
-- [ ] `strata compare record.json cluster:<name>/<profile>` works; an unknown or ambiguous cluster name is an error with exit 2
-- [ ] Records carry uids, never names, so a rename does not break `verify`
+- [x] `PALETTE_PROJECT=<name>` scopes every command to that project; an unknown name is an error with exit 2 that lists the visible projects
+- [x] `--project-name` does the same for `verify`
+- [x] `strata compare record.json cluster:<name>/<profile>` works; an unknown or ambiguous cluster name is an error with exit 2
+- [x] Records carry uids, never names, so a rename does not break `verify`
 
 ## Decide whether a tag-only difference is an IDENTITY change
 
