@@ -72,6 +72,16 @@ pub enum Error {
         /// Profile version.
         version: String,
     },
+    /// `cluster:<uid>/<profile>` named a profile the cluster does not run.
+    #[error("cluster '{cluster}' has no applied profile named '{profile}'; applied: {}", applied.join(", "))]
+    ClusterProfileNotFound {
+        /// Cluster uid.
+        cluster: String,
+        /// The profile name asked for.
+        profile: String,
+        /// The names of the profiles applied to the cluster, in order.
+        applied: Vec<String>,
+    },
     /// The file exists but is not a strata snapshot.
     #[error("'{0}' is not a strata snapshot")]
     NotSnapshot(PathBuf),
@@ -130,6 +140,7 @@ impl Error {
             Error::Transport { .. } => "transport",
             Error::NotJson { .. } => "not-json",
             Error::ProfileNotFound { .. } => "profile-not-found",
+            Error::ClusterProfileNotFound { .. } => "cluster-profile-not-found",
             Error::NotSnapshot(_) => "not-snapshot",
             Error::SnapshotSchema { .. } => "snapshot-schema",
             Error::NoUid => "no-uid",
@@ -141,7 +152,8 @@ impl Error {
     }
 
     /// The machine-readable form: `kind`, `message`, and the variant's own fields (`path`,
-    /// `status`, `name`, `version`, `schema`, `variable`, `alternate`, `value`) when it has them.
+    /// `status`, `name`, `version`, `schema`, `variable`, `alternate`, `value`, `cluster`,
+    /// `profile`, `applied`) when it has them.
     pub fn to_json(&self) -> Value {
         let mut m = Map::new();
         m.insert("kind".into(), Value::from(self.kind()));
@@ -171,6 +183,15 @@ impl Error {
             }
             Error::Transport { path: p, .. } | Error::NotJson { path: p, .. } => {
                 m.insert("path".into(), Value::from(p.as_str()));
+            }
+            Error::ClusterProfileNotFound {
+                cluster,
+                profile,
+                applied,
+            } => {
+                m.insert("cluster".into(), Value::from(cluster.as_str()));
+                m.insert("profile".into(), Value::from(profile.as_str()));
+                m.insert("applied".into(), Value::from(applied.clone()));
             }
             Error::ProfileNotFound { name, version } => {
                 m.insert("name".into(), Value::from(name.as_str()));
@@ -236,6 +257,11 @@ mod tests {
                 name: "aws-pxk".into(),
                 version: "9.9.9".into(),
             },
+            Error::ClusterProfileNotFound {
+                cluster: "c1".into(),
+                profile: "nope".into(),
+                applied: vec!["infra".into(), "addons".into()],
+            },
             Error::NotSnapshot("profile.json".into()),
             Error::SnapshotSchema {
                 path: "old.json".into(),
@@ -298,5 +324,11 @@ mod tests {
         assert_eq!(by_kind("invalid-setting")["variable"], "STRATA_RETRIES");
         assert_eq!(by_kind("invalid-setting")["value"], "lots");
         assert_eq!(by_kind("pattern")["pattern"], "releases/**/*.json");
+        let cp = by_kind("cluster-profile-not-found");
+        assert_eq!(
+            (cp["cluster"].clone(), cp["profile"].clone()),
+            ("c1".into(), "nope".into())
+        );
+        assert_eq!(cp["applied"], serde_json::json!(["infra", "addons"]));
     }
 }

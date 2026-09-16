@@ -9,7 +9,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 
-use crate::api::RawProfile;
+use crate::api::{RawCluster, RawProfile};
 use crate::canon::{canon_yaml, canonical_json, hash_yaml, sha256_hex, Canon};
 use crate::error::{Error, Result};
 
@@ -80,6 +80,70 @@ pub struct Source {
     pub consumers: Consumers,
     /// When the snapshot was taken, RFC 3339 UTC.
     pub fetched_at: String,
+    /// Present when the snapshot records what a cluster runs rather than a published profile.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cluster: Option<ClusterSource>,
+}
+
+impl Source {
+    /// `name@version`, and `on cluster <name>` for a snapshot of a cluster.
+    pub fn title(&self) -> String {
+        let profile = format!("{}@{}", self.name, self.version);
+        match &self.cluster {
+            None => profile,
+            Some(c) if self.name.is_empty() => format!("cluster {}", c.name),
+            Some(c) => format!("{profile} on cluster {}", c.name),
+        }
+    }
+
+    /// The uid a reader looks up: the cluster's for a cluster snapshot, else the profile's.
+    pub fn shown_uid(&self) -> &str {
+        match &self.cluster {
+            Some(c) => &c.uid,
+            None => &self.uid,
+        }
+    }
+}
+
+/// The cluster a snapshot was taken from.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ClusterSource {
+    /// Cluster uid.
+    pub uid: String,
+    /// Cluster name.
+    pub name: String,
+    /// The applied profile selected with `cluster:<uid>/<profile>`; absent when the snapshot
+    /// covers every applied profile.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub profile: Option<String>,
+    /// The applied profiles this snapshot covers, in the order Palette applies them.
+    pub profiles: Vec<AppliedProfile>,
+}
+
+/// One cluster profile version as applied to a cluster.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
+pub struct AppliedProfile {
+    /// Profile uid.
+    pub uid: String,
+    /// Profile name.
+    pub name: String,
+    /// Profile version.
+    pub version: String,
+    /// Profile type: cluster, infra, add-on, system.
+    #[serde(rename = "type")]
+    pub kind: String,
+}
+
+impl AppliedProfile {
+    fn from_template(t: &Value) -> AppliedProfile {
+        AppliedProfile {
+            uid: s(t, "/uid"),
+            name: s(t, "/name"),
+            version: s(t, "/profileVersion"),
+            kind: s(t, "/type"),
+        }
+    }
 }
 
 /// Clusters using a profile version.
@@ -168,6 +232,14 @@ pub struct PackHash {
     pub authored: String,
     /// sha256(identity + upstream + authored)
     pub node: String,
+}
+
+/// The Merkle root over the variables hash and the packs' node hashes, in order.
+fn root_of(variables_hash: &str, packs: &[Pack]) -> String {
+    sha256_hex(&canonical_json(&json!({
+        "variables": variables_hash,
+        "packs": packs.iter().map(|p| json!([p.key, p.hash.node])).collect::<Vec<_>>(),
+    })))
 }
 
 fn s(v: &Value, ptr: &str) -> String {
@@ -384,6 +456,7 @@ impl Snapshot {
                 clusters,
             },
             fetched_at: fetched_at.to_string(),
+            cluster: None,
         };
 
         let mut variables: Vec<Value> = arr(&raw.variables, "/variables")
@@ -398,10 +471,7 @@ impl Snapshot {
             .map(|pk| Pack::from_api(pk, &mpacks))
             .collect();
 
-        let root = sha256_hex(&canonical_json(&json!({
-            "variables": variables_hash,
-            "packs": packs.iter().map(|p| json!([p.key, p.hash.node])).collect::<Vec<_>>(),
-        })));
+        let root = root_of(&variables_hash, &packs);
 
         Ok(Snapshot {
             schema: SNAPSHOT_SCHEMA.to_string(),
@@ -423,6 +493,100 @@ impl Snapshot {
     pub fn with_project(mut self, project_uid: Option<&str>) -> Snapshot {
         self.source.project_uid = project_uid.unwrap_or("").to_string();
         self
+    }
+
+    /// Build a snapshot of what a cluster runs from its raw API responses. Each applied profile is
+    /// hashed as the profile itself would be, so a cluster that runs a recorded version has the
+    /// root of that record. With `profile`, only the applied profile of that name (or uid) is
+    /// covered; without, every applied profile in order, packs concatenated and variables merged.
+    pub fn from_cluster(
+        raw: &RawCluster,
+        profile: Option<&str>,
+        reference: &str,
+        fetched_at: &str,
+    ) -> Result<Snapshot> {
+        let templates = raw.templates();
+        let applied: Vec<AppliedProfile> = templates
+            .iter()
+            .map(AppliedProfile::from_template)
+            .collect();
+        let chosen: Vec<usize> = match profile {
+            None => (0..templates.len()).collect(),
+            Some(p) => {
+                let chosen: Vec<usize> = applied
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, a)| a.name == p || a.uid == p)
+                    .map(|(i, _)| i)
+                    .collect();
+                if chosen.is_empty() {
+                    return Err(Error::ClusterProfileNotFound {
+                        cluster: s(&raw.cluster, "/metadata/uid"),
+                        profile: p.to_string(),
+                        applied: applied.iter().map(|a| a.name.clone()).collect(),
+                    });
+                }
+                chosen
+            }
+        };
+        let parts = chosen
+            .iter()
+            .map(|&i| Snapshot::from_raw(&raw.template_raw(&templates[i]), reference, fetched_at))
+            .collect::<Result<Vec<Snapshot>>>()?;
+        let covered: Vec<AppliedProfile> = chosen.iter().map(|&i| applied[i].clone()).collect();
+
+        let mut variables: Vec<Value> = parts.iter().flat_map(|p| p.variables.clone()).collect();
+        variables.sort_by_key(|v| s(v, "/name"));
+        let variables_hash = sha256_hex(&canonical_json(&Value::Array(variables.clone())));
+        let packs: Vec<Pack> = parts.iter().flat_map(|p| p.packs.clone()).collect();
+        let root = root_of(&variables_hash, &packs);
+
+        let joined = |f: fn(&Source) -> &String| {
+            parts
+                .iter()
+                .map(|p| f(&p.source).as_str())
+                .collect::<Vec<_>>()
+                .join("+")
+        };
+        let source = Source {
+            reference: reference.to_string(),
+            uid: match parts.as_slice() {
+                [only] => only.source.uid.clone(),
+                _ => String::new(),
+            },
+            project_uid: String::new(),
+            name: joined(|s| &s.name),
+            version: joined(|s| &s.version),
+            cloud_type: parts
+                .first()
+                .map(|p| p.source.cloud_type.clone())
+                .filter(|c| !c.is_empty())
+                .unwrap_or_else(|| s(&raw.cluster, "/spec/cloudType")),
+            kind: joined(|s| &s.kind),
+            template: "applied".to_string(),
+            tags: BTreeMap::new(),
+            consumers: Consumers::default(),
+            fetched_at: fetched_at.to_string(),
+            cluster: Some(ClusterSource {
+                uid: s(&raw.cluster, "/metadata/uid"),
+                name: s(&raw.cluster, "/metadata/name"),
+                profile: profile.map(str::to_string),
+                profiles: covered,
+            }),
+        };
+        Ok(Snapshot {
+            schema: SNAPSHOT_SCHEMA.to_string(),
+            tool: Tool {
+                name: crate::TOOL_NAME.to_string(),
+                version: crate::TOOL_VERSION.to_string(),
+                implementation: Some(crate::TOOL_IMPL.to_string()),
+            },
+            source,
+            variables,
+            variables_hash,
+            packs,
+            root,
+        })
     }
 
     /// Read a snapshot file, checking its schema id.

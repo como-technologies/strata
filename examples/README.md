@@ -13,6 +13,8 @@ examples/
   packs/<name>/_summaries.json  GET /v1/packs?filters=spec.name=<name>, filtered to the Public Repo
   profiles/raw/<profile>@<ver>/ profile.json, manifests.json, variables.json in the shapes the tool reads
   profiles/<profile>@<ver>.json snapshots (Merkle root, per-pack hashes, canonical values)
+  clusters/raw/<cluster>/       cluster.json, manifests.json, variables.json in the shapes the tool reads
+  clusters/<cluster>.json       cluster snapshots: what the cluster runs, hashed like the profile
   reports/                   compare output: text reports and one strata-diff/1 JSON document
 ```
 
@@ -26,6 +28,10 @@ examples/
   is copied from the registry pack digest. On a real profile Palette stamps that
   field itself, and whether it carries the same value is the open question noted
   in the top-level README.
+
+The cluster `workload-a` is synthesized the same way. It runs `aws-pxk@1.1.0`
+while `1.1.1` is proposed, so its snapshot has the root of the `1.1.0` record,
+and the reports show one comparison that is `IDENTICAL` and one that is not.
 
 The three profiles:
 

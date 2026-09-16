@@ -349,43 +349,154 @@ pub struct RawProfile {
     pub variables: Value,
 }
 
+/// Read one JSON file from `dir`; an empty file is an error of its own.
+fn read_json_file(dir: &Path, name: &str) -> Result<Value> {
+    let path = dir.join(name);
+    let text = fs::read_to_string(&path).map_err(|source| Error::Io {
+        path: path.clone(),
+        source,
+    })?;
+    if text.trim().is_empty() {
+        return Err(Error::EmptyFile(path));
+    }
+    serde_json::from_str(&text).map_err(|source| Error::FileNotJson { path, source })
+}
+
+/// Write each named document under `dir`, creating it.
+fn write_json_files(dir: &Path, files: &[(&str, &Value)]) -> Result<()> {
+    fs::create_dir_all(dir).map_err(|source| Error::Io {
+        path: dir.to_path_buf(),
+        source,
+    })?;
+    for (name, v) in files {
+        let path = dir.join(name);
+        fs::write(&path, serde_json::to_string_pretty(v)?)
+            .map_err(|source| Error::Io { path, source })?;
+    }
+    Ok(())
+}
+
 impl RawProfile {
     /// Read the three files from `dir`.
     pub fn load_dir(dir: &Path) -> Result<RawProfile> {
-        let read = |name: &str| -> Result<Value> {
-            let path = dir.join(name);
-            let text = fs::read_to_string(&path).map_err(|source| Error::Io {
-                path: path.clone(),
-                source,
-            })?;
-            if text.trim().is_empty() {
-                return Err(Error::EmptyFile(path));
-            }
-            serde_json::from_str(&text).map_err(|source| Error::FileNotJson { path, source })
-        };
         Ok(RawProfile {
-            profile: read("profile.json")?,
-            manifests: read("manifests.json")?,
-            variables: read("variables.json")?,
+            profile: read_json_file(dir, "profile.json")?,
+            manifests: read_json_file(dir, "manifests.json")?,
+            variables: read_json_file(dir, "variables.json")?,
         })
     }
 
     /// Write the three files under `dir`, creating it.
     pub fn save_dir(&self, dir: &Path) -> Result<()> {
-        fs::create_dir_all(dir).map_err(|source| Error::Io {
-            path: dir.to_path_buf(),
-            source,
-        })?;
-        for (name, v) in [
-            ("profile.json", &self.profile),
-            ("manifests.json", &self.manifests),
-            ("variables.json", &self.variables),
-        ] {
-            let path = dir.join(name);
-            fs::write(&path, serde_json::to_string_pretty(v)?)
-                .map_err(|source| Error::Io { path, source })?;
+        write_json_files(
+            dir,
+            &[
+                ("profile.json", &self.profile),
+                ("manifests.json", &self.manifests),
+                ("variables.json", &self.variables),
+            ],
+        )
+    }
+}
+
+/// The three raw API responses a cluster snapshot is built from. Saved as `cluster.json`,
+/// `manifests.json` and `variables.json` by `--raw-dir` and read back by `--from-raw`.
+#[derive(Debug, Clone)]
+pub struct RawCluster {
+    /// `GET /v1/spectroclusters/{uid}`: the applied profile templates are in
+    /// `spec.clusterProfileTemplates`
+    pub cluster: Value,
+    /// `GET /v1/spectroclusters/{uid}/profiles/packs/manifests`: one entry per applied profile
+    pub manifests: Value,
+    /// `GET /v1/spectroclusters/{uid}/variables`: one entry per applied profile, or `[]` when
+    /// unavailable
+    pub variables: Value,
+}
+
+impl RawCluster {
+    /// The file that marks a raw directory as a cluster's.
+    pub const MARKER: &'static str = "cluster.json";
+
+    /// Read the three files from `dir`.
+    pub fn load_dir(dir: &Path) -> Result<RawCluster> {
+        Ok(RawCluster {
+            cluster: read_json_file(dir, Self::MARKER)?,
+            manifests: read_json_file(dir, "manifests.json")?,
+            variables: read_json_file(dir, "variables.json")?,
+        })
+    }
+
+    /// Write the three files under `dir`, creating it.
+    pub fn save_dir(&self, dir: &Path) -> Result<()> {
+        write_json_files(
+            dir,
+            &[
+                (Self::MARKER, &self.cluster),
+                ("manifests.json", &self.manifests),
+                ("variables.json", &self.variables),
+            ],
+        )
+    }
+
+    /// The applied profile templates, in the order Palette applies them.
+    pub fn templates(&self) -> Vec<Value> {
+        self.cluster
+            .pointer("/spec/clusterProfileTemplates")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default()
+    }
+
+    /// One applied template as the three documents of a profile, so a cluster's profile is hashed
+    /// exactly as the profile itself: the template's packs as the published packs, the cluster's
+    /// manifests entry for that profile, and that profile's variable definitions. Variable values
+    /// are left out; they are run-time input, not part of the release.
+    pub fn template_raw(&self, template: &Value) -> RawProfile {
+        let field = |k: &str| template.get(k).cloned().unwrap_or(Value::Null);
+        let uid = template.get("uid").and_then(Value::as_str).unwrap_or("");
+        let name = template.get("name").and_then(Value::as_str).unwrap_or("");
+        let profile = serde_json::json!({
+            "metadata": {"uid": uid, "name": name},
+            "spec": {
+                "version": field("profileVersion"),
+                "published": {
+                    "cloudType": field("cloudType"),
+                    "type": field("type"),
+                    "packs": field("packs"),
+                },
+            },
+            "status": {},
+        });
+        let entries = |doc: &Value, key: &str| -> Vec<Value> {
+            match key {
+                "" => doc.as_array().cloned().unwrap_or_default(),
+                k => doc
+                    .get(k)
+                    .and_then(Value::as_array)
+                    .cloned()
+                    .unwrap_or_default(),
+            }
+        };
+        let meta = |m: &Value, k: &str| {
+            m.pointer(&format!("/metadata/{k}"))
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string()
+        };
+        let manifests = entries(&self.manifests, "profiles")
+            .into_iter()
+            .find(|m| (!uid.is_empty() && meta(m, "uid") == uid) || meta(m, "name") == name)
+            .unwrap_or_else(|| serde_json::json!({"spec": {"packs": []}}));
+        let variables = entries(&self.variables, "")
+            .into_iter()
+            .find(|v| v.get("profileUid").and_then(Value::as_str) == Some(uid))
+            .and_then(|v| v.get("variables").cloned())
+            .unwrap_or_else(|| serde_json::json!([]));
+        RawProfile {
+            profile,
+            manifests,
+            variables: serde_json::json!({ "variables": variables }),
         }
-        Ok(())
     }
 }
 
@@ -457,6 +568,21 @@ impl<A: PaletteApi> Palette<A> {
             })
     }
 
+    /// GET a variables endpoint; a missing endpoint (404 or 405, as on older Palette versions) is
+    /// `none`, other errors propagate.
+    fn variables_or(&self, path: &str, none: Value, progress: &Progress) -> Result<Value> {
+        match self.api.get_json(path) {
+            Ok(v) => Ok(v),
+            Err(Error::Api { status, .. }) if status == 404 || status == 405 => {
+                progress.note(&format!(
+                    "note: {path} is unavailable; treating as no variables"
+                ));
+                Ok(none)
+            }
+            Err(e) => Err(e),
+        }
+    }
+
     /// Fetch the three documents for one profile. A missing variables endpoint (404 or 405, as on
     /// older Palette versions) is treated as "no variables"; other errors propagate.
     pub fn fetch_profile(&self, uid: &str, progress: &Progress) -> Result<RawProfile> {
@@ -465,21 +591,34 @@ impl<A: PaletteApi> Palette<A> {
         let manifests = self
             .api
             .get_json(&format!("/v1/clusterprofiles/{uid}/packs/manifests"))?;
-        let variables = match self
-            .api
-            .get_json(&format!("/v1/clusterprofiles/{uid}/variables"))
-        {
-            Ok(v) => v,
-            Err(Error::Api { status, .. }) if status == 404 || status == 405 => {
-                progress.note(&format!(
-                    "note: variables endpoint unavailable for {uid}; treating as none"
-                ));
-                serde_json::json!({ "variables": [] })
-            }
-            Err(e) => return Err(e),
-        };
+        let variables = self.variables_or(
+            &format!("/v1/clusterprofiles/{uid}/variables"),
+            serde_json::json!({ "variables": [] }),
+            progress,
+        )?;
         Ok(RawProfile {
             profile,
+            manifests,
+            variables,
+        })
+    }
+
+    /// Fetch the three documents for one cluster: the cluster with its applied profile templates,
+    /// the pack manifests of each applied profile, and each applied profile's variables. A missing
+    /// variables endpoint is treated as "no variables"; other errors propagate.
+    pub fn fetch_cluster(&self, uid: &str, progress: &Progress) -> Result<RawCluster> {
+        progress.note(&format!("fetching cluster {uid}"));
+        let cluster = self.api.get_json(&format!("/v1/spectroclusters/{uid}"))?;
+        let manifests = self.api.get_json(&format!(
+            "/v1/spectroclusters/{uid}/profiles/packs/manifests"
+        ))?;
+        let variables = self.variables_or(
+            &format!("/v1/spectroclusters/{uid}/variables"),
+            serde_json::json!([]),
+            progress,
+        )?;
+        Ok(RawCluster {
+            cluster,
             manifests,
             variables,
         })

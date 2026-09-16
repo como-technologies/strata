@@ -79,6 +79,17 @@ pub(crate) fn chain_verdict(c: &Chain) -> String {
     }
 }
 
+/// What a verdict line is about: a published version, or what a cluster runs.
+pub(crate) fn subject(recorded: &Source) -> String {
+    match &recorded.cluster {
+        Some(c) => format!(
+            "cluster {} running {}@{}",
+            c.name, recorded.name, recorded.version
+        ),
+        None => format!("published version {}@{}", recorded.name, recorded.version),
+    }
+}
+
 /// `name@version`, or `-` when the record could not be read.
 pub(crate) fn record_label(name: &str, version: &str) -> String {
     if name.is_empty() {

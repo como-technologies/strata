@@ -9,6 +9,14 @@
 //!   b   the next version: k8s bump + values edits, cilium same tag but new digest, prometheus
 //!       manifest edited + one added, cert-manager added, external-dns removed, metrics-server
 //!       values unparseable on both sides but different, variables changed, two consumers.
+//!   addons  a second, add-on profile (lab-addons@2.0.0) with one pack and one variable
+//!
+//! Clusters, written as the cluster.json, manifests.json and variables.json that a cluster
+//! snapshot reads, each assembled from the profile fixtures it runs:
+//!
+//!   cluster-a       lab-cluster (CLUSTER_UID) running a
+//!   cluster-b       lab-cluster (CLUSTER_UID) running b
+//!   cluster-merged  lab-cluster (CLUSTER_UID) running b and addons
 
 use std::fs;
 use std::path::Path;
@@ -140,6 +148,61 @@ fn write_profile(
     .unwrap();
 }
 
+/// The uid every cluster fixture carries: the fixtures are one cluster at different moments.
+pub const CLUSTER_UID: &str = "c1a5000000000000000000c1";
+
+/// A cluster variable value that must never reach a snapshot.
+pub const SECRET_VALUE: &str = "s3cr3t-value";
+
+fn read_json(path: &Path) -> Value {
+    serde_json::from_str(&fs::read_to_string(path).unwrap()).unwrap()
+}
+
+/// Assemble a cluster that runs the profile fixtures `profiles`, in order, the way Palette returns
+/// it: applied templates on the cluster, per-profile pack manifests, and per-profile variables
+/// with values.
+fn write_cluster(root: &Path, dir: &str, profiles: &[&str]) {
+    let out = root.join(dir);
+    fs::create_dir_all(&out).unwrap();
+    let (mut templates, mut manifests, mut variables) = (vec![], vec![], vec![]);
+    for name in profiles {
+        let prof = read_json(&root.join(name).join("profile.json"));
+        let man = read_json(&root.join(name).join("manifests.json"));
+        let vars = read_json(&root.join(name).join("variables.json"));
+        let published = &prof["spec"]["published"];
+        templates.push(json!({
+            "uid": prof["metadata"]["uid"], "name": prof["metadata"]["name"],
+            "profileVersion": prof["spec"]["version"], "type": published["type"],
+            "cloudType": published["cloudType"], "packs": published["packs"],
+        }));
+        manifests.push(json!({"metadata": man["metadata"], "spec": man["spec"]}));
+        let with_values: Vec<Value> = vars["variables"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|v| {
+                let mut v = v.clone();
+                v["value"] = json!(SECRET_VALUE);
+                v
+            })
+            .collect();
+        variables.push(json!({"profileUid": prof["metadata"]["uid"], "variables": with_values}));
+    }
+    let cluster = json!({
+        "apiVersion": "v1", "kind": "SpectroCluster",
+        "metadata": {"name": "lab-cluster", "uid": CLUSTER_UID},
+        "spec": {"cloudType": "aws", "clusterProfileTemplates": templates},
+        "status": {"state": "Running"},
+    });
+    for (file, v) in [
+        ("cluster.json", cluster),
+        ("manifests.json", json!({"profiles": manifests})),
+        ("variables.json", Value::Array(variables)),
+    ] {
+        fs::write(out.join(file), serde_json::to_string_pretty(&v).unwrap()).unwrap();
+    }
+}
+
 /// Copy the three raw files from `from` to `to`, applying each text replacement to every file.
 fn rewrite(from: &Path, to: &Path, replacements: &[(&str, &str)]) {
     fs::create_dir_all(to).unwrap();
@@ -152,7 +215,8 @@ fn rewrite(from: &Path, to: &Path, replacements: &[(&str, &str)]) {
     }
 }
 
-/// Writes a/, a2/, a3/, a4/ and b/ under `root`.
+/// Writes the profile fixtures a/, a2/, a3/, a4/, b/ and addons/, and the cluster fixtures
+/// cluster-a/, cluster-b/ and cluster-merged/, under `root`.
 pub fn make_fixtures(root: &Path) {
     let packs_a = |k8s_values: &str| {
         vec![
@@ -479,4 +543,45 @@ pub fn make_fixtures(root: &Path) {
         vars_b,
         vec!["cluster-aaa", "cluster-bbb"],
     );
+
+    write_profile(
+        &root.join("addons"),
+        "64f0000000000000000000d4",
+        "2.0.0",
+        vec![pack_ref(
+            "nginx-ingress",
+            "addon",
+            "4.10.0",
+            "4.10.0",
+            "pk-ngx-4100",
+            "sha256:ngx-4100",
+            "charts:\n  ingress-nginx:\n    controller:\n      replicaCount: 2",
+        )],
+        vec![pack_manifests(
+            "nginx-ingress",
+            "addon",
+            "4.10.0",
+            "pk-ngx-4100",
+            "sha256:ngx-4100",
+            "charts:\n  ingress-nginx:\n    controller:\n      replicaCount: 2",
+            vec![],
+        )],
+        json!({"variables": [variable("ingress_class", "Ingress class", "nginx", false)]}),
+        vec![],
+    );
+    rename_profile(&root.join("addons"), "lab-addons");
+
+    write_cluster(root, "cluster-a", &["a"]);
+    write_cluster(root, "cluster-b", &["b"]);
+    write_cluster(root, "cluster-merged", &["b", "addons"]);
+}
+
+/// Give the profile in `dir` another name; `write_profile` names every profile lab-profile.
+fn rename_profile(dir: &Path, name: &str) {
+    for file in ["profile.json", "manifests.json"] {
+        let path = dir.join(file);
+        let mut v = read_json(&path);
+        v["metadata"]["name"] = json!(name);
+        fs::write(&path, serde_json::to_string_pretty(&v).unwrap()).unwrap();
+    }
 }

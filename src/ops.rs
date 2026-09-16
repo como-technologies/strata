@@ -8,7 +8,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::api::{Palette, PaletteApi, RawProfile};
+use crate::api::{Palette, PaletteApi, RawCluster, RawProfile};
 use crate::diff::{self, Diff, ImpactLevel, PackDiff, Status, Verify, VerifyStatus};
 use crate::error::{Error, Result};
 use crate::progress::Progress;
@@ -43,11 +43,31 @@ where
             let raw = palette.fetch_profile(uid, progress)?;
             Ok(Snapshot::from_raw(&raw, uid, fetched_at)?.with_project(palette.project_uid()))
         }
+        Ref::Cluster { uid, profile } => {
+            let palette = connect()?;
+            let raw = palette.fetch_cluster(uid, progress)?;
+            Ok(Snapshot::from_cluster(
+                &raw,
+                profile.as_deref(),
+                &reference.to_string(),
+                fetched_at,
+            )?
+            .with_project(palette.project_uid()))
+        }
     }
 }
 
-/// Build a snapshot from raw API responses saved on disk.
+/// Build a snapshot from raw API responses saved on disk. A directory with `cluster.json` is a
+/// cluster's; a `reference` of the form `cluster:<uid>/<profile>` then selects the profile.
 pub fn snapshot_from_dir(dir: &Path, reference: &str, fetched_at: &str) -> Result<Snapshot> {
+    if dir.join(RawCluster::MARKER).is_file() {
+        let profile = match Ref::parse_with(reference, |_| false) {
+            Ref::Cluster { profile, .. } => profile,
+            _ => None,
+        };
+        let raw = RawCluster::load_dir(dir)?;
+        return Snapshot::from_cluster(&raw, profile.as_deref(), reference, fetched_at);
+    }
     let raw = RawProfile::load_dir(dir)?;
     Snapshot::from_raw(&raw, reference, fetched_at)
 }
@@ -68,23 +88,33 @@ pub struct Verification {
     pub unchanged: bool,
 }
 
-/// Re-fetch the profile a snapshot was taken from and compare.
+/// Re-fetch what a snapshot was taken from and compare: the profile, or for a cluster snapshot
+/// the cluster, with the same profile selection.
 pub fn verify<A: PaletteApi>(
     recorded: &Snapshot,
     palette: &Palette<A>,
     checked_at: &str,
     progress: &Progress,
 ) -> Result<Verification> {
-    let uid = recorded.source.uid.as_str();
+    let uid = recorded.source.shown_uid();
     if uid.is_empty() {
         return Err(Error::NoUid);
     }
     progress.note(&format!(
-        "verifying {}@{} ({uid}) against live; recorded {}",
-        recorded.source.name, recorded.source.version, recorded.source.fetched_at
+        "verifying {} ({uid}) against live; recorded {}",
+        recorded.source.title(),
+        recorded.source.fetched_at
     ));
-    let raw = palette.fetch_profile(uid, progress)?;
-    let live = Snapshot::from_raw(&raw, uid, checked_at)?.with_project(palette.project_uid());
+    let live = match &recorded.source.cluster {
+        Some(c) => Snapshot::from_cluster(
+            &palette.fetch_cluster(uid, progress)?,
+            c.profile.as_deref(),
+            &recorded.source.reference,
+            checked_at,
+        )?,
+        None => Snapshot::from_raw(&palette.fetch_profile(uid, progress)?, uid, checked_at)?,
+    }
+    .with_project(palette.project_uid());
     let unchanged = recorded.root == live.root;
     let verify = Verify {
         status: if unchanged {

@@ -1,0 +1,11 @@
+aws-pxk@1.1.0 (64e0000000000000000000b2)  ->  aws-pxk@1.1.0 on cluster workload-a (64e0000000000000000000d1)
+root       8a8a64d3f95d -> 8a8a64d3f95d   IDENTICAL
+consumers  0 -> 0 clusters
+
+  variables unchanged
+
+  [os   ] ubuntu-aws                 24.04              unchanged
+  [k8s  ] kubernetes                 1.36.2             unchanged
+  [cni  ] cni-cilium-oss             1.20.1             unchanged
+  [csi  ] csi-aws-ebs                1.65.0             unchanged
+  [addon] cert-manager               1.21.1             unchanged

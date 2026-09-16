@@ -620,3 +620,193 @@ fn an_authored_change_during_a_registry_move_fails_and_names_the_pack_and_the_le
     );
     assert_eq!(c.pairs[0].status, PairStatus::Different);
 }
+
+// ---- clusters --------------------------------------------------------------------------------
+
+use common::{CLUSTER_UID, SECRET_VALUE};
+
+/// An API that serves the cluster fixture `dir` under CLUSTER_UID.
+fn serve_cluster(api: MemoryApi, raw_root: &Path, dir: &str) -> MemoryApi {
+    let d = raw_root.join(dir);
+    api.with(
+        format!("/v1/spectroclusters/{CLUSTER_UID}"),
+        read(&d.join("cluster.json")),
+    )
+    .with(
+        format!("/v1/spectroclusters/{CLUSTER_UID}/profiles/packs/manifests"),
+        read(&d.join("manifests.json")),
+    )
+    .with(
+        format!("/v1/spectroclusters/{CLUSTER_UID}/variables"),
+        read(&d.join("variables.json")),
+    )
+}
+
+fn cluster_ref(profile: Option<&str>) -> Ref {
+    Ref::Cluster {
+        uid: CLUSTER_UID.into(),
+        profile: profile.map(str::to_string),
+    }
+}
+
+fn snapshot_cluster(api: &MemoryApi, profile: Option<&str>) -> strata::Result<Snapshot> {
+    ops::snapshot_for(
+        &cluster_ref(profile),
+        || Ok(Palette::new(api.clone())),
+        "t0",
+        &Progress::silent(),
+    )
+}
+
+#[test]
+fn a_cluster_running_the_recorded_version_is_identical_to_the_record() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let recorded_b = ops::snapshot_from_dir(&dir.path().join("b"), "b", "t0").unwrap();
+    let recorded_a = ops::snapshot_from_dir(&dir.path().join("a"), "a", "t0").unwrap();
+
+    let on_b = snapshot_cluster(
+        &serve_cluster(MemoryApi::new(), dir.path(), "cluster-b"),
+        None,
+    )
+    .unwrap();
+    assert_eq!(on_b.root, recorded_b.root, "same release, same root");
+    assert!(ops::compare(&recorded_b, &on_b, "t1").same);
+    let d = ops::compare(&recorded_a, &on_b, "t1");
+    assert!(!d.same);
+    assert!(d.packs.iter().any(|p| p.name == "kubernetes" && p.identity));
+
+    let c = on_b
+        .source
+        .cluster
+        .as_ref()
+        .expect("a cluster snapshot says so");
+    assert_eq!(
+        (c.uid.as_str(), c.name.as_str()),
+        (CLUSTER_UID, "lab-cluster")
+    );
+    assert_eq!(c.profiles.len(), 1);
+    assert_eq!(
+        (c.profiles[0].name.as_str(), c.profiles[0].version.as_str()),
+        ("lab-profile", "1.3.0")
+    );
+    assert_eq!(c.profile, None);
+    assert_eq!(on_b.source.template, "applied");
+    assert_eq!(on_b.source.reference, format!("cluster:{CLUSTER_UID}"));
+    assert_eq!(
+        (on_b.source.name.as_str(), on_b.source.version.as_str()),
+        ("lab-profile", "1.3.0")
+    );
+    assert_eq!(
+        on_b.source.title(),
+        "lab-profile@1.3.0 on cluster lab-cluster"
+    );
+    assert!(
+        !on_b.to_json(true).unwrap().contains(SECRET_VALUE),
+        "variable values are run-time input, never recorded"
+    );
+    assert!(recorded_b.source.cluster.is_none());
+    assert_eq!(recorded_b.source.title(), "lab-profile@1.3.0");
+}
+
+#[test]
+fn a_profile_on_the_cluster_is_selected_by_name_and_the_rest_are_merged() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let recorded_b = ops::snapshot_from_dir(&dir.path().join("b"), "b", "t0").unwrap();
+    let addons = ops::snapshot_from_dir(&dir.path().join("addons"), "addons", "t0").unwrap();
+    let api = serve_cluster(MemoryApi::new(), dir.path(), "cluster-merged");
+
+    let selected = snapshot_cluster(&api, Some("lab-profile")).unwrap();
+    assert_eq!(selected.root, recorded_b.root);
+    assert_eq!(
+        selected.source.cluster.as_ref().unwrap().profile.as_deref(),
+        Some("lab-profile")
+    );
+    assert_eq!(
+        selected.source.reference,
+        format!("cluster:{CLUSTER_UID}/lab-profile")
+    );
+    let other = snapshot_cluster(&api, Some("lab-addons")).unwrap();
+    assert_eq!(other.root, addons.root);
+
+    let merged = snapshot_cluster(&api, None).unwrap();
+    assert_eq!(
+        merged.packs.len(),
+        recorded_b.packs.len() + addons.packs.len(),
+        "every applied profile, in order"
+    );
+    assert_eq!(merged.packs.last().unwrap().name, "nginx-ingress");
+    assert_eq!(merged.variables.len(), recorded_b.variables.len() + 1);
+    let c = merged.source.cluster.as_ref().unwrap();
+    assert_eq!(c.profiles.len(), 2);
+    assert_eq!(
+        merged.source.uid, "",
+        "no single profile uid for a merged snapshot"
+    );
+    assert_eq!(merged.source.name, "lab-profile+lab-addons");
+    assert_eq!(merged.source.version, "1.3.0+2.0.0");
+
+    let err = snapshot_cluster(&api, Some("nope")).unwrap_err();
+    match &err {
+        Error::ClusterProfileNotFound {
+            cluster,
+            profile,
+            applied,
+        } => {
+            assert_eq!((cluster.as_str(), profile.as_str()), (CLUSTER_UID, "nope"));
+            assert_eq!(
+                applied,
+                &vec!["lab-profile".to_string(), "lab-addons".to_string()]
+            );
+        }
+        other => panic!("unexpected error {other}"),
+    }
+    assert_eq!(err.exit_code(), 2);
+    assert!(
+        err.to_string().contains("applied: lab-profile, lab-addons"),
+        "{err}"
+    );
+}
+
+#[test]
+fn verify_refetches_the_cluster_for_a_cluster_record() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let recorded = snapshot_cluster(
+        &serve_cluster(MemoryApi::new(), dir.path(), "cluster-b"),
+        None,
+    )
+    .unwrap();
+
+    let still_b = Palette::new(serve_cluster(MemoryApi::new(), dir.path(), "cluster-b"));
+    let v = ops::verify(&recorded, &still_b, "t1", &Progress::silent()).unwrap();
+    assert!(v.unchanged);
+    assert_eq!(v.diff.verify.as_ref().unwrap().uid, CLUSTER_UID);
+
+    // the same cluster was moved back to a: the run no longer matches its record
+    let now_a = Palette::new(serve_cluster(MemoryApi::new(), dir.path(), "cluster-a"));
+    let v = ops::verify(&recorded, &now_a, "t1", &Progress::silent()).unwrap();
+    assert!(!v.unchanged);
+    assert_eq!(
+        v.diff.verify.as_ref().unwrap().status,
+        VerifyStatus::Drifted
+    );
+    assert!(v.live.source.cluster.is_some());
+
+    // a cluster without the variables endpoint still snapshots, with no variables
+    let d = dir.path().join("cluster-b");
+    let no_vars = MemoryApi::new()
+        .with(
+            format!("/v1/spectroclusters/{CLUSTER_UID}"),
+            read(&d.join("cluster.json")),
+        )
+        .with(
+            format!("/v1/spectroclusters/{CLUSTER_UID}/profiles/packs/manifests"),
+            read(&d.join("manifests.json")),
+        );
+    assert!(snapshot_cluster(&no_vars, None)
+        .unwrap()
+        .variables
+        .is_empty());
+}

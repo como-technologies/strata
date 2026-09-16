@@ -62,8 +62,10 @@ most severe level as `maxImpact`.
 
 - `source`: the ref, the uid, the project the snapshot was taken in (empty
   for tenant scope), the name, the version, the cloud type, the profile type,
-  the template that was used (`published` or `draft`), the tags, the consumer
-  clusters, and the fetch time
+  the template that was used (`published`, `draft`, or `applied` for a
+  cluster), the tags, the consumer clusters, and the fetch time. A snapshot
+  of a cluster adds `cluster`: its uid and name, the profile selected with
+  `cluster:<uid>/<profile>` if any, and the applied profiles it covers
 - `variables` and `variablesHash`
 - `packs[]`: for each pack, the identity fields, the two digests, the raw
   values, the canonical values, the values hash, the manifests with content
@@ -91,5 +93,34 @@ Strata reads these endpoints for one profile:
 
 A profile without a published template falls back to its draft. The snapshot
 records the choice in `source.template`.
+
+## Clusters: release versus run
+
+A cluster carries a copy of each profile version applied to it. Strata hashes
+each copy exactly as it hashes the profile: the applied packs stand in for the
+published packs, the cluster's manifests entry for that profile stands in for
+the profile's manifests, and the profile's variable definitions come from the
+cluster. So a cluster that runs a recorded version has the root of that
+record, and `compare record.json cluster:<uid>/<profile>` answers whether the
+cluster runs the release. An edit to the cluster's pack values shows as
+`AUTHORED`, and a cluster still on an older version shows `IDENTITY`.
+
+The values a cluster gave its variables are run-time input, not part of the
+release. They are neither hashed nor recorded, because some are secrets.
+
+Without a profile name, the snapshot covers every applied profile: packs in
+the order Palette applies them, variables merged and sorted by name. Its
+`source.name` and `source.version` join the profiles' with `+`, and
+`source.uid` is empty. `verify` on a cluster record fetches the cluster again,
+with the same selection.
+
+Strata reads these endpoints for one cluster:
+
+- `GET /v1/spectroclusters/{uid}`: `spec.clusterProfileTemplates`, one
+  applied profile each, with its packs
+- `GET /v1/spectroclusters/{uid}/profiles/packs/manifests`: registry digests
+  and manifest contents, one entry per applied profile
+- `GET /v1/spectroclusters/{uid}/variables`: variable definitions, one entry
+  per applied profile
 
 `strata schema snapshot` prints the JSON Schema of the document.

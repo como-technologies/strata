@@ -47,7 +47,7 @@ api_get() {
   curl -sS --fail-with-body "${hdr[@]}" "${API}$1"
 }
 
-mkdir -p "$out/packs" "$out/profiles/raw" "$out/reports"
+mkdir -p "$out/packs" "$out/profiles/raw" "$out/clusters/raw" "$out/reports"
 
 # ------------------------------------------------------------------ 1. pull packs
 if [ -z "${OFFLINE:-}" ]; then
@@ -170,6 +170,28 @@ write_profile() { # name version uid packfiles... (extra manifests/variables via
   echo "$dir"
 }
 
+write_cluster() { # name uid profile-raw-dir... -> a cluster that runs those profiles, in order
+  local cname=$1 cuid=$2; shift 2
+  local dir="$out/clusters/raw/$cname"; mkdir -p "$dir"
+  local p profiles=() manifests=()
+  for p in "$@"; do profiles+=("$p/profile.json"); manifests+=("$p/manifests.json"); done
+  jq -s --arg n "$cname" --arg uid "$cuid" '
+    {apiVersion: "v1", kind: "SpectroCluster",
+     metadata: {name: $n, uid: $uid},
+     spec: {cloudType: "aws",
+            clusterProfileTemplates: [.[] | {uid: .metadata.uid, name: .metadata.name,
+                                             profileVersion: .spec.version, type: .spec.published.type,
+                                             cloudType: .spec.published.cloudType, packs: .spec.published.packs}]},
+     status: {state: "Running"}}' "${profiles[@]}" > "$dir/cluster.json"
+  jq -s '{profiles: [.[] | {metadata, spec}]}' "${manifests[@]}" > "$dir/manifests.json"
+  # a cluster carries each profile's variable definitions with the value it was given
+  for p in "$@"; do
+    jq -n --slurpfile pr "$p/profile.json" --slurpfile vs "$p/variables.json" \
+      '{profileUid: $pr[0].metadata.uid, variables: [$vs[0].variables[] | . + {value: .defaultValue}]}'
+  done | jq -s '.' > "$dir/variables.json"
+  echo "$dir"
+}
+
 collect() { # which -> prints pack file paths, infra at $which, addons at newest
   local f
   for p in $INFRA; do f=$(pick "$p" "$1"); [ -n "$f" ] && echo "$f"; done
@@ -183,7 +205,7 @@ mapfile -t OLDER < <(collect older)
 mapfile -t NEWER < <(collect newest)
 [ ${#NEWER[@]} -gt 0 ] || die "no packs available under $out/packs; nothing to build"
 
-rm -rf "$out/profiles/raw"/* "$out/profiles"/*.json "$out/reports"/*
+rm -rf "$out/profiles/raw"/* "$out/profiles"/*.json "$out/clusters/raw"/* "$out/clusters"/*.json "$out/reports"/*
 p1=$(write_profile aws-pxk 1.0.0 64e0000000000000000000a1 "${OLDER[@]}")
 p2=$(write_profile aws-pxk 1.1.0 64e0000000000000000000b2 "${NEWER[@]}")
 first_addon=""
@@ -191,6 +213,8 @@ for p in $PACKS; do case " $INFRA " in *" $p "*) ;; *) [ -d "$out/packs/$p" ] &&
 p3=$(EXTRA_MANIFEST_PACK="${first_addon:-kubernetes}" \
      EXTRA_VARIABLES='{"variables":[{"name":"platform_owner","displayName":"Platform owner","defaultValue":"","format":"string","inputType":"text","required":true,"hidden":false,"immutable":false,"isSensitive":false,"options":[]}]}' \
      write_profile aws-pxk 1.1.1 64e0000000000000000000c3 "${NEWER[@]}")
+CLUSTER_UID=64e0000000000000000000d1
+c1=$(write_cluster workload-a "$CLUSTER_UID" "$p2")   # still on 1.1.0 while 1.1.1 is proposed
 
 # ------------------------------------------------------------------ 4. snapshots and reports
 export STRATA_QUIET=1
@@ -206,6 +230,12 @@ report aws-pxk@1.0.0 aws-pxk@1.1.0 .txt
 report aws-pxk@1.0.0 aws-pxk@1.1.0 .json --json
 report aws-pxk@1.1.0 aws-pxk@1.1.1 .txt --full
 report aws-pxk@1.0.0 aws-pxk@1.0.0 .txt
+"$tool" snapshot --from-raw "$c1" "cluster:$CLUSTER_UID" -o "$out/clusters/workload-a.json"
+cluster_report() { # profile-record cluster
+  "$tool" compare "$out/profiles/$1.json" "$out/clusters/$2.json" > "$out/reports/${1}__vs__${2}.txt" || true
+}
+cluster_report aws-pxk@1.1.0 workload-a
+cluster_report aws-pxk@1.1.1 workload-a
 
 # ------------------------------------------------------------------ 5. index
 {
@@ -229,9 +259,15 @@ report aws-pxk@1.0.0 aws-pxk@1.0.0 .txt
     jq -r '"- `\(.source.name)@\(.source.version)` root `\(.root[0:12])`: " + ([.packs[] | "\(.name) \(.version)"] | join(", "))' "$s"
   done
   echo
+  echo "## Clusters synthesized from those profiles"
+  echo
+  for s in "$out"/clusters/*.json; do
+    jq -r '"- `\(.source.cluster.name)` running " + ([.source.cluster.profiles[] | "`\(.name)@\(.version)`"] | join(", ")) + ", root `\(.root[0:12])`"' "$s"
+  done
+  echo
   echo "## Reports"
   echo
   for r in "$out"/reports/*; do echo "- \`reports/$(basename "$r")\`"; done
 } > "$out/INDEX.md"
 
-log "done: $(ls "$out/packs" | wc -l) packs, $(ls "$out"/profiles/*.json | wc -l) profiles, $(ls "$out/reports" | wc -l) reports under $out"
+log "done: $(ls "$out/packs" | wc -l) packs, $(ls "$out"/profiles/*.json | wc -l) profiles, $(ls "$out"/clusters/*.json | wc -l) clusters, $(ls "$out/reports" | wc -l) reports under $out"

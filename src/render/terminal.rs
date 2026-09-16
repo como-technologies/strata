@@ -2,7 +2,7 @@
 
 use super::{
     chain_verdict, counts_line, dash, pair_detail, pair_word, record_detail, record_label, short,
-    show, traits_suffix, variable_lines, version_display, Renderer, VarLine,
+    show, subject, traits_suffix, variable_lines, version_display, Renderer, VarLine,
 };
 use crate::color::Paint;
 use crate::diff::{Diff, ImpactLevel, Leaf, Op, PackDiff, Status, Verify, VerifyStatus};
@@ -146,13 +146,11 @@ impl Renderer for TerminalRenderer {
         let p = &self.paint;
         let mut out: Vec<String> = Vec::new();
         out.push(format!(
-            "{}@{} ({})  ->  {}@{} ({})",
-            p.bold(&d.a.name),
-            p.bold(&d.a.version),
-            p.dim(dash(&d.a.uid)),
-            p.bold(&d.b.name),
-            p.bold(&d.b.version),
-            p.dim(dash(&d.b.uid))
+            "{} ({})  ->  {} ({})",
+            p.bold(&d.a.title()),
+            p.dim(dash(d.a.shown_uid())),
+            p.bold(&d.b.title()),
+            p.dim(dash(d.b.shown_uid()))
         ));
         out.push(format!(
             "root       {} -> {}   {}",
@@ -199,14 +197,13 @@ impl Renderer for TerminalRenderer {
 
     fn verdict(&self, v: &Verify, recorded: &Source) -> Option<String> {
         let p = &self.paint;
-        let (name, ver, at) = (&recorded.name, &recorded.version, &recorded.fetched_at);
+        let (what, at) = (subject(recorded), &recorded.fetched_at);
         Some(match v.status {
-            VerifyStatus::Unchanged => format!(
-                "{}: published version {name}@{ver} is unchanged since {at}",
-                p.bgreen("OK")
-            ),
+            VerifyStatus::Unchanged => {
+                format!("{}: {what} is unchanged since {at}", p.bgreen("OK"))
+            }
             VerifyStatus::Drifted => format!(
-                "{}: published version {name}@{ver} differs from the copy recorded {at}",
+                "{}: {what} differs from the copy recorded {at}",
                 p.bred("DRIFT")
             ),
         })

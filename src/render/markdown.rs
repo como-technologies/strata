@@ -2,7 +2,8 @@
 
 use super::{
     chain_verdict, counts_line, dash, pair_detail, pair_word, plain_flags, record_detail,
-    record_label, short, show, traits_suffix, variable_lines, version_display, Renderer, VarLine,
+    record_label, short, show, subject, traits_suffix, variable_lines, version_display, Renderer,
+    VarLine,
 };
 use crate::color::Paint;
 use crate::diff::{Diff, Leaf, Op, Status, Verify, VerifyStatus};
@@ -42,15 +43,12 @@ fn variable_line(v: &VarLine<'_>) -> String {
 impl Renderer for MarkdownRenderer {
     fn render(&self, d: &Diff, a: &Snapshot, b: &Snapshot, full: bool) -> Result<String> {
         let mut o = String::new();
-        o.push_str(&format!(
-            "### {}@{} → {}@{}\n\n",
-            d.a.name, d.a.version, d.b.name, d.b.version
-        ));
+        o.push_str(&format!("### {} → {}\n\n", d.a.title(), d.b.title()));
         o.push_str("| | A | B |\n|---|---|---|\n");
         o.push_str(&format!(
-            "| profile uid | `{}` | `{}` |\n",
-            dash(&d.a.uid),
-            dash(&d.b.uid)
+            "| uid | `{}` | `{}` |\n",
+            dash(d.a.shown_uid()),
+            dash(d.b.shown_uid())
         ));
         o.push_str(&format!(
             "| root | `{}` | `{}` |\n",
@@ -176,13 +174,11 @@ impl Renderer for MarkdownRenderer {
     }
 
     fn verdict(&self, v: &Verify, recorded: &Source) -> Option<String> {
-        let (name, ver, at) = (&recorded.name, &recorded.version, &recorded.fetched_at);
+        let (what, at) = (subject(recorded), &recorded.fetched_at);
         Some(match v.status {
-            VerifyStatus::Unchanged => {
-                format!("\n**OK**: published version `{name}@{ver}` is unchanged since {at}")
-            }
+            VerifyStatus::Unchanged => format!("\n**OK**: {what} is unchanged since {at}"),
             VerifyStatus::Drifted => {
-                format!("\n**DRIFT**: published version `{name}@{ver}` differs from the copy recorded {at}")
+                format!("\n**DRIFT**: {what} differs from the copy recorded {at}")
             }
         })
     }

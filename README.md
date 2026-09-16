@@ -29,15 +29,19 @@ strata my-profile@1.2.0 my-profile@1.3.0        # compare two versions
 strata compare A B --format markdown            # the pull request comment
 strata compare A B --format json                # for scripts and AI clients
 strata snapshot my-profile@1.2.0 -o rel.json    # record a release
+strata compare rel.json cluster:<uid>/my-profile  # does the cluster run that release?
 strata verify rel.json                          # the immutability check
 strata verify 'releases/**/*.json'              # every record: one line each, one summary
 strata same-release dev.json prod.json          # one release in every project? --allow registry-move
 strata schema diff                              # JSON Schema of the diff document
 ```
 
-A ref is a profile uid, `<name>@<version>`, or a snapshot file.
-`<name>@latest` is the highest version of that name in the scope, by natural
-order, so `22.04` is above `20.04` and `1.30.6` above `1.29.10`. The exit
+A ref is a profile uid, `<name>@<version>`, `cluster:<uid>`, or a snapshot
+file. `<name>@latest` is the highest version of that name in the scope, by
+natural order, so `22.04` is above `20.04` and `1.30.6` above `1.29.10`.
+`cluster:<uid>` is what a cluster runs: every profile applied to it, in
+order. `cluster:<uid>/<profile>` selects one applied profile by name. A
+cluster that runs a recorded version has the same root as that record. The exit
 status is `0` for identical or unchanged, `1` for different or drifted, and
 `2` for an error.
 
@@ -114,6 +118,7 @@ release.
 | a profile change is under review    | `compare --format markdown` between the last published version and the new one. The comment is the evidence the approver reads. |
 | a profile version is published      | `snapshot`. Keep the file with the release.                                      |
 | a cluster is about to move versions | `compare` between the current and the proposed versions. The report shows the repave impact. |
+| a cluster should run its release    | `compare` between the record and `cluster:<uid>/<profile>`. `IDENTICAL` means the cluster runs what was released. |
 | on a schedule                       | `verify` over each recorded snapshot. This enforces the immutability rule.      |
 | before end of life                  | `snapshot`, then read `source.consumers`. Delete only when the count is zero.   |
 
@@ -207,9 +212,9 @@ request, and builds the Linux binary with the same step a release uses.
   snapshot records which field fed `UPSTREAM` in `hash.upstreamSource`. The
   digest the pack's own registry reports is the better source, whichever
   registry that is. It is the planned replacement.
-- Refs are profiles only. The applied profile templates of a cluster use the
-  same pack shape. They are the planned next input, for release-versus-run
-  drift.
+- The cluster endpoints follow the Palette SDK models and have not been
+  checked against a live cluster yet. A cluster snapshot records variable
+  definitions, not the values a cluster was given.
 - Strata does not hash pack presets or the pack schema. A selected preset
   shows as a values change.
 - The text reports truncate values longer than 120 characters. The JSON

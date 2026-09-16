@@ -33,7 +33,8 @@ consumers  0 -> 2 clusters
 - [addon] external-dns               0.14.0             REMOVED
 ```
 
-The first line names the two profiles and their uids. The second line shows
+The first line names the two sides and their uids. A side taken from a
+cluster reads `name@version on cluster <name>` and shows the cluster uid. The second line shows
 the two roots and `IDENTICAL` or `CHANGED`. The third line shows the consumer
 counts. Then come the variables, in name order: one line for an added or
 removed variable with its traits (`required`, `sensitive`, `hidden`,
@@ -178,14 +179,23 @@ carries one line and the exit status is `2`, as always:
 {"error":{"kind":"not-snapshot","message":"'profile.json' is not a strata snapshot","path":"profile.json"}}
 ```
 
-`kind` is a stable kebab-case name: `missing-credential`, `api`, `transport`,
-`not-json`, `profile-not-found`, `not-snapshot`, `snapshot-schema`, `no-uid`,
-`io`, `empty-file`, `file-not-json`, or `serialize`. `message` is the sentence
-the terminal shows. The other fields are the variant's own: `path` and
-`status` for `api`, `path` for the file and transport errors, `name` and
-`version` for `profile-not-found`, `schema` for `snapshot-schema`, `variable`
-and `alternate` for `missing-credential`. Without JSON selected, stderr is the
-sentence prefixed with `strata:`.
+`kind` is a stable kebab-case name: `missing-credential`, `api`,
+`invalid-setting`, `pattern`, `transport`, `not-json`, `profile-not-found`,
+`cluster-profile-not-found`, `not-snapshot`, `snapshot-schema`, `no-uid`,
+`io`, `empty-file`, `file-not-json`, or `serialize`. `message` is the
+sentence the terminal shows. The other fields are the variant's own:
+
+- `variable` and `alternate` for `missing-credential`
+- `path` and `status` for `api`
+- `variable` and `value` for `invalid-setting`
+- `pattern` for `pattern`
+- `path` for `transport`, `not-json`, `not-snapshot`, `io`, `empty-file`,
+  and `file-not-json`
+- `name` and `version` for `profile-not-found`
+- `cluster`, `profile`, and `applied` for `cluster-profile-not-found`
+- `path` and `schema` for `snapshot-schema`
+
+Without JSON selected, stderr is the sentence prefixed with `strata:`.
 
 ### Policy checks with jq
 

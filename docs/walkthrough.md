@@ -3,8 +3,9 @@
 This page shows one platform team and one profile through a release cycle.
 Each command runs offline against the files in `examples/`. Build the tool
 first with `cargo build --release`. When you connect to Palette, replace the
-file paths with live refs: a profile uid, `<name>@<version>`, or
-`<name>@latest` for the highest version in the scope.
+file paths with live refs: a profile uid, `<name>@<version>`,
+`<name>@latest` for the highest version in the scope, or `cluster:<uid>` for
+what a cluster runs.
 
 The cast. The team in this page publishes its profile with Terraform. Strata
 does not know that and does not need to. The same commands work when a team
@@ -220,10 +221,30 @@ Find the cause before you continue.
 
 ## Day 5: a cluster moves to the new version
 
-Trigger: a cluster in `prod` runs `aws-pxk` 1.1.0. The team proposes 1.1.1.
+Trigger: the cluster `workload-a` in `prod` should run `aws-pxk` 1.1.0. The
+team proposes 1.1.1.
 
-Who: whoever prepares the change adds the comparison of the two records to
-the review.
+Who: whoever prepares the change.
+
+First, check that the cluster runs the release its record describes. A
+cluster can stay on an older version, or someone can edit its pack values.
+
+```
+PALETTE_PROJECT_UID=$PROD_PROJECT strata compare releases/1.1.0/prod.json cluster:<uid>/aws-pxk
+```
+
+Offline: `strata compare examples/profiles/aws-pxk@1.1.0.json examples/clusters/workload-a.json`
+
+```
+aws-pxk@1.1.0 (64e0000000000000000000b2)  ->  aws-pxk@1.1.0 on cluster workload-a (64e0000000000000000000d1)
+root       8a8a64d3f95d -> 8a8a64d3f95d   IDENTICAL
+```
+
+`IDENTICAL`, exit `0`: the cluster runs exactly the release. Any other result
+means the run moved away from the release. Find out why before you move it
+again. `/aws-pxk` selects that profile when the cluster runs several.
+
+Then add the comparison of the two records to the review:
 
 ```
 strata compare releases/1.1.0/prod.json releases/1.1.1/prod.json --format markdown
@@ -232,9 +253,37 @@ strata compare releases/1.1.0/prod.json releases/1.1.1/prod.json --format markdo
 The cluster reviewer reads the impact column first. `in-place` means
 approve. `repave` means schedule a maintenance window first.
 
-Not available yet: a comparison of the record against what the cluster runs
-now. The applied profile templates of a cluster use the same pack shape. They
-are the planned next input.
+The same check against the proposed record shows what the move changes on
+this cluster. The `-` lines are what the cluster does not have yet:
+
+Offline: `strata compare examples/profiles/aws-pxk@1.1.1.json examples/clusters/workload-a.json`
+
+```
+aws-pxk@1.1.1 (64e0000000000000000000c3)  ->  aws-pxk@1.1.0 on cluster workload-a (64e0000000000000000000d1)
+root       088136c929bd -> 8a8a64d3f95d   CHANGED
+consumers  0 -> 0 clusters
+
+  variables CHANGED
+        - variable platform_owner (required)
+
+  [os   ] ubuntu-aws                 24.04              unchanged
+  [k8s  ] kubernetes                 1.36.2             unchanged
+  [cni  ] cni-cilium-oss             1.20.1             unchanged
+  [csi  ] csi-aws-ebs                1.65.0             unchanged
+~ [addon] cert-manager               1.21.1             AUTHORED
+      - manifest namespace-labels
+      impact: in-place addon upgrade
+```
+
+After the move, that command prints `IDENTICAL`. To keep a record of what the
+cluster runs, snapshot it like a profile:
+
+```
+PALETTE_PROJECT_UID=$PROD_PROJECT strata snapshot cluster:<uid>/aws-pxk -o runs/workload-a.json
+```
+
+`strata verify runs/workload-a.json` then fetches the cluster again and
+reports `DRIFT` when its run no longer matches the record.
 
 ## Every night: prove that published versions did not change
 
@@ -325,6 +374,7 @@ listing.
 | Does this release repave nodes?                       | `strata compare A B --json \| jq -r .summary.maxImpact`           | prints the level        |                                  |
 | Record this release                                   | `strata snapshot <name>@<version> -o releases/<version>/<project>.json` | written           |                                  |
 | Record the newest published version                   | `strata snapshot <name>@latest -o rel.json`                       | written; `source.version` says which |                       |
+| Does this cluster run its release?                    | `strata compare releases/V/<project>.json cluster:<uid>/<profile>` | yes                   | no, read the report              |
 | Did dev and prod get the same release?                | `strata same-release releases/V/dev.json releases/V/prod.json`    | yes                     | no, the reasons say why; stop the promotion |
 | Same release, packs re-pinned from another registry?  | `strata same-release --allow registry-move A B`                   | yes                     | a value or a version moved too   |
 | Was a published version edited?                       | `strata verify releases/V/<project>.json`                         | unchanged               | drifted, open an issue           |
@@ -334,7 +384,6 @@ listing.
 
 ## What the tool does not do yet
 
-- Compare a profile record against what a cluster is running now.
 - Snapshot a candidate from local files before it is published. Today the
   comparison runs after the version is published.
 - Read the `UPSTREAM` digest from the pack's own registry. Today it comes

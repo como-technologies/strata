@@ -21,11 +21,23 @@ pub enum Ref {
     },
     /// A profile uid.
     Uid(String),
+    /// `cluster:<uid>` or `cluster:<uid>/<profile>`: what a cluster runs. Without a profile,
+    /// every profile applied to the cluster, in order; with one, only the profile of that name.
+    Cluster {
+        /// Cluster uid.
+        uid: String,
+        /// The applied profile to select, by name.
+        profile: Option<String>,
+    },
 }
 
+/// The prefix of a cluster ref.
+pub const CLUSTER_PREFIX: &str = "cluster:";
+
 impl Ref {
-    /// A path to an existing file is a snapshot; `name@version` with both parts non-empty is a
-    /// name and version; anything else is a uid.
+    /// A path to an existing file is a snapshot; `cluster:<uid>[/<profile>]` with a non-empty uid
+    /// is a cluster; `name@version` with both parts non-empty is a name and version; anything else
+    /// is a uid.
     pub fn parse(text: &str) -> Ref {
         Self::parse_with(text, |p| p.is_file())
     }
@@ -34,6 +46,18 @@ impl Ref {
     pub fn parse_with(text: &str, is_file: impl Fn(&Path) -> bool) -> Ref {
         if is_file(Path::new(text)) {
             return Ref::Snapshot(PathBuf::from(text));
+        }
+        if let Some(rest) = text.strip_prefix(CLUSTER_PREFIX) {
+            let (uid, profile) = match rest.split_once('/') {
+                Some((uid, profile)) => (uid, Some(profile).filter(|p| !p.is_empty())),
+                None => (rest, None),
+            };
+            if !uid.is_empty() {
+                return Ref::Cluster {
+                    uid: uid.to_string(),
+                    profile: profile.map(str::to_string),
+                };
+            }
         }
         if let Some((name, version)) = text.rsplit_once('@') {
             if !name.is_empty() && !version.is_empty() {
@@ -53,6 +77,11 @@ impl fmt::Display for Ref {
             Ref::Snapshot(p) => write!(f, "{}", p.display()),
             Ref::NameVersion { name, version } => write!(f, "{name}@{version}"),
             Ref::Uid(u) => write!(f, "{u}"),
+            Ref::Cluster { uid, profile: None } => write!(f, "{CLUSTER_PREFIX}{uid}"),
+            Ref::Cluster {
+                uid,
+                profile: Some(p),
+            } => write!(f, "{CLUSTER_PREFIX}{uid}/{p}"),
         }
     }
 }
@@ -88,5 +117,35 @@ mod tests {
             Ref::Snapshot("rel.json".into())
         );
         assert_eq!(Ref::parse("aws-pxk@1.2.0").to_string(), "aws-pxk@1.2.0");
+    }
+
+    #[test]
+    fn cluster_forms() {
+        let no_files = |_: &Path| false;
+        assert_eq!(
+            Ref::parse_with("cluster:c1", no_files),
+            Ref::Cluster {
+                uid: "c1".into(),
+                profile: None
+            }
+        );
+        let selected = Ref::parse_with("cluster:c1/aws-pxk", no_files);
+        assert_eq!(
+            selected,
+            Ref::Cluster {
+                uid: "c1".into(),
+                profile: Some("aws-pxk".into())
+            }
+        );
+        assert_eq!(selected.to_string(), "cluster:c1/aws-pxk");
+        assert_eq!(
+            Ref::parse_with("cluster:c1/", no_files).to_string(),
+            "cluster:c1"
+        );
+        assert_eq!(
+            Ref::parse_with("cluster:", no_files),
+            Ref::Uid("cluster:".into()),
+            "no uid, no cluster"
+        );
     }
 }

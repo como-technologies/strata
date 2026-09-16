@@ -37,9 +37,10 @@ that a published version still matches its record.\n\n\
 Each pack gets three sub-hashes: IDENTITY (name, layer, type, tag, version, packUid, registryUid),\n\
 UPSTREAM (the digest on the pack ref) and AUTHORED (canonical values YAML, manifests, params).\n\
 A profile's root hash covers its variables and its packs in order; same root, same release.\n\n\
-Refs: a profile uid, <name>@<version>, <name>@latest (the highest version in the scope), or a\n\
-snapshot file written by `snapshot`. A snapshot records the project it was taken in, and verify\n\
-checks it there unless --project says otherwise.\n\
+Refs: a profile uid, <name>@<version>, <name>@latest (the highest version in the scope),\n\
+cluster:<uid> or cluster:<uid>/<profile> (what a cluster runs), or a snapshot file written by\n\
+`snapshot`. A cluster that runs a recorded version has that record's root. A snapshot records the\n\
+project it was taken in, and verify checks it there unless --project says otherwise.\n\
 Environment: PALETTE_API_KEY (or SPECTROCLOUD_APIKEY), PALETTE_PROJECT_UID (optional),\n\
 PALETTE_API (default https://api.spectrocloud.com), STRATA_RETRIES (default 3; retries on HTTP 5xx,\n\
 429 and transport errors, with backoff). Missing values are read from ~/.palette.env.\n\n\
@@ -128,9 +129,9 @@ impl OutputArgs {
 
 #[derive(Args)]
 struct CompareArgs {
-    /// Profile uid, <name>@<version> or <name>@latest, or snapshot file
+    /// Profile uid, <name>@<version> or <name>@latest, cluster:<uid>[/<profile>], or snapshot file
     a: String,
-    /// Profile uid, <name>@<version> or <name>@latest, or snapshot file
+    /// Profile uid, <name>@<version> or <name>@latest, cluster:<uid>[/<profile>], or snapshot file
     b: String,
     /// Also print unified diffs of raw values and changed manifests
     #[arg(long)]
@@ -141,7 +142,8 @@ struct CompareArgs {
 
 #[derive(Args)]
 struct SnapshotArgs {
-    /// Profile uid, <name>@<version> or <name>@latest (omit with --from-raw)
+    /// Profile uid, <name>@<version> or <name>@latest, or cluster:<uid>[/<profile>]. With
+    /// --from-raw it only names the source, and selects the profile of a cluster directory
     r#ref: Option<String>,
     /// Write the snapshot here instead of stdout
     #[arg(short, long)]
@@ -149,7 +151,7 @@ struct SnapshotArgs {
     /// Also save the raw API responses under this directory
     #[arg(long)]
     raw_dir: Option<PathBuf>,
-    /// Build from raw API responses saved earlier (profile.json, manifests.json, variables.json), no network
+    /// Build from raw API responses saved earlier (profile.json or cluster.json, with manifests.json and variables.json), no network
     #[arg(long)]
     from_raw: Option<PathBuf>,
     /// Compact JSON on one line instead of pretty-printed
@@ -332,15 +334,27 @@ fn cmd_snapshot(a: &SnapshotArgs) -> Result<ExitCode> {
             })?;
             let reference = Ref::parse(text);
             let palette = connect(progress, None)?;
-            let uid = match &reference {
-                Ref::Snapshot(_) | Ref::Uid(_) => text.to_string(),
-                Ref::NameVersion { name, version } => palette.resolve(name, version)?,
+            let snap = match &reference {
+                Ref::Cluster { uid, profile } => {
+                    let raw = palette.fetch_cluster(uid, &progress)?;
+                    if let Some(dir) = &a.raw_dir {
+                        raw.save_dir(dir)?;
+                    }
+                    Snapshot::from_cluster(&raw, profile.as_deref(), text, &now)?
+                }
+                Ref::Snapshot(_) | Ref::Uid(_) | Ref::NameVersion { .. } => {
+                    let uid = match &reference {
+                        Ref::NameVersion { name, version } => palette.resolve(name, version)?,
+                        _ => text.to_string(),
+                    };
+                    let raw = palette.fetch_profile(&uid, &progress)?;
+                    if let Some(dir) = &a.raw_dir {
+                        raw.save_dir(dir)?;
+                    }
+                    Snapshot::from_raw(&raw, text, &now)?
+                }
             };
-            let raw = palette.fetch_profile(&uid, &progress)?;
-            if let Some(dir) = &a.raw_dir {
-                raw.save_dir(dir)?;
-            }
-            Snapshot::from_raw(&raw, text, &now)?.with_project(palette.project_uid())
+            snap.with_project(palette.project_uid())
         }
     };
     let text = snap.to_json(a.compact)?;

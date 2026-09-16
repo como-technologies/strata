@@ -528,6 +528,69 @@ fn same_release_checks_consecutive_records_with_an_optional_registry_move_policy
 }
 
 #[test]
+fn a_cluster_snapshot_from_raw_compares_against_profile_records() {
+    let fx = fixtures();
+    let dir = std::path::Path::new(&fx.a).parent().unwrap();
+    let cluster = |raw: &str, reference: &str| {
+        let out = dir.join(format!("{raw}.json"));
+        let r = run(&[
+            "snapshot",
+            "--from-raw",
+            fx.raw.join(raw).to_str().unwrap(),
+            reference,
+            "-o",
+            out.to_str().unwrap(),
+        ]);
+        (r, out.to_str().unwrap().to_string())
+    };
+    let uid = common::CLUSTER_UID;
+    let (r, on_b) = cluster("cluster-b", &format!("cluster:{uid}"));
+    assert_eq!(r.code, 0, "{}", r.err);
+
+    let r = run(&["compare", &fx.b, &on_b]);
+    assert_eq!(r.code, 0, "{}{}", r.out, r.err);
+    assert!(r.out.contains("IDENTICAL"), "{}", r.out);
+    assert!(
+        has_line(
+            &r.out,
+            &format!("^lab-profile@1.3.0 (64f0000000000000000000b2)  ->  lab-profile@1.3.0 on cluster lab-cluster ({uid})")
+        ),
+        "{}",
+        r.out
+    );
+    let r = run(&["compare", &fx.a, &on_b]);
+    assert_eq!(r.code, 1);
+    assert!(has_line(&r.out, "^~ [k8s  ] kubernetes"), "{}", r.out);
+
+    let r = run(&["compare", "--format", "markdown", &fx.b, &on_b]);
+    assert!(
+        r.out
+            .starts_with("### lab-profile@1.3.0 → lab-profile@1.3.0 on cluster lab-cluster"),
+        "{}",
+        r.out
+    );
+
+    let snap = json(&on_b);
+    assert_eq!(snap["source"]["cluster"]["uid"], uid);
+    assert_eq!(snap["source"]["cluster"]["name"], "lab-cluster");
+    assert_eq!(snap["source"]["cluster"]["profiles"][0]["version"], "1.3.0");
+    assert_eq!(snap["source"]["template"], "applied");
+
+    // selecting one of several applied profiles, and naming one that is not there
+    let (r, selected) = cluster("cluster-merged", &format!("cluster:{uid}/lab-profile"));
+    assert_eq!(r.code, 0, "{}", r.err);
+    assert_eq!(run(&["compare", &fx.b, &selected]).code, 0);
+    let (r, _) = cluster("cluster-merged", &format!("cluster:{uid}/nope"));
+    assert_eq!(r.code, 2);
+    assert!(
+        r.err.contains("no applied profile named 'nope'")
+            && r.err.contains("applied: lab-profile, lab-addons"),
+        "{}",
+        r.err
+    );
+}
+
+#[test]
 fn schema_subcommand_prints_json_schema() {
     for kind in ["snapshot", "diff", "verify-summary", "chain"] {
         let r = run(&["schema", kind]);
@@ -535,6 +598,10 @@ fn schema_subcommand_prints_json_schema() {
         let v: serde_json::Value = serde_json::from_str(&r.out).unwrap();
         assert!(v["$schema"].is_string());
         assert!(v["properties"]["schema"].is_object());
+        if kind == "snapshot" {
+            let cluster = &v["$defs"]["ClusterSource"]["properties"];
+            assert!(cluster["uid"].is_object() && cluster["profiles"].is_object());
+        }
         if kind == "diff" {
             let vars = &v["$defs"]["VariablesDiff"]["properties"];
             assert!(vars["diff"].is_object() && vars["byName"].is_object());

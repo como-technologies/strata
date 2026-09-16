@@ -28,7 +28,7 @@ A cluster carries its applied profiles in the same shape strata already parses: 
 - [ ] `strata compare <record>.json cluster:<uid>` prints `IDENTICAL` and exits 0 for a cluster that runs the recorded version
 - [ ] The same command against a cluster on an older version shows the changed layers and exits 1
 - [ ] `cluster:<uid>/<profile>` selects one attached profile; an unknown profile name is an error with exit 2
-- [ ] `source.type` is `cluster` and the JSON document carries the cluster uid
+- [ ] `source.cluster` carries the cluster uid, its name, and the applied profiles; `source.type` keeps the profile type
 - [ ] `strata schema snapshot` includes the new fields
 - [ ] Walkthrough day 5 shows the real command and output
 
