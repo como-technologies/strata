@@ -473,9 +473,9 @@ labels: robustness
 
 ### Acceptance criteria
 
-- [ ] `snapshot <ref> --raw-dir d` followed by `snapshot --from-raw d` records the same `source.projectUid`
-- [ ] Raw directories written before the change still load
-- [ ] A record rebuilt from a raw directory taken before an in-place edit reports `DRIFT` with no project in the environment
+- [x] `snapshot <ref> --raw-dir d` followed by `snapshot --from-raw d` records the same `source.projectUid`
+- [x] Raw directories written before the change still load
+- [x] A record rebuilt from a raw directory taken before an in-place edit reports `DRIFT` with no project in the environment
 
 ## Live-verify a cluster that runs several profiles
 
