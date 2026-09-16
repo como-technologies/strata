@@ -159,7 +159,7 @@ struct SnapshotArgs {
     /// Also save the raw API responses under this directory
     #[arg(long)]
     raw_dir: Option<PathBuf>,
-    /// Build from raw API responses saved earlier (profile.json or cluster.json, with manifests.json and variables.json), no network
+    /// Build from raw API responses saved earlier (profile.json or cluster.json, with manifests.json, variables.json, and scope.json when present), no network
     #[arg(long)]
     from_raw: Option<PathBuf>,
     /// Build from a candidate file before the version exists in Palette; packs are looked up in their registries. See `strata schema candidate`

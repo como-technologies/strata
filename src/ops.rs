@@ -79,8 +79,9 @@ where
     Ok(snap.with_project(palette.project_uid()))
 }
 
-/// Build a snapshot from raw API responses saved on disk. A directory with `cluster.json` is a
-/// cluster's; a `reference` of the form `cluster:<uid>/<profile>` then selects the profile.
+/// Build a snapshot from raw API responses saved on disk, in the project they were fetched in. A
+/// directory with `cluster.json` is a cluster's; a `reference` of the form
+/// `cluster:<uid>/<profile>` then selects the profile.
 pub fn snapshot_from_dir(dir: &Path, reference: &str, fetched_at: &str) -> Result<Snapshot> {
     if dir.join(RawCluster::MARKER).is_file() {
         let profile = match Ref::parse_with(reference, |_| false) {
@@ -88,10 +89,13 @@ pub fn snapshot_from_dir(dir: &Path, reference: &str, fetched_at: &str) -> Resul
             _ => None,
         };
         let raw = RawCluster::load_dir(dir)?;
-        return Snapshot::from_cluster(&raw, profile.as_deref(), reference, fetched_at);
+        return Ok(
+            Snapshot::from_cluster(&raw, profile.as_deref(), reference, fetched_at)?
+                .with_project(raw.project_uid.as_deref()),
+        );
     }
     let raw = RawProfile::load_dir(dir)?;
-    Snapshot::from_raw(&raw, reference, fetched_at)
+    Ok(Snapshot::from_raw(&raw, reference, fetched_at)?.with_project(raw.project_uid.as_deref()))
 }
 
 /// Compare two snapshots.

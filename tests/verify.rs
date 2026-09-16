@@ -478,6 +478,92 @@ fn verify_many_checks_each_record_in_its_own_scope_and_counts_the_outcomes() {
     assert_eq!(s.exit_code(), 1);
 }
 
+#[test]
+fn a_raw_directory_keeps_the_project_a_profile_or_cluster_was_fetched_in() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let silent = Progress::silent();
+    let project_of = |saved: &Path, reference: &str| {
+        ops::snapshot_from_dir(saved, reference, "t1")
+            .unwrap()
+            .source
+            .project_uid
+    };
+
+    let profile = Palette::new(serve(MemoryApi::new(), dir.path(), "a", UID_A).in_project("p1"));
+    let saved = dir.path().join("raw-profile");
+    profile
+        .fetch_profile(UID_A, &silent)
+        .unwrap()
+        .save_dir(&saved)
+        .unwrap();
+    assert_eq!(project_of(&saved, UID_A), "p1");
+
+    let cluster =
+        Palette::new(serve_cluster(MemoryApi::new(), dir.path(), "cluster-a").in_project("p1"));
+    let saved = dir.path().join("raw-cluster");
+    cluster
+        .fetch_cluster(CLUSTER_UID, &silent)
+        .unwrap()
+        .save_dir(&saved)
+        .unwrap();
+    assert_eq!(project_of(&saved, &format!("cluster:{CLUSTER_UID}")), "p1");
+
+    let tenant = Palette::new(serve(MemoryApi::new(), dir.path(), "a", UID_A));
+    let saved = dir.path().join("raw-tenant");
+    tenant
+        .fetch_profile(UID_A, &silent)
+        .unwrap()
+        .save_dir(&saved)
+        .unwrap();
+    assert_eq!(project_of(&saved, UID_A), "", "fetched at tenant scope");
+    assert_eq!(
+        project_of(&dir.path().join("a"), "a"),
+        "",
+        "a raw directory written before the scope was saved still loads, at tenant scope"
+    );
+}
+
+#[test]
+fn a_record_rebuilt_from_a_raw_directory_is_verified_in_its_own_project() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    // saved in project p1 before the version was edited in place
+    let before = Palette::new(serve(MemoryApi::new(), dir.path(), "a", UID_A).in_project("p1"));
+    let saved = dir.path().join("raw");
+    before
+        .fetch_profile(UID_A, &Progress::silent())
+        .unwrap()
+        .save_dir(&saved)
+        .unwrap();
+    let record = dir.path().join("rebuilt.json");
+    let rebuilt = ops::snapshot_from_dir(&saved, UID_A, "t1").unwrap();
+    fs::write(&record, rebuilt.to_json(true).unwrap()).unwrap();
+
+    // after the edit, p1 serves B's content under the same uid; tenant scope does not see it
+    let edited = serve(MemoryApi::new(), dir.path(), "b", UID_A).in_project("p1");
+    let scopes: RefCell<Vec<Option<String>>> = RefCell::new(Vec::new());
+    let connect = |project: Option<&str>| {
+        scopes.borrow_mut().push(project.map(str::to_string));
+        Ok(Palette::new(match project {
+            Some("p1") => edited.clone(),
+            _ => MemoryApi::new(),
+        }))
+    };
+    let s = ops::verify_many(&[record], None, connect, "t2", &Progress::silent());
+    assert_eq!(
+        *scopes.borrow(),
+        vec![Some("p1".to_string())],
+        "checked in the saved project, with none given"
+    );
+    assert_eq!(
+        s.records[0].status,
+        RecordStatus::Drifted,
+        "{:?}",
+        s.records[0].error
+    );
+}
+
 // ---- same release ----------------------------------------------------------------------------
 
 use strata::ops::{PairStatus, Policy};

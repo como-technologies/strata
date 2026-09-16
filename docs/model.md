@@ -139,8 +139,10 @@ most severe level as `maxImpact`.
 `packSummary.digest`, or `none`.
 
 Keep the file with the release record. `compare` and `verify` read it later.
-`--raw-dir DIR` also keeps the three raw API responses. `--from-raw DIR`
-builds a snapshot from them without the network.
+`--raw-dir DIR` also keeps the three raw API responses, and `scope.json` with
+the project they came from. `--from-raw DIR` builds a snapshot from them
+without the network, in that project, so `verify` checks the snapshot there. A
+directory saved without `scope.json` builds a snapshot at tenant scope.
 
 Strata reads these endpoints for one profile:
 

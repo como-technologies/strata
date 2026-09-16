@@ -252,8 +252,6 @@ run.
   layer the report calls that a repave (#19).
 - Projects and clusters are named by uid only; `PALETTE_PROJECT` is ignored
   (#18).
-- A snapshot rebuilt with `--from-raw` loses the project it was taken in
-  (#22).
 - The live example ran without the provider's `immutable-clusterprofiles`
   flag and changed only a version no cluster runs. What `cluster:<uid>` and
   `verify` report when a version that clusters run is edited in place, or

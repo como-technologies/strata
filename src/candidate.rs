@@ -396,5 +396,6 @@ pub fn resolve<A: PaletteApi>(
         }),
         manifests: json!({"metadata": {"name": c.name, "uid": ""}, "spec": {"packs": entries}}),
         variables: json!({ "variables": c.variables }),
+        project_uid: None,
     })
 }

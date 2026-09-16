@@ -339,8 +339,9 @@ impl PaletteApi for MemoryApi {
     }
 }
 
-/// The three raw API responses a snapshot is built from. Saved as `profile.json`, `manifests.json`
-/// and `variables.json` by `--raw-dir` and read back by `--from-raw`.
+/// The three raw API responses a snapshot is built from, and the project they were fetched in.
+/// Saved as `profile.json`, `manifests.json`, `variables.json` and `scope.json` by `--raw-dir` and
+/// read back by `--from-raw`.
 #[derive(Debug, Clone)]
 pub struct RawProfile {
     /// `GET /v1/clusterprofiles/{uid}`
@@ -349,6 +350,30 @@ pub struct RawProfile {
     pub manifests: Value,
     /// `GET /v1/clusterprofiles/{uid}/variables`, or `{"variables": []}` when unavailable
     pub variables: Value,
+    /// The project the responses came from; `None` at tenant scope, or for a directory saved
+    /// without `scope.json`
+    pub project_uid: Option<String>,
+}
+
+/// The file that records the project a raw directory's responses came from.
+const SCOPE_FILE: &str = "scope.json";
+
+/// The project saved in `dir`, or `None` when it has no scope file or names no project.
+fn read_scope(dir: &Path) -> Result<Option<String>> {
+    if !dir.join(SCOPE_FILE).is_file() {
+        return Ok(None);
+    }
+    let scope = read_json_file(dir, SCOPE_FILE)?;
+    Ok(scope
+        .get("projectUid")
+        .and_then(Value::as_str)
+        .filter(|p| !p.is_empty())
+        .map(str::to_string))
+}
+
+/// The scope file's document: the project uid, empty at tenant scope.
+fn scope_document(project_uid: &Option<String>) -> Value {
+    serde_json::json!({ "projectUid": project_uid.as_deref().unwrap_or("") })
 }
 
 /// Read one JSON file from `dir`; an empty file is an error of its own.
@@ -379,16 +404,17 @@ fn write_json_files(dir: &Path, files: &[(&str, &Value)]) -> Result<()> {
 }
 
 impl RawProfile {
-    /// Read the three files from `dir`.
+    /// Read the three files from `dir`, and the project from `scope.json` when it is there.
     pub fn load_dir(dir: &Path) -> Result<RawProfile> {
         Ok(RawProfile {
             profile: read_json_file(dir, "profile.json")?,
             manifests: read_json_file(dir, "manifests.json")?,
             variables: read_json_file(dir, "variables.json")?,
+            project_uid: read_scope(dir)?,
         })
     }
 
-    /// Write the three files under `dir`, creating it.
+    /// Write the three files and `scope.json` under `dir`, creating it.
     pub fn save_dir(&self, dir: &Path) -> Result<()> {
         write_json_files(
             dir,
@@ -396,13 +422,15 @@ impl RawProfile {
                 ("profile.json", &self.profile),
                 ("manifests.json", &self.manifests),
                 ("variables.json", &self.variables),
+                (SCOPE_FILE, &scope_document(&self.project_uid)),
             ],
         )
     }
 }
 
-/// The three raw API responses a cluster snapshot is built from. Saved as `cluster.json`,
-/// `manifests.json` and `variables.json` by `--raw-dir` and read back by `--from-raw`.
+/// The three raw API responses a cluster snapshot is built from, and the project they were fetched
+/// in. Saved as `cluster.json`, `manifests.json`, `variables.json` and `scope.json` by `--raw-dir`
+/// and read back by `--from-raw`.
 #[derive(Debug, Clone)]
 pub struct RawCluster {
     /// `GET /v1/spectroclusters/{uid}`: the applied profile templates are in
@@ -413,22 +441,26 @@ pub struct RawCluster {
     /// `GET /v1/spectroclusters/{uid}/variables`: one entry per applied profile, or `[]` when
     /// unavailable
     pub variables: Value,
+    /// The project the responses came from; `None` at tenant scope, or for a directory saved
+    /// without `scope.json`
+    pub project_uid: Option<String>,
 }
 
 impl RawCluster {
     /// The file that marks a raw directory as a cluster's.
     pub const MARKER: &'static str = "cluster.json";
 
-    /// Read the three files from `dir`.
+    /// Read the three files from `dir`, and the project from `scope.json` when it is there.
     pub fn load_dir(dir: &Path) -> Result<RawCluster> {
         Ok(RawCluster {
             cluster: read_json_file(dir, Self::MARKER)?,
             manifests: read_json_file(dir, "manifests.json")?,
             variables: read_json_file(dir, "variables.json")?,
+            project_uid: read_scope(dir)?,
         })
     }
 
-    /// Write the three files under `dir`, creating it.
+    /// Write the three files and `scope.json` under `dir`, creating it.
     pub fn save_dir(&self, dir: &Path) -> Result<()> {
         write_json_files(
             dir,
@@ -436,6 +468,7 @@ impl RawCluster {
                 (Self::MARKER, &self.cluster),
                 ("manifests.json", &self.manifests),
                 ("variables.json", &self.variables),
+                (SCOPE_FILE, &scope_document(&self.project_uid)),
             ],
         )
     }
@@ -498,6 +531,7 @@ impl RawCluster {
             profile,
             manifests,
             variables: serde_json::json!({ "variables": variables }),
+            project_uid: self.project_uid.clone(),
         }
     }
 }
@@ -622,6 +656,7 @@ impl<A: PaletteApi> Palette<A> {
             profile,
             manifests,
             variables,
+            project_uid: self.project_uid().map(str::to_string),
         })
     }
 
@@ -655,6 +690,7 @@ impl<A: PaletteApi> Palette<A> {
             cluster,
             manifests,
             variables,
+            project_uid: self.project_uid().map(str::to_string),
         })
     }
 }
@@ -762,10 +798,12 @@ mod tests {
             profile: json!({"a": 1}),
             manifests: json!({"b": 2}),
             variables: json!({"variables": []}),
+            project_uid: Some("p1".into()),
         };
         raw.save_dir(dir.path()).unwrap();
         let back = RawProfile::load_dir(dir.path()).unwrap();
         assert_eq!(back.profile, raw.profile);
+        assert_eq!(back.project_uid.as_deref(), Some("p1"));
         fs::write(dir.path().join("variables.json"), "").unwrap();
         assert!(matches!(
             RawProfile::load_dir(dir.path()).unwrap_err(),
