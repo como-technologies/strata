@@ -170,9 +170,9 @@ A developer and a CI runner must run the same binary. Today `ci.yml` uploads a L
 
 ### Acceptance criteria
 
-- [ ] Pushing `v0.4.0` produces a release with four binaries, `SHA256SUMS`, and signatures
-- [ ] `cosign verify-blob` passes on each binary
-- [ ] The README install procedure works on a clean Linux machine
+- [x] Pushing `v0.4.0` produces a release with four binaries, `SHA256SUMS`, and signatures
+- [x] `cosign verify-blob` passes on each binary
+- [x] The README install procedure works on a clean Linux machine
 - [x] `ci.yml` and `release.yml` share the build step
 
 ## Post the comparison as a pull request comment
@@ -191,8 +191,8 @@ Any repository that reviews profile changes wants the same three steps when a pu
 
 ### Acceptance criteria
 
-- [ ] A pull request shows exactly one strata comment, updated on each push
-- [ ] The label is added when `maxImpact` reaches the threshold and removed when it does not
+- [x] A pull request shows exactly one strata comment, updated on each push
+- [x] The label is added when `maxImpact` reaches the threshold and removed when it does not
 - [x] The script runs locally and produces the same comment
 - [x] A repository needs no copy of the logic, only a call
 
