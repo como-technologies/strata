@@ -4,3 +4,8 @@ cloud_account_name = "my-aws-account"
 region             = "us-east-2"
 az                 = "us-east-2a"
 ssh_key_name       = "my-key-pair"
+
+# An OCI pack registry you can log in to (tenant.sh names lists them), and an add-on pack in it.
+oci_registry_name = "my-oci-pack-registry"
+oci_pack          = "my-addon-pack"
+oci_pack_version  = "1.0.0"

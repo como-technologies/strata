@@ -5,9 +5,11 @@
 #
 #   just live-up && just live-verify
 #
-# Needs terraform, jq, and the Palette API key in PALETTE_API_KEY or ~/.palette.env. The strata
-# binary is target/release/strata unless STRATA_BIN says otherwise. Results go under
-# examples/live/runs/<UTC time>/, which is gitignored: raw API responses can hold variable values.
+# Needs terraform, jq, curl, helm, crane, and the Palette API key in PALETTE_API_KEY or
+# ~/.palette.env; crane reads the OCI registry with the credentials a `crane auth login` or
+# `docker login` stored. The strata binary is target/release/strata unless STRATA_BIN says
+# otherwise. Results go under examples/live/runs/<UTC time>/, which is gitignored: raw API
+# responses can hold variable values.
 set -uo pipefail
 
 here=$(cd "$(dirname "$0")" && pwd)
@@ -21,9 +23,10 @@ C=$(out cluster_uid)
 P=$(out release_profile_uid)
 P2=$(out next_profile_uid)
 N=$(out profile_name)
+R=$(out registries_profile_uid)
 PALETTE_PROJECT_UID=$(out project_uid)
 export PALETTE_PROJECT_UID
-for v in C P P2 N PALETTE_PROJECT_UID; do
+for v in C P P2 N R PALETTE_PROJECT_UID; do
   [ -n "${!v}" ] || { echo "verify: the terraform output behind $v is empty" >&2; exit 2; }
 done
 
@@ -91,25 +94,52 @@ check verify-release 0 "an untouched published version verifies" -- \
 check verify-cluster-record 0 "a cluster record verifies against the cluster" -- \
   "$strata" verify cluster.json
 
+# ---- #2: pack-ref digests of Helm and OCI packs
+check snapshot-registries 0 "record the profile with a Helm pack and an OCI pack" -- \
+  "$strata" snapshot "$R" --raw-dir raw/registries -o registries.json
+check registries-kinds 0 "#2: the profile holds one helm pack and one oci pack" -- \
+  jq -e '[.packs[].type] | sort == ["helm", "oci"]' registries.json
+while IFS=$'\t' read -r kind reg name version; do
+  check "registry-digest-$kind" 0 "#2: read the $kind pack's digest from the registry itself" -- \
+    "$here/tenant.sh" digest "$kind" "$reg" "$name" "$version"
+done < <(jq -r '.packs[] | select(.type == "helm" or .type == "oci") | [.type, .registryUid, .name, .version] | @tsv' \
+           registries.json 2>/dev/null)
+
 # ---- summary
 {
   echo "# strata live verification"
   echo
   echo "Run \`$(basename "$run")\` with \`$("$strata" --version)\`. Cluster \`$C\`, project \`$PALETTE_PROJECT_UID\`,"
-  echo "profile \`$N\` versions 1.0.0 (\`$P\`) and 1.0.1 (\`$P2\`)."
+  echo "profile \`$N\` versions 1.0.0 (\`$P\`) and 1.0.1 (\`$P2\`), registries profile \`$R\`."
   echo
   echo "| result | check | expected exit | got | what it shows |"
   echo "|---|---|---|---|---|"
   printf '%s\n' "${rows[@]}"
   echo
-  echo "## Pack-ref digest versus registry digest (#3)"
+  echo "## Pack-ref digests (#2, #3)"
   echo
-  if [ -s release.json ]; then
-    echo "| pack | ref digest | registry digest | fed UPSTREAM | |"
-    echo "|---|---|---|---|---|"
-    jq -r '.packs[] | "| \(.name) | `\(.refDigest[0:19])` | `\(.registryDigest[0:19])` | \(.hash.upstreamSource) | \(if .refDigest == .registryDigest then "equal" else "differ" end) |"' release.json
+  echo "The ref digest is the one Palette stamps on the profile's pack ref, Palette's digest the one"
+  echo "it lists for the pack version, and the registry's digest the one \`tenant.sh digest\` read from"
+  echo "the registry itself: the sha256 of the chart archive for Helm, the manifest digest for OCI."
+  echo "Digests compare with any \`sha256:\` prefix removed."
+  echo
+  if [ -s release.json ] || [ -s registries.json ]; then
+    echo "| pack | type | ref digest | Palette's digest | registry's digest | fed UPSTREAM | |"
+    echo "|---|---|---|---|---|---|---|"
+    for k in helm oci; do
+      [ -s "registry-digest-$k.out" ] && jq -n --arg k "$k" --arg d "$(head -n 1 "registry-digest-$k.out")" '{($k): $d}'
+    done | jq -s 'add // {}' > registry-digests.json
+    jq -rs --slurpfile own registry-digests.json '
+      def bare: sub("^sha256:"; "");
+      def cell: if . == "" then "-" else "`" + .[0:(if startswith("sha256:") then 19 else 12 end)] + "`" end;
+      .[].packs[]
+      | (.refDigest // "") as $ref | (.registryDigest // "") as $pal | ($own[0][.type] // "") as $reg
+      | ([$ref, $pal, $reg] | map(select(. != "") | bare) | unique) as $distinct
+      | "| \(.name) | \(.type) | \($ref | cell) | \($pal | cell) | \($reg | cell) | \(.hash.upstreamSource) | \(
+          if $ref == "" then "no ref digest" elif ($distinct | length) == 1 then "equal" else "differ" end) |"
+    ' $([ -s release.json ] && echo release.json) $([ -s registries.json ] && echo registries.json)
   else
-    echo "No release record; see snapshot-release.err."
+    echo "No release or registries record; see snapshot-release.err and snapshot-registries.err."
   fi
 } > summary.md
 

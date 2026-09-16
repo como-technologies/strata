@@ -12,6 +12,9 @@ Palette tenant and runs every strata check that needs one:
   reproduces the published version's root.
 - **#3, digests.** The summary records whether each pack-ref digest equals the
   registry digest.
+- **#2, Helm and OCI digests.** The same comparison for a pack from a Helm
+  registry and one from an OCI registry, with the digest each registry serves
+  read from the registry itself.
 
 It uses AWS because that is the cloud account the verified run had. Strata
 does not care which cloud runs the cluster. To use another, swap the cluster
@@ -19,13 +22,14 @@ resource and the OS and CSI packs in `terraform/main.tf`.
 
 ## What it builds
 
-`terraform/` creates three things in one Palette project:
+`terraform/` creates four things in one Palette project:
 
 | resource | what it is |
 |---|---|
 | profile `strata-live-profile` 1.0.0 | Ubuntu 24.04, Kubernetes 1.36.2, Cilium 1.20.1, EBS CSI 1.65.0, default values. The cluster runs it. |
 | profile `strata-live-profile` 1.0.1 | The same, with the EBS storage class `reclaimPolicy` changed from `Delete` to `Retain`. Nothing runs it. |
 | cluster `strata-live-cluster` | One control plane and two workers, `t3.xlarge`, one availability zone. |
+| profile `strata-live-registries` 1.0.0 | An add-on profile with one chart from a Helm registry (default `nginx` 25.1.5 from `Bitnami`) and one pack from an OCI pack registry that `terraform.tfvars` names. Nothing runs it. |
 
 The pack versions are those of `examples/profiles/aws-pxk@1.1.0.json`.
 
@@ -39,9 +43,9 @@ it down when the checks are done, and confirm it is gone.
 
 | file | what it does |
 |---|---|
-| `terraform/` | the two profile versions and the cluster |
+| `terraform/` | the three profiles and the cluster |
 | `tf.sh` | runs Terraform with the key and the Palette address strata uses |
-| `tenant.sh` | read-only lookups: the names `terraform.tfvars` needs, and a cluster's state |
+| `tenant.sh` | read-only lookups: the names `terraform.tfvars` needs, a cluster's state, and a pack's digest read from its Helm or OCI registry |
 | `verify.sh` | runs every check and writes `runs/<UTC time>/` |
 | `candidate-from-snapshot.jq` | turns a profile record into a candidate file |
 | `aws-inventory.sh` | what the cluster still has in AWS, for confirming a teardown |
@@ -51,7 +55,10 @@ it down when the checks are done, and confirm it is gone.
 - A Palette tenant with a project, and an AWS cloud account registered in it
 - An EC2 key pair in the region; the provider requires one
 - A Palette API key in `PALETTE_API_KEY` or `~/.palette.env`
-- `terraform` 1.5 or later, `jq`, `just`, `curl`, and a Rust toolchain
+- `terraform` 1.5 or later, `jq`, `just`, `curl`, `helm`, `crane`, and a Rust toolchain
+- Read access to an OCI pack registry in the tenant, and a login to it that
+  `crane` can use (`crane auth login` or `docker login`). The Helm registry
+  must serve charts without credentials; `Bitnami` does.
 - The AWS CLI with read access to the account, only for `aws-inventory.sh`
 
 For a self-hosted Palette, set `PALETTE_API` to its address in the
@@ -61,8 +68,9 @@ pass it on, so every step talks to the same Palette.
 ## Steps
 
 1. Find the names from your tenant. `tenant.sh names` lists the projects, the
-   AWS cloud accounts, and each account's zones and key pairs in a region.
-   The recorded run's tenant answered:
+   AWS cloud accounts, each account's zones and key pairs in a region, the
+   Helm registries, and the OCI pack registries. The recorded run's tenant
+   answered:
 
    ```
    $ examples/live/tenant.sh names us-east-2
@@ -73,11 +81,22 @@ pass it on, so every step talks to the same Palette.
      como-aws
        zones:     us-east-2a, us-east-2b, us-east-2c
        key pairs: iris-on-palette, bastion-iris-on-palette
+   Helm registries (helm_registry_name):
+     Bitnami
+     Public Spectro Helm Repo
+   OCI pack registries (oci_registry_name):
+     Palette Registry  415789037893.dkr.ecr.us-east-1.amazonaws.com
+     Palette Community Registry  415789037893.dkr.ecr.us-east-1.amazonaws.com
+     iris-packs  517293881804.dkr.ecr.us-east-2.amazonaws.com
    ```
 
    Put them in `terraform.tfvars`: a project name as `palette_project`, an
    account name as `cloud_account_name`, the region, a zone as `az`, and a key
-   pair as `ssh_key_name`.
+   pair as `ssh_key_name`. Name an OCI pack registry you can log in to as
+   `oci_registry_name`, and an add-on pack in it with its version as
+   `oci_pack` and `oci_pack_version`. The Helm chart defaults to `nginx`
+   25.1.5 from `Bitnami`; `helm_registry_name`, `helm_chart`, and
+   `helm_chart_version` change it.
 
    ```
    cp examples/live/terraform/terraform.tfvars.example examples/live/terraform/terraform.tfvars
@@ -99,7 +118,11 @@ pass it on, so every step talks to the same Palette.
    `examples/live/runs/<UTC time>/`, which is gitignored because raw responses
    can hold variable values. It exits 0 only when every check passes.
 
+   Log in to the OCI pack registry first, so `crane` can read the pack's
+   digest. For a registry in AWS:
+
    ```
+   aws ecr get-login-password --region <region> | crane auth login -u AWS --password-stdin <registry endpoint>
    just live-verify
    ```
 
@@ -142,7 +165,7 @@ In `runs/<UTC time>/`:
 - `summary.md` has the table of results and the digest table.
 - `<check>.out` and `<check>.err` hold what each command printed. A failed
   comparison names the layer and the leaf in its `.out`.
-- `raw/cluster`, `raw/release`, and `raw/next` hold the API responses strata
+- `raw/cluster`, `raw/release`, `raw/next`, and `raw/registries` hold the API responses strata
   hashed. Compare them with the SDK models when a shape looks wrong.
 
 Run `just live-verify` again after a fix; each run gets its own directory. The
@@ -157,6 +180,7 @@ What went wrong before, and why:
 | `snapshot-candidate` fails with `pack-not-found` naming a tag | a strata build older than the tag fix; the profile's tag is the version |
 | `consumer-is-the-cluster` fails with state `unknown` | the key cannot read the cluster in its project; `consumers-release.out` prints the error next to the cluster |
 | `only-the-edited-value` fails with two changed values | the optional in-place edit was not undone |
+| `registry-digest-oci` fails with "crane digest ... failed" | no login to the OCI registry, or an expired one; an AWS registry login lasts 12 hours |
 
 ## When teardown is slow or stuck
 
@@ -202,6 +226,10 @@ These rules come from six observed teardowns of the same kind of cluster:
 | `candidate-same-release` | 0 | #4: the candidate's root equals the published root |
 | `verify-release` | 0 | an untouched published version verifies |
 | `verify-cluster-record` | 0 | a cluster record verifies against the cluster |
+| `snapshot-registries` | 0 | record the profile with a Helm pack and an OCI pack |
+| `registries-kinds` | 0 | #2: the profile holds one helm pack and one oci pack |
+| `registry-digest-helm` | 0 | #2: read the helm pack's digest from the registry itself |
+| `registry-digest-oci` | 0 | #2: read the oci pack's digest from the registry itself |
 
 `candidate-from-snapshot.jq` builds the candidate file from a record: the same
 packs, tags, registries, values, params, manifests, and variables. Its tags
@@ -212,8 +240,8 @@ tag; strata now accepts one.
 
 ## The recorded run
 
-Run `20260916T153806Z` on 2026-09-16, with strata built from `main`, in a
-tenant's `strata-test` project on AWS us-east-2. All 17 checks passed:
+Run `20260916T175442Z` on 2026-09-16, with strata built from `main`, in a
+tenant's `strata-test` project on AWS us-east-2. All 21 checks passed:
 
 | result | check | expected exit | got | what it shows |
 |---|---|---|---|---|
@@ -234,18 +262,22 @@ tenant's `strata-test` project on AWS us-east-2. All 17 checks passed:
 | PASS | `candidate-same-release` | 0 | 0 | #4: the candidate's root equals the published root |
 | PASS | `verify-release` | 0 | 0 | an untouched published version verifies |
 | PASS | `verify-cluster-record` | 0 | 0 | a cluster record verifies against the cluster |
+| PASS | `snapshot-registries` | 0 | 0 | record the profile with a Helm pack and an OCI pack |
+| PASS | `registries-kinds` | 0 | 0 | #2: the profile holds one helm pack and one oci pack |
+| PASS | `registry-digest-helm` | 0 | 0 | #2: read the helm pack's digest from the registry itself |
+| PASS | `registry-digest-oci` | 0 | 0 | #2: read the oci pack's digest from the registry itself |
 
 The cluster runs the release:
 
 ```
-strata-live-profile@1.0.0 (6aaab2f6da23e353e96e8c69)  ->  strata-live-profile@1.0.0 on cluster strata-live-cluster (6aaab352da23e35da8a5a544)
+strata-live-profile@1.0.0 (uid 6aaab2f6da23e353e96e8c69)  ->  strata-live-profile@1.0.0 on cluster strata-live-cluster (uid 6aaab352da23e35da8a5a544)
 root       eada36c2e3fd -> eada36c2e3fd   IDENTICAL
 ```
 
 A newer record against the same cluster shows the one value that differs:
 
 ```
-strata-live-profile@1.0.1 (6aaab2fbb6a8f072d83984d1)  ->  strata-live-profile@1.0.0 on cluster strata-live-cluster (6aaab352da23e35da8a5a544)
+strata-live-profile@1.0.1 (uid 6aaab2fbb6a8f072d83984d1)  ->  strata-live-profile@1.0.0 on cluster strata-live-cluster (uid 6aaab352da23e35da8a5a544)
 root       7d7689e8321c -> eada36c2e3fd   CHANGED
 ~ [csi  ] csi-aws-ebs                1.65.0             AUTHORED
       values: 1 changed, 0 added, 0 removed
@@ -256,7 +288,7 @@ root       7d7689e8321c -> eada36c2e3fd   CHANGED
 The version the cluster runs lists it, and the candidate reproduces 1.0.1:
 
 ```
-strata-live-profile@1.0.0 (6aaab2f6da23e353e96e8c69): 1 consumer
+strata-live-profile@1.0.0 (uid 6aaab2f6da23e353e96e8c69): 1 consumer
   strata-live-cluster  6aaab352da23e35da8a5a544  project 6aaab0567993b0008ad902db  Running
 ```
 
@@ -265,19 +297,25 @@ IDENTICAL      candidate-snapshot.json -> next.json   root 7d7689e8321c
 SAME RELEASE: 1 pairs passed
 ```
 
-Every pack-ref digest equals the registry digest, and each matches
-`examples/INDEX.md` for the same version:
+Every pack-ref digest equals the digest Palette lists for the pack version.
+The four `spectro` digests match `examples/INDEX.md` for the same versions.
+For the Helm and OCI packs, `tenant.sh digest` read the same digest from the
+registry itself: the sha256 of the `nginx` 25.1.5 chart archive, and the
+manifest digest of `argocd` 10.4.0.1:
 
-| pack | ref digest | registry digest | fed UPSTREAM | |
-|---|---|---|---|---|
-| ubuntu-aws | `sha256:2df05daa4eb4` | `sha256:2df05daa4eb4` | packRef.digest | equal |
-| kubernetes | `sha256:c4f7f20f40c7` | `sha256:c4f7f20f40c7` | packRef.digest | equal |
-| cni-cilium-oss | `sha256:917d9de9a696` | `sha256:917d9de9a696` | packRef.digest | equal |
-| csi-aws-ebs | `sha256:bd09e8b4187b` | `sha256:bd09e8b4187b` | packRef.digest | equal |
+| pack | type | ref digest | Palette's digest | registry's digest | fed UPSTREAM | |
+|---|---|---|---|---|---|---|
+| ubuntu-aws | spectro | `sha256:2df05daa4eb4` | `sha256:2df05daa4eb4` | - | packRef.digest | equal |
+| kubernetes | spectro | `sha256:c4f7f20f40c7` | `sha256:c4f7f20f40c7` | - | packRef.digest | equal |
+| cni-cilium-oss | spectro | `sha256:917d9de9a696` | `sha256:917d9de9a696` | - | packRef.digest | equal |
+| csi-aws-ebs | spectro | `sha256:bd09e8b4187b` | `sha256:bd09e8b4187b` | - | packRef.digest | equal |
+| nginx | helm | `08816cde6bea` | `08816cde6bea` | `08816cde6bea` | packRef.digest | equal |
+| argocd | oci | `sha256:99cac22f712b` | `sha256:99cac22f712b` | `sha256:99cac22f712b` | packRef.digest | equal |
 
-The optional in-place edit changed `volumeBindingMode` on the published 1.0.1.
-Palette accepted it: same uid, same version, still published, and no new
-version. `strata verify` on the earlier record exited `1`:
+In the earlier run `20260916T153806Z`, the optional in-place edit changed
+`volumeBindingMode` on the published 1.0.1. Palette accepted it: same uid,
+same version, still published, and no new version. `strata verify` on the
+earlier record exited `1`:
 
 ```
 root       7d7689e8321c -> 6fdc871ef9a6   CHANGED

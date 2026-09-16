@@ -6,6 +6,10 @@
 #                              (default us-east-2)
 #   tenant.sh cluster UID      a cluster's status.state; exit 0 once it is Deleted or not found,
 #                              1 while it exists, 2 when the answer cannot be trusted
+#   tenant.sh digest KIND REGISTRY_UID NAME VERSION
+#                              the digest a helm or oci registry itself serves for one pack
+#                              version, read from the registry rather than from Palette; exit 2
+#                              when the registry cannot be read
 #
 # The key comes from PALETTE_API_KEY or ~/.palette.env and is never printed; the address from
 # PALETTE_API (default https://api.spectrocloud.com). PALETTE_PROJECT_UID scopes the requests;
@@ -58,6 +62,66 @@ names() {
       echo "    key pairs: unavailable (HTTP $status)"
     fi
   done
+  echo "Helm registries (helm_registry_name):"
+  status=$(get /v1/registries/metadata "$tmp/registries")
+  [ "$status" = 200 ] || die "listing registries answered HTTP $status"
+  jq -r '(.items // [])[] | select(.kind == "helm") | "  \(.name)"' "$tmp/registries"
+  echo "OCI pack registries (oci_registry_name):"
+  status=$(get /v1/registries/oci/summary "$tmp/oci")
+  [ "$status" = 200 ] || die "listing OCI registries answered HTTP $status"
+  jq -r '(.items // [])[] | select(.spec.providerType == "pack") | "  \(.metadata.name)  \(.spec.endpoint)"' "$tmp/oci"
+}
+
+sha256_of() {
+  if command -v sha256sum >/dev/null; then sha256sum "$1"; else shasum -a 256 "$1"; fi | cut -d' ' -f1
+}
+
+digest() {
+  local kind=${1:-} reg=${2:-} name=${3:-} version=${4:-} tmp status endpoint type base ref
+  [ -n "$version" ] || die "usage: tenant.sh digest helm|oci REGISTRY_UID NAME VERSION"
+  tmp=$(mktemp -d); trap 'rm -rf "${tmp:-}"' RETURN EXIT
+  case "$kind" in
+    helm)
+      command -v helm >/dev/null || die "digest helm needs helm"
+      status=$(get "/v1/registries/helm/$reg" "$tmp/registry")
+      [ "$status" = 200 ] || die "reading Helm registry $reg answered HTTP $status"
+      endpoint=$(jq -r '.spec.endpoint // ""' "$tmp/registry")
+      [ -n "$endpoint" ] || die "Helm registry $reg has no endpoint"
+      [ "$(jq -r '.spec.auth.type // "noAuth"' "$tmp/registry")" = noAuth ] \
+        || die "Helm registry $reg needs credentials; digest reads registries that need none"
+      # A private Helm home, so the pull neither reads nor changes the user's repositories.
+      mkdir -p "$tmp/chart"
+      HELM_CACHE_HOME="$tmp/helm" HELM_CONFIG_HOME="$tmp/helm" HELM_DATA_HOME="$tmp/helm" \
+        helm pull --repo "$endpoint" "$name" --version "$version" -d "$tmp/chart" >&2 \
+        || die "helm pull $name $version from $endpoint failed"
+      # A Helm repository index gives the sha256 of the chart archive as the digest, bare hex.
+      set -- "$tmp"/chart/*.tgz
+      [ -f "$1" ] || die "helm pull $name $version wrote no chart archive"
+      sha256_of "$1"
+      ;;
+    oci)
+      command -v crane >/dev/null || die "digest oci needs crane"
+      status=$(get /v1/registries/oci/summary "$tmp/summary")
+      [ "$status" = 200 ] || die "listing OCI registries answered HTTP $status"
+      jq -e --arg r "$reg" '(.items // [])[] | select(.metadata.uid == $r)' "$tmp/summary" > "$tmp/entry" \
+        || die "no OCI registry $reg"
+      [ "$(jq -r '.spec.providerType' "$tmp/entry")" = pack ] \
+        || die "OCI registry $reg holds $(jq -r '.spec.providerType' "$tmp/entry"), not packs; digest reads pack registries"
+      endpoint=$(jq -r '.spec.endpoint // ""' "$tmp/entry")
+      type=$(jq -r '.spec.registryType // ""' "$tmp/entry")
+      status=$(get "/v1/registries/oci/$reg/$type" "$tmp/registry")
+      [ "$status" = 200 ] || die "reading OCI registry $reg answered HTTP $status"
+      base=$(jq -r '.spec.baseContentPath // ""' "$tmp/registry")
+      endpoint=${endpoint#https://}; endpoint=${endpoint#http://}; endpoint=${endpoint%/}
+      base=${base#/}; base=${base%/}
+      # Palette reads a pack version from <base path>/spectro-packs/archive/<name>:<version>.
+      ref="$endpoint/${base:+$base/}spectro-packs/archive/$name:$version"
+      crane digest "$ref" \
+        || die "crane digest $ref failed; log in to the registry first (crane auth login or docker login)"
+      ;;
+    *)
+      die "usage: tenant.sh digest helm|oci REGISTRY_UID NAME VERSION" ;;
+  esac
 }
 
 cluster() {
@@ -88,5 +152,6 @@ cluster() {
 case "${1:-}" in
   names) shift; names "$@" ;;
   cluster) shift; cluster "$@"; exit $? ;;
-  *) sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
+  digest) shift; digest "$@" ;;
+  *) sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
 esac

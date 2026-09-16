@@ -670,3 +670,252 @@ fn tenant_sh_reports_cluster_state_and_never_reads_a_gateway_404_as_deleted() {
     let (o, _) = tenant_cluster("500", "boom");
     assert_eq!(o.status.code(), Some(2));
 }
+
+/// A `curl` that answers by path: the body of `<api path with / as _>` under $FAKE_ROUTES, with
+/// status 200, or 404 when there is no such file. A `<key>.status` file overrides the status.
+const FAKE_ROUTED_CURL: &str = r#"#!/usr/bin/env bash
+out=""; write=""; url=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -o) out=$2; shift 2 ;;
+    -w) write=$2; shift 2 ;;
+    -H|-X|-d) shift 2 ;;
+    -*) shift ;;
+    *) url=$1; shift ;;
+  esac
+done
+path=${url#*://*/}; key=${path//\//_}
+body="$FAKE_ROUTES/$key"; status=404
+[ -f "$body" ] && status=200 || body=/dev/null
+[ -f "$FAKE_ROUTES/$key.status" ] && status=$(cat "$FAKE_ROUTES/$key.status")
+if [ -n "$out" ]; then cp "$body" "$out"; else cat "$body"; fi
+[ -n "$write" ] && printf '%s' "$status"
+exit 0
+"#;
+
+/// A `helm` whose `pull ... -d DIR` writes DIR/<name>-<version>.tgz holding "chart archive\n",
+/// or fails when $FAKE_HELM_FAIL is set. It logs its arguments and the Helm home it was given.
+const FAKE_HELM: &str = r#"#!/usr/bin/env bash
+echo "$* HELM_CONFIG_HOME=$HELM_CONFIG_HOME" >> "$FAKE_LOG"
+[ -z "${FAKE_HELM_FAIL:-}" ] || { echo "Error: chart not found" >&2; exit 1; }
+name=""; version=""; dest=""
+shift
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --repo) shift 2 ;;
+    --version) version=$2; shift 2 ;;
+    -d) dest=$2; shift 2 ;;
+    *) name=$1; shift ;;
+  esac
+done
+printf 'chart archive\n' > "$dest/$name-$version.tgz"
+"#;
+
+/// A `crane` whose `digest REF` prints a fixed digest, or fails when $FAKE_CRANE_FAIL is set.
+const FAKE_CRANE: &str = r#"#!/usr/bin/env bash
+echo "$*" >> "$FAKE_LOG"
+[ -z "${FAKE_CRANE_FAIL:-}" ] || { echo "UNAUTHORIZED: authentication required" >&2; exit 1; }
+echo "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+"#;
+
+/// sha256 of "chart archive\n", the archive the fake helm writes.
+const FAKE_CHART_SHA256: &str = "c7b3bbf2a53bd8a37070529402e843305d2cd0a95abd86cb31f9f3d2629382ed";
+
+struct Digest {
+    out: Output,
+    log: String,
+    /// The TMPDIR tenant.sh ran with, and the entries it left there.
+    tmp: String,
+    tmp_left: usize,
+}
+
+fn tenant_digest(args: &[&str], routes: &[(&str, &str)], envs: &[(&str, &str)]) -> Digest {
+    let dir = tempfile::tempdir().unwrap();
+    let (bin, route_dir, tmp) = (
+        dir.path().join("bin"),
+        dir.path().join("routes"),
+        dir.path().join("tmp"),
+    );
+    for d in [&bin, &route_dir, &tmp] {
+        std::fs::create_dir(d).unwrap();
+    }
+    executable(&bin.join("curl"), FAKE_ROUTED_CURL);
+    executable(&bin.join("helm"), FAKE_HELM);
+    executable(&bin.join("crane"), FAKE_CRANE);
+    for (key, body) in routes {
+        std::fs::write(route_dir.join(key), body).unwrap();
+    }
+    let log = dir.path().join("tools.log");
+    let mut cmd = Command::new("bash");
+    cmd.arg(live_script("tenant.sh"))
+        .arg("digest")
+        .args(args)
+        .env(
+            "PATH",
+            format!("{}:{}", bin.display(), std::env::var("PATH").unwrap()),
+        )
+        .env("HOME", dir.path())
+        .env("TMPDIR", &tmp)
+        .env("PALETTE_API_KEY", "k")
+        .env("PALETTE_PROJECT_UID", "p-1")
+        .env("FAKE_ROUTES", &route_dir)
+        .env("FAKE_LOG", &log);
+    for (k, v) in envs {
+        cmd.env(k, v);
+    }
+    let out = cmd.output().unwrap();
+    Digest {
+        out,
+        log: std::fs::read_to_string(&log).unwrap_or_default(),
+        tmp: tmp.display().to_string(),
+        tmp_left: std::fs::read_dir(&tmp).unwrap().count(),
+    }
+}
+
+const HELM_REGISTRY: (&str, &str) = (
+    "v1_registries_helm_r-helm",
+    r#"{"spec":{"endpoint":"https://charts.example.com/repo","auth":{"type":"noAuth"}}}"#,
+);
+const OCI_SUMMARY: (&str, &str) = (
+    "v1_registries_oci_summary",
+    r#"{"items":[
+        {"metadata":{"uid":"r-oci","name":"packs"},
+         "spec":{"endpoint":"https://registry.example.com/","registryType":"basic","providerType":"pack"}},
+        {"metadata":{"uid":"r-charts","name":"charts"},
+         "spec":{"endpoint":"registry.example.com","registryType":"basic","providerType":"helm"}}]}"#,
+);
+
+#[test]
+fn tenant_sh_digest_reads_the_chart_archive_and_the_pack_manifest_from_the_registry() {
+    let d = tenant_digest(
+        &["helm", "r-helm", "nginx", "25.1.5"],
+        &[HELM_REGISTRY],
+        &[],
+    );
+    assert_eq!(d.out.status.code(), Some(0), "{}", text(&d.out.stderr));
+    assert_eq!(
+        text(&d.out.stdout).trim(),
+        FAKE_CHART_SHA256,
+        "the sha256 of the archive, bare hex as a Helm index records it"
+    );
+    assert!(
+        d.log
+            .contains("pull --repo https://charts.example.com/repo nginx --version 25.1.5 -d "),
+        "{}",
+        d.log
+    );
+    let home = d.log.split("HELM_CONFIG_HOME=").nth(1).unwrap_or("");
+    assert!(
+        home.starts_with(&format!("{}/", d.tmp)),
+        "helm runs with a private home under TMPDIR, not the user's: {}",
+        d.log
+    );
+    assert_eq!(d.tmp_left, 0, "the pulled chart is removed");
+
+    let d = tenant_digest(
+        &["oci", "r-oci", "argocd", "10.4.0.1"],
+        &[
+            OCI_SUMMARY,
+            (
+                "v1_registries_oci_r-oci_basic",
+                r#"{"spec":{"baseContentPath":"/team/"}}"#,
+            ),
+        ],
+        &[],
+    );
+    assert_eq!(d.out.status.code(), Some(0), "{}", text(&d.out.stderr));
+    assert_eq!(
+        text(&d.out.stdout).trim(),
+        "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+    );
+    assert_eq!(
+        d.log.trim(),
+        "digest registry.example.com/team/spectro-packs/archive/argocd:10.4.0.1"
+    );
+    assert_eq!(d.tmp_left, 0);
+
+    let d = tenant_digest(
+        &["oci", "r-oci", "argocd", "10.4.0.1"],
+        &[
+            OCI_SUMMARY,
+            ("v1_registries_oci_r-oci_basic", r#"{"spec":{}}"#),
+        ],
+        &[],
+    );
+    assert_eq!(d.out.status.code(), Some(0), "{}", text(&d.out.stderr));
+    assert_eq!(
+        d.log.trim(),
+        "digest registry.example.com/spectro-packs/archive/argocd:10.4.0.1",
+        "no base path"
+    );
+}
+
+#[test]
+fn tenant_sh_digest_exits_2_when_the_registry_cannot_be_read() {
+    let expect_2 = |d: &Digest, needle: &str| {
+        assert_eq!(d.out.status.code(), Some(2), "{}", text(&d.out.stdout));
+        assert!(
+            text(&d.out.stderr).contains(needle),
+            "wanted {needle:?}: {}",
+            text(&d.out.stderr)
+        );
+        assert!(text(&d.out.stdout).trim().is_empty(), "no digest printed");
+        assert_eq!(d.tmp_left, 0, "cleaned up after {needle:?}");
+    };
+
+    let d = tenant_digest(
+        &["helm", "r-helm", "nginx", "25.1.5"],
+        &[(
+            "v1_registries_helm_r-helm",
+            r#"{"spec":{"endpoint":"https://charts.example.com","auth":{"type":"basic"}}}"#,
+        )],
+        &[],
+    );
+    expect_2(&d, "needs credentials");
+    assert!(d.log.is_empty(), "helm is not run: {}", d.log);
+
+    let d = tenant_digest(
+        &["helm", "r-helm", "nginx", "25.1.5"],
+        &[HELM_REGISTRY],
+        &[("FAKE_HELM_FAIL", "1")],
+    );
+    expect_2(
+        &d,
+        "helm pull nginx 25.1.5 from https://charts.example.com/repo failed",
+    );
+
+    let d = tenant_digest(
+        &["helm", "r-helm", "nginx", "25.1.5"],
+        &[HELM_REGISTRY, ("v1_registries_helm_r-helm.status", "500")],
+        &[],
+    );
+    expect_2(&d, "HTTP 500");
+
+    let d = tenant_digest(
+        &["oci", "r-charts", "podinfo", "6.0.0"],
+        &[OCI_SUMMARY],
+        &[],
+    );
+    expect_2(&d, "holds helm, not packs");
+    assert!(d.log.is_empty(), "crane is not run: {}", d.log);
+
+    let d = tenant_digest(
+        &["oci", "r-missing", "argocd", "1.0.0"],
+        &[OCI_SUMMARY],
+        &[],
+    );
+    expect_2(&d, "no OCI registry r-missing");
+
+    let d = tenant_digest(
+        &["oci", "r-oci", "argocd", "10.4.0.1"],
+        &[
+            OCI_SUMMARY,
+            ("v1_registries_oci_r-oci_basic", r#"{"spec":{}}"#),
+        ],
+        &[("FAKE_CRANE_FAIL", "1")],
+    );
+    expect_2(&d, "log in to the registry first");
+
+    expect_2(&tenant_digest(&["helm", "r-helm"], &[], &[]), "usage");
+    expect_2(&tenant_digest(&["git", "r", "n", "1"], &[], &[]), "usage");
+}

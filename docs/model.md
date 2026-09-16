@@ -21,22 +21,44 @@ not part of a pack.
 
 ### What the pack-ref digest tracks
 
-The live example (`examples/live/`, run `20260916T153806Z`) settled it for the packs
-it used. On a published profile, the `digest` Palette stamps on each pack ref
-equals the digest the registry reports for that pack version. That held for
-all four packs, `spectro` type from the Public Repo:
+The live example (`examples/live/`) settled it for each registry kind a
+profile pins packs from. On a published profile, the `digest` Palette stamps
+on each pack ref equals the digest Palette lists for that pack version. For a
+Helm pack and an OCI pack, it also equals the digest the registry itself
+serves, read without Palette by `tenant.sh digest`. Run `20260916T175442Z`:
 
-| pack | version | pack-ref digest and registry digest |
-|---|---|---|
-| ubuntu-aws | 24.04 | `sha256:2df05daa4eb4...` |
-| kubernetes | 1.36.2 | `sha256:c4f7f20f40c7...` |
-| cni-cilium-oss | 1.20.1 | `sha256:917d9de9a696...` |
-| csi-aws-ebs | 1.65.0 | `sha256:bd09e8b4187b...` |
+| pack | type, registry | version | pack-ref digest | what the digest is |
+|---|---|---|---|---|
+| ubuntu-aws | `spectro`, pack registry | 24.04 | `sha256:2df05daa4eb4...` | the pack registry's digest for the version, as Palette lists it |
+| kubernetes | `spectro`, pack registry | 1.36.2 | `sha256:c4f7f20f40c7...` | the same |
+| cni-cilium-oss | `spectro`, pack registry | 1.20.1 | `sha256:917d9de9a696...` | the same |
+| csi-aws-ebs | `spectro`, pack registry | 1.65.0 | `sha256:bd09e8b4187b...` | the same |
+| nginx | `helm`, Helm registry | 25.1.5 | `08816cde6bea...` | the sha256 of the chart archive, as the repository index records it |
+| argocd | `oci`, OCI pack registry | 10.4.0.1 | `sha256:99cac22f712b...` | the manifest digest of `<base path>/spectro-packs/archive/argocd:10.4.0.1` |
 
-The same digests appear for those versions in `examples/INDEX.md`, fetched
-from the registry a day earlier. So `UPSTREAM` moves with the pack version's
-content, and the fallback order, pack-ref digest first and registry digest
-second, needs no change. Helm and OCI packs were not part of the run.
+The `spectro` digests also appear for those versions in `examples/INDEX.md`,
+fetched from the registry a day earlier, and in the first run,
+`20260916T153806Z`. So for all three kinds the pack-ref digest is a digest of
+the pack version's content, the fallback order, pack-ref digest first and
+registry digest second, needs no change, and strata needs no registry reads
+of its own.
+
+Details the runs showed:
+
+- A Helm digest is bare hex, without the `sha256:` prefix the other kinds
+  carry. Strata hashes the digest as Palette stores it, so this matters only
+  when the digest is compared with another tool's output.
+- The `nginx` 25.1.5 entry in the Bitnami index points at a chart in an OCI
+  registry. The digest is still the sha256 of the chart archive: the chart
+  layer's digest, not the manifest digest (`sha256:7504fcfcdf30...`).
+- Palette stamps the digest from its own copy of the registry, and the copy
+  can lag. On 2026-09-16 Palette listed `nginx` up to 25.1.5 from Bitnami
+  while the repository index had 25.1.12.
+
+Not covered: a version pushed again under the same tag, for any kind, so
+whether a published profile's pack-ref digest follows such a push is
+unobserved; Helm registries that need credentials; and OCI registries that
+hold Helm charts rather than packs. The tenant had none of the last two.
 
 ### Pack schema and presets
 

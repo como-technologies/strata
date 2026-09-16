@@ -75,3 +75,35 @@ variable "csi_version" {
   type    = string
   default = "1.65.0"
 }
+
+# The registries profile. verify.sh reads each pack's digest from its registry as well as from
+# Palette, so the machine running it needs read access to both registries.
+variable "helm_registry_name" {
+  description = "A Helm registry in the tenant that serves charts without credentials"
+  type        = string
+  default     = "Bitnami"
+}
+
+variable "helm_chart" {
+  type    = string
+  default = "nginx"
+}
+
+variable "helm_chart_version" {
+  type    = string
+  default = "25.1.5"
+}
+
+variable "oci_registry_name" {
+  description = "An OCI pack registry in the tenant; log in to it before verify.sh"
+  type        = string
+}
+
+variable "oci_pack" {
+  description = "An add-on pack in that registry"
+  type        = string
+}
+
+variable "oci_pack_version" {
+  type = string
+}

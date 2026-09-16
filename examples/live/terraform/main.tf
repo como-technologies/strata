@@ -1,6 +1,8 @@
 # strata live example: one AWS cluster that runs profile version 1.0.0, and a version 1.0.1 of the
 # same profile that nothing runs. 1.0.1 differs by one value, the EBS storage class reclaimPolicy,
-# so every strata check has a known answer. examples/live/README.md lists the checks.
+# so every strata check has a known answer. A third profile, attached to nothing, holds one pack
+# from a Helm registry and one from an OCI registry, for their pack-ref digests.
+# examples/live/README.md lists the checks.
 #
 # Billable while it exists: tear it down with `just live-down`.
 
@@ -96,6 +98,52 @@ resource "spectrocloud_cluster_profile" "next" {
   }
 
   depends_on = [spectrocloud_cluster_profile.release]
+}
+
+data "spectrocloud_registry" "helm" {
+  name = var.helm_registry_name
+}
+
+data "spectrocloud_registry" "oci" {
+  name = var.oci_registry_name
+}
+
+data "spectrocloud_pack" "helm" {
+  name         = var.helm_chart
+  version      = var.helm_chart_version
+  registry_uid = data.spectrocloud_registry.helm.id
+}
+
+data "spectrocloud_pack" "oci" {
+  name         = var.oci_pack
+  version      = var.oci_pack_version
+  registry_uid = data.spectrocloud_registry.oci.id
+}
+
+resource "spectrocloud_cluster_profile" "registries" {
+  name        = "${var.name_prefix}-registries"
+  version     = "1.0.0"
+  description = "strata live example: a Helm pack and an OCI pack; nothing runs it"
+  cloud       = "all"
+  type        = "add-on"
+
+  pack {
+    name         = data.spectrocloud_pack.helm.name
+    type         = "helm"
+    tag          = data.spectrocloud_pack.helm.version
+    uid          = data.spectrocloud_pack.helm.id
+    registry_uid = data.spectrocloud_registry.helm.id
+    values       = data.spectrocloud_pack.helm.values
+  }
+
+  pack {
+    name         = data.spectrocloud_pack.oci.name
+    type         = "oci"
+    tag          = data.spectrocloud_pack.oci.version
+    uid          = data.spectrocloud_pack.oci.id
+    registry_uid = data.spectrocloud_registry.oci.id
+    values       = data.spectrocloud_pack.oci.values
+  }
 }
 
 resource "spectrocloud_cluster_aws" "this" {

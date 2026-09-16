@@ -19,3 +19,7 @@ output "release_profile_uid" {
 output "next_profile_uid" {
   value = spectrocloud_cluster_profile.next.id
 }
+
+output "registries_profile_uid" {
+  value = spectrocloud_cluster_profile.registries.id
+}
