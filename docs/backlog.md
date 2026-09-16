@@ -365,3 +365,166 @@ Strata is already a library with a thin CLI (`src/lib.rs`, `src/ops.rs`). Anothe
 - [x] `cargo doc --no-deps` builds with no warnings
 - [x] Another crate depends on `strata` and builds a snapshot from a `MemoryApi` without the CLI
 - [x] `docs/model.md` states the semver policy
+
+## Accept names for projects and clusters
+
+labels: ux
+
+### Background
+
+Strata scopes requests with `PALETTE_PROJECT_UID` or `--project <uid>`, and names a cluster only by uid in `cluster:<uid>`. People know names. During the live verification the env file set `PALETTE_PROJECT=strata-test`, which strata ignores, so every command ran at tenant scope and found nothing until the uid was added by hand. The cluster uid had to come from a page URL or an API listing.
+
+### Plan
+
+1. `src/config.rs`: read `PALETTE_PROJECT` as a project name when `PALETTE_PROJECT_UID` is unset, and add `--project-name` next to `--project`. Resolve the name once, at tenant scope, through `GET /v1/dashboard/projects/metadata`; an unknown name is an error that lists the visible projects.
+2. `src/reference.rs` and `src/api.rs`: `cluster:<x>` fetches `<x>` as a uid first; on a `ResourceNotFound`, it searches the project with `POST /v1/dashboard/spectroclusters/search` for a cluster named `<x>`. No match, or several, is an error that lists the candidates. A snapshot records the resolved uid.
+3. Tests with `MemoryApi` for a name, an unknown name, and a uid that is also a name.
+4. `README.md`, `docs/walkthrough.md`, `examples/live`: use names where a person types them.
+
+### Acceptance criteria
+
+- [ ] `PALETTE_PROJECT=<name>` scopes every command to that project; an unknown name is an error with exit 2 that lists the visible projects
+- [ ] `--project-name` does the same for `verify`
+- [ ] `strata compare record.json cluster:<name>/<profile>` works; an unknown or ambiguous cluster name is an error with exit 2
+- [ ] Records carry uids, never names, so a rename does not break `verify`
+
+## Decide whether a tag-only difference is an IDENTITY change
+
+labels: design
+
+### Background
+
+`IDENTITY` hashes a pack's name, layer, type, tag, version, packUid, and registryUid. The live run found that Palette stores the tag a profile was authored with: a profile built with Terraform pins `24.04` for `ubuntu-aws`, while the registry names that pack version `LTS__24.x`, `LTS__24.04`, and `LTS__24.4.x`. Two profiles that pin the same pack uid through different tag names therefore differ in `IDENTITY`. The rules table maps `IDENTITY` on the OS or Kubernetes layer to `repave`, so the report would call it a node repave although both run the same pack version. A floating tag such as `1.x` is different: it changes which version an upgrade picks, so a change to or from one may belong in `IDENTITY`.
+
+### Plan
+
+1. In the live example, publish a version that differs only in the OS pack's tag name for the same pack uid, and record what Palette does to a cluster that moves to it: whether it reconciles or repaves.
+2. Decide with the team: keep the tag in `IDENTITY` and give a tag-only change its own impact level, or drop an exact tag from `IDENTITY` when the pack uid is unchanged.
+3. `src/snapshot.rs` and `src/diff.rs`: implement the decision; if roots change, bump the snapshot schema id as `docs/model.md` requires.
+4. Tests over two fixtures that differ only in a tag name, and one that changes a floating tag.
+
+### Acceptance criteria
+
+- [ ] `docs/model.md` states whether a tag-only change moves `IDENTITY` and what impact it reports, with the live evidence
+- [ ] Comparing two profiles that pin the same pack uid under different tag names reports the decided result, with a test
+- [ ] If roots change, the snapshot schema id changes and older records are refused by name
+
+## Record the values a cluster gives its profile variables
+
+labels: feature
+
+### Background
+
+A cluster snapshot records each applied profile's variable definitions and leaves out the value the cluster gave each variable, because some values are secrets (`isSensitive`). That keeps a cluster's root equal to the profile's, which the release-versus-run check needs. It also hides run-time configuration: two clusters on the same release with different variable values compare `IDENTICAL`, and nothing shows the difference.
+
+### Plan
+
+1. `src/snapshot.rs`: `source.cluster.variables[]` with the name, the profile uid, and the value of each non-sensitive variable. A sensitive variable is listed with `sensitive: true` and no value, and no hash of it either. None of it enters the root.
+2. `src/diff.rs`: when both sides are clusters, an additive `clusterVariables` section in `strata-diff/1` with the changed values.
+3. `src/render/`: the terminal and markdown reports list changed values under the variables line.
+4. Tests over cluster fixtures with different values; the fixture secret must not appear in any document.
+
+### Acceptance criteria
+
+- [ ] A cluster snapshot records non-sensitive variable values outside the root; sensitive values appear in no document
+- [ ] Comparing two cluster snapshots with different values shows the changes and still reports equal roots when the release is the same
+- [ ] `strata schema snapshot` and `strata schema diff` include the new fields
+
+## Write a candidate file from a published profile
+
+labels: feature
+
+### Background
+
+Teams that adopt candidate files start from profiles that are already published. The live example turns a record into a candidate file with a jq filter, `examples/live/candidate-from-snapshot.jq`, and `same-release` then shows that the file reproduces the published root. That belongs in strata: the filter tracks the snapshot shape by hand, and it writes values inline where a repository wants them in files.
+
+### Plan
+
+1. `src/candidate.rs`: `Candidate::from_snapshot`, with explicit tags and registry uids.
+2. `src/main.rs`: `strata candidate <ref> [-o profile.yaml] [--files-dir DIR]`. With `--files-dir`, each layer's values and each manifest go to files the candidate references.
+3. Tests: a candidate written from a fixture record resolves, through registry fixtures, to the record's root.
+4. `examples/live/verify.sh`: use the command and delete the jq filter.
+
+### Acceptance criteria
+
+- [ ] `strata candidate <record>.json -o profile.yaml` writes a file that `snapshot --from-candidate` turns into the record's root
+- [ ] `--files-dir` writes values and manifests to files and references them
+- [ ] The live example uses the command
+
+## Keep the project scope in raw directories
+
+labels: robustness
+
+### Background
+
+`snapshot --raw-dir` saves the API responses a snapshot was built from, and `snapshot --from-raw` rebuilds it offline. The project the responses came from is not saved. A rebuilt record has an empty `source.projectUid`, so `verify` later checks it at tenant scope or in whatever project the environment names, which is wrong for a project's profile or cluster.
+
+### Plan
+
+1. `src/api.rs`: `RawProfile` and `RawCluster` write `scope.json` with the project uid next to their documents, and read it back when present.
+2. `src/ops.rs`: `snapshot_from_dir` applies the saved scope with `Snapshot::with_project`.
+3. Tests: a round trip through a raw directory keeps `source.projectUid`; a raw directory without `scope.json` still loads, at tenant scope.
+
+### Acceptance criteria
+
+- [ ] `snapshot <ref> --raw-dir d` followed by `snapshot --from-raw d` records the same `source.projectUid`
+- [ ] Raw directories written before the change still load
+
+## Live-verify a cluster that runs several profiles
+
+labels: investigation
+
+### Background
+
+`cluster:<uid>` covers every profile applied to a cluster, merged in order, and `cluster:<uid>/<profile>` selects one. The live example's cluster runs a single profile, so the merge and the selection are verified only against fixtures assembled from the SDK models. A cluster with an infra profile and an add-on profile is the common shape.
+
+### Plan
+
+1. `examples/live/terraform`: an add-on profile with one small pack, attached to the cluster next to the infra profile.
+2. `examples/live/verify.sh`: check that `cluster:<uid>` lists both profiles in order, that `cluster:<uid>/<name>` selects each, and that each profile's record compares `IDENTICAL` against its selection.
+3. `examples/live/README.md`: the new checks and a recorded run.
+
+### Acceptance criteria
+
+- [ ] The new checks pass on a real cluster that runs two profiles
+- [ ] The recorded run in `examples/live/README.md` includes them
+
+## Live-verify the registry-move policy
+
+labels: investigation
+
+### Background
+
+`same-release --allow registry-move` accepts a pair whose packs moved to another registry with the same tag, version, type, values, manifests, and params. The rule comes from a fixture that rewrites registry uids, pack uids, and digests. Whether a real copy of a pack in a second registry keeps the same tag names, pack type, and default values is unverified. If a real move changes one of them, a genuine promotion fails the check.
+
+### Plan
+
+1. In a tenant with two registries that hold the same pack version, publish one profile pinned to each.
+2. Run `strata same-release --allow registry-move` on their records and note every field that differs.
+3. `docs/model.md`: state what a real registry move changes; adjust the policy in `src/ops.rs` if it differs from the fixture's, with a test.
+
+### Acceptance criteria
+
+- [ ] `docs/model.md` states which fields differ in a real registry move, with the evidence
+- [ ] The policy passes a real registry move and still fails an `AUTHORED` change
+
+## Report drift from a scheduled verify
+
+labels: ci
+
+### Background
+
+The live run showed that Palette accepts an in-place edit of a published version through the API: same uid, same version, no new version. Only `strata verify` noticed. The walkthrough runs `verify` on a schedule, but each team has to wire the schedule and the reporting itself. `scripts/pr-comment.sh` and the reusable comment workflow do that for pull requests; nothing does it for drift.
+
+### Plan
+
+1. `scripts/verify-report.sh <pattern>...`: run `strata verify --format json` over the records; open one issue per drifted record, with the report and a marker, update it on later runs, and close it when the record verifies again. A record that cannot be checked is reported too. Host calls sit in functions, as in `pr-comment.sh`.
+2. A reusable workflow, `.github/workflows/verify.yml`, that installs the release binary and calls the script; the caller sets the schedule. Other CI systems call the script directly.
+3. Tests with the fake `gh` from `tests/scripts.rs`.
+4. `README.md` and `docs/walkthrough.md`: the call.
+
+### Acceptance criteria
+
+- [ ] A drifted record opens exactly one issue with the report, and a later clean run closes it
+- [ ] A record that cannot be checked is reported, never silently skipped
+- [ ] The script runs locally and through the reusable workflow

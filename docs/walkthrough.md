@@ -425,4 +425,10 @@ the guard.
 
 - Confirm `UPSTREAM` for Helm and OCI packs. It comes from the digest
   Palette stamps on the pack ref, which the live example showed equal to the
-  registry digest for `spectro` packs; Helm and OCI packs are unchecked.
+  registry digest for `spectro` packs; Helm and OCI packs are unchecked (#2).
+- Accept project and cluster names; today both are uids (#18).
+- Show the values a cluster gave its profile variables (#20).
+- Write a candidate file from a published profile; the live example uses a
+  jq filter for now (#21).
+- Report drift from the nightly `verify` on its own; today the nightly job
+  prints it (#25).

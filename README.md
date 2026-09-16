@@ -246,8 +246,15 @@ run.
 - `UPSTREAM` comes from the digest Palette stamps on the pack ref. The live
   example showed it equal to the registry digest for `spectro` packs from the
   Public Repo. Helm and OCI packs are unchecked; if their pack-ref digests
-  turn out to differ, strata will read those from the registry instead.
+  turn out to differ, strata will read those from the registry instead (#2).
 - A cluster snapshot records variable definitions, not the values a cluster
-  was given.
+  was given (#20).
+- Two profiles that pin the same pack under different tag names, such as
+  `24.04` and `LTS__24.x`, differ in `IDENTITY`, and on the OS or Kubernetes
+  layer the report calls that a repave (#19).
+- Projects and clusters are named by uid only; `PALETTE_PROJECT` is ignored
+  (#18).
+- A snapshot rebuilt with `--from-raw` loses the project it was taken in
+  (#22).
 - The text reports truncate values longer than 120 characters. The JSON
   document and `--full` carry the full value.
