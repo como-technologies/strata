@@ -151,8 +151,16 @@ pub fn verify<A: PaletteApi>(
         uid: uid.to_string(),
         recorded_at: recorded.source.fetched_at.clone(),
         checked_at: checked_at.to_string(),
+        cluster_values_changed: 0,
     };
-    let diff = diff::compute(recorded, &live, checked_at, Some(verify));
+    let mut diff = diff::compute(recorded, &live, checked_at, Some(verify));
+    let values_changed = diff
+        .cluster_variables
+        .as_ref()
+        .map_or(0, |c| c.values.len());
+    if let Some(v) = diff.verify.as_mut() {
+        v.cluster_values_changed = values_changed;
+    }
     Ok(Verification {
         diff,
         live,
@@ -243,6 +251,10 @@ pub struct VerifiedRecord {
     /// The full comparison, for drifted records only.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub diff: Option<Diff>,
+    /// For a cluster record, the values the cluster gives its variables that differ from the
+    /// record, whatever the status.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cluster_variables: Option<crate::diff::ClusterVariablesDiff>,
     /// The error object, for records that could not be checked.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<Value>,
@@ -267,6 +279,7 @@ impl VerifiedRecord {
             max_impact: None,
             packs_changed: None,
             diff: None,
+            cluster_variables: None,
             error: Some(e.to_json()),
         }
     }
@@ -355,6 +368,7 @@ where
                 root_live: Some(v.live.root.clone()),
                 max_impact: (!v.unchanged).then_some(v.diff.summary.max_impact),
                 packs_changed: (!v.unchanged).then_some(v.diff.summary.packs_changed),
+                cluster_variables: v.diff.cluster_variables.clone().filter(|c| c.changed),
                 diff: (!v.unchanged).then_some(v.diff),
                 error: None,
             },

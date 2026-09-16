@@ -122,6 +122,58 @@ pub struct ClusterSource {
     pub profile: Option<String>,
     /// The applied profiles this snapshot covers, in the order Palette applies them.
     pub profiles: Vec<AppliedProfile>,
+    /// The values the cluster gives the variables of those profiles, in profile order and then by
+    /// name. Outside the root: two clusters on one release can differ here. A sensitive variable
+    /// is listed without its value.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub variables: Vec<ClusterVariable>,
+}
+
+/// The value a cluster gives one profile variable.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ClusterVariable {
+    /// Name of the profile the variable belongs to.
+    pub profile: String,
+    /// Uid of that profile.
+    pub profile_uid: String,
+    /// Variable name.
+    pub name: String,
+    /// The value; absent for a sensitive variable, which no document records, not even hashed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub value: Option<String>,
+    /// True for a sensitive variable.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub sensitive: bool,
+}
+
+impl ClusterVariable {
+    /// The values the cluster in `raw` gives the variables of `profiles`, in that order and then
+    /// by name.
+    fn read(raw: &RawCluster, profiles: &[AppliedProfile]) -> Vec<ClusterVariable> {
+        let entries = raw.variables.as_array().cloned().unwrap_or_default();
+        let mut out = Vec::new();
+        for p in profiles {
+            let mut of_profile: Vec<ClusterVariable> = entries
+                .iter()
+                .filter(|e| s(e, "/profileUid") == p.uid)
+                .flat_map(|e| arr(e, "/variables"))
+                .map(|v| {
+                    let sensitive = v.get("isSensitive").and_then(Value::as_bool) == Some(true);
+                    ClusterVariable {
+                        profile: p.name.clone(),
+                        profile_uid: p.uid.clone(),
+                        name: s(&v, "/name"),
+                        value: (!sensitive).then(|| s(&v, "/value")),
+                        sensitive,
+                    }
+                })
+                .collect();
+            of_profile.sort_by(|a, b| a.name.cmp(&b.name));
+            out.extend(of_profile);
+        }
+        out
+    }
 }
 
 /// One cluster profile version as applied to a cluster.
@@ -574,6 +626,7 @@ impl Snapshot {
                 uid: s(&raw.cluster, "/metadata/uid"),
                 name: s(&raw.cluster, "/metadata/name"),
                 profile: profile.map(str::to_string),
+                variables: ClusterVariable::read(raw, &covered),
                 profiles: covered,
             }),
         };

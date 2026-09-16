@@ -159,18 +159,27 @@ pub(crate) fn record_label(name: &str, version: &str) -> String {
 }
 
 /// The sentence after a record's status.
+fn record_values_changed(r: &crate::ops::VerifiedRecord) -> usize {
+    r.cluster_variables.as_ref().map_or(0, |c| c.values.len())
+}
+
 pub(crate) fn record_detail(r: &crate::ops::VerifiedRecord) -> String {
     use crate::ops::RecordStatus;
     match r.status {
-        RecordStatus::Unchanged => format!("unchanged since {}", r.recorded_at),
+        RecordStatus::Unchanged => format!(
+            "unchanged since {}{}",
+            r.recorded_at,
+            values_changed_suffix(record_values_changed(r))
+        ),
         RecordStatus::Drifted => format!(
-            "differs from the copy recorded {}; max impact {}, {} packs changed",
+            "differs from the copy recorded {}; max impact {}, {} packs changed{}",
             r.recorded_at,
             r.max_impact
                 .and_then(|l| serde_json::to_value(l).ok())
                 .and_then(|v| v.as_str().map(str::to_string))
                 .unwrap_or_default(),
-            r.packs_changed.unwrap_or(0)
+            r.packs_changed.unwrap_or(0),
+            values_changed_suffix(record_values_changed(r))
         ),
         RecordStatus::Error => r
             .error
@@ -288,6 +297,32 @@ pub(crate) fn variable_lines(g: &VariablesByName) -> Vec<VarLine<'_>> {
     }
     lines.sort_by_key(|(name, _)| *name);
     lines.into_iter().map(|(_, l)| l).collect()
+}
+
+/// `1 variable value changed`, `2 variable values changed`.
+pub(crate) fn values_changed(n: usize) -> String {
+    format!(
+        "{n} variable {} changed",
+        if n == 1 { "value" } else { "values" }
+    )
+}
+
+/// `; 1 variable value changed`, or nothing when none did.
+pub(crate) fn values_changed_suffix(n: usize) -> String {
+    if n == 0 {
+        String::new()
+    } else {
+        format!("; {}", values_changed(n))
+    }
+}
+
+/// A cluster value as the reports print it: quoted, or `(sensitive)`.
+pub(crate) fn cluster_value(value: &Option<String>, sensitive: bool) -> String {
+    match value {
+        Some(v) => show(&Value::from(v.as_str())),
+        None if sensitive => "(sensitive)".to_string(),
+        None => "null".to_string(),
+    }
 }
 
 /// ` (required, sensitive)`, or nothing when no trait is set.

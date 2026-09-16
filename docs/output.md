@@ -38,8 +38,14 @@ cluster reads `name@version on cluster <name>` and shows the cluster uid. The se
 the two roots and `IDENTICAL` or `CHANGED`. The third line shows the consumer
 counts. Then come the variables, in name order: one line for an added or
 removed variable with its traits (`required`, `sensitive`, `hidden`,
-`immutable`), and one line per changed field of a changed variable. Then comes
-one line per pack, in layer order.
+`immutable`), and one line per changed field of a changed variable. When both
+sides are clusters and they give their variables different values, a
+`cluster values CHANGED` line follows, with one line per value as
+`<profile>.<variable>: "old" -> "new"`. A sensitive variable shows
+`(sensitive)` in place of its value: strata never records one, so it can show
+that a sensitive variable was added or removed, never that its value changed.
+Values are run-time input, not the release, so they never change `IDENTICAL`.
+Then comes one line per pack, in layer order.
 A changed pack shows its flags. Below it, indented, come the upstream digest,
 the changed values, the manifest changes, and the impact.
 
@@ -66,7 +72,8 @@ Strata obeys the `NO_COLOR` and `CLICOLOR_FORCE` environment variables. With
   counts, and the variables state
 - one table row per pack with layer, name, version, flags, and impact
 - one collapsible `diff` block for the variables, with the same lines as
-  the terminal report
+  the terminal report, and one for the cluster values when two clusters give
+  their variables different values
 - one collapsible `diff` block per changed pack, with the changed values,
   the upstream digest, and the manifest changes
 
@@ -90,6 +97,11 @@ model can read it without these pages:
   `required`, `sensitive`, `hidden`, and `immutable`; `changed[]` carries the
   `name` and the changed `fields[]` as leaves with paths relative to the
   variable, such as `defaultValue`.
+- `clusterVariables` is present when both sides are clusters. `changed` is
+  true when any value differs, and `values[]` has one entry per difference
+  with `op`, `profile`, `name`, `old`, `new`, and `sensitive`. A sensitive
+  variable has no `old` or `new`. The sides' own values are in
+  `a.cluster.variables` and `b.cluster.variables`.
 - `packs[]` has one entry per pack key on either side, sorted by layer and
   then by name. Each entry has `status`, the booleans `identity`,
   `upstream`, and `authored`, `paramsChanged`, and `impact` with `level` and
@@ -101,7 +113,14 @@ model can read it without these pages:
   the path as a list: strings for keys, integers for indexes, and
   `{"name": ...}` for named list items.
 - `verify` is present after `strata verify`. It holds `status`, `uid`,
-  `recordedAt`, and `checkedAt`.
+  `recordedAt`, and `checkedAt`. For a cluster record, `clusterValuesChanged`
+  counts the variable values that differ from the record.
+
+A cluster record whose root is unchanged but whose variable values differ is
+not `DRIFT`: the release is the same, so `verify` exits `0`. The verdict line
+names the count, as in `OK: cluster workload-a running aws-pxk@1.1.0 is
+unchanged since <time>; 1 variable value changed`, and the report above it
+lists each value.
 
 The JSON is never colored and never truncated. `--compact` writes it on one
 line. `strata schema diff` prints the JSON Schema of the document.
@@ -133,7 +152,10 @@ lines as a table.
 - `records[]` has one entry per file in the order given: `path`, `status`,
   `name`, `version`, `uid`, `projectUid`, `recordedAt`, `rootRecorded`, and
   `rootLive`. A drifted record adds `maxImpact`, `packsChanged`, and the full
-  `diff` document. A failed record adds the `error` object described below.
+  `diff` document. A cluster record whose variable values differ from the
+  record adds `clusterVariables`, whatever its status, and its line ends with
+  `; 1 variable value changed`. A failed record adds the `error` object
+  described below.
 
 `strata schema verify-summary` prints its JSON Schema. One file on its own
 prints the full report and verdict line described above.

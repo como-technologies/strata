@@ -427,7 +427,6 @@ the guard.
 
 ## What the tool does not do yet
 
-- Show the values a cluster gave its profile variables (#20).
 - Write a candidate file from a published profile; the live example uses a
   jq filter for now (#21).
 - Report drift from the nightly `verify` on its own; today the nightly job

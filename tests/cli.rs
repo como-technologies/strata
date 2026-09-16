@@ -682,10 +682,16 @@ fn schema_subcommand_prints_json_schema() {
         if kind == "snapshot" {
             let cluster = &v["$defs"]["ClusterSource"]["properties"];
             assert!(cluster["uid"].is_object() && cluster["profiles"].is_object());
+            let value = &v["$defs"]["ClusterVariable"]["properties"];
+            assert!(
+                value["value"].is_object() && value["sensitive"].is_object(),
+                "{v}"
+            );
         }
         if kind == "diff" {
             let vars = &v["$defs"]["VariablesDiff"]["properties"];
             assert!(vars["diff"].is_object() && vars["byName"].is_object());
+            assert!(v["properties"]["clusterVariables"].is_object(), "{v}");
             let by_name = &v["$defs"]["VariablesByName"]["properties"];
             assert!(by_name["added"].is_object() && by_name["changed"].is_object());
             assert!(v["$defs"]["VariableSummary"]["properties"]["sensitive"].is_object());

@@ -1,12 +1,15 @@
 //! The terminal report: plain when piped, colored on a terminal.
 
 use super::{
-    chain_verdict, consumer_count, consumers_heading, counts_line, dash, entry_error, list_count,
-    list_scope, pack_version, pair_detail, pair_word, record_detail, record_label, short, show,
-    subject, traits_suffix, variable_lines, version_display, Renderer, VarLine,
+    chain_verdict, cluster_value, consumer_count, consumers_heading, counts_line, dash,
+    entry_error, list_count, list_scope, pack_version, pair_detail, pair_word, record_detail,
+    record_label, short, show, subject, traits_suffix, values_changed_suffix, variable_lines,
+    version_display, Renderer, VarLine,
 };
 use crate::color::Paint;
-use crate::diff::{Diff, ImpactLevel, Leaf, Op, PackDiff, Status, Verify, VerifyStatus};
+use crate::diff::{
+    ClusterValueChange, Diff, ImpactLevel, Leaf, Op, PackDiff, Status, Verify, VerifyStatus,
+};
 use crate::error::Result;
 use crate::ops::{Chain, ConsumersReport, Listing, PairStatus, RecordStatus, VerifySummary};
 use crate::snapshot::{Snapshot, Source};
@@ -100,6 +103,24 @@ fn variable_line(v: &VarLine<'_>, p: &Paint) -> String {
             traits_suffix(s)
         ),
         VarLine::Field(name, l) => vline_at(&format!("{name}.{}", l.path), l, p),
+    }
+}
+
+fn cluster_value_line(c: &ClusterValueChange, p: &Paint) -> String {
+    let path = format!("{}.{}", c.profile, c.name);
+    let (old, new) = (
+        cluster_value(&c.old, c.sensitive),
+        cluster_value(&c.new, c.sensitive),
+    );
+    match c.op {
+        Op::Changed => format!(
+            "{} {path}: {} -> {}",
+            opmark(c.op, p),
+            p.red(&old),
+            p.green(&new)
+        ),
+        Op::Added => format!("{} {path}: {}", opmark(c.op, p), p.green(&new)),
+        Op::Removed => format!("{} {path}: {}", opmark(c.op, p), p.red(&old)),
     }
 }
 
@@ -218,6 +239,12 @@ impl Renderer for TerminalRenderer {
         for v in variable_lines(&d.variables.by_name) {
             out.push(format!("        {}", variable_line(&v, p)));
         }
+        if let Some(cv) = d.cluster_variables.as_ref().filter(|c| c.changed) {
+            out.push(format!("  cluster values {}", p.byellow("CHANGED")));
+            for c in &cv.values {
+                out.push(format!("        {}", cluster_value_line(c, p)));
+            }
+        }
         out.push(String::new());
         for pd in &d.packs {
             out.push(packline(pd, p));
@@ -239,12 +266,15 @@ impl Renderer for TerminalRenderer {
         let p = &self.paint;
         let (what, at) = (subject(recorded), &recorded.fetched_at);
         Some(match v.status {
-            VerifyStatus::Unchanged => {
-                format!("{}: {what} is unchanged since {at}", p.bgreen("OK"))
-            }
+            VerifyStatus::Unchanged => format!(
+                "{}: {what} is unchanged since {at}{}",
+                p.bgreen("OK"),
+                values_changed_suffix(v.cluster_values_changed)
+            ),
             VerifyStatus::Drifted => format!(
-                "{}: {what} differs from the copy recorded {at}",
-                p.bred("DRIFT")
+                "{}: {what} differs from the copy recorded {at}{}",
+                p.bred("DRIFT"),
+                values_changed_suffix(v.cluster_values_changed)
             ),
         })
     }

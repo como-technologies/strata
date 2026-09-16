@@ -129,7 +129,12 @@ most severe level as `maxImpact`.
   of a cluster adds `cluster`: its uid and name, the profile selected with
   `cluster:<cluster>/<profile>` if any, and the applied profiles it covers.
   The ref stays as typed, a name or a uid. `verify` reads only the uids, the
-  cluster's and the project's, so a renamed cluster or project still verifies
+  cluster's and the project's, so a renamed cluster or project still verifies.
+  `cluster.variables` holds the value the cluster gives each variable of those
+  profiles, with the profile's name and uid. It is outside the root, so two
+  clusters on one release have one root whatever their values. A sensitive
+  variable is listed with `sensitive: true` and no value, and no hash of the
+  value either: strata keeps secrets out of every document
 - `variables` and `variablesHash`
 - `packs[]`: for each pack, the identity fields, the two digests, the raw
   values, the canonical values, the values hash, the manifests with content

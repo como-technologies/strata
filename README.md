@@ -257,8 +257,6 @@ run.
 
 ## Known limits
 
-- A cluster snapshot records variable definitions, not the values a cluster
-  was given (#20).
 - Two profiles that pin the same pack under different tag names, such as
   `24.04` and `LTS__24.x`, differ in `IDENTITY`, and on the OS or Kubernetes
   layer the report calls that a repave (#19).

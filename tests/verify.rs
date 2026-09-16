@@ -873,7 +873,7 @@ fn a_cluster_running_the_recorded_version_is_identical_to_the_record() {
     );
     assert!(
         !on_b.to_json(true).unwrap().contains(SECRET_VALUE),
-        "variable values are run-time input, never recorded"
+        "a sensitive variable value is never recorded"
     );
     assert!(recorded_b.source.cluster.is_none());
     assert_eq!(recorded_b.source.title(), "lab-profile@1.3.0");
@@ -2096,4 +2096,165 @@ fn a_cluster_record_taken_by_name_verifies_by_uid_after_a_rename() {
         );
     let v = ops::verify(&recorded, &Palette::new(renamed), "t1", &Progress::silent()).unwrap();
     assert!(v.unchanged, "the old name is gone, the uid is not");
+}
+
+// ---- cluster variable values -------------------------------------------------------------------
+
+fn cluster_snapshot(raw_root: &Path, dir: &str) -> Snapshot {
+    ops::snapshot_from_dir(&raw_root.join(dir), &format!("cluster:{CLUSTER_UID}"), "t0").unwrap()
+}
+
+#[test]
+fn a_cluster_snapshot_records_variable_values_outside_the_root_and_never_a_secret() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let dev = cluster_snapshot(dir.path(), "cluster-a");
+    let cluster = dev.source.cluster.as_ref().unwrap();
+    let values: Vec<(&str, &str, Option<&str>, bool)> = cluster
+        .variables
+        .iter()
+        .map(|v| {
+            (
+                v.profile.as_str(),
+                v.name.as_str(),
+                v.value.as_deref(),
+                v.sensitive,
+            )
+        })
+        .collect();
+    assert_eq!(
+        values,
+        vec![
+            ("lab-profile", "cluster_env", Some("dev"), false),
+            ("lab-profile", "grafana_password", None, true),
+        ]
+    );
+    assert_eq!(cluster.variables[0].profile_uid, UID_A);
+
+    let json = dev.to_json(true).unwrap();
+    assert!(
+        !json.contains(SECRET_VALUE),
+        "a sensitive value is in no document"
+    );
+    let staging = cluster_snapshot(dir.path(), "cluster-a-staging");
+    assert_eq!(staging.root, dev.root, "values are outside the root");
+
+    let path = dir.path().join("dev.json");
+    fs::write(&path, json).unwrap();
+    assert_eq!(
+        Snapshot::load(&path)
+            .unwrap()
+            .source
+            .cluster
+            .unwrap()
+            .variables,
+        dev.source.cluster.unwrap().variables
+    );
+}
+
+#[test]
+fn two_clusters_on_one_release_with_different_values_compare_identical_and_show_the_values() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let dev = cluster_snapshot(dir.path(), "cluster-a");
+    let staging = cluster_snapshot(dir.path(), "cluster-a-staging");
+    let d = ops::compare(&dev, &staging, "t1");
+    assert!(d.same, "one release");
+    let values = d
+        .cluster_variables
+        .as_ref()
+        .expect("both sides are clusters");
+    assert!(values.changed);
+    assert_eq!(values.values.len(), 1, "{:?}", values.values);
+    let c = &values.values[0];
+    assert_eq!(
+        (c.profile.as_str(), c.name.as_str(), c.op),
+        ("lab-profile", "cluster_env", strata::diff::Op::Changed)
+    );
+    assert_eq!(
+        (c.old.as_deref(), c.new.as_deref(), c.sensitive),
+        (Some("dev"), Some("staging"), false)
+    );
+
+    let text = render::renderer(Format::Terminal, Paint::off(), false)
+        .render(&d, &dev, &staging, false)
+        .unwrap();
+    assert!(
+        text.contains(r#"~ lab-profile.cluster_env: "dev" -> "staging""#),
+        "{text}"
+    );
+    let md = render::renderer(Format::Markdown, Paint::off(), false)
+        .render(&d, &dev, &staging, false)
+        .unwrap();
+    assert!(
+        md.contains("- lab-profile.cluster_env: \"dev\"\n+ lab-profile.cluster_env: \"staging\"\n"),
+        "the markdown diff style: {md}"
+    );
+    let json = render::renderer(Format::Json, Paint::off(), true)
+        .render(&d, &dev, &staging, false)
+        .unwrap();
+    assert!(json.contains("\"clusterVariables\""));
+    assert!(!json.contains(SECRET_VALUE));
+
+    let same = ops::compare(&dev, &dev, "t1");
+    assert!(!same.cluster_variables.unwrap().changed);
+    let profile = ops::snapshot_from_dir(&dir.path().join("a"), "a", "t0").unwrap();
+    assert!(
+        ops::compare(&profile, &dev, "t1")
+            .cluster_variables
+            .is_none(),
+        "a profile has no cluster values to compare"
+    );
+}
+
+#[test]
+fn verify_names_a_cluster_value_changed_since_the_record_without_calling_it_drift() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let recorded = snapshot_cluster(
+        &serve_cluster(MemoryApi::new(), dir.path(), "cluster-a"),
+        None,
+    )
+    .unwrap();
+    let live = serve_cluster(MemoryApi::new(), dir.path(), "cluster-a-staging");
+
+    let v = ops::verify(
+        &recorded,
+        &Palette::new(live.clone()),
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert!(v.unchanged, "a value is not part of the release");
+    assert!(v.diff.cluster_variables.as_ref().unwrap().changed);
+    let renderer = render::renderer(Format::Terminal, Paint::off(), false);
+    let verdict = renderer
+        .verdict(v.diff.verify.as_ref().unwrap(), &recorded.source)
+        .unwrap();
+    assert!(
+        verdict.starts_with("OK:") && verdict.contains("1 variable value changed"),
+        "{verdict}"
+    );
+
+    let path = dir.path().join("cluster.json");
+    fs::write(&path, recorded.to_json(true).unwrap()).unwrap();
+    let s = ops::verify_many(
+        &[path],
+        None,
+        |_| Ok(Palette::new(live.clone())),
+        "t1",
+        &Progress::silent(),
+    );
+    assert_eq!(
+        (s.records[0].status, s.exit_code()),
+        (RecordStatus::Unchanged, 0)
+    );
+    let named = s.records[0]
+        .cluster_variables
+        .as_ref()
+        .expect("the summary names the changed value");
+    assert_eq!(named.values[0].name, "cluster_env");
+    let lines = renderer.render_verify_summary(&s).unwrap();
+    assert!(lines.contains("1 variable value changed"), "{lines}");
+    assert!(!serde_json::to_string(&s).unwrap().contains(SECRET_VALUE));
 }

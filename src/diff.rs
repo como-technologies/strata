@@ -10,7 +10,7 @@ use serde_json::{json, Value};
 
 use crate::canon::canonical_json;
 use crate::layer::Layer;
-use crate::snapshot::{Pack, Snapshot, Source, Tool};
+use crate::snapshot::{ClusterVariable, Pack, Snapshot, Source, Tool};
 
 /// Schema id written into every diff document.
 pub const DIFF_SCHEMA: &str = "strata-diff/1";
@@ -41,6 +41,10 @@ pub struct Diff {
     pub summary: Summary,
     /// Profile variables compared.
     pub variables: VariablesDiff,
+    /// The values the two clusters give their profile variables, compared; present only when both
+    /// sides are clusters. A difference here does not change `same`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cluster_variables: Option<ClusterVariablesDiff>,
     /// True when packs present on both sides appear in a different order
     pub order_changed: bool,
     /// One entry per pack key present on either side, sorted by layer then name
@@ -125,6 +129,37 @@ pub struct Summary {
     pub variables_changed: bool,
     /// The most severe impact level across all changed packs
     pub max_impact: ImpactLevel,
+}
+
+/// The values two clusters give their profile variables, compared.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ClusterVariablesDiff {
+    /// True when any value differs.
+    pub changed: bool,
+    /// The values that differ.
+    pub values: Vec<ClusterValueChange>,
+}
+
+/// One value that differs between two clusters.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ClusterValueChange {
+    /// What happened.
+    pub op: Op,
+    /// Profile name.
+    pub profile: String,
+    /// Variable name.
+    pub name: String,
+    /// Value in A; absent for an addition or a sensitive variable.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub old: Option<String>,
+    /// Value in B; absent for a removal or a sensitive variable.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub new: Option<String>,
+    /// True when the variable is sensitive on either side; its values are never compared.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub sensitive: bool,
 }
 
 /// Profile variables compared by name.
@@ -385,6 +420,14 @@ pub struct Verify {
     pub recorded_at: String,
     /// When the live profile was fetched.
     pub checked_at: String,
+    /// For a cluster record: how many values the cluster gives its variables differ from the
+    /// record. They do not change `status`.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub cluster_values_changed: usize,
+}
+
+fn is_zero(n: &usize) -> bool {
+    *n == 0
 }
 
 /// Whether a published version still matches its record.
@@ -765,6 +808,45 @@ pub fn group_variables(a: &[Value], b: &[Value]) -> VariablesByName {
     g
 }
 
+/// The values two clusters give their variables, matched by profile name and variable name.
+fn cluster_values_diff(a: &[ClusterVariable], b: &[ClusterVariable]) -> ClusterVariablesDiff {
+    let keyed = |vs: &[ClusterVariable]| -> BTreeMap<(String, String), ClusterVariable> {
+        vs.iter()
+            .map(|v| ((v.profile.clone(), v.name.clone()), v.clone()))
+            .collect()
+    };
+    let (ka, kb) = (keyed(a), keyed(b));
+    let mut keys: Vec<&(String, String)> = ka.keys().chain(kb.keys()).collect();
+    keys.sort();
+    keys.dedup();
+    let values: Vec<ClusterValueChange> = keys
+        .into_iter()
+        .filter_map(|k| {
+            let (x, y) = (ka.get(k), kb.get(k));
+            let op = match (x, y) {
+                (Some(x), Some(y)) if x.value == y.value && x.sensitive == y.sensitive => {
+                    return None
+                }
+                (Some(_), Some(_)) => Op::Changed,
+                (None, Some(_)) => Op::Added,
+                _ => Op::Removed,
+            };
+            Some(ClusterValueChange {
+                op,
+                profile: k.0.clone(),
+                name: k.1.clone(),
+                old: x.and_then(|v| v.value.clone()),
+                new: y.and_then(|v| v.value.clone()),
+                sensitive: x.is_some_and(|v| v.sensitive) || y.is_some_and(|v| v.sensitive),
+            })
+        })
+        .collect();
+    ClusterVariablesDiff {
+        changed: !values.is_empty(),
+        values,
+    }
+}
+
 /// Compare two snapshots. `verify` is attached when this is the second half of a verification.
 pub fn compute(a: &Snapshot, b: &Snapshot, generated_at: &str, verify: Option<Verify>) -> Diff {
     let pa: BTreeMap<&str, &Pack> = a.packs.iter().map(|p| (p.key.as_str(), p)).collect();
@@ -915,6 +997,10 @@ pub fn compute(a: &Snapshot, b: &Snapshot, generated_at: &str, verify: Option<Ve
             } else {
                 VariablesByName::default()
             },
+        },
+        cluster_variables: match (&a.source.cluster, &b.source.cluster) {
+            (Some(x), Some(y)) => Some(cluster_values_diff(&x.variables, &y.variables)),
+            _ => None,
         },
         order_changed: order_a != order_b,
         packs,

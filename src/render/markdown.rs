@@ -1,9 +1,10 @@
 //! The pull request comment.
 
 use super::{
-    chain_verdict, consumer_count, consumers_heading, counts_line, dash, entry_error, list_count,
-    list_scope, pack_version, pair_detail, pair_word, plain_flags, record_detail, record_label,
-    short, show, subject, traits_suffix, variable_lines, version_display, Renderer, VarLine,
+    chain_verdict, cluster_value, consumer_count, consumers_heading, counts_line, dash,
+    entry_error, list_count, list_scope, pack_version, pair_detail, pair_word, plain_flags,
+    record_detail, record_label, short, show, subject, traits_suffix, values_changed,
+    values_changed_suffix, variable_lines, version_display, Renderer, VarLine,
 };
 use crate::color::Paint;
 use crate::diff::{Diff, Leaf, Op, Status, Verify, VerifyStatus};
@@ -116,6 +117,25 @@ impl Renderer for MarkdownRenderer {
             }
             o.push_str("```\n</details>\n\n");
         }
+        if let Some(cv) = d.cluster_variables.as_ref().filter(|c| c.changed) {
+            o.push_str(&format!(
+                "<details><summary>cluster values: {}</summary>\n\n```diff\n",
+                values_changed(cv.values.len())
+            ));
+            for c in &cv.values {
+                let path = format!("{}.{}", c.profile, c.name);
+                let (old, new) = (
+                    cluster_value(&c.old, c.sensitive),
+                    cluster_value(&c.new, c.sensitive),
+                );
+                o.push_str(&match c.op {
+                    Op::Changed => format!("- {path}: {old}\n+ {path}: {new}\n"),
+                    Op::Added => format!("+ {path}: {new}\n"),
+                    Op::Removed => format!("- {path}: {old}\n"),
+                });
+            }
+            o.push_str("```\n</details>\n\n");
+        }
         for pd in d.packs.iter().filter(|p| p.status == Status::Changed) {
             let mut body = String::new();
             if pd.upstream {
@@ -176,10 +196,14 @@ impl Renderer for MarkdownRenderer {
     fn verdict(&self, v: &Verify, recorded: &Source) -> Option<String> {
         let (what, at) = (subject(recorded), &recorded.fetched_at);
         Some(match v.status {
-            VerifyStatus::Unchanged => format!("\n**OK**: {what} is unchanged since {at}"),
-            VerifyStatus::Drifted => {
-                format!("\n**DRIFT**: {what} differs from the copy recorded {at}")
-            }
+            VerifyStatus::Unchanged => format!(
+                "\n**OK**: {what} is unchanged since {at}{}",
+                values_changed_suffix(v.cluster_values_changed)
+            ),
+            VerifyStatus::Drifted => format!(
+                "\n**DRIFT**: {what} differs from the copy recorded {at}{}",
+                values_changed_suffix(v.cluster_values_changed)
+            ),
         })
     }
 
