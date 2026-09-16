@@ -3,6 +3,8 @@
 
 use std::path::PathBuf;
 
+use serde_json::{Map, Value};
+
 /// Everything that can go wrong in the library.
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -96,7 +98,157 @@ impl Error {
     pub fn exit_code(&self) -> u8 {
         2
     }
+
+    /// A stable kebab-case name for the variant, for programs that read errors. The `match` is
+    /// exhaustive, so a new variant cannot be added without naming it here.
+    pub fn kind(&self) -> &'static str {
+        match self {
+            Error::MissingCredential { .. } => "missing-credential",
+            Error::Api { .. } => "api",
+            Error::Transport { .. } => "transport",
+            Error::NotJson { .. } => "not-json",
+            Error::ProfileNotFound { .. } => "profile-not-found",
+            Error::NotSnapshot(_) => "not-snapshot",
+            Error::SnapshotSchema { .. } => "snapshot-schema",
+            Error::NoUid => "no-uid",
+            Error::Io { .. } => "io",
+            Error::EmptyFile(_) => "empty-file",
+            Error::FileNotJson { .. } => "file-not-json",
+            Error::Serialize(_) => "serialize",
+        }
+    }
+
+    /// The machine-readable form: `kind`, `message`, and the variant's own fields (`path`,
+    /// `status`, `name`, `version`, `schema`, `variable`, `alternate`) when it has them.
+    pub fn to_json(&self) -> Value {
+        let mut m = Map::new();
+        m.insert("kind".into(), Value::from(self.kind()));
+        m.insert("message".into(), Value::from(self.to_string()));
+        let path = |m: &mut Map<String, Value>, p: &std::path::Path| {
+            m.insert("path".into(), Value::from(p.display().to_string()));
+        };
+        match self {
+            Error::MissingCredential { primary, alternate } => {
+                m.insert("variable".into(), Value::from(*primary));
+                m.insert("alternate".into(), Value::from(*alternate));
+            }
+            Error::Api {
+                path: p, status, ..
+            } => {
+                m.insert("path".into(), Value::from(p.as_str()));
+                m.insert("status".into(), Value::from(*status));
+            }
+            Error::Transport { path: p, .. } | Error::NotJson { path: p, .. } => {
+                m.insert("path".into(), Value::from(p.as_str()));
+            }
+            Error::ProfileNotFound { name, version } => {
+                m.insert("name".into(), Value::from(name.as_str()));
+                m.insert("version".into(), Value::from(version.as_str()));
+            }
+            Error::NotSnapshot(p) | Error::EmptyFile(p) => path(&mut m, p),
+            Error::SnapshotSchema {
+                path: p, schema, ..
+            } => {
+                path(&mut m, p);
+                m.insert("schema".into(), Value::from(*schema));
+            }
+            Error::Io { path: p, .. } | Error::FileNotJson { path: p, .. } => path(&mut m, p),
+            Error::NoUid | Error::Serialize(_) => {}
+        }
+        Value::Object(m)
+    }
 }
 
 /// Result alias for the library.
 pub type Result<T> = std::result::Result<T, Error>;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn bad_json() -> serde_json::Error {
+        serde_json::from_str::<serde_json::Value>("{").unwrap_err()
+    }
+
+    /// One value of every variant. The `match` in `kind` is exhaustive, so the compiler keeps the
+    /// mapping total; this test keeps it distinct and keeps `to_json` in step with it.
+    fn one_of_each() -> Vec<Error> {
+        vec![
+            Error::MissingCredential {
+                primary: "PALETTE_API_KEY",
+                alternate: "SPECTROCLOUD_APIKEY",
+            },
+            Error::Api {
+                path: "/v1/x".into(),
+                status: 503,
+                body: "busy".into(),
+            },
+            Error::Transport {
+                path: "/v1/x".into(),
+                message: "refused".into(),
+            },
+            Error::NotJson {
+                path: "/v1/x".into(),
+                source: bad_json(),
+            },
+            Error::ProfileNotFound {
+                name: "aws-pxk".into(),
+                version: "9.9.9".into(),
+            },
+            Error::NotSnapshot("profile.json".into()),
+            Error::SnapshotSchema {
+                path: "old.json".into(),
+                schema: "strata-snapshot/1",
+                source: bad_json(),
+            },
+            Error::NoUid,
+            Error::Io {
+                path: "rel.json".into(),
+                source: std::io::Error::other("denied"),
+            },
+            Error::EmptyFile("variables.json".into()),
+            Error::FileNotJson {
+                path: "profile.json".into(),
+                source: bad_json(),
+            },
+            Error::Serialize(bad_json()),
+        ]
+    }
+
+    #[test]
+    fn every_variant_has_a_distinct_kind() {
+        let all = one_of_each();
+        let mut kinds: Vec<&str> = all.iter().map(Error::kind).collect();
+        kinds.sort_unstable();
+        kinds.dedup();
+        assert_eq!(kinds.len(), all.len(), "kinds: {kinds:?}");
+        for k in &kinds {
+            assert!(
+                k.chars().all(|c| c.is_ascii_lowercase() || c == '-'),
+                "kind {k} is not kebab-case"
+            );
+        }
+    }
+
+    #[test]
+    fn to_json_carries_kind_message_and_the_variant_fields() {
+        for e in one_of_each() {
+            let j = e.to_json();
+            assert_eq!(j["kind"], e.kind());
+            assert_eq!(j["message"], e.to_string());
+        }
+        let api = &one_of_each()[1];
+        assert_eq!(api.to_json()["status"], 503);
+        assert_eq!(api.to_json()["path"], "/v1/x");
+        let cred = &one_of_each()[0];
+        assert_eq!(cred.to_json()["variable"], "PALETTE_API_KEY");
+        assert_eq!(cred.to_json()["alternate"], "SPECTROCLOUD_APIKEY");
+        assert_eq!(
+            one_of_each()[5].to_json()["path"],
+            "profile.json",
+            "NotSnapshot exposes its path"
+        );
+        assert_eq!(one_of_each()[4].to_json()["name"], "aws-pxk");
+        assert_eq!(one_of_each()[6].to_json()["schema"], "strata-snapshot/1");
+    }
+}

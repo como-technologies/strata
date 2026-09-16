@@ -343,3 +343,53 @@ fn schema_subcommand_prints_json_schema() {
         assert!(v["properties"]["schema"].is_object());
     }
 }
+
+#[test]
+fn json_mode_writes_one_structured_error_line_on_stderr() {
+    let fx = fixtures();
+    let not_snapshot = fx.raw.join("a/profile.json");
+    let r = run(&["compare", "--json", not_snapshot.to_str().unwrap(), &fx.b]);
+    assert_eq!(r.code, 2, "exit code is unchanged");
+    assert_eq!(r.err.lines().count(), 1, "stderr: {}", r.err);
+    let e: serde_json::Value = serde_json::from_str(r.err.trim()).unwrap();
+    assert_eq!(e["error"]["kind"], "not-snapshot");
+    assert!(e["error"]["message"]
+        .as_str()
+        .unwrap()
+        .contains("not a strata snapshot"));
+    assert!(e["error"]["path"]
+        .as_str()
+        .unwrap()
+        .ends_with("profile.json"));
+
+    // the issue's example: a ref that is not a file is a uid, which needs credentials
+    let home = tempfile::tempdir().unwrap();
+    let r = run_in(
+        &["compare", "--json", &fx.a, "missing.json"],
+        &[("HOME", home.path().to_str().unwrap())],
+        &["PALETTE_API_KEY", "SPECTROCLOUD_APIKEY"],
+    );
+    assert_eq!(r.code, 2, "{}", r.err);
+    let e: serde_json::Value = serde_json::from_str(r.err.trim()).unwrap();
+    assert_eq!(e["error"]["kind"], "missing-credential");
+    assert_eq!(e["error"]["variable"], "PALETTE_API_KEY");
+    assert!(e["error"]["message"]
+        .as_str()
+        .unwrap()
+        .contains("PALETTE_API_KEY is required"));
+
+    // --format json works the same as --json, on verify too
+    let r = run_in(
+        &["verify", "--format", "json", &fx.a],
+        &[("HOME", home.path().to_str().unwrap())],
+        &["PALETTE_API_KEY", "SPECTROCLOUD_APIKEY"],
+    );
+    assert_eq!(r.code, 2);
+    let e: serde_json::Value = serde_json::from_str(r.err.trim()).unwrap();
+    assert_eq!(e["error"]["kind"], "missing-credential");
+
+    // without JSON selected the sentence stays
+    let r = run(&["compare", not_snapshot.to_str().unwrap(), &fx.b]);
+    assert!(r.err.starts_with("strata: "), "{}", r.err);
+    assert!(!r.err.contains("\"kind\""));
+}

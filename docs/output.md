@@ -96,6 +96,24 @@ model can read it without these pages:
 The JSON is never colored and never truncated. `--compact` writes it on one
 line. `strata schema diff` prints the JSON Schema of the document.
 
+### Errors in JSON mode
+
+When `--format json` or `--json` is selected and the command fails, stderr
+carries one line and the exit status is `2`, as always:
+
+```
+{"error":{"kind":"not-snapshot","message":"'profile.json' is not a strata snapshot","path":"profile.json"}}
+```
+
+`kind` is a stable kebab-case name: `missing-credential`, `api`, `transport`,
+`not-json`, `profile-not-found`, `not-snapshot`, `snapshot-schema`, `no-uid`,
+`io`, `empty-file`, `file-not-json`, or `serialize`. `message` is the sentence
+the terminal shows. The other fields are the variant's own: `path` and
+`status` for `api`, `path` for the file and transport errors, `name` and
+`version` for `profile-not-found`, `schema` for `snapshot-schema`, `variable`
+and `alternate` for `missing-credential`. Without JSON selected, stderr is the
+sentence prefixed with `strata:`.
+
 ### Policy checks with jq
 
 ```

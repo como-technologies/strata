@@ -39,6 +39,17 @@ struct Cli {
     cmd: Cmd,
 }
 
+impl Cli {
+    /// True when the command will write JSON, so an error must be JSON too.
+    fn json_selected(&self) -> bool {
+        match &self.cmd {
+            Cmd::Compare(a) => a.out.format() == Format::Json,
+            Cmd::Verify(a) => a.out.format() == Format::Json,
+            Cmd::Snapshot(_) | Cmd::Schema { .. } => false,
+        }
+    }
+}
+
 #[derive(Subcommand)]
 enum Cmd {
     /// Compare two profiles (the default when the first argument is not a subcommand)
@@ -189,10 +200,15 @@ fn main() -> ExitCode {
         argv.insert(1, "compare".to_string());
     }
     let cli = Cli::parse_from(argv);
+    let json = cli.json_selected();
     match run(cli) {
         Ok(code) => code,
         Err(e) => {
-            eprintln!("{TOOL_NAME}: {e}");
+            if json {
+                eprintln!("{}", serde_json::json!({ "error": e.to_json() }));
+            } else {
+                eprintln!("{TOOL_NAME}: {e}");
+            }
             ExitCode::from(e.exit_code())
         }
     }
