@@ -29,20 +29,55 @@ resource and the OS and CSI packs in `terraform/main.tf`.
 
 The pack versions are those of `examples/profiles/aws-pxk@1.1.0.json`.
 
-The cluster is billable while it exists: three EC2 instances plus the load
-balancer and NAT gateway Palette creates. Creation takes about 20 to 40
-minutes, and deletion about 15 to 20. Tear it down when the checks are done.
+The cluster is billable while it exists. In the recorded run it owned four EC2
+instances (the three `t3.xlarge` nodes and a `t3.micro`), a NAT gateway, an
+elastic IP, a classic load balancer, a VPC, and four volumes. Creation took 19
+minutes. Healthy deletions of this kind of cluster take 9 to 29 minutes. Tear
+it down when the checks are done, and confirm it is gone.
+
+## Files
+
+| file | what it does |
+|---|---|
+| `terraform/` | the two profile versions and the cluster |
+| `tf.sh` | runs Terraform with the key and the Palette address strata uses |
+| `tenant.sh` | read-only lookups: the names `terraform.tfvars` needs, and a cluster's state |
+| `verify.sh` | runs every check and writes `runs/<UTC time>/` |
+| `candidate-from-snapshot.jq` | turns a profile record into a candidate file |
+| `aws-inventory.sh` | what the cluster still has in AWS, for confirming a teardown |
 
 ## Prerequisites
 
 - A Palette tenant with a project, and an AWS cloud account registered in it
 - An EC2 key pair in the region; the provider requires one
 - A Palette API key in `PALETTE_API_KEY` or `~/.palette.env`
-- `terraform` 1.5 or later, `jq`, `just`, and a Rust toolchain
+- `terraform` 1.5 or later, `jq`, `just`, `curl`, and a Rust toolchain
+- The AWS CLI with read access to the account, only for `aws-inventory.sh`
+
+For a self-hosted Palette, set `PALETTE_API` to its address in the
+environment or `~/.palette.env`. Strata reads it, and `tf.sh` and `tenant.sh`
+pass it on, so every step talks to the same Palette.
 
 ## Steps
 
-1. Fill in the names from your tenant:
+1. Find the names from your tenant. `tenant.sh names` lists the projects, the
+   AWS cloud accounts, and each account's zones and key pairs in a region.
+   The recorded run's tenant answered:
+
+   ```
+   $ examples/live/tenant.sh names us-east-2
+   projects (palette_project):
+     iris-on-palette  uid 6a860681da93f9c74843a019
+     strata-test  uid 6aaab0567993b0008ad902db
+   AWS cloud accounts (cloud_account_name), with zones (az) and key pairs (ssh_key_name) in us-east-2:
+     como-aws
+       zones:     us-east-2a, us-east-2b, us-east-2c
+       key pairs: iris-on-palette, bastion-iris-on-palette
+   ```
+
+   Put them in `terraform.tfvars`: a project name as `palette_project`, an
+   account name as `cloud_account_name`, the region, a zone as `az`, and a key
+   pair as `ssh_key_name`.
 
    ```
    cp examples/live/terraform/terraform.tfvars.example examples/live/terraform/terraform.tfvars
@@ -72,19 +107,81 @@ minutes, and deletion about 15 to 20. Tear it down when the checks are done.
    Nothing runs 1.0.1, so this touches no cluster:
 
    ```
+   export PALETTE_PROJECT_UID=$(examples/live/tf.sh output -raw project_uid)
    examples/live/tf.sh apply -var edit_next_in_place=true
    target/release/strata verify examples/live/runs/<time>/next.json    # DRIFT, exit 1
    examples/live/tf.sh apply                                            # undo the edit
    ```
 
-   Set `PALETTE_PROJECT_UID` to the `project_uid` output first; `verify.sh`
-   does that for its own checks.
+   `verify.sh` sets `PALETTE_PROJECT_UID` for its own checks; a command run by
+   hand needs the export. Undo the edit before running `verify.sh` again:
+   with it in place, two values differ and `only-the-edited-value` fails.
 
-5. Tear it down:
+5. Tear it down, and confirm it is gone. Keep the uids first; the outputs
+   disappear with the state.
 
    ```
+   C=$(examples/live/tf.sh output -raw cluster_uid)
+   export PALETTE_PROJECT_UID=$(examples/live/tf.sh output -raw project_uid)
    just live-down
+   examples/live/tenant.sh cluster "$C"                 # exit 0: Deleted
+   AWS_PROFILE=<profile> examples/live/aws-inventory.sh  # exit 0: nothing left
    ```
+
+   Terraform's "Destroy complete" is not the confirmation. During a gateway
+   outage Palette answers a plain-text 404, and the provider can take that
+   for a finished deletion while the cluster still runs. A deleted cluster
+   answers with state `Deleted`; `tenant.sh cluster` exits 2 on a 404 that is
+   not Palette's JSON `ResourceNotFound`.
+
+## When a check fails
+
+`verify.sh` keeps going after a failed check, so one run shows every result.
+In `runs/<UTC time>/`:
+
+- `summary.md` has the table of results and the digest table.
+- `<check>.out` and `<check>.err` hold what each command printed. A failed
+  comparison names the layer and the leaf in its `.out`.
+- `raw/cluster`, `raw/release`, and `raw/next` hold the API responses strata
+  hashed. Compare them with the SDK models when a shape looks wrong.
+
+Run `just live-verify` again after a fix; each run gets its own directory. The
+cluster does not need to be `Running`: the checks read Palette's record of
+the cluster, which exists once creation starts.
+
+What went wrong before, and why:
+
+| symptom | cause |
+|---|---|
+| `live-up` fails with "A minimum allocation of '4.1' CPU cores is required across all worker nodes" | workers total 4 cores or fewer; the default of two `t3.xlarge` workers clears it |
+| `snapshot-candidate` fails with `pack-not-found` naming a tag | a strata build older than the tag fix; the profile's tag is the version |
+| `consumer-is-the-cluster` fails with state `unknown` | the key cannot read the cluster in its project; `consumers-release.out` prints the error next to the cluster |
+| `only-the-edited-value` fails with two changed values | the optional in-place edit was not undone |
+
+## When teardown is slow or stuck
+
+These rules come from six observed teardowns of the same kind of cluster:
+
+- Deletion continues in Palette after Terraform gives up or is interrupted.
+  Keep checking with `tenant.sh cluster` instead of starting over.
+- Judge progress by `aws-inventory.sh`, not by elapsed time. AWS empties first,
+  in about 6 to 12 minutes for a cluster without add-ons, and the state turns
+  `Deleted` 3 to 8 minutes after that.
+- If the state stays `Deleting` and the inventory stops shrinking for several
+  readings, read the cluster's events in the Palette console; the message
+  usually names what is stuck. A cluster with Pause Agent Upgrades enabled
+  can stay in `Deleting`; disable it and delete again.
+- Force delete only when `aws-inventory.sh` exits 0. A force delete removes
+  Palette's records and nothing in AWS; forcing earlier leaves resources
+  billing with nothing tracking them. Palette refuses a force delete for about
+  15 minutes after deletion starts, and can answer 500 before accepting it.
+  In the console, or with the key and address exported:
+
+  ```
+  set -a; . ~/.palette.env; set +a     # when the key lives there
+  curl -X DELETE -H "ApiKey: $PALETTE_API_KEY" -H "ProjectUid: $PALETTE_PROJECT_UID" \
+    "${PALETTE_API:-https://api.spectrocloud.com}/v1/spectroclusters/$C?forceDelete=true"
+  ```
 
 ## The checks
 

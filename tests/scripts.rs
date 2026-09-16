@@ -459,3 +459,214 @@ fn pr_comment_snapshots_a_live_ref_once_and_compares_files_offline() {
         .saved_body()
         .contains("### lab-profile@1.3.0 → lab-profile@1.2.0"));
 }
+
+// ---- examples/live helpers -------------------------------------------------------------------
+
+fn live_script(name: &str) -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("examples/live")
+        .join(name)
+}
+
+fn executable(path: &Path, body: &str) {
+    std::fs::write(path, body).unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
+}
+
+/// A `terraform` that reports the host and whether a key arrived, never the key itself.
+const FAKE_TERRAFORM: &str = r#"#!/usr/bin/env bash
+echo "host=${SPECTROCLOUD_HOST-<unset>} key=${SPECTROCLOUD_APIKEY:+set} args=$*"
+"#;
+
+fn tf_sh(envs: &[(&str, &str)], palette_env: Option<&str>) -> Output {
+    let dir = tempfile::tempdir().unwrap();
+    let bin = dir.path().join("bin");
+    std::fs::create_dir(&bin).unwrap();
+    executable(&bin.join("terraform"), FAKE_TERRAFORM);
+    let home = dir.path().join("home");
+    std::fs::create_dir(&home).unwrap();
+    if let Some(text) = palette_env {
+        std::fs::write(home.join(".palette.env"), text).unwrap();
+    }
+    let mut c = Command::new("bash");
+    c.arg(live_script("tf.sh"))
+        .arg("output")
+        .env(
+            "PATH",
+            format!("{}:{}", bin.display(), std::env::var("PATH").unwrap()),
+        )
+        .env("HOME", &home)
+        .env_remove("SPECTROCLOUD_APIKEY")
+        .env_remove("SPECTROCLOUD_HOST")
+        .env_remove("PALETTE_API_KEY")
+        .env_remove("PALETTE_API");
+    for (k, v) in envs {
+        c.env(k, v);
+    }
+    let o = c.output().unwrap();
+    drop(dir);
+    o
+}
+
+#[test]
+fn tf_sh_passes_the_key_and_a_self_hosted_address_to_terraform() {
+    let o = tf_sh(&[("PALETTE_API_KEY", "k")], None);
+    assert!(o.status.success(), "{}", text(&o.stderr));
+    assert_eq!(
+        text(&o.stdout).trim(),
+        "host=<unset> key=set args=-chdir=".to_string()
+            + live_script("terraform").to_str().unwrap()
+            + " output",
+        "SaaS: no host, so the provider uses its default"
+    );
+
+    let o = tf_sh(
+        &[
+            ("PALETTE_API_KEY", "k"),
+            ("PALETTE_API", "https://palette.example.com/"),
+        ],
+        None,
+    );
+    assert!(
+        text(&o.stdout).starts_with("host=palette.example.com key=set"),
+        "{}",
+        text(&o.stdout)
+    );
+
+    // both read from ~/.palette.env, as strata reads them
+    let o = tf_sh(
+        &[],
+        Some("PALETTE_API_KEY=k\nexport PALETTE_API=\"http://palette.internal:8080\"\n"),
+    );
+    assert!(o.status.success(), "{}", text(&o.stderr));
+    assert!(
+        text(&o.stdout).starts_with("host=palette.internal:8080 key=set"),
+        "{}",
+        text(&o.stdout)
+    );
+
+    // an explicit SPECTROCLOUD_HOST wins
+    let o = tf_sh(
+        &[
+            ("PALETTE_API_KEY", "k"),
+            ("PALETTE_API", "https://a.example.com"),
+            ("SPECTROCLOUD_HOST", "b.example.com"),
+        ],
+        None,
+    );
+    assert!(
+        text(&o.stdout).starts_with("host=b.example.com"),
+        "{}",
+        text(&o.stdout)
+    );
+
+    let o = tf_sh(&[], None);
+    assert_eq!(o.status.code(), Some(2));
+    assert!(
+        text(&o.stderr).contains("PALETTE_API_KEY"),
+        "{}",
+        text(&o.stderr)
+    );
+}
+
+/// A `curl` that answers from files: the status in $FAKE_CURL_STATUS, the body in $FAKE_CURL_BODY.
+/// It honors `-o <file>` and `-w '%{http_code}'`, the two options tenant.sh relies on, and logs
+/// each URL.
+const FAKE_CURL: &str = r#"#!/usr/bin/env bash
+out=""; write=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -o) out=$2; shift 2 ;;
+    -w) write=$2; shift 2 ;;
+    -H|-X|-d) shift 2 ;;
+    -*) shift ;;
+    *) echo "$1" >> "$FAKE_CURL_LOG"; shift ;;
+  esac
+done
+if [ -n "$out" ]; then cp "$FAKE_CURL_BODY" "$out"; else cat "$FAKE_CURL_BODY"; fi
+[ -n "$write" ] && printf '%s' "$(cat "$FAKE_CURL_STATUS")"
+exit 0
+"#;
+
+fn tenant_cluster(status: &str, body: &str) -> (Output, String) {
+    let dir = tempfile::tempdir().unwrap();
+    let bin = dir.path().join("bin");
+    std::fs::create_dir(&bin).unwrap();
+    executable(&bin.join("curl"), FAKE_CURL);
+    let (status_file, body_file, log) = (
+        dir.path().join("status"),
+        dir.path().join("body"),
+        dir.path().join("curl.log"),
+    );
+    std::fs::write(&status_file, status).unwrap();
+    std::fs::write(&body_file, body).unwrap();
+    let o = Command::new("bash")
+        .arg(live_script("tenant.sh"))
+        .args(["cluster", "c-123"])
+        .env(
+            "PATH",
+            format!("{}:{}", bin.display(), std::env::var("PATH").unwrap()),
+        )
+        .env("HOME", dir.path())
+        .env("PALETTE_API_KEY", "k")
+        .env("PALETTE_PROJECT_UID", "p-1")
+        .env("FAKE_CURL_STATUS", &status_file)
+        .env("FAKE_CURL_BODY", &body_file)
+        .env("FAKE_CURL_LOG", &log)
+        .output()
+        .unwrap();
+    let urls = std::fs::read_to_string(&log).unwrap_or_default();
+    (o, urls)
+}
+
+#[test]
+fn tenant_sh_reports_cluster_state_and_never_reads_a_gateway_404_as_deleted() {
+    let (o, urls) = tenant_cluster(
+        "200",
+        r#"{"metadata":{"name":"strata-live-cluster"},"status":{"state":"Running"}}"#,
+    );
+    assert_eq!(o.status.code(), Some(1), "still there: {}", text(&o.stdout));
+    assert_eq!(text(&o.stdout).trim(), "strata-live-cluster c-123: Running");
+    assert!(urls.contains("/v1/spectroclusters/c-123"), "{urls}");
+    assert!(
+        urls.starts_with("https://api.spectrocloud.com/"),
+        "SaaS by default: {urls}"
+    );
+
+    let (o, _) = tenant_cluster(
+        "200",
+        r#"{"metadata":{"name":"strata-live-cluster"},"status":{"state":"Deleted"}}"#,
+    );
+    assert_eq!(
+        o.status.code(),
+        Some(0),
+        "a deleted cluster answers 200 with state Deleted"
+    );
+    assert_eq!(text(&o.stdout).trim(), "strata-live-cluster c-123: Deleted");
+
+    let (o, _) = tenant_cluster(
+        "404",
+        r#"{"code":"ResourceNotFound","message":"not found"}"#,
+    );
+    assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
+    assert!(text(&o.stdout).contains("not found"), "{}", text(&o.stdout));
+
+    let (o, _) = tenant_cluster("404", "404 page not found");
+    assert_eq!(
+        o.status.code(),
+        Some(2),
+        "a plain-text 404 is a gateway problem, not a deletion"
+    );
+    assert!(
+        text(&o.stderr).contains("not proof of deletion"),
+        "{}",
+        text(&o.stderr)
+    );
+
+    let (o, _) = tenant_cluster("500", "boom");
+    assert_eq!(o.status.code(), Some(2));
+}

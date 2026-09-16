@@ -285,6 +285,11 @@ strata compare releases/1.1.0/prod.json releases/1.1.1/prod.json --format markdo
 The cluster reviewer reads the impact column first. `in-place` means
 approve. `repave` means schedule a maintenance window first.
 
+To run the cluster commands against a real cluster, `examples/live/` builds
+one that runs a recorded version, next to a newer version. Its
+`compare-release-cluster` and `compare-next-cluster` checks are the two
+comparisons in this section.
+
 The same check against the proposed record shows what the move changes on
 this cluster. The `-` lines are what the cluster does not have yet:
 
@@ -386,6 +391,10 @@ cluster that cannot be read still counts. `--format json` writes
 
 Offline, a record keeps the consumer uids from the moment it was taken:
 `jq .source.consumers examples/profiles/aws-pxk@1.1.1.json`
+
+To see `consumers` against a real cluster, `examples/live/` runs it on the
+version a cluster runs and on one nothing runs: its `consumers-release` and
+`consumers-next` checks.
 
 ## Why the nightly check is needed
 

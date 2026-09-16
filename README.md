@@ -201,6 +201,15 @@ shape of the API responses, and tests of the scripts. The tests do not use
 the network. CI runs `just lint` and `just test` on each push and pull
 request, and builds the Linux binary with the same step a release uses.
 
+The fixtures follow the Palette API's shapes, but only a real tenant proves
+them. A change to how strata reads Palette, such as cluster refs, consumers,
+candidates, or the API client, also needs the live example:
+`just live-up`, `just live-verify`, and `just live-down`. It builds a billable
+cluster, so it runs by hand and never in CI.
+[examples/live/README.md](examples/live/README.md) has the prerequisites, the
+17 checks, what to do when one fails or a teardown sticks, and the recorded
+run.
+
 ## Releasing
 
 1. Set the new version in `Cargo.toml` and commit.
