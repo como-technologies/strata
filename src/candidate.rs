@@ -62,7 +62,8 @@ pub struct CandidateLayer {
     /// Layer: os, k8s, cni, csi, addon. Defaults to the registry's.
     #[serde(default)]
     pub layer: Option<String>,
-    /// The tag to pin. Defaults to the tag equal to the version, else the first tag of that version.
+    /// The tag to pin: one of the registry's tags for the version, or the version itself. Defaults
+    /// to the tag equal to the version, else the first tag of that version.
     #[serde(default)]
     pub tag: Option<String>,
     /// The registry, by name; overrides the top-level registry.
@@ -328,8 +329,11 @@ pub fn resolve<A: PaletteApi>(
             .filter(|t| text(t, "/packUid").as_deref() == Some(pack_uid.as_str()))
             .filter_map(|t| text(t, "/tag"))
             .collect();
+        // Palette stores the tag a profile was authored with, which can be the version itself
+        // rather than one of the registry's tag names (a Terraform-built profile pins `24.04`
+        // where the registry says `LTS__24.x`). Accept both; anything else is a typo.
         let tag = match &l.tag {
-            Some(t) if tags.contains(t) => t.clone(),
+            Some(t) if tags.contains(t) || *t == l.version => t.clone(),
             Some(t) => return Err(not_found(Some(t.clone()))),
             None => tags
                 .iter()

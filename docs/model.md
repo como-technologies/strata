@@ -136,7 +136,12 @@ For each layer:
 - `values` inline or `valuesFile`, not both. With neither, the layer gets the
   pack's default values from the registry.
 - `layer` defaults to the registry's. `tag` defaults to the tag equal to the
-  version, else the first tag of that version. An explicit `tag` must exist.
+  version, else the first tag of that version. An explicit `tag` must be one
+  of the registry's tags for that version, or the version itself. Palette
+  stores the tag a profile was authored with: a profile built with Terraform
+  pins `24.04` where the registry names that version `LTS__24.x`. Set `tag`
+  to match how the profile will be published, because it is part of
+  `IDENTITY`.
 - `params` is a map. `manifests[]` each have a `name` and `content` inline or
   `contentFile`.
 

@@ -1350,3 +1350,57 @@ fn candidate_errors_name_what_is_wrong() {
     .unwrap();
     assert_eq!(snap.packs[0].tag, "floating.x");
 }
+
+#[test]
+fn an_explicit_tag_equal_to_the_version_is_accepted_as_palette_does() {
+    // Palette stores the tag a profile was authored with. A profile built with Terraform pins the
+    // version itself, `24.04`, although the registry names that version `LTS__24.x`; the live
+    // example run of 2026-09-16 recorded exactly that.
+    let summary = serde_json::json!([{
+        "metadata": {"uid": "pk-ubuntu-2404"},
+        "spec": {"name": "ubuntu-aws", "version": "24.04", "registryUid": "reg", "digest": "sha256:u",
+                 "layer": "os", "type": "spectro", "values": ""},
+    }]);
+    let entity = serde_json::json!({"tags": [
+        {"tag": "LTS__24.x", "packUid": "pk-ubuntu-2404"},
+        {"tag": "LTS__24.04", "packUid": "pk-ubuntu-2404"},
+    ]});
+    let api = serve_registry_pack(MemoryApi::new(), "ubuntu-aws", summary, entity, "reg");
+    let dir = tempfile::tempdir().unwrap();
+    let candidate = |name: &str, tag: Option<&str>| {
+        let mut layer = serde_json::json!({"name": "ubuntu-aws", "version": "24.04"});
+        if let Some(t) = tag {
+            layer["tag"] = serde_json::json!(t);
+        }
+        let file = dir.path().join(name);
+        write_yaml(
+            &file,
+            &serde_json::json!({"name": "p", "version": "1", "registryUid": "reg", "layers": [layer]}),
+        );
+        ops::snapshot_from_candidate(
+            &file,
+            || Ok(Palette::new(api.clone())),
+            "t0",
+            &Progress::silent(),
+        )
+    };
+
+    assert_eq!(
+        candidate("version.yaml", Some("24.04")).unwrap().packs[0].tag,
+        "24.04"
+    );
+    assert_eq!(
+        candidate("registry.yaml", Some("LTS__24.04"))
+            .unwrap()
+            .packs[0]
+            .tag,
+        "LTS__24.04"
+    );
+    assert_eq!(
+        candidate("default.yaml", None).unwrap().packs[0].tag,
+        "LTS__24.x",
+        "without a tag, the registry's first tag for the version"
+    );
+    let err = candidate("typo.yaml", Some("LTS__99")).unwrap_err();
+    assert!(matches!(err, Error::PackNotFound { .. }), "{err}");
+}
