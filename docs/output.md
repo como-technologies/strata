@@ -204,7 +204,7 @@ carries one line and the exit status is `2`, as always:
 `kind` is a stable kebab-case name: `missing-credential`, `api`,
 `invalid-setting`, `pattern`, `transport`, `not-json`, `profile-not-found`,
 `cluster-profile-not-found`, `profile-ref-required`, `candidate-invalid`,
-`pack-not-found`, `registry-not-found`, `not-snapshot`,
+`pack-not-found`, `registry-not-found`, `not-snapshot`, `unsupported-schema`,
 `snapshot-schema`, `no-uid`,
 `io`, `empty-file`, `file-not-json`, or `serialize`. `message` is the
 sentence the terminal shows. The other fields are the variant's own:
@@ -223,6 +223,7 @@ sentence the terminal shows. The other fields are the variant's own:
   `pack-not-found`
 - `registry` and `available` for `registry-not-found`
 - `path` and `schema` for `snapshot-schema`
+- `path`, `found`, and `supported` for `unsupported-schema`
 
 Without JSON selected, stderr is the sentence prefixed with `strata:`.
 

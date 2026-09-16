@@ -18,3 +18,6 @@ examples/live/terraform/*.tfstate.*
 examples/live/terraform/.terraform.tfstate.lock.info
 examples/live/terraform/terraform.tfvars
 examples/live/runs/
+
+# the library example resolves its own dependencies
+examples/library/Cargo.lock

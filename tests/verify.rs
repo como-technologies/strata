@@ -1404,3 +1404,48 @@ fn an_explicit_tag_equal_to_the_version_is_accepted_as_palette_does() {
     let err = candidate("typo.yaml", Some("LTS__99")).unwrap_err();
     assert!(matches!(err, Error::PackNotFound { .. }), "{err}");
 }
+
+#[test]
+fn a_record_from_another_snapshot_schema_is_refused_by_name_and_extra_fields_are_ignored() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let recorded = ops::snapshot_from_dir(&dir.path().join("a"), "a", "t0").unwrap();
+    let mut doc: Value = serde_json::from_str(&recorded.to_json(true).unwrap()).unwrap();
+
+    // a field this strata does not know: additive changes keep the schema id and still load
+    doc["source"]["addedLater"] = serde_json::json!("x");
+    let extra = dir.path().join("extra.json");
+    fs::write(&extra, doc.to_string()).unwrap();
+    assert_eq!(Snapshot::load(&extra).unwrap().root, recorded.root);
+
+    // a newer schema id is refused, naming both ids
+    doc["schema"] = serde_json::json!("strata-snapshot/2");
+    let newer = dir.path().join("newer.json");
+    fs::write(&newer, doc.to_string()).unwrap();
+    let err = Snapshot::load(&newer).unwrap_err();
+    match &err {
+        Error::UnsupportedSchema {
+            found, supported, ..
+        } => {
+            assert_eq!(
+                (found.as_str(), *supported),
+                ("strata-snapshot/2", "strata-snapshot/1")
+            );
+        }
+        other => panic!("unexpected {other}"),
+    }
+    assert_eq!(err.kind(), "unsupported-schema");
+    assert!(
+        err.to_string().contains("strata-snapshot/2")
+            && err.to_string().contains("strata-snapshot/1"),
+        "{err}"
+    );
+
+    // a file that is not a strata document at all stays not-snapshot
+    let other = dir.path().join("other.json");
+    fs::write(&other, r#"{"schema": "something-else/1"}"#).unwrap();
+    assert!(matches!(
+        Snapshot::load(&other).unwrap_err(),
+        Error::NotSnapshot(_)
+    ));
+}

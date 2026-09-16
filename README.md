@@ -193,6 +193,28 @@ implementation and an in-memory one for tests, `snapshot::Snapshot`,
 `diff::compute`, `render::Renderer`, and the operations in `ops`. The command
 line adds only argument parsing, printing, and exit codes.
 
+To depend on it, pin a release tag. The repository is private, so Cargo has to
+fetch it with the git command line, which uses your SSH setup:
+
+```toml
+[dependencies]
+strata = { git = "ssh://git@github.com/como-technologies/strata.git", tag = "v0.4.0" }
+```
+
+```
+CARGO_NET_GIT_FETCH_WITH_CLI=true cargo build
+```
+
+Setting `git-fetch-with-cli = true` under `[net]` in `.cargo/config.toml` does
+the same. Without it, Cargo's built-in git fails with "no authentication
+methods succeeded".
+
+`cargo doc --open` shows the API, and the crate docs start with an example
+that runs as a test. `examples/library/` is a separate crate that uses strata
+this way, with no command line and no network; `just library-example` runs it,
+and so does CI. [docs/model.md](docs/model.md) states what a version number
+promises for the library, the documents, and the command line.
+
 ## Tests
 
 `cargo test`, or `just test`, runs unit tests, library tests against an

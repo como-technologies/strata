@@ -32,7 +32,7 @@ tempfile = "3"
 
 [lints.rust]
 unsafe_code = "forbid"
-missing_docs = "warn"
+missing_docs = "deny"
 
 [profile.release]
 strip = true

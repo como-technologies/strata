@@ -219,3 +219,31 @@ Strata reads these endpoints for one cluster:
   per applied profile
 
 `strata schema snapshot` prints the JSON Schema of the document.
+
+## Versions and compatibility
+
+Strata has three interfaces, and each is versioned on its own.
+
+**The Rust library.** The crate follows semantic versioning over the public
+API that `cargo doc` shows under `strata::`. While the version is 0.x, a minor
+release, such as 0.4 to 0.5, can change that API, and a patch release, such
+as 0.4.0 to 0.4.1, does not. Crate-internal code, such as the canonical form,
+is not part of the API. Each release is tagged `v<version>`.
+
+**The documents.** Each JSON document carries a schema id:
+`strata-snapshot/1`, `strata-diff/1`, `strata-verify-summary/1`,
+`strata-chain/1`, and `strata-consumers/1`. The id changes only when a reader
+of the old id would misread the document: a field removed, renamed, or given a
+new meaning, or a hash computed differently. Adding a field keeps the id.
+Strata ignores fields it does not know, so it reads a record of its own id
+that a later release wrote. `source.projectUid` and `source.cluster` joined
+`strata-snapshot/1` this way. Roots are comparable only within one snapshot
+schema id. Strata refuses a snapshot of another id with `unsupported-schema`,
+which names both ids.
+
+**The command line.** Scripts can rely on the exit codes `0`, `1`, and `2`, on
+the JSON documents, and on the error `kind` names. New kinds can appear, and
+an existing kind keeps its meaning. The terminal and markdown text can change
+in any release. The candidate file format rejects fields it does not know, so a
+file that uses a field added in a later release fails on an older strata with
+`candidate-invalid`.

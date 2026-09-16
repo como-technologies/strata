@@ -16,6 +16,9 @@ use crate::error::{Error, Result};
 /// Schema id written into every snapshot.
 pub const SNAPSHOT_SCHEMA: &str = "strata-snapshot/1";
 
+/// The part of a snapshot schema id shared by every version of it.
+const SNAPSHOT_FAMILY: &str = "strata-snapshot/";
+
 /// One published profile version: its Merkle root, per-pack hashes, canonical values, and raw contents.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
@@ -159,7 +162,7 @@ pub struct Consumers {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct Pack {
-    /// "<layer>/<name>", the Merkle node key
+    /// `<layer>/<name>`, the Merkle node key
     pub key: String,
     /// Palette layer name: os, k8s, cni, csi, addon.
     pub layer: String,
@@ -597,8 +600,16 @@ impl Snapshot {
         })?;
         let v: Value =
             serde_json::from_str(&text).map_err(|_| Error::NotSnapshot(path.to_path_buf()))?;
-        if v.get("schema").and_then(Value::as_str) != Some(SNAPSHOT_SCHEMA) {
-            return Err(Error::NotSnapshot(path.to_path_buf()));
+        match v.get("schema").and_then(Value::as_str) {
+            Some(SNAPSHOT_SCHEMA) => {}
+            Some(other) if other.starts_with(SNAPSHOT_FAMILY) => {
+                return Err(Error::UnsupportedSchema {
+                    path: path.to_path_buf(),
+                    found: other.to_string(),
+                    supported: SNAPSHOT_SCHEMA,
+                })
+            }
+            _ => return Err(Error::NotSnapshot(path.to_path_buf())),
         }
         serde_json::from_value(v).map_err(|source| Error::SnapshotSchema {
             path: path.to_path_buf(),

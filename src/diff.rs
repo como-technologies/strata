@@ -137,7 +137,7 @@ pub struct VariablesDiff {
     pub hash_a: String,
     /// Variables hash of B.
     pub hash_b: String,
-    /// Leaf changes with paths like "<variable name>.<field>"
+    /// Leaf changes with paths like `<variable name>.<field>`
     pub diff: Vec<Leaf>,
     /// The same changes grouped per variable, the form the text reports print
     #[serde(default)]
@@ -227,7 +227,7 @@ pub enum Op {
 pub struct Leaf {
     /// What happened.
     pub op: Op,
-    /// Dotted path; array items as [i], or [name=<value>] when every item has a unique name
+    /// Dotted path; array items as `[i]`, or `[name=<value>]` when every item has a unique name
     pub path: String,
     /// The same path as segments: strings for keys, integers for indexes, {"name": ...} for named items
     pub segments: Vec<Value>,

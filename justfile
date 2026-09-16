@@ -28,6 +28,11 @@ test:
 lint:
     cargo fmt --check
     cargo clippy --all-targets -- -D warnings
+    RUSTDOCFLAGS="-D warnings" cargo doc --no-deps
+
+# Build and run examples/library: a separate crate that uses strata as a library
+library-example:
+    cargo run --quiet --manifest-path examples/library/Cargo.toml --target-dir target/library-example
 
 # Rebuild examples/ from the cached registry responses (no API key needed)
 examples: build

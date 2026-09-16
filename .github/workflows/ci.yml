@@ -22,6 +22,8 @@ jobs:
       # CI runs the same recipes a developer runs locally
       - run: just lint
       - run: just test
+      # a separate crate that depends on strata as a library
+      - run: just library-example
 
   build:
     name: build x86_64-unknown-linux-musl

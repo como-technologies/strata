@@ -119,6 +119,16 @@ pub enum Error {
     /// The file exists but is not a strata snapshot.
     #[error("'{0}' is not a strata snapshot")]
     NotSnapshot(PathBuf),
+    /// The file is a strata snapshot of a schema version this strata does not read.
+    #[error("'{}' is a {found} record; this strata reads {supported}", path.display())]
+    UnsupportedSchema {
+        /// File path.
+        path: PathBuf,
+        /// The schema id in the file.
+        found: String,
+        /// The schema id this strata reads.
+        supported: &'static str,
+    },
     /// The file claims the snapshot schema but does not match it.
     #[error("'{path}' does not match {schema}: {source}")]
     SnapshotSchema {
@@ -180,6 +190,7 @@ impl Error {
             Error::PackNotFound { .. } => "pack-not-found",
             Error::RegistryNotFound { .. } => "registry-not-found",
             Error::NotSnapshot(_) => "not-snapshot",
+            Error::UnsupportedSchema { .. } => "unsupported-schema",
             Error::SnapshotSchema { .. } => "snapshot-schema",
             Error::NoUid => "no-uid",
             Error::Io { .. } => "io",
@@ -260,6 +271,15 @@ impl Error {
                 m.insert("version".into(), Value::from(version.as_str()));
             }
             Error::NotSnapshot(p) | Error::EmptyFile(p) => path(&mut m, p),
+            Error::UnsupportedSchema {
+                path: p,
+                found,
+                supported,
+            } => {
+                path(&mut m, p);
+                m.insert("found".into(), Value::from(found.as_str()));
+                m.insert("supported".into(), Value::from(*supported));
+            }
             Error::SnapshotSchema {
                 path: p, schema, ..
             } => {
@@ -341,6 +361,11 @@ mod tests {
                 registry: "Nope".into(),
                 available: vec!["Public Repo".into()],
             },
+            Error::UnsupportedSchema {
+                path: "newer.json".into(),
+                found: "strata-snapshot/2".into(),
+                supported: "strata-snapshot/1",
+            },
             Error::NotSnapshot("profile.json".into()),
             Error::SnapshotSchema {
                 path: "old.json".into(),
@@ -411,6 +436,7 @@ mod tests {
         assert_eq!(cp["applied"], serde_json::json!(["infra", "addons"]));
         assert_eq!(by_kind("profile-ref-required")["reference"], "cluster:c1");
         assert_eq!(by_kind("candidate-invalid")["path"], "profile.yaml");
+        assert_eq!(by_kind("unsupported-schema")["found"], "strata-snapshot/2");
         let pnf = by_kind("pack-not-found");
         assert_eq!(
             (pnf["name"].clone(), pnf["tag"].clone()),
