@@ -278,11 +278,11 @@ The header means "come back at this time". When that time is further away than a
 
 ### Acceptance criteria
 
-- [ ] A `Retry-After` at or below the ceiling is honored as sent; above it, the command exits 2 at once with no sleep
-- [ ] The error message names the seconds the server asked for and the ceiling
-- [ ] `--format json` writes kind `retry-after-too-long` with `retryAfter` and `limit`
-- [ ] `STRATA_MAX_RETRY_AFTER=900` raises the ceiling to fifteen minutes
-- [ ] The README states the default ceiling
+- [x] A `Retry-After` at or below the ceiling is honored as sent; above it, the command exits 2 at once with no sleep
+- [x] The error message names the seconds the server asked for and the ceiling
+- [x] `--format json` writes kind `retry-after-too-long` with `retryAfter` and `limit`
+- [x] `STRATA_MAX_RETRY_AFTER=900` raises the ceiling to fifteen minutes
+- [x] The README states the default ceiling
 
 ## Consumer names and projects
 
