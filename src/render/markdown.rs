@@ -1,13 +1,13 @@
 //! The pull request comment.
 
 use super::{
-    counts_line, dash, plain_flags, record_detail, record_label, short, show, traits_suffix,
-    variable_lines, version_display, Renderer, VarLine,
+    chain_verdict, counts_line, dash, pair_detail, pair_word, plain_flags, record_detail,
+    record_label, short, show, traits_suffix, variable_lines, version_display, Renderer, VarLine,
 };
 use crate::color::Paint;
 use crate::diff::{Diff, Leaf, Op, Status, Verify, VerifyStatus};
 use crate::error::Result;
-use crate::ops::{RecordStatus, VerifySummary};
+use crate::ops::{Chain, RecordStatus, VerifySummary};
 use crate::snapshot::{Snapshot, Source};
 
 /// Renders markdown for a pull request comment.
@@ -201,6 +201,27 @@ impl Renderer for MarkdownRenderer {
                 escape(&r.path),
                 record_label(&r.name, &r.version),
                 escape(&record_detail(r))
+            ));
+        }
+        o.push('\n');
+        Ok(o)
+    }
+
+    fn render_chain(&self, c: &Chain) -> Result<String> {
+        let mut o = format!("### same release: {}\n\n", chain_verdict(c));
+        o.push_str("| status | from | to | detail |\n|---|---|---|---|\n");
+        for p in &c.pairs {
+            let mut detail = escape(&pair_detail(p));
+            for r in &p.reasons {
+                detail.push_str("<br>");
+                detail.push_str(&escape(r));
+            }
+            o.push_str(&format!(
+                "| {} | `{}` | `{}` | {} |\n",
+                pair_word(p.status),
+                escape(&p.a),
+                escape(&p.b),
+                detail
             ));
         }
         o.push('\n');

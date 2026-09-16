@@ -137,6 +137,38 @@ lines as a table.
 `strata schema verify-summary` prints its JSON Schema. One file on its own
 prints the full report and verdict line described above.
 
+## The same-release report
+
+`strata same-release A B C` compares each record to the next, in the order
+given, and says whether they are one release. Exit `0` means every pair
+passed, `1` means at least one did not.
+
+```
+IDENTICAL      releases/1.1.1/dev.json -> releases/1.1.1/test.json   root 088136c929bd
+REGISTRY MOVE  releases/1.1.1/test.json -> releases/1.1.1/prod.json   5 packs re-pinned, same configuration
+SAME RELEASE: 2 pairs passed
+```
+
+```
+DIFFERENT      releases/1.1.1/test.json -> releases/1.1.1/prod.json   root 088136c929bd -> 3f1c0a9e7b21
+               pack addon/cert-manager AUTHORED: charts.cert-manager.replicaCount
+NOT THE SAME RELEASE: 1 of 1 pairs failed
+```
+
+By default only equal roots pass. `--allow registry-move` also passes a pair
+whose only difference is packs re-pinned from another registry: the same
+tag, version, type, values, manifests, and params, with variables unchanged.
+Without the flag such a pair is `DIFFERENT` and its reasons name the move,
+so the reader can decide to allow it. A reason names the pack and, for an
+`AUTHORED` change, the first changed leaf.
+
+`--format json` writes the document `strata-chain/1`: `legend`, `policy`,
+`same`, `summary` with `pairs`, `passed`, and `failed`, `records[]` with
+each label, name, version, uid, project, and root, and `pairs[]` with `a`,
+`b`, `status` (`identical`, `registry-move`, `different`), the two roots,
+`packsRepinned`, and `reasons[]`. `strata schema chain` prints its JSON
+Schema.
+
 ### Errors in JSON mode
 
 When `--format json` or `--json` is selected and the command fails, stderr

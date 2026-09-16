@@ -179,19 +179,44 @@ PALETTE_PROJECT_UID=$PROD_PROJECT strata snapshot aws-pxk@1.1.1 -o releases/1.1.
 Promotion check, right after:
 
 ```
-strata compare releases/1.1.1/dev.json releases/1.1.1/prod.json || exit 1
+strata same-release releases/1.1.1/dev.json releases/1.1.1/prod.json
 ```
 
-Expected: `IDENTICAL`, exit `0`. The same release went to each project. Any
-other result stops the promotion. Prod must run the release that dev
-approved.
+```
+IDENTICAL      releases/1.1.1/dev.json -> releases/1.1.1/prod.json   root 088136c929bd
+SAME RELEASE: 1 pairs passed
+```
+
+Expected: exit `0`. The same release went to each project. Any other result
+stops the promotion. Prod must run the release that dev approved. With more
+projects, list every record in promotion order; each is compared to the
+next.
 
 One difference can be intended. Some teams promote packs between registries,
 for example from a staging registry to a production one, and re-pin the
-profile. Then the comparison shows `IDENTITY UPSTREAM` on each pack, with no
-`AUTHORED` and no value lines: the same configuration and a different
-registry. An `AUTHORED` flag in that comparison means a value changed during
-the promotion. Find the cause before you continue.
+profile. Then each pack shows `IDENTITY UPSTREAM` with no `AUTHORED`: the
+same configuration and a different registry. Tell the check to accept
+exactly that and nothing else:
+
+```
+strata same-release --allow registry-move releases/1.1.1/dev.json releases/1.1.1/prod.json
+```
+
+```
+REGISTRY MOVE  releases/1.1.1/dev.json -> releases/1.1.1/prod.json   5 packs re-pinned, same configuration
+SAME RELEASE: 1 pairs passed
+```
+
+A value that changed during the promotion still fails, and the report names
+the pack and the leaf:
+
+```
+DIFFERENT      releases/1.1.1/dev.json -> releases/1.1.1/prod.json   root 088136c929bd -> 3f1c0a9e7b21
+               pack addon/cert-manager AUTHORED: charts.cert-manager.replicaCount
+NOT THE SAME RELEASE: 1 of 1 pairs failed
+```
+
+Find the cause before you continue.
 
 ## Day 5: a cluster moves to the new version
 
@@ -300,7 +325,8 @@ listing.
 | Does this release repave nodes?                       | `strata compare A B --json \| jq -r .summary.maxImpact`           | prints the level        |                                  |
 | Record this release                                   | `strata snapshot <name>@<version> -o releases/<version>/<project>.json` | written           |                                  |
 | Record the newest published version                   | `strata snapshot <name>@latest -o rel.json`                       | written; `source.version` says which |                       |
-| Did dev and prod get the same release?                | `strata compare releases/V/dev.json releases/V/prod.json`         | yes                     | no, stop the promotion           |
+| Did dev and prod get the same release?                | `strata same-release releases/V/dev.json releases/V/prod.json`    | yes                     | no, the reasons say why; stop the promotion |
+| Same release, packs re-pinned from another registry?  | `strata same-release --allow registry-move A B`                   | yes                     | a value or a version moved too   |
 | Was a published version edited?                       | `strata verify releases/V/<project>.json`                         | unchanged               | drifted, open an issue           |
 | Were any published versions edited?                   | `strata verify 'releases/**/*.json'`                              | all unchanged           | some drifted; `2` means a record could not be checked |
 | Can we delete this version?                           | `strata snapshot <ref> \| jq .source.consumers.count`             | `0` means yes           |                                  |

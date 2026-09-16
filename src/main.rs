@@ -10,13 +10,21 @@ use strata::api::{HttpApi, Palette, Retry, RetryPolicy};
 use strata::color::{ColorMode, Paint};
 use strata::config::Config;
 use strata::error::{Error, Result};
+use strata::ops::Policy;
 use strata::progress::Progress;
 use strata::reference::Ref;
 use strata::render::{self, Format};
 use strata::snapshot::Snapshot;
 use strata::{diff, ops, TOOL_NAME};
 
-const SUBCOMMANDS: &[&str] = &["compare", "snapshot", "verify", "schema", "help"];
+const SUBCOMMANDS: &[&str] = &[
+    "compare",
+    "snapshot",
+    "verify",
+    "same-release",
+    "schema",
+    "help",
+];
 
 #[derive(Parser)]
 #[command(
@@ -35,7 +43,8 @@ checks it there unless --project says otherwise.\n\
 Environment: PALETTE_API_KEY (or SPECTROCLOUD_APIKEY), PALETTE_PROJECT_UID (optional),\n\
 PALETTE_API (default https://api.spectrocloud.com), STRATA_RETRIES (default 3; retries on HTTP 5xx,\n\
 429 and transport errors, with backoff). Missing values are read from ~/.palette.env.\n\n\
-Exit status: 0 identical (verify: unchanged), 1 different (verify: drifted), 2 error."
+Exit status: 0 identical (verify: unchanged, same-release: same), 1 different (verify: drifted,\n\
+same-release: not the same), 2 error."
 )]
 struct Cli {
     #[command(subcommand)]
@@ -48,6 +57,7 @@ impl Cli {
         match &self.cmd {
             Cmd::Compare(a) => a.out.format() == Format::Json,
             Cmd::Verify(a) => a.out.format() == Format::Json,
+            Cmd::SameRelease(a) => a.out.format() == Format::Json,
             Cmd::Snapshot(_) | Cmd::Schema { .. } => false,
         }
     }
@@ -62,7 +72,9 @@ enum Cmd {
     /// Re-fetch each record's profile; exit 1 if a published version was edited in place. Several
     /// files or a pattern print one line per record and a summary
     Verify(VerifyArgs),
-    /// Print the JSON Schema of the snapshot, diff, or verify-summary document
+    /// Check that two or more records are the same release, comparing each to the next in order
+    SameRelease(SameReleaseArgs),
+    /// Print the JSON Schema of the snapshot, diff, verify-summary, or chain document
     Schema {
         #[arg(value_enum)]
         kind: SchemaKind,
@@ -162,6 +174,25 @@ struct VerifyArgs {
     out: OutputArgs,
 }
 
+#[derive(Args)]
+struct SameReleaseArgs {
+    /// Two or more refs in the order to compare: snapshot files, uids, or <name>@<version>
+    #[arg(required = true, num_args = 2..)]
+    records: Vec<String>,
+    /// Accept one kind of difference between consecutive records
+    #[arg(long, value_enum)]
+    allow: Option<Allow>,
+    #[command(flatten)]
+    out: OutputArgs,
+}
+
+/// Differences `same-release` can be told to accept.
+#[derive(Clone, Copy, PartialEq, Eq, ValueEnum)]
+enum Allow {
+    /// Packs re-pinned from another registry with the same tag, version, values, and manifests
+    RegistryMove,
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, ValueEnum)]
 enum FormatArg {
     Terminal,
@@ -201,6 +232,7 @@ enum SchemaKind {
     Snapshot,
     Diff,
     VerifySummary,
+    Chain,
 }
 
 fn main() -> ExitCode {
@@ -230,6 +262,7 @@ fn run(cli: Cli) -> Result<ExitCode> {
         Cmd::Compare(a) => cmd_compare(&a),
         Cmd::Snapshot(a) => cmd_snapshot(&a),
         Cmd::Verify(a) => cmd_verify(&a),
+        Cmd::SameRelease(a) => cmd_same_release(&a),
         Cmd::Schema { kind } => cmd_schema(kind),
     }
 }
@@ -395,11 +428,29 @@ fn cmd_verify(a: &VerifyArgs) -> Result<ExitCode> {
     Ok(exit_for(v.unchanged))
 }
 
+fn cmd_same_release(a: &SameReleaseArgs) -> Result<ExitCode> {
+    let progress = a.out.progress();
+    let now = now_utc();
+    let mut records = Vec::with_capacity(a.records.len());
+    for r in &a.records {
+        let snap = ops::snapshot_for(&Ref::parse(r), || connect(progress, None), &now, &progress)?;
+        records.push((r.clone(), snap));
+    }
+    let policy = match a.allow {
+        Some(Allow::RegistryMove) => Policy::RegistryMove,
+        None => Policy::Exact,
+    };
+    let c = ops::same_release(&records, policy, &now);
+    print!("{}", a.out.renderer().render_chain(&c)?);
+    Ok(ExitCode::from(c.exit_code()))
+}
+
 fn cmd_schema(kind: SchemaKind) -> Result<ExitCode> {
     let schema = match kind {
         SchemaKind::Snapshot => schemars::schema_for!(Snapshot),
         SchemaKind::Diff => schemars::schema_for!(diff::Diff),
         SchemaKind::VerifySummary => schemars::schema_for!(ops::VerifySummary),
+        SchemaKind::Chain => schemars::schema_for!(ops::Chain),
     };
     println!("{}", serde_json::to_string_pretty(&schema)?);
     Ok(ExitCode::SUCCESS)

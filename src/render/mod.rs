@@ -10,7 +10,7 @@ use serde_json::Value;
 use crate::color::Paint;
 use crate::diff::{Diff, Leaf, PackDiff, Status, VariableSummary, VariablesByName, Verify};
 use crate::error::Result;
-use crate::ops::VerifySummary;
+use crate::ops::{Chain, Pair, PairStatus, VerifySummary};
 use crate::snapshot::{Snapshot, Source};
 
 pub use json::JsonRenderer;
@@ -42,6 +42,41 @@ pub trait Renderer {
 
     /// Render the outcome of `verify` over several records.
     fn render_verify_summary(&self, s: &VerifySummary) -> Result<String>;
+
+    /// Render the outcome of `same-release`.
+    fn render_chain(&self, c: &Chain) -> Result<String>;
+}
+
+/// The status word of a pair, as the text reports print it.
+pub(crate) fn pair_word(status: PairStatus) -> &'static str {
+    match status {
+        PairStatus::Identical => "IDENTICAL",
+        PairStatus::RegistryMove => "REGISTRY MOVE",
+        PairStatus::Different => "DIFFERENT",
+    }
+}
+
+/// The short sentence after a pair's status.
+pub(crate) fn pair_detail(p: &Pair) -> String {
+    match p.status {
+        PairStatus::Identical => format!("root {}", short(&p.root_a)),
+        PairStatus::RegistryMove => {
+            format!("{} packs re-pinned, same configuration", p.packs_repinned)
+        }
+        PairStatus::Different => format!("root {} -> {}", short(&p.root_a), short(&p.root_b)),
+    }
+}
+
+/// `SAME RELEASE: 2 pairs passed`, or `NOT THE SAME RELEASE: 1 of 2 pairs failed`.
+pub(crate) fn chain_verdict(c: &Chain) -> String {
+    if c.same {
+        format!("SAME RELEASE: {} pairs passed", c.summary.passed)
+    } else {
+        format!(
+            "NOT THE SAME RELEASE: {} of {} pairs failed",
+            c.summary.failed, c.summary.pairs
+        )
+    }
 }
 
 /// `name@version`, or `-` when the record could not be read.

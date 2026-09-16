@@ -3,6 +3,9 @@
 //!
 //!   a   baseline
 //!   a2  same content as a, but the kubernetes values YAML is reordered and re-indented
+//!   a3  a re-pinned from another registry: same packs, values, and manifests, but registryUid,
+//!       packUid, and every digest differ, so each pack shows IDENTITY UPSTREAM and nothing else
+//!   a4  a3 with one kubernetes value edited (podSubnet): a registry move plus an AUTHORED change
 //!   b   the next version: k8s bump + values edits, cilium same tag but new digest, prometheus
 //!       manifest edited + one added, cert-manager added, external-dns removed, metrics-server
 //!       values unparseable on both sides but different, variables changed, two consumers.
@@ -137,7 +140,19 @@ fn write_profile(
     .unwrap();
 }
 
-/// Writes a/, a2/ and b/ under `root`.
+/// Copy the three raw files from `from` to `to`, applying each text replacement to every file.
+fn rewrite(from: &Path, to: &Path, replacements: &[(&str, &str)]) {
+    fs::create_dir_all(to).unwrap();
+    for name in ["profile.json", "manifests.json", "variables.json"] {
+        let mut text = fs::read_to_string(from.join(name)).unwrap();
+        for (old, new) in replacements {
+            text = text.replace(old, new);
+        }
+        fs::write(to.join(name), text).unwrap();
+    }
+}
+
+/// Writes a/, a2/, a3/, a4/ and b/ under `root`.
 pub fn make_fixtures(root: &Path) {
     let packs_a = |k8s_values: &str| {
         vec![
@@ -299,6 +314,22 @@ pub fn make_fixtures(root: &Path) {
         manifests_a(K8S_VALUES_A2),
         vars_a,
         vec![],
+    );
+    // a3 and a4 are text transforms of a: the API shapes stay, only the identifiers move.
+    // Manifest digests are not hashed, so rewriting every digest changes UPSTREAM alone.
+    rewrite(
+        &root.join("a"),
+        &root.join("a3"),
+        &[
+            ("\"reg-public\"", "\"reg-prod\""),
+            ("\"pk-", "\"pkp-"),
+            ("sha256:", "sha256:prod-"),
+        ],
+    );
+    rewrite(
+        &root.join("a3"),
+        &root.join("a4"),
+        &[("podSubnet: 192.168.0.0/16", "podSubnet: 10.0.0.0/16")],
     );
 
     let packs_b = vec![

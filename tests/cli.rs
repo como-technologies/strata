@@ -440,8 +440,96 @@ fn verify_over_many_records_prints_one_line_each_and_a_summary_document() {
 }
 
 #[test]
+fn same_release_checks_consecutive_records_with_an_optional_registry_move_policy() {
+    let fx = fixtures();
+    let dir = std::path::Path::new(&fx.a).parent().unwrap();
+    let snap = |name: &str| -> String {
+        let out = dir.join(format!("{name}.json"));
+        let r = run(&[
+            "snapshot",
+            "--from-raw",
+            fx.raw.join(name).to_str().unwrap(),
+            "-o",
+            out.to_str().unwrap(),
+        ]);
+        assert_eq!(r.code, 0, "{}", r.err);
+        out.to_str().unwrap().to_string()
+    };
+    let (a3, a4) = (snap("a3"), snap("a4"));
+
+    let r = run(&["same-release", &fx.a, &fx.a2, &fx.a]);
+    assert_eq!(r.code, 0, "{}{}", r.out, r.err);
+    assert!(
+        r.out.lines().filter(|l| l.starts_with("IDENTICAL")).count() == 2,
+        "{}",
+        r.out
+    );
+    assert!(
+        r.out.trim_end().ends_with("SAME RELEASE: 2 pairs passed"),
+        "{}",
+        r.out
+    );
+
+    let r = run(&["same-release", &fx.a, &fx.b]);
+    assert_eq!(r.code, 1);
+    let first = r.out.lines().next().unwrap();
+    assert!(
+        first.starts_with("DIFFERENT") && first.contains(&fx.a) && first.contains(&fx.b),
+        "{first}"
+    );
+    assert!(
+        r.out.contains("NOT THE SAME RELEASE: 1 of 1 pairs failed"),
+        "{}",
+        r.out
+    );
+
+    let r = run(&["same-release", &fx.a, &a3]);
+    assert_eq!(
+        r.code, 1,
+        "a registry move is a difference under the exact policy"
+    );
+    let r = run(&["same-release", "--allow", "registry-move", &fx.a, &a3]);
+    assert_eq!(r.code, 0, "{}{}", r.out, r.err);
+    assert!(r.out.starts_with("REGISTRY MOVE"), "{}", r.out);
+    assert!(r.out.contains("7 packs re-pinned"), "{}", r.out);
+
+    let r = run(&["same-release", "--allow", "registry-move", &fx.a, &a4]);
+    assert_eq!(r.code, 1);
+    assert!(
+        r.out.contains(
+            "k8s/kubernetes AUTHORED: kubeadmconfig.clusterConfiguration.networking.podSubnet"
+        ),
+        "{}",
+        r.out
+    );
+
+    let r = run(&[
+        "same-release",
+        "--json",
+        "--allow",
+        "registry-move",
+        &fx.a,
+        &a3,
+        &a4,
+    ]);
+    assert_eq!(r.code, 1);
+    let d: serde_json::Value = serde_json::from_str(&r.out).unwrap();
+    assert_eq!(d["schema"], "strata-chain/1");
+    assert_eq!(d["policy"], "registry-move");
+    assert_eq!(d["same"], false);
+    assert_eq!(d["pairs"][0]["status"], "registry-move");
+    assert_eq!(d["pairs"][1]["status"], "different");
+    assert_eq!(d["summary"]["failed"], 1);
+    assert!(d["legend"]["status"]["registry-move"].is_string());
+    assert_eq!(d["records"].as_array().unwrap().len(), 3);
+
+    let r = run(&["same-release", &fx.a]);
+    assert_eq!(r.code, 2, "two records at least");
+}
+
+#[test]
 fn schema_subcommand_prints_json_schema() {
-    for kind in ["snapshot", "diff", "verify-summary"] {
+    for kind in ["snapshot", "diff", "verify-summary", "chain"] {
         let r = run(&["schema", kind]);
         assert_eq!(r.code, 0, "{}", r.err);
         let v: serde_json::Value = serde_json::from_str(&r.out).unwrap();

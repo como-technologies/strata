@@ -1,13 +1,13 @@
 //! The terminal report: plain when piped, colored on a terminal.
 
 use super::{
-    counts_line, dash, record_detail, record_label, short, show, traits_suffix, variable_lines,
-    version_display, Renderer, VarLine,
+    chain_verdict, counts_line, dash, pair_detail, pair_word, record_detail, record_label, short,
+    show, traits_suffix, variable_lines, version_display, Renderer, VarLine,
 };
 use crate::color::Paint;
 use crate::diff::{Diff, ImpactLevel, Leaf, Op, PackDiff, Status, Verify, VerifyStatus};
 use crate::error::Result;
-use crate::ops::{RecordStatus, VerifySummary};
+use crate::ops::{Chain, PairStatus, RecordStatus, VerifySummary};
 use crate::snapshot::{Snapshot, Source};
 
 /// Renders the text report.
@@ -229,6 +229,36 @@ impl Renderer for TerminalRenderer {
             ));
         }
         out.push_str(&counts_line(s));
+        out.push('\n');
+        Ok(out)
+    }
+
+    fn render_chain(&self, c: &Chain) -> Result<String> {
+        let p = &self.paint;
+        let mut out = String::new();
+        for pair in &c.pairs {
+            let word = format!("{:<13}", pair_word(pair.status));
+            let word = match pair.status {
+                PairStatus::Identical => p.bgreen(&word),
+                PairStatus::RegistryMove => p.byellow(&word),
+                PairStatus::Different => p.bred(&word),
+            };
+            out.push_str(&format!(
+                "{word}  {} -> {}   {}\n",
+                pair.a,
+                pair.b,
+                p.dim(&pair_detail(pair))
+            ));
+            for r in &pair.reasons {
+                out.push_str(&format!("               {r}\n"));
+            }
+        }
+        let verdict = chain_verdict(c);
+        out.push_str(&if c.same {
+            p.bgreen(&verdict)
+        } else {
+            p.bred(&verdict)
+        });
         out.push('\n');
         Ok(out)
     }

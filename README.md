@@ -31,6 +31,7 @@ strata compare A B --format json                # for scripts and AI clients
 strata snapshot my-profile@1.2.0 -o rel.json    # record a release
 strata verify rel.json                          # the immutability check
 strata verify 'releases/**/*.json'              # every record: one line each, one summary
+strata same-release dev.json prod.json          # one release in every project? --allow registry-move
 strata schema diff                              # JSON Schema of the diff document
 ```
 

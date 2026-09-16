@@ -472,3 +472,146 @@ fn verify_many_checks_each_record_in_its_own_scope_and_counts_the_outcomes() {
     assert_eq!(s.summary.status, SummaryStatus::Drifted);
     assert_eq!(s.exit_code(), 1);
 }
+
+// ---- same release ----------------------------------------------------------------------------
+
+use strata::ops::{PairStatus, Policy};
+
+fn chain_input(dir: &Path, names: &[&str]) -> Vec<(String, Snapshot)> {
+    names
+        .iter()
+        .map(|n| {
+            (
+                format!("{n}.json"),
+                ops::snapshot_from_dir(&dir.join(n), n, "t0").unwrap(),
+            )
+        })
+        .collect()
+}
+
+#[test]
+fn same_release_passes_when_every_root_is_equal() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let c = ops::same_release(
+        &chain_input(dir.path(), &["a", "a2", "a"]),
+        Policy::Exact,
+        "t1",
+    );
+    assert_eq!(c.schema, "strata-chain/1");
+    assert!(c.same);
+    assert_eq!(c.exit_code(), 0);
+    assert_eq!(c.pairs.len(), 2, "consecutive pairs in the order given");
+    assert!(c.pairs.iter().all(|p| p.status == PairStatus::Identical));
+    assert_eq!(
+        (c.pairs[0].a.as_str(), c.pairs[0].b.as_str()),
+        ("a.json", "a2.json")
+    );
+    assert_eq!(c.records.len(), 3);
+    assert_eq!(c.records[0].label, "a.json");
+    assert_eq!(c.summary.passed, 2);
+}
+
+#[test]
+fn a_root_difference_fails_and_names_the_two_records() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let c = ops::same_release(&chain_input(dir.path(), &["a", "b"]), Policy::Exact, "t1");
+    assert!(!c.same);
+    assert_eq!(c.exit_code(), 1);
+    let p = &c.pairs[0];
+    assert_eq!(p.status, PairStatus::Different);
+    assert_eq!((p.a.as_str(), p.b.as_str()), ("a.json", "b.json"));
+    assert!(
+        p.reasons.iter().any(|r| r.contains("variables changed")),
+        "{:?}",
+        p.reasons
+    );
+    assert!(
+        p.reasons
+            .iter()
+            .any(|r| r.contains("addon/cert-manager added")),
+        "{:?}",
+        p.reasons
+    );
+    assert!(
+        p.reasons
+            .iter()
+            .any(|r| r.contains("addon/external-dns removed")),
+        "{:?}",
+        p.reasons
+    );
+    assert!(
+        p.reasons
+            .iter()
+            .any(|r| r.contains("k8s/kubernetes") && r.contains("1.29.4 -> 1.30.2")),
+        "{:?}",
+        p.reasons
+    );
+}
+
+#[test]
+fn a_registry_move_passes_only_when_allowed() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    // a3 is a re-pinned from another registry: every pack has IDENTITY UPSTREAM and nothing else
+    let exact = ops::same_release(&chain_input(dir.path(), &["a", "a3"]), Policy::Exact, "t1");
+    assert_eq!(exact.pairs[0].status, PairStatus::Different);
+    assert!(
+        exact.pairs[0]
+            .reasons
+            .iter()
+            .any(|r| r.contains("os/ubuntu-aws")
+                && r.contains("moved registry reg-public -> reg-prod")),
+        "{:?}",
+        exact.pairs[0].reasons
+    );
+    let allowed = ops::same_release(
+        &chain_input(dir.path(), &["a", "a3"]),
+        Policy::RegistryMove,
+        "t1",
+    );
+    assert!(allowed.same);
+    assert_eq!(allowed.exit_code(), 0);
+    assert_eq!(allowed.pairs[0].status, PairStatus::RegistryMove);
+    assert_eq!(allowed.pairs[0].packs_repinned, 7);
+    assert!(allowed.pairs[0].reasons.is_empty());
+    // roots still differ, and the document says so
+    assert_ne!(allowed.records[0].root, allowed.records[1].root);
+}
+
+#[test]
+fn an_authored_change_during_a_registry_move_fails_and_names_the_pack_and_the_leaf() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    // a4 is a3 with one value edited on the kubernetes pack
+    let c = ops::same_release(
+        &chain_input(dir.path(), &["a", "a4"]),
+        Policy::RegistryMove,
+        "t1",
+    );
+    assert!(!c.same);
+    assert_eq!(c.exit_code(), 1);
+    let p = &c.pairs[0];
+    assert_eq!(p.status, PairStatus::Different);
+    assert_eq!(
+        p.reasons.len(),
+        1,
+        "only the violation is a reason: {:?}",
+        p.reasons
+    );
+    assert!(p.reasons[0].contains("k8s/kubernetes"), "{}", p.reasons[0]);
+    assert!(p.reasons[0].contains("AUTHORED"), "{}", p.reasons[0]);
+    assert!(
+        p.reasons[0].contains("kubeadmconfig.clusterConfiguration.networking.podSubnet"),
+        "{}",
+        p.reasons[0]
+    );
+    // the other direction of the same edit, and a plain content change, are not registry moves either
+    let c = ops::same_release(
+        &chain_input(dir.path(), &["a", "b"]),
+        Policy::RegistryMove,
+        "t1",
+    );
+    assert_eq!(c.pairs[0].status, PairStatus::Different);
+}
