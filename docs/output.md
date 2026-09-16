@@ -239,8 +239,9 @@ version: `24.04 (tag LTS__24.x)`. A profile version that cannot be read shows
 its error in place of the type. It stays in the list, also with `--pack`,
 because strata cannot tell whether it carries the pack.
 
-Profiles and clusters come from the project in `PALETTE_PROJECT_UID`, or from
-`--project <uid>`. `--project ''` is tenant scope. Palette lists each kind
+Profiles and clusters come from the configured project, `PALETTE_PROJECT_UID`
+or the name in `PALETTE_PROJECT`, or from `--project <uid>` or
+`--project-name <name>`. `--project ''` is tenant scope. Palette lists each kind
 differently by scope:
 
 | listing  | in a project           | at tenant scope                 |
@@ -252,7 +253,8 @@ differently by scope:
 For that reason `strata list` always reads projects at tenant scope. A cluster
 ref works only in the cluster's own project. When a cluster is in a different
 project from the listing, its line ends with `project <uid>`. Set
-`PALETTE_PROJECT_UID` to that uid before you use the ref.
+`PALETTE_PROJECT_UID` to that uid, or `PALETTE_PROJECT` to the project's
+name, before you use the ref.
 
 The listings are `GET /v1/dashboard/clusterprofiles/metadata`,
 `GET /v1/dashboard/spectroclusters/meta`, and
@@ -282,7 +284,8 @@ carries one line and the exit status is `2`, as always:
 `kind` is a stable kebab-case name: `missing-credential`, `api`,
 `retry-after-too-long`, `invalid-setting`, `pattern`, `transport`, `not-json`, `profile-not-found`,
 `cluster-profile-not-found`, `profile-ref-required`, `candidate-invalid`,
-`pack-not-found`, `registry-not-found`, `not-snapshot`, `unsupported-schema`,
+`pack-not-found`, `registry-not-found`, `project-not-found`,
+`cluster-not-found`, `cluster-name-ambiguous`, `not-snapshot`, `unsupported-schema`,
 `snapshot-schema`, `no-uid`,
 `io`, `empty-file`, `file-not-json`, or `serialize`. `message` is the
 sentence the terminal shows. The other fields are the variant's own:
@@ -302,6 +305,10 @@ sentence the terminal shows. The other fields are the variant's own:
 - `name`, `version`, `registry`, and `tag` when one was given, for
   `pack-not-found`
 - `registry` and `available` for `registry-not-found`
+- `name` and `available`, the visible project names, for `project-not-found`
+- `cluster` and `available`, the cluster names in the scope, for
+  `cluster-not-found`
+- `name` and `uids` for `cluster-name-ambiguous`
 - `path` and `schema` for `snapshot-schema`
 - `path`, `found`, and `supported` for `unsupported-schema`
 

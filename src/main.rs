@@ -3,6 +3,7 @@
 
 use std::path::PathBuf;
 use std::process::ExitCode;
+use std::sync::OnceLock;
 
 use clap::{Args, Parser, Subcommand, ValueEnum};
 
@@ -40,10 +41,11 @@ Each pack gets three sub-hashes: IDENTITY (name, layer, type, tag, version, pack
 UPSTREAM (the digest on the pack ref) and AUTHORED (canonical values YAML, manifests, params).\n\
 A profile's root hash covers its variables and its packs in order; same root, same release.\n\n\
 Refs: a profile uid, <name>@<version>, <name>@latest (the highest version in the scope),\n\
-cluster:<uid> or cluster:<uid>/<profile> (what a cluster runs), or a snapshot file written by\n\
+cluster:<uid or name> or cluster:<uid or name>/<profile> (what a cluster runs), or a snapshot file written by\n\
 `snapshot`. `list` shows the profile and cluster refs in the scope. A cluster that runs a recorded version has that record's root. A snapshot records the\n\
 project it was taken in, and verify checks it there unless --project says otherwise.\n\
-Environment: PALETTE_API_KEY (or SPECTROCLOUD_APIKEY), PALETTE_PROJECT_UID (optional),\n\
+Environment: PALETTE_API_KEY (or SPECTROCLOUD_APIKEY), PALETTE_PROJECT_UID or the project name\n\
+PALETTE_PROJECT (optional; the uid wins),\n\
 PALETTE_API (default https://api.spectrocloud.com), STRATA_RETRIES (default 3; retries on HTTP 5xx,\n\
 429 and transport errors, with backoff), STRATA_MAX_RETRY_AFTER (default 300; a longer Retry-After\n\
 fails at once). Missing values are read from ~/.palette.env.\n\n\
@@ -138,9 +140,9 @@ impl OutputArgs {
 
 #[derive(Args)]
 struct CompareArgs {
-    /// Profile uid, <name>@<version> or <name>@latest, cluster:<uid>[/<profile>], or snapshot file
+    /// Profile uid, <name>@<version> or <name>@latest, cluster:<uid or name>[/<profile>], or snapshot file
     a: String,
-    /// Profile uid, <name>@<version> or <name>@latest, cluster:<uid>[/<profile>], or snapshot file
+    /// Profile uid, <name>@<version> or <name>@latest, cluster:<uid or name>[/<profile>], or snapshot file
     b: String,
     /// Also print unified diffs of raw values and changed manifests
     #[arg(long)]
@@ -151,7 +153,7 @@ struct CompareArgs {
 
 #[derive(Args)]
 struct SnapshotArgs {
-    /// Profile uid, <name>@<version> or <name>@latest, or cluster:<uid>[/<profile>]. With
+    /// Profile uid, <name>@<version> or <name>@latest, or cluster:<uid or name>[/<profile>]. With
     /// --from-raw it only names the source, and selects the profile of a cluster directory
     r#ref: Option<String>,
     /// Write the snapshot here instead of stdout
@@ -184,6 +186,9 @@ struct VerifyArgs {
     /// Check every record in this project instead of the project each record was taken in
     #[arg(long)]
     project: Option<String>,
+    /// Like --project, with the project's name
+    #[arg(long, conflicts_with = "project")]
+    project_name: Option<String>,
     #[command(flatten)]
     out: OutputArgs,
 }
@@ -214,10 +219,13 @@ struct ListArgs {
     /// profiles with --pack
     #[arg(value_enum)]
     kinds: Vec<KindArg>,
-    /// List profiles and clusters in this project instead of PALETTE_PROJECT_UID's. Projects are
+    /// List profiles and clusters in this project instead of the configured one. Projects are
     /// always listed at tenant scope
     #[arg(long)]
     project: Option<String>,
+    /// Like --project, with the project's name
+    #[arg(long, conflicts_with = "project")]
+    project_name: Option<String>,
     /// Read each profile version for its type, consumer count, and packs; one request each
     #[arg(long)]
     packs: bool,
@@ -340,19 +348,50 @@ fn progress(quiet: bool) -> Progress {
     Progress::new(quiet || std::env::var_os("STRATA_QUIET").is_some())
 }
 
-/// A client from the environment; `project` replaces `PALETTE_PROJECT_UID` when given, and an
-/// empty one is tenant scope.
+/// A client from the environment; `project` replaces `PALETTE_PROJECT_UID` or `PALETTE_PROJECT`
+/// when given, and an empty one is tenant scope.
 fn connect(progress: Progress, project: Option<&str>) -> Result<Palette<Retry<HttpApi>>> {
     let mut config = Config::from_env()?;
-    if let Some(p) = project {
-        config.project_uid = Some(p.to_string()).filter(|p| !p.is_empty());
+    match project {
+        Some(p) => config.project_uid = Some(p.to_string()).filter(|p| !p.is_empty()),
+        None => {
+            if let Some(name) = config.project_name.clone() {
+                config.project_uid = Some(project_uid_named(&config, &name, progress)?);
+            }
+        }
     }
+    Ok(client(config, progress))
+}
+
+fn client(config: Config, progress: Progress) -> Palette<Retry<HttpApi>> {
     let policy = RetryPolicy::from_config(&config);
-    Ok(Palette::new(Retry::new(
-        HttpApi::new(config),
-        policy,
-        progress,
-    )))
+    Palette::new(Retry::new(HttpApi::new(config), policy, progress))
+}
+
+/// The uid of the project named `name`, looked up at tenant scope once per run.
+fn project_uid_named(config: &Config, name: &str, progress: Progress) -> Result<String> {
+    static RESOLVED: OnceLock<(String, String)> = OnceLock::new();
+    if let Some((_, uid)) = RESOLVED.get().filter(|(n, _)| n == name) {
+        return Ok(uid.clone());
+    }
+    let mut tenant = config.clone();
+    tenant.project_uid = None;
+    progress.note(&format!("looking up project {name}"));
+    let uid = client(tenant, progress).project_uid_named(name)?;
+    let _ = RESOLVED.set((name.to_string(), uid.clone()));
+    Ok(uid)
+}
+
+/// `--project`, or the uid of the project `--project-name` names.
+fn project_arg(
+    progress: Progress,
+    uid: &Option<String>,
+    name: &Option<String>,
+) -> Result<Option<String>> {
+    match name {
+        Some(n) => Ok(Some(project_uid_named(&Config::from_env()?, n, progress)?)),
+        None => Ok(uid.clone()),
+    }
 }
 
 fn exit_for(same: bool) -> ExitCode {
@@ -477,11 +516,12 @@ fn expand_records(args: &[String]) -> Result<Vec<PathBuf>> {
 fn cmd_verify(a: &VerifyArgs) -> Result<ExitCode> {
     let progress = a.out.progress();
     let paths = expand_records(&a.snapshots)?;
+    let project = project_arg(progress, &a.project, &a.project_name)?;
     let bulk = a.snapshots.len() > 1 || a.snapshots.iter().any(|s| is_pattern(s));
     if bulk {
         let s = ops::verify_many(
             &paths,
-            a.project.as_deref(),
+            project.as_deref(),
             |scope| connect(progress, scope),
             &now_utc(),
             &progress,
@@ -490,8 +530,7 @@ fn cmd_verify(a: &VerifyArgs) -> Result<ExitCode> {
         return Ok(ExitCode::from(s.exit_code()));
     }
     let recorded = Snapshot::load(&paths[0])?;
-    let scope = a
-        .project
+    let scope = project
         .as_deref()
         .or(Some(recorded.source.project_uid.as_str()).filter(|p| !p.is_empty()));
     let palette = connect(progress, scope)?;
@@ -542,7 +581,7 @@ fn cmd_list(a: &ListArgs) -> Result<ExitCode> {
     let progress = a.out.progress();
     let options = ListOptions {
         kinds: a.kinds.iter().map(|&k| k.into()).collect(),
-        project: a.project.clone(),
+        project: project_arg(progress, &a.project, &a.project_name)?,
         packs: a.packs,
         pack: a.pack.clone(),
     };

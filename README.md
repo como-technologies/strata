@@ -32,7 +32,7 @@ strata compare A B --format markdown            # the pull request comment
 strata compare A B --format json                # for scripts and AI clients
 strata snapshot my-profile@1.2.0 -o rel.json    # record a release
 strata snapshot --from-candidate my-profile.yaml -o candidate.json  # before it exists in Palette
-strata compare rel.json cluster:<uid>/my-profile  # does the cluster run that release?
+strata compare rel.json cluster:my-cluster/my-profile  # does the cluster run that release?
 strata consumers my-profile@1.0.0               # which clusters still use it? exit 1 if any
 strata verify rel.json                          # the immutability check
 strata verify 'releases/**/*.json'              # every record: one line each, one summary
@@ -40,13 +40,16 @@ strata same-release dev.json prod.json          # one release in every project? 
 strata schema diff                              # JSON Schema of the diff document
 ```
 
-A ref is a profile uid, `<name>@<version>`, `cluster:<uid>`, or a snapshot
+A ref is a profile uid, `<name>@<version>`, `cluster:<cluster>`, or a snapshot
 file. `strata list` prints the refs in the scope. `<name>@latest` is the
 highest version of that name in the scope, by natural order, so `22.04` is
-above `20.04` and `1.30.6` above `1.29.10`. `cluster:<uid>` is what a cluster
-runs: every profile applied to it, in order. `cluster:<uid>/<profile>` selects
+above `20.04` and `1.30.6` above `1.29.10`. `cluster:<cluster>` is what a
+cluster runs: every profile applied to it, in order. `<cluster>` is the
+cluster's uid, or its name in the project; a name that more than one cluster
+has is an error that lists their uids. `cluster:<cluster>/<profile>` selects
 one applied profile by name. A cluster that runs a recorded version has the
-same root as that record. The exit status is `0` for identical or unchanged,
+same root as that record. A record stores the cluster's uid, so `verify`
+still finds a renamed cluster. The exit status is `0` for identical or unchanged,
 `1` for different or drifted, and `2` for an error.
 
 ## Install
@@ -92,9 +95,13 @@ cosign verify-blob strata-$t --bundle strata-$t.sigstore.json \
    `target/release/strata`. `just build-target <triple>` builds one of the
    release targets the same way the release workflow does.
 2. Set `PALETTE_API_KEY`.
-3. Set `PALETTE_PROJECT_UID` for project-scoped profiles. A snapshot records
-   the project it was taken in, and `verify` checks each record there, so a
-   scheduled job needs no per-project setup. `--project` overrides it.
+3. Set `PALETTE_PROJECT` to the project's name, or `PALETTE_PROJECT_UID` to
+   its uid, for project-scoped profiles and clusters. When both are set, the
+   uid wins. Strata looks a name up once per command, at tenant scope, and an
+   unknown name is an error that lists the projects the key can see. A
+   snapshot records the project's uid, and `verify` checks each record there,
+   so a scheduled job needs no per-project setup. `--project <uid>` or
+   `--project-name <name>` overrides both.
 4. Set `PALETTE_API` for a self-hosted Palette. The default is
    `https://api.spectrocloud.com`.
 5. Set `STRATA_RETRIES` to change how many times a failed request is retried.
@@ -127,7 +134,7 @@ release.
 | a profile change is under review    | `snapshot --from-candidate` on the file under review, then `compare --format markdown` against the last record. The comment is the evidence the approver reads, before anything is published. |
 | a profile version is published      | `snapshot`. Keep the file with the release.                                      |
 | a cluster is about to move versions | `compare` between the current and the proposed versions. The report shows the repave impact. |
-| a cluster should run its release    | `compare` between the record and `cluster:<uid>/<profile>`. `IDENTICAL` means the cluster runs what was released. |
+| a cluster should run its release    | `compare` between the record and `cluster:<cluster>/<profile>`. `IDENTICAL` means the cluster runs what was released. |
 | on a schedule                       | `verify` over each recorded snapshot. This enforces the immutability rule.      |
 | before end of life                  | `consumers`: each cluster that uses the version, with its project and state. Exit `0` means nothing uses it. |
 
@@ -255,10 +262,8 @@ run.
 - Two profiles that pin the same pack under different tag names, such as
   `24.04` and `LTS__24.x`, differ in `IDENTITY`, and on the OS or Kubernetes
   layer the report calls that a repave (#19).
-- Projects and clusters are named by uid only; `PALETTE_PROJECT` is ignored
-  (#18).
 - The live example ran without the provider's `immutable-clusterprofiles`
-  flag and changed only a version no cluster runs. What `cluster:<uid>` and
+  flag and changed only a version no cluster runs. What `cluster:<cluster>` and
   `verify` report when a version that clusters run is edited in place, or
   overwritten by a legacy version bump, is unverified (#27).
 - `verify` compares roots only, so a version bump that overwrites a version's

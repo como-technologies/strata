@@ -1957,3 +1957,143 @@ fn a_record_from_another_snapshot_schema_is_refused_by_name_and_extra_fields_are
         Error::NotSnapshot(_)
     ));
 }
+
+// ---- names for projects and clusters -----------------------------------------------------------
+
+#[test]
+fn a_project_name_resolves_to_its_uid_and_an_unknown_name_lists_the_projects() {
+    let tenant = Palette::new(MemoryApi::new().with(
+        "/v1/dashboard/projects/metadata",
+        projects(&[("prod", "p2"), ("lab", "p1")]),
+    ));
+    assert_eq!(tenant.project_uid_named("prod").unwrap(), "p2");
+
+    let err = tenant.project_uid_named("staging").unwrap_err();
+    assert!(matches!(err, Error::ProjectNotFound { .. }), "{err}");
+    assert_eq!((err.kind(), err.exit_code()), ("project-not-found", 2));
+    assert!(
+        err.to_string().contains("'staging'") && err.to_string().contains("lab, prod"),
+        "names the visible projects in order: {err}"
+    );
+    assert_eq!(
+        err.to_json()["available"],
+        serde_json::json!(["lab", "prod"])
+    );
+}
+
+/// Cluster fixture `cluster-a` under [`CLUSTER_UID`], and a scope listing of `clusters`.
+fn clusters_named(raw_root: &Path, clusters: &[(&str, &str)]) -> MemoryApi {
+    let listing: Vec<Value> = clusters
+        .iter()
+        .map(|(name, uid)| listed_cluster(name, uid, "Running"))
+        .collect();
+    serve_cluster(MemoryApi::new(), raw_root, "cluster-a")
+        .with("/v1/dashboard/spectroclusters/meta", Value::Array(listing))
+        .in_project("p1")
+}
+
+fn cluster_named(name: &str) -> Ref {
+    Ref::Cluster {
+        uid: name.into(),
+        profile: None,
+    }
+}
+
+#[test]
+fn a_cluster_ref_takes_a_uid_or_a_name() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let api = clusters_named(dir.path(), &[("lab-cluster", CLUSTER_UID), ("other", "c2")]);
+    let by_uid = snapshot_cluster(&api, None).unwrap();
+    assert_eq!(
+        api.calls("/v1/dashboard/spectroclusters/meta"),
+        0,
+        "a uid needs no listing"
+    );
+    let by_name = ops::snapshot_for(
+        &cluster_named("lab-cluster"),
+        || Ok(Palette::new(api.clone())),
+        "t0",
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert_eq!(
+        by_name.source.cluster.as_ref().unwrap().uid,
+        CLUSTER_UID,
+        "the record carries the uid"
+    );
+    assert_eq!(by_name.root, by_uid.root);
+
+    let err = ops::snapshot_for(
+        &cluster_named("nope"),
+        || Ok(Palette::new(api.clone())),
+        "t0",
+        &Progress::silent(),
+    )
+    .unwrap_err();
+    assert!(matches!(err, Error::ClusterNotFound { .. }), "{err}");
+    assert_eq!((err.kind(), err.exit_code()), ("cluster-not-found", 2));
+    assert!(
+        err.to_string().contains("'nope'") && err.to_string().contains("lab-cluster, other"),
+        "{err}"
+    );
+}
+
+#[test]
+fn a_cluster_name_that_matches_several_clusters_is_an_error_and_a_uid_wins_over_a_name() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let twins = clusters_named(dir.path(), &[("twin", "c7"), ("twin", "c8")]);
+    let err = ops::snapshot_for(
+        &cluster_named("twin"),
+        || Ok(Palette::new(twins.clone())),
+        "t0",
+        &Progress::silent(),
+    )
+    .unwrap_err();
+    assert!(matches!(err, Error::ClusterNameAmbiguous { .. }), "{err}");
+    assert_eq!(err.kind(), "cluster-name-ambiguous");
+    assert!(
+        err.to_string().contains("c7, c8"),
+        "lists the candidates: {err}"
+    );
+
+    // another cluster is named after this cluster's uid; the uid is fetched first
+    let api = clusters_named(
+        dir.path(),
+        &[("lab-cluster", CLUSTER_UID), (CLUSTER_UID, "c9")],
+    );
+    let snap = snapshot_cluster(&api, None).unwrap();
+    assert_eq!(snap.source.cluster.unwrap().uid, CLUSTER_UID);
+    assert_eq!(api.calls("/v1/dashboard/spectroclusters/meta"), 0);
+}
+
+#[test]
+fn a_cluster_record_taken_by_name_verifies_by_uid_after_a_rename() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let api = clusters_named(dir.path(), &[("lab-cluster", CLUSTER_UID)]);
+    let recorded = ops::snapshot_for(
+        &cluster_named("lab-cluster"),
+        || Ok(Palette::new(api.clone())),
+        "t0",
+        &Progress::silent(),
+    )
+    .unwrap();
+
+    let mut renamed_doc = read(&dir.path().join("cluster-a/cluster.json"));
+    renamed_doc["metadata"]["name"] = Value::from("lab-cluster-renamed");
+    let renamed = api
+        .clone()
+        .with(format!("/v1/spectroclusters/{CLUSTER_UID}"), renamed_doc)
+        .with(
+            "/v1/dashboard/spectroclusters/meta",
+            Value::Array(vec![listed_cluster(
+                "lab-cluster-renamed",
+                CLUSTER_UID,
+                "Running",
+            )]),
+        );
+    let v = ops::verify(&recorded, &Palette::new(renamed), "t1", &Progress::silent()).unwrap();
+    assert!(v.unchanged, "the old name is gone, the uid is not");
+}

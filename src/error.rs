@@ -97,6 +97,36 @@ pub enum Error {
         /// The names of the profiles applied to the cluster, in order.
         applied: Vec<String>,
     },
+    /// A project name matches no project the key can see.
+    #[error(
+        "no project named '{name}' that this key can see; projects: {}",
+        list_or_none(available)
+    )]
+    ProjectNotFound {
+        /// The name asked for.
+        name: String,
+        /// The names of the projects the key can see, in order.
+        available: Vec<String>,
+    },
+    /// `cluster:<x>` is neither a cluster uid nor the name of a cluster in the scope.
+    #[error(
+        "no cluster with the uid or name '{cluster}' in this scope; clusters: {}",
+        list_or_none(available)
+    )]
+    ClusterNotFound {
+        /// The uid or name as given.
+        cluster: String,
+        /// The names of the clusters in the scope, in order.
+        available: Vec<String>,
+    },
+    /// `cluster:<name>` matches more than one cluster in the scope.
+    #[error("several clusters in this scope are named '{name}': {}; use cluster:<uid>", uids.join(", "))]
+    ClusterNameAmbiguous {
+        /// The name as given.
+        name: String,
+        /// The uids of the clusters with that name, in order.
+        uids: Vec<String>,
+    },
     /// A command that works on a profile was given a cluster, or a record of one.
     #[error("'{reference}' is a cluster; this command takes a profile uid, <name>@<version>, or a profile record")]
     ProfileRefRequired {
@@ -181,6 +211,15 @@ pub enum Error {
     Serialize(#[from] serde_json::Error),
 }
 
+/// `a, b, c`, or `none` for an empty list.
+fn list_or_none(items: &[String]) -> String {
+    if items.is_empty() {
+        "none".to_string()
+    } else {
+        items.join(", ")
+    }
+}
+
 impl Error {
     /// The process exit status the CLI uses for this error. Every error is 2 today; the method
     /// exists so a future distinction (for example, 3 for "cannot reach Palette") lands in one place.
@@ -205,6 +244,9 @@ impl Error {
             Error::CandidateInvalid { .. } => "candidate-invalid",
             Error::PackNotFound { .. } => "pack-not-found",
             Error::RegistryNotFound { .. } => "registry-not-found",
+            Error::ProjectNotFound { .. } => "project-not-found",
+            Error::ClusterNotFound { .. } => "cluster-not-found",
+            Error::ClusterNameAmbiguous { .. } => "cluster-name-ambiguous",
             Error::NotSnapshot(_) => "not-snapshot",
             Error::UnsupportedSchema { .. } => "unsupported-schema",
             Error::SnapshotSchema { .. } => "snapshot-schema",
@@ -314,6 +356,18 @@ impl Error {
                 m.insert("schema".into(), Value::from(*schema));
             }
             Error::Io { path: p, .. } | Error::FileNotJson { path: p, .. } => path(&mut m, p),
+            Error::ProjectNotFound { name, available } => {
+                m.insert("name".into(), Value::from(name.as_str()));
+                m.insert("available".into(), Value::from(available.clone()));
+            }
+            Error::ClusterNotFound { cluster, available } => {
+                m.insert("cluster".into(), Value::from(cluster.as_str()));
+                m.insert("available".into(), Value::from(available.clone()));
+            }
+            Error::ClusterNameAmbiguous { name, uids } => {
+                m.insert("name".into(), Value::from(name.as_str()));
+                m.insert("uids".into(), Value::from(uids.clone()));
+            }
             Error::NoUid | Error::Serialize(_) => {}
         }
         Value::Object(m)
@@ -394,6 +448,18 @@ mod tests {
                 registry: "Nope".into(),
                 available: vec!["Public Repo".into()],
             },
+            Error::ProjectNotFound {
+                name: "staging".into(),
+                available: vec!["lab".into(), "prod".into()],
+            },
+            Error::ClusterNotFound {
+                cluster: "nope".into(),
+                available: vec![],
+            },
+            Error::ClusterNameAmbiguous {
+                name: "twin".into(),
+                uids: vec!["c7".into(), "c8".into()],
+            },
             Error::UnsupportedSchema {
                 path: "newer.json".into(),
                 found: "strata-snapshot/2".into(),
@@ -464,6 +530,14 @@ mod tests {
         assert_eq!(by_kind("retry-after-too-long")["status"], 429);
         assert_eq!(by_kind("retry-after-too-long")["retryAfter"], 900);
         assert_eq!(by_kind("retry-after-too-long")["limit"], 300);
+        assert_eq!(by_kind("project-not-found")["name"], "staging");
+        assert_eq!(by_kind("project-not-found")["available"][1], "prod");
+        assert_eq!(by_kind("cluster-not-found")["cluster"], "nope");
+        assert!(by_kind("cluster-not-found")["message"]
+            .as_str()
+            .unwrap()
+            .ends_with("clusters: none"));
+        assert_eq!(by_kind("cluster-name-ambiguous")["uids"][0], "c7");
         assert_eq!(by_kind("pattern")["pattern"], "releases/**/*.json");
         let cp = by_kind("cluster-profile-not-found");
         assert_eq!(

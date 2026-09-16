@@ -127,7 +127,9 @@ most severe level as `maxImpact`.
   the template that was used (`published`, `draft`, or `applied` for a
   cluster), the tags, the consumer clusters, and the fetch time. A snapshot
   of a cluster adds `cluster`: its uid and name, the profile selected with
-  `cluster:<uid>/<profile>` if any, and the applied profiles it covers
+  `cluster:<cluster>/<profile>` if any, and the applied profiles it covers.
+  The ref stays as typed, a name or a uid. `verify` reads only the uids, the
+  cluster's and the project's, so a renamed cluster or project still verifies
 - `variables` and `variablesHash`
 - `packs[]`: for each pack, the identity fields, the two digests, the raw
   values, the canonical values, the values hash, the manifests with content

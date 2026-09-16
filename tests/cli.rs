@@ -742,3 +742,80 @@ fn json_mode_writes_one_structured_error_line_on_stderr() {
     assert!(r.err.starts_with("strata: "), "{}", r.err);
     assert!(!r.err.contains("\"kind\""));
 }
+
+/// Run against an address that refuses connections, with no retries and a clean environment, so
+/// the path in the transport error is the first request strata made.
+fn first_request(args: &[&str], envs: &[(&str, &str)]) -> (i32, serde_json::Value) {
+    let home = tempfile::tempdir().unwrap();
+    let mut all = vec![
+        ("HOME", home.path().to_str().unwrap()),
+        ("PALETTE_API_KEY", "k"),
+        ("PALETTE_API", "http://127.0.0.1:9"),
+        ("STRATA_RETRIES", "0"),
+    ];
+    all.extend_from_slice(envs);
+    let r = run_in(
+        args,
+        &all,
+        &[
+            "PALETTE_PROJECT_UID",
+            "PALETTE_PROJECT",
+            "SPECTROCLOUD_APIKEY",
+            "SPECTROCLOUD_HOST",
+        ],
+    );
+    let e: serde_json::Value = serde_json::from_str(r.err.trim())
+        .unwrap_or_else(|_| serde_json::json!({"error": {"raw": r.err}}));
+    (r.code, e["error"].clone())
+}
+
+#[test]
+fn a_project_name_is_looked_up_in_the_project_listing_before_anything_else() {
+    let fx = fixtures();
+    let projects = "/v1/dashboard/projects/metadata";
+
+    let (code, e) = first_request(
+        &["list", "profiles", "--json"],
+        &[("PALETTE_PROJECT", "lab")],
+    );
+    assert_eq!((code, e["kind"].as_str()), (2, Some("transport")), "{e}");
+    assert_eq!(e["path"], projects, "PALETTE_PROJECT is resolved first");
+
+    let (_, e) = first_request(
+        &["list", "profiles", "--json"],
+        &[("PALETTE_PROJECT", "lab"), ("PALETTE_PROJECT_UID", "p1")],
+    );
+    assert_eq!(
+        e["path"], "/v1/dashboard/clusterprofiles/metadata",
+        "a uid wins over a name: {e}"
+    );
+
+    for args in [
+        vec!["list", "profiles", "--json", "--project-name", "lab"],
+        vec!["verify", "--json", fx.a.as_str(), "--project-name", "lab"],
+    ] {
+        let (code, e) = first_request(&args, &[]);
+        assert_eq!(code, 2);
+        assert_eq!(e["path"], projects, "{args:?}: {e}");
+    }
+
+    let (code, e) = first_request(
+        &[
+            "verify",
+            fx.a.as_str(),
+            "--project",
+            "p1",
+            "--project-name",
+            "lab",
+        ],
+        &[],
+    );
+    assert_eq!(code, 2);
+    assert!(
+        e["raw"]
+            .as_str()
+            .unwrap_or("")
+            .contains("cannot be used with"),
+        "{e}"
+    );
+}

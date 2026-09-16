@@ -562,6 +562,31 @@ impl RawCluster {
     }
 }
 
+/// `(name, uid)` of each entry of a listing: an array, or an object with `items`.
+fn named_entries(listing: &Value) -> Vec<(String, String)> {
+    let field = |v: &Value, k: &str| {
+        v.pointer(&format!("/metadata/{k}"))
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_string()
+    };
+    listing
+        .get("items")
+        .unwrap_or(listing)
+        .as_array()
+        .into_iter()
+        .flatten()
+        .map(|e| (field(e, "name"), field(e, "uid")))
+        .collect()
+}
+
+/// The names of `entries`, sorted.
+fn sorted_names(entries: &[(String, String)]) -> Vec<String> {
+    let mut names: Vec<String> = entries.iter().map(|(n, _)| n.clone()).collect();
+    names.sort();
+    names
+}
+
 /// Profile-level operations over any [`PaletteApi`].
 pub struct Palette<A: PaletteApi> {
     api: A,
@@ -643,6 +668,43 @@ impl<A: PaletteApi> Palette<A> {
         self.api.get_json(CLUSTER_LISTING)
     }
 
+    /// The uid of the project named `name`, from [`Palette::project_listing`]. Call it at tenant
+    /// scope: in a project, Palette lists only that project.
+    pub fn project_uid_named(&self, name: &str) -> Result<String> {
+        let listing = self.project_listing()?;
+        let projects = named_entries(&listing);
+        match projects.iter().find(|(n, _)| n == name) {
+            Some((_, uid)) => Ok(uid.clone()),
+            None => Err(Error::ProjectNotFound {
+                name: name.to_string(),
+                available: sorted_names(&projects),
+            }),
+        }
+    }
+
+    /// The uid of the one cluster named `name` in the scope, from [`Palette::cluster_listing`].
+    pub fn cluster_uid_named(&self, name: &str) -> Result<String> {
+        let listing = self.cluster_listing()?;
+        let clusters = named_entries(&listing);
+        let mut uids: Vec<String> = clusters
+            .iter()
+            .filter(|(n, _)| n == name)
+            .map(|(_, uid)| uid.clone())
+            .collect();
+        uids.sort();
+        match uids.len() {
+            1 => Ok(uids.remove(0)),
+            0 => Err(Error::ClusterNotFound {
+                cluster: name.to_string(),
+                available: sorted_names(&clusters),
+            }),
+            _ => Err(Error::ClusterNameAmbiguous {
+                name: name.to_string(),
+                uids,
+            }),
+        }
+    }
+
     /// The project listing, `GET /v1/dashboard/projects/metadata`: `items[]` with each project's
     /// name and uid. At tenant scope it holds every project the key can see; in a project, only
     /// that project.
@@ -700,10 +762,21 @@ impl<A: PaletteApi> Palette<A> {
 
     /// Fetch the three documents for one cluster: the cluster with its applied profile templates,
     /// the pack manifests of each applied profile, and each applied profile's variables. A missing
-    /// variables endpoint is treated as "no variables"; other errors propagate.
-    pub fn fetch_cluster(&self, uid: &str, progress: &Progress) -> Result<RawCluster> {
-        progress.note(&format!("fetching cluster {uid}"));
-        let cluster = self.api.get_json(&format!("/v1/spectroclusters/{uid}"))?;
+    /// variables endpoint is treated as "no variables"; other errors propagate. `cluster` is a uid,
+    /// or, when no cluster has that uid, the name of one cluster in the scope; the documents are
+    /// always read by uid.
+    pub fn fetch_cluster(&self, cluster: &str, progress: &Progress) -> Result<RawCluster> {
+        progress.note(&format!("fetching cluster {cluster}"));
+        let (uid, cluster) = match self.cluster_document(cluster) {
+            Ok(doc) => (cluster.to_string(), doc),
+            Err(Error::Api { status: 404, .. }) => {
+                let uid = self.cluster_uid_named(cluster)?;
+                progress.note(&format!("cluster '{cluster}' is {uid}"));
+                let doc = self.cluster_document(&uid)?;
+                (uid, doc)
+            }
+            Err(e) => return Err(e),
+        };
         let manifests = self.api.get_json(&format!(
             "/v1/spectroclusters/{uid}/profiles/packs/manifests"
         ))?;

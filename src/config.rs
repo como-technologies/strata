@@ -13,6 +13,7 @@ pub const DEFAULT_BASE_URL: &str = "https://api.spectrocloud.com";
 const KEY_VARS: [&str; 2] = ["PALETTE_API_KEY", "SPECTROCLOUD_APIKEY"];
 const URL_VARS: [&str; 2] = ["PALETTE_API", "SPECTROCLOUD_HOST"];
 const PROJECT_VARS: [&str; 1] = ["PALETTE_PROJECT_UID"];
+const PROJECT_NAME_VAR: &str = "PALETTE_PROJECT";
 const RETRIES_VAR: &str = "STRATA_RETRIES";
 const DEFAULT_RETRIES: u32 = 3;
 const MAX_RETRY_AFTER_VAR: &str = "STRATA_MAX_RETRY_AFTER";
@@ -27,6 +28,9 @@ pub struct Config {
     pub base_url: String,
     /// Sent as the `ProjectUid` header when set; scopes requests to one project.
     pub project_uid: Option<String>,
+    /// A project by name, from `PALETTE_PROJECT` when `PALETTE_PROJECT_UID` is unset. A client
+    /// resolves it to a uid with [`crate::api::Palette::project_uid_named`] at tenant scope.
+    pub project_name: Option<String>,
     /// Per-request timeout.
     pub timeout: Duration,
     /// Retries after a failed attempt on a transient error; `STRATA_RETRIES`, default 3.
@@ -43,6 +47,7 @@ impl Config {
             api_key: api_key.into(),
             base_url: normalize_url(base_url.into()),
             project_uid: None,
+            project_name: None,
             timeout: Duration::from_secs(120),
             retries: DEFAULT_RETRIES,
             max_retry_after: DEFAULT_MAX_RETRY_AFTER,
@@ -56,8 +61,8 @@ impl Config {
     }
 
     /// Read `PALETTE_API_KEY` (or `SPECTROCLOUD_APIKEY`), `PALETTE_API` (or `SPECTROCLOUD_HOST`),
-    /// `PALETTE_PROJECT_UID`, `STRATA_RETRIES`, and `STRATA_MAX_RETRY_AFTER` from the environment,
-    /// then from `~/.palette.env`.
+    /// `PALETTE_PROJECT_UID` (or the name `PALETTE_PROJECT`), `STRATA_RETRIES`, and
+    /// `STRATA_MAX_RETRY_AFTER` from the environment, then from `~/.palette.env`.
     pub fn from_env() -> Result<Self> {
         Self::from_lookup(|key| env_nonempty(key).or_else(|| dotenv_lookup(key)))
     }
@@ -72,6 +77,9 @@ impl Config {
         let base_url = first(&URL_VARS).unwrap_or_else(|| DEFAULT_BASE_URL.to_string());
         let mut cfg = Config::new(base_url, api_key);
         cfg.project_uid = first(&PROJECT_VARS);
+        if cfg.project_uid.is_none() {
+            cfg.project_name = lookup(PROJECT_NAME_VAR);
+        }
         if let Some(v) = lookup(RETRIES_VAR) {
             cfg.retries = v.trim().parse().map_err(|_| Error::InvalidSetting {
                 variable: RETRIES_VAR,
@@ -221,6 +229,25 @@ mod tests {
             "{err}"
         );
         assert!(err.to_string().contains("'soon'"));
+    }
+
+    #[test]
+    fn palette_project_names_a_project_when_no_uid_is_set() {
+        let cfg = Config::from_lookup(lookup(&[
+            ("PALETTE_API_KEY", "k"),
+            ("PALETTE_PROJECT", "strata-test"),
+        ]))
+        .unwrap();
+        assert_eq!(cfg.project_name.as_deref(), Some("strata-test"));
+        assert_eq!(cfg.project_uid, None);
+        let cfg = Config::from_lookup(lookup(&[
+            ("PALETTE_API_KEY", "k"),
+            ("PALETTE_PROJECT", "strata-test"),
+            ("PALETTE_PROJECT_UID", "p1"),
+        ]))
+        .unwrap();
+        assert_eq!(cfg.project_uid.as_deref(), Some("p1"));
+        assert_eq!(cfg.project_name, None, "the uid wins");
     }
 
     #[test]

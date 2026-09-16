@@ -4,8 +4,8 @@ This page shows one platform team and one profile through a release cycle.
 Each command runs offline against the files in `examples/`. Build the tool
 first with `cargo build --release`. When you connect to Palette, replace the
 file paths with live refs: a profile uid, `<name>@<version>`, `<name>@latest`
-for the highest version in the scope, or `cluster:<uid>` for what a cluster
-runs. `strata list` prints the profile and cluster refs in the scope, and
+for the highest version in the scope, or `cluster:<cluster>` for what a
+cluster runs, by the cluster's name or uid. `strata list` prints the profile and cluster refs in the scope, and
 `strata list --pack <name>` the profile versions that carry a pack.
 
 The cast. The team in this page publishes its profile with Terraform. Strata
@@ -33,10 +33,10 @@ alias strata=target/release/strata
 1. **Where snapshots live.** Next to the profile definition, at
    `releases/<version>/<project>.json`, committed with the release. The
    `examples/profiles/` files stand in for these below.
-2. **Which project a command talks to.** Set `PALETTE_PROJECT_UID` to the
-   project before every live command. One project, one uid. The snapshot
-   records it, so `verify` later finds the project on its own.
-   `strata list projects` prints the uid of each project the key can see.
+2. **Which project a command talks to.** Set `PALETTE_PROJECT` to the
+   project's name before every live command. The snapshot records the
+   project's uid, so `verify` later finds the project on its own, even after
+   a rename. `strata list projects` prints each project the key can see.
 3. **Exit codes drive automation.** `0` means identical, or unchanged for
    `verify`. `1` means different, or drifted. `2` means the tool could not
    answer. Treat `2` as a failed job, never as "no change".
@@ -51,7 +51,7 @@ Who: whoever published it, right after. Strata cannot tell a CI job from a
 person at a terminal.
 
 ```
-PALETTE_PROJECT_UID=$DEV_PROJECT strata snapshot aws-pxk@1.0.0 -o releases/1.0.0/dev.json
+PALETTE_PROJECT=dev strata snapshot aws-pxk@1.0.0 -o releases/1.0.0/dev.json
 ```
 
 What you see on stderr:
@@ -139,7 +139,7 @@ Record it, as on day 1, and prove that what was published is what was
 approved, with the candidate rebuilt from the merged file:
 
 ```
-PALETTE_PROJECT_UID=$DEV_PROJECT strata snapshot aws-pxk@1.1.0 -o releases/1.1.0/dev.json
+PALETTE_PROJECT=dev strata snapshot aws-pxk@1.1.0 -o releases/1.1.0/dev.json
 strata snapshot --from-candidate aws-pxk.yaml -o candidate.json
 strata same-release candidate.json releases/1.1.0/dev.json
 ```
@@ -208,7 +208,7 @@ Trigger: the team promotes 1.1.1 to `prod`, behind its approval gate. After
 the publication it records the project:
 
 ```
-PALETTE_PROJECT_UID=$PROD_PROJECT strata snapshot aws-pxk@1.1.1 -o releases/1.1.1/prod.json
+PALETTE_PROJECT=prod strata snapshot aws-pxk@1.1.1 -o releases/1.1.1/prod.json
 ```
 
 Promotion check, right after:
@@ -264,7 +264,7 @@ First, check that the cluster runs the release its record describes. A
 cluster can stay on an older version, or someone can edit its pack values.
 
 ```
-PALETTE_PROJECT_UID=$PROD_PROJECT strata compare releases/1.1.0/prod.json cluster:<uid>/aws-pxk
+PALETTE_PROJECT=prod strata compare releases/1.1.0/prod.json cluster:workload-a/aws-pxk
 ```
 
 Offline: `strata compare examples/profiles/aws-pxk@1.1.0.json examples/clusters/workload-a.json`
@@ -318,7 +318,7 @@ After the move, that command prints `IDENTICAL`. To keep a record of what the
 cluster runs, snapshot it like a profile:
 
 ```
-PALETTE_PROJECT_UID=$PROD_PROJECT strata snapshot cluster:<uid>/aws-pxk -o runs/workload-a.json
+PALETTE_PROJECT=prod strata snapshot cluster:workload-a/aws-pxk -o runs/workload-a.json
 ```
 
 `strata verify runs/workload-a.json` then fetches the cluster again and
@@ -373,7 +373,7 @@ truth. The live object is the deviation.
 Trigger: the team wants to delete `aws-pxk` 1.0.0 from a project.
 
 ```
-PALETTE_PROJECT_UID=$PROD_PROJECT strata consumers aws-pxk@1.0.0 && delete_it
+PALETTE_PROJECT=prod strata consumers aws-pxk@1.0.0 && delete_it
 ```
 
 `consumers` asks Palette which clusters use the version now, then reads each
@@ -417,7 +417,7 @@ the guard.
 | Does this release repave nodes?                       | `strata compare A B --json \| jq -r .summary.maxImpact`           | prints the level        |                                  |
 | Record this release                                   | `strata snapshot <name>@<version> -o releases/<version>/<project>.json` | written           |                                  |
 | Record the newest published version                   | `strata snapshot <name>@latest -o rel.json`                       | written; `source.version` says which |                       |
-| Does this cluster run its release?                    | `strata compare releases/V/<project>.json cluster:<uid>/<profile>` | yes                   | no, read the report              |
+| Does this cluster run its release?                    | `strata compare releases/V/<project>.json cluster:<cluster>/<profile>` | yes                   | no, read the report              |
 | Did dev and prod get the same release?                | `strata same-release releases/V/dev.json releases/V/prod.json`    | yes                     | no, the reasons say why; stop the promotion |
 | Same release, packs re-pinned from another registry?  | `strata same-release --allow registry-move A B`                   | yes                     | a value or a version moved too   |
 | Was a published version edited?                       | `strata verify releases/V/<project>.json`                         | unchanged               | drifted, open an issue           |
@@ -427,7 +427,6 @@ the guard.
 
 ## What the tool does not do yet
 
-- Accept project and cluster names; today both are uids (#18).
 - Show the values a cluster gave its profile variables (#20).
 - Write a candidate file from a published profile; the live example uses a
   jq filter for now (#21).
