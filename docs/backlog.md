@@ -551,9 +551,9 @@ A pack is not a ref: a snapshot always records a whole profile, so the useful qu
 
 ### Acceptance criteria
 
-- [ ] `strata list` prints each profile version as a `<name>@<version>` ref and each cluster as a `cluster:<uid>` ref, and `snapshot` takes each ref unchanged
-- [ ] `strata list --pack cilium` names every profile version with a Cilium layer, with the pack's name and version
-- [ ] `strata list projects` lists every project the key can see, with or without `PALETTE_PROJECT_UID`
-- [ ] `--project <uid>` lists another project with no change to the environment
-- [ ] `--format json` writes `strata-list/1`, and `strata schema list` prints its JSON Schema
-- [ ] A `<name>@<version>` that matches nothing points at `strata list`
+- [x] `strata list` prints each profile version as a `<name>@<version>` ref and each cluster as a `cluster:<uid>` ref, and `snapshot` takes each ref unchanged
+- [x] `strata list --pack cilium` names every profile version with a Cilium layer, with the pack's name and version
+- [x] `strata list projects` lists every project the key can see, with or without `PALETTE_PROJECT_UID`
+- [x] `--project <uid>` lists another project with no change to the environment
+- [x] `--format json` writes `strata-list/1`, and `strata schema list` prints its JSON Schema
+- [x] A `<name>@<version>` that matches nothing points at `strata list`
