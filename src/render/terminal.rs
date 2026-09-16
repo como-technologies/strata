@@ -1,13 +1,14 @@
 //! The terminal report: plain when piped, colored on a terminal.
 
 use super::{
-    chain_verdict, counts_line, dash, pair_detail, pair_word, record_detail, record_label, short,
-    show, subject, traits_suffix, variable_lines, version_display, Renderer, VarLine,
+    chain_verdict, consumers_heading, counts_line, dash, pair_detail, pair_word, record_detail,
+    record_label, short, show, subject, traits_suffix, variable_lines, version_display, Renderer,
+    VarLine,
 };
 use crate::color::Paint;
 use crate::diff::{Diff, ImpactLevel, Leaf, Op, PackDiff, Status, Verify, VerifyStatus};
 use crate::error::Result;
-use crate::ops::{Chain, PairStatus, RecordStatus, VerifySummary};
+use crate::ops::{Chain, ConsumersReport, PairStatus, RecordStatus, VerifySummary};
 use crate::snapshot::{Snapshot, Source};
 
 /// Renders the text report.
@@ -257,6 +258,41 @@ impl Renderer for TerminalRenderer {
             p.bred(&verdict)
         });
         out.push('\n');
+        Ok(out)
+    }
+
+    fn render_consumers(&self, r: &ConsumersReport) -> Result<String> {
+        let p = &self.paint;
+        let mut out = format!("{}\n", consumers_heading(r));
+        let width = r
+            .consumers
+            .iter()
+            .map(|c| dash(&c.name).len())
+            .max()
+            .unwrap_or(0);
+        for c in &r.consumers {
+            let state = match c.state.as_str() {
+                "Running" => p.green(&c.state),
+                crate::ops::UNKNOWN_STATE => p.yellow(&c.state),
+                _ => c.state.clone(),
+            };
+            out.push_str(&format!(
+                "  {}  {}  project {}  {}",
+                p.bold(&format!("{:<width$}", dash(&c.name))),
+                p.dim(&c.uid),
+                dash(&c.project_uid),
+                state
+            ));
+            if let Some(msg) = c
+                .error
+                .as_ref()
+                .and_then(|e| e.get("message"))
+                .and_then(serde_json::Value::as_str)
+            {
+                out.push_str(&format!("  {}", p.dim(&format!("({msg})"))));
+            }
+            out.push('\n');
+        }
         Ok(out)
     }
 }

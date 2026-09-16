@@ -674,3 +674,187 @@ pub fn same_release(records: &[(String, Snapshot)], policy: Policy, generated_at
         pairs,
     }
 }
+
+/// Schema id of the document `consumers` writes.
+pub const CONSUMERS_SCHEMA: &str = "strata-consumers/1";
+
+/// The state a consumer shows when its cluster could not be read.
+pub const UNKNOWN_STATE: &str = "unknown";
+
+/// The profile version whose consumers are listed.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
+pub struct ConsumedProfile {
+    /// Profile uid.
+    pub uid: String,
+    /// Profile name.
+    pub name: String,
+    /// Profile version.
+    pub version: String,
+}
+
+/// One cluster that uses the profile version.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct Consumer {
+    /// Cluster uid.
+    pub uid: String,
+    /// Cluster name; empty when neither the profile nor the cluster could name it.
+    pub name: String,
+    /// The project the cluster is in; empty for tenant scope or when unknown.
+    pub project_uid: String,
+    /// The cluster's `status.state`, for example `Running`, or `unknown` when it could not be read.
+    pub state: String,
+    /// Why the cluster could not be read, when it could not.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<Value>,
+}
+
+/// The document `consumers` writes: `strata-consumers/1`.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ConsumersReport {
+    /// Always "strata-consumers/1"
+    pub schema: String,
+    /// Which tool wrote the document.
+    pub tool: Tool,
+    /// When, RFC 3339 UTC.
+    pub generated_at: String,
+    /// The profile version.
+    pub profile: ConsumedProfile,
+    /// The number of clusters that use it. Exit status 0 when zero, 1 otherwise.
+    pub count: usize,
+    /// One entry per cluster, in the order Palette lists them.
+    pub consumers: Vec<Consumer>,
+}
+
+impl ConsumersReport {
+    /// The exit status: 0 when nothing uses the profile version, 1 when something does, so a
+    /// delete step can branch on it.
+    pub fn exit_code(&self) -> u8 {
+        u8::from(self.count > 0)
+    }
+}
+
+/// List the clusters that use a profile version, with each cluster's name, project, and state.
+/// The profile comes from a uid, `<name>@<version>`, or a profile record (whose uid and project
+/// are used; the list is always fetched live). Names and projects come from the profile's
+/// `status.inUseClusters`; each cluster is then read in its own project for its state, with one
+/// client per project from `connect`. A cluster that cannot be read is listed with state
+/// `unknown` and its error; it still counts.
+pub fn consumers<A, F>(
+    reference: &Ref,
+    mut connect: F,
+    generated_at: &str,
+    progress: &Progress,
+) -> Result<ConsumersReport>
+where
+    A: PaletteApi,
+    F: FnMut(Option<&str>) -> Result<Palette<A>>,
+{
+    let refused = || Error::ProfileRefRequired {
+        reference: reference.to_string(),
+    };
+    let (profile_scope, uid_hint) = match reference {
+        Ref::Cluster { .. } => return Err(refused()),
+        Ref::Snapshot(path) => {
+            let recorded = Snapshot::load(path)?;
+            if recorded.source.cluster.is_some() {
+                return Err(refused());
+            }
+            if recorded.source.uid.is_empty() {
+                return Err(Error::NoUid);
+            }
+            let scope = Some(recorded.source.project_uid.clone()).filter(|p| !p.is_empty());
+            (scope, Some(recorded.source.uid))
+        }
+        Ref::Uid(uid) => (None, Some(uid.clone())),
+        Ref::NameVersion { .. } => (None, None),
+    };
+
+    let mut clients: HashMap<Option<String>, Palette<A>> = HashMap::new();
+    let home = connect(profile_scope.as_deref())?;
+    let uid = match (uid_hint, reference) {
+        (Some(uid), _) => uid,
+        (None, Ref::NameVersion { name, version }) => home.resolve(name, version)?,
+        (None, _) => unreachable!("every other ref carries a uid"),
+    };
+    progress.note(&format!("listing consumers of profile {uid}"));
+    let doc = home.profile_document(&uid)?;
+    clients.insert(profile_scope, home);
+
+    let text = |v: &Value, ptr: &str| {
+        v.pointer(ptr)
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_string()
+    };
+    let named: Vec<Value> = doc
+        .pointer("/status/inUseClusters")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let mut uids: Vec<String> = doc
+        .pointer("/status/inUseClusterUids")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|v| v.as_str().map(str::to_string))
+        .collect();
+    for n in &named {
+        let u = text(n, "/uid");
+        if !u.is_empty() && !uids.contains(&u) {
+            uids.push(u);
+        }
+    }
+
+    let mut list = Vec::with_capacity(uids.len());
+    for cluster in uids {
+        let known = named.iter().find(|n| text(n, "/uid") == cluster);
+        let mut c = Consumer {
+            name: known.map(|n| text(n, "/name")).unwrap_or_default(),
+            project_uid: known.map(|n| text(n, "/projectUid")).unwrap_or_default(),
+            state: UNKNOWN_STATE.to_string(),
+            error: None,
+            uid: cluster,
+        };
+        let scope = Some(c.project_uid.clone()).filter(|p| !p.is_empty());
+        let client = match clients.entry(scope.clone()) {
+            Entry::Occupied(e) => Ok(e.into_mut()),
+            Entry::Vacant(v) => connect(scope.as_deref()).map(|p| v.insert(p)),
+        };
+        match client.and_then(|p| p.cluster_document(&c.uid)) {
+            Ok(d) => {
+                let or_keep = |current: String, found: String| {
+                    if found.is_empty() {
+                        current
+                    } else {
+                        found
+                    }
+                };
+                c.name = or_keep(c.name, text(&d, "/metadata/name"));
+                c.project_uid =
+                    or_keep(c.project_uid, text(&d, "/metadata/annotations/projectUid"));
+                c.state = or_keep(c.state, text(&d, "/status/state"));
+            }
+            Err(e) => c.error = Some(e.to_json()),
+        }
+        list.push(c);
+    }
+
+    Ok(ConsumersReport {
+        schema: CONSUMERS_SCHEMA.to_string(),
+        tool: Tool {
+            name: crate::TOOL_NAME.to_string(),
+            version: crate::TOOL_VERSION.to_string(),
+            implementation: Some(crate::TOOL_IMPL.to_string()),
+        },
+        generated_at: generated_at.to_string(),
+        profile: ConsumedProfile {
+            uid: text(&doc, "/metadata/uid"),
+            name: text(&doc, "/metadata/name"),
+            version: text(&doc, "/spec/version"),
+        },
+        count: list.len(),
+        consumers: list,
+    })
+}

@@ -170,6 +170,28 @@ each label, name, version, uid, project, and root, and `pairs[]` with `a`,
 `packsRepinned`, and `reasons[]`. `strata schema chain` prints its JSON
 Schema.
 
+## The consumers report
+
+`strata consumers <ref>` lists the clusters that use one profile version. The
+ref is a profile uid, `<name>@<version>`, or a profile record; a record's uid
+and project are used, and the list is always fetched live. A cluster ref is
+an error.
+
+```
+aws-pxk@1.0.0 (64e0000000000000000000a1): 2 consumers
+  workload-a  64f1000000000000000000e1  project 64f20000000000000000a0f1  Running
+  workload-b  64f1000000000000000000e2  project -  unknown  (GET /v1/spectroclusters/64f1000000000000000000e2 failed with HTTP 404: ...)
+```
+
+Names and projects come from the profile's `status.inUseClusters`. Each
+cluster is then read in its own project for `status.state`. A cluster that
+cannot be read shows `unknown` and the error, and it still counts. The exit
+status is `0` when no cluster uses the version and `1` when any does.
+`--format markdown` writes a table. `--format json` writes the document
+`strata-consumers/1`: `profile` with uid, name, and version, `count`, and
+`consumers[]` with `uid`, `name`, `projectUid`, `state`, and `error` when
+there is one. `strata schema consumers` prints its JSON Schema.
+
 ### Errors in JSON mode
 
 When `--format json` or `--json` is selected and the command fails, stderr
@@ -181,7 +203,8 @@ carries one line and the exit status is `2`, as always:
 
 `kind` is a stable kebab-case name: `missing-credential`, `api`,
 `invalid-setting`, `pattern`, `transport`, `not-json`, `profile-not-found`,
-`cluster-profile-not-found`, `not-snapshot`, `snapshot-schema`, `no-uid`,
+`cluster-profile-not-found`, `profile-ref-required`, `not-snapshot`,
+`snapshot-schema`, `no-uid`,
 `io`, `empty-file`, `file-not-json`, or `serialize`. `message` is the
 sentence the terminal shows. The other fields are the variant's own:
 
@@ -193,6 +216,7 @@ sentence the terminal shows. The other fields are the variant's own:
   and `file-not-json`
 - `name` and `version` for `profile-not-found`
 - `cluster`, `profile`, and `applied` for `cluster-profile-not-found`
+- `reference` for `profile-ref-required`
 - `path` and `schema` for `snapshot-schema`
 
 Without JSON selected, stderr is the sentence prefixed with `strata:`.

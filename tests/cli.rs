@@ -591,8 +591,17 @@ fn a_cluster_snapshot_from_raw_compares_against_profile_records() {
 }
 
 #[test]
+fn consumers_refuses_a_cluster_ref_with_a_structured_error() {
+    let r = run(&["consumers", "--json", "cluster:c1"]);
+    assert_eq!(r.code, 2, "{}", r.err);
+    let e: serde_json::Value = serde_json::from_str(r.err.trim()).unwrap();
+    assert_eq!(e["error"]["kind"], "profile-ref-required");
+    assert_eq!(e["error"]["reference"], "cluster:c1");
+}
+
+#[test]
 fn schema_subcommand_prints_json_schema() {
-    for kind in ["snapshot", "diff", "verify-summary", "chain"] {
+    for kind in ["snapshot", "diff", "verify-summary", "chain", "consumers"] {
         let r = run(&["schema", kind]);
         assert_eq!(r.code, 0, "{}", r.err);
         let v: serde_json::Value = serde_json::from_str(&r.out).unwrap();

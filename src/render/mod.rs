@@ -10,7 +10,7 @@ use serde_json::Value;
 use crate::color::Paint;
 use crate::diff::{Diff, Leaf, PackDiff, Status, VariableSummary, VariablesByName, Verify};
 use crate::error::Result;
-use crate::ops::{Chain, Pair, PairStatus, VerifySummary};
+use crate::ops::{Chain, ConsumersReport, Pair, PairStatus, VerifySummary};
 use crate::snapshot::{Snapshot, Source};
 
 pub use json::JsonRenderer;
@@ -45,6 +45,24 @@ pub trait Renderer {
 
     /// Render the outcome of `same-release`.
     fn render_chain(&self, c: &Chain) -> Result<String>;
+
+    /// Render the clusters that use a profile version.
+    fn render_consumers(&self, r: &ConsumersReport) -> Result<String>;
+}
+
+/// `lab-profile@1.3.0 (uid): 2 consumers`, or `...: no consumers`.
+pub(crate) fn consumers_heading(r: &ConsumersReport) -> String {
+    let count = match r.count {
+        0 => "no consumers".to_string(),
+        1 => "1 consumer".to_string(),
+        n => format!("{n} consumers"),
+    };
+    format!(
+        "{}@{} ({}): {count}",
+        r.profile.name,
+        r.profile.version,
+        dash(&r.profile.uid)
+    )
 }
 
 /// The status word of a pair, as the text reports print it.

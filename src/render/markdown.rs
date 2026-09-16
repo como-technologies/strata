@@ -1,14 +1,14 @@
 //! The pull request comment.
 
 use super::{
-    chain_verdict, counts_line, dash, pair_detail, pair_word, plain_flags, record_detail,
-    record_label, short, show, subject, traits_suffix, variable_lines, version_display, Renderer,
-    VarLine,
+    chain_verdict, consumers_heading, counts_line, dash, pair_detail, pair_word, plain_flags,
+    record_detail, record_label, short, show, subject, traits_suffix, variable_lines,
+    version_display, Renderer, VarLine,
 };
 use crate::color::Paint;
 use crate::diff::{Diff, Leaf, Op, Status, Verify, VerifyStatus};
 use crate::error::Result;
-use crate::ops::{Chain, RecordStatus, VerifySummary};
+use crate::ops::{Chain, ConsumersReport, RecordStatus, VerifySummary};
 use crate::snapshot::{Snapshot, Source};
 
 /// Renders markdown for a pull request comment.
@@ -218,6 +218,25 @@ impl Renderer for MarkdownRenderer {
                 escape(&p.a),
                 escape(&p.b),
                 detail
+            ));
+        }
+        o.push('\n');
+        Ok(o)
+    }
+
+    fn render_consumers(&self, r: &ConsumersReport) -> Result<String> {
+        let mut o = format!("### consumers: {}\n\n", consumers_heading(r));
+        if r.consumers.is_empty() {
+            return Ok(o);
+        }
+        o.push_str("| cluster | uid | project | state |\n|---|---|---|---|\n");
+        for c in &r.consumers {
+            o.push_str(&format!(
+                "| `{}` | `{}` | `{}` | {} |\n",
+                escape(dash(&c.name)),
+                escape(&c.uid),
+                escape(dash(&c.project_uid)),
+                escape(&c.state)
             ));
         }
         o.push('\n');

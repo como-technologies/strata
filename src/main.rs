@@ -22,6 +22,7 @@ const SUBCOMMANDS: &[&str] = &[
     "snapshot",
     "verify",
     "same-release",
+    "consumers",
     "schema",
     "help",
 ];
@@ -59,6 +60,7 @@ impl Cli {
             Cmd::Compare(a) => a.out.format() == Format::Json,
             Cmd::Verify(a) => a.out.format() == Format::Json,
             Cmd::SameRelease(a) => a.out.format() == Format::Json,
+            Cmd::Consumers(a) => a.out.format() == Format::Json,
             Cmd::Snapshot(_) | Cmd::Schema { .. } => false,
         }
     }
@@ -75,7 +77,9 @@ enum Cmd {
     Verify(VerifyArgs),
     /// Check that two or more records are the same release, comparing each to the next in order
     SameRelease(SameReleaseArgs),
-    /// Print the JSON Schema of the snapshot, diff, verify-summary, or chain document
+    /// List the clusters that use a profile version, with name, project, and state; exit 1 when any do
+    Consumers(ConsumersArgs),
+    /// Print the JSON Schema of the snapshot, diff, verify-summary, chain, or consumers document
     Schema {
         #[arg(value_enum)]
         kind: SchemaKind,
@@ -188,6 +192,14 @@ struct SameReleaseArgs {
     out: OutputArgs,
 }
 
+#[derive(Args)]
+struct ConsumersArgs {
+    /// Profile uid, <name>@<version> or <name>@latest, or a profile record (its uid is fetched live)
+    r#ref: String,
+    #[command(flatten)]
+    out: OutputArgs,
+}
+
 /// Differences `same-release` can be told to accept.
 #[derive(Clone, Copy, PartialEq, Eq, ValueEnum)]
 enum Allow {
@@ -235,6 +247,7 @@ enum SchemaKind {
     Diff,
     VerifySummary,
     Chain,
+    Consumers,
 }
 
 fn main() -> ExitCode {
@@ -265,6 +278,7 @@ fn run(cli: Cli) -> Result<ExitCode> {
         Cmd::Snapshot(a) => cmd_snapshot(&a),
         Cmd::Verify(a) => cmd_verify(&a),
         Cmd::SameRelease(a) => cmd_same_release(&a),
+        Cmd::Consumers(a) => cmd_consumers(&a),
         Cmd::Schema { kind } => cmd_schema(kind),
     }
 }
@@ -459,12 +473,25 @@ fn cmd_same_release(a: &SameReleaseArgs) -> Result<ExitCode> {
     Ok(ExitCode::from(c.exit_code()))
 }
 
+fn cmd_consumers(a: &ConsumersArgs) -> Result<ExitCode> {
+    let progress = a.out.progress();
+    let r = ops::consumers(
+        &Ref::parse(&a.r#ref),
+        |scope| connect(progress, scope),
+        &now_utc(),
+        &progress,
+    )?;
+    print!("{}", a.out.renderer().render_consumers(&r)?);
+    Ok(ExitCode::from(r.exit_code()))
+}
+
 fn cmd_schema(kind: SchemaKind) -> Result<ExitCode> {
     let schema = match kind {
         SchemaKind::Snapshot => schemars::schema_for!(Snapshot),
         SchemaKind::Diff => schemars::schema_for!(diff::Diff),
         SchemaKind::VerifySummary => schemars::schema_for!(ops::VerifySummary),
         SchemaKind::Chain => schemars::schema_for!(ops::Chain),
+        SchemaKind::Consumers => schemars::schema_for!(ops::ConsumersReport),
     };
     println!("{}", serde_json::to_string_pretty(&schema)?);
     Ok(ExitCode::SUCCESS)

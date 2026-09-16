@@ -810,3 +810,178 @@ fn verify_refetches_the_cluster_for_a_cluster_record() {
         .variables
         .is_empty());
 }
+
+// ---- consumers -------------------------------------------------------------------------------
+
+use strata::color::Paint;
+use strata::render::{self, Format};
+
+/// Profile b's API, with `inUseClusters` naming one of its two consumers the way Palette does.
+fn serve_b_with_named_consumer(dir: &Path) -> MemoryApi {
+    let mut profile = read(&dir.join("b").join("profile.json"));
+    profile["status"]["inUseClusters"] = serde_json::json!([
+        {"uid": "cluster-aaa", "name": "alpha", "projectUid": "p1", "kind": "spectrocluster"}
+    ]);
+    serve(MemoryApi::new(), dir, "b", UID_B).with(format!("/v1/clusterprofiles/{UID_B}"), profile)
+}
+
+fn cluster_doc(uid: &str, name: &str, project: &str, state: &str) -> Value {
+    serde_json::json!({
+        "metadata": {"uid": uid, "name": name, "annotations": {"projectUid": project}},
+        "status": {"state": state},
+    })
+}
+
+#[test]
+fn consumers_lists_each_cluster_with_name_project_and_state_from_its_own_project() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let tenant = serve_b_with_named_consumer(dir.path());
+    let in_p1 = MemoryApi::new().with(
+        "/v1/spectroclusters/cluster-aaa",
+        cluster_doc("cluster-aaa", "alpha", "p1", "Running"),
+    );
+    let scopes: RefCell<Vec<Option<String>>> = RefCell::new(Vec::new());
+    let connect = |scope: Option<&str>| {
+        scopes.borrow_mut().push(scope.map(str::to_string));
+        Ok(Palette::new(match scope {
+            Some("p1") => in_p1.clone(),
+            _ => tenant.clone(),
+        }))
+    };
+    let r = ops::consumers(&Ref::Uid(UID_B.into()), connect, "t1", &Progress::silent()).unwrap();
+    assert_eq!(r.schema, "strata-consumers/1");
+    assert_eq!(
+        (
+            r.profile.uid.as_str(),
+            r.profile.name.as_str(),
+            r.profile.version.as_str()
+        ),
+        (UID_B, "lab-profile", "1.3.0")
+    );
+    assert_eq!(r.count, 2);
+    assert_eq!(
+        r.exit_code(),
+        1,
+        "consumers exist: a delete step must not proceed"
+    );
+    let alpha = &r.consumers[0];
+    assert_eq!(
+        (
+            alpha.uid.as_str(),
+            alpha.name.as_str(),
+            alpha.project_uid.as_str(),
+            alpha.state.as_str()
+        ),
+        ("cluster-aaa", "alpha", "p1", "Running")
+    );
+    assert!(alpha.error.is_none());
+    // cluster-bbb is only a uid on the profile, and it cannot be read in the tenant scope
+    let unknown = &r.consumers[1];
+    assert_eq!(
+        (unknown.uid.as_str(), unknown.state.as_str()),
+        ("cluster-bbb", "unknown")
+    );
+    assert_eq!(unknown.error.as_ref().unwrap()["kind"], "api");
+    assert_eq!(
+        *scopes.borrow(),
+        vec![None, Some("p1".to_string())],
+        "one client per project; the profile and unscoped clusters share one"
+    );
+
+    let text = render::renderer(Format::Terminal, Paint::off(), false)
+        .render_consumers(&r)
+        .unwrap();
+    assert!(
+        text.starts_with("lab-profile@1.3.0 (64f0000000000000000000b2): 2 consumers\n"),
+        "{text}"
+    );
+    assert!(text.contains("alpha"), "{text}");
+    assert!(text.contains("p1") && text.contains("Running"), "{text}");
+    assert!(
+        text.contains("cluster-bbb") && text.contains("unknown"),
+        "{text}"
+    );
+    let md = render::renderer(Format::Markdown, Paint::off(), false)
+        .render_consumers(&r)
+        .unwrap();
+    assert!(
+        md.contains("| `alpha` | `cluster-aaa` | `p1` | Running |"),
+        "{md}"
+    );
+    let json: Value = serde_json::from_str(
+        &render::renderer(Format::Json, Paint::off(), true)
+            .render_consumers(&r)
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(json["consumers"][0]["projectUid"], "p1");
+    assert_eq!(json["count"], 2);
+}
+
+#[test]
+fn a_profile_without_consumers_exits_zero_and_fetches_no_cluster() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let api = serve(MemoryApi::new(), dir.path(), "a", UID_A).with(
+        "/v1/dashboard/clusterprofiles/metadata",
+        serde_json::json!({"items": [
+            {"metadata": {"name": "lab-profile", "uid": UID_A}, "spec": {"version": "1.2.0"}}
+        ]}),
+    );
+    let r = ops::consumers(
+        &Ref::NameVersion {
+            name: "lab-profile".into(),
+            version: "1.2.0".into(),
+        },
+        |_| Ok(Palette::new(api.clone())),
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert_eq!((r.count, r.exit_code()), (0, 0));
+    assert!(r.consumers.is_empty());
+    let text = render::renderer(Format::Terminal, Paint::off(), false)
+        .render_consumers(&r)
+        .unwrap();
+    assert_eq!(
+        text,
+        "lab-profile@1.2.0 (64f0000000000000000000a1): no consumers\n"
+    );
+}
+
+#[test]
+fn consumers_takes_a_profile_and_refuses_a_cluster() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let never = |_: Option<&str>| -> strata::Result<Palette<MemoryApi>> {
+        panic!("a cluster ref is refused before connecting")
+    };
+    let err = ops::consumers(&cluster_ref(None), never, "t1", &Progress::silent()).unwrap_err();
+    assert!(matches!(err, Error::ProfileRefRequired { .. }), "{err}");
+    assert_eq!(err.kind(), "profile-ref-required");
+
+    // a record of a cluster is refused the same way; a profile record uses its uid, fetched live
+    let on_b = snapshot_cluster(
+        &serve_cluster(MemoryApi::new(), dir.path(), "cluster-b"),
+        None,
+    )
+    .unwrap();
+    let file = dir.path().join("on-b.json");
+    fs::write(&file, on_b.to_json(true).unwrap()).unwrap();
+    let err = ops::consumers(&Ref::Snapshot(file), never, "t1", &Progress::silent()).unwrap_err();
+    assert!(matches!(err, Error::ProfileRefRequired { .. }), "{err}");
+
+    let recorded = ops::snapshot_from_dir(&dir.path().join("a"), "a", "t0").unwrap();
+    let file = dir.path().join("a.json");
+    fs::write(&file, recorded.to_json(true).unwrap()).unwrap();
+    let api = serve(MemoryApi::new(), dir.path(), "a", UID_A);
+    let r = ops::consumers(
+        &Ref::Snapshot(file),
+        |_| Ok(Palette::new(api.clone())),
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert_eq!(r.profile.uid, UID_A);
+}

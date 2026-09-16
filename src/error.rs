@@ -82,6 +82,12 @@ pub enum Error {
         /// The names of the profiles applied to the cluster, in order.
         applied: Vec<String>,
     },
+    /// A command that works on a profile was given a cluster, or a record of one.
+    #[error("'{reference}' is a cluster; this command takes a profile uid, <name>@<version>, or a profile record")]
+    ProfileRefRequired {
+        /// The ref as given.
+        reference: String,
+    },
     /// The file exists but is not a strata snapshot.
     #[error("'{0}' is not a strata snapshot")]
     NotSnapshot(PathBuf),
@@ -141,6 +147,7 @@ impl Error {
             Error::NotJson { .. } => "not-json",
             Error::ProfileNotFound { .. } => "profile-not-found",
             Error::ClusterProfileNotFound { .. } => "cluster-profile-not-found",
+            Error::ProfileRefRequired { .. } => "profile-ref-required",
             Error::NotSnapshot(_) => "not-snapshot",
             Error::SnapshotSchema { .. } => "snapshot-schema",
             Error::NoUid => "no-uid",
@@ -153,7 +160,7 @@ impl Error {
 
     /// The machine-readable form: `kind`, `message`, and the variant's own fields (`path`,
     /// `status`, `name`, `version`, `schema`, `variable`, `alternate`, `value`, `cluster`,
-    /// `profile`, `applied`) when it has them.
+    /// `profile`, `applied`, `reference`) when it has them.
     pub fn to_json(&self) -> Value {
         let mut m = Map::new();
         m.insert("kind".into(), Value::from(self.kind()));
@@ -192,6 +199,9 @@ impl Error {
                 m.insert("cluster".into(), Value::from(cluster.as_str()));
                 m.insert("profile".into(), Value::from(profile.as_str()));
                 m.insert("applied".into(), Value::from(applied.clone()));
+            }
+            Error::ProfileRefRequired { reference } => {
+                m.insert("reference".into(), Value::from(reference.as_str()));
             }
             Error::ProfileNotFound { name, version } => {
                 m.insert("name".into(), Value::from(name.as_str()));
@@ -262,6 +272,9 @@ mod tests {
                 profile: "nope".into(),
                 applied: vec!["infra".into(), "addons".into()],
             },
+            Error::ProfileRefRequired {
+                reference: "cluster:c1".into(),
+            },
             Error::NotSnapshot("profile.json".into()),
             Error::SnapshotSchema {
                 path: "old.json".into(),
@@ -330,5 +343,6 @@ mod tests {
             ("c1".into(), "nope".into())
         );
         assert_eq!(cp["applied"], serde_json::json!(["infra", "addons"]));
+        assert_eq!(by_kind("profile-ref-required")["reference"], "cluster:c1");
     }
 }

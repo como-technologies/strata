@@ -603,6 +603,18 @@ impl<A: PaletteApi> Palette<A> {
         })
     }
 
+    /// The profile document alone, `GET /v1/clusterprofiles/{uid}`: metadata, versions, and the
+    /// clusters that use it in `status`.
+    pub fn profile_document(&self, uid: &str) -> Result<Value> {
+        self.api.get_json(&format!("/v1/clusterprofiles/{uid}"))
+    }
+
+    /// The cluster document alone, `GET /v1/spectroclusters/{uid}`: its name, its project in the
+    /// `projectUid` annotation, and its state in `status.state`.
+    pub fn cluster_document(&self, uid: &str) -> Result<Value> {
+        self.api.get_json(&format!("/v1/spectroclusters/{uid}"))
+    }
+
     /// Fetch the three documents for one cluster: the cluster with its applied profile templates,
     /// the pack manifests of each applied profile, and each applied profile's variables. A missing
     /// variables endpoint is treated as "no variables"; other errors propagate.

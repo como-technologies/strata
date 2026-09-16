@@ -30,6 +30,7 @@ strata compare A B --format markdown            # the pull request comment
 strata compare A B --format json                # for scripts and AI clients
 strata snapshot my-profile@1.2.0 -o rel.json    # record a release
 strata compare rel.json cluster:<uid>/my-profile  # does the cluster run that release?
+strata consumers my-profile@1.0.0               # which clusters still use it? exit 1 if any
 strata verify rel.json                          # the immutability check
 strata verify 'releases/**/*.json'              # every record: one line each, one summary
 strata same-release dev.json prod.json          # one release in every project? --allow registry-move
@@ -120,7 +121,7 @@ release.
 | a cluster is about to move versions | `compare` between the current and the proposed versions. The report shows the repave impact. |
 | a cluster should run its release    | `compare` between the record and `cluster:<uid>/<profile>`. `IDENTICAL` means the cluster runs what was released. |
 | on a schedule                       | `verify` over each recorded snapshot. This enforces the immutability rule.      |
-| before end of life                  | `snapshot`, then read `source.consumers`. Delete only when the count is zero.   |
+| before end of life                  | `consumers`: each cluster that uses the version, with its project and state. Exit `0` means nothing uses it. |
 
 ## Pull request comments
 

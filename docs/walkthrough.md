@@ -334,21 +334,26 @@ truth. The live object is the deviation.
 Trigger: the team wants to delete `aws-pxk` 1.0.0 from a project.
 
 ```
-PALETTE_PROJECT_UID=$PROD_PROJECT strata snapshot aws-pxk@1.0.0 | jq .source.consumers
+PALETTE_PROJECT_UID=$PROD_PROJECT strata consumers aws-pxk@1.0.0 && delete_it
 ```
 
-Offline: `jq .source.consumers examples/profiles/aws-pxk@1.1.1.json`
+`consumers` asks Palette which clusters use the version now, then reads each
+cluster in its own project for its state. It needs a live tenant. What you
+see when two clusters still use it, and one cannot be read with this key:
 
 ```
-{
-  "clusters": [],
-  "count": 0
-}
+aws-pxk@1.0.0 (64e0000000000000000000a1): 2 consumers
+  workload-a  64f1000000000000000000e1  project 64f20000000000000000a0f1  Running
+  workload-b  64f1000000000000000000e2  project 64f20000000000000000a0f1  unknown  (GET /v1/spectroclusters/64f1000000000000000000e2 failed with HTTP 403: ...)
 ```
 
-Delete only when `count` is `0`. Each listed cluster must move to a newer
-version first. The nightly `verify` run refreshes this list. The latest
-record is never more than one day old.
+Exit `0` means no cluster uses the version, so the `&&` lets the delete run.
+Exit `1` means at least one does; each must move to a newer version first. A
+cluster that cannot be read still counts. `--format json` writes
+`strata-consumers/1` for a script.
+
+Offline, a record keeps the consumer uids from the moment it was taken:
+`jq .source.consumers examples/profiles/aws-pxk@1.1.1.json`
 
 ## Confirm how Palette treats an edit to a published version
 
@@ -379,7 +384,7 @@ listing.
 | Same release, packs re-pinned from another registry?  | `strata same-release --allow registry-move A B`                   | yes                     | a value or a version moved too   |
 | Was a published version edited?                       | `strata verify releases/V/<project>.json`                         | unchanged               | drifted, open an issue           |
 | Were any published versions edited?                   | `strata verify 'releases/**/*.json'`                              | all unchanged           | some drifted; `2` means a record could not be checked |
-| Can we delete this version?                           | `strata snapshot <ref> \| jq .source.consumers.count`             | `0` means yes           |                                  |
+| Can we delete this version?                           | `strata consumers <ref>`                                          | nothing uses it         | clusters still use it            |
 | What does the JSON mean?                              | `strata schema diff`                                              | prints the JSON Schema  |                                  |
 
 ## What the tool does not do yet
