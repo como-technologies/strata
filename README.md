@@ -179,6 +179,9 @@ the checkout and the download fail.
   comment, the JSON document for scripts and AI clients, and colors.
 - [examples/README.md](examples/README.md): real packs and profiles for
   offline use.
+- [examples/live/README.md](examples/live/README.md): a real cluster and two
+  profile versions in Palette, with every check that needs them and the
+  recorded run.
 - [docs/backlog.md](docs/backlog.md): the planned work, one section per
   GitHub issue; `just backlog-issues` opens them.
 
@@ -209,16 +212,12 @@ request, and builds the Linux binary with the same step a release uses.
 
 ## Known limits
 
-- Strata has not compared the pack-ref digest with the registry digest on a
-  live profile. No tenant with a cluster profile has been available. Each
-  snapshot records which field fed `UPSTREAM` in `hash.upstreamSource`. The
-  digest the pack's own registry reports is the better source, whichever
-  registry that is. It is the planned replacement. A candidate snapshot uses
-  the registry digest, so its root equals the published version's only when
-  the two digests agree.
-- The cluster endpoints follow the Palette SDK models and have not been
-  checked against a live cluster yet. A cluster snapshot records variable
-  definitions, not the values a cluster was given.
+- `UPSTREAM` comes from the digest Palette stamps on the pack ref. The live
+  example showed it equal to the registry digest for `spectro` packs from the
+  Public Repo; Helm and OCI packs are unchecked. Reading the digest from the
+  pack's own registry is planned.
+- A cluster snapshot records variable definitions, not the values a cluster
+  was given.
 - Strata does not hash pack presets or the pack schema. A selected preset
   shows as a values change.
 - The text reports truncate values longer than 120 characters. The JSON

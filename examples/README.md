@@ -16,7 +16,12 @@ examples/
   clusters/raw/<cluster>/       cluster.json, manifests.json, variables.json in the shapes the tool reads
   clusters/<cluster>.json       cluster snapshots: what the cluster runs, hashed like the profile
   reports/                   compare output: text reports and one strata-diff/1 JSON document
+  live/                      Terraform, a verify script, and the recorded run against a real cluster
 ```
+
+Everything above works offline. `live/` builds a real cluster and two profile
+versions in a Palette tenant, runs every check that needs them, and records
+the result; see [live/README.md](live/README.md).
 
 ## What is real and what is synthesized
 

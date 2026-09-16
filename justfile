@@ -37,6 +37,19 @@ examples: build
 examples-fetch: build
     STRATA_BIN=target/release/strata examples/fetch-examples.sh
 
+# Live example: build a cluster and two profile versions in Palette. Billable until live-down.
+live-up:
+    examples/live/tf.sh init -input=false
+    examples/live/tf.sh apply
+
+# Run every live check against the live example and write a summary
+live-verify: build
+    examples/live/verify.sh
+
+# Tear the live example down
+live-down:
+    examples/live/tf.sh destroy
+
 # Open one GitHub issue per section of docs/backlog.md (needs gh and a GitHub remote)
 backlog-issues:
     scripts/open-backlog-issues.sh

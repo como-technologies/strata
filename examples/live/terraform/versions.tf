@@ -1,0 +1,15 @@
+terraform {
+  required_version = ">= 1.5"
+  required_providers {
+    spectrocloud = {
+      source  = "spectrocloud/spectrocloud"
+      version = "0.29.7"
+    }
+  }
+}
+
+# Auth: SPECTROCLOUD_APIKEY rides the environment; examples/live/tf.sh sets it from
+# PALETTE_API_KEY or ~/.palette.env. Never in tfvars.
+provider "spectrocloud" {
+  project_name = var.palette_project
+}

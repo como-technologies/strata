@@ -1,0 +1,6 @@
+# Copy to terraform.tfvars (gitignored) and fill in names from your tenant.
+palette_project    = "my-project"
+cloud_account_name = "my-aws-account"
+region             = "us-east-2"
+az                 = "us-east-2a"
+ssh_key_name       = "my-key-pair"

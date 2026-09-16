@@ -387,20 +387,13 @@ cluster that cannot be read still counts. `--format json` writes
 Offline, a record keeps the consumer uids from the moment it was taken:
 `jq .source.consumers examples/profiles/aws-pxk@1.1.1.json`
 
-## Confirm how Palette treats an edit to a published version
+## Why the nightly check is needed
 
-One Palette behavior is still unconfirmed, and the nightly check depends on
-it: what happens when someone edits a published profile version in place.
-Confirm it in a sandbox tenant:
-
-1. `strata snapshot <profile>@<version> -o before.json`
-2. Edit one value of that version in the Palette UI and save.
-3. `strata verify before.json`
-
-Write the result down with the team's model notes. If `verify` exits `1`,
-Palette allowed the edit and the nightly job is the guard. If Palette created
-a new version instead, `verify` exits `0` and the new version shows up in the
-listing.
+Palette lets a published profile version be edited in place. The live example
+(`examples/live/`) edited one value of a published version through the API:
+the version kept its uid and its number, and no new version appeared. Only
+`strata verify` noticed, with `DRIFT` and the changed leaf. The nightly job is
+the guard.
 
 ## Cheat sheet
 
@@ -422,5 +415,5 @@ listing.
 ## What the tool does not do yet
 
 - Read the `UPSTREAM` digest from the pack's own registry. Today it comes
-  from the digest Palette stamps on the pack ref, which the team has not yet
-  confirmed against a live profile.
+  from the digest Palette stamps on the pack ref, which the live example
+  showed equal to the registry digest for `spectro` packs.

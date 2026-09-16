@@ -19,6 +19,34 @@ Two profiles with the same root are the same release. Profile variables have
 their own hash. They are the per-deployment configuration interface. They are
 not part of a pack.
 
+### What the pack-ref digest tracks
+
+The live example (`examples/live/`, run `20260916T153806Z`) settled it for the packs
+it used. On a published profile, the `digest` Palette stamps on each pack ref
+equals the digest the registry reports for that pack version. That held for
+all four packs, `spectro` type from the Public Repo:
+
+| pack | version | pack-ref digest and registry digest |
+|---|---|---|
+| ubuntu-aws | 24.04 | `sha256:2df05daa4eb4...` |
+| kubernetes | 1.36.2 | `sha256:c4f7f20f40c7...` |
+| cni-cilium-oss | 1.20.1 | `sha256:917d9de9a696...` |
+| csi-aws-ebs | 1.65.0 | `sha256:bd09e8b4187b...` |
+
+The same digests appear for those versions in `examples/INDEX.md`, fetched
+from the registry a day earlier. So `UPSTREAM` moves with the pack version's
+content, and the fallback order, pack-ref digest first and registry digest
+second, needs no change. Helm and OCI packs were not part of the run.
+
+### Editing a published version in place
+
+The same run edited version 1.0.1 of its profile in place through the API,
+as the Terraform provider does, changing one value. Palette accepted the edit.
+The profile kept its uid and its version, stayed published, and no new version
+appeared. `strata verify` on the record taken before the edit exited `1` with
+`DRIFT` and named the changed leaf. A published version is immutable only
+because a check says so; the scheduled `verify` is that check.
+
 ## Canonical form
 
 Palette rewrites values when it returns them. Whitespace, key order, and
@@ -156,9 +184,10 @@ read, are found before any request. The registry lookups are:
 
 A version or tag the registry does not have is `pack-not-found`; a registry
 name that is not visible is `registry-not-found`. The snapshot has
-`source.template` `candidate` and no uid. The pack-ref digest of a published
-profile is not confirmed to equal the registry digest; until it is, a
-candidate's root can differ from the published root by `UPSTREAM` alone.
+`source.template` `candidate` and no uid. Because a published profile's
+pack-ref digest equals the registry digest, a candidate that carries the
+published tags, values, and manifests has the published root. The live
+example checks exactly that.
 
 ## Clusters: release versus run
 

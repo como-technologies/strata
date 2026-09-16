@@ -10,3 +10,11 @@ _entity.raw.json
 
 # build output
 /target
+
+# live example: state and real variable values stay local; runs hold raw API responses
+examples/live/terraform/.terraform/
+examples/live/terraform/*.tfstate
+examples/live/terraform/*.tfstate.*
+examples/live/terraform/.terraform.tfstate.lock.info
+examples/live/terraform/terraform.tfvars
+examples/live/runs/
