@@ -254,5 +254,11 @@ run.
   (#18).
 - A snapshot rebuilt with `--from-raw` loses the project it was taken in
   (#22).
+- The live example ran without the provider's `immutable-clusterprofiles`
+  flag and changed only a version no cluster runs. What `cluster:<uid>` and
+  `verify` report when a version that clusters run is edited in place, or
+  overwritten by a legacy version bump, is unverified (#27).
+- `verify` compares roots only, so a version bump that overwrites a version's
+  number without changing its content verifies unchanged (#27).
 - The text reports truncate values longer than 120 characters. The JSON
   document and `--full` carry the full value.

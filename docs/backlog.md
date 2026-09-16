@@ -396,9 +396,11 @@ labels: design
 
 `IDENTITY` hashes a pack's name, layer, type, tag, version, packUid, and registryUid. The live run found that Palette stores the tag a profile was authored with: a profile built with Terraform pins `24.04` for `ubuntu-aws`, while the registry names that pack version `LTS__24.x`, `LTS__24.04`, and `LTS__24.4.x`. Two profiles that pin the same pack uid through different tag names therefore differ in `IDENTITY`. The rules table maps `IDENTITY` on the OS or Kubernetes layer to `repave`, so the report would call it a node repave although both run the same pack version. A floating tag such as `1.x` is different: it changes which version an upgrade picks, so a change to or from one may belong in `IDENTITY`.
 
+An in-place edit can also rename the tag of a published version and keep its pack uid. If an exact tag leaves `IDENTITY`, that edit changes no hash, and the scheduled `verify` stops seeing it. The provider's `immutable-clusterprofiles` flag refuses such an edit from Terraform, but Palette accepts it through the API, so the question stands with the flag on.
+
 ### Plan
 
-1. In the live example, publish a version that differs only in the OS pack's tag name for the same pack uid, and record what Palette does to a cluster that moves to it: whether it reconciles or repaves.
+1. In the live example, publish a version that differs only in the OS pack's tag name for the same pack uid, and record what Palette does to a cluster that moves to it: whether it reconciles or repaves. Also rename that tag on a published version in place through the API, and run `verify` on the record taken before the edit.
 2. Decide with the team: keep the tag in `IDENTITY` and give a tag-only change its own impact level, or drop an exact tag from `IDENTITY` when the pack uid is unchanged.
 3. `src/snapshot.rs` and `src/diff.rs`: implement the decision; if roots change, bump the snapshot schema id as `docs/model.md` requires.
 4. Tests over two fixtures that differ only in a tag name, and one that changes a floating tag.
@@ -408,6 +410,7 @@ labels: design
 - [ ] `docs/model.md` states whether a tag-only change moves `IDENTITY` and what impact it reports, with the live evidence
 - [ ] Comparing two profiles that pin the same pack uid under different tag names reports the decided result, with a test
 - [ ] If roots change, the snapshot schema id changes and older records are refused by name
+- [ ] `docs/model.md` states whether an in-place tag rename of a published version is `DRIFT`, and `verify` reports what it states, with a test
 
 ## Record the values a cluster gives its profile variables
 
@@ -422,13 +425,15 @@ A cluster snapshot records each applied profile's variable definitions and leave
 1. `src/snapshot.rs`: `source.cluster.variables[]` with the name, the profile uid, and the value of each non-sensitive variable. A sensitive variable is listed with `sensitive: true` and no value, and no hash of it either. None of it enters the root.
 2. `src/diff.rs`: when both sides are clusters, an additive `clusterVariables` section in `strata-diff/1` with the changed values.
 3. `src/render/`: the terminal and markdown reports list changed values under the variables line.
-4. Tests over cluster fixtures with different values; the fixture secret must not appear in any document.
+4. `src/ops.rs`: `verify` on a cluster record names the values changed since the record was taken, apart from the root verdict, as a cluster's counterpart to an in-place edit of its profile.
+5. Tests over cluster fixtures with different values; the fixture secret must not appear in any document.
 
 ### Acceptance criteria
 
 - [ ] A cluster snapshot records non-sensitive variable values outside the root; sensitive values appear in no document
 - [ ] Comparing two cluster snapshots with different values shows the changes and still reports equal roots when the release is the same
 - [ ] `strata schema snapshot` and `strata schema diff` include the new fields
+- [ ] `verify` on a cluster record names a variable value changed since the record was taken, and `docs/output.md` states whether that alone is `DRIFT`
 
 ## Write a candidate file from a published profile
 
@@ -442,14 +447,15 @@ Teams that adopt candidate files start from profiles that are already published.
 
 1. `src/candidate.rs`: `Candidate::from_snapshot`, with explicit tags and registry uids.
 2. `src/main.rs`: `strata candidate <ref> [-o profile.yaml] [--files-dir DIR]`. With `--files-dir`, each layer's values and each manifest go to files the candidate references.
-3. Tests: a candidate written from a fixture record resolves, through registry fixtures, to the record's root.
-4. `examples/live/verify.sh`: use the command and delete the jq filter.
+3. Tests: a candidate written from a fixture record resolves, through registry fixtures, to the record's root; after an in-place edit of the fixture version, `same-release` between the candidate's snapshot and the edited version fails and names the edited leaf.
+4. `examples/live/verify.sh`: use the command and delete the jq filter. After the in-place edit, check that the candidate no longer reproduces the version.
 
 ### Acceptance criteria
 
 - [ ] `strata candidate <record>.json -o profile.yaml` writes a file that `snapshot --from-candidate` turns into the record's root
 - [ ] `--files-dir` writes values and manifests to files and references them
 - [ ] The live example uses the command
+- [ ] After an in-place edit of the published version, `same-release` between the candidate's snapshot and the version fails and names the edited leaf
 
 ## Keep the project scope in raw directories
 
@@ -463,12 +469,13 @@ labels: robustness
 
 1. `src/api.rs`: `RawProfile` and `RawCluster` write `scope.json` with the project uid next to their documents, and read it back when present.
 2. `src/ops.rs`: `snapshot_from_dir` applies the saved scope with `Snapshot::with_project`.
-3. Tests: a round trip through a raw directory keeps `source.projectUid`; a raw directory without `scope.json` still loads, at tenant scope.
+3. Tests: a round trip through a raw directory keeps `source.projectUid`; a raw directory without `scope.json` still loads, at tenant scope; a record rebuilt from a raw directory taken before an in-place edit of a project's profile reports `DRIFT` with no project set in the environment.
 
 ### Acceptance criteria
 
 - [ ] `snapshot <ref> --raw-dir d` followed by `snapshot --from-raw d` records the same `source.projectUid`
 - [ ] Raw directories written before the change still load
+- [ ] A record rebuilt from a raw directory taken before an in-place edit reports `DRIFT` with no project in the environment
 
 ## Live-verify a cluster that runs several profiles
 
@@ -481,12 +488,14 @@ labels: investigation
 ### Plan
 
 1. `examples/live/terraform`: an add-on profile with one small pack, attached to the cluster next to the infra profile.
-2. `examples/live/verify.sh`: check that `cluster:<uid>` lists both profiles in order, that `cluster:<uid>/<name>` selects each, and that each profile's record compares `IDENTICAL` against its selection.
+2. `examples/live/verify.sh`: check that `cluster:<uid>` lists both profiles in order, that `cluster:<uid>/<name>` selects each, and that each profile's record compares `IDENTICAL` against its selection. Then edit the add-on profile in place: its record reports `DRIFT` and the infra profile's record does not. When the edit reaches the cluster is #27's question. With `immutable-clusterprofiles` on, bump the add-on profile's version instead: the cluster's selection still matches the old version's record, and `consumers` lists the cluster under the old version only.
 3. `examples/live/README.md`: the new checks and a recorded run.
 
 ### Acceptance criteria
 
 - [ ] The new checks pass on a real cluster that runs two profiles
+- [ ] An in-place edit of the add-on profile makes its record `DRIFT` and leaves the infra profile's record unchanged
+- [ ] With `immutable-clusterprofiles` on, a version bump of the add-on profile leaves the cluster's selection equal to the old version's record
 - [ ] The recorded run in `examples/live/README.md` includes them
 
 ## Live-verify the registry-move policy
@@ -499,14 +508,14 @@ labels: investigation
 
 ### Plan
 
-1. In a tenant with two registries that hold the same pack version, publish one profile pinned to each.
-2. Run `strata same-release --allow registry-move` on their records and note every field that differs.
+1. In a tenant with two registries that hold the same pack version, publish one profile pinned to each. Make the second as a version bump with the provider's `immutable-clusterprofiles` flag on, so the pair is the preserved version and its clone with the packs re-pinned, the way a team promotes a move.
+2. Run `strata same-release --allow registry-move` on their records and note every field that differs. Then edit one profile's values in place and run it again.
 3. `docs/model.md`: state what a real registry move changes; adjust the policy in `src/ops.rs` if it differs from the fixture's, with a test.
 
 ### Acceptance criteria
 
 - [ ] `docs/model.md` states which fields differ in a real registry move, with the evidence
-- [ ] The policy passes a real registry move and still fails an `AUTHORED` change
+- [ ] The policy passes a real registry move and fails the same pair after an in-place edit of one side's values
 
 ## Report drift from a scheduled verify
 
@@ -521,13 +530,15 @@ The live run showed that Palette accepts an in-place edit of a published version
 1. `scripts/verify-report.sh <pattern>...`: run `strata verify --format json` over the records; open one issue per drifted record, with the report and a marker, update it on later runs, and close it when the record verifies again. A record that cannot be checked is reported too. Host calls sit in functions, as in `pr-comment.sh`.
 2. A reusable workflow, `.github/workflows/verify.yml`, that installs the release binary and calls the script; the caller sets the schedule. Other CI systems call the script directly.
 3. Tests with the fake `gh` from `tests/scripts.rs`.
-4. `README.md` and `docs/walkthrough.md`: the call.
+4. `examples/live`: run the script around the in-place edit, so a real drifted record opens the issue and undoing the edit closes it. Do it with the provider's `immutable-clusterprofiles` flag off, through Terraform, and on, through the API, which Palette still accepts: the flag guards one client, and this report guards the tenant. A record whose version a legacy version bump overwrote is reported too (#27). Cluster records follow what #27 finds about an update that waits for a cluster.
+5. `README.md` and `docs/walkthrough.md`: the call.
 
 ### Acceptance criteria
 
 - [ ] A drifted record opens exactly one issue with the report, and a later clean run closes it
 - [ ] A record that cannot be checked is reported, never silently skipped
 - [ ] The script runs locally and through the reusable workflow
+- [ ] In the live example, the in-place edit opens one issue with `immutable-clusterprofiles` off and with it on, and undoing the edit closes it
 
 ## List profiles, clusters, and projects
 
@@ -557,3 +568,43 @@ A pack is not a ref: a snapshot always records a whole profile, so the useful qu
 - [x] `--project <uid>` lists another project with no change to the environment
 - [x] `--format json` writes `strata-list/1`, and `strata schema list` prints its JSON Schema
 - [x] A `<name>@<version>` that matches nothing points at `strata list`
+
+## Live-verify clusters on a changed profile version, with and without immutable-clusterprofiles
+
+labels: investigation
+
+### Background
+
+`cluster:<uid>` records what a cluster runs from the cluster's own copy of its profiles: `spec.clusterProfileTemplates` in `GET /v1/spectroclusters/<uid>`, and `GET /v1/spectroclusters/<uid>/profiles/packs/manifests`. The live run edited a published version in place, and `verify` on its record reported `DRIFT` (`docs/model.md`). That version ran on no cluster, and the edit is an optional manual step in `examples/live/README.md`.
+
+How a version that clusters run can change depends on the Terraform provider's `immutable-clusterprofiles` feature_preview flag, which exists from provider 0.29.5. The live example pins 0.29.7 and leaves the flag off.
+
+- Flag off, the legacy behavior: a content change without a version bump is a `PUT` to the published version, as `edit_next_in_place` does. A version bump on the same resource is a `PUT` too: the profile keeps its uid and takes the new version number, so the old version is gone, and the clusters that ran it point at a uid that now names another version.
+- Flag on: the provider refuses a content change without a version bump at plan time. A version bump clones the profile (`POST /v1/clusterprofiles/<uid>/clone`), overwrites the clone with the configuration, and keeps the old version when `skip_destroy` is set. Palette does not enforce any of this: the API and the console still accept an in-place edit.
+
+Nothing shows what these changes do to clusters. Take cluster A created from `P@1.0.0`, then an in-place edit of 1.0.0, then cluster B created from the edited 1.0.0. Both clusters name the same profile uid and version. Palette lists the changes that wait for a cluster separately, in `GET /v1/spectroclusters/<uid>/profileUpdates`. If A's copy keeps the old content until the update is applied, `compare cluster:A cluster:B` shows the edit, which is right, although nothing in the report says that both sides name the same version. If A's copy takes the edit at once, strata reports content that A does not run yet, and A and B compare `IDENTICAL` while they differ.
+
+`verify` compares roots only. After a legacy version bump that changes no content, a record of 1.0.0 verifies unchanged although 1.0.0 no longer exists.
+
+### Plan
+
+1. `examples/live/terraform`: an `immutable_profiles` variable that sets the flag through `feature_preview`, with `skip_destroy` and `create_before_destroy` on the profiles when it is set; `just live-down` still removes every version. A second cluster, B, created only when `second_cluster` is set. `edit_release_in_place`, modeled on `edit_next_in_place`, and `bump_release_version`, which moves the release resource to a new version.
+2. `examples/live/in-place.sh`: run the sequence once with the flag off and once with it on, keeping each stage under `runs/<UTC time>/in-place/<off|on>/`. With the flag on, check that `tf.sh plan` refuses the in-place edit, then make the edit through the API.
+   1. Record cluster A, the release version, and A's `profileUpdates`.
+   2. Edit 1.0.0 in place and create cluster B. Record A again without applying the update, with its `profileUpdates`, and record B.
+   3. Apply the waiting update to A and record A a third time.
+   4. Undo the edit and bump the release version. Record both clusters, the old version, and the new one.
+
+   At each stage, run `compare cluster:A cluster:B`, `verify` on the first records of A and of the release version, `consumers` of the release version, and `compare` of the release record against `cluster:A`. After both runs, `same-release` between the bumped version's records from the two runs shows whether the clone carried anything over from the version it copied. Remove B at the end.
+3. `docs/model.md`, under "Editing a published version in place": for each flag setting, what an in-place edit and a version bump do to a cluster that runs the version, before and after the update is applied, and to a cluster created afterward, and whether a clone carries content over, with the evidence.
+4. `src/ops.rs`: `verify` reports a record whose uid now names another version, even when the roots match. `src/diff.rs` and `src/render/`: when both sides name the same profile uid and version and their roots differ, the report says the version was edited in place. Tests over fixtures for both.
+5. Only if the evidence needs it: `cluster:<uid>` reads what the cluster applied, not what waits for it, and a cluster snapshot records a waiting update outside the root.
+6. `in-place.sh` asserts the recorded answers, so a later run fails when Palette or the provider changes them. `examples/live/README.md`: the script replaces the optional in-place step, with a recorded run for each flag setting.
+
+### Acceptance criteria
+
+- [ ] `docs/model.md` states, for each setting of `immutable-clusterprofiles`, what an in-place edit and a version bump do to a cluster that runs the version, before and after the update is applied, and to a cluster created afterward, with the live evidence
+- [ ] `cluster:<uid>` records the content a cluster runs, and `compare cluster:A cluster:B` shows a change exactly when the two clusters run different content
+- [ ] A comparison of two sides with the same profile uid and version and different roots says the version was edited in place
+- [ ] `verify` exits 1 for a record whose uid now names another version, even when the roots match
+- [ ] `examples/live/in-place.sh` runs with the flag off and on against a version a cluster runs, and `examples/live/README.md` records both runs
