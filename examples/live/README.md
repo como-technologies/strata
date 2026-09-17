@@ -567,12 +567,15 @@ consumers  1 -> 0 clusters
 
 ## The drift report runs
 
-`just live-drift-report` in session `20260917T133523Z`: `drift-report.sh off`
-and `drift-report.sh on` against cluster A `fred`, with the issues in this
+`drift-report.sh off` and `drift-report.sh on` in session `20260917T150538Z`,
+with provider 0.30.1, against cluster A `fred`, with the issues in this
 repository under the label `strata-live-drift`. The two runs differ only in the
 provider's `immutable-clusterprofiles` flag. No check failed: 28 with the flag
 off and 27 with it on. Each started from the baseline, with no issue open, and
-restored it with every issue it opened closed.
+restored it with every issue it opened closed. `hold_versions` at the start
+changed nothing with the flag off and only `skip_destroy` on the four profiles
+with it on, and the flag-on bump ran without `-target` (`1 added, 0 changed, 1
+destroyed`).
 
 In both runs the in-place edit through the API opened one issue for the
 add-on record, the second report updated that issue, and the undo closed it;
@@ -584,14 +587,15 @@ in place", and one for cluster A's record, whose add-on version was gone. The
 restore closed both. With the flag, the bump kept 1.0.0, and nothing opened:
 
 ```
-off  verify-report: 3 records: 2 unchanged, 1 drifted, 0 could not be checked; opened #42 for records-off/addon.json
-off  verify-report: 3 records: 1 unchanged, 2 drifted, 0 could not be checked; opened #43 for records-off/addon.json; opened #44 for records-off/cluster-a.json
-off  verify-report: 3 records: 3 unchanged, 0 drifted, 0 could not be checked; closed #43 for records-off/addon.json; closed #44 for records-off/cluster-a.json
+off  verify-report: 3 records: 2 unchanged, 1 drifted, 0 could not be checked; opened #48 for records-off/addon.json
+off  verify-report: 3 records: 1 unchanged, 2 drifted, 0 could not be checked; opened #49 for records-off/addon.json; opened #50 for records-off/cluster-a.json
+off  verify-report: 3 records: 3 unchanged, 0 drifted, 0 could not be checked; closed #49 for records-off/addon.json; closed #50 for records-off/cluster-a.json
 on   verify-report: 3 records: 3 unchanged, 0 drifted, 0 could not be checked
 ```
 
-The session before it, `20260917T132642Z`, found two problems in the example,
-both fixed: GitHub lists a new or closed issue about five seconds later, so
+Session `20260917T133523Z` passed the same checks with provider 0.29.7 and
+its workaround (#47). The session before that, `20260917T132642Z`, found two
+problems in the example, both fixed: GitHub lists a new or closed issue about five seconds later, so
 the checks now wait for the listing, and the flag-on bump asked Palette to
 delete the version cluster A runs, because the state still held
 `skip_destroy = false` (see "When a check fails").
