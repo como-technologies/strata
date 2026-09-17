@@ -9,7 +9,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::api::{Palette, PaletteApi, RawCluster, RawProfile};
-use crate::diff::{self, Diff, ImpactLevel, PackDiff, Status, Verify, VerifyStatus};
+use crate::diff::{
+    self, ClusterProfileOverwritten, Diff, ImpactLevel, PackDiff, Status, Verify, VerifyStatus,
+};
 use crate::error::{Error, Result};
 use crate::progress::Progress;
 use crate::reference::Ref;
@@ -115,6 +117,36 @@ pub struct Verification {
 }
 
 /// Re-fetch what a snapshot was taken from and compare: the profile, or for a cluster snapshot
+/// Each profile a cluster runs whose uid no longer names the version the cluster's copy names,
+/// read from the profile documents: one request per profile. A profile that is gone is listed with
+/// no version; any other error stops the check.
+fn profiles_overwritten<A: PaletteApi>(
+    running: &[crate::snapshot::AppliedProfile],
+    palette: &Palette<A>,
+) -> Result<Vec<ClusterProfileOverwritten>> {
+    let mut out = Vec::new();
+    for p in running {
+        let now = match palette.profile_document(&p.uid) {
+            Ok(doc) => doc
+                .pointer("/spec/version")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string(),
+            Err(Error::Api { status: 404, .. }) => String::new(),
+            Err(e) => return Err(e),
+        };
+        if now != p.version {
+            out.push(ClusterProfileOverwritten {
+                uid: p.uid.clone(),
+                name: p.name.clone(),
+                cluster_version: p.version.clone(),
+                profile_version: now,
+            });
+        }
+    }
+    Ok(out)
+}
+
 /// the cluster, with the same profile selection.
 pub fn verify<A: PaletteApi>(
     recorded: &Snapshot,
@@ -146,7 +178,12 @@ pub fn verify<A: PaletteApi>(
         && (&live.source.name, &live.source.version)
             != (&recorded.source.name, &recorded.source.version))
         .then(|| format!("{}@{}", live.source.name, live.source.version));
-    let unchanged = recorded.root == live.root && overwritten_by.is_none();
+    let profiles_overwritten = match &live.source.cluster {
+        Some(c) => profiles_overwritten(&c.profiles, palette)?,
+        None => Vec::new(),
+    };
+    let unchanged =
+        recorded.root == live.root && overwritten_by.is_none() && profiles_overwritten.is_empty();
     let verify = Verify {
         status: if unchanged {
             VerifyStatus::Unchanged
@@ -157,6 +194,7 @@ pub fn verify<A: PaletteApi>(
         recorded_at: recorded.source.fetched_at.clone(),
         checked_at: checked_at.to_string(),
         overwritten_by,
+        profiles_overwritten,
         cluster_values_changed: 0,
     };
     let mut diff = diff::compute(recorded, &live, checked_at, Some(verify));

@@ -842,6 +842,22 @@ use common::{CLUSTER_UID, SECRET_VALUE};
 /// An API that serves the cluster fixture `dir` under CLUSTER_UID.
 fn serve_cluster(api: MemoryApi, raw_root: &Path, dir: &str) -> MemoryApi {
     let d = raw_root.join(dir);
+    // the profile documents of the profiles the cluster runs, as they are published: verify of a
+    // cluster record reads them for their current version
+    let mut api = api;
+    for template in read(&d.join("cluster.json"))["spec"]["clusterProfileTemplates"]
+        .as_array()
+        .unwrap()
+    {
+        let uid = template["uid"].as_str().unwrap();
+        for fixture in ["a", "b", "addons"] {
+            let profile = read(&raw_root.join(fixture).join("profile.json"));
+            if profile["metadata"]["uid"] == uid {
+                api = api.with(format!("/v1/clusterprofiles/{uid}"), profile);
+                break;
+            }
+        }
+    }
     api.with(
         format!("/v1/spectroclusters/{CLUSTER_UID}"),
         read(&d.join("cluster.json")),
@@ -981,6 +997,111 @@ fn a_profile_on_the_cluster_is_selected_by_name_and_the_rest_are_merged() {
         err.to_string().contains("applied: lab-profile, lab-addons"),
         "{err}"
     );
+}
+
+#[test]
+fn verify_reports_a_cluster_record_whose_profile_version_was_overwritten_or_deleted() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let recorded = snapshot_cluster(
+        &serve_cluster(MemoryApi::new(), dir.path(), "cluster-a"),
+        None,
+    )
+    .unwrap();
+    let verify = |api: MemoryApi| {
+        ops::verify(&recorded, &Palette::new(api), "t1", &Progress::silent()).unwrap()
+    };
+
+    // the cluster and its profile as recorded: one extra request, for the one profile it runs
+    let api = serve_cluster(MemoryApi::new(), dir.path(), "cluster-a");
+    let v = ops::verify(&recorded, &Palette::new(&api), "t1", &Progress::silent()).unwrap();
+    assert_eq!(api.calls(&format!("/v1/clusterprofiles/{UID_A}")), 1);
+    assert!(v.unchanged);
+    assert!(v
+        .diff
+        .verify
+        .as_ref()
+        .unwrap()
+        .profiles_overwritten
+        .is_empty());
+
+    // a legacy version bump renamed the profile the cluster runs; the cluster did not change
+    let mut renamed = read(&dir.path().join("a/profile.json"));
+    renamed["spec"]["version"] = Value::from("1.3.0");
+    let v = verify(
+        serve_cluster(MemoryApi::new(), dir.path(), "cluster-a")
+            .with(format!("/v1/clusterprofiles/{UID_A}"), renamed),
+    );
+    assert_eq!(v.live.root, recorded.root, "the cluster runs what it ran");
+    assert!(!v.unchanged, "the version it runs is gone from Palette");
+    let ver = v.diff.verify.as_ref().unwrap();
+    assert_eq!(ver.status, VerifyStatus::Drifted);
+    let named: Vec<(&str, &str, &str, &str)> = ver
+        .profiles_overwritten
+        .iter()
+        .map(|o| {
+            (
+                o.uid.as_str(),
+                o.name.as_str(),
+                o.cluster_version.as_str(),
+                o.profile_version.as_str(),
+            )
+        })
+        .collect();
+    assert_eq!(named, [(UID_A, "lab-profile", "1.2.0", "1.3.0")]);
+    let verdict = render::renderer(Format::Terminal, Paint::off(), false)
+        .verdict(ver, &recorded.source)
+        .unwrap();
+    assert_eq!(
+        verdict,
+        "DRIFT: cluster lab-cluster runs lab-profile@1.2.0, but uid 64f0000000000000000000a1 now names 1.3.0: the version was overwritten in place"
+    );
+
+    // the profile was deleted
+    let v = verify(
+        MemoryApi::new()
+            .with(
+                format!("/v1/spectroclusters/{CLUSTER_UID}"),
+                read(&dir.path().join("cluster-a/cluster.json")),
+            )
+            .with(
+                format!("/v1/spectroclusters/{CLUSTER_UID}/profiles/packs/manifests"),
+                read(&dir.path().join("cluster-a/manifests.json")),
+            )
+            .with(
+                format!("/v1/spectroclusters/{CLUSTER_UID}/variables"),
+                read(&dir.path().join("cluster-a/variables.json")),
+            ),
+    );
+    assert!(!v.unchanged);
+    let ver = v.diff.verify.as_ref().unwrap();
+    assert_eq!(ver.profiles_overwritten.len(), 1);
+    assert_eq!(
+        ver.profiles_overwritten[0].profile_version, "",
+        "no version: the uid is gone"
+    );
+    let verdict = render::renderer(Format::Terminal, Paint::off(), false)
+        .verdict(ver, &recorded.source)
+        .unwrap();
+    assert!(
+        verdict.ends_with("but uid 64f0000000000000000000a1 no longer exists"),
+        "{verdict}"
+    );
+
+    // any other error reading a profile stops verify rather than guessing
+    let err = ops::verify(
+        &recorded,
+        &Palette::new(
+            serve_cluster(MemoryApi::new(), dir.path(), "cluster-a").failing(
+                format!("/v1/clusterprofiles/{UID_A}"),
+                500,
+                "boom",
+            ),
+        ),
+        "t1",
+        &Progress::silent(),
+    );
+    assert!(err.is_err(), "{err:?}");
 }
 
 #[test]

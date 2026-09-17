@@ -492,10 +492,29 @@ pub struct Verify {
     /// match.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub overwritten_by: Option<String>,
+    /// For a cluster record: each profile the cluster runs whose uid now names another version
+    /// than the cluster's copy, or no longer exists. The cluster may run exactly what it ran, but
+    /// the version it runs is gone from Palette, so `status` is drifted.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub profiles_overwritten: Vec<ClusterProfileOverwritten>,
     /// For a cluster record: how many values the cluster gives its variables differ from the
     /// record. They do not change `status`.
     #[serde(default, skip_serializing_if = "is_zero")]
     pub cluster_values_changed: usize,
+}
+
+/// A profile a cluster runs whose uid no longer names the version the cluster's copy names.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ClusterProfileOverwritten {
+    /// The profile uid.
+    pub uid: String,
+    /// The profile name, as the cluster's copy names it.
+    pub name: String,
+    /// The version the cluster's copy names.
+    pub cluster_version: String,
+    /// The version the uid names now; empty when the uid no longer exists.
+    pub profile_version: String,
 }
 
 fn is_zero(n: &usize) -> bool {

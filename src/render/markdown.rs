@@ -3,9 +3,9 @@
 use super::{
     chain_verdict, cluster_value, consumer_count, consumers_heading, counts_line, dash,
     edited_in_place_note, entry_error, list_count, list_scope, overwritten_in_place_notes,
-    pack_version, pair_detail, pair_word, plain_flags, record_detail, record_label, short, show,
-    subject, traits_suffix, values_changed, values_changed_suffix, variable_lines, version_display,
-    Renderer, VarLine,
+    pack_version, pair_detail, pair_word, plain_flags, profiles_overwritten_sentence,
+    record_detail, record_label, short, show, subject, traits_suffix, values_changed,
+    values_changed_suffix, variable_lines, version_display, Renderer, VarLine,
 };
 use crate::color::Paint;
 use crate::diff::{Diff, Leaf, Op, Status, Verify, VerifyStatus};
@@ -208,6 +208,11 @@ impl Renderer for MarkdownRenderer {
                 values_changed_suffix(v.cluster_values_changed)
             ),
             VerifyStatus::Drifted => match &v.overwritten_by {
+                _ if !v.profiles_overwritten.is_empty() => format!(
+                    "\n**DRIFT**: {}{}",
+                    profiles_overwritten_sentence(v, recorded).unwrap_or_default(),
+                    values_changed_suffix(v.cluster_values_changed)
+                ),
                 Some(now) => format!(
                     "\n**DRIFT**: {what} now names {now}: the version recorded {at} was overwritten in place{}",
                     values_changed_suffix(v.cluster_values_changed)

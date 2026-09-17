@@ -158,6 +158,40 @@ pub(crate) fn record_label(name: &str, version: &str) -> String {
     }
 }
 
+/// For a cluster record whose running profile versions are gone from Palette: `cluster c runs
+/// name@1.2.0, but uid u now names 1.3.0: the version was overwritten in place`, or `but uid u no
+/// longer exists`, one clause per profile.
+pub(crate) fn profiles_overwritten_sentence(v: &Verify, recorded: &Source) -> Option<String> {
+    if v.profiles_overwritten.is_empty() {
+        return None;
+    }
+    let cluster = recorded
+        .cluster
+        .as_ref()
+        .map(|c| c.name.as_str())
+        .unwrap_or_default();
+    Some(
+        v.profiles_overwritten
+            .iter()
+            .map(|o| {
+                let runs = format!(
+                    "cluster {cluster} runs {}@{}, but uid {}",
+                    o.name, o.cluster_version, o.uid
+                );
+                if o.profile_version.is_empty() {
+                    format!("{runs} no longer exists")
+                } else {
+                    format!(
+                        "{runs} now names {}: the version was overwritten in place",
+                        o.profile_version
+                    )
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("; "),
+    )
+}
+
 /// The sentence after a record's status.
 fn overwritten_by(r: &crate::ops::VerifiedRecord) -> Option<&str> {
     r.diff
@@ -211,12 +245,22 @@ fn record_values_changed(r: &crate::ops::VerifiedRecord) -> usize {
     r.cluster_variables.as_ref().map_or(0, |c| c.values.len())
 }
 
+fn record_profiles_overwritten(r: &crate::ops::VerifiedRecord) -> Option<String> {
+    let d = r.diff.as_ref()?;
+    profiles_overwritten_sentence(d.verify.as_ref()?, &d.a)
+}
+
 pub(crate) fn record_detail(r: &crate::ops::VerifiedRecord) -> String {
     use crate::ops::RecordStatus;
     match r.status {
         RecordStatus::Unchanged => format!(
             "unchanged since {}{}",
             r.recorded_at,
+            values_changed_suffix(record_values_changed(r))
+        ),
+        RecordStatus::Drifted if record_profiles_overwritten(r).is_some() => format!(
+            "{}{}",
+            record_profiles_overwritten(r).unwrap_or_default(),
             values_changed_suffix(record_values_changed(r))
         ),
         RecordStatus::Drifted if overwritten_by(r).is_some() => format!(

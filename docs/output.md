@@ -136,7 +136,15 @@ model can read it without these pages:
   the roots match. The verdict reads `DRIFT: published version <name>@<version>
   now names <name>@<new version>: the version recorded <time> was overwritten
   in place`. For a cluster record, `clusterValuesChanged`
-  counts the variable values that differ from the record.
+  counts the variable values that differ from the record, and
+  `profilesOverwritten` lists each profile the cluster runs whose uid now
+  names another version than the cluster's copy, or no longer exists: `uid`,
+  `name`, `clusterVersion`, and `profileVersion`, empty for a uid that is gone.
+  `verify` reads each profile the cluster runs for this, one request per
+  profile. A listed profile makes the status `drifted` even when the cluster
+  runs exactly what it ran, and the verdict reads `DRIFT: cluster <name> runs
+  <name>@<version>, but uid <uid> now names <version>: the version was
+  overwritten in place`, or `but uid <uid> no longer exists`.
 
 A cluster record whose root is unchanged but whose variable values differ is
 not `DRIFT`: the release is the same, so `verify` exits `0`. The verdict line
