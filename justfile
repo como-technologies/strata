@@ -69,6 +69,16 @@ live-session: build
     OUT=$session/registry-move examples/live/registry-move.sh || exit 1
     echo "live-session: all four passed; results in $session"
 
+# The drift report test (#25), with the flag off and then on, in one session directory. It opens
+# and closes issues labeled strata-live-drift in this repository; see examples/live/README.md.
+live-drift-report: build
+    #!/usr/bin/env bash
+    set -uo pipefail
+    session=examples/live/runs/$(date -u +%Y%m%dT%H%M%SZ)
+    OUT=$session/drift-report/off examples/live/drift-report.sh off || exit 1
+    OUT=$session/drift-report/on examples/live/drift-report.sh on || exit 1
+    echo "live-drift-report: both passed; results in $session"
+
 # Tear the live example down, with every version of every profile name it uses, including the
 # versions skip_destroy kept out of Terraform's state. When the destroy fails,
 # examples/live/diagnose.sh saves what holds each cluster.
