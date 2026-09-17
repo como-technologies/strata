@@ -608,3 +608,68 @@ Nothing shows what these changes do to clusters. Take cluster A created from `P@
 - [ ] A comparison of two sides with the same profile uid and version and different roots says the version was edited in place
 - [ ] `verify` exits 1 for a record whose uid now names another version, even when the roots match
 - [ ] `examples/live/in-place.sh` runs with the flag off and on against a version a cluster runs, and `examples/live/README.md` records both runs
+
+## Show the version each consumer's copy names in consumers
+
+labels: feature
+
+### Background
+
+#27's flag-off run bumped `strata-live-addon` from 1.0.0 to 1.0.1 with the Terraform provider's legacy behavior: the profile kept its uid, which now names 1.0.1, and 1.0.0 is gone from Palette. The Palette console does the same when only the version is renamed. Both clusters that ran 1.0.0 kept their own copies, which still name 1.0.0 (run `20260916T213303Z`, `a4-addon.json` and `b4-addon.json`). `strata consumers` of the uid then reported `strata-live-addon@1.0.1` with both clusters as consumers (`consumers-old.out`). It lists each cluster under the version the uid names now, which neither cluster runs, so "what runs 1.0.1" answers with two clusters that run a copy of 1.0.0.
+
+`consumers` already reads each cluster's document for its name and state (`src/ops.rs`, `consumers`). That document lists `spec.clusterProfileTemplates[]` with each applied profile's uid, name, and version, so the version a cluster's copy names costs no extra request.
+
+### Plan
+
+1. `src/ops.rs`: `Consumer` gains `version`, the version of the profile's entry in the cluster's `spec.clusterProfileTemplates`, empty when the cluster could not be read. `ConsumersReport` gains the count of consumers whose copy names another version than the profile uid names now.
+2. `src/render/`: such a consumer shows the version it runs and says the version was overwritten in place, for example `runs strata-live-addon@1.0.0, which uid 6aab0a99da23ecda03f36685 no longer names`.
+3. `docs/output.md`: the new fields. Tests over fixtures: a cluster whose template names the profile's current version, and one whose template names an older version under the same uid.
+4. `examples/live/in-place.sh`: after the bump, check that `consumers` of the first uid marks both clusters with the flag off and neither with it on.
+
+### Acceptance criteria
+
+- [ ] `consumers` shows the version each cluster's copy names, from the cluster document it already reads
+- [ ] A consumer whose copy names another version than the profile uid names now is marked as overwritten in the terminal, markdown, and JSON output
+- [ ] Offline tests cover both cases, and the live flag-off run marks both clusters after a legacy version bump
+
+## Note a profile uid that names two versions in compare
+
+labels: feature
+
+### Background
+
+`compare` notes an in-place edit when both sides name the same profile uid and version with different roots (#27). A legacy version bump, from Terraform without `immutable-clusterprofiles` or a version rename in the Palette console, gives the same uid a new version instead. In #27's flag-off run `20260916T213303Z`, `compare` of the bumped version's record against cluster A's selection labeled its sides `strata-live-addon@1.0.1 (uid 6aab0a99da23ecda03f36685)` and `strata-live-addon@1.0.0 on cluster strata-live-cluster` and said nothing about the shared uid (`a4-matches-old-version.out`). It reported `CHANGED` only because the content differed too. After a rename that changes no content, the same comparison says `IDENTICAL`, which reads as the cluster running 1.0.1. The record of 1.0.0 taken before the bump and the live 1.0.1 had equal roots (`a18670a7b8d6`): `verify` reports that pair since #27, and `compare` does not.
+
+### Plan
+
+1. `src/diff.rs`: `Diff` gains `overwrittenInPlace`, true when both sides carry the same non-empty profile uid under different versions, whatever the roots; for a side that covers several applied profiles, per profile. `editedInPlace` stays as it is.
+2. `src/render/`: a note line in the terminal and markdown reports, next to the edited-in-place note, for example `both sides are uid 6aab0a99da23ecda03f36685, as strata-live-addon@1.0.1 and @1.0.0: the version was overwritten in place`. An `IDENTICAL` verdict keeps its wording and gains the note.
+3. `docs/output.md`: the field. Tests over fixtures: the same uid under different versions with equal roots and with different roots; different uids under different versions stay unnoted.
+4. `examples/live/in-place.sh`: check the field on `a4-matches-old-version`: true with the flag off, false with it on, where the bump made a new uid.
+
+### Acceptance criteria
+
+- [ ] A comparison of two sides that carry the same profile uid under different versions says the version was overwritten in place, whether or not the roots match
+- [ ] Sides with different uids, including a flag-on bump and the version it cloned, get no such note
+- [ ] Offline tests cover equal and different roots, and the live flag-off run shows the note after a legacy version bump
+
+## Report a cluster record whose profile version was overwritten in place
+
+labels: feature
+
+### Background
+
+`verify` on a profile record exits 1 when the uid now names another version (#27). A cluster record is verified against the cluster, and the cluster does not change when its profile version is overwritten. In #27's flag-off run `20260916T213303Z`, after the legacy bump, both clusters' copies still named `strata-live-addon@1.0.0` with the content they had before (`a4-addon.json`, `b4-addon.json`), a version Palette no longer has. A scheduled `verify` of cluster records stays green while the release those clusters claim to run is gone, and the only copies of 1.0.0 left are on the clusters and in strata records.
+
+### Plan
+
+1. `src/ops.rs`, `verify` of a cluster record: for each applied profile of the live cluster, read the profile document, one request per profile, and compare its version with the version the cluster's copy names. Report each profile whose uid names another version, or no longer exists, in `Verify` as `profilesOverwritten` with the uid, the name, and both versions, and exit 1, as for an overwritten profile record.
+2. `src/render/`: a line per such profile in the verdict, for example `strata-live-cluster runs strata-live-addon@1.0.0, but uid 6aab0a99da23ecda03f36685 now names 1.0.1: the version was overwritten in place`.
+3. `docs/output.md`: the field and the exit status. Tests with `MemoryApi`: a cluster whose profile uids still name their versions, one whose uid names another version, and one whose uid is gone.
+4. `examples/live/in-place.sh`: after the bump, `verify` on cluster A's record from stage 3 exits 1 and names the add-on profile with the flag off, and exits 0 with it on.
+
+### Acceptance criteria
+
+- [ ] `verify` on a cluster record exits 1 and names each applied profile whose uid now names another version than the cluster's copy, or no longer exists, even when the cluster itself is unchanged
+- [ ] A cluster whose profile uids still name their versions verifies as before, at one extra request per applied profile
+- [ ] Offline tests cover the three cases, and the live runs show exit 1 with the flag off and 0 with it on after the bump
