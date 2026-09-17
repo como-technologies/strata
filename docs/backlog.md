@@ -642,15 +642,15 @@ labels: feature
 
 ### Plan
 
-1. `src/diff.rs`: `Diff` gains `overwrittenInPlace`, true when both sides carry the same non-empty profile uid under different versions, whatever the roots; for a side that covers several applied profiles, per profile. `editedInPlace` stays as it is.
+1. `src/diff.rs`: `Diff` gains `overwrittenInPlace`, the list of profile uids both sides carry under different versions, whatever the roots, with the name and both versions; a side that records a cluster carries every profile it runs. `editedInPlace` stays as it is.
 2. `src/render/`: a note line in the terminal and markdown reports, next to the edited-in-place note, for example `both sides are uid 6aab0a99da23ecda03f36685, as strata-live-addon@1.0.1 and @1.0.0: the version was overwritten in place`. An `IDENTICAL` verdict keeps its wording and gains the note.
 3. `docs/output.md`: the field. Tests over fixtures: the same uid under different versions with equal roots and with different roots; different uids under different versions stay unnoted.
-4. `examples/live/in-place.sh`: check the field on `a4-matches-old-version`: true with the flag off, false with it on, where the bump made a new uid.
+4. `examples/live/in-place.sh`: after the bump, `a4-names-overwrite` checks that the comparison of the first add-on uid with cluster A names that uid with the flag off, and nothing with it on, where the bump made a new uid.
 
 ### Acceptance criteria
 
-- [ ] A comparison of two sides that carry the same profile uid under different versions says the version was overwritten in place, whether or not the roots match
-- [ ] Sides with different uids, including a flag-on bump and the version it cloned, get no such note
+- [x] A comparison of two sides that carry the same profile uid under different versions says the version was overwritten in place, whether or not the roots match
+- [x] Sides with different uids, including a flag-on bump and the version it cloned, get no such note
 - [ ] Offline tests cover equal and different roots, and the live flag-off run shows the note after a legacy version bump
 
 ## Report a cluster record whose profile version was overwritten in place
