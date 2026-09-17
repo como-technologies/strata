@@ -194,6 +194,10 @@ pass it on, so every step talks to the same Palette.
    examples/live/registry-move.sh                                       # #24
    ```
 
+   `just live-session` runs `verify.sh` and these three in that order under
+   one `runs/<UTC time>/` directory, and stops at the first that fails. The
+   recorded runs below come from it.
+
    `in-place.sh` is billable: it creates cluster `fred`, which
    takes about 20 minutes, and deletes it at the end, which takes 10 to 30.
    It waits for that cluster to be `Running` before deleting it, because

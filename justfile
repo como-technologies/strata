@@ -56,6 +56,19 @@ live-up:
 live-verify: build
     examples/live/verify.sh
 
+# Run the four live scripts in order from the baseline, under one runs/<UTC time>/ directory:
+# verify.sh, in-place.sh off, in-place.sh on (against that off run), and registry-move.sh. Stops at
+# the first script that fails. Billable: about 3 to 4 hours with cluster B twice.
+live-session: build
+    #!/usr/bin/env bash
+    set -uo pipefail
+    session=examples/live/runs/$(date -u +%Y%m%dT%H%M%SZ)
+    OUT=$session examples/live/verify.sh || exit 1
+    OUT=$session/in-place/off examples/live/in-place.sh off || exit 1
+    OUT=$session/in-place/on OFF_RUN=$PWD/$session/in-place/off examples/live/in-place.sh on || exit 1
+    OUT=$session/registry-move examples/live/registry-move.sh || exit 1
+    echo "live-session: all four passed; results in $session"
+
 # Tear the live example down, with every version of every profile name it uses, including the
 # versions skip_destroy kept out of Terraform's state. When the destroy fails,
 # examples/live/diagnose.sh saves what holds each cluster.
