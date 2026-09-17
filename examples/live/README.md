@@ -63,7 +63,7 @@ it down when the checks are done, and confirm it is gone.
 | `lib.sh` | what the scripts share: the checks and their summary, the Terraform applies with the one provider workaround, waiting for a cluster, and the baseline |
 | `baseline.sh` | checks that the example is at its baseline; every script requires it before it starts and after it ends |
 | `tf.sh` | runs Terraform with the key and the Palette address strata uses |
-| `tenant.sh` | read-only lookups: the names `terraform.tfvars` needs, a cluster's state and the conditions that hold it, a cluster's diagnostics, and a pack's digest read from its Helm or OCI registry |
+| `tenant.sh` | read-only lookups: the names `terraform.tfvars` needs, a cluster's state and the conditions that hold it, a cluster's diagnostics, whether Palette would repave a cluster for a move to another profile version, and a pack's digest read from its Helm or OCI registry |
 | `diagnose.sh` | saves diagnostics for every cluster in Terraform's state; `in-place.sh`, `just live-up`, and `just live-down` run it when an apply fails or a wait gives up |
 | `verify.sh` | runs every read-only check and writes `runs/<UTC time>/` |
 | `in-place.sh` | the in-place edit test (#27): edits the add-on profile in place, creates cluster B, applies the edit to cluster A, and bumps the version, once with the flag off and once with it on |

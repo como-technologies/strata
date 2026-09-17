@@ -104,6 +104,63 @@ edit of 1.0.1's CSI values in place through the API, the same check fails and
 names the `AUTHORED` leaf
 (`charts.aws-ebs-csi-driver.storageClasses[name=spectro-storage-class].reclaimPolicy`).
 
+### A tag name for the same build
+
+A registry can give one pack version several tags. For `ubuntu-aws` 24.04 the
+pack registry lists `LTS__24.04`, `LTS__24.4.x`, and `LTS__24.x`, each with
+the version `24.04` and the pack uid `6917446d9da9b9852faf5f60`
+(`GET /v1/packs/ubuntu-aws/registries/<uid>`). A profile built with Terraform
+pins `24.04`. Palette stores the tag a profile was authored with, and
+`IDENTITY` hashes the tag, so two profile versions that pin one build under
+different tag names have different roots (#19).
+
+`examples/live/tag-only.sh` published two versions of the release that differ
+from 1.0.0 only in the OS pack's tag name: 1.0.2 under the exact tag
+`LTS__24.04`, and 1.0.3 under the floating tag `LTS__24.x`. It moved cluster
+A to 1.0.2 and back, and held each move `Running` for 15 minutes. Then it
+renamed 1.0.2's tag in place through the API. Run `20260917T044135Z`, flag
+off:
+
+| question | answer |
+|---|---|
+| what Palette stored | 1.0.0 `24.04`, 1.0.2 `LTS__24.04`, 1.0.3 `LTS__24.x`: the tag as authored, and one pack uid and version for all three |
+| whether Palette repaves for a move to 1.0.2 or 1.0.3 (`POST /v1/spectroclusters/<uid>/validate/repave`, which `tenant.sh repave` calls) | no repave. The control, 1.0.0 with one more `postKubeadmCommands` entry, repaves: `PackValuesUpdated` on `kubeadmconfig.postKubeadmCommands` |
+| cluster A moved to 1.0.2, and back to 1.0.0 | the same four EC2 instances before, between, and after the moves; `Running` on every poll; its selection matched the target version from the first poll |
+| what Palette recorded for each move | one audit, "Profile 'strata-live-profile' with uid '...' is dissociated from the cluster" and "Profile 'strata-live-profile' is associated to the cluster", and no repave: `GET /v1/spectroclusters/<uid>/repave/status` answers 404 |
+| the rename of 1.0.2's tag from `LTS__24.04` to `24.04` in place | Palette accepted it and kept the pack uid; 1.0.2 then had 1.0.0's root |
+
+Palette's check also answered no repave for a request that gave the OS pack
+the tag `22.04`, so a tag in the request is no control for it; a change to the
+values is.
+
+So strata compares a tag-only difference by build (#19). The hash keeps the
+tag in `IDENTITY`, and the snapshot schema stays `strata-snapshot/1`: every
+record keeps its root. `compare` marks a pack whose `IDENTITY` moved only by
+its tag name, with the same name, layer, type, version, `packUid`, and
+`registryUid`, as `tagRenamed`. The pack line shows `tag <a> -> <b>` in place
+of `IDENTITY`, and the impact is `none (tag renamed, same pack build)`. When
+nothing else differs, the root line says `SAME CONTENT` and a note says the
+roots differ only by the tag name. The impact rules do not count the rename as
+an `IDENTITY` change, so a rename together with a values change on the OS
+layer is `may-repave`, as the values change alone is. `same-release` passes a
+pair that differs only by renamed tags as `SAME CONTENT` under either policy,
+counts the renamed packs, and never names a renamed tag as a reason. Another
+build under another tag, with another version or pack uid, is still an
+`IDENTITY` change with the `repave` impact. The floating tag is no exception:
+the profile stores a pack uid with it, as with an exact tag.
+
+A rename of a published version's tag in place is `DRIFT`. It changes no
+build, but it edits a published version, and `verify` exists to catch that:
+`verify` exits `1`, and its report says `SAME CONTENT`, names the rename, and
+gives no node impact. Dropping an exact tag from `IDENTITY` would have given
+such a pair equal roots, but `verify` would then miss the rename, and the new
+hash would need `strata-snapshot/2`.
+
+Not covered: a new build published under a floating tag a profile already
+pins. Whether Palette then moves the profile's pack uid is unobserved. If it
+does, the pack uid or version changes, and strata reports an `IDENTITY` change
+with its impact.
+
 ### Editing a published version in place
 
 The same run edited version 1.0.1 of its profile in place through the API,
@@ -197,12 +254,12 @@ layer and the flags. It is a hint. It is not an answer from the Palette API.
 
 | level          | condition                                         | meaning                                                   |
 |----------------|---------------------------------------------------|-----------------------------------------------------------|
-| `repave`       | OS or Kubernetes layer with `IDENTITY`            | Palette replaces the nodes                                |
+| `repave`       | OS or Kubernetes layer with `IDENTITY`, other than a renamed tag | Palette replaces the nodes                 |
 | `may-repave`   | OS or Kubernetes layer with `AUTHORED`            | node or control plane configuration changed; Palette can repave |
 | `cluster-wide` | CNI or CSI layer with `IDENTITY` or `AUTHORED`    | each node is affected; a repave is possible               |
 | `in-place`     | add-on layer with `IDENTITY` or `AUTHORED`        | the add-on is upgraded or reconfigured in place           |
 | `sync`         | only `UPSTREAM`                                   | applied on the next profile sync                          |
-| `none`         | no change                                         |                                                           |
+| `none`         | no change, or only a tag renamed for the same build (`none (tag renamed, same pack build)`) | clusters run the same build |
 
 The levels are in ascending order of severity. The JSON summary reports the
 most severe level as `maxImpact`.
@@ -302,7 +359,8 @@ For each layer:
   stores the tag a profile was authored with: a profile built with Terraform
   pins `24.04` where the registry names that version `LTS__24.x`. Set `tag`
   to match how the profile will be published, because it is part of
-  `IDENTITY`.
+  `IDENTITY`: another tag for the same build gives another root, which
+  `same-release` passes as `SAME CONTENT` ("A tag name for the same build").
 - `params` is a map. `manifests[]` each have a `name` and `content` inline or
   `contentFile`.
 

@@ -17,6 +17,13 @@
 #                              kubeconfig is used from a temporary file and never saved. What could
 #                              not be read is listed in DIR/errors.txt; exit 2 only when Palette
 #                              cannot read the cluster
+#   tenant.sh repave CLUSTER_UID CURRENT_UID TARGET_UID [PACK FROM TO]
+#                              whether Palette would repave the cluster if it ran the profile
+#                              version TARGET_UID in place of CURRENT_UID: Palette's own check,
+#                              given TARGET_UID's pack values (not its manifests). With PACK FROM
+#                              TO, the text FROM in PACK's values is replaced by TO first, as a
+#                              control that changes what a node runs. Prints each reason; exit 0
+#                              for no repave, 1 for a repave, 2 when the answer cannot be read
 #   tenant.sh digest KIND REGISTRY_UID NAME VERSION
 #                              the digest a helm or oci registry itself serves for one pack
 #                              version, read from the registry rather than from Palette; exit 2
@@ -90,6 +97,38 @@ updates() {
   status=$(get "/v1/spectroclusters/$uid/profileUpdates" "$tmp")
   [ "$status" = 200 ] || die "reading the profile updates of $uid answered HTTP $status"
   jq . "$tmp"
+}
+
+repave() {
+  local cluster=${1:-} current=${2:-} target=${3:-} pack=${4:-} from=${5:-} to=${6:-} tmp status what
+  [ -n "$target" ] || die "usage: tenant.sh repave CLUSTER_UID CURRENT_UID TARGET_UID [PACK FROM TO]"
+  tmp=$(mktemp -d); trap 'rm -rf "${tmp:-}"' RETURN EXIT
+  status=$(get "/v1/clusterprofiles/$target" "$tmp/profile")
+  [ "$status" = 200 ] || die "reading profile $target answered HTTP $status"
+  what="cluster $cluster, profile $current -> $target"
+  if [ -n "$pack" ]; then
+    jq -e --arg p "$pack" --arg from "$from" \
+      '[.spec.published.packs[] | select(.name == $p and ((.values // "") | contains($from)))] | length == 1' \
+      "$tmp/profile" > /dev/null || die "pack $pack of $target has no values containing the text to replace"
+    what="$what with $pack values edited"
+  fi
+  jq --arg current "$current" --arg p "$pack" --arg from "$from" --arg to "$to" '
+    {profiles: [{uid: $current, replaceWithProfile: .metadata.uid, variables: [],
+      packValues: [.spec.published.packs[] | {name, tag, type, values: (.values // ""), manifests: []}
+        | if $p != "" and .name == $p then .values |= (split($from) | join($to)) else . end]}]}' \
+    "$tmp/profile" > "$tmp/body"
+  status=$(curl -sS -o "$tmp/answer" -w '%{http_code}' -X POST \
+    -H "ApiKey: $KEY" -H 'Accept: application/json' -H 'Content-Type: application/json' \
+    ${PROJECT:+-H "ProjectUid: $PROJECT"} --data-binary "@$tmp/body" \
+    "$API/v1/spectroclusters/$cluster/validate/repave")
+  [ "$status" = 200 ] || die "validating the repave of $cluster answered HTTP $status: $(head -c 300 "$tmp/answer")"
+  jq -e 'has("isRepaveRequired")' "$tmp/answer" > /dev/null || die "Palette's answer has no isRepaveRequired"
+  if jq -e '.isRepaveRequired' "$tmp/answer" > /dev/null; then
+    echo "$what: repave"
+    jq -r '(.reasons // [])[] | "  \(.code): \(.message)\(if (.pack.diffConfigKeys // []) == [] then "" else " (\(.pack.diffConfigKeys | join(", ")))" end)"' "$tmp/answer"
+    return 1
+  fi
+  echo "$what: no repave"
 }
 
 sha256_of() {
@@ -238,6 +277,7 @@ case "${1:-}" in
   cluster) shift; cluster "$@"; exit $? ;;
   updates) shift; updates "$@" ;;
   diagnose) shift; diagnose "$@" ;;
+  repave) shift; repave "$@"; exit $? ;;
   digest) shift; digest "$@" ;;
   *) sed -n '2,/^set -uo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; exit 2 ;;
 esac

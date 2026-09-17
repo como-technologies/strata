@@ -1588,3 +1588,102 @@ fn api_sh_retag_renames_one_pack_tag_in_place_and_keeps_everything_else() {
         text(&o.stderr)
     );
 }
+
+#[test]
+fn tenant_sh_repave_asks_palette_whether_a_move_to_another_profile_version_repaves() {
+    let root = tempfile::tempdir().unwrap();
+    let routes = root.path().join("routes");
+    std::fs::create_dir_all(&routes).unwrap();
+    std::fs::write(
+        routes.join("v1_clusterprofiles_prof-2"),
+        r#"{"metadata":{"uid":"prof-2"},"spec":{"version":"1.0.2","published":{"packs":[
+            {"name":"ubuntu-aws","tag":"LTS__24.04","type":"spectro","layer":"os","values":"os: values\n"},
+            {"name":"kubernetes","tag":"1.36.2","type":"spectro","layer":"k8s","values":"postKubeadmCommands:\n  - chmod\n"}]}}}"#,
+    )
+    .unwrap();
+    let validate = routes.join("v1_spectroclusters_c-1_validate_repave");
+    std::fs::write(&validate, r#"{"isRepaveRequired":false,"reasons":[]}"#).unwrap();
+    let sent = || -> serde_json::Value {
+        serde_json::from_str(
+            &std::fs::read_to_string(
+                routes.join("sent/POST_v1_spectroclusters_c-1_validate_repave"),
+            )
+            .unwrap(),
+        )
+        .unwrap()
+    };
+
+    let o = run_live(
+        "tenant.sh",
+        &["repave", "c-1", "prof-1", "prof-2"],
+        root.path(),
+        &[],
+    );
+    assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
+    assert_eq!(
+        text(&o.stdout),
+        "cluster c-1, profile prof-1 -> prof-2: no repave\n"
+    );
+    assert_eq!(
+        sent(),
+        serde_json::json!({"profiles": [{"uid": "prof-1", "replaceWithProfile": "prof-2", "variables": [],
+        "packValues": [
+            {"name": "ubuntu-aws", "tag": "LTS__24.04", "type": "spectro", "values": "os: values\n", "manifests": []},
+            {"name": "kubernetes", "tag": "1.36.2", "type": "spectro", "values": "postKubeadmCommands:\n  - chmod\n", "manifests": []}
+        ]}]}),
+        "the target version's packs replace the current version on the cluster"
+    );
+
+    // the control: a change to the values that Palette repaves for
+    std::fs::write(
+        &validate,
+        r#"{"isRepaveRequired":true,"reasons":[{"code":"PackValuesUpdated","message":"Pack 'kubernetes' values are updated",
+            "pack":{"diffConfigKeys":["kubeadmconfig.postKubeadmCommands"]}}]}"#,
+    )
+    .unwrap();
+    let o = run_live(
+        "tenant.sh",
+        &[
+            "repave",
+            "c-1",
+            "prof-1",
+            "prof-2",
+            "kubernetes",
+            "postKubeadmCommands:\n",
+            "postKubeadmCommands:\n  - echo strata\n",
+        ],
+        root.path(),
+        &[],
+    );
+    assert_eq!(o.status.code(), Some(1), "{}", text(&o.stderr));
+    assert_eq!(
+        text(&o.stdout),
+        "cluster c-1, profile prof-1 -> prof-2 with kubernetes values edited: repave\n  PackValuesUpdated: Pack 'kubernetes' values are updated (kubeadmconfig.postKubeadmCommands)\n"
+    );
+    assert_eq!(
+        sent()["profiles"][0]["packValues"][1]["values"],
+        "postKubeadmCommands:\n  - echo strata\n  - chmod\n"
+    );
+
+    let o = run_live(
+        "tenant.sh",
+        &[
+            "repave",
+            "c-1",
+            "prof-1",
+            "prof-2",
+            "kubernetes",
+            "absent",
+            "x",
+        ],
+        root.path(),
+        &[],
+    );
+    assert_eq!(o.status.code(), Some(2));
+    assert!(
+        text(&o.stderr)
+            .contains("pack kubernetes of prof-2 has no values containing the text to replace"),
+        "{}",
+        text(&o.stderr)
+    );
+}
