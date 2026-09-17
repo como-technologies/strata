@@ -755,3 +755,35 @@ labels: robustness
 - [x] Only the fetched pack data under `examples/packs/` is tracked; `git status` stays clean after `just examples`
 - [x] CI runs `just examples`
 - [x] Every doc that points at a built example file says how to build it
+
+## Remove the provider 0.29.7 workaround from the live example
+
+labels: robustness
+
+### Background
+
+Terraform provider 0.29.7 refuses every plan with `immutable-clusterprofiles` on that includes an existing profile at an unchanged version, even one that changes nothing: Palette stores the packs a little differently from the configuration, and the provider counted that as a content change. #31 put the workaround in `examples/live/lib.sh`: an apply that changes a profile targets that one resource (`apply_profile`), an apply that changes only clusters runs with the flag off (`apply_clusters`), and the variable `keep_profile_versions` keeps `skip_destroy` on through those flag-off applies. `plan-no-change` expects the refusal, and `lib.sh` says to remove all three once that check passes with the flag on.
+
+Provider 0.29.8 compares `pack` and `profile_variables` by content in `resourceClusterProfileCustomizeDiff` (`hasSemanticPackChange`, `hasSemanticProfileVariablesChange`, commit `972c76c`), and 0.30.1 has the same code. On 2026-09-17, with provider 0.30.1 and the live example at its baseline (cluster A `fred`, `6aabf73c9dde8be792cec2bd`):
+
+1. `tf.sh plan -detailed-exitcode -var immutable_profiles=true` exited 2 with no refusal. Its only changes were `skip_destroy = false -> true` on the release, next, registries, and add-on profiles.
+2. `tf.sh apply -auto-approve -var immutable_profiles=true` applied those four changes (`0 added, 4 changed, 0 destroyed`), and the same plan then exited 0 with `No changes.`
+3. `tf.sh plan -detailed-exitcode -var immutable_profiles=true -var addon_version=1.0.1 -var cluster_addon_profile_uid=6aabf7369dde8be6e13d7a02`, with no `-target`, exited 2. Its only change was `spectrocloud_cluster_profile.addon must be replaced` (`create replacement and then destroy`, 1 to add, 0 to change, 1 to destroy).
+4. `tf.sh apply -auto-approve` with the default variables set `skip_destroy` back to false, and `baseline.sh` passed every condition.
+
+One rule stays. In 0.30.1, `resourceClusterProfileDelete` still reads `skip_destroy` from the state of the object it deletes, so a flag-on bump of a profile whose state holds `skip_destroy = false` asks Palette to delete the old version, which Palette refuses while a cluster runs it (`DeletionResourceInUseError`, `drift-report.sh on`, run `20260917T132642Z`). `skip_destroy` must be in the state before the first flag-on bump.
+
+### Plan
+
+1. `examples/live/terraform`: pin provider 0.30.1. Remove `keep_profile_versions`; `skip_destroy` is `var.immutable_profiles` on every profile.
+2. `examples/live/lib.sh`: `tf_apply FLAG ARG...` loses its second argument. One `apply ARG...` with the script's flag and no `-target` replaces `apply_profile` and `apply_clusters`. `hold_versions` becomes an apply with the script's flag at the baseline, which changes only `skip_destroy`, and every script that applies runs it right after `require_baseline`. `apply_baseline` applies the default variables with the flag off, which puts `skip_destroy` back to false; `restore_addon`, `registry-move.sh`, and `tag-only.sh` end with it.
+3. `in-place.sh` and `registry-move.sh`: `plan-no-change` expects 0 with the flag off and on. `in-place.sh` stage 5 deletes cluster B without `-target`. `drift-report.sh` holds `skip_destroy` at the start instead of before the bump.
+4. `examples/live/README.md`: remove the 0.29.7 workaround from the design notes, the steps, and "When a check fails", and state the `skip_destroy` rule instead.
+5. Run `registry-move.sh`, `drift-report.sh off` and `on`, and `in-place.sh off` and `on` from the baseline, and record the runs.
+
+### Acceptance criteria
+
+- [ ] The live example pins provider 0.30.1, and nothing in `examples/live` sets `-target`, `keep_profile_versions`, or a flag other than the script's own, except the apply that restores the baseline
+- [ ] `plan-no-change` expects exit 0 with the flag off and on
+- [ ] Every script that applies holds `skip_destroy` for its flag before its first apply, and `examples/live/README.md` states why
+- [ ] `registry-move.sh`, `drift-report.sh off` and `on`, and `in-place.sh off` and `on` pass from the baseline and restore it, and `examples/live/README.md` records the runs
