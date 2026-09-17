@@ -673,3 +673,65 @@ labels: feature
 - [ ] `verify` on a cluster record exits 1 and names each applied profile whose uid now names another version than the cluster's copy, or no longer exists, even when the cluster itself is unchanged
 - [ ] A cluster whose profile uids still name their versions verifies as before, at one extra request per applied profile
 - [ ] Offline tests cover the three cases, and the live runs show exit 1 with the flag off and 0 with it on after the bump
+
+## Make the live example a controlled experiment
+
+labels: robustness
+
+### Background
+
+`examples/live` grew one issue at a time (#1, #2, #12, #23, #24, #27), and each addition solved its own problem. An engineer who reads it now finds differences with no stated reason, and two runs that are meant to differ in one variable differ in more. From the 2026-09-17 review:
+
+1. Clusters A and B are two copied resource blocks, identical except for the name.
+2. Only the add-on and move profiles have `skip_destroy` and `create_before_destroy`; the release, next, and registries profiles do not.
+3. `in-place.sh` edits the add-on profile through Terraform with `immutable-clusterprofiles` off and through the API with it on, so the two runs differ in the edit path as well as the flag. The runs showed the two paths are not equivalent: an API edit that sent a manifest without its uid replaced the manifest (fixed in `api.sh`).
+4. The scripts leave the example in different states: stage 5 restores the add-on profile to 1.0.0 with the flag off and leaves 1.0.1 with it on; `registry-move.sh` needs no cluster B; `verify.sh` needs the add-on profile at 1.0.0. The order of the scripts matters, and nothing says so.
+5. `keep_profile_versions`, `apply_without_flag`, and `-target` exist only because Terraform provider 0.29.7 refuses a flag-on plan that changes nothing, and they are spread over three files.
+6. `edit_next_in_place` is left from a manual step that `in-place.sh` replaced; no script uses it.
+
+Cluster `fred` also stayed in `Provisioning` in run `20260917T003054Z`, with its machines `Running` and its nodes `Ready`. It was created with `skip_completion`, which no other cluster had, and stage 3 pushed updates to cluster A while it provisioned. Both differences are gone since `skip_completion` was removed; a cluster that still sticks without them is a Palette defect, and `diagnose.sh` saves the evidence.
+
+### Plan
+
+1. `examples/live/terraform`: one `spectrocloud_cluster_aws` resource over a map of cluster names, A always and B when `second_cluster` is set, with `moved` blocks so an existing cluster is not replaced. The same lifecycle on every profile. Remove `edit_next_in_place`.
+2. `examples/live/in-place.sh`: make the in-place edit through `api.sh edit` with the flag off and on. Check what Terraform does with the same edit on its own: with the flag off, the plan updates the version in place; with it on, the plan refuses.
+3. One baseline: the state `just live-up` builds, with no cluster B and every profile at its first version. `examples/live/baseline.sh` checks it; `verify.sh`, `in-place.sh`, and `registry-move.sh` run it first and refuse to start from anything else, and `in-place.sh` and `registry-move.sh` restore it at the end, whatever the flag. `just live-down` deletes every version of every profile name the example uses.
+4. The workaround for provider 0.29.7 in one place, `examples/live/lib.sh`, with the release that removes it named next to it; `plan-refuses-no-change` stays the check that shows when it can go.
+5. `examples/live/README.md`: a "Design" section that lists what each script varies and what it holds fixed, and the baseline.
+6. Run `verify.sh`, `in-place.sh off`, `in-place.sh on`, and `registry-move.sh` in that order from one `just live-up`, and replace the recorded runs.
+
+### Acceptance criteria
+
+- [ ] Clusters A and B come from one resource definition, and every profile has the same lifecycle
+- [ ] The two `in-place.sh` runs differ only in the flag: both edit through the API, and Terraform's handling of the edit is a separate check in each
+- [ ] Each script checks the baseline before it starts and leaves it as it found it, so the scripts run in any order
+- [ ] The provider 0.29.7 workaround lives in one file, next to the release that removes it
+- [ ] `examples/live/README.md` states what each script varies and holds fixed
+- [ ] The four scripts pass in one session from one `just live-up`, and `examples/live/README.md` records those runs
+
+## Compare manifest packs by content, not by the uid Palette mints for each profile
+
+labels: design
+
+### Background
+
+A pack's `packUid` is part of `IDENTITY`. For a pack from a registry, the uid is the registry's id for that pack version, so two profiles that pin the same version share it: the release profile's root was `eada36c2e3fd` in both builds of the live example. A manifest pack has no registry, and Palette mints its `packUid` for each profile it creates, the clone of a version bump included (#27, runs `20260916T213303Z` and `20260917T003054Z`):
+
+- The add-on profile, with identical content, had root `a18670a7b8d6` in one build and `7d1079372122` in the next.
+- The flag-on bump of 1.0.0 to 1.0.1 minted a new `packUid` (`6aab35b4da23f189d7ff68d0`) for the same manifest. `same-release` between it and the flag-off 1.0.1 made from the same configuration failed with `IDENTITY: packUid`, although the values, the manifest, and the variables were equal (`clone-same-content`).
+
+So two profiles created apart with the same manifests never compare as the same release, and neither do a version and a flag-on bump that changes nothing else. Within one version the uid is stable: an in-place edit and a legacy bump kept it, so `verify` is not affected.
+
+### Plan
+
+1. Decide between two designs, and state the decision in `docs/model.md`:
+   - Keep the hash and `strata-snapshot/1`. `compare` and `same-release` treat a manifest pack whose only `IDENTITY` difference is its `packUid` as unchanged in content, the way `--allow registry-move` treats a re-pinned pack, and say so in the report.
+   - Leave `packUid` out of `IDENTITY` for a pack with no registry. That computes a hash differently, so the snapshot schema becomes `strata-snapshot/2`, and records of `/1` need a way forward (a re-hash from the fields a record keeps, or a documented re-snapshot).
+2. Implement it with tests over fixtures: two manifest packs with equal content and different uids, and with different content.
+3. `examples/live/in-place.sh`: `clone-carried-nothing` expects the clone and the legacy bump to be the same release.
+
+### Acceptance criteria
+
+- [ ] `docs/model.md` states how a manifest pack's `packUid` counts, with the live evidence, and why the chosen design keeps or changes the snapshot schema
+- [ ] Two profile versions with the same manifest content and different minted `packUid`s compare as the same release
+- [ ] A manifest content change still makes them different
