@@ -83,13 +83,26 @@ open_issues() {
   gh issue list --repo "$repo" --label "$label" --state open --limit 1000 --json number,body \
     | jq -r '.[] | "\(.number)\t\(.body | split("\n")[0] | rtrimstr("\r"))"'
 }
-# issues_are RECORD...: the open issues with the label are exactly one per RECORD, by marker
+# issues_are RECORD...: the open issues with the label are exactly one per RECORD, by marker.
+# GitHub lists a new or closed issue about 5 seconds later (measured on 2026-09-17, the same through
+# gh issue list and the REST API), so it reads the listing every 5 seconds for up to a minute and
+# prints the last listing and how long it took.
 issues_are() {
-  local want got
+  local want got listing waited=0
   want=$(for r in "$@"; do echo "<!-- strata-verify: $records/$r.json -->"; done | sort)
-  got=$(open_issues | tee /dev/stderr | cut -f2 | sort)
+  while :; do
+    listing=$(open_issues)
+    got=$(cut -f2 <<<"$listing" | sed '/^$/d' | sort)
+    [ "$got" = "$want" ] && break
+    [ "$waited" -ge 60 ] && break
+    sleep 5
+    waited=$((waited + 5))
+  done
+  printf '%s\nlisted after %s seconds\n' "$listing" "$waited" >&2
   [ "$got" = "$want" ]
 }
+# issue_in FILE ACTION RECORD: the issue number the report in FILE names for ACTION on RECORD
+issue_in() { grep -o "$2 #[0-9]* for $records/$3.json" "$1" | grep -o '[0-9]*' | head -1; }
 # said FILE ACTION COUNT: the report's summary line in FILE names ACTION ("opened", "updated",
 # "closed") exactly COUNT times
 said() { [ "$(grep -o "$2 #[0-9]* for " "$1" | wc -l)" = "$3" ]; }
@@ -131,7 +144,7 @@ if stage 2 "edit the add-on version in place and report"; then
   check report-edit-opened 0 "#25: it opens one issue, for the add-on record; cluster A's copy is untouched" -- \
     bash -c 'grep -q "3 records: 2 unchanged, 1 drifted, 0 could not be checked; opened #[0-9]* for '"$records"'/addon.json$" report-edit.err'
   check issues-after-edit 0 "#25: one open issue, for the add-on record" -- issues_are addon
-  EDIT_ISSUE=$(open_issues | cut -f1)
+  EDIT_ISSUE=$(issue_in report-edit.err opened addon)
   save EDIT_ISSUE "$EDIT_ISSUE"
   check issue-has-report 0 "#25: the issue holds the report of the drift" -- \
     bash -c "gh issue view $EDIT_ISSUE --repo $repo --json body --jq .body | tee issue-edit-body.md | grep -q 'reports drift'"
@@ -159,9 +172,8 @@ if stage 4 "bump the add-on version and report"; then
   if [ "$mode" = off ]; then
     check issues-after-bump 0 "#27, #30: one open issue each for the add-on record and cluster A's record" -- issues_are addon cluster-a
     check bump-issue-names-overwrite 0 "#27: the add-on record's issue says the version was overwritten in place" -- \
-      bash -c "gh issue view \$(gh issue list --repo $repo --label $label --state open --json number,body \
-        --jq '.[] | select(.body | startswith(\"<!-- strata-verify: $records/addon.json -->\")) | .number') \
-        --repo $repo --json body --jq .body | tee issue-bump-body.md | grep -q 'overwritten in place'"
+      bash -c "gh issue view $(issue_in report-bump.err opened addon) --repo $repo --json body --jq .body \
+        | tee issue-bump-body.md | grep -q 'overwritten in place'"
   else
     check issues-after-bump 0 "no issue is open: the flag kept the first add-on version" -- issues_are
   fi
