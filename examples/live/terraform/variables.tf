@@ -49,12 +49,6 @@ variable "worker_count" {
   default = 2
 }
 
-variable "edit_next_in_place" {
-  description = "Change a value of profile version 1.0.1 in place after it is published, to see what Palette does and what strata verify reports. Nothing runs 1.0.1."
-  type        = bool
-  default     = false
-}
-
 variable "registry_name" {
   type    = string
   default = "Public Repo"
@@ -146,13 +140,13 @@ variable "second_cluster_name" {
 }
 
 variable "immutable_profiles" {
-  description = "The provider's immutable-clusterprofiles feature_preview flag, with skip_destroy on the add-on and move profiles"
+  description = "The provider's immutable-clusterprofiles feature_preview flag, with skip_destroy on every profile"
   type        = bool
   default     = false
 }
 
 variable "keep_profile_versions" {
-  description = "skip_destroy on the add-on and move profiles with the flag off, for an apply that must not undo it"
+  description = "skip_destroy on every profile with the flag off, for an apply that must not undo it (see examples/live/lib.sh)"
   type        = bool
   default     = false
 }

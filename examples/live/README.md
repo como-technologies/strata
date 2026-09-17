@@ -58,15 +58,48 @@ it down when the checks are done, and confirm it is gone.
 
 | file | what it does |
 |---|---|
-| `terraform/` | the profiles and the cluster, and the variables the two scripts below set |
+| `terraform/` | the profiles and the clusters, and the variables the scripts below set |
+| `lib.sh` | what the scripts share: the checks and their summary, the Terraform applies with the one provider workaround, waiting for a cluster, and the baseline |
+| `baseline.sh` | checks that the example is at its baseline; every script requires it before it starts and after it ends |
 | `tf.sh` | runs Terraform with the key and the Palette address strata uses |
 | `tenant.sh` | read-only lookups: the names `terraform.tfvars` needs, a cluster's state and the conditions that hold it, a cluster's diagnostics, and a pack's digest read from its Helm or OCI registry |
 | `diagnose.sh` | saves diagnostics for every cluster in Terraform's state; `in-place.sh`, `just live-up`, and `just live-down` run it when an apply fails or a wait gives up |
-| `verify.sh` | runs every check and writes `runs/<UTC time>/` |
-| `in-place.sh` | the in-place edit test (#27): edits the add-on profile in place, creates cluster B, applies the edit to the cluster, and bumps the version, with the flag off or on |
+| `verify.sh` | runs every read-only check and writes `runs/<UTC time>/` |
+| `in-place.sh` | the in-place edit test (#27): edits the add-on profile in place, creates cluster B, applies the edit to cluster A, and bumps the version, once with the flag off and once with it on |
 | `registry-move.sh` | the registry-move check (#24) |
-| `api.sh` | the writes the scripts make outside Terraform: an in-place edit, pushing a profile to a cluster, and deleting a profile version |
+| `api.sh` | the writes the scripts make outside Terraform: an in-place edit, pushing a profile to a cluster, and deleting profile versions |
 | `aws-inventory.sh` | what the cluster still has in AWS, for confirming a teardown |
+
+## Design
+
+The example is a controlled experiment: each script changes one thing and
+holds the rest, so a difference in its results has one cause.
+
+**The baseline** is the state `just live-up` builds, and `baseline.sh`
+checks it: a Terraform plan with the default variables changes nothing,
+cluster A (`barney`) is `Running` and runs the release and add-on profiles'
+current content, no cluster B (`fred`) exists, and each profile name holds
+exactly the versions Terraform manages. Every script requires it before it
+starts and leaves it as it found it.
+
+| script | varies | holds |
+|---|---|---|
+| `verify.sh` | nothing; it only reads | the baseline |
+| `in-place.sh off` and `on` | the provider's `immutable-clusterprofiles` flag, in every plan and in every apply that changes a profile | the in-place edit (`api.sh edit` in both runs), the clusters, the steps and their order, the baseline it starts from and restores |
+| `registry-move.sh` | the move profile's CSI registry, then its values | the flag (on), the other packs, the baseline |
+
+**One definition per kind.** Clusters A and B come from one Terraform
+resource and differ only in their names, which share no part. Every profile
+has the same lifecycle: `skip_destroy` follows the flag, and
+`create_before_destroy` is on.
+
+**What Terraform does is a check, not a step.** The in-place edit goes
+through the API in both `in-place.sh` runs, because Terraform refuses it with
+the flag on; `plan-edit` records what Terraform does with the same edit.
+
+**One workaround, labeled.** Provider 0.29.7 refuses a flag-on plan that
+changes nothing (`plan-no-change`). `lib.sh` works around it in one place,
+and names what to remove when a provider release fixes it.
 
 ## Prerequisites
 
@@ -151,8 +184,9 @@ pass it on, so every step talks to the same Palette.
    ```
 
 4. Edit a published version that clusters run, and move a pack to another
-   registry. Both scripts write to the tenant, one at a time, and run only
-   while no cluster B exists:
+   registry. The scripts write to the tenant, so run them one at a time. Each
+   starts from the baseline (see "Design") and restores it, so they run in
+   any order:
 
    ```
    examples/live/in-place.sh off                                        # #27, legacy provider behavior
@@ -172,16 +206,12 @@ pass it on, so every step talks to the same Palette.
    with `OUT=<that directory> examples/live/in-place.sh <off|on> <stage>`.
 
    With the flag on, provider 0.29.7 refuses every plan that includes an
-   existing profile at an unchanged version, even one that changes nothing.
-   Palette stores the packs a little differently from the configuration: no
-   trailing newline on values and manifests, and pack type and registry
-   fields filled in. That provider's check counts the difference as a change.
-   Both scripts record the refusal as an expected check,
-   `plan-refuses-no-change`, until the provider release that fixes it. Until
-   then they apply around it: a version bump targets the profile it bumps,
-   and an apply that only creates or deletes cluster B runs with the flag
-   off, which governs nothing but profiles, and with `keep_profile_versions`
-   holding `skip_destroy` on.
+   existing profile at an unchanged version, even one that changes nothing:
+   Palette stores the packs a little differently from the configuration (no
+   trailing newline on values and manifests, pack type and registry fields
+   filled in), and that provider counts the difference as a change. The
+   check `plan-no-change` records it. `lib.sh` holds the one workaround, and
+   says what to remove once a provider release fixes it.
 
 5. Tear it down, and confirm it is gone. Keep the uids first; the outputs
    disappear with the state.
@@ -194,10 +224,10 @@ pass it on, so every step talks to the same Palette.
    AWS_PROFILE=<profile> examples/live/aws-inventory.sh  # exit 0: nothing left
    ```
 
-   `live-down` also deletes every version of `strata-live-addon` and
-   `strata-live-move`, by exact name: with the flag on, `skip_destroy` keeps
-   the versions a bump replaced out of Terraform's state, so a destroy alone
-   leaves them in Palette.
+   `live-down` also deletes every version of every profile name the example
+   uses (the `profile_names` output), by exact name: with the flag on,
+   `skip_destroy` keeps the versions a bump replaced out of Terraform's
+   state, so a destroy alone leaves them in Palette.
 
    Terraform's "Destroy complete" is not the confirmation. During a gateway
    outage Palette answers a plain-text 404, and the provider can take that
@@ -227,8 +257,9 @@ What went wrong before, and why:
 | `live-up` fails with "A minimum allocation of '4.1' CPU cores is required across all worker nodes" | workers total 4 cores or fewer; the default of two `t3.xlarge` workers clears it |
 | `snapshot-candidate` fails with `pack-not-found` naming a tag | a strata build older than the tag fix; the profile's tag is the version |
 | `consumer-is-the-cluster` fails with state `unknown` | the key cannot read the cluster in its project; `consumers-release.out` prints the error next to the cluster |
-| `only-the-edited-value` fails with two changed values | 1.0.1 was edited in place, with `edit_next_in_place`, and the edit was not undone |
-| `plan-refuses-no-change` fails with exit 0 | the provider no longer refuses a flag-on plan that changes nothing: a release with the fix; expect 0 |
+| `only-the-edited-value` fails with two changed values | 1.0.1 was edited in place and the edit was not undone; `baseline.sh` names it |
+| `plan-no-change` fails with exit 0 with the flag on | the provider no longer refuses a flag-on plan that changes nothing: a release with the fix. Remove the workaround in `lib.sh` and expect 0 |
+| a script stops with "not at its baseline" | an earlier run did not finish, or something changed the example by hand; `baseline-before.txt` in the run names each difference. `just live-down && just live-up` rebuilds it |
 | `registry-digest-oci` fails with "crane digest ... failed" | no login to the OCI registry, or an expired one; an AWS registry login lasts 12 hours |
 | `ebs-csi-controller` pods in `CrashLoopBackOff`, `UnauthorizedOperation` on `ec2:DescribeAvailabilityZones` | the worker node role lacks `AmazonEBSCSIDriverPolicy`; see Prerequisites |
 | a cluster stays `Provisioning` with `not done: WorkerNodeAdditionDone: provision worker nodes`, although its machines are `Running` and its nodes `Ready` | Palette did not check the worker nodes again after a node that was still joining failed its first check (`fred`, 2026-09-17); restarting the Palette controller in the cluster did not clear it. Its deletion ran normally: delete it, and send its diagnostics to Palette support |

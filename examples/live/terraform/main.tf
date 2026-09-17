@@ -18,13 +18,9 @@ locals {
   ]
   # The one difference between the two versions.
   next_csi_values = replace(data.spectrocloud_pack.csi.values, "reclaimPolicy: Delete", "reclaimPolicy: Retain")
-  # With edit_next_in_place, a second change applied to 1.0.1 after it is published.
-  next_csi_values_edited = replace(local.next_csi_values, "volumeBindingMode: WaitForFirstConsumer", "volumeBindingMode: Immediate")
   next_packs = [
     for p in local.release_packs :
-    p.name == data.spectrocloud_pack.csi.name
-    ? merge(p, { values = var.edit_next_in_place ? local.next_csi_values_edited : local.next_csi_values })
-    : p
+    p.name == data.spectrocloud_pack.csi.name ? merge(p, { values = local.next_csi_values }) : p
   ]
 
   # The add-on profile's one layer: a ConfigMap, so it installs anywhere and an edit to it changes
@@ -91,11 +87,12 @@ data "spectrocloud_pack" "csi" {
 }
 
 resource "spectrocloud_cluster_profile" "release" {
-  name        = local.profile_name
-  version     = "1.0.0"
-  description = "strata live example: the version the cluster runs"
-  cloud       = "aws"
-  type        = "cluster"
+  name         = local.profile_name
+  version      = "1.0.0"
+  description  = "strata live example: the version the cluster runs"
+  cloud        = "aws"
+  type         = "cluster"
+  skip_destroy = var.immutable_profiles || var.keep_profile_versions
 
   dynamic "pack" {
     for_each = local.release_packs
@@ -106,14 +103,19 @@ resource "spectrocloud_cluster_profile" "release" {
       values = pack.value.values
     }
   }
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 resource "spectrocloud_cluster_profile" "next" {
-  name        = local.profile_name
-  version     = "1.0.1"
-  description = "strata live example: a newer version nothing runs"
-  cloud       = "aws"
-  type        = "cluster"
+  name         = local.profile_name
+  version      = "1.0.1"
+  description  = "strata live example: a newer version nothing runs"
+  cloud        = "aws"
+  type         = "cluster"
+  skip_destroy = var.immutable_profiles || var.keep_profile_versions
 
   dynamic "pack" {
     for_each = local.next_packs
@@ -126,6 +128,10 @@ resource "spectrocloud_cluster_profile" "next" {
   }
 
   depends_on = [spectrocloud_cluster_profile.release]
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 data "spectrocloud_registry" "helm" {
@@ -149,11 +155,12 @@ data "spectrocloud_pack" "oci" {
 }
 
 resource "spectrocloud_cluster_profile" "registries" {
-  name        = "${var.name_prefix}-registries"
-  version     = "1.0.0"
-  description = "strata live example: a Helm pack and an OCI pack; nothing runs it"
-  cloud       = "all"
-  type        = "add-on"
+  name         = "${var.name_prefix}-registries"
+  version      = "1.0.0"
+  description  = "strata live example: a Helm pack and an OCI pack; nothing runs it"
+  cloud        = "all"
+  type         = "add-on"
+  skip_destroy = var.immutable_profiles || var.keep_profile_versions
 
   pack {
     name         = data.spectrocloud_pack.helm.name
@@ -172,15 +179,18 @@ resource "spectrocloud_cluster_profile" "registries" {
     registry_uid = data.spectrocloud_registry.oci.id
     values       = data.spectrocloud_pack.oci.values
   }
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 resource "spectrocloud_cluster_profile" "addon" {
-  name        = "${var.name_prefix}-addon"
-  version     = var.addon_version
-  description = "strata live example: an add-on profile the clusters run next to the release"
-  cloud       = "all"
-  type        = "add-on"
-  # With immutable-clusterprofiles, a version bump keeps the old version in Palette.
+  name         = "${var.name_prefix}-addon"
+  version      = var.addon_version
+  description  = "strata live example: an add-on profile the clusters run next to the release"
+  cloud        = "all"
+  type         = "add-on"
   skip_destroy = var.immutable_profiles || var.keep_profile_versions
 
   pack {
@@ -237,8 +247,19 @@ resource "spectrocloud_cluster_profile" "move" {
   }
 }
 
-resource "spectrocloud_cluster_aws" "this" {
-  name             = var.cluster_name
+# The clusters: A always, and B while second_cluster is set, for examples/live/in-place.sh. One
+# definition, so the two differ only in their names. Billable while they exist. An apply waits for
+# each to be Running.
+locals {
+  clusters = merge(
+    { a = var.cluster_name },
+    var.second_cluster ? { b = var.second_cluster_name } : {},
+  )
+}
+
+resource "spectrocloud_cluster_aws" "cluster" {
+  for_each         = local.clusters
+  name             = each.value
   cloud_account_id = data.spectrocloud_cloudaccount_aws.this.id
   tags             = local.tags
 
@@ -276,46 +297,14 @@ resource "spectrocloud_cluster_aws" "this" {
   }
 }
 
-# Cluster B for examples/live/in-place.sh: the same profiles as the cluster, created after an
-# in-place edit of the add-on profile. Billable while it exists. The apply waits for it to be
-# Running, so a cluster that never gets there stops the run at creation, and nothing deletes a
-# cluster that is still provisioning.
-resource "spectrocloud_cluster_aws" "b" {
-  count            = var.second_cluster ? 1 : 0
-  name             = var.second_cluster_name
-  cloud_account_id = data.spectrocloud_cloudaccount_aws.this.id
-  tags             = local.tags
+# The two resources this one replaced, so an existing cluster moves in the state instead of being
+# replaced.
+moved {
+  from = spectrocloud_cluster_aws.this
+  to   = spectrocloud_cluster_aws.cluster["a"]
+}
 
-  cluster_profile {
-    id = spectrocloud_cluster_profile.release.id
-  }
-
-  cluster_profile {
-    id = local.cluster_addon_uid
-  }
-
-  cloud_config {
-    region       = var.region
-    ssh_key_name = var.ssh_key_name
-  }
-
-  machine_pool {
-    name          = "cp-pool"
-    count         = 1
-    control_plane = true
-    instance_type = var.instance_type
-    azs           = [var.az]
-  }
-
-  machine_pool {
-    name          = "worker-pool"
-    count         = var.worker_count
-    instance_type = var.instance_type
-    azs           = [var.az]
-  }
-
-  timeouts {
-    create = "60m"
-    delete = "45m"
-  }
+moved {
+  from = spectrocloud_cluster_aws.b[0]
+  to   = spectrocloud_cluster_aws.cluster["b"]
 }

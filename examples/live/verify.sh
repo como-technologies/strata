@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Run every strata live check against the cluster and profile versions that
-# examples/live/terraform built, and write a summary. Exit 0 only when every check gets its
-# expected exit code.
+# examples/live/terraform built, and write a summary. Read-only: it needs the live example at its
+# baseline (baseline.sh) and leaves it there. Exit 0 only when every check gets its expected exit
+# code.
 #
 #   just live-up && just live-verify
 #
@@ -11,14 +12,16 @@
 # otherwise. Results go under examples/live/runs/<UTC time>/, which is gitignored: raw API
 # responses can hold variable values.
 set -uo pipefail
+script=verify
+. "$(cd "$(dirname "$0")" && pwd)/lib.sh"
+[ -x "$strata" ] || die "no strata binary at $strata; run cargo build --release"
 
-here=$(cd "$(dirname "$0")" && pwd)
-repo=$(cd "$here/../.." && pwd)
-strata=${STRATA_BIN:-$repo/target/release/strata}
-[ -x "$strata" ] || { echo "verify: no strata binary at $strata; run cargo build --release" >&2; exit 2; }
+run=${OUT:-$live/runs/$(date -u +%Y%m%dT%H%M%SZ)}
+mkdir -p "$run" && cd "$run" || exit 2
+export STRATA_QUIET=1
 
-outputs=$("$here/tf.sh" output -json) || { echo "verify: no terraform outputs; run just live-up first" >&2; exit 2; }
-out() { jq -r --arg k "$1" '.[$k].value // empty' <<<"$outputs"; }
+load_outputs
+require_baseline
 C=$(out cluster_uid)
 P=$(out release_profile_uid)
 P2=$(out next_profile_uid)
@@ -29,25 +32,8 @@ AN=$(out addon_profile_name)
 PALETTE_PROJECT_UID=$(out project_uid)
 export PALETTE_PROJECT_UID
 for v in C P P2 N R AD AN PALETTE_PROJECT_UID; do
-  [ -n "${!v}" ] || { echo "verify: the terraform output behind $v is empty" >&2; exit 2; }
+  [ -n "${!v}" ] || die "the terraform output behind $v is empty"
 done
-
-run=${OUT:-$here/runs/$(date -u +%Y%m%dT%H%M%SZ)}
-mkdir -p "$run" && cd "$run" || exit 2
-export STRATA_QUIET=1
-
-failures=0
-rows=()
-# check <id> <expected exit> <what it shows> -- command...
-check() {
-  local id=$1 want=$2 what=$3
-  shift 4
-  "$@" > "$id.out" 2> "$id.err"
-  local got=$? verdict=PASS
-  if [ "$got" != "$want" ]; then verdict=FAIL; failures=$((failures + 1)); fi
-  rows+=("| $verdict | \`$id\` | $want | $got | $what |")
-  printf '%-4s  %-26s expected %s, got %s\n' "$verdict" "$id" "$want" "$got"
-}
 
 # ---- #1: release versus run
 check snapshot-cluster 0 "strata reads what a live cluster runs" -- \
@@ -109,7 +95,7 @@ check registries-kinds 0 "#2: the profile holds one helm pack and one oci pack" 
   jq -e '[.packs[].type] | sort == ["helm", "oci"]' registries.json
 while IFS=$'\t' read -r kind reg name version; do
   check "registry-digest-$kind" 0 "#2: read the $kind pack's digest from the registry itself" -- \
-    "$here/tenant.sh" digest "$kind" "$reg" "$name" "$version"
+    "$live/tenant.sh" digest "$kind" "$reg" "$name" "$version"
 done < <(jq -r '.packs[] | select(.type == "helm" or .type == "oci") | [.type, .registryUid, .name, .version] | @tsv' \
            registries.json 2>/dev/null)
 
@@ -120,9 +106,7 @@ done < <(jq -r '.packs[] | select(.type == "helm" or .type == "oci") | [.type, .
   echo "Run \`$(basename "$run")\` with \`$("$strata" --version)\`. Cluster \`$C\`, project \`$PALETTE_PROJECT_UID\`,"
   echo "profile \`$N\` versions 1.0.0 (\`$P\`) and 1.0.1 (\`$P2\`), registries profile \`$R\`."
   echo
-  echo "| result | check | expected exit | got | what it shows |"
-  echo "|---|---|---|---|---|"
-  printf '%s\n' "${rows[@]}"
+  summary_table
   echo
   echo "## Pack-ref digests (#2, #3)"
   echo
@@ -151,6 +135,7 @@ done < <(jq -r '.packs[] | select(.type == "helm" or .type == "oci") | [.type, .
   fi
 } > summary.md
 
+total=$(command grep -cE '^(PASS|FAIL) ' steps.log)
 echo
-echo "$(( ${#rows[@]} - failures )) of ${#rows[@]} checks passed; details in $run"
+echo "$((total - failures)) of $total checks passed; details in $run"
 [ "$failures" -eq 0 ]

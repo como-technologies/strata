@@ -56,15 +56,17 @@ live-up:
 live-verify: build
     examples/live/verify.sh
 
-# Tear the live example down, with the add-on and move profile versions that skip_destroy kept
-# out of Terraform's state. When the destroy fails, examples/live/diagnose.sh saves what holds
-# each cluster.
+# Tear the live example down, with every version of every profile name it uses, including the
+# versions skip_destroy kept out of Terraform's state. When the destroy fails,
+# examples/live/diagnose.sh saves what holds each cluster.
 live-down:
     #!/usr/bin/env bash
     set -uo pipefail
-    export PALETTE_PROJECT_UID=$(examples/live/tf.sh output -raw project_uid)
+    outputs=$(examples/live/tf.sh output -json) || { echo "live-down: no terraform outputs" >&2; exit 1; }
+    export PALETTE_PROJECT_UID=$(jq -r '.project_uid.value' <<<"$outputs")
+    names=$(jq -r '.profile_names.value[]' <<<"$outputs")
     examples/live/tf.sh destroy || { examples/live/diagnose.sh; exit 1; }
-    examples/live/api.sh delete-named strata-live-addon strata-live-move
+    examples/live/api.sh delete-named $names
 
 # Open one GitHub issue per section of docs/backlog.md (needs gh and a GitHub remote)
 backlog-issues:

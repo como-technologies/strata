@@ -1288,3 +1288,116 @@ fn diagnose_sh_saves_diagnostics_for_every_cluster_in_the_terraform_state() {
     let fred = std::fs::read_to_string(out.join("fred/state.txt")).unwrap();
     assert!(fred.contains("fred c-1: Provisioning"), "{fred}");
 }
+
+/// A `terraform` for baseline.sh: outputs for cluster A `c-a` and four profile versions, a plan
+/// that exits $FAKE_PLAN_EXIT, and a state that manages r-1, r-2, g-1, and ad-1.
+const FAKE_TERRAFORM_BASELINE: &str = r#"#!/usr/bin/env bash
+case "$*" in
+  *"output -json"*) cat <<'JSON'
+{"project_uid":{"value":"p-1"},"cluster_uid":{"value":"c-a"},"cluster_b_uid":{"value":""},
+ "profile_name":{"value":"strata-live-profile"},"release_profile_uid":{"value":"r-1"},
+ "addon_profile_uid":{"value":"ad-1"},"addon_profile_name":{"value":"strata-live-addon"},
+ "profile_names":{"value":["strata-live-profile","strata-live-addon","strata-live-move"]},
+ "cluster_names":{"value":{"a":"barney","b":"fred"}}}
+JSON
+  ;;
+  *"plan"*)
+    code=${FAKE_PLAN_EXIT:-0}
+    [ "$code" = 2 ] && echo "  # spectrocloud_cluster_profile.addon will be updated in-place"
+    [ "$code" = 0 ] && echo "No changes."
+    exit "$code" ;;
+  *"show -json"*) cat <<'JSON'
+{"values":{"root_module":{"resources":[
+  {"type":"spectrocloud_cluster_profile","values":{"id":"r-1","name":"strata-live-profile"}},
+  {"type":"spectrocloud_cluster_profile","values":{"id":"r-2","name":"strata-live-profile"}},
+  {"type":"spectrocloud_cluster_profile","values":{"id":"ad-1","name":"strata-live-addon"}},
+  {"type":"spectrocloud_cluster_aws","values":{"id":"c-a","name":"barney"}}
+]}}}
+JSON
+  ;;
+  *) exit 1 ;;
+esac
+"#;
+
+/// A `strata` for baseline.sh: listings from the test's environment, and a compare that exits
+/// $FAKE_COMPARE_EXIT.
+const FAKE_STRATA_BASELINE: &str = r#"#!/usr/bin/env bash
+case "$*" in
+  "list clusters --json") echo "{\"clusters\":[{\"name\":\"barney\",\"uid\":\"c-a\"}${FAKE_FRED:+,{\"name\":\"fred\",\"uid\":\"c-b\"\}}]}" ;;
+  "list profiles --json") echo "{\"profiles\":[{\"name\":\"strata-live-profile\",\"uid\":\"r-1\"},{\"name\":\"strata-live-profile\",\"uid\":\"r-2\"},{\"name\":\"strata-live-addon\",\"uid\":\"ad-1\"}${FAKE_EXTRA_ADDON:+,{\"name\":\"strata-live-addon\",\"uid\":\"ad-2\"\}}]}" ;;
+  compare*) echo "x -> y"; echo "root       aaa -> bbb   CHANGED"; exit "${FAKE_COMPARE_EXIT:-0}" ;;
+  *) exit 1 ;;
+esac
+"#;
+
+fn run_baseline(extra: &[(&str, &str)]) -> Output {
+    let root = tempfile::tempdir().unwrap();
+    let routes = root.path().join("routes");
+    std::fs::create_dir_all(&routes).unwrap();
+    std::fs::write(
+        routes.join("v1_spectroclusters_c-a"),
+        r#"{"metadata":{"name":"barney"},"status":{"state":"Running"}}"#,
+    )
+    .unwrap();
+    let bin = root.path().join("bin");
+    std::fs::create_dir_all(&bin).unwrap();
+    executable(&bin.join("terraform"), FAKE_TERRAFORM_BASELINE);
+    executable(&bin.join("fake-strata"), FAKE_STRATA_BASELINE);
+    let strata = bin.join("fake-strata").display().to_string();
+    let mut env = vec![("STRATA_BIN", strata.as_str())];
+    env.extend_from_slice(extra);
+    run_live("baseline.sh", &[], root.path(), &env)
+}
+
+#[test]
+fn baseline_sh_passes_only_when_every_condition_holds_and_names_each_that_does_not() {
+    let o = run_baseline(&[]);
+    let out = text(&o.stdout);
+    assert_eq!(o.status.code(), Some(0), "{out}{}", text(&o.stderr));
+    for name in [
+        "plan",
+        "cluster-a",
+        "no-cluster-b",
+        "versions",
+        "runs-release",
+        "runs-addon",
+    ] {
+        assert!(
+            out.lines().any(|l| l.starts_with("ok") && l.contains(name)),
+            "{name} holds: {out}"
+        );
+    }
+    assert!(!out.contains("differs"), "{out}");
+
+    let o = run_baseline(&[
+        ("FAKE_PLAN_EXIT", "2"),
+        ("FAKE_EXTRA_ADDON", "1"),
+        ("FAKE_FRED", "1"),
+        ("FAKE_COMPARE_EXIT", "1"),
+    ]);
+    let out = text(&o.stdout);
+    assert_eq!(o.status.code(), Some(1), "{out}{}", text(&o.stderr));
+    for want in [
+        "spectrocloud_cluster_profile.addon will be updated in-place",
+        "fred exists: c-b",
+        "strata-live-addon: Palette has ad-1 ad-2, Terraform manages ad-1",
+        "root       aaa -> bbb   CHANGED",
+    ] {
+        assert!(
+            out.lines()
+                .any(|l| l.starts_with("differs") && l.contains(want)),
+            "names {want:?}: {out}"
+        );
+    }
+    assert!(
+        out.contains("ok       versions      strata-live-profile: r-1 r-2"),
+        "a name that matches still passes: {out}"
+    );
+
+    let o = run_baseline(&[("FAKE_PLAN_EXIT", "1")]);
+    assert_eq!(
+        o.status.code(),
+        Some(2),
+        "a plan that fails means it cannot tell"
+    );
+}
