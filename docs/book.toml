@@ -13,11 +13,11 @@ create-missing = false
 [preprocessor.mermaid]
 command = "mdbook-mermaid"
 
-# Test each link while the book builds, with the rules in .mdbook-lint.toml. `optional` keeps a
-# checkout that has no mdbook-lint able to build the book: without it, mdbook stops with exit
-# code 101. Continuous integration installs the tool, so the test runs where it decides a merge.
-[preprocessor.lint]
-optional = true
+# mdbook-lint is not a preprocessor here. `just docs-lint` runs it, and so does CI. As a
+# preprocessor it stops the build on a workstation that does not have it: `optional` skips a
+# command that the system reports as absent, and a PATH with an entry that is not a directory
+# makes the system report "permission denied" instead. Then `just docs-serve` fails with
+# "Unable to run the preprocessor `lint`" and builds no book.
 
 [output.html]
 git-repository-url = "https://github.com/como-technologies/strata"
