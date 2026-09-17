@@ -282,7 +282,7 @@ resource "spectrocloud_cluster_profile" "move" {
 # each to be Running.
 locals {
   clusters = merge(
-    { a = var.cluster_name },
+    var.cluster ? { a = var.cluster_name } : {},
     var.second_cluster ? { b = var.second_cluster_name } : {},
   )
 }

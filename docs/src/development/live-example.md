@@ -177,6 +177,11 @@ just live-up          # billable until live-down
 `tf.sh` gives the key to OpenTofu from the environment or `~/.palette.env`, and
 never prints it.
 
+For the profiles alone, with no cluster and no cost, `just live-profiles` runs
+the apply with `-var cluster=false`. It gives a project that `list`, `compare`,
+`candidate`, `consumers`, and `verify` read in seconds. The cluster checks need
+`just live-up`. `just live-down` removes either.
+
 ### 3. Run the checks
 
 Log in to the OCI pack registry first, so `crane` can read the digest of the

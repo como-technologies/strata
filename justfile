@@ -106,6 +106,13 @@ live-up:
     examples/live/diagnose.sh
     exit 1
 
+# Build the profiles of the live example and no cluster: seconds, and no cost
+live-profiles:
+    #!/usr/bin/env bash
+    set -uo pipefail
+    examples/live/tf.sh init -input=false || exit 1
+    examples/live/tf.sh apply -var cluster=false
+
 # Run every read-only live check and write a summary
 live-verify: build
     examples/live/verify.sh

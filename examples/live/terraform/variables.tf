@@ -127,6 +127,12 @@ variable "cluster_addon_profile_uid" {
   default     = ""
 }
 
+variable "cluster" {
+  description = "Create cluster A. With false the example makes its profiles and no cluster, which costs nothing and takes seconds"
+  type        = bool
+  default     = true
+}
+
 variable "second_cluster" {
   description = "Create cluster B next to the cluster. Billable while it exists."
   type        = bool

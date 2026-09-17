@@ -5,7 +5,7 @@ output "project_uid" {
 }
 
 output "cluster_uid" {
-  value = spectrocloud_cluster_aws.cluster["a"].id
+  value = try(spectrocloud_cluster_aws.cluster["a"].id, "")
 }
 
 output "profile_name" {
