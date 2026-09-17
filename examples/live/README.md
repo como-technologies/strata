@@ -77,6 +77,12 @@ it down when the checks are done, and confirm it is gone.
   `crane` can use (`crane auth login` or `docker login`). The Helm registry
   must serve charts without credentials; `Bitnami` does.
 - The AWS CLI with read access to the account, only for `aws-inventory.sh`
+- The AWS managed policy `AmazonEBSCSIDriverPolicy` attached to the account's
+  worker node role, `nodes.cluster-api-provider-aws.sigs.k8s.io`, so the EBS
+  CSI pack runs as it ships. Without it, its controller crash-loops on every
+  cluster with `UnauthorizedOperation` on `ec2:DescribeAvailabilityZones`. No
+  strata check depends on volumes, and Palette still reports such a cluster
+  `Running`; the recorded runs before 2026-09-17 01:35 UTC ran without it.
 
 For a self-hosted Palette, set `PALETTE_API` to its address in the
 environment or `~/.palette.env`. Strata reads it, and `tf.sh` and `tenant.sh`
@@ -223,6 +229,7 @@ What went wrong before, and why:
 | `only-the-edited-value` fails with two changed values | 1.0.1 was edited in place, with `edit_next_in_place`, and the edit was not undone |
 | `plan-refuses-no-change` fails with exit 0 | the provider no longer refuses a flag-on plan that changes nothing: a release with the fix; expect 0 |
 | `registry-digest-oci` fails with "crane digest ... failed" | no login to the OCI registry, or an expired one; an AWS registry login lasts 12 hours |
+| `ebs-csi-controller` pods in `CrashLoopBackOff`, `UnauthorizedOperation` on `ec2:DescribeAvailabilityZones` | the worker node role lacks `AmazonEBSCSIDriverPolicy`; see Prerequisites |
 
 ## When teardown is slow or stuck
 
