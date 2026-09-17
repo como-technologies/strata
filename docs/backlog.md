@@ -400,17 +400,17 @@ An in-place edit can also rename the tag of a published version and keep its pac
 
 ### Plan
 
-1. In the live example, publish a version that differs only in the OS pack's tag name for the same pack uid, and record what Palette does to a cluster that moves to it: whether it reconciles or repaves. Also rename that tag on a published version in place through the API, and run `verify` on the record taken before the edit.
-2. Decide with the team: keep the tag in `IDENTITY` and give a tag-only change its own impact level, or drop an exact tag from `IDENTITY` when the pack uid is unchanged.
-3. `src/snapshot.rs` and `src/diff.rs`: implement the decision; if roots change, bump the snapshot schema id as `docs/model.md` requires.
+1. In the live example, publish a version that differs only in the OS pack's tag name for the same pack uid, and record what Palette does to a cluster that moves to it: whether it reconciles or repaves, by its instances and by Palette's own repave check (`tenant.sh repave`). Also rename that tag on a published version in place through the API, and run `verify` on the record taken before the edit.
+2. Decide with the team: keep the tag in `IDENTITY` and give a tag-only change its own impact level, or drop an exact tag from `IDENTITY` when the pack uid is unchanged. Decided: keep the tag in `IDENTITY`, and compare a tag-only change by build, as `SAME CONTENT` with the impact `none (tag renamed, same pack build)`; an in-place rename is `DRIFT`.
+3. `src/diff.rs` and `src/ops.rs`: implement the decision; if roots change, bump the snapshot schema id as `docs/model.md` requires. Roots do not change, so `strata-snapshot/1` stays.
 4. Tests over two fixtures that differ only in a tag name, and one that changes a floating tag.
 
 ### Acceptance criteria
 
-- [ ] `docs/model.md` states whether a tag-only change moves `IDENTITY` and what impact it reports, with the live evidence
-- [ ] Comparing two profiles that pin the same pack uid under different tag names reports the decided result, with a test
-- [ ] If roots change, the snapshot schema id changes and older records are refused by name
-- [ ] `docs/model.md` states whether an in-place tag rename of a published version is `DRIFT`, and `verify` reports what it states, with a test
+- [x] `docs/model.md` states whether a tag-only change moves `IDENTITY` and what impact it reports, with the live evidence
+- [x] Comparing two profiles that pin the same pack uid under different tag names reports the decided result, with a test
+- [x] If roots change, the snapshot schema id changes and older records are refused by name
+- [x] `docs/model.md` states whether an in-place tag rename of a published version is `DRIFT`, and `verify` reports what it states, with a test
 
 ## Record the values a cluster gives its profile variables
 
