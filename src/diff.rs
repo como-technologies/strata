@@ -31,7 +31,7 @@ pub struct Diff {
     pub a: Source,
     /// The candidate side.
     pub b: Source,
-    /// True when the Merkle roots are equal: same release
+    /// True when the roots are equal: same release
     pub same: bool,
     /// True when the roots are equal, or differ only by the `packUid`s Palette mints for each
     /// profile's manifest packs (`packs[].mintedUidOnly`) and the tag names packs are pinned under
@@ -105,7 +105,7 @@ impl Legend {
                 ("cluster-wide", "CNI or CSI layer changed; affects every node and may repave."),
                 ("in-place", "Add-on pack upgraded or reconfigured in place."),
                 ("sync", "Only the upstream digest changed; applied on the next profile sync."),
-                ("none", "No change."),
+                ("none", "No change, or only the tag name of a pack changed for the same build."),
             ]),
             status: m(&[
                 ("unchanged", "Same node hash on both sides."),

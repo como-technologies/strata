@@ -512,7 +512,7 @@ pub struct ChainRecord {
     pub uid: String,
     /// The project the record was taken in; empty for tenant scope.
     pub project_uid: String,
-    /// The Merkle root.
+    /// The root: one sha256 digest of the whole release.
     pub root: String,
 }
 
@@ -757,7 +757,7 @@ pub fn same_release(records: &[(String, Snapshot)], policy: Policy, generated_at
         legend: ChainLegend {
             status: m(&[
                 ("identical", "The two records have the same root: the same release."),
-                ("same-content", "The roots differ only by the packUid Palette mints for each profile's manifest packs: the same content, so the same release under either policy."),
+                ("same-content", "The roots differ only by the packUid Palette mints for each profile's manifest packs, or by the tag name a pack is pinned under for the same build: the same content, so the same release under either policy."),
                 ("registry-move", "The roots differ only because packs were re-pinned from another registry with the same tag, version, values, and manifests; accepted by the registry-move policy."),
                 ("different", "Not the same release; reasons lists each difference."),
             ]),

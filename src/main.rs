@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 use std::sync::OnceLock;
 
-use clap::{Args, Parser, Subcommand, ValueEnum};
+use clap::{Args, CommandFactory, FromArgMatches, Parser, Subcommand, ValueEnum};
 
 use strata::api::{HttpApi, Palette, Retry, RetryPolicy};
 use strata::color::{ColorMode, Paint};
@@ -18,40 +18,94 @@ use strata::render::{self, Format};
 use strata::snapshot::Snapshot;
 use strata::{candidate, diff, ops, TOOL_NAME};
 
-const SUBCOMMANDS: &[&str] = &[
-    "compare",
-    "snapshot",
-    "candidate",
-    "verify",
-    "same-release",
-    "consumers",
-    "list",
-    "schema",
-    "help",
+/// The commands by task, in the order of `strata --help`. The order follows the work: find the
+/// refs, record a release, compare releases, check the records.
+const GROUPS: &[(&str, &[&str])] = &[
+    ("Find", &["list"]),
+    ("Record", &["snapshot", "candidate"]),
+    ("Compare", &["compare", "same-release"]),
+    ("Check", &["verify", "consumers"]),
+    ("Reference", &["schema", "help"]),
+];
+
+/// The description of the `help` command, which clap adds.
+const HELP_ABOUT: &str = "Print this help, or the help of a command";
+
+/// The refs, the environment, and the exit status, after the options of `strata --help`.
+const REFERENCE_HELP: &[(&str, &[(&str, &str)])] = &[
+    (
+        "Refs",
+        &[
+            ("<uid>", "a profile version, by its uid"),
+            (
+                "<name>@<version>",
+                "a profile version, by its name and version",
+            ),
+            (
+                "<name>@latest",
+                "the highest version of the name in the scope",
+            ),
+            (
+                "cluster:<cluster>",
+                "all profiles that a cluster runs, by its name or uid",
+            ),
+            (
+                "cluster:<cluster>/<profile>",
+                "one profile that a cluster runs",
+            ),
+            ("<file>", "a snapshot file from strata snapshot"),
+        ],
+    ),
+    (
+        "Environment",
+        &[
+            (
+                "PALETTE_API_KEY",
+                "the API key; SPECTROCLOUD_APIKEY also works",
+            ),
+            (
+                "PALETTE_PROJECT",
+                "the project name; PALETTE_PROJECT_UID has priority",
+            ),
+            (
+                "PALETTE_API",
+                "the Palette address; default https://api.spectrocloud.com",
+            ),
+            (
+                "STRATA_RETRIES",
+                "how many times to send a failed request again; default 3",
+            ),
+            (
+                "STRATA_MAX_RETRY_AFTER",
+                "the longest Retry-After wait in seconds; default 300",
+            ),
+            ("STRATA_QUIET", "any value: the same as --quiet"),
+            (
+                "~/.palette.env",
+                "the key, the address, and the project, when the environment does not set them",
+            ),
+        ],
+    ),
+    (
+        "Exit status",
+        &[
+            ("0", "the same, unchanged, or not in use"),
+            ("1", "different, drifted, or in use"),
+            ("2", "an error: strata cannot answer"),
+        ],
+    ),
 ];
 
 #[derive(Parser)]
 #[command(
     name = TOOL_NAME,
     version,
-    about = "Record, compare, and verify Palette cluster profile versions as immutable, layered releases",
-    long_about = "A Palette cluster profile is a stack of layers. Strata records each published version as a\n\
-snapshot, compares two versions and says what kind of change happened in each layer, and verifies\n\
-that a published version still matches its record.\n\n\
-Each pack gets three sub-hashes: IDENTITY (name, layer, type, tag, version, packUid, registryUid),\n\
-UPSTREAM (the digest on the pack ref) and AUTHORED (canonical values YAML, manifests, params).\n\
-A profile's root hash covers its variables and its packs in order; same root, same release.\n\n\
-Refs: a profile uid, <name>@<version>, <name>@latest (the highest version in the scope),\n\
-cluster:<uid or name> or cluster:<uid or name>/<profile> (what a cluster runs), or a snapshot file written by\n\
-`snapshot`. `list` shows the profile and cluster refs in the scope. A cluster that runs a recorded version has that record's root. A snapshot records the\n\
-project it was taken in, and verify checks it there unless --project says otherwise.\n\
-Environment: PALETTE_API_KEY (or SPECTROCLOUD_APIKEY), PALETTE_PROJECT_UID or the project name\n\
-PALETTE_PROJECT (optional; the uid wins),\n\
-PALETTE_API (default https://api.spectrocloud.com), STRATA_RETRIES (default 3; retries on HTTP 5xx,\n\
-429 and transport errors, with backoff), STRATA_MAX_RETRY_AFTER (default 300; a longer Retry-After\n\
-fails at once). Missing values are read from ~/.palette.env.\n\n\
-Exit status: 0 identical (verify: unchanged, same-release: same), 1 different (verify: drifted,\n\
-same-release: not the same), 2 error."
+    about = "Record, compare, and check Palette cluster profile versions as releases",
+    long_about = "Record, compare, and check Palette cluster profile versions as releases.\n\n\
+A published profile version is a release. Strata writes a release to a snapshot file. It compares \
+two releases layer by layer, and it makes sure that Palette still has the release that a file \
+records. A cluster runs a release, and strata reads a cluster in the same way.",
+    override_usage = "strata <COMMAND>\n       strata <A> <B>"
 )]
 struct Cli {
     #[command(subcommand)]
@@ -74,24 +128,57 @@ impl Cli {
 
 #[derive(Subcommand)]
 enum Cmd {
-    /// Compare two profiles (the default when the first argument is not a subcommand)
-    Compare(CompareArgs),
-    /// Fetch one profile and write its snapshot: Merkle root, per-pack hashes, canonical contents
-    Snapshot(SnapshotArgs),
-    /// Write a profile version or record as a candidate file, which `snapshot --from-candidate`
-    /// turns back into the same root
-    Candidate(CandidateArgs),
-    /// Re-fetch each record's profile; exit 1 if a published version was edited in place. Several
-    /// files or a pattern print one line per record and a summary
-    Verify(VerifyArgs),
-    /// Check that two or more records are the same release, comparing each to the next in order
-    SameRelease(SameReleaseArgs),
-    /// List the clusters that use a profile version, with name, project, and state; exit 1 when any do
-    Consumers(ConsumersArgs),
-    /// List the profile versions and clusters in the scope as refs, and the projects the key can see
+    /// List the profile versions, clusters, and projects in the scope
+    ///
+    /// The first column of each line is a ref that the other commands accept. The scope is the
+    /// configured project, or the project that --project or --project-name gives.
     List(ListArgs),
-    /// Print the JSON Schema of a document: snapshot, diff, verify-summary, chain, consumers, list, or the candidate file
+    /// Record a profile version or a cluster in a snapshot file
+    ///
+    /// The file holds the root, the hashes of each pack, the values and manifests, the project,
+    /// and the clusters that use the version. `compare`, `same-release`, and `verify` read it.
+    Snapshot(SnapshotArgs),
+    /// Write a candidate file from a profile version or a record
+    ///
+    /// The file gives the pack, tag, registry, values, and manifests of each layer, and the
+    /// variables. `strata snapshot --from-candidate` calculates the same root from the file, when
+    /// the registry still has the same pack versions.
+    Candidate(CandidateArgs),
+    /// Compare two profile versions, records, or clusters
+    ///
+    /// The report gives the root of each side, the variables, and one line for each pack with its
+    /// change flags and impact. `strata <A> <B>` is the same as `strata compare <A> <B>`.
+    ///
+    /// Exit status: 0 when the roots are equal, 1 when they differ, 2 on an error.
+    Compare(CompareArgs),
+    /// Make sure that two or more records are one release
+    ///
+    /// Strata compares each record with the next one, in the order given. A pair passes when the
+    /// roots are equal. A pair also passes when the roots differ only by a tag name or by the uid
+    /// that Palette gives a manifest pack, because the content is the same.
+    ///
+    /// Exit status: 0 when each pair passes, 1 when a pair fails, 2 on an error.
+    SameRelease(SameReleaseArgs),
+    /// Make sure that each record agrees with Palette now
+    ///
+    /// For each record, strata fetches the same uid again in the project of the record and
+    /// compares the roots. A version number that changed on the same uid is drift too. One file
+    /// prints the full report and a verdict. Two or more files, or a pattern, print one line for
+    /// each record and a summary.
+    ///
+    /// Exit status: 0 when each record is unchanged, 1 when a record drifted, 2 when strata
+    /// cannot check a record.
+    Verify(VerifyArgs),
+    /// List the clusters that use a profile version
+    ///
+    /// Each line gives the name, uid, project, and state of a cluster. When the copy of a cluster
+    /// names a version that differs from the profile, the line says so.
+    ///
+    /// Exit status: 0 when no cluster uses the version, 1 when a cluster uses it, 2 on an error.
+    Consumers(ConsumersArgs),
+    /// Print the JSON Schema of a document or of the candidate file
     Schema {
+        /// The document: snapshot, diff, verify-summary, chain, consumers, list, or candidate
         #[arg(value_enum)]
         kind: SchemaKind,
     },
@@ -99,22 +186,23 @@ enum Cmd {
 
 #[derive(Args)]
 struct OutputArgs {
-    /// Output format: terminal (colored text), markdown (PR comment), json (machine-readable)
+    /// The output format: terminal, markdown for a pull request comment, or json for a script
     #[arg(long, value_enum, default_value = "terminal")]
     format: FormatArg,
-    /// Shorthand for --format json
+    /// The same as --format json
     #[arg(long)]
     json: bool,
-    /// Color the terminal report; auto colors only when stdout is a terminal and honors NO_COLOR and CLICOLOR_FORCE
+    /// When to color the terminal report. auto colors only a terminal, and obeys NO_COLOR and
+    /// CLICOLOR_FORCE
     #[arg(long, value_enum, default_value = "auto", num_args = 0..=1, default_missing_value = "always")]
     color: ColorArg,
-    /// Same as --color=never
+    /// The same as --color=never
     #[arg(long)]
     no_color: bool,
-    /// Compact JSON on one line instead of pretty-printed
+    /// Write the JSON on one line
     #[arg(long)]
     compact: bool,
-    /// Suppress progress messages on stderr
+    /// Do not write progress messages to standard error
     #[arg(short, long)]
     quiet: bool,
 }
@@ -144,11 +232,12 @@ impl OutputArgs {
 
 #[derive(Args)]
 struct CompareArgs {
-    /// Profile uid, <name>@<version> or <name>@latest, cluster:<uid or name>[/<profile>], or snapshot file
+    /// The first side: a profile uid, <name>@<version>, <name>@latest,
+    /// cluster:<cluster>[/<profile>], or a snapshot file
     a: String,
-    /// Profile uid, <name>@<version> or <name>@latest, cluster:<uid or name>[/<profile>], or snapshot file
+    /// The second side, in the same forms as the first
     b: String,
-    /// Also print unified diffs of raw values and changed manifests
+    /// Also print unified diffs of the raw values and of each changed manifest
     #[arg(long)]
     full: bool,
     #[command(flatten)]
@@ -157,60 +246,58 @@ struct CompareArgs {
 
 #[derive(Args)]
 struct SnapshotArgs {
-    /// Profile uid, <name>@<version> or <name>@latest, or cluster:<uid or name>[/<profile>]. With
-    /// --from-raw it only names the source, and selects the profile of a cluster directory
+    /// A profile uid, <name>@<version>, <name>@latest, or cluster:<cluster>[/<profile>]. With
+    /// --from-raw, it only names the source and selects one profile of a cluster directory
     r#ref: Option<String>,
-    /// Write the snapshot here instead of stdout
+    /// Write the snapshot to this file, not to standard output
     #[arg(short, long)]
     output: Option<PathBuf>,
-    /// Also save the raw API responses under this directory
+    /// Also save the raw API responses in this directory
     #[arg(long)]
     raw_dir: Option<PathBuf>,
-    /// Build from raw API responses saved earlier (profile.json or cluster.json, with manifests.json, variables.json, and scope.json when present), no network
+    /// Build the snapshot from the raw API responses that --raw-dir saved, with no network
     #[arg(long)]
     from_raw: Option<PathBuf>,
-    /// Build from a candidate file before the version exists in Palette; packs are looked up in their registries. See `strata schema candidate`
+    /// Build the snapshot from a candidate file, before the version is in Palette. Strata finds
+    /// each pack in its registry. See `strata schema candidate`
     #[arg(long, conflicts_with_all = ["from_raw", "raw_dir", "ref"])]
     from_candidate: Option<PathBuf>,
-    /// Compact JSON on one line instead of pretty-printed
+    /// Write the JSON on one line
     #[arg(long)]
     compact: bool,
-    /// Suppress progress messages on stderr
+    /// Do not write progress messages to standard error
     #[arg(short, long)]
     quiet: bool,
 }
 
 #[derive(Args)]
 struct CandidateArgs {
-    /// Profile uid, <name>@<version> or <name>@latest, or a profile record
+    /// A profile uid, <name>@<version>, <name>@latest, or a profile record
     r#ref: String,
-    /// Write the candidate file here instead of stdout
+    /// Write the candidate file to this file, not to standard output
     #[arg(short, long)]
     output: Option<PathBuf>,
-    /// Write each layer's values and each manifest to a file under this directory, referenced
-    /// from the candidate file
+    /// Write the values of each layer and each manifest to a file in this directory, and refer to
+    /// those files from the candidate file
     #[arg(long, requires = "output")]
     files_dir: Option<PathBuf>,
-    /// Suppress progress messages on stderr
+    /// Do not write progress messages to standard error
     #[arg(short, long)]
     quiet: bool,
 }
 
 #[derive(Args)]
 struct VerifyArgs {
-    /// Snapshot files written earlier by `snapshot`. A quoted pattern such as 'releases/**/*.json'
-    /// is expanded by strata. One file prints the full report; more, or a pattern, print one line
-    /// per record and a summary
+    /// Snapshot files. Put a pattern such as 'releases/**/*.json' in quotes: strata expands it
     #[arg(required = true)]
     snapshots: Vec<String>,
-    /// Check every record in this project instead of the project each record was taken in
+    /// Check each record in the project with this uid, not in the project of the record
     #[arg(long)]
     project: Option<String>,
-    /// Like --project, with the project's name
+    /// The same as --project, with the project name
     #[arg(long, conflicts_with = "project")]
     project_name: Option<String>,
-    /// Print one line per record and a summary even for one file, as for several; a script then
-    /// reads one document shape whatever it matched
+    /// Print one line and a summary also for one file, so a script always reads the same document
     #[arg(long)]
     summary: bool,
     #[command(flatten)]
@@ -219,10 +306,10 @@ struct VerifyArgs {
 
 #[derive(Args)]
 struct SameReleaseArgs {
-    /// Two or more refs in the order to compare: snapshot files, uids, or <name>@<version>
+    /// Two or more refs, in order: snapshot files, profile versions, or clusters
     #[arg(required = true, num_args = 2..)]
     records: Vec<String>,
-    /// Accept one kind of difference between consecutive records
+    /// Also pass a pair that differs only in this way
     #[arg(long, value_enum)]
     allow: Option<Allow>,
     #[command(flatten)]
@@ -231,7 +318,8 @@ struct SameReleaseArgs {
 
 #[derive(Args)]
 struct ConsumersArgs {
-    /// Profile uid, <name>@<version> or <name>@latest, or a profile record (its uid is fetched live)
+    /// A profile uid, <name>@<version>, <name>@latest, or a profile record. Strata always reads
+    /// the clusters from Palette
     r#ref: String,
     #[command(flatten)]
     out: OutputArgs,
@@ -239,21 +327,22 @@ struct ConsumersArgs {
 
 #[derive(Args)]
 struct ListArgs {
-    /// What to list: profiles, clusters, projects. Without one: profiles and clusters, or only
+    /// What to list: profiles, clusters, projects. With none: profiles and clusters, or only
     /// profiles with --pack
     #[arg(value_enum)]
     kinds: Vec<KindArg>,
-    /// List profiles and clusters in this project instead of the configured one. Projects are
-    /// always listed at tenant scope
+    /// List the profiles and clusters of the project with this uid, not of the configured project.
+    /// '' is tenant scope. Strata always lists projects at tenant scope
     #[arg(long)]
     project: Option<String>,
-    /// Like --project, with the project's name
+    /// The same as --project, with the project name
     #[arg(long, conflicts_with = "project")]
     project_name: Option<String>,
-    /// Read each profile version for its type, consumer count, and packs; one request each
+    /// Also read each profile version for its type, consumers, and packs: one request for each
     #[arg(long)]
     packs: bool,
-    /// Keep the profile versions with a pack whose name contains TEXT, ignoring case; implies --packs
+    /// Keep the profile versions with a pack whose name contains TEXT, in upper or lower case.
+    /// Sets --packs
     #[arg(long, value_name = "TEXT")]
     pack: Option<String>,
     #[command(flatten)]
@@ -281,7 +370,7 @@ impl From<KindArg> for ListKind {
 /// Differences `same-release` can be told to accept.
 #[derive(Clone, Copy, PartialEq, Eq, ValueEnum)]
 enum Allow {
-    /// Packs re-pinned from another registry with the same tag, version, values, and manifests
+    /// Packs from another registry, with the same tag, version, values, and manifests
     RegistryMove,
 }
 
@@ -330,14 +419,77 @@ enum SchemaKind {
     Candidate,
 }
 
+/// The command line, with `strata --help` listing the commands by task and ending with the refs,
+/// the environment, and the exit status.
+fn command() -> clap::Command {
+    let cmd = Cli::command();
+    let styles = cmd.get_styles().clone();
+    let heading = |text: &str| {
+        let h = styles.get_header();
+        format!("{}{text}:{}\n", h.render(), h.render_reset())
+    };
+    let row = |width: usize, name: &str, text: &str| {
+        let l = styles.get_literal();
+        format!(
+            "  {}{name:width$}{}  {text}\n",
+            l.render(),
+            l.render_reset()
+        )
+    };
+
+    let width = GROUPS
+        .iter()
+        .flat_map(|(_, names)| names.iter())
+        .map(|name| name.len())
+        .max()
+        .unwrap_or(0);
+    let mut commands = String::new();
+    for (group, names) in GROUPS {
+        commands.push_str(&heading(group));
+        for name in *names {
+            let about = match cmd.find_subcommand(name).and_then(|c| c.get_about()) {
+                Some(about) => about.to_string(),
+                None => HELP_ABOUT.to_string(),
+            };
+            commands.push_str(&row(width, name, &about));
+        }
+        commands.push('\n');
+    }
+
+    let reference: Vec<String> = REFERENCE_HELP
+        .iter()
+        .map(|(section, rows)| {
+            let width = rows.iter().map(|(name, _)| name.len()).max().unwrap_or(0);
+            let lines: String = rows
+                .iter()
+                .map(|(name, text)| row(width, name, text))
+                .collect();
+            heading(section) + &lines
+        })
+        .collect();
+    let reference = reference.join("\n");
+
+    cmd.help_template(format!(
+        "{{about-with-newline}}\n{{usage-heading}} {{usage}}\n\n{commands}{}{{options}}{{after-help}}\n",
+        heading("Options")
+    ))
+    .after_long_help(reference.trim_end().to_string())
+}
+
+/// True when `arg` names a command, so `strata <A> <B>` does not become `strata compare`.
+fn is_command(arg: &str) -> bool {
+    GROUPS.iter().any(|(_, names)| names.contains(&arg))
+}
+
 fn main() -> ExitCode {
     let mut argv: Vec<String> = std::env::args().collect();
     let first = argv.get(1).map(String::as_str).unwrap_or("");
     let is_global_flag = matches!(first, "-h" | "--help" | "-V" | "--version");
-    if argv.len() > 1 && !SUBCOMMANDS.contains(&first) && !is_global_flag {
+    if argv.len() > 1 && !is_command(first) && !is_global_flag {
         argv.insert(1, "compare".to_string());
     }
-    let cli = Cli::parse_from(argv);
+    let matches = command().get_matches_from(argv);
+    let cli = Cli::from_arg_matches(&matches).unwrap_or_else(|e| e.exit());
     let json = cli.json_selected();
     match run(cli) {
         Ok(code) => code,
@@ -661,4 +813,51 @@ fn cmd_schema(kind: SchemaKind) -> Result<ExitCode> {
     };
     println!("{}", serde_json::to_string_pretty(&schema)?);
     Ok(ExitCode::SUCCESS)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn help_lists_each_command_in_exactly_one_group() {
+        let mut listed: Vec<&str> = GROUPS
+            .iter()
+            .flat_map(|(_, names)| names.iter().copied())
+            .collect();
+        let count = listed.len();
+        listed.sort_unstable();
+        listed.dedup();
+        assert_eq!(listed.len(), count, "a command is in two groups");
+
+        let mut built = command();
+        built.build();
+        let mut commands: Vec<&str> = built.get_subcommands().map(|c| c.get_name()).collect();
+        commands.sort_unstable();
+        assert_eq!(listed, commands);
+    }
+
+    #[test]
+    fn help_follows_the_group_order_and_ends_with_the_exit_status() {
+        let help = command().render_long_help().to_string();
+        let at = |text: &str| {
+            help.find(text)
+                .unwrap_or_else(|| panic!("no {text:?} in:\n{help}"))
+        };
+        let mut last = 0;
+        for (group, names) in GROUPS {
+            assert!(at(&format!("{group}:")) > last, "{group} is out of order");
+            last = at(&format!("{group}:"));
+            for name in *names {
+                assert!(
+                    at(&format!("  {name} ")) > last,
+                    "{name} is not under {group}"
+                );
+            }
+        }
+        assert!(at("Options:") > last);
+        assert!(at("Refs:") > at("Options:"));
+        assert!(at("Exit status:") > at("Environment:"));
+        assert!(!help.contains("Merkle"));
+    }
 }

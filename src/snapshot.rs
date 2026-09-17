@@ -1,5 +1,5 @@
-//! The snapshot document (schema strata-snapshot/1): one profile version with its Merkle
-//! root, per-pack hashes, canonical values and raw contents. Byte-compatible with the snapshots
+//! The snapshot document (schema strata-snapshot/1): one profile version with its root,
+//! per-pack hashes, canonical values and raw contents. Byte-compatible with the snapshots
 //! written by the bash reference implementation.
 
 use std::collections::BTreeMap;
@@ -19,7 +19,7 @@ pub const SNAPSHOT_SCHEMA: &str = "strata-snapshot/1";
 /// The part of a snapshot schema id shared by every version of it.
 const SNAPSHOT_FAMILY: &str = "strata-snapshot/";
 
-/// One published profile version: its Merkle root, per-pack hashes, canonical values, and raw contents.
+/// One published profile version: its root, per-pack hashes, canonical values, and raw contents.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct Snapshot {
@@ -214,7 +214,7 @@ pub struct Consumers {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct Pack {
-    /// `<layer>/<name>`, the Merkle node key
+    /// `<layer>/<name>`, the key of the pack's node hash in the root
     pub key: String,
     /// Palette layer name: os, k8s, cni, csi, addon.
     pub layer: String,
@@ -289,7 +289,7 @@ pub struct PackHash {
     pub node: String,
 }
 
-/// The Merkle root over the variables hash and the packs' node hashes, in order.
+/// The root: one sha256 digest over the variables hash and the node hash of each pack, in order.
 fn root_of(variables_hash: &str, packs: &[Pack]) -> String {
     sha256_hex(&canonical_json(&json!({
         "variables": variables_hash,
