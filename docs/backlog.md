@@ -630,7 +630,7 @@ labels: feature
 
 - [x] `consumers` shows the version each cluster's copy names, from the cluster document it already reads
 - [x] A consumer whose copy names another version than the profile uid names now is marked as overwritten in the terminal, markdown, and JSON output
-- [ ] Offline tests cover both cases, and the live flag-off run marks both clusters after a legacy version bump
+- [x] Offline tests cover both cases, and the live flag-off run marks both clusters after a legacy version bump
 
 ## Note a profile uid that names two versions in compare
 
