@@ -136,7 +136,7 @@ release.
 | a profile version is published      | `snapshot`. Keep the file with the release.                                      |
 | a cluster is about to move versions | `compare` between the current and the proposed versions. The report shows the repave impact. |
 | a cluster should run its release    | `compare` between the record and `cluster:<cluster>/<profile>`. `IDENTICAL` means the cluster runs what was released. |
-| on a schedule                       | `verify` over each recorded snapshot. This enforces the immutability rule.      |
+| on a schedule                       | `verify` over each recorded snapshot, through `scripts/verify-report.sh`, which keeps one issue per record that drifted. This enforces the immutability rule. |
 | before end of life                  | `consumers`: each cluster that uses the version, with its project and state. Exit `0` means nothing uses it. |
 
 ## Pull request comments
@@ -177,12 +177,55 @@ and runs the script. It comments with the caller's token. Any other CI
 system installs strata and runs the script directly.
 
 While this repository is private, two things are needed before another
-repository can call the workflow. First, allow access in this repository's
+repository can call a workflow of this repository. First, allow access in this repository's
 Settings, under Actions, General, Access: "Accessible from repositories in
 the organization". Second, pass `strata-token`: a fine-grained token or a
 GitHub App token with read access to this repository's contents. The
 caller's own token cannot read another private repository, so without it
 the checkout and the download fail.
+
+## Drift issues
+
+`scripts/verify-report.sh 'releases/**/*.json'` runs `strata verify` over
+the records and keeps one open issue for each record that drifted or could
+not be checked. The first run that finds a record opens its issue with the
+`verify` report, each later run updates it, and the first run where the
+record verifies again closes it with a comment. The script finds a record's
+issue by the marker `<!-- strata-verify: <path> -->` on the first line of its
+body, among the open issues with the label `strata-drift` (`--label` changes
+it), and leaves the issues of records it was not given alone. It exits like
+`verify`: `0` when every record verified, `1` when any drifted, `2` when any
+could not be checked, after the issues are handled. `--dry-run` prints each
+issue body and what it would do, without touching the host. The script needs
+`gh` logged in, `jq`, and the Palette key; the repository comes from `--repo`
+or from `gh`.
+
+On GitHub Actions, call the reusable workflow from a scheduled workflow. The
+caller sets the schedule and needs `issues: write`:
+
+```yaml
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+permissions:
+  contents: read
+  issues: write
+jobs:
+  strata:
+    uses: como-technologies/strata/.github/workflows/verify.yml@v0.5.0
+    with:
+      records: releases/**/*.json
+      strata-version: v0.5.0
+    secrets:
+      strata-token: ${{ secrets.STRATA_READ_TOKEN }}     # while this repository is private
+      palette-api-key: ${{ secrets.PALETTE_API_KEY }}
+```
+
+`records` takes several files or patterns, separated by spaces or newlines;
+strata expands the patterns. `palette-api` sets the address of a self-hosted
+Palette, and `label` the issue label. Any other scheduler runs the script
+directly.
 
 ## Documentation
 

@@ -1,0 +1,78 @@
+name: strata verify report
+
+# Reusable workflow. A repository calls it from its own scheduled workflow to verify its strata
+# records and keep one issue open per record that drifted or could not be checked; see the README.
+# The caller sets the schedule. It downloads the strata release binary, checks it against
+# SHA256SUMS, and runs scripts/verify-report.sh from the same tag. Other CI systems run the script
+# directly.
+on:
+  workflow_call:
+    inputs:
+      records:
+        description: The records to verify in the caller's checkout, snapshot files or patterns such as releases/**/*.json, separated by spaces or newlines. Strata expands the patterns.
+        required: true
+        type: string
+      label:
+        description: The label of the issues the report keeps
+        default: strata-drift
+        type: string
+      palette-api:
+        description: The Palette API address, for a self-hosted Palette; empty means https://api.spectrocloud.com
+        default: ""
+        type: string
+      strata-version:
+        description: The strata release to use, for example v0.5.0
+        required: true
+        type: string
+    secrets:
+      strata-token:
+        description: A token that can read como-technologies/strata (contents read), needed while that repository is private. The caller's own token cannot read another private repository.
+        required: false
+      palette-api-key:
+        description: PALETTE_API_KEY, which verify needs to read each record's profile or cluster
+        required: true
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      # the caller's repository, where the records live
+      - uses: actions/checkout@v4
+      # this repository at the requested tag, for the script
+      - uses: actions/checkout@v4
+        with:
+          repository: como-technologies/strata
+          ref: ${{ inputs.strata-version }}
+          path: .strata
+          token: ${{ secrets.strata-token || github.token }}
+      - name: install strata
+        env:
+          GH_TOKEN: ${{ secrets.strata-token || github.token }}
+          VERSION: ${{ inputs.strata-version }}
+        run: |
+          mkdir -p .strata/bin && cd .strata/bin
+          gh release download "$VERSION" --repo como-technologies/strata \
+            --pattern strata-x86_64-unknown-linux-musl --pattern SHA256SUMS
+          sha256sum --check --ignore-missing SHA256SUMS
+          chmod +x strata-x86_64-unknown-linux-musl
+          mv strata-x86_64-unknown-linux-musl strata
+          ./strata --version
+      - name: verify and report
+        env:
+          # the caller's token: it owns the issues
+          GH_TOKEN: ${{ github.token }}
+          STRATA_BIN: ${{ github.workspace }}/.strata/bin/strata
+          PALETTE_API_KEY: ${{ secrets.palette-api-key }}
+          PALETTE_API: ${{ inputs.palette-api }}
+          RECORDS: ${{ inputs.records }}
+          LABEL: ${{ inputs.label }}
+          REPO: ${{ github.repository }}
+        run: |
+          # split the records on whitespace and leave each pattern for strata to expand
+          set -f
+          # shellcheck disable=SC2086
+          .strata/scripts/verify-report.sh $RECORDS --repo "$REPO" --label "$LABEL"

@@ -1687,3 +1687,347 @@ fn tenant_sh_repave_asks_palette_whether_a_move_to_another_profile_version_repav
         text(&o.stderr)
     );
 }
+
+// ---- verify-report.sh ------------------------------------------------------------------------
+
+/// A `strata` for verify-report.sh: `verify --summary ...` answers from summary.json and
+/// summary.exit, and `verify <path> --format markdown` from <basename>.md, .err, and .exit, all
+/// under FAKE_VERIFY; every call is logged.
+const FAKE_VERIFY_STRATA: &str = r#"#!/usr/bin/env bash
+echo "$*" >> "$FAKE_VERIFY/strata.log"
+[ "$1" = verify ] || exit 9
+if [ "$2" = --summary ]; then
+  cat "$FAKE_VERIFY/summary.json" 2>/dev/null
+  cat "$FAKE_VERIFY/summary.err" >&2 2>/dev/null
+  exit "$(cat "$FAKE_VERIFY/summary.exit")"
+fi
+key=$(basename "$2" .json)
+cat "$FAKE_VERIFY/$key.md" 2>/dev/null
+[ -f "$FAKE_VERIFY/$key.err" ] && cat "$FAKE_VERIFY/$key.err" >&2
+exit "$(cat "$FAKE_VERIFY/$key.exit")"
+"#;
+
+/// A `gh` for issues: logs each call, keeps each body file it is handed as body-<n>.md in call
+/// order, lists the open issues from issues.json, and numbers a new issue from 41 up.
+const FAKE_ISSUES_GH: &str = r#"#!/usr/bin/env bash
+set -euo pipefail
+echo "$*" >> "$FAKE_VERIFY/gh.log"
+n=$(wc -l < "$FAKE_VERIFY/gh.log")
+prev=""
+for a in "$@"; do
+  [ "$prev" = "--body-file" ] && cp "$a" "$FAKE_VERIFY/body-$n.md"
+  [ "$prev" = "--comment" ] && printf '%s' "$a" > "$FAKE_VERIFY/comment-$n.md"
+  prev="$a"
+done
+case "$*" in
+  "issue list"*) cat "$FAKE_VERIFY/issues.json" 2>/dev/null || echo "[]" ;;
+  "issue create"*) c=$(cat "$FAKE_VERIFY/created" 2>/dev/null || echo 40); c=$((c + 1)); echo "$c" > "$FAKE_VERIFY/created"
+                   echo "https://github.com/o/r/issues/$c" ;;
+  "label list"*) cat "$FAKE_VERIFY/labels.json" 2>/dev/null || echo "[]" ;;
+  "repo view"*) echo '{"nameWithOwner":"o/r"}' ;;
+esac
+"#;
+
+struct Drift {
+    dir: tempfile::TempDir,
+}
+
+impl Drift {
+    fn new() -> Drift {
+        let dir = tempfile::tempdir().unwrap();
+        let bin = dir.path().join("bin");
+        std::fs::create_dir(&bin).unwrap();
+        executable(&bin.join("strata"), FAKE_VERIFY_STRATA);
+        executable(&bin.join("gh"), FAKE_ISSUES_GH);
+        Drift { dir }
+    }
+
+    fn put(&self, name: &str, body: &str) {
+        std::fs::write(self.dir.path().join(name), body).unwrap();
+    }
+
+    /// The summary strata prints, from (path, status, name, version) per record.
+    fn summary(&self, exit: i32, records: &[(&str, &str, &str, &str)]) {
+        let records: Vec<serde_json::Value> = records
+            .iter()
+            .map(|(path, status, name, version)| {
+                let mut r = serde_json::json!({"path": path, "status": status, "name": name,
+                    "version": version, "uid": "64f0000000000000000000a1", "recordedAt": "2026-09-16T01:56:23Z"});
+                if *status == "error" {
+                    r["error"] = serde_json::json!({"kind": "api", "message": "GET /v1/clusterprofiles/64f0 failed with HTTP 404"});
+                }
+                r
+            })
+            .collect();
+        self.put(
+            "summary.json",
+            &serde_json::json!({"schema": "strata-verify-summary/1", "records": records})
+                .to_string(),
+        );
+        self.put("summary.exit", &exit.to_string());
+    }
+
+    /// What `strata verify <path> --format markdown` prints and exits with for one record.
+    fn record(&self, key: &str, exit: i32, report: &str, err: &str) {
+        self.put(&format!("{key}.md"), report);
+        self.put(&format!("{key}.exit"), &exit.to_string());
+        let e = self.dir.path().join(format!("{key}.err"));
+        if err.is_empty() {
+            let _ = std::fs::remove_file(e);
+        } else {
+            std::fs::write(e, err).unwrap();
+        }
+    }
+
+    fn run(&self, args: &[&str]) -> Output {
+        for f in ["gh.log", "strata.log"] {
+            let _ = std::fs::remove_file(self.dir.path().join(f));
+        }
+        Command::new("bash")
+            .arg(script("verify-report.sh"))
+            .args(args)
+            .env(
+                "PATH",
+                format!(
+                    "{}:{}",
+                    self.dir.path().join("bin").display(),
+                    std::env::var("PATH").unwrap()
+                ),
+            )
+            .env("FAKE_VERIFY", self.dir.path())
+            .env_remove("STRATA_BIN")
+            .env_remove("GITHUB_REPOSITORY")
+            .output()
+            .unwrap()
+    }
+
+    fn log(&self, name: &str) -> Vec<String> {
+        std::fs::read_to_string(self.dir.path().join(name))
+            .unwrap_or_default()
+            .lines()
+            .map(str::to_string)
+            .collect()
+    }
+
+    /// The body or comment handed to gh on the call with this 1-based number.
+    fn handed(&self, kind: &str, call: usize) -> String {
+        std::fs::read_to_string(self.dir.path().join(format!("{kind}-{call}.md")))
+            .unwrap_or_else(|_| panic!("gh call {call} was handed no {kind}"))
+    }
+}
+
+#[test]
+fn verify_report_opens_one_issue_per_record_that_did_not_verify_and_closes_it_once_it_does() {
+    let d = Drift::new();
+    d.summary(
+        2,
+        &[
+            ("releases/a.json", "unchanged", "lab-profile", "1.2.0"),
+            ("releases/b.json", "drifted", "lab-profile", "1.3.0"),
+            ("releases/c.json", "error", "lab-profile", "1.0.0"),
+        ],
+    );
+    d.record("b", 1, "## lab-profile@1.3.0\n\n**Result:** CHANGED\n", "");
+    d.record(
+        "c",
+        2,
+        "",
+        "strata: GET /v1/clusterprofiles/64f0 failed with HTTP 404\n",
+    );
+
+    // first run: no issues yet, and no label
+    let o = d.run(&["releases/*.json", "--repo", "o/r"]);
+    assert_eq!(
+        o.status.code(),
+        Some(2),
+        "a record that could not be checked: {}",
+        text(&o.stderr)
+    );
+    assert_eq!(
+        d.log("strata.log"),
+        vec![
+            "verify --summary --quiet --format json releases/*.json",
+            "verify releases/b.json --quiet --format markdown",
+            "verify releases/c.json --quiet --format markdown",
+        ],
+        "one summary, then each record that did not verify on its own for its report"
+    );
+    let calls = d.log("gh.log");
+    assert_eq!(calls.len(), 5, "{calls:#?}");
+    assert!(
+        calls[0].starts_with("issue list --repo o/r --label strata-drift --state open"),
+        "{}",
+        calls[0]
+    );
+    assert!(
+        calls[1].starts_with("label list --repo o/r"),
+        "{}",
+        calls[1]
+    );
+    assert!(
+        calls[2].starts_with("label create strata-drift --repo o/r"),
+        "{}",
+        calls[2]
+    );
+    assert!(
+        calls[3].starts_with("issue create --repo o/r --title strata verify: lab-profile@1.3.0 drifted (releases/b.json)"),
+        "{}",
+        calls[3]
+    );
+    assert!(calls[3].contains("--label strata-drift"), "{}", calls[3]);
+    let b = d.handed("body", 4);
+    assert!(
+        b.starts_with("<!-- strata-verify: releases/b.json -->\n"),
+        "{b}"
+    );
+    assert!(
+        b.contains("`strata verify releases/b.json` reports drift"),
+        "{b}"
+    );
+    assert!(
+        b.contains("**Result:** CHANGED"),
+        "the report is in the issue: {b}"
+    );
+    assert!(
+        calls[4].starts_with(
+            "issue create --repo o/r --title strata verify: releases/c.json could not be checked"
+        ),
+        "{}",
+        calls[4]
+    );
+    let c = d.handed("body", 5);
+    assert!(
+        c.starts_with("<!-- strata-verify: releases/c.json -->\n"),
+        "{c}"
+    );
+    assert!(
+        c.contains("api: GET /v1/clusterprofiles/64f0 failed with HTTP 404"),
+        "{c}"
+    );
+    let err = text(&o.stderr);
+    assert!(
+        err.contains("3 records: 1 unchanged, 1 drifted, 1 could not be checked; opened #41 for releases/b.json; opened #42 for releases/c.json"),
+        "{err}"
+    );
+
+    // second run: b still drifts, c verifies again, a keeps verifying and has an old issue; an
+    // issue for a record not given stays open
+    d.summary(
+        1,
+        &[
+            ("releases/a.json", "unchanged", "lab-profile", "1.2.0"),
+            ("releases/b.json", "drifted", "lab-profile", "1.3.0"),
+            ("releases/c.json", "error", "lab-profile", "1.0.0"),
+        ],
+    );
+    d.record(
+        "b",
+        1,
+        "## lab-profile@1.3.0\n\n**Result:** CHANGED, again\n",
+        "",
+    );
+    d.record("c", 0, "", "");
+    d.put(
+        "issues.json",
+        r#"[{"number":7,"title":"old","body":"<!-- strata-verify: releases/a.json -->\nold"},
+            {"number":41,"title":"t","body":"<!-- strata-verify: releases/b.json -->\r\nedited on the web"},
+            {"number":42,"title":"t","body":"<!-- strata-verify: releases/c.json -->\nold"},
+            {"number":50,"title":"t","body":"<!-- strata-verify: releases/other.json -->\nold"}]"#,
+    );
+    let o = d.run(&["releases/*.json", "--repo", "o/r"]);
+    assert_eq!(o.status.code(), Some(1), "{}", text(&o.stderr));
+    let calls = d.log("gh.log");
+    assert_eq!(calls.len(), 4, "{calls:#?}");
+    assert!(
+        calls[1].starts_with("issue close 7 --repo o/r --comment"),
+        "{}",
+        calls[1]
+    );
+    assert!(
+        d.handed("comment", 2).contains("`releases/a.json` verifies again: lab-profile@1.2.0 is unchanged since 2026-09-16T01:56:23Z"),
+        "{}",
+        d.handed("comment", 2)
+    );
+    assert!(
+        calls[2].starts_with("issue edit 41 --repo o/r --title strata verify: lab-profile@1.3.0 drifted (releases/b.json)"),
+        "{}",
+        calls[2]
+    );
+    assert!(d.handed("body", 3).contains("CHANGED, again"));
+    assert!(
+        calls[3].starts_with("issue close 42 --repo o/r --comment"),
+        "{}",
+        calls[3]
+    );
+    assert!(
+        calls
+            .iter()
+            .all(|c| !c.contains(" 50 ") && !c.starts_with("issue create")),
+        "exactly one issue per record, and none touched for a record not given: {calls:#?}"
+    );
+    assert!(
+        text(&o.stderr).contains("3 records: 2 unchanged, 1 drifted, 0 could not be checked; closed #7 for releases/a.json; updated #41 for releases/b.json; closed #42 for releases/c.json"),
+        "{}",
+        text(&o.stderr)
+    );
+
+    // a clean run with no open issues only lists them
+    d.summary(
+        0,
+        &[("releases/a.json", "unchanged", "lab-profile", "1.2.0")],
+    );
+    d.put("issues.json", "[]");
+    let o = d.run(&["releases/a.json", "--repo", "o/r"]);
+    assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
+    assert_eq!(d.log("gh.log").len(), 1);
+}
+
+#[test]
+fn verify_report_touches_no_issue_when_verify_checks_nothing() {
+    let d = Drift::new();
+    d.put(
+        "summary.err",
+        r#"{"error":{"kind":"pattern","message":"'releases/*.json' matched no files"}}"#,
+    );
+    d.put("summary.exit", "2");
+    let o = d.run(&["releases/*.json", "--repo", "o/r"]);
+    assert_eq!(o.status.code(), Some(2));
+    assert!(d.log("gh.log").is_empty(), "{:?}", d.log("gh.log"));
+    let err = text(&o.stderr);
+    assert!(err.contains("matched no files"), "{err}");
+    assert!(
+        err.contains("verify-report: strata verify checked nothing (exit 2)"),
+        "{err}"
+    );
+}
+
+#[test]
+fn verify_report_dry_run_prints_each_report_and_calls_no_host() {
+    let d = Drift::new();
+    d.summary(
+        1,
+        &[
+            ("releases/a.json", "unchanged", "lab-profile", "1.2.0"),
+            ("releases/b.json", "drifted", "lab-profile", "1.3.0"),
+        ],
+    );
+    d.record("b", 1, "**Result:** CHANGED\n", "");
+    let o = d.run(&["releases/*.json", "--dry-run"]);
+    assert_eq!(o.status.code(), Some(1), "{}", text(&o.stderr));
+    assert!(d.log("gh.log").is_empty(), "{:?}", d.log("gh.log"));
+    let out = text(&o.stdout);
+    assert!(
+        out.contains("<!-- strata-verify: releases/b.json -->"),
+        "{out}"
+    );
+    assert!(out.contains("**Result:** CHANGED"), "{out}");
+    let err = text(&o.stderr);
+    assert!(
+        err.contains("would close the open issue for releases/a.json, if any"),
+        "{err}"
+    );
+    assert!(
+        err.contains("would open or update the issue for releases/b.json"),
+        "{err}"
+    );
+}

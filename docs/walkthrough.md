@@ -364,7 +364,19 @@ strata verify releases/1.1.1/prod.json
 DRIFT: published version aws-pxk@1.1.1 differs from the copy recorded <recorded time>
 ```
 
-What to do on `DRIFT`: open an issue with the report. Then restore the rule.
+What to do on `DRIFT`: open an issue with the report.
+`scripts/verify-report.sh` does it for the job, and closes the issue once the
+record verifies again:
+
+```
+scripts/verify-report.sh 'releases/**/*.json'
+```
+
+```
+verify-report: 2 records: 1 unchanged, 1 drifted, 0 could not be checked; opened #12 for releases/1.1.1/prod.json
+```
+
+The issue holds the report above. Then restore the rule.
 The fix is a new version that carries the change through review and
 publication. Do not repair the edited object in place. The record is the
 truth. The live object is the deviation.
