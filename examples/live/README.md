@@ -280,7 +280,10 @@ These rules come from the observed teardowns of the same kind of cluster:
   `Running` and its nodes `Ready`: Palette then does not carry out the
   deletion, and every cloud resource stays in place.
 - Deletion continues in Palette after Terraform gives up or is interrupted.
-  Keep checking with `tenant.sh cluster` instead of starting over.
+  Keep checking with `tenant.sh cluster` instead of starting over. While the
+  state is not `Running` or `Deleted`, it prints the conditions not yet done
+  and the three latest events, so a deletion that is moving shows it: the
+  last AWS steps, then `Cluster <name> has been deleted`.
 - Judge progress by `aws-inventory.sh`, not by elapsed time, and only 0 on
   every line means AWS is empty. The instances, NAT gateway, and load balancer
   go first; the security groups, route tables, subnets, internet gateway, and

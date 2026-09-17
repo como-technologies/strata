@@ -1487,3 +1487,33 @@ fn aws_inventory_counts_what_a_cluster_deletion_removes_last() {
         "{calls}"
     );
 }
+
+#[test]
+fn tenant_sh_cluster_shows_the_latest_events_of_a_cluster_that_is_not_settled() {
+    let root = tempfile::tempdir().unwrap();
+    let routes = root.path().join("routes");
+    std::fs::create_dir_all(&routes).unwrap();
+    std::fs::write(
+        routes.join("v1_spectroclusters_c-1"),
+        r#"{"metadata":{"name":"barney"},"status":{"state":"Deleting","conditions":[
+            {"type":"DeProvisionDone","status":"False","message":"ApplyingClusterSpec"}]}}"#,
+    )
+    .unwrap();
+    std::fs::write(
+        routes.join("v1_events_components_spectrocluster_c-1"),
+        r#"{"items":[
+            {"metadata":{"creationTimestamp":"2026-09-17T03:44:39.000Z"},"reason":"Deleted","message":"Cluster barney has been deleted"},
+            {"metadata":{"creationTimestamp":"2026-09-17T03:44:36.000Z"},"reason":"SuccessfulDeleteSecurityGroup","message":"Deleted cluster managed SecurityGroup \"sg-1\""},
+            {"metadata":{"creationTimestamp":"2026-09-17T03:33:20.000Z"},"reason":"Deleting","message":"Cluster barney is Deleting"},
+            {"metadata":{"creationTimestamp":"2026-09-17T03:44:39.500Z"},"reason":"SuccessfulDeleteVPC","message":"Deleted managed VPC \"vpc-1\""}
+        ]}"#,
+    )
+    .unwrap();
+    let o = run_live("tenant.sh", &["cluster", "c-1"], root.path(), &[]);
+    assert_eq!(o.status.code(), Some(1), "{}", text(&o.stderr));
+    assert_eq!(
+        text(&o.stdout),
+        "barney c-1: Deleting\n  not done: DeProvisionDone: ApplyingClusterSpec\n  event 03:44:36 SuccessfulDeleteSecurityGroup: Deleted cluster managed SecurityGroup \"sg-1\"\n  event 03:44:39 Deleted: Cluster barney has been deleted\n  event 03:44:39 SuccessfulDeleteVPC: Deleted managed VPC \"vpc-1\"\n",
+        "the three latest events, oldest first, show a deletion that is moving"
+    );
+}

@@ -4,9 +4,10 @@
 #   tenant.sh names [REGION]   the names terraform.tfvars needs: projects, AWS cloud accounts, and
 #                              for each account the availability zones and EC2 key pairs in REGION
 #                              (default us-east-2)
-#   tenant.sh cluster UID      a cluster's status.state, and each condition not yet done while it
-#                              is neither Running nor Deleted; exit 0 once it is Deleted or not
-#                              found, 1 while it exists, 2 when the answer cannot be trusted
+#   tenant.sh cluster UID      a cluster's status.state, and while it is neither Running nor
+#                              Deleted, each condition not yet done and its three latest events;
+#                              exit 0 once it is Deleted or not found, 1 while it exists, 2 when
+#                              the answer cannot be trusted
 #   tenant.sh updates UID      what Palette lists as waiting for a cluster's profiles, as JSON
 #   tenant.sh diagnose UID DIR what holds a cluster that will not reach Running or will not finish
 #                              deleting, saved under DIR: the cluster document, its events, and the
@@ -147,18 +148,26 @@ cluster() {
   local uid=${1:-} tmp status state name
   [ -n "$uid" ] || die "usage: tenant.sh cluster UID"
   [ -n "$PROJECT" ] || die "set PALETTE_PROJECT_UID to the cluster's project"
-  tmp=$(mktemp); trap 'rm -f "$tmp"' RETURN
+  tmp=$(mktemp); trap 'rm -f "$tmp" "$tmp.events"' RETURN
   status=$(get "/v1/spectroclusters/$uid" "$tmp")
   case "$status" in
     200)
       state=$(jq -r '.status.state // "unknown"' "$tmp" 2>/dev/null) || die "HTTP 200 without JSON; try again"
       name=$(jq -r '.metadata.name // ""' "$tmp")
       echo "$name $uid: $state"
-      # What holds a cluster that is neither Running nor Deleted: each condition not yet true.
+      # What holds a cluster that is neither Running nor Deleted: each condition not yet true, and
+      # the three latest events, which show whether it is still moving.
       case "$state" in
         Running|Deleted) ;;
-        *) jq -r '(.status.conditions // [])[] | select(.status != "True")
-                  | "  not done: \(.type): \(.message // .reason // "")"' "$tmp" ;;
+        *)
+          jq -r '(.status.conditions // [])[] | select(.status != "True")
+                 | "  not done: \(.type): \(.message // .reason // "")"' "$tmp"
+          if [ "$(get "/v1/events/components/spectrocluster/$uid?limit=100" "$tmp.events")" = 200 ]; then
+            jq -r '[(.items // [])[]] | sort_by(.metadata.creationTimestamp) | .[-3:][]
+                   | "  event \(.metadata.creationTimestamp[11:19]) \(.reason // ""): \((.message // "")[0:120])"' \
+              "$tmp.events" 2>/dev/null
+          fi
+          ;;
       esac
       [ "$state" = Deleted ] && return 0 || return 1 ;;
     404)
