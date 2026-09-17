@@ -627,6 +627,52 @@ delete the version cluster A runs, because the state still held
 | `issues-after-restore` | PASS 0 | PASS 0 | no issue is open |
 | `baseline-after` | PASS 0 | PASS 0 | the live example is back at its baseline |
 
+### Through the reusable workflow
+
+The same report through `.github/workflows/verify.yml@v0.5.0`, run on
+2026-09-17 (`runs/20260917T134851Z/workflow/`) with
+[act](https://github.com/nektos/act) 0.2.82 and the runner image
+`catthehacker/ubuntu:gh-latest`, which has `gh` as GitHub's runners do. The
+caller was a scratch repository whose `origin` is this repository, holding
+one record of the add-on version and this workflow:
+
+```yaml
+name: strata drift
+# A caller of the reusable verify workflow, as the README shows one, run with act for #25.
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+  issues: write
+jobs:
+  strata:
+    uses: como-technologies/strata/.github/workflows/verify.yml@v0.5.0
+    with:
+      records: records/*.json
+      label: strata-live-drift
+      strata-version: v0.5.0
+    secrets:
+      strata-token: ${{ secrets.STRATA_READ_TOKEN }}
+      palette-api-key: ${{ secrets.PALETTE_API_KEY }}
+```
+
+```
+act workflow_dispatch -W .github/workflows/drift.yml -P ubuntu-latest=catthehacker/ubuntu:gh-latest --secret-file <file with GITHUB_TOKEN, STRATA_READ_TOKEN, PALETTE_API_KEY>
+```
+
+Each run checked out the caller and this repository at `v0.5.0`, downloaded
+the `v0.5.0` binary and checked it against `SHA256SUMS`, and ran the script.
+At the baseline the job succeeded and opened nothing. After an in-place edit
+through `api.sh edit`, it opened issue #46 with the report and the job failed
+with exit 1. After the undo, it closed #46 and succeeded:
+
+```
+baseline  verify-report: 1 records: 1 unchanged, 0 drifted, 0 could not be checked
+edited    verify-report: 1 records: 0 unchanged, 1 drifted, 0 could not be checked; opened #46 for records/addon.json
+edited    exitcode '1': failure
+undone    verify-report: 1 records: 1 unchanged, 0 drifted, 0 could not be checked; closed #46 for records/addon.json
+```
+
 ## The in-place runs
 
 `in-place.sh off` and `in-place.sh on` in session `20260917T031126Z`, against

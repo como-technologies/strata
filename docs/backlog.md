@@ -530,15 +530,15 @@ The live run showed that Palette accepts an in-place edit of a published version
 1. `scripts/verify-report.sh <pattern>...`: run `strata verify --format json` over the records; open one issue per drifted record, with the report and a marker, update it on later runs, and close it when the record verifies again. A record that cannot be checked is reported too. Host calls sit in functions, as in `pr-comment.sh`.
 2. A reusable workflow, `.github/workflows/verify.yml`, that installs the release binary and calls the script; the caller sets the schedule. Other CI systems call the script directly.
 3. Tests with the fake `gh` from `tests/scripts.rs`.
-4. `examples/live`: run the script around the in-place edit, so a real drifted record opens the issue and undoing the edit closes it. Do it with the provider's `immutable-clusterprofiles` flag off, through Terraform, and on, through the API, which Palette still accepts: the flag guards one client, and this report guards the tenant. A record whose version a legacy version bump overwrote is reported too (#27). Cluster records follow what #27 finds about an update that waits for a cluster.
+4. `examples/live`: run the script around the in-place edit, so a real drifted record opens the issue and undoing the edit closes it. Do it with the provider's `immutable-clusterprofiles` flag off and on, editing through the API in both, which Palette accepts whatever the flag, with Terraform's own handling of the edit a check (`drift-report.sh`): the flag guards one client, and this report guards the tenant. A record whose version a legacy version bump overwrote is reported too (#27). Cluster records follow what #27 finds about an update that waits for a cluster.
 5. `README.md` and `docs/walkthrough.md`: the call.
 
 ### Acceptance criteria
 
-- [ ] A drifted record opens exactly one issue with the report, and a later clean run closes it
-- [ ] A record that cannot be checked is reported, never silently skipped
-- [ ] The script runs locally and through the reusable workflow
-- [ ] In the live example, the in-place edit opens one issue with `immutable-clusterprofiles` off and with it on, and undoing the edit closes it
+- [x] A drifted record opens exactly one issue with the report, and a later clean run closes it
+- [x] A record that cannot be checked is reported, never silently skipped
+- [x] The script runs locally and through the reusable workflow
+- [x] In the live example, the in-place edit opens one issue with `immutable-clusterprofiles` off and with it on, and undoing the edit closes it
 
 ## List profiles, clusters, and projects
 
