@@ -60,7 +60,7 @@ a Sigstore signature for every file. Download, check, and move onto your
 path:
 
 ```
-v=v0.4.0; t=x86_64-unknown-linux-musl
+v=v0.5.0; t=x86_64-unknown-linux-musl
 base=https://github.com/como-technologies/strata/releases/download/$v
 curl -fsSLO $base/strata-$t
 curl -fsSLO $base/SHA256SUMS
@@ -162,11 +162,11 @@ permissions:
   pull-requests: write
 jobs:
   strata:
-    uses: como-technologies/strata/.github/workflows/comment.yml@v0.4.0
+    uses: como-technologies/strata/.github/workflows/comment.yml@v0.5.0
     with:
       a: releases/1.1.0/dev.json
       b: releases/1.1.1/dev.json
-      strata-version: v0.4.0
+      strata-version: v0.5.0
     secrets:
       strata-token: ${{ secrets.STRATA_READ_TOKEN }}     # while this repository is private
       palette-api-key: ${{ secrets.PALETTE_API_KEY }}   # only when a ref is not a snapshot file
@@ -258,7 +258,7 @@ fetch it with the git command line, which uses your SSH setup:
 
 ```toml
 [dependencies]
-strata = { git = "ssh://git@github.com/como-technologies/strata.git", tag = "v0.4.0" }
+strata = { git = "ssh://git@github.com/como-technologies/strata.git", tag = "v0.5.0" }
 ```
 
 ```
