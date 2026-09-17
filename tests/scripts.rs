@@ -2123,27 +2123,25 @@ fn live_scripts_refuse_a_strata_binary_older_than_the_sources() {
     assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
 }
 
-/// A `terraform` for lib.sh's applies: logs each call, shows one profile resource whose
-/// skip_destroy is FAKE_SKIP, and has no outputs.
+/// A `terraform` for lib.sh's applies: logs each call and has no outputs.
 const FAKE_TERRAFORM_APPLY: &str = r#"#!/usr/bin/env bash
 echo "$*" >> "$FAKE_TF_LOG"
 case "$*" in
-  *"state show"*) printf '# %s:\nresource "spectrocloud_cluster_profile" "addon" {\n    id           = "ad-1"\n    skip_destroy = %s\n}\n' "${*: -1}" "$FAKE_SKIP" ;;
   *"output -json"*) echo '{}' ;;
 esac
 "#;
 
 #[test]
-fn a_flag_on_profile_apply_needs_skip_destroy_held_in_the_state_first() {
+fn live_applies_take_the_script_flag_and_the_baseline_restore_turns_it_off() {
     let root = tempfile::tempdir().unwrap();
     let bin = root.path().join("bin");
     std::fs::create_dir_all(&bin).unwrap();
     executable(&bin.join("terraform"), FAKE_TERRAFORM_APPLY);
     let log = root.path().join("tf.log");
-    let run = |flag: &str, skip: &str, body: &str| {
+    for flag in ["true", "false"] {
         let _ = std::fs::remove_file(&log);
         let probe = format!(
-            "cd \"$WORK\" && script=probe flag={flag} && . \"{}\" && {body} && echo done",
+            "cd \"$WORK\" && script=probe flag={flag} && . \"{}\" && hold_versions && apply -var addon_version=1.0.1 && apply_baseline && echo done",
             live_script("lib.sh").display()
         );
         let o = Command::new("bash")
@@ -2157,39 +2155,25 @@ fn a_flag_on_profile_apply_needs_skip_destroy_held_in_the_state_first() {
             .env("PALETTE_API_KEY", "k")
             .env("STRATA_BIN", "/bin/true")
             .env("FAKE_TF_LOG", &log)
-            .env("FAKE_SKIP", skip)
             .output()
             .unwrap();
-        let calls = std::fs::read_to_string(&log).unwrap_or_default();
-        (o, calls)
-    };
-    let bump = "apply_profile spectrocloud_cluster_profile.addon -var addon_version=1.0.1";
-
-    let (o, calls) = run("true", "false", bump);
-    assert_eq!(o.status.code(), Some(2), "{}", text(&o.stdout));
-    assert!(
-        text(&o.stderr).contains("probe: spectrocloud_cluster_profile.addon holds skip_destroy = false in the Terraform state; run hold_versions first, because Terraform deletes a replaced version with the skip_destroy its state holds"),
-        "{}",
-        text(&o.stderr)
-    );
-    assert!(!calls.contains("apply"), "no apply was attempted: {calls}");
-
-    let (o, calls) = run("true", "false", "hold_versions");
-    assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
-    assert!(
-        calls.lines().any(|c| c.ends_with("apply -input=false -auto-approve -no-color -var immutable_profiles=false -var keep_profile_versions=true")),
-        "held with the flag off and every profile, nothing else: {calls}"
-    );
-
-    let (o, calls) = run("true", "true", bump);
-    assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
-    assert!(
-        calls.contains("apply -input=false -auto-approve -no-color -var immutable_profiles=true -var keep_profile_versions=true -target=spectrocloud_cluster_profile.addon -var addon_version=1.0.1"),
-        "{calls}"
-    );
-
-    // with the flag off nothing is kept, so there is nothing to hold
-    let (o, calls) = run("false", "false", bump);
-    assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
-    assert!(!calls.contains("state show"), "{calls}");
+        assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
+        let calls = std::fs::read_to_string(&log).unwrap();
+        // each call starts with tf.sh's -chdir
+        let applies: Vec<&str> = calls
+            .lines()
+            .filter_map(|c| c.split_once(' ').map(|(_, rest)| rest))
+            .filter(|c| c.starts_with("apply "))
+            .collect();
+        let with = "apply -input=false -auto-approve -no-color -var immutable_profiles=";
+        assert_eq!(
+            applies,
+            [
+                format!("{with}{flag}"),
+                format!("{with}{flag} -var addon_version=1.0.1"),
+                format!("{with}false"),
+            ],
+            "hold_versions and apply take the flag with no -target, and apply_baseline turns it off: {calls}"
+        );
+    }
 }
