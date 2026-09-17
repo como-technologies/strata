@@ -3145,3 +3145,67 @@ fn compare_says_when_both_sides_are_one_profile_version_with_different_content()
     assert!(!ops::compare(&a, &b, "t2").edited_in_place, "two versions");
     assert!(!ops::compare(&a, &a, "t2").edited_in_place, "same content");
 }
+
+use strata::diff::ImpactLevel;
+
+/// A pack key is `<layer>/<name>`, so a profile that exchanges one pack for a pack of another name
+/// gives one removed pack and one added pack. The impact must still name the repave (#53).
+#[test]
+fn a_pack_that_only_one_side_has_carries_the_impact_of_its_layer() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let a = ops::snapshot_from_dir(&dir.path().join("a"), "a", "t0").unwrap();
+
+    // the OS pack of another vendor, under the same layer
+    let mut swapped = a.clone();
+    let os = swapped
+        .packs
+        .iter_mut()
+        .find(|p| p.name == "ubuntu-aws")
+        .unwrap();
+    os.name = "rhel-aws".to_string();
+    os.key = "os/rhel-aws".to_string();
+
+    let d = ops::compare(&a, &swapped, "t1");
+    assert_eq!(d.summary.packs_added, 1);
+    assert_eq!(d.summary.packs_removed, 1);
+    assert_eq!(d.summary.max_impact, ImpactLevel::Repave, "{:?}", d.summary);
+    let added = d.packs.iter().find(|p| p.name == "rhel-aws").unwrap();
+    let removed = d.packs.iter().find(|p| p.name == "ubuntu-aws").unwrap();
+    assert_eq!(added.impact.level, ImpactLevel::Repave);
+    assert_eq!(added.impact.text, "node repave (os pack added)");
+    assert_eq!(removed.impact.level, ImpactLevel::Repave);
+    assert_eq!(removed.impact.text, "node repave (os pack removed)");
+
+    // the terminal report gives the impact under the pack line
+    let text = render::renderer(Format::Terminal, Paint::off(), false)
+        .render(&d, &a, &swapped, false)
+        .unwrap();
+    assert!(text.contains("node repave (os pack added)"), "{text}");
+}
+
+/// An add-on that comes or goes is an in-place change; a cni or csi pack is cluster-wide (#53).
+#[test]
+fn an_added_addon_is_in_place_and_an_added_infra_pack_is_cluster_wide() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let a = ops::snapshot_from_dir(&dir.path().join("a"), "a", "t0").unwrap();
+    let b = ops::snapshot_from_dir(&dir.path().join("b"), "b", "t0").unwrap();
+
+    // fixture b adds cert-manager and removes external-dns, both add-ons
+    let d = ops::compare(&a, &b, "t1");
+    let added = d.packs.iter().find(|p| p.name == "cert-manager").unwrap();
+    let removed = d.packs.iter().find(|p| p.name == "external-dns").unwrap();
+    assert_eq!(added.impact.level, ImpactLevel::InPlace);
+    assert_eq!(added.impact.text, "addon added in place");
+    assert_eq!(removed.impact.level, ImpactLevel::InPlace);
+    assert_eq!(removed.impact.text, "addon removed in place");
+
+    // a cni pack that only one side has affects every node
+    let mut without_cni = a.clone();
+    without_cni.packs.retain(|p| p.layer != "cni");
+    let d = ops::compare(&without_cni, &a, "t1");
+    let cni = d.packs.iter().find(|p| p.layer == "cni").unwrap();
+    assert_eq!(cni.impact.level, ImpactLevel::ClusterWide);
+    assert_eq!(d.summary.max_impact, ImpactLevel::ClusterWide);
+}

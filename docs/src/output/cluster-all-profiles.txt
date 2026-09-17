@@ -11,3 +11,4 @@ consumers  2 -> 0 clusters
   [csi  ] csi-aws-ebs                1.65.0             unchanged
   [addon] cert-manager               1.21.1             unchanged
 + [addon] namespace-policy           1.0.0              ADDED
+      impact: addon added in place

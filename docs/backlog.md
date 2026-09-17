@@ -813,3 +813,29 @@ One condition holds the work: this repository is private, and on a GitHub plan b
 - [ ] The book opens at its address, with the gruvbox theme and the mermaid diagrams
 - [ ] `README.md` and `strata --help` name the address
 - [ ] No page of the book holds a uid or a name of a real tenant
+
+## Count an added or a removed pack in the impact
+
+labels: robustness
+
+### Background
+
+A pack key is `<layer>/<name>` (`Pack::key` in `src/snapshot.rs`). So a profile that exchanges one pack for a pack with another name gives one `REMOVED` entry and one `ADDED` entry, and no `IDENTITY` change: `os/ubuntu-aws` for `os/rhel-aws`, or `cni/cni-cilium-oss` for `cni/calico`. `diff::compute` builds both entries with the impact `none`, and it raises `summary.maxImpact` only in the branch that has two sides (`src/diff.rs`). So the most destructive change that a profile can make reports `maxImpact: none`. `scripts/pr-comment.sh` takes its label from that field, so such a pull request gets no `repave` label, and the jq gate in `docs/src/automation/scripts.md` passes it.
+
+### Plan
+
+1. `src/diff.rs`: give a pack that is on one side only the impact of its layer, as an identity change has it: `repave` for os, k8s, and kernel, `cluster-wide` for cni and csi, and `in-place` for each other layer. The text names the layer and the word added or removed.
+2. `src/diff.rs`: raise `summary.maxImpact` for those entries too.
+3. `tests/verify.rs`: one test for an exchange of the OS pack, and one for an add-on pack that comes and goes.
+4. `just docs-examples`: the terminal report of a cluster with a second profile gets the new impact line.
+5. Docs: state the rule in `docs/src/reference/impact.md`, and remove the warning there and in `docs/src/automation/scripts.md`.
+
+The schema id stays `strata-diff/1`: the change adds no field, removes no field, and renames no field.
+
+### Acceptance criteria
+
+- [ ] A profile that exchanges the OS pack for a pack of another name reports `maxImpact` `repave`
+- [ ] An added or a removed add-on pack has the impact `in-place`, and a cni or csi pack `cluster-wide`
+- [ ] The pack line of the terminal report and the impact column of the markdown report give that impact
+- [ ] `docs/src/reference/impact.md` states the rule, and no page holds the warning
+- [ ] `just lint`, `just test`, and `just docs-check` pass

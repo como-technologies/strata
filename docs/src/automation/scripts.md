@@ -34,24 +34,18 @@ test is false:
 Some rules that teams use:
 
 ```bash
-# a release that adds or removes a pack needs a reading, whatever maxImpact says
-jq -e '.summary.packsAdded == 0 and .summary.packsRemoved == 0' report.json
-
 # a repave needs a second approver
 jq -e '.summary.maxImpact != "repave"' report.json || gh pr edit "$PR" --add-label repave
 
 # the layers that replace nodes
 jq -r '.packs[] | select(.impact.level == "repave") | "\(.name): \(.impact.text)"' report.json
 
-# no variable may change in a patch release
+# no variable changes in a patch release
 jq -e '.summary.variablesChanged | not' report.json
-```
 
-> **`maxImpact` does not cover an added or a removed pack.** Such a pack gets the
-> impact `none`. A gate on `maxImpact` alone passes a release that replaces one
-> OS pack with a pack of another name. Test `summary.packsAdded` and
-> `summary.packsRemoved` as well. See
-> [Change flags and impact](../reference/impact.md#the-impact-levels).
+# no pack comes or goes in a patch release
+jq -e '.summary.packsAdded == 0 and .summary.packsRemoved == 0' report.json
+```
 
 [JSON documents](../reference/documents.md) lists each field.
 `strata schema <kind>` prints the JSON Schema.

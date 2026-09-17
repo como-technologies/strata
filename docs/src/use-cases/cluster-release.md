@@ -35,9 +35,9 @@ The cluster side then holds the packs of both profiles:
 {{#include ../output/cluster-all-profiles.txt}}
 ```
 
-`CHANGED` and exit `1`, with the add-on pack `ADDED`. The release itself did not
-change: each of its five packs is `unchanged`. Select the profile, unless the
-record covers each profile of the cluster.
+`CHANGED` and exit `1`, with the add-on pack `ADDED` and its impact. The release
+itself did not change: each of its five packs is `unchanged`. Select the
+profile, unless the record covers each profile of the cluster.
 
 ## 3. A cluster on another version
 

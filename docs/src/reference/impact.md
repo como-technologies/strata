@@ -34,10 +34,11 @@ impact is a hint. It is not an answer from Palette.
 | `sync` | only `UPSTREAM`, on any layer | Palette applies the change at the next profile sync. |
 | `none` | no change, or only a tag renamed for the same build | The clusters run the same build. |
 
-> **Read the pack list as well as `maxImpact`.** An added or a removed pack gets
-> the impact `none`, because strata compares no two sides for it. A release that
-> replaces one OS pack with a pack of another name gives `maxImpact: none`, with
-> one `ADDED` and one `REMOVED` line.
+A pack key is `<layer>/<name>`. So a release that exchanges one pack for a pack
+of another name gives one `ADDED` line and one `REMOVED` line, and no `IDENTITY`
+change. Such a pack takes the impact of its layer, as an identity change does:
+`repave` on the OS, Kubernetes, or kernel layer, `cluster-wide` on the CNI or
+CSI layer, and `in-place` on any other layer.
 
 The list goes from the most severe level to the least severe. The JSON summary
 gives the most severe level of a comparison as `maxImpact`. A renamed tag

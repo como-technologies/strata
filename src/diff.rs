@@ -142,7 +142,8 @@ pub struct Summary {
     pub authored_changes: usize,
     /// True when the variables hash differs.
     pub variables_changed: bool,
-    /// The most severe impact level across all changed packs
+    /// The most severe impact level across the packs that changed, and the packs that only one
+    /// side has
     pub max_impact: ImpactLevel,
 }
 
@@ -669,6 +670,28 @@ pub fn impact(layer: Layer, flags: Flags) -> Impact {
         })
 }
 
+/// The impact of a pack that only one side has. A pack key is `<layer>/<name>`, so a profile that
+/// exchanges one pack for a pack of another name gives one removed pack and one added pack, and no
+/// identity change. The level therefore follows the layer, as an identity change does.
+pub fn presence_impact(layer: &str, added: bool) -> Impact {
+    let level = impact(
+        Layer::parse(layer),
+        Flags {
+            identity: true,
+            upstream: false,
+            authored: false,
+        },
+    )
+    .level;
+    let what = if added { "added" } else { "removed" };
+    let text = match level {
+        ImpactLevel::Repave => format!("node repave ({layer} pack {what})"),
+        ImpactLevel::ClusterWide => format!("cluster-wide infra addon {what}"),
+        _ => format!("addon {what} in place"),
+    };
+    Impact { level, text }
+}
+
 enum Seg {
     Key(String),
     Index(usize),
@@ -970,6 +993,10 @@ pub fn compute(a: &Snapshot, b: &Snapshot, generated_at: &str, verify: Option<Ve
         let pd = match (pa.get(k), pb.get(k)) {
             (None, Some(y)) => {
                 summary.packs_added += 1;
+                let imp = presence_impact(&y.layer, true);
+                if imp.level > summary.max_impact {
+                    summary.max_impact = imp.level;
+                }
                 PackDiff {
                     key: k.to_string(),
                     layer: y.layer.clone(),
@@ -983,16 +1010,17 @@ pub fn compute(a: &Snapshot, b: &Snapshot, generated_at: &str, verify: Option<Ve
                     params_changed: false,
                     minted_uid_only: false,
                     tag_renamed: false,
-                    impact: Impact {
-                        level: ImpactLevel::None,
-                        text: String::new(),
-                    },
+                    impact: imp,
                     values: ValuesDiff::default(),
                     manifests: Vec::new(),
                 }
             }
             (Some(x), None) => {
                 summary.packs_removed += 1;
+                let imp = presence_impact(&x.layer, false);
+                if imp.level > summary.max_impact {
+                    summary.max_impact = imp.level;
+                }
                 PackDiff {
                     key: k.to_string(),
                     layer: x.layer.clone(),
@@ -1006,10 +1034,7 @@ pub fn compute(a: &Snapshot, b: &Snapshot, generated_at: &str, verify: Option<Ve
                     params_changed: false,
                     minted_uid_only: false,
                     tag_renamed: false,
-                    impact: Impact {
-                        level: ImpactLevel::None,
-                        text: String::new(),
-                    },
+                    impact: imp,
                     values: ValuesDiff::default(),
                     manifests: Vec::new(),
                 }
