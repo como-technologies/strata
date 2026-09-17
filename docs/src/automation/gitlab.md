@@ -63,7 +63,9 @@ export STRATA_BIN=$PWD/.strata/strata
 ```
 
 Each release carries the binary for four targets, `SHA256SUMS`, and the three
-scripts, so one download gives a job everything. The installer itself is a
+scripts, so one download gives a job everything. A release carries the scripts
+from **v0.5.1** on; for `v0.5.0`, check this repository out at the tag and run
+the scripts from `scripts/`. The installer itself is a
 release file: the pipeline downloads it first. A token in `STRATA_TOKEN`,
 `GITHUB_TOKEN` or `GH_TOKEN` reads a private repository; a public one needs
 none.
