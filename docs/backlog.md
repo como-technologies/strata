@@ -834,8 +834,8 @@ The schema id stays `strata-diff/1`: the change adds no field, removes no field,
 
 ### Acceptance criteria
 
-- [ ] A profile that exchanges the OS pack for a pack of another name reports `maxImpact` `repave`
-- [ ] An added or a removed add-on pack has the impact `in-place`, and a cni or csi pack `cluster-wide`
-- [ ] The pack line of the terminal report and the impact column of the markdown report give that impact
-- [ ] `docs/src/reference/impact.md` states the rule, and no page holds the warning
-- [ ] `just lint`, `just test`, and `just docs-check` pass
+- [x] A profile that exchanges the OS pack for a pack of another name reports `maxImpact` `repave`
+- [x] An added or a removed add-on pack has the impact `in-place`, and a cni or csi pack `cluster-wide`
+- [x] The pack line of the terminal report and the impact column of the markdown report give that impact
+- [x] `docs/src/reference/impact.md` states the rule, and no page holds the warning
+- [x] `just lint`, `just test`, and `just docs-check` pass
