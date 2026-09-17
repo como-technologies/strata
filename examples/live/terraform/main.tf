@@ -4,13 +4,13 @@
 # third profile, attached to nothing, holds one pack from a Helm registry and one from an OCI
 # registry, for their pack-ref digests. The variables of examples/live/in-place.sh add a second
 # cluster, edit the add-on profile in place, bump its version, and move a profile's CSI pack to an
-# OCI registry. examples/live/README.md lists the checks.
+# OCI registry. docs/src/development/live-example.md lists the checks.
 #
 # Billable while it exists: tear it down with `just live-down`.
 
 locals {
   profile_name = "${var.name_prefix}-profile"
-  tags         = ["purpose:strata-live-example", "managed-by:terraform"]
+  tags         = ["purpose:strata-live-example", "managed-by:opentofu"]
 
   release_packs = [
     for p in [data.spectrocloud_pack.os, data.spectrocloud_pack.k8s, data.spectrocloud_pack.cni, data.spectrocloud_pack.csi] :

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # The registry-move check (#24): a real move of the CSI pack to another registry, made the way a
-# team promotes one with the Terraform provider's immutable-clusterprofiles flag, as a version bump
+# team promotes one with the Spectro Cloud provider's immutable-clusterprofiles flag, as a version bump
 # that keeps the old version.
 #
 #   examples/live/registry-move.sh
@@ -46,7 +46,7 @@ hold_versions
 PALETTE_PROJECT_UID=$(out project_uid)
 export PALETTE_PROJECT_UID
 
-check plan-no-change 0 "Terraform plans no change once skip_destroy is held for the flag" -- tf_plan "$flag"
+check plan-no-change 0 "OpenTofu plans no change once skip_destroy is held for the flag" -- tf_plan "$flag"
 
 echo "== 1: create the move profile at 1.0.0" | tee -a steps.log
 apply -var registry_move=true

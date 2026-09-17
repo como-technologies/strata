@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# The writes to Palette that the live example's scripts make outside Terraform.
+# The writes to Palette that the live example's scripts make outside OpenTofu.
 #
 #   api.sh edit PROFILE_UID FROM TO
 #       Replace the text FROM with TO in the one pack values or manifest that contains it, in a
 #       published profile version, in place: PUT the version, keeping each manifest's uid, then
 #       publish it. This is an edit
-#       through the API, which Palette accepts whatever the Terraform provider's
+#       through the API, which Palette accepts whatever the Spectro Cloud provider's
 #       immutable-clusterprofiles flag says. Exit 2 when no place, or more than one, contains
 #       FROM.
 #   api.sh retag PROFILE_UID PACK FROM_TAG TO_TAG
@@ -15,7 +15,7 @@
 #   api.sh apply CLUSTER_UID [--keep-notification]
 #       Accept the waiting update of every profile a cluster runs: PUT the cluster's profiles with
 #       the uids it already has, each pack's values and manifests read from its profile, with
-#       resolveNotification=true. As the Terraform provider does, each manifest keeps the uid of
+#       resolveNotification=true. As the Spectro Cloud provider does, each manifest keeps the uid of
 #       the cluster's own copy, so the content lands in that copy. --keep-notification sends the
 #       same PUT without resolveNotification; in the recorded runs Palette changed the cluster's
 #       copy either way.
@@ -25,7 +25,7 @@
 #       Delete a profile version; a missing one is not an error.
 #   api.sh delete-named NAME...
 #       Delete every version of each profile named exactly NAME, found in the profile listing:
-#       the versions skip_destroy kept out of Terraform's state. A name with no versions is not
+#       the versions skip_destroy kept out of the OpenTofu state. A name with no versions is not
 #       an error.
 #
 # The key comes from PALETTE_API_KEY or ~/.palette.env and is never printed; the address from

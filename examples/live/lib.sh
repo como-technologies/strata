@@ -1,10 +1,10 @@
-# Shared by the scripts in examples/live: the strata binary, Terraform's outputs, the checks and
-# their summary, the Terraform applies, and the baseline. Source it, then set `script` to the
+# Shared by the scripts in examples/live: the strata binary, the OpenTofu outputs, the checks and
+# their summary, the OpenTofu applies, and the baseline. Source it, then set `script` to the
 # script's name and `flag` to the immutable-clusterprofiles setting the script runs with.
 #
 # The baseline is the state `just live-up` builds: cluster A Running the release and add-on
 # profiles' current content, no cluster B, every profile name holding only the versions
-# Terraform created, and a Terraform plan with the default variables that changes nothing.
+# OpenTofu created, and an OpenTofu plan with the default variables that changes nothing.
 # baseline.sh checks it. Every script requires it before it starts and leaves it as it found it,
 # so the scripts run in any order.
 
@@ -22,10 +22,10 @@ if [ -z "${STRATA_BIN:-}" ] && [ -e "$strata" ]; then
   [ -z "$stale" ] || die "$strata is older than $(cd "$(dirname "$stale")" && pwd)/$(basename "$stale"); run just build"
 fi
 
-# ---- Terraform outputs ---------------------------------------------------------------------------
+# ---- OpenTofu outputs ----------------------------------------------------------------------------
 
-# load_outputs: read Terraform's outputs again; every apply here does it for you
-load_outputs() { outputs=$("$live/tf.sh" output -json 2>/dev/null) || die "no terraform outputs; run just live-up first"; }
+# load_outputs: read the OpenTofu outputs again; every apply here does it for you
+load_outputs() { outputs=$("$live/tf.sh" output -json 2>/dev/null) || die "no tofu outputs; run just live-up first"; }
 # out NAME: one output, as text; empty when it is not set
 out() {
   local json=${outputs:-}
@@ -65,27 +65,27 @@ summary_table() {
   done
 }
 
-# ---- Terraform ---------------------------------------------------------------------------------------
+# ---- OpenTofu ----------------------------------------------------------------------------------------
 #
 # The provider's immutable-clusterprofiles flag (variable immutable_profiles) governs only profile
 # resources, and sets skip_destroy on every profile. Every apply runs with the script's flag, except
 # the one that restores the baseline (apply_baseline).
 
 applies=$(ls apply-*.txt 2>/dev/null | wc -l)
-# tf_apply FLAG ARG...: terraform apply with immutable_profiles=FLAG; the output goes to
+# tf_apply FLAG ARG...: tofu apply with immutable_profiles=FLAG; the output goes to
 # apply-<n>.txt. A failed apply saves diagnostics and stops the script.
 tf_apply() {
   local with=$1
   shift
   applies=$((applies + 1))
-  echo "terraform apply -var immutable_profiles=$with $*" | tee -a steps.log
+  echo "tofu apply -var immutable_profiles=$with $*" | tee -a steps.log
   "$live/tf.sh" apply -input=false -auto-approve -no-color -var "immutable_profiles=$with" "$@" \
     > "apply-$applies.txt" 2>&1
   local code=$?
   command grep -E '^(Plan|Apply complete|Error)' "apply-$applies.txt" | tee -a steps.log
   if [ "$code" != 0 ]; then
     "$live/diagnose.sh" "$PWD/diagnostics" >&2
-    die "terraform apply failed; see $PWD/apply-$applies.txt and $PWD/diagnostics"
+    die "tofu apply failed; see $PWD/apply-$applies.txt and $PWD/diagnostics"
   fi
   load_outputs
 }
@@ -93,7 +93,7 @@ tf_apply() {
 apply() { tf_apply "$flag" "$@"; }
 # hold_versions: at the baseline, store skip_destroy for the script's flag on every profile in the
 # state, changing nothing else. Every script that applies runs it right after require_baseline. A
-# flag-on version bump replaces the profile resource, and Terraform deletes the replaced object with
+# flag-on version bump replaces the profile resource, and the provider deletes the replaced object with
 # the skip_destroy its state holds, not the new value (provider 0.30.1,
 # resourceClusterProfileDelete): without this, the bump asks Palette to delete the old version,
 # which Palette refuses while a cluster runs it (DeletionResourceInUseError, drift-report.sh on,
@@ -103,7 +103,7 @@ hold_versions() { tf_apply "$flag"; }
 # skip_destroy goes back to false on every profile. A profile resource this removes stays in
 # Palette when its state held skip_destroy = true.
 apply_baseline() { tf_apply false; }
-# tf_plan FLAG ARG...: terraform plan with -detailed-exitcode: 0 no changes, 2 changes, 1 refused
+# tf_plan FLAG ARG...: tofu plan with -detailed-exitcode: 0 no changes, 2 changes, 1 refused
 tf_plan() { local with=$1; shift; "$live/tf.sh" plan -input=false -no-color -detailed-exitcode -var "immutable_profiles=$with" "$@"; }
 
 # ---- clusters ------------------------------------------------------------------------------------------
@@ -132,7 +132,7 @@ require_baseline() {
 
 # restore_addon UID RECORD: put the add-on profile back at its baseline, whatever the flag did to
 # it: uid UID holds version 1.0.0 with the content of RECORD (a record of it at the baseline),
-# Terraform manages UID, no other version of its name exists, and cluster A runs it. The steps are
+# OpenTofu manages UID, no other version of its name exists, and cluster A runs it. The steps are
 # the same with the flag off and on; each changes nothing where there is nothing to undo.
 restore_addon() {
   local uid=$1 record=$2 name current v
@@ -142,7 +142,7 @@ restore_addon() {
   if ! "$strata" compare "$record" "$uid" >/dev/null 2>&1; then
     "$live/api.sh" edit "$uid" 'edited: "yes"' 'edited: "no"' | tee -a steps.log || die "cannot undo the edit of $uid"
   fi
-  # 2. Terraform manages the uid the cluster runs
+  # 2. OpenTofu manages the uid the cluster runs
   current=$(out addon_profile_uid)
   if [ "$current" != "$uid" ]; then
     "$live/tf.sh" state rm spectrocloud_cluster_profile.addon >> steps.log 2>&1 || die "cannot remove $current from the state"

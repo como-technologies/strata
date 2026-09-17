@@ -211,7 +211,7 @@ cluster() {
       [ "$state" = Deleted ] && return 0 || return 1 ;;
     404)
       # A real not-found carries a JSON body with code ResourceNotFound. A plain-text 404 comes
-      # from a gateway outage, when Terraform can report a destroy complete while the cluster runs.
+      # from a gateway outage, when OpenTofu can report a destroy complete while the cluster runs.
       if jq -e '.code == "ResourceNotFound"' "$tmp" >/dev/null 2>&1; then
         echo "$uid: not found"
         return 0

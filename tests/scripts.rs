@@ -477,8 +477,8 @@ fn executable(path: &Path, body: &str) {
     }
 }
 
-/// A `terraform` that reports the host and whether a key arrived, never the key itself.
-const FAKE_TERRAFORM: &str = r#"#!/usr/bin/env bash
+/// A `tofu` that reports the host and whether a key arrived, never the key itself.
+const FAKE_TOFU: &str = r#"#!/usr/bin/env bash
 echo "host=${SPECTROCLOUD_HOST-<unset>} key=${SPECTROCLOUD_APIKEY:+set} args=$*"
 "#;
 
@@ -486,7 +486,7 @@ fn tf_sh(envs: &[(&str, &str)], palette_env: Option<&str>) -> Output {
     let dir = tempfile::tempdir().unwrap();
     let bin = dir.path().join("bin");
     std::fs::create_dir(&bin).unwrap();
-    executable(&bin.join("terraform"), FAKE_TERRAFORM);
+    executable(&bin.join("tofu"), FAKE_TOFU);
     let home = dir.path().join("home");
     std::fs::create_dir(&home).unwrap();
     if let Some(text) = palette_env {
@@ -513,7 +513,7 @@ fn tf_sh(envs: &[(&str, &str)], palette_env: Option<&str>) -> Output {
 }
 
 #[test]
-fn tf_sh_passes_the_key_and_a_self_hosted_address_to_terraform() {
+fn tf_sh_passes_the_key_and_a_self_hosted_address_to_tofu() {
     let o = tf_sh(&[("PALETTE_API_KEY", "k")], None);
     assert!(o.status.success(), "{}", text(&o.stderr));
     assert_eq!(
@@ -1254,8 +1254,8 @@ fn tenant_sh_diagnose_keeps_what_palette_gives_when_the_cluster_cannot_be_read_f
     );
 }
 
-/// A `terraform` whose `show -json` holds clusters A and B.
-const FAKE_TERRAFORM_STATE: &str = r#"#!/usr/bin/env bash
+/// A `tofu` whose `show -json` holds clusters A and B.
+const FAKE_TOFU_STATE: &str = r#"#!/usr/bin/env bash
 case "$*" in
   *"show -json"*) cat <<'JSON'
 {"values":{"outputs":{"project_uid":{"value":"p-1"}},"root_module":{"resources":[
@@ -1270,7 +1270,7 @@ esac
 "#;
 
 #[test]
-fn diagnose_sh_saves_diagnostics_for_every_cluster_in_the_terraform_state() {
+fn diagnose_sh_saves_diagnostics_for_every_cluster_in_the_tofu_state() {
     let root = tempfile::tempdir().unwrap();
     stuck_cluster_routes(&root.path().join("routes"), true);
     std::fs::write(
@@ -1279,7 +1279,7 @@ fn diagnose_sh_saves_diagnostics_for_every_cluster_in_the_terraform_state() {
     )
     .unwrap();
     std::fs::create_dir_all(root.path().join("bin")).unwrap();
-    executable(&root.path().join("bin/terraform"), FAKE_TERRAFORM_STATE);
+    executable(&root.path().join("bin/tofu"), FAKE_TOFU_STATE);
     let out = root.path().join("diag");
     let o = run_live("diagnose.sh", &[out.to_str().unwrap()], root.path(), &[]);
     assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
@@ -1289,9 +1289,9 @@ fn diagnose_sh_saves_diagnostics_for_every_cluster_in_the_terraform_state() {
     assert!(barney.contains("barney c-1: Provisioning"), "{barney}");
 }
 
-/// A `terraform` for baseline.sh: outputs for cluster A `c-a` and four profile versions, a plan
+/// A `tofu` for baseline.sh: outputs for cluster A `c-a` and four profile versions, a plan
 /// that exits $FAKE_PLAN_EXIT, and a state that manages r-1, r-2, g-1, and ad-1.
-const FAKE_TERRAFORM_BASELINE: &str = r#"#!/usr/bin/env bash
+const FAKE_TOFU_BASELINE: &str = r#"#!/usr/bin/env bash
 case "$*" in
   *"output -json"*) cat <<'JSON'
 {"project_uid":{"value":"p-1"},"cluster_uid":{"value":"c-a"},"cluster_b_uid":{"value":""},
@@ -1341,7 +1341,7 @@ fn run_baseline(extra: &[(&str, &str)]) -> Output {
     .unwrap();
     let bin = root.path().join("bin");
     std::fs::create_dir_all(&bin).unwrap();
-    executable(&bin.join("terraform"), FAKE_TERRAFORM_BASELINE);
+    executable(&bin.join("tofu"), FAKE_TOFU_BASELINE);
     executable(&bin.join("fake-strata"), FAKE_STRATA_BASELINE);
     let strata = bin.join("fake-strata").display().to_string();
     let mut env = vec![("STRATA_BIN", strata.as_str())];
@@ -1380,7 +1380,7 @@ fn baseline_sh_passes_only_when_every_condition_holds_and_names_each_that_does_n
     for want in [
         "spectrocloud_cluster_profile.addon will be updated in-place",
         "barney exists: c-b",
-        "strata-live-addon: Palette has ad-1 ad-2, Terraform manages ad-1",
+        "strata-live-addon: Palette has ad-1 ad-2, OpenTofu manages ad-1",
         "root       aaa -> bbb   CHANGED",
     ] {
         assert!(
@@ -2123,8 +2123,8 @@ fn live_scripts_refuse_a_strata_binary_older_than_the_sources() {
     assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
 }
 
-/// A `terraform` for lib.sh's applies: logs each call and has no outputs.
-const FAKE_TERRAFORM_APPLY: &str = r#"#!/usr/bin/env bash
+/// A `tofu` for lib.sh's applies: logs each call and has no outputs.
+const FAKE_TOFU_APPLY: &str = r#"#!/usr/bin/env bash
 echo "$*" >> "$FAKE_TF_LOG"
 case "$*" in
   *"output -json"*) echo '{}' ;;
@@ -2136,7 +2136,7 @@ fn live_applies_take_the_script_flag_and_the_baseline_restore_turns_it_off() {
     let root = tempfile::tempdir().unwrap();
     let bin = root.path().join("bin");
     std::fs::create_dir_all(&bin).unwrap();
-    executable(&bin.join("terraform"), FAKE_TERRAFORM_APPLY);
+    executable(&bin.join("tofu"), FAKE_TOFU_APPLY);
     let log = root.path().join("tf.log");
     for flag in ["true", "false"] {
         let _ = std::fs::remove_file(&log);

@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # The drift report test (#25): scripts/verify-report.sh, the scheduled verify's reporter, run around
-# an in-place edit and a version bump of the add-on profile. Run it once with the Terraform
+# an in-place edit and a version bump of the add-on profile. Run it once with the Spectro Cloud
 # provider's immutable-clusterprofiles flag off and once with it on; the two runs differ in nothing
 # else.
 #
 #   examples/live/drift-report.sh off|on [FROM_STAGE]
 #
 #   1  hold skip_destroy for the flag (lib.sh); record the release, the add-on version, and cluster
-#      A; report them, which opens nothing; and what Terraform plans for an in-place edit with the
+#      A; report them, which opens nothing; and what OpenTofu plans for an in-place edit with the
 #      flag
 #   2  edit the add-on version in place through the API and report twice: one issue opens, and
 #      the second report updates it
@@ -17,7 +17,7 @@
 #
 # What varies: the flag, in the plan and in the bump. What holds: the edit (api.sh edit in both
 # runs), the records, the steps and their order, the issue label, and the baseline the run starts
-# from and returns to (lib.sh). The flag guards one client, Terraform; the report guards the
+# from and returns to (lib.sh). The flag guards one client, OpenTofu; the report guards the
 # tenant, so the edit through the API opens an issue whatever the flag says. Without the flag the
 # bump overwrites the first add-on uid in place, and the report opens an issue for the add-on
 # record and one for cluster A's record, whose add-on version is gone (#27, #30); with it, the bump
@@ -120,7 +120,7 @@ if [ "$from" -le 1 ]; then
   AN=$(out addon_profile_name)
   AD1=$(out addon_profile_uid)
   for v in PALETTE_PROJECT_UID C P AN AD1; do
-    [ -n "${!v}" ] || die "the terraform output behind $v is empty"
+    [ -n "${!v}" ] || die "the tofu output behind $v is empty"
     save "$v" "${!v}"
   done
 fi
@@ -134,7 +134,7 @@ if stage 1 "record, and report the baseline"; then
   check report-baseline 0 "#25: the report over the three records at the baseline" -- report
   check report-baseline-says 0 "every record verifies, and no issue opens" -- \
     bash -c 'grep -q "3 records: 3 unchanged, 0 drifted, 0 could not be checked$" report-baseline.err'
-  check plan-edit "$off2_on1" "Terraform's plan for an in-place edit of the add-on version: an update in place without the flag, a refusal with it" -- \
+  check plan-edit "$off2_on1" "OpenTofu's plan for an in-place edit of the add-on version: an update in place without the flag, a refusal with it" -- \
     tf_plan "$flag" -var edit_addon_in_place=true
   check plan-edit-says 0 "the plan says which" -- command grep -q "$plan_edit_says" plan-edit.out plan-edit.err
 fi

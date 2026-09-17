@@ -1,5 +1,8 @@
 # Local entry point; CI runs the same recipes.
 
+# The OpenTofu version that the live example runs
+tofu_version := env_var_or_default("TOFU_VERSION", "1.12.6")
+
 default: build
 
 # Release binary at target/release/strata
@@ -42,6 +45,14 @@ examples: build
 examples-fetch: build
     STRATA_BIN=target/release/strata examples/fetch-examples.sh
 
+# Install the pinned OpenTofu into ~/.local/bin for the live example. Needs no root.
+tofu-install:
+    TOFU_VERSION={{tofu_version}} examples/live/tofu-install.sh
+
+# Remove the OpenTofu that tofu-install put in ~/.local/bin
+tofu-uninstall:
+    TOFU_VERSION={{tofu_version}} examples/live/tofu-install.sh --uninstall
+
 # Live example: build a cluster and two profile versions in Palette. Billable until live-down.
 # When the apply fails, examples/live/diagnose.sh saves what holds each cluster.
 live-up:
@@ -80,12 +91,12 @@ live-drift-report: build
     echo "live-drift-report: both passed; results in $session"
 
 # Tear the live example down, with every version of every profile name it uses, including the
-# versions skip_destroy kept out of Terraform's state. When the destroy fails,
+# versions skip_destroy kept out of the OpenTofu state. When the destroy fails,
 # examples/live/diagnose.sh saves what holds each cluster.
 live-down:
     #!/usr/bin/env bash
     set -uo pipefail
-    outputs=$(examples/live/tf.sh output -json) || { echo "live-down: no terraform outputs" >&2; exit 1; }
+    outputs=$(examples/live/tf.sh output -json) || { echo "live-down: no tofu outputs" >&2; exit 1; }
     export PALETTE_PROJECT_UID=$(jq -r '.project_uid.value' <<<"$outputs")
     names=$(jq -r '.profile_names.value[]' <<<"$outputs")
     examples/live/tf.sh destroy || { examples/live/diagnose.sh; exit 1; }

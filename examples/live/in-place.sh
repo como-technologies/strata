@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # The in-place edit test (#27, #23): what an in-place edit and a version bump of the add-on profile
-# do to the clusters that run it. Run it once with the Terraform provider's immutable-clusterprofiles
+# do to the clusters that run it. Run it once with the Spectro Cloud provider's immutable-clusterprofiles
 # flag off and once with it on; the two runs differ in nothing else.
 #
 #   examples/live/in-place.sh off|on [FROM_STAGE]
 #
 #   1  hold skip_destroy for the flag (lib.sh); record cluster A and the release and add-on
-#      versions, and what Terraform plans with the flag: no change, and an in-place edit of the
+#      versions, and what OpenTofu plans with the flag: no change, and an in-place edit of the
 #      add-on version
 #   2  edit the add-on version in place through the API, create cluster B, and record both
 #      clusters without applying anything to cluster A
@@ -16,9 +16,9 @@
 #      versions
 #   5  delete cluster B and restore the baseline
 #
-# What varies: the flag, in every Terraform plan and apply. What holds: the edit (api.sh edit in
+# What varies: the flag, in every OpenTofu plan and apply. What holds: the edit (api.sh edit in
 # both runs), the clusters (one definition), the steps and their order, and the baseline the run
-# starts from and returns to (lib.sh). Terraform's own handling of the edit is a check, not a step:
+# starts from and returns to (lib.sh). OpenTofu's own handling of the edit is a check, not a step:
 # with the flag off it plans an update in place, with it on it refuses.
 #
 # Needs the live example at its baseline (baseline.sh), the strata release binary, jq, and the key
@@ -40,7 +40,7 @@ esac
 . "$(cd "$(dirname "$0")" && pwd)/lib.sh"
 [ -x "$strata" ] || die "no strata binary at $strata"
 
-# Expected exits that differ with the flag, and what Terraform says about the edit.
+# Expected exits that differ with the flag, and what OpenTofu says about the edit.
 if [ "$mode" = on ]; then
   off0_on1=1 off1_on0=0 off2_on1=1
   plan_edit_says='immutable-clusterprofiles: cluster profile versions are immutable'
@@ -86,7 +86,7 @@ if [ "$from" -le 1 ]; then
   AN=$(out addon_profile_name)
   AD1=$(out addon_profile_uid)
   for v in PALETTE_PROJECT_UID C N P AN AD1; do
-    [ -n "${!v}" ] || die "the terraform output behind $v is empty"
+    [ -n "${!v}" ] || die "the tofu output behind $v is empty"
     save "$v" "${!v}"
   done
 fi
@@ -102,8 +102,8 @@ if stage 1 "record the baseline"; then
   check a-owns-manifest-copy 0 "cluster A runs its own copy of the add-on manifest, not the profile's" -- \
     jq -e -n --slurpfile c a1-addon.json --slurpfile p addon1.json \
       '$c[0].packs[0].manifests[0].uid != $p[0].packs[0].manifests[0].uid'
-  check plan-no-change 0 "Terraform plans no change once skip_destroy is held for the flag" -- tf_plan "$flag"
-  check plan-edit "$off2_on1" "#27: Terraform's plan for an in-place edit of the add-on version: an update in place without the flag, a refusal with it" -- \
+  check plan-no-change 0 "OpenTofu plans no change once skip_destroy is held for the flag" -- tf_plan "$flag"
+  check plan-edit "$off2_on1" "#27: OpenTofu's plan for an in-place edit of the add-on version: an update in place without the flag, a refusal with it" -- \
     tf_plan "$flag" -var edit_addon_in_place=true
   check plan-edit-says 0 "the plan says which" -- command grep -q "$plan_edit_says" plan-edit.out plan-edit.err
 fi

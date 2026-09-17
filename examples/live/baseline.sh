@@ -3,10 +3,10 @@
 #
 #   examples/live/baseline.sh
 #
-#   plan          a Terraform plan with the default variables changes nothing
+#   plan          an OpenTofu plan with the default variables changes nothing
 #   cluster-a     cluster A is Running
 #   no-cluster-b  no cluster by cluster B's name exists
-#   versions      each profile name holds exactly the versions Terraform manages
+#   versions      each profile name holds exactly the versions OpenTofu manages
 #   runs-release  cluster A runs the release profile's current content
 #   runs-addon    cluster A runs the add-on profile's current content
 #
@@ -34,7 +34,7 @@ tf_plan false > "$tmp/plan" 2>&1
 case $? in
   0) say ok plan "no changes with the default variables" ;;
   2) say differs plan "$(command grep -E '^\s+# .* (will|must) be' "$tmp/plan" | sed 's/^ *# //' | paste -sd ';' -)" ;;
-  *) die "terraform plan failed: $(tail -3 "$tmp/plan")" ;;
+  *) die "tofu plan failed: $(tail -3 "$tmp/plan")" ;;
 esac
 
 C=$(out cluster_uid)
@@ -49,7 +49,7 @@ B_NAME=$(out cluster_names | jq -r .b)
 b=$(jq -r --arg n "$B_NAME" '[.clusters[] | select(.name == $n) | "\(.uid) \(.state // "")"] | join(", ")' "$tmp/clusters")
 if [ -z "$b" ]; then say ok no-cluster-b "no cluster named $B_NAME"; else say differs no-cluster-b "$B_NAME exists: $b"; fi
 
-"$live/tf.sh" show -json > "$tmp/state" 2>/dev/null || die "cannot read the Terraform state"
+"$live/tf.sh" show -json > "$tmp/state" 2>/dev/null || die "cannot read the OpenTofu state"
 "$strata" list profiles --json > "$tmp/profiles" 2> "$tmp/profiles.err" || die "strata list profiles failed: $(cat "$tmp/profiles.err")"
 for name in $(out profile_names | jq -r '.[]'); do
   managed=$(jq -r --arg n "$name" '[.values.root_module.resources[]? | select(.type == "spectrocloud_cluster_profile" and .values.name == $n) | .values.id] | sort | join(" ")' "$tmp/state")
@@ -57,7 +57,7 @@ for name in $(out profile_names | jq -r '.[]'); do
   if [ "$managed" = "$live_uids" ]; then
     say ok versions "$name: ${live_uids:-none}"
   else
-    say differs versions "$name: Palette has ${live_uids:-none}, Terraform manages ${managed:-none}"
+    say differs versions "$name: Palette has ${live_uids:-none}, OpenTofu manages ${managed:-none}"
   fi
 done
 

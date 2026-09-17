@@ -6,7 +6,7 @@
 #
 #   just live-up && just live-verify
 #
-# Needs terraform, jq, curl, helm, crane, and the Palette API key in PALETTE_API_KEY or
+# Needs tofu, jq, curl, helm, crane, and the Palette API key in PALETTE_API_KEY or
 # ~/.palette.env; crane reads the OCI registry with the credentials a `crane auth login` or
 # `docker login` stored. The strata binary is target/release/strata unless STRATA_BIN says
 # otherwise. Results go under examples/live/runs/<UTC time>/, which is gitignored: raw API
@@ -32,7 +32,7 @@ AN=$(out addon_profile_name)
 PALETTE_PROJECT_UID=$(out project_uid)
 export PALETTE_PROJECT_UID
 for v in C P P2 N R AD AN PALETTE_PROJECT_UID; do
-  [ -n "${!v}" ] || die "the terraform output behind $v is empty"
+  [ -n "${!v}" ] || die "the tofu output behind $v is empty"
 done
 
 # ---- #1: release versus run

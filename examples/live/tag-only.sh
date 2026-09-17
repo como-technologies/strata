@@ -18,7 +18,7 @@
 # What varies: the tag name the OS pack is pinned under, and which of the two versions cluster A
 # runs. What holds: the pack uid, every other pack, the values, the flag (off), and the baseline
 # the run starts from and returns to (lib.sh). The expectations are #19's decision
-# (docs/model.md, "A tag name for the same build"): the versions are the same content with no
+# (docs/src/internals/palette.md, "Tag names"): the versions are the same content with no
 # node impact, Palette neither plans nor does a repave, and the in-place rename is DRIFT.
 #
 # Needs the live example at its baseline (baseline.sh), the strata release binary, jq, and an AWS
@@ -69,7 +69,7 @@ if [ "$from" -le 1 ]; then
   N=$(out profile_name)
   P=$(out release_profile_uid)
   for v in PALETTE_PROJECT_UID C CN N P; do
-    [ -n "${!v}" ] || die "the terraform output behind $v is empty"
+    [ -n "${!v}" ] || die "the tofu output behind $v is empty"
     save "$v" "${!v}"
   done
 fi

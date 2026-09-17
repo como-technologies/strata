@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
-# terraform for examples/live. The Palette API key comes from SPECTROCLOUD_APIKEY, PALETTE_API_KEY,
+# tofu for examples/live. The Palette API key comes from SPECTROCLOUD_APIKEY, PALETTE_API_KEY,
 # or ~/.palette.env, in that order, and is never printed. For a self-hosted Palette, PALETTE_API
 # (the address strata uses, from the environment or ~/.palette.env) becomes the provider's
-# SPECTROCLOUD_HOST unless that is already set, so strata and Terraform talk to the same Palette.
+# SPECTROCLOUD_HOST unless that is already set, so strata and OpenTofu talk to the same Palette.
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
+
+command -v tofu >/dev/null || { echo "tf.sh: tofu is not installed. Run: just tofu-install" >&2; exit 2; }
 
 from_env_file() { # name -> value from ~/.palette.env, or empty
   [ -f "$HOME/.palette.env" ] || return 0
@@ -26,4 +28,4 @@ if [ -z "${SPECTROCLOUD_HOST:-}" ]; then
   fi
 fi
 
-exec terraform -chdir="$here/terraform" "$@"
+exec tofu -chdir="$here/terraform" "$@"

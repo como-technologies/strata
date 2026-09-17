@@ -1,11 +1,23 @@
-# This file is maintained automatically by "terraform init".
+# This file is maintained automatically by "tofu init".
 # Manual edits may be lost in future updates.
 
-provider "registry.terraform.io/spectrocloud/spectrocloud" {
+provider "registry.opentofu.org/spectrocloud/spectrocloud" {
   version     = "0.30.1"
   constraints = "0.30.1"
   hashes = [
+    "h1:9y1Ah4ntZDFvurLQd5aJDnF6jYYrCJR3Ob4xE395jmE=",
+    "h1:AYbmY0iLTkyJ9TxNsAbrOmNPP0Y9sKGom2zI0Rzo9rU=",
+    "h1:CyJvgA4AzBXzpmknmmCTUwl3sZ2fyWsTuBqQFphYbIA=",
+    "h1:PT/bE82laR8Oq7amYjxew08w+lcrUs7rQLu/LXgtdA0=",
+    "h1:Wi+Q5MQw3xnLKXhmv09MgL6qdXAZ+z17OCQ55HXNdPY=",
+    "h1:Wx1vMBXcNX6ez/dLO20i0jfJQEwayugru/N9+07s+h8=",
+    "h1:ax0B1nYSmvgsQFsci+f6s3ZnViv/S93MFBHzFGEE1Yg=",
     "h1:eKY2NK/eekzNir/EwuzFeiMOdzQT6HqXAdPGo+1tHN0=",
+    "h1:g2FqbxvlaL367mr93c5LzrQJBCrQnIgKXluqcBGRxwI=",
+    "h1:i7L5VybeRQkzlmPuNFCDr5Tyqe0ueh1dwEMRFFJlmLY=",
+    "h1:nMqbeloqA+6AEiJ991SKpT7VAeqMOpZ+jMGUHiSb3y0=",
+    "h1:oJS+M6DnGaPTe+QeZ6a2lgEg8BCO3eAfpTX7GrT+jf4=",
+    "h1:ws6CZTEsF/pSYa5bfrelbsLLCaFYQXeeZEBVeUi5ZM0=",
     "zh:3c8b8c0ca2ea8d93c3015d3f68d50ec5a7146eec28422a4f874c94f12eac6f98",
     "zh:403944355f6d569d8ec70f95fc9cec22b8269e9e0b123536e57ddaa2970a7fc8",
     "zh:451fc3a7d49af454bf79217127e6ac1e8ef310a161d31d291a06bf22cae5ed6c",
