@@ -651,7 +651,7 @@ labels: feature
 
 - [x] A comparison of two sides that carry the same profile uid under different versions says the version was overwritten in place, whether or not the roots match
 - [x] Sides with different uids, including a flag-on bump and the version it cloned, get no such note
-- [ ] Offline tests cover equal and different roots, and the live flag-off run shows the note after a legacy version bump
+- [x] Offline tests cover equal and different roots, and the live flag-off run shows the note after a legacy version bump
 
 ## Report a cluster record whose profile version was overwritten in place
 
