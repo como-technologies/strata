@@ -2,8 +2,10 @@
 
 The live example ran strata against a real tenant, and recorded what Palette
 did. Each section gives the run ids. [Live runs](../development/live-runs.md)
-has the check tables. The recorded runs used Terraform 1.16.2. The live example
-uses OpenTofu now, with the same provider.
+has the check tables. The runs used Terraform 1.16.2, except run
+`20260917T183929Z-tofu`, which repeated the read-only checks with OpenTofu
+1.12.6 and gave the same answers. The live example uses OpenTofu now, with the
+same provider.
 
 Each uid in this book is an example. The runs used the uids of a test tenant,
 and this book holds none of them. The pack names, the versions, the digests, and

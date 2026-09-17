@@ -267,7 +267,7 @@ in Palette, which exists from the start of the creation.
 | `consumer-is-the-cluster` fails with state `unknown` | The key cannot read the cluster in its project. `consumers-release.out` prints the error next to the cluster. |
 | `only-the-edited-value` fails with two changed values | Somebody edited 1.0.1 in place and did not undo it. `baseline.sh` names it. |
 | A script stops with "not at its baseline" | An earlier run did not finish, or a person changed the example. `baseline-before.txt` names each difference. `just live-down && just live-up` builds it again. |
-| `registry-digest-oci` fails with "crane digest ... failed" | No login to the OCI registry, or an expired one. An AWS registry login lasts 12 hours. |
+| `registry-digest-oci` fails with "crane digest ... failed" or HTTP 401 | No login to the OCI registry, or an expired one. An AWS registry login lasts 12 hours. A login also stores an empty credential, and reports a success, when the token request before it failed: run `aws ecr get-login-password` alone first, and use a profile that has `ecr:GetAuthorizationToken`. |
 | `ebs-csi-controller` pods in `CrashLoopBackOff`, with `UnauthorizedOperation` on `ec2:DescribeAvailabilityZones` | The worker node role does not have `AmazonEBSCSIDriverPolicy`. See Prerequisites. |
 | A cluster stays `Provisioning` with `not done: WorkerNodeAdditionDone: provision worker nodes`, although its machines are `Running` and its nodes `Ready` | Palette did not check the workers again after a node that was not yet in the cluster failed its first check (`fred`, 2026-09-17). A restart of the Palette controller in the cluster did not help. Its deletion ran normally: delete it, and send its diagnostics to Palette support. |
 

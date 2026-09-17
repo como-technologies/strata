@@ -8,6 +8,36 @@ descriptions are quoted as each run recorded them.
 Each uid below is an example, as everywhere in this book. The check tables, the
 run ids, the counts, and the roots are the recorded ones.
 
+## The first run with OpenTofu
+
+Run `20260917T183929Z-tofu`, with OpenTofu 1.12.6 and the Spectro Cloud provider
+0.30.1. It is the run that moved the example from Terraform to OpenTofu, and the
+only run that OpenTofu made. The earlier runs used Terraform 1.16.2.
+
+| Step | Result |
+| --- | --- |
+| `tofu init` | Read the state that Terraform wrote, and took the provider from `registry.opentofu.org`. The lock file names that registry now. |
+| `tofu plan` | Exit 2 with the creates of the whole example, and no other change. |
+| `tofu apply` | `Apply complete! Resources: 5 added`. The four profiles took 3 to 4 seconds each, and cluster A 16m3s. |
+| `verify.sh` | 24 of 24 checks passed, with the same answers as the Terraform runs. |
+| `tofu destroy` | `Destroy complete! Resources: 5 destroyed`. Cluster A took 19m17s. |
+| `api.sh delete-named` | Each of the four profile names holds no version. |
+| After the teardown | The cluster has the state `Deleted`, the project holds no profile, and `aws-inventory.sh` prints 0 on each line. |
+
+The plan and apply text that the checks read did not change: OpenTofu writes the
+same `Plan:`, `Apply complete!`, and `# <resource> will be updated in-place`
+lines, and `-detailed-exitcode` answers 2 for a change.
+
+`registry-digest-oci` failed in the first attempt of `verify.sh` with HTTP 401.
+The cause was the login, not the tool: `aws ecr get-login-password` had failed
+with `AccessDeniedException`, and `crane auth login` then stored an empty
+credential and reported a success. A login with an AWS profile that has
+`ecr:GetAuthorizationToken` fixed it, and the check read the recorded digest
+`sha256:99cac22f712b...`.
+
+The scripts that write to the tenant (`in-place.sh`, `registry-move.sh`,
+`tag-only.sh`, `drift-report.sh`) have no OpenTofu run yet.
+
 ## verify.sh
 
 Session `20260917T031126Z` on 2026-09-17: one `just live-up`, then `just
