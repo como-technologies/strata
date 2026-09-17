@@ -565,6 +565,68 @@ consumers  1 -> 0 clusters
 | PASS | `verify-exact1-says` | 0 | 0 | #19: the drift names the rename, the same content, and no node impact |
 | PASS | `baseline-after` | 0 | 0 | the live example is back at its baseline |
 
+## The drift report runs
+
+`just live-drift-report` in session `20260917T133523Z`: `drift-report.sh off`
+and `drift-report.sh on` against cluster A `fred`, with the issues in this
+repository under the label `strata-live-drift`. The two runs differ only in the
+provider's `immutable-clusterprofiles` flag. No check failed: 28 with the flag
+off and 27 with it on. Each started from the baseline, with no issue open, and
+restored it with every issue it opened closed.
+
+In both runs the in-place edit through the API opened one issue for the
+add-on record, the second report updated that issue, and the undo closed it;
+cluster A's record, whose copy the edit did not reach, stayed verified. The
+bump differed with the flag. Without it, the bump overwrote the first add-on
+uid in place, and the report opened one issue for the add-on record, whose
+report says the version "now names strata-live-addon@1.0.1 ... was overwritten
+in place", and one for cluster A's record, whose add-on version was gone. The
+restore closed both. With the flag, the bump kept 1.0.0, and nothing opened:
+
+```
+off  verify-report: 3 records: 2 unchanged, 1 drifted, 0 could not be checked; opened #42 for records-off/addon.json
+off  verify-report: 3 records: 1 unchanged, 2 drifted, 0 could not be checked; opened #43 for records-off/addon.json; opened #44 for records-off/cluster-a.json
+off  verify-report: 3 records: 3 unchanged, 0 drifted, 0 could not be checked; closed #43 for records-off/addon.json; closed #44 for records-off/cluster-a.json
+on   verify-report: 3 records: 3 unchanged, 0 drifted, 0 could not be checked
+```
+
+The session before it, `20260917T132642Z`, found two problems in the example,
+both fixed: GitHub lists a new or closed issue about five seconds later, so
+the checks now wait for the listing, and the flag-on bump asked Palette to
+delete the version cluster A runs, because the state still held
+`skip_destroy = false` (see "When a check fails").
+
+| check | flag off | flag on | what it shows |
+|---|---|---|---|
+| `record-release` | PASS 0 | PASS 0 | record the release version |
+| `record-addon` | PASS 0 | PASS 0 | record the add-on version |
+| `record-cluster-a` | PASS 0 | PASS 0 | record cluster A |
+| `report-baseline` | PASS 0 | PASS 0 | #25: the report over the three records at the baseline |
+| `report-baseline-says` | PASS 0 | PASS 0 | every record verifies, and no issue opens |
+| `plan-edit` | PASS 2 | PASS 1 | Terraform's plan for an in-place edit of the add-on version: an update in place without the flag, a refusal with it |
+| `plan-edit-says` | PASS 0 | PASS 0 | the plan says which |
+| `api-edit` | PASS 0 | PASS 0 | edit the add-on version in place through the API, which Palette accepts whatever the flag |
+| `report-edit` | PASS 1 | PASS 1 | #25: the report after the edit exits 1 |
+| `report-edit-opened` | PASS 0 | PASS 0 | #25: it opens one issue, for the add-on record; cluster A's copy is untouched |
+| `issues-after-edit` | PASS 0 | PASS 0 | #25: one open issue, for the add-on record |
+| `issue-has-report` | PASS 0 | PASS 0 | #25: the issue holds the report of the drift |
+| `report-edit-again` | PASS 1 | PASS 1 | #25: a second report while the edit stands |
+| `report-edit-again-updated` | PASS 0 | PASS 0 | #25: it updates the issue and opens none |
+| `issues-after-edit-again` | PASS 0 | PASS 0 | #25: still exactly one open issue |
+| `api-undo` | PASS 0 | PASS 0 | undo the edit through the API |
+| `report-undo` | PASS 0 | PASS 0 | #25: the report after the undo exits 0 |
+| `report-undo-closed` | PASS 0 | PASS 0 | #25: it closes the issue |
+| `issue-edit-closed` | PASS 0 | PASS 0 | #25: the issue is closed on the host |
+| `issues-after-undo` | PASS 0 | PASS 0 | no issue is open |
+| `report-bump` | PASS 1 | PASS 0 | #25, #27: the report after the bump: drift only without the flag |
+| `report-bump-opened` | PASS 0 | PASS 0 | #25, #27: the issues the bump opens: the add-on record's and cluster A's without the flag, none with it |
+| `issues-after-bump` | PASS 0 | PASS 0 | #27, #30: without the flag, one open issue each for the add-on record and cluster A's record; with it, none |
+| `bump-issue-names-overwrite` | PASS 0 | - | #27: the add-on record's issue says the version was overwritten in place |
+| `report-restored` | PASS 0 | PASS 0 | #25: the report after the restore exits 0 |
+| `report-restored-closed` | PASS 0 | PASS 0 | #25: it closes each issue the bump opened |
+| `issues-after-restore` | PASS 0 | PASS 0 | no issue is open |
+| `baseline-after` | PASS 0 | PASS 0 | the live example is back at its baseline |
+
 ## The in-place runs
 
 `in-place.sh off` and `in-place.sh on` in session `20260917T031126Z`, against
