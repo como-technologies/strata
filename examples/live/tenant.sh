@@ -4,8 +4,9 @@
 #   tenant.sh names [REGION]   the names terraform.tfvars needs: projects, AWS cloud accounts, and
 #                              for each account the availability zones and EC2 key pairs in REGION
 #                              (default us-east-2)
-#   tenant.sh cluster UID      a cluster's status.state; exit 0 once it is Deleted or not found,
-#                              1 while it exists, 2 when the answer cannot be trusted
+#   tenant.sh cluster UID      a cluster's status.state, and each condition not yet done while it
+#                              is neither Running nor Deleted; exit 0 once it is Deleted or not
+#                              found, 1 while it exists, 2 when the answer cannot be trusted
 #   tenant.sh updates UID      what Palette lists as waiting for a cluster's profiles, as JSON
 #   tenant.sh digest KIND REGISTRY_UID NAME VERSION
 #                              the digest a helm or oci registry itself serves for one pack
@@ -145,6 +146,12 @@ cluster() {
       state=$(jq -r '.status.state // "unknown"' "$tmp" 2>/dev/null) || die "HTTP 200 without JSON; try again"
       name=$(jq -r '.metadata.name // ""' "$tmp")
       echo "$name $uid: $state"
+      # What holds a cluster that is neither Running nor Deleted: each condition not yet true.
+      case "$state" in
+        Running|Deleted) ;;
+        *) jq -r '(.status.conditions // [])[] | select(.status != "True")
+                  | "  not done: \(.type): \(.message // .reason // "")"' "$tmp" ;;
+      esac
       [ "$state" = Deleted ] && return 0 || return 1 ;;
     404)
       # A real not-found carries a JSON body with code ResourceNotFound. A plain-text 404 comes
@@ -164,5 +171,5 @@ case "${1:-}" in
   cluster) shift; cluster "$@"; exit $? ;;
   updates) shift; updates "$@" ;;
   digest) shift; digest "$@" ;;
-  *) sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
+  *) sed -n '2,/^set -uo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; exit 2 ;;
 esac

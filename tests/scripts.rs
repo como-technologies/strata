@@ -649,6 +649,19 @@ fn tenant_sh_reports_cluster_state_and_never_reads_a_gateway_404_as_deleted() {
     assert_eq!(text(&o.stdout).trim(), "barney c-123: Deleted");
 
     let (o, _) = tenant_cluster(
+        "200",
+        r#"{"metadata":{"name":"fred"},"status":{"state":"Provisioning","conditions":[
+            {"type":"KubeConfigReady","status":"True","message":"Kubeconfig file is available."},
+            {"type":"WorkerNodeAdditionDone","status":"False","message":"provision worker nodes"}]}}"#,
+    );
+    assert_eq!(o.status.code(), Some(1));
+    assert_eq!(
+        text(&o.stdout),
+        "fred c-123: Provisioning\n  not done: WorkerNodeAdditionDone: provision worker nodes\n",
+        "a cluster that is not Running says which conditions hold it"
+    );
+
+    let (o, _) = tenant_cluster(
         "404",
         r#"{"code":"ResourceNotFound","message":"not found"}"#,
     );

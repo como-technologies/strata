@@ -277,15 +277,14 @@ resource "spectrocloud_cluster_aws" "this" {
 }
 
 # Cluster B for examples/live/in-place.sh: the same profiles as the cluster, created after an
-# in-place edit of the add-on profile. Billable while it exists. Created without waiting for it to
-# finish: Palette records the profiles a cluster runs when the cluster is created, and that record
-# is what strata reads; an add-on that never installs would otherwise hold the apply for an hour.
+# in-place edit of the add-on profile. Billable while it exists. The apply waits for it to be
+# Running, so a cluster that never gets there stops the run at creation, and nothing deletes a
+# cluster that is still provisioning.
 resource "spectrocloud_cluster_aws" "b" {
   count            = var.second_cluster ? 1 : 0
   name             = var.second_cluster_name
   cloud_account_id = data.spectrocloud_cloudaccount_aws.this.id
   tags             = local.tags
-  skip_completion  = true
 
   cluster_profile {
     id = spectrocloud_cluster_profile.release.id
