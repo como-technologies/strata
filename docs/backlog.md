@@ -666,12 +666,12 @@ labels: feature
 1. `src/ops.rs`, `verify` of a cluster record: for each applied profile of the live cluster, read the profile document, one request per profile, and compare its version with the version the cluster's copy names. Report each profile whose uid names another version, or no longer exists, in `Verify` as `profilesOverwritten` with the uid, the name, and both versions, and exit 1, as for an overwritten profile record.
 2. `src/render/`: a line per such profile in the verdict, for example `strata-live-cluster runs strata-live-addon@1.0.0, but uid 6aab0a99da23ecda03f36685 now names 1.0.1: the version was overwritten in place`.
 3. `docs/output.md`: the field and the exit status. Tests with `MemoryApi`: a cluster whose profile uids still name their versions, one whose uid names another version, and one whose uid is gone.
-4. `examples/live/in-place.sh`: after the bump, `verify` on cluster A's record from stage 3 exits 1 and names the add-on profile with the flag off, and exits 0 with it on.
+4. `examples/live/in-place.sh`: after the bump, `verify-a3-after-bump` and `a3-names-overwritten-profile` check that `verify` on cluster A's record from stage 3 exits 1 and names the add-on profile with the flag off, and exits 0 with it on.
 
 ### Acceptance criteria
 
-- [ ] `verify` on a cluster record exits 1 and names each applied profile whose uid now names another version than the cluster's copy, or no longer exists, even when the cluster itself is unchanged
-- [ ] A cluster whose profile uids still name their versions verifies as before, at one extra request per applied profile
+- [x] `verify` on a cluster record exits 1 and names each applied profile whose uid now names another version than the cluster's copy, or no longer exists, even when the cluster itself is unchanged
+- [x] A cluster whose profile uids still name their versions verifies as before, at one extra request per applied profile
 - [ ] Offline tests cover the three cases, and the live runs show exit 1 with the flag off and 0 with it on after the bump
 
 ## Make the live example a controlled experiment
