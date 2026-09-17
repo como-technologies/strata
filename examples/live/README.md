@@ -281,9 +281,16 @@ These rules come from the observed teardowns of the same kind of cluster:
   deletion, and every cloud resource stays in place.
 - Deletion continues in Palette after Terraform gives up or is interrupted.
   Keep checking with `tenant.sh cluster` instead of starting over.
-- Judge progress by `aws-inventory.sh`, not by elapsed time. AWS empties first,
-  in about 6 to 12 minutes for a cluster without add-ons, and the state turns
-  `Deleted` 3 to 8 minutes after that.
+- Judge progress by `aws-inventory.sh`, not by elapsed time, and only 0 on
+  every line means AWS is empty. The instances, NAT gateway, and load balancer
+  go first; the security groups, route tables, subnets, internet gateway, and
+  VPC go last, some after a retry, and the state turns `Deleted` with them. On
+  2026-09-17 cluster `barney` took 15.5 minutes from the delete to Palette's
+  `Cluster barney has been deleted` event, and its last AWS steps came in the
+  final 90 seconds. Before that day `aws-inventory.sh` counted only instances,
+  NAT gateways, VPCs, elastic IPs, volumes, and the load balancer, so it could
+  read 0 while the network was still being deleted, and a healthy deletion
+  looked stuck.
 - If the state stays `Deleting` and the inventory stops shrinking for several
   readings, read the cluster's events in the Palette console; the message
   usually names what is stuck. A cluster with Pause Agent Upgrades enabled

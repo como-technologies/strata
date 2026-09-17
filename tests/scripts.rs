@@ -1401,3 +1401,89 @@ fn baseline_sh_passes_only_when_every_condition_holds_and_names_each_that_does_n
         "a plan that fails means it cannot tell"
     );
 }
+
+/// An `aws` for aws-inventory.sh: it logs each call and answers `<service> <operation>` with the
+/// ids in $FAKE_AWS/<operation>, or nothing when that file is absent.
+const FAKE_AWS: &str = r#"#!/usr/bin/env bash
+echo "$*" >> "$FAKE_AWS/calls.log"
+[ -f "$FAKE_AWS/$2" ] && cat "$FAKE_AWS/$2"
+exit 0
+"#;
+
+fn aws_inventory(answers: &[(&str, &str)]) -> (Output, String) {
+    let root = tempfile::tempdir().unwrap();
+    let (bin, fake) = (root.path().join("bin"), root.path().join("aws"));
+    for d in [&bin, &fake] {
+        std::fs::create_dir_all(d).unwrap();
+    }
+    executable(&bin.join("aws"), FAKE_AWS);
+    for (op, ids) in answers {
+        std::fs::write(fake.join(op), ids).unwrap();
+    }
+    let o = Command::new("bash")
+        .arg(live_script("aws-inventory.sh"))
+        .args(["fred", "us-east-2"])
+        .env(
+            "PATH",
+            format!("{}:{}", bin.display(), std::env::var("PATH").unwrap()),
+        )
+        .env("FAKE_AWS", &fake)
+        .output()
+        .unwrap();
+    let calls = std::fs::read_to_string(fake.join("calls.log")).unwrap_or_default();
+    (o, calls)
+}
+
+#[test]
+fn aws_inventory_counts_what_a_cluster_deletion_removes_last() {
+    let (o, _) = aws_inventory(&[]);
+    assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
+    for label in [
+        "instances",
+        "load balancers",
+        "security groups",
+        "subnets",
+        "route tables",
+        "internet gateways",
+        "network interfaces",
+        "vpcs",
+    ] {
+        assert!(
+            text(&o.stdout)
+                .lines()
+                .any(|l| l.starts_with(label) && l.trim_end().ends_with(" 0")),
+            "{label}: {}",
+            text(&o.stdout)
+        );
+    }
+
+    // after the instances, NAT gateway, and load balancer are gone, the network is still there
+    let (o, calls) = aws_inventory(&[
+        ("describe-vpcs", "vpc-1\n"),
+        ("describe-security-groups", "sg-1\tsg-2\n"),
+        ("describe-subnets", "subnet-1\n"),
+        ("describe-route-tables", "rtb-1\n"),
+        ("describe-internet-gateways", "igw-1\n"),
+        ("describe-network-interfaces", "eni-1\n"),
+    ]);
+    assert_eq!(
+        o.status.code(),
+        Some(1),
+        "anything left is not gone: {}",
+        text(&o.stdout)
+    );
+    let out = text(&o.stdout);
+    assert!(
+        out.lines()
+            .any(|l| l.starts_with("security groups") && l.trim_end().ends_with(" 2")),
+        "{out}"
+    );
+    assert!(
+        calls.contains("describe-network-interfaces --filters Name=vpc-id,Values=vpc-1"),
+        "interfaces are found in the cluster's VPC, since they are not all tagged: {calls}"
+    );
+    assert!(
+        calls.contains("describe-security-groups --filters Name=tag-key,Values=sigs.k8s.io/cluster-api-provider-aws/cluster/fred"),
+        "{calls}"
+    );
+}
