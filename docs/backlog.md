@@ -603,11 +603,11 @@ Nothing shows what these changes do to clusters. Take cluster A created from `P@
 
 ### Acceptance criteria
 
-- [ ] `docs/model.md` states, for each setting of `immutable-clusterprofiles`, what an in-place edit and a version bump do to a cluster that runs the version, before and after the update is applied, and to a cluster created afterward, with the live evidence
-- [ ] `cluster:<uid>` records the content a cluster runs, and `compare cluster:A cluster:B` shows a change exactly when the two clusters run different content
-- [ ] A comparison of two sides with the same profile uid and version and different roots says the version was edited in place
-- [ ] `verify` exits 1 for a record whose uid now names another version, even when the roots match
-- [ ] `examples/live/in-place.sh` runs with the flag off and on against a version a cluster runs, and `examples/live/README.md` records both runs
+- [x] `docs/model.md` states, for each setting of `immutable-clusterprofiles`, what an in-place edit and a version bump do to a cluster that runs the version, before and after the update is applied, and to a cluster created afterward, with the live evidence
+- [x] `cluster:<uid>` records the content a cluster runs, and `compare cluster:A cluster:B` shows a change exactly when the two clusters run different content
+- [x] A comparison of two sides with the same profile uid and version and different roots says the version was edited in place
+- [x] `verify` exits 1 for a record whose uid now names another version, even when the roots match
+- [x] `examples/live/in-place.sh` runs with the flag off and on against a version a cluster runs, and `examples/live/README.md` records both runs
 
 ## Show the version each consumer's copy names in consumers
 
