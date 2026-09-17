@@ -93,6 +93,10 @@ model can read it without these pages:
 - `schema`, `tool`, and `generatedAt` identify the document.
 - `legend` explains the three flags, each `status`, each `op`, and each
   impact level in plain sentences.
+- `sameContent` is true when the roots are equal, or differ only by the
+  `packUid` Palette mints for each profile's manifest packs; the terminal
+  and markdown reports then add a note. `same` stays false in the second
+  case, and `compare` still exits 1: the roots differ.
 - `editedInPlace` is true when both sides name the same profile uid and
   version and their roots differ.
 - `overwrittenInPlace` lists each profile uid the two sides name under
@@ -120,8 +124,9 @@ model can read it without these pages:
   `a.cluster.variables` and `b.cluster.variables`.
 - `packs[]` has one entry per pack key on either side, sorted by layer and
   then by name. Each entry has `status`, the booleans `identity`,
-  `upstream`, and `authored`, `paramsChanged`, and `impact` with `level` and
-  `text`. The sides `a` and `b` hold tag, version, packUid, registryUid, the
+  `upstream`, and `authored`, `paramsChanged`, `mintedUidOnly` when the pack
+  comes from no registry and only its minted `packUid` differs, and `impact`
+  with `level` and `text`. The sides `a` and `b` hold tag, version, packUid, registryUid, the
   upstream digest and its source, the values hash, and the node hash.
   `values` holds `changed`, `parseable`, the three counts, and `diff[]`.
   `manifests[]` lists changes with the content hashes.
@@ -208,7 +213,13 @@ DIFFERENT      releases/1.1.1/test.json -> releases/1.1.1/prod.json   root 08813
 NOT THE SAME RELEASE: 1 of 1 pairs failed
 ```
 
-By default only equal roots pass. `--allow registry-move` also passes a pair
+By default only equal roots pass, and so does a pair whose roots differ only
+by the `packUid` Palette mints for each profile's manifest packs: that pair is
+`SAME CONTENT` under either policy, because a manifest pack comes from no
+registry and its content is the same (`docs/model.md`, "A version that
+clusters run"). A minted `packUid` is never a reason; a manifest pack whose
+content changed is `DIFFERENT` and names the `AUTHORED` change.
+`--allow registry-move` also passes a pair
 whose only difference is packs re-pinned from another registry: the same
 tag, version, values, manifests, and params, with variables unchanged. The
 pack type may change, because it follows the registry (`spectro` for a pack
@@ -221,7 +232,7 @@ so the reader can decide to allow it. A reason names the pack and, for an
 `--format json` writes the document `strata-chain/1`: `legend`, `policy`,
 `same`, `summary` with `pairs`, `passed`, and `failed`, `records[]` with
 each label, name, version, uid, project, and root, and `pairs[]` with `a`,
-`b`, `status` (`identical`, `registry-move`, `different`), the two roots,
+`b`, `status` (`identical`, `same-content`, `registry-move`, `different`), the two roots,
 `packsRepinned`, and `reasons[]`. `strata schema chain` prints its JSON
 Schema.
 

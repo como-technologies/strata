@@ -482,6 +482,9 @@ pub enum Policy {
 pub enum PairStatus {
     /// Equal roots.
     Identical,
+    /// Roots differ only by the `packUid`s Palette mints for each profile's manifest packs: the
+    /// same content, under either policy.
+    SameContent,
     /// Roots differ only because packs were re-pinned from another registry; accepted by policy.
     RegistryMove,
     /// Not the same release; `reasons` says why.
@@ -640,6 +643,12 @@ fn pair_reasons(d: &Diff, a: &Snapshot, b: &Snapshot, policy: Policy) -> (Vec<St
             Status::Removed => reasons.push(format!("pack {} removed", pd.key)),
             Status::Changed => {
                 let (x, y) = (pa[pd.key.as_str()], pb[pd.key.as_str()]);
+                // a manifest pack's packUid is minted for each profile: not part of the release
+                let minted = x.registry_uid.is_empty()
+                    && y.registry_uid.is_empty()
+                    && x.pack_uid != y.pack_uid
+                    && (&x.name, &x.layer, &x.kind, &x.tag, &x.version)
+                        == (&y.name, &y.layer, &y.kind, &y.tag, &y.version);
                 // The type follows the registry (spectro, helm, oci), so a move may change it; a
                 // pack from no registry, a manifest, did not move.
                 let moved = !x.registry_uid.is_empty()
@@ -647,7 +656,7 @@ fn pair_reasons(d: &Diff, a: &Snapshot, b: &Snapshot, policy: Policy) -> (Vec<St
                     && x.registry_uid != y.registry_uid
                     && x.tag == y.tag
                     && x.version == y.version;
-                if pd.identity {
+                if pd.identity && !minted {
                     if moved {
                         if !pd.authored {
                             repinned += 1;
@@ -681,7 +690,7 @@ fn pair_reasons(d: &Diff, a: &Snapshot, b: &Snapshot, policy: Policy) -> (Vec<St
     if d.order_changed {
         reasons.push("pack order changed".to_string());
     }
-    if reasons.is_empty() && !d.same && policy == Policy::Exact {
+    if reasons.is_empty() && !d.same_content && policy == Policy::Exact {
         reasons.push("roots differ".to_string());
     }
     (reasons, repinned)
@@ -698,6 +707,8 @@ pub fn same_release(records: &[(String, Snapshot)], policy: Policy, generated_at
             let (reasons, packs_repinned) = pair_reasons(&d, a, b, policy);
             let status = if d.same {
                 PairStatus::Identical
+            } else if d.same_content {
+                PairStatus::SameContent
             } else if policy == Policy::RegistryMove && reasons.is_empty() {
                 PairStatus::RegistryMove
             } else {
@@ -732,6 +743,7 @@ pub fn same_release(records: &[(String, Snapshot)], policy: Policy, generated_at
         legend: ChainLegend {
             status: m(&[
                 ("identical", "The two records have the same root: the same release."),
+                ("same-content", "The roots differ only by the packUid Palette mints for each profile's manifest packs: the same content, so the same release under either policy."),
                 ("registry-move", "The roots differ only because packs were re-pinned from another registry with the same tag, version, values, and manifests; accepted by the registry-move policy."),
                 ("different", "Not the same release; reasons lists each difference."),
             ]),

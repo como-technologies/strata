@@ -725,6 +725,112 @@ fn a_root_difference_fails_and_names_the_two_records() {
     );
 }
 
+/// Fixture a with prometheus-operator stored the way Palette stores a manifest pack: no registry,
+/// no digest, and a `packUid` minted for the profile. `rules` replaces its manifest's content.
+fn with_manifest_pack(raw_root: &Path, dir: &str, pack_uid: &str, rules: Option<&str>) -> Snapshot {
+    let (from, to) = (raw_root.join("a"), raw_root.join(dir));
+    fs::create_dir_all(&to).unwrap();
+    let mut profile = read(&from.join("profile.json"));
+    for pack in profile["spec"]["published"]["packs"]
+        .as_array_mut()
+        .unwrap()
+    {
+        if pack["name"] == "prometheus-operator" {
+            pack["type"] = Value::from("manifest");
+            pack["registryUid"] = Value::from("");
+            pack["packUid"] = Value::from(pack_uid);
+            pack.as_object_mut().unwrap().remove("digest");
+        }
+    }
+    let mut manifests = read(&from.join("manifests.json"));
+    for pack in manifests["spec"]["packs"].as_array_mut().unwrap() {
+        if pack["spec"]["name"] == "prometheus-operator" {
+            pack["metadata"]["uid"] = Value::from(pack_uid);
+            pack["spec"]["registryUid"] = Value::from("");
+            pack["spec"]["digest"] = Value::from("");
+            if let Some(content) = rules {
+                pack["spec"]["manifests"][0]["content"] = Value::from(content);
+            }
+        }
+    }
+    for (name, doc) in [("profile.json", &profile), ("manifests.json", &manifests)] {
+        fs::write(to.join(name), serde_json::to_string_pretty(doc).unwrap()).unwrap();
+    }
+    fs::copy(from.join("variables.json"), to.join("variables.json")).unwrap();
+    ops::snapshot_from_dir(&to, dir, "t0").unwrap()
+}
+
+#[test]
+fn two_profiles_with_the_same_manifest_content_are_one_release_whatever_uid_palette_minted() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let one = with_manifest_pack(dir.path(), "m1", "pk-minted-1", None);
+    let two = with_manifest_pack(dir.path(), "m2", "pk-minted-2", None);
+    let edited = with_manifest_pack(dir.path(), "m3", "pk-minted-3", Some("groups: []\n"));
+
+    let d = ops::compare(&one, &two, "t1");
+    assert!(
+        !d.same,
+        "the minted uid is part of IDENTITY, so the roots differ"
+    );
+    assert!(d.same_content, "and nothing else differs");
+    let prom = d
+        .packs
+        .iter()
+        .find(|p| p.name == "prometheus-operator")
+        .unwrap();
+    assert!(prom.identity && prom.minted_uid_only, "{prom:?}");
+    let text = render::renderer(Format::Terminal, Paint::off(), false)
+        .render(&d, &one, &two, false)
+        .unwrap();
+    assert!(
+        text.contains("the roots differ only by the packUid Palette mints for each profile's manifest pack: the same content"),
+        "{text}"
+    );
+
+    for policy in [Policy::Exact, Policy::RegistryMove] {
+        let c = ops::same_release(
+            &[
+                ("m1.json".into(), one.clone()),
+                ("m2.json".into(), two.clone()),
+            ],
+            policy,
+            "t1",
+        );
+        assert!(c.same, "{:?}", c.pairs[0].reasons);
+        assert_eq!(c.pairs[0].status, PairStatus::SameContent);
+        assert!(c.pairs[0].reasons.is_empty());
+    }
+
+    // a manifest content change is still a different release
+    let d = ops::compare(&one, &edited, "t1");
+    assert!(!d.same_content);
+    let c = ops::same_release(
+        &[("m1.json".into(), one.clone()), ("m3.json".into(), edited)],
+        Policy::Exact,
+        "t1",
+    );
+    assert!(!c.same);
+    assert!(
+        c.pairs[0]
+            .reasons
+            .iter()
+            .any(|r| r.contains("prometheus-operator") && r.contains("AUTHORED")),
+        "{:?}",
+        c.pairs[0].reasons
+    );
+    assert!(
+        c.pairs[0].reasons.iter().all(|r| !r.contains("packUid")),
+        "the minted uid is not a reason: {:?}",
+        c.pairs[0].reasons
+    );
+
+    // a pack from a registry whose packUid changed is not a minted uid
+    let a = ops::snapshot_from_dir(&dir.path().join("a"), "a", "t0").unwrap();
+    let a3 = ops::snapshot_from_dir(&dir.path().join("a3"), "a3", "t0").unwrap();
+    assert!(!ops::compare(&a, &a3, "t1").same_content);
+}
+
 #[test]
 fn a_registry_move_passes_only_when_allowed() {
     let dir = tempfile::tempdir().unwrap();

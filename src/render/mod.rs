@@ -110,6 +110,7 @@ pub(crate) fn consumers_heading(r: &ConsumersReport) -> String {
 pub(crate) fn pair_word(status: PairStatus) -> &'static str {
     match status {
         PairStatus::Identical => "IDENTICAL",
+        PairStatus::SameContent => "SAME CONTENT",
         PairStatus::RegistryMove => "REGISTRY MOVE",
         PairStatus::Different => "DIFFERENT",
     }
@@ -119,6 +120,11 @@ pub(crate) fn pair_word(status: PairStatus) -> &'static str {
 pub(crate) fn pair_detail(p: &Pair) -> String {
     match p.status {
         PairStatus::Identical => format!("root {}", short(&p.root_a)),
+        PairStatus::SameContent => format!(
+            "root {} -> {}, only the packUid minted for each manifest pack differs",
+            short(&p.root_a),
+            short(&p.root_b)
+        ),
         PairStatus::RegistryMove => {
             format!("{} packs re-pinned, same configuration", p.packs_repinned)
         }
@@ -220,6 +226,14 @@ pub(crate) fn overwritten_in_place_notes(d: &Diff) -> Vec<String> {
             )
         })
         .collect()
+}
+
+/// `the roots differ only by the packUid Palette mints for each profile's manifest pack: the same
+/// content`, for a diff whose roots differ in nothing else.
+pub(crate) fn same_content_note(d: &Diff) -> Option<String> {
+    (!d.same && d.same_content).then(|| {
+        "the roots differ only by the packUid Palette mints for each profile's manifest pack: the same content".to_string()
+    })
 }
 
 /// `both sides are name@version (uid u): the version was edited in place`, for a diff whose sides

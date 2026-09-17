@@ -150,9 +150,20 @@ the clone included, where a registry pack's `packUid` is the registry's. Because
 `IDENTITY` hashes it, two profile versions with the same manifest content never
 share a root: the add-on's root differed between two builds of the live example
 from the same configuration (`a18670a7b8d6`, `7d1079372122`), where the release
-profile's did not (`eada36c2e3fd`). So `same-release` fails two profiles
-created apart with the same manifests, and a flag-on bump that changes nothing
-else, on `IDENTITY: packUid`.
+profile's did not (`eada36c2e3fd`).
+
+So strata compares a manifest pack by content (#32). The hash keeps
+`packUid` in `IDENTITY`, and the snapshot schema stays `strata-snapshot/1`:
+every existing record keeps its root, and a pack from a registry still counts
+its `packUid`, where it names the registry's build. `compare` marks a manifest
+pack whose only difference is its minted `packUid` (`mintedUidOnly`) and
+notes when nothing else differs (`sameContent`). `same-release` passes such a
+pair as `SAME CONTENT` under either policy and never names a minted `packUid`
+as a reason, while a change to the manifest content still fails the pair.
+Leaving `packUid` out of the hash for a manifest pack would have given such
+profiles equal roots, but it computes a hash differently, so it needs
+`strata-snapshot/2` and a way forward for every `/1` record; the difference is
+only whether the roots are equal, which `same-release` settles without it.
 
 An edit through the API must keep each manifest's uid. In the flag-on run the
 edit first sent the manifest without it. Palette replaced the manifest with a

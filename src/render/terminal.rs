@@ -4,8 +4,8 @@ use super::{
     chain_verdict, cluster_value, consumer_count, consumers_heading, counts_line, dash,
     edited_in_place_note, entry_error, list_count, list_scope, overwritten_in_place_notes,
     pack_version, pair_detail, pair_word, profiles_overwritten_sentence, record_detail,
-    record_label, short, show, subject, traits_suffix, values_changed_suffix, variable_lines,
-    version_display, Renderer, VarLine,
+    record_label, same_content_note, short, show, subject, traits_suffix, values_changed_suffix,
+    variable_lines, version_display, Renderer, VarLine,
 };
 use crate::color::Paint;
 use crate::diff::{
@@ -230,6 +230,9 @@ impl Renderer for TerminalRenderer {
         for note in overwritten_in_place_notes(d) {
             out.push(format!("note       {}", p.byellow(&note)));
         }
+        if let Some(note) = same_content_note(d) {
+            out.push(format!("note       {}", p.bgreen(&note)));
+        }
         out.push(format!(
             "consumers  {} -> {} clusters",
             d.a.consumers.count, d.b.consumers.count
@@ -326,7 +329,7 @@ impl Renderer for TerminalRenderer {
         for pair in &c.pairs {
             let word = format!("{:<13}", pair_word(pair.status));
             let word = match pair.status {
-                PairStatus::Identical => p.bgreen(&word),
+                PairStatus::Identical | PairStatus::SameContent => p.bgreen(&word),
                 PairStatus::RegistryMove => p.byellow(&word),
                 PairStatus::Different => p.bred(&word),
             };

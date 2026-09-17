@@ -33,6 +33,11 @@ pub struct Diff {
     pub b: Source,
     /// True when the Merkle roots are equal: same release
     pub same: bool,
+    /// True when the roots are equal, or differ only by the `packUid`s Palette mints for each
+    /// profile's manifest packs (`packs[].mintedUidOnly`): the same content. `same-release`
+    /// accepts such a pair.
+    #[serde(default)]
+    pub same_content: bool,
     /// True when both sides name the same profile uid and version but their roots differ: the
     /// version was edited in place, or, between two clusters, changed on one of them.
     #[serde(default)]
@@ -433,6 +438,11 @@ pub struct PackDiff {
     pub authored: bool,
     /// The params differ.
     pub params_changed: bool,
+    /// True when the pack comes from no registry on either side (a manifest pack) and the only
+    /// difference is its `packUid`: Palette mints that uid for each profile it creates, so two
+    /// profiles with the same manifests carry different ones. The content is the same.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub minted_uid_only: bool,
     /// What the change does to clusters.
     pub impact: Impact,
     /// The values compared.
@@ -963,6 +973,7 @@ pub fn compute(a: &Snapshot, b: &Snapshot, generated_at: &str, verify: Option<Ve
                     upstream: false,
                     authored: false,
                     params_changed: false,
+                    minted_uid_only: false,
                     impact: Impact {
                         level: ImpactLevel::None,
                         text: String::new(),
@@ -984,6 +995,7 @@ pub fn compute(a: &Snapshot, b: &Snapshot, generated_at: &str, verify: Option<Ve
                     upstream: false,
                     authored: false,
                     params_changed: false,
+                    minted_uid_only: false,
                     impact: Impact {
                         level: ImpactLevel::None,
                         text: String::new(),
@@ -1030,6 +1042,14 @@ pub fn compute(a: &Snapshot, b: &Snapshot, generated_at: &str, verify: Option<Ve
                     upstream,
                     authored,
                     params_changed: canonical_json(&x.params) != canonical_json(&y.params),
+                    minted_uid_only: identity
+                        && !upstream
+                        && !authored
+                        && x.registry_uid.is_empty()
+                        && y.registry_uid.is_empty()
+                        && x.pack_uid != y.pack_uid
+                        && (&x.name, &x.layer, &x.kind, &x.tag, &x.version)
+                            == (&y.name, &y.layer, &y.kind, &y.tag, &y.version),
                     impact: imp,
                     values: values_diff(x, y),
                     manifests: manifests_diff(x, y),
@@ -1058,6 +1078,13 @@ pub fn compute(a: &Snapshot, b: &Snapshot, generated_at: &str, verify: Option<Ve
 
     let variables_changed = a.variables_hash != b.variables_hash;
     summary.variables_changed = variables_changed;
+    let order_changed = order_a != order_b;
+    let same_content = a.root == b.root
+        || (!variables_changed
+            && !order_changed
+            && packs
+                .iter()
+                .all(|p| p.status == Status::Unchanged || p.minted_uid_only));
 
     Diff {
         schema: DIFF_SCHEMA.to_string(),
@@ -1071,6 +1098,7 @@ pub fn compute(a: &Snapshot, b: &Snapshot, generated_at: &str, verify: Option<Ve
         a: a.source.clone(),
         b: b.source.clone(),
         same: a.root == b.root,
+        same_content,
         edited_in_place: a.root != b.root
             && !a.source.uid.is_empty()
             && a.source.uid == b.source.uid
@@ -1098,7 +1126,7 @@ pub fn compute(a: &Snapshot, b: &Snapshot, generated_at: &str, verify: Option<Ve
             (Some(x), Some(y)) => Some(cluster_values_diff(&x.variables, &y.variables)),
             _ => None,
         },
-        order_changed: order_a != order_b,
+        order_changed,
         packs,
         verify,
     }

@@ -193,7 +193,7 @@ if stage 4 "undo the edit and bump the add-on version"; then
   check consumers-old-overwritten "$off0_on1" "#28: consumers of the first add-on uid marks both clusters as running a version it no longer names, only without the flag" -- \
     jq -e '.overwritten == 2 and ([.consumers[].version] | unique) == ["1.0.0"]' consumers-old.out
   if [ "$mode" = on ] && [ -n "${OFF_RUN:-}" ]; then
-    check clone-carried-nothing 1 "#27: the flag's clone is not the same release as the legacy bump: Palette mints the manifest pack's uid for each profile (#32)" -- \
+    check clone-carried-nothing 0 "#27, #32: the flag's clone is the same release as the legacy bump of the same configuration, whatever packUid Palette minted" -- \
       "$strata" same-release "$OFF_RUN/addon-new4.json" addon-new4.json
     check clone-same-content 0 "#27: the clone has the values, manifests, and variables of the legacy bump of the same configuration" -- \
       jq -e -n --slurpfile a "$OFF_RUN/addon-new4.json" --slurpfile b addon-new4.json \
