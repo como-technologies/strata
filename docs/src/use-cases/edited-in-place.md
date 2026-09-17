@@ -6,13 +6,13 @@ Palette accepts an edit of a published profile version through the API. The
 version keeps its uid and its number, and no new version appears. The
 immutable-clusterprofiles flag of the Spectro Cloud provider stops the edit only
 in the provider, at plan time. The API accepts the edit with the flag on or off.
-So the version name `aws-pxk@1.1.1` can mean two contents at two times.
+So the version name `aws-stack@1.1.1` can mean two contents at two times.
 
 A cluster that runs the version keeps its own copy. A cluster that you create
 after the edit gets the edited content. An update that a person accepts on the
 first cluster brings the edit there too.
 
-In this example, `dev` has `aws-pxk@1.1.1`, and the cluster `payments` runs it.
+In this example, `dev` has `aws-stack@1.1.1`, and the cluster `payments` runs it.
 
 ## 1. Record the version and the cluster
 
@@ -57,7 +57,7 @@ The cluster `search` starts after the edit, on the same version:
 {{#include ../output/edited-two-clusters.txt}}
 ```
 
-Two clusters on `aws-pxk@1.1.1` run different content.
+Two clusters on `aws-stack@1.1.1` run different content.
 
 ## 5. Check all records
 

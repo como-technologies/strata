@@ -136,9 +136,9 @@ mod tests {
             Ref::Uid("64f0a1".into())
         );
         assert_eq!(
-            Ref::parse_with("aws-pxk@1.2.0", no_files),
+            Ref::parse_with("aws-stack@1.2.0", no_files),
             Ref::NameVersion {
-                name: "aws-pxk".into(),
+                name: "aws-stack".into(),
                 version: "1.2.0".into()
             }
         );
@@ -147,14 +147,14 @@ mod tests {
             Ref::Uid("@1.2.0".into())
         );
         assert_eq!(
-            Ref::parse_with("aws-pxk@", no_files),
-            Ref::Uid("aws-pxk@".into())
+            Ref::parse_with("aws-stack@", no_files),
+            Ref::Uid("aws-stack@".into())
         );
         assert_eq!(
             Ref::parse_with("rel.json", |_| true),
             Ref::Snapshot("rel.json".into())
         );
-        assert_eq!(Ref::parse("aws-pxk@1.2.0").to_string(), "aws-pxk@1.2.0");
+        assert_eq!(Ref::parse("aws-stack@1.2.0").to_string(), "aws-stack@1.2.0");
     }
 
     #[test]
@@ -198,15 +198,15 @@ mod tests {
                 profile: None
             }
         );
-        let selected = Ref::parse_with("cluster:c1/aws-pxk", no_files);
+        let selected = Ref::parse_with("cluster:c1/aws-stack", no_files);
         assert_eq!(
             selected,
             Ref::Cluster {
                 uid: "c1".into(),
-                profile: Some("aws-pxk".into())
+                profile: Some("aws-stack".into())
             }
         );
-        assert_eq!(selected.to_string(), "cluster:c1/aws-pxk");
+        assert_eq!(selected.to_string(), "cluster:c1/aws-stack");
         assert_eq!(
             Ref::parse_with("cluster:c1/", no_files).to_string(),
             "cluster:c1"

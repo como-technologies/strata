@@ -2,7 +2,7 @@ $ scripts/verify-report.sh 'releases/**/*.json' 'runs/*.json' --dry-run
 <!-- strata-verify: releases/1.1.1/dev.json -->
 `strata verify releases/1.1.1/dev.json` reports drift, checked 2026-09-17T09:30:00Z.
 
-### aws-pxk@1.1.1 → aws-pxk@1.1.1
+### aws-stack@1.1.1 → aws-stack@1.1.1
 
 | | A | B |
 |---|---|---|
@@ -13,7 +13,7 @@ $ scripts/verify-report.sh 'releases/**/*.json' 'runs/*.json' --dry-run
 
 **Result:** CHANGED · max impact: `cluster-wide` · packs: 1 changed, 0 added, 0 removed, 4 unchanged · variables: unchanged
 
-**Note:** both sides are aws-pxk@1.1.1 (uid 64e0000000000000000000c3): the version was edited in place
+**Note:** both sides are aws-stack@1.1.1 (uid 64e0000000000000000000c3): the version was edited in place
 
 **Verify:** `Drifted` for uid `64e0000000000000000000c3`, recorded 2026-09-17T09:30:00Z, checked 2026-09-17T09:30:00Z
 
@@ -35,8 +35,8 @@ $ scripts/verify-report.sh 'releases/**/*.json' 'runs/*.json' --dry-run
 </details>
 
 
-**DRIFT**: published version aws-pxk@1.1.1 differs from the copy recorded 2026-09-17T09:30:00Z
+**DRIFT**: published version aws-stack@1.1.1 differs from the copy recorded 2026-09-17T09:30:00Z
 
-verify-report: would open or update the issue for releases/1.1.1/dev.json: strata verify: aws-pxk@1.1.1 drifted (releases/1.1.1/dev.json)
+verify-report: would open or update the issue for releases/1.1.1/dev.json: strata verify: aws-stack@1.1.1 drifted (releases/1.1.1/dev.json)
 verify-report: would close the open issue for runs/payments.json, if any
 verify-report: 2 records: 1 unchanged, 1 drifted, 0 could not be checked

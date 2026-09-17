@@ -1,5 +1,5 @@
-$ cat aws-pxk.yaml
-name: aws-pxk
+$ cat aws-stack.yaml
+name: aws-stack
 version: 1.1.0
 cloudType: aws
 registry: Public Repo

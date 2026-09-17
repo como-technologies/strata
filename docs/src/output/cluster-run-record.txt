@@ -1,10 +1,10 @@
-$ strata snapshot cluster:payments/aws-pxk -o runs/payments.json
+$ strata snapshot cluster:payments/aws-stack -o runs/payments.json
 strata: looking up project dev
 strata: fetching cluster payments
 strata: cluster 'payments' is 64f1000000000000000000e1
 strata: wrote runs/payments.json (root 8a8a64d3f95d)
 $ strata verify runs/payments.json
-aws-pxk@1.1.0 on cluster payments (uid 64f1000000000000000000e1)  ->  aws-pxk@1.1.0 on cluster payments (uid 64f1000000000000000000e1)
+aws-stack@1.1.0 on cluster payments (uid 64f1000000000000000000e1)  ->  aws-stack@1.1.0 on cluster payments (uid 64f1000000000000000000e1)
 root       8a8a64d3f95d -> 8a8a64d3f95d   IDENTICAL
 consumers  0 -> 0 clusters
 
@@ -15,4 +15,4 @@ consumers  0 -> 0 clusters
   [cni  ] cni-cilium-oss             1.20.1             unchanged
   [csi  ] csi-aws-ebs                1.65.0             unchanged
   [addon] cert-manager               1.21.1             unchanged
-OK: cluster payments running aws-pxk@1.1.0 is unchanged since 2026-09-17T09:30:00Z
+OK: cluster payments running aws-stack@1.1.0 is unchanged since 2026-09-17T09:30:00Z

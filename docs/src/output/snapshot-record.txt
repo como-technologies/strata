@@ -2,10 +2,10 @@ $ jq '{root, source: (.source | {ref, uid, projectUid, name, version, template, 
 {
   "root": "088136c929bd2837cf59ab12920367187654c128964cea737c28b98e13f79dc4",
   "source": {
-    "ref": "aws-pxk@1.1.1",
+    "ref": "aws-stack@1.1.1",
     "uid": "64e0000000000000000000c3",
     "projectUid": "64f20000000000000000a0d1",
-    "name": "aws-pxk",
+    "name": "aws-stack",
     "version": "1.1.1",
     "template": "published",
     "fetchedAt": "2026-09-17T09:30:00Z"

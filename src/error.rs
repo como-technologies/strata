@@ -443,7 +443,7 @@ mod tests {
                 source: bad_json(),
             },
             Error::ProfileNotFound {
-                name: "aws-pxk".into(),
+                name: "aws-stack".into(),
                 version: "9.9.9".into(),
             },
             Error::ClusterProfileNotFound {
@@ -547,7 +547,7 @@ mod tests {
             "SPECTROCLOUD_APIKEY"
         );
         assert_eq!(by_kind("not-snapshot")["path"], "profile.json");
-        assert_eq!(by_kind("profile-not-found")["name"], "aws-pxk");
+        assert_eq!(by_kind("profile-not-found")["name"], "aws-stack");
         assert_eq!(by_kind("snapshot-schema")["schema"], "strata-snapshot/1");
         assert_eq!(by_kind("invalid-setting")["variable"], "STRATA_RETRIES");
         assert_eq!(by_kind("invalid-setting")["value"], "lots");

@@ -1,2 +1,2 @@
-$ strata snapshot aws-pxk@1.1.1 -o aws-pxk.json
-strata: no cluster profile named 'aws-pxk' with version '1.1.1' in this scope; `strata list` shows the profiles in it, and `strata list --pack aws-pxk` the profiles with a pack of that name
+$ strata snapshot aws-stack@1.1.1 -o aws-stack.json
+strata: no cluster profile named 'aws-stack' with version '1.1.1' in this scope; `strata list` shows the profiles in it, and `strata list --pack aws-stack` the profiles with a pack of that name

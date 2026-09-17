@@ -4,7 +4,7 @@ Make sure that each record agrees with Palette now. For each record, strata
 reads the uid and the project from the file, fetches that uid again, and
 compares the roots.
 
-The examples use the project `dev`, which holds `aws-pxk@1.1.1`, and the cluster
+The examples use the project `dev`, which holds `aws-stack@1.1.1`, and the cluster
 `payments` that runs it.
 
 ## Check one record

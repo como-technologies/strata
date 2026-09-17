@@ -12,9 +12,9 @@ In this example, `dev` has three clusters:
 
 | Cluster | Runs |
 | --- | --- |
-| `payments` | `aws-pxk@1.1.0`, then the add-on profile `platform-addons@1.0.0` |
-| `search` | `aws-pxk@1.1.1` |
-| `ledger` | `aws-pxk@1.1.0`, with one value edited on the cluster |
+| `payments` | `aws-stack@1.1.0`, then the add-on profile `platform-addons@1.0.0` |
+| `search` | `aws-stack@1.1.1` |
+| `ledger` | `aws-stack@1.1.0`, with one value edited on the cluster |
 
 The release record is `releases/1.1.0/dev.json`.
 
@@ -24,7 +24,7 @@ The release record is `releases/1.1.0/dev.json`.
 {{#include ../output/cluster-identical.txt}}
 ```
 
-`/aws-pxk` selects one profile of the cluster.
+`/aws-stack` selects one profile of the cluster.
 
 ## 2. A cluster that runs two profiles
 
@@ -45,7 +45,7 @@ profile, unless the record covers each profile of the cluster.
 {{#include ../output/cluster-moved.txt}}
 ```
 
-The cluster side reads `aws-pxk@1.1.1 on cluster search`: it moved early.
+The cluster side reads `aws-stack@1.1.1 on cluster search`: it moved early.
 
 ## 4. A cluster with an edit on the cluster
 

@@ -1,3 +1,3 @@
-$ strata same-release aws-pxk@1.1.1 aws-pxk@1.1.2
-SAME CONTENT   aws-pxk@1.1.1 -> aws-pxk@1.1.2   root 088136c929bd -> f93d20107a15, 1 pack pinned under another tag name, the same build
+$ strata same-release aws-stack@1.1.1 aws-stack@1.1.2
+SAME CONTENT   aws-stack@1.1.1 -> aws-stack@1.1.2   root 088136c929bd -> f93d20107a15, 1 pack pinned under another tag name, the same build
 SAME RELEASE: 1 pairs passed

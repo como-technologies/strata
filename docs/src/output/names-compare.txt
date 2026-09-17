@@ -1,5 +1,5 @@
 $ strata compare dev-payments.json prod-payments.json
-aws-pxk@1.1.1 on cluster payments (uid 64f1000000000000000000e1)  ->  aws-pxk@1.1.1 on cluster payments (uid 64f1000000000000000000f1)
+aws-stack@1.1.1 on cluster payments (uid 64f1000000000000000000e1)  ->  aws-stack@1.1.1 on cluster payments (uid 64f1000000000000000000f1)
 root       088136c929bd -> 78a86f401545   CHANGED
 consumers  0 -> 0 clusters
 

@@ -3,7 +3,7 @@
 ## The problem
 
 Each Palette project holds its own copy of a profile version, with its own uid.
-The projects `dev` and `prod` both have `aws-pxk@1.1.1`. The name and the version
+The projects `dev` and `prod` both have `aws-stack@1.1.1`. The name and the version
 are the same, but nothing in Palette makes the content the same. A person who
 builds the prod copy by hand can change one value.
 

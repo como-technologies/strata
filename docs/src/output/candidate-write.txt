@@ -1,4 +1,4 @@
-$ strata candidate aws-pxk@1.1.1 -o aws-pxk.yaml --files-dir aws-pxk
+$ strata candidate aws-stack@1.1.1 -o aws-stack.yaml --files-dir aws-stack
 strata: looking up project dev
 strata: fetching profile 64e0000000000000000000c3
-strata: wrote aws-pxk.yaml (root 088136c929bd)
+strata: wrote aws-stack.yaml (root 088136c929bd)

@@ -4,7 +4,7 @@
 
 The repository holds real pack data from the Public Repo registry. In a
 checkout, with Rust and `just`, this builds three versions of the profile
-`aws-pxk` from that data, with no network:
+`aws-stack` from that data, with no network:
 
 ```bash
 just examples
@@ -20,7 +20,7 @@ replaces no node.
 
 ## With a tenant
 
-The project `dev` holds the versions 1.0.0, 1.1.0, and 1.1.1 of `aws-pxk`. The
+The project `dev` holds the versions 1.0.0, 1.1.0, and 1.1.1 of `aws-stack`. The
 cluster `payments` runs 1.1.0.
 
 ```bash

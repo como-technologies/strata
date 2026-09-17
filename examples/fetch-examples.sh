@@ -206,13 +206,13 @@ mapfile -t NEWER < <(collect newest)
 [ ${#NEWER[@]} -gt 0 ] || die "no packs available under $out/packs; nothing to build"
 
 rm -rf "$out/profiles/raw"/* "$out/profiles"/*.json "$out/clusters/raw"/* "$out/clusters"/*.json "$out/reports"/*
-p1=$(write_profile aws-pxk 1.0.0 64e0000000000000000000a1 "${OLDER[@]}")
-p2=$(write_profile aws-pxk 1.1.0 64e0000000000000000000b2 "${NEWER[@]}")
+p1=$(write_profile aws-stack 1.0.0 64e0000000000000000000a1 "${OLDER[@]}")
+p2=$(write_profile aws-stack 1.1.0 64e0000000000000000000b2 "${NEWER[@]}")
 first_addon=""
 for p in $PACKS; do case " $INFRA " in *" $p "*) ;; *) [ -d "$out/packs/$p" ] && { first_addon=$p; break; } ;; esac; done
 p3=$(EXTRA_MANIFEST_PACK="${first_addon:-kubernetes}" \
      EXTRA_VARIABLES='{"variables":[{"name":"platform_owner","displayName":"Platform owner","defaultValue":"","format":"string","inputType":"text","required":true,"hidden":false,"immutable":false,"isSensitive":false,"options":[]}]}' \
-     write_profile aws-pxk 1.1.1 64e0000000000000000000c3 "${NEWER[@]}")
+     write_profile aws-stack 1.1.1 64e0000000000000000000c3 "${NEWER[@]}")
 CLUSTER_UID=64e0000000000000000000d1
 c1=$(write_cluster workload-a "$CLUSTER_UID" "$p2")   # still on 1.1.0 while 1.1.1 is proposed
 
@@ -226,16 +226,16 @@ report() { # a b suffix extra-args...
   local a=$1 b=$2 suffix=$3; shift 3
   "$tool" compare "$@" "$out/profiles/$a.json" "$out/profiles/$b.json" > "$out/reports/${a}__vs__${b}${suffix}" || true
 }
-report aws-pxk@1.0.0 aws-pxk@1.1.0 .txt
-report aws-pxk@1.0.0 aws-pxk@1.1.0 .json --json
-report aws-pxk@1.1.0 aws-pxk@1.1.1 .txt --full
-report aws-pxk@1.0.0 aws-pxk@1.0.0 .txt
+report aws-stack@1.0.0 aws-stack@1.1.0 .txt
+report aws-stack@1.0.0 aws-stack@1.1.0 .json --json
+report aws-stack@1.1.0 aws-stack@1.1.1 .txt --full
+report aws-stack@1.0.0 aws-stack@1.0.0 .txt
 "$tool" snapshot --from-raw "$c1" "cluster:$CLUSTER_UID" -o "$out/clusters/workload-a.json"
 cluster_report() { # profile-record cluster
   "$tool" compare "$out/profiles/$1.json" "$out/clusters/$2.json" > "$out/reports/${1}__vs__${2}.txt" || true
 }
-cluster_report aws-pxk@1.1.0 workload-a
-cluster_report aws-pxk@1.1.1 workload-a
+cluster_report aws-stack@1.1.0 workload-a
+cluster_report aws-stack@1.1.1 workload-a
 
 # ------------------------------------------------------------------ 5. index
 {

@@ -61,7 +61,7 @@ changes it.
 
    ```bash
    show  verify-drift 1 'strata verify releases/1.1.1/dev.json'   # standard output
-   show2 snapshot-profile 0 'strata snapshot aws-pxk@1.1.1 -o r.json'   # and standard error
+   show2 snapshot-profile 0 'strata snapshot aws-stack@1.1.1 -o r.json'   # and standard error
    ```
 
    Two steps with one name go into one file.

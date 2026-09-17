@@ -801,8 +801,8 @@ mod tests {
 
     fn listing() -> Value {
         json!({"items": [
-            {"metadata": {"name": "aws-pxk", "uid": "u1"}, "spec": {"version": "1.0.0"}},
-            {"metadata": {"name": "aws-pxk", "uid": "u2"}, "spec": {"version": "1.1.0"}},
+            {"metadata": {"name": "aws-stack", "uid": "u1"}, "spec": {"version": "1.0.0"}},
+            {"metadata": {"name": "aws-stack", "uid": "u2"}, "spec": {"version": "1.1.0"}},
         ]})
     }
 
@@ -811,12 +811,12 @@ mod tests {
         let p = Palette::new(
             MemoryApi::new().with("/v1/dashboard/clusterprofiles/metadata", listing()),
         );
-        assert_eq!(p.resolve("aws-pxk", "1.1.0").unwrap(), "u2");
-        let err = p.resolve("aws-pxk", "9.9.9").unwrap_err();
+        assert_eq!(p.resolve("aws-stack", "1.1.0").unwrap(), "u2");
+        let err = p.resolve("aws-stack", "9.9.9").unwrap_err();
         assert!(matches!(err, Error::ProfileNotFound { .. }));
-        assert!(err.to_string().contains("'aws-pxk' with version '9.9.9'"));
+        assert!(err.to_string().contains("'aws-stack' with version '9.9.9'"));
         assert!(
-            err.to_string().contains("`strata list --pack aws-pxk`"),
+            err.to_string().contains("`strata list --pack aws-stack`"),
             "a miss points at the listing, since the name may be a pack's: {err}"
         );
     }
@@ -824,15 +824,15 @@ mod tests {
     #[test]
     fn latest_resolves_to_the_highest_version_by_natural_order() {
         let listing = json!({"items": [
-            {"metadata": {"name": "aws-pxk", "uid": "u1"}, "spec": {"version": "1.9.0"}},
-            {"metadata": {"name": "aws-pxk", "uid": "u2"}, "spec": {"version": "1.10.0"}},
-            {"metadata": {"name": "aws-pxk", "uid": "u0"}, "spec": {"version": "1.2.0"}},
+            {"metadata": {"name": "aws-stack", "uid": "u1"}, "spec": {"version": "1.9.0"}},
+            {"metadata": {"name": "aws-stack", "uid": "u2"}, "spec": {"version": "1.10.0"}},
+            {"metadata": {"name": "aws-stack", "uid": "u0"}, "spec": {"version": "1.2.0"}},
             {"metadata": {"name": "other", "uid": "u3"}, "spec": {"version": "9.0.0"}},
         ]});
         let p =
             Palette::new(MemoryApi::new().with("/v1/dashboard/clusterprofiles/metadata", listing));
-        assert_eq!(p.resolve_latest("aws-pxk").unwrap(), "u2");
-        assert_eq!(p.resolve("aws-pxk", "latest").unwrap(), "u2");
+        assert_eq!(p.resolve_latest("aws-stack").unwrap(), "u2");
+        assert_eq!(p.resolve("aws-stack", "latest").unwrap(), "u2");
         let err = p.resolve_latest("nope").unwrap_err();
         assert!(matches!(err, Error::ProfileNotFound { .. }), "{err}");
         assert!(err.to_string().contains("'nope'"));

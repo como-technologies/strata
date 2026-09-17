@@ -2,4 +2,4 @@ $ strata list profiles
 project dev (uid 64f20000000000000000a0d1)
 
 1 profile
-  aws-pxk@1.2.0  64e0000000000000000000c3  aws
+  aws-stack@1.2.0  64e0000000000000000000c3  aws

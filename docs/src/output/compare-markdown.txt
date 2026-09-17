@@ -1,5 +1,5 @@
-$ strata compare aws-pxk@1.0.0 aws-pxk@1.1.0 --format markdown
-### aws-pxk@1.0.0 → aws-pxk@1.1.0
+$ strata compare aws-stack@1.0.0 aws-stack@1.1.0 --format markdown
+### aws-stack@1.0.0 → aws-stack@1.1.0
 
 | | A | B |
 |---|---|---|

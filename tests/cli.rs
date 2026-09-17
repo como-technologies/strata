@@ -642,7 +642,7 @@ fn snapshot_from_candidate_reports_local_problems_without_credentials() {
     let file = dir.path().join("profile.yaml");
     std::fs::write(
         &file,
-        "name: aws-pxk\nversion: 1.2.0\nregistry: Public Repo\nlayers:\n  - name: kubernetes\n    version: 1.36.2\n    valuesFile: values/k8s.yaml\n",
+        "name: aws-stack\nversion: 1.2.0\nregistry: Public Repo\nlayers:\n  - name: kubernetes\n    version: 1.36.2\n    valuesFile: values/k8s.yaml\n",
     )
     .unwrap();
     let home = tempfile::tempdir().unwrap();

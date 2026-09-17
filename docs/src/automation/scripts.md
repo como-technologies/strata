@@ -13,7 +13,7 @@ error kinds do not. See [Versions and compatibility](../reference/compatibility.
 | `2` | Strata could not answer. Treat it as a failed job, never as "no change". |
 
 ```bash
-strata consumers aws-pxk@1.0.0 && delete_the_version
+strata consumers aws-stack@1.0.0 && delete_the_version
 ```
 
 ## Read one field

@@ -16,10 +16,10 @@ export PALETTE_API_KEY=...        # or put it in ~/.palette.env
 export PALETTE_PROJECT=dev
 
 strata list                                    # the refs in the project
-strata snapshot aws-pxk@1.1.1 -o aws-pxk.json  # record a release
-strata verify aws-pxk.json                     # exit 1 when somebody changed it
-strata compare aws-pxk.json cluster:payments   # does the cluster run it?
-strata compare aws-pxk@1.1.0 aws-pxk@1.1.1     # what changed, and the impact
+strata snapshot aws-stack@1.1.1 -o aws-stack.json  # record a release
+strata verify aws-stack.json                     # exit 1 when somebody changed it
+strata compare aws-stack.json cluster:payments   # does the cluster run it?
+strata compare aws-stack@1.1.0 aws-stack@1.1.1     # what changed, and the impact
 ```
 
 With no tenant, `just examples` builds real profiles offline. See the

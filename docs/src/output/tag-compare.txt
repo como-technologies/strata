@@ -1,5 +1,5 @@
-$ strata compare aws-pxk@1.1.1 aws-pxk@1.1.2
-aws-pxk@1.1.1 (uid 64e0000000000000000000c3)  ->  aws-pxk@1.1.2 (uid 64e0000000000000000000d4)
+$ strata compare aws-stack@1.1.1 aws-stack@1.1.2
+aws-stack@1.1.1 (uid 64e0000000000000000000c3)  ->  aws-stack@1.1.2 (uid 64e0000000000000000000d4)
 root       088136c929bd -> f93d20107a15   SAME CONTENT
 note       the roots differ only by the tag name a pack is pinned under: the same pack build
 consumers  0 -> 0 clusters

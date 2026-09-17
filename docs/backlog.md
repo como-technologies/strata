@@ -227,11 +227,11 @@ Scripts often want the newest published version of a profile without knowing its
 1. `src/version.rs`: a natural version comparator (numeric runs compared as numbers, the rest as text) with tests over Palette's forms.
 2. `src/api.rs`: `Palette::resolve_latest(name)` picking the highest version among the listing entries with that name.
 3. `src/reference.rs`: treat `version == "latest"` as a request to resolve; record the resolved version in `source.version` and keep `latest` in `source.ref`.
-4. `docs/walkthrough.md`: use `aws-pxk@latest` in the nightly example where it fits.
+4. `docs/walkthrough.md`: use `aws-stack@latest` in the nightly example where it fits.
 
 ### Acceptance criteria
 
-- [x] `strata snapshot aws-pxk@latest` records the highest version in the scope
+- [x] `strata snapshot aws-stack@latest` records the highest version in the scope
 - [x] `22.04` sorts above `20.04`, `1.30.6` above `1.29.10`, `LTS__24.x` above `LTS__22.04`
 - [x] A name with no versions is `ProfileNotFound`
 
@@ -300,7 +300,7 @@ labels: feature
 
 ### Acceptance criteria
 
-- [x] `strata consumers aws-pxk@1.0.0` lists each consumer with name, project, and state
+- [x] `strata consumers aws-stack@1.0.0` lists each consumer with name, project, and state
 - [x] Exit 0 when there are no consumers, 1 when there are, so a delete step can branch on it
 - [x] `--format json` writes `strata-consumers/1`
 
@@ -742,7 +742,7 @@ labels: robustness
 
 ### Background
 
-`examples/fetch-examples.sh` does two different things. With the API it fetches pack data from the Public Repo: `packs/<name>/_entity.json` and `packs/<name>/_summaries.json`. Offline (`just examples`) it builds everything else from that data: `packs/<name>/<version>.json`, the synthesized profiles and cluster under `profiles/` and `clusters/` (with their `raw/` inputs), the reports under `reports/`, and `INDEX.md`. All of it is tracked, so the generated files only change when someone reruns the script and commits the result, and nothing checks that they still match the code. They do not: on 2026-09-17, `just examples` into a scratch directory wrote a `reports/aws-pxk@1.0.0__vs__aws-pxk@1.1.0.json` with the `editedInPlace` field that #27 added, which the tracked copy lacks. The other generated files differed only in their `fetchedAt` times.
+`examples/fetch-examples.sh` does two different things. With the API it fetches pack data from the Public Repo: `packs/<name>/_entity.json` and `packs/<name>/_summaries.json`. Offline (`just examples`) it builds everything else from that data: `packs/<name>/<version>.json`, the synthesized profiles and cluster under `profiles/` and `clusters/` (with their `raw/` inputs), the reports under `reports/`, and `INDEX.md`. All of it is tracked, so the generated files only change when someone reruns the script and commits the result, and nothing checks that they still match the code. They do not: on 2026-09-17, `just examples` into a scratch directory wrote a `reports/aws-stack@1.0.0__vs__aws-stack@1.1.0.json` with the `editedInPlace` field that #27 added, which the tracked copy lacks. The other generated files differed only in their `fetchedAt` times.
 
 ### Plan
 

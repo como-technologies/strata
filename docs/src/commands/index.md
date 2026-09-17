@@ -50,10 +50,10 @@ details.
 | Ref | Example |
 | --- | --- |
 | A profile uid | `64e0000000000000000000c3` |
-| A name and a version | `aws-pxk@1.1.1` |
-| The highest version of a name | `aws-pxk@latest` |
+| A name and a version | `aws-stack@1.1.1` |
+| The highest version of a name | `aws-stack@latest` |
 | All profiles that a cluster runs | `cluster:payments` |
-| One profile that a cluster runs | `cluster:payments/aws-pxk` |
+| One profile that a cluster runs | `cluster:payments/aws-stack` |
 | A snapshot file | `releases/1.1.1/dev.json` |
 
 ## Exit status

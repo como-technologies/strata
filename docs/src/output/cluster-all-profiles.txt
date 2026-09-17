@@ -1,5 +1,5 @@
 $ strata compare releases/1.1.0/dev.json cluster:payments
-aws-pxk@1.1.0 (uid 64e0000000000000000000b2)  ->  aws-pxk+platform-addons@1.1.0+1.0.0 on cluster payments (uid 64f1000000000000000000e1)
+aws-stack@1.1.0 (uid 64e0000000000000000000b2)  ->  aws-stack+platform-addons@1.1.0+1.0.0 on cluster payments (uid 64f1000000000000000000e1)
 root       8a8a64d3f95d -> 479b4c499a2c   CHANGED
 consumers  2 -> 0 clusters
 

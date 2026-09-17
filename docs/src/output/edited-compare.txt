@@ -1,7 +1,7 @@
-$ strata compare releases/1.1.1/dev.json aws-pxk@1.1.1
-aws-pxk@1.1.1 (uid 64e0000000000000000000c3)  ->  aws-pxk@1.1.1 (uid 64e0000000000000000000c3)
+$ strata compare releases/1.1.1/dev.json aws-stack@1.1.1
+aws-stack@1.1.1 (uid 64e0000000000000000000c3)  ->  aws-stack@1.1.1 (uid 64e0000000000000000000c3)
 root       088136c929bd -> 78a86f401545   CHANGED
-note       both sides are aws-pxk@1.1.1 (uid 64e0000000000000000000c3): the version was edited in place
+note       both sides are aws-stack@1.1.1 (uid 64e0000000000000000000c3): the version was edited in place
 consumers  1 -> 1 clusters
 
   variables unchanged

@@ -4,7 +4,7 @@ A candidate file describes a profile version before it is in Palette. It is YAML
 or JSON. `strata schema candidate` prints its JSON Schema.
 
 ```yaml
-name: aws-pxk
+name: aws-stack
 version: 1.1.1
 type: cluster              # default cluster
 cloudType: aws

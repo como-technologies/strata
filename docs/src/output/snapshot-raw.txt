@@ -1,13 +1,13 @@
-$ strata snapshot aws-pxk@1.1.1 --raw-dir raw/aws-pxk-1.1.1 -o online.json
+$ strata snapshot aws-stack@1.1.1 --raw-dir raw/aws-stack-1.1.1 -o online.json
 strata: looking up project dev
 strata: fetching profile 64e0000000000000000000c3
 strata: wrote online.json (root 088136c929bd)
-$ ls raw/aws-pxk-1.1.1
+$ ls raw/aws-stack-1.1.1
 manifests.json
 profile.json
 scope.json
 variables.json
-$ strata snapshot --from-raw raw/aws-pxk-1.1.1 -o offline.json
+$ strata snapshot --from-raw raw/aws-stack-1.1.1 -o offline.json
 strata: wrote offline.json (root 088136c929bd)
 $ jq -r .root online.json offline.json
 088136c929bd2837cf59ab12920367187654c128964cea737c28b98e13f79dc4

@@ -7,7 +7,7 @@ Two pack refs answer what changed between two versions of a pack:
 [What changed between two pack versions](../use-cases/pack-versions.md).
 
 The examples use the project `dev`, which holds the versions 1.0.0, 1.1.0,
-1.1.1, and 1.1.2 of `aws-pxk`. Version 1.1.2 is 1.1.1 with one changed value.
+1.1.1, and 1.1.2 of `aws-stack`. Version 1.1.2 is 1.1.1 with one changed value.
 
 ## Compare two versions
 

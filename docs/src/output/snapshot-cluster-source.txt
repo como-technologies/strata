@@ -5,14 +5,14 @@ $ jq .source.cluster runs/payments.json
   "profiles": [
     {
       "uid": "64e0000000000000000000c3",
-      "name": "aws-pxk",
+      "name": "aws-stack",
       "version": "1.1.1",
       "type": "cluster"
     }
   ],
   "variables": [
     {
-      "profile": "aws-pxk",
+      "profile": "aws-stack",
       "profileUid": "64e0000000000000000000c3",
       "name": "platform_owner",
       "value": ""

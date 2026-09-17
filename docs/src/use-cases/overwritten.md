@@ -7,7 +7,7 @@ version bump with the provider updates the profile in place. The uid stays the
 same, and takes the new version number and content. The old version disappears from
 the listing. The clusters that ran it keep copies that name the old version.
 
-In this example, `dev` had `aws-pxk@1.1.1` with the uid `...c3`, and the cluster
+In this example, `dev` had `aws-stack@1.1.1` with the uid `...c3`, and the cluster
 `payments` runs it. The team bumped the version to 1.2.0 with one changed value,
 without the flag.
 

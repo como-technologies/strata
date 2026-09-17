@@ -40,11 +40,11 @@ Only the fetched pack data and the script are tracked. CI runs `just examples`.
 
 | Profile | Content | Shows |
 | --- | --- | --- |
-| `aws-pxk@1.0.0` | OS, Kubernetes, CNI, and CSI at the oldest fetched version; the add-on at the newest | the baseline |
-| `aws-pxk@1.1.0` | the same packs, with the infrastructure layers at the newest fetched version | `IDENTITY` and `UPSTREAM` changes, and diffs between real default values |
-| `aws-pxk@1.1.1` | 1.1.0 with one attached manifest and one profile variable | `AUTHORED` only, with no pack change |
+| `aws-stack@1.0.0` | OS, Kubernetes, CNI, and CSI at the oldest fetched version; the add-on at the newest | the baseline |
+| `aws-stack@1.1.0` | the same packs, with the infrastructure layers at the newest fetched version | `IDENTITY` and `UPSTREAM` changes, and diffs between real default values |
+| `aws-stack@1.1.1` | 1.1.0 with one attached manifest and one profile variable | `AUTHORED` only, with no pack change |
 
-The cluster `workload-a` runs `aws-pxk@1.1.0`, so its snapshot has the root of
+The cluster `workload-a` runs `aws-stack@1.1.0`, so its snapshot has the root of
 the 1.1.0 record.
 
 Between 1.0.0 and 1.1.0, the OS pack moves from 20.04 to 24.04 with `IDENTITY

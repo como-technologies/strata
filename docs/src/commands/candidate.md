@@ -8,7 +8,7 @@ Start a file from a published version with this command. Then change the file in
 a pull request, and compare the candidate with the last release:
 [Review a change before you publish it](../use-cases/review.md).
 
-The examples use the project `dev`, which holds `aws-pxk@1.1.1`.
+The examples use the project `dev`, which holds `aws-stack@1.1.1`.
 
 ## Write a candidate file
 

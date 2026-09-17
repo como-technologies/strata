@@ -23,13 +23,13 @@ behavior of Palette, it links to the live run that shows that behavior.
 
 ## The examples
 
-The pages use one team and one profile, `aws-pxk`, with real pack data from the
+The pages use one team and one profile, `aws-stack`, with real pack data from the
 Public Repo registry. The tenant has two projects:
 
 | Project | Holds |
 | --- | --- |
-| `dev` | the versions 1.0.0, 1.1.0, and 1.1.1 of `aws-pxk`, and the clusters `payments`, `search`, and `ledger` |
-| `prod` | its own copy of `aws-pxk@1.1.1`, and its own cluster `payments` |
+| `dev` | the versions 1.0.0, 1.1.0, and 1.1.1 of `aws-stack`, and the clusters `payments`, `search`, and `ledger` |
+| `prod` | its own copy of `aws-stack@1.1.1`, and its own cluster `payments` |
 
 The examples keep a record at `releases/<version>/<project>.json`, and a cluster
 record at `runs/<cluster>.json`. The names are a choice of the team, not of

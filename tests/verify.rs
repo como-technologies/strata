@@ -2101,7 +2101,7 @@ fn a_candidate_built_from_real_registry_responses_has_the_root_of_the_published_
     for version in ["1.0.0", "1.1.0", "1.1.1"] {
         let raw = examples
             .join("profiles/raw")
-            .join(format!("aws-pxk@{version}"));
+            .join(format!("aws-stack@{version}"));
         let profile = read(&raw.join("profile.json"));
         let manifests = read(&raw.join("manifests.json"));
         let registry = profile["spec"]["published"]["packs"][0]["registryUid"]
@@ -2146,11 +2146,11 @@ fn a_candidate_built_from_real_registry_responses_has_the_root_of_the_published_
             layers.push(layer);
         }
         let candidate = serde_json::json!({
-            "name": "aws-pxk", "version": version, "cloudType": "aws", "registry": "Public Repo",
+            "name": "aws-stack", "version": version, "cloudType": "aws", "registry": "Public Repo",
             "layers": layers,
             "variables": read(&raw.join("variables.json"))["variables"],
         });
-        let file = dir.path().join(format!("aws-pxk@{version}.yaml"));
+        let file = dir.path().join(format!("aws-stack@{version}.yaml"));
         write_yaml(&file, &candidate);
 
         let snap = ops::snapshot_from_candidate(
@@ -2163,18 +2163,18 @@ fn a_candidate_built_from_real_registry_responses_has_the_root_of_the_published_
         let published = read(
             &examples
                 .join("profiles")
-                .join(format!("aws-pxk@{version}.json")),
+                .join(format!("aws-stack@{version}.json")),
         );
         assert_eq!(
             snap.root,
             published["root"].as_str().unwrap(),
-            "aws-pxk@{version}: the candidate is the release that gets published"
+            "aws-stack@{version}: the candidate is the release that gets published"
         );
         assert_eq!(snap.source.template, "candidate");
         assert_eq!(snap.source.uid, "");
         assert_eq!(
             (snap.source.name.as_str(), snap.source.version.as_str()),
-            ("aws-pxk", version)
+            ("aws-stack", version)
         );
         assert_eq!(snap.source.reference, file.display().to_string());
     }

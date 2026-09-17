@@ -3,8 +3,8 @@
 Record a profile version or a cluster in a snapshot file. `compare`,
 `same-release`, and `verify` read the file later.
 
-The examples use the project `dev`, which holds `aws-pxk@1.1.0` and
-`aws-pxk@1.1.1`. The cluster `payments` runs 1.1.1.
+The examples use the project `dev`, which holds `aws-stack@1.1.0` and
+`aws-stack@1.1.1`. The cluster `payments` runs 1.1.1.
 
 ## Record a profile version
 
@@ -46,7 +46,7 @@ lists each field.
 ```
 
 A cluster that runs a recorded version has the root of that record: here
-`088136c929bd`, the root of `aws-pxk@1.1.1`. `cluster:<cluster>` records every
+`088136c929bd`, the root of `aws-stack@1.1.1`. `cluster:<cluster>` records every
 profile that the cluster runs. `cluster:<cluster>/<profile>` records one. The
 record keeps the uid of the cluster, so `verify` finds a renamed cluster.
 

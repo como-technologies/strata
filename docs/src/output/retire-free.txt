@@ -1,2 +1,2 @@
-$ strata consumers aws-pxk@1.0.0
-aws-pxk@1.0.0 (uid 64e0000000000000000000a1): no consumers
+$ strata consumers aws-stack@1.0.0
+aws-stack@1.0.0 (uid 64e0000000000000000000a1): no consumers

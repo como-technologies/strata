@@ -1,7 +1,7 @@
-$ strata compare cluster:payments aws-pxk@1.2.0
-aws-pxk@1.1.1 on cluster payments (uid 64f1000000000000000000e1)  ->  aws-pxk@1.2.0 (uid 64e0000000000000000000c3)
+$ strata compare cluster:payments aws-stack@1.2.0
+aws-stack@1.1.1 on cluster payments (uid 64f1000000000000000000e1)  ->  aws-stack@1.2.0 (uid 64e0000000000000000000c3)
 root       088136c929bd -> 78a86f401545   CHANGED
-note       uid 64e0000000000000000000c3 is aws-pxk@1.1.1 on one side and aws-pxk@1.2.0 on the other: the version was overwritten in place
+note       uid 64e0000000000000000000c3 is aws-stack@1.1.1 on one side and aws-stack@1.2.0 on the other: the version was overwritten in place
 consumers  0 -> 1 clusters
 
   variables unchanged

@@ -1,8 +1,8 @@
-$ PALETTE_PROJECT=dev strata snapshot aws-pxk@1.1.1 -o releases/1.1.1/dev.json
+$ PALETTE_PROJECT=dev strata snapshot aws-stack@1.1.1 -o releases/1.1.1/dev.json
 strata: looking up project dev
 strata: fetching profile 64e0000000000000000000c3
 strata: wrote releases/1.1.1/dev.json (root 088136c929bd)
-$ PALETTE_PROJECT=prod strata snapshot aws-pxk@1.1.1 -o releases/1.1.1/prod.json
+$ PALETTE_PROJECT=prod strata snapshot aws-stack@1.1.1 -o releases/1.1.1/prod.json
 strata: looking up project prod
 strata: fetching profile 64e1000000000000000000c3
 strata: wrote releases/1.1.1/prod.json (root 78a86f401545)

@@ -3,7 +3,7 @@
 ## The problem
 
 Names repeat across projects. Here `dev` and `prod` each have a cluster named
-`payments` and a profile version `aws-pxk@1.1.1`. Strata reads a ref in one
+`payments` and a profile version `aws-stack@1.1.1`. Strata reads a ref in one
 scope, so the scope decides which object a name means. The prod copy of the
 profile has one changed value.
 

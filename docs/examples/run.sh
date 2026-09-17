@@ -33,7 +33,7 @@ case "${1:-}" in
 esac
 
 [ -x "$tool" ] || die "no strata binary at $tool. Run: just build"
-[ -f "$repo/examples/profiles/raw/aws-pxk@1.1.1/profile.json" ] || die "the examples are not built. Run: just examples"
+[ -f "$repo/examples/profiles/raw/aws-stack@1.1.1/profile.json" ] || die "the examples are not built. Run: just examples"
 command -v python3 >/dev/null || die "python3 is not installed"
 command -v jq >/dev/null || die "jq is not installed"
 
@@ -165,7 +165,7 @@ listings() {
 }
 
 # profile PROJECT UID VERSION EXAMPLE [FILTER]: publish a copy of the example profile EXAMPLE, such
-# as aws-pxk@1.1.1, in PROJECT under UID and VERSION. FILTER is a jq program for the profile
+# as aws-stack@1.1.1, in PROJECT under UID and VERSION. FILTER is a jq program for the profile
 # document: a changed value or tag.
 profile() {
   local project=$1 uid=$2 version=$3 from=$repo/examples/profiles/raw/$4 filter=${5:-.}
@@ -355,25 +355,25 @@ done
 
 chapter quickstart PALETTE_PROJECT=dev
 projects dev=$DEV prod=$PROD
-profile $DEV $A100 1.0.0 aws-pxk@1.0.0
-profile $DEV $A110 1.1.0 aws-pxk@1.1.0
-profile $DEV $A111 1.1.1 aws-pxk@1.1.1
+profile $DEV $A100 1.0.0 aws-stack@1.0.0
+profile $DEV $A110 1.1.0 aws-stack@1.1.0
+profile $DEV $A111 1.1.1 aws-stack@1.1.1
 cluster $DEV $PAYMENTS payments $A110
-show quickstart-offline 1 'strata compare examples/profiles/aws-pxk@1.1.0.json examples/profiles/aws-pxk@1.1.1.json'
+show quickstart-offline 1 'strata compare examples/profiles/aws-stack@1.1.0.json examples/profiles/aws-stack@1.1.1.json'
 show quickstart-list 0 'strata list'
-show2 quickstart-snapshot 0 'strata snapshot aws-pxk@1.1.0 -o aws-pxk-1.1.0.json'
-show quickstart-verify 0 'strata verify aws-pxk-1.1.0.json'
-show quickstart-cluster 0 'strata compare aws-pxk-1.1.0.json cluster:payments'
-show quickstart-versions 1 'strata compare aws-pxk@1.1.0 aws-pxk@1.1.1'
+show2 quickstart-snapshot 0 'strata snapshot aws-stack@1.1.0 -o aws-stack-1.1.0.json'
+show quickstart-verify 0 'strata verify aws-stack-1.1.0.json'
+show quickstart-cluster 0 'strata compare aws-stack-1.1.0.json cluster:payments'
+show quickstart-versions 1 'strata compare aws-stack@1.1.0 aws-stack@1.1.1'
 
 # ---- chapters: commands -----------------------------------------------------------------------
 
 chapter list PALETTE_PROJECT=dev
 projects dev=$DEV prod=$PROD
-profile $DEV $A100 1.0.0 aws-pxk@1.0.0
-profile $DEV $A110 1.1.0 aws-pxk@1.1.0
-profile $DEV $A111 1.1.1 aws-pxk@1.1.1
-profile $PROD $A111_PROD 1.1.1 aws-pxk@1.1.1
+profile $DEV $A100 1.0.0 aws-stack@1.0.0
+profile $DEV $A110 1.1.0 aws-stack@1.1.0
+profile $DEV $A111 1.1.1 aws-stack@1.1.1
+profile $PROD $A111_PROD 1.1.1 aws-stack@1.1.1
 cluster $DEV $PAYMENTS payments $A110
 cluster $DEV $SEARCH search $A111
 cluster $PROD $PAYMENTS_PROD payments $A111_PROD
@@ -383,50 +383,50 @@ show list-prod 0 'strata list --project-name prod'
 show list-tenant 0 "strata list clusters --project ''"
 show list-pack 0 'strata list --pack cilium'
 show list-pack-all 0 'for p in dev prod; do strata list --pack cilium --project-name "$p"; done'
-show list-pack-consumers 1 'for v in 1.0.0 1.1.0 1.1.1; do strata consumers aws-pxk@$v; done'
-show list-pack-consumers 1 'PALETTE_PROJECT=prod strata consumers aws-pxk@1.1.1'
+show list-pack-consumers 1 'for v in 1.0.0 1.1.0 1.1.1; do strata consumers aws-stack@$v; done'
+show list-pack-consumers 1 'PALETTE_PROJECT=prod strata consumers aws-stack@1.1.1'
 show list-pack-json 0 "strata list --pack cilium --json | jq -r '.profiles[] | .ref as \$ref | .packs[] | select(.name | contains(\"cilium\")) | \"\(\$ref) \(.name) \(.version)\"'"
 
 chapter snapshot PALETTE_PROJECT=dev
 projects dev=$DEV
-profile $DEV $A110 1.1.0 aws-pxk@1.1.0
-profile $DEV $A111 1.1.1 aws-pxk@1.1.1
+profile $DEV $A110 1.1.0 aws-stack@1.1.0
+profile $DEV $A111 1.1.1 aws-stack@1.1.1
 cluster $DEV $PAYMENTS payments $A111
 quiet 'mkdir -p releases/1.1.1 runs'
-show2 snapshot-profile 0 'strata snapshot aws-pxk@1.1.1 -o releases/1.1.1/dev.json'
+show2 snapshot-profile 0 'strata snapshot aws-stack@1.1.1 -o releases/1.1.1/dev.json'
 show snapshot-record 0 "jq '{root, source: (.source | {ref, uid, projectUid, name, version, template, fetchedAt}), packs: [.packs[] | {key, version, node: .hash.node}]}' releases/1.1.1/dev.json"
-show2 snapshot-latest 0 'strata snapshot aws-pxk@latest -o latest.json'
+show2 snapshot-latest 0 'strata snapshot aws-stack@latest -o latest.json'
 show snapshot-latest-version 0 "jq -r '.source | \"\(.name)@\(.version)\"' latest.json"
 show2 snapshot-cluster 0 'strata snapshot cluster:payments -o runs/payments.json'
 show snapshot-cluster-source 0 'jq .source.cluster runs/payments.json'
-show2 snapshot-raw 0 'strata snapshot aws-pxk@1.1.1 --raw-dir raw/aws-pxk-1.1.1 -o online.json'
-show snapshot-raw 0 'ls raw/aws-pxk-1.1.1'
-show2 snapshot-raw 0 'strata snapshot --from-raw raw/aws-pxk-1.1.1 -o offline.json'
+show2 snapshot-raw 0 'strata snapshot aws-stack@1.1.1 --raw-dir raw/aws-stack-1.1.1 -o online.json'
+show snapshot-raw 0 'ls raw/aws-stack-1.1.1'
+show2 snapshot-raw 0 'strata snapshot --from-raw raw/aws-stack-1.1.1 -o offline.json'
 show snapshot-raw 0 'jq -r .root online.json offline.json'
 
 chapter candidate PALETTE_PROJECT=dev
 projects dev=$DEV
 registries $DEV
-profile $DEV $A111 1.1.1 aws-pxk@1.1.1
-show2 candidate-write 0 'strata candidate aws-pxk@1.1.1 -o aws-pxk.yaml --files-dir aws-pxk'
-show candidate-yaml 0 'cat aws-pxk.yaml'
-show candidate-files 0 'find aws-pxk -type f | sort'
-show2 candidate-snapshot 0 'strata snapshot --from-candidate aws-pxk.yaml -o candidate.json'
-show2 candidate-published 0 'strata snapshot aws-pxk@1.1.1 -o published.json'
+profile $DEV $A111 1.1.1 aws-stack@1.1.1
+show2 candidate-write 0 'strata candidate aws-stack@1.1.1 -o aws-stack.yaml --files-dir aws-stack'
+show candidate-yaml 0 'cat aws-stack.yaml'
+show candidate-files 0 'find aws-stack -type f | sort'
+show2 candidate-snapshot 0 'strata snapshot --from-candidate aws-stack.yaml -o candidate.json'
+show2 candidate-published 0 'strata snapshot aws-stack@1.1.1 -o published.json'
 show candidate-same 0 'strata same-release candidate.json published.json'
 
 chapter compare PALETTE_PROJECT=dev
 projects dev=$DEV
-profile $DEV $A100 1.0.0 aws-pxk@1.0.0
-profile $DEV $A110 1.1.0 aws-pxk@1.1.0
-profile $DEV $A111 1.1.1 aws-pxk@1.1.1
-profile $DEV $A112 1.1.2 aws-pxk@1.1.1 "$RETAIN"
-show compare-identical 0 'strata compare aws-pxk@1.1.1 aws-pxk@1.1.1'
-show compare-repave 1 'strata compare aws-pxk@1.0.0 aws-pxk@1.1.0'
-show compare-values 1 'strata compare aws-pxk@1.1.1 aws-pxk@1.1.2'
-show compare-full 1 'strata compare aws-pxk@1.1.1 aws-pxk@1.1.2 --full'
-show compare-markdown 1 'strata compare aws-pxk@1.0.0 aws-pxk@1.1.0 --format markdown'
-show compare-json 1 'strata compare aws-pxk@1.0.0 aws-pxk@1.1.0 --json | jq .summary'
+profile $DEV $A100 1.0.0 aws-stack@1.0.0
+profile $DEV $A110 1.1.0 aws-stack@1.1.0
+profile $DEV $A111 1.1.1 aws-stack@1.1.1
+profile $DEV $A112 1.1.2 aws-stack@1.1.1 "$RETAIN"
+show compare-identical 0 'strata compare aws-stack@1.1.1 aws-stack@1.1.1'
+show compare-repave 1 'strata compare aws-stack@1.0.0 aws-stack@1.1.0'
+show compare-values 1 'strata compare aws-stack@1.1.1 aws-stack@1.1.2'
+show compare-full 1 'strata compare aws-stack@1.1.1 aws-stack@1.1.2 --full'
+show compare-markdown 1 'strata compare aws-stack@1.0.0 aws-stack@1.1.0 --format markdown'
+show compare-json 1 'strata compare aws-stack@1.0.0 aws-stack@1.1.0 --json | jq .summary'
 
 chapter schema
 show schema-diff 0 "strata schema diff | jq -r '.required | join(\", \")'"
@@ -436,10 +436,10 @@ show schema-diff 0 "strata schema diff | jq -r '.required | join(\", \")'"
 chapter review PALETTE_PROJECT=dev
 projects dev=$DEV
 registries $DEV
-profile $DEV $A100 1.0.0 aws-pxk@1.0.0
-quiet 'mkdir -p releases/1.0.0 releases/1.1.0 && strata snapshot aws-pxk@1.0.0 -o releases/1.0.0/dev.json'
-cat > "$dir/aws-pxk.yaml" <<'YAML'
-name: aws-pxk
+profile $DEV $A100 1.0.0 aws-stack@1.0.0
+quiet 'mkdir -p releases/1.0.0 releases/1.1.0 && strata snapshot aws-stack@1.0.0 -o releases/1.0.0/dev.json'
+cat > "$dir/aws-stack.yaml" <<'YAML'
+name: aws-stack
 version: 1.1.0
 cloudType: aws
 registry: Public Repo
@@ -455,55 +455,55 @@ layers:
   - name: cert-manager
     version: 1.21.1
 YAML
-show review-candidate 0 'cat aws-pxk.yaml'
-show2 review-snapshot 0 'strata snapshot --from-candidate aws-pxk.yaml -o candidate.json'
+show review-candidate 0 'cat aws-stack.yaml'
+show2 review-snapshot 0 'strata snapshot --from-candidate aws-stack.yaml -o candidate.json'
 show review-markdown 1 'strata compare releases/1.0.0/dev.json candidate.json --format markdown'
 show review-repave 1 "strata compare releases/1.0.0/dev.json candidate.json --json | jq -r '.packs[] | select(.impact.level == \"repave\") | \"\(.name): \(.impact.text)\"'"
 show2 review-pr-comment 0 'scripts/pr-comment.sh releases/1.0.0/dev.json candidate.json --dry-run > comment.md'
 show review-pr-comment 0 'head -3 comment.md'
-profile $DEV $A110 1.1.0 aws-pxk@1.1.0
-show2 review-published 0 'strata snapshot aws-pxk@1.1.0 -o releases/1.1.0/dev.json'
+profile $DEV $A110 1.1.0 aws-stack@1.1.0
+show2 review-published 0 'strata snapshot aws-stack@1.1.0 -o releases/1.1.0/dev.json'
 show review-same 0 'strata same-release candidate.json releases/1.1.0/dev.json'
 
 chapter promote
 projects dev=$DEV prod=$PROD
-profile $DEV $A111 1.1.1 aws-pxk@1.1.1
-profile $PROD $A111_PROD 1.1.1 aws-pxk@1.1.1 "$RETAIN"
+profile $DEV $A111 1.1.1 aws-stack@1.1.1
+profile $PROD $A111_PROD 1.1.1 aws-stack@1.1.1 "$RETAIN"
 quiet 'mkdir -p releases/1.1.1'
-show2 promote-record 0 'PALETTE_PROJECT=dev strata snapshot aws-pxk@1.1.1 -o releases/1.1.1/dev.json'
-show2 promote-record 0 'PALETTE_PROJECT=prod strata snapshot aws-pxk@1.1.1 -o releases/1.1.1/prod.json'
+show2 promote-record 0 'PALETTE_PROJECT=dev strata snapshot aws-stack@1.1.1 -o releases/1.1.1/dev.json'
+show2 promote-record 0 'PALETTE_PROJECT=prod strata snapshot aws-stack@1.1.1 -o releases/1.1.1/prod.json'
 show promote-different 1 'strata same-release releases/1.1.1/dev.json releases/1.1.1/prod.json'
 show promote-compare 1 'strata compare releases/1.1.1/dev.json releases/1.1.1/prod.json'
-show promote-consumers 0 'PALETTE_PROJECT=prod strata consumers aws-pxk@1.1.1'
+show promote-consumers 0 'PALETTE_PROJECT=prod strata consumers aws-stack@1.1.1'
 find "$tenant/$PROD/v1/clusterprofiles" -mindepth 1 -delete
-profile $PROD $A111_PROD2 1.1.1 aws-pxk@1.1.1
-show2 promote-again 0 'PALETTE_PROJECT=prod strata snapshot aws-pxk@1.1.1 -o releases/1.1.1/prod.json'
+profile $PROD $A111_PROD2 1.1.1 aws-stack@1.1.1
+show2 promote-again 0 'PALETTE_PROJECT=prod strata snapshot aws-stack@1.1.1 -o releases/1.1.1/prod.json'
 show promote-same 0 'strata same-release releases/1.1.1/dev.json releases/1.1.1/prod.json'
 
 chapter registry-move
 projects dev=$DEV prod=$PROD
-profile $DEV $A111 1.1.1 aws-pxk@1.1.1
-profile $PROD $A111_PROD 1.1.1 aws-pxk@1.1.1 "$OCI_CSI"
+profile $DEV $A111 1.1.1 aws-stack@1.1.1
+profile $PROD $A111_PROD 1.1.1 aws-stack@1.1.1 "$OCI_CSI"
 quiet 'mkdir -p releases/1.1.1'
-quiet 'PALETTE_PROJECT=dev strata snapshot aws-pxk@1.1.1 -o releases/1.1.1/dev.json'
-quiet 'PALETTE_PROJECT=prod strata snapshot aws-pxk@1.1.1 -o releases/1.1.1/prod.json'
+quiet 'PALETTE_PROJECT=dev strata snapshot aws-stack@1.1.1 -o releases/1.1.1/dev.json'
+quiet 'PALETTE_PROJECT=prod strata snapshot aws-stack@1.1.1 -o releases/1.1.1/prod.json'
 show move-exact 1 'strata same-release releases/1.1.1/dev.json releases/1.1.1/prod.json'
 show move-compare 1 'strata compare releases/1.1.1/dev.json releases/1.1.1/prod.json'
 show move-fields 1 "strata compare releases/1.1.1/dev.json releases/1.1.1/prod.json --json | jq '.packs[] | select(.identity) | {name, a: .a | {packUid, registryUid, upstream}, b: .b | {packUid, registryUid, upstream}}'"
 show move-allow 0 'strata same-release --allow registry-move releases/1.1.1/dev.json releases/1.1.1/prod.json'
 find "$tenant/$PROD/v1/clusterprofiles" -mindepth 1 -delete
-profile $PROD $A111_PROD 1.1.1 aws-pxk@1.1.1 "$OCI_CSI | $RETAIN"
-quiet 'PALETTE_PROJECT=prod strata snapshot aws-pxk@1.1.1 -o releases/1.1.1/prod.json'
+profile $PROD $A111_PROD 1.1.1 aws-stack@1.1.1 "$OCI_CSI | $RETAIN"
+quiet 'PALETTE_PROJECT=prod strata snapshot aws-stack@1.1.1 -o releases/1.1.1/prod.json'
 show move-allow-edited 1 'strata same-release --allow registry-move releases/1.1.1/dev.json releases/1.1.1/prod.json'
 
 chapter tag-name PALETTE_PROJECT=dev
 projects dev=$DEV
-profile $DEV $A111 1.1.1 aws-pxk@1.1.1
-profile $DEV $A112 1.1.2 aws-pxk@1.1.1 "$TAG_2404"
-show tag-compare 1 'strata compare aws-pxk@1.1.1 aws-pxk@1.1.2'
-show tag-same 0 'strata same-release aws-pxk@1.1.1 aws-pxk@1.1.2'
-show tag-json 1 "strata compare aws-pxk@1.1.1 aws-pxk@1.1.2 --json | jq '{same, sameContent, maxImpact: .summary.maxImpact, renamed: [.packs[] | select(.tagRenamed) | .name]}'"
-quiet 'mkdir -p releases/1.1.2 && strata snapshot aws-pxk@1.1.2 -o releases/1.1.2/dev.json'
+profile $DEV $A111 1.1.1 aws-stack@1.1.1
+profile $DEV $A112 1.1.2 aws-stack@1.1.1 "$TAG_2404"
+show tag-compare 1 'strata compare aws-stack@1.1.1 aws-stack@1.1.2'
+show tag-same 0 'strata same-release aws-stack@1.1.1 aws-stack@1.1.2'
+show tag-json 1 "strata compare aws-stack@1.1.1 aws-stack@1.1.2 --json | jq '{same, sameContent, maxImpact: .summary.maxImpact, renamed: [.packs[] | select(.tagRenamed) | .name]}'"
+quiet 'mkdir -p releases/1.1.2 && strata snapshot aws-stack@1.1.2 -o releases/1.1.2/dev.json'
 edit $DEV $A112 "$TAG_LTS2404"
 show tag-verify 1 'strata verify releases/1.1.2/dev.json'
 
@@ -523,15 +523,15 @@ show manifest-different 1 'strata same-release addons/1.0.0/dev.json addons/1.0.
 
 chapter edited-in-place PALETTE_PROJECT=dev
 projects dev=$DEV
-profile $DEV $A111 1.1.1 aws-pxk@1.1.1
+profile $DEV $A111 1.1.1 aws-stack@1.1.1
 cluster $DEV $PAYMENTS payments $A111
 quiet 'mkdir -p releases/1.1.1 runs'
-show2 edited-record 0 'strata snapshot aws-pxk@1.1.1 -o releases/1.1.1/dev.json'
+show2 edited-record 0 'strata snapshot aws-stack@1.1.1 -o releases/1.1.1/dev.json'
 show2 edited-record 0 'strata snapshot cluster:payments -o runs/payments.json'
 show edited-verify-ok 0 'strata verify releases/1.1.1/dev.json'
 edit $DEV $A111 "$RETAIN"
 show edited-verify 1 'strata verify releases/1.1.1/dev.json'
-show edited-compare 1 'strata compare releases/1.1.1/dev.json aws-pxk@1.1.1'
+show edited-compare 1 'strata compare releases/1.1.1/dev.json aws-stack@1.1.1'
 show edited-cluster-kept 0 'strata verify runs/payments.json'
 cluster $DEV $SEARCH search $A111
 show edited-two-clusters 1 'strata compare cluster:payments cluster:search'
@@ -543,45 +543,45 @@ show edited-cluster-updated 1 'strata verify runs/payments.json'
 
 chapter overwritten PALETTE_PROJECT=dev
 projects dev=$DEV
-profile $DEV $A111 1.1.1 aws-pxk@1.1.1
+profile $DEV $A111 1.1.1 aws-stack@1.1.1
 cluster $DEV $PAYMENTS payments $A111
 quiet 'mkdir -p releases/1.1.1 runs'
-quiet 'strata snapshot aws-pxk@1.1.1 -o releases/1.1.1/dev.json'
+quiet 'strata snapshot aws-stack@1.1.1 -o releases/1.1.1/dev.json'
 quiet 'strata snapshot cluster:payments -o runs/payments.json'
 edit $DEV $A111 ".spec.version = \"1.2.0\" | $RETAIN"
 show overwritten-list 0 'strata list profiles'
 show overwritten-verify 1 'strata verify releases/1.1.1/dev.json'
 show overwritten-cluster 1 'strata verify runs/payments.json'
-show overwritten-consumers 1 'strata consumers aws-pxk@1.2.0'
-show overwritten-compare 1 'strata compare cluster:payments aws-pxk@1.2.0'
-show2 overwritten-candidate 0 'strata candidate releases/1.1.1/dev.json -o aws-pxk-1.1.1.yaml --files-dir aws-pxk-1.1.1'
+show overwritten-consumers 1 'strata consumers aws-stack@1.2.0'
+show overwritten-compare 1 'strata compare cluster:payments aws-stack@1.2.0'
+show2 overwritten-candidate 0 'strata candidate releases/1.1.1/dev.json -o aws-stack-1.1.1.yaml --files-dir aws-stack-1.1.1'
 edit $DEV $A111 '.spec.version = "1.1.1"'
 rewrite "$(doc $DEV "v1/clusterprofiles/$A111")" "$(pack_values csi-aws-ebs) |= sub(\"reclaimPolicy: Retain\"; \"reclaimPolicy: Delete\")"
-profile $DEV $A120 1.2.0 aws-pxk@1.1.1 "$RETAIN"
+profile $DEV $A120 1.2.0 aws-stack@1.1.1 "$RETAIN"
 show overwritten-flag-list 0 'strata list profiles'
 show overwritten-flag-verify 0 'strata verify releases/1.1.1/dev.json runs/payments.json'
 
 chapter cluster-release PALETTE_PROJECT=dev
 projects dev=$DEV
-profile $DEV $A110 1.1.0 aws-pxk@1.1.0
-profile $DEV $A111 1.1.1 aws-pxk@1.1.1
+profile $DEV $A110 1.1.0 aws-stack@1.1.0
+profile $DEV $A111 1.1.1 aws-stack@1.1.1
 addons $DEV $ADDONS_DEV 64e2000000000000000000d1 restricted
 cluster $DEV $PAYMENTS payments $A110 $ADDONS_DEV
 cluster $DEV $SEARCH search $A111
 cluster $DEV $LEDGER ledger $A110
 on_cluster $DEV $LEDGER "(.spec.clusterProfileTemplates[].packs[] | select(.name == \"csi-aws-ebs\") | .values) |= sub(\"reclaimPolicy: Delete\"; \"reclaimPolicy: Retain\")"
 quiet 'mkdir -p releases/1.1.0 runs'
-quiet 'strata snapshot aws-pxk@1.1.0 -o releases/1.1.0/dev.json'
-show cluster-identical 0 'strata compare releases/1.1.0/dev.json cluster:payments/aws-pxk'
+quiet 'strata snapshot aws-stack@1.1.0 -o releases/1.1.0/dev.json'
+show cluster-identical 0 'strata compare releases/1.1.0/dev.json cluster:payments/aws-stack'
 show cluster-all-profiles 1 'strata compare releases/1.1.0/dev.json cluster:payments'
 show cluster-moved 1 'strata compare releases/1.1.0/dev.json cluster:search'
 show cluster-edited 1 'strata compare releases/1.1.0/dev.json cluster:ledger'
-show2 cluster-run-record 0 'strata snapshot cluster:payments/aws-pxk -o runs/payments.json'
+show2 cluster-run-record 0 'strata snapshot cluster:payments/aws-stack -o runs/payments.json'
 show cluster-run-record 0 'strata verify runs/payments.json'
 
 chapter cluster-values PALETTE_PROJECT=dev
 projects dev=$DEV
-profile $DEV $A111 1.1.1 aws-pxk@1.1.1
+profile $DEV $A111 1.1.1 aws-stack@1.1.1
 cluster $DEV $PAYMENTS payments $A111 -- platform_owner=team-payments
 cluster $DEV $SEARCH search $A111 -- platform_owner=team-search
 show values-compare 0 'strata compare cluster:payments cluster:search'
@@ -592,13 +592,13 @@ show values-verify 0 'strata verify runs/payments.json'
 
 chapter same-names
 projects dev=$DEV prod=$PROD
-profile $DEV $A111 1.1.1 aws-pxk@1.1.1
-profile $PROD $A111_PROD 1.1.1 aws-pxk@1.1.1 "$RETAIN"
+profile $DEV $A111 1.1.1 aws-stack@1.1.1
+profile $PROD $A111_PROD 1.1.1 aws-stack@1.1.1 "$RETAIN"
 cluster $DEV $PAYMENTS payments $A111
 cluster $PROD $PAYMENTS_PROD payments $A111_PROD
 show names-tenant 0 "strata list clusters --project ''"
 show2 names-ambiguous 2 'strata snapshot cluster:payments -o payments.json'
-show2 names-profile 2 'strata snapshot aws-pxk@1.1.1 -o aws-pxk.json'
+show2 names-profile 2 'strata snapshot aws-stack@1.1.1 -o aws-stack.json'
 show2 names-by-project 0 'PALETTE_PROJECT=dev strata snapshot cluster:payments -o dev-payments.json'
 show2 names-by-project 0 'PALETTE_PROJECT=prod strata snapshot cluster:payments -o prod-payments.json'
 show names-compare 1 'strata compare dev-payments.json prod-payments.json'
@@ -615,27 +615,27 @@ show pack-verify 0 'strata verify kubernetes.json'
 
 chapter retire PALETTE_PROJECT=dev
 projects dev=$DEV
-profile $DEV $A100 1.0.0 aws-pxk@1.0.0
-profile $DEV $A110 1.1.0 aws-pxk@1.1.0
+profile $DEV $A100 1.0.0 aws-stack@1.0.0
+profile $DEV $A110 1.1.0 aws-stack@1.1.0
 cluster $DEV $PAYMENTS payments $A110
 cluster $DEV $SEARCH search $A110
-show retire-in-use 1 'strata consumers aws-pxk@1.1.0'
-show retire-free 0 'strata consumers aws-pxk@1.0.0'
-show retire-gate 0 'strata consumers aws-pxk@1.0.0 && echo "no cluster uses aws-pxk@1.0.0"'
-show retire-json 1 "strata consumers aws-pxk@1.1.0 --json | jq -r '.consumers[] | \"\(.name) \(.state) \(.version)\"'"
+show retire-in-use 1 'strata consumers aws-stack@1.1.0'
+show retire-free 0 'strata consumers aws-stack@1.0.0'
+show retire-gate 0 'strata consumers aws-stack@1.0.0 && echo "no cluster uses aws-stack@1.0.0"'
+show retire-json 1 "strata consumers aws-stack@1.1.0 --json | jq -r '.consumers[] | \"\(.name) \(.state) \(.version)\"'"
 
 # ---- chapters: automation ---------------------------------------------------------------------
 
 chapter automation PALETTE_PROJECT=dev
 projects dev=$DEV
-profile $DEV $A100 1.0.0 aws-pxk@1.0.0
-profile $DEV $A110 1.1.0 aws-pxk@1.1.0
-profile $DEV $A111 1.1.1 aws-pxk@1.1.1
-show auto-max-impact 1 'strata compare aws-pxk@1.0.0 aws-pxk@1.1.0 --json | jq -r .summary.maxImpact'
-show auto-gate 1 'strata compare aws-pxk@1.1.0 aws-pxk@1.1.1 --json > report.json'
+profile $DEV $A100 1.0.0 aws-stack@1.0.0
+profile $DEV $A110 1.1.0 aws-stack@1.1.0
+profile $DEV $A111 1.1.1 aws-stack@1.1.1
+show auto-max-impact 1 'strata compare aws-stack@1.0.0 aws-stack@1.1.0 --json | jq -r .summary.maxImpact'
+show auto-gate 1 'strata compare aws-stack@1.1.0 aws-stack@1.1.1 --json > report.json'
 show auto-gate 0 "jq -e '.summary.maxImpact != \"repave\"' report.json"
-show2 auto-error 2 'strata compare aws-pxk@1.1.1 aws-pxk@9.9.9 --json --quiet'
-show2 auto-error-text 2 'strata compare aws-pxk@1.1.1 aws-pxk@9.9.9 --quiet'
+show2 auto-error 2 'strata compare aws-stack@1.1.1 aws-stack@9.9.9 --json --quiet'
+show2 auto-error-text 2 'strata compare aws-stack@1.1.1 aws-stack@9.9.9 --quiet'
 
 # ---- the result -------------------------------------------------------------------------------
 

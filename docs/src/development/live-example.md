@@ -29,7 +29,7 @@ resource and the OS and CSI packs in `terraform/main.tf`.
 | cluster `fred` (cluster A) | One control plane node and two workers, `t3.xlarge`, one availability zone. |
 | profile `strata-live-registries` 1.0.0 | An add-on profile with one chart from a Helm registry (default `nginx` 25.1.5 from `Bitnami`), and one pack from the OCI pack registry that `terraform.tfvars` names. No cluster runs it. |
 
-The pack versions are those of `examples/profiles/aws-pxk@1.1.0.json`.
+The pack versions are those of `examples/profiles/aws-stack@1.1.0.json`.
 
 `in-place.sh` adds cluster `barney` (cluster B), with the same two profiles, for
 the length of its run. The two cluster names share no part, so no match by

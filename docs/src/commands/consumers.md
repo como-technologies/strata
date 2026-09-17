@@ -3,8 +3,8 @@
 List the clusters that use a profile version. Strata always reads the list from
 Palette.
 
-The first examples use the project `dev`, which holds `aws-pxk@1.0.0` and
-`aws-pxk@1.1.0`. The clusters `payments` and `search` run 1.1.0.
+The first examples use the project `dev`, which holds `aws-stack@1.0.0` and
+`aws-stack@1.1.0`. The clusters `payments` and `search` run 1.1.0.
 
 ## A version in use
 

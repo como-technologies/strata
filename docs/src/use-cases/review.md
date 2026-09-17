@@ -9,7 +9,7 @@ publishes it.
 After the publication, the team must know that Palette has the version that the
 reviewer approved.
 
-The project `dev` has `aws-pxk@1.0.0`, recorded at `releases/1.0.0/dev.json`.
+The project `dev` has `aws-stack@1.0.0`, recorded at `releases/1.0.0/dev.json`.
 
 ## 1. Write the candidate file
 

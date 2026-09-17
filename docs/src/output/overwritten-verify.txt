@@ -1,5 +1,5 @@
 $ strata verify releases/1.1.1/dev.json
-aws-pxk@1.1.1 (uid 64e0000000000000000000c3)  ->  aws-pxk@1.2.0 (uid 64e0000000000000000000c3)
+aws-stack@1.1.1 (uid 64e0000000000000000000c3)  ->  aws-stack@1.2.0 (uid 64e0000000000000000000c3)
 root       088136c929bd -> 78a86f401545   CHANGED
 consumers  1 -> 1 clusters
 
@@ -13,4 +13,4 @@ consumers  1 -> 1 clusters
         ~ charts.aws-ebs-csi-driver.storageClasses[name=spectro-storage-class].reclaimPolicy: "Delete" -> "Retain"
       impact: cluster-wide infra addon update
   [addon] cert-manager               1.21.1             unchanged
-DRIFT: published version aws-pxk@1.1.1 now names aws-pxk@1.2.0: the version recorded 2026-09-17T09:30:00Z was overwritten in place
+DRIFT: published version aws-stack@1.1.1 now names aws-stack@1.2.0: the version recorded 2026-09-17T09:30:00Z was overwritten in place

@@ -1,5 +1,5 @@
-$ strata compare aws-pxk-1.1.0.json cluster:payments
-aws-pxk@1.1.0 (uid 64e0000000000000000000b2)  ->  aws-pxk@1.1.0 on cluster payments (uid 64f1000000000000000000e1)
+$ strata compare aws-stack-1.1.0.json cluster:payments
+aws-stack@1.1.0 (uid 64e0000000000000000000b2)  ->  aws-stack@1.1.0 on cluster payments (uid 64f1000000000000000000e1)
 root       8a8a64d3f95d -> 8a8a64d3f95d   IDENTICAL
 consumers  1 -> 0 clusters
 

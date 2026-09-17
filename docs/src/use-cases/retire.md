@@ -5,8 +5,8 @@
 A team wants to delete old profile versions. A version that a cluster uses must
 stay until the cluster moves to a newer version.
 
-In this example, `dev` has `aws-pxk@1.0.0`, which no cluster uses, and
-`aws-pxk@1.1.0`, which `payments` and `search` run.
+In this example, `dev` has `aws-stack@1.0.0`, which no cluster uses, and
+`aws-stack@1.1.0`, which `payments` and `search` run.
 
 ## 1. A version in use
 

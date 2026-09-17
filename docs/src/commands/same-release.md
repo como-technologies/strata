@@ -4,7 +4,7 @@ Make sure that two or more records are one release. Strata compares each record
 with the next one, in the order that you give.
 
 The examples use the projects `dev` and `prod`, which each hold a copy of
-`aws-pxk@1.1.1`.
+`aws-stack@1.1.1`.
 
 ## Check a promotion
 

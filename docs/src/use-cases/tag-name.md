@@ -8,7 +8,7 @@ with one pack uid. Palette stores the tag that the author of the profile picked:
 a profile from the Spectro Cloud provider pins `24.04`. The tag is part of
 `IDENTITY`, so two such roots differ, although the nodes run the same build.
 
-In this example, `aws-pxk@1.1.2` is `aws-pxk@1.1.1` with the OS pack pinned as
+In this example, `aws-stack@1.1.2` is `aws-stack@1.1.1` with the OS pack pinned as
 `24.04` in place of `LTS__24.x`.
 
 ## 1. Compare the versions

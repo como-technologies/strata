@@ -48,7 +48,7 @@ A record of one profile version or cluster.
     `packRef.digest`, `packSummary.digest`, or `none`.
 
 A cluster record that covers two or more profiles joins their names and versions
-with `+`, for example `aws-pxk+platform-addons@1.1.0+1.0.0`, and its `source.uid`
+with `+`, for example `aws-stack+platform-addons@1.1.0+1.0.0`, and its `source.uid`
 is empty. A record of one profile keeps the name, version, and uid of that
 profile.
 

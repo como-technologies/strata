@@ -54,7 +54,7 @@ variable "registry_name" {
   default = "Public Repo"
 }
 
-# The pack versions of examples/profiles/aws-pxk@1.1.0.json, so the live run and the offline
+# The pack versions of examples/profiles/aws-stack@1.1.0.json, so the live run and the offline
 # examples describe the same stack.
 variable "os_version" {
   type    = string

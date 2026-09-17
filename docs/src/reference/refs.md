@@ -5,13 +5,13 @@ A ref names the thing that a command reads.
 | Form | Reads | Example |
 | --- | --- | --- |
 | `<uid>` | the profile version with this uid | `64e0000000000000000000c3` |
-| `<name>@<version>` | the profile version with this name and version in the scope | `aws-pxk@1.1.1` |
-| `<name>@latest` | the highest version of the name in the scope | `aws-pxk@latest` |
+| `<name>@<version>` | the profile version with this name and version in the scope | `aws-stack@1.1.1` |
+| `<name>@latest` | the highest version of the name in the scope | `aws-stack@latest` |
 | `pack:<name>@<version>` | one pack version in a registry, with the values that the registry ships | `pack:csi-aws-ebs@1.65.0` |
 | `pack:<registry>/<name>@<version>` | the same, from the registry of that name or uid | `pack:Public Repo/csi-aws-ebs@1.65.0` |
 | `pack:<name>@latest` | the highest version of the pack in the registry | `pack:kubernetes@latest` |
 | `cluster:<cluster>` | each profile that the cluster runs, in the order that Palette applies them | `cluster:payments` |
-| `cluster:<cluster>/<profile>` | one profile that the cluster runs, by its name or uid | `cluster:payments/aws-pxk` |
+| `cluster:<cluster>/<profile>` | one profile that the cluster runs, by its name or uid | `cluster:payments/aws-stack` |
 | a file | a snapshot file from `strata snapshot` | `releases/1.1.1/dev.json` |
 
 `strata list` prints the refs of a scope.
@@ -24,7 +24,7 @@ A ref names the thing that a command reads.
 - **`@latest`.** The highest version by natural order: digit runs compare as
   numbers, other text as text. `22.04` is above `20.04`, and `1.30.6` is above
   `1.29.10`. The snapshot records the version that it found in
-  `source.version`, and keeps `aws-pxk@latest` in `source.ref`.
+  `source.version`, and keeps `aws-stack@latest` in `source.ref`.
 - **`pack:`.** A pack version, read from the registry, not from a profile. Its
   snapshot holds that one pack with the values that the registry ships, and no
   manifests or params: those belong to a profile. Comparing two of them says

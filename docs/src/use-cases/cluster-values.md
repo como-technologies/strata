@@ -7,7 +7,7 @@ variable a value. Two clusters on one release can give different values, and a
 person can change a value on a cluster. The values are not part of the release,
 so they do not change the root. But a team wants to see them.
 
-In this example, `payments` and `search` run `aws-pxk@1.1.1`. Each gives its own
+In this example, `payments` and `search` run `aws-stack@1.1.1`. Each gives its own
 team name to `platform_owner`.
 
 ## 1. Compare the clusters

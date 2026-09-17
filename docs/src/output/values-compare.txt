@@ -1,11 +1,11 @@
 $ strata compare cluster:payments cluster:search
-aws-pxk@1.1.1 on cluster payments (uid 64f1000000000000000000e1)  ->  aws-pxk@1.1.1 on cluster search (uid 64f1000000000000000000e2)
+aws-stack@1.1.1 on cluster payments (uid 64f1000000000000000000e1)  ->  aws-stack@1.1.1 on cluster search (uid 64f1000000000000000000e2)
 root       088136c929bd -> 088136c929bd   IDENTICAL
 consumers  0 -> 0 clusters
 
   variables unchanged
   cluster values CHANGED
-        ~ aws-pxk.platform_owner: "team-payments" -> "team-search"
+        ~ aws-stack.platform_owner: "team-payments" -> "team-search"
 
   [os   ] ubuntu-aws                 24.04              unchanged
   [k8s  ] kubernetes                 1.36.2             unchanged

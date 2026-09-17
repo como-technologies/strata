@@ -1,4 +1,4 @@
-$ strata compare aws-pxk@1.0.0 aws-pxk@1.1.0 --json | jq .summary
+$ strata compare aws-stack@1.0.0 aws-stack@1.1.0 --json | jq .summary
 {
   "packsAdded": 0,
   "packsRemoved": 0,

@@ -1,5 +1,5 @@
 $ strata compare releases/1.0.0/dev.json candidate.json --format markdown
-### aws-pxk@1.0.0 → aws-pxk@1.1.0
+### aws-stack@1.0.0 → aws-stack@1.1.0
 
 | | A | B |
 |---|---|---|
