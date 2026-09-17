@@ -24,7 +24,7 @@ Sigstore signature for each file.
 | `aarch64-apple-darwin` | macOS, Apple silicon |
 
 ```bash
-v=v0.5.0; t=x86_64-unknown-linux-musl
+v=v0.5.1; t=x86_64-unknown-linux-musl
 gh release download $v --repo como-technologies/strata --pattern strata-$t --pattern SHA256SUMS
 sha256sum --check --ignore-missing SHA256SUMS   # macOS: shasum -a 256 --check --ignore-missing SHA256SUMS
 chmod +x strata-$t && sudo mv strata-$t /usr/local/bin/strata
