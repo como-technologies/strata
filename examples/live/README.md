@@ -68,6 +68,7 @@ it down when the checks are done, and confirm it is gone.
 | `verify.sh` | runs every read-only check and writes `runs/<UTC time>/` |
 | `in-place.sh` | the in-place edit test (#27): edits the add-on profile in place, creates cluster B, applies the edit to cluster A, and bumps the version, once with the flag off and once with it on |
 | `registry-move.sh` | the registry-move check (#24) |
+| `drift-report.sh` | the drift report test (#25): `scripts/verify-report.sh` around an in-place edit and a version bump of the add-on profile, with the flag off or on; issues go to this repository under the label `strata-live-drift` |
 | `tag-only.sh` | the tag-only test (#19): versions that differ from 1.0.0 only in the OS pack's tag name, a move of cluster A to one and back, watched for a repave, and an in-place rename of the tag |
 | `api.sh` | the writes the scripts make outside Terraform: an in-place edit, pushing a profile to a cluster, and deleting profile versions |
 | `aws-inventory.sh` | what the cluster still has in AWS, for confirming a teardown |
@@ -89,6 +90,7 @@ starts and leaves it as it found it.
 | `verify.sh` | nothing; it only reads | the baseline |
 | `in-place.sh off` and `on` | the provider's `immutable-clusterprofiles` flag, in every plan and in every apply that changes a profile | the in-place edit (`api.sh edit` in both runs), the clusters, the steps and their order, the baseline it starts from and restores |
 | `registry-move.sh` | the move profile's CSI registry, then its values | the flag (on), the other packs, the baseline |
+| `drift-report.sh off` and `on` | the provider's `immutable-clusterprofiles` flag, in the plan and in the bump | the edit (`api.sh edit` in both runs), the records, the steps and their order, the issue label, the baseline |
 | `tag-only.sh` | the tag name the OS pack is pinned under, and which of two such versions cluster A runs | the pack uid, every other pack, the values, the flag (off), the baseline |
 
 **One definition per kind.** Clusters A and B come from one Terraform
