@@ -621,15 +621,15 @@ labels: feature
 
 ### Plan
 
-1. `src/ops.rs`: `Consumer` gains `version`, the version of the profile's entry in the cluster's `spec.clusterProfileTemplates`, empty when the cluster could not be read. `ConsumersReport` gains the count of consumers whose copy names another version than the profile uid names now.
+1. `src/ops.rs`: `Consumer` gains `version`, the version of the profile's entry in the cluster's `spec.clusterProfileTemplates`, empty when the cluster could not be read. `ConsumersReport` gains `overwritten`, the count of consumers whose copy names another version than the profile uid names now.
 2. `src/render/`: such a consumer shows the version it runs and says the version was overwritten in place, for example `runs strata-live-addon@1.0.0, which uid 6aab0a99da23ecda03f36685 no longer names`.
 3. `docs/output.md`: the new fields. Tests over fixtures: a cluster whose template names the profile's current version, and one whose template names an older version under the same uid.
-4. `examples/live/in-place.sh`: after the bump, check that `consumers` of the first uid marks both clusters with the flag off and neither with it on.
+4. `examples/live/in-place.sh`: after the bump, `consumers-old-overwritten` checks that `consumers` of the first uid marks both clusters with the flag off and neither with it on.
 
 ### Acceptance criteria
 
-- [ ] `consumers` shows the version each cluster's copy names, from the cluster document it already reads
-- [ ] A consumer whose copy names another version than the profile uid names now is marked as overwritten in the terminal, markdown, and JSON output
+- [x] `consumers` shows the version each cluster's copy names, from the cluster document it already reads
+- [x] A consumer whose copy names another version than the profile uid names now is marked as overwritten in the terminal, markdown, and JSON output
 - [ ] Offline tests cover both cases, and the live flag-off run marks both clusters after a legacy version bump
 
 ## Note a profile uid that names two versions in compare
