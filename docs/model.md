@@ -116,12 +116,12 @@ because a check says so; the scheduled `verify` is that check.
 #### A version that clusters run
 
 `examples/live/in-place.sh` edits and then bumps the add-on profile version
-that two clusters run, with the Terraform provider's
-`immutable-clusterprofiles` flag off (run `20260916T213303Z`, clusters
-`strata-live-cluster` and `strata-live-cluster-b`) and on (run
-`20260917T003054Z`, clusters `barney` and `fred`). Cluster A ran
-`strata-live-addon@1.0.0` before the edit. Cluster B was created from the
-edited 1.0.0.
+that two clusters run, once with the Terraform provider's
+`immutable-clusterprofiles` flag off and once with it on, and the two runs
+differ in nothing else (session `20260917T031126Z`, cluster A `fred`, cluster
+B `barney`; the first runs, `20260916T213303Z` and `20260917T003054Z`, gave the
+same answers). Cluster A ran `strata-live-addon@1.0.0` before the edit.
+Cluster B was created from the edited 1.0.0.
 
 Each cluster runs its own copy of a profile's manifests. The copy has its own
 uid, and `GET /v1/spectroclusters/<uid>/profiles/packs/manifests` serves it.
@@ -130,7 +130,7 @@ was given, not what its profile holds now:
 
 | step | flag off | flag on |
 |---|---|---|
-| edit 1.0.0 in place | Terraform sends the edit as a `PUT` | Terraform refuses the plan; Palette accepts the same edit through the API |
+| edit 1.0.0 in place | Palette accepts the edit through the API; Terraform plans the same edit as an update in place, a `PUT` | Palette accepts the edit through the API; Terraform refuses the same edit at plan time |
 | cluster A, running before the edit | keeps its old copy: its record from before the edit verifies, and the version's record from before the edit compares `IDENTICAL` against it | the same |
 | the version's record from before the edit | `verify` reports `DRIFT` | the same |
 | cluster B, created after the edit | runs the edited content: `compare cluster:A/<profile> cluster:B/<profile>` shows the change and notes that both sides are the same version, edited in place | the same |
@@ -165,8 +165,8 @@ profiles equal roots, but it computes a hash differently, so it needs
 `strata-snapshot/2` and a way forward for every `/1` record; the difference is
 only whether the roots are equal, which `same-release` settles without it.
 
-An edit through the API must keep each manifest's uid. In the flag-on run the
-edit first sent the manifest without it. Palette replaced the manifest with a
+An edit through the API must keep each manifest's uid. In run
+`20260916T233714Z` the edit sent the manifest without it. Palette replaced the manifest with a
 new one, and when cluster A's update was then accepted, A's copy of the old
 manifest was dropped, leaving the add-on with no manifest on the cluster.
 `api.sh edit` keeps the uids, and `in-place.sh` checks that it did.

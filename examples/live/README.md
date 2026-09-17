@@ -348,9 +348,11 @@ found that strata rejected a version used as a tag; strata now accepts one.
 
 ## The recorded run
 
-Run `20260917T002933Z` on 2026-09-17, with strata built from `main`, in a
-tenant's `strata-test` project on AWS us-east-2, against cluster `barney`.
-All 24 checks passed:
+Session `20260917T031126Z` on 2026-09-17: one `just live-up`, then `just
+live-session`, in a tenant's `strata-test` project on AWS us-east-2, with
+cluster A `fred` and cluster B `barney`. The four scripts ran 144 checks, and
+none failed: `verify.sh` 24, `in-place.sh off` 51, `in-place.sh on` 53, and
+`registry-move.sh` 16. Nothing was done by hand. `verify.sh`:
 
 | result | check | expected exit | got | what it shows |
 |---|---|---|---|---|
@@ -383,19 +385,19 @@ The cluster runs the release, and the add-on profile after it; each record
 compares `IDENTICAL` against its selection:
 
 ```
-strata-live-profile@1.0.0 (uid 6aab30f2b6a8fe13e4abb1d4)  ->  strata-live-profile@1.0.0 on cluster barney (uid 6aab30f89dde75fd5dcb6256)
+strata-live-profile@1.0.0 (uid 6aab5674b6a80225b1a53a66)  ->  strata-live-profile@1.0.0 on cluster fred (uid 6aab5678b6a8022628c8c750)
 root       eada36c2e3fd -> eada36c2e3fd   IDENTICAL
 ```
 
 ```
-strata-live-addon@1.0.0 (uid 6aab30f39dde75fcac792fe7)  ->  strata-live-addon@1.0.0 on cluster barney (uid 6aab30f89dde75fd5dcb6256)
-root       7d1079372122 -> 7d1079372122   IDENTICAL
+strata-live-addon@1.0.0 (uid 6aab5674da23f51fbe101d42)  ->  strata-live-addon@1.0.0 on cluster fred (uid 6aab5678b6a8022628c8c750)
+root       9c68e5319d53 -> 9c68e5319d53   IDENTICAL
 ```
 
 A newer record against the same cluster shows the one value that differs:
 
 ```
-strata-live-profile@1.0.1 (uid 6aab30f8da23f105f62d4451)  ->  strata-live-profile@1.0.0 on cluster barney (uid 6aab30f89dde75fd5dcb6256)
+strata-live-profile@1.0.1 (uid 6aab5678b6a8022625c1992d)  ->  strata-live-profile@1.0.0 on cluster fred (uid 6aab5678b6a8022628c8c750)
 root       7d7689e8321c -> eada36c2e3fd   CHANGED
 consumers  0 -> 0 clusters
 
@@ -414,8 +416,8 @@ The version the cluster runs lists it, and the candidate written from the
 1.0.1 record, with its values in files, reproduces 1.0.1:
 
 ```
-strata-live-profile@1.0.0 (uid 6aab30f2b6a8fe13e4abb1d4): 1 consumer
-  barney  6aab30f89dde75fd5dcb6256  project 6aaab0567993b0008ad902db  Running
+strata-live-profile@1.0.0 (uid 6aab5674b6a80225b1a53a66): 1 consumer
+  fred  6aab5678b6a8022628c8c750  project 6aaab0567993b0008ad902db  Running
 ```
 
 ```
@@ -424,10 +426,10 @@ SAME RELEASE: 1 pairs passed
 ```
 
 Every pack-ref digest equals the digest Palette lists for the pack version.
-The four `spectro` digests match `examples/INDEX.md`, which `just examples` builds, for the same versions.
-For the Helm and OCI packs, `tenant.sh digest` read the same digest from the
-registry itself: the sha256 of the `nginx` 25.1.5 chart archive, and the
-manifest digest of `argocd` 10.4.0.1:
+The four `spectro` digests match `examples/INDEX.md`, which `just examples`
+builds, for the same versions. For the Helm and OCI packs, `tenant.sh digest`
+read the same digest from the registry itself: the sha256 of the `nginx`
+25.1.5 chart archive, and the manifest digest of `argocd` 10.4.0.1:
 
 | pack | type | ref digest | Palette's digest | registry's digest | fed UPSTREAM | |
 |---|---|---|---|---|---|---|
@@ -460,18 +462,19 @@ What the first attempts ran into, now built into the example:
 
 ## The registry-move run
 
-Run `20260917T003010Z`, `registry-move.sh`, with the flag on. All 15 checks
-passed. The bump re-pinned `csi-aws-ebs` 1.65.0 from `Public Repo` to the OCI
-registry `Palette Registry`, which changed its type from `spectro` to `oci`,
-its registry uid, its pack uid, and its digest, and nothing else
+`registry-move.sh` in session `20260917T031126Z`, with the flag on. All 16
+checks passed. The bump re-pinned `csi-aws-ebs` 1.65.0 from `Public Repo` to
+the OCI registry `Palette Registry`, which changed its type from `spectro` to
+`oci`, its registry uid, its pack uid, and its digest, and nothing else
 (`docs/model.md`, "A real registry move"). `same-release --allow
 registry-move` passed the pair as `registry-move` with 1 pack re-pinned, and
 failed it after an in-place edit of 1.0.1's values, naming only
-`pack csi/csi-aws-ebs AUTHORED: charts.aws-ebs-csi-driver.storageClasses[name=spectro-storage-class].reclaimPolicy`.
+`pack csi/csi-aws-ebs AUTHORED: charts.aws-ebs-csi-driver.storageClasses[name=spectro-storage-class].reclaimPolicy`. The run
+started from the baseline and ended at it (`baseline-after`).
 
 | result | check | expected exit | got | what it shows |
 |---|---|---|---|---|
-| PASS | `plan-refuses-no-change` | 1 | 1 | expected with provider 0.29.7: with the flag on, Terraform refuses a plan that changes nothing |
+| PASS | `plan-no-change` | 1 | 1 | provider 0.29.7 refuses a flag-on plan that changes nothing (lib.sh) |
 | PASS | `move1` | 0 | 0 | record 1.0.0, every pack from the pack registry |
 | PASS | `move-new-uid` | 1 | 1 | the flag made 1.0.1 a new profile version |
 | PASS | `move1-kept` | 0 | 0 | 1.0.0 is still there, unchanged |
@@ -486,33 +489,19 @@ failed it after an in-place edit of 1.0.1's values, naming only
 | PASS | `edit-is-authored` | 0 | 0 | the reason names the AUTHORED change |
 | PASS | `delete-move2` | 0 | 0 | delete 1.0.1 |
 | PASS | `delete-move1` | 0 | 0 | delete 1.0.0 |
+| PASS | `baseline-after` | 0 | 0 | the live example is back at its baseline |
 
 ## The in-place runs
 
-Two runs of `in-place.sh` with strata 0.4.0, and no failed check:
-
-- Flag off, run `20260916T213303Z`: cluster A `strata-live-cluster`, cluster
-  B `strata-live-cluster-b`. 26 checks passed; 15 answers were recorded
-  (`SEEN`) before `in-place.sh` asserted them, and it asserts each now.
-- Flag on, run `20260917T003054Z`: cluster A `barney`, cluster B `fred`. 44
-  checks passed; `clone-carried-nothing` was recorded, and is asserted now
-  with `clone-same-content` next to it.
-
-`docs/model.md`, "A version that clusters run", states what the answers show.
-What happened around the runs:
-
-- The flag-off run's cluster B was deleted while it was still provisioning. It
-  stayed `Deleting` for over an hour, and a force delete and a manual AWS
-  cleanup removed it. `in-place.sh` now waits for `Running` before it deletes
-  cluster B.
-- An earlier flag-on run, `20260916T233714Z`, stopped in stage 3: `api.sh edit`
-  then sent the manifest without its uid, and cluster A lost the add-on's
-  manifest when its update was accepted. `api.sh edit` keeps the uids, and
-  `edit-kept-manifest-uid` checks it.
-- `fred` never reached `Running` (`WorkerNodeAdditionDone` stayed false; see
-  "When a check fails"), so stage 5 gave up. It was deleted through Terraform
-  with its machines `Running`, in 18 minutes with nothing left in AWS, and
-  stage 5 then ran again to record `b-gone`.
+`in-place.sh off` and `in-place.sh on` in session `20260917T031126Z`, against
+cluster A `fred`, with cluster B `barney` created and deleted in each. The two
+runs differ only in the provider's `immutable-clusterprofiles` flag: both edit
+the add-on version through the API, and `plan-edit` records what Terraform
+does with the same edit. Each started from the baseline and restored it
+(`baseline-after`). No check failed: 51 with the flag off and 53 with it on.
+Each deletion of cluster B finished without help, in about 19 minutes; see
+"When teardown is slow or stuck". `docs/model.md`, "A version that clusters
+run", states what the answers show.
 
 | check | flag off | flag on | what it shows |
 |---|---|---|---|
@@ -523,43 +512,49 @@ What happened around the runs:
 | `addon1-is-1.0.0` | PASS 0 | PASS 0 | the add-on version is 1.0.0 |
 | `a1-updates` | PASS 0 | PASS 0 | what waits for cluster A |
 | `a-owns-manifest-copy` | PASS 0 | PASS 0 | cluster A runs its own copy of the add-on manifest, not the profile's |
-| `plan-refuses-no-change` | - | PASS 1 | expected with provider 0.29.7: with the flag on, Terraform refuses a plan that changes nothing |
-| `plan-refuses-edit` | - | PASS 1 | #27: with the flag on, Terraform refuses an in-place edit |
-| `plan-names-the-flag` | - | PASS 0 | the refusal names immutable-clusterprofiles |
-| `api-edit` | - | PASS 0 | the API still accepts the in-place edit |
+| `plan-no-change` | PASS 0 | PASS 1 | Terraform plans no change at the baseline; provider 0.29.7 refuses that plan with the flag on (lib.sh) |
+| `plan-edit` | PASS 2 | PASS 1 | #27: Terraform's plan for an in-place edit of the add-on version: an update in place without the flag, a refusal with it |
+| `plan-edit-says` | PASS 0 | PASS 0 | the plan says which |
+| `api-edit` | PASS 0 | PASS 0 | #27: edit the add-on version in place through the API |
 | `a2` | PASS 0 | PASS 0 | record cluster A again, applying nothing |
 | `a2-addon` | PASS 0 | PASS 0 | record cluster A's add-on selection |
 | `b2-addon` | PASS 0 | PASS 0 | record cluster B's add-on selection |
 | `addon2` | PASS 0 | PASS 0 | record the edited add-on version |
-| `edit-kept-manifest-uid` | - | PASS 0 | the edit kept the add-on manifest's uid, so cluster copies still name it |
+| `edit-kept-manifest-uid` | PASS 0 | PASS 0 | the edit kept the add-on manifest's uid, so cluster copies still name it |
 | `a2-updates` | PASS 0 | PASS 0 | what waits for cluster A |
 | `b-owns-manifest-copy` | PASS 0 | PASS 0 | cluster B was created with its own copy of the add-on manifest |
-| `a-kept-old-content` | SEEN 0 | PASS 0 | #27: cluster A keeps its copy from before the edit |
-| `a-vs-b` | SEEN 1 | PASS 1 | #27: cluster A differs from cluster B, created from the edited version |
-| `a-vs-b-edited-in-place` | SEEN 0 | PASS 0 | #27: the comparison says the version was edited in place |
-| `verify-a1` | SEEN 0 | PASS 0 | #27: cluster A's record from before the edit still verifies |
+| `a-kept-old-content` | PASS 0 | PASS 0 | #27: cluster A keeps its copy from before the edit |
+| `a-vs-b` | PASS 1 | PASS 1 | #27: cluster A differs from cluster B, created from the edited version |
+| `a-vs-b-edited-in-place` | PASS 0 | PASS 0 | #27: the comparison says the version was edited in place |
+| `verify-a1` | PASS 0 | PASS 0 | #27: cluster A's record from before the edit still verifies |
 | `verify-release1` | PASS 0 | PASS 0 | #23: the release record is untouched by the add-on edit |
 | `verify-addon1` | PASS 1 | PASS 1 | #23: the add-on record reports DRIFT after its in-place edit |
-| `addon1-vs-a2` | SEEN 0 | PASS 0 | #27: the add-on record from before the edit matches cluster A's selection |
+| `addon1-vs-a2` | PASS 0 | PASS 0 | #27: the add-on record from before the edit matches cluster A's selection |
 | `consumers-addon` | PASS 1 | PASS 1 | both clusters use the add-on version |
 | `apply-keeping-notification` | PASS 0 | PASS 0 | push the add-on's content to cluster A without resolving its notification |
-| `a-changed-without-resolve` | SEEN 1 | PASS 1 | #27: three minutes after that push, cluster A's copy has taken the edit |
+| `a-changed-without-resolve` | PASS 1 | PASS 1 | #27: three minutes after that push, cluster A's copy has taken the edit |
 | `apply-to-a` | PASS 0 | PASS 0 | #27: accept the waiting update on cluster A, resolving the notification |
 | `a3` | PASS 0 | PASS 0 | record cluster A after the apply |
 | `a3-updates` | PASS 0 | PASS 0 | what waits for cluster A |
-| `a3-matches-b` | SEEN 0 | PASS 0 | #27: after the apply, cluster A runs what cluster B runs |
-| `verify-a1-after-apply` | SEEN 1 | PASS 1 | #27: once the update is applied, cluster A's record from before the edit reports DRIFT |
-| `addon-uid-kept` | SEEN 0 | PASS 1 | #27: the bump keeps the add-on uid without the flag and makes a new one with it |
+| `a3-matches-b` | PASS 0 | PASS 0 | #27: after the apply, cluster A runs what cluster B runs |
+| `verify-a1-after-apply` | PASS 1 | PASS 1 | #27: once the update is applied, cluster A's record from before the edit reports DRIFT |
+| `addon-uid-kept` | PASS 0 | PASS 1 | #27: the bump keeps the add-on uid without the flag and makes a new one with it |
 | `addon-old4` | PASS 0 | PASS 0 | record what the first add-on uid holds now |
 | `addon-new4` | PASS 0 | PASS 0 | record the bumped add-on version |
 | `a4-addon` | PASS 0 | PASS 0 | record cluster A's add-on selection |
 | `b4-addon` | PASS 0 | PASS 0 | record cluster B's add-on selection |
-| `verify-addon1-after-bump` | SEEN 1 | PASS 1 | #27: the add-on record from before the edit still reports DRIFT |
-| `addon1-overwritten` | SEEN 0 | PASS 1 | #27: verify says the recorded version was overwritten, only without the flag |
-| `a4-matches-old-version` | SEEN 1 | PASS 0 | #23, #27: cluster A's selection equals the first add-on uid only with the flag, which keeps the old version |
-| `a4-still-a3` | SEEN 0 | PASS 0 | #27: the bump left cluster A as it was |
-| `consumers-old` | SEEN 1 | PASS 1 | #27: both clusters are still consumers of the first add-on uid |
-| `clone-carried-nothing` | - | SEEN 1 | #27: the flag's clone is not the same release as the legacy bump: Palette mints the manifest pack's uid for each profile |
-| `reapply-to-a` | PASS 0 | - | apply the restored add-on profile to cluster A |
-| `a5-matches-addon` | SEEN 0 | - | cluster A runs the restored add-on version |
+| `verify-addon1-after-bump` | PASS 1 | PASS 1 | #27: the add-on record from before the edit still reports DRIFT |
+| `addon1-overwritten` | PASS 0 | PASS 1 | #27: verify says the recorded version was overwritten, only without the flag |
+| `a4-matches-old-version` | PASS 1 | PASS 0 | #23, #27: cluster A's selection equals the first add-on uid only with the flag, which keeps the old version |
+| `a4-vs-old-json` | PASS 1 | PASS 0 | the same comparison as JSON |
+| `a4-names-overwrite` | PASS 0 | PASS 1 | #29: the comparison names the first add-on uid as overwritten in place, only without the flag |
+| `a4-still-a3` | PASS 0 | PASS 0 | #27: the bump left cluster A as it was |
+| `verify-a3-after-bump` | PASS 1 | PASS 0 | #30: verify of cluster A's record from stage 3 fails only without the flag: the version it runs was overwritten |
+| `a3-names-overwritten-profile` | PASS 0 | PASS 1 | #30: the verify names the add-on profile, only without the flag |
+| `consumers-old` | PASS 1 | PASS 1 | #27: both clusters are still consumers of the first add-on uid |
+| `consumers-old-overwritten` | PASS 0 | PASS 1 | #28: consumers of the first add-on uid marks both clusters as running a version it no longer names, only without the flag |
+| `clone-carried-nothing` | - | PASS 0 | #27, #32: the flag's clone is the same release as the legacy bump of the same configuration, whatever packUid Palette minted |
+| `clone-same-content` | - | PASS 0 | #27: the clone has the values, manifests, and variables of the legacy bump of the same configuration |
 | `b-gone` | PASS 0 | PASS 0 | cluster B is deleted |
+| `a5-matches-addon` | PASS 0 | PASS 0 | cluster A runs the restored add-on version |
+| `baseline-after` | PASS 0 | PASS 0 | the live example is back at its baseline |
