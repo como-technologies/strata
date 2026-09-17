@@ -116,9 +116,11 @@ because a check says so; the scheduled `verify` is that check.
 
 `examples/live/in-place.sh` edits and then bumps the add-on profile version
 that two clusters run, with the Terraform provider's
-`immutable-clusterprofiles` flag off (run `20260916T213303Z`) and on (run
-`20260916T233714Z`). Cluster A ran `strata-live-addon@1.0.0` before the edit.
-Cluster B was created from the edited 1.0.0.
+`immutable-clusterprofiles` flag off (run `20260916T213303Z`, clusters
+`strata-live-cluster` and `strata-live-cluster-b`) and on (run
+`20260917T003054Z`, clusters `barney` and `fred`). Cluster A ran
+`strata-live-addon@1.0.0` before the edit. Cluster B was created from the
+edited 1.0.0.
 
 Each cluster runs its own copy of a profile's manifests. The copy has its own
 uid, and `GET /v1/spectroclusters/<uid>/profiles/packs/manifests` serves it.
@@ -132,12 +134,24 @@ was given, not what its profile holds now:
 | the version's record from before the edit | `verify` reports `DRIFT` | the same |
 | cluster B, created after the edit | runs the edited content: `compare cluster:A/<profile> cluster:B/<profile>` shows the change and notes that both sides are the same version, edited in place | the same |
 | the update pushed to cluster A without resolving its notification | cluster A's copy takes the edit within three minutes | the same |
-| the update accepted on cluster A | cluster A matches cluster B, and A's record from before the edit reports `DRIFT` | not yet run |
-| version bump to 1.0.1 | the profile keeps its uid, which now names 1.0.1: `verify` on the 1.0.0 record reports it overwritten by `strata-live-addon@1.0.1`. Both clusters keep their copies, which still name 1.0.0, and stay listed as consumers of the uid | not yet run |
+| the update accepted on cluster A | cluster A matches cluster B, and A's record from before the edit reports `DRIFT` | the same |
+| version bump to 1.0.1 | the profile keeps its uid, which now names 1.0.1: `verify` on the 1.0.0 record reports it overwritten by `strata-live-addon@1.0.1`. Both clusters keep their copies, which still name 1.0.0, and stay listed as consumers of the uid | 1.0.1 is a clone under a new uid, and 1.0.0 stays under the old one: `verify` on the 1.0.0 record reports the in-place edit and nothing overwritten. Both clusters keep their copies, which equal the 1.0.0 record, and stay listed as consumers of 1.0.0 only |
 
 So `compare` of two cluster records shows a change exactly when the clusters
 run different content, and strata needs no record of the updates that wait for
 a cluster.
+
+The clone carries the content over exactly: the values, the manifest, and the
+variables of the flag-on 1.0.1 equal those of the flag-off 1.0.1 made from the
+same configuration. The two differ in one field, the `packUid` of the manifest
+pack. Palette mints that uid for the manifest pack of each profile it creates,
+the clone included, where a registry pack's `packUid` is the registry's. Because
+`IDENTITY` hashes it, two profile versions with the same manifest content never
+share a root: the add-on's root differed between two builds of the live example
+from the same configuration (`a18670a7b8d6`, `7d1079372122`), where the release
+profile's did not (`eada36c2e3fd`). So `same-release` fails two profiles
+created apart with the same manifests, and a flag-on bump that changes nothing
+else, on `IDENTITY: packUid`.
 
 An edit through the API must keep each manifest's uid. In the flag-on run the
 edit first sent the manifest without it. Palette replaced the manifest with a
