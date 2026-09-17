@@ -702,11 +702,11 @@ Cluster `fred` also stayed in `Provisioning` in run `20260917T003054Z`, with its
 
 ### Acceptance criteria
 
-- [ ] Clusters A and B come from one resource definition, and every profile has the same lifecycle
+- [x] Clusters A and B come from one resource definition, and every profile has the same lifecycle
 - [ ] The two `in-place.sh` runs differ only in the flag: both edit through the API, and Terraform's handling of the edit is a separate check in each
 - [ ] Each script checks the baseline before it starts and leaves it as it found it, so the scripts run in any order
-- [ ] The provider 0.29.7 workaround lives in one file, next to the release that removes it
-- [ ] `examples/live/README.md` states what each script varies and holds fixed
+- [x] The provider 0.29.7 workaround lives in one file, next to the release that removes it
+- [x] `examples/live/README.md` states what each script varies and holds fixed
 - [ ] The four scripts pass in one session from one `just live-up`, and `examples/live/README.md` records those runs
 
 ## Compare manifest packs by content, not by the uid Palette mints for each profile
