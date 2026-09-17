@@ -437,6 +437,22 @@ fn verify_over_many_records_prints_one_line_each_and_a_summary_document() {
     let r = run_in(&["verify", &none], &no_creds, &clear);
     assert_eq!(r.code, 2);
     assert!(r.err.contains("matched no files"), "{}", r.err);
+
+    // --summary gives one file the summary too, so a script reads one shape whatever it passed
+    let r = run_in(&["verify", "--summary", "--json", &fx.a], &no_creds, &clear);
+    assert_eq!(r.code, 2, "{}", r.err);
+    let d: serde_json::Value = serde_json::from_str(&r.out).unwrap();
+    assert_eq!(d["schema"], "strata-verify-summary/1");
+    assert_eq!(d["summary"]["records"], 1);
+    assert_eq!(d["records"][0]["path"], fx.a.as_str());
+    assert_eq!(d["records"][0]["error"]["kind"], "missing-credential");
+    let r = run_in(&["verify", "--summary", &fx.a], &no_creds, &clear);
+    assert_eq!(
+        r.out.lines().count(),
+        2,
+        "one record line and the counts:\n{}",
+        r.out
+    );
 }
 
 #[test]

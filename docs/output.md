@@ -201,7 +201,9 @@ lines as a table.
   described below.
 
 `strata schema verify-summary` prints its JSON Schema. One file on its own
-prints the full report and verdict line described above.
+prints the full report and verdict line described above, unless `--summary`
+is given: then one file prints the summary too, so a script reads one document
+shape whatever its arguments matched.
 
 ## The same-release report
 

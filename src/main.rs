@@ -209,6 +209,10 @@ struct VerifyArgs {
     /// Like --project, with the project's name
     #[arg(long, conflicts_with = "project")]
     project_name: Option<String>,
+    /// Print one line per record and a summary even for one file, as for several; a script then
+    /// reads one document shape whatever it matched
+    #[arg(long)]
+    summary: bool,
     #[command(flatten)]
     out: OutputArgs,
 }
@@ -567,7 +571,7 @@ fn cmd_verify(a: &VerifyArgs) -> Result<ExitCode> {
     let progress = a.out.progress();
     let paths = expand_records(&a.snapshots)?;
     let project = project_arg(progress, &a.project, &a.project_name)?;
-    let bulk = a.snapshots.len() > 1 || a.snapshots.iter().any(|s| is_pattern(s));
+    let bulk = a.summary || a.snapshots.len() > 1 || a.snapshots.iter().any(|s| is_pattern(s));
     if bulk {
         let s = ops::verify_many(
             &paths,
