@@ -1,7 +1,8 @@
 # strata
 
-Record, compare, and check Spectro Cloud Palette cluster profile versions as
-releases.
+Record, compare, and check what Spectro Cloud Palette holds: cluster profile
+versions, the clusters that run them, and pack versions in a registry. A
+published profile version is a release.
 
 A profile version is a stack of packs: OS, Kubernetes, CNI, CSI, and add-ons.
 Palette lets a person edit a published version in place, and each project holds
@@ -20,6 +21,7 @@ strata snapshot aws-stack@1.1.1 -o aws-stack.json  # record a release
 strata verify aws-stack.json                     # exit 1 when somebody changed it
 strata compare aws-stack.json cluster:payments   # does the cluster run it?
 strata compare aws-stack@1.1.0 aws-stack@1.1.1     # what changed, and the impact
+strata compare pack:csi-aws-ebs@1.63.1 pack:csi-aws-ebs@1.65.0  # two pack versions
 ```
 
 With no tenant, `just examples` builds real profiles offline. See the

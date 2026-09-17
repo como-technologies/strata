@@ -1,7 +1,8 @@
 # strata
 
-Strata records, compares, and checks Spectro Cloud Palette cluster profile
-versions as releases.
+Strata records, compares, and checks what Spectro Cloud Palette holds: a
+cluster profile version, the copy that a cluster runs, and a pack version in a
+registry. A published profile version is a release.
 
 A cluster profile is a stack of layers: OS, Kubernetes, CNI, CSI, and add-ons.
 Each layer is a pack with a version, a digest, and values. Palette lets a
@@ -24,6 +25,7 @@ flowchart LR
 | Does Palette still have the version that I recorded? | [`strata verify record.json`](./commands/verify.md) |
 | Do dev and prod have the same release? | [`strata same-release dev.json prod.json`](./commands/same-release.md) |
 | Does this cluster run its release? | [`strata compare record.json cluster:NAME`](./use-cases/cluster-release.md) |
+| What changed between two pack versions? | [`strata compare pack:NAME@A pack:NAME@B`](./use-cases/pack-versions.md) |
 | Can I delete this version? | [`strata consumers NAME@VERSION`](./commands/consumers.md) |
 
 ## Where to start

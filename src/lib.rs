@@ -1,5 +1,6 @@
-//! Strata records, compares, and verifies Spectro Cloud Palette cluster profile versions as
-//! immutable, layered releases.
+//! Strata records, compares, and verifies what Spectro Cloud Palette holds: a cluster profile
+//! version as an immutable, layered release, the copy that a cluster runs, and a pack version in
+//! a registry.
 //!
 //! A profile is a stack of layers (packs). Every layer gets three hashes so a report can name the
 //! kind of change: identity (which pack build the layer references), upstream (the digest Palette

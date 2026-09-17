@@ -49,8 +49,9 @@ the move, so you can decide to allow it. See
 ## Refs
 
 Each side is a ref: a snapshot file, a profile uid, `<name>@<version>`,
-`<name>@latest`, or a cluster. Strata reads a uid, a name, or a cluster in the
-configured project. To compare two projects, give two files.
+`<name>@latest`, a cluster, or `pack:<name>@<version>`. Strata reads a uid, a
+name, or a cluster in the configured project. To compare two projects, give two
+files. [Refs](../reference/refs.md) lists each form.
 
 ## What to expect
 
