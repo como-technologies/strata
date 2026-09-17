@@ -72,6 +72,36 @@ the pack-ref digest that feeds `UPSTREAM` tracks that content. A preset that a
 profile applies ends up in the pack's values, which `AUTHORED` covers. The
 hash scheme, and with it `strata-snapshot/1`, stays as it is.
 
+### A real registry move
+
+`examples/live/registry-move.sh` moved a pack the way a team promotes one:
+profile version 1.0.0 took every pack from the pack registry (`Public Repo`),
+and a version bump to 1.0.1 with the provider's `immutable-clusterprofiles`
+flag on re-pinned `csi-aws-ebs` 1.65.0 to an OCI pack registry
+(`Palette Registry`). The flag kept 1.0.0 under its own uid. Run
+`20260916T233556Z`, `strata compare` of the two records:
+
+| field | 1.0.0, pack registry | 1.0.1, OCI registry |
+|---|---|---|
+| type | `spectro` | `oci` |
+| registryUid | `5eecc89d0b150045ae661cef` | `64eaff453040297344bcad5d` |
+| packUid | `6aa410ec144aaec79d547a9e` | `6aa41627144aaece1b2e2452` |
+| digest (`UPSTREAM`) | `sha256:bd09e8b4187b...` | `sha256:a746e1468908...` |
+| tag, version | `1.65.0` | `1.65.0` |
+| values (`AUTHORED`), manifests, params | | unchanged |
+
+The other three packs did not change. The pack type follows the registry, as
+the registries profile shows too (`helm` from a Helm registry, `oci` from an
+OCI registry), so a real move to another kind of registry changes it. The
+registry-move policy had required an equal type, from a fixture that
+rewrote only uids and digests, and failed this pair with `IDENTITY: type
+spectro -> oci`. It now accepts a type change between two registries, and
+still refuses a pack that comes from no registry, a `manifest`. With that
+change the pair passes as `REGISTRY MOVE` with one pack re-pinned. After an
+edit of 1.0.1's CSI values in place through the API, the same check fails and
+names the `AUTHORED` leaf
+(`charts.aws-ebs-csi-driver.storageClasses[name=spectro-storage-class].reclaimPolicy`).
+
 ### Editing a published version in place
 
 The same run edited version 1.0.1 of its profile in place through the API,

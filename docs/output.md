@@ -191,7 +191,10 @@ NOT THE SAME RELEASE: 1 of 1 pairs failed
 
 By default only equal roots pass. `--allow registry-move` also passes a pair
 whose only difference is packs re-pinned from another registry: the same
-tag, version, type, values, manifests, and params, with variables unchanged.
+tag, version, values, manifests, and params, with variables unchanged. The
+pack type may change, because it follows the registry (`spectro` for a pack
+registry, `helm`, `oci`); a `manifest` pack comes from no registry, so it
+never moves (`docs/model.md`, "A real registry move").
 Without the flag such a pair is `DIFFERENT` and its reasons name the move,
 so the reader can decide to allow it. A reason names the pack and, for an
 `AUTHORED` change, the first changed leaf.

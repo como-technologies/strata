@@ -602,10 +602,13 @@ fn pair_reasons(d: &Diff, a: &Snapshot, b: &Snapshot, policy: Policy) -> (Vec<St
             Status::Removed => reasons.push(format!("pack {} removed", pd.key)),
             Status::Changed => {
                 let (x, y) = (pa[pd.key.as_str()], pb[pd.key.as_str()]);
-                let moved = x.registry_uid != y.registry_uid
+                // The type follows the registry (spectro, helm, oci), so a move may change it; a
+                // pack from no registry, a manifest, did not move.
+                let moved = !x.registry_uid.is_empty()
+                    && !y.registry_uid.is_empty()
+                    && x.registry_uid != y.registry_uid
                     && x.tag == y.tag
-                    && x.version == y.version
-                    && x.kind == y.kind;
+                    && x.version == y.version;
                 if pd.identity {
                     if moved {
                         if !pd.authored {

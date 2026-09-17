@@ -756,6 +756,50 @@ fn a_registry_move_passes_only_when_allowed() {
 }
 
 #[test]
+fn a_registry_move_passes_when_the_pack_type_follows_the_new_registry() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    // a5 is a3 with every pack typed oci, as a real move from a pack registry to an OCI one is
+    let allowed = ops::same_release(
+        &chain_input(dir.path(), &["a", "a5"]),
+        Policy::RegistryMove,
+        "t1",
+    );
+    assert!(
+        allowed.pairs[0].reasons.is_empty(),
+        "{:?}",
+        allowed.pairs[0].reasons
+    );
+    assert_eq!(allowed.pairs[0].status, PairStatus::RegistryMove);
+    assert_eq!(allowed.pairs[0].packs_repinned, 7);
+    let exact = ops::same_release(&chain_input(dir.path(), &["a", "a5"]), Policy::Exact, "t1");
+    assert!(
+        exact.pairs[0]
+            .reasons
+            .iter()
+            .any(|r| r.contains("os/ubuntu-aws")
+                && r.contains("moved registry reg-public -> reg-prod")),
+        "{:?}",
+        exact.pairs[0].reasons
+    );
+    // a pack that came from no registry did not move: a manifest turned registry pack is not a move
+    let c = ops::same_release(
+        &chain_input(dir.path(), &["a6", "a3"]),
+        Policy::RegistryMove,
+        "t1",
+    );
+    assert_eq!(c.pairs[0].status, PairStatus::Different);
+    assert!(
+        c.pairs[0]
+            .reasons
+            .iter()
+            .any(|r| r.contains("type manifest -> spectro")),
+        "{:?}",
+        c.pairs[0].reasons
+    );
+}
+
+#[test]
 fn an_authored_change_during_a_registry_move_fails_and_names_the_pack_and_the_leaf() {
     let dir = tempfile::tempdir().unwrap();
     common::make_fixtures(dir.path());

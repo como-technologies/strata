@@ -6,6 +6,9 @@
 //!   a3  a re-pinned from another registry: same packs, values, and manifests, but registryUid,
 //!       packUid, and every digest differ, so each pack shows IDENTITY UPSTREAM and nothing else
 //!   a4  a3 with one kubernetes value edited (podSubnet): a registry move plus an AUTHORED change
+//!   a5  a3 with every pack of type oci: a move to an OCI registry, where the type follows the
+//!       registry
+//!   a6  a with every pack a manifest: type manifest and no registry
 //!   b   the next version: k8s bump + values edits, cilium same tag but new digest, prometheus
 //!       manifest edited + one added, cert-manager added, external-dns removed, metrics-server
 //!       values unparseable on both sides but different, variables changed, two consumers.
@@ -227,7 +230,7 @@ fn rewrite(from: &Path, to: &Path, replacements: &[(&str, &str)]) {
     }
 }
 
-/// Writes the profile fixtures a/, a2/, a3/, a4/, b/ and addons/, and the cluster fixtures
+/// Writes the profile fixtures a/ to a6/, b/ and addons/, and the cluster fixtures
 /// cluster-a/, cluster-b/ and cluster-merged/, under `root`.
 pub fn make_fixtures(root: &Path) {
     let packs_a = |k8s_values: &str| {
@@ -406,6 +409,19 @@ pub fn make_fixtures(root: &Path) {
         &root.join("a3"),
         &root.join("a4"),
         &[("podSubnet: 192.168.0.0/16", "podSubnet: 10.0.0.0/16")],
+    );
+    rewrite(
+        &root.join("a3"),
+        &root.join("a5"),
+        &[("\"type\": \"spectro\"", "\"type\": \"oci\"")],
+    );
+    rewrite(
+        &root.join("a"),
+        &root.join("a6"),
+        &[
+            ("\"type\": \"spectro\"", "\"type\": \"manifest\""),
+            ("\"registryUid\": \"reg-public\"", "\"registryUid\": \"\""),
+        ],
     );
 
     let packs_b = vec![
