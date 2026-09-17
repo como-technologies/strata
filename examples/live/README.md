@@ -679,15 +679,22 @@ undone    verify-report: 1 records: 1 unchanged, 0 drifted, 0 could not be check
 
 ## The in-place runs
 
-`in-place.sh off` and `in-place.sh on` in session `20260917T031126Z`, against
-cluster A `fred`, with cluster B `barney` created and deleted in each. The two
-runs differ only in the provider's `immutable-clusterprofiles` flag: both edit
-the add-on version through the API, and `plan-edit` records what Terraform
-does with the same edit. Each started from the baseline and restored it
-(`baseline-after`). No check failed: 51 with the flag off and 53 with it on.
-Each deletion of cluster B finished without help, in about 19 minutes; see
-"When teardown is slow or stuck". `docs/model.md`, "A version that clusters
-run", states what the answers show.
+`in-place.sh off` and `in-place.sh on` in session `20260917T151426Z`, with
+provider 0.30.1, against cluster A `fred`, with cluster B `barney` created and
+deleted in each. The two runs differ only in the provider's
+`immutable-clusterprofiles` flag: both edit the add-on version through the
+API, and `plan-edit` records what Terraform does with the same edit. Each
+started from the baseline and restored it (`baseline-after`). No check failed:
+51 with the flag off and 53 with it on. Every apply took the run's flag with
+no `-target`, except the restore of the baseline. With the flag on,
+`hold_versions` changed only `skip_destroy` on the four profiles, the apply
+that created cluster B after the edit through the API changed no profile, and
+the bump kept the first add-on uid (`1 added, 0 changed, 1 destroyed`). Each
+deletion of cluster B finished without help, in 19m1s and 19m44s; see "When
+teardown is slow or stuck". Every answer is the one session
+`20260917T031126Z` recorded with provider 0.29.7 and its workaround, except
+`plan-no-change`, which that provider refused with the flag on.
+`docs/model.md`, "A version that clusters run", states what the answers show.
 
 | check | flag off | flag on | what it shows |
 |---|---|---|---|
@@ -698,7 +705,7 @@ run", states what the answers show.
 | `addon1-is-1.0.0` | PASS 0 | PASS 0 | the add-on version is 1.0.0 |
 | `a1-updates` | PASS 0 | PASS 0 | what waits for cluster A |
 | `a-owns-manifest-copy` | PASS 0 | PASS 0 | cluster A runs its own copy of the add-on manifest, not the profile's |
-| `plan-no-change` | PASS 0 | PASS 1 | Terraform plans no change at the baseline; provider 0.29.7 refuses that plan with the flag on (lib.sh) |
+| `plan-no-change` | PASS 0 | PASS 0 | Terraform plans no change once skip_destroy is held for the flag |
 | `plan-edit` | PASS 2 | PASS 1 | #27: Terraform's plan for an in-place edit of the add-on version: an update in place without the flag, a refusal with it |
 | `plan-edit-says` | PASS 0 | PASS 0 | the plan says which |
 | `api-edit` | PASS 0 | PASS 0 | #27: edit the add-on version in place through the API |
