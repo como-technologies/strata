@@ -1565,9 +1565,34 @@ fn never_connect() -> strata::Result<Palette<MemoryApi>> {
     panic!("local errors are found before connecting")
 }
 
+/// The examples that `just examples` builds, built into a temporary directory from the fetched
+/// pack data the repository tracks, with this build of strata.
+fn built_examples() -> tempfile::TempDir {
+    let repo = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let dir = tempfile::tempdir().unwrap();
+    for entry in fs::read_dir(repo.join("examples/packs")).unwrap() {
+        let pack = entry.unwrap().path();
+        let to = dir.path().join("packs").join(pack.file_name().unwrap());
+        fs::create_dir_all(&to).unwrap();
+        for file in ["_entity.json", "_summaries.json"] {
+            fs::copy(pack.join(file), to.join(file)).unwrap();
+        }
+    }
+    let o = std::process::Command::new("bash")
+        .arg(repo.join("examples/fetch-examples.sh"))
+        .env("EXAMPLES_DIR", dir.path())
+        .env("OFFLINE", "1")
+        .env("STRATA_BIN", env!("CARGO_BIN_EXE_strata"))
+        .output()
+        .unwrap();
+    assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
+    dir
+}
+
 #[test]
 fn a_candidate_built_from_real_registry_responses_has_the_root_of_the_published_profile() {
-    let examples = Path::new(env!("CARGO_MANIFEST_DIR")).join("examples");
+    let built = built_examples();
+    let examples = built.path();
     let dir = tempfile::tempdir().unwrap();
     for version in ["1.0.0", "1.1.0", "1.1.1"] {
         let raw = examples
