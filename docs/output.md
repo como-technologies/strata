@@ -38,7 +38,10 @@ cluster reads `name@version on cluster <name>` and shows the cluster uid. The se
 the two roots and `IDENTICAL` or `CHANGED`. When both sides name the same
 profile uid and version and their roots still differ, a `note` line follows:
 `both sides are <name>@<version> (uid <uid>): the version was edited in place`.
-Between two clusters it adds `or changed on a cluster`. The third line shows the consumer
+Between two clusters it adds `or changed on a cluster`. When the sides name one profile
+uid under two versions, a `note` line per uid says so, under `IDENTICAL` too:
+`uid <uid> is <name>@<version> on one side and <name>@<version> on the other:
+the version was overwritten in place`. The third line shows the consumer
 counts. Then come the variables, in name order: one line for an added or
 removed variable with its traits (`required`, `sensitive`, `hidden`,
 `immutable`), and one line per changed field of a changed variable. When both
@@ -92,6 +95,14 @@ model can read it without these pages:
   impact level in plain sentences.
 - `editedInPlace` is true when both sides name the same profile uid and
   version and their roots differ.
+- `overwrittenInPlace` lists each profile uid the two sides name under
+  different versions, whatever the roots: `uid`, `name`, `versionA`,
+  `versionB`, and `nameB` when the name differs too. A legacy version bump or
+  a rename does this: the uid keeps its content and takes a new version name,
+  while clusters keep running copies that name the old one. A side that
+  records a cluster names every profile it runs. The terminal and markdown
+  reports add a note per uid, also under `IDENTICAL`; `verify` leaves it out
+  when its verdict already names the overwrite. Absent when empty.
 - `summary` gives `packsAdded`, `packsRemoved`, `packsChanged`,
   `packsUnchanged`, `identityChanges`, `upstreamChanges`, `authoredChanges`,
   `variablesChanged`, and `maxImpact`.

@@ -180,6 +180,10 @@ if stage 4 "undo the edit and bump the add-on version"; then
     jq -e '.verify.overwrittenBy != null' verify-addon1-after-bump.out
   check a4-matches-old-version "$off1_on0" "#23, #27: cluster A's selection equals the first add-on uid only with the flag, which keeps the old version" -- \
     "$strata" compare addon-old4.json a4-addon.json
+  check a4-vs-old-json "$off1_on0" "the same comparison as JSON" -- \
+    "$strata" compare addon-old4.json a4-addon.json --json
+  check a4-names-overwrite "$off0_on1" "#29: the comparison names the first add-on uid as overwritten in place, only without the flag" -- \
+    jq -e --arg u "$AD1" '(.overwrittenInPlace // []) | map(.uid) == [$u]' a4-vs-old-json.out
   check a4-still-a3 0 "#27: the bump left cluster A as it was" -- "$strata" compare a3-addon.json a4-addon.json
   check consumers-old 1 "#27: both clusters are still consumers of the first add-on uid" -- "$strata" consumers "$AD1" --json
   if [ "$mode" = on ] && [ -n "${OFF_RUN:-}" ]; then

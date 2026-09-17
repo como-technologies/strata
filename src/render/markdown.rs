@@ -2,9 +2,10 @@
 
 use super::{
     chain_verdict, cluster_value, consumer_count, consumers_heading, counts_line, dash,
-    edited_in_place_note, entry_error, list_count, list_scope, pack_version, pair_detail,
-    pair_word, plain_flags, record_detail, record_label, short, show, subject, traits_suffix,
-    values_changed, values_changed_suffix, variable_lines, version_display, Renderer, VarLine,
+    edited_in_place_note, entry_error, list_count, list_scope, overwritten_in_place_notes,
+    pack_version, pair_detail, pair_word, plain_flags, record_detail, record_label, short, show,
+    subject, traits_suffix, values_changed, values_changed_suffix, variable_lines, version_display,
+    Renderer, VarLine,
 };
 use crate::color::Paint;
 use crate::diff::{Diff, Leaf, Op, Status, Verify, VerifyStatus};
@@ -81,6 +82,9 @@ impl Renderer for MarkdownRenderer {
             if s.variables_changed { "changed" } else { "unchanged" }
         ));
         if let Some(note) = edited_in_place_note(d) {
+            o.push_str(&format!("**Note:** {note}\n\n"));
+        }
+        for note in overwritten_in_place_notes(d) {
             o.push_str(&format!("**Note:** {note}\n\n"));
         }
         if let Some(v) = &d.verify {

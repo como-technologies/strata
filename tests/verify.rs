@@ -2514,6 +2514,93 @@ fn verify_reports_a_version_overwritten_under_the_same_uid_even_when_the_root_ma
 }
 
 #[test]
+fn compare_names_a_profile_uid_that_names_two_versions_whatever_the_roots() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let a = ops::snapshot_from_dir(&dir.path().join("a"), "a", "t0").unwrap();
+    let live = |edit: fn(&mut Value)| {
+        ops::snapshot_for(
+            &Ref::Uid(UID_A.into()),
+            || Ok(Palette::new(serve_edited(dir.path(), "a", UID_A, edit))),
+            "t1",
+            &Progress::silent(),
+        )
+        .unwrap()
+    };
+    // a legacy version bump that changes no content: the uid now names 1.3.0
+    let renamed = live(|p| p["spec"]["version"] = Value::from("1.3.0"));
+    let d = ops::compare(&a, &renamed, "t2");
+    assert!(d.same, "the content did not change");
+    assert!(
+        !d.edited_in_place,
+        "two version names are not an in-place edit"
+    );
+    let overwritten: Vec<(&str, &str, &str, &str)> = d
+        .overwritten_in_place
+        .iter()
+        .map(|o| {
+            (
+                o.uid.as_str(),
+                o.name.as_str(),
+                o.version_a.as_str(),
+                o.version_b.as_str(),
+            )
+        })
+        .collect();
+    assert_eq!(overwritten, [(UID_A, "lab-profile", "1.2.0", "1.3.0")]);
+    let text = render::renderer(Format::Terminal, Paint::off(), false)
+        .render(&d, &a, &renamed, false)
+        .unwrap();
+    assert!(text.contains("IDENTICAL"), "{text}");
+    assert!(
+        text.contains("uid 64f0000000000000000000a1 is lab-profile@1.2.0 on one side and lab-profile@1.3.0 on the other: the version was overwritten in place"),
+        "{text}"
+    );
+    let md = render::renderer(Format::Markdown, Paint::off(), false)
+        .render(&d, &a, &renamed, false)
+        .unwrap();
+    assert!(md.contains("the version was overwritten in place"), "{md}");
+    let json: Value = serde_json::to_value(&d).unwrap();
+    assert_eq!(json["overwrittenInPlace"][0]["versionB"], "1.3.0", "{json}");
+
+    // the same bump with a content change: still named, and the roots differ
+    let bumped = live(|p| {
+        p["spec"]["version"] = Value::from("1.3.0");
+        p["spec"]["published"]["packs"][1]["values"] =
+            Value::from("pack:\n  k8sHardening: false\n");
+    });
+    let d = ops::compare(&a, &bumped, "t2");
+    assert!(!d.same);
+    assert_eq!(d.overwritten_in_place.len(), 1);
+
+    // a cluster that runs the uid under its old version name, against the renamed version
+    let cluster = cluster_snapshot(dir.path(), "cluster-a");
+    let runs: Vec<(&str, &str)> = cluster
+        .source
+        .cluster
+        .as_ref()
+        .unwrap()
+        .profiles
+        .iter()
+        .map(|p| (p.uid.as_str(), p.version.as_str()))
+        .collect();
+    assert!(runs.contains(&(UID_A, "1.2.0")), "{runs:?}");
+    let d = ops::compare(&renamed, &cluster, "t2");
+    assert_eq!(
+        d.overwritten_in_place
+            .iter()
+            .map(|o| (o.uid.as_str(), o.version_a.as_str(), o.version_b.as_str()))
+            .collect::<Vec<_>>(),
+        [(UID_A, "1.3.0", "1.2.0")]
+    );
+
+    // different uids under different versions are two profiles, not an overwrite
+    let b = ops::snapshot_from_dir(&dir.path().join("b"), "b", "t0").unwrap();
+    assert!(ops::compare(&a, &b, "t2").overwritten_in_place.is_empty());
+    assert!(ops::compare(&a, &a, "t2").overwritten_in_place.is_empty());
+}
+
+#[test]
 fn compare_says_when_both_sides_are_one_profile_version_with_different_content() {
     let dir = tempfile::tempdir().unwrap();
     common::make_fixtures(dir.path());

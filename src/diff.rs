@@ -37,6 +37,11 @@ pub struct Diff {
     /// version was edited in place, or, between two clusters, changed on one of them.
     #[serde(default)]
     pub edited_in_place: bool,
+    /// Each profile uid that the two sides name under different versions: the version was
+    /// overwritten in place, by a legacy version bump or a rename, whatever the roots. A side
+    /// that records a cluster names every profile the cluster runs.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub overwritten_in_place: Vec<OverwrittenProfile>,
     /// Root of A.
     pub root_a: String,
     /// Root of B.
@@ -164,6 +169,64 @@ pub struct ClusterValueChange {
     /// True when the variable is sensitive on either side; its values are never compared.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub sensitive: bool,
+}
+
+/// A profile uid that the two sides of a comparison name under different versions.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct OverwrittenProfile {
+    /// The profile uid.
+    pub uid: String,
+    /// The profile name on side A.
+    pub name: String,
+    /// The version side A names under the uid.
+    pub version_a: String,
+    /// The profile name on side B, when it differs from side A's.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub name_b: String,
+    /// The version side B names under the uid.
+    pub version_b: String,
+}
+
+/// The profiles a snapshot names, as (uid, name, version): every profile a cluster runs, or the
+/// one profile a profile record holds.
+fn named_profiles(s: &Snapshot) -> Vec<(&str, &str, &str)> {
+    match &s.source.cluster {
+        Some(c) => c
+            .profiles
+            .iter()
+            .map(|p| (p.uid.as_str(), p.name.as_str(), p.version.as_str()))
+            .collect(),
+        None if s.source.uid.is_empty() => Vec::new(),
+        None => vec![(
+            s.source.uid.as_str(),
+            s.source.name.as_str(),
+            s.source.version.as_str(),
+        )],
+    }
+}
+
+/// The profile uids that `a` and `b` name under different versions.
+fn overwritten_in_place(a: &Snapshot, b: &Snapshot) -> Vec<OverwrittenProfile> {
+    let named_b = named_profiles(b);
+    named_profiles(a)
+        .into_iter()
+        .filter(|(uid, _, _)| !uid.is_empty())
+        .filter_map(|(uid, name, version)| {
+            let (_, name_b, version_b) = named_b.iter().find(|(u, _, _)| *u == uid)?;
+            (version != *version_b).then(|| OverwrittenProfile {
+                uid: uid.to_string(),
+                name: name.to_string(),
+                version_a: version.to_string(),
+                name_b: if *name_b == name {
+                    String::new()
+                } else {
+                    name_b.to_string()
+                },
+                version_b: version_b.to_string(),
+            })
+        })
+        .collect()
 }
 
 /// Profile variables compared by name.
@@ -993,6 +1056,7 @@ pub fn compute(a: &Snapshot, b: &Snapshot, generated_at: &str, verify: Option<Ve
             && !a.source.uid.is_empty()
             && a.source.uid == b.source.uid
             && a.source.version == b.source.version,
+        overwritten_in_place: overwritten_in_place(a, b),
         root_a: a.root.clone(),
         root_b: b.root.clone(),
         summary,

@@ -166,6 +166,28 @@ fn overwritten_by(r: &crate::ops::VerifiedRecord) -> Option<&str> {
         .and_then(|v| v.overwritten_by.as_deref())
 }
 
+/// `uid u is name@1.2.0 on one side and name@1.3.0 on the other: the version was overwritten in
+/// place`, one per profile uid the two sides name under different versions. A verify whose verdict
+/// already says the recorded version was overwritten gets none.
+pub(crate) fn overwritten_in_place_notes(d: &Diff) -> Vec<String> {
+    if d.verify
+        .as_ref()
+        .is_some_and(|v| v.overwritten_by.is_some())
+    {
+        return Vec::new();
+    }
+    d.overwritten_in_place
+        .iter()
+        .map(|o| {
+            let name_b = if o.name_b.is_empty() { &o.name } else { &o.name_b };
+            format!(
+                "uid {} is {}@{} on one side and {}@{} on the other: the version was overwritten in place",
+                o.uid, o.name, o.version_a, name_b, o.version_b
+            )
+        })
+        .collect()
+}
+
 /// `both sides are name@version (uid u): the version was edited in place`, for a diff whose sides
 /// name one profile version with different content.
 pub(crate) fn edited_in_place_note(d: &Diff) -> Option<String> {

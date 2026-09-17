@@ -2,9 +2,9 @@
 
 use super::{
     chain_verdict, cluster_value, consumer_count, consumers_heading, counts_line, dash,
-    edited_in_place_note, entry_error, list_count, list_scope, pack_version, pair_detail,
-    pair_word, record_detail, record_label, short, show, subject, traits_suffix,
-    values_changed_suffix, variable_lines, version_display, Renderer, VarLine,
+    edited_in_place_note, entry_error, list_count, list_scope, overwritten_in_place_notes,
+    pack_version, pair_detail, pair_word, record_detail, record_label, short, show, subject,
+    traits_suffix, values_changed_suffix, variable_lines, version_display, Renderer, VarLine,
 };
 use crate::color::Paint;
 use crate::diff::{
@@ -224,6 +224,9 @@ impl Renderer for TerminalRenderer {
             }
         ));
         if let Some(note) = edited_in_place_note(d) {
+            out.push(format!("note       {}", p.byellow(&note)));
+        }
+        for note in overwritten_in_place_notes(d) {
             out.push(format!("note       {}", p.byellow(&note)));
         }
         out.push(format!(
