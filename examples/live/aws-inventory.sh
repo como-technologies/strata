@@ -4,12 +4,12 @@
 #
 #   AWS_PROFILE=<profile> examples/live/aws-inventory.sh [CLUSTER_NAME] [REGION]
 #
-# Defaults: barney, cluster A, in us-east-2. Instances, NAT gateways, VPCs, elastic IPs, and
+# Defaults: fred, cluster A, in us-east-2. Instances, NAT gateways, VPCs, elastic IPs, and
 # volumes carry the Cluster API tag sigs.k8s.io/cluster-api-provider-aws/cluster/<name>; the
 # classic load balancer is found by its exact name, <name>-apiserver. Run it after
 # `just live-down`, and before any force delete: a force delete drops only Palette's records.
 set -uo pipefail
-name=${1:-barney}
+name=${1:-fred}
 region=${2:-us-east-2}
 tag="sigs.k8s.io/cluster-api-provider-aws/cluster/$name"
 total=0

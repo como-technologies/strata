@@ -38,12 +38,12 @@ resource and the OS and CSI packs in `terraform/main.tf`.
 | profile `strata-live-profile` 1.0.0 | Ubuntu 24.04, Kubernetes 1.36.2, Cilium 1.20.1, EBS CSI 1.65.0, default values. The cluster runs it. |
 | profile `strata-live-profile` 1.0.1 | The same, with the EBS storage class `reclaimPolicy` changed from `Delete` to `Retain`. Nothing runs it. |
 | profile `strata-live-addon` 1.0.0 | An add-on profile with one manifest, the ConfigMap `strata-live-config` in `default`. The cluster runs it after the release profile. |
-| cluster `barney` | One control plane and two workers, `t3.xlarge`, one availability zone. |
+| cluster `fred` | One control plane and two workers, `t3.xlarge`, one availability zone. |
 | profile `strata-live-registries` 1.0.0 | An add-on profile with one chart from a Helm registry (default `nginx` 25.1.5 from `Bitnami`) and one pack from an OCI pack registry that `terraform.tfvars` names. Nothing runs it. |
 
 The pack versions are those of `examples/profiles/aws-pxk@1.1.0.json`.
 
-`in-place.sh` adds cluster `fred`, with the same two profiles, for the length
+`in-place.sh` adds cluster `barney`, with the same two profiles, for the length
 of its run. The two cluster names share no part, so no prefix or substring
 match finds both. `registry-move.sh` adds profile `strata-live-move` 1.0.0 and
 1.0.1, with the release packs, and deletes both at its end.
@@ -77,8 +77,8 @@ holds the rest, so a difference in its results has one cause.
 
 **The baseline** is the state `just live-up` builds, and `baseline.sh`
 checks it: a Terraform plan with the default variables changes nothing,
-cluster A (`barney`) is `Running` and runs the release and add-on profiles'
-current content, no cluster B (`fred`) exists, and each profile name holds
+cluster A (`fred`) is `Running` and runs the release and add-on profiles'
+current content, no cluster B (`barney`) exists, and each profile name holds
 exactly the versions Terraform manages. Every script requires it before it
 starts and leaves it as it found it.
 
@@ -198,7 +198,7 @@ pass it on, so every step talks to the same Palette.
    one `runs/<UTC time>/` directory, and stops at the first that fails. The
    recorded runs below come from it.
 
-   `in-place.sh` is billable: it creates cluster `fred`, which
+   `in-place.sh` is billable: it creates cluster `barney`, which
    takes about 20 minutes, and deletes it at the end, which takes 10 to 30.
    It waits for that cluster to be `Running` before deleting it, because
    Palette does not carry out the deletion of a cluster that is still

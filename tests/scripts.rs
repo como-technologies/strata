@@ -627,10 +627,10 @@ fn tenant_cluster(status: &str, body: &str) -> (Output, String) {
 fn tenant_sh_reports_cluster_state_and_never_reads_a_gateway_404_as_deleted() {
     let (o, urls) = tenant_cluster(
         "200",
-        r#"{"metadata":{"name":"barney"},"status":{"state":"Running"}}"#,
+        r#"{"metadata":{"name":"fred"},"status":{"state":"Running"}}"#,
     );
     assert_eq!(o.status.code(), Some(1), "still there: {}", text(&o.stdout));
-    assert_eq!(text(&o.stdout).trim(), "barney c-123: Running");
+    assert_eq!(text(&o.stdout).trim(), "fred c-123: Running");
     assert!(urls.contains("/v1/spectroclusters/c-123"), "{urls}");
     assert!(
         urls.starts_with("https://api.spectrocloud.com/"),
@@ -639,25 +639,25 @@ fn tenant_sh_reports_cluster_state_and_never_reads_a_gateway_404_as_deleted() {
 
     let (o, _) = tenant_cluster(
         "200",
-        r#"{"metadata":{"name":"barney"},"status":{"state":"Deleted"}}"#,
+        r#"{"metadata":{"name":"fred"},"status":{"state":"Deleted"}}"#,
     );
     assert_eq!(
         o.status.code(),
         Some(0),
         "a deleted cluster answers 200 with state Deleted"
     );
-    assert_eq!(text(&o.stdout).trim(), "barney c-123: Deleted");
+    assert_eq!(text(&o.stdout).trim(), "fred c-123: Deleted");
 
     let (o, _) = tenant_cluster(
         "200",
-        r#"{"metadata":{"name":"fred"},"status":{"state":"Provisioning","conditions":[
+        r#"{"metadata":{"name":"barney"},"status":{"state":"Provisioning","conditions":[
             {"type":"KubeConfigReady","status":"True","message":"Kubeconfig file is available."},
             {"type":"WorkerNodeAdditionDone","status":"False","message":"provision worker nodes"}]}}"#,
     );
     assert_eq!(o.status.code(), Some(1));
     assert_eq!(
         text(&o.stdout),
-        "fred c-123: Provisioning\n  not done: WorkerNodeAdditionDone: provision worker nodes\n",
+        "barney c-123: Provisioning\n  not done: WorkerNodeAdditionDone: provision worker nodes\n",
         "a cluster that is not Running says which conditions hold it"
     );
 
@@ -1082,12 +1082,12 @@ grep -q 'fake-kubeconfig' "${KUBECONFIG:-/dev/null}" 2>/dev/null || { echo "no k
 echo "kubectl says: $*"
 "#;
 
-/// The fake Palette routes for one stuck cluster, `c-1` named fred.
+/// The fake Palette routes for one stuck cluster, `c-1` named barney.
 fn stuck_cluster_routes(routes: &Path, kubeconfig: bool) {
     std::fs::create_dir_all(routes).unwrap();
     std::fs::write(
         routes.join("v1_spectroclusters_c-1"),
-        r#"{"metadata":{"name":"fred"},"status":{"state":"Provisioning","conditions":[
+        r#"{"metadata":{"name":"barney"},"status":{"state":"Provisioning","conditions":[
             {"type":"WorkerNodeAdditionDone","status":"False","message":"provision worker nodes"}]}}"#,
     )
     .unwrap();
@@ -1260,8 +1260,8 @@ case "$*" in
   *"show -json"*) cat <<'JSON'
 {"values":{"outputs":{"project_uid":{"value":"p-1"}},"root_module":{"resources":[
   {"type":"spectrocloud_cluster_profile","values":{"id":"prof-1","name":"strata-live-profile"}},
-  {"type":"spectrocloud_cluster_aws","values":{"id":"c-1","name":"fred","cloud_config":[{"region":"us-east-2"}]}},
-  {"type":"spectrocloud_cluster_aws","values":{"id":"c-2","name":"barney","cloud_config":[{"region":"us-east-2"}]}}
+  {"type":"spectrocloud_cluster_aws","values":{"id":"c-1","name":"barney","cloud_config":[{"region":"us-east-2"}]}},
+  {"type":"spectrocloud_cluster_aws","values":{"id":"c-2","name":"fred","cloud_config":[{"region":"us-east-2"}]}}
 ]}}}
 JSON
   ;;
@@ -1275,7 +1275,7 @@ fn diagnose_sh_saves_diagnostics_for_every_cluster_in_the_terraform_state() {
     stuck_cluster_routes(&root.path().join("routes"), true);
     std::fs::write(
         root.path().join("routes/v1_spectroclusters_c-2"),
-        r#"{"metadata":{"name":"barney"},"status":{"state":"Running"}}"#,
+        r#"{"metadata":{"name":"fred"},"status":{"state":"Running"}}"#,
     )
     .unwrap();
     std::fs::create_dir_all(root.path().join("bin")).unwrap();
@@ -1283,10 +1283,10 @@ fn diagnose_sh_saves_diagnostics_for_every_cluster_in_the_terraform_state() {
     let out = root.path().join("diag");
     let o = run_live("diagnose.sh", &[out.to_str().unwrap()], root.path(), &[]);
     assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
-    assert!(out.join("fred/cluster.json").exists());
     assert!(out.join("barney/cluster.json").exists());
-    let fred = std::fs::read_to_string(out.join("fred/state.txt")).unwrap();
-    assert!(fred.contains("fred c-1: Provisioning"), "{fred}");
+    assert!(out.join("fred/cluster.json").exists());
+    let barney = std::fs::read_to_string(out.join("barney/state.txt")).unwrap();
+    assert!(barney.contains("barney c-1: Provisioning"), "{barney}");
 }
 
 /// A `terraform` for baseline.sh: outputs for cluster A `c-a` and four profile versions, a plan
@@ -1298,7 +1298,7 @@ case "$*" in
  "profile_name":{"value":"strata-live-profile"},"release_profile_uid":{"value":"r-1"},
  "addon_profile_uid":{"value":"ad-1"},"addon_profile_name":{"value":"strata-live-addon"},
  "profile_names":{"value":["strata-live-profile","strata-live-addon","strata-live-move"]},
- "cluster_names":{"value":{"a":"barney","b":"fred"}}}
+ "cluster_names":{"value":{"a":"fred","b":"barney"}}}
 JSON
   ;;
   *"plan"*)
@@ -1311,7 +1311,7 @@ JSON
   {"type":"spectrocloud_cluster_profile","values":{"id":"r-1","name":"strata-live-profile"}},
   {"type":"spectrocloud_cluster_profile","values":{"id":"r-2","name":"strata-live-profile"}},
   {"type":"spectrocloud_cluster_profile","values":{"id":"ad-1","name":"strata-live-addon"}},
-  {"type":"spectrocloud_cluster_aws","values":{"id":"c-a","name":"barney"}}
+  {"type":"spectrocloud_cluster_aws","values":{"id":"c-a","name":"fred"}}
 ]}}}
 JSON
   ;;
@@ -1323,7 +1323,7 @@ esac
 /// $FAKE_COMPARE_EXIT.
 const FAKE_STRATA_BASELINE: &str = r#"#!/usr/bin/env bash
 case "$*" in
-  "list clusters --json") echo "{\"clusters\":[{\"name\":\"barney\",\"uid\":\"c-a\"}${FAKE_FRED:+,{\"name\":\"fred\",\"uid\":\"c-b\"\}}]}" ;;
+  "list clusters --json") echo "{\"clusters\":[{\"name\":\"fred\",\"uid\":\"c-a\"}${FAKE_CLUSTER_B:+,{\"name\":\"barney\",\"uid\":\"c-b\"\}}]}" ;;
   "list profiles --json") echo "{\"profiles\":[{\"name\":\"strata-live-profile\",\"uid\":\"r-1\"},{\"name\":\"strata-live-profile\",\"uid\":\"r-2\"},{\"name\":\"strata-live-addon\",\"uid\":\"ad-1\"}${FAKE_EXTRA_ADDON:+,{\"name\":\"strata-live-addon\",\"uid\":\"ad-2\"\}}]}" ;;
   compare*) echo "x -> y"; echo "root       aaa -> bbb   CHANGED"; exit "${FAKE_COMPARE_EXIT:-0}" ;;
   *) exit 1 ;;
@@ -1336,7 +1336,7 @@ fn run_baseline(extra: &[(&str, &str)]) -> Output {
     std::fs::create_dir_all(&routes).unwrap();
     std::fs::write(
         routes.join("v1_spectroclusters_c-a"),
-        r#"{"metadata":{"name":"barney"},"status":{"state":"Running"}}"#,
+        r#"{"metadata":{"name":"fred"},"status":{"state":"Running"}}"#,
     )
     .unwrap();
     let bin = root.path().join("bin");
@@ -1372,14 +1372,14 @@ fn baseline_sh_passes_only_when_every_condition_holds_and_names_each_that_does_n
     let o = run_baseline(&[
         ("FAKE_PLAN_EXIT", "2"),
         ("FAKE_EXTRA_ADDON", "1"),
-        ("FAKE_FRED", "1"),
+        ("FAKE_CLUSTER_B", "1"),
         ("FAKE_COMPARE_EXIT", "1"),
     ]);
     let out = text(&o.stdout);
     assert_eq!(o.status.code(), Some(1), "{out}{}", text(&o.stderr));
     for want in [
         "spectrocloud_cluster_profile.addon will be updated in-place",
-        "fred exists: c-b",
+        "barney exists: c-b",
         "strata-live-addon: Palette has ad-1 ad-2, Terraform manages ad-1",
         "root       aaa -> bbb   CHANGED",
     ] {

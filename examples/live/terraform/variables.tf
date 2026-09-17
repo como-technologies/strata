@@ -32,7 +32,7 @@ variable "name_prefix" {
 variable "cluster_name" {
   description = "Cluster A's name: shares no part with second_cluster_name, so no prefix or substring match finds both"
   type        = string
-  default     = "barney"
+  default     = "fred"
 }
 
 variable "instance_type" {
@@ -136,7 +136,7 @@ variable "second_cluster" {
 variable "second_cluster_name" {
   description = "Cluster B's name: shares no part with cluster_name, so no prefix or substring match finds both"
   type        = string
-  default     = "fred"
+  default     = "barney"
 }
 
 variable "immutable_profiles" {
