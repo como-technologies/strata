@@ -219,7 +219,8 @@ fn write_cluster(root: &Path, dir: &str, profiles: &[&str], values: &[(&str, &st
 }
 
 /// Copy the three raw files from `from` to `to`, applying each text replacement to every file.
-fn rewrite(from: &Path, to: &Path, replacements: &[(&str, &str)]) {
+/// Copy a raw profile fixture with each replacement applied to its files.
+pub fn rewrite(from: &Path, to: &Path, replacements: &[(&str, &str)]) {
     fs::create_dir_all(to).unwrap();
     for name in ["profile.json", "manifests.json", "variables.json"] {
         let mut text = fs::read_to_string(from.join(name)).unwrap();

@@ -138,6 +138,44 @@ fi
 exec "$REAL_STRATA" "$@"
 "#;
 
+/// A `curl` for the GitLab REST API: logs each call as "METHOD /path field field", keeps each
+/// body file it is handed as body-<n>.md in call order, answers a GET from a gl-*.json file under
+/// FAKE_GL when the test wrote one, numbers a new issue from 41 up, and prints the status code
+/// FAKE_GL_STATUS (200 by default) the way `-w '%{http_code}'` does.
+const FAKE_GL_CURL: &str = r#"#!/usr/bin/env bash
+set -euo pipefail
+out=/dev/null; method=GET; url=""; data=()
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -o) out=$2; shift 2 ;;
+    -X) method=$2; shift 2 ;;
+    -H|-w) shift 2 ;;
+    --data-urlencode) data+=("$2"); shift 2 ;;
+    -*) shift ;;
+    *) url=$1; shift ;;
+  esac
+done
+path=${url#*/api/v4}
+echo "$method $path ${data[*]-}" >> "$FAKE_GL/curl.log"
+n=$(wc -l < "$FAKE_GL/curl.log")
+for d in "${data[@]-}"; do
+  f=${d#*@}
+  case "$d" in *@*) [ -f "$f" ] && cp "$f" "$FAKE_GL/body-$n.md" ;; esac
+done
+answer='{}'
+from() { [ -f "$FAKE_GL/$1" ] && answer=$(cat "$FAKE_GL/$1") || answer=$2; }
+case "$method $path" in
+  "GET "*"/notes"*) from gl-notes.json "[]" ;;
+  "GET "*"/merge_requests/"*) from gl-mr.json '{"labels":[]}' ;;
+  "GET "*"/labels"*) from gl-labels.json "[]" ;;
+  "GET "*"/issues"*) from gl-issues.json "[]" ;;
+  "POST /projects/"*"/issues") c=$(cat "$FAKE_GL/created" 2>/dev/null || echo 40); c=$((c + 1))
+                                echo "$c" > "$FAKE_GL/created"; answer="{\"iid\":$c}" ;;
+esac
+printf '%s' "$answer" > "$out"
+printf '%s' "${FAKE_GL_STATUS:-200}"
+"#;
+
 struct Host {
     _dir: tempfile::TempDir,
     bin: PathBuf,
@@ -146,6 +184,7 @@ struct Host {
     comments: PathBuf,
     labels: PathBuf,
     repo_labels: PathBuf,
+    gl: PathBuf,
     home: PathBuf,
     a: String,
     a2: String,
@@ -173,7 +212,11 @@ fn host() -> Host {
     };
     let bin = dir.path().join("bin");
     std::fs::create_dir(&bin).unwrap();
-    for (name, body) in [("gh", FAKE_GH), ("fake-strata", FAKE_STRATA)] {
+    for (name, body) in [
+        ("gh", FAKE_GH),
+        ("fake-strata", FAKE_STRATA),
+        ("curl", FAKE_GL_CURL),
+    ] {
         let path = bin.join(name);
         std::fs::write(&path, body).unwrap();
         #[cfg(unix)]
@@ -193,6 +236,11 @@ fn host() -> Host {
         comments: dir.path().join("comments.json"),
         labels: dir.path().join("labels.json"),
         repo_labels: dir.path().join("repo-labels.json"),
+        gl: {
+            let g = dir.path().join("gitlab");
+            std::fs::create_dir(&g).unwrap();
+            g
+        },
         home: {
             let h = dir.path().join("home");
             std::fs::create_dir(&h).unwrap();
@@ -252,6 +300,42 @@ impl Host {
 
     fn saved_body(&self) -> String {
         std::fs::read_to_string(&self.body).expect("gh was handed a comment body")
+    }
+
+    /// Run the script the way a GitLab job does: the CI variables, and no --host.
+    fn run_gitlab(&self, args: &[&str], envs: &[(&str, &str)]) -> Output {
+        for f in ["curl.log", "body-1.md", "body-2.md", "body-3.md"] {
+            let _ = std::fs::remove_file(self.gl.join(f));
+        }
+        let gl = self.gl.display().to_string();
+        let mut all: Vec<(&str, &str)> = vec![
+            ("FAKE_GL", &gl),
+            ("GITLAB_CI", "true"),
+            ("CI_PROJECT_ID", "42"),
+            ("CI_MERGE_REQUEST_IID", "7"),
+            ("CI_API_V4_URL", "https://gitlab.example/api/v4"),
+            ("GITLAB_TOKEN", "a-token"),
+        ];
+        all.extend_from_slice(envs);
+        self.run_with(args, &all)
+    }
+
+    fn put_gl(&self, name: &str, body: &str) {
+        std::fs::write(self.gl.join(name), body).unwrap();
+    }
+
+    fn gl_calls(&self) -> Vec<String> {
+        std::fs::read_to_string(self.gl.join("curl.log"))
+            .unwrap_or_default()
+            .lines()
+            .map(str::to_string)
+            .collect()
+    }
+
+    /// The body file handed to curl on the call with this 1-based number.
+    fn gl_handed(&self, call: usize) -> String {
+        std::fs::read_to_string(self.gl.join(format!("body-{call}.md")))
+            .unwrap_or_else(|_| panic!("curl call {call} was handed no body"))
     }
 }
 
@@ -458,6 +542,497 @@ fn pr_comment_snapshots_a_live_ref_once_and_compares_files_offline() {
     assert!(h
         .saved_body()
         .contains("### lab-profile@1.3.0 → lab-profile@1.2.0"));
+}
+
+#[test]
+fn pr_comment_posts_one_marked_note_and_labels_the_merge_request_on_gitlab() {
+    let h = host();
+    // no --host and no --pr: the CI variables of a GitLab job say both
+    let o = h.run_gitlab(&[&h.a, &h.b], &[]);
+    assert!(o.status.success(), "{}{}", text(&o.stdout), text(&o.stderr));
+    let calls = h.gl_calls();
+    assert!(
+        calls[0].starts_with("GET /projects/42/merge_requests/7/notes"),
+        "{calls:?}"
+    );
+    assert!(
+        calls[1].starts_with("POST /projects/42/merge_requests/7/notes body@"),
+        "{calls:?}"
+    );
+    let body = h.gl_handed(2);
+    assert!(
+        body.starts_with("<!-- strata -->\n"),
+        "marker first so the note can be found again:\n{body}"
+    );
+    assert!(
+        body.contains("### lab-profile@1.2.0 → lab-profile@1.3.0"),
+        "{body}"
+    );
+    let create = calls
+        .iter()
+        .position(|c| c.starts_with("POST /projects/42/labels name=repave"))
+        .expect("a label the project lacks is created first");
+    let add = calls
+        .iter()
+        .position(|c| c == "PUT /projects/42/merge_requests/7 add_labels=repave")
+        .expect("repave reaches the default threshold");
+    assert!(create < add, "{calls:?}");
+    assert!(
+        text(&o.stderr).contains("max impact: repave"),
+        "{}",
+        text(&o.stderr)
+    );
+}
+
+#[test]
+fn pr_comment_updates_the_marked_note_on_gitlab_and_leaves_a_label_it_has() {
+    let h = host();
+    h.put_gl(
+        "gl-notes.json",
+        r#"[{"id": 11, "body": "a review note"}, {"id": 55, "body": "<!-- strata -->\nan older report"}]"#,
+    );
+    h.put_gl("gl-mr.json", r#"{"labels": ["repave", "review"]}"#);
+    let o = h.run_gitlab(&[&h.a, &h.b], &[]);
+    assert!(o.status.success(), "{}{}", text(&o.stdout), text(&o.stderr));
+    let calls = h.gl_calls();
+    assert!(
+        calls
+            .iter()
+            .any(|c| c.starts_with("PUT /projects/42/merge_requests/7/notes/55 body@")),
+        "the marked note is updated, not doubled: {calls:?}"
+    );
+    assert!(
+        !calls
+            .iter()
+            .any(|c| c.starts_with("POST /projects/42/merge_requests/7/notes")),
+        "{calls:?}"
+    );
+    assert!(
+        !calls.iter().any(|c| c.contains("add_labels")),
+        "the merge request already has the label: {calls:?}"
+    );
+    assert!(
+        text(&o.stderr).contains("comment 55 updated"),
+        "{}",
+        text(&o.stderr)
+    );
+}
+
+#[test]
+fn pr_comment_stops_on_what_gitlab_answers_and_asks_for_a_token_that_can_write() {
+    let h = host();
+    let o = h.run_gitlab(&[&h.a, &h.b], &[("FAKE_GL_STATUS", "403")]);
+    assert!(!o.status.success());
+    assert!(
+        text(&o.stderr).contains("GitLab answered HTTP 403"),
+        "{}",
+        text(&o.stderr)
+    );
+
+    let o = h.run_gitlab(&[&h.a, &h.b], &[("GITLAB_TOKEN", "")]);
+    assert_eq!(o.status.code(), Some(2));
+    assert!(
+        text(&o.stderr).contains("set GITLAB_TOKEN"),
+        "{}",
+        text(&o.stderr)
+    );
+    assert!(h.gl_calls().is_empty(), "no call before the token is there");
+}
+
+// ---- install-strata.sh -------------------------------------------------------------------------
+
+/// A `curl` for the release API of a code host: the release document, and each asset by its id.
+const FAKE_RELEASE_CURL: &str = r#"#!/usr/bin/env bash
+set -euo pipefail
+out=""; url=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -o) out=$2; shift 2 ;;
+    -H) shift 2 ;;
+    -*) shift ;;
+    *) url=$1; shift ;;
+  esac
+done
+echo "$url" >> "$FAKE_REL/curl.log"
+case "$url" in
+  */releases/tags/*|*/releases/latest) cp "$FAKE_REL/release.json" "$out" ;;
+  */releases/assets/*) cp "$FAKE_REL/assets/${url##*/}" "$out" ;;
+  *) echo "no such URL: $url" >&2; exit 22 ;;
+esac
+"#;
+
+/// A release with the four files a job downloads, and the checksums over them.
+fn release() -> tempfile::TempDir {
+    let dir = tempfile::tempdir().unwrap();
+    let d = dir.path();
+    let assets = d.join("assets");
+    std::fs::create_dir(&assets).unwrap();
+    let files = [
+        (
+            "1",
+            "strata-x86_64-unknown-linux-musl",
+            "#!/bin/sh\necho strata 9.9.9\n",
+        ),
+        ("2", "pr-comment.sh", "#!/bin/sh\necho comment\n"),
+        ("3", "verify-report.sh", "#!/bin/sh\necho report\n"),
+        ("4", "install-strata.sh", "#!/bin/sh\necho installer\n"),
+    ];
+    let mut sums = String::new();
+    let mut listed = Vec::new();
+    for (id, name, body) in files {
+        std::fs::write(assets.join(id), body).unwrap();
+        let sum = Command::new("sha256sum")
+            .arg(assets.join(id))
+            .output()
+            .unwrap();
+        let sum = text(&sum.stdout);
+        sums.push_str(&format!(
+            "{}  {}\n",
+            sum.split_whitespace().next().unwrap(),
+            name
+        ));
+        listed.push(serde_json::json!({"name": name, "id": id.parse::<u32>().unwrap()}));
+    }
+    std::fs::write(assets.join("5"), &sums).unwrap();
+    listed.push(serde_json::json!({"name": "SHA256SUMS", "id": 5}));
+    std::fs::write(
+        d.join("release.json"),
+        serde_json::json!({"tag_name": "v9.9.9", "assets": listed}).to_string(),
+    )
+    .unwrap();
+    let bin = d.join("bin");
+    std::fs::create_dir(&bin).unwrap();
+    executable(&bin.join("curl"), FAKE_RELEASE_CURL);
+    dir
+}
+
+fn install(d: &Path, args: &[&str]) -> Output {
+    Command::new("bash")
+        .arg(script("install-strata.sh"))
+        .args(args)
+        .current_dir(d)
+        .env(
+            "PATH",
+            format!(
+                "{}:{}",
+                d.join("bin").display(),
+                std::env::var("PATH").unwrap()
+            ),
+        )
+        .env("FAKE_REL", d)
+        .env("STRATA_API", "https://host.example/api")
+        .env("STRATA_REPO", "o/r")
+        .env_remove("STRATA_TOKEN")
+        .env_remove("GITHUB_TOKEN")
+        .env_remove("GH_TOKEN")
+        .output()
+        .unwrap()
+}
+
+#[test]
+fn install_strata_takes_the_binary_and_the_scripts_of_one_release_and_checks_them() {
+    let r = release();
+    let d = r.path();
+    let o = install(
+        d,
+        &[
+            "--version",
+            "v9.9.9",
+            "--dir",
+            "here",
+            "--target",
+            "x86_64-unknown-linux-musl",
+        ],
+    );
+    assert!(o.status.success(), "{}{}", text(&o.stdout), text(&o.stderr));
+    assert_eq!(
+        text(&o.stdout).trim(),
+        "here/strata",
+        "the path of the binary, for STRATA_BIN"
+    );
+    for name in ["strata", "pr-comment.sh", "verify-report.sh", "SHA256SUMS"] {
+        assert!(d.join("here").join(name).exists(), "{name} is installed");
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        for name in ["strata", "pr-comment.sh", "verify-report.sh"] {
+            let mode = std::fs::metadata(d.join("here").join(name))
+                .unwrap()
+                .permissions()
+                .mode();
+            assert_eq!(mode & 0o111, 0o111, "{name} is executable");
+        }
+    }
+    assert!(
+        text(&o.stderr).contains("v9.9.9 installed in here, checksums verified"),
+        "{}",
+        text(&o.stderr)
+    );
+}
+
+#[test]
+fn install_strata_installs_nothing_when_a_file_does_not_match_the_checksums() {
+    let r = release();
+    let d = r.path();
+    // the release serves another binary than the one SHA256SUMS signed
+    std::fs::write(d.join("assets/1"), "#!/bin/sh\necho another build\n").unwrap();
+    let o = install(
+        d,
+        &[
+            "--version",
+            "v9.9.9",
+            "--dir",
+            "here",
+            "--target",
+            "x86_64-unknown-linux-musl",
+        ],
+    );
+    assert_eq!(o.status.code(), Some(2));
+    assert!(
+        text(&o.stderr).contains("do not match SHA256SUMS"),
+        "{}",
+        text(&o.stderr)
+    );
+    assert!(
+        !d.join("here/strata").exists(),
+        "the check comes before anything is installed"
+    );
+}
+
+#[test]
+fn install_strata_says_which_file_a_release_does_not_have() {
+    let r = release();
+    let d = r.path();
+    let doc = std::fs::read_to_string(d.join("release.json")).unwrap();
+    let doc = doc.replace("\"pr-comment.sh\"", "\"something-else.sh\"");
+    std::fs::write(d.join("release.json"), doc).unwrap();
+    let o = install(
+        d,
+        &[
+            "--version",
+            "v9.9.9",
+            "--dir",
+            "here",
+            "--target",
+            "x86_64-unknown-linux-musl",
+        ],
+    );
+    assert_eq!(o.status.code(), Some(2));
+    assert!(
+        text(&o.stderr).contains("the release v9.9.9 has no pr-comment.sh"),
+        "{}",
+        text(&o.stderr)
+    );
+}
+
+// ---- merge-gate.sh ----------------------------------------------------------------------------
+
+/// A repository with a main branch that holds `releases/dev.json`, and a branch `work` that
+/// changes it. `main_side` is what another merge request put on main in the meantime.
+struct Gate {
+    dir: tempfile::TempDir,
+}
+
+impl Gate {
+    fn new(base: &str, branch: &str, main_side: &str) -> Gate {
+        Gate::build(base, branch, main_side, false)
+    }
+
+    /// The same, and the branch then merged main and kept its own record, which is what a hand
+    /// merge of a conflict does. The branch carries main, and still pins its own version.
+    fn merged_keeping_its_own(base: &str, branch: &str, main_side: &str) -> Gate {
+        Gate::build(base, branch, main_side, true)
+    }
+
+    fn build(base: &str, branch: &str, main_side: &str, merge_ours: bool) -> Gate {
+        let dir = tempfile::tempdir().unwrap();
+        let d = dir.path();
+        git(d, &["init", "-q", "-b", "main"]);
+        std::fs::create_dir(d.join("releases")).unwrap();
+        std::fs::write(d.join("releases/dev.json"), base).unwrap();
+        git(d, &["add", "."]);
+        git(d, &["commit", "-q", "-m", "the record"]);
+        git(d, &["checkout", "-q", "-b", "work"]);
+        std::fs::write(d.join("releases/dev.json"), branch).unwrap();
+        git(d, &["commit", "-qam", "the branch moves dev"]);
+        git(d, &["checkout", "-q", "main"]);
+        if main_side != base {
+            std::fs::write(d.join("releases/dev.json"), main_side).unwrap();
+            git(d, &["commit", "-qam", "another merge request moved dev"]);
+        }
+        // a remote named origin is this repository itself, which is what a fetch in CI reads
+        git(d, &["remote", "add", "origin", d.to_str().unwrap()]);
+        git(d, &["checkout", "-q", "work"]);
+        if merge_ours {
+            git(d, &["fetch", "-q", "origin", "main"]);
+            git(
+                d,
+                &["merge", "-q", "-X", "ours", "--no-edit", "origin/main"],
+            );
+        }
+        Gate { dir }
+    }
+
+    fn run(&self, args: &[&str]) -> Output {
+        Command::new("bash")
+            .arg(script("merge-gate.sh"))
+            .args(args)
+            .current_dir(self.dir.path())
+            .env("GIT_CONFIG_GLOBAL", "/dev/null")
+            .env("GIT_CONFIG_SYSTEM", "/dev/null")
+            .env("GIT_AUTHOR_NAME", "t")
+            .env("GIT_AUTHOR_EMAIL", "t@example.com")
+            .env("GIT_COMMITTER_NAME", "t")
+            .env("GIT_COMMITTER_EMAIL", "t@example.com")
+            .env("STRATA_BIN", env!("CARGO_BIN_EXE_strata"))
+            .env("STRATA_QUIET", "1")
+            .env_remove("PALETTE_API_KEY")
+            .env_remove("SPECTROCLOUD_APIKEY")
+            .output()
+            .unwrap()
+    }
+}
+
+/// The record of fixture a, the record the branch pins, and the later record another merge
+/// request put on main. All three carry one header, the way records written by one job do.
+fn gate_records() -> (String, String, String) {
+    let dir = tempfile::tempdir().unwrap();
+    let raw = dir.path().join("raw");
+    common::make_fixtures(&raw);
+    common::rewrite(&raw.join("a"), &raw.join("branch"), &[("1.29.4", "1.30.2")]);
+    common::rewrite(
+        &raw.join("a"),
+        &raw.join("main-side"),
+        &[("1.29.4", "1.31.0")],
+    );
+    let snap = |name: &str| -> String {
+        let out = dir.path().join(format!("{name}.json"));
+        let o = Command::new(env!("CARGO_BIN_EXE_strata"))
+            .args(["snapshot", "--from-raw"])
+            .arg(raw.join(name))
+            .arg("-o")
+            .arg(&out)
+            .env("STRATA_QUIET", "1")
+            .output()
+            .unwrap();
+        assert!(o.status.success(), "{}", text(&o.stderr));
+        // one header for all three: the ref and the time are what the job wrote, not the change
+        let doc = std::fs::read_to_string(&out).unwrap();
+        let doc = field(&doc, "\"ref\": \"", "releases/dev.json");
+        field(&doc, "\"fetchedAt\": \"", "2026-09-17T00:00:00Z")
+    };
+    let (base, branch, main_side) = (snap("a"), snap("branch"), snap("main-side"));
+    assert_ne!(base, branch);
+    assert_ne!(branch, main_side);
+    (base, branch, main_side)
+}
+
+/// Replace the value that follows the first `key` in a JSON document.
+fn field(doc: &str, key: &str, value: &str) -> String {
+    let i = doc
+        .find(key)
+        .unwrap_or_else(|| panic!("no {key} in the document"))
+        + key.len();
+    let j = doc[i..].find('"').unwrap() + i;
+    format!("{}{}{}", &doc[..i], value, &doc[j..])
+}
+
+#[test]
+fn merge_gate_stops_a_branch_that_would_replace_a_newer_pin() {
+    let (base, branch, main_side) = gate_records();
+    // the branch settled the conflict by keeping its own record, so git merges and says nothing
+    let g = Gate::merged_keeping_its_own(&base, &branch, &main_side);
+    let o = g.run(&["releases/*.json", "--base", "main", "--no-verify"]);
+    assert_eq!(
+        o.status.code(),
+        Some(1),
+        "the gate is red:\n{}{}",
+        text(&o.stdout),
+        text(&o.stderr)
+    );
+    let out = text(&o.stdout);
+    assert!(
+        out.contains(
+            "BEHIND: releases/dev.json would replace what main pinned with an older version"
+        ),
+        "{out}"
+    );
+    assert!(
+        out.contains("k8s/kubernetes: main has 1.31.0, the merge result has 1.30.2"),
+        "the line names the pack and both versions:\n{out}"
+    );
+    assert!(
+        text(&o.stderr).contains("1 records: 1 behind main"),
+        "{}",
+        text(&o.stderr)
+    );
+}
+
+#[test]
+fn merge_gate_passes_a_branch_that_carries_the_target_branch_and_moves_forward() {
+    let (base, branch, main_side) = gate_records();
+    // the target branch did not move, and the branch moves the pin forward
+    let g = Gate::new(&base, &branch, &base);
+    let o = g.run(&["releases/*.json", "--base", "main", "--no-verify"]);
+    assert!(o.status.success(), "{}{}", text(&o.stdout), text(&o.stderr));
+    assert!(
+        text(&o.stderr).contains("the merge result is clear against main"),
+        "{}",
+        text(&o.stderr)
+    );
+
+    // and a branch that settled the conflict by taking the later record is clear too
+    let g = Gate::merged_keeping_its_own(&base, &main_side, &main_side);
+    let o = g.run(&["releases/*.json", "--base", "main", "--no-verify"]);
+    assert!(o.status.success(), "{}{}", text(&o.stdout), text(&o.stderr));
+}
+
+#[test]
+fn merge_gate_reads_a_conflict_as_a_release_and_leaves_the_checkout_alone() {
+    let (base, branch, main_side) = gate_records();
+    let g = Gate::new(&base, &branch, &main_side);
+    let o = g.run(&["releases/*.json", "--base", "main", "--no-verify"]);
+    assert_eq!(o.status.code(), Some(1));
+    let out = text(&o.stdout);
+    assert!(
+        out.contains("CONFLICT: this branch does not merge origin/main cleanly"),
+        "{out}"
+    );
+    assert!(out.contains("releases/dev.json"), "{out}");
+    assert!(
+        out.contains("1.31.0") && out.contains("1.30.2"),
+        "the conflict is explained as the two releases:\n{out}"
+    );
+    let status = git(g.dir.path(), &["status", "--porcelain"]);
+    assert!(
+        text(&status.stdout).trim().is_empty(),
+        "the merge is aborted, so the job leaves a clean checkout: {}",
+        text(&status.stdout)
+    );
+}
+
+#[test]
+fn merge_gate_needs_a_target_branch_and_a_record() {
+    let (base, branch, main_side) = gate_records();
+    let g = Gate::new(&base, &branch, &main_side);
+    let o = g.run(&["releases/*.json", "--no-verify"]);
+    assert_eq!(o.status.code(), Some(2));
+    assert!(
+        text(&o.stderr).contains("pass --base"),
+        "{}",
+        text(&o.stderr)
+    );
+
+    // a branch that merges cleanly, so the patterns are what is left to fail on
+    let clean = Gate::new(&base, &branch, &base);
+    let o = clean.run(&["releases/none/*.json", "--base", "main", "--no-verify"]);
+    assert_eq!(o.status.code(), Some(2));
+    assert!(
+        text(&o.stderr).contains("no record in the merge result matches"),
+        "{}",
+        text(&o.stderr)
+    );
 }
 
 // ---- examples/live helpers -------------------------------------------------------------------
@@ -1742,6 +2317,7 @@ impl Drift {
         std::fs::create_dir(&bin).unwrap();
         executable(&bin.join("strata"), FAKE_VERIFY_STRATA);
         executable(&bin.join("gh"), FAKE_ISSUES_GH);
+        executable(&bin.join("curl"), FAKE_GL_CURL);
         Drift { dir }
     }
 
@@ -1798,6 +2374,33 @@ impl Drift {
                 ),
             )
             .env("FAKE_VERIFY", self.dir.path())
+            .env_remove("STRATA_BIN")
+            .env_remove("GITHUB_REPOSITORY")
+            .output()
+            .unwrap()
+    }
+
+    /// Run the script the way a GitLab job does; the stand-in curl answers from the same
+    /// directory, so its log and the bodies it is handed sit beside the rest.
+    fn run_gitlab(&self, args: &[&str]) -> Output {
+        let _ = std::fs::remove_file(self.dir.path().join("curl.log"));
+        Command::new("bash")
+            .arg(script("verify-report.sh"))
+            .args(args)
+            .env(
+                "PATH",
+                format!(
+                    "{}:{}",
+                    self.dir.path().join("bin").display(),
+                    std::env::var("PATH").unwrap()
+                ),
+            )
+            .env("FAKE_VERIFY", self.dir.path())
+            .env("FAKE_GL", self.dir.path())
+            .env("GITLAB_CI", "true")
+            .env("CI_PROJECT_ID", "42")
+            .env("CI_API_V4_URL", "https://gitlab.example/api/v4")
+            .env("GITLAB_TOKEN", "a-token")
             .env_remove("STRATA_BIN")
             .env_remove("GITHUB_REPOSITORY")
             .output()
@@ -2001,6 +2604,85 @@ fn verify_report_opens_one_issue_per_record_that_did_not_verify_and_closes_it_on
     let o = d.run(&["releases/a.json", "--repo", "o/r"]);
     assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
     assert_eq!(d.log("gh.log").len(), 1);
+}
+
+#[test]
+fn verify_report_opens_updates_and_closes_gitlab_issues_the_same_way() {
+    let d = Drift::new();
+    d.summary(
+        2,
+        &[
+            ("releases/a.json", "unchanged", "lab-profile", "1.2.0"),
+            ("releases/b.json", "drifted", "lab-profile", "1.3.0"),
+            ("releases/c.json", "error", "lab-profile", "1.0.0"),
+        ],
+    );
+    d.record("a", 0, "", "");
+    d.record("b", 1, "| `~` | k8s | `kubernetes` |\n", "");
+    d.record(
+        "c",
+        2,
+        "",
+        "api: GET /v1/clusterprofiles/64f0 failed with HTTP 404\n",
+    );
+    // one issue is already open for the record that verifies again, and one for the record that
+    // still cannot be checked
+    d.put(
+        "gl-issues.json",
+        r#"[{"iid": 7, "title": "strata verify: lab-profile@1.2.0 drifted (releases/a.json)",
+             "description": "<!-- strata-verify: releases/a.json -->\nan older report"},
+            {"iid": 9, "title": "strata verify: releases/c.json could not be checked",
+             "description": "<!-- strata-verify: releases/c.json -->\nan older report"}]"#,
+    );
+
+    let o = d.run_gitlab(&["releases/*.json"]);
+    assert_eq!(o.status.code(), Some(2), "{}", text(&o.stderr));
+    let calls = d.log("curl.log");
+    assert!(
+        calls[0].starts_with("GET /projects/42/issues?labels=strata-drift&state=opened"),
+        "{calls:?}"
+    );
+    // the record that verifies again is answered with a note and then closed
+    let note = calls
+        .iter()
+        .position(|c| {
+            c.starts_with("POST /projects/42/issues/7/notes body=`releases/a.json` verifies again")
+        })
+        .expect("the closing comment says why");
+    let close = calls
+        .iter()
+        .position(|c| c == "PUT /projects/42/issues/7 state_event=close")
+        .expect("and then the issue closes");
+    assert!(note < close, "{calls:?}");
+    // the record that drifted has no issue yet, so the label comes first and the issue is new
+    let label = calls
+        .iter()
+        .position(|c| c.starts_with("POST /projects/42/labels name=strata-drift"))
+        .expect("a label the project lacks is created first");
+    let open = calls
+        .iter()
+        .position(|c| {
+            c.starts_with("POST /projects/42/issues title=strata verify: lab-profile@1.3.0 drifted (releases/b.json)")
+                && c.contains("labels=strata-drift")
+        })
+        .expect("the new issue carries the label");
+    assert!(label < open, "{calls:?}");
+    // the record that still cannot be checked updates the issue it already has
+    assert!(
+        calls.iter().any(|c| c.starts_with(
+            "PUT /projects/42/issues/9 title=strata verify: releases/c.json could not be checked"
+        )),
+        "{calls:?}"
+    );
+    assert!(
+        !calls.iter().any(|c| c.starts_with("POST /projects/42/issues title=strata verify: releases/c.json")),
+        "no second issue for a record that has one: {calls:?}"
+    );
+    assert!(
+        text(&o.stderr).contains("3 records: 1 unchanged, 1 drifted, 1 could not be checked"),
+        "{}",
+        text(&o.stderr)
+    );
 }
 
 #[test]

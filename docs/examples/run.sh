@@ -465,6 +465,38 @@ profile $DEV $A110 1.1.0 aws-stack@1.1.0
 show2 review-published 0 'strata snapshot aws-stack@1.1.0 -o releases/1.1.0/dev.json'
 show review-same 0 'strata same-release candidate.json releases/1.1.0/dev.json'
 
+chapter merge-gate PALETTE_PROJECT=dev GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null \
+  GIT_AUTHOR_NAME=dev GIT_AUTHOR_EMAIL=dev@example.com \
+  GIT_COMMITTER_NAME=dev GIT_COMMITTER_EMAIL=dev@example.com
+projects dev=$DEV
+registries $DEV
+profile $DEV $A100 1.0.0 aws-stack@1.0.0
+# main pins aws-stack@1.0.0, and a branch changes the record: the profile was edited in place
+quiet 'mkdir -p releases && git init -q -b main . && git remote add origin .'
+quiet 'strata snapshot aws-stack@1.0.0 -o releases/dev.json &&
+  git add releases && git commit -qm "dev pins aws-stack@1.0.0"'
+quiet 'git checkout -q -b keep-the-volumes'
+edit $DEV $A100 "$RETAIN"
+quiet 'strata snapshot aws-stack@1.0.0 -o releases/dev.json &&
+  git commit -qam "keep the volumes on delete"'
+# while that branch waited, another merge request published 1.1.0 and pinned it on main
+quiet 'git checkout -q main'
+profile $DEV $A110 1.1.0 aws-stack@1.1.0
+quiet 'strata snapshot aws-stack@1.1.0 -o releases/dev.json &&
+  git commit -qam "dev pins aws-stack@1.1.0"'
+# the branch settled the conflict by keeping its own record, which is what a hand merge does
+quiet 'git checkout -q keep-the-volumes && git fetch -q origin main &&
+  { git merge -q --no-edit --no-commit origin/main || true; } &&
+  git checkout HEAD -- releases/dev.json &&
+  git commit -qm "merge main, keep our record"'
+show2 merge-gate-behind 1 'scripts/merge-gate.sh "releases/*.json" --base main'
+# the fix: pin the version that main has, with the change on top
+quiet 'strata snapshot aws-stack@1.1.0 -o releases/dev.json && git commit -qam "pin aws-stack@1.1.0"'
+show2 merge-gate-clear 0 'scripts/merge-gate.sh "releases/*.json" --base main'
+# and the check that git cannot make: the pinned profile is edited in Palette after the record
+edit $DEV $A110 "$RETAIN"
+show2 merge-gate-drifted 1 'scripts/merge-gate.sh "releases/*.json" --base main'
+
 chapter promote
 projects dev=$DEV prod=$PROD
 profile $DEV $A111 1.1.1 aws-stack@1.1.1

@@ -1,0 +1,81 @@
+name: strata merge gate
+
+# Reusable workflow. A repository calls it from its own pull request workflow to check the merge
+# result before the merge button: the records as they will be after the merge, against the base
+# branch as it is now; see docs/src/automation/merge-gate.md. Make it a required status check, with
+# "Require branches to be up to date before merging", or put it in the merge queue.
+# It downloads the strata release binary, checks it against SHA256SUMS, and runs
+# scripts/merge-gate.sh from the same tag. Other CI systems run the script directly.
+on:
+  workflow_call:
+    inputs:
+      records:
+        description: The records to check in the caller's checkout, snapshot files or patterns such as releases/**/*.json, separated by spaces or newlines. Git expands the patterns over the merge result.
+        required: true
+        type: string
+      verify:
+        description: Also verify each record of the merge result against Palette; needs palette-api-key
+        default: true
+        type: boolean
+      palette-api:
+        description: The Palette API address, for a self-hosted Palette; empty means https://api.spectrocloud.com
+        default: ""
+        type: string
+      strata-version:
+        description: The strata release to use, for example v0.5.0
+        required: true
+        type: string
+    secrets:
+      strata-token:
+        description: A token that can read como-technologies/strata (contents read), needed while that repository is private.
+        required: false
+      palette-api-key:
+        description: PALETTE_API_KEY, which the verify part of the gate needs
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      # the whole history: the gate compares the merge result with the base branch
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      # this repository at the requested tag, for the script
+      - uses: actions/checkout@v4
+        with:
+          repository: como-technologies/strata
+          ref: ${{ inputs.strata-version }}
+          path: .strata
+          token: ${{ secrets.strata-token || github.token }}
+      - name: install strata
+        env:
+          GH_TOKEN: ${{ secrets.strata-token || github.token }}
+          VERSION: ${{ inputs.strata-version }}
+        run: |
+          mkdir -p .strata/bin && cd .strata/bin
+          gh release download "$VERSION" --repo como-technologies/strata \
+            --pattern strata-x86_64-unknown-linux-musl --pattern SHA256SUMS
+          sha256sum --check --ignore-missing SHA256SUMS
+          chmod +x strata-x86_64-unknown-linux-musl
+          mv strata-x86_64-unknown-linux-musl strata
+          ./strata --version
+      - name: check the merge result
+        env:
+          STRATA_BIN: ${{ github.workspace }}/.strata/bin/strata
+          PALETTE_API_KEY: ${{ secrets.palette-api-key }}
+          PALETTE_API: ${{ inputs.palette-api }}
+          RECORDS: ${{ inputs.records }}
+          # the checkout of a pull request is already the merge result; the gate confirms it
+          GITHUB_BASE_REF: ${{ github.base_ref }}
+          NO_VERIFY: ${{ inputs.verify && '' || '--no-verify' }}
+        run: |
+          git config user.email "strata@github"
+          git config user.name "strata merge gate"
+          # split the records on whitespace and leave each pattern for git to expand
+          set -f
+          # shellcheck disable=SC2086
+          .strata/scripts/merge-gate.sh $RECORDS $NO_VERIFY

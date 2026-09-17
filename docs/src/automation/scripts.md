@@ -72,3 +72,17 @@ fields.
 
 Strata writes progress messages to standard error. `-q`, `--quiet`, or
 `STRATA_QUIET=1` stops them.
+
+## The scripts in this repository
+
+Each release carries these beside the binaries, so a CI job downloads one
+release and has everything.
+
+| Script | Does |
+| --- | --- |
+| [`pr-comment.sh`](./pr-comments.md) | One comment on a pull request or a merge request, and a label from the impact. |
+| [`merge-gate.sh`](./merge-gate.md) | The check that the merge button waits for: the records of the merge result. |
+| [`verify-report.sh`](./drift-issues.md) | One issue per record that drifted or could not be checked. |
+| [`install-strata.sh`](./gitlab.md#install-strata-in-a-job) | One release, with the checksums checked. |
+
+They run on GitHub and on GitLab. See [GitLab CI](./gitlab.md).

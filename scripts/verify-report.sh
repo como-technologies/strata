@@ -18,8 +18,13 @@
 # or closed issue a few seconds later, so two runs that close together can open a second issue for
 # one record: schedule runs minutes apart.
 #
-# Needs strata (or STRATA_BIN), jq, and gh logged in. Every host call is one of the functions
-# below, so another code host is another set of the same functions.
+# Hosts: GitHub through `gh`, and GitLab through the REST API v4 with `curl`. --host picks one;
+# without it, the CI variables do: GITLAB_CI or CI_PROJECT_ID means GitLab, else GitHub. On GitLab
+# the project is CI_PROJECT_ID or --repo, the API CI_API_V4_URL, and the token GITLAB_TOKEN: a job
+# token cannot write issues.
+#
+# Needs strata (or STRATA_BIN), jq, and the host's tool: gh logged in, or curl and GITLAB_TOKEN.
+# Every host call goes through `host`, so another code host is another set of the same functions.
 set -euo pipefail
 
 die() { echo "verify-report: $*" >&2; exit 2; }
@@ -31,41 +36,99 @@ quietly() {
   out=$("$@" 2>&1) || { printf '%s\n' "$out" >&2; return 1; }
 }
 
-# ---- host: GitHub through gh -----------------------------------------------------------------
-host_repo() { gh repo view --json nameWithOwner | jq -r .nameWithOwner; }
-host_open_issues() {
+# ---- the hosts ---------------------------------------------------------------------------------
+# One function for each thing the script needs from a code host. `host <name> [args]` calls the
+# set of the chosen host. Each set prints issues as [{number, title, body}].
+
+github_repo() { gh repo view --json nameWithOwner | jq -r .nameWithOwner; }
+github_open_issues() {
   gh issue list --repo "$repo" --label "$label" --state open --limit 1000 --json number,title,body
 }
-host_repo_labels() { gh label list --repo "$repo" --limit 1000 --json name | jq -r '.[].name'; }
-host_create_label() {
+github_repo_labels() { gh label list --repo "$repo" --limit 1000 --json name | jq -r '.[].name'; }
+github_create_label() {
   quietly gh label create "$1" --repo "$repo" --color d93f0b \
     --description "strata: a record that drifted or could not be checked"
 }
 # prints the new issue's number
-host_open_issue() {
+github_open_issue() {
   local url
   url=$(gh issue create --repo "$repo" --title "$1" --body-file "$2" --label "$label")
   echo "${url##*/}"
 }
-host_update_issue() { quietly gh issue edit "$1" --repo "$repo" --title "$2" --body-file "$3"; }
-host_close_issue() { quietly gh issue close "$1" --repo "$repo" --comment "$2"; }
+github_update_issue() { quietly gh issue edit "$1" --repo "$repo" --title "$2" --body-file "$3"; }
+github_close_issue() { quietly gh issue close "$1" --repo "$repo" --comment "$2"; }
+
+# GitLab: the REST API v4. The project is a number or a path with its slashes encoded.
+gitlab_api() { # METHOD PATH [curl arguments...]
+  local method=$1 path=$2 status body
+  shift 2
+  body=$(mktemp)
+  status=$(curl -sS -o "$body" -w '%{http_code}' -X "$method" \
+    -H "PRIVATE-TOKEN: ${GITLAB_TOKEN:-}" "$api/projects/$project$path" "$@")
+  case "$status" in
+    2*) cat "$body"; rm -f "$body" ;;
+    *) echo "verify-report: GitLab answered HTTP $status for $method $path: $(head -c 300 "$body")" >&2
+       rm -f "$body"; return 1 ;;
+  esac
+}
+gitlab_repo() { printf '%s' "${CI_PROJECT_PATH:-$project}"; }
+gitlab_open_issues() {
+  gitlab_api GET "/issues?labels=$label&state=opened&per_page=100" \
+    | jq '[.[] | {number: .iid, title: .title, body: .description}]'
+}
+gitlab_repo_labels() { gitlab_api GET "/labels?per_page=100" | jq -r '.[].name'; }
+gitlab_create_label() {
+  quietly gitlab_api POST "/labels" --data-urlencode "name=$1" --data-urlencode "color=#d93f0b" \
+    --data-urlencode "description=strata: a record that drifted or could not be checked"
+}
+gitlab_open_issue() {
+  gitlab_api POST "/issues" --data-urlencode "title=$1" --data-urlencode "description@$2" \
+    --data-urlencode "labels=$label" | jq -r .iid
+}
+gitlab_update_issue() {
+  quietly gitlab_api PUT "/issues/$1" --data-urlencode "title=$2" --data-urlencode "description@$3"
+}
+gitlab_close_issue() {
+  quietly gitlab_api POST "/issues/$1/notes" --data-urlencode "body=$2"
+  quietly gitlab_api PUT "/issues/$1" --data-urlencode "state_event=close"
+}
+
+host() { local what=$1; shift; "${host_kind}_$what" "$@"; }
 
 # ---- arguments -------------------------------------------------------------------------------
 patterns=()
 repo="${GITHUB_REPOSITORY:-}"
 label="strata-drift"
 dry=""
+host_kind=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --repo) repo=$2; shift 2 ;;
+    --host) host_kind=$2; shift 2 ;;
     --label) label=$2; shift 2 ;;
     --dry-run) dry=1; shift ;;
-    -h|--help) sed -n '2,22p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     --*) die "unknown option $1" ;;
     *) patterns+=("$1"); shift ;;
   esac
 done
-[ ${#patterns[@]} -gt 0 ] || die "usage: verify-report.sh <record or pattern>... [--repo OWNER/REPO] [--label NAME] [--dry-run]"
+[ ${#patterns[@]} -gt 0 ] || die "usage: verify-report.sh <record or pattern>... [--repo OWNER/REPO] [--host github|gitlab] [--label NAME] [--dry-run]"
+
+# The CI variables name the host when nothing else does.
+if [ -z "$host_kind" ]; then
+  if [ -n "${GITLAB_CI:-}${CI_PROJECT_ID:-}" ]; then host_kind=gitlab; else host_kind=github; fi
+fi
+case "$host_kind" in
+  github|gitlab) ;;
+  *) die "unknown host '$host_kind': github or gitlab" ;;
+esac
+if [ "$host_kind" = gitlab ]; then
+  api=${CI_API_V4_URL:-https://gitlab.com/api/v4}
+  project=${CI_PROJECT_ID:-}
+  # a path such as group/sub/project addresses a project too, with its slashes encoded
+  [ -n "$project" ] || project=$(printf '%s' "${repo:-}" | sed 's#/#%2F#g')
+  [ -n "$dry" ] || [ -n "${GITLAB_TOKEN:-}" ] || die "set GITLAB_TOKEN: a job token cannot write issues"
+fi
 
 strata=${STRATA_BIN:-strata}
 work=$(mktemp -d)
@@ -81,9 +144,9 @@ if ! jq -e '.schema == "strata-verify-summary/1"' "$work/summary.json" > /dev/nu
 fi
 
 if [ -z "$dry" ]; then
-  [ -n "$repo" ] || repo=$(host_repo)
-  [ -n "$repo" ] || die "could not determine the repository; pass --repo"
-  host_open_issues > "$work/issues.json"
+  [ -n "$repo" ] || repo=$(host repo)
+  [ -n "$repo" ] || die "could not determine the project; pass --repo"
+  host open_issues > "$work/issues.json"
 fi
 
 # issue_for PATH -> the lowest open issue number whose body starts with PATH's marker
@@ -97,8 +160,8 @@ label_ready=""
 ensure_label() {
   [ -z "$label_ready" ] || return 0
   local labels
-  labels=$(host_repo_labels)
-  grep -Fxq "$label" <<<"$labels" || host_create_label "$label"
+  labels=$(host repo_labels)
+  grep -Fxq "$label" <<<"$labels" || host create_label "$label"
   label_ready=1
 }
 
@@ -129,7 +192,7 @@ while IFS= read -r record <&3; do
       fi
       number=$(issue_for "$path")
       [ -n "$number" ] || continue
-      host_close_issue "$number" "\`$path\` verifies again: $subject is unchanged since $recorded (checked $now)."
+      host close_issue "$number" "\`$path\` verifies again: $subject is unchanged since $recorded (checked $now)."
       actions+=("closed #$number for $path")
       continue
       ;;
@@ -164,11 +227,11 @@ while IFS= read -r record <&3; do
   fi
   number=$(issue_for "$path")
   if [ -n "$number" ]; then
-    host_update_issue "$number" "$title" "$body"
+    host update_issue "$number" "$title" "$body"
     actions+=("updated #$number for $path")
   else
     ensure_label
-    number=$(host_open_issue "$title" "$body")
+    number=$(host open_issue "$title" "$body")
     actions+=("opened #$number for $path")
   fi
 done 3< <(jq -c '.records[]' "$work/summary.json")

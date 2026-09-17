@@ -36,12 +36,14 @@ checked.
 
 | Option | Default | Function |
 | --- | --- | --- |
-| `--repo OWNER/REPO` | `GITHUB_REPOSITORY`, or from `gh` | The repository. |
+| `--repo OWNER/REPO` | `GITHUB_REPOSITORY`, or from `gh` | The repository, or the GitLab project. |
+| `--host github\|gitlab` | from the CI variables | The code host. |
 | `--label NAME` | `strata-drift` | The label of the issues. |
 | `--dry-run` | | Print, and change nothing. |
 
 The script is in this repository, at `scripts/verify-report.sh`. It needs
-`strata`, `jq`, a `gh` with a login, and the Palette API key.
+`strata`, `jq`, the Palette API key, and the tool of the host: a `gh` with a
+login, or `curl` and a `GITLAB_TOKEN`. See [GitLab CI](./gitlab.md).
 
 > **Schedule the runs minutes apart.** GitHub lists a new or closed issue about
 > five seconds later. Two runs close together can open a second issue for one

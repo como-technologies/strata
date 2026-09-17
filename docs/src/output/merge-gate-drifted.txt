@@ -1,0 +1,21 @@
+$ scripts/merge-gate.sh "releases/*.json" --base main
+merge-gate: the branch already carries origin/main; the checkout is the merge result
+DRIFTED: releases/dev.json does not verify; a cluster built from it would not get what it says
+  aws-stack@1.1.0 (uid 64e0000000000000000000b2)  ->  aws-stack@1.1.0 (uid 64e0000000000000000000b2)
+  root       8a8a64d3f95d -> e06b81973b8e   CHANGED
+  note       both sides are aws-stack@1.1.0 (uid 64e0000000000000000000b2): the version was edited in place
+  consumers  0 -> 0 clusters
+  
+    variables unchanged
+  
+    [os   ] ubuntu-aws                 24.04              unchanged
+    [k8s  ] kubernetes                 1.36.2             unchanged
+    [cni  ] cni-cilium-oss             1.20.1             unchanged
+  ~ [csi  ] csi-aws-ebs                1.65.0             AUTHORED
+        values: 1 changed, 0 added, 0 removed
+          ~ charts.aws-ebs-csi-driver.storageClasses[name=spectro-storage-class].reclaimPolicy: "Delete" -> "Retain"
+        impact: cluster-wide infra addon update
+    [addon] cert-manager               1.21.1             unchanged
+  DRIFT: published version aws-stack@1.1.0 differs from the copy recorded 2026-09-17T09:30:00Z
+merge-gate: 1 records: 0 behind main, 1 did not verify
+merge-gate: the merge button must wait: settle the records above, then push again

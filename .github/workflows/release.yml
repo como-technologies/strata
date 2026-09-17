@@ -45,6 +45,8 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
+      # the sources, for the CI scripts the release carries beside the binaries
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           path: dist
@@ -54,8 +56,10 @@ jobs:
       - name: checksums and signatures
         working-directory: dist
         run: |
-          sha256sum strata-* > SHA256SUMS
-          files=(strata-* SHA256SUMS)
+          # a CI job on any host downloads one release: the binary and the scripts that use it
+          cp ../scripts/pr-comment.sh ../scripts/verify-report.sh ../scripts/install-strata.sh .
+          sha256sum strata-* *.sh > SHA256SUMS
+          files=(strata-* *.sh SHA256SUMS)
           for f in "${files[@]}"; do
             cosign sign-blob --yes "$f" --bundle "$f.sigstore.json"
           done
@@ -64,7 +68,7 @@ jobs:
         working-directory: dist
         run: |
           sha256sum --check SHA256SUMS
-          for f in strata-* SHA256SUMS; do
+          for f in strata-* *.sh SHA256SUMS; do
             case "$f" in *.sigstore.json) continue ;; esac
             cosign verify-blob "$f" --bundle "$f.sigstore.json" \
               --certificate-identity "https://github.com/${{ github.repository }}/.github/workflows/release.yml@${{ github.ref }}" \

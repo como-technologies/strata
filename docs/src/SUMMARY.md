@@ -36,12 +36,15 @@
 - [What changed between two pack versions](./use-cases/pack-versions.md)
 - [Find the profiles that carry a pack](./use-cases/find-a-pack.md)
 - [Retire a version](./use-cases/retire.md)
+- [A team pins each environment](./use-cases/fan-out.md)
 
 # Automation
 
 - [Scripts and exit codes](./automation/scripts.md)
 - [Pull request comments](./automation/pr-comments.md)
+- [The merge gate](./automation/merge-gate.md)
 - [Drift issues](./automation/drift-issues.md)
+- [GitLab CI](./automation/gitlab.md)
 - [The Rust library](./automation/library.md)
 
 # Reference

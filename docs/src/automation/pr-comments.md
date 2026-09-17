@@ -25,13 +25,15 @@ impact no longer reaches the threshold.
 | Option | Default | Function |
 | --- | --- | --- |
 | `--pr N` | from `gh` in a checkout of the branch | The pull request. |
-| `--repo OWNER/REPO` | `GITHUB_REPOSITORY`, or from `gh` | The repository. |
+| `--repo OWNER/REPO` | `GITHUB_REPOSITORY`, or from `gh` | The repository, or the GitLab project. |
+| `--host github\|gitlab` | from the CI variables | The code host. |
 | `--label NAME` | `repave` | The label. |
 | `--threshold LEVEL` | `repave` | The lowest [impact](../reference/impact.md) that adds the label. |
 | `--dry-run` | | Print, and change nothing. |
 
 The script is in this repository, at `scripts/pr-comment.sh`. It needs `strata`
-(or `STRATA_BIN`), `jq`, and a `gh` with a login. A ref that is not a file gets
+(or `STRATA_BIN`), `jq`, and the tool of the host: a `gh` with a login, or
+`curl` and a `GITLAB_TOKEN`. See [GitLab CI](./gitlab.md). A ref that is not a file gets
 one snapshot, so Palette gets one set of requests. Run from a terminal, the
 script posts the same comment as the job.
 

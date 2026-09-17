@@ -20,6 +20,7 @@ behavior of Palette, it links to the live run that shows that behavior.
 | `cluster:payments` names two clusters, or `name@version` is not found | [The same names in two projects](./same-names.md) |
 | A pack version has a security problem | [Find the profiles that carry a pack](./find-a-pack.md) |
 | You want to delete an old version | [Retire a version](./retire.md) |
+| A team of developers pins each environment, and merge requests cross | [A team pins each environment](./fan-out.md) |
 
 ## The examples
 

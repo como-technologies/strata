@@ -890,3 +890,54 @@ labels: feature
 - [ ] A pack with more than 100 versions lists completely, and a repeated version appears once
 - [ ] An unknown registry name is an error with exit 2 that lists the visible registries
 - [ ] `--format json` writes `strata-packs/1`
+
+## Give GitLab the same automations as GitHub
+
+labels: ci
+
+### Background
+
+`scripts/pr-comment.sh` posts the comparison of a change as one comment, and `scripts/verify-report.sh` reports each drifted record as an issue. Both talk to `gh`, and the reusable workflows that call them are GitHub Actions. A team whose merge requests and scheduled pipelines run in GitLab has to write all of it again, although each script keeps every host call in its own function for exactly this reason.
+
+### Plan
+
+1. `scripts/pr-comment.sh` and `scripts/verify-report.sh`: a `--host github|gitlab` option, detected from `GITLAB_CI` or `CI_PROJECT_ID`, else GitHub. A GitLab set of the same host functions, over the REST API v4 with `curl`, `CI_API_V4_URL`, `CI_PROJECT_ID`, `CI_MERGE_REQUEST_IID`, and a token in `GITLAB_TOKEN`. Every host call goes through one `host <name>` dispatcher, so a third host is a third set.
+2. The GitLab functions keep the behavior: one note per merge request, found by the marker and updated on each push; the label added and removed at the threshold; one issue per record, found by its marker, updated, and closed with a comment when the record verifies again.
+3. `examples/gitlab/strata.yml`: the drop-in jobs that a pipeline includes, one for the comment, one for [the merge gate](#stop-a-merge-request-that-would-land-the-wrong-release), and one for the scheduled verify.
+4. `scripts/install-strata.sh`: one release, for any host and a laptop. It reads the release document, downloads the binary for the machine and the scripts, checks every file against `SHA256SUMS`, and prints the path of the binary.
+5. `.github/workflows/release.yml`: attach the scripts to each release, so a job downloads one release and has everything.
+6. `tests/scripts.rs`: the GitLab host calls against a stand-in `curl`, as the GitHub ones run against a stand-in `gh`.
+7. The book: a GitLab page beside the GitHub ones, and the fan-out use case that uses both.
+
+### Acceptance criteria
+
+- [x] `pr-comment.sh --host gitlab` posts one note on a merge request, updates that note on a later run, and sets the label from the impact
+- [x] `verify-report.sh --host gitlab` opens one issue for each record that drifted or could not be checked, updates it, and closes it when the record verifies again
+- [x] Both scripts pick the host from the CI variables, so a GitLab job passes no flag
+- [x] `examples/gitlab/strata.yml` needs only the project's variables, and checks what it downloads
+- [x] The tests cover the GitLab host calls and use no network
+- [x] The book documents the GitLab jobs beside the GitHub ones
+
+## Stop a merge request that would land the wrong release
+
+labels: ci
+
+### Background
+
+A merge request is reviewed against the default branch as it was when somebody opened it. Hours later the branch is still open, another merge request has moved the record of an environment, and Palette may have changed the version that the record names. The comment on the merge request still shows the old comparison. Git merges the branch and says nothing, because git reads lines and not releases, and the cluster build gets a release that nobody reviewed. The team needs to know before the merge button, not after the cluster fails.
+
+### Plan
+
+1. `scripts/merge-gate.sh <record or pattern>...`: merge the target branch into the checkout first, so every answer is about the merge result. The target branch comes from `--base`, `CI_MERGE_REQUEST_TARGET_BRANCH_NAME` or `GITHUB_BASE_REF`.
+2. Three checks, each exit 1: a conflict, reported as a comparison of the two records and not as lines; a merge result that pins an older version of a pack or of the profile than the target branch has; a record of the merge result that does not verify against Palette.
+3. `.github/workflows/merge-gate.yml`, a reusable workflow for a required status check, and a `strata-merge-gate` job in `examples/gitlab/strata.yml`.
+4. The book: an automation page with the output of each check, and how each host holds the merge button. Say why a git hook is not the answer: it runs on one laptop, it is one flag away from being skipped, and it cannot see the target branch a minute before the merge.
+
+### Acceptance criteria
+
+- [x] The gate reports a branch that would replace a newer pin, and names each pack that moves back
+- [x] The gate reads a conflict as a comparison of the two records, and leaves the checkout clean
+- [x] The gate reports a record of the merge result that Palette no longer matches
+- [x] The exit status is 0 clear, 1 red, 2 could not answer, so any CI system can hold the button on it
+- [x] The tests cover each check with a real git repository and no network
+- [x] The book shows the output of each check and the setting that holds the merge button on both hosts
