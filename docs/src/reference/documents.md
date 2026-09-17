@@ -28,6 +28,10 @@ A record of one profile version or cluster.
   - `template`: `published`, `draft`, `applied` for a cluster, or `candidate`.
   - `consumers`: the uids of the clusters that used the version, and the count.
   - `fetchedAt`: the time of the read.
+  - `pack`, for a pack record: the pack's `name` and `version`, the
+    `registryUid` and `registryName` it came from, and `packUid`, the uid of
+    that version in the registry. `template` is `registry` and `type` is
+    `pack`.
   - `cluster`, for a cluster record: its `uid` and `name`, the `profile` that
     `cluster:<cluster>/<profile>` selected, the applied `profiles`, and
     `variables`, the value that the cluster gives each variable. `verify` reads

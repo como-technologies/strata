@@ -153,6 +153,16 @@ pub enum Error {
         /// The registry, as the candidate names it.
         registry: String,
     },
+    /// A pack version is in more than one visible registry, and the ref named none.
+    #[error("pack '{name}' at version '{version}' is in several registries: {}; name one, as in pack:<registry>/{name}@{version}", registries.join(", "))]
+    PackInSeveralRegistries {
+        /// Pack name.
+        name: String,
+        /// Pack version.
+        version: String,
+        /// The registries that have it, by name.
+        registries: Vec<String>,
+    },
     /// A candidate names a registry that is not visible with this key.
     #[error("no registry named '{registry}' is visible; registries: {}", available.join(", "))]
     RegistryNotFound {
@@ -243,6 +253,7 @@ impl Error {
             Error::ProfileRefRequired { .. } => "profile-ref-required",
             Error::CandidateInvalid { .. } => "candidate-invalid",
             Error::PackNotFound { .. } => "pack-not-found",
+            Error::PackInSeveralRegistries { .. } => "pack-in-several-registries",
             Error::RegistryNotFound { .. } => "registry-not-found",
             Error::ProjectNotFound { .. } => "project-not-found",
             Error::ClusterNotFound { .. } => "cluster-not-found",
@@ -324,6 +335,15 @@ impl Error {
                     m.insert("tag".into(), Value::from(t.as_str()));
                 }
                 m.insert("registry".into(), Value::from(registry.as_str()));
+            }
+            Error::PackInSeveralRegistries {
+                name,
+                version,
+                registries,
+            } => {
+                m.insert("name".into(), Value::from(name.as_str()));
+                m.insert("version".into(), Value::from(version.as_str()));
+                m.insert("registries".into(), Value::from(registries.clone()));
             }
             Error::RegistryNotFound {
                 registry,
@@ -444,6 +464,11 @@ mod tests {
                 tag: Some("2.x".into()),
                 registry: "Public Repo".into(),
             },
+            Error::PackInSeveralRegistries {
+                name: "csi-aws-ebs".into(),
+                version: "1.65.0".into(),
+                registries: vec!["Public Repo".into(), "Mirror".into()],
+            },
             Error::RegistryNotFound {
                 registry: "Nope".into(),
                 available: vec!["Public Repo".into()],
@@ -556,6 +581,10 @@ mod tests {
         assert_eq!(
             by_kind("registry-not-found")["available"],
             serde_json::json!(["Public Repo"])
+        );
+        assert_eq!(
+            by_kind("pack-in-several-registries")["registries"],
+            serde_json::json!(["Public Repo", "Mirror"])
         );
     }
 }

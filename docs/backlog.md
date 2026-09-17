@@ -839,3 +839,54 @@ The schema id stays `strata-diff/1`: the change adds no field, removes no field,
 - [x] The pack line of the terminal report and the impact column of the markdown report give that impact
 - [x] `docs/src/reference/impact.md` states the rule, and no page holds the warning
 - [x] `just lint`, `just test`, and `just docs-check` pass
+
+## Compare pack versions from a registry
+
+labels: feature
+
+### Background
+
+Strata read profile versions and clusters. A pack was only ever a layer inside them, so a person who wanted what Palette changed between two versions of a pack, say `csi-aws-ebs` 1.63.1 and 1.65.0, had the Palette UI and nothing else. The bump that a profile makes starts there.
+
+A pack version is a thing with a name, a version, a content digest, and values, which is what strata already hashes. Reading one from the registry gives it the three hashes, the impact rules, and `verify`.
+
+### Plan
+
+1. `src/reference.rs`: `Ref::Pack` from `pack:<name>@<version>` and `pack:<registry>/<name>@<version>`, with `latest`.
+2. `src/candidate.rs`: `pack_snapshot`, which resolves the registry, pages the pack listing, and builds a one-layer snapshot through the candidate path.
+3. `src/snapshot.rs`: `source.pack` with the pack's name, version, registry, and pack uid; `title` and `shown_uid` for a pack record.
+4. `src/ops.rs`: route the ref through `snapshot_for`, and re-read the registry in `verify`.
+5. `src/error.rs`: `pack-in-several-registries` when a ref names no registry and several have the version.
+6. Tests, and a book page under use cases with generated output.
+
+### Acceptance criteria
+
+- [x] `strata compare pack:<name>@<a> pack:<name>@<b>` reports `IDENTITY`, `UPSTREAM`, and `AUTHORED` between two versions of a pack, with the changed values and the impact of the layer
+- [x] `pack:<registry>/<name>@<version>` picks a registry by name or uid; without one, a version that several registries have is `pack-in-several-registries`, which lists them
+- [x] `pack:<name>@latest` takes the highest version in the registry
+- [x] `strata snapshot pack:<name>@<version>` writes a record, and `strata verify` on it reads the registry again
+- [x] The book shows the commands and their output
+
+## List the versions a registry offers for a pack
+
+labels: feature
+
+### Background
+
+`strata compare pack:<name>@<a> pack:<name>@<b>` compares two versions of a pack, and `strata list --packs` shows the packs that profiles use. Neither answers what a registry offers: which versions of `cni-cilium-oss` exist, which is newest, and which support a cloud. Picking that pin is the first step of a bump, and today it happens in the Palette UI or with `curl` against `/v1/packs?filters=spec.name=<name>`. That listing caps `limit` at 100, repeats a version, and says nothing about the floating tags, such as `1.x` and `LTS__24.x`, that name the newest version in a line.
+
+### Plan
+
+1. `src/candidate.rs` already pages the listing in `versions_of` and reads the registries in `registries`: lift both into an operation.
+2. `src/ops.rs`: `registry_packs` returning each version with its pack uid, digest, layer, type, cloud types, and the tags that point at it, newest first by `version::compare`.
+3. `src/main.rs`: `strata packs <name> [--registry NAME] [--registry-uid UID] [--cloud TYPE] [--latest]`, and a `strata-packs/1` document.
+4. Tests with `MemoryApi`: several pages, a repeated version, a version without the cloud, and an unknown registry.
+5. The book: a page under commands, and a step in the pack-versions use case.
+
+### Acceptance criteria
+
+- [ ] `strata packs <name>` lists every version in the registry, newest first, with the tags that point at each
+- [ ] `--cloud <type>` keeps the versions that support it, and `--latest` prints one line
+- [ ] A pack with more than 100 versions lists completely, and a repeated version appears once
+- [ ] An unknown registry name is an error with exit 2 that lists the visible registries
+- [ ] `--format json` writes `strata-packs/1`

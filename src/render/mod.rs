@@ -152,6 +152,14 @@ pub(crate) fn chain_verdict(c: &Chain) -> String {
 
 /// What a verdict line is about: a published version, or what a cluster runs.
 pub(crate) fn subject(recorded: &Source) -> String {
+    if let Some(p) = &recorded.pack {
+        let registry = if p.registry_name.is_empty() {
+            p.registry_uid.clone()
+        } else {
+            p.registry_name.clone()
+        };
+        return format!("pack {}@{} in registry {registry}", p.name, p.version);
+    }
     match &recorded.cluster {
         Some(c) => format!(
             "cluster {} running {}@{}",

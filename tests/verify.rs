@@ -3209,3 +3209,209 @@ fn an_added_addon_is_in_place_and_an_added_infra_pack_is_cluster_wide() {
     assert_eq!(cni.impact.level, ImpactLevel::ClusterWide);
     assert_eq!(d.summary.max_impact, ImpactLevel::ClusterWide);
 }
+
+// ---- packs from a registry -------------------------------------------------------------------
+
+use strata::diff::ImpactLevel as Impact;
+
+const CSI_63: &str = "charts:\n  aws-ebs-csi-driver:\n    storageClasses:\n      - name: spectro-storage-class\n        reclaimPolicy: Delete\n";
+const CSI_65: &str = "charts:\n  aws-ebs-csi-driver:\n    storageClasses:\n      - name: spectro-storage-class\n        reclaimPolicy: Retain\n    controller:\n      replicas: 2\n";
+
+fn pack_summary(uid: &str, version: &str, registry: &str, digest: &str, values: &str) -> Value {
+    serde_json::json!({
+        "metadata": {"uid": uid},
+        "spec": {"name": "csi-aws-ebs", "version": version, "registryUid": registry,
+                 "digest": digest, "layer": "csi", "type": "spectro", "values": values,
+                 "cloudTypes": ["aws"]},
+    })
+}
+
+/// Two versions of one pack in the Public Repo, and the registry listing that names it.
+fn serve_registry(extra: Vec<Value>, entities: &[(&str, Value)]) -> MemoryApi {
+    let mut summaries = vec![
+        pack_summary("pk-63", "1.63.1", "reg-public", "sha256:aaa", CSI_63),
+        pack_summary("pk-65", "1.65.0", "reg-public", "sha256:bbb", CSI_65),
+    ];
+    summaries.extend(extra);
+    serve_summaries(summaries, entities)
+}
+
+/// The same, with the pack versions spelled out.
+fn serve_summaries(summaries: Vec<Value>, entities: &[(&str, Value)]) -> MemoryApi {
+    let mut api = MemoryApi::new()
+        .with(
+            "/v1/registries/metadata",
+            serde_json::json!({"items": [
+                {"name": "Public Repo", "uid": "reg-public", "kind": "pack"},
+                {"name": "Mirror", "uid": "reg-mirror", "kind": "oci"},
+            ]}),
+        )
+        .with(
+            "/v1/packs?filters=spec.name=csi-aws-ebs&limit=100&offset=0",
+            serde_json::json!({"items": summaries, "listmeta": {"count": 9}}),
+        );
+    for (registry, entity) in entities {
+        api = api.with(
+            format!("/v1/packs/csi-aws-ebs/registries/{registry}"),
+            entity.clone(),
+        );
+    }
+    api
+}
+
+fn public_entity() -> Value {
+    serde_json::json!({"layer": "csi", "tags": [
+        {"tag": "1.63.1", "packUid": "pk-63"},
+        {"tag": "1.63.x", "packUid": "pk-63"},
+        {"tag": "1.x", "packUid": "pk-65"},
+        {"tag": "1.65.0", "packUid": "pk-65"},
+    ]})
+}
+
+fn snapshot_pack(api: &MemoryApi, reference: &str) -> strata::Result<Snapshot> {
+    ops::snapshot_for(
+        &Ref::parse_with(reference, |_| false),
+        || Ok(Palette::new(api.clone())),
+        "t0",
+        &Progress::silent(),
+    )
+}
+
+#[test]
+fn comparing_two_pack_versions_says_what_changed_between_them() {
+    let api = serve_registry(vec![], &[("reg-public", public_entity())]);
+    let old = snapshot_pack(&api, "pack:csi-aws-ebs@1.63.1").unwrap();
+    let new = snapshot_pack(&api, "pack:csi-aws-ebs@1.65.0").unwrap();
+
+    assert_eq!(old.packs.len(), 1, "a pack snapshot holds the one pack");
+    assert_eq!(old.source.title(), "pack csi-aws-ebs@1.63.1");
+    assert_eq!(old.source.template, "registry");
+    assert_eq!(old.source.uid, "", "a registry pack has no profile uid");
+    let src = old.source.pack.as_ref().expect("a pack snapshot says so");
+    assert_eq!(
+        (
+            src.name.as_str(),
+            src.version.as_str(),
+            src.registry_uid.as_str(),
+            src.registry_name.as_str()
+        ),
+        ("csi-aws-ebs", "1.63.1", "reg-public", "Public Repo")
+    );
+    assert_eq!(
+        src.pack_uid, "pk-63",
+        "the uid of the pack version in the registry"
+    );
+    assert_eq!(old.packs[0].tag, "1.63.1");
+    assert_eq!(old.packs[0].layer, "csi");
+    assert_eq!(old.packs[0].hash.upstream_raw, "sha256:aaa");
+
+    let d = ops::compare(&old, &new, "t1");
+    assert!(!d.same);
+    let pd = &d.packs[0];
+    assert_eq!(pd.name, "csi-aws-ebs");
+    assert!(
+        pd.identity && pd.upstream && pd.authored,
+        "version, digest, and values all moved"
+    );
+    let paths: Vec<&str> = pd.values.diff.iter().map(|l| l.path.as_str()).collect();
+    assert!(
+        paths.iter().any(|p| p.ends_with("reclaimPolicy")),
+        "{paths:?}"
+    );
+    assert!(
+        paths.iter().any(|p| p.ends_with("controller.replicas")),
+        "{paths:?}"
+    );
+    assert_eq!(
+        pd.impact.level,
+        Impact::ClusterWide,
+        "a CSI pack affects every node"
+    );
+    assert_eq!(d.summary.max_impact, Impact::ClusterWide);
+
+    // the newest version of the pack in the registry
+    let latest = snapshot_pack(&api, "pack:csi-aws-ebs@latest").unwrap();
+    assert_eq!(latest.source.version, "1.65.0");
+    assert_eq!(latest.source.reference, "pack:csi-aws-ebs@latest");
+    assert_eq!(latest.root, new.root);
+}
+
+#[test]
+fn a_pack_in_several_registries_needs_the_registry_named() {
+    let mirrored = pack_summary("pk-65-mirror", "1.65.0", "reg-mirror", "sha256:ccc", CSI_65);
+    let mirror_entity =
+        serde_json::json!({"layer": "csi", "tags": [{"tag": "1.65.0", "packUid": "pk-65-mirror"}]});
+    let api = serve_registry(
+        vec![mirrored],
+        &[
+            ("reg-public", public_entity()),
+            ("reg-mirror", mirror_entity),
+        ],
+    );
+
+    let err = snapshot_pack(&api, "pack:csi-aws-ebs@1.65.0").unwrap_err();
+    match &err {
+        Error::PackInSeveralRegistries {
+            name,
+            version,
+            registries,
+        } => {
+            assert_eq!((name.as_str(), version.as_str()), ("csi-aws-ebs", "1.65.0"));
+            assert_eq!(
+                registries,
+                &vec!["Public Repo".to_string(), "Mirror".to_string()]
+            );
+        }
+        other => panic!("unexpected {other}"),
+    }
+    assert_eq!(err.kind(), "pack-in-several-registries");
+    assert_eq!(err.exit_code(), 2);
+
+    // by registry name, and by registry uid
+    let by_name = snapshot_pack(&api, "pack:Mirror/csi-aws-ebs@1.65.0").unwrap();
+    assert_eq!(by_name.packs[0].hash.upstream_raw, "sha256:ccc");
+    assert_eq!(by_name.source.reference, "pack:Mirror/csi-aws-ebs@1.65.0");
+    let by_uid = snapshot_pack(&api, "pack:reg-public/csi-aws-ebs@1.65.0").unwrap();
+    assert_eq!(by_uid.packs[0].hash.upstream_raw, "sha256:bbb");
+
+    // the same release in two registries differs by IDENTITY and UPSTREAM alone
+    let d = ops::compare(&by_uid, &by_name, "t1");
+    let pd = &d.packs[0];
+    assert!(pd.identity && pd.upstream && !pd.authored);
+
+    let unknown = snapshot_pack(&api, "pack:Nope/csi-aws-ebs@1.65.0").unwrap_err();
+    assert!(
+        matches!(unknown, Error::RegistryNotFound { .. }),
+        "{unknown}"
+    );
+    let missing = snapshot_pack(&api, "pack:csi-aws-ebs@9.9.9").unwrap_err();
+    assert!(matches!(missing, Error::PackNotFound { .. }), "{missing}");
+}
+
+#[test]
+fn verify_rechecks_a_pack_version_against_its_registry() {
+    let api = serve_registry(vec![], &[("reg-public", public_entity())]);
+    let recorded = snapshot_pack(&api, "pack:csi-aws-ebs@1.65.0").unwrap();
+    let palette = Palette::new(api.clone());
+    let v = ops::verify(&recorded, &palette, "t1", &Progress::silent()).unwrap();
+    assert!(v.unchanged);
+
+    // the registry now serves other content under the same version
+    // the same version, with other content under it
+    let moved = serve_summaries(
+        vec![pack_summary(
+            "pk-65",
+            "1.65.0",
+            "reg-public",
+            "sha256:moved",
+            CSI_63,
+        )],
+        &[("reg-public", public_entity())],
+    );
+    let v = ops::verify(&recorded, &Palette::new(moved), "t1", &Progress::silent()).unwrap();
+    assert!(!v.unchanged, "a pack version whose content moved is drift");
+    assert_eq!(
+        v.diff.verify.as_ref().unwrap().status,
+        VerifyStatus::Drifted
+    );
+}

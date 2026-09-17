@@ -15,10 +15,17 @@ use serde_json::{json, Map, Value};
 use crate::api::{Palette, PaletteApi, RawProfile};
 use crate::error::{Error, Result};
 use crate::progress::Progress;
-use crate::snapshot::Snapshot;
+use crate::reference::LATEST;
+use crate::snapshot::{PackSource, Snapshot};
 
 /// The `source.template` of a snapshot built from a candidate file.
 pub const TEMPLATE: &str = "candidate";
+
+/// The `source.template` of a snapshot of one pack version from a registry.
+pub const PACK_TEMPLATE: &str = "registry";
+
+/// The `source.type` of such a snapshot.
+pub const PACK_TYPE: &str = "pack";
 
 /// A candidate profile version. YAML or JSON. Quote versions that YAML would read as numbers,
 /// such as `"22.04"`.
@@ -356,6 +363,191 @@ pub fn load(path: &Path) -> Result<LoadedCandidate> {
     })
 }
 
+/// Every version of `name` the pack listing returns, across registries. The listing caps `limit`
+/// at 100, so this pages until it has them all.
+fn versions_of<A: PaletteApi>(palette: &Palette<A>, name: &str) -> Result<Vec<Value>> {
+    let mut out: Vec<Value> = Vec::new();
+    let mut offset = 0;
+    loop {
+        let page = palette.api().get_json(&format!(
+            "/v1/packs?filters=spec.name={name}&limit=100&offset={offset}"
+        ))?;
+        let items = page
+            .get("items")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        let n = items.len();
+        for it in items {
+            if text(&it, "/spec/name").as_deref() == Some(name) {
+                out.push(it);
+            }
+        }
+        offset += n;
+        let total = page
+            .pointer("/listmeta/count")
+            .and_then(Value::as_u64)
+            .unwrap_or(0) as usize;
+        if n < 100 || offset >= total {
+            return Ok(out);
+        }
+    }
+}
+
+/// The registries this key can see, name and uid, in the order Palette lists them.
+fn registries<A: PaletteApi>(palette: &Palette<A>) -> Result<Vec<(String, String)>> {
+    let listing = palette.api().get_json("/v1/registries/metadata")?;
+    Ok(listing
+        .get("items")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|it| Some((text(it, "/name")?, text(it, "/uid")?)))
+        .collect())
+}
+
+/// Record one pack version as a snapshot of a single layer, with the values the registry ships.
+/// Its pack hashes the same way as that pack inside a profile, so comparing two of these says
+/// what changed between two versions of a pack: the version and uid in `IDENTITY`, the content
+/// digest in `UPSTREAM`, and the default values in `AUTHORED`.
+///
+/// Without `registry`, strata uses the registry that has the pack version, and refuses when
+/// several do. `version` may be [`LATEST`].
+#[allow(clippy::too_many_arguments)]
+pub fn pack_snapshot<A: PaletteApi>(
+    palette: &Palette<A>,
+    registry: Option<&str>,
+    name: &str,
+    version: &str,
+    reference: &str,
+    fetched_at: &str,
+    progress: &Progress,
+) -> Result<Snapshot> {
+    let visible = registries(palette)?;
+    let entries = versions_of(palette, name)?;
+    let not_found = |registry: String| Error::PackNotFound {
+        name: name.to_string(),
+        version: version.to_string(),
+        tag: None,
+        registry,
+    };
+    let of = |e: &Value, ptr: &str| text(e, ptr).unwrap_or_default();
+
+    let registry_uid = match registry {
+        Some(r) => visible
+            .iter()
+            .find(|(n, u)| n == r || u == r)
+            .map(|(_, u)| u.clone())
+            .ok_or_else(|| Error::RegistryNotFound {
+                registry: r.to_string(),
+                available: visible.iter().map(|(n, _)| n.clone()).collect(),
+            })?,
+        None => {
+            // the registries that have it, in the order Palette lists them
+            let holders: Vec<&(String, String)> = visible
+                .iter()
+                .filter(|(_, uid)| {
+                    entries.iter().any(|e| {
+                        of(e, "/spec/registryUid") == *uid
+                            && (version == LATEST || of(e, "/spec/version") == version)
+                    })
+                })
+                .collect();
+            match holders.as_slice() {
+                [(_, uid)] => uid.clone(),
+                [] => return Err(not_found("any visible registry".to_string())),
+                several => {
+                    return Err(Error::PackInSeveralRegistries {
+                        name: name.to_string(),
+                        version: version.to_string(),
+                        registries: several.iter().map(|(n, _)| n.clone()).collect(),
+                    })
+                }
+            }
+        }
+    };
+    let registry_name = visible
+        .iter()
+        .find(|(_, u)| *u == registry_uid)
+        .map(|(n, _)| n.clone())
+        .unwrap_or_default();
+    let named = |uid: &str| -> String {
+        if registry_name.is_empty() {
+            uid.to_string()
+        } else {
+            registry_name.clone()
+        }
+    };
+
+    let here: Vec<String> = entries
+        .iter()
+        .filter(|e| of(e, "/spec/registryUid") == registry_uid)
+        .map(|e| of(e, "/spec/version"))
+        .collect();
+    let resolved = if version == LATEST {
+        here.iter()
+            .max_by(|a, b| crate::version::compare(a, b))
+            .cloned()
+            .ok_or_else(|| not_found(named(&registry_uid)))?
+    } else if here.iter().any(|v| v == version) {
+        version.to_string()
+    } else {
+        return Err(not_found(named(&registry_uid)));
+    };
+    progress.note(&format!(
+        "recording pack {name}@{resolved} from registry {}",
+        named(&registry_uid)
+    ));
+
+    // one layer, the registry's own values: the same path a candidate file takes
+    let candidate = Candidate {
+        name: name.to_string(),
+        version: resolved.clone(),
+        kind: PACK_TYPE.to_string(),
+        cloud_type: String::new(),
+        registry: None,
+        registry_uid: Some(registry_uid.clone()),
+        layers: vec![CandidateLayer {
+            name: name.to_string(),
+            version: resolved.clone(),
+            layer: None,
+            tag: None,
+            registry: None,
+            registry_uid: None,
+            values: None,
+            values_file: None,
+            params: Map::new(),
+            manifests: Vec::new(),
+        }],
+        variables: Vec::new(),
+    };
+    let loaded = LoadedCandidate {
+        path: PathBuf::from(reference),
+        candidate,
+        layers: vec![LoadedLayer {
+            registry: RegistryRef::Uid(registry_uid.clone()),
+            values: None,
+            manifests: Vec::new(),
+        }],
+    };
+    let raw = resolve(&loaded, palette, progress)?;
+    let mut snap = Snapshot::from_raw(&raw, reference, fetched_at)?;
+    snap.source.kind = PACK_TYPE.to_string();
+    snap.source.template = PACK_TEMPLATE.to_string();
+    snap.source.pack = Some(PackSource {
+        name: name.to_string(),
+        version: resolved,
+        registry_uid,
+        registry_name,
+        pack_uid: snap
+            .packs
+            .first()
+            .map(|p| p.pack_uid.clone())
+            .unwrap_or_default(),
+    });
+    Ok(snap)
+}
+
 fn text(v: &Value, ptr: &str) -> Option<String> {
     v.pointer(ptr).and_then(Value::as_str).map(str::to_string)
 }
@@ -407,7 +599,7 @@ pub fn resolve<A: PaletteApi>(
 ) -> Result<RawProfile> {
     let c = &loaded.candidate;
     progress.note(&format!(
-        "resolving candidate {}@{} against the registry",
+        "resolving {}@{} against the registry",
         c.name, c.version
     ));
     // registry names to uids, in the order Palette lists them; fetched once, and only when needed

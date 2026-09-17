@@ -21,6 +21,18 @@ pub enum Ref {
     },
     /// A profile uid.
     Uid(String),
+    /// `pack:<name>@<version>` or `pack:<registry>/<name>@<version>`: one pack version in a
+    /// registry, with the values the registry ships. The version [`LATEST`] picks the highest
+    /// version of that pack in the registry.
+    Pack {
+        /// The registry, by name or uid. Without one, strata uses the registry that has the pack
+        /// version, and says so when several do.
+        registry: Option<String>,
+        /// Pack name.
+        name: String,
+        /// Pack version, or [`LATEST`].
+        version: String,
+    },
     /// `cluster:<uid>` or `cluster:<uid>/<profile>`: what a cluster runs. Without a profile,
     /// every profile applied to the cluster, in order; with one, only the profile of that name.
     Cluster {
@@ -34,6 +46,9 @@ pub enum Ref {
 /// The prefix of a cluster ref.
 pub const CLUSTER_PREFIX: &str = "cluster:";
 
+/// The prefix of a pack ref.
+pub const PACK_PREFIX: &str = "pack:";
+
 impl Ref {
     /// A path to an existing file is a snapshot; `cluster:<uid>[/<profile>]` with a non-empty uid
     /// is a cluster; `name@version` with both parts non-empty is a name and version; anything else
@@ -46,6 +61,21 @@ impl Ref {
     pub fn parse_with(text: &str, is_file: impl Fn(&Path) -> bool) -> Ref {
         if is_file(Path::new(text)) {
             return Ref::Snapshot(PathBuf::from(text));
+        }
+        if let Some(rest) = text.strip_prefix(PACK_PREFIX) {
+            if let Some((left, version)) = rest.rsplit_once('@') {
+                let (registry, name) = match left.split_once('/') {
+                    Some((registry, name)) => (Some(registry), name),
+                    None => (None, left),
+                };
+                if !name.is_empty() && !version.is_empty() {
+                    return Ref::Pack {
+                        registry: registry.filter(|r| !r.is_empty()).map(str::to_string),
+                        name: name.to_string(),
+                        version: version.to_string(),
+                    };
+                }
+            }
         }
         if let Some(rest) = text.strip_prefix(CLUSTER_PREFIX) {
             let (uid, profile) = match rest.split_once('/') {
@@ -77,6 +107,14 @@ impl fmt::Display for Ref {
             Ref::Snapshot(p) => write!(f, "{}", p.display()),
             Ref::NameVersion { name, version } => write!(f, "{name}@{version}"),
             Ref::Uid(u) => write!(f, "{u}"),
+            Ref::Pack {
+                registry,
+                name,
+                version,
+            } => match registry {
+                Some(r) => write!(f, "{PACK_PREFIX}{r}/{name}@{version}"),
+                None => write!(f, "{PACK_PREFIX}{name}@{version}"),
+            },
             Ref::Cluster { uid, profile: None } => write!(f, "{CLUSTER_PREFIX}{uid}"),
             Ref::Cluster {
                 uid,
@@ -117,6 +155,37 @@ mod tests {
             Ref::Snapshot("rel.json".into())
         );
         assert_eq!(Ref::parse("aws-pxk@1.2.0").to_string(), "aws-pxk@1.2.0");
+    }
+
+    #[test]
+    fn pack_forms() {
+        let no_files = |_: &Path| false;
+        assert_eq!(
+            Ref::parse_with("pack:csi-aws-ebs@1.65.0", no_files),
+            Ref::Pack {
+                registry: None,
+                name: "csi-aws-ebs".into(),
+                version: "1.65.0".into()
+            }
+        );
+        let with_registry = Ref::parse_with("pack:Public Repo/csi-aws-ebs@latest", no_files);
+        assert_eq!(
+            with_registry,
+            Ref::Pack {
+                registry: Some("Public Repo".into()),
+                name: "csi-aws-ebs".into(),
+                version: LATEST.into()
+            }
+        );
+        assert_eq!(
+            with_registry.to_string(),
+            "pack:Public Repo/csi-aws-ebs@latest"
+        );
+        assert_eq!(
+            Ref::parse_with("pack:csi-aws-ebs", no_files),
+            Ref::Uid("pack:csi-aws-ebs".into()),
+            "a pack ref needs a version"
+        );
     }
 
     #[test]

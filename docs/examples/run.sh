@@ -113,6 +113,7 @@ quiet() {
 DEV=64f20000000000000000a0d1
 PROD=64f20000000000000000a0f1
 PUBLIC_REPO=5eecc89d0b150045ae661cef
+PALETTE_REGISTRY=64ec000000000000000000a1
 
 # doc PROJECT PATH: the file that answers GET PATH in PROJECT, or at tenant scope for "tenant"
 doc() {
@@ -281,16 +282,41 @@ set_value() {
 # registries PROJECT: the Public Repo registry and the versions of each pack in examples/packs/,
 # as the registry lookups of a candidate read them
 registries() {
-  local project=$1 d name count
-  jq -n --arg uid "$PUBLIC_REPO" '{items: [{name: "Public Repo", uid: $uid, kind: "pack"}]}' \
+  local project=$1 d name count listing
+  jq -n --arg uid "$PUBLIC_REPO" --arg oci "$PALETTE_REGISTRY" \
+    '{items: [{name: "Public Repo", uid: $uid, kind: "pack"},
+              {name: "Palette Registry", uid: $oci, kind: "oci"}]}' \
     > "$(doc "$project" v1/registries/metadata)"
   for d in "$repo"/examples/packs/*/; do
     name=$(basename "$d")
     count=$(jq length "$d/_summaries.json")
-    jq --argjson n "$count" '{items: ., listmeta: {count: $n}}' "$d/_summaries.json" \
-      > "$(doc "$project" "v1/packs@filters=spec.name=$name&limit=100&offset=0")"
+    listing=$(doc "$project" "v1/packs@filters=spec.name=$name&limit=100&offset=0")
+    jq --argjson n "$count" '{items: ., listmeta: {count: $n}}' "$d/_summaries.json" > "$listing"
     cp "$d/_entity.json" "$(doc "$project" "v1/packs/$name/registries/$PUBLIC_REPO")"
+    # The CSI pack is in the OCI registry too, as the live run of 20260917T150025Z found. A pack
+    # ref that names no registry then has to say so.
+    if [ "$name" = csi-aws-ebs ]; then
+      rewrite "$listing" "$(csi_in_oci)"
+      jq "$(csi_entity_in_oci)" "$d/_entity.json" \
+        > "$(doc "$project" "v1/packs/$name/registries/$PALETTE_REGISTRY")"
+    fi
   done
+}
+
+# the newest csi-aws-ebs version, copied into the OCI registry with its own uid and digest
+csi_in_oci() {
+  cat <<'JQ'
+    ([.items[] | select(.spec.values != null) | .spec.version]
+       | sort_by(split(".") | map(tonumber? // 0)) | last) as $newest
+    | .items += [.items[] | select(.spec.version == $newest and .spec.values != null)
+        | .metadata.uid = "64ec000000000000000000b1"
+        | .spec.registryUid = "64ec000000000000000000a1"
+        | .spec.digest = "sha256:a746e14689085b14531566f9c9cfb2bc7716e96a394547ef50a1c52eab510c9e"]
+JQ
+}
+
+csi_entity_in_oci() {
+  printf '%s' '.tags = [{tag: ([.tags[].tag] | map(select(test("^[0-9]+\\.[0-9]+\\.[0-9]+$"))) | sort | last), packUid: "64ec000000000000000000b1"}]'
 }
 
 # jq programs for a profile document
@@ -576,6 +602,16 @@ show2 names-profile 2 'strata snapshot aws-pxk@1.1.1 -o aws-pxk.json'
 show2 names-by-project 0 'PALETTE_PROJECT=dev strata snapshot cluster:payments -o dev-payments.json'
 show2 names-by-project 0 'PALETTE_PROJECT=prod strata snapshot cluster:payments -o prod-payments.json'
 show names-compare 1 'strata compare dev-payments.json prod-payments.json'
+
+chapter packs PALETTE_PROJECT=dev
+projects dev=$DEV prod=$PROD
+registries $DEV
+show pack-compare 1 "strata compare 'pack:Public Repo/kubernetes@1.35.3' 'pack:Public Repo/kubernetes@1.36.2'"
+show pack-os 1 "strata compare 'pack:Public Repo/ubuntu-aws@20.04' 'pack:Public Repo/ubuntu-aws@24.04'"
+show2 pack-ambiguous 2 'strata compare pack:csi-aws-ebs@1.65.0 pack:csi-aws-ebs@1.65.0'
+show pack-registries 1 "strata compare 'pack:Public Repo/csi-aws-ebs@1.65.0' 'pack:Palette Registry/csi-aws-ebs@1.65.0'"
+show2 pack-record 0 "strata snapshot 'pack:Public Repo/kubernetes@latest' -o kubernetes.json"
+show pack-verify 0 'strata verify kubernetes.json'
 
 chapter retire PALETTE_PROJECT=dev
 projects dev=$DEV

@@ -625,6 +625,19 @@ fn cmd_snapshot(a: &SnapshotArgs) -> Result<ExitCode> {
                     }
                     Snapshot::from_cluster(&raw, profile.as_deref(), text, &now)?
                 }
+                Ref::Pack {
+                    registry,
+                    name,
+                    version,
+                } => strata::candidate::pack_snapshot(
+                    &palette,
+                    registry.as_deref(),
+                    name,
+                    version,
+                    text,
+                    &now,
+                    &progress,
+                )?,
                 Ref::Snapshot(_) | Ref::Uid(_) | Ref::NameVersion { .. } => {
                     let uid = match &reference {
                         Ref::NameVersion { name, version } => palette.resolve(name, version)?,

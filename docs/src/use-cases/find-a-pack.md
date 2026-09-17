@@ -4,7 +4,9 @@
 
 A pack version has a security problem, for example a Cilium release. You need
 each profile version that carries the pack, in each project, and the clusters
-that run those versions. A pack is not a ref, so `compare` cannot find it.
+that run those versions. `pack:<name>@<version>` reads the pack itself, and
+[What changed between two pack versions](./pack-versions.md) compares two of
+them, but neither says which profiles carry it: that is what `list` is for.
 
 ## 1. Search one project
 

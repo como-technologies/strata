@@ -1,0 +1,5 @@
+$ strata snapshot 'pack:Public Repo/kubernetes@latest' -o kubernetes.json
+strata: looking up project dev
+strata: recording pack kubernetes@1.36.2 from registry Public Repo
+strata: resolving kubernetes@1.36.2 against the registry
+strata: wrote kubernetes.json (root 9e8881b1e813)

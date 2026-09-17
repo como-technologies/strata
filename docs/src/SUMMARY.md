@@ -33,6 +33,7 @@
 - [A cluster does not run its release](./use-cases/cluster-release.md)
 - [Clusters give variables different values](./use-cases/cluster-values.md)
 - [The same names in two projects](./use-cases/same-names.md)
+- [What changed between two pack versions](./use-cases/pack-versions.md)
 - [Find the profiles that carry a pack](./use-cases/find-a-pack.md)
 - [Retire a version](./use-cases/retire.md)
 

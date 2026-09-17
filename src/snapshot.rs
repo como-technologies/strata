@@ -86,12 +86,34 @@ pub struct Source {
     /// Present when the snapshot records what a cluster runs rather than a published profile.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cluster: Option<ClusterSource>,
+    /// Present when the snapshot records one pack version from a registry.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pack: Option<PackSource>,
+}
+
+/// The registry pack a snapshot was taken from.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct PackSource {
+    /// Pack name.
+    pub name: String,
+    /// Pack version.
+    pub version: String,
+    /// Uid of the registry the pack was read from.
+    pub registry_uid: String,
+    /// Name of that registry, when Palette lists one.
+    pub registry_name: String,
+    /// Uid of the pack version in the registry.
+    pub pack_uid: String,
 }
 
 impl Source {
     /// `name@version`, and `on cluster <name>` for a snapshot of a cluster.
     pub fn title(&self) -> String {
         let profile = format!("{}@{}", self.name, self.version);
+        if self.pack.is_some() {
+            return format!("pack {profile}");
+        }
         match &self.cluster {
             None => profile,
             Some(c) if self.name.is_empty() => format!("cluster {}", c.name),
@@ -101,9 +123,10 @@ impl Source {
 
     /// The uid a reader looks up: the cluster's for a cluster snapshot, else the profile's.
     pub fn shown_uid(&self) -> &str {
-        match &self.cluster {
-            Some(c) => &c.uid,
-            None => &self.uid,
+        match (&self.pack, &self.cluster) {
+            (Some(p), _) => &p.pack_uid,
+            (None, Some(c)) => &c.uid,
+            (None, None) => &self.uid,
         }
     }
 }
@@ -512,6 +535,7 @@ impl Snapshot {
             },
             fetched_at: fetched_at.to_string(),
             cluster: None,
+            pack: None,
         };
 
         let mut variables: Vec<Value> = arr(&raw.variables, "/variables")
@@ -622,6 +646,7 @@ impl Snapshot {
             tags: BTreeMap::new(),
             consumers: Consumers::default(),
             fetched_at: fetched_at.to_string(),
+            pack: None,
             cluster: Some(ClusterSource {
                 uid: s(&raw.cluster, "/metadata/uid"),
                 name: s(&raw.cluster, "/metadata/name"),

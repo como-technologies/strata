@@ -50,6 +50,11 @@ A cluster that runs a recorded version has the root of that record: here
 profile that the cluster runs. `cluster:<cluster>/<profile>` records one. The
 record keeps the uid of the cluster, so `verify` finds a renamed cluster.
 
+`pack:<name>@<version>` records one pack version from a registry, with the
+values that the registry ships. `verify` on that record reads the registry
+again, so it says whether a published pack version still serves the content it
+served. See [What changed between two pack versions](../use-cases/pack-versions.md).
+
 `source.cluster.variables` holds the value that the cluster gives each
 variable. The values are not part of the root. Strata writes no value for a
 sensitive variable. See [Clusters give variables different values](../use-cases/cluster-values.md).

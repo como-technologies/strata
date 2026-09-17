@@ -1,7 +1,10 @@
 # strata compare
 
-Compare two refs: profile versions, snapshot files, or clusters. `strata A B` is
-the same as `strata compare A B`.
+Compare two refs: profile versions, snapshot files, clusters, or pack versions
+from a registry. `strata A B` is the same as `strata compare A B`.
+
+Two pack refs answer what changed between two versions of a pack:
+[What changed between two pack versions](../use-cases/pack-versions.md).
 
 The examples use the project `dev`, which holds the versions 1.0.0, 1.1.0,
 1.1.1, and 1.1.2 of `aws-pxk`. Version 1.1.2 is 1.1.1 with one changed value.

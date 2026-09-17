@@ -46,6 +46,23 @@ where
             let raw = palette.fetch_profile(uid, progress)?;
             Ok(Snapshot::from_raw(&raw, uid, fetched_at)?.with_project(palette.project_uid()))
         }
+        Ref::Pack {
+            registry,
+            name,
+            version,
+        } => {
+            let palette = connect()?;
+            Ok(crate::candidate::pack_snapshot(
+                &palette,
+                registry.as_deref(),
+                name,
+                version,
+                &reference.to_string(),
+                fetched_at,
+                progress,
+            )?
+            .with_project(palette.project_uid()))
+        }
         Ref::Cluster { uid, profile } => {
             let palette = connect()?;
             let raw = palette.fetch_cluster(uid, progress)?;
@@ -154,6 +171,44 @@ pub fn verify<A: PaletteApi>(
     checked_at: &str,
     progress: &Progress,
 ) -> Result<Verification> {
+    // a pack record names a registry pack, not a profile or a cluster
+    if let Some(p) = &recorded.source.pack {
+        progress.note(&format!(
+            "verifying {} against its registry; recorded {}",
+            recorded.source.title(),
+            recorded.source.fetched_at
+        ));
+        let live = crate::candidate::pack_snapshot(
+            palette,
+            Some(&p.registry_uid),
+            &p.name,
+            &p.version,
+            &recorded.source.reference,
+            checked_at,
+            progress,
+        )?
+        .with_project(palette.project_uid());
+        let unchanged = recorded.root == live.root;
+        let verify = Verify {
+            status: if unchanged {
+                VerifyStatus::Unchanged
+            } else {
+                VerifyStatus::Drifted
+            },
+            uid: p.pack_uid.clone(),
+            recorded_at: recorded.source.fetched_at.clone(),
+            checked_at: checked_at.to_string(),
+            overwritten_by: None,
+            profiles_overwritten: Vec::new(),
+            cluster_values_changed: 0,
+        };
+        let diff = diff::compute(recorded, &live, checked_at, Some(verify));
+        return Ok(Verification {
+            diff,
+            live,
+            unchanged,
+        });
+    }
     let uid = recorded.source.shown_uid();
     if uid.is_empty() {
         return Err(Error::NoUid);
@@ -909,7 +964,7 @@ where
         reference: reference.to_string(),
     };
     let (profile_scope, uid_hint) = match reference {
-        Ref::Cluster { .. } => return Err(refused()),
+        Ref::Cluster { .. } | Ref::Pack { .. } => return Err(refused()),
         Ref::Snapshot(path) => {
             let recorded = Snapshot::load(path)?;
             if recorded.source.cluster.is_some() {
