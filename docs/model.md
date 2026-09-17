@@ -118,8 +118,9 @@ different tag names have different roots (#19).
 from 1.0.0 only in the OS pack's tag name: 1.0.2 under the exact tag
 `LTS__24.04`, and 1.0.3 under the floating tag `LTS__24.x`. It moved cluster
 A to 1.0.2 and back, and held each move `Running` for 15 minutes. Then it
-renamed 1.0.2's tag in place through the API. Run `20260917T044135Z`, flag
-off:
+renamed 1.0.2's tag in place through the API. Runs `20260917T044135Z` and
+`20260917T124102Z`, flag off, gave the same answers; the second checked each
+one against the decision below, and all 32 checks passed:
 
 | question | answer |
 |---|---|

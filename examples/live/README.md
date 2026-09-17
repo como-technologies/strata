@@ -498,6 +498,71 @@ started from the baseline and ended at it (`baseline-after`).
 | PASS | `delete-move1` | 0 | 0 | delete 1.0.0 |
 | PASS | `baseline-after` | 0 | 0 | the live example is back at its baseline |
 
+## The tag-only run
+
+`AWS_PROFILE=<profile> tag-only.sh` in run `20260917T124102Z`, with the flag
+off. All 32 checks passed. Versions 1.0.2 and 1.0.3 differ from 1.0.0 only
+in the tag name the OS pack is pinned under, `LTS__24.04` and `LTS__24.x`,
+with one pack uid and version for all three. `compare` calls each pair
+`SAME CONTENT` with the impact `none (tag renamed, same pack build)`, and
+`same-release` passes the three. Palette's own repave check answers no repave
+for either move and a repave for the control. Cluster A ran 1.0.2 and then
+1.0.0 again, each for 15 minutes, on the same four EC2 instances throughout.
+After the rename of 1.0.2's tag in place, `verify` of its earlier record
+reports `DRIFT` with no node impact (`docs/model.md`, "A tag name for the
+same build"). The first run, `20260917T044135Z`, recorded the same answers
+before the expectations were set.
+
+```
+strata-live-profile@1.0.0 (uid 6aab5674b6a80225b1a53a66)  ->  strata-live-profile@1.0.2 (uid 6aabe001b6a811035f4fe2a5)
+root       eada36c2e3fd -> afdc4d3e06d1   SAME CONTENT
+note       the roots differ only by the tag name a pack is pinned under: the same pack build
+consumers  1 -> 0 clusters
+
+  variables unchanged
+
+~ [os   ] ubuntu-aws                 24.04              tag 24.04 -> LTS__24.04
+      impact: none (tag renamed, same pack build)
+  [k8s  ] kubernetes                 1.36.2             unchanged
+  [cni  ] cni-cilium-oss             1.20.1             unchanged
+  [csi  ] csi-aws-ebs                1.65.0             unchanged
+```
+
+| result | check | expected exit | got | what it shows |
+|---|---|---|---|---|
+| PASS | `release1` | 0 | 0 | record 1.0.0, the OS pack under tag 24.04 |
+| PASS | `a1` | 0 | 0 | record cluster A's release selection |
+| PASS | `instances1` | 0 | 0 | cluster A's EC2 instances before any move |
+| PASS | `exact1` | 0 | 0 | record 1.0.2 |
+| PASS | `floating1` | 0 | 0 | record 1.0.3 |
+| PASS | `os-packs` | 0 | 0 | the OS pack's tag, version, and pack uid as Palette stored each version |
+| PASS | `one-build` | 0 | 0 | Palette stored the tag each version was authored with, and one pack uid and version for all three |
+| PASS | `compare-exact` | 1 | 1 | 1.0.0 against 1.0.2, the exact tag: the roots differ |
+| PASS | `compare-exact-says` | 0 | 0 | #19: the pair is SAME CONTENT, names the rename, and gives no node impact |
+| PASS | `compare-exact-json` | 1 | 1 | the same comparison as JSON |
+| PASS | `compare-exact-json-says` | 0 | 0 | #19: sameContent, the OS pack tagRenamed, max impact none |
+| PASS | `compare-floating` | 1 | 1 | 1.0.0 against 1.0.3, the floating tag: the roots differ |
+| PASS | `compare-floating-says` | 0 | 0 | #19: the floating tag is the same content too |
+| PASS | `same-release-tags` | 0 | 0 | #19: 1.0.0, 1.0.2, and 1.0.3 are one release |
+| PASS | `palette-repave-exact` | 0 | 0 | Palette: a move from 1.0.0 to 1.0.2 repaves nothing |
+| PASS | `palette-repave-floating` | 0 | 0 | Palette: a move from 1.0.0 to 1.0.3 repaves nothing |
+| PASS | `palette-repave-control` | 1 | 1 | the control: 1.0.0 with one more kubeadm command repaves |
+| PASS | `a2` | 0 | 0 | record cluster A's release selection |
+| PASS | `a2-runs-exact` | 0 | 0 | cluster A's selection is IDENTICAL to 1.0.2 |
+| PASS | `instances2` | 0 | 0 | cluster A's EC2 instances after the move |
+| PASS | `repaved-to-exact` | 1 | 1 | #19: the move to 1.0.2 kept cluster A's instances (a repave replaces them: 0) |
+| PASS | `palette-repave-back` | 0 | 0 | Palette: a move from 1.0.2 back to 1.0.0 repaves nothing |
+| PASS | `a3` | 0 | 0 | record cluster A's release selection |
+| PASS | `a3-runs-release` | 0 | 0 | cluster A's selection is IDENTICAL to 1.0.0 |
+| PASS | `instances3` | 0 | 0 | cluster A's EC2 instances after the move back |
+| PASS | `repaved-back` | 1 | 1 | #19: the move back to 1.0.0 kept cluster A's instances (a repave replaces them: 0) |
+| PASS | `retag` | 0 | 0 | #19: rename 1.0.2's OS pack tag through the API, keeping its pack uid |
+| PASS | `exact2` | 0 | 0 | record the renamed 1.0.2 |
+| PASS | `retag-kept-pack-uid` | 0 | 0 | the rename kept the pack uid |
+| PASS | `verify-exact1` | 1 | 1 | #19: verify of 1.0.2's record from before the rename reports DRIFT |
+| PASS | `verify-exact1-says` | 0 | 0 | #19: the drift names the rename, the same content, and no node impact |
+| PASS | `baseline-after` | 0 | 0 | the live example is back at its baseline |
+
 ## The in-place runs
 
 `in-place.sh off` and `in-place.sh on` in session `20260917T031126Z`, against
