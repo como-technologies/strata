@@ -732,9 +732,9 @@ So two profiles created apart with the same manifests never compare as the same 
 
 ### Acceptance criteria
 
-- [ ] `docs/model.md` states how a manifest pack's `packUid` counts, with the live evidence, and why the chosen design keeps or changes the snapshot schema
-- [ ] Two profile versions with the same manifest content and different minted `packUid`s compare as the same release
-- [ ] A manifest content change still makes them different
+- [x] `docs/model.md` states how a manifest pack's `packUid` counts, with the live evidence, and why the chosen design keeps or changes the snapshot schema
+- [x] Two profile versions with the same manifest content and different minted `packUid`s compare as the same release
+- [x] A manifest content change still makes them different
 
 ## Stop tracking the generated examples
 
