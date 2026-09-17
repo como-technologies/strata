@@ -8,6 +8,14 @@
 #                              is neither Running nor Deleted; exit 0 once it is Deleted or not
 #                              found, 1 while it exists, 2 when the answer cannot be trusted
 #   tenant.sh updates UID      what Palette lists as waiting for a cluster's profiles, as JSON
+#   tenant.sh diagnose UID DIR what holds a cluster that will not reach Running or will not finish
+#                              deleting, saved under DIR: the cluster document, its events, and the
+#                              conditions not yet done from Palette; with kubectl and a kubeconfig
+#                              from Palette, the nodes, machines, pods, Kubernetes events, and the
+#                              logs of the Palette and Cluster API controllers in the cluster. The
+#                              kubeconfig is used from a temporary file and never saved. What could
+#                              not be read is listed in DIR/errors.txt; exit 2 only when Palette
+#                              cannot read the cluster
 #   tenant.sh digest KIND REGISTRY_UID NAME VERSION
 #                              the digest a helm or oci registry itself serves for one pack
 #                              version, read from the registry rather than from Palette; exit 2
@@ -31,11 +39,11 @@ case "$API" in http://*|https://*) ;; *) API="https://$API" ;; esac
 API=${API%/}
 PROJECT=${PALETTE_PROJECT_UID:-$(from_env_file PALETTE_PROJECT_UID)}
 
-# get PATH [BODYFILE] -> writes the body, prints the HTTP status
+# get PATH [BODYFILE [ACCEPT]] -> writes the body, prints the HTTP status
 get() {
-  local body=${2:-/dev/stdout}
+  local body=${2:-/dev/stdout} accept=${3:-application/json}
   curl -sS -o "$body" -w '%{http_code}' \
-    -H "ApiKey: $KEY" -H 'Accept: application/json' ${PROJECT:+-H "ProjectUid: $PROJECT"} \
+    -H "ApiKey: $KEY" -H "Accept: $accept" ${PROJECT:+-H "ProjectUid: $PROJECT"} \
     "$API$1"
 }
 
@@ -166,10 +174,61 @@ cluster() {
   esac
 }
 
+diagnose() {
+  local uid=${1:-} dir=${2:-} tmp status d
+  [ -n "$dir" ] || die "usage: tenant.sh diagnose CLUSTER_UID DIR"
+  [ -n "$PROJECT" ] || die "set PALETTE_PROJECT_UID to the cluster's project"
+  mkdir -p "$dir/logs" || die "cannot write $dir"
+  tmp=$(mktemp -d); trap 'rm -rf "${tmp:-}"' RETURN EXIT
+  status=$(get "/v1/spectroclusters/$uid" "$dir/cluster.json")
+  [ "$status" = 200 ] || die "reading cluster $uid answered HTTP $status"
+  ( cluster "$uid" ) > "$dir/state.txt" 2>&1
+  : > "$dir/errors.txt"
+  # Events, newest first, 100 a page (Palette answers 500 for more), up to 1000.
+  local page=1 cont=""
+  while :; do
+    status=$(get "/v1/events/components/spectrocluster/$uid?limit=100${cont:+&continue=$cont}" "$tmp/events-$page")
+    [ "$status" = 200 ] || { echo "events page $page: HTTP $status" >> "$dir/errors.txt"; break; }
+    cont=$(jq -r '.listmeta.continue // empty' "$tmp/events-$page")
+    [ -n "$cont" ] && [ "$page" -lt 10 ] || break
+    page=$((page + 1))
+  done
+  jq -s '{items: [.[].items // [] | .[]]}' "$tmp"/events-* > "$dir/events.json" 2>/dev/null \
+    || echo '{"items":[]}' > "$dir/events.json"
+  # Asked for JSON, Palette answers {"Reader":{}}; the kubeconfig comes with any other Accept.
+  status=$(get "/v1/spectroclusters/$uid/assets/kubeconfig" "$tmp/kubeconfig" '*/*')
+  if [ "$status" != 200 ]; then
+    echo "kubeconfig: HTTP $status; nothing was read from inside the cluster" >> "$dir/errors.txt"
+  elif ! grep -q '^apiVersion:' "$tmp/kubeconfig"; then
+    echo "kubeconfig: Palette answered without one; nothing was read from inside the cluster" >> "$dir/errors.txt"
+  elif ! command -v kubectl >/dev/null; then
+    echo "kubectl: not installed; nothing was read from inside the cluster" >> "$dir/errors.txt"
+  else
+    # kubectl OUT ARGS...: one read from inside the cluster, into DIR/OUT
+    in_cluster() {
+      local out=$1
+      shift
+      KUBECONFIG="$tmp/kubeconfig" kubectl --request-timeout=30s "$@" > "$dir/$out" 2>&1 \
+        || echo "kubectl $*: exit $?" >> "$dir/errors.txt"
+    }
+    in_cluster nodes.txt get nodes -o wide
+    in_cluster machines.txt get machinedeployments,machinesets,machines -A -o wide
+    in_cluster pods.txt get pods -A -o wide
+    in_cluster kube-events.txt get events -A --sort-by=.lastTimestamp
+    # A cluster Palette deploys runs its own Palette and Cluster API controllers, in cluster-<uid>.
+    for d in palette-controller-manager cluster-management-agent capi-controller-manager capa-controller-manager; do
+      in_cluster "logs/$d.txt" -n "cluster-$uid" logs "deploy/$d" --all-containers --tail=3000
+    done
+  fi
+  [ -s "$dir/errors.txt" ] || rm -f "$dir/errors.txt"
+  echo "diagnostics for $(head -1 "$dir/state.txt") in $dir"
+}
+
 case "${1:-}" in
   names) shift; names "$@" ;;
   cluster) shift; cluster "$@"; exit $? ;;
   updates) shift; updates "$@" ;;
+  diagnose) shift; diagnose "$@" ;;
   digest) shift; digest "$@" ;;
   *) sed -n '2,/^set -uo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; exit 2 ;;
 esac

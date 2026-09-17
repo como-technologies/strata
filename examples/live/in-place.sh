@@ -67,7 +67,11 @@ terraform_apply() {
     > "apply-$applies.txt" 2>&1
   local code=$?
   grep -E '^(Plan|Apply complete|Error)' "apply-$applies.txt" | tee -a steps.log
-  [ "$code" = 0 ] || { echo "in-place: terraform apply failed; see $run/apply-$applies.txt" >&2; exit 2; }
+  if [ "$code" != 0 ]; then
+    "$here/diagnose.sh" "$run/diagnostics" >&2
+    echo "in-place: terraform apply failed; see $run/apply-$applies.txt and $run/diagnostics" >&2
+    exit 2
+  fi
 }
 apply() { terraform_apply "$flag" "$@"; }
 apply_without_flag() { terraform_apply false -var keep_profile_versions=true "$@"; }
@@ -253,7 +257,9 @@ if stage 5 "delete cluster B and restore the add-on profile"; then
     done
     case "$state" in
       *": Running") ;;
-      *) echo "in-place: cluster B is not Running ($state); delete it by hand, then run stage 5 again" >&2; exit 2 ;;
+      *) "$here/diagnose.sh" "$run/diagnostics" >&2
+         echo "in-place: cluster B is not Running ($state); see $run/diagnostics, delete it by hand, then run stage 5 again" >&2
+         exit 2 ;;
     esac
   fi
   if [ "$mode" = on ]; then

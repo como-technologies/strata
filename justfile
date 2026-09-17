@@ -43,21 +43,27 @@ examples-fetch: build
     STRATA_BIN=target/release/strata examples/fetch-examples.sh
 
 # Live example: build a cluster and two profile versions in Palette. Billable until live-down.
+# When the apply fails, examples/live/diagnose.sh saves what holds each cluster.
 live-up:
-    examples/live/tf.sh init -input=false
-    examples/live/tf.sh apply
+    #!/usr/bin/env bash
+    set -uo pipefail
+    examples/live/tf.sh init -input=false || exit 1
+    examples/live/tf.sh apply && exit 0
+    examples/live/diagnose.sh
+    exit 1
 
 # Run every live check against the live example and write a summary
 live-verify: build
     examples/live/verify.sh
 
 # Tear the live example down, with the add-on and move profile versions that skip_destroy kept
-# out of Terraform's state
+# out of Terraform's state. When the destroy fails, examples/live/diagnose.sh saves what holds
+# each cluster.
 live-down:
     #!/usr/bin/env bash
-    set -euo pipefail
+    set -uo pipefail
     export PALETTE_PROJECT_UID=$(examples/live/tf.sh output -raw project_uid)
-    examples/live/tf.sh destroy
+    examples/live/tf.sh destroy || { examples/live/diagnose.sh; exit 1; }
     examples/live/api.sh delete-named strata-live-addon strata-live-move
 
 # Open one GitHub issue per section of docs/backlog.md (needs gh and a GitHub remote)

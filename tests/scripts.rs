@@ -934,24 +934,27 @@ fn tenant_sh_digest_exits_2_when_the_registry_cannot_be_read() {
 }
 
 /// A `curl` for api.sh: FAKE_ROUTED_CURL that also logs each request as `METHOD path` to
-/// $FAKE_LOG and keeps each request body as $FAKE_ROUTES/sent/<METHOD>_<route key>.
+/// $FAKE_LOG, keeps each request body as $FAKE_ROUTES/sent/<METHOD>_<route key>, and its query and
+/// headers, without the key, as $FAKE_ROUTES/sent/<METHOD>_<route key>.request.
 const FAKE_API_CURL: &str = r#"#!/usr/bin/env bash
-out=""; write=""; url=""; method=GET; sent=""
+out=""; write=""; url=""; method=GET; sent=""; headers=""
 while [ $# -gt 0 ]; do
   case "$1" in
     -o) out=$2; shift 2 ;;
     -w) write=$2; shift 2 ;;
     -X) method=$2; shift 2 ;;
     --data-binary) sent=${2#@}; shift 2 ;;
-    -H|-d) shift 2 ;;
+    -H) headers="$headers$2"$'\n'; shift 2 ;;
+    -d) shift 2 ;;
     -*) shift ;;
     *) url=$1; shift ;;
   esac
 done
-path=${url#*://*/}; path=${path%%\?*}; key=${path//\//_}
+path=${url#*://*/}; query=""; [ "$path" != "${path#*\?}" ] && query=${path#*\?}; path=${path%%\?*}; key=${path//\//_}
 echo "$method /$path" >> "$FAKE_LOG"
 mkdir -p "$FAKE_ROUTES/sent"
 [ -n "$sent" ] && cp "$sent" "$FAKE_ROUTES/sent/${method}_$key"
+printf 'query=%s\n%s' "$query" "$headers" | grep -v '^ApiKey:' > "$FAKE_ROUTES/sent/${method}_$key.request"
 body="$FAKE_ROUTES/$key"; status=404
 [ -f "$body" ] && status=200 || body=/dev/null
 if [ -n "$out" ]; then cp "$body" "$out"; else cat "$body"; fi
@@ -1069,4 +1072,219 @@ fn api_sh_delete_named_deletes_every_version_of_exactly_that_name() {
         "{}",
         text(&o.stdout)
     );
+}
+
+/// A `kubectl` that logs its arguments and the kubeconfig it was given, and answers only when
+/// that kubeconfig is the one the fake Palette serves.
+const FAKE_KUBECTL: &str = r#"#!/usr/bin/env bash
+echo "$*" >> "$FAKE_KUBECTL_LOG"
+grep -q 'fake-kubeconfig' "${KUBECONFIG:-/dev/null}" 2>/dev/null || { echo "no kubeconfig" >&2; exit 1; }
+echo "kubectl says: $*"
+"#;
+
+/// The fake Palette routes for one stuck cluster, `c-1` named fred.
+fn stuck_cluster_routes(routes: &Path, kubeconfig: bool) {
+    std::fs::create_dir_all(routes).unwrap();
+    std::fs::write(
+        routes.join("v1_spectroclusters_c-1"),
+        r#"{"metadata":{"name":"fred"},"status":{"state":"Provisioning","conditions":[
+            {"type":"WorkerNodeAdditionDone","status":"False","message":"provision worker nodes"}]}}"#,
+    )
+    .unwrap();
+    std::fs::write(
+        routes.join("v1_events_components_spectrocluster_c-1"),
+        r#"{"items":[{"reason":"CSIInstallFailed","message":"CSI install failed"}]}"#,
+    )
+    .unwrap();
+    if kubeconfig {
+        std::fs::write(
+            routes.join("v1_spectroclusters_c-1_assets_kubeconfig"),
+            "apiVersion: v1 # fake-kubeconfig\n",
+        )
+        .unwrap();
+    }
+}
+
+fn run_live(script: &str, args: &[&str], root: &Path, extra: &[(&str, &str)]) -> Output {
+    let bin = root.join("bin");
+    std::fs::create_dir_all(&bin).unwrap();
+    executable(&bin.join("curl"), FAKE_API_CURL);
+    executable(&bin.join("kubectl"), FAKE_KUBECTL);
+    let tmp = root.join("tmp");
+    std::fs::create_dir_all(&tmp).unwrap();
+    let mut c = Command::new("bash");
+    c.arg(live_script(script))
+        .args(args)
+        .env(
+            "PATH",
+            format!("{}:{}", bin.display(), std::env::var("PATH").unwrap()),
+        )
+        .env("HOME", root)
+        .env("TMPDIR", &tmp)
+        .env("PALETTE_API_KEY", "k")
+        .env("PALETTE_PROJECT_UID", "p-1")
+        .env("FAKE_ROUTES", root.join("routes"))
+        .env("FAKE_LOG", root.join("curl.log"))
+        .env("FAKE_KUBECTL_LOG", root.join("kubectl.log"))
+        .env_remove("AWS_PROFILE");
+    for (k, v) in extra {
+        c.env(k, v);
+    }
+    c.output().unwrap()
+}
+
+/// Every file under `dir`, as (path relative to dir, contents).
+fn files_under(dir: &Path) -> Vec<(String, String)> {
+    let mut out = Vec::new();
+    let mut stack = vec![dir.to_path_buf()];
+    while let Some(d) = stack.pop() {
+        for e in std::fs::read_dir(&d).unwrap() {
+            let p = e.unwrap().path();
+            if p.is_dir() {
+                stack.push(p);
+            } else {
+                let rel = p.strip_prefix(dir).unwrap().display().to_string();
+                out.push((rel, std::fs::read_to_string(&p).unwrap_or_default()));
+            }
+        }
+    }
+    out.sort();
+    out
+}
+
+#[test]
+fn tenant_sh_diagnose_saves_what_holds_a_cluster_without_keeping_its_kubeconfig() {
+    let root = tempfile::tempdir().unwrap();
+    stuck_cluster_routes(&root.path().join("routes"), true);
+    let out = root.path().join("diag");
+    let o = run_live(
+        "tenant.sh",
+        &["diagnose", "c-1", out.to_str().unwrap()],
+        root.path(),
+        &[],
+    );
+    assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
+    let files = files_under(&out);
+    let names: Vec<&str> = files.iter().map(|(n, _)| n.as_str()).collect();
+    for want in [
+        "cluster.json",
+        "events.json",
+        "state.txt",
+        "nodes.txt",
+        "machines.txt",
+        "pods.txt",
+        "kube-events.txt",
+        "logs/palette-controller-manager.txt",
+        "logs/cluster-management-agent.txt",
+    ] {
+        assert!(names.contains(&want), "missing {want}: {names:?}");
+    }
+    let state = &files.iter().find(|(n, _)| n == "state.txt").unwrap().1;
+    assert!(
+        state.contains("not done: WorkerNodeAdditionDone: provision worker nodes"),
+        "{state}"
+    );
+    assert!(
+        files
+            .iter()
+            .all(|(_, body)| !body.contains("fake-kubeconfig")),
+        "the kubeconfig carries credentials and is never saved: {names:?}"
+    );
+    assert!(!names.contains(&"errors.txt"), "nothing failed: {names:?}");
+    let sent = |key: &str| {
+        std::fs::read_to_string(root.path().join("routes/sent").join(key)).unwrap_or_default()
+    };
+    let kubeconfig_request = sent("GET_v1_spectroclusters_c-1_assets_kubeconfig.request");
+    assert!(
+        !kubeconfig_request.contains("application/json"),
+        "asked for JSON, Palette answers {{\"Reader\":{{}}}} instead of the kubeconfig: {kubeconfig_request}"
+    );
+    let events_request = sent("GET_v1_events_components_spectrocluster_c-1.request");
+    assert!(
+        events_request.contains("query=limit=100"),
+        "Palette answers 500 for more than 100 events a page: {events_request}"
+    );
+    let kubectl = std::fs::read_to_string(root.path().join("kubectl.log")).unwrap();
+    assert!(
+        kubectl.contains("-n cluster-c-1 logs deploy/palette-controller-manager --all-containers"),
+        "{kubectl}"
+    );
+    assert_eq!(
+        std::fs::read_dir(root.path().join("tmp")).unwrap().count(),
+        0,
+        "the temporary kubeconfig is removed"
+    );
+}
+
+#[test]
+fn tenant_sh_diagnose_keeps_what_palette_gives_when_the_cluster_cannot_be_read_from_inside() {
+    let root = tempfile::tempdir().unwrap();
+    stuck_cluster_routes(&root.path().join("routes"), false);
+    let out = root.path().join("diag");
+    let o = run_live(
+        "tenant.sh",
+        &["diagnose", "c-1", out.to_str().unwrap()],
+        root.path(),
+        &[],
+    );
+    assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
+    let files = files_under(&out);
+    let errors = &files
+        .iter()
+        .find(|(n, _)| n == "errors.txt")
+        .expect("errors.txt names what could not be read")
+        .1;
+    assert!(errors.contains("kubeconfig: HTTP 404"), "{errors}");
+    assert!(files.iter().any(|(n, _)| n == "cluster.json"));
+    assert!(
+        !root.path().join("kubectl.log").exists(),
+        "kubectl is not run without a kubeconfig"
+    );
+
+    let o = run_live(
+        "tenant.sh",
+        &["diagnose", "c-missing", out.to_str().unwrap()],
+        root.path(),
+        &[],
+    );
+    assert_eq!(
+        o.status.code(),
+        Some(2),
+        "a cluster Palette cannot read is an error"
+    );
+}
+
+/// A `terraform` whose `show -json` holds clusters A and B.
+const FAKE_TERRAFORM_STATE: &str = r#"#!/usr/bin/env bash
+case "$*" in
+  *"show -json"*) cat <<'JSON'
+{"values":{"outputs":{"project_uid":{"value":"p-1"}},"root_module":{"resources":[
+  {"type":"spectrocloud_cluster_profile","values":{"id":"prof-1","name":"strata-live-profile"}},
+  {"type":"spectrocloud_cluster_aws","values":{"id":"c-1","name":"fred","cloud_config":[{"region":"us-east-2"}]}},
+  {"type":"spectrocloud_cluster_aws","values":{"id":"c-2","name":"barney","cloud_config":[{"region":"us-east-2"}]}}
+]}}}
+JSON
+  ;;
+  *) exit 1 ;;
+esac
+"#;
+
+#[test]
+fn diagnose_sh_saves_diagnostics_for_every_cluster_in_the_terraform_state() {
+    let root = tempfile::tempdir().unwrap();
+    stuck_cluster_routes(&root.path().join("routes"), true);
+    std::fs::write(
+        root.path().join("routes/v1_spectroclusters_c-2"),
+        r#"{"metadata":{"name":"barney"},"status":{"state":"Running"}}"#,
+    )
+    .unwrap();
+    std::fs::create_dir_all(root.path().join("bin")).unwrap();
+    executable(&root.path().join("bin/terraform"), FAKE_TERRAFORM_STATE);
+    let out = root.path().join("diag");
+    let o = run_live("diagnose.sh", &[out.to_str().unwrap()], root.path(), &[]);
+    assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
+    assert!(out.join("fred/cluster.json").exists());
+    assert!(out.join("barney/cluster.json").exists());
+    let fred = std::fs::read_to_string(out.join("fred/state.txt")).unwrap();
+    assert!(fred.contains("fred c-1: Provisioning"), "{fred}");
 }

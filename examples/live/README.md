@@ -60,7 +60,8 @@ it down when the checks are done, and confirm it is gone.
 |---|---|
 | `terraform/` | the profiles and the cluster, and the variables the two scripts below set |
 | `tf.sh` | runs Terraform with the key and the Palette address strata uses |
-| `tenant.sh` | read-only lookups: the names `terraform.tfvars` needs, a cluster's state, and a pack's digest read from its Helm or OCI registry |
+| `tenant.sh` | read-only lookups: the names `terraform.tfvars` needs, a cluster's state and the conditions that hold it, a cluster's diagnostics, and a pack's digest read from its Helm or OCI registry |
+| `diagnose.sh` | saves diagnostics for every cluster in Terraform's state; `in-place.sh`, `just live-up`, and `just live-down` run it when an apply fails or a wait gives up |
 | `verify.sh` | runs every check and writes `runs/<UTC time>/` |
 | `in-place.sh` | the in-place edit test (#27): edits the add-on profile in place, creates cluster B, applies the edit to the cluster, and bumps the version, with the flag off or on |
 | `registry-move.sh` | the registry-move check (#24) |
@@ -230,11 +231,18 @@ What went wrong before, and why:
 | `plan-refuses-no-change` fails with exit 0 | the provider no longer refuses a flag-on plan that changes nothing: a release with the fix; expect 0 |
 | `registry-digest-oci` fails with "crane digest ... failed" | no login to the OCI registry, or an expired one; an AWS registry login lasts 12 hours |
 | `ebs-csi-controller` pods in `CrashLoopBackOff`, `UnauthorizedOperation` on `ec2:DescribeAvailabilityZones` | the worker node role lacks `AmazonEBSCSIDriverPolicy`; see Prerequisites |
+| a cluster stays `Provisioning` with `not done: WorkerNodeAdditionDone: provision worker nodes`, although its machines are `Running` and its nodes `Ready` | Palette did not check the worker nodes again after a node that was still joining failed its first check (`fred`, 2026-09-17); restarting the Palette controller in the cluster did not clear it. Its deletion ran normally: delete it, and send its diagnostics to Palette support |
 
 ## When teardown is slow or stuck
 
-These rules come from six observed teardowns of the same kind of cluster:
+These rules come from the observed teardowns of the same kind of cluster:
 
+- First save what holds the cluster: `examples/live/diagnose.sh` (with
+  `AWS_PROFILE` set, for the AWS inventory too), or `tenant.sh diagnose <uid>
+  <dir>` for one cluster. Once the cluster is gone, so is the evidence.
+- Never delete a cluster that is still provisioning, unless its machines are
+  `Running` and its nodes `Ready`: Palette then does not carry out the
+  deletion, and every cloud resource stays in place.
 - Deletion continues in Palette after Terraform gives up or is interrupted.
   Keep checking with `tenant.sh cluster` instead of starting over.
 - Judge progress by `aws-inventory.sh`, not by elapsed time. AWS empties first,
