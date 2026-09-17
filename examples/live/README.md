@@ -41,7 +41,8 @@ resource and the OS and CSI packs in `terraform/main.tf`.
 | cluster `fred` | One control plane and two workers, `t3.xlarge`, one availability zone. |
 | profile `strata-live-registries` 1.0.0 | An add-on profile with one chart from a Helm registry (default `nginx` 25.1.5 from `Bitnami`) and one pack from an OCI pack registry that `terraform.tfvars` names. Nothing runs it. |
 
-The pack versions are those of `examples/profiles/aws-pxk@1.1.0.json`.
+The pack versions are those of `examples/profiles/aws-pxk@1.1.0.json`, which
+`just examples` builds.
 
 `in-place.sh` adds cluster `barney`, with the same two profiles, for the length
 of its run. The two cluster names share no part, so no prefix or substring
@@ -412,7 +413,7 @@ SAME RELEASE: 1 pairs passed
 ```
 
 Every pack-ref digest equals the digest Palette lists for the pack version.
-The four `spectro` digests match `examples/INDEX.md` for the same versions.
+The four `spectro` digests match `examples/INDEX.md`, which `just examples` builds, for the same versions.
 For the Helm and OCI packs, `tenant.sh digest` read the same digest from the
 registry itself: the sha256 of the `nginx` 25.1.5 chart archive, and the
 manifest digest of `argocd` 10.4.0.1:

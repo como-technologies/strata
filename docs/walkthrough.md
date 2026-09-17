@@ -32,7 +32,8 @@ alias strata=target/release/strata
 
 1. **Where snapshots live.** Next to the profile definition, at
    `releases/<version>/<project>.json`, committed with the release. The
-   `examples/profiles/` files stand in for these below.
+   `examples/profiles/` files stand in for these below; `just examples`
+   builds them offline.
 2. **Which project a command talks to.** Set `PALETTE_PROJECT` to the
    project's name before every live command. The snapshot records the
    project's uid, so `verify` later finds the project on its own, even after

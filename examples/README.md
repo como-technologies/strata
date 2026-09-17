@@ -6,18 +6,23 @@ compare, and verify without touching a tenant.
 
 ```
 examples/
-  fetch-examples.sh          pulls packs (GET only), builds profiles, runs the tool
-  INDEX.md                   generated: what was pulled, versions, digests, reports
-  packs/<name>/<version>.json   one real pack version: values, digest, packUid, schema, template, dependencies
-  packs/<name>/_entity.json     GET /v1/packs/<name>/registries/<publicRepoUid>  (readme stripped)
-  packs/<name>/_summaries.json  GET /v1/packs?filters=spec.name=<name>, filtered to the Public Repo
-  profiles/raw/<profile>@<ver>/ profile.json, manifests.json, variables.json in the shapes the tool reads
-  profiles/<profile>@<ver>.json snapshots (Merkle root, per-pack hashes, canonical values)
-  clusters/raw/<cluster>/       cluster.json, manifests.json, variables.json in the shapes the tool reads
-  clusters/<cluster>.json       cluster snapshots: what the cluster runs, hashed like the profile
-  reports/                   compare output: text reports and one strata-diff/1 JSON document
-  live/                      Terraform, a verify script, and the recorded run against a real cluster
+  fetch-examples.sh             pulls packs (GET only), builds profiles, runs the tool
+  packs/<name>/_entity.json     fetched: GET /v1/packs/<name>/registries/<publicRepoUid>  (readme stripped)
+  packs/<name>/_summaries.json  fetched: GET /v1/packs?filters=spec.name=<name>, filtered to the Public Repo
+  packs/<name>/<version>.json   built: one real pack version: values, digest, packUid, schema, template, dependencies
+  profiles/raw/<profile>@<ver>/ built: profile.json, manifests.json, variables.json in the shapes the tool reads
+  profiles/<profile>@<ver>.json built: snapshots (Merkle root, per-pack hashes, canonical values)
+  clusters/raw/<cluster>/       built: cluster.json, manifests.json, variables.json in the shapes the tool reads
+  clusters/<cluster>.json       built: cluster snapshots: what the cluster runs, hashed like the profile
+  reports/                      built: compare output: text reports and one strata-diff/1 JSON document
+  INDEX.md                      built: what was pulled, versions, digests, reports
+  live/                         Terraform, the scripts, and the recorded runs against real clusters
 ```
+
+Only the fetched pack data and the script are tracked. `just examples` builds
+every file marked built, offline, from that data, so run it once before the
+commands below and in `docs/walkthrough.md`; CI runs it too. `just
+examples-fetch` fetches the pack data again, which needs a Palette API key.
 
 Everything above works offline. `live/` builds a real cluster and two profile
 versions in a Palette tenant, runs every check that needs them, and records

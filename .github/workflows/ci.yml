@@ -24,6 +24,8 @@ jobs:
       - run: just test
       # a separate crate that depends on strata as a library
       - run: just library-example
+      # the examples are built, not tracked: this keeps the generator working
+      - run: just examples
 
   build:
     name: build x86_64-unknown-linux-musl

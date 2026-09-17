@@ -36,7 +36,8 @@ serves, read without Palette by `tenant.sh digest`. Run `20260916T175442Z`:
 | nginx | `helm`, Helm registry | 25.1.5 | `08816cde6bea...` | the sha256 of the chart archive, as the repository index records it |
 | argocd | `oci`, OCI pack registry | 10.4.0.1 | `sha256:99cac22f712b...` | the manifest digest of `<base path>/spectro-packs/archive/argocd:10.4.0.1` |
 
-The `spectro` digests also appear for those versions in `examples/INDEX.md`,
+The `spectro` digests also appear for those versions in `examples/INDEX.md`
+(built by `just examples`),
 fetched from the registry a day earlier, and in the first run,
 `20260916T153806Z`. So for all three kinds the pack-ref digest is a digest of
 the pack version's content, the fallback order, pack-ref digest first and

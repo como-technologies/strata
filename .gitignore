@@ -19,5 +19,14 @@ examples/live/terraform/.terraform.tfstate.lock.info
 examples/live/terraform/terraform.tfvars
 examples/live/runs/
 
+# examples: `just examples` builds these offline from the fetched pack data, which stays tracked
+examples/INDEX.md
+examples/packs/*/*
+!examples/packs/*/_entity.json
+!examples/packs/*/_summaries.json
+examples/profiles/
+examples/clusters/
+examples/reports/
+
 # the library example resolves its own dependencies
 examples/library/Cargo.lock
