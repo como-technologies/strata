@@ -50,8 +50,8 @@ match finds both. `registry-move.sh` adds profile `strata-live-move` 1.0.0 and
 
 The cluster is billable while it exists. In the recorded run it owned four EC2
 instances (the three `t3.xlarge` nodes and a `t3.micro`), a NAT gateway, an
-elastic IP, a classic load balancer, a VPC, and four volumes. Creation took 19
-minutes. Healthy deletions of this kind of cluster take 9 to 29 minutes. Tear
+elastic IP, a classic load balancer, a VPC, and four volumes. Creation took 15
+to 19 minutes. Healthy deletions of this kind of cluster take 9 to 29 minutes. Tear
 it down when the checks are done, and confirm it is gone.
 
 ## Files
@@ -286,15 +286,19 @@ found that strata rejected a version used as a tag; strata now accepts one.
 
 ## The recorded run
 
-Run `20260916T191828Z` on 2026-09-16, with strata built from `main`, in a
-tenant's `strata-test` project on AWS us-east-2. All 21 checks passed:
+Run `20260917T002933Z` on 2026-09-17, with strata built from `main`, in a
+tenant's `strata-test` project on AWS us-east-2, against cluster `barney`.
+All 24 checks passed:
 
 | result | check | expected exit | got | what it shows |
 |---|---|---|---|---|
 | PASS | `snapshot-cluster` | 0 | 0 | strata reads what a live cluster runs |
 | PASS | `cluster-runs-release` | 0 | 0 | the cluster reports the release profile version |
+| PASS | `cluster-runs-two-profiles` | 0 | 0 | #23: the cluster runs the release profile, then the add-on profile |
 | PASS | `snapshot-release` | 0 | 0 | record the version the cluster runs |
 | PASS | `compare-release-cluster` | 0 | 0 | #1: a cluster that runs the recorded version is IDENTICAL |
+| PASS | `snapshot-addon` | 0 | 0 | record the add-on profile version the cluster runs |
+| PASS | `compare-addon-cluster` | 0 | 0 | #23: the add-on record is IDENTICAL to the cluster's add-on selection |
 | PASS | `snapshot-next` | 0 | 0 | record the newer version |
 | PASS | `compare-next-cluster` | 1 | 1 | #1: against a newer record, the cluster shows the change |
 | PASS | `compare-next-cluster-json` | 1 | 1 | the same comparison as JSON |
@@ -313,18 +317,31 @@ tenant's `strata-test` project on AWS us-east-2. All 21 checks passed:
 | PASS | `registry-digest-helm` | 0 | 0 | #2: read the helm pack's digest from the registry itself |
 | PASS | `registry-digest-oci` | 0 | 0 | #2: read the oci pack's digest from the registry itself |
 
-The cluster runs the release:
+The cluster runs the release, and the add-on profile after it; each record
+compares `IDENTICAL` against its selection:
 
 ```
-strata-live-profile@1.0.0 (uid 6aaab2f6da23e353e96e8c69)  ->  strata-live-profile@1.0.0 on cluster strata-live-cluster (uid 6aaab352da23e35da8a5a544)
+strata-live-profile@1.0.0 (uid 6aab30f2b6a8fe13e4abb1d4)  ->  strata-live-profile@1.0.0 on cluster barney (uid 6aab30f89dde75fd5dcb6256)
 root       eada36c2e3fd -> eada36c2e3fd   IDENTICAL
+```
+
+```
+strata-live-addon@1.0.0 (uid 6aab30f39dde75fcac792fe7)  ->  strata-live-addon@1.0.0 on cluster barney (uid 6aab30f89dde75fd5dcb6256)
+root       7d1079372122 -> 7d1079372122   IDENTICAL
 ```
 
 A newer record against the same cluster shows the one value that differs:
 
 ```
-strata-live-profile@1.0.1 (uid 6aaab2fbb6a8f072d83984d1)  ->  strata-live-profile@1.0.0 on cluster strata-live-cluster (uid 6aaab352da23e35da8a5a544)
+strata-live-profile@1.0.1 (uid 6aab30f8da23f105f62d4451)  ->  strata-live-profile@1.0.0 on cluster barney (uid 6aab30f89dde75fd5dcb6256)
 root       7d7689e8321c -> eada36c2e3fd   CHANGED
+consumers  0 -> 0 clusters
+
+  variables unchanged
+
+  [os   ] ubuntu-aws                 24.04              unchanged
+  [k8s  ] kubernetes                 1.36.2             unchanged
+  [cni  ] cni-cilium-oss             1.20.1             unchanged
 ~ [csi  ] csi-aws-ebs                1.65.0             AUTHORED
       values: 1 changed, 0 added, 0 removed
         ~ charts.aws-ebs-csi-driver.storageClasses[name=spectro-storage-class].reclaimPolicy: "Retain" -> "Delete"
@@ -335,8 +352,8 @@ The version the cluster runs lists it, and the candidate written from the
 1.0.1 record, with its values in files, reproduces 1.0.1:
 
 ```
-strata-live-profile@1.0.0 (uid 6aaab2f6da23e353e96e8c69): 1 consumer
-  strata-live-cluster  6aaab352da23e35da8a5a544  project 6aaab0567993b0008ad902db  Running
+strata-live-profile@1.0.0 (uid 6aab30f2b6a8fe13e4abb1d4): 1 consumer
+  barney  6aab30f89dde75fd5dcb6256  project 6aaab0567993b0008ad902db  Running
 ```
 
 ```
@@ -378,3 +395,33 @@ What the first attempts ran into, now built into the example:
   it. The cluster then took 19 minutes to reach `Running`.
 - The candidate check failed until strata accepted a version used as a tag,
   because that is the tag Palette stored.
+
+## The registry-move run
+
+Run `20260917T003010Z`, `registry-move.sh`, with the flag on. All 15 checks
+passed. The bump re-pinned `csi-aws-ebs` 1.65.0 from `Public Repo` to the OCI
+registry `Palette Registry`, which changed its type from `spectro` to `oci`,
+its registry uid, its pack uid, and its digest, and nothing else
+(`docs/model.md`, "A real registry move"). `same-release --allow
+registry-move` passed the pair as `registry-move` with 1 pack re-pinned, and
+failed it after an in-place edit of 1.0.1's values, naming only
+`pack csi/csi-aws-ebs AUTHORED: charts.aws-ebs-csi-driver.storageClasses[name=spectro-storage-class].reclaimPolicy`.
+
+| result | check | expected exit | got | what it shows |
+|---|---|---|---|---|
+| PASS | `plan-refuses-no-change` | 1 | 1 | expected with provider 0.29.7: with the flag on, Terraform refuses a plan that changes nothing |
+| PASS | `move1` | 0 | 0 | record 1.0.0, every pack from the pack registry |
+| PASS | `move-new-uid` | 1 | 1 | the flag made 1.0.1 a new profile version |
+| PASS | `move1-kept` | 0 | 0 | 1.0.0 is still there, unchanged |
+| PASS | `move2` | 0 | 0 | record 1.0.1 |
+| PASS | `move2-csi-is-oci` | 0 | 0 | 1.0.1's CSI pack comes from the OCI registry |
+| PASS | `compare-move` | 1 | 1 | every field that differs between the two records |
+| PASS | `same-release-exact` | 1 | 1 | an exact check fails: the registry moved |
+| PASS | `same-release-registry-move` | 0 | 0 | #24: the registry-move policy passes a real move, which changes the pack type |
+| PASS | `api-edit-move2` | 0 | 0 | edit 1.0.1's CSI values through the API |
+| PASS | `move2-edited` | 0 | 0 | record the edited 1.0.1 |
+| PASS | `same-release-after-edit` | 1 | 1 | #24: the policy fails the pair after an in-place edit |
+| PASS | `edit-is-authored` | 0 | 0 | the reason names the AUTHORED change |
+| PASS | `delete-move2` | 0 | 0 | delete 1.0.1 |
+| PASS | `delete-move1` | 0 | 0 | delete 1.0.0 |
+

@@ -97,7 +97,8 @@ registry-move policy had required an equal type, from a fixture that
 rewrote only uids and digests, and failed this pair with `IDENTITY: type
 spectro -> oci`. It now accepts a type change between two registries, and
 still refuses a pack that comes from no registry, a `manifest`. With that
-change the pair passes as `REGISTRY MOVE` with one pack re-pinned. After an
+change the pair passes as `REGISTRY MOVE` with one pack re-pinned, and
+`registry-move.sh` passes all 15 checks (run `20260917T003010Z`). After an
 edit of 1.0.1's CSI values in place through the API, the same check fails and
 names the `AUTHORED` leaf
 (`charts.aws-ebs-csi-driver.storageClasses[name=spectro-storage-class].reclaimPolicy`).
