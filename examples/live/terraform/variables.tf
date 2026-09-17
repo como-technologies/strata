@@ -145,12 +145,6 @@ variable "immutable_profiles" {
   default     = false
 }
 
-variable "keep_profile_versions" {
-  description = "skip_destroy on every profile with the flag off, for an apply that must not undo it (see examples/live/lib.sh)"
-  type        = bool
-  default     = false
-}
-
 variable "registry_move" {
   description = "Create the registry-move profile"
   type        = bool

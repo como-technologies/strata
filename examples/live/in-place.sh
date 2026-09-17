@@ -5,8 +5,9 @@
 #
 #   examples/live/in-place.sh off|on [FROM_STAGE]
 #
-#   1  record cluster A and the release and add-on versions, and what Terraform plans with the flag:
-#      no change, and an in-place edit of the add-on version
+#   1  hold skip_destroy for the flag (lib.sh); record cluster A and the release and add-on
+#      versions, and what Terraform plans with the flag: no change, and an in-place edit of the
+#      add-on version
 #   2  edit the add-on version in place through the API, create cluster B, and record both
 #      clusters without applying anything to cluster A
 #   3  push the add-on's content to cluster A without resolving its notification, then accept the
@@ -15,11 +16,10 @@
 #      versions
 #   5  delete cluster B and restore the baseline
 #
-# What varies: the flag, in every Terraform plan and every apply that changes a profile. What holds:
-# the edit (api.sh edit in both runs), the clusters (one definition), the steps and their order,
-# and the baseline the run starts from and returns to (lib.sh). Terraform's own handling of the
-# edit is a check, not a step: with the flag off it plans an update in place, with it on it
-# refuses.
+# What varies: the flag, in every Terraform plan and apply. What holds: the edit (api.sh edit in
+# both runs), the clusters (one definition), the steps and their order, and the baseline the run
+# starts from and returns to (lib.sh). Terraform's own handling of the edit is a check, not a step:
+# with the flag off it plans an update in place, with it on it refuses.
 #
 # Needs the live example at its baseline (baseline.sh), the strata release binary, jq, and the key
 # as verify.sh needs it. Billable: cluster B takes about 20 minutes to create and 10 to 30 to
@@ -77,6 +77,7 @@ stage() { [ "$from" -le "$1" ] && echo "== stage $1: $2" | tee -a steps.log; }
 load_outputs
 if [ "$from" -le 1 ]; then
   require_baseline
+  hold_versions
   : > ids.env
   PALETTE_PROJECT_UID=$(out project_uid)
   C=$(out cluster_uid)
@@ -101,8 +102,7 @@ if stage 1 "record the baseline"; then
   check a-owns-manifest-copy 0 "cluster A runs its own copy of the add-on manifest, not the profile's" -- \
     jq -e -n --slurpfile c a1-addon.json --slurpfile p addon1.json \
       '$c[0].packs[0].manifests[0].uid != $p[0].packs[0].manifests[0].uid'
-  check plan-no-change "$off0_on1" "Terraform plans no change at the baseline; provider 0.29.7 refuses that plan with the flag on (lib.sh)" -- \
-    tf_plan "$flag"
+  check plan-no-change 0 "Terraform plans no change once skip_destroy is held for the flag" -- tf_plan "$flag"
   check plan-edit "$off2_on1" "#27: Terraform's plan for an in-place edit of the add-on version: an update in place without the flag, a refusal with it" -- \
     tf_plan "$flag" -var edit_addon_in_place=true
   check plan-edit-says 0 "the plan says which" -- command grep -q "$plan_edit_says" plan-edit.out plan-edit.err
@@ -112,7 +112,7 @@ if stage 2 "edit the add-on version in place and create cluster B"; then
   check api-edit 0 "#27: edit the add-on version in place through the API" -- \
     "$live/api.sh" edit "$AD1" "$edit_from" "$edit_to"
   # The configuration now matches the edited version, so this creates cluster B and changes no profile.
-  apply_clusters -var edit_addon_in_place=true -var second_cluster=true
+  apply -var edit_addon_in_place=true -var second_cluster=true
   B=$(out cluster_b_uid)
   save B "$B"
   check a2 0 "record cluster A again, applying nothing" -- "$strata" snapshot "cluster:$C" --raw-dir raw/a2 -o a2.json
@@ -165,8 +165,7 @@ if stage 3 "apply the add-on profile to cluster A"; then
 fi
 
 if stage 4 "undo the edit and bump the add-on version"; then
-  apply_profile spectrocloud_cluster_profile.addon \
-    -var addon_version=1.0.1 -var second_cluster=true -var "cluster_addon_profile_uid=$AD1"
+  apply -var addon_version=1.0.1 -var second_cluster=true -var "cluster_addon_profile_uid=$AD1"
   AD2=$(out addon_profile_uid)
   save AD2 "$AD2"
   check addon-uid-kept "$off0_on1" "#27: the bump keeps the add-on uid without the flag and makes a new one with it" -- test "$AD2" = "$AD1"
@@ -203,8 +202,7 @@ fi
 
 if stage 5 "delete cluster B and restore the baseline"; then
   "$live/tenant.sh" cluster "$B" >/dev/null 2>&1 || wait_running "$B"  # exit 0: already deleted
-  apply_clusters '-target=spectrocloud_cluster_aws.cluster["b"]' \
-    -var addon_version=1.0.1 -var second_cluster=false -var "cluster_addon_profile_uid=$AD1"
+  apply -var addon_version=1.0.1 -var second_cluster=false -var "cluster_addon_profile_uid=$AD1"
   check b-gone 0 "cluster B is deleted" -- "$live/tenant.sh" cluster "$B"
   restore_addon "$AD1" addon1.json
   check a5-matches-addon 0 "cluster A runs the restored add-on version" -- "$strata" compare "$AD1" "cluster:$C/$AN"

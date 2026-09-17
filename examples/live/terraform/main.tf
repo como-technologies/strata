@@ -94,7 +94,7 @@ resource "spectrocloud_cluster_profile" "release" {
   description  = "strata live example: the version the cluster runs"
   cloud        = "aws"
   type         = "cluster"
-  skip_destroy = var.immutable_profiles || var.keep_profile_versions
+  skip_destroy = var.immutable_profiles
 
   dynamic "pack" {
     for_each = local.release_packs
@@ -117,7 +117,7 @@ resource "spectrocloud_cluster_profile" "next" {
   description  = "strata live example: a newer version nothing runs"
   cloud        = "aws"
   type         = "cluster"
-  skip_destroy = var.immutable_profiles || var.keep_profile_versions
+  skip_destroy = var.immutable_profiles
 
   dynamic "pack" {
     for_each = local.next_packs
@@ -145,7 +145,7 @@ resource "spectrocloud_cluster_profile" "tagged" {
   description  = "strata live example: the release with the OS pack pinned under the tag ${each.value}"
   cloud        = "aws"
   type         = "cluster"
-  skip_destroy = var.immutable_profiles || var.keep_profile_versions
+  skip_destroy = var.immutable_profiles
 
   dynamic "pack" {
     for_each = local.release_packs
@@ -190,7 +190,7 @@ resource "spectrocloud_cluster_profile" "registries" {
   description  = "strata live example: a Helm pack and an OCI pack; nothing runs it"
   cloud        = "all"
   type         = "add-on"
-  skip_destroy = var.immutable_profiles || var.keep_profile_versions
+  skip_destroy = var.immutable_profiles
 
   pack {
     name         = data.spectrocloud_pack.helm.name
@@ -221,7 +221,7 @@ resource "spectrocloud_cluster_profile" "addon" {
   description  = "strata live example: an add-on profile the clusters run next to the release"
   cloud        = "all"
   type         = "add-on"
-  skip_destroy = var.immutable_profiles || var.keep_profile_versions
+  skip_destroy = var.immutable_profiles
 
   pack {
     name   = "strata-live-config"
@@ -258,7 +258,7 @@ resource "spectrocloud_cluster_profile" "move" {
   description  = "strata live example: the release packs, for a real registry move; nothing runs it"
   cloud        = "aws"
   type         = "cluster"
-  skip_destroy = var.immutable_profiles || var.keep_profile_versions
+  skip_destroy = var.immutable_profiles
 
   dynamic "pack" {
     for_each = local.move_packs

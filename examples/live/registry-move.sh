@@ -5,7 +5,8 @@
 #
 #   examples/live/registry-move.sh
 #
-#   1  create the move profile at 1.0.0 with every pack from the pack registry
+#   1  hold skip_destroy for the flag (lib.sh), and create the move profile at 1.0.0 with every pack
+#      from the pack registry
 #   2  bump it to 1.0.1 with the CSI pack from the OCI registry (move_registry_name); the flag
 #      clones 1.0.0 and keeps it
 #   3  run same-release on the two records, exactly and with --allow registry-move
@@ -41,19 +42,19 @@ trap summary EXIT
 
 load_outputs
 require_baseline
+hold_versions
 PALETTE_PROJECT_UID=$(out project_uid)
 export PALETTE_PROJECT_UID
-move=spectrocloud_cluster_profile.move
 
-check plan-no-change 1 "provider 0.29.7 refuses a flag-on plan that changes nothing (lib.sh)" -- tf_plan true
+check plan-no-change 0 "Terraform plans no change once skip_destroy is held for the flag" -- tf_plan "$flag"
 
 echo "== 1: create the move profile at 1.0.0" | tee -a steps.log
-apply_profile "$move" -var registry_move=true
+apply -var registry_move=true
 M1=$(out move_profile_uid)
 check move1 0 "record 1.0.0, every pack from the pack registry" -- "$strata" snapshot "$M1" -o move1.json
 
 echo "== 2: bump it to 1.0.1 with the CSI pack from the OCI registry" | tee -a steps.log
-apply_profile "$move" -var registry_move=true -var move_version=1.0.1 -var move_csi_to_oci=true
+apply -var registry_move=true -var move_version=1.0.1 -var move_csi_to_oci=true
 M2=$(out move_profile_uid)
 check move-new-uid 1 "the flag made 1.0.1 a new profile version" -- test "$M2" = "$M1"
 check move1-kept 0 "1.0.0 is still there, unchanged" -- "$strata" verify move1.json
@@ -79,7 +80,8 @@ check edit-is-authored 0 "the reason names the AUTHORED change" -- \
   jq -e '[.pairs[0].reasons[] | select(contains("AUTHORED"))] | length == 1' same-release-after-edit.out
 
 echo "== 5: delete both versions and check the baseline" | tee -a steps.log
-apply_profile "$move" -var registry_move=false
+# skip_destroy keeps both versions in Palette when this removes the move profile from the state
+apply_baseline
 check delete-move2 0 "delete 1.0.1" -- "$live/api.sh" delete "$M2"
 check delete-move1 0 "delete 1.0.0" -- "$live/api.sh" delete "$M1"
 check baseline-after 0 "the live example is back at its baseline" -- "$live/baseline.sh"

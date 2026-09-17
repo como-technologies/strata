@@ -61,6 +61,7 @@ stage() { [ "$from" -le "$1" ] && echo "== stage $1: $2" | tee -a steps.log; }
 load_outputs
 if [ "$from" -le 1 ]; then
   require_baseline
+  hold_versions
   : > ids.env
   PALETTE_PROJECT_UID=$(out project_uid)
   C=$(out cluster_uid)
@@ -113,7 +114,7 @@ if stage 1 "record the baseline"; then
 fi
 
 if stage 2 "publish 1.0.2 and 1.0.3, which differ only in the OS pack's tag"; then
-  apply_profile spectrocloud_cluster_profile.tagged -var "tag_only_versions=$versions"
+  apply -var "tag_only_versions=$versions"
   EXACT=$(out tagged_profile_uids | jq -r '."1.0.2"')
   FLOATING=$(out tagged_profile_uids | jq -r '."1.0.3"')
   save EXACT "$EXACT"
@@ -150,7 +151,7 @@ if stage 2 "publish 1.0.2 and 1.0.3, which differ only in the OS pack's tag"; th
 fi
 
 if stage 3 "move cluster A to 1.0.2"; then
-  apply_clusters -var "tag_only_versions=$versions" -var "cluster_release_profile_uid=$EXACT"
+  apply -var "tag_only_versions=$versions" -var "cluster_release_profile_uid=$EXACT"
   watch to-exact exact1.json
   check a2 0 "record cluster A's release selection" -- "$strata" snapshot "cluster:$C/$N" --raw-dir raw/a2 -o a2.json
   check a2-runs-exact 0 "cluster A's selection is IDENTICAL to 1.0.2" -- "$strata" compare exact1.json a2.json
@@ -162,7 +163,7 @@ fi
 if stage 4 "move cluster A back to 1.0.0"; then
   check palette-repave-back 0 "Palette: a move from 1.0.2 back to 1.0.0 repaves nothing" -- \
     "$live/tenant.sh" repave "$C" "$EXACT" "$P"
-  apply_clusters -var "tag_only_versions=$versions"
+  apply -var "tag_only_versions=$versions"
   watch to-release release1.json
   check a3 0 "record cluster A's release selection" -- "$strata" snapshot "cluster:$C/$N" --raw-dir raw/a3 -o a3.json
   check a3-runs-release 0 "cluster A's selection is IDENTICAL to 1.0.0" -- "$strata" compare release1.json a3.json
@@ -185,7 +186,7 @@ if stage 5 "rename 1.0.2's OS pack tag in place"; then
 fi
 
 if stage 6 "delete 1.0.2 and 1.0.3, and check the baseline"; then
-  apply_profile spectrocloud_cluster_profile.tagged
+  apply_baseline
   check baseline-after 0 "the live example is back at its baseline" -- "$live/baseline.sh"
 fi
 

@@ -88,7 +88,7 @@ starts and leaves it as it found it.
 | script | varies | holds |
 |---|---|---|
 | `verify.sh` | nothing; it only reads | the baseline |
-| `in-place.sh off` and `on` | the provider's `immutable-clusterprofiles` flag, in every plan and in every apply that changes a profile | the in-place edit (`api.sh edit` in both runs), the clusters, the steps and their order, the baseline it starts from and restores |
+| `in-place.sh off` and `on` | the provider's `immutable-clusterprofiles` flag, in every plan and apply | the in-place edit (`api.sh edit` in both runs), the clusters, the steps and their order, the baseline it starts from and restores |
 | `registry-move.sh` | the move profile's CSI registry, then its values | the flag (on), the other packs, the baseline |
 | `drift-report.sh off` and `on` | the provider's `immutable-clusterprofiles` flag, in the plan and in the bump | the edit (`api.sh edit` in both runs), the records, the steps and their order, the issue label, the baseline |
 | `tag-only.sh` | the tag name the OS pack is pinned under, and which of two such versions cluster A runs | the pack uid, every other pack, the values, the flag (off), the baseline |
@@ -102,9 +102,12 @@ has the same lifecycle: `skip_destroy` follows the flag, and
 through the API in both `in-place.sh` runs, because Terraform refuses it with
 the flag on; `plan-edit` records what Terraform does with the same edit.
 
-**One workaround, labeled.** Provider 0.29.7 refuses a flag-on plan that
-changes nothing (`plan-no-change`). `lib.sh` works around it in one place,
-and names what to remove when a provider release fixes it.
+**`skip_destroy` before the first apply.** A flag-on version bump replaces
+the profile resource, and Terraform deletes the version it replaced with the
+`skip_destroy` its state holds, not the new value. Each script that applies
+first stores `skip_destroy` for its flag with an apply at the baseline that
+changes nothing else (`hold_versions` in `lib.sh`), and its last apply puts
+it back to false with the default variables (`apply_baseline`).
 
 ## Prerequisites
 
@@ -214,14 +217,6 @@ pass it on, so every step talks to the same Palette.
    `runs/<UTC time>/registry-move/`. An interrupted `in-place.sh` resumes
    with `OUT=<that directory> examples/live/in-place.sh <off|on> <stage>`.
 
-   With the flag on, provider 0.29.7 refuses every plan that includes an
-   existing profile at an unchanged version, even one that changes nothing:
-   Palette stores the packs a little differently from the configuration (no
-   trailing newline on values and manifests, pack type and registry fields
-   filled in), and that provider counts the difference as a change. The
-   check `plan-no-change` records it. `lib.sh` holds the one workaround, and
-   says what to remove once a provider release fixes it.
-
 5. Tear it down, and confirm it is gone. Keep the uids first; the outputs
    disappear with the state.
 
@@ -265,11 +260,10 @@ What went wrong before, and why:
 |---|---|
 | `live-up` fails with "A minimum allocation of '4.1' CPU cores is required across all worker nodes" | workers total 4 cores or fewer; the default of two `t3.xlarge` workers clears it |
 | `snapshot-candidate` fails with `pack-not-found` naming a tag | a strata build older than the tag fix; the profile's tag is the version |
-| a flag-on bump fails with `DeletionResourceInUseError: Unable to delete the resource as fred spectrocluster(s) in-use` | the profile's state held `skip_destroy = false`, and Terraform deletes a replaced version with the value its state holds, not the new one (provider 0.29.7). `apply_profile` now stops before such an apply; run `hold_versions` first (`lib.sh`) |
+| a flag-on bump fails with `DeletionResourceInUseError: Unable to delete the resource as fred spectrocluster(s) in-use` | the profile's state held `skip_destroy = false`, and Terraform deletes a replaced version with the value its state holds, not the new one (provider 0.29.7, and `resourceClusterProfileDelete` in 0.30.1). Each script now runs `hold_versions` (`lib.sh`) right after it checks the baseline |
 | a script stops with "target/release/strata is older than <file>; run just build" | the sources changed after the last release build. A script run directly, not through a `just` recipe, does not build first; without this check the `drift-report.sh off` run of 2026-09-17 ran a binary without `verify --summary` and failed 18 checks. `just build`, then run it again |
 | `consumer-is-the-cluster` fails with state `unknown` | the key cannot read the cluster in its project; `consumers-release.out` prints the error next to the cluster |
 | `only-the-edited-value` fails with two changed values | 1.0.1 was edited in place and the edit was not undone; `baseline.sh` names it |
-| `plan-no-change` fails with exit 0 with the flag on | the provider no longer refuses a flag-on plan that changes nothing: a release with the fix. Remove the workaround in `lib.sh` and expect 0 |
 | a script stops with "not at its baseline" | an earlier run did not finish, or something changed the example by hand; `baseline-before.txt` in the run names each difference. `just live-down && just live-up` rebuilds it |
 | `registry-digest-oci` fails with "crane digest ... failed" | no login to the OCI registry, or an expired one; an AWS registry login lasts 12 hours |
 | `ebs-csi-controller` pods in `CrashLoopBackOff`, `UnauthorizedOperation` on `ec2:DescribeAvailabilityZones` | the worker node role lacks `AmazonEBSCSIDriverPolicy`; see Prerequisites |

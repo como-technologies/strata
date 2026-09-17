@@ -6,13 +6,13 @@
 #
 #   examples/live/drift-report.sh off|on [FROM_STAGE]
 #
-#   1  record the release, the add-on version, and cluster A; report them, which opens nothing; and
-#      what Terraform plans for an in-place edit with the flag
+#   1  hold skip_destroy for the flag (lib.sh); record the release, the add-on version, and cluster
+#      A; report them, which opens nothing; and what Terraform plans for an in-place edit with the
+#      flag
 #   2  edit the add-on version in place through the API and report twice: one issue opens, and
 #      the second report updates it
 #   3  undo the edit and report: the issue closes
-#   4  hold skip_destroy for the flag (lib.sh), bump the add-on version with the flag, keeping
-#      cluster A on the first add-on uid, and report
+#   4  bump the add-on version with the flag, keeping cluster A on the first add-on uid, and report
 #   5  restore the baseline and report: every issue the run opened is closed
 #
 # What varies: the flag, in the plan and in the bump. What holds: the edit (api.sh edit in both
@@ -112,6 +112,7 @@ load_outputs
 if [ "$from" -le 1 ]; then
   require_baseline
   [ -z "$(open_issues)" ] || die "issues labeled $label are open in $repo; close them before a run"
+  hold_versions
   : > ids.env
   PALETTE_PROJECT_UID=$(out project_uid)
   C=$(out cluster_uid)
@@ -166,8 +167,7 @@ if stage 3 "undo the edit and report"; then
 fi
 
 if stage 4 "bump the add-on version and report"; then
-  hold_versions
-  apply_profile spectrocloud_cluster_profile.addon -var addon_version=1.0.1 -var "cluster_addon_profile_uid=$AD1"
+  apply -var addon_version=1.0.1 -var "cluster_addon_profile_uid=$AD1"
   check report-bump "$off1_on0" "#25, #27: the report after the bump: drift only without the flag" -- report
   check report-bump-opened 0 "#25, #27: the issues it opens: the add-on record and cluster A's without the flag, none with it" -- \
     said report-bump.err opened "$bump_issues"

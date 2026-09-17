@@ -68,26 +68,19 @@ summary_table() {
 # ---- Terraform ---------------------------------------------------------------------------------------
 #
 # The provider's immutable-clusterprofiles flag (variable immutable_profiles) governs only profile
-# resources, and keep_profile_versions holds skip_destroy where the flag set it.
-#
-# Workaround, until the provider release after 0.29.7 that stops it: 0.29.7 refuses every flag-on
-# plan that includes an existing profile whose version stays the same, even one that changes
-# nothing (check plan-no-change). So an apply that changes a profile targets that profile
-# (apply_profile), and an apply that changes only clusters runs with the flag off (apply_clusters).
-# With the flag off, both rules change nothing. When plan-no-change passes with the flag on, remove
-# the -target and the flag override here, and keep_profile_versions.
+# resources, and sets skip_destroy on every profile. Every apply runs with the script's flag, except
+# the one that restores the baseline (apply_baseline).
 
 applies=$(ls apply-*.txt 2>/dev/null | wc -l)
-# tf_apply FLAG KEEP ARG...: terraform apply with immutable_profiles=FLAG and
-# keep_profile_versions=KEEP; the output goes to apply-<n>.txt. A failed apply saves diagnostics
-# and stops the script.
+# tf_apply FLAG ARG...: terraform apply with immutable_profiles=FLAG; the output goes to
+# apply-<n>.txt. A failed apply saves diagnostics and stops the script.
 tf_apply() {
-  local with=$1 keep=$2
-  shift 2
+  local with=$1
+  shift
   applies=$((applies + 1))
-  echo "terraform apply -var immutable_profiles=$with -var keep_profile_versions=$keep $*" | tee -a steps.log
-  "$live/tf.sh" apply -input=false -auto-approve -no-color \
-    -var "immutable_profiles=$with" -var "keep_profile_versions=$keep" "$@" > "apply-$applies.txt" 2>&1
+  echo "terraform apply -var immutable_profiles=$with $*" | tee -a steps.log
+  "$live/tf.sh" apply -input=false -auto-approve -no-color -var "immutable_profiles=$with" "$@" \
+    > "apply-$applies.txt" 2>&1
   local code=$?
   command grep -E '^(Plan|Apply complete|Error)' "apply-$applies.txt" | tee -a steps.log
   if [ "$code" != 0 ]; then
@@ -96,29 +89,20 @@ tf_apply() {
   fi
   load_outputs
 }
-# apply_profile RESOURCE ARG...: an apply that changes one profile resource, with the script's flag.
-# With the flag on it stops unless the resource's state already holds skip_destroy = true (see
-# hold_versions); a resource not yet in the state is created with it.
-apply_profile() {
-  local r=$1 held
-  shift
-  if [ "$flag" = true ]; then
-    held=$("$live/tf.sh" state show -no-color "$r" 2>/dev/null | awk '$1 == "skip_destroy" { print $3 }')
-    [ "$held" != false ] \
-      || die "$r holds skip_destroy = false in the Terraform state; run hold_versions first, because Terraform deletes a replaced version with the skip_destroy its state holds"
-  fi
-  tf_apply "$flag" "$flag" "-target=$r" "$@"
-}
+# apply ARG...: an apply with the script's flag
+apply() { tf_apply "$flag" "$@"; }
 # hold_versions: at the baseline, store skip_destroy for the script's flag on every profile in the
-# state, changing nothing else. A flag-on version bump replaces the profile resource, and Terraform
-# deletes the replaced object with the skip_destroy its state holds (provider 0.29.7,
-# resourceClusterProfileDelete), not the new value: without this, the bump that sets it asks
-# Palette to delete the old version, which Palette refuses while a cluster runs it
-# (DeletionResourceInUseError, drift-report.sh on, run 20260917T132642Z).
-hold_versions() { tf_apply false "$flag"; }
-# apply_clusters ARG...: an apply that changes only clusters, with skip_destroy held where the
-# script's flag set it
-apply_clusters() { tf_apply false "$flag" "$@"; }
+# state, changing nothing else. Every script that applies runs it right after require_baseline. A
+# flag-on version bump replaces the profile resource, and Terraform deletes the replaced object with
+# the skip_destroy its state holds, not the new value (provider 0.30.1,
+# resourceClusterProfileDelete): without this, the bump asks Palette to delete the old version,
+# which Palette refuses while a cluster runs it (DeletionResourceInUseError, drift-report.sh on,
+# run 20260917T132642Z).
+hold_versions() { tf_apply "$flag"; }
+# apply_baseline: the default variables with the flag off, which is the baseline's configuration;
+# skip_destroy goes back to false on every profile. A profile resource this removes stays in
+# Palette when its state held skip_destroy = true.
+apply_baseline() { tf_apply false; }
 # tf_plan FLAG ARG...: terraform plan with -detailed-exitcode: 0 no changes, 2 changes, 1 refused
 tf_plan() { local with=$1; shift; "$live/tf.sh" plan -input=false -no-color -detailed-exitcode -var "immutable_profiles=$with" "$@"; }
 
@@ -170,8 +154,8 @@ restore_addon() {
       '.profiles[] | select(.name == $n and .uid != $u) | .uid'); do
     "$live/api.sh" delete "$v" | tee -a steps.log
   done
-  # 4. the default variables: version 1.0.0, and the clusters on the resource's uid
-  tf_apply false false
+  # 4. the default variables: version 1.0.0, the clusters on the resource's uid, and skip_destroy off
+  apply_baseline
   # 5. cluster A runs it
   "$live/api.sh" apply "$(out cluster_uid)" | tee -a steps.log || die "cannot apply the add-on profile to cluster A"
   for _ in $(seq 1 30); do
