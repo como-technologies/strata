@@ -1,16 +1,24 @@
-# Local entry point; CI runs the same recipes.
+# Local entry point; CI runs the same recipes. Run `just --list` to see each recipe.
+#
+# `just --list` prints the LAST comment line before a recipe as its help. Put an explanation
+# above a blank line, and one help line directly above the recipe.
 
 # The OpenTofu version that the live example runs
 tofu_version := env_var_or_default("TOFU_VERSION", "1.12.6")
 
+# Build the release binary
 default: build
 
-# Release binary at target/release/strata
+# ---- build and test -------------------------------------------------------------------------
+
+# Build the release binary at target/release/strata
 build:
     cargo build --release
 
-# Release binary for one target at target/<target>/release/strata. Linux targets are static
-# musl builds made in cross's containers; the others build natively with cargo.
+# Linux targets are static musl builds in the containers of cross. The other targets build
+# natively with cargo.
+
+# Build the release binary for one target at target/<target>/release/strata
 build-target target:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -19,33 +27,67 @@ build-target target:
       *) cargo build --release --target "{{target}}" ;;
     esac
 
-# Tag the version in Cargo.toml as v<version>; refuses on a dirty tree or an existing tag.
-# Push the tag to start the release workflow.
-release:
-    scripts/tag-release.sh
-
-# Rust unit + integration tests
+# Run the unit, library, binary, and script tests. No network.
 test:
     cargo test
 
+# Test the format, the clippy lints, and the rustdoc
 lint:
     cargo fmt --check
     cargo clippy --all-targets -- -D warnings
     RUSTDOCFLAGS="-D warnings" cargo doc --no-deps
 
-# Build and run examples/library: a separate crate that uses strata as a library
+# Build and run examples/library, a separate crate that uses strata as a library
 library-example:
     cargo run --quiet --manifest-path examples/library/Cargo.toml --target-dir target/library-example
 
-# Rebuild examples/ from the cached registry responses (no API key needed)
+# ---- examples -------------------------------------------------------------------------------
+
+# Build examples/ from the tracked registry responses. Needs no API key.
 examples: build
     OFFLINE=1 STRATA_BIN=target/release/strata examples/fetch-examples.sh
 
-# Pull fresh packs from the Public Repo and rebuild examples/ (needs PALETTE_API_KEY)
+# Fetch the packs from the Public Repo again and build examples/. Needs PALETTE_API_KEY.
 examples-fetch: build
     STRATA_BIN=target/release/strata examples/fetch-examples.sh
 
-# Install the pinned OpenTofu into ~/.local/bin for the live example. Needs no root.
+# ---- documentation --------------------------------------------------------------------------
+# The book is docs/src/. It needs mdbook, mdbook-mermaid, and mdbook-gruvbox. docs/book/ is the
+# output, and it is not tracked.
+
+# Build the book into docs/book/
+docs:
+    mdbook build docs
+
+# Build the book and serve it at http://localhost:3000 with live reload
+docs-serve:
+    mdbook serve docs --open
+
+# docs/examples/run.sh runs each command against a local stand-in for Palette. Needs python3
+# and jq.
+
+# Write the output of each command that the book shows into docs/src/output/
+docs-examples: examples
+    docs/examples/run.sh
+
+# Fail when docs/src/output/ is not the output of this build of strata
+docs-check: examples
+    docs/examples/run.sh --check
+
+# Test each link of the book with mdbook-lint
+docs-lint:
+    mdbook-lint lint docs/src/
+
+# Install the mermaid and gruvbox theme files into docs/ again
+docs-theme:
+    mdbook-mermaid install docs
+    mdbook-gruvbox install docs
+
+# ---- live example ---------------------------------------------------------------------------
+# A real cluster and profile versions in a Palette tenant. See docs/src/development/live-example.md.
+# Every recipe that creates something is billable until live-down.
+
+# Install the pinned OpenTofu into ~/.local/bin. Needs no root.
 tofu-install:
     TOFU_VERSION={{tofu_version}} examples/live/tofu-install.sh
 
@@ -53,8 +95,9 @@ tofu-install:
 tofu-uninstall:
     TOFU_VERSION={{tofu_version}} examples/live/tofu-install.sh --uninstall
 
-# Live example: build a cluster and two profile versions in Palette. Billable until live-down.
 # When the apply fails, examples/live/diagnose.sh saves what holds each cluster.
+
+# Build the live example: a cluster and the profile versions. Billable until live-down.
 live-up:
     #!/usr/bin/env bash
     set -uo pipefail
@@ -63,13 +106,15 @@ live-up:
     examples/live/diagnose.sh
     exit 1
 
-# Run every live check against the live example and write a summary
+# Run every read-only live check and write a summary
 live-verify: build
     examples/live/verify.sh
 
-# Run the four live scripts in order from the baseline, under one runs/<UTC time>/ directory:
-# verify.sh, in-place.sh off, in-place.sh on (against that off run), and registry-move.sh. Stops at
-# the first script that fails. Billable: about 3 to 4 hours with cluster B twice.
+# The scripts run in order from the baseline: verify.sh, in-place.sh off, in-place.sh on (against
+# that off run), and registry-move.sh. The recipe stops at the first script that fails. Billable:
+# about 3 to 4 hours, with cluster B two times.
+
+# Run the four live scripts under one runs/<UTC time>/ directory
 live-session: build
     #!/usr/bin/env bash
     set -uo pipefail
@@ -80,8 +125,9 @@ live-session: build
     OUT=$session/registry-move examples/live/registry-move.sh || exit 1
     echo "live-session: all four passed; results in $session"
 
-# The drift report test (#25), with the flag off and then on, in one session directory. It opens
-# and closes issues labeled strata-live-drift in this repository; see examples/live/README.md.
+# The test opens and closes issues with the label strata-live-drift in this repository.
+
+# Run the drift report test (#25) with the flag off and then on
 live-drift-report: build
     #!/usr/bin/env bash
     set -uo pipefail
@@ -90,9 +136,10 @@ live-drift-report: build
     OUT=$session/drift-report/on examples/live/drift-report.sh on || exit 1
     echo "live-drift-report: both passed; results in $session"
 
-# Tear the live example down, with every version of every profile name it uses, including the
-# versions skip_destroy kept out of the OpenTofu state. When the destroy fails,
-# examples/live/diagnose.sh saves what holds each cluster.
+# The recipe also deletes the versions that skip_destroy kept out of the OpenTofu state. When the
+# destroy fails, examples/live/diagnose.sh saves what holds each cluster.
+
+# Remove the live example and every version of each profile name that it uses
 live-down:
     #!/usr/bin/env bash
     set -uo pipefail
@@ -102,6 +149,14 @@ live-down:
     examples/live/tf.sh destroy || { examples/live/diagnose.sh; exit 1; }
     examples/live/api.sh delete-named $names
 
-# Open one GitHub issue per section of docs/backlog.md (needs gh and a GitHub remote)
+# ---- release --------------------------------------------------------------------------------
+
+# The recipe refuses a dirty tree or a tag that exists. Push the tag to start the release workflow.
+
+# Tag the version in Cargo.toml as v<version>
+release:
+    scripts/tag-release.sh
+
+# Open or update one GitHub issue for each section of docs/backlog.md. Needs gh.
 backlog-issues:
     scripts/open-backlog-issues.sh

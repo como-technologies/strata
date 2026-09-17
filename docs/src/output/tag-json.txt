@@ -1,0 +1,9 @@
+$ strata compare aws-pxk@1.1.1 aws-pxk@1.1.2 --json | jq '{same, sameContent, maxImpact: .summary.maxImpact, renamed: [.packs[] | select(.tagRenamed) | .name]}'
+{
+  "same": false,
+  "sameContent": true,
+  "maxImpact": "none",
+  "renamed": [
+    "ubuntu-aws"
+  ]
+}

@@ -1,0 +1,14 @@
+$ strata compare releases/1.1.1/dev.json releases/1.1.1/prod.json
+aws-pxk@1.1.1 (uid 64e0000000000000000000c3)  ->  aws-pxk@1.1.1 (uid 64e1000000000000000000c3)
+root       088136c929bd -> 90e2c34c183d   CHANGED
+consumers  0 -> 0 clusters
+
+  variables unchanged
+
+  [os   ] ubuntu-aws                 24.04              unchanged
+  [k8s  ] kubernetes                 1.36.2             unchanged
+  [cni  ] cni-cilium-oss             1.20.1             unchanged
+~ [csi  ] csi-aws-ebs                1.65.0             IDENTITY UPSTREAM
+      upstream digest  sha256:bd09e -> sha256:a746e   (packRef.digest)
+      impact: cluster-wide infra addon update
+  [addon] cert-manager               1.21.1             unchanged

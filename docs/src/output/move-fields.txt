@@ -1,0 +1,14 @@
+$ strata compare releases/1.1.1/dev.json releases/1.1.1/prod.json --json | jq '.packs[] | select(.identity) | {name, a: .a | {packUid, registryUid, upstream}, b: .b | {packUid, registryUid, upstream}}'
+{
+  "name": "csi-aws-ebs",
+  "a": {
+    "packUid": "6aa410ec144aaec79d547a9e",
+    "registryUid": "5eecc89d0b150045ae661cef",
+    "upstream": "sha256:bd09e8b4187bdef2e5f1fca88203ecd0504224087a0cd97e41a42f0a3930601c"
+  },
+  "b": {
+    "packUid": "6aa41627144aaece1b2e2452",
+    "registryUid": "64eaff453040297344bcad5d",
+    "upstream": "sha256:a746e14689085b14531566f9c9cfb2bc7716e96a394547ef50a1c52eab510c9e"
+  }
+}

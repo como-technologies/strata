@@ -1,0 +1,40 @@
+$ jq '{root, source: (.source | {ref, uid, projectUid, name, version, template, fetchedAt}), packs: [.packs[] | {key, version, node: .hash.node}]}' releases/1.1.1/dev.json
+{
+  "root": "088136c929bd2837cf59ab12920367187654c128964cea737c28b98e13f79dc4",
+  "source": {
+    "ref": "aws-pxk@1.1.1",
+    "uid": "64e0000000000000000000c3",
+    "projectUid": "64f20000000000000000a0d1",
+    "name": "aws-pxk",
+    "version": "1.1.1",
+    "template": "published",
+    "fetchedAt": "2026-09-17T09:30:00Z"
+  },
+  "packs": [
+    {
+      "key": "os/ubuntu-aws",
+      "version": "24.04",
+      "node": "9a9daa7c5f6980f1121ec1f9354ab965beb09d5a6ead8485ac4b88a303e067cb"
+    },
+    {
+      "key": "k8s/kubernetes",
+      "version": "1.36.2",
+      "node": "87f522ae4374049e1e0d3b9ac89055efb440aa016c86c41267a5177a0ec61d75"
+    },
+    {
+      "key": "cni/cni-cilium-oss",
+      "version": "1.20.1",
+      "node": "b0482c0e018932d6eabe8f6947a1a17b1e48f6e45d41a2286b5bf3d2504ac407"
+    },
+    {
+      "key": "csi/csi-aws-ebs",
+      "version": "1.65.0",
+      "node": "6a58b304efc62377318ab7548c2d2541a91ac4daa8e4ad68477dcf98a3f62857"
+    },
+    {
+      "key": "addon/cert-manager",
+      "version": "1.21.1",
+      "node": "6203030569a134aa16b01bdeeb6ef60b026793b4a2e80029c4a7df3df5462d22"
+    }
+  ]
+}

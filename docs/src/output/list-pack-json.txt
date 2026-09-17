@@ -1,0 +1,4 @@
+$ strata list --pack cilium --json | jq -r '.profiles[] | .ref as $ref | .packs[] | select(.name | contains("cilium")) | "\($ref) \(.name) \(.version)"'
+aws-pxk@1.0.0 cni-cilium-oss 1.19.6
+aws-pxk@1.1.0 cni-cilium-oss 1.20.1
+aws-pxk@1.1.1 cni-cilium-oss 1.20.1

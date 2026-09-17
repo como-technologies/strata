@@ -1,0 +1,12 @@
+$ strata compare aws-pxk@1.0.0 aws-pxk@1.1.0 --json | jq .summary
+{
+  "packsAdded": 0,
+  "packsRemoved": 0,
+  "packsChanged": 4,
+  "packsUnchanged": 1,
+  "identityChanges": 4,
+  "upstreamChanges": 4,
+  "authoredChanges": 3,
+  "variablesChanged": false,
+  "maxImpact": "repave"
+}

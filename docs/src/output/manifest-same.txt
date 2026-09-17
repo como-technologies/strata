@@ -1,0 +1,3 @@
+$ strata same-release addons/1.0.0/dev.json addons/1.0.0/prod.json
+SAME CONTENT   addons/1.0.0/dev.json -> addons/1.0.0/prod.json   root 74321d2697be -> 79b01f916234, only the packUid minted for each manifest pack differs
+SAME RELEASE: 1 pairs passed

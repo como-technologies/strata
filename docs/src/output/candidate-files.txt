@@ -1,0 +1,7 @@
+$ find aws-pxk -type f | sort
+aws-pxk/manifests/cert-manager/namespace-labels.yaml
+aws-pxk/values/cert-manager.yaml
+aws-pxk/values/cni-cilium-oss.yaml
+aws-pxk/values/csi-aws-ebs.yaml
+aws-pxk/values/kubernetes.yaml
+aws-pxk/values/ubuntu-aws.yaml

@@ -1,0 +1,6 @@
+$ strata list projects
+project dev (uid 64f20000000000000000a0d1)
+
+2 projects
+  dev   64f20000000000000000a0d1
+  prod  64f20000000000000000a0f1

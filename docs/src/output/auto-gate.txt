@@ -1,0 +1,3 @@
+$ strata compare aws-pxk@1.1.0 aws-pxk@1.1.1 --json > report.json
+$ jq -e '.summary.maxImpact != "repave"' report.json
+true

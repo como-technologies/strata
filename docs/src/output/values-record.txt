@@ -1,0 +1,9 @@
+$ jq .source.cluster.variables runs/payments.json
+[
+  {
+    "profile": "aws-pxk",
+    "profileUid": "64e0000000000000000000c3",
+    "name": "platform_owner",
+    "value": "team-payments"
+  }
+]

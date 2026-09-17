@@ -1,0 +1,22 @@
+$ strata list --pack cilium
+project dev (uid 64f20000000000000000a0d1)
+
+3 profiles with a pack matching 'cilium'
+  aws-pxk@1.0.0  64e0000000000000000000a1  aws  cluster  no consumers
+    os     ubuntu-aws      20.04 (tag LTS__20.4.x)
+    k8s    kubernetes      1.35.3
+    cni    cni-cilium-oss  1.19.6
+    csi    csi-aws-ebs     1.63.1
+    addon  cert-manager    1.21.1
+  aws-pxk@1.1.0  64e0000000000000000000b2  aws  cluster  1 consumer
+    os     ubuntu-aws      24.04 (tag LTS__24.x)
+    k8s    kubernetes      1.36.2
+    cni    cni-cilium-oss  1.20.1
+    csi    csi-aws-ebs     1.65.0
+    addon  cert-manager    1.21.1
+  aws-pxk@1.1.1  64e0000000000000000000c3  aws  cluster  1 consumer
+    os     ubuntu-aws      24.04 (tag LTS__24.x)
+    k8s    kubernetes      1.36.2
+    cni    cni-cilium-oss  1.20.1
+    csi    csi-aws-ebs     1.65.0
+    addon  cert-manager    1.21.1

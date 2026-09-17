@@ -1,0 +1,27 @@
+$ strata compare aws-pxk@1.1.1 aws-pxk@1.1.2 --full
+aws-pxk@1.1.1 (uid 64e0000000000000000000c3)  ->  aws-pxk@1.1.2 (uid 64e0000000000000000000d4)
+root       088136c929bd -> 78a86f401545   CHANGED
+consumers  0 -> 0 clusters
+
+  variables unchanged
+
+  [os   ] ubuntu-aws                 24.04              unchanged
+  [k8s  ] kubernetes                 1.36.2             unchanged
+  [cni  ] cni-cilium-oss             1.20.1             unchanged
+~ [csi  ] csi-aws-ebs                1.65.0             AUTHORED
+      values: 1 changed, 0 added, 0 removed
+        ~ charts.aws-ebs-csi-driver.storageClasses[name=spectro-storage-class].reclaimPolicy: "Delete" -> "Retain"
+      impact: cluster-wide infra addon update
+  [addon] cert-manager               1.21.1             unchanged
+
+--- a: csi/csi-aws-ebs values
++++ b: csi/csi-aws-ebs values
+@@ -28,7 +28,7 @@
+           # defaults to WaitForFirstConsumer
+         volumeBindingMode: WaitForFirstConsumer
+         # defaults to Delete
+-        reclaimPolicy: Delete
++        reclaimPolicy: Retain
+         parameters:
+           # File system type: xfs, ext2, ext3, ext4
+           csi.storage.k8s.io/fstype: "ext4"

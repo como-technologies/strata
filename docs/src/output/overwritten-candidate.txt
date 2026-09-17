@@ -1,0 +1,2 @@
+$ strata candidate releases/1.1.1/dev.json -o aws-pxk-1.1.1.yaml --files-dir aws-pxk-1.1.1
+strata: wrote aws-pxk-1.1.1.yaml (root 088136c929bd)

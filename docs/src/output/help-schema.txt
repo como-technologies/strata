@@ -1,0 +1,10 @@
+$ strata schema --help
+Print the JSON Schema of a document or of the candidate file
+
+Usage: strata schema <KIND>
+
+Arguments:
+  <KIND>  The document: snapshot, diff, verify-summary, chain, consumers, list, or candidate [possible values: snapshot, diff, verify-summary, chain, consumers, list, candidate]
+
+Options:
+  -h, --help  Print help

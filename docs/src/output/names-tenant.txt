@@ -1,0 +1,6 @@
+$ strata list clusters --project ''
+tenant scope
+
+2 clusters
+  cluster:64f1000000000000000000e1  payments  Running  aws  project 64f20000000000000000a0d1
+  cluster:64f1000000000000000000f1  payments  Running  aws  project 64f20000000000000000a0f1

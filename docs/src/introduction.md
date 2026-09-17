@@ -1,0 +1,45 @@
+# strata
+
+Strata records, compares, and checks Spectro Cloud Palette cluster profile
+versions as releases.
+
+A cluster profile is a stack of layers: OS, Kubernetes, CNI, CSI, and add-ons.
+Each layer is a pack with a version, a digest, and values. Palette lets a
+person edit a published version in place. Two projects can hold one version
+name with different contents. Strata calculates one digest for each version,
+the **root**. Two versions with the same root are the same release.
+
+```mermaid
+flowchart LR
+  pack["pack<br/>a build"] --> version["profile version<br/>a release"]
+  version --> cluster["cluster<br/>a run"]
+  version -- "strata snapshot" --> record[("record<br/>a JSON file")]
+  record -- "strata verify" --> version
+  record -- "strata compare" --> cluster
+```
+
+| Question | Command |
+| --- | --- |
+| What changed between two versions? | [`strata compare A B`](./commands/compare.md) |
+| Does Palette still have the version that I recorded? | [`strata verify record.json`](./commands/verify.md) |
+| Do dev and prod have the same release? | [`strata same-release dev.json prod.json`](./commands/same-release.md) |
+| Does this cluster run its release? | [`strata compare record.json cluster:NAME`](./use-cases/cluster-release.md) |
+| Can I delete this version? | [`strata consumers NAME@VERSION`](./commands/consumers.md) |
+
+## Where to start
+
+1. [Install](./install.md) strata.
+2. [Configure](./configure.md) the API key and the project.
+3. Do the [quick start](./quickstart.md).
+4. Find your problem in [Use cases](./use-cases/index.md).
+
+## The rule
+
+A published profile version is a release. It has a name and a version. Do not
+change it after you publish it. To change a release, publish a new version.
+`strata verify` tells you when a person or a tool breaks this rule.
+
+Strata reads Palette and writes files. It publishes nothing. It works in the
+same way when a team publishes with OpenTofu, the API, or the Palette console.
+It has no opinion about where the records live, which registry holds the packs,
+which cloud the profile targets, or which CI system runs the commands.

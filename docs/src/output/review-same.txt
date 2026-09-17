@@ -1,0 +1,3 @@
+$ strata same-release candidate.json releases/1.1.0/dev.json
+IDENTICAL      candidate.json -> releases/1.1.0/dev.json   root 8a8a64d3f95d
+SAME RELEASE: 1 pairs passed

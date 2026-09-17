@@ -1,0 +1,15 @@
+# mdbook-lint: the link rules only. `just docs-lint` runs them, and `mdbook build` runs them when
+# mdbook-lint is installed. mdbook builds a link to a page or a heading that does not exist with
+# exit code 0 and no message, so these rules are the only test of the links.
+#
+# The style rules stay off. CONTENT004 wants title case, and this book uses sentence case. MD013
+# wants a line limit that the tables and the command output exceed.
+enabled-rules = [
+  "MDBOOK002", # internal-link-validation: a link resolves to a file
+  "MDBOOK006", # internal-cross-references: a link resolves to a heading
+  "MD051",     # link-fragments: a fragment matches a heading of the same page
+  "CONTENT006",# no-broken-internal-links
+]
+
+fail-on-errors = true
+fail-on-warnings = true

@@ -1,7 +1,7 @@
 name: strata comment
 
 # Reusable workflow. A repository calls it from its own pull request workflow to post the
-# comparison of two refs as one comment and set a label from the impact; see the README. It
+# comparison of two refs as one comment and set a label from the impact; see docs/src/automation/pr-comments.md. It
 # downloads the strata release binary, checks it against SHA256SUMS, and runs
 # scripts/pr-comment.sh from the same tag. Other CI systems run the script directly.
 on:

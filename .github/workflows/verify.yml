@@ -1,7 +1,8 @@
 name: strata verify report
 
 # Reusable workflow. A repository calls it from its own scheduled workflow to verify its strata
-# records and keep one issue open per record that drifted or could not be checked; see the README.
+# records and keep one issue open per record that drifted or could not be checked; see
+# docs/src/automation/drift-issues.md.
 # The caller sets the schedule. It downloads the strata release binary, checks it against
 # SHA256SUMS, and runs scripts/verify-report.sh from the same tag. Other CI systems run the script
 # directly.

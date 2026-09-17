@@ -1,0 +1,13 @@
+$ strata verify aws-pxk-1.1.0.json
+aws-pxk@1.1.0 (uid 64e0000000000000000000b2)  ->  aws-pxk@1.1.0 (uid 64e0000000000000000000b2)
+root       8a8a64d3f95d -> 8a8a64d3f95d   IDENTICAL
+consumers  1 -> 1 clusters
+
+  variables unchanged
+
+  [os   ] ubuntu-aws                 24.04              unchanged
+  [k8s  ] kubernetes                 1.36.2             unchanged
+  [cni  ] cni-cilium-oss             1.20.1             unchanged
+  [csi  ] csi-aws-ebs                1.65.0             unchanged
+  [addon] cert-manager               1.21.1             unchanged
+OK: published version aws-pxk@1.1.0 is unchanged since 2026-09-17T09:30:00Z

@@ -1,0 +1,52 @@
+$ cat aws-pxk.yaml
+name: aws-pxk
+version: 1.1.1
+type: cluster
+cloudType: aws
+layers:
+- name: ubuntu-aws
+  version: '24.04'
+  layer: os
+  tag: LTS__24.x
+  registryUid: 5eecc89d0b150045ae661cef
+  valuesFile: aws-pxk/values/ubuntu-aws.yaml
+- name: kubernetes
+  version: 1.36.2
+  layer: k8s
+  tag: 1.36.2
+  registryUid: 5eecc89d0b150045ae661cef
+  valuesFile: aws-pxk/values/kubernetes.yaml
+- name: cni-cilium-oss
+  version: 1.20.1
+  layer: cni
+  tag: 1.20.1
+  registryUid: 5eecc89d0b150045ae661cef
+  valuesFile: aws-pxk/values/cni-cilium-oss.yaml
+- name: csi-aws-ebs
+  version: 1.65.0
+  layer: csi
+  tag: 1.65.0
+  registryUid: 5eecc89d0b150045ae661cef
+  valuesFile: aws-pxk/values/csi-aws-ebs.yaml
+- name: cert-manager
+  version: 1.21.1
+  layer: addon
+  tag: 1.21.1
+  registryUid: 5eecc89d0b150045ae661cef
+  valuesFile: aws-pxk/values/cert-manager.yaml
+  manifests:
+  - name: namespace-labels
+    contentFile: aws-pxk/manifests/cert-manager/namespace-labels.yaml
+variables:
+- defaultValue: ''
+  description: ''
+  displayName: Platform owner
+  format: string
+  hidden: false
+  immutable: false
+  inputType: text
+  isSensitive: false
+  name: platform_owner
+  options: []
+  regex: ''
+  required: true

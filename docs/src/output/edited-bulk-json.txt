@@ -1,0 +1,8 @@
+$ strata verify 'releases/**/*.json' 'runs/*.json' --json | jq '.summary'
+{
+  "records": 2,
+  "unchanged": 1,
+  "drifted": 1,
+  "errors": 0,
+  "status": "drifted"
+}

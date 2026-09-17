@@ -1,0 +1,3 @@
+$ strata consumers aws-pxk@1.1.0 --json | jq -r '.consumers[] | "\(.name) \(.state) \(.version)"'
+payments Running 1.1.0
+search Running 1.1.0

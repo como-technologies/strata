@@ -1,0 +1,4 @@
+$ strata snapshot aws-pxk@latest -o latest.json
+strata: looking up project dev
+strata: fetching profile 64e0000000000000000000c3
+strata: wrote latest.json (root 088136c929bd)

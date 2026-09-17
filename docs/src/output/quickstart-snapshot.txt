@@ -1,0 +1,4 @@
+$ strata snapshot aws-pxk@1.1.0 -o aws-pxk-1.1.0.json
+strata: looking up project dev
+strata: fetching profile 64e0000000000000000000b2
+strata: wrote aws-pxk-1.1.0.json (root 8a8a64d3f95d)

@@ -1,0 +1,28 @@
+[book]
+title = "strata"
+description = "Record, compare, and check Palette cluster profile versions as releases."
+authors = ["Como Technologies"]
+language = "en"
+src = "src"
+
+[build]
+build-dir = "book"
+# Fail the build if SUMMARY.md names a page that does not exist.
+create-missing = false
+
+[preprocessor.mermaid]
+command = "mdbook-mermaid"
+
+# Test each link while the book builds, with the rules in .mdbook-lint.toml. `optional` keeps a
+# checkout that has no mdbook-lint able to build the book: without it, mdbook stops with exit
+# code 101. Continuous integration installs the tool, so the test runs where it decides a merge.
+[preprocessor.lint]
+optional = true
+
+[output.html]
+git-repository-url = "https://github.com/como-technologies/strata"
+edit-url-template = "https://github.com/como-technologies/strata/edit/main/docs/{path}"
+additional-js = ["mermaid.min.js", "mermaid-init.js", "gruvbox/gruvbox.js", "gruvbox/mermaid-gruvbox.js"]
+default-theme = "gruvbox"
+preferred-dark-theme = "gruvbox"
+additional-css = ["gruvbox/css/variables.css", "gruvbox/highlight.css"]

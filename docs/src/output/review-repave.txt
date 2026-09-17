@@ -1,0 +1,3 @@
+$ strata compare releases/1.0.0/dev.json candidate.json --json | jq -r '.packs[] | select(.impact.level == "repave") | "\(.name): \(.impact.text)"'
+ubuntu-aws: node repave (OS image change)
+kubernetes: node repave (Kubernetes version change)

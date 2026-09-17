@@ -1,0 +1,4 @@
+$ strata verify 'releases/**/*.json' 'runs/*.json'
+DRIFT  releases/1.1.1/dev.json  aws-pxk@1.1.1  differs from the copy recorded 2026-09-17T09:30:00Z; max impact cluster-wide, 1 packs changed
+OK     runs/payments.json  aws-pxk@1.1.1  unchanged since 2026-09-17T09:30:00Z
+2 records: 1 unchanged, 1 drifted, 0 errors

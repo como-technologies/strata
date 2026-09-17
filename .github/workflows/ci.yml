@@ -27,6 +27,22 @@ jobs:
       # the examples are built, not tracked: this keeps the generator working
       - run: just examples
 
+  docs:
+    name: docs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: extractions/setup-just@v2
+      - name: Install mdbook and the preprocessors
+        run: cargo install --locked mdbook mdbook-mermaid mdbook-gruvbox mdbook-lint
+      # each output in the book is the output of this build of strata
+      - run: just docs-check
+      # mdbook builds a broken link with no message; mdbook-lint finds it
+      - run: just docs-lint
+      - run: just docs
+
   build:
     name: build x86_64-unknown-linux-musl
     runs-on: ubuntu-latest

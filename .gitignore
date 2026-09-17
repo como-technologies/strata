@@ -30,3 +30,6 @@ examples/reports/
 
 # the library example resolves its own dependencies
 examples/library/Cargo.lock
+
+# the book: `just docs` builds it
+docs/book/

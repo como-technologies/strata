@@ -1,0 +1,2 @@
+$ strata compare aws-pxk@1.0.0 aws-pxk@1.1.0 --json | jq -r .summary.maxImpact
+repave

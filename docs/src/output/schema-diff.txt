@@ -1,0 +1,2 @@
+$ strata schema diff | jq -r '.required | join(", ")'
+schema, tool, generatedAt, legend, a, b, same, rootA, rootB, summary, variables, orderChanged, packs

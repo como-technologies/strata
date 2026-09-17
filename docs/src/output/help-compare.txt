@@ -1,0 +1,46 @@
+$ strata compare --help
+Compare two profile versions, records, or clusters
+
+The report gives the root of each side, the variables, and one line for each pack with its change flags and impact. `strata <A> <B>` is the same as `strata compare <A> <B>`.
+
+Exit status: 0 when the roots are equal, 1 when they differ, 2 on an error.
+
+Usage: strata compare [OPTIONS] <A> <B>
+
+Arguments:
+  <A>
+          The first side: a profile uid, <name>@<version>, <name>@latest, cluster:<cluster>[/<profile>], or a snapshot file
+
+  <B>
+          The second side, in the same forms as the first
+
+Options:
+      --full
+          Also print unified diffs of the raw values and of each changed manifest
+
+      --format <FORMAT>
+          The output format: terminal, markdown for a pull request comment, or json for a script
+          
+          [default: terminal]
+          [possible values: terminal, markdown, json]
+
+      --json
+          The same as --format json
+
+      --color [<COLOR>]
+          When to color the terminal report. auto colors only a terminal, and obeys NO_COLOR and CLICOLOR_FORCE
+          
+          [default: auto]
+          [possible values: auto, always, never]
+
+      --no-color
+          The same as --color=never
+
+      --compact
+          Write the JSON on one line
+
+  -q, --quiet
+          Do not write progress messages to standard error
+
+  -h, --help
+          Print help (see a summary with '-h')
