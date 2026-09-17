@@ -488,7 +488,7 @@ labels: investigation
 ### Plan
 
 1. `examples/live/terraform`: an add-on profile with one small pack, attached to the cluster next to the infra profile.
-2. `examples/live/verify.sh`: check that `cluster:<uid>` lists both profiles in order, that `cluster:<uid>/<name>` selects each, and that each profile's record compares `IDENTICAL` against its selection. Then edit the add-on profile in place: its record reports `DRIFT` and the infra profile's record does not. When the edit reaches the cluster is #27's question. With `immutable-clusterprofiles` on, bump the add-on profile's version instead: the cluster's selection still matches the old version's record, and `consumers` lists the cluster under the old version only.
+2. `examples/live/verify.sh`: check that `cluster:<uid>` lists both profiles in order, that `cluster:<uid>/<name>` selects each, and that each profile's record compares `IDENTICAL` against its selection. Then, in `examples/live/in-place.sh` (#27), edit the add-on profile in place: its record reports `DRIFT` and the infra profile's record does not. When the edit reaches the cluster is #27's question. With `immutable-clusterprofiles` on, bump the add-on profile's version instead: the cluster's selection still matches the old version's record, and `consumers` lists the cluster under the old version only.
 3. `examples/live/README.md`: the new checks and a recorded run.
 
 ### Acceptance criteria
@@ -588,14 +588,14 @@ Nothing shows what these changes do to clusters. Take cluster A created from `P@
 
 ### Plan
 
-1. `examples/live/terraform`: an `immutable_profiles` variable that sets the flag through `feature_preview`, with `skip_destroy` and `create_before_destroy` on the profiles when it is set; `just live-down` still removes every version. A second cluster, B, created only when `second_cluster` is set. `edit_release_in_place`, modeled on `edit_next_in_place`, and `bump_release_version`, which moves the release resource to a new version.
+1. `examples/live/terraform`: an `immutable_profiles` variable that sets the flag through `feature_preview`, with `skip_destroy` and `create_before_destroy` on the profiles when it is set; `just live-down` still removes every version. A second cluster, B, created only when `second_cluster` is set. `edit_addon_in_place` and `addon_version`, which edit and bump the add-on profile the clusters run (#23): its one layer is a ConfigMap, where an edit changes nothing a running cluster depends on, unlike the release's storage class, which Kubernetes does not let change.
 2. `examples/live/in-place.sh`: run the sequence once with the flag off and once with it on, keeping each stage under `runs/<UTC time>/in-place/<off|on>/`. With the flag on, check that `tf.sh plan` refuses the in-place edit, then make the edit through the API.
-   1. Record cluster A, the release version, and A's `profileUpdates`.
+   1. Record cluster A, the add-on version, and A's `profileUpdates`.
    2. Edit 1.0.0 in place and create cluster B. Record A again without applying the update, with its `profileUpdates`, and record B.
    3. Apply the waiting update to A and record A a third time.
-   4. Undo the edit and bump the release version. Record both clusters, the old version, and the new one.
+   4. Undo the edit and bump the add-on version. Record both clusters, the old version, and the new one.
 
-   At each stage, run `compare cluster:A cluster:B`, `verify` on the first records of A and of the release version, `consumers` of the release version, and `compare` of the release record against `cluster:A`. After both runs, `same-release` between the bumped version's records from the two runs shows whether the clone carried anything over from the version it copied. Remove B at the end.
+   At each stage, run `compare cluster:A cluster:B`, `verify` on the first records of A and of the add-on version, `consumers` of the add-on version, and `compare` of the add-on record against `cluster:A`. After both runs, `same-release` between the bumped version's records from the two runs shows whether the clone carried anything over from the version it copied. Remove B at the end.
 3. `docs/model.md`, under "Editing a published version in place": for each flag setting, what an in-place edit and a version bump do to a cluster that runs the version, before and after the update is applied, and to a cluster created afterward, and whether a clone carries content over, with the evidence.
 4. `src/ops.rs`: `verify` reports a record whose uid now names another version, even when the roots match. `src/diff.rs` and `src/render/`: when both sides name the same profile uid and version and their roots differ, the report says the version was edited in place. Tests over fixtures for both.
 5. Only if the evidence needs it: `cluster:<uid>` reads what the cluster applied, not what waits for it, and a cluster snapshot records a waiting update outside the root.
