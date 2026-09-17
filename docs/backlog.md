@@ -514,8 +514,8 @@ labels: investigation
 
 ### Acceptance criteria
 
-- [ ] `docs/model.md` states which fields differ in a real registry move, with the evidence
-- [ ] The policy passes a real registry move and fails the same pair after an in-place edit of one side's values
+- [x] `docs/model.md` states which fields differ in a real registry move, with the evidence
+- [x] The policy passes a real registry move and fails the same pair after an in-place edit of one side's values
 
 ## Report drift from a scheduled verify
 
