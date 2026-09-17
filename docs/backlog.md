@@ -783,7 +783,7 @@ One rule stays. In 0.30.1, `resourceClusterProfileDelete` still reads `skip_dest
 
 ### Acceptance criteria
 
-- [ ] The live example pins provider 0.30.1, and nothing in `examples/live` sets `-target`, `keep_profile_versions`, or a flag other than the script's own, except the apply that restores the baseline
-- [ ] `plan-no-change` expects exit 0 with the flag off and on
-- [ ] Every script that applies holds `skip_destroy` for its flag before its first apply, and `examples/live/README.md` states why
-- [ ] `registry-move.sh`, `drift-report.sh off` and `on`, and `in-place.sh off` and `on` pass from the baseline and restore it, and `examples/live/README.md` records the runs
+- [x] The live example pins provider 0.30.1, and nothing in `examples/live` sets `-target`, `keep_profile_versions`, or a flag other than the script's own, except the apply that restores the baseline
+- [x] `plan-no-change` expects exit 0 with the flag off and on
+- [x] Every script that applies holds `skip_destroy` for its flag before its first apply, and `examples/live/README.md` states why
+- [x] `registry-move.sh`, `drift-report.sh off` and `on`, and `in-place.sh off` and `on` pass from the baseline and restore it, and `examples/live/README.md` records the runs
