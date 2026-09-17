@@ -23,3 +23,19 @@ output "next_profile_uid" {
 output "registries_profile_uid" {
   value = spectrocloud_cluster_profile.registries.id
 }
+
+output "addon_profile_uid" {
+  value = spectrocloud_cluster_profile.addon.id
+}
+
+output "addon_profile_name" {
+  value = spectrocloud_cluster_profile.addon.name
+}
+
+output "cluster_b_uid" {
+  value = try(spectrocloud_cluster_aws.b[0].id, "")
+}
+
+output "move_profile_uid" {
+  value = try(spectrocloud_cluster_profile.move[0].id, "")
+}

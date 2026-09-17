@@ -24,9 +24,15 @@ variable "ssh_key_name" {
 }
 
 variable "name_prefix" {
-  description = "Prefix for the cluster and profile names"
+  description = "Prefix for the profile names"
   type        = string
   default     = "strata-live"
+}
+
+variable "cluster_name" {
+  description = "Cluster A's name: shares no part with second_cluster_name, so no prefix or substring match finds both"
+  type        = string
+  default     = "barney"
 }
 
 variable "instance_type" {
@@ -106,4 +112,70 @@ variable "oci_pack" {
 
 variable "oci_pack_version" {
   type = string
+}
+
+# The add-on profile the clusters run, and examples/live/in-place.sh's variables.
+variable "addon_version" {
+  description = "Version of the add-on profile; in-place.sh bumps it"
+  type        = string
+  default     = "1.0.0"
+}
+
+variable "edit_addon_in_place" {
+  description = "Change one data value of the add-on profile's ConfigMap without bumping the version"
+  type        = bool
+  default     = false
+}
+
+variable "cluster_addon_profile_uid" {
+  description = "Pin the clusters to this add-on profile uid instead of the resource's current version"
+  type        = string
+  default     = ""
+}
+
+variable "second_cluster" {
+  description = "Create cluster B next to the cluster. Billable while it exists."
+  type        = bool
+  default     = false
+}
+
+variable "second_cluster_name" {
+  description = "Cluster B's name: shares no part with cluster_name, so no prefix or substring match finds both"
+  type        = string
+  default     = "fred"
+}
+
+variable "immutable_profiles" {
+  description = "The provider's immutable-clusterprofiles feature_preview flag, with skip_destroy on the add-on and move profiles"
+  type        = bool
+  default     = false
+}
+
+variable "keep_profile_versions" {
+  description = "skip_destroy on the add-on and move profiles with the flag off, for an apply that must not undo it"
+  type        = bool
+  default     = false
+}
+
+variable "registry_move" {
+  description = "Create the registry-move profile"
+  type        = bool
+  default     = false
+}
+
+variable "move_version" {
+  type    = string
+  default = "1.0.0"
+}
+
+variable "move_csi_to_oci" {
+  description = "Take the move profile's CSI pack from move_registry_name instead of registry_name"
+  type        = bool
+  default     = false
+}
+
+variable "move_registry_name" {
+  description = "An OCI pack registry that holds csi-aws-ebs at csi_version"
+  type        = string
+  default     = "Palette Registry"
 }

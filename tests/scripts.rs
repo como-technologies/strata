@@ -627,10 +627,10 @@ fn tenant_cluster(status: &str, body: &str) -> (Output, String) {
 fn tenant_sh_reports_cluster_state_and_never_reads_a_gateway_404_as_deleted() {
     let (o, urls) = tenant_cluster(
         "200",
-        r#"{"metadata":{"name":"strata-live-cluster"},"status":{"state":"Running"}}"#,
+        r#"{"metadata":{"name":"barney"},"status":{"state":"Running"}}"#,
     );
     assert_eq!(o.status.code(), Some(1), "still there: {}", text(&o.stdout));
-    assert_eq!(text(&o.stdout).trim(), "strata-live-cluster c-123: Running");
+    assert_eq!(text(&o.stdout).trim(), "barney c-123: Running");
     assert!(urls.contains("/v1/spectroclusters/c-123"), "{urls}");
     assert!(
         urls.starts_with("https://api.spectrocloud.com/"),
@@ -639,14 +639,14 @@ fn tenant_sh_reports_cluster_state_and_never_reads_a_gateway_404_as_deleted() {
 
     let (o, _) = tenant_cluster(
         "200",
-        r#"{"metadata":{"name":"strata-live-cluster"},"status":{"state":"Deleted"}}"#,
+        r#"{"metadata":{"name":"barney"},"status":{"state":"Deleted"}}"#,
     );
     assert_eq!(
         o.status.code(),
         Some(0),
         "a deleted cluster answers 200 with state Deleted"
     );
-    assert_eq!(text(&o.stdout).trim(), "strata-live-cluster c-123: Deleted");
+    assert_eq!(text(&o.stdout).trim(), "barney c-123: Deleted");
 
     let (o, _) = tenant_cluster(
         "404",
@@ -918,4 +918,84 @@ fn tenant_sh_digest_exits_2_when_the_registry_cannot_be_read() {
 
     expect_2(&tenant_digest(&["helm", "r-helm"], &[], &[]), "usage");
     expect_2(&tenant_digest(&["git", "r", "n", "1"], &[], &[]), "usage");
+}
+
+/// A `curl` for api.sh: FAKE_ROUTED_CURL that also logs each request as `METHOD path` to
+/// $FAKE_LOG and keeps each request body as $FAKE_ROUTES/sent/<METHOD>_<route key>.
+const FAKE_API_CURL: &str = r#"#!/usr/bin/env bash
+out=""; write=""; url=""; method=GET; sent=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -o) out=$2; shift 2 ;;
+    -w) write=$2; shift 2 ;;
+    -X) method=$2; shift 2 ;;
+    --data-binary) sent=${2#@}; shift 2 ;;
+    -H|-d) shift 2 ;;
+    -*) shift ;;
+    *) url=$1; shift ;;
+  esac
+done
+path=${url#*://*/}; path=${path%%\?*}; key=${path//\//_}
+echo "$method /$path" >> "$FAKE_LOG"
+mkdir -p "$FAKE_ROUTES/sent"
+[ -n "$sent" ] && cp "$sent" "$FAKE_ROUTES/sent/${method}_$key"
+body="$FAKE_ROUTES/$key"; status=404
+[ -f "$body" ] && status=200 || body=/dev/null
+if [ -n "$out" ]; then cp "$body" "$out"; else cat "$body"; fi
+[ -n "$write" ] && printf '%s' "$status"
+exit 0
+"#;
+
+#[test]
+fn api_sh_edit_keeps_each_manifest_uid_so_clusters_keep_their_copies() {
+    let dir = tempfile::tempdir().unwrap();
+    let (bin, routes) = (dir.path().join("bin"), dir.path().join("routes"));
+    for d in [&bin, &routes] {
+        std::fs::create_dir(d).unwrap();
+    }
+    executable(&bin.join("curl"), FAKE_API_CURL);
+    std::fs::write(
+        routes.join("v1_clusterprofiles_prof-1"),
+        r#"{"metadata":{"name":"addon","uid":"prof-1"},"spec":{"version":"1.0.0","published":{
+            "type":"add-on","cloudType":"all","packs":[{"name":"config","tag":"1.0.0",
+            "type":"manifest","layer":"addon","packUid":"pk-1","values":""}]}}}"#,
+    )
+    .unwrap();
+    std::fs::write(
+        routes.join("v1_clusterprofiles_prof-1_packs_manifests"),
+        r#"{"metadata":{},"spec":{"packs":[{"metadata":{},"spec":{"name":"config","manifests":[
+            {"name":"config","uid":"m-1","digest":"d","content":"edited: \"no\"\n"}]}}]}}"#,
+    )
+    .unwrap();
+    std::fs::write(routes.join("v1_clusterprofiles_prof-1_publish"), "{}").unwrap();
+    let log = dir.path().join("curl.log");
+    let o = Command::new("bash")
+        .arg(live_script("api.sh"))
+        .args(["edit", "prof-1", r#"edited: "no""#, r#"edited: "yes""#])
+        .env(
+            "PATH",
+            format!("{}:{}", bin.display(), std::env::var("PATH").unwrap()),
+        )
+        .env("HOME", dir.path())
+        .env("PALETTE_API_KEY", "k")
+        .env("PALETTE_PROJECT_UID", "p-1")
+        .env("FAKE_ROUTES", &routes)
+        .env("FAKE_LOG", &log)
+        .output()
+        .unwrap();
+    assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
+    let calls = std::fs::read_to_string(&log).unwrap();
+    assert!(
+        calls.contains("PATCH /v1/clusterprofiles/prof-1/publish"),
+        "{calls}"
+    );
+    let put: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(routes.join("sent/PUT_v1_clusterprofiles_prof-1")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        put["spec"]["template"]["packs"][0]["manifests"],
+        serde_json::json!([{"name": "config", "uid": "m-1", "content": "edited: \"yes\"\n"}]),
+        "a manifest sent without its uid is a new manifest, and a cluster's copy of the old one is dropped when the cluster's update is accepted"
+    );
 }

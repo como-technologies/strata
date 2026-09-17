@@ -15,6 +15,15 @@ Palette tenant and runs every strata check that needs one:
 - **#2, Helm and OCI digests.** The same comparison for a pack from a Helm
   registry and one from an OCI registry, with the digest each registry serves
   read from the registry itself.
+- **#23, a cluster with two profiles.** The cluster runs the release profile
+  and an add-on profile; each profile's record compares `IDENTICAL` against
+  its selection.
+- **#27, in-place edits and version bumps.** `in-place.sh` edits the add-on
+  profile in place and bumps its version while two clusters run it, with the
+  Terraform provider's `immutable-clusterprofiles` flag off and on.
+- **#24, a real registry move.** `registry-move.sh` moves a profile's CSI pack
+  to an OCI registry as a version bump and runs `same-release --allow
+  registry-move` on the pair.
 
 It uses AWS because that is the cloud account the verified run had. Strata
 does not care which cloud runs the cluster. To use another, swap the cluster
@@ -22,16 +31,22 @@ resource and the OS and CSI packs in `terraform/main.tf`.
 
 ## What it builds
 
-`terraform/` creates four things in one Palette project:
+`terraform/` creates five things in one Palette project:
 
 | resource | what it is |
 |---|---|
 | profile `strata-live-profile` 1.0.0 | Ubuntu 24.04, Kubernetes 1.36.2, Cilium 1.20.1, EBS CSI 1.65.0, default values. The cluster runs it. |
 | profile `strata-live-profile` 1.0.1 | The same, with the EBS storage class `reclaimPolicy` changed from `Delete` to `Retain`. Nothing runs it. |
-| cluster `strata-live-cluster` | One control plane and two workers, `t3.xlarge`, one availability zone. |
+| profile `strata-live-addon` 1.0.0 | An add-on profile with one manifest, the ConfigMap `strata-live-config` in `default`. The cluster runs it after the release profile. |
+| cluster `barney` | One control plane and two workers, `t3.xlarge`, one availability zone. |
 | profile `strata-live-registries` 1.0.0 | An add-on profile with one chart from a Helm registry (default `nginx` 25.1.5 from `Bitnami`) and one pack from an OCI pack registry that `terraform.tfvars` names. Nothing runs it. |
 
 The pack versions are those of `examples/profiles/aws-pxk@1.1.0.json`.
+
+`in-place.sh` adds cluster `fred`, with the same two profiles, for the length
+of its run. The two cluster names share no part, so no prefix or substring
+match finds both. `registry-move.sh` adds profile `strata-live-move` 1.0.0 and
+1.0.1, with the release packs, and deletes both at its end.
 
 The cluster is billable while it exists. In the recorded run it owned four EC2
 instances (the three `t3.xlarge` nodes and a `t3.micro`), a NAT gateway, an
@@ -43,10 +58,13 @@ it down when the checks are done, and confirm it is gone.
 
 | file | what it does |
 |---|---|
-| `terraform/` | the three profiles and the cluster |
+| `terraform/` | the profiles and the cluster, and the variables the two scripts below set |
 | `tf.sh` | runs Terraform with the key and the Palette address strata uses |
 | `tenant.sh` | read-only lookups: the names `terraform.tfvars` needs, a cluster's state, and a pack's digest read from its Helm or OCI registry |
 | `verify.sh` | runs every check and writes `runs/<UTC time>/` |
+| `in-place.sh` | the in-place edit test (#27): edits the add-on profile in place, creates cluster B, applies the edit to the cluster, and bumps the version, with the flag off or on |
+| `registry-move.sh` | the registry-move check (#24) |
+| `api.sh` | the writes the scripts make outside Terraform: an in-place edit, pushing a profile to a cluster, and deleting a profile version |
 | `aws-inventory.sh` | what the cluster still has in AWS, for confirming a teardown |
 
 ## Prerequisites
@@ -125,23 +143,38 @@ pass it on, so every step talks to the same Palette.
    just live-verify
    ```
 
-4. Optional, for what Palette does with an edit to a published version.
-   Nothing runs 1.0.1, so this touches no cluster:
+4. Edit a published version that clusters run, and move a pack to another
+   registry. Both scripts write to the tenant, one at a time, and run only
+   while no cluster B exists:
 
    ```
-   export PALETTE_PROJECT_UID=$(examples/live/tf.sh output -raw project_uid)
-   examples/live/tf.sh apply -var edit_next_in_place=true
-   target/release/strata verify examples/live/runs/<time>/next.json    # DRIFT, exit 1
-   target/release/strata same-release examples/live/runs/<time>/candidate-snapshot.json \
-     strata-live-profile@1.0.1                                         # exit 1, names the edited leaf
-   examples/live/tf.sh apply                                            # undo the edit
+   examples/live/in-place.sh off                                        # #27, legacy provider behavior
+   OFF_RUN=examples/live/runs/<time>/in-place/off examples/live/in-place.sh on   # #27, with the flag
+   examples/live/registry-move.sh                                       # #24
    ```
 
-   The candidate written before the edit no longer reproduces the version.
+   `in-place.sh` is billable: it creates cluster `fred`, which
+   takes about 20 minutes, and deletes it at the end, which takes 10 to 30.
+   It waits for that cluster to be `Running` before deleting it, because
+   Palette does not carry out the deletion of a cluster that is still
+   provisioning. `registry-move.sh` runs no cluster and takes a few minutes.
 
-   `verify.sh` sets `PALETTE_PROJECT_UID` for its own checks; a command run by
-   hand needs the export. Undo the edit before running `verify.sh` again:
-   with it in place, two values differ and `only-the-edited-value` fails.
+   Each script checks exit codes as `verify.sh` does and writes `summary.md`
+   and every output under `runs/<UTC time>/in-place/<off|on>/` or
+   `runs/<UTC time>/registry-move/`. An interrupted `in-place.sh` resumes
+   with `OUT=<that directory> examples/live/in-place.sh <off|on> <stage>`.
+
+   With the flag on, provider 0.29.7 refuses every plan that includes an
+   existing profile at an unchanged version, even one that changes nothing.
+   Palette stores the packs a little differently from the configuration: no
+   trailing newline on values and manifests, and pack type and registry
+   fields filled in. That provider's check counts the difference as a change.
+   Both scripts record the refusal as an expected check,
+   `plan-refuses-no-change`, until the provider release that fixes it. Until
+   then they apply around it: a version bump targets the profile it bumps,
+   and an apply that only creates or deletes cluster B runs with the flag
+   off, which governs nothing but profiles, and with `keep_profile_versions`
+   holding `skip_destroy` on.
 
 5. Tear it down, and confirm it is gone. Keep the uids first; the outputs
    disappear with the state.
@@ -182,7 +215,8 @@ What went wrong before, and why:
 | `live-up` fails with "A minimum allocation of '4.1' CPU cores is required across all worker nodes" | workers total 4 cores or fewer; the default of two `t3.xlarge` workers clears it |
 | `snapshot-candidate` fails with `pack-not-found` naming a tag | a strata build older than the tag fix; the profile's tag is the version |
 | `consumer-is-the-cluster` fails with state `unknown` | the key cannot read the cluster in its project; `consumers-release.out` prints the error next to the cluster |
-| `only-the-edited-value` fails with two changed values | the optional in-place edit was not undone |
+| `only-the-edited-value` fails with two changed values | 1.0.1 was edited in place, with `edit_next_in_place`, and the edit was not undone |
+| `plan-refuses-no-change` fails with exit 0 | the provider no longer refuses a flag-on plan that changes nothing: a release with the fix; expect 0 |
 | `registry-digest-oci` fails with "crane digest ... failed" | no login to the OCI registry, or an expired one; an AWS registry login lasts 12 hours |
 
 ## When teardown is slow or stuck
@@ -216,8 +250,11 @@ These rules come from six observed teardowns of the same kind of cluster:
 |---|---|---|
 | `snapshot-cluster` | 0 | strata reads what a live cluster runs |
 | `cluster-runs-release` | 0 | the cluster reports the release profile version |
+| `cluster-runs-two-profiles` | 0 | #23: the cluster runs the release profile, then the add-on profile |
 | `snapshot-release` | 0 | record the version the cluster runs |
 | `compare-release-cluster` | 0 | #1: a cluster that runs the recorded version is `IDENTICAL` |
+| `snapshot-addon` | 0 | record the add-on profile version the cluster runs |
+| `compare-addon-cluster` | 0 | #23: the add-on record is IDENTICAL to the cluster's add-on selection |
 | `snapshot-next` | 0 | record the newer version |
 | `compare-next-cluster` | 1 | #1: against a newer record, the cluster shows the change |
 | `only-the-edited-value` | 0 | #1: the only change is `csi-aws-ebs` `reclaimPolicy` |

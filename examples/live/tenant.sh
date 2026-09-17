@@ -6,6 +6,7 @@
 #                              (default us-east-2)
 #   tenant.sh cluster UID      a cluster's status.state; exit 0 once it is Deleted or not found,
 #                              1 while it exists, 2 when the answer cannot be trusted
+#   tenant.sh updates UID      what Palette lists as waiting for a cluster's profiles, as JSON
 #   tenant.sh digest KIND REGISTRY_UID NAME VERSION
 #                              the digest a helm or oci registry itself serves for one pack
 #                              version, read from the registry rather than from Palette; exit 2
@@ -70,6 +71,15 @@ names() {
   status=$(get /v1/registries/oci/summary "$tmp/oci")
   [ "$status" = 200 ] || die "listing OCI registries answered HTTP $status"
   jq -r '(.items // [])[] | select(.spec.providerType == "pack") | "  \(.metadata.name)  \(.spec.endpoint)"' "$tmp/oci"
+}
+
+updates() {
+  local uid=${1:-} tmp status
+  [ -n "$uid" ] || die "usage: tenant.sh updates CLUSTER_UID"
+  tmp=$(mktemp); trap 'rm -f "${tmp:-}"' RETURN EXIT
+  status=$(get "/v1/spectroclusters/$uid/profileUpdates" "$tmp")
+  [ "$status" = 200 ] || die "reading the profile updates of $uid answered HTTP $status"
+  jq . "$tmp"
 }
 
 sha256_of() {
@@ -152,6 +162,7 @@ cluster() {
 case "${1:-}" in
   names) shift; names "$@" ;;
   cluster) shift; cluster "$@"; exit $? ;;
+  updates) shift; updates "$@" ;;
   digest) shift; digest "$@" ;;
-  *) sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
+  *) sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
 esac

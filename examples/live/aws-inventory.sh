@@ -4,12 +4,12 @@
 #
 #   AWS_PROFILE=<profile> examples/live/aws-inventory.sh [CLUSTER_NAME] [REGION]
 #
-# Defaults: strata-live-cluster in us-east-2. Instances, NAT gateways, VPCs, elastic IPs, and
+# Defaults: barney, cluster A, in us-east-2. Instances, NAT gateways, VPCs, elastic IPs, and
 # volumes carry the Cluster API tag sigs.k8s.io/cluster-api-provider-aws/cluster/<name>; the
-# classic load balancer is found by its name, which starts with the cluster name. Run it after
+# classic load balancer is found by its exact name, <name>-apiserver. Run it after
 # `just live-down`, and before any force delete: a force delete drops only Palette's records.
 set -uo pipefail
-name=${1:-strata-live-cluster}
+name=${1:-barney}
 region=${2:-us-east-2}
 tag="sigs.k8s.io/cluster-api-provider-aws/cluster/$name"
 total=0
@@ -32,6 +32,6 @@ count vpcs aws ec2 describe-vpcs --filters "Name=tag-key,Values=$tag" --query 'V
 count "elastic ips" aws ec2 describe-addresses --filters "Name=tag-key,Values=$tag" --query 'Addresses[].AllocationId'
 count volumes aws ec2 describe-volumes --filters "Name=tag-key,Values=$tag" --query 'Volumes[].VolumeId'
 count "load balancers" aws elb describe-load-balancers \
-  --query "LoadBalancerDescriptions[?starts_with(LoadBalancerName, '$name')].LoadBalancerName"
+  --query "LoadBalancerDescriptions[?LoadBalancerName=='$name-apiserver'].LoadBalancerName"
 
 [ "$total" -eq 0 ]

@@ -24,9 +24,11 @@ P=$(out release_profile_uid)
 P2=$(out next_profile_uid)
 N=$(out profile_name)
 R=$(out registries_profile_uid)
+AD=$(out addon_profile_uid)
+AN=$(out addon_profile_name)
 PALETTE_PROJECT_UID=$(out project_uid)
 export PALETTE_PROJECT_UID
-for v in C P P2 N R PALETTE_PROJECT_UID; do
+for v in C P P2 N R AD AN PALETTE_PROJECT_UID; do
   [ -n "${!v}" ] || { echo "verify: the terraform output behind $v is empty" >&2; exit 2; }
 done
 
@@ -52,10 +54,16 @@ check snapshot-cluster 0 "strata reads what a live cluster runs" -- \
   "$strata" snapshot "cluster:$C" --raw-dir raw/cluster -o cluster.json
 check cluster-runs-release 0 "the cluster reports the release profile version" -- \
   jq -e --arg p "$P" '[.source.cluster.profiles[].uid] | index($p) != null' cluster.json
+check cluster-runs-two-profiles 0 "#23: the cluster runs the release profile, then the add-on profile" -- \
+  jq -e --arg p "$N" --arg a "$AN" '[.source.cluster.profiles[].name] == [$p, $a]' cluster.json
 check snapshot-release 0 "record the version the cluster runs" -- \
   "$strata" snapshot "$P" --raw-dir raw/release -o release.json
 check compare-release-cluster 0 "#1: a cluster that runs the recorded version is IDENTICAL" -- \
   "$strata" compare release.json "cluster:$C/$N"
+check snapshot-addon 0 "record the add-on profile version the cluster runs" -- \
+  "$strata" snapshot "$AD" --raw-dir raw/addon -o addon.json
+check compare-addon-cluster 0 "#23: the add-on record is IDENTICAL to the cluster's add-on selection" -- \
+  "$strata" compare addon.json "cluster:$C/$AN"
 check snapshot-next 0 "record the newer version" -- \
   "$strata" snapshot "$P2" --raw-dir raw/next -o next.json
 check compare-next-cluster 1 "#1: against a newer record, the cluster shows the change" -- \
