@@ -999,3 +999,61 @@ fn api_sh_edit_keeps_each_manifest_uid_so_clusters_keep_their_copies() {
         "a manifest sent without its uid is a new manifest, and a cluster's copy of the old one is dropped when the cluster's update is accepted"
     );
 }
+
+#[test]
+fn api_sh_delete_named_deletes_every_version_of_exactly_that_name() {
+    let dir = tempfile::tempdir().unwrap();
+    let (bin, routes) = (dir.path().join("bin"), dir.path().join("routes"));
+    for d in [&bin, &routes] {
+        std::fs::create_dir(d).unwrap();
+    }
+    executable(&bin.join("curl"), FAKE_API_CURL);
+    std::fs::write(
+        routes.join("v1_dashboard_clusterprofiles_metadata"),
+        r#"{"items":[
+            {"metadata":{"name":"strata-live-addon","uid":"u1"},"spec":{"version":"1.0.0"}},
+            {"metadata":{"name":"strata-live-addon","uid":"u2"},"spec":{"version":"1.0.1"}},
+            {"metadata":{"name":"strata-live-addon-2","uid":"u3"},"spec":{"version":"1.0.0"}},
+            {"metadata":{"name":"strata-live-profile","uid":"u4"},"spec":{"version":"1.0.0"}}
+        ]}"#,
+    )
+    .unwrap();
+    for uid in ["u1", "u2", "u3", "u4"] {
+        std::fs::write(routes.join(format!("v1_clusterprofiles_{uid}")), "{}").unwrap();
+    }
+    let log = dir.path().join("curl.log");
+    let o = Command::new("bash")
+        .arg(live_script("api.sh"))
+        .args(["delete-named", "strata-live-addon", "strata-live-move"])
+        .env(
+            "PATH",
+            format!("{}:{}", bin.display(), std::env::var("PATH").unwrap()),
+        )
+        .env("HOME", dir.path())
+        .env("PALETTE_API_KEY", "k")
+        .env("PALETTE_PROJECT_UID", "p-1")
+        .env("FAKE_ROUTES", &routes)
+        .env("FAKE_LOG", &log)
+        .output()
+        .unwrap();
+    assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
+    let deletes: Vec<String> = std::fs::read_to_string(&log)
+        .unwrap()
+        .lines()
+        .filter(|l| l.starts_with("DELETE "))
+        .map(str::to_string)
+        .collect();
+    assert_eq!(
+        deletes,
+        [
+            "DELETE /v1/clusterprofiles/u1",
+            "DELETE /v1/clusterprofiles/u2"
+        ],
+        "only the exact name, never a name that starts with it"
+    );
+    assert!(
+        text(&o.stdout).contains("strata-live-move: no versions"),
+        "{}",
+        text(&o.stdout)
+    );
+}

@@ -19,6 +19,10 @@
 #       The same PUT without PROFILE_UID, which takes that profile off the cluster.
 #   api.sh delete PROFILE_UID
 #       Delete a profile version; a missing one is not an error.
+#   api.sh delete-named NAME...
+#       Delete every version of each profile named exactly NAME, found in the profile listing:
+#       the versions skip_destroy kept out of Terraform's state. A name with no versions is not
+#       an error.
 #
 # The key comes from PALETTE_API_KEY or ~/.palette.env and is never printed; the address from
 # PALETTE_API (default https://api.spectrocloud.com). PALETTE_PROJECT_UID scopes the requests.
@@ -154,10 +158,25 @@ delete() {
   esac
 }
 
+delete_named() {
+  local name uids uid
+  [ $# -gt 0 ] || die "usage: api.sh delete-named NAME..."
+  for name in "$@"; do
+    uids=$(call GET /v1/dashboard/clusterprofiles/metadata \
+      | jq -r --arg n "$name" '(.items // [])[] | select(.metadata.name == $n) | .metadata.uid') \
+      || die "listing the profiles failed"
+    [ -n "$uids" ] || { echo "$name: no versions"; continue; }
+    for uid in $uids; do
+      delete "$uid"
+    done
+  done
+}
+
 case "${1:-}" in
   edit) shift; edit "$@" ;;
   apply) shift; apply "$@" ;;
   detach) shift; detach "$@" ;;
   delete) shift; delete "$@" ;;
-  *) sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
+  delete-named) shift; delete_named "$@" ;;
+  *) sed -n '2,/^set -uo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; exit 2 ;;
 esac

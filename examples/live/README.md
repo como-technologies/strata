@@ -187,6 +187,11 @@ pass it on, so every step talks to the same Palette.
    AWS_PROFILE=<profile> examples/live/aws-inventory.sh  # exit 0: nothing left
    ```
 
+   `live-down` also deletes every version of `strata-live-addon` and
+   `strata-live-move`, by exact name: with the flag on, `skip_destroy` keeps
+   the versions a bump replaced out of Terraform's state, so a destroy alone
+   leaves them in Palette.
+
    Terraform's "Destroy complete" is not the confirmation. During a gateway
    outage Palette answers a plain-text 404, and the provider can take that
    for a finished deletion while the cluster still runs. A deleted cluster

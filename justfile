@@ -51,9 +51,14 @@ live-up:
 live-verify: build
     examples/live/verify.sh
 
-# Tear the live example down
+# Tear the live example down, with the add-on and move profile versions that skip_destroy kept
+# out of Terraform's state
 live-down:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    export PALETTE_PROJECT_UID=$(examples/live/tf.sh output -raw project_uid)
     examples/live/tf.sh destroy
+    examples/live/api.sh delete-named strata-live-addon strata-live-move
 
 # Open one GitHub issue per section of docs/backlog.md (needs gh and a GitHub remote)
 backlog-issues:
