@@ -265,6 +265,7 @@ What went wrong before, and why:
 |---|---|
 | `live-up` fails with "A minimum allocation of '4.1' CPU cores is required across all worker nodes" | workers total 4 cores or fewer; the default of two `t3.xlarge` workers clears it |
 | `snapshot-candidate` fails with `pack-not-found` naming a tag | a strata build older than the tag fix; the profile's tag is the version |
+| a flag-on bump fails with `DeletionResourceInUseError: Unable to delete the resource as fred spectrocluster(s) in-use` | the profile's state held `skip_destroy = false`, and Terraform deletes a replaced version with the value its state holds, not the new one (provider 0.29.7). `apply_profile` now stops before such an apply; run `hold_versions` first (`lib.sh`) |
 | a script stops with "target/release/strata is older than <file>; run just build" | the sources changed after the last release build. A script run directly, not through a `just` recipe, does not build first; without this check the `drift-report.sh off` run of 2026-09-17 ran a binary without `verify --summary` and failed 18 checks. `just build`, then run it again |
 | `consumer-is-the-cluster` fails with state `unknown` | the key cannot read the cluster in its project; `consumers-release.out` prints the error next to the cluster |
 | `only-the-edited-value` fails with two changed values | 1.0.1 was edited in place and the edit was not undone; `baseline.sh` names it |

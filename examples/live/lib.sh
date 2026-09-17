@@ -96,8 +96,26 @@ tf_apply() {
   fi
   load_outputs
 }
-# apply_profile RESOURCE ARG...: an apply that changes one profile resource, with the script's flag
-apply_profile() { local r=$1; shift; tf_apply "$flag" "$flag" "-target=$r" "$@"; }
+# apply_profile RESOURCE ARG...: an apply that changes one profile resource, with the script's flag.
+# With the flag on it stops unless the resource's state already holds skip_destroy = true (see
+# hold_versions); a resource not yet in the state is created with it.
+apply_profile() {
+  local r=$1 held
+  shift
+  if [ "$flag" = true ]; then
+    held=$("$live/tf.sh" state show -no-color "$r" 2>/dev/null | awk '$1 == "skip_destroy" { print $3 }')
+    [ "$held" != false ] \
+      || die "$r holds skip_destroy = false in the Terraform state; run hold_versions first, because Terraform deletes a replaced version with the skip_destroy its state holds"
+  fi
+  tf_apply "$flag" "$flag" "-target=$r" "$@"
+}
+# hold_versions: at the baseline, store skip_destroy for the script's flag on every profile in the
+# state, changing nothing else. A flag-on version bump replaces the profile resource, and Terraform
+# deletes the replaced object with the skip_destroy its state holds (provider 0.29.7,
+# resourceClusterProfileDelete), not the new value: without this, the bump that sets it asks
+# Palette to delete the old version, which Palette refuses while a cluster runs it
+# (DeletionResourceInUseError, drift-report.sh on, run 20260917T132642Z).
+hold_versions() { tf_apply false "$flag"; }
 # apply_clusters ARG...: an apply that changes only clusters, with skip_destroy held where the
 # script's flag set it
 apply_clusters() { tf_apply false "$flag" "$@"; }
