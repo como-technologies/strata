@@ -930,14 +930,17 @@ A merge request is reviewed against the default branch as it was when somebody o
 
 1. `scripts/merge-gate.sh <record or pattern>...`: merge the target branch into the checkout first, so every answer is about the merge result. The target branch comes from `--base`, `CI_MERGE_REQUEST_TARGET_BRANCH_NAME` or `GITHUB_BASE_REF`.
 2. Three checks, each exit 1: a conflict, reported as a comparison of the two records and not as lines; a merge result that pins an older version of a pack or of the profile than the target branch has; a record of the merge result that does not verify against Palette.
-3. `.github/workflows/merge-gate.yml`, a reusable workflow for a required status check, and a `strata-merge-gate` job in `examples/gitlab/strata.yml`.
-4. The book: an automation page with the output of each check, and how each host holds the merge button. Say why a git hook is not the answer: it runs on one laptop, it is one flag away from being skipped, and it cannot see the target branch a minute before the merge.
+3. A rollback moves a pin backwards on purpose, and only the author knows which one it is. The gate does not guess: it prints the evidence of each backwards pin, and it passes when a commit of the branch carries `Rollback: <record> to <name>@<version>` that names the record and the release of the merge result, or when the job runs with `--allow-rollback` for a merge request with the rollback label. The evidence is whether the target branch pinned that release before, with the date and the commit, and whether the branch wrote its record after the target branch moved.
+4. `.github/workflows/merge-gate.yml`, a reusable workflow for a required status check, and a `strata-merge-gate` job in `examples/gitlab/strata.yml`. Each reads the rollback label of the merge request.
+5. The book: an automation page with the output of each check, and how each host holds the merge button. Say why a git hook is not the answer: it runs on one laptop, it is one flag away from being skipped, and it cannot see the target branch a minute before the merge.
 
 ### Acceptance criteria
 
 - [x] The gate reports a branch that would replace a newer pin, and names each pack that moves back
 - [x] The gate reads a conflict as a comparison of the two records, and leaves the checkout clean
 - [x] The gate reports a record of the merge result that Palette no longer matches
+- [x] A declared rollback passes, by a commit line that names the record and the release, or by the label
+- [x] The report gives the evidence that tells a rollback from a branch that did not look
 - [x] The exit status is 0 clear, 1 red, 2 could not answer, so any CI system can hold the button on it
 - [x] The tests cover each check with a real git repository and no network
 - [x] The book shows the output of each check and the setting that holds the merge button on both hosts

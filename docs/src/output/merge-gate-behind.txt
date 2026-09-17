@@ -6,6 +6,10 @@ BEHIND: releases/dev.json would replace what main pinned with an older version
   k8s/kubernetes: main has 1.36.2, the merge result has 1.35.3
   cni/cni-cilium-oss: main has 1.20.1, the merge result has 1.19.6
   csi/csi-aws-ebs: main has 1.65.0, the merge result has 1.63.1
-  merge main into the branch, then read the comparison again.
-merge-gate: 1 records: 1 behind main, 0 did not verify
+  main never pinned this release in the last 50 commits of releases/dev.json
+  the branch wrote this record before main moved to aws-stack@1.1.0
+  a rollback says so, in a commit of the branch:
+    Rollback: releases/dev.json to aws-stack@1.0.0
+  or in the rollback label, which gives the job --allow-rollback.
+merge-gate: 1 records: 1 behind main, 0 declared rollback, 0 did not verify
 merge-gate: the merge button must wait: settle the records above, then push again

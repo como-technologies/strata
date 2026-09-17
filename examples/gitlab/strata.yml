@@ -26,6 +26,7 @@ variables:
   STRATA_LABEL: repave
   STRATA_THRESHOLD: repave
   STRATA_DRIFT_LABEL: strata-drift
+  STRATA_ROLLBACK_LABEL: rollback
 
 # Installs the release binary and the scripts of one strata version, with the checksums checked.
 .strata:
@@ -67,7 +68,12 @@ strata-merge-gate:
   script:
     - git config user.email "strata@$CI_SERVER_HOST"
     - git config user.name "strata merge gate"
-    - .strata/merge-gate.sh $STRATA_RECORDS
+    # the label is how a reviewer says that a backwards pin is a rollback
+    - |
+      rollback=""
+      if printf '%s' "${CI_MERGE_REQUEST_LABELS:-}" | tr ',' '\n' \
+        | grep -qx "$STRATA_ROLLBACK_LABEL"; then rollback=--allow-rollback; fi
+      .strata/merge-gate.sh $STRATA_RECORDS $rollback
 
 # A scheduled pipeline: verify every record, and keep one issue open per record that drifted or
 # could not be checked. Add the schedule in CI/CD > Schedules.

@@ -96,7 +96,8 @@ step() {
     cat "$raw" "$work/stderr" >&2 2>/dev/null || true
     die "$name: '$cmd' exited with $got, and the book says $want"
   fi
-  sed -E 's/[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z/2026-09-17T09:30:00Z/g' "$raw" >> "$out/$name.txt"
+  sed -E -e 's/[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z/2026-09-17T09:30:00Z/g' \
+    -e 's/ in [0-9a-f]{7,40}$/ in 8c1d4f2/' "$raw" >> "$out/$name.txt"
 }
 
 show() { step "$1" "$2" out "$3"; }
@@ -467,7 +468,8 @@ show review-same 0 'strata same-release candidate.json releases/1.1.0/dev.json'
 
 chapter merge-gate PALETTE_PROJECT=dev GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null \
   GIT_AUTHOR_NAME=dev GIT_AUTHOR_EMAIL=dev@example.com \
-  GIT_COMMITTER_NAME=dev GIT_COMMITTER_EMAIL=dev@example.com
+  GIT_COMMITTER_NAME=dev GIT_COMMITTER_EMAIL=dev@example.com \
+  GIT_AUTHOR_DATE=2026-09-10T10:00:00+00:00 GIT_COMMITTER_DATE=2026-09-10T10:00:00+00:00
 projects dev=$DEV
 registries $DEV
 profile $DEV $A100 1.0.0 aws-stack@1.0.0
@@ -496,6 +498,32 @@ show2 merge-gate-clear 0 'scripts/merge-gate.sh "releases/*.json" --base main'
 # and the check that git cannot make: the pinned profile is edited in Palette after the record
 edit $DEV $A110 "$RETAIN"
 show2 merge-gate-drifted 1 'scripts/merge-gate.sh "releases/*.json" --base main'
+
+chapter merge-gate-rollback PALETTE_PROJECT=dev GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null \
+  GIT_AUTHOR_NAME=dev GIT_AUTHOR_EMAIL=dev@example.com \
+  GIT_COMMITTER_NAME=dev GIT_COMMITTER_EMAIL=dev@example.com \
+  GIT_AUTHOR_DATE=2026-09-10T10:00:00+00:00 GIT_COMMITTER_DATE=2026-09-10T10:00:00+00:00
+projects dev=$DEV
+registries $DEV
+profile $DEV $A100 1.0.0 aws-stack@1.0.0
+profile $DEV $A110 1.1.0 aws-stack@1.1.0
+# dev ran 1.0.0, and then 1.1.0
+quiet 'mkdir -p releases && git init -q -b main . && git remote add origin .'
+quiet 'strata snapshot aws-stack@1.0.0 -o releases/dev.json &&
+  git add releases && git commit -qm "dev pins aws-stack@1.0.0"'
+quiet 'strata snapshot aws-stack@1.1.0 -o releases/dev.json &&
+  git commit -qam "dev pins aws-stack@1.1.0"'
+# 1.1.0 repaved the nodes badly, so a branch off main puts back what dev ran before
+quiet 'git checkout -q -b roll-dev-back &&
+  git show main~1:releases/dev.json > releases/dev.json &&
+  git commit -qam "pin what dev ran before 1.1.0"'
+show2 merge-gate-rollback-red 1 'scripts/merge-gate.sh "releases/*.json" --base main'
+# the same change, with the rollback declared in the commit that makes it
+quiet 'git commit -q --amend -m "roll dev back to aws-stack@1.0.0
+
+Rollback: releases/dev.json to aws-stack@1.0.0
+1.1.0 repaved the nodes with a CSI driver that lost the volumes"'
+show2 merge-gate-rollback 0 'scripts/merge-gate.sh "releases/*.json" --base main'
 
 chapter promote
 projects dev=$DEV prod=$PROD

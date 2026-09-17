@@ -19,7 +19,7 @@ build gets something that nobody reviewed.
 | Check | What it catches | Exit |
 | --- | --- | --- |
 | Conflict | The branch does not merge the target branch. The report compares the two records, so you read the conflict as a release. | 1 |
-| Behind | The merge result pins an older version than the target branch has. | 1 |
+| Behind | The merge result pins an older version than the target branch has, and no commit declares a rollback. | 1 |
 | Verify | A record of the merge result does not verify against Palette. | 1 |
 
 ### A branch that would replace a newer pin
@@ -38,6 +38,47 @@ top. Then the gate is clear:
 ```text
 {{#include ../output/merge-gate-clear.txt}}
 ```
+
+### A rollback, and a branch that did not look
+
+Both move a pin backwards, and only the author knows which one it is. The gate
+does not guess. It prints the evidence, and it asks the author to say so.
+
+| Evidence | A branch that did not look | A rollback |
+| --- | --- | --- |
+| Did the target branch pin this release before? | no | yes, with the date and the commit |
+| Did the branch write its record after the target branch moved? | no | yes |
+
+A branch that puts back what `dev` ran before `1.1.0`, and says nothing:
+
+```text
+{{#include ../output/merge-gate-rollback-red.txt}}
+```
+
+Every line of the evidence says rollback, and the gate is still red, because
+nobody wrote it down. The same change, declared in the commit that makes it:
+
+```text
+roll dev back to aws-stack@1.0.0
+
+Rollback: releases/dev.json to aws-stack@1.0.0
+1.1.0 repaved the nodes with a CSI driver that lost the volumes
+```
+
+```text
+{{#include ../output/merge-gate-rollback.txt}}
+```
+
+The line names the record and the release that the merge result pins, so a
+declaration covers that rollback and no other change. A team that works in the
+merge request puts the label `rollback` on it, and the job runs with
+`--allow-rollback`; both ways are reported, and both pass.
+
+Read the evidence as evidence, not as proof. A rebase replays an old change on
+the new base, so "the branch wrote this record after the target branch moved"
+can be true of a branch that never looked at what it replaces. The declaration
+is the part that makes it a decision, and it stays in the history of the
+repository, where the next person can read why.
 
 ### A record that Palette no longer matches
 
@@ -58,6 +99,7 @@ See [A published version is edited in place](../use-cases/edited-in-place.md).
 | `--base BRANCH` | `CI_MERGE_REQUEST_TARGET_BRANCH_NAME`, or `GITHUB_BASE_REF` | The target branch. |
 | `--remote NAME` | `STRATA_REMOTE`, or `origin` | The remote to fetch the target branch from. |
 | `--no-verify` | | Leave the verify check out. |
+| `--allow-rollback` | | Accept a backwards pin, as the `rollback` label does. |
 
 The script needs `strata` (or `STRATA_BIN`), `git`, `jq`, and `sort -V`. It
 needs the history, so a job that clones with a depth gives it `GIT_DEPTH: 0` or
@@ -103,6 +145,7 @@ jobs:
 | `records` | yes | The records, or patterns, in the checkout of the caller. |
 | `strata-version` | yes | The strata release, for example `v0.5.0`. |
 | `verify` | no | `false` leaves the verify check out. Default `true`. |
+| `rollback-label` | no | The label that allows a backwards pin. Default `rollback`. |
 | `palette-api` | no | A self-hosted Palette address. |
 
 The checkout of a pull request is already the merge result, so the gate finds

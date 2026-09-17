@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Check what a merge request does to the records, against the target branch as it is now.
 #
-#   scripts/merge-gate.sh <record or pattern>... [--base BRANCH] [--remote NAME] [--no-verify]
+#   scripts/merge-gate.sh <record or pattern>... [--base BRANCH] [--remote NAME]
+#                         [--no-verify] [--allow-rollback]
 #
 # A branch that sat for a day compares against a base that moved. This script merges the target
 # branch into the checkout first, so every answer is about the merge result: what the records will
@@ -14,6 +15,16 @@
 #   2. The merge result moves a pin backwards: the target branch has a later version of a pack, or
 #      of the profile, than the merge result. A branch that carries an older pin replaces what
 #      another merge request pinned, and a cluster built from it gets the older release.
+#      A rollback moves a pin backwards too, and only the author knows which one it is, so the
+#      author says so. A commit on the branch carries the line
+#
+#        Rollback: <record> to <name>@<version>
+#
+#      which must name the record and the release that the merge result pins, or the job runs
+#      with --allow-rollback, which is what a job does for a merge request with the rollback
+#      label. A declared rollback is reported and passes. Every other backwards pin is red, and
+#      the report gives the evidence: whether the target branch pinned that release before, and
+#      whether the branch wrote its record before or after the target branch moved.
 #   3. A record of the merge result does not verify: the profile or cluster it names changed in
 #      Palette, or is gone. A cluster built from it would not get what the record says. --no-verify,
 #      or no PALETTE_API_KEY, leaves this check out.
@@ -31,17 +42,19 @@ patterns=()
 base=""
 remote="${STRATA_REMOTE:-origin}"
 verify=1
+allow_rollback=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --base) base=$2; shift 2 ;;
     --remote) remote=$2; shift 2 ;;
     --no-verify) verify=""; shift ;;
-    -h|--help) sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    --allow-rollback) allow_rollback=1; shift ;;
+    -h|--help) sed -n '2,37p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     --*) die "unknown option $1" ;;
     *) patterns+=("$1"); shift ;;
   esac
 done
-[ ${#patterns[@]} -gt 0 ] || die "usage: merge-gate.sh <record or pattern>... [--base BRANCH] [--remote NAME] [--no-verify]"
+[ ${#patterns[@]} -gt 0 ] || die "usage: merge-gate.sh <record or pattern>... [--base BRANCH] [--remote NAME] [--no-verify] [--allow-rollback]"
 
 [ -n "$base" ] || base="${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:-${GITHUB_BASE_REF:-}}"
 [ -n "$base" ] || die "pass --base: no CI variable names the target branch"
@@ -54,6 +67,14 @@ trap 'rm -rf "$work"' EXIT
 
 # at REV FILE OUT: write the file as that revision has it, or fail when it is not there
 at() { git show "$1:$2" > "$3" 2> /dev/null; }
+
+# same_release A B: 0 when the two files are one release, 1 when they are not
+same_release() {
+  local code=0
+  "$strata" same-release "$1" "$2" --quiet > /dev/null 2>&1 || code=$?
+  [ "$code" -le 1 ] || die "strata could not read $1 or $2"
+  return "$code"
+}
 
 # compare A B FORMAT: exit 1 is a difference, which is the normal case here
 compare() {
@@ -115,16 +136,78 @@ backwards() {
       done || true
 }
 
-behind=() unverified=()
+# pinned_before FILE: the date and the commit where the target branch last pinned the release
+# that the merge result pins. A rollback returns to a release that this record carried before.
+pinned_before() {
+  local f=$1 c
+  for c in $(git log --format=%H -n 50 "$target" -- "$f"); do
+    at "$c" "$f" "$work/old.json" || continue
+    if same_release "$work/old.json" "$f"; then
+      echo "$(git log -1 --format=%cs "$c") in $(git rev-parse --short "$c")"
+      return 0
+    fi
+  done
+  return 1
+}
+
+# wrote_after_target FILE: 0 when the branch wrote its record after the target branch moved, so
+# the author had the later release in front of them. A merge commit does not count: settling a
+# conflict by keeping one side is the accident this gate is here for.
+wrote_after_target() {
+  local f=$1 theirs mine
+  theirs=$(git log -1 --format=%H "$target" -- "$f")
+  mine=$(git log -1 --no-merges --format=%H HEAD --not "$target" -- "$f")
+  [ -n "$theirs" ] && [ -n "$mine" ] || return 1
+  git merge-base --is-ancestor "$theirs" "$mine"
+}
+
+# declared FILE RELEASE: 0 when a commit of this branch says that this is a rollback
+declared() {
+  git log --format=%B HEAD --not "$target" \
+    | grep -qiE "^Rollback:[[:space:]]+$1[[:space:]]+to[[:space:]]+$2([[:space:]]+.*)?$"
+}
+
+behind=() rolled=() unverified=()
 for f in "${files[@]}"; do
   if at "$target" "$f" "$work/target.json"; then
     compare "$work/target.json" "$f" json > "$work/diff.json"
     back=$(backwards "$work/diff.json")
     if [ -n "$back" ]; then
-      behind+=("$f")
-      echo "BEHIND: $f would replace what $base pinned with an older version"
-      printf '%s\n' "$back" | sed 's/^/  /'
-      echo "  merge $base into the branch, then read the comparison again."
+      release=$(jq -r '"\(.b.name // "")@\(.b.version // "")"' "$work/diff.json")
+      theirs=$(jq -r '"\(.a.name // "")@\(.a.version // "")"' "$work/diff.json")
+      # the evidence that tells a rollback from a branch that did not look
+      evidence=""
+      if where=$(pinned_before "$f"); then
+        evidence="  $base pinned this release before, on $where"
+      else
+        evidence="  $base never pinned this release in the last 50 commits of $f"
+      fi
+      if wrote_after_target "$f"; then
+        evidence="$evidence
+  the branch wrote this record after $base moved to $theirs"
+      else
+        evidence="$evidence
+  the branch wrote this record before $base moved to $theirs"
+      fi
+      if [ -n "$allow_rollback" ]; then
+        rolled+=("$f")
+        echo "ROLLBACK: $f returns to $release, by the label on the merge request"
+        printf '%s\n' "$back" | sed 's/^/  /'
+        printf '%s\n' "$evidence"
+      elif declared "$f" "$release"; then
+        rolled+=("$f")
+        echo "ROLLBACK: $f returns to $release, declared in a commit of the branch"
+        printf '%s\n' "$back" | sed 's/^/  /'
+        printf '%s\n' "$evidence"
+      else
+        behind+=("$f")
+        echo "BEHIND: $f would replace what $base pinned with an older version"
+        printf '%s\n' "$back" | sed 's/^/  /'
+        printf '%s\n' "$evidence"
+        echo "  a rollback says so, in a commit of the branch:"
+        echo "    Rollback: $f to $release"
+        echo "  or in the rollback label, which gives the job --allow-rollback."
+      fi
     fi
   fi
   if [ -n "$verify" ]; then
@@ -142,7 +225,7 @@ for f in "${files[@]}"; do
   fi
 done
 
-note "${#files[@]} records: ${#behind[@]} behind $base, ${#unverified[@]} did not verify"
+note "${#files[@]} records: ${#behind[@]} behind $base, ${#rolled[@]} declared rollback, ${#unverified[@]} did not verify"
 if [ ${#behind[@]} -gt 0 ] || [ ${#unverified[@]} -gt 0 ]; then
   note "the merge button must wait: settle the records above, then push again"
   exit 1

@@ -17,6 +17,10 @@ on:
         description: Also verify each record of the merge result against Palette; needs palette-api-key
         default: true
         type: boolean
+      rollback-label:
+        description: The label on the pull request that says a backwards pin is a rollback
+        default: rollback
+        type: string
       palette-api:
         description: The Palette API address, for a self-hosted Palette; empty means https://api.spectrocloud.com
         default: ""
@@ -72,10 +76,12 @@ jobs:
           # the checkout of a pull request is already the merge result; the gate confirms it
           GITHUB_BASE_REF: ${{ github.base_ref }}
           NO_VERIFY: ${{ inputs.verify && '' || '--no-verify' }}
+          # the label is how a reviewer says that a backwards pin is a rollback
+          ROLLBACK: ${{ contains(github.event.pull_request.labels.*.name, inputs.rollback-label) && '--allow-rollback' || '' }}
         run: |
           git config user.email "strata@github"
           git config user.name "strata merge gate"
           # split the records on whitespace and leave each pattern for git to expand
           set -f
           # shellcheck disable=SC2086
-          .strata/scripts/merge-gate.sh $RECORDS $NO_VERIFY
+          .strata/scripts/merge-gate.sh $RECORDS $NO_VERIFY $ROLLBACK

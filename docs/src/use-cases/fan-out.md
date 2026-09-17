@@ -63,6 +63,20 @@ merge request landed. Git merged it without a word, because the developer
 settled the conflict by keeping their own record. The cluster would have been
 built one release back.
 
+A rollback moves a pin backwards on purpose, and looks the same to git. The
+gate reports the evidence of each backwards pin — whether the default branch
+pinned that release before, and whether the branch wrote its record after the
+default branch moved — and it passes when the commit that makes the change says
+so:
+
+```text
+Rollback: releases/dev.json to aws-stack@1.0.0
+1.1.0 repaved the nodes with a CSI driver that lost the volumes
+```
+
+The reason stays in the history, where the next person reads it. A team that
+works in the merge request uses the `rollback` label instead.
+
 The gate also catches what git cannot see: a record that Palette no longer
 matches, because the version it names was edited in place. See
 [The merge gate](../automation/merge-gate.md), which has the output and the

@@ -1,0 +1,15 @@
+$ scripts/merge-gate.sh "releases/*.json" --base main
+merge-gate: the branch already carries origin/main; the checkout is the merge result
+BEHIND: releases/dev.json would replace what main pinned with an older version
+  the profile: main has 1.1.0, the merge result has 1.0.0
+  os/ubuntu-aws: main has 24.04, the merge result has 20.04
+  k8s/kubernetes: main has 1.36.2, the merge result has 1.35.3
+  cni/cni-cilium-oss: main has 1.20.1, the merge result has 1.19.6
+  csi/csi-aws-ebs: main has 1.65.0, the merge result has 1.63.1
+  main pinned this release before, on 2026-09-10 in 8c1d4f2
+  the branch wrote this record after main moved to aws-stack@1.1.0
+  a rollback says so, in a commit of the branch:
+    Rollback: releases/dev.json to aws-stack@1.0.0
+  or in the rollback label, which gives the job --allow-rollback.
+merge-gate: 1 records: 1 behind main, 0 declared rollback, 0 did not verify
+merge-gate: the merge button must wait: settle the records above, then push again

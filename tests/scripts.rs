@@ -874,6 +874,12 @@ impl Gate {
         Gate { dir }
     }
 
+    /// Write the record and commit it on the branch that is checked out.
+    fn pin(&self, content: &str, message: &str) {
+        std::fs::write(self.dir.path().join("releases/dev.json"), content).unwrap();
+        git(self.dir.path(), &["commit", "-qam", message]);
+    }
+
     fn run(&self, args: &[&str]) -> Output {
         Command::new("bash")
             .arg(script("merge-gate.sh"))
@@ -963,9 +969,98 @@ fn merge_gate_stops_a_branch_that_would_replace_a_newer_pin() {
         "the line names the pack and both versions:\n{out}"
     );
     assert!(
+        out.contains("main never pinned this release in the last 50 commits of releases/dev.json"),
+        "the evidence says this is not a return to anything main ran:\n{out}"
+    );
+    assert!(
+        out.contains("the branch wrote this record before main moved to"),
+        "the evidence says the author never saw the later release:\n{out}"
+    );
+    assert!(
+        out.contains("Rollback: releases/dev.json to lab-profile@1.2.0"),
+        "the report gives the line that declares a rollback:\n{out}"
+    );
+    assert!(
         text(&o.stderr).contains("1 records: 1 behind main"),
         "{}",
         text(&o.stderr)
+    );
+}
+
+/// A branch that deliberately returns the record to the release that main pinned before.
+fn rollback_gate() -> (Gate, String) {
+    let (base, branch, main_side) = gate_records();
+    let g = Gate::merged_keeping_its_own(&base, &branch, &main_side);
+    (g, base)
+}
+
+#[test]
+fn merge_gate_passes_a_rollback_that_a_commit_declares() {
+    let (g, base) = rollback_gate();
+    g.pin(
+        &base,
+        "pin the release of last week\n\nRollback: releases/dev.json to lab-profile@1.2.0\n",
+    );
+    let o = g.run(&["releases/*.json", "--base", "main", "--no-verify"]);
+    assert!(o.status.success(), "{}{}", text(&o.stdout), text(&o.stderr));
+    let out = text(&o.stdout);
+    assert!(
+        out.contains(
+            "ROLLBACK: releases/dev.json returns to lab-profile@1.2.0, declared in a commit of the branch"
+        ),
+        "{out}"
+    );
+    assert!(
+        out.contains("main pinned this release before, on "),
+        "the evidence confirms that main ran this release:\n{out}"
+    );
+    assert!(
+        text(&o.stderr).contains("1 records: 0 behind main, 1 declared rollback"),
+        "{}",
+        text(&o.stderr)
+    );
+}
+
+#[test]
+fn merge_gate_passes_a_rollback_that_the_label_allows() {
+    let (g, base) = rollback_gate();
+    g.pin(&base, "pin the release of last week");
+    let o = g.run(&[
+        "releases/*.json",
+        "--base",
+        "main",
+        "--no-verify",
+        "--allow-rollback",
+    ]);
+    assert!(o.status.success(), "{}{}", text(&o.stdout), text(&o.stderr));
+    assert!(
+        text(&o.stdout).contains(
+            "ROLLBACK: releases/dev.json returns to lab-profile@1.2.0, by the label on the merge request"
+        ),
+        "{}",
+        text(&o.stdout)
+    );
+}
+
+#[test]
+fn merge_gate_stays_red_when_the_declaration_names_another_release() {
+    let (g, base) = rollback_gate();
+    g.pin(
+        &base,
+        "pin the release of last week\n\nRollback: releases/dev.json to lab-profile@9.9.9\n",
+    );
+    let o = g.run(&["releases/*.json", "--base", "main", "--no-verify"]);
+    assert_eq!(
+        o.status.code(),
+        Some(1),
+        "a declaration counts only for the release it names"
+    );
+    let out = text(&o.stdout);
+    assert!(out.contains("BEHIND: releases/dev.json"), "{out}");
+    // and the evidence still tells the reviewer that main ran this release before
+    assert!(
+        out.contains("main pinned this release before, on "),
+        "{out}"
     );
 }
 
