@@ -1255,6 +1255,78 @@ fn consumers_lists_each_cluster_with_name_project_and_state_from_its_own_project
 }
 
 #[test]
+fn consumers_shows_the_version_each_cluster_runs_and_marks_one_the_uid_no_longer_names() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let mut profile = read(&dir.path().join("b").join("profile.json"));
+    profile["status"]["inUseClusters"] = serde_json::json!([
+        {"uid": "cluster-aaa", "name": "alpha", "projectUid": "p1"},
+        {"uid": "cluster-bbb", "name": "beta", "projectUid": "p1"}
+    ]);
+    let tenant = serve(MemoryApi::new(), dir.path(), "b", UID_B)
+        .with(format!("/v1/clusterprofiles/{UID_B}"), profile);
+    // alpha runs the version the uid names; beta's copy still names 1.2.9, from before a legacy
+    // version bump renamed the uid to 1.3.0
+    let runs = |uid: &str, name: &str, version: &str| {
+        let mut d = cluster_doc(uid, name, "p1", "Running");
+        d["spec"] = serde_json::json!({"clusterProfileTemplates": [
+            {"uid": "64f0000000000000000000d4", "name": "lab-addons", "profileVersion": "2.0.0"},
+            {"uid": UID_B, "name": "lab-profile", "profileVersion": version}
+        ]});
+        d
+    };
+    let in_p1 = MemoryApi::new()
+        .with(
+            "/v1/spectroclusters/cluster-aaa",
+            runs("cluster-aaa", "alpha", "1.3.0"),
+        )
+        .with(
+            "/v1/spectroclusters/cluster-bbb",
+            runs("cluster-bbb", "beta", "1.2.9"),
+        );
+    let connect = |scope: Option<&str>| {
+        Ok(Palette::new(match scope {
+            Some("p1") => in_p1.clone(),
+            _ => tenant.clone(),
+        }))
+    };
+    let r = ops::consumers(&Ref::Uid(UID_B.into()), connect, "t1", &Progress::silent()).unwrap();
+    let versions: Vec<(&str, &str)> = r
+        .consumers
+        .iter()
+        .map(|c| (c.name.as_str(), c.version.as_str()))
+        .collect();
+    assert_eq!(versions, [("alpha", "1.3.0"), ("beta", "1.2.9")]);
+    assert_eq!(r.overwritten, 1);
+
+    let text = render::renderer(Format::Terminal, Paint::off(), false)
+        .render_consumers(&r)
+        .unwrap();
+    let beta = text.lines().find(|l| l.contains("beta")).unwrap();
+    assert!(
+        beta.contains("runs lab-profile@1.2.9, which uid 64f0000000000000000000b2 no longer names"),
+        "{text}"
+    );
+    let alpha = text.lines().find(|l| l.contains("alpha")).unwrap();
+    assert!(!alpha.contains("no longer names"), "{text}");
+    let md = render::renderer(Format::Markdown, Paint::off(), false)
+        .render_consumers(&r)
+        .unwrap();
+    assert!(
+        md.contains("`1.2.9`, which the uid no longer names"),
+        "{md}"
+    );
+    let json: Value = serde_json::from_str(
+        &render::renderer(Format::Json, Paint::off(), true)
+            .render_consumers(&r)
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(json["consumers"][1]["version"], "1.2.9");
+    assert_eq!(json["overwritten"], 1);
+}
+
+#[test]
 fn a_profile_without_consumers_exits_zero_and_fetches_no_cluster() {
     let dir = tempfile::tempdir().unwrap();
     common::make_fixtures(dir.path());

@@ -239,13 +239,19 @@ aws-pxk@1.0.0 (uid 64e0000000000000000000a1): 2 consumers
 ```
 
 Names and projects come from the profile's `status.inUseClusters`. Each
-cluster is then read in its own project for `status.state`. A cluster that
-cannot be read shows `unknown` and the error, and it still counts. The exit
-status is `0` when no cluster uses the version and `1` when any does.
-`--format markdown` writes a table. `--format json` writes the document
-`strata-consumers/1`: `profile` with uid, name, and version, `count`, and
-`consumers[]` with `uid`, `name`, `projectUid`, `state`, and `error` when
-there is one. `strata schema consumers` prints its JSON Schema.
+cluster is then read in its own project for `status.state` and for the
+version its own copy of the profile names. A cluster that cannot be read
+shows `unknown` and the error, and it still counts. When a cluster's copy
+names another version than the profile does now, the line ends
+`runs <name>@<version>, which uid <uid> no longer names`: a legacy version
+bump or a rename overwrote the version the cluster runs, and the cluster runs
+a copy of the old one. The exit status is `0` when no cluster uses the
+version and `1` when any does. `--format markdown` writes a table with the
+version each cluster runs. `--format json` writes the document
+`strata-consumers/1`: `profile` with uid, name, and version, `count`,
+`overwritten` (the consumers whose copy names another version), and
+`consumers[]` with `uid`, `name`, `projectUid`, `state`, `version`, and
+`error` when there is one. `strata schema consumers` prints its JSON Schema.
 
 ## The list report
 

@@ -823,6 +823,11 @@ pub struct Consumer {
     pub project_uid: String,
     /// The cluster's `status.state`, for example `Running`, or `unknown` when it could not be read.
     pub state: String,
+    /// The version the cluster's own copy of the profile names, from the cluster document; empty
+    /// when the cluster could not be read. It differs from `profile.version` when the version the
+    /// cluster runs was overwritten in place, by a legacy version bump or a rename.
+    #[serde(default)]
+    pub version: String,
     /// Why the cluster could not be read, when it could not.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<Value>,
@@ -842,6 +847,10 @@ pub struct ConsumersReport {
     pub profile: ConsumedProfile,
     /// The number of clusters that use it. Exit status 0 when zero, 1 otherwise.
     pub count: usize,
+    /// The consumers whose copy names another version than `profile.version`: the version they run
+    /// was overwritten in place.
+    #[serde(default)]
+    pub overwritten: usize,
     /// One entry per cluster, in the order Palette lists them.
     pub consumers: Vec<Consumer>,
 }
@@ -915,6 +924,7 @@ where
             name: known.map(|n| text(n, "/name")).unwrap_or_default(),
             project_uid: known.map(|n| text(n, "/projectUid")).unwrap_or_default(),
             state: UNKNOWN_STATE.to_string(),
+            version: String::new(),
             error: None,
             uid: cluster,
         };
@@ -936,12 +946,23 @@ where
                 c.project_uid =
                     or_keep(c.project_uid, text(&d, "/metadata/annotations/projectUid"));
                 c.state = or_keep(c.state, text(&d, "/status/state"));
+                c.version = d
+                    .pointer("/spec/clusterProfileTemplates")
+                    .and_then(Value::as_array)
+                    .and_then(|ts| ts.iter().find(|t| text(t, "/uid") == uid))
+                    .map(|t| text(t, "/profileVersion"))
+                    .unwrap_or_default();
             }
             Err(e) => c.error = Some(e.to_json()),
         }
         list.push(c);
     }
 
+    let version = text(&doc, "/spec/version");
+    let overwritten = list
+        .iter()
+        .filter(|c| !c.version.is_empty() && c.version != version)
+        .count();
     Ok(ConsumersReport {
         schema: CONSUMERS_SCHEMA.to_string(),
         tool: Tool {
@@ -953,9 +974,10 @@ where
         profile: ConsumedProfile {
             uid: text(&doc, "/metadata/uid"),
             name: text(&doc, "/metadata/name"),
-            version: text(&doc, "/spec/version"),
+            version,
         },
         count: list.len(),
+        overwritten,
         consumers: list,
     })
 }

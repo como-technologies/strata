@@ -190,6 +190,8 @@ if stage 4 "undo the edit and bump the add-on version"; then
   check a3-names-overwritten-profile "$off0_on1" "#30: the verify names the add-on profile, only without the flag" -- \
     jq -e --arg u "$AD1" '[.verify.profilesOverwritten[]?.uid] == [$u]' verify-a3-after-bump.out
   check consumers-old 1 "#27: both clusters are still consumers of the first add-on uid" -- "$strata" consumers "$AD1" --json
+  check consumers-old-overwritten "$off0_on1" "#28: consumers of the first add-on uid marks both clusters as running a version it no longer names, only without the flag" -- \
+    jq -e '.overwritten == 2 and ([.consumers[].version] | unique) == ["1.0.0"]' consumers-old.out
   if [ "$mode" = on ] && [ -n "${OFF_RUN:-}" ]; then
     check clone-carried-nothing 1 "#27: the flag's clone is not the same release as the legacy bump: Palette mints the manifest pack's uid for each profile (#32)" -- \
       "$strata" same-release "$OFF_RUN/addon-new4.json" addon-new4.json

@@ -271,10 +271,17 @@ impl Renderer for MarkdownRenderer {
         if r.consumers.is_empty() {
             return Ok(o);
         }
-        o.push_str("| cluster | uid | project | state |\n|---|---|---|---|\n");
+        o.push_str("| cluster | uid | project | state | runs |\n|---|---|---|---|---|\n");
         for c in &r.consumers {
+            let runs = if c.version.is_empty() {
+                "-".to_string()
+            } else if c.version != r.profile.version {
+                format!("`{}`, which the uid no longer names", escape(&c.version))
+            } else {
+                format!("`{}`", escape(&c.version))
+            };
             o.push_str(&format!(
-                "| `{}` | `{}` | `{}` | {} |\n",
+                "| `{}` | `{}` | `{}` | {} | {runs} |\n",
                 escape(dash(&c.name)),
                 escape(&c.uid),
                 escape(dash(&c.project_uid)),

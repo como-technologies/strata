@@ -372,6 +372,15 @@ impl Renderer for TerminalRenderer {
                 dash(&c.project_uid),
                 state
             ));
+            if !c.version.is_empty() && c.version != r.profile.version {
+                out.push_str(&format!(
+                    "  {}",
+                    p.byellow(&format!(
+                        "runs {}@{}, which uid {} no longer names",
+                        r.profile.name, c.version, r.profile.uid
+                    ))
+                ));
+            }
             if let Some(msg) = c
                 .error
                 .as_ref()
