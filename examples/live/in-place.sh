@@ -44,6 +44,9 @@ case "$mode" in
 esac
 [ -x "$strata" ] || { echo "in-place: no strata binary at $strata" >&2; exit 2; }
 
+# Expected exits that differ with the flag.
+if [ "$mode" = on ]; then off0_on1=1; off1_on0=0; else off0_on1=0; off1_on0=1; fi
+
 edit_from='edited: "no"'
 edit_to='edited: "yes"'
 
@@ -99,7 +102,7 @@ summary() {
     echo "| result | check | expected exit | got | what it shows |"
     echo "|---|---|---|---|---|"
     grep -E '^(PASS|FAIL|SEEN) ' steps.log | while read -r verdict id _ want _ got; do
-      what=$(grep -oE "check $id [0-9?] \"[^\"]*\"" "$here/in-place.sh" | head -1 | sed -E 's/^check [^ ]+ [0-9?] "(.*)"$/\1/')
+      what=$(grep -oE "check $id [^ ]+ \"[^\"]*\"" "$here/in-place.sh" | head -1 | sed -E 's/^check [^ ]+ [^ ]+ "(.*)"$/\1/')
       echo "| $verdict | \`$id\` | ${want%,} | $got | $what |"
     done
   } > summary.md
@@ -170,16 +173,16 @@ if stage 2 "edit the add-on version in place and create cluster B"; then
   check b-owns-manifest-copy 0 "cluster B was created with its own copy of the add-on manifest" -- \
     jq -e -n --slurpfile c b2-addon.json --slurpfile p addon2.json \
       '$c[0].packs[0].manifests[0].uid != $p[0].packs[0].manifests[0].uid'
-  check a-kept-old-content ? "#27: cluster A's record still matches its copy from before the edit" -- \
+  check a-kept-old-content 0 "#27: cluster A keeps its copy from before the edit" -- \
     "$strata" compare a1-addon.json a2-addon.json
-  check a-vs-b ? "#27: cluster A against cluster B, both on the same add-on version" -- \
+  check a-vs-b 1 "#27: cluster A differs from cluster B, created from the edited version" -- \
     "$strata" compare a2-addon.json b2-addon.json --json
-  check a-vs-b-edited-in-place ? "#27: the comparison says the version was edited in place" -- \
+  check a-vs-b-edited-in-place 0 "#27: the comparison says the version was edited in place" -- \
     jq -e '.editedInPlace' a-vs-b.out
-  check verify-a1 ? "#27: verify cluster A's record from before the edit" -- "$strata" verify a1.json
+  check verify-a1 0 "#27: cluster A's record from before the edit still verifies" -- "$strata" verify a1.json
   check verify-release1 0 "#23: the release record is untouched by the add-on edit" -- "$strata" verify release1.json
   check verify-addon1 1 "#23: the add-on record reports DRIFT after its in-place edit" -- "$strata" verify addon1.json
-  check addon1-vs-a2 ? "#27: the add-on record against cluster A's selection" -- \
+  check addon1-vs-a2 0 "#27: the add-on record from before the edit matches cluster A's selection" -- \
     "$strata" compare addon1.json "cluster:$C/$AN"
   check consumers-addon 1 "both clusters use the add-on version" -- "$strata" consumers "$AD1" --json
 fi
@@ -191,7 +194,7 @@ if stage 3 "apply the add-on profile to cluster A"; then
     check apply-keeping-notification 0 "push the add-on's content to cluster A without resolving its notification" -- \
       "$here/api.sh" apply "$C" --keep-notification
     sleep 180
-    check a-unchanged-without-resolve ? "#27: three minutes after that push, cluster A against its copy from before" -- \
+    check a-changed-without-resolve 1 "#27: three minutes after that push, cluster A's copy has taken the edit" -- \
       "$strata" compare a2-addon.json "cluster:$C/$AN"
     check apply-to-a 0 "#27: accept the waiting update on cluster A, resolving the notification" -- \
       "$here/api.sh" apply "$C"
@@ -203,9 +206,9 @@ if stage 3 "apply the add-on profile to cluster A"; then
   done
   check a3 0 "record cluster A after the apply" -- "$strata" snapshot "cluster:$C" --raw-dir raw/a3 -o a3.json
   check a3-updates 0 "what waits for cluster A" -- "$here/tenant.sh" updates "$C"
-  check a3-matches-b ? "#27: after the apply, cluster A runs what cluster B runs" -- \
+  check a3-matches-b 0 "#27: after the apply, cluster A runs what cluster B runs" -- \
     "$strata" compare a3-addon.json b2-addon.json
-  check verify-a1-after-apply ? "#27: verify cluster A's record from before the edit" -- "$strata" verify a1.json
+  check verify-a1-after-apply 1 "#27: once the update is applied, cluster A's record from before the edit reports DRIFT" -- "$strata" verify a1.json
 fi
 
 if stage 4 "undo the edit and bump the add-on version"; then
@@ -217,19 +220,19 @@ if stage 4 "undo the edit and bump the add-on version"; then
   fi
   AD2=$(out addon_profile_uid)
   save AD2 "$AD2"
-  check addon-uid-kept ? "#27: the bump kept the add-on uid (legacy) or made a new one (flag)" -- test "$AD2" = "$AD1"
+  check addon-uid-kept "$off0_on1" "#27: the bump keeps the add-on uid without the flag and makes a new one with it" -- test "$AD2" = "$AD1"
   check addon-old4 0 "record what the first add-on uid holds now" -- "$strata" snapshot "$AD1" --raw-dir raw/addon-old4 -o addon-old4.json
   check addon-new4 0 "record the bumped add-on version" -- "$strata" snapshot "$AD2" --raw-dir raw/addon-new4 -o addon-new4.json
   check a4-addon 0 "record cluster A's add-on selection" -- "$strata" snapshot "cluster:$C/$AN" --raw-dir raw/a4-addon -o a4-addon.json
   check b4-addon 0 "record cluster B's add-on selection" -- "$strata" snapshot "cluster:$B/$AN" --raw-dir raw/b4-addon -o b4-addon.json
-  check verify-addon1-after-bump ? "#27: verify the add-on record from before the edit" -- \
+  check verify-addon1-after-bump 1 "#27: the add-on record from before the edit still reports DRIFT" -- \
     "$strata" verify addon1.json --json
-  check addon1-overwritten ? "#27: verify says the recorded version was overwritten" -- \
+  check addon1-overwritten "$off0_on1" "#27: verify says the recorded version was overwritten, only without the flag" -- \
     jq -e '.verify.overwrittenBy != null' verify-addon1-after-bump.out
-  check a4-matches-old-version ? "#23, #27: cluster A's selection against the first add-on uid" -- \
+  check a4-matches-old-version "$off1_on0" "#23, #27: cluster A's selection equals the first add-on uid only with the flag, which keeps the old version" -- \
     "$strata" compare addon-old4.json a4-addon.json
-  check a4-still-a3 ? "#27: the bump left cluster A as it was" -- "$strata" compare a3-addon.json a4-addon.json
-  check consumers-old ? "#27: consumers of the first add-on uid" -- "$strata" consumers "$AD1" --json
+  check a4-still-a3 0 "#27: the bump left cluster A as it was" -- "$strata" compare a3-addon.json a4-addon.json
+  check consumers-old 1 "#27: both clusters are still consumers of the first add-on uid" -- "$strata" consumers "$AD1" --json
   if [ "$mode" = on ] && [ -n "${OFF_RUN:-}" ]; then
     check clone-carried-nothing ? "#27: the flag's clone equals the legacy bump of the same configuration" -- \
       "$strata" same-release "$OFF_RUN/addon-new4.json" addon-new4.json
@@ -260,7 +263,7 @@ if stage 5 "delete cluster B and restore the add-on profile"; then
       "$strata" compare addon5.json "cluster:$C/$AN" >/dev/null 2>&1 && break
       sleep 30
     done
-    check a5-matches-addon ? "cluster A runs the restored add-on version" -- \
+    check a5-matches-addon 0 "cluster A runs the restored add-on version" -- \
       "$strata" compare addon5.json "cluster:$C/$AN"
   fi
   check b-gone 0 "cluster B is deleted" -- "$here/tenant.sh" cluster "$B"
