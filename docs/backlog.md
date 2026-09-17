@@ -735,3 +735,23 @@ So two profiles created apart with the same manifests never compare as the same 
 - [ ] `docs/model.md` states how a manifest pack's `packUid` counts, with the live evidence, and why the chosen design keeps or changes the snapshot schema
 - [ ] Two profile versions with the same manifest content and different minted `packUid`s compare as the same release
 - [ ] A manifest content change still makes them different
+
+## Stop tracking the generated examples
+
+labels: robustness
+
+### Background
+
+`examples/fetch-examples.sh` does two different things. With the API it fetches pack data from the Public Repo: `packs/<name>/_entity.json` and `packs/<name>/_summaries.json`. Offline (`just examples`) it builds everything else from that data: `packs/<name>/<version>.json`, the synthesized profiles and cluster under `profiles/` and `clusters/` (with their `raw/` inputs), the reports under `reports/`, and `INDEX.md`. All of it is tracked, so the generated files only change when someone reruns the script and commits the result, and nothing checks that they still match the code. They do not: on 2026-09-17, `just examples` into a scratch directory wrote a `reports/aws-pxk@1.0.0__vs__aws-pxk@1.1.0.json` with the `editedInPlace` field that #27 added, which the tracked copy lacks. The other generated files differed only in their `fetchedAt` times.
+
+### Plan
+
+1. `.gitignore`: the files `just examples` builds offline; remove them from the index. The fetched pack data stays tracked, since it is the one input that cannot be rebuilt without a tenant.
+2. `.github/workflows/ci.yml`: run `just examples`, so a change that breaks the generator fails CI instead of going unnoticed.
+3. `examples/README.md`: which files are fetched and tracked, which are built, and `just examples` as the first step. `docs/walkthrough.md`, `docs/model.md`, and `examples/live/README.md`: where they point at a built file, say that `just examples` builds it.
+
+### Acceptance criteria
+
+- [ ] Only the fetched pack data under `examples/packs/` is tracked; `git status` stays clean after `just examples`
+- [ ] CI runs `just examples`
+- [ ] Every doc that points at a built example file says how to build it
