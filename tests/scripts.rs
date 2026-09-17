@@ -2031,3 +2031,73 @@ fn verify_report_dry_run_prints_each_report_and_calls_no_host() {
         "{err}"
     );
 }
+
+#[test]
+fn live_scripts_refuse_a_strata_binary_older_than_the_sources() {
+    let root = tempfile::tempdir().unwrap();
+    let live = root.path().join("examples/live");
+    let release = root.path().join("target/release");
+    for d in [&live, &release, &root.path().join("src")] {
+        std::fs::create_dir_all(d).unwrap();
+    }
+    std::fs::copy(live_script("lib.sh"), live.join("lib.sh")).unwrap();
+    executable(
+        &live.join("probe.sh"),
+        "script=probe\n. \"$(dirname \"$0\")/lib.sh\"\necho ran \"$strata\"\n",
+    );
+    let strata = release.join("strata");
+    executable(&strata, "#!/bin/sh\n");
+    let source = root.path().join("src/lib.rs");
+    std::fs::write(&source, "// changed after the build\n").unwrap();
+    let old = std::time::SystemTime::now() - std::time::Duration::from_secs(600);
+    std::fs::File::options()
+        .write(true)
+        .open(&strata)
+        .unwrap()
+        .set_modified(old)
+        .unwrap();
+    let probe = || {
+        Command::new("bash")
+            .arg(live.join("probe.sh"))
+            .env_remove("STRATA_BIN")
+            .output()
+            .unwrap()
+    };
+
+    let o = probe();
+    assert_eq!(o.status.code(), Some(2), "{}", text(&o.stdout));
+    assert!(
+        text(&o.stderr).contains(&format!(
+            "probe: {} is older than {}; run just build",
+            strata.display(),
+            source.display()
+        )),
+        "{}",
+        text(&o.stderr)
+    );
+
+    // rebuilt: the binary is newer than every source
+    std::fs::File::options()
+        .write(true)
+        .open(&strata)
+        .unwrap()
+        .set_modified(std::time::SystemTime::now() + std::time::Duration::from_secs(5))
+        .unwrap();
+    let o = probe();
+    assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
+
+    // a binary chosen with STRATA_BIN is the caller's to keep current
+    std::fs::write(&source, "// changed again\n").unwrap();
+    std::fs::File::options()
+        .write(true)
+        .open(&source)
+        .unwrap()
+        .set_modified(std::time::SystemTime::now() + std::time::Duration::from_secs(60))
+        .unwrap();
+    let o = Command::new("bash")
+        .arg(live.join("probe.sh"))
+        .env("STRATA_BIN", &strata)
+        .output()
+        .unwrap();
+    assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
+}

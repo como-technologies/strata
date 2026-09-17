@@ -15,6 +15,13 @@ flag=${flag:-false}
 
 die() { echo "$script: $*" >&2; exit 2; }
 
+# The default binary must be built from these sources: a run with an older one tests old code.
+# `just build`, and each live recipe, builds it. A binary set with STRATA_BIN is the caller's.
+if [ -z "${STRATA_BIN:-}" ] && [ -e "$strata" ]; then
+  stale=$(find "$live/../../src" "$live/../../Cargo.toml" "$live/../../Cargo.lock" -type f -newer "$strata" -print -quit 2>/dev/null)
+  [ -z "$stale" ] || die "$strata is older than $(cd "$(dirname "$stale")" && pwd)/$(basename "$stale"); run just build"
+fi
+
 # ---- Terraform outputs ---------------------------------------------------------------------------
 
 # load_outputs: read Terraform's outputs again; every apply here does it for you
