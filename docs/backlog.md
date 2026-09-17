@@ -493,10 +493,10 @@ labels: investigation
 
 ### Acceptance criteria
 
-- [ ] The new checks pass on a real cluster that runs two profiles
-- [ ] An in-place edit of the add-on profile makes its record `DRIFT` and leaves the infra profile's record unchanged
-- [ ] With `immutable-clusterprofiles` on, a version bump of the add-on profile leaves the cluster's selection equal to the old version's record
-- [ ] The recorded run in `examples/live/README.md` includes them
+- [x] The new checks pass on a real cluster that runs two profiles
+- [x] An in-place edit of the add-on profile makes its record `DRIFT` and leaves the infra profile's record unchanged
+- [x] With `immutable-clusterprofiles` on, a version bump of the add-on profile leaves the cluster's selection equal to the old version's record
+- [x] The recorded run in `examples/live/README.md` includes them
 
 ## Live-verify the registry-move policy
 
