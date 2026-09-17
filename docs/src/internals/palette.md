@@ -5,6 +5,10 @@ did. Each section gives the run ids. [Live runs](../development/live-runs.md)
 has the check tables. The recorded runs used Terraform 1.16.2. The live example
 uses OpenTofu now, with the same provider.
 
+Each uid in this book is an example. The runs used the uids of a test tenant,
+and this book holds none of them. The pack names, the versions, the digests, and
+the run ids are the real ones.
+
 ## The pack-ref digest
 
 On a published profile, the `digest` that Palette puts on each pack reference
@@ -53,8 +57,8 @@ to the OCI pack registry `Palette Registry`. Run `20260917T150025Z`, provider
 | Field | 1.0.0, pack registry | 1.0.1, OCI registry |
 | --- | --- | --- |
 | type | `spectro` | `oci` |
-| registryUid | `5eecc89d0b150045ae661cef` | `64eaff453040297344bcad5d` |
-| packUid | `6aa410ec144aaec79d547a9e` | `6aa41627144aaece1b2e2452` |
+| registryUid | `5eecc89d0b150045ae661cef` | `64ec000000000000000000a1` |
+| packUid | `6aa410ec144aaec79d547a9e` | `64ec000000000000000000b1` |
 | digest | `sha256:bd09e8b4187b...` | `sha256:a746e1468908...` |
 | tag, version | `1.65.0` | `1.65.0` |
 | values, manifests, params | | unchanged |

@@ -130,20 +130,23 @@ For a self-hosted Palette, set `PALETTE_API` in the environment or in
 ```text
 $ examples/live/tenant.sh names us-east-2
 projects (palette_project):
-  iris-on-palette  uid 6a860681da93f9c74843a019
-  strata-test  uid 6aaab0567993b0008ad902db
+  platform  uid 64f20000000000000000a0f1
+  strata-test  uid 64f20000000000000000a0d1
 AWS cloud accounts (cloud_account_name), with zones (az) and key pairs (ssh_key_name) in us-east-2:
-  como-aws
+  aws-main
     zones:     us-east-2a, us-east-2b, us-east-2c
-    key pairs: iris-on-palette, bastion-iris-on-palette
+    key pairs: platform-key, bastion-key
 Helm registries (helm_registry_name):
   Bitnami
   Public Spectro Helm Repo
 OCI pack registries (oci_registry_name):
-  Palette Registry  415789037893.dkr.ecr.us-east-1.amazonaws.com
-  Palette Community Registry  415789037893.dkr.ecr.us-east-1.amazonaws.com
-  iris-packs  517293881804.dkr.ecr.us-east-2.amazonaws.com
+  Palette Registry  <spectro account>.dkr.ecr.us-east-1.amazonaws.com
+  Palette Community Registry  <spectro account>.dkr.ecr.us-east-1.amazonaws.com
+  team-packs  <your account>.dkr.ecr.us-east-2.amazonaws.com
 ```
+
+The names and the uids above are examples. This book holds no name or uid of a
+real tenant.
 
 Put the names in `terraform.tfvars`:
 

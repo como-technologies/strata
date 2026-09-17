@@ -622,7 +622,7 @@ labels: feature
 ### Plan
 
 1. `src/ops.rs`: `Consumer` gains `version`, the version of the profile's entry in the cluster's `spec.clusterProfileTemplates`, empty when the cluster could not be read. `ConsumersReport` gains `overwritten`, the count of consumers whose copy names another version than the profile uid names now.
-2. `src/render/`: such a consumer shows the version it runs and says the version was overwritten in place, for example `runs strata-live-addon@1.0.0, which uid 6aab0a99da23ecda03f36685 no longer names`.
+2. `src/render/`: such a consumer shows the version it runs and says the version was overwritten in place, for example `runs strata-live-addon@1.0.0, which uid 64e2000000000000000000f2 no longer names`.
 3. `docs/output.md`: the new fields. Tests over fixtures: a cluster whose template names the profile's current version, and one whose template names an older version under the same uid.
 4. `examples/live/in-place.sh`: after the bump, `consumers-old-overwritten` checks that `consumers` of the first uid marks both clusters with the flag off and neither with it on.
 
@@ -638,12 +638,12 @@ labels: feature
 
 ### Background
 
-`compare` notes an in-place edit when both sides name the same profile uid and version with different roots (#27). A legacy version bump, from Terraform without `immutable-clusterprofiles` or a version rename in the Palette console, gives the same uid a new version instead. In #27's flag-off run `20260916T213303Z`, `compare` of the bumped version's record against cluster A's selection labeled its sides `strata-live-addon@1.0.1 (uid 6aab0a99da23ecda03f36685)` and `strata-live-addon@1.0.0 on cluster strata-live-cluster` and said nothing about the shared uid (`a4-matches-old-version.out`). It reported `CHANGED` only because the content differed too. After a rename that changes no content, the same comparison says `IDENTICAL`, which reads as the cluster running 1.0.1. The record of 1.0.0 taken before the bump and the live 1.0.1 had equal roots (`a18670a7b8d6`): `verify` reports that pair since #27, and `compare` does not.
+`compare` notes an in-place edit when both sides name the same profile uid and version with different roots (#27). A legacy version bump, from Terraform without `immutable-clusterprofiles` or a version rename in the Palette console, gives the same uid a new version instead. In #27's flag-off run `20260916T213303Z`, `compare` of the bumped version's record against cluster A's selection labeled its sides `strata-live-addon@1.0.1 (uid 64e2000000000000000000f2)` and `strata-live-addon@1.0.0 on cluster strata-live-cluster` and said nothing about the shared uid (`a4-matches-old-version.out`). It reported `CHANGED` only because the content differed too. After a rename that changes no content, the same comparison says `IDENTICAL`, which reads as the cluster running 1.0.1. The record of 1.0.0 taken before the bump and the live 1.0.1 had equal roots (`a18670a7b8d6`): `verify` reports that pair since #27, and `compare` does not.
 
 ### Plan
 
 1. `src/diff.rs`: `Diff` gains `overwrittenInPlace`, the list of profile uids both sides carry under different versions, whatever the roots, with the name and both versions; a side that records a cluster carries every profile it runs. `editedInPlace` stays as it is.
-2. `src/render/`: a note line in the terminal and markdown reports, next to the edited-in-place note, for example `both sides are uid 6aab0a99da23ecda03f36685, as strata-live-addon@1.0.1 and @1.0.0: the version was overwritten in place`. An `IDENTICAL` verdict keeps its wording and gains the note.
+2. `src/render/`: a note line in the terminal and markdown reports, next to the edited-in-place note, for example `both sides are uid 64e2000000000000000000f2, as strata-live-addon@1.0.1 and @1.0.0: the version was overwritten in place`. An `IDENTICAL` verdict keeps its wording and gains the note.
 3. `docs/output.md`: the field. Tests over fixtures: the same uid under different versions with equal roots and with different roots; different uids under different versions stay unnoted.
 4. `examples/live/in-place.sh`: after the bump, `a4-names-overwrite` checks that the comparison of the first add-on uid with cluster A names that uid with the flag off, and nothing with it on, where the bump made a new uid.
 
@@ -664,7 +664,7 @@ labels: feature
 ### Plan
 
 1. `src/ops.rs`, `verify` of a cluster record: for each applied profile of the live cluster, read the profile document, one request per profile, and compare its version with the version the cluster's copy names. Report each profile whose uid names another version, or no longer exists, in `Verify` as `profilesOverwritten` with the uid, the name, and both versions, and exit 1, as for an overwritten profile record.
-2. `src/render/`: a line per such profile in the verdict, for example `strata-live-cluster runs strata-live-addon@1.0.0, but uid 6aab0a99da23ecda03f36685 now names 1.0.1: the version was overwritten in place`.
+2. `src/render/`: a line per such profile in the verdict, for example `strata-live-cluster runs strata-live-addon@1.0.0, but uid 64e2000000000000000000f2 now names 1.0.1: the version was overwritten in place`.
 3. `docs/output.md`: the field and the exit status. Tests with `MemoryApi`: a cluster whose profile uids still name their versions, one whose uid names another version, and one whose uid is gone.
 4. `examples/live/in-place.sh`: after the bump, `verify-a3-after-bump` and `a3-names-overwritten-profile` check that `verify` on cluster A's record from stage 3 exits 1 and names the add-on profile with the flag off, and exits 0 with it on.
 
@@ -718,7 +718,7 @@ labels: design
 A pack's `packUid` is part of `IDENTITY`. For a pack from a registry, the uid is the registry's id for that pack version, so two profiles that pin the same version share it: the release profile's root was `eada36c2e3fd` in both builds of the live example. A manifest pack has no registry, and Palette mints its `packUid` for each profile it creates, the clone of a version bump included (#27, runs `20260916T213303Z` and `20260917T003054Z`):
 
 - The add-on profile, with identical content, had root `a18670a7b8d6` in one build and `7d1079372122` in the next.
-- The flag-on bump of 1.0.0 to 1.0.1 minted a new `packUid` (`6aab35b4da23f189d7ff68d0`) for the same manifest. `same-release` between it and the flag-off 1.0.1 made from the same configuration failed with `IDENTITY: packUid`, although the values, the manifest, and the variables were equal (`clone-same-content`).
+- The flag-on bump of 1.0.0 to 1.0.1 minted a new `packUid` (`64e3000000000000000000d1`) for the same manifest. `same-release` between it and the flag-off 1.0.1 made from the same configuration failed with `IDENTITY: packUid`, although the values, the manifest, and the variables were equal (`clone-same-content`).
 
 So two profiles created apart with the same manifests never compare as the same release, and neither do a version and a flag-on bump that changes nothing else. Within one version the uid is stable: an in-place edit and a legacy bump kept it, so `verify` is not affected.
 
@@ -764,11 +764,11 @@ labels: robustness
 
 Terraform provider 0.29.7 refuses every plan with `immutable-clusterprofiles` on that includes an existing profile at an unchanged version, even one that changes nothing: Palette stores the packs a little differently from the configuration, and the provider counted that as a content change. #31 put the workaround in `examples/live/lib.sh`: an apply that changes a profile targets that one resource (`apply_profile`), an apply that changes only clusters runs with the flag off (`apply_clusters`), and the variable `keep_profile_versions` keeps `skip_destroy` on through those flag-off applies. `plan-no-change` expects the refusal, and `lib.sh` says to remove all three once that check passes with the flag on.
 
-Provider 0.29.8 compares `pack` and `profile_variables` by content in `resourceClusterProfileCustomizeDiff` (`hasSemanticPackChange`, `hasSemanticProfileVariablesChange`, commit `972c76c`), and 0.30.1 has the same code. On 2026-09-17, with provider 0.30.1 and the live example at its baseline (cluster A `fred`, `6aabf73c9dde8be792cec2bd`):
+Provider 0.29.8 compares `pack` and `profile_variables` by content in `resourceClusterProfileCustomizeDiff` (`hasSemanticPackChange`, `hasSemanticProfileVariablesChange`, commit `972c76c`), and 0.30.1 has the same code. On 2026-09-17, with provider 0.30.1 and the live example at its baseline (cluster A `fred`, `64e2000000000000000000f4`):
 
 1. `tf.sh plan -detailed-exitcode -var immutable_profiles=true` exited 2 with no refusal. Its only changes were `skip_destroy = false -> true` on the release, next, registries, and add-on profiles.
 2. `tf.sh apply -auto-approve -var immutable_profiles=true` applied those four changes (`0 added, 4 changed, 0 destroyed`), and the same plan then exited 0 with `No changes.`
-3. `tf.sh plan -detailed-exitcode -var immutable_profiles=true -var addon_version=1.0.1 -var cluster_addon_profile_uid=6aabf7369dde8be6e13d7a02`, with no `-target`, exited 2. Its only change was `spectrocloud_cluster_profile.addon must be replaced` (`create replacement and then destroy`, 1 to add, 0 to change, 1 to destroy).
+3. `tf.sh plan -detailed-exitcode -var immutable_profiles=true -var addon_version=1.0.1 -var cluster_addon_profile_uid=64e2000000000000000000f3`, with no `-target`, exited 2. Its only change was `spectrocloud_cluster_profile.addon must be replaced` (`create replacement and then destroy`, 1 to add, 0 to change, 1 to destroy).
 4. `tf.sh apply -auto-approve` with the default variables set `skip_destroy` back to false, and `baseline.sh` passed every condition.
 
 One rule stays. In 0.30.1, `resourceClusterProfileDelete` still reads `skip_destroy` from the state of the object it deletes, so a flag-on bump of a profile whose state holds `skip_destroy = false` asks Palette to delete the old version, which Palette refuses while a cluster runs it (`DeletionResourceInUseError`, `drift-report.sh on`, run `20260917T132642Z`). `skip_destroy` must be in the state before the first flag-on bump.

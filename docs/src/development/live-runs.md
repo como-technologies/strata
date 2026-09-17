@@ -5,6 +5,9 @@ section. `examples/live/runs/` is not tracked, so this page and the issue
 comments keep the evidence. The runs used Terraform 1.16.2. The check
 descriptions are quoted as each run recorded them.
 
+Each uid below is an example, as everywhere in this book. The check tables, the
+run ids, the counts, and the roots are the recorded ones.
+
 ## verify.sh
 
 Session `20260917T031126Z` on 2026-09-17: one `just live-up`, then `just
@@ -44,19 +47,19 @@ The cluster runs the release, and the add-on profile after it. Each record
 compares `IDENTICAL` with its selection:
 
 ```text
-strata-live-profile@1.0.0 (uid 6aab5674b6a80225b1a53a66)  ->  strata-live-profile@1.0.0 on cluster fred (uid 6aab5678b6a8022628c8c750)
+strata-live-profile@1.0.0 (uid 64e0000000000000000000f1)  ->  strata-live-profile@1.0.0 on cluster fred (uid 64f1000000000000000000f5)
 root       eada36c2e3fd -> eada36c2e3fd   IDENTICAL
 ```
 
 ```text
-strata-live-addon@1.0.0 (uid 6aab5674da23f51fbe101d42)  ->  strata-live-addon@1.0.0 on cluster fred (uid 6aab5678b6a8022628c8c750)
+strata-live-addon@1.0.0 (uid 64e2000000000000000000f1)  ->  strata-live-addon@1.0.0 on cluster fred (uid 64f1000000000000000000f5)
 root       9c68e5319d53 -> 9c68e5319d53   IDENTICAL
 ```
 
 A newer record against the same cluster shows the one value that differs:
 
 ```text
-strata-live-profile@1.0.1 (uid 6aab5678b6a8022625c1992d)  ->  strata-live-profile@1.0.0 on cluster fred (uid 6aab5678b6a8022628c8c750)
+strata-live-profile@1.0.1 (uid 64e0000000000000000000f2)  ->  strata-live-profile@1.0.0 on cluster fred (uid 64f1000000000000000000f5)
 root       7d7689e8321c -> eada36c2e3fd   CHANGED
 consumers  0 -> 0 clusters
 
@@ -75,8 +78,8 @@ The version that the cluster runs lists it. The candidate from the 1.0.1 record,
 with its values in files, gives the root of 1.0.1:
 
 ```text
-strata-live-profile@1.0.0 (uid 6aab5674b6a80225b1a53a66): 1 consumer
-  fred  6aab5678b6a8022628c8c750  project 6aaab0567993b0008ad902db  Running
+strata-live-profile@1.0.0 (uid 64e0000000000000000000f1): 1 consumer
+  fred  64f1000000000000000000f5  project 64f20000000000000000a0d1  Running
 ```
 
 ```text
@@ -164,7 +167,7 @@ no node impact. The first run, `20260917T044135Z`, recorded the same answers
 before the expectations were set.
 
 ```text
-strata-live-profile@1.0.0 (uid 6aab5674b6a80225b1a53a66)  ->  strata-live-profile@1.0.2 (uid 6aabe001b6a811035f4fe2a5)
+strata-live-profile@1.0.0 (uid 64e0000000000000000000f1)  ->  strata-live-profile@1.0.2 (uid 64e0000000000000000000f3)
 root       eada36c2e3fd -> afdc4d3e06d1   SAME CONTENT
 note       the roots differ only by the tag name a pack is pinned under: the same pack build
 consumers  1 -> 0 clusters

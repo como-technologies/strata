@@ -1,6 +1,6 @@
 $ strata compare addons/1.0.0/dev.json addons/1.0.0/prod.json
 platform-addons@1.0.0 (uid 64e2000000000000000000a1)  ->  platform-addons@1.0.0 (uid 64e3000000000000000000a1)
-root       74321d2697be -> 79b01f916234   SAME CONTENT
+root       b49f91f9df85 -> 24c6d1b1de2e   SAME CONTENT
 note       the roots differ only by the packUid Palette mints for each profile's manifest pack: the same content
 consumers  0 -> 0 clusters
 

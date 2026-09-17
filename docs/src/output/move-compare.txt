@@ -1,6 +1,6 @@
 $ strata compare releases/1.1.1/dev.json releases/1.1.1/prod.json
 aws-pxk@1.1.1 (uid 64e0000000000000000000c3)  ->  aws-pxk@1.1.1 (uid 64e1000000000000000000c3)
-root       088136c929bd -> 90e2c34c183d   CHANGED
+root       088136c929bd -> 30a4e5a6cd42   CHANGED
 consumers  0 -> 0 clusters
 
   variables unchanged

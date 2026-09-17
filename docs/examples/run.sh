@@ -300,7 +300,7 @@ TAG_2404='(.spec.published.packs[] | select(.name == "ubuntu-aws") | .tag) = "24
 TAG_LTS2404='(.spec.published.packs[] | select(.name == "ubuntu-aws") | .tag) = "LTS__24.04"'
 # The CSI pack from the OCI registry "Palette Registry", as run 20260917T150025Z recorded it
 OCI_CSI='(.spec.published.packs[] | select(.name == "csi-aws-ebs")) |= (.type = "oci"
-  | .registryUid = "64eaff453040297344bcad5d" | .packUid = "6aa41627144aaece1b2e2452"
+  | .registryUid = "64ec000000000000000000a1" | .packUid = "64ec000000000000000000b1"
   | .digest = "sha256:a746e14689085b14531566f9c9cfb2bc7716e96a394547ef50a1c52eab510c9e")'
 
 # the profile uids of the examples, in dev
@@ -483,15 +483,15 @@ show tag-verify 1 'strata verify releases/1.1.2/dev.json'
 
 chapter manifest-pack
 projects dev=$DEV prod=$PROD
-addons $DEV $ADDONS_DEV 6aab0a99da23ecd9ffe96c56 restricted
-addons $PROD $ADDONS_PROD 6aab35b4da23f189d7ff68d0 restricted
+addons $DEV $ADDONS_DEV 64e2000000000000000000d1 restricted
+addons $PROD $ADDONS_PROD 64e3000000000000000000d1 restricted
 quiet 'mkdir -p addons/1.0.0'
 show2 manifest-record 0 'PALETTE_PROJECT=dev strata snapshot platform-addons@1.0.0 -o addons/1.0.0/dev.json'
 show2 manifest-record 0 'PALETTE_PROJECT=prod strata snapshot platform-addons@1.0.0 -o addons/1.0.0/prod.json'
 show manifest-compare 1 'strata compare addons/1.0.0/dev.json addons/1.0.0/prod.json'
 show manifest-same 0 'strata same-release addons/1.0.0/dev.json addons/1.0.0/prod.json'
 find "$tenant/$PROD/v1/clusterprofiles" -mindepth 1 -delete
-addons $PROD $ADDONS_PROD 6aab35b4da23f189d7ff68d0 baseline
+addons $PROD $ADDONS_PROD 64e3000000000000000000d1 baseline
 quiet 'PALETTE_PROJECT=prod strata snapshot platform-addons@1.0.0 -o addons/1.0.0/prod.json'
 show manifest-different 1 'strata same-release addons/1.0.0/dev.json addons/1.0.0/prod.json'
 
@@ -539,7 +539,7 @@ chapter cluster-release PALETTE_PROJECT=dev
 projects dev=$DEV
 profile $DEV $A110 1.1.0 aws-pxk@1.1.0
 profile $DEV $A111 1.1.1 aws-pxk@1.1.1
-addons $DEV $ADDONS_DEV 6aab0a99da23ecd9ffe96c56 restricted
+addons $DEV $ADDONS_DEV 64e2000000000000000000d1 restricted
 cluster $DEV $PAYMENTS payments $A110 $ADDONS_DEV
 cluster $DEV $SEARCH search $A111
 cluster $DEV $LEDGER ledger $A110
