@@ -1720,6 +1720,9 @@ for a in "$@"; do
   prev="$a"
 done
 case "$*" in
+  *" 99 "*) echo "GraphQL: Could not resolve to an issue with the number of 99." >&2; exit 1 ;;
+  "issue close"*) echo "✓ Closed issue o/r#$3" >&2 ;;
+  "label create"*) echo "✓ Label \"$3\" created in o/r" >&2 ;;
   "issue list"*) cat "$FAKE_VERIFY/issues.json" 2>/dev/null || echo "[]" ;;
   "issue create"*) c=$(cat "$FAKE_VERIFY/created" 2>/dev/null || echo 40); c=$((c + 1)); echo "$c" > "$FAKE_VERIFY/created"
                    echo "https://github.com/o/r/issues/$c" ;;
@@ -1909,6 +1912,10 @@ fn verify_report_opens_one_issue_per_record_that_did_not_verify_and_closes_it_on
         err.contains("3 records: 1 unchanged, 1 drifted, 1 could not be checked; opened #41 for releases/b.json; opened #42 for releases/c.json"),
         "{err}"
     );
+    assert!(
+        !err.contains('✓'),
+        "gh's success messages stay out of the report: {err}"
+    );
 
     // second run: b still drifts, c verifies again, a keeps verifying and has an old issue; an
     // issue for a record not given stays open
@@ -1967,6 +1974,20 @@ fn verify_report_opens_one_issue_per_record_that_did_not_verify_and_closes_it_on
     );
     assert!(
         text(&o.stderr).contains("3 records: 2 unchanged, 1 drifted, 0 could not be checked; closed #7 for releases/a.json; updated #41 for releases/b.json; closed #42 for releases/c.json"),
+        "{}",
+        text(&o.stderr)
+    );
+    assert!(!text(&o.stderr).contains('✓'), "{}", text(&o.stderr));
+
+    // a host call that fails stops the script and shows what the host said
+    d.put(
+        "issues.json",
+        r#"[{"number":99,"title":"t","body":"<!-- strata-verify: releases/a.json -->\nold"}]"#,
+    );
+    let o = d.run(&["releases/*.json", "--repo", "o/r"]);
+    assert_ne!(o.status.code(), Some(0));
+    assert!(
+        text(&o.stderr).contains("Could not resolve to an issue with the number of 99"),
         "{}",
         text(&o.stderr)
     );

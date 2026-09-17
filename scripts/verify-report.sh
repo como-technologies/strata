@@ -14,7 +14,9 @@
 #
 # Exit 0 when every record verified, 1 when any drifted, 2 when any could not be checked or verify
 # checked nothing; the issues are handled first, so a scheduled job shows the state too. A host
-# call that fails stops the script with a nonzero status.
+# call that fails stops the script with a nonzero status and what the host said. GitHub lists a new
+# or closed issue a few seconds later, so two runs that close together can open a second issue for
+# one record: schedule runs minutes apart.
 #
 # Needs strata (or STRATA_BIN), jq, and gh logged in. Every host call is one of the functions
 # below, so another code host is another set of the same functions.
@@ -23,6 +25,12 @@ set -euo pipefail
 die() { echo "verify-report: $*" >&2; exit 2; }
 note() { echo "verify-report: $*" >&2; }
 
+# quietly COMMAND...: run a host call and keep what it prints to itself, unless it fails
+quietly() {
+  local out
+  out=$("$@" 2>&1) || { printf '%s\n' "$out" >&2; return 1; }
+}
+
 # ---- host: GitHub through gh -----------------------------------------------------------------
 host_repo() { gh repo view --json nameWithOwner | jq -r .nameWithOwner; }
 host_open_issues() {
@@ -30,8 +38,8 @@ host_open_issues() {
 }
 host_repo_labels() { gh label list --repo "$repo" --limit 1000 --json name | jq -r '.[].name'; }
 host_create_label() {
-  gh label create "$1" --repo "$repo" --color d93f0b \
-    --description "strata: a record that drifted or could not be checked" >/dev/null
+  quietly gh label create "$1" --repo "$repo" --color d93f0b \
+    --description "strata: a record that drifted or could not be checked"
 }
 # prints the new issue's number
 host_open_issue() {
@@ -39,8 +47,8 @@ host_open_issue() {
   url=$(gh issue create --repo "$repo" --title "$1" --body-file "$2" --label "$label")
   echo "${url##*/}"
 }
-host_update_issue() { gh issue edit "$1" --repo "$repo" --title "$2" --body-file "$3" >/dev/null; }
-host_close_issue() { gh issue close "$1" --repo "$repo" --comment "$2" >/dev/null; }
+host_update_issue() { quietly gh issue edit "$1" --repo "$repo" --title "$2" --body-file "$3"; }
+host_close_issue() { quietly gh issue close "$1" --repo "$repo" --comment "$2"; }
 
 # ---- arguments -------------------------------------------------------------------------------
 patterns=()
@@ -52,7 +60,7 @@ while [ $# -gt 0 ]; do
     --repo) repo=$2; shift 2 ;;
     --label) label=$2; shift 2 ;;
     --dry-run) dry=1; shift ;;
-    -h|--help) sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,22p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     --*) die "unknown option $1" ;;
     *) patterns+=("$1"); shift ;;
   esac

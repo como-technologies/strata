@@ -198,7 +198,9 @@ it), and leaves the issues of records it was not given alone. It exits like
 could not be checked, after the issues are handled. `--dry-run` prints each
 issue body and what it would do, without touching the host. The script needs
 `gh` logged in, `jq`, and the Palette key; the repository comes from `--repo`
-or from `gh`.
+or from `gh`. GitHub lists a new or closed issue about five seconds later, so
+two runs that close together can open a second issue for one record: schedule
+runs minutes apart.
 
 On GitHub Actions, call the reusable workflow from a scheduled workflow. The
 caller sets the schedule and needs `issues: write`:
