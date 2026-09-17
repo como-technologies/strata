@@ -43,8 +43,8 @@ version bump or a rename overwrote the version that the cluster runs. See
 ## What to expect
 
 - The ref is a profile uid, `<name>@<version>`, `<name>@latest`, or a profile
-  record. Strata uses the uid and the project of a record. A cluster ref is an
-  error: `profile-ref-required`.
+  record. Strata uses the uid and the project of a record. A cluster ref or a
+  pack ref is an error: `profile-ref-required`.
 - The names and the projects come from `status.inUseClusters` of the profile.
   Strata then reads each cluster in its own project, for its state and the
   version that its copy names.

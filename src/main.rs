@@ -100,11 +100,13 @@ const REFERENCE_HELP: &[(&str, &[(&str, &str)])] = &[
 #[command(
     name = TOOL_NAME,
     version,
-    about = "Record, compare, and check Palette cluster profile versions as releases",
-    long_about = "Record, compare, and check Palette cluster profile versions as releases.\n\n\
+    about = "Record, compare, and check Palette profile versions, clusters, and pack versions",
+    long_about = "Record, compare, and check what Palette holds: cluster profile versions, the \
+clusters that run them, and pack versions in a registry.\n\n\
 A published profile version is a release. Strata writes a release to a snapshot file. It compares \
 two releases layer by layer, and it makes sure that Palette still has the release that a file \
-records. A cluster runs a release, and strata reads a cluster in the same way.",
+records. A cluster runs a release, and strata reads a cluster in the same way. It reads a pack \
+version from its registry in the same way, so two pack versions compare like two releases.",
     override_usage = "strata <COMMAND>\n       strata <A> <B>"
 )]
 struct Cli {
@@ -706,7 +708,7 @@ fn expand_records(args: &[String]) -> Result<Vec<PathBuf>> {
 fn cmd_candidate(a: &CandidateArgs) -> Result<ExitCode> {
     let progress = progress(a.quiet);
     let reference = Ref::parse(&a.r#ref);
-    if let Ref::Cluster { .. } = reference {
+    if let Ref::Cluster { .. } | Ref::Pack { .. } = reference {
         return Err(Error::ProfileRefRequired {
             reference: a.r#ref.clone(),
         });

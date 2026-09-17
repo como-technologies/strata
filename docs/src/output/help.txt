@@ -1,7 +1,7 @@
 $ strata --help
-Record, compare, and check Palette cluster profile versions as releases.
+Record, compare, and check what Palette holds: cluster profile versions, the clusters that run them, and pack versions in a registry.
 
-A published profile version is a release. Strata writes a release to a snapshot file. It compares two releases layer by layer, and it makes sure that Palette still has the release that a file records. A cluster runs a release, and strata reads a cluster in the same way.
+A published profile version is a release. Strata writes a release to a snapshot file. It compares two releases layer by layer, and it makes sure that Palette still has the release that a file records. A cluster runs a release, and strata reads a cluster in the same way. It reads a pack version from its registry in the same way, so two pack versions compare like two releases.
 
 Usage: strata <COMMAND>
        strata <A> <B>

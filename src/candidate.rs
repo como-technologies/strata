@@ -61,7 +61,9 @@ impl Candidate {
     /// `snapshot --from-candidate` turns it back into the record's root while the registry still
     /// serves those pack versions. A cluster record is refused: it is not one profile version.
     pub fn from_snapshot(snap: &Snapshot) -> Result<Candidate> {
-        if snap.source.cluster.is_some() {
+        // a candidate describes a profile version to publish: a cluster holds a copy of one, and
+        // a pack is one layer of one, so neither makes a candidate
+        if snap.source.cluster.is_some() || snap.source.pack.is_some() {
             return Err(Error::ProfileRefRequired {
                 reference: snap.source.reference.clone(),
             });

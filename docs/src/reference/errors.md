@@ -22,7 +22,7 @@ the kind.
 | `not-json` | Palette answered with a body that is not JSON. | `path` |
 | `profile-not-found` | No profile version with this name and version in the scope. | `name`, `version` |
 | `cluster-profile-not-found` | The cluster runs no profile with this name. | `cluster`, `profile`, `applied` |
-| `profile-ref-required` | The command needs a profile, and got a cluster. | `reference` |
+| `profile-ref-required` | The command needs a profile, and got a cluster or a pack. | `reference` |
 | `candidate-invalid` | The candidate file has a problem. | `path` |
 | `pack-not-found` | The registry has no such pack version or tag. | `name`, `version`, `registry`, `tag` when given |
 | `registry-not-found` | No visible registry has this name. | `registry`, `available` |

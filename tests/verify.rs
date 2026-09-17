@@ -3278,6 +3278,16 @@ fn snapshot_pack(api: &MemoryApi, reference: &str) -> strata::Result<Snapshot> {
 }
 
 #[test]
+fn a_candidate_needs_a_profile_and_refuses_a_pack_record() {
+    let api = serve_registry(vec![], &[("reg-public", public_entity())]);
+    let pack = snapshot_pack(&api, "pack:csi-aws-ebs@1.65.0").unwrap();
+    // a pack is one layer, so a candidate built from it would name a profile that does not exist
+    let err = strata::candidate::Candidate::from_snapshot(&pack).unwrap_err();
+    assert!(matches!(err, Error::ProfileRefRequired { .. }), "{err}");
+    assert_eq!(err.kind(), "profile-ref-required");
+}
+
+#[test]
 fn comparing_two_pack_versions_says_what_changed_between_them() {
     let api = serve_registry(vec![], &[("reg-public", public_entity())]);
     let old = snapshot_pack(&api, "pack:csi-aws-ebs@1.63.1").unwrap();
