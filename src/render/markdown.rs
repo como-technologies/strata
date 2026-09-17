@@ -73,7 +73,13 @@ impl Renderer for MarkdownRenderer {
             .unwrap_or_default();
         o.push_str(&format!(
             "**Result:** {} · max impact: `{}` · packs: {} changed, {} added, {} removed, {} unchanged · variables: {}\n\n",
-            if d.same { "IDENTICAL" } else { "CHANGED" },
+            if d.same {
+                "IDENTICAL"
+            } else if d.same_content {
+                "SAME CONTENT"
+            } else {
+                "CHANGED"
+            },
             max_impact,
             s.packs_changed,
             s.packs_added,
@@ -102,7 +108,7 @@ impl Renderer for MarkdownRenderer {
                 Status::Unchanged => (" ", "unchanged".to_string()),
                 Status::Added => ("+", "ADDED".to_string()),
                 Status::Removed => ("-", "REMOVED".to_string()),
-                Status::Changed => ("~", plain_flags(pd)),
+                Status::Changed => ("~", plain_flags(pd).replace("->", "→")),
             };
             o.push_str(&format!(
                 "| `{mark}` | {} | `{}` | {} | {} | {} |\n",

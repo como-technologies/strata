@@ -34,8 +34,9 @@ pub struct Diff {
     /// True when the Merkle roots are equal: same release
     pub same: bool,
     /// True when the roots are equal, or differ only by the `packUid`s Palette mints for each
-    /// profile's manifest packs (`packs[].mintedUidOnly`): the same content. `same-release`
-    /// accepts such a pair.
+    /// profile's manifest packs (`packs[].mintedUidOnly`) and the tag names packs are pinned under
+    /// for the same build (`packs[].tagRenamed`): the same content. `same-release` accepts such a
+    /// pair.
     #[serde(default)]
     pub same_content: bool,
     /// True when both sides name the same profile uid and version but their roots differ: the
@@ -443,6 +444,13 @@ pub struct PackDiff {
     /// profiles with the same manifests carry different ones. The content is the same.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub minted_uid_only: bool,
+    /// True when `IDENTITY` moved only because the tag name differs: the same name, layer, type,
+    /// version, `packUid`, and `registryUid`, pinned under another of the registry's names for
+    /// that version, exact (`LTS__24.04`) or floating (`LTS__24.x`). Palette pins the `packUid`
+    /// when the profile is saved, so a cluster runs the same build, and the impact leaves the
+    /// rename out. `AUTHORED` and `UPSTREAM` still count.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub tag_renamed: bool,
     /// What the change does to clusters.
     pub impact: Impact,
     /// The values compared.
@@ -974,6 +982,7 @@ pub fn compute(a: &Snapshot, b: &Snapshot, generated_at: &str, verify: Option<Ve
                     authored: false,
                     params_changed: false,
                     minted_uid_only: false,
+                    tag_renamed: false,
                     impact: Impact {
                         level: ImpactLevel::None,
                         text: String::new(),
@@ -996,6 +1005,7 @@ pub fn compute(a: &Snapshot, b: &Snapshot, generated_at: &str, verify: Option<Ve
                     authored: false,
                     params_changed: false,
                     minted_uid_only: false,
+                    tag_renamed: false,
                     impact: Impact {
                         level: ImpactLevel::None,
                         text: String::new(),
@@ -1020,14 +1030,34 @@ pub fn compute(a: &Snapshot, b: &Snapshot, generated_at: &str, verify: Option<Ve
                 summary.identity_changes += usize::from(identity);
                 summary.upstream_changes += usize::from(upstream);
                 summary.authored_changes += usize::from(authored);
-                let imp = impact(
+                let tag_renamed = identity
+                    && x.tag != y.tag
+                    && (
+                        &x.name,
+                        &x.layer,
+                        &x.kind,
+                        &x.version,
+                        &x.pack_uid,
+                        &x.registry_uid,
+                    ) == (
+                        &y.name,
+                        &y.layer,
+                        &y.kind,
+                        &y.version,
+                        &y.pack_uid,
+                        &y.registry_uid,
+                    );
+                let mut imp = impact(
                     Layer::parse(&x.layer),
                     Flags {
-                        identity,
+                        identity: identity && !tag_renamed,
                         upstream,
                         authored,
                     },
                 );
+                if tag_renamed && imp.level == ImpactLevel::None {
+                    imp.text = "none (tag renamed, same pack build)".to_string();
+                }
                 if imp.level > summary.max_impact {
                     summary.max_impact = imp.level;
                 }
@@ -1050,6 +1080,7 @@ pub fn compute(a: &Snapshot, b: &Snapshot, generated_at: &str, verify: Option<Ve
                         && x.pack_uid != y.pack_uid
                         && (&x.name, &x.layer, &x.kind, &x.tag, &x.version)
                             == (&y.name, &y.layer, &y.kind, &y.tag, &y.version),
+                    tag_renamed,
                     impact: imp,
                     values: values_diff(x, y),
                     manifests: manifests_diff(x, y),
@@ -1082,9 +1113,11 @@ pub fn compute(a: &Snapshot, b: &Snapshot, generated_at: &str, verify: Option<Ve
     let same_content = a.root == b.root
         || (!variables_changed
             && !order_changed
-            && packs
-                .iter()
-                .all(|p| p.status == Status::Unchanged || p.minted_uid_only));
+            && packs.iter().all(|p| {
+                p.status == Status::Unchanged
+                    || p.minted_uid_only
+                    || (p.tag_renamed && !p.upstream && !p.authored)
+            }));
 
     Diff {
         schema: DIFF_SCHEMA.to_string(),

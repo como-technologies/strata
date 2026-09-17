@@ -258,9 +258,6 @@ run.
 
 ## Known limits
 
-- Two profiles that pin the same pack under different tag names, such as
-  `24.04` and `LTS__24.x`, differ in `IDENTITY`, and on the OS or Kubernetes
-  layer the report calls that a repave (#19).
 - The live example ran without the provider's `immutable-clusterprofiles`
   flag and changed only a version no cluster runs. What `cluster:<cluster>` and
   `verify` report when a version that clusters run is edited in place, or

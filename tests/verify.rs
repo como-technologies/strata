@@ -787,6 +787,11 @@ fn two_profiles_with_the_same_manifest_content_are_one_release_whatever_uid_pale
         text.contains("the roots differ only by the packUid Palette mints for each profile's manifest pack: the same content"),
         "{text}"
     );
+    assert!(
+        text.lines()
+            .any(|l| l.starts_with("root ") && l.ends_with("SAME CONTENT")),
+        "{text}"
+    );
 
     for policy in [Policy::Exact, Policy::RegistryMove] {
         let c = ops::same_release(
@@ -829,6 +834,206 @@ fn two_profiles_with_the_same_manifest_content_are_one_release_whatever_uid_pale
     let a = ops::snapshot_from_dir(&dir.path().join("a"), "a", "t0").unwrap();
     let a3 = ops::snapshot_from_dir(&dir.path().join("a3"), "a3", "t0").unwrap();
     assert!(!ops::compare(&a, &a3, "t1").same_content);
+}
+
+/// Fixture A with its `ubuntu-aws` pack changed by `edit` in the profile, saved as the raw
+/// directory `dir`; the pack's uid in the manifests listing follows the profile's `packUid`.
+fn with_os_pack(raw_root: &Path, dir: &str, edit: impl Fn(&mut Value)) -> Snapshot {
+    let (from, to) = (raw_root.join("a"), raw_root.join(dir));
+    fs::create_dir_all(&to).unwrap();
+    let mut profile = read(&from.join("profile.json"));
+    let mut uid = Value::Null;
+    for pack in profile["spec"]["published"]["packs"]
+        .as_array_mut()
+        .unwrap()
+    {
+        if pack["name"] == "ubuntu-aws" {
+            edit(pack);
+            uid = pack["packUid"].clone();
+        }
+    }
+    let mut manifests = read(&from.join("manifests.json"));
+    for pack in manifests["spec"]["packs"].as_array_mut().unwrap() {
+        if pack["spec"]["name"] == "ubuntu-aws" {
+            pack["metadata"]["uid"] = uid.clone();
+        }
+    }
+    for (name, doc) in [("profile.json", &profile), ("manifests.json", &manifests)] {
+        fs::write(to.join(name), serde_json::to_string_pretty(doc).unwrap()).unwrap();
+    }
+    fs::copy(from.join("variables.json"), to.join("variables.json")).unwrap();
+    ops::snapshot_from_dir(&to, dir, "t0").unwrap()
+}
+
+#[test]
+fn two_profiles_that_pin_one_pack_build_under_different_tag_names_are_the_same_content() {
+    use strata::diff::ImpactLevel;
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let a = ops::snapshot_from_dir(&dir.path().join("a"), "a", "t0").unwrap();
+
+    // the registry's other names for version 22.04: an exact tag and a floating one
+    for tag in ["LTS__22.04", "LTS__22.x"] {
+        let retagged = with_os_pack(dir.path(), tag, |p| p["tag"] = Value::from(tag));
+        let d = ops::compare(&a, &retagged, "t1");
+        assert!(!d.same, "the tag is part of IDENTITY, so the roots differ");
+        assert!(d.same_content, "and nothing else differs");
+        let os = d.packs.iter().find(|p| p.name == "ubuntu-aws").unwrap();
+        assert!(os.identity && os.tag_renamed, "{os:?}");
+        assert_eq!(os.impact.level, ImpactLevel::None);
+        assert_eq!(os.impact.text, "none (tag renamed, same pack build)");
+        assert_eq!(d.summary.max_impact, ImpactLevel::None);
+
+        let text = render::renderer(Format::Terminal, Paint::off(), false)
+            .render(&d, &a, &retagged, false)
+            .unwrap();
+        assert!(text.contains(&format!("tag 22.04 -> {tag}")), "{text}");
+        assert!(
+            text.lines()
+                .any(|l| l.starts_with("root ") && l.ends_with("SAME CONTENT")),
+            "{text}"
+        );
+        assert!(
+            text.contains(
+                "the roots differ only by the tag name a pack is pinned under: the same pack build"
+            ),
+            "{text}"
+        );
+        assert!(
+            text.contains("impact: none (tag renamed, same pack build)"),
+            "{text}"
+        );
+        assert!(!text.contains("repave"), "{text}");
+        let md = render::renderer(Format::Markdown, Paint::off(), false)
+            .render(&d, &a, &retagged, false)
+            .unwrap();
+        assert!(md.contains(&format!("tag 22.04 → {tag}")), "{md}");
+        assert!(md.contains("**Result:** SAME CONTENT"), "{md}");
+        let json: Value = serde_json::from_str(
+            &render::renderer(Format::Json, Paint::off(), true)
+                .render(&d, &a, &retagged, false)
+                .unwrap(),
+        )
+        .unwrap();
+        let os = json["packs"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|p| p["name"] == "ubuntu-aws")
+            .unwrap();
+        assert_eq!(os["tagRenamed"], true, "{os}");
+
+        for policy in [Policy::Exact, Policy::RegistryMove] {
+            let c = ops::same_release(
+                &[
+                    ("a.json".into(), a.clone()),
+                    ("retagged.json".into(), retagged.clone()),
+                ],
+                policy,
+                "t1",
+            );
+            assert!(c.same, "{:?}", c.pairs[0].reasons);
+            assert_eq!(c.pairs[0].status, PairStatus::SameContent);
+            assert!(c.pairs[0].reasons.is_empty());
+            assert_eq!(c.pairs[0].packs_retagged, 1);
+            let text = render::renderer(Format::Terminal, Paint::off(), false)
+                .render_chain(&c)
+                .unwrap();
+            assert!(
+                text.contains("1 pack pinned under another tag name, the same build"),
+                "{text}"
+            );
+        }
+    }
+
+    // a tag rename with a values change: the values set the impact, and the rename is no reason
+    let edited = with_os_pack(dir.path(), "retag-values", |p| {
+        p["tag"] = Value::from("LTS__22.04");
+        p["values"] = Value::from("kubeadmconfig:\n  preKubeadmCommands:\n  - echo strata\n");
+    });
+    let d = ops::compare(&a, &edited, "t1");
+    assert!(!d.same_content);
+    let os = d.packs.iter().find(|p| p.name == "ubuntu-aws").unwrap();
+    assert!(os.tag_renamed && os.authored, "{os:?}");
+    assert_eq!(os.impact.level, ImpactLevel::MayRepave);
+    let c = ops::same_release(
+        &[("a.json".into(), a.clone()), ("edited.json".into(), edited)],
+        Policy::Exact,
+        "t1",
+    );
+    assert_eq!(c.pairs[0].status, PairStatus::Different);
+    assert!(
+        c.pairs[0]
+            .reasons
+            .iter()
+            .any(|r| r.contains("os/ubuntu-aws") && r.contains("AUTHORED")),
+        "{:?}",
+        c.pairs[0].reasons
+    );
+    assert!(
+        c.pairs[0].reasons.iter().all(|r| !r.contains("tag")),
+        "a renamed tag is not a reason: {:?}",
+        c.pairs[0].reasons
+    );
+
+    // another build under another tag is still an IDENTITY change: a node repave
+    let other = with_os_pack(dir.path(), "other-build", |p| {
+        p["tag"] = Value::from("LTS__24.04");
+        p["version"] = Value::from("24.04");
+        p["packUid"] = Value::from("pk-os-2404");
+    });
+    let d = ops::compare(&a, &other, "t1");
+    assert!(!d.same_content);
+    let os = d.packs.iter().find(|p| p.name == "ubuntu-aws").unwrap();
+    assert!(os.identity && !os.tag_renamed, "{os:?}");
+    assert_eq!(os.impact.level, ImpactLevel::Repave);
+    let c = ops::same_release(
+        &[("a.json".into(), a.clone()), ("other.json".into(), other)],
+        Policy::Exact,
+        "t1",
+    );
+    assert!(
+        c.pairs[0]
+            .reasons
+            .iter()
+            .any(|r| r == "pack os/ubuntu-aws IDENTITY: version 22.04 -> 24.04"),
+        "{:?}",
+        c.pairs[0].reasons
+    );
+}
+
+#[test]
+fn verify_reports_a_tag_renamed_in_place_as_drift_with_no_node_impact() {
+    use strata::diff::ImpactLevel;
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let recorded = ops::snapshot_from_dir(&dir.path().join("a"), "a", "t0").unwrap();
+    // the published version under A's uid now pins the same build under another tag name
+    with_os_pack(dir.path(), "retagged", |p| {
+        p["tag"] = Value::from("LTS__22.04")
+    });
+    let palette = Palette::new(serve(MemoryApi::new(), dir.path(), "retagged", UID_A));
+    let v = ops::verify(&recorded, &palette, "t1", &Progress::silent()).unwrap();
+    assert!(!v.unchanged, "an edit to a published version is drift");
+    let ver = v.diff.verify.as_ref().unwrap();
+    assert_eq!(ver.status, VerifyStatus::Drifted);
+    assert!(v.diff.same_content);
+    assert_eq!(v.diff.summary.max_impact, ImpactLevel::None);
+    let text = render::renderer(Format::Terminal, Paint::off(), false)
+        .render(&v.diff, &recorded, &v.live, false)
+        .unwrap();
+    assert!(text.contains("tag 22.04 -> LTS__22.04"), "{text}");
+    assert!(
+        text.contains(
+            "the roots differ only by the tag name a pack is pinned under: the same pack build"
+        ),
+        "{text}"
+    );
+    assert!(!text.contains("repave"), "{text}");
+    let verdict = render::renderer(Format::Terminal, Paint::off(), false)
+        .verdict(ver, &recorded.source)
+        .unwrap();
+    assert!(verdict.starts_with("DRIFT: "), "{verdict}");
 }
 
 #[test]

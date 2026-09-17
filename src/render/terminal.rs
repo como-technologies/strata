@@ -4,8 +4,8 @@ use super::{
     chain_verdict, cluster_value, consumer_count, consumers_heading, counts_line, dash,
     edited_in_place_note, entry_error, list_count, list_scope, overwritten_in_place_notes,
     pack_version, pair_detail, pair_word, profiles_overwritten_sentence, record_detail,
-    record_label, same_content_note, short, show, subject, traits_suffix, values_changed_suffix,
-    variable_lines, version_display, Renderer, VarLine,
+    record_label, same_content_note, short, show, subject, tag_rename, traits_suffix,
+    values_changed_suffix, variable_lines, version_display, Renderer, VarLine,
 };
 use crate::color::Paint;
 use crate::diff::{
@@ -127,7 +127,9 @@ fn cluster_value_line(c: &ClusterValueChange, p: &Paint) -> String {
 
 fn flags(pd: &PackDiff, p: &Paint) -> String {
     let mut f = Vec::new();
-    if pd.identity {
+    if let Some(t) = tag_rename(pd) {
+        f.push(p.blue(&t));
+    } else if pd.identity {
         f.push(p.blue("IDENTITY"));
     }
     if pd.upstream {
@@ -195,7 +197,7 @@ fn packdetail(pd: &PackDiff, p: &Paint, out: &mut Vec<String>) {
     for m in &pd.manifests {
         out.push(format!("      {} manifest {}", opmark(m.op, p), m.name));
     }
-    if pd.impact.level != ImpactLevel::None {
+    if pd.impact.level != ImpactLevel::None || !pd.impact.text.is_empty() {
         out.push(format!(
             "      impact: {}",
             paint_impact(pd.impact.level, &pd.impact.text, p)
@@ -220,6 +222,8 @@ impl Renderer for TerminalRenderer {
             p.dim(short(&d.root_b)),
             if d.same {
                 p.bgreen("IDENTICAL")
+            } else if d.same_content {
+                p.bgreen("SAME CONTENT")
             } else {
                 p.bred("CHANGED")
             }

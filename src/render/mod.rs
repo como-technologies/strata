@@ -120,6 +120,12 @@ pub(crate) fn pair_word(status: PairStatus) -> &'static str {
 pub(crate) fn pair_detail(p: &Pair) -> String {
     match p.status {
         PairStatus::Identical => format!("root {}", short(&p.root_a)),
+        PairStatus::SameContent if p.packs_retagged > 0 => format!(
+            "root {} -> {}, {} pinned under another tag name, the same build",
+            short(&p.root_a),
+            short(&p.root_b),
+            list_count(p.packs_retagged, "pack", None)
+        ),
         PairStatus::SameContent => format!(
             "root {} -> {}, only the packUid minted for each manifest pack differs",
             short(&p.root_a),
@@ -228,12 +234,30 @@ pub(crate) fn overwritten_in_place_notes(d: &Diff) -> Vec<String> {
         .collect()
 }
 
-/// `the roots differ only by the packUid Palette mints for each profile's manifest pack: the same
-/// content`, for a diff whose roots differ in nothing else.
+/// `the roots differ only by the tag name a pack is pinned under: the same pack build`, or by the
+/// packUid Palette mints for each profile's manifest pack, for a diff whose roots differ in
+/// nothing else.
 pub(crate) fn same_content_note(d: &Diff) -> Option<String> {
-    (!d.same && d.same_content).then(|| {
-        "the roots differ only by the packUid Palette mints for each profile's manifest pack: the same content".to_string()
-    })
+    if d.same || !d.same_content {
+        return None;
+    }
+    let retagged = d.packs.iter().any(|p| p.tag_renamed);
+    let minted = d.packs.iter().any(|p| p.minted_uid_only);
+    Some(match (retagged, minted) {
+        (true, false) => {
+            "the roots differ only by the tag name a pack is pinned under: the same pack build"
+        }
+        (true, true) => "the roots differ only by the tag name a pack is pinned under and the packUid Palette mints for each profile's manifest pack: the same content",
+        _ => "the roots differ only by the packUid Palette mints for each profile's manifest pack: the same content",
+    }.to_string())
+}
+
+/// `tag 24.04 -> LTS__24.04`, for a pack whose identity moved only by its tag name.
+pub(crate) fn tag_rename(pd: &PackDiff) -> Option<String> {
+    match (pd.tag_renamed, &pd.a, &pd.b) {
+        (true, Some(a), Some(b)) => Some(format!("tag {} -> {}", a.tag, b.tag)),
+        _ => None,
+    }
 }
 
 /// `both sides are name@version (uid u): the version was edited in place`, for a diff whose sides
@@ -354,10 +378,14 @@ pub(crate) fn show(v: &Value) -> String {
     }
 }
 
-/// `IDENTITY UPSTREAM AUTHORED`, only the flags that are set, uncolored.
+/// `IDENTITY UPSTREAM AUTHORED`, only the flags that are set, uncolored; a renamed tag in place of
+/// `IDENTITY`.
 pub(crate) fn plain_flags(pd: &PackDiff) -> String {
     let mut f = Vec::new();
-    if pd.identity {
+    let rename = tag_rename(pd);
+    if let Some(t) = &rename {
+        f.push(t.as_str());
+    } else if pd.identity {
         f.push("IDENTITY");
     }
     if pd.upstream {

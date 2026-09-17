@@ -35,7 +35,10 @@ consumers  0 -> 2 clusters
 
 The first line names the two sides and their uids. A side taken from a
 cluster reads `name@version on cluster <name>` and shows the cluster uid. The second line shows
-the two roots and `IDENTICAL` or `CHANGED`. When both sides name the same
+the two roots and `IDENTICAL`, `SAME CONTENT`, or `CHANGED`. `SAME CONTENT` means
+the roots differ only by the `packUid` Palette mints for each profile's
+manifest packs, or by the tag name a pack is pinned under for the same build,
+and a `note` line names which. When both sides name the same
 profile uid and version and their roots still differ, a `note` line follows:
 `both sides are <name>@<version> (uid <uid>): the version was edited in place`.
 Between two clusters it adds `or changed on a cluster`. When the sides name one profile
@@ -52,8 +55,10 @@ sides are clusters and they give their variables different values, a
 that a sensitive variable was added or removed, never that its value changed.
 Values are run-time input, not the release, so they never change `IDENTICAL`.
 Then comes one line per pack, in layer order.
-A changed pack shows its flags. Below it, indented, come the upstream digest,
-the changed values, the manifest changes, and the impact.
+A changed pack shows its flags, with `tag <a> -> <b>` in place of `IDENTITY`
+when only the tag name moved for the same build. Below it, indented, come the
+upstream digest, the changed values, the manifest changes, and the impact; a
+renamed tag alone has the impact `none (tag renamed, same pack build)`.
 
 `--full` adds a unified diff of the raw values and of each changed manifest.
 
@@ -74,8 +79,8 @@ Strata obeys the `NO_COLOR` and `CLICOLOR_FORCE` environment variables. With
 
 - a header table with the two uids, the two roots, the consumer counts, and
   the fetch times
-- a result line with `IDENTICAL` or `CHANGED`, the maximum impact, the pack
-  counts, and the variables state
+- a result line with `IDENTICAL`, `SAME CONTENT`, or `CHANGED`, the maximum
+  impact, the pack counts, and the variables state
 - one table row per pack with layer, name, version, flags, and impact
 - one collapsible `diff` block for the variables, with the same lines as
   the terminal report, and one for the cluster values when two clusters give
@@ -94,8 +99,9 @@ model can read it without these pages:
 - `legend` explains the three flags, each `status`, each `op`, and each
   impact level in plain sentences.
 - `sameContent` is true when the roots are equal, or differ only by the
-  `packUid` Palette mints for each profile's manifest packs; the terminal
-  and markdown reports then add a note. `same` stays false in the second
+  `packUid` Palette mints for each profile's manifest packs and the tag names
+  packs are pinned under for the same build; the terminal and markdown reports
+  then say `SAME CONTENT` and add a note. `same` stays false in the second
   case, and `compare` still exits 1: the roots differ.
 - `editedInPlace` is true when both sides name the same profile uid and
   version and their roots differ.
@@ -125,7 +131,9 @@ model can read it without these pages:
 - `packs[]` has one entry per pack key on either side, sorted by layer and
   then by name. Each entry has `status`, the booleans `identity`,
   `upstream`, and `authored`, `paramsChanged`, `mintedUidOnly` when the pack
-  comes from no registry and only its minted `packUid` differs, and `impact`
+  comes from no registry and only its minted `packUid` differs, `tagRenamed`
+  when only the tag name differs for the same name, layer, type, version,
+  `packUid`, and `registryUid`, and `impact`
   with `level` and `text`. The sides `a` and `b` hold tag, version, packUid, registryUid, the
   upstream digest and its source, the values hash, and the node hash.
   `values` holds `changed`, `parseable`, the three counts, and `diff[]`.
@@ -218,7 +226,11 @@ by the `packUid` Palette mints for each profile's manifest packs: that pair is
 `SAME CONTENT` under either policy, because a manifest pack comes from no
 registry and its content is the same (`docs/model.md`, "A version that
 clusters run"). A minted `packUid` is never a reason; a manifest pack whose
-content changed is `DIFFERENT` and names the `AUTHORED` change.
+content changed is `DIFFERENT` and names the `AUTHORED` change. A pair whose
+roots differ only by the tag names packs are pinned under for the same build
+is `SAME CONTENT` too, and its line counts them, `1 pack pinned under another
+tag name, the same build` (`docs/model.md`, "A tag name for the same build").
+A renamed tag is never a reason.
 `--allow registry-move` also passes a pair
 whose only difference is packs re-pinned from another registry: the same
 tag, version, values, manifests, and params, with variables unchanged. The
@@ -233,7 +245,7 @@ so the reader can decide to allow it. A reason names the pack and, for an
 `same`, `summary` with `pairs`, `passed`, and `failed`, `records[]` with
 each label, name, version, uid, project, and root, and `pairs[]` with `a`,
 `b`, `status` (`identical`, `same-content`, `registry-move`, `different`), the two roots,
-`packsRepinned`, and `reasons[]`. `strata schema chain` prints its JSON
+`packsRepinned`, `packsRetagged`, and `reasons[]`. `strata schema chain` prints its JSON
 Schema.
 
 ## The consumers report

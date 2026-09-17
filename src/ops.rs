@@ -532,6 +532,9 @@ pub struct Pair {
     pub root_b: String,
     /// Packs re-pinned from another registry with nothing else changed.
     pub packs_repinned: usize,
+    /// Packs pinned under another tag name for the same build, with nothing else changed.
+    #[serde(default)]
+    pub packs_retagged: usize,
     /// Why the pair is not the same release, one sentence per difference; empty when it passed.
     /// Under the exact policy a registry move is listed too, so the reader can decide to allow it.
     pub reasons: Vec<String>,
@@ -627,12 +630,18 @@ fn identity_detail(x: &Pack, y: &Pack) -> String {
 }
 
 /// The differences between two records that the policy does not accept, plus the number of
-/// clean registry re-pins.
-fn pair_reasons(d: &Diff, a: &Snapshot, b: &Snapshot, policy: Policy) -> (Vec<String>, usize) {
+/// clean registry re-pins and of packs pinned under another tag name with nothing else changed.
+fn pair_reasons(
+    d: &Diff,
+    a: &Snapshot,
+    b: &Snapshot,
+    policy: Policy,
+) -> (Vec<String>, usize, usize) {
     let pa: HashMap<&str, &Pack> = a.packs.iter().map(|p| (p.key.as_str(), p)).collect();
     let pb: HashMap<&str, &Pack> = b.packs.iter().map(|p| (p.key.as_str(), p)).collect();
     let mut reasons = Vec::new();
     let mut repinned = 0;
+    let mut retagged = 0;
     if d.variables.changed {
         reasons.push("variables changed".to_string());
     }
@@ -656,7 +665,11 @@ fn pair_reasons(d: &Diff, a: &Snapshot, b: &Snapshot, policy: Policy) -> (Vec<St
                     && x.registry_uid != y.registry_uid
                     && x.tag == y.tag
                     && x.version == y.version;
-                if pd.identity && !minted {
+                // the same build under another of the registry's names for its version
+                if pd.tag_renamed && !pd.upstream && !pd.authored {
+                    retagged += 1;
+                }
+                if pd.identity && !minted && !pd.tag_renamed {
                     if moved {
                         if !pd.authored {
                             repinned += 1;
@@ -678,7 +691,7 @@ fn pair_reasons(d: &Diff, a: &Snapshot, b: &Snapshot, policy: Policy) -> (Vec<St
                 if pd.authored {
                     reasons.push(format!("pack {} AUTHORED: {}", pd.key, authored_detail(pd)));
                 }
-                if pd.upstream && !pd.identity {
+                if pd.upstream && (!pd.identity || pd.tag_renamed) {
                     reasons.push(format!(
                         "pack {} UPSTREAM in the same registry: {} -> {}",
                         pd.key, x.hash.upstream_raw, y.hash.upstream_raw
@@ -693,7 +706,7 @@ fn pair_reasons(d: &Diff, a: &Snapshot, b: &Snapshot, policy: Policy) -> (Vec<St
     if reasons.is_empty() && !d.same_content && policy == Policy::Exact {
         reasons.push("roots differ".to_string());
     }
-    (reasons, repinned)
+    (reasons, repinned, retagged)
 }
 
 /// Compare consecutive records, in the order given, and decide whether they are one release
@@ -704,7 +717,7 @@ pub fn same_release(records: &[(String, Snapshot)], policy: Policy, generated_at
         .map(|w| {
             let ((la, a), (lb, b)) = (&w[0], &w[1]);
             let d = diff::compute(a, b, generated_at, None);
-            let (reasons, packs_repinned) = pair_reasons(&d, a, b, policy);
+            let (reasons, packs_repinned, packs_retagged) = pair_reasons(&d, a, b, policy);
             let status = if d.same {
                 PairStatus::Identical
             } else if d.same_content {
@@ -721,6 +734,7 @@ pub fn same_release(records: &[(String, Snapshot)], policy: Policy, generated_at
                 root_a: a.root.clone(),
                 root_b: b.root.clone(),
                 packs_repinned,
+                packs_retagged,
                 reasons,
             }
         })
