@@ -173,3 +173,16 @@ variable "move_registry_name" {
   type        = string
   default     = "Palette Registry"
 }
+
+# examples/live/tag-only.sh's variables (#19).
+variable "tag_only_versions" {
+  description = "Release versions that differ from 1.0.0 only in the OS pack's tag name, as version => tag"
+  type        = map(string)
+  default     = {}
+}
+
+variable "cluster_release_profile_uid" {
+  description = "Pin the clusters to this release profile uid instead of 1.0.0"
+  type        = string
+  default     = ""
+}

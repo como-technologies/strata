@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The writes to Palette that examples/live/in-place.sh makes outside Terraform.
+# The writes to Palette that the live example's scripts make outside Terraform.
 #
 #   api.sh edit PROFILE_UID FROM TO
 #       Replace the text FROM with TO in the one pack values or manifest that contains it, in a
@@ -8,6 +8,10 @@
 #       through the API, which Palette accepts whatever the Terraform provider's
 #       immutable-clusterprofiles flag says. Exit 2 when no place, or more than one, contains
 #       FROM.
+#   api.sh retag PROFILE_UID PACK FROM_TAG TO_TAG
+#       Rename the tag of one pack in a published profile version, in place, keeping its pack uid,
+#       values, and manifests: PUT the version, then publish it. Exit 2 when the version has no
+#       such pack under FROM_TAG.
 #   api.sh apply CLUSTER_UID [--keep-notification]
 #       Accept the waiting update of every profile a cluster runs: PUT the cluster's profiles with
 #       the uids it already has, each pack's values and manifests read from its profile, with
@@ -57,24 +61,23 @@ call() {
   rm -f "$out"
 }
 
-edit() {
-  local uid=${1:-} from=${2:-} to=${3:-} tmp
-  [ -n "$uid" ] && [ -n "$from" ] || die "usage: api.sh edit PROFILE_UID FROM TO"
-  tmp=$(mktemp -d); trap 'rm -rf "${tmp:-}"' RETURN EXIT
-  call GET "/v1/clusterprofiles/$uid" > "$tmp/profile" || exit 2
-  call GET "/v1/clusterprofiles/$uid/packs/manifests" > "$tmp/manifests" || exit 2
-  # the manifests with their uid and content, by pack name. The PUT keeps each uid: a manifest
-  # sent without one replaces the old manifest, and a cluster that runs a copy of the old one
-  # drops that copy when its update is accepted.
+# fetch_published UID DIR: DIR/profile, and DIR/contents with each pack's manifests, uid and
+# content included. A PUT keeps each manifest uid: a manifest sent without one replaces the old
+# manifest, and a cluster that runs a copy of the old one drops that copy when its update is
+# accepted.
+fetch_published() {
+  call GET "/v1/clusterprofiles/$1" > "$2/profile" || exit 2
+  call GET "/v1/clusterprofiles/$1/packs/manifests" > "$2/manifests" || exit 2
   jq '[(.spec.packs // [])[] | {key: .spec.name, value: [(.spec.manifests // [])[] | {name, uid, content}]}]
-      | from_entries' "$tmp/manifests" > "$tmp/contents"
-  local matches
-  matches=$(jq --arg from "$from" --slurpfile c "$tmp/contents" '
-      [.spec.published.packs[] | (.values // ""), ($c[0][.name] // [] | .[].content)]
-      | map(select(contains($from))) | length' "$tmp/profile")
-  [ "$matches" = 1 ] || die "$matches values and manifests of $uid contain the text to replace; want exactly 1"
-  jq --arg from "$from" --arg to "$to" --slurpfile c "$tmp/contents" '
-    def swap: split($from) | join($to);
+      | from_entries' "$2/manifests" > "$2/contents"
+}
+
+# body DIR PACK_FILTER [JQ ARG...]: the PUT body for DIR/profile, each pack passed through
+# PACK_FILTER, which sees the pack with its manifests from DIR/contents
+body() {
+  local dir=$1 filter=$2
+  shift 2
+  jq "$@" --slurpfile c "$dir/contents" "
     {
       metadata: {name: .metadata.name, uid: .metadata.uid},
       spec: {
@@ -84,15 +87,46 @@ edit() {
           cloudType: .spec.published.cloudType,
           packs: [.spec.published.packs[] | {
             name, tag, type, layer, registryUid, uid: .packUid,
-            values: ((.values // "") | swap),
-            manifests: [($c[0][.name] // [])[] | {name, uid, content: (.content // "" | swap)}]
-          }]
+            values: (.values // \"\"),
+            manifests: (\$c[0][.name] // [])
+          } | $filter]
         }
       }
-    }' "$tmp/profile" > "$tmp/body"
-  call PUT "/v1/clusterprofiles/$uid" "$tmp/body" > /dev/null || exit 2
-  call PATCH "/v1/clusterprofiles/$uid/publish" > /dev/null || exit 2
+    }" "$dir/profile"
+}
+
+# put_published UID DIR: PUT DIR/body as the published version, then publish it
+put_published() {
+  call PUT "/v1/clusterprofiles/$1" "$2/body" > /dev/null || exit 2
+  call PATCH "/v1/clusterprofiles/$1/publish" > /dev/null || exit 2
+}
+
+edit() {
+  local uid=${1:-} from=${2:-} to=${3:-} tmp matches
+  [ -n "$uid" ] && [ -n "$from" ] || die "usage: api.sh edit PROFILE_UID FROM TO"
+  tmp=$(mktemp -d); trap 'rm -rf "${tmp:-}"' RETURN EXIT
+  fetch_published "$uid" "$tmp"
+  matches=$(jq --arg from "$from" --slurpfile c "$tmp/contents" '
+      [.spec.published.packs[] | (.values // ""), ($c[0][.name] // [] | .[].content)]
+      | map(select(contains($from))) | length' "$tmp/profile")
+  [ "$matches" = 1 ] || die "$matches values and manifests of $uid contain the text to replace; want exactly 1"
+  body "$tmp" '.values |= (split($from) | join($to)) | .manifests |= map(.content = ((.content // "") | split($from) | join($to)))' \
+    --arg from "$from" --arg to "$to" > "$tmp/body"
+  put_published "$uid" "$tmp"
   echo "edited $uid in place: '$from' -> '$to'"
+}
+
+retag() {
+  local uid=${1:-} pack=${2:-} from=${3:-} to=${4:-} tmp
+  [ -n "$to" ] || die "usage: api.sh retag PROFILE_UID PACK FROM_TAG TO_TAG"
+  tmp=$(mktemp -d); trap 'rm -rf "${tmp:-}"' RETURN EXIT
+  fetch_published "$uid" "$tmp"
+  jq -e --arg p "$pack" --arg t "$from" '[.spec.published.packs[] | select(.name == $p and .tag == $t)] | length == 1' \
+    "$tmp/profile" > /dev/null || die "no pack $pack with tag $from in $uid"
+  body "$tmp" 'if .name == $p and .tag == $from then .tag = $to else . end' \
+    --arg p "$pack" --arg from "$from" --arg to "$to" > "$tmp/body"
+  put_published "$uid" "$tmp"
+  echo "retagged $pack in $uid in place: $from -> $to"
 }
 
 # profiles_body CLUSTER DIR [EXCLUDE_UID] -> DIR/body: the PUT body for the cluster's profiles
@@ -174,6 +208,7 @@ delete_named() {
 
 case "${1:-}" in
   edit) shift; edit "$@" ;;
+  retag) shift; retag "$@" ;;
   apply) shift; apply "$@" ;;
   detach) shift; detach "$@" ;;
   delete) shift; delete "$@" ;;

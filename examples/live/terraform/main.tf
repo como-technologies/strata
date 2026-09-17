@@ -39,6 +39,8 @@ locals {
   addon_manifest      = var.edit_addon_in_place ? replace(local.addon_manifest_base, "edited: \"no\"", "edited: \"yes\"") : local.addon_manifest_base
   # The add-on profile version the clusters run: a pinned uid, else the resource's current one.
   cluster_addon_uid = var.cluster_addon_profile_uid != "" ? var.cluster_addon_profile_uid : spectrocloud_cluster_profile.addon.id
+  # The release profile version the clusters run: a pinned uid, else 1.0.0.
+  cluster_release_uid = var.cluster_release_profile_uid != "" ? var.cluster_release_profile_uid : spectrocloud_cluster_profile.release.id
 
   # The registry-move profile: the release packs, with the CSI pack from the OCI registry when
   # move_csi_to_oci is set.
@@ -128,6 +130,34 @@ resource "spectrocloud_cluster_profile" "next" {
   }
 
   depends_on = [spectrocloud_cluster_profile.release]
+
+  lifecycle {
+    create_before_destroy = true
+  }
+}
+
+# Versions of the release that differ from 1.0.0 only in the tag name the OS pack is pinned under,
+# for examples/live/tag-only.sh (#19): the same pack uid, from the registry's other names for it.
+resource "spectrocloud_cluster_profile" "tagged" {
+  for_each     = var.tag_only_versions
+  name         = local.profile_name
+  version      = each.key
+  description  = "strata live example: the release with the OS pack pinned under the tag ${each.value}"
+  cloud        = "aws"
+  type         = "cluster"
+  skip_destroy = var.immutable_profiles || var.keep_profile_versions
+
+  dynamic "pack" {
+    for_each = local.release_packs
+    content {
+      name   = pack.value.name
+      tag    = pack.value.name == data.spectrocloud_pack.os.name ? each.value : pack.value.tag
+      uid    = pack.value.uid
+      values = pack.value.values
+    }
+  }
+
+  depends_on = [spectrocloud_cluster_profile.next]
 
   lifecycle {
     create_before_destroy = true
@@ -264,7 +294,7 @@ resource "spectrocloud_cluster_aws" "cluster" {
   tags             = local.tags
 
   cluster_profile {
-    id = spectrocloud_cluster_profile.release.id
+    id = local.cluster_release_uid
   }
 
   cluster_profile {

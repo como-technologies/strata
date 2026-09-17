@@ -1517,3 +1517,74 @@ fn tenant_sh_cluster_shows_the_latest_events_of_a_cluster_that_is_not_settled() 
         "the three latest events, oldest first, show a deletion that is moving"
     );
 }
+
+#[test]
+fn api_sh_retag_renames_one_pack_tag_in_place_and_keeps_everything_else() {
+    let dir = tempfile::tempdir().unwrap();
+    let (bin, routes) = (dir.path().join("bin"), dir.path().join("routes"));
+    for d in [&bin, &routes] {
+        std::fs::create_dir(d).unwrap();
+    }
+    executable(&bin.join("curl"), FAKE_API_CURL);
+    std::fs::write(
+        routes.join("v1_clusterprofiles_prof-1"),
+        r#"{"metadata":{"name":"release","uid":"prof-1"},"spec":{"version":"1.0.2","published":{
+            "type":"cluster","cloudType":"aws","packs":[
+            {"name":"ubuntu-aws","tag":"LTS__24.04","type":"spectro","layer":"os","packUid":"pk-os","registryUid":"reg-1","values":"os: values\n"},
+            {"name":"kubernetes","tag":"1.36.2","type":"spectro","layer":"k8s","packUid":"pk-k8s","registryUid":"reg-1","values":"k8s: values\n"}]}}}"#,
+    )
+    .unwrap();
+    std::fs::write(
+        routes.join("v1_clusterprofiles_prof-1_packs_manifests"),
+        r#"{"spec":{"packs":[{"spec":{"name":"ubuntu-aws","manifests":[]}},{"spec":{"name":"kubernetes","manifests":[]}}]}}"#,
+    )
+    .unwrap();
+    std::fs::write(routes.join("v1_clusterprofiles_prof-1_publish"), "{}").unwrap();
+    let run = |args: &[&str]| {
+        Command::new("bash")
+            .arg(live_script("api.sh"))
+            .args(args)
+            .env(
+                "PATH",
+                format!("{}:{}", bin.display(), std::env::var("PATH").unwrap()),
+            )
+            .env("HOME", dir.path())
+            .env("PALETTE_API_KEY", "k")
+            .env("PALETTE_PROJECT_UID", "p-1")
+            .env("FAKE_ROUTES", &routes)
+            .env("FAKE_LOG", dir.path().join("curl.log"))
+            .output()
+            .unwrap()
+    };
+    let o = run(&["retag", "prof-1", "ubuntu-aws", "LTS__24.04", "24.04"]);
+    assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
+    let put: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(routes.join("sent/PUT_v1_clusterprofiles_prof-1")).unwrap(),
+    )
+    .unwrap();
+    let packs = &put["spec"]["template"]["packs"];
+    assert_eq!(
+        (
+            packs[0]["name"].as_str(),
+            packs[0]["tag"].as_str(),
+            packs[0]["uid"].as_str()
+        ),
+        (Some("ubuntu-aws"), Some("24.04"), Some("pk-os")),
+        "the tag changes and the pack uid stays: {put}"
+    );
+    assert_eq!(packs[0]["values"], "os: values\n");
+    assert_eq!(packs[1]["tag"], "1.36.2", "other packs keep their tags");
+    let calls = std::fs::read_to_string(dir.path().join("curl.log")).unwrap();
+    assert!(
+        calls.contains("PATCH /v1/clusterprofiles/prof-1/publish"),
+        "{calls}"
+    );
+
+    let o = run(&["retag", "prof-1", "ubuntu-aws", "9.9", "24.04"]);
+    assert_eq!(o.status.code(), Some(2));
+    assert!(
+        text(&o.stderr).contains("no pack ubuntu-aws with tag 9.9"),
+        "{}",
+        text(&o.stderr)
+    );
+}

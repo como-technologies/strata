@@ -49,3 +49,11 @@ output "profile_names" {
 output "cluster_names" {
   value = { a = var.cluster_name, b = var.second_cluster_name }
 }
+
+output "tagged_profile_uids" {
+  value = { for version, p in spectrocloud_cluster_profile.tagged : version => p.id }
+}
+
+output "region" {
+  value = var.region
+}
