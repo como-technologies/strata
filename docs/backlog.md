@@ -787,3 +787,29 @@ One rule stays. In 0.30.1, `resourceClusterProfileDelete` still reads `skip_dest
 - [x] `plan-no-change` expects exit 0 with the flag off and on
 - [x] Every script that applies holds `skip_destroy` for its flag before its first apply, and `examples/live/README.md` states why
 - [x] `registry-move.sh`, `drift-report.sh off` and `on`, and `in-place.sh off` and `on` pass from the baseline and restore it, and `examples/live/README.md` records the runs
+
+## Publish the book to GitHub Pages
+
+labels: ci
+
+### Background
+
+The book in `docs/src/` builds with `just docs`, and the `docs` job of `.github/workflows/ci.yml` builds it on each push. A reader needs a checkout, `mdbook`, `mdbook-mermaid`, and `mdbook-gruvbox` to read it. A Pages site removes that, as `palette-edge-libvirt` does with its own `docs.yml` workflow.
+
+One condition holds the work: this repository is private, and on a GitHub plan below Enterprise a Pages site of a private repository is public. The book holds no uid and no name of a real tenant, but it does hold the pack data, the run ids, and the behavior of the tool. So the organization must first decide who can read the site.
+
+### Plan
+
+1. Find which Pages visibility the plan of the organization gives: a public site, or a site for the members of the organization.
+2. Add `.github/workflows/docs.yml`: build with `just docs`, upload `docs/book`, and deploy with `actions/deploy-pages` on each push to main.
+3. Enable Pages one time in Settings, Pages, with the source GitHub Actions.
+4. Put the address in `README.md` under Documentation, and in the footer of `strata --help`.
+5. Keep `just docs-check` and `just docs-lint` in the `docs` job, so the published book is the output of the build.
+
+### Acceptance criteria
+
+- [ ] The organization states who can read a Pages site of this repository
+- [ ] `.github/workflows/docs.yml` publishes `docs/book` on each push to main
+- [ ] The book opens at its address, with the gruvbox theme and the mermaid diagrams
+- [ ] `README.md` and `strata --help` name the address
+- [ ] No page of the book holds a uid or a name of a real tenant
