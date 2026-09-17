@@ -753,5 +753,5 @@ labels: robustness
 ### Acceptance criteria
 
 - [x] Only the fetched pack data under `examples/packs/` is tracked; `git status` stays clean after `just examples`
-- [ ] CI runs `just examples`
+- [x] CI runs `just examples`
 - [x] Every doc that points at a built example file says how to build it
