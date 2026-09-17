@@ -204,7 +204,7 @@ pass it on, so every step talks to the same Palette.
 
    `just live-session` runs `verify.sh` and these three in that order under
    one `runs/<UTC time>/` directory, and stops at the first that fails. The
-   recorded runs below come from it.
+   recorded runs below name the session or run each comes from.
 
    `in-place.sh` is billable: it creates cluster `barney`, which
    takes about 20 minutes, and deletes it at the end, which takes 10 to 30.
@@ -465,19 +465,25 @@ What the first attempts ran into, now built into the example:
 
 ## The registry-move run
 
-`registry-move.sh` in session `20260917T031126Z`, with the flag on. All 16
-checks passed. The bump re-pinned `csi-aws-ebs` 1.65.0 from `Public Repo` to
-the OCI registry `Palette Registry`, which changed its type from `spectro` to
-`oci`, its registry uid, its pack uid, and its digest, and nothing else
-(`docs/model.md`, "A real registry move"). `same-release --allow
-registry-move` passed the pair as `registry-move` with 1 pack re-pinned, and
-failed it after an in-place edit of 1.0.1's values, naming only
-`pack csi/csi-aws-ebs AUTHORED: charts.aws-ebs-csi-driver.storageClasses[name=spectro-storage-class].reclaimPolicy`. The run
-started from the baseline and ended at it (`baseline-after`).
+`registry-move.sh` run `20260917T150025Z`, with the flag on and provider
+0.30.1. All 16 checks passed. `hold_versions` changed only `skip_destroy` on
+the four profiles (`0 added, 4 changed, 0 destroyed`), after which a flag-on
+plan changed nothing (`plan-no-change`). Every apply ran without `-target`.
+The bump re-pinned `csi-aws-ebs` 1.65.0 from `Public Repo` to the OCI
+registry `Palette Registry`, which changed its type from `spectro` to `oci`,
+its registry uid, its pack uid, and its digest, and nothing else
+(`docs/model.md`, "A real registry move"); the flag kept 1.0.0
+(`move1-kept`). `same-release --allow registry-move` passed the pair as
+`registry-move` with 1 pack re-pinned, and failed it after an in-place edit
+of 1.0.1's values, naming only
+`pack csi/csi-aws-ebs AUTHORED: charts.aws-ebs-csi-driver.storageClasses[name=spectro-storage-class].reclaimPolicy`.
+`apply_baseline` removed the move profile from the state and put
+`skip_destroy` back to false (`0 added, 4 changed, 1 destroyed`), the API
+deleted both versions, and the run ended at the baseline (`baseline-after`).
 
 | result | check | expected exit | got | what it shows |
 |---|---|---|---|---|
-| PASS | `plan-no-change` | 1 | 1 | provider 0.29.7 refuses a flag-on plan that changes nothing (lib.sh) |
+| PASS | `plan-no-change` | 0 | 0 | Terraform plans no change once skip_destroy is held for the flag |
 | PASS | `move1` | 0 | 0 | record 1.0.0, every pack from the pack registry |
 | PASS | `move-new-uid` | 1 | 1 | the flag made 1.0.1 a new profile version |
 | PASS | `move1-kept` | 0 | 0 | 1.0.0 is still there, unchanged |
