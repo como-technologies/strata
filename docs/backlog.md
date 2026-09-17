@@ -672,7 +672,7 @@ labels: feature
 
 - [x] `verify` on a cluster record exits 1 and names each applied profile whose uid now names another version than the cluster's copy, or no longer exists, even when the cluster itself is unchanged
 - [x] A cluster whose profile uids still name their versions verifies as before, at one extra request per applied profile
-- [ ] Offline tests cover the three cases, and the live runs show exit 1 with the flag off and 0 with it on after the bump
+- [x] Offline tests cover the three cases, and the live runs show exit 1 with the flag off and 0 with it on after the bump
 
 ## Make the live example a controlled experiment
 
