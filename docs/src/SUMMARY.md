@@ -37,6 +37,7 @@
 - [Find the profiles that carry a pack](./use-cases/find-a-pack.md)
 - [Retire a version](./use-cases/retire.md)
 - [A team pins each environment](./use-cases/fan-out.md)
+- [A publish fans out to what pins it](./use-cases/publish-fan-out.md)
 
 # Automation
 

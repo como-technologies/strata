@@ -21,6 +21,7 @@ behavior of Palette, it links to the live run that shows that behavior.
 | A pack version has a security problem | [Find the profiles that carry a pack](./find-a-pack.md) |
 | You want to delete an old version | [Retire a version](./retire.md) |
 | A team of developers pins each environment, and merge requests cross | [A team pins each environment](./fan-out.md) |
+| A pack or profile publish opens a bump merge request on everything that pins it | [A publish fans out to what pins it](./publish-fan-out.md) |
 
 ## The examples
 

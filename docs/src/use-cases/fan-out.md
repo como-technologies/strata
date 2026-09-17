@@ -148,3 +148,7 @@ lists the root of each environment answers "what is where" in one line each.
 Both hosts run the same three scripts, so a team that moves between them keeps
 the reports, the markers and the exit codes. See
 [GitLab CI](../automation/gitlab.md).
+
+A team that keeps one repository per pack, per profile and per cluster asks the
+same questions one level up, where a publish opens the merge requests instead of
+a person. See [A publish fans out to what pins it](./publish-fan-out.md).
