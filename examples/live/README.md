@@ -284,10 +284,14 @@ These rules come from the observed teardowns of the same kind of cluster:
 - Judge progress by `aws-inventory.sh`, not by elapsed time, and only 0 on
   every line means AWS is empty. The instances, NAT gateway, and load balancer
   go first; the security groups, route tables, subnets, internet gateway, and
-  VPC go last, some after a retry, and the state turns `Deleted` with them. On
-  2026-09-17 cluster `barney` took 15.5 minutes from the delete to Palette's
-  `Cluster barney has been deleted` event, and its last AWS steps came in the
-  final 90 seconds. Before that day `aws-inventory.sh` counted only instances,
+  VPC go last, some after a retry. Palette then logs the event `Cluster <name>
+  has been deleted`, but the state stays `Deleting` for several minutes more,
+  and Terraform waits for the state. On 2026-09-17 cluster B (`barney`, run
+  `20260917T031126Z`) was deleted at 03:33:11 UTC; its VPC went and the event
+  came at 03:44:39, with `aws-inventory.sh` at 0 on every line; the state
+  turned `Deleted` and Terraform finished at 03:52, 19 minutes after the
+  delete, with nothing done by hand. A force delete in that gap does no harm
+  once the inventory is empty, and gains a few minutes at most. Before that day `aws-inventory.sh` counted only instances,
   NAT gateways, VPCs, elastic IPs, volumes, and the load balancer, so it could
   read 0 while the network was still being deleted, and a healthy deletion
   looked stuck.
