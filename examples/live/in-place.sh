@@ -234,8 +234,11 @@ if stage 4 "undo the edit and bump the add-on version"; then
   check a4-still-a3 0 "#27: the bump left cluster A as it was" -- "$strata" compare a3-addon.json a4-addon.json
   check consumers-old 1 "#27: both clusters are still consumers of the first add-on uid" -- "$strata" consumers "$AD1" --json
   if [ "$mode" = on ] && [ -n "${OFF_RUN:-}" ]; then
-    check clone-carried-nothing ? "#27: the flag's clone equals the legacy bump of the same configuration" -- \
+    check clone-carried-nothing 1 "#27: the flag's clone is not the same release as the legacy bump: Palette mints the manifest pack's uid for each profile" -- \
       "$strata" same-release "$OFF_RUN/addon-new4.json" addon-new4.json
+    check clone-same-content 0 "#27: the clone has the values, manifests, and variables of the legacy bump of the same configuration" -- \
+      jq -e -n --slurpfile a "$OFF_RUN/addon-new4.json" --slurpfile b addon-new4.json \
+        '[$a[0].packs[] | .hash.authored] == [$b[0].packs[] | .hash.authored] and $a[0].variablesHash == $b[0].variablesHash'
   fi
 fi
 
