@@ -121,7 +121,13 @@ fn the_playground_serves_the_tenant_of_one_chapter() {
 
     // the commands of the book run against it, by name, with no key of a real tenant
     let o = Command::new(env!("CARGO_BIN_EXE_strata"))
-        .args(["compare", "aws-stack@1.0.0", "aws-stack@1.1.0", "--quiet", "--no-color"])
+        .args([
+            "compare",
+            "aws-stack@1.0.0",
+            "aws-stack@1.1.0",
+            "--quiet",
+            "--no-color",
+        ])
         .env("PALETTE_API", &api)
         .env("PALETTE_API_KEY", "docs-example-key")
         .env("PALETTE_PROJECT_UID", &uid)
