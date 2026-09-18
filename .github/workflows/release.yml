@@ -81,3 +81,25 @@ jobs:
         run: |
           gh release create "${{ github.ref_name }}" --repo "${{ github.repository }}" \
             --title "${{ github.ref_name }}" --generate-notes dist/*
+
+  check:
+    name: install what was published
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      # the release as a consumer gets it: the installer asks the release for each file it needs,
+      # so a release that lacks one fails here instead of in somebody's pipeline
+      - uses: actions/checkout@v4
+      - name: install the tag that was just published
+        env:
+          STRATA_TOKEN: ${{ github.token }}
+          STRATA_REPO: ${{ github.repository }}
+        run: |
+          scripts/ci/install-strata.sh --version "${{ github.ref_name }}" --dir .published
+      - name: run the binary and each script it installed
+        run: |
+          .published/strata --version
+          for s in pr-comment.sh merge-gate.sh verify-report.sh install-strata.sh; do
+            echo "== $s"
+            .published/"$s" --help > /dev/null
+          done
