@@ -569,10 +569,7 @@ fn cmd_snapshot(a: &SnapshotArgs) -> Result<ExitCode> {
     let text = snap.to_json(a.compact)?;
     match &a.output {
         Some(path) => {
-            std::fs::write(path, text).map_err(|source| Error::Io {
-                path: path.clone(),
-                source,
-            })?;
+            ops::write_file(path, &text)?;
             progress.note(&format!(
                 "wrote {} (root {})",
                 path.display(),

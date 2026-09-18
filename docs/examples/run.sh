@@ -471,7 +471,6 @@ projects dev=$DEV
 profile $DEV $A110 1.1.0 aws-stack@1.1.0
 profile $DEV $A111 1.1.1 aws-stack@1.1.1
 cluster $DEV $PAYMENTS payments $A111
-quiet 'mkdir -p releases/1.1.1 runs'
 show2 snapshot-profile 0 'strata snapshot aws-stack@1.1.1 -o releases/1.1.1/dev.json'
 show snapshot-record 0 "jq '{root, source: (.source | {ref, uid, projectUid, name, version, template, fetchedAt}), packs: [.packs[] | {key, version, node: .hash.node}]}' releases/1.1.1/dev.json"
 show2 snapshot-latest 0 'strata snapshot aws-stack@latest -o latest.json'
@@ -516,7 +515,7 @@ chapter review PALETTE_PROJECT=dev
 projects dev=$DEV
 registries $DEV
 profile $DEV $A100 1.0.0 aws-stack@1.0.0
-quiet 'mkdir -p releases/1.0.0 releases/1.1.0 && strata snapshot aws-stack@1.0.0 -o releases/1.0.0/dev.json'
+quiet 'strata snapshot aws-stack@1.0.0 -o releases/1.0.0/dev.json'
 cat > "$dir/aws-stack.yaml" <<'YAML'
 name: aws-stack
 version: 1.1.0
@@ -552,7 +551,7 @@ projects dev=$DEV
 registries $DEV
 profile $DEV $A100 1.0.0 aws-stack@1.0.0
 # main pins aws-stack@1.0.0, and a branch changes the record: the profile was edited in place
-quiet 'mkdir -p releases && git init -q -b main . && git remote add origin .'
+quiet 'git init -q -b main . && git remote add origin .'
 quiet 'strata snapshot aws-stack@1.0.0 -o releases/dev.json &&
   git add releases && git commit -qm "dev pins aws-stack@1.0.0"'
 quiet 'git checkout -q -b keep-the-volumes'
@@ -586,7 +585,7 @@ registries $DEV
 profile $DEV $A100 1.0.0 aws-stack@1.0.0
 profile $DEV $A110 1.1.0 aws-stack@1.1.0
 # dev ran 1.0.0, and then 1.1.0
-quiet 'mkdir -p releases && git init -q -b main . && git remote add origin .'
+quiet 'git init -q -b main . && git remote add origin .'
 quiet 'strata snapshot aws-stack@1.0.0 -o releases/dev.json &&
   git add releases && git commit -qm "dev pins aws-stack@1.0.0"'
 quiet 'strata snapshot aws-stack@1.1.0 -o releases/dev.json &&
@@ -607,7 +606,6 @@ chapter promote
 projects dev=$DEV prod=$PROD
 profile $DEV $A111 1.1.1 aws-stack@1.1.1
 profile $PROD $A111_PROD 1.1.1 aws-stack@1.1.1 "$RETAIN"
-quiet 'mkdir -p releases/1.1.1'
 show2 promote-record 0 'PALETTE_PROJECT=dev strata snapshot aws-stack@1.1.1 -o releases/1.1.1/dev.json'
 show2 promote-record 0 'PALETTE_PROJECT=prod strata snapshot aws-stack@1.1.1 -o releases/1.1.1/prod.json'
 show promote-different 1 'strata same-release releases/1.1.1/dev.json releases/1.1.1/prod.json'
@@ -622,7 +620,6 @@ chapter registry-move
 projects dev=$DEV prod=$PROD
 profile $DEV $A111 1.1.1 aws-stack@1.1.1
 profile $PROD $A111_PROD 1.1.1 aws-stack@1.1.1 "$OCI_CSI"
-quiet 'mkdir -p releases/1.1.1'
 quiet 'PALETTE_PROJECT=dev strata snapshot aws-stack@1.1.1 -o releases/1.1.1/dev.json'
 quiet 'PALETTE_PROJECT=prod strata snapshot aws-stack@1.1.1 -o releases/1.1.1/prod.json'
 show move-exact 1 'strata same-release releases/1.1.1/dev.json releases/1.1.1/prod.json'
@@ -641,7 +638,7 @@ profile $DEV $A112 1.1.2 aws-stack@1.1.1 "$TAG_2404"
 show tag-compare 1 'strata compare aws-stack@1.1.1 aws-stack@1.1.2'
 show tag-same 0 'strata same-release aws-stack@1.1.1 aws-stack@1.1.2'
 show tag-json 1 "strata compare aws-stack@1.1.1 aws-stack@1.1.2 --json | jq '{same, sameContent, maxImpact: .summary.maxImpact, renamed: [.packs[] | select(.tagRenamed) | .name]}'"
-quiet 'mkdir -p releases/1.1.2 && strata snapshot aws-stack@1.1.2 -o releases/1.1.2/dev.json'
+quiet 'strata snapshot aws-stack@1.1.2 -o releases/1.1.2/dev.json'
 edit $DEV $A112 "$TAG_LTS2404"
 show tag-verify 1 'strata verify releases/1.1.2/dev.json'
 
@@ -663,7 +660,6 @@ chapter edited-in-place PALETTE_PROJECT=dev
 projects dev=$DEV
 profile $DEV $A111 1.1.1 aws-stack@1.1.1
 cluster $DEV $PAYMENTS payments $A111
-quiet 'mkdir -p releases/1.1.1 runs'
 show2 edited-record 0 'strata snapshot aws-stack@1.1.1 -o releases/1.1.1/dev.json'
 show2 edited-record 0 'strata snapshot cluster:payments -o runs/payments.json'
 show edited-verify-ok 0 'strata verify releases/1.1.1/dev.json'
@@ -683,7 +679,6 @@ chapter overwritten PALETTE_PROJECT=dev
 projects dev=$DEV
 profile $DEV $A111 1.1.1 aws-stack@1.1.1
 cluster $DEV $PAYMENTS payments $A111
-quiet 'mkdir -p releases/1.1.1 runs'
 quiet 'strata snapshot aws-stack@1.1.1 -o releases/1.1.1/dev.json'
 quiet 'strata snapshot cluster:payments -o runs/payments.json'
 edit $DEV $A111 ".spec.version = \"1.2.0\" | $RETAIN"
@@ -708,7 +703,6 @@ cluster $DEV $PAYMENTS payments $A110 $ADDONS_DEV
 cluster $DEV $SEARCH search $A111
 cluster $DEV $LEDGER ledger $A110
 on_cluster $DEV $LEDGER "(.spec.clusterProfileTemplates[].packs[] | select(.name == \"csi-aws-ebs\") | .values) |= sub(\"reclaimPolicy: Delete\"; \"reclaimPolicy: Retain\")"
-quiet 'mkdir -p releases/1.1.0 runs'
 quiet 'strata snapshot aws-stack@1.1.0 -o releases/1.1.0/dev.json'
 show cluster-applied 0 'strata list clusters --applied'
 show cluster-identical 0 'strata compare releases/1.1.0/dev.json cluster:payments/aws-stack'
@@ -724,7 +718,7 @@ profile $DEV $A111 1.1.1 aws-stack@1.1.1
 cluster $DEV $PAYMENTS payments $A111 -- platform_owner=team-payments
 cluster $DEV $SEARCH search $A111 -- platform_owner=team-search
 show values-compare 0 'strata compare cluster:payments cluster:search'
-quiet 'mkdir -p runs && strata snapshot cluster:payments -o runs/payments.json'
+quiet 'strata snapshot cluster:payments -o runs/payments.json'
 show values-record 0 'jq .source.cluster.variables runs/payments.json'
 set_value $DEV $PAYMENTS platform_owner team-platform
 show values-verify 0 'strata verify runs/payments.json'

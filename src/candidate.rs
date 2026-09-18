@@ -127,7 +127,7 @@ pub fn write(candidate: &Candidate, path: &Path, files_dir: Option<&Path>) -> Re
             let pack = file_name(&layer.name);
             if let Some(values) = layer.values.take() {
                 let file = dir.join("values").join(format!("{pack}.yaml"));
-                write_file(&file, &values)?;
+                crate::ops::write_file(&file, &values)?;
                 layer.values_file = Some(reference(&base, &file)?);
             }
             for m in &mut layer.manifests {
@@ -136,29 +136,18 @@ pub fn write(candidate: &Candidate, path: &Path, files_dir: Option<&Path>) -> Re
                         .join("manifests")
                         .join(&pack)
                         .join(format!("{}.yaml", file_name(&m.name)));
-                    write_file(&file, &content)?;
+                    crate::ops::write_file(&file, &content)?;
                     m.content_file = Some(reference(&base, &file)?);
                 }
             }
         }
     }
-    write_file(path, &to_yaml(&c)?)
+    crate::ops::write_file(path, &to_yaml(&c)?)
 }
 
 /// A name made safe as one path segment.
 fn file_name(name: &str) -> String {
     name.replace(['/', '\\'], "_")
-}
-
-fn write_file(path: &Path, text: &str) -> Result<()> {
-    let io = |source| Error::Io {
-        path: path.to_path_buf(),
-        source,
-    };
-    if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
-        std::fs::create_dir_all(parent).map_err(io)?;
-    }
-    std::fs::write(path, text).map_err(io)
 }
 
 /// `to` as a path relative to the directory `from`, with `/` separators.

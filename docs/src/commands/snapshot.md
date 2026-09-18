@@ -81,6 +81,8 @@ snapshot at tenant scope.
 
 - Exit `0`, or `2` on an error.
 - Without `-o`, the snapshot goes to standard output.
+- `-o releases/1.1.0/dev.json` makes the directory that the path names, so a
+  release directory needs no `mkdir` first.
 - When a profile version has no published template, strata reads its draft.
   `source.template` names the one that it read: `published`, `draft`, `applied`
   for a cluster, or `candidate`.

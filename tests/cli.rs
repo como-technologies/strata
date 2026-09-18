@@ -123,6 +123,26 @@ fn reordered_yaml_gives_the_same_root() {
 }
 
 #[test]
+fn an_output_path_makes_the_directory_it_names() {
+    let fx = fixtures();
+    let dir = tempfile::tempdir().unwrap();
+    let out = dir.path().join("runs/2026/payments.json");
+    let r = run(&[
+        "snapshot",
+        "--from-raw",
+        fx.raw.join("b").to_str().unwrap(),
+        "-o",
+        out.to_str().unwrap(),
+    ]);
+    assert_eq!(r.code, 0, "{}{}", r.out, r.err);
+    assert!(
+        out.is_file(),
+        "a record goes where it is asked for, with no mkdir first"
+    );
+    assert!(r.err.contains("wrote") || r.err.is_empty(), "{}", r.err);
+}
+
+#[test]
 fn a_command_name_that_is_not_first_says_so_instead_of_failing_as_a_compare() {
     let fx = fixtures();
     let r = run(&["strata", "consumers", "aws-stack@1.2.0"]);

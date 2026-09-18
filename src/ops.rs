@@ -117,6 +117,19 @@ pub fn snapshot_from_dir(dir: &Path, reference: &str, fetched_at: &str) -> Resul
     Ok(Snapshot::from_raw(&raw, reference, fetched_at)?.with_project(raw.project_uid.as_deref()))
 }
 
+/// Write `text` to `path`, creating the directory it names when that directory does not exist.
+/// Every file strata writes goes through here, so `-o releases/1.2.0/dev.json` needs no `mkdir`.
+pub fn write_file(path: &Path, text: &str) -> Result<()> {
+    let io = |source| Error::Io {
+        path: path.to_path_buf(),
+        source,
+    };
+    if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
+        std::fs::create_dir_all(parent).map_err(io)?;
+    }
+    std::fs::write(path, text).map_err(io)
+}
+
 /// Compare two snapshots.
 pub fn compare(a: &Snapshot, b: &Snapshot, generated_at: &str) -> Diff {
     diff::compute(a, b, generated_at, None)
