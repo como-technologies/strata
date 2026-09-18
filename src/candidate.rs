@@ -356,8 +356,14 @@ pub fn load(path: &Path) -> Result<LoadedCandidate> {
 
 /// Every version of `name` the pack listing returns, across registries. The listing caps `limit`
 /// at 100, so this pages until it has them all.
-pub(crate) fn versions_of<A: PaletteApi>(palette: &Palette<A>, name: &str) -> Result<Vec<Value>> {
-    let mut out: Vec<Value> = Vec::new();
+/// Read `/v1/packs?filters=spec.name=<name>` and give each entry to `each`. Palette serves this
+/// listing 100 entries at a time, so one pack name can take several requests. `each` returns false
+/// to stop the walk.
+fn each_pack_named<A: PaletteApi>(
+    palette: &Palette<A>,
+    name: &str,
+    mut each: impl FnMut(Value) -> bool,
+) -> Result<()> {
     let mut offset = 0;
     loop {
         let page = palette.api().get_json(&format!(
@@ -370,8 +376,8 @@ pub(crate) fn versions_of<A: PaletteApi>(palette: &Palette<A>, name: &str) -> Re
             .unwrap_or_default();
         let n = items.len();
         for it in items {
-            if text(&it, "/spec/name").as_deref() == Some(name) {
-                out.push(it);
+            if !each(it) {
+                return Ok(());
             }
         }
         offset += n;
@@ -380,9 +386,20 @@ pub(crate) fn versions_of<A: PaletteApi>(palette: &Palette<A>, name: &str) -> Re
             .and_then(Value::as_u64)
             .unwrap_or(0) as usize;
         if n < 100 || offset >= total {
-            return Ok(out);
+            return Ok(());
         }
     }
+}
+
+pub(crate) fn versions_of<A: PaletteApi>(palette: &Palette<A>, name: &str) -> Result<Vec<Value>> {
+    let mut out: Vec<Value> = Vec::new();
+    each_pack_named(palette, name, |it| {
+        if text(&it, "/spec/name").as_deref() == Some(name) {
+            out.push(it);
+        }
+        true
+    })?;
+    Ok(out)
 }
 
 /// The registries this key can see, name and uid, in the order Palette lists them.
@@ -555,33 +572,17 @@ fn find_version<A: PaletteApi>(
     version: &str,
     registry: &str,
 ) -> Result<Option<Value>> {
-    let mut offset = 0;
-    loop {
-        let page = palette.api().get_json(&format!(
-            "/v1/packs?filters=spec.name={name}&limit=100&offset={offset}"
-        ))?;
-        let items = page
-            .get("items")
-            .and_then(Value::as_array)
-            .cloned()
-            .unwrap_or_default();
-        let found = items.iter().find(|it| {
-            text(it, "/spec/name").as_deref() == Some(name)
-                && text(it, "/spec/registryUid").as_deref() == Some(registry)
-                && text(it, "/spec/version").as_deref() == Some(version)
-        });
-        if let Some(it) = found {
-            return Ok(Some(it.clone()));
+    let mut found = None;
+    each_pack_named(palette, name, |it| {
+        let hit = text(&it, "/spec/name").as_deref() == Some(name)
+            && text(&it, "/spec/registryUid").as_deref() == Some(registry)
+            && text(&it, "/spec/version").as_deref() == Some(version);
+        if hit {
+            found = Some(it);
         }
-        offset += items.len();
-        let total = page
-            .pointer("/listmeta/count")
-            .and_then(Value::as_u64)
-            .unwrap_or(0) as usize;
-        if items.len() < 100 || offset >= total {
-            return Ok(None);
-        }
-    }
+        !hit
+    })?;
+    Ok(found)
 }
 
 /// Look each layer's pack up in its registry and build the three documents a published profile
@@ -607,16 +608,7 @@ pub fn resolve<A: PaletteApi>(
             RegistryRef::Uid(u) => u.clone(),
             RegistryRef::Name(n) => {
                 if names.is_none() {
-                    let listing = palette.api().get_json("/v1/registries/metadata")?;
-                    names = Some(
-                        listing
-                            .get("items")
-                            .and_then(Value::as_array)
-                            .into_iter()
-                            .flatten()
-                            .filter_map(|it| Some((text(it, "/name")?, text(it, "/uid")?)))
-                            .collect(),
-                    );
+                    names = Some(registries(palette)?);
                 }
                 let visible = names.as_deref().unwrap_or_default();
                 visible
