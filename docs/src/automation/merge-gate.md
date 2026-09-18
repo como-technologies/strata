@@ -146,7 +146,7 @@ jobs:
 | Input | Required | Function |
 | --- | --- | --- |
 | `records` | yes | The records, or patterns, in the checkout of the caller. |
-| `strata-version` | yes | The strata release, for example `v0.6.0`. |
+| `strata-version` | yes | The strata release, a tag of this repository. |
 | `verify` | no | `false` leaves the verify check out. Default `true`. |
 | `rollback-label` | no | The label that allows a backwards pin. Default `rollback`. |
 | `palette-api` | no | A self-hosted Palette address. |

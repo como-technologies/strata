@@ -79,7 +79,7 @@ jobs:
 | Input | Required | Function |
 | --- | --- | --- |
 | `records` | yes | Files or patterns, separated by spaces or new lines. Strata expands the patterns. |
-| `strata-version` | yes | The strata release, for example `v0.6.0`. |
+| `strata-version` | yes | The strata release, a tag of this repository. |
 | `label` | no | The label of the issues. Default `strata-drift`. |
 | `palette-api` | no | The address of a self-hosted Palette. |
 

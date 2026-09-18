@@ -64,7 +64,7 @@ jobs:
 | Input | Required | Function |
 | --- | --- | --- |
 | `a`, `b` | yes | The two refs, in the checkout of the caller. |
-| `strata-version` | yes | The strata release, for example `v0.6.0`. |
+| `strata-version` | yes | The strata release, a tag of this repository. |
 | `label` | no | The label. Default `repave`. |
 | `threshold` | no | The impact that earns the label. Default `repave`. |
 

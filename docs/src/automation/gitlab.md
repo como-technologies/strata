@@ -63,7 +63,7 @@ export STRATA_BIN=$PWD/.strata/strata
 ```
 
 Each release carries the binary for four targets, `SHA256SUMS`, and the four
-scripts, so one download gives a job everything. Use **v0.6.0** or later: it is
+scripts, so one download gives a job everything. Use **v0.5.2** or later: it is
 the first release with all four. `v0.5.1` carries three of them and no
 `merge-gate.sh`, and `v0.5.0` carries none, so an older pipeline checks this
 repository out at the tag and runs the scripts from `scripts/`. The installer

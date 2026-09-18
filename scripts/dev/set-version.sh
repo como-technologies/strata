@@ -11,6 +11,12 @@
 # It refuses when a file it must rewrite already has uncommitted changes, so the commit it writes
 # is the version and nothing else.
 #
+# It rewrites the version only where the version is meant to follow this repository: the manifest,
+# the badge, an install command, a pinned workflow ref, and the variables the drop-ins set. Prose
+# that names a version names it for a reason -- "use v0.5.2 or later: it is the first release with
+# all four scripts" is a fact about v0.5.2, not about the version now -- so free text is never
+# rewritten, whatever version it holds.
+#
 # Recorded evidence is never touched, because it says which build produced a result:
 #   examples/live/runs/                   the raw output of each live run
 #   docs/src/development/live-runs.md     the page that reports those runs
@@ -64,10 +70,24 @@ if [ ${#dirty[@]} -gt 0 ]; then
   exit 1
 fi
 
+# the contexts the version follows, and nothing else
 for f in "${files[@]}"; do
-  # v<old> first, so the tag form keeps its v
-  sed -i "s/v${old}/v${new}/g; s/${old}/${new}/g" "$f"
-  echo "set-version: $f"
+  before=$(cat "$f")
+  sed -i \
+    -e "s/^version = \"${old}\"$/version = \"${new}\"/" \
+    -e "s|badge/version-${old}-blue|badge/version-${new}-blue|g" \
+    -e "s/v=v${old}\b/v=v${new}/g" \
+    -e "s/--version v${old}\b/--version v${new}/g" \
+    -e "s/@v${old}\b/@v${new}/g" \
+    -e "s/strata-version: v${old}\b/strata-version: v${new}/g" \
+    -e "s/^\( *\)STRATA_VERSION: v${old}\b/\1STRATA_VERSION: v${new}/g" \
+    -e "s/tag = \"v${old}\"/tag = \"v${new}\"/g" \
+    "$f"
+  if [ "$before" = "$(cat "$f")" ]; then
+    echo "set-version: $f names $old, and in no context this command rewrites; read it" >&2
+  else
+    echo "set-version: $f"
+  fi
 done
 
 # Cargo.lock carries the version of this crate; cargo writes it
