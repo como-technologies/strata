@@ -22,7 +22,7 @@ on:
         default: ""
         type: string
       strata-version:
-        description: The strata release to use, for example v0.5.1
+        description: The strata release to use, for example v0.5.2
         required: true
         type: string
     secrets:

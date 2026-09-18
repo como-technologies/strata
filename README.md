@@ -42,7 +42,7 @@ Run `strata --help` for the list, and `strata <command> --help` for the options.
 ## Install
 
 ```bash
-v=v0.5.1; t=x86_64-unknown-linux-musl
+v=v0.5.2; t=x86_64-unknown-linux-musl
 gh release download $v --repo como-technologies/strata --pattern strata-$t --pattern SHA256SUMS
 sha256sum --check --ignore-missing SHA256SUMS
 chmod +x strata-$t && sudo mv strata-$t /usr/local/bin/strata

@@ -5,7 +5,7 @@
 #   include:
 #     - local: .gitlab/strata.yml      # or a remote: URL, or a component
 #   variables:
-#     STRATA_VERSION: v0.5.1          # a release that carries the scripts, v0.5.1 on
+#     STRATA_VERSION: v0.5.2          # a release that carries the scripts, v0.5.2 on
 #     STRATA_A: releases/dev.json      # the record the target branch has
 #     STRATA_B: candidate.yaml         # what this merge request proposes
 #     STRATA_RECORDS: "releases/**/*.json"
@@ -21,7 +21,7 @@
 # merge request settings, so the merge button waits for strata-merge-gate.
 
 variables:
-  STRATA_VERSION: v0.5.1
+  STRATA_VERSION: v0.5.2
   STRATA_REPO: como-technologies/strata
   STRATA_LABEL: repave
   STRATA_THRESHOLD: repave

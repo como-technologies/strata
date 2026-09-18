@@ -51,11 +51,11 @@ permissions:
   pull-requests: write
 jobs:
   strata:
-    uses: como-technologies/strata/.github/workflows/comment.yml@v0.5.1
+    uses: como-technologies/strata/.github/workflows/comment.yml@v0.5.2
     with:
       a: releases/1.1.0/dev.json
       b: releases/1.1.1/dev.json
-      strata-version: v0.5.1
+      strata-version: v0.5.2
     secrets:
       strata-token: ${{ secrets.STRATA_READ_TOKEN }}     # while this repository is private
       palette-api-key: ${{ secrets.PALETTE_API_KEY }}   # only when a ref is not a snapshot file
@@ -64,7 +64,7 @@ jobs:
 | Input | Required | Function |
 | --- | --- | --- |
 | `a`, `b` | yes | The two refs, in the checkout of the caller. |
-| `strata-version` | yes | The strata release, for example `v0.5.1`. |
+| `strata-version` | yes | The strata release, for example `v0.5.2`. |
 | `label` | no | The label. Default `repave`. |
 | `threshold` | no | The impact that earns the label. Default `repave`. |
 
