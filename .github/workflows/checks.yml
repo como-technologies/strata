@@ -1,0 +1,68 @@
+name: checks
+
+# Every check this repository has, as one reusable workflow. The ci workflow runs it on a push and
+# a pull request, and the release workflow runs it before it builds anything, so a tag cannot ship
+# what the checks refuse. It deploys nothing, so it needs no more than `contents: read`, and a
+# caller that grants no more can still call it.
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: lint and test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - uses: extractions/setup-just@v4
+      # CI runs the same recipes a developer runs locally
+      - run: just lint
+      - run: just test
+      # a separate crate that depends on strata as a library
+      - run: just library-example
+      # the examples are built, not tracked: this keeps the generator working
+      - run: just examples
+
+  docs:
+    name: docs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: extractions/setup-just@v4
+      - uses: ./.github/actions/mdbook
+      # each output in the book is the output of this build of strata
+      - run: just docs-check
+      # mdbook builds a broken link with no message; mdbook-lint finds it
+      - run: just docs-lint
+      - run: just docs
+      # the book the checks passed is the book that is published, so it is built once. There is
+      # no configure-pages step: it reads the Pages API, which this job has no token for, and
+      # mdbook needs nothing from it. Pages is already set to build from a workflow.
+      - uses: actions/upload-pages-artifact@v5
+        if: github.ref == 'refs/heads/main'
+        with:
+          path: docs/book
+
+  build:
+    name: build x86_64-unknown-linux-musl
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      # the same step the release workflow uses, so CI checks the binary a release would ship
+      - uses: ./.github/actions/build
+        with:
+          target: x86_64-unknown-linux-musl
+      - uses: actions/upload-artifact@v7
+        with:
+          name: strata-x86_64-unknown-linux-musl
+          path: target/x86_64-unknown-linux-musl/release/strata
+          if-no-files-found: error
+
