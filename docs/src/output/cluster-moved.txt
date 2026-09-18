@@ -1,7 +1,7 @@
 $ strata compare releases/1.1.0/dev.json cluster:search
 aws-stack@1.1.0 (uid 64e0000000000000000000b2)  ->  aws-stack@1.1.1 on cluster search (uid 64f1000000000000000000e2)
 root       8a8a64d3f95d -> 088136c929bd   CHANGED
-consumers  2 -> 0 clusters
+consumers  aws-stack@1.1.0 has 2 consumers; search is not one of them
 
   variables CHANGED
         + variable platform_owner (required)

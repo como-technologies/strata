@@ -1,11 +1,12 @@
 //! The terminal report: plain when piped, colored on a terminal.
 
 use super::{
-    chain_verdict, cluster_value, consumer_count, consumers_heading, counts_line, dash,
-    edited_in_place_note, entry_error, list_count, list_scope, overwritten_in_place_notes,
-    pack_version, pair_detail, pair_word, profiles_overwritten_sentence, record_detail,
-    record_label, same_content_note, short, show, subject, tag_rename, traits_suffix,
-    values_changed_suffix, variable_lines, version_display, Renderer, VarLine,
+    chain_verdict, cluster_value, consumer_count, consumers_comparable, consumers_heading,
+    consumers_sentence, counts_line, dash, edited_in_place_note, entry_error, list_count,
+    list_scope, overwritten_in_place_notes, pack_version, pair_detail, pair_word,
+    profiles_overwritten_sentence, record_detail, record_label, same_content_note, short, show,
+    subject, tag_rename, traits_suffix, values_changed_suffix, variable_lines, version_display,
+    Renderer, VarLine,
 };
 use crate::color::Paint;
 use crate::diff::{
@@ -260,10 +261,14 @@ impl Renderer for TerminalRenderer {
         if let Some(note) = same_content_note(d) {
             out.push(format!("note       {}", p.bgreen(&note)));
         }
-        out.push(format!(
-            "consumers  {} -> {} clusters",
-            d.a.consumers.count, d.b.consumers.count
-        ));
+        if consumers_comparable(d) {
+            out.push(format!(
+                "consumers  {} -> {} clusters",
+                d.a.consumers.count, d.b.consumers.count
+            ));
+        } else if let Some(sentence) = consumers_sentence(d) {
+            out.push(format!("consumers  {sentence}"));
+        }
         out.push(String::new());
         out.push(format!(
             "  variables {}",

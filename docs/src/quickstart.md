@@ -60,7 +60,9 @@ you recorded it. Run this check on a schedule:
 {{#include output/quickstart-cluster.txt}}
 ```
 
-`IDENTICAL`: the cluster runs the recorded release.
+`IDENTICAL`: the cluster runs the recorded release. A cluster has no
+consumers, so the `consumers` line gives the profile side alone. Palette lists
+`payments` as one of the clusters that use the version.
 
 ### 5. See what the next version changes
 

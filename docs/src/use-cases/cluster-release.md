@@ -45,7 +45,8 @@ profile, unless the record covers each profile of the cluster.
 {{#include ../output/cluster-moved.txt}}
 ```
 
-The cluster side reads `aws-stack@1.1.1 on cluster search`: it moved early.
+The cluster side reads `aws-stack@1.1.1 on cluster search`: it moved early. The
+`consumers` line agrees: Palette does not list `search` for 1.1.0.
 
 ## 4. A cluster with an edit on the cluster
 

@@ -6,7 +6,6 @@ strata: wrote runs/payments.json (root 8a8a64d3f95d)
 $ strata verify runs/payments.json
 aws-stack@1.1.0 on cluster payments (uid 64f1000000000000000000e1)  ->  aws-stack@1.1.0 on cluster payments (uid 64f1000000000000000000e1)
 root       8a8a64d3f95d -> 8a8a64d3f95d   IDENTICAL
-consumers  0 -> 0 clusters
 
   variables unchanged
 

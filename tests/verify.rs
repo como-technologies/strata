@@ -1311,6 +1311,78 @@ fn a_profile_on_the_cluster_is_selected_by_name_and_the_rest_are_merged() {
 }
 
 #[test]
+fn a_compare_against_a_cluster_gives_the_consumers_of_the_profile_side_alone() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let mut recorded = ops::snapshot_from_dir(&dir.path().join("b"), "b", "t0").unwrap();
+    let on_cluster = snapshot_cluster(
+        &serve_cluster(MemoryApi::new(), dir.path(), "cluster-b"),
+        None,
+    )
+    .unwrap();
+    assert_eq!(recorded.source.consumers.count, 2);
+    assert_eq!(
+        on_cluster.source.consumers.count, 0,
+        "a cluster has no consumers"
+    );
+    let text = |a: &Snapshot, b: &Snapshot| {
+        let d = ops::compare(a, b, "t1");
+        render::renderer(Format::Terminal, Paint::off(), false)
+            .render(&d, a, b, false)
+            .unwrap()
+    };
+
+    // Palette does not list this cluster for the version: no arrow, and the count of the cluster
+    // side stays out of the report.
+    let t = text(&recorded, &on_cluster);
+    assert!(
+        t.contains(
+            "consumers  lab-profile@1.3.0 has 2 consumers; lab-cluster is not one of them\n"
+        ),
+        "{t}"
+    );
+    assert!(!t.contains("-> 0 clusters"), "{t}");
+
+    // Palette lists it, whichever side the cluster is on.
+    recorded
+        .source
+        .consumers
+        .clusters
+        .push(CLUSTER_UID.to_string());
+    recorded.source.consumers.count = 3;
+    let t = text(&recorded, &on_cluster);
+    assert!(
+        t.contains("consumers  lab-profile@1.3.0 has 3 consumers; lab-cluster is one of them\n"),
+        "{t}"
+    );
+    let t = text(&on_cluster, &recorded);
+    assert!(
+        t.contains("consumers  lab-profile@1.3.0 has 3 consumers; lab-cluster is one of them\n"),
+        "{t}"
+    );
+
+    // Two clusters, or two packs, have no consumers at all: the report says nothing.
+    let t = text(&on_cluster, &on_cluster);
+    assert!(!t.contains("consumers"), "{t}");
+
+    // The markdown report drops the row of counts for the same reason.
+    let d = ops::compare(&recorded, &on_cluster, "t1");
+    let md = render::renderer(Format::Markdown, Paint::off(), false)
+        .render(&d, &recorded, &on_cluster, false)
+        .unwrap();
+    assert!(!md.contains("| consumers |"), "{md}");
+    assert!(
+        md.contains("**Consumers:** lab-profile@1.3.0 has 3 consumers; lab-cluster is one of them"),
+        "{md}"
+    );
+
+    // Two profile versions still compare their counts.
+    let other = ops::snapshot_from_dir(&dir.path().join("a"), "a", "t0").unwrap();
+    let t = text(&other, &recorded);
+    assert!(t.contains("consumers  0 -> 3 clusters\n"), "{t}");
+}
+
+#[test]
 fn verify_reports_a_cluster_record_whose_profile_version_was_overwritten_or_deleted() {
     let dir = tempfile::tempdir().unwrap();
     common::make_fixtures(dir.path());

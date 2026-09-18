@@ -2,7 +2,7 @@ $ strata compare releases/1.1.0/dev.json cluster:ledger
 aws-stack@1.1.0 (uid 64e0000000000000000000b2)  ->  aws-stack@1.1.0 on cluster ledger (uid 64f1000000000000000000e3)
 root       8a8a64d3f95d -> e06b81973b8e   CHANGED
 note       both sides are aws-stack@1.1.0 (uid 64e0000000000000000000b2): the version was edited in place, or changed on a cluster
-consumers  2 -> 0 clusters
+consumers  aws-stack@1.1.0 has 2 consumers; ledger is one of them
 
   variables unchanged
 

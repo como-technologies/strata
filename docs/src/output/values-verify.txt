@@ -1,7 +1,6 @@
 $ strata verify runs/payments.json
 aws-stack@1.1.1 on cluster payments (uid 64f1000000000000000000e1)  ->  aws-stack@1.1.1 on cluster payments (uid 64f1000000000000000000e1)
 root       088136c929bd -> 088136c929bd   IDENTICAL
-consumers  0 -> 0 clusters
 
   variables unchanged
   cluster values CHANGED

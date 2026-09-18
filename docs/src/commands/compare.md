@@ -20,8 +20,10 @@ Read the report from the top:
 1. The two sides, with their uids.
 2. `root`: the two roots and the result. `IDENTICAL`, `SAME CONTENT`, or
    `CHANGED`.
-3. `consumers`: how many clusters used each side when strata read it. A cluster
-   side shows `0`: a cluster has no consumers.
+3. `consumers`: how many clusters used each side when strata read it. Only a
+   profile version has consumers. Against a cluster or a pack, the line gives
+   the profile side alone, and it tells you if that cluster is one of the
+   consumers. Between two clusters, or two packs, there is no line.
 4. `variables`: the profile variables.
 5. One line for each pack, in layer order. A changed pack shows its
    [change flags](../reference/impact.md): `IDENTITY`, `UPSTREAM`, `AUTHORED`.

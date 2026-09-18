@@ -1,11 +1,12 @@
 //! The pull request comment.
 
 use super::{
-    chain_verdict, cluster_value, consumer_count, consumers_heading, counts_line, dash,
-    edited_in_place_note, entry_error, list_count, list_scope, overwritten_in_place_notes,
-    pack_version, pair_detail, pair_word, plain_flags, profiles_overwritten_sentence,
-    record_detail, record_label, same_content_note, short, show, subject, traits_suffix,
-    values_changed, values_changed_suffix, variable_lines, version_display, Renderer, VarLine,
+    chain_verdict, cluster_value, consumer_count, consumers_comparable, consumers_heading,
+    consumers_sentence, counts_line, dash, edited_in_place_note, entry_error, list_count,
+    list_scope, overwritten_in_place_notes, pack_version, pair_detail, pair_word, plain_flags,
+    profiles_overwritten_sentence, record_detail, record_label, same_content_note, short, show,
+    subject, traits_suffix, values_changed, values_changed_suffix, variable_lines, version_display,
+    Renderer, VarLine,
 };
 use crate::color::Paint;
 use crate::diff::{Diff, Leaf, Op, Status, Verify, VerifyStatus};
@@ -57,10 +58,12 @@ impl Renderer for MarkdownRenderer {
             short(&d.root_a),
             short(&d.root_b)
         ));
-        o.push_str(&format!(
-            "| consumers | {} clusters | {} clusters |\n",
-            d.a.consumers.count, d.b.consumers.count
-        ));
+        if consumers_comparable(d) {
+            o.push_str(&format!(
+                "| consumers | {} clusters | {} clusters |\n",
+                d.a.consumers.count, d.b.consumers.count
+            ));
+        }
         o.push_str(&format!(
             "| fetched | {} | {} |\n\n",
             dash(&d.a.fetched_at),
@@ -87,6 +90,9 @@ impl Renderer for MarkdownRenderer {
             s.packs_unchanged,
             if s.variables_changed { "changed" } else { "unchanged" }
         ));
+        if let Some(sentence) = consumers_sentence(d) {
+            o.push_str(&format!("**Consumers:** {sentence}\n\n"));
+        }
         if let Some(note) = edited_in_place_note(d) {
             o.push_str(&format!("**Note:** {note}\n\n"));
         }

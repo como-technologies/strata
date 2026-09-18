@@ -98,6 +98,43 @@ pub(crate) fn entry_error(error: Option<&Value>) -> Option<&str> {
     error.and_then(|e| e.get("message")).and_then(Value::as_str)
 }
 
+/// True when Palette lists the clusters that use a side: a profile version has consumers, but a
+/// side that records a cluster, or one pack from a registry, has none.
+pub(crate) fn lists_consumers(s: &Source) -> bool {
+    s.cluster.is_none() && s.pack.is_none()
+}
+
+/// True when both sides are profile versions, and the reports compare the two counts.
+pub(crate) fn consumers_comparable(d: &Diff) -> bool {
+    lists_consumers(&d.a) && lists_consumers(&d.b)
+}
+
+/// What the consumers of the profile side say, when the other side is a cluster or a pack:
+/// `aws-stack@1.1.0 has 1 consumer; payments is one of them`. The count of the other side is 0
+/// because it has no consumers, so the reports state the profile side alone. None when both sides
+/// are profile versions, or when neither is.
+pub(crate) fn consumers_sentence(d: &Diff) -> Option<String> {
+    let (profile, other) = match (lists_consumers(&d.a), lists_consumers(&d.b)) {
+        (true, false) => (&d.a, &d.b),
+        (false, true) => (&d.b, &d.a),
+        _ => return None,
+    };
+    let count = consumer_count(profile.consumers.count);
+    let has = format!("{}@{} has {count}", profile.name, profile.version);
+    match &other.cluster {
+        Some(c) if profile.consumers.count > 0 => Some(format!(
+            "{has}; {} is {}one of them",
+            c.name,
+            if profile.consumers.clusters.contains(&c.uid) {
+                ""
+            } else {
+                "not "
+            }
+        )),
+        _ => Some(has),
+    }
+}
+
 /// `lab-profile@1.3.0 (uid <uid>): 2 consumers`, or `...: no consumers`.
 pub(crate) fn consumers_heading(r: &ConsumersReport) -> String {
     let count = consumer_count(r.count);
