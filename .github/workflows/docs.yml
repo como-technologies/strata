@@ -1,0 +1,59 @@
+name: docs
+
+# The book, published on each push to main. The ci workflow checks the book on every push and
+# every pull request; this one publishes what that check passed, so the site is never ahead of the
+# build that made it.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - docs/**
+      - examples/**
+      - src/**
+      - justfile
+      - .github/workflows/docs.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deployment at a time, and never cancel one that is running: a half-deployed site is worse
+# than a site one commit behind.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: build the book
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: extractions/setup-just@v2
+      - name: Install mdbook and the preprocessors
+        run: cargo install --locked mdbook mdbook-mermaid mdbook-gruvbox mdbook-lint
+      # each output in the book is the output of this build of strata
+      - run: just docs-check
+      # mdbook builds a broken link with no message; mdbook-lint finds it
+      - run: just docs-lint
+      - run: just docs
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs/book
+
+  deploy:
+    name: publish the book
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

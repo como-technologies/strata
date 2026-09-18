@@ -796,23 +796,23 @@ labels: ci
 
 The book in `docs/src/` builds with `just docs`, and the `docs` job of `.github/workflows/ci.yml` builds it on each push. A reader needs a checkout, `mdbook`, `mdbook-mermaid`, and `mdbook-gruvbox` to read it. A Pages site removes that, as `palette-edge-libvirt` does with its own `docs.yml` workflow.
 
-One condition holds the work: this repository is private, and on a GitHub plan below Enterprise a Pages site of a private repository is public. The book holds no uid and no name of a real tenant, but it does hold the pack data, the run ids, and the behavior of the tool. So the organization must first decide who can read the site.
+One condition holds the work: this repository is private, and on a GitHub plan below Enterprise a Pages site of a private repository is public. Two facts now answer most of it. The organization `como-technologies` is on the `enterprise` plan, so a Pages site of a private repository can be held to the members of the organization: the same readers the repository already has. And the book does hold uids of a real tenant, which the last criterion below asked about: `docs/src/internals/palette.md` and `docs/src/development/live-runs.md` name the profile, cluster, and project uids of the live example, and the `docs/src/output/` pages name pack uids of the Public Repo, which is a public registry. A site for the members of the organization exposes none of that to a new reader. A public site exposes the live tenant uids and the run ids, so a public site needs a scrub first.
 
 ### Plan
 
-1. Find which Pages visibility the plan of the organization gives: a public site, or a site for the members of the organization.
+1. Decide who reads the site. The plan gives both choices; a site for the members of the organization keeps the readers the repository already has, and needs no scrub of the book.
 2. Add `.github/workflows/docs.yml`: build with `just docs`, upload `docs/book`, and deploy with `actions/deploy-pages` on each push to main.
-3. Enable Pages one time in Settings, Pages, with the source GitHub Actions.
+3. Enable Pages one time in Settings, Pages, with the source GitHub Actions, and set the visibility that step 1 decided. The API refuses this step to a token that cannot open a public surface, so a person does it.
 4. Put the address in `README.md` under Documentation, and in the footer of `strata --help`.
 5. Keep `just docs-check` and `just docs-lint` in the `docs` job, so the published book is the output of the build.
 
 ### Acceptance criteria
 
 - [ ] The organization states who can read a Pages site of this repository
-- [ ] `.github/workflows/docs.yml` publishes `docs/book` on each push to main
+- [x] `.github/workflows/docs.yml` publishes `docs/book` on each push to main
 - [ ] The book opens at its address, with the gruvbox theme and the mermaid diagrams
 - [ ] `README.md` and `strata --help` name the address
-- [ ] No page of the book holds a uid or a name of a real tenant
+- [ ] No page of the book holds a uid or a name of a real tenant: it holds twelve, so this holds only for a public site, and `internals/palette.md` and `development/live-runs.md` are the pages to scrub
 
 ## Count an added or a removed pack in the impact
 
