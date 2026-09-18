@@ -1043,6 +1043,20 @@ impl Gate {
         git(self.dir.path(), &["commit", "-qam", message]);
     }
 
+    /// What the gate reads to find a rollback a commit declares: the messages of the commits the
+    /// branch carries and the target branch does not. A failure of a rollback test says nothing
+    /// without this, because the gate only reports that it found no declaration.
+    fn branch_messages(&self) -> String {
+        let d = self.dir.path();
+        let refs = git(d, &["log", "--oneline", "--all", "--decorate"]);
+        let range = git(d, &["log", "--format=%B", "HEAD", "--not", "origin/main"]);
+        format!(
+            "\n-- git log --format=%B HEAD --not origin/main --\n{}\n-- every commit --\n{}",
+            text(&range.stdout),
+            text(&refs.stdout)
+        )
+    }
+
     fn run(&self, args: &[&str]) -> Output {
         Command::new("bash")
             .arg(script("ci/merge-gate.sh"))
@@ -1165,13 +1179,20 @@ fn merge_gate_passes_a_rollback_that_a_commit_declares() {
         "pin the release of last week\n\nRollback: releases/dev.json to lab-profile@1.2.0\n",
     );
     let o = g.run(&["releases/*.json", "--base", "main", "--no-verify"]);
-    assert!(o.status.success(), "{}{}", text(&o.stdout), text(&o.stderr));
+    assert!(
+        o.status.success(),
+        "{}{}{}",
+        text(&o.stdout),
+        text(&o.stderr),
+        g.branch_messages()
+    );
     let out = text(&o.stdout);
     assert!(
         out.contains(
             "ROLLBACK: releases/dev.json returns to lab-profile@1.2.0, declared in a commit of the branch"
         ),
-        "{out}"
+        "{out}{}",
+        g.branch_messages()
     );
     assert!(
         out.contains("main pinned this release before, on "),
