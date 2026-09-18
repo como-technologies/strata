@@ -172,7 +172,7 @@ live-down:
 
 # The recipe refuses a dirty tree or a tag that exists. Push the tag to start the release workflow.
 
-# Set the version everywhere it is written: just version 0.6.0
+# Set the version everywhere it is written, for example: just version 1.2.3
 version VERSION:
     scripts/dev/set-version.sh {{VERSION}}
 

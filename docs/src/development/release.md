@@ -3,7 +3,7 @@
 1. Set the new version, and commit:
 
    ```bash
-   just version 0.6.0   # Cargo.toml, the README badge, the install commands, the CI drop-ins
+   just version <version>   # Cargo.toml, the README badge, the install commands, the drop-ins
    ```
 
    The version is written in more than a dozen files. The recipe moves all of
