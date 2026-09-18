@@ -10,7 +10,7 @@ use super::{
 use crate::color::Paint;
 use crate::diff::{Diff, Leaf, Op, Status, Verify, VerifyStatus};
 use crate::error::Result;
-use crate::ops::{Chain, ConsumersReport, Listing, RecordStatus, VerifySummary};
+use crate::ops::{Chain, ConsumersReport, Listing, PackListing, RecordStatus, VerifySummary};
 use crate::snapshot::{Snapshot, Source};
 
 /// Renders markdown for a pull request comment.
@@ -299,6 +299,39 @@ impl Renderer for MarkdownRenderer {
         }
         o.push('\n');
         Ok(o)
+    }
+
+    fn render_packs(&self, l: &PackListing) -> Result<String> {
+        let mut out = String::new();
+        for r in &l.registries {
+            out.push_str(&format!("### {} in {}\n\n", l.name, r.registry));
+            out.push_str("| version | tags | type | clouds | pack uid |\n");
+            out.push_str("| --- | --- | --- | --- | --- |\n");
+            for v in &r.versions {
+                out.push_str(&format!(
+                    "| `{}` | {} | {} | {} | `{}` |\n",
+                    v.version,
+                    if v.tags.is_empty() {
+                        "-".to_string()
+                    } else {
+                        v.tags
+                            .iter()
+                            .map(|t| format!("`{t}`"))
+                            .collect::<Vec<_>>()
+                            .join(" ")
+                    },
+                    v.kind,
+                    if v.cloud_types.is_empty() {
+                        "-".to_string()
+                    } else {
+                        v.cloud_types.join(", ")
+                    },
+                    v.pack_uid
+                ));
+            }
+            out.push('\n');
+        }
+        Ok(out)
     }
 
     fn render_list(&self, l: &Listing) -> Result<String> {

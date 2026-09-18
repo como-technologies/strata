@@ -367,7 +367,7 @@ pub fn load(path: &Path) -> Result<LoadedCandidate> {
 
 /// Every version of `name` the pack listing returns, across registries. The listing caps `limit`
 /// at 100, so this pages until it has them all.
-fn versions_of<A: PaletteApi>(palette: &Palette<A>, name: &str) -> Result<Vec<Value>> {
+pub(crate) fn versions_of<A: PaletteApi>(palette: &Palette<A>, name: &str) -> Result<Vec<Value>> {
     let mut out: Vec<Value> = Vec::new();
     let mut offset = 0;
     loop {
@@ -397,7 +397,7 @@ fn versions_of<A: PaletteApi>(palette: &Palette<A>, name: &str) -> Result<Vec<Va
 }
 
 /// The registries this key can see, name and uid, in the order Palette lists them.
-fn registries<A: PaletteApi>(palette: &Palette<A>) -> Result<Vec<(String, String)>> {
+pub(crate) fn registries<A: PaletteApi>(palette: &Palette<A>) -> Result<Vec<(String, String)>> {
     let listing = palette.api().get_json("/v1/registries/metadata")?;
     Ok(listing
         .get("items")

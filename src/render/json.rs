@@ -5,7 +5,7 @@ use serde::Serialize;
 use super::Renderer;
 use crate::diff::Diff;
 use crate::error::Result;
-use crate::ops::{Chain, ConsumersReport, Listing, VerifySummary};
+use crate::ops::{Chain, ConsumersReport, Listing, PackListing, VerifySummary};
 use crate::snapshot::Snapshot;
 
 /// Serializes the diff document. Never colored, never truncated.
@@ -44,6 +44,10 @@ impl Renderer for JsonRenderer {
     }
 
     fn render_list(&self, l: &Listing) -> Result<String> {
+        self.document(l)
+    }
+
+    fn render_packs(&self, l: &PackListing) -> Result<String> {
         self.document(l)
     }
 }

@@ -3287,6 +3287,181 @@ fn a_candidate_needs_a_profile_and_refuses_a_pack_record() {
     assert_eq!(err.kind(), "profile-ref-required");
 }
 
+fn packs_of(
+    api: &MemoryApi,
+    name: &str,
+    options: ops::PackOptions,
+) -> strata::Result<ops::PackListing> {
+    ops::registry_packs(
+        name,
+        &options,
+        |_| Ok(Palette::new(api.clone())),
+        "2026-09-18T00:00:00Z",
+        &Progress::silent(),
+    )
+}
+
+#[test]
+fn packs_lists_what_a_registry_offers_newest_first_with_the_tags_of_each_version() {
+    let api = serve_registry(vec![], &[("reg-public", public_entity())]);
+    let l = packs_of(&api, "csi-aws-ebs", ops::PackOptions::default()).unwrap();
+    assert_eq!(l.schema, "strata-packs/1");
+    assert_eq!(l.registries.len(), 1, "only the registry that has it");
+    let r = &l.registries[0];
+    assert_eq!(
+        (r.registry.as_str(), r.layer.as_str()),
+        ("Public Repo", "csi")
+    );
+    let versions: Vec<&str> = r.versions.iter().map(|v| v.version.as_str()).collect();
+    assert_eq!(versions, vec!["1.65.0", "1.63.1"], "newest first");
+    assert!(r.versions[0].latest, "the newest is marked");
+    assert!(!r.versions[1].latest);
+    assert_eq!(
+        r.versions[0].tags,
+        vec!["1.65.0", "1.x"],
+        "the exact tag first"
+    );
+    assert_eq!(r.versions[0].pack_uid, "pk-65");
+    assert_eq!(r.versions[0].digest, "sha256:bbb");
+    assert_eq!(r.versions[0].kind, "spectro");
+    assert_eq!(r.versions[0].cloud_types, vec!["aws"]);
+
+    // --latest keeps one line per registry
+    let one = packs_of(
+        &api,
+        "csi-aws-ebs",
+        ops::PackOptions {
+            latest: true,
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    assert_eq!(one.registries[0].versions.len(), 1);
+    assert_eq!(one.registries[0].versions[0].version, "1.65.0");
+}
+
+#[test]
+fn packs_pages_past_a_hundred_versions_and_counts_a_repeated_one_once() {
+    // 100 on the first page, 30 on the second, and 1.65.0 served twice, as Palette does
+    let mut first: Vec<Value> = (0..100)
+        .map(|i| {
+            pack_summary(
+                &format!("pk-{i}"),
+                &format!("1.{i}.0"),
+                "reg-public",
+                "sha256:a",
+                CSI_63,
+            )
+        })
+        .collect();
+    first.push(pack_summary(
+        "pk-65",
+        "1.65.0",
+        "reg-public",
+        "sha256:bbb",
+        CSI_65,
+    ));
+    let second: Vec<Value> = vec![
+        pack_summary("pk-65", "1.65.0", "reg-public", "sha256:bbb", CSI_65),
+        pack_summary("pk-200", "1.200.0", "reg-public", "sha256:c", CSI_65),
+    ];
+    let api = MemoryApi::new()
+        .with(
+            "/v1/registries/metadata",
+            serde_json::json!({"items": [{"name": "Public Repo", "uid": "reg-public", "kind": "pack"}]}),
+        )
+        .with(
+            "/v1/packs?filters=spec.name=csi-aws-ebs&limit=100&offset=0",
+            serde_json::json!({"items": first, "listmeta": {"count": 103}}),
+        )
+        .with(
+            "/v1/packs?filters=spec.name=csi-aws-ebs&limit=100&offset=101",
+            serde_json::json!({"items": second, "listmeta": {"count": 103}}),
+        )
+        .with(
+            "/v1/packs/csi-aws-ebs/registries/reg-public",
+            public_entity(),
+        );
+    let l = packs_of(&api, "csi-aws-ebs", ops::PackOptions::default()).unwrap();
+    let versions = &l.registries[0].versions;
+    // 1.0.0 to 1.99.0 hold 1.65.0 already, so the pages carry 101 distinct versions in all
+    assert_eq!(
+        versions.len(),
+        101,
+        "every distinct version, the repeat counted once"
+    );
+    assert_eq!(
+        versions[0].version, "1.200.0",
+        "natural order, not text order"
+    );
+    assert_eq!(
+        versions.iter().filter(|v| v.version == "1.65.0").count(),
+        1,
+        "the repeated version appears once"
+    );
+}
+
+#[test]
+fn packs_keeps_the_versions_of_one_cloud_and_answers_with_none_when_no_version_has_it() {
+    let api = serve_registry(vec![], &[("reg-public", public_entity())]);
+    let aws = packs_of(
+        &api,
+        "csi-aws-ebs",
+        ops::PackOptions {
+            cloud: Some("aws".to_string()),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    assert_eq!(aws.registries[0].versions.len(), 2);
+
+    // a cloud no version supports is an answer, and an empty one: exit 0, not an error
+    let none = packs_of(
+        &api,
+        "csi-aws-ebs",
+        ops::PackOptions {
+            cloud: Some("edge-native".to_string()),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    assert!(none.registries.is_empty());
+    assert_eq!(none.cloud.as_deref(), Some("edge-native"));
+}
+
+#[test]
+fn packs_refuses_a_registry_that_is_not_visible_and_a_pack_no_registry_has() {
+    let api = serve_registry(vec![], &[("reg-public", public_entity())]);
+    let err = packs_of(
+        &api,
+        "csi-aws-ebs",
+        ops::PackOptions {
+            registry: Some("Nope".to_string()),
+            ..Default::default()
+        },
+    )
+    .unwrap_err();
+    assert_eq!(err.kind(), "registry-not-found");
+    assert_eq!(err.exit_code(), 2);
+    assert!(
+        format!("{err}").contains("Public Repo"),
+        "the error lists what is visible: {err}"
+    );
+
+    let api = MemoryApi::new()
+        .with(
+            "/v1/registries/metadata",
+            serde_json::json!({"items": [{"name": "Public Repo", "uid": "reg-public", "kind": "pack"}]}),
+        )
+        .with(
+            "/v1/packs?filters=spec.name=nowhere&limit=100&offset=0",
+            serde_json::json!({"items": [], "listmeta": {"count": 0}}),
+        );
+    let err = packs_of(&api, "nowhere", ops::PackOptions::default()).unwrap_err();
+    assert_eq!(err.kind(), "pack-not-found");
+    assert_eq!(err.exit_code(), 2);
+}
+
 #[test]
 fn comparing_two_pack_versions_says_what_changed_between_them() {
     let api = serve_registry(vec![], &[("reg-public", public_entity())]);

@@ -49,7 +49,17 @@ Comparing the two copies says whether they are the same build:
 registry, under another pack uid and digest. That is the pattern of
 [A pack comes from another registry](./registry-move.md).
 
-## 3. Record a version, and check it later
+## 3. Which versions does the registry have
+
+```text
+{{#include ../output/packs-latest.txt}}
+```
+
+`strata packs <name>` lists them, newest first, with the tags that point at
+each. `--latest` answers the question a bump asks: is the pin the current
+version? See [packs](../commands/packs.md).
+
+## 4. Record a version, and check it later
 
 ```text
 {{#include ../output/pack-record.txt}}

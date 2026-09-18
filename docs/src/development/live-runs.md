@@ -390,7 +390,18 @@ the message reads the same on every run.
 | PASS | `registries-differ` | 1 | 1 | #55: the two registries hold different builds of the version |
 | PASS | `unknown-version` | 2 | 2 | #55: a version the registry does not have is an error |
 | PASS | `unknown-registry` | 2 | 2 | #55: a registry the tenant does not have is an error |
-
+| PASS | `packs-one` | 0 | 0 | #54: packs lists the versions of one registry, newest first |
+| PASS | `packs-newest` | 0 | 0 | #54: the newest version is the first line, and it carries the floating tag |
+| PASS | `packs-latest` | 0 | 0 | #54: --latest gives one line for each registry that has the pack |
+| PASS | `packs-two-registries` | 0 | 0 | #54: both registries of this tenant answer |
+| PASS | `packs-paged` | 0 | 0 | #54: a pack with more than 100 versions lists completely |
+| PASS | `packs-paged-count` | 0 | 0 | #54: the listing passes the 100 of one page |
+| PASS | `packs-cloud` | 0 | 0 | #54: --cloud keeps the versions of one cloud |
+| PASS | `packs-cloud-none` | 0 | 0 | #54: a cloud no version supports is an empty answer, not an error |
+| PASS | `packs-cloud-none-says` | 0 | 0 | #54: and it says so |
+| PASS | `packs-json` | 0 | 0 | #54: --json writes strata-packs/1 |
+| PASS | `packs-unknown-registry` | 2 | 2 | #54: an unknown registry is an error that lists the visible ones |
+| PASS | `packs-unknown-pack` | 2 | 2 | #54: a pack no registry has is pack-not-found |
 ## merge-gate.sh
 
 The merge gate (#57), run `20260918T003905Z` with strata 0.5.2: the live

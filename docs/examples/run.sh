@@ -312,12 +312,17 @@ csi_in_oci() {
     | .items += [.items[] | select(.spec.version == $newest and .spec.values != null)
         | .metadata.uid = "64ec000000000000000000b1"
         | .spec.registryUid = "64ec000000000000000000a1"
-        | .spec.digest = "sha256:a746e14689085b14531566f9c9cfb2bc7716e96a394547ef50a1c52eab510c9e"]
+        | .spec.digest = "sha256:a746e14689085b14531566f9c9cfb2bc7716e96a394547ef50a1c52eab510c9e"
+        | .spec.type = "oci"]
 JQ
 }
 
+# The OCI copy holds the newest version, under its exact tag. A tag row carries its version, as
+# run 20260918T020941Z found, and the newest is newest by number, not by text.
 csi_entity_in_oci() {
-  printf '%s' '.tags = [{tag: ([.tags[].tag] | map(select(test("^[0-9]+\\.[0-9]+\\.[0-9]+$"))) | sort | last), packUid: "64ec000000000000000000b1"}]'
+  printf '%s' '([.tags[] | select(.tag | test("^[0-9]+\\.[0-9]+\\.[0-9]+$"))]
+      | sort_by(.version | split(".") | map(tonumber? // 0)) | last) as $n
+    | .tags = [{tag: $n.tag, version: $n.version, packUid: "64ec000000000000000000b1"}]'
 }
 
 # jq programs for a profile document
@@ -350,7 +355,7 @@ PAYMENTS_PROD=64f1000000000000000000f1
 
 chapter help
 show help 0 'strata --help'
-for c in list snapshot candidate compare same-release verify consumers schema; do
+for c in list packs snapshot candidate compare same-release verify consumers schema; do
   show "help-$c" 0 "strata $c --help"
 done
 
@@ -672,6 +677,10 @@ show2 pack-ambiguous 2 'strata compare pack:csi-aws-ebs@1.65.0 pack:csi-aws-ebs@
 show pack-registries 1 "strata compare 'pack:Public Repo/csi-aws-ebs@1.65.0' 'pack:Palette Registry/csi-aws-ebs@1.65.0'"
 show2 pack-record 0 "strata snapshot 'pack:Public Repo/kubernetes@latest' -o kubernetes.json"
 show pack-verify 0 'strata verify kubernetes.json'
+show packs-list 0 "strata packs csi-aws-ebs --registry 'Public Repo'"
+show packs-latest 0 'strata packs csi-aws-ebs --latest'
+show packs-cloud 0 "strata packs kubernetes --registry 'Public Repo' --cloud aws --latest"
+show packs-json 0 "strata packs csi-aws-ebs --registry 'Public Repo' --latest --json | jq '.registries[0].versions[0]'"
 
 chapter retire PALETTE_PROJECT=dev
 projects dev=$DEV

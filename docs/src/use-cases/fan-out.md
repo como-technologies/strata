@@ -133,6 +133,7 @@ The issue closes itself on the first run where the record verifies again. See
 | Which profiles carry a pack version? | `strata list --pack csi-aws-ebs` |
 | Which clusters use this profile version? | `strata consumers aws-stack@1.1.0` |
 | What changed between two pack versions? | `strata compare pack:csi-aws-ebs@1.63.1 pack:csi-aws-ebs@1.65.0` |
+| Which version does the registry offer now? | `strata packs csi-aws-ebs --latest` |
 
 The root of a record is the key that ties the fleet together: two records with
 one root are one release, whatever the names and the uids say. A report that

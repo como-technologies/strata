@@ -8,6 +8,7 @@ Usage: strata <COMMAND>
 
 Find:
   list          List the profile versions, clusters, and projects in the scope
+  packs         List the versions a registry offers for a pack
 
 Record:
   snapshot      Record a profile version or a cluster in a snapshot file

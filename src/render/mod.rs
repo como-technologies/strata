@@ -10,7 +10,7 @@ use serde_json::Value;
 use crate::color::Paint;
 use crate::diff::{Diff, Leaf, PackDiff, Status, VariableSummary, VariablesByName, Verify};
 use crate::error::Result;
-use crate::ops::{Chain, ConsumersReport, Listing, Pair, PairStatus, VerifySummary};
+use crate::ops::{Chain, ConsumersReport, Listing, PackListing, Pair, PairStatus, VerifySummary};
 use crate::snapshot::{Snapshot, Source};
 
 pub use json::JsonRenderer;
@@ -51,6 +51,9 @@ pub trait Renderer {
 
     /// Render the profiles, clusters, and projects `list` found.
     fn render_list(&self, l: &Listing) -> Result<String>;
+
+    /// The versions a registry offers for a pack.
+    fn render_packs(&self, l: &PackListing) -> Result<String>;
 }
 
 /// `project lab (uid p1)`, `project p1` when the name is unknown, or `tenant scope`.

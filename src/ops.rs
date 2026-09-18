@@ -1065,6 +1065,8 @@ where
 
 /// Schema id of the document `list` writes.
 pub const LIST_SCHEMA: &str = "strata-list/1";
+/// The schema id of the document `packs` writes.
+pub const PACKS_SCHEMA: &str = "strata-packs/1";
 
 /// The scope `list` passes to `connect` for tenant scope: no project, whatever the environment
 /// sets.
@@ -1397,4 +1399,217 @@ fn list_projects(doc: &Value) -> Vec<ListedProject> {
         .collect();
     projects.sort_by(|a, b| a.name.cmp(&b.name).then_with(|| a.uid.cmp(&b.uid)));
     projects
+}
+
+/// The document `packs` writes: `strata-packs/1`. One entry per registry that has the pack, and
+/// one row per version, newest first.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct PackListing {
+    /// Always "strata-packs/1"
+    pub schema: String,
+    /// Which tool wrote the document.
+    pub tool: Tool,
+    /// When, RFC 3339 UTC.
+    pub generated_at: String,
+    /// The pack that was asked for.
+    pub name: String,
+    /// With `--cloud`: the cloud the versions were kept for.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cloud: Option<String>,
+    /// The registries that have the pack, in the order Palette lists them.
+    pub registries: Vec<PackRegistry>,
+}
+
+/// One registry's copy of the pack.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct PackRegistry {
+    /// The registry name.
+    pub registry: String,
+    /// Its uid.
+    pub registry_uid: String,
+    /// The layer the pack belongs to, as the registry gives it.
+    pub layer: String,
+    /// The versions, newest first.
+    pub versions: Vec<PackBuild>,
+}
+
+/// One version of a pack in one registry.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct PackBuild {
+    /// The version.
+    pub version: String,
+    /// The pack uid of this build.
+    pub pack_uid: String,
+    /// The digest the registry reports, empty when it reports none.
+    pub digest: String,
+    /// The pack type: spectro, helm, oci, or manifest.
+    #[serde(rename = "type")]
+    pub kind: String,
+    /// The clouds this version supports.
+    pub cloud_types: Vec<String>,
+    /// Every tag that points at this version, the exact tag first.
+    pub tags: Vec<String>,
+    /// True for the newest version of the registry's copy.
+    pub latest: bool,
+}
+
+/// What `packs` was asked for.
+#[derive(Debug, Clone, Default)]
+pub struct PackOptions {
+    /// Only this registry, by name or uid.
+    pub registry: Option<String>,
+    /// Only the versions that support this cloud.
+    pub cloud: Option<String>,
+    /// Only the newest version of each registry.
+    pub latest: bool,
+}
+
+/// List what the registries offer for one pack.
+///
+/// Reads the paged listing for the versions, their digests and their types, and each registry's
+/// own answer for the tags that point at a version. A registry that does not have the pack is not
+/// in the answer; no registry with it at all is `pack-not-found`.
+pub fn registry_packs<A, F>(
+    name: &str,
+    options: &PackOptions,
+    mut connect: F,
+    generated_at: &str,
+    progress: &Progress,
+) -> Result<PackListing>
+where
+    A: PaletteApi,
+    F: FnMut(Option<&str>) -> Result<Palette<A>>,
+{
+    let palette = connect(None)?;
+    let visible = crate::candidate::registries(&palette)?;
+    let wanted = match &options.registry {
+        Some(r) => {
+            let found = visible
+                .iter()
+                .find(|(n, u)| n == r || u == r)
+                .ok_or_else(|| Error::RegistryNotFound {
+                    registry: r.to_string(),
+                    available: visible.iter().map(|(n, _)| n.clone()).collect(),
+                })?;
+            vec![found.clone()]
+        }
+        None => visible.clone(),
+    };
+    progress.note(&format!("reading the versions of {name}"));
+    let entries = crate::candidate::versions_of(&palette, name)?;
+
+    let mut registries = Vec::new();
+    let mut had_the_pack = false;
+    for (registry, uid) in wanted {
+        let mut versions: Vec<PackBuild> = Vec::new();
+        let mine: Vec<&Value> = entries
+            .iter()
+            .filter(|e| text(e, "/spec/registryUid") == uid)
+            .collect();
+        if mine.is_empty() {
+            continue;
+        }
+        had_the_pack = true;
+        // the registry's own answer holds the tags, which the listing does not
+        progress.note(&format!("reading the tags of {name} in {registry}"));
+        let entity = palette
+            .api()
+            .get_json(&format!("/v1/packs/{name}/registries/{uid}"))?;
+        let layer = text(&entity, "/layer");
+        let tags = entity
+            .get("tags")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+
+        for e in mine {
+            let version = text(e, "/spec/version");
+            if versions.iter().any(|v: &PackBuild| v.version == version) {
+                continue; // the paged listing repeats a version
+            }
+            let cloud_types: Vec<String> = e
+                .pointer("/spec/cloudTypes")
+                .and_then(Value::as_array)
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|c| c.as_str().map(str::to_string))
+                        .collect()
+                })
+                .unwrap_or_default();
+            if let Some(cloud) = &options.cloud {
+                if !cloud_types.iter().any(|c| c == cloud) {
+                    continue;
+                }
+            }
+            // a tag row names its version, and names the build it points at; match on either,
+            // because a registry that answers with one and not the other still says enough
+            let pack_uid = text(e, "/metadata/uid");
+            let mut for_version: Vec<String> = tags
+                .iter()
+                .filter(|t| {
+                    let v = text(t, "/version");
+                    if v.is_empty() {
+                        text(t, "/packUid") == pack_uid
+                    } else {
+                        v == version
+                    }
+                })
+                .map(|t| text(t, "/tag"))
+                .collect();
+            // the exact tag first, then the floating tags above it, longest first
+            for_version.sort_by(|a, b| b.len().cmp(&a.len()).then_with(|| a.cmp(b)));
+            versions.push(PackBuild {
+                version,
+                pack_uid,
+                digest: text(e, "/spec/digest"),
+                kind: text(e, "/spec/type"),
+                cloud_types,
+                tags: for_version,
+                latest: false,
+            });
+        }
+        versions.sort_by(|a, b| version::compare(&b.version, &a.version));
+        if let Some(first) = versions.first_mut() {
+            first.latest = true;
+        }
+        if options.latest {
+            versions.truncate(1);
+        }
+        if !versions.is_empty() {
+            registries.push(PackRegistry {
+                registry,
+                registry_uid: uid,
+                layer,
+                versions,
+            });
+        }
+    }
+    // no registry has the pack at all: strata cannot answer. A cloud that keeps nothing is an
+    // answer, and an empty one.
+    if !had_the_pack {
+        return Err(Error::PackNotFound {
+            name: name.to_string(),
+            version: String::new(),
+            tag: None,
+            registry: options
+                .registry
+                .clone()
+                .unwrap_or_else(|| "any visible registry".to_string()),
+        });
+    }
+    Ok(PackListing {
+        schema: PACKS_SCHEMA.to_string(),
+        tool: Tool {
+            name: crate::TOOL_NAME.to_string(),
+            version: crate::TOOL_VERSION.to_string(),
+            implementation: Some(crate::TOOL_IMPL.to_string()),
+        },
+        generated_at: generated_at.to_string(),
+        name: name.to_string(),
+        cloud: options.cloud.clone(),
+        registries,
+    })
 }

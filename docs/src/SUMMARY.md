@@ -12,6 +12,7 @@
 
 - [Overview](./commands/index.md)
 - [list](./commands/list.md)
+- [packs](./commands/packs.md)
 - [snapshot](./commands/snapshot.md)
 - [candidate](./commands/candidate.md)
 - [compare](./commands/compare.md)

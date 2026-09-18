@@ -1,0 +1,7 @@
+$ strata packs csi-aws-ebs --latest
+csi-aws-ebs in Public Repo (1 version)
+  1.65.0  6aa410ec144aaec79d547a9e  spectro  eks,aws  1.65.0 1.65.x 1.x
+
+csi-aws-ebs in Palette Registry (1 version)
+  1.65.0  64ec000000000000000000b1  oci  eks,aws  1.65.0
+

@@ -12,7 +12,9 @@ use crate::diff::{
     ClusterValueChange, Diff, ImpactLevel, Leaf, Op, PackDiff, Status, Verify, VerifyStatus,
 };
 use crate::error::Result;
-use crate::ops::{Chain, ConsumersReport, Listing, PairStatus, RecordStatus, VerifySummary};
+use crate::ops::{
+    Chain, ConsumersReport, Listing, PackListing, PairStatus, RecordStatus, VerifySummary,
+};
 use crate::snapshot::{Snapshot, Source};
 
 /// The width of each column: its widest cell, leaving out the last cell of each row, which is
@@ -395,6 +397,59 @@ impl Renderer for TerminalRenderer {
                 .and_then(serde_json::Value::as_str)
             {
                 out.push_str(&format!("  {}", p.dim(&format!("({msg})"))));
+            }
+            out.push('\n');
+        }
+        Ok(out)
+    }
+
+    fn render_packs(&self, l: &PackListing) -> Result<String> {
+        let p = &self.paint;
+        let mut out = String::new();
+        if l.registries.is_empty() {
+            let cloud = l.cloud.as_deref().unwrap_or("");
+            return Ok(format!("no version of {} supports {cloud}\n", l.name));
+        }
+        for r in &l.registries {
+            out.push_str(&format!(
+                "{} in {} ({} {})\n",
+                p.bold(&l.name),
+                p.bold(&r.registry),
+                r.versions.len(),
+                if r.versions.len() == 1 {
+                    "version"
+                } else {
+                    "versions"
+                }
+            ));
+            let rows: Vec<Vec<String>> = r
+                .versions
+                .iter()
+                .map(|v| {
+                    vec![
+                        v.version.clone(),
+                        v.pack_uid.clone(),
+                        dash(&v.kind).to_string(),
+                        if v.cloud_types.is_empty() {
+                            "-".to_string()
+                        } else {
+                            v.cloud_types.join(",")
+                        },
+                        if v.tags.is_empty() {
+                            "-".to_string()
+                        } else {
+                            v.tags.join(" ")
+                        },
+                    ]
+                })
+                .collect();
+            let widths = column_widths(&rows);
+            for (v, row) in r.versions.iter().zip(&rows) {
+                out.push_str(&table_line("  ", row, &widths, |i, cell| match i {
+                    0 if v.latest => p.bold(cell),
+                    1 => p.dim(cell),
+                    _ => cell.to_string(),
+                }));
             }
             out.push('\n');
         }

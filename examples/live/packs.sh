@@ -80,6 +80,32 @@ check unknown-version 2 '#55: a version the registry does not have is an error' 
 check unknown-registry 2 '#55: a registry the tenant does not have is an error' -- \
   "$strata" snapshot "pack:No Such Registry/$pack@$new" -o nope2.json
 
+echo "== the versions a registry offers (#54)" | tee -a steps.log
+check packs-one 0 '#54: packs lists the versions of one registry, newest first' -- \
+  "$strata" packs "$pack" --registry "$reg"
+check packs-newest 0 '#54: the newest version is the first line, and it carries the floating tag' -- \
+  bash -c "head -2 packs-one.out | tail -1 | grep -q '$new' && head -2 packs-one.out | tail -1 | grep -q '1.x'"
+check packs-latest 0 '#54: --latest gives one line for each registry that has the pack' -- \
+  "$strata" packs "$pack" --latest
+check packs-two-registries 0 '#54: both registries of this tenant answer' -- \
+  bash -c "grep -c 'version)' packs-latest.out | grep -qx 2"
+check packs-paged 0 '#54: a pack with more than 100 versions lists completely' -- \
+  "$strata" packs kubernetes --registry "$reg"
+check packs-paged-count 0 '#54: the listing passes the 100 of one page' -- \
+  bash -c "head -1 packs-paged.out | grep -oE '[0-9]+ versions' | grep -oE '^[0-9]+' | awk '{exit !(\$1 > 100)}'"
+check packs-cloud 0 '#54: --cloud keeps the versions of one cloud' -- \
+  "$strata" packs kubernetes --registry "$reg" --cloud aws --latest
+check packs-cloud-none 0 '#54: a cloud no version supports is an empty answer, not an error' -- \
+  "$strata" packs kubernetes --registry "$reg" --cloud no-such-cloud
+check packs-cloud-none-says 0 '#54: and it says so' -- \
+  grep -q 'no version of kubernetes supports no-such-cloud' packs-cloud-none.out
+check packs-json 0 '#54: --json writes strata-packs/1' -- \
+  bash -c "\"$strata\" packs $pack --registry '$reg' --latest --json | jq -e '.schema == \"strata-packs/1\" and (.registries[0].versions[0].tags | length > 0)'"
+check packs-unknown-registry 2 '#54: an unknown registry is an error that lists the visible ones' -- \
+  "$strata" packs "$pack" --registry "No Such Registry"
+check packs-unknown-pack 2 '#54: a pack no registry has is pack-not-found' -- \
+  "$strata" packs no-such-pack-anywhere
+
 echo
 echo "$script: $(grep -c PASS steps.log) passed, $failures failed; results in $run"
 [ "$failures" = 0 ]

@@ -1,0 +1,39 @@
+$ strata packs csi-aws-ebs --registry 'Public Repo'
+csi-aws-ebs in Public Repo (36 versions)
+  1.65.0  6aa410ec144aaec79d547a9e  spectro  eks,aws  1.65.0 1.65.x 1.x
+  1.64.0  6a9d8e38f39026aa0c23cfe1  spectro  eks,aws  1.64.0 1.64.x
+  1.63.1  6a75f441d410c3b5762fed2d  spectro  eks,aws  1.63.1 1.63.x
+  1.63.0  6a6e2dc316c3d017495a155d  spectro  eks,aws  1.63.0
+  1.62.0  6a414aab24a8446c59a878ea  spectro  eks,aws  1.62.0 1.62.x
+  1.61.1  6a354632be0d8453aee36d0b  spectro  eks,aws  1.61.1 1.61.x
+  1.60.1  6a2c0a00529ef49e6651206f  spectro  eks,aws  1.60.1 1.60.x
+  1.60.0  6a106bbc5a19cb06f59fe002  spectro  eks,aws  1.60.0
+  1.59.0  69fdff6a1cf3d3dad7996f21  spectro  eks,aws  1.59.0 1.59.x
+  1.58.0  69eb85cbc678e39cdc655692  spectro  eks,aws  1.58.0 1.58.x
+  1.57.1  69d276966792525f1933d5fa  spectro  eks,aws  1.57.1 1.57.x
+  1.56.0  69b41ff572b86d95672d717a  spectro  eks,aws  1.56.0 1.56.x
+  1.55.0  699073384b0c74448631eba1  spectro  eks,aws  1.55.0 1.55.x
+  1.54.0  69738e2447eca4e9df89f3e8  spectro  eks,aws  1.54.0 1.54.x
+  1.53.0  696d0421567d3e0ab0a508a4  spectro  eks,aws  1.53.0 1.53.x
+  1.51.0  6921dbcec8f8ca0892d7f4ac  spectro  eks,aws  1.51.0 1.51.x
+  1.48.0  68dfec4c8ce8d5f7d18a017d  spectro  eks,aws  1.48.0 1.48.x
+  1.46.0  68a1ea59018f23c3902ac880  spectro  eks,aws  1.46.0 1.46.x
+  1.43.0  687bbdd7511462ef75ba7ee1  spectro  eks,aws  1.43.0 1.43.x
+  1.41.0  6803e5e3d7d1020e9becd38f  spectro  eks,aws  1.41.0 1.41.x
+  1.39.0  67b224b58ab50a5e81eaa0df  spectro  eks,aws  1.39.0 1.39.x
+  1.37.0  678d28bee2561ecc24c1da64  spectro  eks,aws  1.37.0 1.37.x
+  1.35.0  670bf0f13deb3ad3b1a3fdb8  spectro  eks,aws  1.35.0 1.35.x
+  1.33.0  66c0c362cd3c6822e6708912  spectro  eks,aws  1.33.0 1.33.x
+  1.30.0  669be6f355ed407c3f09a9e5  spectro  eks,aws  1.30.0 1.30.x
+  1.28.0  666e811d86330a62a133511f  spectro  eks,aws  1.28.0 1.28.x
+  1.26.1  661cc4f60aa79b75afba6d4b  spectro  eks,aws  1.26.1 1.26.x
+  1.24.0  659a47a18b7673a6cd81cfdb  spectro  eks,aws  1.24.0 1.24.x
+  1.22.0  651c1484f55d6318a0b4d98d  spectro  eks,aws  1.22.0 1.22.x
+  1.20.0  64eaf1151a2af69624d12a41  spectro  eks,aws  1.20.0 1.20.x
+  1.17.0  646c66c4aadf34e433120937  spectro  eks,aws  1.17.0 1.17.x
+  1.16.0  6416f9ca2c0e8b7d92ac6906  spectro  eks,aws  1.16.0 1.16.x
+  1.12.0  63ac59fe082ebe80e6f2b0a5  spectro  eks,aws  1.12.0 1.12.x
+  1.10.0  63559d51c3ffd889f42a15ec  spectro  eks,aws  1.10.0 1.10.x
+  1.8.0   62fca4e216b4105316bb7600  spectro  eks,aws  1.8.0 1.8.x
+  1.5.1   62737a4862f9f233a79c43c8  spectro  eks,aws  1.5.1 1.5.x
+

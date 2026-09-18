@@ -152,3 +152,13 @@ is the path as a list: strings for keys, numbers for indexes, and
     `version`, or `error`.
   - A cluster: `ref`, `name`, `uid`, `state`, `cloudType`, and `projectUid`.
   - A project: `name` and `uid`.
+
+## strata-packs/1
+
+- `name`: the pack that was asked for, and `cloud` when `--cloud` was given.
+- `registries[]`: one entry per registry that has the pack, with `registry`,
+  `registryUid`, `layer`, and `versions[]`.
+  - A version: `version`, `packUid`, `digest`, `type`, `cloudTypes[]`, `tags[]`
+    with the exact tag first, and `latest`, which is true for the newest version
+    of that registry.
+

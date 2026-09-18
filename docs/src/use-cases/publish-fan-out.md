@@ -114,6 +114,8 @@ The chain also answers the question that comes at the end of a version's life:
 {{#include ../output/list-pack-consumers.txt:1:6}}
 ```
 
+`strata packs <name> --latest` says which version each registry offers now,
+which is what a bump compares its pin against.
 `strata list --pack <name>` finds the profiles that carry a pack, and
 `strata consumers <name>@<version>` finds the clusters that run a profile
 version. See [Find the profiles that carry a pack](./find-a-pack.md) and

@@ -21,7 +21,7 @@ use strata::{candidate, diff, ops, TOOL_NAME};
 /// The commands by task, in the order of `strata --help`. The order follows the work: find the
 /// refs, record a release, compare releases, check the records.
 const GROUPS: &[(&str, &[&str])] = &[
-    ("Find", &["list"]),
+    ("Find", &["list", "packs"]),
     ("Record", &["snapshot", "candidate"]),
     ("Compare", &["compare", "same-release"]),
     ("Check", &["verify", "consumers"]),
@@ -123,6 +123,7 @@ impl Cli {
             Cmd::SameRelease(a) => a.out.format() == Format::Json,
             Cmd::Consumers(a) => a.out.format() == Format::Json,
             Cmd::List(a) => a.out.format() == Format::Json,
+            Cmd::Packs(a) => a.out.format() == Format::Json,
             Cmd::Snapshot(_) | Cmd::Candidate(_) | Cmd::Schema { .. } => false,
         }
     }
@@ -135,6 +136,11 @@ enum Cmd {
     /// The first column of each line is a ref that the other commands accept. The scope is the
     /// configured project, or the project that --project or --project-name gives.
     List(ListArgs),
+    /// List the versions a registry offers for a pack
+    ///
+    /// Reads the registries the key can see, and says which versions each one has, newest first,
+    /// with the tags that point at each version. `pack:<name>@<version>` reads one of them.
+    Packs(PacksArgs),
     /// Record a profile version or a cluster in a snapshot file
     ///
     /// The file holds the root, the hashes of each pack, the values and manifests, the project,
@@ -328,6 +334,23 @@ struct ConsumersArgs {
 }
 
 #[derive(Args)]
+struct PacksArgs {
+    /// The pack name, as the registry holds it
+    name: String,
+    /// Only this registry, by name or uid
+    #[arg(long, value_name = "NAME")]
+    registry: Option<String>,
+    /// Keep the versions that support this cloud, such as aws or edge-native
+    #[arg(long, value_name = "TYPE")]
+    cloud: Option<String>,
+    /// Only the newest version of each registry
+    #[arg(long)]
+    latest: bool,
+    #[command(flatten)]
+    out: OutputArgs,
+}
+
+#[derive(Args)]
 struct ListArgs {
     /// What to list: profiles, clusters, projects. With none: profiles and clusters, or only
     /// profiles with --pack
@@ -418,6 +441,7 @@ enum SchemaKind {
     Chain,
     Consumers,
     List,
+    Packs,
     Candidate,
 }
 
@@ -515,6 +539,7 @@ fn run(cli: Cli) -> Result<ExitCode> {
         Cmd::SameRelease(a) => cmd_same_release(&a),
         Cmd::Consumers(a) => cmd_consumers(&a),
         Cmd::List(a) => cmd_list(&a),
+        Cmd::Packs(a) => cmd_packs(&a),
         Cmd::Schema { kind } => cmd_schema(kind),
     }
 }
@@ -816,6 +841,24 @@ fn cmd_list(a: &ListArgs) -> Result<ExitCode> {
     Ok(ExitCode::SUCCESS)
 }
 
+fn cmd_packs(a: &PacksArgs) -> Result<ExitCode> {
+    let progress = a.out.progress();
+    let options = ops::PackOptions {
+        registry: a.registry.clone(),
+        cloud: a.cloud.clone(),
+        latest: a.latest,
+    };
+    let listing = ops::registry_packs(
+        &a.name,
+        &options,
+        |scope| connect(progress, scope),
+        &now_utc(),
+        &progress,
+    )?;
+    print!("{}", a.out.renderer().render_packs(&listing)?);
+    Ok(ExitCode::SUCCESS)
+}
+
 fn cmd_schema(kind: SchemaKind) -> Result<ExitCode> {
     let schema = match kind {
         SchemaKind::Snapshot => schemars::schema_for!(Snapshot),
@@ -824,6 +867,7 @@ fn cmd_schema(kind: SchemaKind) -> Result<ExitCode> {
         SchemaKind::Chain => schemars::schema_for!(ops::Chain),
         SchemaKind::Consumers => schemars::schema_for!(ops::ConsumersReport),
         SchemaKind::List => schemars::schema_for!(ops::Listing),
+        SchemaKind::Packs => schemars::schema_for!(ops::PackListing),
         SchemaKind::Candidate => schemars::schema_for!(strata::candidate::Candidate),
     };
     println!("{}", serde_json::to_string_pretty(&schema)?);
