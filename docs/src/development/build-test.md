@@ -45,8 +45,8 @@ STRATA_FUZZ_SEED=1337 cargo test --test fuzz
 The default seed is fixed, so each run of CI fuzzes the same cases. Give a new
 seed to look for more.
 
-Two of the tests measure themselves, because a fuzz test that stops reaching the
-code it fuzzes still passes. `a_profile_of_junk_gives_a_record_that_round_trips`
+One test measures itself, because a fuzz test that stops reaching the code it
+fuzzes still passes. `a_profile_of_junk_gives_a_record_that_round_trips`
 fails when fewer than 50 of its 2000 cases build a record.
 
 ## Continuous integration
