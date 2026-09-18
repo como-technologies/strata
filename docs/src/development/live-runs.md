@@ -153,10 +153,12 @@ The first attempts found two problems. Both are part of the example now:
 
 Session `20260918T175802Z` on 2026-09-18, in the `strata-test` project on AWS
 us-east-2, with cluster A `fred` and no cluster B. `verify.sh` ran 30 checks and
-29 passed. `registry-digest-oci` failed with HTTP 401 from the OCI registry: the
-login that `crane` needs had expired, and the AWS account of this checkout
-cannot read that registry. The check belongs to #2, and nothing in this run
-changed it.
+29 passed. `registry-digest-oci` failed with HTTP 401 from the OCI registry,
+because the ECR login that `crane` needs had expired. A login with an AWS
+profile that can get an ECR token gives the expected digest
+`sha256:99cac22f712b` for the same pack, so the failure is a credential of the
+machine, not a result. The check belongs to #2, and nothing in this run changed
+it.
 
 `strata list clusters --applied` named each profile that the cluster applies
 (#63):

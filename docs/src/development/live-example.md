@@ -111,7 +111,17 @@ back to false with the default variables (`apply_baseline`).
   `curl`, `helm`, `crane`, and a Rust toolchain.
 - Read access to an OCI pack registry in the tenant, and a login to it that
   `crane` can use (`crane auth login` or `docker login`). The Helm registry must
-  serve charts with no credentials. `Bitnami` does.
+  serve charts with no credentials. `Bitnami` does. For an ECR registry:
+
+  ```bash
+  AWS_PROFILE=<profile> aws ecr get-login-password --region <region> \
+    | crane auth login <account>.dkr.ecr.<region>.amazonaws.com -u AWS --password-stdin
+  ```
+
+  The profile needs `ecr:GetAuthorizationToken`, and the token expires, so a run
+  after some hours needs the login again. `crane auth login` reports success
+  even when it reads an empty password, so make sure of the login with `crane
+  digest <registry>/<repository>:<tag>`.
 - The AWS CLI with read access to the account, only for `aws-inventory.sh`.
 - The AWS managed policy `AmazonEBSCSIDriverPolicy` on the worker node role
   `nodes.cluster-api-provider-aws.sigs.k8s.io`. Without it, the EBS CSI
