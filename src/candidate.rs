@@ -459,11 +459,16 @@ pub fn pack_snapshot<A: PaletteApi>(
                 [(_, uid)] => uid.clone(),
                 [] => return Err(not_found("any visible registry".to_string())),
                 several => {
+                    // by name, so the message reads the same on every run: Palette lists the
+                    // registries in the order it likes, and a live run saw both orders
+                    let mut registries: Vec<String> =
+                        several.iter().map(|(n, _)| n.clone()).collect();
+                    registries.sort();
                     return Err(Error::PackInSeveralRegistries {
                         name: name.to_string(),
                         version: version.to_string(),
-                        registries: several.iter().map(|(n, _)| n.clone()).collect(),
-                    })
+                        registries,
+                    });
                 }
             }
         }

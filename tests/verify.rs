@@ -3367,9 +3367,11 @@ fn a_pack_in_several_registries_needs_the_registry_named() {
             registries,
         } => {
             assert_eq!((name.as_str(), version.as_str()), ("csi-aws-ebs", "1.65.0"));
+            // sorted by name, not in the order Palette listed them: a live run of packs.sh saw
+            // the two orders on two runs, which made the message differ for one tenant state
             assert_eq!(
                 registries,
-                &vec!["Public Repo".to_string(), "Mirror".to_string()]
+                &vec!["Mirror".to_string(), "Public Repo".to_string()]
             );
         }
         other => panic!("unexpected {other}"),
