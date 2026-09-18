@@ -192,6 +192,43 @@ in place, and one for the record of cluster A. With the flag, nothing opened.
 GitHub lists a new or closed issue about five seconds later, so the checks wait
 for the listing.
 
+## What a registry answers about a pack
+
+`GET /v1/packs/<name>/registries/<uid>` answers with everything the registry
+holds for one pack, in one request. Run `20260918T020941Z` read `csi-aws-ebs`
+from `Public Repo`, which gave 36 versions in an answer of about 1 MB:
+
+| Field | Holds |
+| --- | --- |
+| `layer`, `cloudTypes` | the layer of the pack, and the clouds it supports |
+| `tags[]` | one row per tag: `tag`, `version`, `packUid`, and `parentTags` |
+| `packValues[]` | one row per build: `packUid`, `values`, `schema`, `presets`, `readme`, `annotations`, `dependencies` |
+
+The 36 versions carried 71 tag rows and 36 pack uids: one build per version,
+under several tags. A version carries its exact tag and the floating tags above
+it, each as its own row, and `parentTags` names the tags above that one:
+
+```text
+{"packUid":"6aa410ec…","parentTags":null,          "tag":"1.x",    "version":"1.65.0"}
+{"packUid":"6aa410ec…","parentTags":["1.x"],       "tag":"1.65.x", "version":"1.65.0"}
+{"packUid":"6aa410ec…","parentTags":["1.65.x","1.x"],"tag":"1.65.0","version":"1.65.0"}
+```
+
+So the newest version of a line is the version that the floating tag names, and
+one request gives every version, every tag, and no repeats. The paged listing
+`/v1/packs?filters=spec.name=<name>` holds the digest of each build, which this
+answer does not, and it repeats a version across pages.
+
+**A constraint between packs.** `packValues[]` has a `dependencies` field, which
+is where a pack that requires another pack would say so. It is empty for every
+version this run read: all 36 of `csi-aws-ebs`, and every version of
+`kubernetes`, `cni-cilium-oss`, `prometheus-operator`, `cert-manager`,
+`nginx-ingress` and `external-secrets-operator`, in `Public Repo` and in
+`Spectro Addon Repo`. The shape is there and the content is not, so
+[#58](https://github.com/como-technologies/strata/issues/58) cannot be designed
+from this tenant. It needs one pack that declares a dependency, which a team
+that publishes its own packs has and a public registry does not.
+
 ## What no run covers
 
 - A pack version pushed again under the same tag, for any registry kind. It is
