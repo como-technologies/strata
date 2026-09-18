@@ -1551,6 +1551,48 @@ fn cluster_doc(uid: &str, name: &str, project: &str, state: &str) -> Value {
 }
 
 #[test]
+fn a_consumer_with_no_project_is_read_in_the_scope_the_profile_was_read_in() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+
+    // the profile of project p1, with one consumer that Palette names no project for
+    let mut profile = read(&dir.path().join("b").join("profile.json"));
+    profile["status"]["inUseClusterUids"] = serde_json::json!(["cluster-aaa"]);
+    profile["status"]["inUseClusters"] =
+        serde_json::json!([{"uid": "cluster-aaa", "name": "alpha", "projectUid": ""}]);
+    let in_p1 = serve(MemoryApi::new(), dir.path(), "b", UID_B)
+        .with(format!("/v1/clusterprofiles/{UID_B}"), profile)
+        .with(
+            "/v1/spectroclusters/cluster-aaa",
+            cluster_doc("cluster-aaa", "alpha", "", "Running"),
+        );
+
+    // a record of that profile, taken in p1
+    let record = ops::snapshot_from_dir(&dir.path().join("b"), "b", "t0")
+        .unwrap()
+        .with_project(Some("p1"));
+    let path = dir.path().join("record.json");
+    std::fs::write(&path, record.to_json(false).unwrap()).unwrap();
+
+    let scopes: RefCell<Vec<Option<String>>> = RefCell::new(Vec::new());
+    let connect = |scope: Option<&str>| {
+        scopes.borrow_mut().push(scope.map(str::to_string));
+        Ok(Palette::new(in_p1.clone()))
+    };
+    let r = ops::consumers(&Ref::Snapshot(path), connect, "t1", &Progress::silent()).unwrap();
+
+    assert_eq!(r.count, 1);
+    assert_eq!(r.consumers[0].state, "Running", "the cluster was read");
+    assert!(r.consumers[0].error.is_none());
+    assert_eq!(
+        *scopes.borrow(),
+        vec![Some("p1".to_string())],
+        "the record names p1, so its consumers are read there: one client, and never the scope of \
+         the environment"
+    );
+}
+
+#[test]
 fn consumers_lists_each_cluster_with_name_project_and_state_from_its_own_project() {
     let dir = tempfile::tempdir().unwrap();
     common::make_fixtures(dir.path());

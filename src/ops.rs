@@ -985,7 +985,7 @@ where
         Ref::NameVersion { .. } => (None, None),
     };
 
-    let mut clients: HashMap<Option<String>, Palette<A>> = HashMap::new();
+    let mut clients: HashMap<String, Palette<A>> = HashMap::new();
     let home = connect(profile_scope.as_deref())?;
     let uid = match (uid_hint, reference) {
         (Some(uid), _) => uid,
@@ -994,7 +994,6 @@ where
     };
     progress.note(&format!("listing consumers of profile {uid}"));
     let doc = home.profile_document(&uid)?;
-    clients.insert(profile_scope, home);
 
     let named: Vec<Value> = doc
         .pointer("/status/inUseClusters")
@@ -1014,12 +1013,9 @@ where
             error: None,
             uid: cluster,
         };
-        let scope = Some(c.project_uid.clone()).filter(|p| !p.is_empty());
-        let client = match clients.entry(scope.clone()) {
-            Entry::Occupied(e) => Ok(e.into_mut()),
-            Entry::Vacant(v) => connect(scope.as_deref()).map(|p| v.insert(p)),
-        };
-        match client.and_then(|p| p.cluster_document(&c.uid)) {
+        let doc = client_for(&mut clients, &home, &c.project_uid, &mut connect)
+            .and_then(|p| p.cluster_document(&c.uid));
+        match doc {
             Ok(d) => {
                 let or_keep = |current: String, found: String| {
                     if found.is_empty() {
@@ -1423,6 +1419,29 @@ fn list_clusters(doc: &Value) -> Vec<ListedCluster> {
     clusters
 }
 
+/// The client that reads a cluster of project `project`: the one already connected for that
+/// project, a new one, or `home` when the cluster names no project of its own. A cluster with no
+/// project is in the scope the operation already works in, so `home` reads it; `consumers` and
+/// `list --applied` answered that differently until they shared this.
+fn client_for<'a, A, F>(
+    clients: &'a mut HashMap<String, Palette<A>>,
+    home: &'a Palette<A>,
+    project: &str,
+    connect: &mut F,
+) -> Result<&'a Palette<A>>
+where
+    A: PaletteApi,
+    F: FnMut(Option<&str>) -> Result<Palette<A>>,
+{
+    if project.is_empty() || Some(project) == home.project_uid() {
+        return Ok(home);
+    }
+    match clients.entry(project.to_string()) {
+        Entry::Occupied(e) => Ok(e.into_mut()),
+        Entry::Vacant(v) => connect(Some(project)).map(|p| &*v.insert(p)),
+    }
+}
+
 /// Read each cluster document for the profiles it applies. A cluster is in its own project, so
 /// each project gets one client, as `consumers` reads its clusters. A cluster the request cannot
 /// read keeps its row and carries the error.
@@ -1435,19 +1454,11 @@ fn read_applied<A, F>(
     A: PaletteApi,
     F: FnMut(Option<&str>) -> Result<Palette<A>>,
 {
-    let at_home = home.project_uid().unwrap_or("").to_string();
     let mut clients: HashMap<String, Palette<A>> = HashMap::new();
     for c in clusters.iter_mut() {
         progress.note(&format!("reading cluster {}", c.uid));
-        let doc = if c.project_uid.is_empty() || c.project_uid == at_home {
-            home.cluster_document(&c.uid)
-        } else {
-            let client = match clients.entry(c.project_uid.clone()) {
-                Entry::Occupied(e) => Ok(e.into_mut()),
-                Entry::Vacant(v) => connect(Some(&c.project_uid)).map(|p| v.insert(p)),
-            };
-            client.and_then(|p| p.cluster_document(&c.uid))
-        };
+        let doc = client_for(&mut clients, home, &c.project_uid, connect)
+            .and_then(|p| p.cluster_document(&c.uid));
         match doc {
             Ok(d) => c.profiles = Some(AppliedProfile::of_cluster(&d)),
             Err(e) => c.error = Some(e.to_json()),
