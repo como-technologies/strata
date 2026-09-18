@@ -51,6 +51,17 @@ pub struct Tool {
     pub implementation: Option<String>,
 }
 
+impl Tool {
+    /// This build of strata, as every document it writes records it.
+    pub fn current() -> Tool {
+        Tool {
+            name: crate::TOOL_NAME.to_string(),
+            version: crate::TOOL_VERSION.to_string(),
+            implementation: Some(crate::TOOL_IMPL.to_string()),
+        }
+    }
+}
+
 /// Where a snapshot came from.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
@@ -565,11 +576,7 @@ impl Snapshot {
 
         Ok(Snapshot {
             schema: SNAPSHOT_SCHEMA.to_string(),
-            tool: Tool {
-                name: crate::TOOL_NAME.to_string(),
-                version: crate::TOOL_VERSION.to_string(),
-                implementation: Some(crate::TOOL_IMPL.to_string()),
-            },
+            tool: Tool::current(),
             source,
             variables,
             variables_hash,
@@ -668,11 +675,7 @@ impl Snapshot {
         };
         Ok(Snapshot {
             schema: SNAPSHOT_SCHEMA.to_string(),
-            tool: Tool {
-                name: crate::TOOL_NAME.to_string(),
-                version: crate::TOOL_VERSION.to_string(),
-                implementation: Some(crate::TOOL_IMPL.to_string()),
-            },
+            tool: Tool::current(),
             source,
             variables,
             variables_hash,

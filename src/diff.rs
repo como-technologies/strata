@@ -1146,11 +1146,7 @@ pub fn compute(a: &Snapshot, b: &Snapshot, generated_at: &str, verify: Option<Ve
 
     Diff {
         schema: DIFF_SCHEMA.to_string(),
-        tool: Tool {
-            name: crate::TOOL_NAME.to_string(),
-            version: crate::TOOL_VERSION.to_string(),
-            implementation: Some(crate::TOOL_IMPL.to_string()),
-        },
+        tool: Tool::current(),
         generated_at: generated_at.to_string(),
         legend: Legend::standard(),
         a: a.source.clone(),

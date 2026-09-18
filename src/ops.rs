@@ -502,11 +502,7 @@ where
     };
     VerifySummary {
         schema: VERIFY_SUMMARY_SCHEMA.to_string(),
-        tool: Tool {
-            name: crate::TOOL_NAME.to_string(),
-            version: crate::TOOL_VERSION.to_string(),
-            implementation: Some(crate::TOOL_IMPL.to_string()),
-        },
+        tool: Tool::current(),
         generated_at: checked_at.to_string(),
         legend: VerifyLegend {
             status: [
@@ -816,11 +812,7 @@ pub fn same_release(records: &[(String, Snapshot)], policy: Policy, generated_at
     };
     Chain {
         schema: CHAIN_SCHEMA.to_string(),
-        tool: Tool {
-            name: crate::TOOL_NAME.to_string(),
-            version: crate::TOOL_VERSION.to_string(),
-            implementation: Some(crate::TOOL_IMPL.to_string()),
-        },
+        tool: Tool::current(),
         generated_at: generated_at.to_string(),
         legend: ChainLegend {
             status: m(&[
@@ -1059,11 +1051,7 @@ where
         .count();
     Ok(ConsumersReport {
         schema: CONSUMERS_SCHEMA.to_string(),
-        tool: Tool {
-            name: crate::TOOL_NAME.to_string(),
-            version: crate::TOOL_VERSION.to_string(),
-            implementation: Some(crate::TOOL_IMPL.to_string()),
-        },
+        tool: Tool::current(),
         generated_at: generated_at.to_string(),
         profile: ConsumedProfile {
             uid: text(&doc, "/metadata/uid"),
@@ -1314,11 +1302,7 @@ where
 
     Ok(Listing {
         schema: LIST_SCHEMA.to_string(),
-        tool: Tool {
-            name: crate::TOOL_NAME.to_string(),
-            version: crate::TOOL_VERSION.to_string(),
-            implementation: Some(crate::TOOL_IMPL.to_string()),
-        },
+        tool: Tool::current(),
         generated_at: generated_at.to_string(),
         project_uid,
         project_name,
@@ -1683,11 +1667,7 @@ where
     }
     Ok(PackListing {
         schema: PACKS_SCHEMA.to_string(),
-        tool: Tool {
-            name: crate::TOOL_NAME.to_string(),
-            version: crate::TOOL_VERSION.to_string(),
-            implementation: Some(crate::TOOL_IMPL.to_string()),
-        },
+        tool: Tool::current(),
         generated_at: generated_at.to_string(),
         name: name.to_string(),
         cloud: options.cloud.clone(),
