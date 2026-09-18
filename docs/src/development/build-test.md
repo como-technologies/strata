@@ -58,6 +58,14 @@ fails when fewer than 50 of its 2000 cases build a record.
 | lint and test | `just lint`, `just test`, `just library-example`, and `just examples` |
 | docs | `just docs-check`, and `just docs` with `mdbook-lint` |
 | build | the Linux musl binary, with the step that a release uses |
+| publish the book | the book that the `docs` job built, to GitHub Pages |
+
+`publish the book` needs the other three, and runs only on `main`, so the site is
+a build that every check passed. The `docs` job builds the book once and hands it
+over, so no job builds it twice.
+
+The release workflow calls this one before it builds a binary, so a tag cannot
+ship what the checks refuse.
 
 Run the same recipes in a clean checkout before you push. A file that is not
 tracked can hide a failure:

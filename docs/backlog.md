@@ -801,7 +801,7 @@ One condition holds the work: this repository is private, and on a GitHub plan b
 ### Plan
 
 1. Decide who reads the site. The plan gives both choices; a site for the members of the organization keeps the readers the repository already has, and needs no scrub of the book.
-2. Add `.github/workflows/docs.yml`: build with `just docs`, upload `docs/book`, and deploy with `actions/deploy-pages` on each push to main.
+2. Publish from the `docs` job of `.github/workflows/ci.yml`: it already builds the book, so it uploads `docs/book`, and a `publish-docs` job that needs every check deploys it with `actions/deploy-pages` on each push to main. A workflow of its own would build the book a second time, and would publish it whatever the checks said.
 3. Enable Pages one time in Settings, Pages, with the source GitHub Actions, and set the visibility that step 1 decided. The API refuses this step to a token that cannot open a public surface, so a person does it.
 4. Put the address in `README.md` under Documentation, and in the footer of `strata --help`.
 5. Keep `just docs-check` and `just docs-lint` in the `docs` job, so the published book is the output of the build.
@@ -809,7 +809,7 @@ One condition holds the work: this repository is private, and on a GitHub plan b
 ### Acceptance criteria
 
 - [x] The organization states who can read a Pages site of this repository: the site is `public: false`, so it opens for the members of the organization only
-- [x] `.github/workflows/docs.yml` publishes `docs/book` on each push to main
+- [x] `.github/workflows/ci.yml` publishes `docs/book` on each push to main, after every check passed
 - [ ] The book opens at its address, with the gruvbox theme and the mermaid diagrams
 - [x] `README.md` and `strata --help` name the address
 - [x] No page of the book holds a uid or a name of a real tenant: it holds twelve, and a site for the members of the organization gives them to no new reader. A public site would need `internals/palette.md` and `development/live-runs.md` scrubbed first

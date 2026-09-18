@@ -1,9 +1,12 @@
 name: ci
 
+# Every check this repository has, and the one deployment that follows them. The release workflow
+# calls this workflow before it builds anything, so a tag cannot ship what the checks refuse.
 on:
   push:
     branches: [main]
   pull_request:
+  workflow_call:
 
 permissions:
   contents: read
@@ -41,6 +44,13 @@ jobs:
       # mdbook builds a broken link with no message; mdbook-lint finds it
       - run: just docs-lint
       - run: just docs
+      # the book the checks passed is the book that is published, so it is built once
+      - uses: actions/configure-pages@v5
+        if: github.ref == 'refs/heads/main'
+      - uses: actions/upload-pages-artifact@v3
+        if: github.ref == 'refs/heads/main'
+        with:
+          path: docs/book
 
   build:
     name: build x86_64-unknown-linux-musl
@@ -56,3 +66,24 @@ jobs:
           name: strata-x86_64-unknown-linux-musl
           path: target/x86_64-unknown-linux-musl/release/strata
           if-no-files-found: error
+
+  # the book goes out only after every check passed, and only from main
+  publish-docs:
+    name: publish the book
+    needs: [check, docs, build]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    # one deployment at a time, and never cancel one that is running: a half-deployed site is
+    # worse than a site one commit behind
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
