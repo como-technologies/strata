@@ -247,7 +247,7 @@ struct PacksArgs {
 
 #[derive(Args)]
 struct ListArgs {
-    /// What to list: profiles, clusters, projects
+    /// What to list; with none, profiles and clusters
     #[arg(value_enum)]
     kinds: Vec<KindArg>,
     /// List this project, by uid; '' is tenant scope

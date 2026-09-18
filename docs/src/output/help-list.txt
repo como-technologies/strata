@@ -4,7 +4,7 @@ List the profile versions, clusters, and projects in the scope
 Usage: strata list [OPTIONS] [KINDS]...
 
 Arguments:
-  [KINDS]...  What to list: profiles, clusters, projects [possible values: profiles, clusters, projects]
+  [KINDS]...  What to list; with none, profiles and clusters [possible values: profiles, clusters, projects]
 
 Options:
       --project <PROJECT>            List this project, by uid; '' is tenant scope
