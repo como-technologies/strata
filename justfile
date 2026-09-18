@@ -117,6 +117,14 @@ live-profiles:
 live-verify: build
     examples/live/verify.sh
 
+# The pack ref checks against the tenant's registries: read-only, no cluster, no cost (#55)
+live-packs: build
+    examples/live/packs.sh
+
+# The merge gate over records of the live profiles: needs live-profiles, no cluster, no cost (#57)
+live-merge-gate: build
+    examples/live/merge-gate.sh
+
 # The scripts run in order from the baseline: verify.sh, in-place.sh off, in-place.sh on (against
 # that off run), and registry-move.sh. The recipe stops at the first script that fails. Billable:
 # about 3 to 4 hours, with cluster B two times.

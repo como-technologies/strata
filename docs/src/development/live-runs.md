@@ -356,6 +356,91 @@ edited    exitcode '1': failure
 undone    verify-report: 1 records: 1 unchanged, 0 drifted, 0 could not be checked; closed #46 for records/addon.json
 ```
 
+## packs.sh
+
+The pack ref checks (#55), run `20260918T003543Z` with strata 0.5.2: read-only, no
+cluster, no cost. `just live-packs`. All 15 checks passed.
+
+The tenant holds `csi-aws-ebs` in two registries, `Public Repo` and the OCI
+registry `Palette Registry` that the registry-move run added, so a bare
+`pack:csi-aws-ebs@1.63.1` is ambiguous and every reading ref names its registry:
+
+```text
+strata: pack 'csi-aws-ebs' at version '1.63.1' is in several registries: Palette Registry, Public Repo; name one, as in pack:<registry>/csi-aws-ebs@1.63.1
+```
+
+The first run of this script printed those two names in the other order, because
+Palette lists the registries in the order it likes. Strata now sorts them, so
+the message reads the same on every run.
+
+| result | check | expected exit | got | what it shows |
+|---|---|---|---|---|
+| PASS | `list-packs` | 0 | 0 | #55: the profiles list the pack versions they pin |
+| PASS | `compare-versions` | 1 | 1 | #55: pack:Public Repo/csi-aws-ebs@1.63.1 against @1.65.0 differs |
+| PASS | `compare-json` | 1 | 1 | #55: the diff document names the pack on both sides |
+| PASS | `compare-same` | 0 | 0 | #55: pack:Public Repo/csi-aws-ebs@1.65.0 against itself is identical |
+| PASS | `record` | 0 | 0 | #55: snapshot writes a record of a pack version |
+| PASS | `record-title` | 0 | 0 | #55: the record names the pack, not a profile |
+| PASS | `verify-record` | 0 | 0 | #55: the record verifies against the registry it came from |
+| PASS | `latest` | 0 | 0 | #55: pack:Public Repo/csi-aws-ebs@latest resolves to a version |
+| PASS | `latest-is-newest` | 0 | 0 | #55: latest gives the newest version the registry offers |
+| PASS | `two-registries` | 2 | 2 | #55: a bare ref for a pack in two registries is an error that names both |
+| PASS | `two-registries-says` | 0 | 0 | #55: the error names each registry and the ref that fixes it |
+| PASS | `other-registry` | 0 | 0 | #55: the same pack version reads from the other registry too |
+| PASS | `registries-differ` | 1 | 1 | #55: the two registries hold different builds of the version |
+| PASS | `unknown-version` | 2 | 2 | #55: a version the registry does not have is an error |
+| PASS | `unknown-registry` | 2 | 2 | #55: a registry the tenant does not have is an error |
+
+## merge-gate.sh
+
+The merge gate (#57), run `20260918T003905Z` with strata 0.5.2: the live
+profiles, no cluster, and one in-place edit that the run undoes. `just
+live-merge-gate`. All 15 checks passed.
+
+The repository is local, with a bare origin, so the fetch and the merge are real
+git; every record and every verify is live. Main pinned
+`strata-live-profile@1.0.0` and then `@1.0.1`, and the branch pins `1.0.0`
+again:
+
+```text
+BEHIND: releases/dev.json would replace what main pinned with an older version
+  the profile: main has 1.0.1, the merge result has 1.0.0
+  main pinned this release before, on 2026-09-17 in 53e65a4
+  the branch wrote this record after main moved to strata-live-profile@1.0.1
+  a rollback says so, in a commit of the branch:
+    Rollback: releases/dev.json to strata-live-profile@1.0.0
+  or in the rollback label, which gives the job --allow-rollback.
+```
+
+With the rollback declared in the branch's commit, the gate passes. Then the
+add-on version is edited in place through the API, and the gate goes red on a
+record that git cannot fault, while the declared rollback still passes:
+
+```text
+DRIFTED: releases/addon.json does not verify; a cluster built from it would not get what it says
+  strata-live-addon@1.0.0 (uid 6aac455cb6a81bf97d926581)  ->  strata-live-addon@1.0.0 (uid 6aac455cb6a81bf97d926581)
+  root       2d6991fdf460 -> e264fb17e249   CHANGED
+  note       both sides are strata-live-addon@1.0.0 (uid 6aac455cb6a81bf97d926581): the version was edited in place
+```
+
+| result | check | expected exit | got | what it shows |
+|---|---|---|---|---|
+| PASS | `record-newer` | 0 | 0 | #57: record strata-live-profile@1.0.1, which main pins |
+| PASS | `record-addon` | 0 | 0 | #57: record strata-live-addon@1.0.0, which both sides pin |
+| PASS | `record-older` | 0 | 0 | #57: record strata-live-profile@1.0.0, which the branch pins |
+| PASS | `behind` | 1 | 1 | #57: the gate is red: the merge result pins the earlier version |
+| PASS | `behind-says` | 0 | 0 | #57: the report names the record and both versions |
+| PASS | `behind-evidence` | 0 | 0 | #57: the evidence says main pinned this release before |
+| PASS | `behind-declares` | 0 | 0 | #57: the report gives the line that declares a rollback |
+| PASS | `declared` | 0 | 0 | #57: the gate passes once the commit declares the rollback |
+| PASS | `declared-says` | 0 | 0 | #57: the report names it a rollback, declared in a commit |
+| PASS | `api-edit` | 0 | 0 | #57: edit the add-on version in place through the API |
+| PASS | `drifted` | 1 | 1 | #57: the gate is red on a record Palette no longer matches |
+| PASS | `drifted-says` | 0 | 0 | #57: the report names the record that does not verify |
+| PASS | `drifted-keeps-rollback` | 0 | 0 | #57: the declared rollback still passes; only the record fails |
+| PASS | `api-undo` | 0 | 0 | #57: undo the edit through the API |
+| PASS | `restored` | 0 | 0 | #57: the gate passes again once Palette matches the record |
+
 ## in-place.sh
 
 `in-place.sh off` and `in-place.sh on` in session `20260917T151426Z`, provider
