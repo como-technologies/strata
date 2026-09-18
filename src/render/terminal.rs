@@ -32,6 +32,27 @@ fn column_widths(rows: &[Vec<String>]) -> Vec<usize> {
     widths
 }
 
+/// The pack name with the part that `--pack` matched in bold yellow, the way a search tool marks
+/// a match. The cell is already padded, so the escape codes do not move the column. Text that is
+/// not ASCII is left alone: lowercasing can change its length, and the match would slice wrongly.
+fn matched(p: &Paint, cell: &str, text: Option<&str>) -> String {
+    let Some(text) = text.filter(|t| !t.is_empty()) else {
+        return cell.to_string();
+    };
+    if !cell.is_ascii() || !text.is_ascii() {
+        return cell.to_string();
+    }
+    match cell.to_lowercase().find(&text.to_lowercase()) {
+        Some(at) => format!(
+            "{}{}{}",
+            &cell[..at],
+            p.byellow(&cell[at..at + text.len()]),
+            &cell[at + text.len()..]
+        ),
+        None => cell.to_string(),
+    }
+}
+
 /// One table line: cells padded to their column and two spaces apart, the last cell unpadded so
 /// no line ends in spaces. `style` colors a padded cell by its column.
 fn table_line(
@@ -500,6 +521,7 @@ impl Renderer for TerminalRenderer {
                 for row in &packs {
                     out.push_str(&table_line("    ", row, &pack_widths, |i, cell| match i {
                         0 => p.dim(cell),
+                        1 => matched(p, cell, l.pack.as_deref()),
                         _ => cell.to_string(),
                     }));
                 }
@@ -552,5 +574,44 @@ impl Renderer for TerminalRenderer {
             }
         }
         Ok(out)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_part_of_a_pack_name_that_matched_is_marked() {
+        let on = Paint::resolve(crate::color::ColorMode::Always);
+        assert_eq!(
+            matched(&on, "cni-cilium-oss", Some("cilium")),
+            format!("cni-{}-oss", on.byellow("cilium")),
+            "the match is marked, and the rest of the name is not"
+        );
+        // the search ignores case, and the name keeps its own
+        assert_eq!(
+            matched(&on, "cni-Cilium-oss", Some("cilium")),
+            format!("cni-{}-oss", on.byellow("Cilium"))
+        );
+        // the padding of the column stays in the cell
+        assert_eq!(
+            matched(&on, "csi-aws-ebs   ", Some("aws")),
+            format!("csi-{}-ebs   ", on.byellow("aws"))
+        );
+
+        // nothing to mark, nothing to do
+        assert_eq!(matched(&on, "kubernetes", Some("cilium")), "kubernetes");
+        assert_eq!(matched(&on, "kubernetes", None), "kubernetes");
+        assert_eq!(matched(&on, "kubernetes", Some("")), "kubernetes");
+        // no color: the plain name, so a pipe and a file read the same
+        let off = Paint::off();
+        assert_eq!(
+            matched(&off, "cni-cilium-oss", Some("cilium")),
+            "cni-cilium-oss"
+        );
+        // text that is not ASCII is left alone, because lowercasing can change its length
+        assert_eq!(matched(&on, "pack-ß", Some("ß")), "pack-ß");
+        assert_eq!(matched(&on, "cilium", Some("CILIUM")), on.byellow("cilium"));
     }
 }

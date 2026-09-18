@@ -50,6 +50,9 @@ whose name contains the text, in upper or lower case:
 {{#include ../output/list-pack.txt}}
 ```
 
+In a terminal, the part of each pack name that matched is marked, as a search
+tool marks a match. A pipe, a file and `--no-color` get the plain name.
+
 `--pack` reads each profile version, one request for each. It also lists only
 profiles, unless you name the kinds. `--packs` reads the packs with no filter.
 A pack under another tag name shows the tag: `24.04 (tag LTS__24.x)`. A version
