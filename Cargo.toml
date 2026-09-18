@@ -1,6 +1,6 @@
 [package]
 name = "strata"
-version = "0.6.0"
+version = "0.6.1"
 edition = "2021"
 description = "Record, compare, and check Spectro Cloud Palette profile versions, clusters, and pack versions"
 publish = false

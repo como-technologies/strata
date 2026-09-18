@@ -1,6 +1,6 @@
 # strata
 
-[![version](https://img.shields.io/badge/version-0.6.0-blue)](Cargo.toml)
+[![version](https://img.shields.io/badge/version-0.6.1-blue)](Cargo.toml)
 [![the book](https://github.com/como-technologies/strata/actions/workflows/docs.yml/badge.svg)](https://legendary-train-pzq9ojj.pages.github.io/)
 
 Record, compare, and check what Spectro Cloud Palette holds: cluster profile
@@ -45,7 +45,7 @@ Run `strata --help` for the list, and `strata <command> --help` for the options.
 ## Install
 
 ```bash
-v=v0.6.0; t=x86_64-unknown-linux-musl
+v=v0.6.1; t=x86_64-unknown-linux-musl
 gh release download $v --repo como-technologies/strata --pattern strata-$t --pattern SHA256SUMS
 sha256sum --check --ignore-missing SHA256SUMS
 chmod +x strata-$t && sudo mv strata-$t /usr/local/bin/strata
