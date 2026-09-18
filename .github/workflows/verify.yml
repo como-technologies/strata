@@ -42,9 +42,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       # the caller's repository, where the records live
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # this repository at the requested tag, for the script
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           repository: como-technologies/strata
           ref: ${{ inputs.strata-version }}

@@ -13,7 +13,7 @@ runs:
     - uses: Swatinem/rust-cache@v2
       with:
         key: ${{ inputs.target }}
-    - uses: extractions/setup-just@v2
+    - uses: extractions/setup-just@v4
     # Linux targets are static musl builds; ring needs a musl C toolchain, which cross provides
     - name: install cross
       if: contains(inputs.target, 'linux')

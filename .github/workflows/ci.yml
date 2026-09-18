@@ -16,12 +16,12 @@ jobs:
     name: lint and test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
-      - uses: extractions/setup-just@v2
+      - uses: extractions/setup-just@v4
       # CI runs the same recipes a developer runs locally
       - run: just lint
       - run: just test
@@ -34,10 +34,10 @@ jobs:
     name: docs
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - uses: extractions/setup-just@v2
+      - uses: extractions/setup-just@v4
       - uses: ./.github/actions/mdbook
       # each output in the book is the output of this build of strata
       - run: just docs-check
@@ -56,12 +56,12 @@ jobs:
     name: build x86_64-unknown-linux-musl
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # the same step the release workflow uses, so CI checks the binary a release would ship
       - uses: ./.github/actions/build
         with:
           target: x86_64-unknown-linux-musl
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: strata-x86_64-unknown-linux-musl
           path: target/x86_64-unknown-linux-musl/release/strata
@@ -86,4 +86,4 @@ jobs:
       cancel-in-progress: false
     steps:
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5

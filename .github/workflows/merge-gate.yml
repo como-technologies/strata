@@ -45,11 +45,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       # the whole history: the gate compares the merge result with the base branch
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       # this repository at the requested tag, for the script
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           repository: como-technologies/strata
           ref: ${{ inputs.strata-version }}
