@@ -214,6 +214,17 @@ pub struct AppliedProfile {
 }
 
 impl AppliedProfile {
+    /// The profiles a cluster document applies, in the order Palette applies them:
+    /// `spec.clusterProfileTemplates` of `GET /v1/spectroclusters/{uid}`.
+    pub fn of_cluster(doc: &Value) -> Vec<AppliedProfile> {
+        doc.pointer("/spec/clusterProfileTemplates")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .map(AppliedProfile::from_template)
+            .collect()
+    }
+
     fn from_template(t: &Value) -> AppliedProfile {
         AppliedProfile {
             uid: s(t, "/uid"),

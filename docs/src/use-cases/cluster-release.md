@@ -18,7 +18,17 @@ In this example, `dev` has three clusters:
 
 The release record is `releases/1.1.0/dev.json`.
 
-## 1. A cluster that runs the release
+## 1. What each cluster runs
+
+```text
+{{#include ../output/cluster-applied.txt}}
+```
+
+`strata list clusters --applied` reads each cluster for the profiles it
+applies. Start here: the list gives you the cluster refs and tells you which
+cluster needs `/aws-stack` to select one profile.
+
+## 2. A cluster that runs the release
 
 ```text
 {{#include ../output/cluster-identical.txt}}
@@ -26,7 +36,7 @@ The release record is `releases/1.1.0/dev.json`.
 
 `/aws-stack` selects one profile of the cluster.
 
-## 2. A cluster that runs two profiles
+## 3. A cluster that runs two profiles
 
 Without the selection, the snapshot covers each profile that the cluster runs.
 The cluster side then holds the packs of both profiles:
@@ -39,7 +49,7 @@ The cluster side then holds the packs of both profiles:
 itself did not change: each of its five packs is `unchanged`. Select the
 profile, unless the record covers each profile of the cluster.
 
-## 3. A cluster on another version
+## 4. A cluster on another version
 
 ```text
 {{#include ../output/cluster-moved.txt}}
@@ -48,7 +58,7 @@ profile, unless the record covers each profile of the cluster.
 The cluster side reads `aws-stack@1.1.1 on cluster search`: it moved early. The
 `consumers` line agrees: Palette does not list `search` for 1.1.0.
 
-## 4. A cluster with an edit on the cluster
+## 5. A cluster with an edit on the cluster
 
 ```text
 {{#include ../output/cluster-edited.txt}}
@@ -58,7 +68,7 @@ The versions are equal, but the value differs. The note gives two causes. Run
 `verify` on the record of the version to find which one: when `verify` passes,
 the version did not change, so somebody edited the values on the cluster.
 
-## 5. Record what the cluster runs
+## 6. Record what the cluster runs
 
 ```text
 {{#include ../output/cluster-run-record.txt}}

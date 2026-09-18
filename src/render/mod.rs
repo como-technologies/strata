@@ -98,6 +98,11 @@ pub(crate) fn entry_error(error: Option<&Value>) -> Option<&str> {
     error.and_then(|e| e.get("message")).and_then(Value::as_str)
 }
 
+/// `<name>@<version>` of a profile a cluster applies, as `list` and the reports print it.
+pub(crate) fn applied_ref(a: &crate::snapshot::AppliedProfile) -> String {
+    record_label(&a.name, &a.version)
+}
+
 /// True when Palette lists the clusters that use a side: a profile version has consumers, but a
 /// side that records a cluster, or one pack from a registry, has none.
 pub(crate) fn lists_consumers(s: &Source) -> bool {

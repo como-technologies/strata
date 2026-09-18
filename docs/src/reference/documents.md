@@ -151,6 +151,8 @@ is the path as a list: strings for keys, numbers for indexes, and
     also `type`, `consumers`, and `packs[]` with `layer`, `name`, `tag`, and
     `version`, or `error`.
   - A cluster: `ref`, `name`, `uid`, `state`, `cloudType`, and `projectUid`.
+    With `--applied`, also `profiles[]` with the `uid`, `name`, `version`, and
+    `type` of each profile the cluster applies, or `error`.
   - A project: `name` and `uid`.
 
 ## strata-packs/1

@@ -11,6 +11,7 @@ Options:
       --project-name <PROJECT_NAME>  The same, by project name
       --packs                        Also read each version for its packs and consumers
       --pack <TEXT>                  Keep the versions with a pack whose name holds TEXT; sets --packs
+      --applied                      Also read each cluster for the profiles it applies
       --format <FORMAT>              The report format: terminal, markdown, or json [default: terminal]
       --json                         The same as --format json
       --color [<COLOR>]              Color the report: auto, always, or never [default: auto]

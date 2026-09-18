@@ -15,7 +15,7 @@ use crate::diff::{
 use crate::error::{Error, Result};
 use crate::progress::Progress;
 use crate::reference::Ref;
-use crate::snapshot::{Pack, Snapshot, Tool};
+use crate::snapshot::{AppliedProfile, Pack, Snapshot, Tool};
 use crate::version;
 
 /// Turn a ref into a snapshot. A snapshot file is loaded; anything else is fetched through the
@@ -1096,6 +1096,8 @@ pub struct ListOptions {
     /// Keep only the profiles with a pack whose name contains this text, ignoring case. Implies
     /// `packs`.
     pub pack: Option<String>,
+    /// Read each cluster document for the profiles the cluster applies: one request per cluster.
+    pub applied: bool,
 }
 
 impl ListOptions {
@@ -1168,6 +1170,12 @@ pub struct ListedCluster {
     /// The project the cluster is in; empty for a tenant cluster. The ref works only in this
     /// project, which a tenant-scope listing can differ from.
     pub project_uid: String,
+    /// With applied: the profile versions the cluster applies, in the order Palette applies them.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub profiles: Option<Vec<AppliedProfile>>,
+    /// With applied: why the cluster document could not be read, when it could not.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<Value>,
 }
 
 /// One project.
@@ -1235,7 +1243,11 @@ where
     };
     let clusters = if options.wants(ListKind::Clusters) {
         progress.note("listing clusters");
-        Some(list_clusters(&home.cluster_listing()?))
+        let mut clusters = list_clusters(&home.cluster_listing()?);
+        if options.applied {
+            read_applied(&mut clusters, &home, &mut connect, progress);
+        }
+        Some(clusters)
     } else {
         None
     };
@@ -1383,11 +1395,45 @@ fn list_clusters(doc: &Value) -> Vec<ListedCluster> {
                 cloud_type: text(it, "/spec/cloudType"),
                 project_uid: text(it, "/metadata/annotations/projectUid"),
                 uid,
+                profiles: None,
+                error: None,
             }
         })
         .collect();
     clusters.sort_by(|a, b| a.name.cmp(&b.name).then_with(|| a.uid.cmp(&b.uid)));
     clusters
+}
+
+/// Read each cluster document for the profiles it applies. A cluster is in its own project, so
+/// each project gets one client, as `consumers` reads its clusters. A cluster the request cannot
+/// read keeps its row and carries the error.
+fn read_applied<A, F>(
+    clusters: &mut [ListedCluster],
+    home: &Palette<A>,
+    connect: &mut F,
+    progress: &Progress,
+) where
+    A: PaletteApi,
+    F: FnMut(Option<&str>) -> Result<Palette<A>>,
+{
+    let at_home = home.project_uid().unwrap_or("").to_string();
+    let mut clients: HashMap<String, Palette<A>> = HashMap::new();
+    for c in clusters.iter_mut() {
+        progress.note(&format!("reading cluster {}", c.uid));
+        let doc = if c.project_uid.is_empty() || c.project_uid == at_home {
+            home.cluster_document(&c.uid)
+        } else {
+            let client = match clients.entry(c.project_uid.clone()) {
+                Entry::Occupied(e) => Ok(e.into_mut()),
+                Entry::Vacant(v) => connect(Some(&c.project_uid)).map(|p| v.insert(p)),
+            };
+            client.and_then(|p| p.cluster_document(&c.uid))
+        };
+        match doc {
+            Ok(d) => c.profiles = Some(AppliedProfile::of_cluster(&d)),
+            Err(e) => c.error = Some(e.to_json()),
+        }
+    }
 }
 
 fn list_projects(doc: &Value) -> Vec<ListedProject> {

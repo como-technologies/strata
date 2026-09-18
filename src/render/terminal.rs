@@ -1,9 +1,9 @@
 //! The terminal report: plain when piped, colored on a terminal.
 
 use super::{
-    chain_verdict, cluster_value, consumer_count, consumers_comparable, consumers_heading,
-    consumers_sentence, counts_line, dash, edited_in_place_note, entry_error, list_count,
-    list_scope, overwritten_in_place_notes, pack_version, pair_detail, pair_word,
+    applied_ref, chain_verdict, cluster_value, consumer_count, consumers_comparable,
+    consumers_heading, consumers_sentence, counts_line, dash, edited_in_place_note, entry_error,
+    list_count, list_scope, overwritten_in_place_notes, pack_version, pair_detail, pair_word,
     profiles_overwritten_sentence, record_detail, record_label, same_content_note, short, show,
     subject, tag_rename, traits_suffix, values_changed_suffix, variable_lines, version_display,
     Renderer, VarLine,
@@ -549,6 +549,9 @@ impl Renderer for TerminalRenderer {
                     if c.project_uid != l.project_uid {
                         row.push(format!("project {}", dash(&c.project_uid)));
                     }
+                    if let Some(msg) = entry_error(c.error.as_ref()) {
+                        row.push(format!("({msg})"));
+                    }
                     row
                 })
                 .collect();
@@ -559,6 +562,30 @@ impl Renderer for TerminalRenderer {
                     2 if c.state == "Running" => p.green(cell),
                     _ => cell.to_string(),
                 }));
+                let applied: Vec<Vec<String>> = c
+                    .profiles
+                    .iter()
+                    .flatten()
+                    .map(|a| {
+                        vec![
+                            applied_ref(a),
+                            dash(&a.uid).to_string(),
+                            dash(&a.kind).to_string(),
+                        ]
+                    })
+                    .collect();
+                let applied_widths = column_widths(&applied);
+                for row in &applied {
+                    out.push_str(&table_line(
+                        "    ",
+                        row,
+                        &applied_widths,
+                        |i, cell| match i {
+                            1 => p.dim(cell),
+                            _ => cell.to_string(),
+                        },
+                    ));
+                }
             }
         }
         if let Some(projects) = &l.projects {

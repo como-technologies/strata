@@ -262,6 +262,9 @@ struct ListArgs {
     /// Keep the versions with a pack whose name holds TEXT; sets --packs
     #[arg(long, value_name = "TEXT")]
     pack: Option<String>,
+    /// Also read each cluster for the profiles it applies
+    #[arg(long)]
+    applied: bool,
     #[command(flatten)]
     out: OutputArgs,
 }
@@ -700,6 +703,7 @@ fn cmd_list(a: &ListArgs) -> Result<ExitCode> {
         project: project_arg(progress, &a.project, &a.project_name)?,
         packs: a.packs,
         pack: a.pack.clone(),
+        applied: a.applied,
     };
     let l = ops::list(
         &options,

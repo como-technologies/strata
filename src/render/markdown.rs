@@ -1,12 +1,12 @@
 //! The pull request comment.
 
 use super::{
-    chain_verdict, cluster_value, consumer_count, consumers_comparable, consumers_heading,
-    consumers_sentence, counts_line, dash, edited_in_place_note, entry_error, list_count,
-    list_scope, overwritten_in_place_notes, pack_version, pair_detail, pair_word, plain_flags,
-    profiles_overwritten_sentence, record_detail, record_label, same_content_note, short, show,
-    subject, traits_suffix, values_changed, values_changed_suffix, variable_lines, version_display,
-    Renderer, VarLine,
+    applied_ref, chain_verdict, cluster_value, consumer_count, consumers_comparable,
+    consumers_heading, consumers_sentence, counts_line, dash, edited_in_place_note, entry_error,
+    list_count, list_scope, overwritten_in_place_notes, pack_version, pair_detail, pair_word,
+    plain_flags, profiles_overwritten_sentence, record_detail, record_label, same_content_note,
+    short, show, subject, traits_suffix, values_changed, values_changed_suffix, variable_lines,
+    version_display, Renderer, VarLine,
 };
 use crate::color::Paint;
 use crate::diff::{Diff, Leaf, Op, Status, Verify, VerifyStatus};
@@ -392,10 +392,15 @@ impl Renderer for MarkdownRenderer {
                 list_count(clusters.len(), "cluster", None)
             ));
             let elsewhere = clusters.iter().any(|c| c.project_uid != l.project_uid);
-            if elsewhere {
-                o.push_str("| ref | name | state | cloud | project |\n|---|---|---|---|---|\n");
-            } else if !clusters.is_empty() {
-                o.push_str("| ref | name | state | cloud |\n|---|---|---|---|\n");
+            let with_applied = clusters
+                .iter()
+                .any(|c| c.profiles.is_some() || c.error.is_some());
+            let project = if elsewhere { " project |" } else { "" };
+            let applied = if with_applied { " profiles |" } else { "" };
+            if !clusters.is_empty() {
+                let head = format!("| ref | name | state | cloud |{project}{applied}");
+                let rule: String = head.matches('|').skip(1).map(|_| "---|").collect();
+                o.push_str(&format!("{head}\n|{rule}\n"));
             }
             for c in clusters {
                 o.push_str(&format!(
@@ -407,6 +412,19 @@ impl Renderer for MarkdownRenderer {
                 ));
                 if elsewhere {
                     o.push_str(&format!(" `{}` |", escape(dash(&c.project_uid))));
+                }
+                if with_applied {
+                    let profiles = match entry_error(c.error.as_ref()) {
+                        Some(msg) => format!("error: {msg}"),
+                        None => c
+                            .profiles
+                            .iter()
+                            .flatten()
+                            .map(|a| format!("{} ({})", applied_ref(a), dash(&a.kind)))
+                            .collect::<Vec<_>>()
+                            .join("<br>"),
+                    };
+                    o.push_str(&format!(" {} |", escape(dash(&profiles))));
                 }
                 o.push('\n');
             }

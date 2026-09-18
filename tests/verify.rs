@@ -2101,6 +2101,222 @@ fn list_at_tenant_scope_names_the_project_of_each_cluster() {
     );
 }
 
+/// A cluster document, as `GET /v1/spectroclusters/{uid}` returns it. The applied profiles are in
+/// `spec.clusterProfileTemplates`, in the order Palette applies them.
+fn cluster_document(uid: &str, applied: &[(&str, &str, &str, &str)]) -> Value {
+    let templates: Vec<Value> = applied
+        .iter()
+        .map(|(name, version, profile_uid, kind)| {
+            serde_json::json!({"name": name, "profileVersion": version, "uid": profile_uid, "type": kind})
+        })
+        .collect();
+    serde_json::json!({
+        "metadata": {"uid": uid, "annotations": {"projectUid": "p1"}},
+        "spec": {"clusterProfileTemplates": templates},
+        "status": {"state": "Running"},
+    })
+}
+
+#[test]
+fn list_with_applied_reads_each_cluster_for_the_profiles_it_applies() {
+    let api = MemoryApi::new()
+        .in_project("p1")
+        .with(
+            "/v1/dashboard/spectroclusters/meta",
+            serde_json::json!([
+                listed_cluster("workload-b", "c2", "Running"),
+                listed_cluster("workload-a", "c1", "Running"),
+            ]),
+        )
+        .with(
+            "/v1/spectroclusters/c1",
+            cluster_document(
+                "c1",
+                &[
+                    (
+                        "lab-profile",
+                        "1.3.0",
+                        "64f0000000000000000000b2",
+                        "cluster",
+                    ),
+                    ("lab-addons", "2.0.0", "64f0000000000000000000d4", "add-on"),
+                ],
+            ),
+        )
+        .with(
+            "/v1/spectroclusters/c2",
+            cluster_document(
+                "c2",
+                &[(
+                    "lab-profile",
+                    "1.2.0",
+                    "64f0000000000000000000a1",
+                    "cluster",
+                )],
+            ),
+        );
+    let list = |options: &ListOptions| {
+        ops::list(
+            options,
+            |_| Ok(Palette::new(&api)),
+            "t1",
+            &Progress::silent(),
+        )
+        .unwrap()
+    };
+    let clusters = ListOptions {
+        kinds: vec![ListKind::Clusters],
+        ..ListOptions::default()
+    };
+
+    // the option is what costs the requests: without it, the listing alone answers
+    let plain = list(&clusters);
+    assert_eq!(api.calls("/v1/spectroclusters/c1"), 0);
+    assert!(plain.clusters.as_ref().unwrap()[0].profiles.is_none());
+
+    let l = list(&ListOptions {
+        applied: true,
+        ..clusters.clone()
+    });
+    assert_eq!(api.calls("/v1/spectroclusters/c1"), 1);
+    let listed = l.clusters.as_ref().unwrap();
+    assert_eq!(
+        listed.iter().map(|c| c.name.as_str()).collect::<Vec<_>>(),
+        ["workload-a", "workload-b"],
+        "the listing keeps its sort order"
+    );
+    let applied = listed[0].profiles.as_ref().unwrap();
+    assert_eq!(
+        applied
+            .iter()
+            .map(|a| (a.name.as_str(), a.version.as_str(), a.kind.as_str()))
+            .collect::<Vec<_>>(),
+        [
+            ("lab-profile", "1.3.0", "cluster"),
+            ("lab-addons", "2.0.0", "add-on")
+        ],
+        "in the order Palette applies them"
+    );
+    assert_eq!(applied[0].uid, "64f0000000000000000000b2");
+
+    let text = render::renderer(Format::Terminal, Paint::off(), false)
+        .render_list(&l)
+        .unwrap();
+    assert!(
+        text.contains(
+            "  cluster:c1  workload-a  Running  aws
+    lab-profile@1.3.0  64f0000000000000000000b2  cluster
+    lab-addons@2.0.0   64f0000000000000000000d4  add-on
+  cluster:c2  workload-b  Running  aws
+    lab-profile@1.2.0  64f0000000000000000000a1  cluster
+"
+        ),
+        "{text}"
+    );
+    let md = render::renderer(Format::Markdown, Paint::off(), false)
+        .render_list(&l)
+        .unwrap();
+    assert!(
+        md.contains("| ref | name | state | cloud | profiles |\n|---|---|---|---|---|\n"),
+        "{md}"
+    );
+    assert!(
+        md.contains("| `cluster:c1` | workload-a | Running | aws | lab-profile@1.3.0 (cluster)<br>lab-addons@2.0.0 (add-on) |"),
+        "{md}"
+    );
+    let json: Value = serde_json::from_str(
+        &render::renderer(Format::Json, Paint::off(), true)
+            .render_list(&l)
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(json["clusters"][0]["profiles"][1]["name"], "lab-addons");
+}
+
+#[test]
+fn list_with_applied_keeps_a_cluster_it_cannot_read_and_reads_each_project_once() {
+    let mut elsewhere = listed_cluster("edge-1", "c7", "Running");
+    elsewhere["metadata"]["annotations"]["projectUid"] = serde_json::json!("p2");
+    let mut gone = listed_cluster("gone", "c9", "Deleting");
+    gone["metadata"]["annotations"]["projectUid"] = serde_json::json!("p2");
+    let listing = MemoryApi::new().with(
+        "/v1/dashboard/spectroclusters/meta",
+        serde_json::json!([
+            listed_cluster("workload-a", "c1", "Running"),
+            elsewhere,
+            gone
+        ]),
+    );
+    let p1 = listing.clone().with(
+        "/v1/spectroclusters/c1",
+        cluster_document(
+            "c1",
+            &[(
+                "lab-profile",
+                "1.3.0",
+                "64f0000000000000000000b2",
+                "cluster",
+            )],
+        ),
+    );
+    let p2 = MemoryApi::new()
+        .with(
+            "/v1/spectroclusters/c7",
+            cluster_document(
+                "c7",
+                &[(
+                    "lab-profile",
+                    "1.2.0",
+                    "64f0000000000000000000a1",
+                    "cluster",
+                )],
+            ),
+        )
+        .failing("/v1/spectroclusters/c9", 404, "no such cluster");
+    let scopes: RefCell<Vec<Option<String>>> = RefCell::new(Vec::new());
+    let connect = |project: Option<&str>| {
+        scopes.borrow_mut().push(project.map(str::to_string));
+        Ok(Palette::new(match project {
+            Some("p2") => p2.clone(),
+            _ => p1.clone(),
+        }))
+    };
+    let options = ListOptions {
+        kinds: vec![ListKind::Clusters],
+        project: Some(String::new()),
+        applied: true,
+        ..ListOptions::default()
+    };
+    let l = ops::list(&options, connect, "t1", &Progress::silent()).unwrap();
+    assert_eq!(
+        *scopes.borrow(),
+        vec![
+            Some(String::new()),
+            Some("p2".to_string()),
+            Some("p1".to_string())
+        ],
+        "each project gets one client, whatever the scope the listing was read in"
+    );
+    let listed = l.clusters.as_ref().unwrap();
+    let by_name = |name: &str| listed.iter().find(|c| c.name == name).unwrap();
+    assert_eq!(
+        by_name("edge-1").profiles.as_ref().unwrap()[0].version,
+        "1.2.0",
+        "a cluster in another project is read with that project's client"
+    );
+    let failed = by_name("gone");
+    assert!(failed.profiles.is_none());
+    assert_eq!(failed.error.as_ref().unwrap()["kind"], "api");
+    let text = render::renderer(Format::Terminal, Paint::off(), false)
+        .render_list(&l)
+        .unwrap();
+    assert!(
+        text.contains("gone"),
+        "a cluster that cannot be read keeps its row: {text}"
+    );
+    assert!(text.contains("lab-profile@1.3.0"), "{text}");
+}
+
 #[test]
 fn list_fails_when_a_listing_cannot_be_read() {
     let api = MemoryApi::new().failing("/v1/dashboard/clusterprofiles/metadata", 401, "no key");

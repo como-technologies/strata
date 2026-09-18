@@ -456,6 +456,7 @@ show list 0 'strata list'
 show list-projects 0 'strata list projects'
 show list-prod 0 'strata list --project-name prod'
 show list-tenant 0 "strata list clusters --project ''"
+show list-applied 0 'strata list clusters --applied'
 show list-pack 0 'strata list --pack cilium'
 show list-pack-all 0 'for p in dev prod; do strata list --pack cilium --project-name "$p"; done'
 show list-packs 0 'strata list --packs'
@@ -707,6 +708,7 @@ cluster $DEV $LEDGER ledger $A110
 on_cluster $DEV $LEDGER "(.spec.clusterProfileTemplates[].packs[] | select(.name == \"csi-aws-ebs\") | .values) |= sub(\"reclaimPolicy: Delete\"; \"reclaimPolicy: Retain\")"
 quiet 'mkdir -p releases/1.1.0 runs'
 quiet 'strata snapshot aws-stack@1.1.0 -o releases/1.1.0/dev.json'
+show cluster-applied 0 'strata list clusters --applied'
 show cluster-identical 0 'strata compare releases/1.1.0/dev.json cluster:payments/aws-stack'
 show cluster-all-profiles 1 'strata compare releases/1.1.0/dev.json cluster:payments'
 show cluster-moved 1 'strata compare releases/1.1.0/dev.json cluster:search'

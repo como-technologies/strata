@@ -41,6 +41,25 @@ project that the key can see.
 cluster ref works only in the project of the cluster: set `PALETTE_PROJECT`
 before you use it. See [The same names in two projects](../use-cases/same-names.md).
 
+## Find the profiles a cluster runs
+
+`strata consumers <name>@<version>` names the clusters that use a profile
+version. `--applied` answers the opposite question, for each cluster in the
+scope:
+
+```text
+{{#include ../output/list-applied.txt}}
+```
+
+Each line under a cluster is one profile the cluster applies, with its uid and
+its type, in the order Palette applies them. A cluster with an add-on profile
+shows each one: see [A release on a cluster](../use-cases/cluster-release.md).
+
+`--applied` reads each cluster, one request for each. Read the uid when you
+need the identity: a version can be overwritten in place, and then the same
+`<name>@<version>` names another release. A cluster that strata cannot read
+stays in the list with its error.
+
 ## Find the profile versions that carry a pack
 
 A pack is not a ref. `--pack <text>` keeps the profile versions with a pack
