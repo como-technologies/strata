@@ -53,6 +53,9 @@ and the source build.
 
 ## Documentation
 
+The book is at <https://legendary-train-pzq9ojj.pages.github.io/>. It opens for the members of the
+organization, as this repository does.
+
 ```bash
 just docs-serve   # build the book and open it at http://localhost:3000
 ```

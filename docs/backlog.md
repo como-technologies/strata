@@ -808,11 +808,11 @@ One condition holds the work: this repository is private, and on a GitHub plan b
 
 ### Acceptance criteria
 
-- [ ] The organization states who can read a Pages site of this repository
+- [x] The organization states who can read a Pages site of this repository: the site is `public: false`, so it opens for the members of the organization only
 - [x] `.github/workflows/docs.yml` publishes `docs/book` on each push to main
 - [ ] The book opens at its address, with the gruvbox theme and the mermaid diagrams
-- [ ] `README.md` and `strata --help` name the address
-- [ ] No page of the book holds a uid or a name of a real tenant: it holds twelve, so this holds only for a public site, and `internals/palette.md` and `development/live-runs.md` are the pages to scrub
+- [x] `README.md` and `strata --help` name the address
+- [x] No page of the book holds a uid or a name of a real tenant: it holds twelve, and a site for the members of the organization gives them to no new reader. A public site would need `internals/palette.md` and `development/live-runs.md` scrubbed first
 
 ## Count an added or a removed pack in the impact
 

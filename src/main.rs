@@ -368,7 +368,10 @@ fn command() -> clap::Command {
                 .action(clap::ArgAction::Version)
                 .help("Print version"),
         )
-        .after_help("Use \"strata <command> --help\" for more information about a command.");
+        .after_help(concat!(
+            "Use \"strata <command> --help\" for more information about a command.\n",
+            "The book: https://legendary-train-pzq9ojj.pages.github.io/"
+        ));
     for name in COMMANDS {
         if *name == "help" {
             continue;

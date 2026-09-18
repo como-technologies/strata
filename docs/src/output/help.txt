@@ -21,3 +21,4 @@ Options:
   -V, --version  Print version
 
 Use "strata <command> --help" for more information about a command.
+The book: https://legendary-train-pzq9ojj.pages.github.io/
