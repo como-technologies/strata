@@ -15,8 +15,13 @@
 # Needs: target/release/strata (or STRATA_BIN), the examples that `just examples` builds,
 # python3, and jq.
 #
-#   docs/examples/run.sh           write docs/src/output/
-#   docs/examples/run.sh --check   exit 1 when docs/src/output/ is not current
+#   docs/examples/run.sh                   write docs/src/output/
+#   docs/examples/run.sh --check           exit 1 when docs/src/output/ is not current
+#   docs/examples/run.sh --serve CHAPTER   build that chapter's tenant, serve it, and wait
+#
+# --serve is the playground: the tenant of one chapter, on this machine, with no key and no cost.
+# The script runs no step and writes no output file; it prints the settings to export and holds
+# the stand-in open, so the commands of the book run as the book prints them.
 set -euo pipefail
 
 repo=$(cd "$(dirname "$0")/../.." && pwd)
@@ -26,10 +31,14 @@ dest=$repo/docs/src/output
 die() { echo "docs-examples: $*" >&2; exit 2; }
 
 check=""
+serve=""
+served=""
+skip=""
 case "${1:-}" in
   --check) check=1 ;;
+  --serve) serve=${2:-list} ;;
   "") ;;
-  *) die "usage: run.sh [--check]" ;;
+  *) die "usage: run.sh [--check | --serve CHAPTER]" ;;
 esac
 
 [ -x "$tool" ] || die "no strata binary at $tool. Run: just build"
@@ -69,9 +78,58 @@ base_env=(env -i "PATH=$work/bin:$PATH" "HOME=$work/home" "LANG=C.UTF-8"
 dir=""
 chapter_env=()
 
+# serve_wait: the playground. The tenant of the chapter is built, so say how to reach it and
+# wait for the person to stop the script.
+serve_wait() {
+  local port project=dev uid e
+  port=$(cat "$work/port")
+  for e in "${chapter_env[@]+"${chapter_env[@]}"}"; do
+    case "$e" in PALETTE_PROJECT=*) project=${e#PALETTE_PROJECT=} ;; esac
+  done
+  # the uid, not the name: PALETTE_PROJECT_UID has priority, so it beats a ~/.palette.env that
+  # points at a real tenant
+  uid=$(jq -r --arg n "$project" '.items[] | select(.metadata.name == $n) | .metadata.uid' \
+    "$tenant/tenant/v1/dashboard/projects/metadata.json" 2> /dev/null | head -1)
+  cat <<EOF
+
+The tenant of the chapter "$serve" is served on this machine. Export these three, and the commands
+of the book run as the book prints them:
+
+export PALETTE_API=http://127.0.0.1:$port
+export PALETTE_API_KEY=docs-example-key
+export PALETTE_PROJECT_UID=$uid            # the project "$project"
+
+The three beat a ~/.palette.env that names a real tenant. For example:
+
+  strata list
+  strata compare aws-stack@1.0.0 aws-stack@1.1.0
+  strata snapshot aws-stack@1.1.0 -o dev.json && strata verify dev.json
+  strata compare dev.json cluster:payments
+  strata consumers aws-stack@1.1.0
+
+Nothing here reaches Palette, and nothing costs anything. Stop with Ctrl-C.
+EOF
+  while kill -0 "$server" 2> /dev/null; do
+    sleep 1
+  done
+  exit 0
+}
+
 # chapter NAME [VAR=VALUE]...: an empty tenant, a new working directory, and the environment of
 # the commands that follow. The working directory links examples/ and scripts/ of the repository.
 chapter() {
+  # --serve: build the tenant of the wanted chapter only, and stop when the next one starts
+  if [ -n "$serve" ]; then
+    if [ -n "$served" ]; then
+      serve_wait
+    fi
+    if [ "$1" = "$serve" ]; then
+      served=1
+      skip=""
+    else
+      skip=1
+    fi
+  fi
   dir=$work/chapters/$1
   shift
   mkdir -p "$dir"
@@ -85,6 +143,7 @@ chapter() {
 # step NAME EXIT KEEP COMMAND: run COMMAND with bash in the chapter directory, and add "$ COMMAND"
 # and the output to NAME.txt. KEEP is out for standard output, or both to keep standard error too.
 step() {
+  [ -z "$serve" ] || return 0
   local name=$1 want=$2 keep=$3 cmd=$4 got=0 raw=$work/step.txt
   printf '$ %s\n' "$cmd" > "$raw"
   if [ "$keep" = both ]; then
@@ -105,6 +164,7 @@ show2() { step "$1" "$2" both "$3"; }
 
 # quiet COMMAND: a step that the book does not show
 quiet() {
+  [ -z "$serve" ] || return 0
   (cd "$dir" && "${base_env[@]}" "${chapter_env[@]}" bash -o pipefail -c "$1") > "$work/quiet" 2>&1 ||
     { cat "$work/quiet" >&2; die "the command '$1' failed"; }
 }
@@ -131,6 +191,7 @@ rewrite() {
 
 # projects NAME=UID...: the projects the key can see
 projects() {
+  [ -z "$skip" ] || return 0
   local pair items=()
   for pair in "$@"; do
     items+=("$(jq -cn --arg n "${pair%%=*}" --arg u "${pair#*=}" '{metadata: {name: $n, uid: $u}}')")
@@ -143,6 +204,7 @@ projects() {
 # listings: the profile and cluster listings of each scope, from the documents in the tenant. At
 # tenant scope Palette lists the tenant's own profiles, and the clusters of every project.
 listings() {
+  [ -z "$skip" ] || return 0
   local scope project profiles clusters all=()
   shopt -s nullglob
   for scope in "$tenant"/*/; do
@@ -169,6 +231,7 @@ listings() {
 # as aws-stack@1.1.1, in PROJECT under UID and VERSION. FILTER is a jq program for the profile
 # document: a changed value or tag.
 profile() {
+  [ -z "$skip" ] || return 0
   local project=$1 uid=$2 version=$3 from=$repo/examples/profiles/raw/$4 filter=${5:-.}
   jq --arg uid "$uid" --arg v "$version" \
     ".metadata.uid = \$uid | .spec.version = \$v
@@ -183,6 +246,7 @@ profile() {
 # addons PROJECT UID PACK_UID LABEL: publish platform-addons@1.0.0, an add-on profile with one
 # manifest pack. Palette gives the manifest pack of each profile a new pack uid.
 addons() {
+  [ -z "$skip" ] || return 0
   local project=$1 uid=$2 pack=$3 label=$4
   local content="apiVersion: v1
 kind: Namespace
@@ -214,6 +278,7 @@ metadata:
 
 # edit PROJECT UID FILTER: change a published profile in place, as an edit through the API does
 edit() {
+  [ -z "$skip" ] || return 0
   rewrite "$(doc "$1" "v1/clusterprofiles/$2")" "$3"
   listings
 }
@@ -223,6 +288,7 @@ edit() {
 # profile does not reach the cluster. Run it again for the same cluster to apply the update that
 # waits for the cluster.
 cluster() {
+  [ -z "$skip" ] || return 0
   local project=$1 uid=$2 name=$3 p kv
   shift 3
   local profiles=() values='{}'
@@ -271,11 +337,13 @@ cluster() {
 # on_cluster PROJECT UID FILTER: change a cluster document in place, as an edit of the pack values
 # on the cluster does
 on_cluster() {
+  [ -z "$skip" ] || return 0
   rewrite "$(doc "$1" "v1/spectroclusters/$2")" "$3"
 }
 
 # set_value PROJECT UID VARIABLE VALUE: give a cluster variable a new value
 set_value() {
+  [ -z "$skip" ] || return 0
   rewrite "$(doc "$1" "v1/spectroclusters/$2/variables")" \
     "map(.variables |= map(if .name == \"$3\" then .value = \"$4\" else . end))"
 }
@@ -283,6 +351,7 @@ set_value() {
 # registries PROJECT: the Public Repo registry and the versions of each pack in examples/packs/,
 # as the registry lookups of a candidate read them
 registries() {
+  [ -z "$skip" ] || return 0
   local project=$1 d name count listing
   jq -n --arg uid "$PUBLIC_REPO" --arg oci "$PALETTE_REGISTRY" \
     '{items: [{name: "Public Repo", uid: $uid, kind: "pack"},

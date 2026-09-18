@@ -75,3 +75,71 @@ fn tag_release_tags_the_cargo_version_once_and_only_on_a_clean_tree() {
         "no tag on a dirty tree"
     );
 }
+
+// ---- docs/examples/run.sh --serve ----------------------------------------------------------------
+
+/// The playground: `run.sh --serve CHAPTER` builds the tenant of one chapter, serves it, and
+/// waits. The test needs the offline examples and python3, which `just examples` and CI provide;
+/// without them it has nothing to serve and returns.
+#[test]
+fn the_playground_serves_the_tenant_of_one_chapter() {
+    let repo = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let built = repo.join("examples/profiles/raw/aws-stack@1.1.1/profile.json");
+    if !built.exists() || Command::new("python3").arg("--version").output().is_err() {
+        return;
+    }
+    let dir = tempfile::tempdir().unwrap();
+    let log = dir.path().join("serve.log");
+    let mut child = Command::new("bash")
+        .arg(repo.join("docs/examples/run.sh"))
+        .args(["--serve", "list"])
+        .env("STRATA_BIN", env!("CARGO_BIN_EXE_strata"))
+        .stdout(std::fs::File::create(&log).unwrap())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .unwrap();
+
+    // the settings it prints are its contract: the address, the key, and the project uid
+    let mut printed = String::new();
+    for _ in 0..600 {
+        printed = std::fs::read_to_string(&log).unwrap_or_default();
+        if printed.contains("PALETTE_PROJECT_UID=") && printed.contains("Ctrl-C") {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+    let value = |key: &str| -> String {
+        printed
+            .split_whitespace()
+            .find(|w| w.starts_with(key))
+            .unwrap_or_else(|| panic!("no {key} in:\n{printed}"))
+            .trim_start_matches(key)
+            .to_string()
+    };
+    let api = value("PALETTE_API=");
+    let uid = value("PALETTE_PROJECT_UID=");
+
+    // the commands of the book run against it, by name, with no key of a real tenant
+    let o = Command::new(env!("CARGO_BIN_EXE_strata"))
+        .args(["compare", "aws-stack@1.0.0", "aws-stack@1.1.0", "--quiet", "--no-color"])
+        .env("PALETTE_API", &api)
+        .env("PALETTE_API_KEY", "docs-example-key")
+        .env("PALETTE_PROJECT_UID", &uid)
+        .env("HOME", dir.path())
+        .output()
+        .unwrap();
+    let text = text(&o.stdout);
+    // stop the script first, so a failed assertion leaves no server behind
+    let _ = Command::new("kill").arg(child.id().to_string()).status();
+    let _ = child.wait();
+
+    assert_eq!(o.status.code(), Some(1), "the two versions differ: {text}");
+    assert!(
+        text.contains("aws-stack@1.0.0") && text.contains("aws-stack@1.1.0"),
+        "the playground answered by name:\n{text}"
+    );
+    assert!(
+        !printed.contains("api.spectrocloud.com"),
+        "nothing points at a real tenant:\n{printed}"
+    );
+}

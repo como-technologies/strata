@@ -46,6 +46,18 @@ cargo install mdbook mdbook-mermaid mdbook-gruvbox mdbook-lint
 | How strata calculates, and what Palette does | How it works |
 | How to build, test, release, and write | Development |
 
+## Serve a chapter, to try a command by hand
+
+```bash
+just playground          # the tenant of the chapter "list"
+just playground compare  # another chapter
+```
+
+The script builds the tenant of that chapter, serves it, prints the three
+settings to export, and waits. It runs no step and writes no output file, so a
+page can be tried by hand before its output is generated. It is also how a
+reader follows the book without a tenant.
+
 ## Add an output
 
 `docs/examples/run.sh` runs each command against `docs/examples/palette.py`, a

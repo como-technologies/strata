@@ -53,8 +53,20 @@ to `examples/profiles/`, so a page that reads a ref by name reads a file here:
 strata compare examples/profiles/aws-stack@1.0.0.json examples/profiles/aws-stack@1.1.0.json
 ```
 
+To run a page as it is printed, with the names and the clusters, serve the same
+tenant on this machine:
+
+```bash
+just playground
+```
+
+It prints three settings to export. A stand-in for the Palette API then answers
+`strata list`, `strata compare aws-stack@1.0.0 aws-stack@1.1.0`,
+`cluster:payments`, and the rest, with no key and no cost. `just playground
+<chapter>` serves the tenant of another chapter of this book.
+
 With your own tenant, the same pages read your profile names.
-[The offline examples](./development/examples.md) tells what the command
+[The offline examples](./development/examples.md) tells what `just examples`
 builds.
 
 ## The rule

@@ -113,6 +113,10 @@ live-profiles:
     examples/live/tf.sh init -input=false || exit 1
     examples/live/tf.sh apply -var cluster=false
 
+# Serve the tenant of one chapter of the book on this machine: no key, no tenant, no cost
+playground chapter="list": build examples
+    docs/examples/run.sh --serve {{chapter}}
+
 # Run every read-only live check and write a summary
 live-verify: build
     examples/live/verify.sh
