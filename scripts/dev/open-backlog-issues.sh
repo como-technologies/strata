@@ -3,7 +3,7 @@
 # exists as an open issue is skipped. Needs `gh` logged in and a GitHub remote on this repository.
 set -euo pipefail
 
-here=$(cd "$(dirname "$0")/.." && pwd)
+here=$(cd "$(dirname "$0")/../.." && pwd)
 backlog="$here/docs/backlog.md"
 
 gh repo view --json nameWithOwner --jq .nameWithOwner >/dev/null 2>&1 \

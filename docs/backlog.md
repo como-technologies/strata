@@ -984,10 +984,10 @@ labels: ci
 
 ### Acceptance criteria
 
-- [ ] `scripts/ci/` holds the four scripts a release carries, and `scripts/dev/` the two it does not
-- [ ] A release carries the same asset names as before, and `install-strata.sh` is unchanged
-- [ ] Every path in the workflows, the justfile, the drop-ins and the book names the file where it now is
-- [ ] `just lint`, `just test`, `just docs-check` and `just docs` pass
+- [x] `scripts/ci/` holds the four scripts a release carries, and `scripts/dev/` the two it does not
+- [x] A release carries the same asset names as before, and `install-strata.sh` needs no change to what it downloads
+- [x] Every path in the workflows, the justfile, the drop-ins and the book names the file where it now is
+- [x] `just lint`, `just test`, `just docs-check` and `just docs` pass
 
 ## Split the shell script tests by what they cover
 
@@ -1001,12 +1001,13 @@ labels: ci
 
 1. `tests/ci_scripts.rs`: the tests of the four scripts a release carries, with the stand-in `gh`, the stand-in `curl` and the release fixtures.
 2. `tests/live_scripts.rs`: the tests of the live example's scripts, with the stand-in `tofu`, `aws`, `kubectl`, `helm` and `crane`.
-3. The shared helpers (`script()`, `text()`, `git()`, `executable()`) go where both can use them, in `tests/common/`.
-4. No test changes what it asserts: the split moves code and nothing else.
+3. `tests/dev_scripts.rs`: the tests of `scripts/dev/`, so the three test files match the three places the scripts now live.
+4. The shared helpers (`script()`, `live_script()`, `text()`, `git()`, `executable()`) go where every one of them can use them, in `tests/common/`.
+5. No test changes what it asserts: the split moves code and nothing else.
 
 ### Acceptance criteria
 
-- [ ] `tests/ci_scripts.rs` and `tests/live_scripts.rs` replace `tests/scripts.rs`, and neither is longer than the other by much
-- [ ] The same tests run, with the same names and the same count
-- [ ] The shared helpers live in one place, not copied into both files
-- [ ] `just lint` and `just test` pass
+- [x] `tests/ci_scripts.rs`, `tests/live_scripts.rs` and `tests/dev_scripts.rs` replace `tests/scripts.rs`, one for each place a script lives
+- [x] The same tests run, with the same names and the same count
+- [x] The shared helpers live in one place, not copied into the files
+- [x] `just lint` and `just test` pass

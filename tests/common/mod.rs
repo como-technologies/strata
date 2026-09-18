@@ -25,6 +25,8 @@
 //! A cluster gives each variable its default value, or the value in its `values`; a sensitive
 //! variable always gets SECRET_VALUE, which no document may contain.
 
+#![allow(dead_code)]
+
 use std::fs;
 use std::path::Path;
 
@@ -618,5 +620,52 @@ fn rename_profile(dir: &Path, name: &str) {
         let mut v = read_json(&path);
         v["metadata"]["name"] = json!(name);
         fs::write(&path, serde_json::to_string_pretty(&v).unwrap()).unwrap();
+    }
+}
+
+// ---- the shell script helpers ------------------------------------------------------------------
+
+/// A script by its path under scripts/, such as `ci/merge-gate.sh` or `dev/tag-release.sh`.
+pub fn script(name: &str) -> std::path::PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("scripts")
+        .join(name)
+}
+
+/// A script of the live example, by its name under examples/live/.
+pub fn live_script(name: &str) -> std::path::PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("examples/live")
+        .join(name)
+}
+
+pub fn text(bytes: &[u8]) -> String {
+    String::from_utf8_lossy(bytes).into_owned()
+}
+
+/// Run git in `dir` with no user or global configuration, so signing settings cannot leak in.
+pub fn git(dir: &Path, args: &[&str]) -> std::process::Output {
+    let o = std::process::Command::new("git")
+        .args(args)
+        .current_dir(dir)
+        .env("GIT_CONFIG_GLOBAL", "/dev/null")
+        .env("GIT_CONFIG_SYSTEM", "/dev/null")
+        .env("GIT_AUTHOR_NAME", "t")
+        .env("GIT_AUTHOR_EMAIL", "t@example.com")
+        .env("GIT_COMMITTER_NAME", "t")
+        .env("GIT_COMMITTER_EMAIL", "t@example.com")
+        .output()
+        .unwrap();
+    assert!(o.status.success(), "git {args:?}: {}", text(&o.stderr));
+    o
+}
+
+/// Write a file and make it executable, for a stand-in command on a test's PATH.
+pub fn executable(path: &Path, body: &str) {
+    std::fs::write(path, body).unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755)).unwrap();
     }
 }
