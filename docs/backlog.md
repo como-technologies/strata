@@ -1011,3 +1011,46 @@ labels: ci
 - [x] The same tests run, with the same names and the same count
 - [x] The shared helpers live in one place, not copied into the files
 - [x] `just lint` and `just test` pass
+
+## Check the published release from CI
+
+labels: ci
+
+### Background
+
+`v0.5.1` shipped without `merge-gate.sh`. The release job copies the scripts into the directory it signs, and that list was written before the merge gate existed, so the gate's own drop-in would have failed at `no such file`. Everything passed: the build, the checksums, the signatures, the publish. Nothing in this repository reads a release back after it exists, so a missing or unrunnable file is found by the first person who installs it.
+
+### Plan
+
+1. `.github/workflows/release.yml`: a job after the publish that installs the tag that was just published with `scripts/ci/install-strata.sh --version <tag>`, which fails when the release lacks a file it asks for, and checks every file against `SHA256SUMS`.
+2. The same job runs the binary and each script it installed: `strata --version`, and `--help` on `pr-comment.sh`, `merge-gate.sh`, `verify-report.sh` and `install-strata.sh`. A script that cannot even print its help is not one a pipeline can run.
+3. `tests/ci_scripts.rs`: the same `--help` check offline, so a script that stops printing help fails the tests before a tag exists.
+
+### Acceptance criteria
+
+- [x] The release workflow installs the tag it published and fails when a file is missing
+- [x] The job runs the binary and prints the help of each script it installed
+- [x] A test covers the help of each script that ships, so the tests fail before the tag does
+- [x] The job needs no secret beyond the workflow's own token
+
+## Test the CI drop-ins against the scripts they call
+
+labels: ci
+
+### Background
+
+`examples/ci/github/strata.yml` and `examples/ci/gitlab/strata.yml` name scripts, options and a release version. Nothing reads them. A renamed option, a moved script, or a version reference left behind breaks a drop-in for whoever copies it, and the repository stays green: the earlier `merge-gate.yml@v0.5.0` example named a workflow that did not exist in that tag, and the paths under `scripts/` moved twice without either file being checked.
+
+### Plan
+
+1. A test that reads both drop-ins and the reusable workflows.
+2. Every script path they name exists.
+3. Every long option they pass to a script of `scripts/ci/` appears in that script's `--help`.
+4. Every strata version they name is the version in `Cargo.toml`, so a release bump cannot leave a drop-in pointing at a tag without the file it needs.
+
+### Acceptance criteria
+
+- [x] A test fails when a drop-in names a script that does not exist
+- [x] A test fails when a drop-in passes an option a script does not have, wherever the file carries it: on the call, in an environment value, or assigned to a shell variable
+- [x] A test fails when a drop-in names a strata version other than the one in `Cargo.toml`
+- [x] The test reads the files themselves, with no network and no YAML dependency beyond what the tests already use
