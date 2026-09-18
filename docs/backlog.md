@@ -1092,3 +1092,33 @@ One question is open: whether the cluster listing, `GET /v1/dashboard/spectroclu
 - [x] `strata list` without the option makes no request for each cluster
 - [x] `--format json` writes `strata-list/1` with `clusters[].profiles[]`, and `strata schema list` prints the schema
 - [x] A live check says whether `GET /v1/dashboard/spectroclusters/meta` already names the applied profiles, and the result is recorded in `docs/src/internals/palette.md`: run `20260918T175802Z` shows that it names none, so the option stays
+
+## Keep the clusters whose name or uid matches a text
+
+labels: feature
+
+### Background
+
+`strata list --pack <text>` keeps the profile versions with a pack whose name holds the text, and `--project` and `--project-name` choose the scope. A person who wants one cluster has no such option. `strata list clusters --applied` reads every cluster in the scope, one request for each, to answer a question about one of them.
+
+The two ways to ask about one cluster today both cost more than the answer. `strata list clusters --applied --json` with a `jq` filter reads every cluster and throws most of the answers away. `strata snapshot cluster:<name>` reads the cluster, the pack manifests of each applied profile, and the variables, to print two names.
+
+At tenant scope a name can match a cluster in more than one project, and that is the answer, not a problem: [The same names in two projects](../use-cases/same-names.md) shows why a person needs to see both.
+
+### Plan
+
+1. `src/ops.rs`: `ListOptions` gains `cluster: Option<String>`. `list_clusters` keeps the clusters whose name or uid holds the text, ignoring case, as `list_profiles` keeps the profiles with a matching pack. The filter runs before the cluster documents are read, so `--applied` reads only the clusters that matched.
+2. `src/ops.rs`: `Listing` carries the text as `cluster`, next to `pack`, so a report can name what it filtered by.
+3. `src/main.rs`: `--cluster <TEXT>` on `list`. It implies `--applied`, as `--pack` implies `--packs`, and it lists clusters only unless the kinds are named.
+4. `src/render/`: the heading says what the filter kept, as the profile heading does: `1 cluster matching 'payments'`, or `no clusters matching 'ledger'`. The terminal marks the part of each cluster name that matched, as it marks a pack name.
+5. Tests: the filter by name, by uid, ignoring case, a text that matches nothing, a text that matches clusters in two projects at tenant scope, and that only the matched clusters are read.
+6. Documentation: a step in `docs/examples/run.sh`, `docs/src/commands/list.md`, and the option in `strata-list/1` in `docs/src/reference/documents.md`.
+
+### Acceptance criteria
+
+- [ ] `strata list --cluster payments` prints that cluster with the profiles it applies, and reads no other cluster
+- [ ] The text matches the name or the uid, in upper or lower case, anywhere in either
+- [ ] At tenant scope, a name that two projects use keeps both clusters, each with its project
+- [ ] A text that matches nothing prints `no clusters matching '<text>'` and exits 0
+- [ ] `--cluster` lists clusters only, unless the kinds are named
+- [ ] The heading and the JSON say which text the listing filtered by
