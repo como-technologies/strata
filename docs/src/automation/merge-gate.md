@@ -134,10 +134,10 @@ permissions:
   contents: read
 jobs:
   gate:
-    uses: como-technologies/strata/.github/workflows/merge-gate.yml@v0.5.2
+    uses: como-technologies/strata/.github/workflows/merge-gate.yml@v0.6.0
     with:
       records: releases/**/*.json
-      strata-version: v0.5.2
+      strata-version: v0.6.0
     secrets:
       strata-token: ${{ secrets.STRATA_READ_TOKEN }}   # while this repository is private
       palette-api-key: ${{ secrets.PALETTE_API_KEY }}  # for the verify check
@@ -146,7 +146,7 @@ jobs:
 | Input | Required | Function |
 | --- | --- | --- |
 | `records` | yes | The records, or patterns, in the checkout of the caller. |
-| `strata-version` | yes | The strata release, for example `v0.5.2`. |
+| `strata-version` | yes | The strata release, for example `v0.6.0`. |
 | `verify` | no | `false` leaves the verify check out. Default `true`. |
 | `rollback-label` | no | The label that allows a backwards pin. Default `rollback`. |
 | `palette-api` | no | A self-hosted Palette address. |

@@ -1,6 +1,14 @@
 # Release
 
-1. Set the new version in `Cargo.toml`, and commit.
+1. Set the new version, and commit:
+
+   ```bash
+   just version 0.6.0   # Cargo.toml, the README badge, the install commands, the CI drop-ins
+   ```
+
+   The version is written in more than a dozen files. The recipe moves all of
+   them, and leaves the recorded live runs alone, because each one says which
+   build produced it. `just test` fails when a file is left behind.
 2. Tag the commit:
 
    ```bash

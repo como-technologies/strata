@@ -23,7 +23,7 @@ include:
   - local: .gitlab/strata.yml
 
 variables:
-  STRATA_VERSION: v0.5.2
+  STRATA_VERSION: v0.6.0
   STRATA_A: releases/dev.json        # the record that main has
   STRATA_B: candidate.yaml           # what this merge request proposes
   STRATA_RECORDS: "releases/**/*.json"
@@ -57,13 +57,13 @@ no setting. `--repo group/subgroup/project` names a project from a terminal.
 `SHA256SUMS`, and prints the path of the binary:
 
 ```bash
-bash install-strata.sh --version v0.5.2 --dir .strata
+bash install-strata.sh --version v0.6.0 --dir .strata
 export STRATA_BIN=$PWD/.strata/strata
 .strata/merge-gate.sh "releases/*.json"
 ```
 
 Each release carries the binary for four targets, `SHA256SUMS`, and the four
-scripts, so one download gives a job everything. Use **v0.5.2** or later: it is
+scripts, so one download gives a job everything. Use **v0.6.0** or later: it is
 the first release with all four. `v0.5.1` carries three of them and no
 `merge-gate.sh`, and `v0.5.0` carries none, so an older pipeline checks this
 repository out at the tag and runs the scripts from `scripts/`. The installer

@@ -67,10 +67,10 @@ permissions:
   issues: write
 jobs:
   strata:
-    uses: como-technologies/strata/.github/workflows/verify.yml@v0.5.2
+    uses: como-technologies/strata/.github/workflows/verify.yml@v0.6.0
     with:
       records: releases/**/*.json
-      strata-version: v0.5.2
+      strata-version: v0.6.0
     secrets:
       strata-token: ${{ secrets.STRATA_READ_TOKEN }}     # while this repository is private
       palette-api-key: ${{ secrets.PALETTE_API_KEY }}
@@ -79,7 +79,7 @@ jobs:
 | Input | Required | Function |
 | --- | --- | --- |
 | `records` | yes | Files or patterns, separated by spaces or new lines. Strata expands the patterns. |
-| `strata-version` | yes | The strata release, for example `v0.5.2`. |
+| `strata-version` | yes | The strata release, for example `v0.6.0`. |
 | `label` | no | The label of the issues. Default `strata-drift`. |
 | `palette-api` | no | The address of a self-hosted Palette. |
 

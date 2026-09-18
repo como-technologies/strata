@@ -24,7 +24,7 @@ on:
         default: repave
         type: string
       strata-version:
-        description: The strata release to use, for example v0.5.2
+        description: The strata release to use, for example v0.6.0
         required: true
         type: string
     secrets:

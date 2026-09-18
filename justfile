@@ -172,6 +172,10 @@ live-down:
 
 # The recipe refuses a dirty tree or a tag that exists. Push the tag to start the release workflow.
 
+# Set the version everywhere it is written: just version 0.6.0
+version VERSION:
+    scripts/dev/set-version.sh {{VERSION}}
+
 # Tag the version in Cargo.toml as v<version>
 release:
     scripts/dev/tag-release.sh
