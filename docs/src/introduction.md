@@ -35,6 +35,28 @@ flowchart LR
 3. Do the [quick start](./quickstart.md).
 4. Find your problem in [Use cases](./use-cases/index.md).
 
+## The profile that the pages use
+
+Every page uses one profile, `aws-stack`, with the versions 1.0.0, 1.1.0 and
+1.1.1, and the clusters `payments`, `search` and `ledger`. It is not a profile
+of your tenant. Strata builds it from the pack data that this repository tracks:
+
+```bash
+just examples
+```
+
+This needs no key and no network, and it costs nothing. It writes the records
+to `examples/profiles/`, so a page that reads a ref by name reads a file here:
+`aws-stack@1.1.1` becomes `examples/profiles/aws-stack@1.1.1.json`.
+
+```bash
+strata compare examples/profiles/aws-stack@1.0.0.json examples/profiles/aws-stack@1.1.0.json
+```
+
+With your own tenant, the same pages read your profile names.
+[The offline examples](./development/examples.md) tells what the command
+builds.
+
 ## The rule
 
 A published profile version is a release. It has a name and a version. Do not
