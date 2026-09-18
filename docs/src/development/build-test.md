@@ -20,8 +20,34 @@ just docs-check        # docs/src/output/ is the output of this build
 - the tests of the binary over fixtures with the shape of the API responses
 - the tests of the scripts in `scripts/` and `examples/live/`, with stand-ins
   for `gh` and `tofu`
+- the fuzzing in `tests/fuzz.rs`
 
 No test uses the network.
+
+### The fuzzing
+
+`tests/fuzz.rs` sends random and hostile input to each entry point that reads a
+ref, a file, a directory, or an answer from Palette: refs of punctuation and
+text that is not ASCII, records of junk bytes, a path that names a directory,
+API answers of the right keys with the wrong types, and the binary itself with
+random arguments against an address that refuses the connection.
+
+One property holds everywhere: strata answers, or it errors with a kind and
+exit `2`. It never panics.
+
+The generator is deterministic, so a failure repeats. Each case names its seed,
+and a seed runs alone:
+
+```bash
+STRATA_FUZZ_SEED=1337 cargo test --test fuzz
+```
+
+The default seed is fixed, so each run of CI fuzzes the same cases. Give a new
+seed to look for more.
+
+Two of the tests measure themselves, because a fuzz test that stops reaching the
+code it fuzzes still passes. `a_profile_of_junk_gives_a_record_that_round_trips`
+fails when fewer than 50 of its 2000 cases build a record.
 
 ## Continuous integration
 
