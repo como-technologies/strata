@@ -1,12 +1,37 @@
 # strata candidate
 
-Write a candidate file from a profile version or a record. A candidate file
-describes a profile version. `strata snapshot --from-candidate` builds its
-snapshot, with the root of the version after somebody publishes it.
+`strata candidate <ref>` writes a candidate file from a profile version that
+Palette already has.
 
-Start a file from a published version with this command. Then change the file in
-a pull request, and compare the candidate with the last release:
-[Review a change before you publish it](../use-cases/review.md).
+## What a candidate file is
+
+A profile version is a stack of packs with their values, and the variables of
+the profile. Palette holds a version after somebody publishes it. A candidate
+file holds the same content as YAML, in your repository, before Palette has it.
+
+A person reads and edits the file. A [record](./snapshot.md) holds the same
+version as hashes, which a machine compares.
+[The candidate file](../reference/candidate-file.md) gives each field.
+
+Strata does not publish a candidate, and strata never writes to Palette. Your
+pipeline publishes the version. Strata tells you what that version will be.
+
+## Why you write one
+
+- **To review a change before the version exists.** The change is a diff in a
+  pull request. `strata snapshot --from-candidate` calculates the root of the
+  version to come. `strata compare` then names each layer that changes, and the
+  impact on a cluster. See
+  [Review a change before you publish it](../use-cases/review.md).
+- **To keep the version in git.** `--files-dir` writes the values of each layer
+  to their own file. A change to one value is then a change to one line, with an
+  author and a reason.
+- **To prove that Palette has the release you approved.** Record the published
+  version. Then run `strata same-release candidate.json published.json`. Exit
+  `0` says that the two are one release.
+
+This command writes the first file for you. Write the next one by hand, or from
+the version before it.
 
 The examples use the project `dev`, which holds `aws-stack@1.1.1`.
 
