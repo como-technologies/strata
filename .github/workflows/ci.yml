@@ -44,9 +44,9 @@ jobs:
       # mdbook builds a broken link with no message; mdbook-lint finds it
       - run: just docs-lint
       - run: just docs
-      # the book the checks passed is the book that is published, so it is built once
-      - uses: actions/configure-pages@v5
-        if: github.ref == 'refs/heads/main'
+      # the book the checks passed is the book that is published, so it is built once. There is
+      # no configure-pages step: it reads the Pages API, which this job has no token for, and
+      # mdbook needs nothing from it. Pages is already set to build from a workflow.
       - uses: actions/upload-pages-artifact@v3
         if: github.ref == 'refs/heads/main'
         with:
