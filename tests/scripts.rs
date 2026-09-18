@@ -6,6 +6,7 @@ mod common;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
+/// A script by its path under scripts/, such as `ci/merge-gate.sh` or `dev/tag-release.sh`.
 fn script(name: &str) -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("scripts")
@@ -35,7 +36,7 @@ fn git(dir: &Path, args: &[&str]) -> Output {
 
 fn tag_release(dir: &Path) -> Output {
     Command::new("bash")
-        .arg(script("tag-release.sh"))
+        .arg(script("dev/tag-release.sh"))
         .current_dir(dir)
         .env("GIT_CONFIG_GLOBAL", "/dev/null")
         .env("GIT_CONFIG_SYSTEM", "/dev/null")
@@ -264,7 +265,7 @@ impl Host {
             std::env::var("PATH").unwrap_or_default()
         );
         let mut c = Command::new("bash");
-        c.arg(script("pr-comment.sh"))
+        c.arg(script("ci/pr-comment.sh"))
             .args(args)
             .env("PATH", path)
             .env("STRATA_BIN", env!("CARGO_BIN_EXE_strata"))
@@ -709,7 +710,7 @@ fn release() -> tempfile::TempDir {
 
 fn install(d: &Path, args: &[&str]) -> Output {
     Command::new("bash")
-        .arg(script("install-strata.sh"))
+        .arg(script("ci/install-strata.sh"))
         .args(args)
         .current_dir(d)
         .env(
@@ -894,7 +895,7 @@ impl Gate {
 
     fn run(&self, args: &[&str]) -> Output {
         Command::new("bash")
-            .arg(script("merge-gate.sh"))
+            .arg(script("ci/merge-gate.sh"))
             .args(args)
             .current_dir(self.dir.path())
             .env("GIT_CONFIG_GLOBAL", "/dev/null")
@@ -2470,7 +2471,7 @@ impl Drift {
             let _ = std::fs::remove_file(self.dir.path().join(f));
         }
         Command::new("bash")
-            .arg(script("verify-report.sh"))
+            .arg(script("ci/verify-report.sh"))
             .args(args)
             .env(
                 "PATH",
@@ -2492,7 +2493,7 @@ impl Drift {
     fn run_gitlab(&self, args: &[&str]) -> Output {
         let _ = std::fs::remove_file(self.dir.path().join("curl.log"));
         Command::new("bash")
-            .arg(script("verify-report.sh"))
+            .arg(script("ci/verify-report.sh"))
             .args(args)
             .env(
                 "PATH",

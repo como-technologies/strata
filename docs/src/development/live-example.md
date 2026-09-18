@@ -11,7 +11,7 @@ check that needs them. [Live runs](./live-runs.md) records the results, and
 | `in-place.sh off`, `in-place.sh on` | An edit in place and a version bump of a version that two clusters run, with the immutable-clusterprofiles flag off and on (#27). |
 | `registry-move.sh` | A pack moved to an OCI registry, and `same-release --allow registry-move` (#24). |
 | `tag-only.sh` | Versions that differ only in a tag name, a cluster move, and a rename in place (#19). |
-| `drift-report.sh off`, `drift-report.sh on` | `scripts/verify-report.sh` around an edit in place and a version bump (#25). |
+| `drift-report.sh off`, `drift-report.sh on` | `scripts/ci/verify-report.sh` around an edit in place and a version bump (#25). |
 
 The example uses AWS, because the recorded runs had an AWS cloud account. Strata
 does not care which cloud runs the cluster. For another cloud, change the cluster

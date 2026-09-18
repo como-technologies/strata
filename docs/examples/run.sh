@@ -460,7 +460,7 @@ show review-candidate 0 'cat aws-stack.yaml'
 show2 review-snapshot 0 'strata snapshot --from-candidate aws-stack.yaml -o candidate.json'
 show review-markdown 1 'strata compare releases/1.0.0/dev.json candidate.json --format markdown'
 show review-repave 1 "strata compare releases/1.0.0/dev.json candidate.json --json | jq -r '.packs[] | select(.impact.level == \"repave\") | \"\(.name): \(.impact.text)\"'"
-show2 review-pr-comment 0 'scripts/pr-comment.sh releases/1.0.0/dev.json candidate.json --dry-run > comment.md'
+show2 review-pr-comment 0 'scripts/ci/pr-comment.sh releases/1.0.0/dev.json candidate.json --dry-run > comment.md'
 show review-pr-comment 0 'head -3 comment.md'
 profile $DEV $A110 1.1.0 aws-stack@1.1.0
 show2 review-published 0 'strata snapshot aws-stack@1.1.0 -o releases/1.1.0/dev.json'
@@ -491,13 +491,13 @@ quiet 'git checkout -q keep-the-volumes && git fetch -q origin main &&
   { git merge -q --no-edit --no-commit origin/main || true; } &&
   git checkout HEAD -- releases/dev.json &&
   git commit -qm "merge main, keep our record"'
-show2 merge-gate-behind 1 'scripts/merge-gate.sh "releases/*.json" --base main'
+show2 merge-gate-behind 1 'scripts/ci/merge-gate.sh "releases/*.json" --base main'
 # the fix: pin the version that main has, with the change on top
 quiet 'strata snapshot aws-stack@1.1.0 -o releases/dev.json && git commit -qam "pin aws-stack@1.1.0"'
-show2 merge-gate-clear 0 'scripts/merge-gate.sh "releases/*.json" --base main'
+show2 merge-gate-clear 0 'scripts/ci/merge-gate.sh "releases/*.json" --base main'
 # and the check that git cannot make: the pinned profile is edited in Palette after the record
 edit $DEV $A110 "$RETAIN"
-show2 merge-gate-drifted 1 'scripts/merge-gate.sh "releases/*.json" --base main'
+show2 merge-gate-drifted 1 'scripts/ci/merge-gate.sh "releases/*.json" --base main'
 
 chapter merge-gate-rollback PALETTE_PROJECT=dev GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null \
   GIT_AUTHOR_NAME=dev GIT_AUTHOR_EMAIL=dev@example.com \
@@ -517,13 +517,13 @@ quiet 'strata snapshot aws-stack@1.1.0 -o releases/dev.json &&
 quiet 'git checkout -q -b roll-dev-back &&
   git show main~1:releases/dev.json > releases/dev.json &&
   git commit -qam "pin what dev ran before 1.1.0"'
-show2 merge-gate-rollback-red 1 'scripts/merge-gate.sh "releases/*.json" --base main'
+show2 merge-gate-rollback-red 1 'scripts/ci/merge-gate.sh "releases/*.json" --base main'
 # the same change, with the rollback declared in the commit that makes it
 quiet 'git commit -q --amend -m "roll dev back to aws-stack@1.0.0
 
 Rollback: releases/dev.json to aws-stack@1.0.0
 1.1.0 repaved the nodes with a CSI driver that lost the volumes"'
-show2 merge-gate-rollback 0 'scripts/merge-gate.sh "releases/*.json" --base main'
+show2 merge-gate-rollback 0 'scripts/ci/merge-gate.sh "releases/*.json" --base main'
 
 chapter promote
 projects dev=$DEV prod=$PROD
@@ -597,7 +597,7 @@ cluster $DEV $SEARCH search $A111
 show edited-two-clusters 1 'strata compare cluster:payments cluster:search'
 show edited-bulk 1 "strata verify 'releases/**/*.json' 'runs/*.json'"
 show edited-bulk-json 1 "strata verify 'releases/**/*.json' 'runs/*.json' --json | jq '.summary'"
-show2 edited-report 1 "scripts/verify-report.sh 'releases/**/*.json' 'runs/*.json' --dry-run"
+show2 edited-report 1 "scripts/ci/verify-report.sh 'releases/**/*.json' 'runs/*.json' --dry-run"
 cluster $DEV $PAYMENTS payments $A111
 show edited-cluster-updated 1 'strata verify runs/payments.json'
 

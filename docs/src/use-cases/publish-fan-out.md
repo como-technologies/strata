@@ -98,7 +98,7 @@ them: before the push, not after the pipeline.
 strata verify "releases/**/*.json" --summary
 
 # what would my branch land, against the default branch as it is now?
-scripts/merge-gate.sh "releases/**/*.json" --base main
+scripts/ci/merge-gate.sh "releases/**/*.json" --base main
 ```
 
 The gate writes to no host and needs no token: it fetches the target branch,

@@ -1,6 +1,6 @@
 # Backlog
 
-Each `##` section is one GitHub issue; its `###` headings become `##` in the posted body. `scripts/open-backlog-issues.sh` (or `just backlog-issues`) creates missing issues and updates the body of existing ones by title, so this file is the source of truth. The `labels:` line is read by the script and is not part of the body. Paragraphs are single lines: GitHub renders markdown, hard wraps only add noise.
+Each `##` section is one GitHub issue; its `###` headings become `##` in the posted body. `scripts/dev/open-backlog-issues.sh` (or `just backlog-issues`) creates missing issues and updates the body of existing ones by title, so this file is the source of truth. The `labels:` line is read by the script and is not part of the body. Paragraphs are single lines: GitHub renders markdown, hard wraps only add noise.
 
 Strata is a tool, not a pipeline. Nothing here assumes a cloud provider, a registry product, a publishing tool, a CI system, a repository layout, or a set of environments. Where an example needs names, it uses the `examples/` data and calls them examples.
 
@@ -181,7 +181,7 @@ Any repository that reviews profile changes wants the same three steps when a pu
 
 ### Plan
 
-1. `scripts/pr-comment.sh <A> <B> [--label repave] [--threshold repave]`: runs the comparison in both formats, posts or updates one comment (marker `<!-- strata -->`), and sets the label from `summary.maxImpact`. GitHub through `gh` first; the host-specific part is one function, so another host is one more function.
+1. `scripts/ci/pr-comment.sh <A> <B> [--label repave] [--threshold repave]`: runs the comparison in both formats, posts or updates one comment (marker `<!-- strata -->`), and sets the label from `summary.maxImpact`. GitHub through `gh` first; the host-specific part is one function, so another host is one more function.
 2. A reusable GitHub Actions workflow in this repository, `.github/workflows/comment.yml`, that downloads the release binary and calls the script; inputs `a`, `b`, `label`, `threshold`. Other CI systems call the script directly.
 3. `README.md`: how to call the script and the workflow.
 
@@ -523,11 +523,11 @@ labels: ci
 
 ### Background
 
-The live run showed that Palette accepts an in-place edit of a published version through the API: same uid, same version, no new version. Only `strata verify` noticed. The walkthrough runs `verify` on a schedule, but each team has to wire the schedule and the reporting itself. `scripts/pr-comment.sh` and the reusable comment workflow do that for pull requests; nothing does it for drift.
+The live run showed that Palette accepts an in-place edit of a published version through the API: same uid, same version, no new version. Only `strata verify` noticed. The walkthrough runs `verify` on a schedule, but each team has to wire the schedule and the reporting itself. `scripts/ci/pr-comment.sh` and the reusable comment workflow do that for pull requests; nothing does it for drift.
 
 ### Plan
 
-1. `scripts/verify-report.sh <pattern>...`: run `strata verify --format json` over the records; open one issue per drifted record, with the report and a marker, update it on later runs, and close it when the record verifies again. A record that cannot be checked is reported too. Host calls sit in functions, as in `pr-comment.sh`.
+1. `scripts/ci/verify-report.sh <pattern>...`: run `strata verify --format json` over the records; open one issue per drifted record, with the report and a marker, update it on later runs, and close it when the record verifies again. A record that cannot be checked is reported too. Host calls sit in functions, as in `pr-comment.sh`.
 2. A reusable workflow, `.github/workflows/verify.yml`, that installs the release binary and calls the script; the caller sets the schedule. Other CI systems call the script directly.
 3. Tests with the fake `gh` from `tests/scripts.rs`.
 4. `examples/live`: run the script around the in-place edit, so a real drifted record opens the issue and undoing the edit closes it. Do it with the provider's `immutable-clusterprofiles` flag off and on, editing through the API in both, which Palette accepts whatever the flag, with Terraform's own handling of the edit a check (`drift-report.sh`): the flag guards one client, and this report guards the tenant. A record whose version a legacy version bump overwrote is reported too (#27). Cluster records follow what #27 finds about an update that waits for a cluster.
@@ -820,7 +820,7 @@ labels: robustness
 
 ### Background
 
-A pack key is `<layer>/<name>` (`Pack::key` in `src/snapshot.rs`). So a profile that exchanges one pack for a pack with another name gives one `REMOVED` entry and one `ADDED` entry, and no `IDENTITY` change: `os/ubuntu-aws` for `os/rhel-aws`, or `cni/cni-cilium-oss` for `cni/calico`. `diff::compute` builds both entries with the impact `none`, and it raises `summary.maxImpact` only in the branch that has two sides (`src/diff.rs`). So the most destructive change that a profile can make reports `maxImpact: none`. `scripts/pr-comment.sh` takes its label from that field, so such a pull request gets no `repave` label, and the jq gate in `docs/src/automation/scripts.md` passes it.
+A pack key is `<layer>/<name>` (`Pack::key` in `src/snapshot.rs`). So a profile that exchanges one pack for a pack with another name gives one `REMOVED` entry and one `ADDED` entry, and no `IDENTITY` change: `os/ubuntu-aws` for `os/rhel-aws`, or `cni/cni-cilium-oss` for `cni/calico`. `diff::compute` builds both entries with the impact `none`, and it raises `summary.maxImpact` only in the branch that has two sides (`src/diff.rs`). So the most destructive change that a profile can make reports `maxImpact: none`. `scripts/ci/pr-comment.sh` takes its label from that field, so such a pull request gets no `repave` label, and the jq gate in `docs/src/automation/scripts.md` passes it.
 
 ### Plan
 
@@ -897,14 +897,14 @@ labels: ci
 
 ### Background
 
-`scripts/pr-comment.sh` posts the comparison of a change as one comment, and `scripts/verify-report.sh` reports each drifted record as an issue. Both talk to `gh`, and the reusable workflows that call them are GitHub Actions. A team whose merge requests and scheduled pipelines run in GitLab has to write all of it again, although each script keeps every host call in its own function for exactly this reason.
+`scripts/ci/pr-comment.sh` posts the comparison of a change as one comment, and `scripts/ci/verify-report.sh` reports each drifted record as an issue. Both talk to `gh`, and the reusable workflows that call them are GitHub Actions. A team whose merge requests and scheduled pipelines run in GitLab has to write all of it again, although each script keeps every host call in its own function for exactly this reason.
 
 ### Plan
 
-1. `scripts/pr-comment.sh` and `scripts/verify-report.sh`: a `--host github|gitlab` option, detected from `GITLAB_CI` or `CI_PROJECT_ID`, else GitHub. A GitLab set of the same host functions, over the REST API v4 with `curl`, `CI_API_V4_URL`, `CI_PROJECT_ID`, `CI_MERGE_REQUEST_IID`, and a token in `GITLAB_TOKEN`. Every host call goes through one `host <name>` dispatcher, so a third host is a third set.
+1. `scripts/ci/pr-comment.sh` and `scripts/ci/verify-report.sh`: a `--host github|gitlab` option, detected from `GITLAB_CI` or `CI_PROJECT_ID`, else GitHub. A GitLab set of the same host functions, over the REST API v4 with `curl`, `CI_API_V4_URL`, `CI_PROJECT_ID`, `CI_MERGE_REQUEST_IID`, and a token in `GITLAB_TOKEN`. Every host call goes through one `host <name>` dispatcher, so a third host is a third set.
 2. The GitLab functions keep the behavior: one note per merge request, found by the marker and updated on each push; the label added and removed at the threshold; one issue per record, found by its marker, updated, and closed with a comment when the record verifies again.
 3. `examples/ci/gitlab/strata.yml`: the drop-in jobs that a pipeline includes, one for the comment, one for [the merge gate](#stop-a-merge-request-that-would-land-the-wrong-release), and one for the scheduled verify.
-4. `scripts/install-strata.sh`: one release, for any host and a laptop. It reads the release document, downloads the binary for the machine and the scripts, checks every file against `SHA256SUMS`, and prints the path of the binary.
+4. `scripts/ci/install-strata.sh`: one release, for any host and a laptop. It reads the release document, downloads the binary for the machine and the scripts, checks every file against `SHA256SUMS`, and prints the path of the binary.
 5. `.github/workflows/release.yml`: attach the scripts to each release, so a job downloads one release and has everything.
 6. `tests/scripts.rs`: the GitLab host calls against a stand-in `curl`, as the GitHub ones run against a stand-in `gh`.
 7. The book: a GitLab page beside the GitHub ones, and the fan-out use case that uses both.
@@ -928,7 +928,7 @@ A merge request is reviewed against the default branch as it was when somebody o
 
 ### Plan
 
-1. `scripts/merge-gate.sh <record or pattern>...`: merge the target branch into the checkout first, so every answer is about the merge result. The target branch comes from `--base`, `CI_MERGE_REQUEST_TARGET_BRANCH_NAME` or `GITHUB_BASE_REF`.
+1. `scripts/ci/merge-gate.sh <record or pattern>...`: merge the target branch into the checkout first, so every answer is about the merge result. The target branch comes from `--base`, `CI_MERGE_REQUEST_TARGET_BRANCH_NAME` or `GITHUB_BASE_REF`.
 2. Three checks, each exit 1: a conflict, reported as a comparison of the two records and not as lines; a merge result that pins an older version of a pack or of the profile than the target branch has; a record of the merge result that does not verify against Palette.
 3. A rollback moves a pin backwards on purpose, and only the author knows which one it is. The gate does not guess: it prints the evidence of each backwards pin, and it passes when a commit of the branch carries `Rollback: <record> to <name>@<version>` that names the record and the release of the merge result, or when the job runs with `--allow-rollback` for a merge request with the rollback label. The evidence is whether the target branch pinned that release before, with the date and the commit, and whether the branch wrote its record after the target branch moved.
 4. `.github/workflows/merge-gate.yml`, a reusable workflow for a required status check, and a `strata-merge-gate` job in `examples/ci/gitlab/strata.yml`. Each reads the rollback label of the merge request.
@@ -966,3 +966,47 @@ A pack can require another pack, with a minimum version. Palette checks that req
 - [ ] Strata reports a pack whose required pack is not in the same profile, and names both packs and the version asked for
 - [ ] A profile that carries every required pack reports nothing
 - [ ] The book states that a constraint reaches only the packs of one profile
+
+## Group the scripts by who runs them
+
+labels: ci
+
+### Background
+
+`scripts/` holds two kinds of file. Four of them ship in every release and run in a consumer's pipeline: `pr-comment.sh`, `merge-gate.sh`, `verify-report.sh` and `install-strata.sh`. Two are maintenance of this repository and belong to nobody else: `tag-release.sh` and `open-backlog-issues.sh`. One directory for both leaves a reader guessing which is which, the same way `examples/gitlab/` did before the CI drop-ins moved under `examples/ci/`.
+
+### Plan
+
+1. `scripts/ci/` for the four that ship, `scripts/dev/` for the two that do not.
+2. `.github/workflows/release.yml`: the `cp` that puts the scripts in the release reads the new paths. The release asset names stay flat, so a pipeline that downloads a release sees no change, and `install-strata.sh` needs no edit.
+3. `justfile`, the reusable workflows, `examples/ci/*`, and the book: the paths they name.
+4. `tests/scripts.rs`: the `script()` helper takes the directory with the name.
+
+### Acceptance criteria
+
+- [ ] `scripts/ci/` holds the four scripts a release carries, and `scripts/dev/` the two it does not
+- [ ] A release carries the same asset names as before, and `install-strata.sh` is unchanged
+- [ ] Every path in the workflows, the justfile, the drop-ins and the book names the file where it now is
+- [ ] `just lint`, `just test`, `just docs-check` and `just docs` pass
+
+## Split the shell script tests by what they cover
+
+labels: ci
+
+### Background
+
+`tests/scripts.rs` is about three thousand lines. It covers two unrelated things: the CI scripts that a consumer runs (the comment, the merge gate, the drift report, the installer) and the scripts of the live example (`tf.sh`, `tenant.sh`, `api.sh`, `aws-inventory.sh`, the baseline and the diagnostics). A reader looking for one has to scroll past the other, and a failure names a file that covers both.
+
+### Plan
+
+1. `tests/ci_scripts.rs`: the tests of the four scripts a release carries, with the stand-in `gh`, the stand-in `curl` and the release fixtures.
+2. `tests/live_scripts.rs`: the tests of the live example's scripts, with the stand-in `tofu`, `aws`, `kubectl`, `helm` and `crane`.
+3. The shared helpers (`script()`, `text()`, `git()`, `executable()`) go where both can use them, in `tests/common/`.
+4. No test changes what it asserts: the split moves code and nothing else.
+
+### Acceptance criteria
+
+- [ ] `tests/ci_scripts.rs` and `tests/live_scripts.rs` replace `tests/scripts.rs`, and neither is longer than the other by much
+- [ ] The same tests run, with the same names and the same count
+- [ ] The shared helpers live in one place, not copied into both files
+- [ ] `just lint` and `just test` pass

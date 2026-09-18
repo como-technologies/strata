@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Install one strata release, with its CI scripts, and check every file against SHA256SUMS.
 #
-#   scripts/install-strata.sh [--version vX.Y.Z] [--dir DIR] [--repo OWNER/REPO] [--target TARGET]
+#   scripts/ci/install-strata.sh [--version vX.Y.Z] [--dir DIR] [--repo OWNER/REPO] [--target TARGET]
 #
 # Downloads the binary for this machine, SHA256SUMS, and the CI scripts pr-comment.sh,
 # merge-gate.sh and verify-report.sh into DIR (default .strata), checks the checksums, and prints

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Post a strata comparison as one pull request comment and set a label from its impact.
 #
-#   scripts/pr-comment.sh <A> <B> [--pr N] [--repo OWNER/REPO] [--label NAME] [--threshold LEVEL] [--dry-run]
+#   scripts/ci/pr-comment.sh <A> <B> [--pr N] [--repo OWNER/REPO] [--label NAME] [--threshold LEVEL] [--dry-run]
 #
 # A and B are refs strata understands: snapshot files, uids, or name@version. A ref that is not a
 # file is snapshotted once, so both renderings read files and Palette is asked once. The comment starts

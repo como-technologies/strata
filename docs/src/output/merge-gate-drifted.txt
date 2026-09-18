@@ -1,4 +1,4 @@
-$ scripts/merge-gate.sh "releases/*.json" --base main
+$ scripts/ci/merge-gate.sh "releases/*.json" --base main
 merge-gate: the branch already carries origin/main; the checkout is the merge result
 DRIFTED: releases/dev.json does not verify; a cluster built from it would not get what it says
   aws-stack@1.1.0 (uid 64e0000000000000000000b2)  ->  aws-stack@1.1.0 (uid 64e0000000000000000000b2)

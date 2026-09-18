@@ -3,7 +3,7 @@ name: strata comment
 # Reusable workflow. A repository calls it from its own pull request workflow to post the
 # comparison of two refs as one comment and set a label from the impact; see docs/src/automation/pr-comments.md. It
 # downloads the strata release binary, checks it against SHA256SUMS, and runs
-# scripts/pr-comment.sh from the same tag. Other CI systems run the script directly.
+# scripts/ci/pr-comment.sh from the same tag. Other CI systems run the script directly.
 on:
   workflow_call:
     inputs:
@@ -81,5 +81,5 @@ jobs:
           PR: ${{ github.event.pull_request.number }}
           REPO: ${{ github.repository }}
         run: |
-          .strata/scripts/pr-comment.sh "$A" "$B" --pr "$PR" --repo "$REPO" \
+          .strata/scripts/ci/pr-comment.sh "$A" "$B" --pr "$PR" --repo "$REPO" \
             --label "$LABEL" --threshold "$THRESHOLD"

@@ -1,12 +1,12 @@
 # The merge gate
 
-`scripts/merge-gate.sh` answers one question: **what do the records look like
+`scripts/ci/merge-gate.sh` answers one question: **what do the records look like
 after the merge button?** It merges the target branch into the checkout first,
 so every answer is about the merge result, not about the branch as it was when
 somebody opened it.
 
 ```bash
-scripts/merge-gate.sh "releases/*.json" --base main
+scripts/ci/merge-gate.sh "releases/*.json" --base main
 ```
 
 A branch that sat for a day is the problem. Another merge request moved the

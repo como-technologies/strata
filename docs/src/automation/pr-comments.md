@@ -1,11 +1,11 @@
 # Pull request comments
 
-`scripts/pr-comment.sh A B` compares two refs and posts the report as one
+`scripts/ci/pr-comment.sh A B` compares two refs and posts the report as one
 comment on a pull request. When the maximum impact reaches `repave`, it adds the
 label `repave`.
 
 ```bash
-scripts/pr-comment.sh releases/1.0.0/dev.json candidate.json
+scripts/ci/pr-comment.sh releases/1.0.0/dev.json candidate.json
 ```
 
 On the next push, the script updates the same comment. It finds the comment by
@@ -31,7 +31,7 @@ impact no longer reaches the threshold.
 | `--threshold LEVEL` | `repave` | The lowest [impact](../reference/impact.md) that adds the label. |
 | `--dry-run` | | Print, and change nothing. |
 
-The script is in this repository, at `scripts/pr-comment.sh`. It needs `strata`
+The script is in this repository, at `scripts/ci/pr-comment.sh`. It needs `strata`
 (or `STRATA_BIN`), `jq`, and the tool of the host: a `gh` with a login, or
 `curl` and a `GITLAB_TOKEN`. See [GitLab CI](./gitlab.md). A ref that is not a file gets
 one snapshot, so Palette gets one set of requests. Run from a terminal, the

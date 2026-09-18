@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The drift report test (#25): scripts/verify-report.sh, the scheduled verify's reporter, run around
+# The drift report test (#25): scripts/ci/verify-report.sh, the scheduled verify's reporter, run around
 # an in-place edit and a version bump of the add-on profile. Run it once with the Spectro Cloud
 # provider's immutable-clusterprofiles flag off and once with it on; the two runs differ in nothing
 # else.
@@ -40,7 +40,7 @@ case "$mode" in
 esac
 . "$(cd "$(dirname "$0")" && pwd)/lib.sh"
 [ -x "$strata" ] || die "no strata binary at $strata"
-reporter=$(cd "$live/../.." && pwd)/scripts/verify-report.sh
+reporter=$(cd "$live/../.." && pwd)/scripts/ci/verify-report.sh
 repo=${REPORT_REPO:-$(cd "$live" && gh repo view --json nameWithOwner --jq .nameWithOwner)} \
   || die "gh cannot see a repository for the issues; set REPORT_REPO"
 label=strata-live-drift

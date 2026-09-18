@@ -1,4 +1,4 @@
-$ scripts/verify-report.sh 'releases/**/*.json' 'runs/*.json' --dry-run
+$ scripts/ci/verify-report.sh 'releases/**/*.json' 'runs/*.json' --dry-run
 <!-- strata-verify: releases/1.1.1/dev.json -->
 `strata verify releases/1.1.1/dev.json` reports drift, checked 2026-09-17T09:30:00Z.
 

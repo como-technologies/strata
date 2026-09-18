@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Report the records a scheduled `strata verify` finds drifted, or cannot check, as issues.
 #
-#   scripts/verify-report.sh <record or pattern>... [--repo OWNER/REPO] [--label NAME] [--dry-run]
+#   scripts/ci/verify-report.sh <record or pattern>... [--repo OWNER/REPO] [--label NAME] [--dry-run]
 #
 # Runs `strata verify --summary --format json` over the records; strata expands a quoted pattern
 # such as 'releases/**/*.json'. Each record that did not verify is checked again on its own for its

@@ -68,7 +68,7 @@ request for each. See [A version bump overwrites a version](../use-cases/overwri
 
 ## Run it on a schedule
 
-`scripts/verify-report.sh` runs `verify` over each record, and keeps one GitHub
+`scripts/ci/verify-report.sh` runs `verify` over each record, and keeps one GitHub
 issue open for each record that drifted. See
 [Drift issues](../automation/drift-issues.md).
 

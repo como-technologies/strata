@@ -5,7 +5,7 @@ name: strata merge gate
 # branch as it is now; see docs/src/automation/merge-gate.md. Make it a required status check, with
 # "Require branches to be up to date before merging", or put it in the merge queue.
 # It downloads the strata release binary, checks it against SHA256SUMS, and runs
-# scripts/merge-gate.sh from the same tag. Other CI systems run the script directly.
+# scripts/ci/merge-gate.sh from the same tag. Other CI systems run the script directly.
 on:
   workflow_call:
     inputs:
@@ -84,4 +84,4 @@ jobs:
           # split the records on whitespace and leave each pattern for git to expand
           set -f
           # shellcheck disable=SC2086
-          .strata/scripts/merge-gate.sh $RECORDS $NO_VERIFY $ROLLBACK
+          .strata/scripts/ci/merge-gate.sh $RECORDS $NO_VERIFY $ROLLBACK

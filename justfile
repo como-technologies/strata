@@ -170,8 +170,8 @@ live-down:
 
 # Tag the version in Cargo.toml as v<version>
 release:
-    scripts/tag-release.sh
+    scripts/dev/tag-release.sh
 
 # Open or update one GitHub issue for each section of docs/backlog.md. Needs gh.
 backlog-issues:
-    scripts/open-backlog-issues.sh
+    scripts/dev/open-backlog-issues.sh

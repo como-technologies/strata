@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The merge gate test (#57): scripts/merge-gate.sh over records of the live profiles, in a git
+# The merge gate test (#57): scripts/ci/merge-gate.sh over records of the live profiles, in a git
 # repository this script builds. It needs the live profiles (just live-profiles), no cluster, and
 # it writes to Palette only the in-place edit of stage 4, which stage 5 undoes.
 #
@@ -23,7 +23,7 @@ script=merge-gate
 from=${1:-1}
 . "$(cd "$(dirname "$0")" && pwd)/lib.sh"
 [ -x "$strata" ] || die "no strata binary at $strata"
-gate=$(cd "$live/../.." && pwd)/scripts/merge-gate.sh
+gate=$(cd "$live/../.." && pwd)/scripts/ci/merge-gate.sh
 
 profile=strata-live-profile
 addon=strata-live-addon

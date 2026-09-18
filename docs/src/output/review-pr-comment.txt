@@ -1,4 +1,4 @@
-$ scripts/pr-comment.sh releases/1.0.0/dev.json candidate.json --dry-run > comment.md
+$ scripts/ci/pr-comment.sh releases/1.0.0/dev.json candidate.json --dry-run > comment.md
 pr-comment: max impact: repave; would add label repave
 $ head -3 comment.md
 <!-- strata -->

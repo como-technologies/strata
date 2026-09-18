@@ -69,7 +69,7 @@ collapsible block for each changed pack:
 ...
 ````
 
-`scripts/pr-comment.sh` posts it: see
+`scripts/ci/pr-comment.sh` posts it: see
 [Pull request comments](../automation/pr-comments.md).
 
 ## A script

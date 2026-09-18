@@ -1,4 +1,4 @@
-$ scripts/merge-gate.sh "releases/*.json" --base main
+$ scripts/ci/merge-gate.sh "releases/*.json" --base main
 merge-gate: the branch already carries origin/main; the checkout is the merge result
 ROLLBACK: releases/dev.json returns to aws-stack@1.0.0, declared in a commit of the branch
   the profile: main has 1.1.0, the merge result has 1.0.0

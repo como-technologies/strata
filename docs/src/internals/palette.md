@@ -183,7 +183,7 @@ of the release profile did not (`eada36c2e3fd`).
 
 ## Drift reports
 
-`examples/live/drift-report.sh` ran `scripts/verify-report.sh` around an edit in
+`examples/live/drift-report.sh` ran `scripts/ci/verify-report.sh` around an edit in
 place and a version bump, with the flag off and on. Session `20260917T150538Z`,
 provider 0.30.1. In both runs, the edit opened one issue for the add-on record,
 a second report updated it, and the undo closed it. Without the flag, the bump

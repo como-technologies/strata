@@ -37,7 +37,7 @@ The comment job compares the record that the default branch has with what the
 merge request proposes:
 
 ```bash
-scripts/pr-comment.sh releases/dev.json candidate.json
+scripts/ci/pr-comment.sh releases/dev.json candidate.json
 ```
 
 ```text
@@ -114,7 +114,7 @@ scheduled job checks each record against Palette, and keeps one issue open per
 record that drifted:
 
 ```bash
-scripts/verify-report.sh "releases/**/*.json"
+scripts/ci/verify-report.sh "releases/**/*.json"
 ```
 
 ````text

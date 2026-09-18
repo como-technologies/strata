@@ -1,10 +1,10 @@
 # Drift issues
 
-`scripts/verify-report.sh` runs `strata verify` over the records. It keeps one
+`scripts/ci/verify-report.sh` runs `strata verify` over the records. It keeps one
 open GitHub issue for each record that drifted or that strata could not check.
 
 ```bash
-scripts/verify-report.sh 'releases/**/*.json' 'runs/*.json'
+scripts/ci/verify-report.sh 'releases/**/*.json' 'runs/*.json'
 ```
 
 | Run | Issue |
@@ -41,7 +41,7 @@ checked.
 | `--label NAME` | `strata-drift` | The label of the issues. |
 | `--dry-run` | | Print, and change nothing. |
 
-The script is in this repository, at `scripts/verify-report.sh`. It needs
+The script is in this repository, at `scripts/ci/verify-report.sh`. It needs
 `strata`, `jq`, the Palette API key, and the tool of the host: a `gh` with a
 login, or `curl` and a `GITLAB_TOKEN`. See [GitLab CI](./gitlab.md).
 

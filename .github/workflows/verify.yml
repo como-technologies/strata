@@ -4,7 +4,7 @@ name: strata verify report
 # records and keep one issue open per record that drifted or could not be checked; see
 # docs/src/automation/drift-issues.md.
 # The caller sets the schedule. It downloads the strata release binary, checks it against
-# SHA256SUMS, and runs scripts/verify-report.sh from the same tag. Other CI systems run the script
+# SHA256SUMS, and runs scripts/ci/verify-report.sh from the same tag. Other CI systems run the script
 # directly.
 on:
   workflow_call:
@@ -76,4 +76,4 @@ jobs:
           # split the records on whitespace and leave each pattern for strata to expand
           set -f
           # shellcheck disable=SC2086
-          .strata/scripts/verify-report.sh $RECORDS --repo "$REPO" --label "$LABEL"
+          .strata/scripts/ci/verify-report.sh $RECORDS --repo "$REPO" --label "$LABEL"

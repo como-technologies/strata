@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Check what a merge request does to the records, against the target branch as it is now.
 #
-#   scripts/merge-gate.sh <record or pattern>... [--base BRANCH] [--remote NAME]
+#   scripts/ci/merge-gate.sh <record or pattern>... [--base BRANCH] [--remote NAME]
 #                         [--no-verify] [--allow-rollback]
 #
 # A branch that sat for a day compares against a base that moved. This script merges the target
