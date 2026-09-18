@@ -1058,3 +1058,37 @@ labels: ci
 - [x] A test fails when a drop-in passes an option a script does not have, wherever the file carries it: on the call, in an environment value, or assigned to a shell variable
 - [x] A test fails when a drop-in names a strata version other than the one in `Cargo.toml`
 - [x] The test reads the files themselves, with no network and no YAML dependency beyond what the tests already use
+
+## List the profiles a cluster applies
+
+labels: feature
+
+### Background
+
+`strata consumers <name>@<version>` answers which clusters use a profile version. The opposite question, which profile versions a cluster applies, has no cheap answer. `strata list clusters` prints the ref, the name, the state, and the cloud type of each cluster, and stops there.
+
+Today a person gets the applied profiles in two ways, and neither is meant for the question. `strata snapshot cluster:<uid>` records them, but it reads the packs, the manifests, and the variables of every applied profile to do it, and it writes a record the person did not ask for. The error `ClusterProfileNotFound` also names them: `strata compare <record>.json cluster:<uid>/<profile>` with a profile the cluster does not run ends with `applied: lab-profile, lab-addons`. A person learns the answer when the guess is wrong.
+
+The data needs one request. `GET /v1/spectroclusters/{uid}` returns `spec.clusterProfileTemplates[]`, and `AppliedProfile::from_template` in `src/snapshot.rs` already reads the uid, the name, the version, and the type of each template. `Palette::cluster_document` in `src/api.rs` already makes that request for `verify`.
+
+One question is open: whether the cluster listing, `GET /v1/dashboard/spectroclusters/meta`, already names the applied profiles of each cluster. Strata reads only `metadata.name`, `metadata.uid`, `metadata.annotations.projectUid`, `status.state`, and `spec.cloudType` from it. If the listing carries the profiles, the command needs no request for each cluster and no option. A live check must answer this before the option becomes the only design.
+
+### Plan
+
+1. `src/ops.rs`: `ListOptions` gains `applied`. `list_clusters` takes the palette, the options, and the progress, as `list_profiles` does, and with `applied` it reads `Palette::cluster_document` for each cluster. A cluster the request cannot read keeps its row and carries the `error`, the way a profile does with `--packs`.
+2. `src/ops.rs`: `ListedCluster` gains `profiles: Option<Vec<AppliedProfile>>` and `error: Option<Value>`, both left out of the JSON when they are empty, as `ListedProfile` leaves out its own.
+3. `src/ops.rs`: at tenant scope a cluster is in a project, so `list` connects one client for each project the clusters name and reads each cluster with the client of its project, the way `consumers` reads its clusters.
+4. `src/main.rs`: `--applied` on `list`: "Also read each cluster for the profiles it applies". The name keeps the option apart from `profiles`, which is a value of the `KINDS` argument.
+5. `src/render/terminal.rs` and `src/render/markdown.rs`: one indented line for each applied profile under its cluster, with `<name>@<version>`, the uid, and the type, the way `--packs` prints the packs of a profile. A cluster that cannot be read shows its error.
+6. Tests: `MemoryApi` serving the cluster listing and the cluster documents, for a cluster with two profiles, a cluster whose document fails, and a tenant scope with clusters in two projects. A CLI test for the option and for `strata schema list`.
+7. Documentation: a step in `docs/examples/run.sh` for the new output, `docs/src/commands/list.md`, and `clusters[].profiles[]` in `docs/src/reference/documents.md`.
+
+### Acceptance criteria
+
+- [ ] `strata list clusters --applied` prints, for each cluster, the profile versions it applies, in the order Palette applies them
+- [ ] Each applied profile shows its `<name>@<version>`, its uid, and its type, so a person can read the uid when a version was overwritten in place
+- [ ] A cluster whose document cannot be read keeps its row, carries the error, and does not stop the other rows
+- [ ] `--applied` at tenant scope reads each cluster with the client of its own project
+- [ ] `strata list` without the option makes no request for each cluster
+- [ ] `--format json` writes `strata-list/1` with `clusters[].profiles[]`, and `strata schema list` prints the schema
+- [ ] A live check says whether `GET /v1/dashboard/spectroclusters/meta` already names the applied profiles, and the result is recorded in `docs/src/internals/palette.md`
