@@ -1,23 +1,13 @@
 $ strata candidate --help
 Write a candidate file from a profile version or a record
 
-The file gives the pack, tag, registry, values, and manifests of each layer, and the variables. `strata snapshot --from-candidate` calculates the same root from the file, when the registry still has the same pack versions.
-
 Usage: strata candidate [OPTIONS] <REF>
 
 Arguments:
-  <REF>
-          A profile uid, <name>@<version>, <name>@latest, or a profile record
+  <REF>  A profile version, by ref or by record
 
 Options:
-  -o, --output <OUTPUT>
-          Write the candidate file to this file, not to standard output
-
-      --files-dir <FILES_DIR>
-          Write the values of each layer and each manifest to a file in this directory, and refer to those files from the candidate file
-
-  -q, --quiet
-          Do not write progress messages to standard error
-
-  -h, --help
-          Print help (see a summary with '-h')
+  -o, --output <OUTPUT>        Write to this file, not to standard output
+      --files-dir <FILES_DIR>  Write the values and the manifests to files in this directory
+  -q, --quiet                  No progress messages
+  -h, --help                   Print help

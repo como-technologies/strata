@@ -18,82 +18,19 @@ use strata::render::{self, Format};
 use strata::snapshot::Snapshot;
 use strata::{candidate, diff, ops, TOOL_NAME};
 
-/// The commands by task, in the order of `strata --help`. The order follows the work: find the
-/// refs, record a release, compare releases, check the records.
-const GROUPS: &[(&str, &[&str])] = &[
-    ("Find", &["list", "packs"]),
-    ("Record", &["snapshot", "candidate"]),
-    ("Compare", &["compare", "same-release"]),
-    ("Check", &["verify", "consumers"]),
-    ("Reference", &["schema", "help"]),
-];
-
-/// The description of the `help` command, which clap adds.
-const HELP_ABOUT: &str = "Print this help, or the help of a command";
-
-/// The refs, the environment, and the exit status, after the options of `strata --help`.
-const REFERENCE_HELP: &[(&str, &[(&str, &str)])] = &[
-    (
-        "Refs",
-        &[
-            ("<uid>", "a profile version, by its uid"),
-            (
-                "<name>@<version>",
-                "a profile version, by its name and version",
-            ),
-            (
-                "<name>@latest",
-                "the highest version of the name in the scope",
-            ),
-            (
-                "cluster:<cluster>",
-                "all profiles that a cluster runs, by its name or uid",
-            ),
-            (
-                "cluster:<cluster>/<profile>",
-                "one profile that a cluster runs",
-            ),
-            ("<file>", "a snapshot file from strata snapshot"),
-        ],
-    ),
-    (
-        "Environment",
-        &[
-            (
-                "PALETTE_API_KEY",
-                "the API key; SPECTROCLOUD_APIKEY also works",
-            ),
-            (
-                "PALETTE_PROJECT",
-                "the project name; PALETTE_PROJECT_UID has priority",
-            ),
-            (
-                "PALETTE_API",
-                "the Palette address; default https://api.spectrocloud.com",
-            ),
-            (
-                "STRATA_RETRIES",
-                "how many times to send a failed request again; default 3",
-            ),
-            (
-                "STRATA_MAX_RETRY_AFTER",
-                "the longest Retry-After wait in seconds; default 300",
-            ),
-            ("STRATA_QUIET", "any value: the same as --quiet"),
-            (
-                "~/.palette.env",
-                "the key, the address, and the project, when the environment does not set them",
-            ),
-        ],
-    ),
-    (
-        "Exit status",
-        &[
-            ("0", "the same, unchanged, or not in use"),
-            ("1", "different, drifted, or in use"),
-            ("2", "an error: strata cannot answer"),
-        ],
-    ),
+/// Every command, in the order that `strata --help` lists them. A first argument that is not one
+/// of these makes `strata <A> <B>` a compare.
+const COMMANDS: &[&str] = &[
+    "candidate",
+    "compare",
+    "consumers",
+    "help",
+    "list",
+    "packs",
+    "same-release",
+    "schema",
+    "snapshot",
+    "verify",
 ];
 
 #[derive(Parser)]
@@ -101,12 +38,6 @@ const REFERENCE_HELP: &[(&str, &[(&str, &str)])] = &[
     name = TOOL_NAME,
     version,
     about = "Record, compare, and check Palette profile versions, clusters, and pack versions",
-    long_about = "Record, compare, and check what Palette holds: cluster profile versions, the \
-clusters that run them, and pack versions in a registry.\n\n\
-A published profile version is a release. Strata writes a release to a snapshot file. It compares \
-two releases layer by layer, and it makes sure that Palette still has the release that a file \
-records. A cluster runs a release, and strata reads a cluster in the same way. It reads a pack \
-version from its registry in the same way, so two pack versions compare like two releases.",
     override_usage = "strata <COMMAND>\n       strata <A> <B>"
 )]
 struct Cli {
@@ -130,79 +61,48 @@ impl Cli {
 }
 
 #[derive(Subcommand)]
+// In alphabetical order, which is the order `strata --help` lists them in.
 enum Cmd {
-    /// List the profile versions, clusters, and projects in the scope
-    ///
-    /// The first column of each line is a ref that the other commands accept. The scope is the
-    /// configured project, or the project that --project or --project-name gives.
-    List(ListArgs),
-    /// List the versions a registry offers for a pack
-    ///
-    /// Reads the registries the key can see, and says which versions each one has, newest first,
-    /// with the tags that point at each version. `pack:<name>@<version>` reads one of them.
-    Packs(PacksArgs),
-    /// Record a profile version or a cluster in a snapshot file
-    ///
-    /// The file holds the root, the hashes of each pack, the values and manifests, the project,
-    /// and the clusters that use the version. `compare`, `same-release`, and `verify` read it.
-    Snapshot(SnapshotArgs),
     /// Write a candidate file from a profile version or a record
-    ///
-    /// The file gives the pack, tag, registry, values, and manifests of each layer, and the
-    /// variables. `strata snapshot --from-candidate` calculates the same root from the file, when
-    /// the registry still has the same pack versions.
     Candidate(CandidateArgs),
     /// Compare two profile versions, records, or clusters
-    ///
-    /// The report gives the root of each side, the variables, and one line for each pack with its
-    /// change flags and impact. `strata <A> <B>` is the same as `strata compare <A> <B>`.
-    ///
-    /// Exit status: 0 when the roots are equal, 1 when they differ, 2 on an error.
     Compare(CompareArgs),
-    /// Make sure that two or more records are one release
-    ///
-    /// Strata compares each record with the next one, in the order given. A pair passes when the
-    /// roots are equal. A pair also passes when the roots differ only by a tag name or by the uid
-    /// that Palette gives a manifest pack, because the content is the same.
-    ///
-    /// Exit status: 0 when each pair passes, 1 when a pair fails, 2 on an error.
-    SameRelease(SameReleaseArgs),
-    /// Make sure that each record agrees with Palette now
-    ///
-    /// For each record, strata fetches the same uid again in the project of the record and
-    /// compares the roots. A version number that changed on the same uid is drift too. One file
-    /// prints the full report and a verdict. Two or more files, or a pattern, print one line for
-    /// each record and a summary.
-    ///
-    /// Exit status: 0 when each record is unchanged, 1 when a record drifted, 2 when strata
-    /// cannot check a record.
-    Verify(VerifyArgs),
     /// List the clusters that use a profile version
-    ///
-    /// Each line gives the name, uid, project, and state of a cluster. When the copy of a cluster
-    /// names a version that differs from the profile, the line says so.
-    ///
-    /// Exit status: 0 when no cluster uses the version, 1 when a cluster uses it, 2 on an error.
     Consumers(ConsumersArgs),
+    /// List the profile versions, clusters, and projects in the scope
+    List(ListArgs),
+    /// List the versions a registry offers for a pack
+    Packs(PacksArgs),
+    /// Make sure that two or more records are one release
+    SameRelease(SameReleaseArgs),
     /// Print the JSON Schema of a document or of the candidate file
     Schema {
-        /// The document: snapshot, diff, verify-summary, chain, consumers, list, or candidate
+        /// Which document, or the candidate file
         #[arg(value_enum)]
         kind: SchemaKind,
     },
+    /// Record a profile version or a cluster in a snapshot file
+    Snapshot(SnapshotArgs),
+    /// Make sure that each record agrees with Palette now
+    Verify(VerifyArgs),
 }
 
 #[derive(Args)]
 struct OutputArgs {
-    /// The output format: terminal, markdown for a pull request comment, or json for a script
-    #[arg(long, value_enum, default_value = "terminal")]
+    /// The report format: terminal, markdown, or json
+    #[arg(
+        long,
+        value_enum,
+        default_value = "terminal",
+        hide_possible_values = true
+    )]
     format: FormatArg,
     /// The same as --format json
     #[arg(long)]
     json: bool,
-    /// When to color the terminal report. auto colors only a terminal, and obeys NO_COLOR and
-    /// CLICOLOR_FORCE
-    #[arg(long, value_enum, default_value = "auto", num_args = 0..=1, default_missing_value = "always")]
+    /// Color the report: auto, always, or never
+    #[arg(long, value_enum, default_value = "auto", num_args = 0..=1,
+          default_missing_value = "always", hide_possible_values = true)]
     color: ColorArg,
     /// The same as --color=never
     #[arg(long)]
@@ -210,7 +110,7 @@ struct OutputArgs {
     /// Write the JSON on one line
     #[arg(long)]
     compact: bool,
-    /// Do not write progress messages to standard error
+    /// No progress messages
     #[arg(short, long)]
     quiet: bool,
 }
@@ -240,12 +140,11 @@ impl OutputArgs {
 
 #[derive(Args)]
 struct CompareArgs {
-    /// The first side: a profile uid, <name>@<version>, <name>@latest,
-    /// cluster:<cluster>[/<profile>], or a snapshot file
+    /// The first side: a ref or a snapshot file
     a: String,
     /// The second side, in the same forms as the first
     b: String,
-    /// Also print unified diffs of the raw values and of each changed manifest
+    /// Also print the unified diffs of the values and the manifests
     #[arg(long)]
     full: bool,
     #[command(flatten)]
@@ -254,58 +153,55 @@ struct CompareArgs {
 
 #[derive(Args)]
 struct SnapshotArgs {
-    /// A profile uid, <name>@<version>, <name>@latest, or cluster:<cluster>[/<profile>]. With
-    /// --from-raw, it only names the source and selects one profile of a cluster directory
+    /// What to record: a ref, or the source with --from-raw
     r#ref: Option<String>,
-    /// Write the snapshot to this file, not to standard output
+    /// Write to this file, not to standard output
     #[arg(short, long)]
     output: Option<PathBuf>,
-    /// Also save the raw API responses in this directory
+    /// Also save the raw API answers in this directory
     #[arg(long)]
     raw_dir: Option<PathBuf>,
-    /// Build the snapshot from the raw API responses that --raw-dir saved, with no network
+    /// Read the raw answers of --raw-dir, with no network
     #[arg(long)]
     from_raw: Option<PathBuf>,
-    /// Build the snapshot from a candidate file, before the version is in Palette. Strata finds
-    /// each pack in its registry. See `strata schema candidate`
+    /// Read a candidate file, before the version is in Palette
     #[arg(long, conflicts_with_all = ["from_raw", "raw_dir", "ref"])]
     from_candidate: Option<PathBuf>,
     /// Write the JSON on one line
     #[arg(long)]
     compact: bool,
-    /// Do not write progress messages to standard error
+    /// No progress messages
     #[arg(short, long)]
     quiet: bool,
 }
 
 #[derive(Args)]
 struct CandidateArgs {
-    /// A profile uid, <name>@<version>, <name>@latest, or a profile record
+    /// A profile version, by ref or by record
     r#ref: String,
-    /// Write the candidate file to this file, not to standard output
+    /// Write to this file, not to standard output
     #[arg(short, long)]
     output: Option<PathBuf>,
-    /// Write the values of each layer and each manifest to a file in this directory, and refer to
-    /// those files from the candidate file
+    /// Write the values and the manifests to files in this directory
     #[arg(long, requires = "output")]
     files_dir: Option<PathBuf>,
-    /// Do not write progress messages to standard error
+    /// No progress messages
     #[arg(short, long)]
     quiet: bool,
 }
 
 #[derive(Args)]
 struct VerifyArgs {
-    /// Snapshot files. Put a pattern such as 'releases/**/*.json' in quotes: strata expands it
+    /// Snapshot files; quote a pattern such as 'releases/**/*.json'
     #[arg(required = true)]
     snapshots: Vec<String>,
-    /// Check each record in the project with this uid, not in the project of the record
+    /// Check the records in this project, by uid
     #[arg(long)]
     project: Option<String>,
-    /// The same as --project, with the project name
+    /// The same, by project name
     #[arg(long, conflicts_with = "project")]
     project_name: Option<String>,
-    /// Print one line and a summary also for one file, so a script always reads the same document
+    /// One line for each record and a summary, also for one file
     #[arg(long)]
     summary: bool,
     #[command(flatten)]
@@ -314,10 +210,10 @@ struct VerifyArgs {
 
 #[derive(Args)]
 struct SameReleaseArgs {
-    /// Two or more refs, in order: snapshot files, profile versions, or clusters
+    /// Two or more refs, in promotion order
     #[arg(required = true, num_args = 2..)]
     records: Vec<String>,
-    /// Also pass a pair that differs only in this way
+    /// Pass a pair that differs only in this way
     #[arg(long, value_enum)]
     allow: Option<Allow>,
     #[command(flatten)]
@@ -326,8 +222,7 @@ struct SameReleaseArgs {
 
 #[derive(Args)]
 struct ConsumersArgs {
-    /// A profile uid, <name>@<version>, <name>@latest, or a profile record. Strata always reads
-    /// the clusters from Palette
+    /// A profile version, by ref or by record
     r#ref: String,
     #[command(flatten)]
     out: OutputArgs,
@@ -340,7 +235,7 @@ struct PacksArgs {
     /// Only this registry, by name or uid
     #[arg(long, value_name = "NAME")]
     registry: Option<String>,
-    /// Keep the versions that support this cloud, such as aws or edge-native
+    /// Keep the versions of this cloud, such as aws
     #[arg(long, value_name = "TYPE")]
     cloud: Option<String>,
     /// Only the newest version of each registry
@@ -352,22 +247,19 @@ struct PacksArgs {
 
 #[derive(Args)]
 struct ListArgs {
-    /// What to list: profiles, clusters, projects. With none: profiles and clusters, or only
-    /// profiles with --pack
+    /// What to list: profiles, clusters, projects
     #[arg(value_enum)]
     kinds: Vec<KindArg>,
-    /// List the profiles and clusters of the project with this uid, not of the configured project.
-    /// '' is tenant scope. Strata always lists projects at tenant scope
+    /// List this project, by uid; '' is tenant scope
     #[arg(long)]
     project: Option<String>,
-    /// The same as --project, with the project name
+    /// The same, by project name
     #[arg(long, conflicts_with = "project")]
     project_name: Option<String>,
-    /// Also read each profile version for its type, consumers, and packs: one request for each
+    /// Also read each version for its packs and consumers
     #[arg(long)]
     packs: bool,
-    /// Keep the profile versions with a pack whose name contains TEXT, in upper or lower case.
-    /// Sets --packs
+    /// Keep the versions with a pack whose name holds TEXT; sets --packs
     #[arg(long, value_name = "TEXT")]
     pack: Option<String>,
     #[command(flatten)]
@@ -445,66 +337,44 @@ enum SchemaKind {
     Candidate,
 }
 
-/// The command line, with `strata --help` listing the commands by task and ending with the refs,
-/// the environment, and the exit status.
+/// The command line. The help screen is the one a terminal expects: the description, the usage,
+/// the commands, the flags, and one line that says where to read more. The refs, the settings and
+/// the exit status are in the book, and in the help of each command.
 fn command() -> clap::Command {
-    let cmd = Cli::command();
-    let styles = cmd.get_styles().clone();
-    let heading = |text: &str| {
-        let h = styles.get_header();
-        format!("{}{text}:{}\n", h.render(), h.render_reset())
+    // clap's own help flag carries long text, and its long layout gives each option two lines.
+    // This one says a line and prints the short layout. disable_help_flag reaches the
+    // subcommands, so each one gets the same flag.
+    let help_flag = || {
+        clap::Arg::new("help")
+            .short('h')
+            .long("help")
+            .action(clap::ArgAction::HelpShort)
+            .help("Print help")
     };
-    let row = |width: usize, name: &str, text: &str| {
-        let l = styles.get_literal();
-        format!(
-            "  {}{name:width$}{}  {text}\n",
-            l.render(),
-            l.render_reset()
+    let mut cmd = Cli::command()
+        .disable_help_flag(true)
+        .disable_version_flag(true)
+        .arg(help_flag())
+        .arg(
+            clap::Arg::new("version")
+                .short('V')
+                .long("version")
+                .action(clap::ArgAction::Version)
+                .help("Print version"),
         )
-    };
-
-    let width = GROUPS
-        .iter()
-        .flat_map(|(_, names)| names.iter())
-        .map(|name| name.len())
-        .max()
-        .unwrap_or(0);
-    let mut commands = String::new();
-    for (group, names) in GROUPS {
-        commands.push_str(&heading(group));
-        for name in *names {
-            let about = match cmd.find_subcommand(name).and_then(|c| c.get_about()) {
-                Some(about) => about.to_string(),
-                None => HELP_ABOUT.to_string(),
-            };
-            commands.push_str(&row(width, name, &about));
+        .after_help("Use \"strata <command> --help\" for more information about a command.");
+    for name in COMMANDS {
+        if *name == "help" {
+            continue;
         }
-        commands.push('\n');
+        cmd = cmd.mut_subcommand(name, |s| s.arg(help_flag()));
     }
-
-    let reference: Vec<String> = REFERENCE_HELP
-        .iter()
-        .map(|(section, rows)| {
-            let width = rows.iter().map(|(name, _)| name.len()).max().unwrap_or(0);
-            let lines: String = rows
-                .iter()
-                .map(|(name, text)| row(width, name, text))
-                .collect();
-            heading(section) + &lines
-        })
-        .collect();
-    let reference = reference.join("\n");
-
-    cmd.help_template(format!(
-        "{{about-with-newline}}\n{{usage-heading}} {{usage}}\n\n{commands}{}{{options}}{{after-help}}\n",
-        heading("Options")
-    ))
-    .after_long_help(reference.trim_end().to_string())
+    cmd
 }
 
 /// True when `arg` names a command, so `strata <A> <B>` does not become `strata compare`.
 fn is_command(arg: &str) -> bool {
-    GROUPS.iter().any(|(_, names)| names.contains(&arg))
+    COMMANDS.contains(&arg)
 }
 
 fn main() -> ExitCode {
@@ -879,44 +749,38 @@ mod tests {
     use super::*;
 
     #[test]
-    fn help_lists_each_command_in_exactly_one_group() {
-        let mut listed: Vec<&str> = GROUPS
-            .iter()
-            .flat_map(|(_, names)| names.iter().copied())
-            .collect();
-        let count = listed.len();
-        listed.sort_unstable();
-        listed.dedup();
-        assert_eq!(listed.len(), count, "a command is in two groups");
-
+    fn help_names_every_command_the_binary_has() {
         let mut built = command();
         built.build();
         let mut commands: Vec<&str> = built.get_subcommands().map(|c| c.get_name()).collect();
         commands.sort_unstable();
-        assert_eq!(listed, commands);
+        let mut listed: Vec<&str> = COMMANDS.to_vec();
+        listed.sort_unstable();
+        assert_eq!(listed, commands, "COMMANDS and the binary disagree");
     }
 
     #[test]
-    fn help_follows_the_group_order_and_ends_with_the_exit_status() {
-        let help = command().render_long_help().to_string();
+    fn the_help_screen_is_the_one_a_terminal_expects() {
+        let help = command().render_help().to_string();
         let at = |text: &str| {
             help.find(text)
                 .unwrap_or_else(|| panic!("no {text:?} in:\n{help}"))
         };
-        let mut last = 0;
-        for (group, names) in GROUPS {
-            assert!(at(&format!("{group}:")) > last, "{group} is out of order");
-            last = at(&format!("{group}:"));
-            for name in *names {
-                assert!(
-                    at(&format!("  {name} ")) > last,
-                    "{name} is not under {group}"
-                );
-            }
+        assert!(at("Usage:") < at("Commands:"), "the usage comes first");
+        assert!(at("Commands:") < at("Options:"), "then the commands");
+        assert!(
+            at("Options:") < at("Use \"strata <command> --help\""),
+            "and one line at the end says where to read more"
+        );
+        for name in COMMANDS {
+            assert!(help.contains(&format!("  {name} ")), "{name} is not listed");
         }
-        assert!(at("Options:") > last);
-        assert!(at("Refs:") > at("Options:"));
-        assert!(at("Exit status:") > at("Environment:"));
+        // the screen fits a terminal, and every option is one line
+        assert!(
+            help.lines().count() < 30,
+            "the help screen grew to {} lines:\n{help}",
+            help.lines().count()
+        );
         assert!(!help.contains("Merkle"));
     }
 }

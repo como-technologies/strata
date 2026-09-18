@@ -1,49 +1,19 @@
 $ strata verify --help
 Make sure that each record agrees with Palette now
 
-For each record, strata fetches the same uid again in the project of the record and compares the roots. A version number that changed on the same uid is drift too. One file prints the full report and a verdict. Two or more files, or a pattern, print one line for each record and a summary.
-
-Exit status: 0 when each record is unchanged, 1 when a record drifted, 2 when strata cannot check a record.
-
 Usage: strata verify [OPTIONS] <SNAPSHOTS>...
 
 Arguments:
-  <SNAPSHOTS>...
-          Snapshot files. Put a pattern such as 'releases/**/*.json' in quotes: strata expands it
+  <SNAPSHOTS>...  Snapshot files; quote a pattern such as 'releases/**/*.json'
 
 Options:
-      --project <PROJECT>
-          Check each record in the project with this uid, not in the project of the record
-
-      --project-name <PROJECT_NAME>
-          The same as --project, with the project name
-
-      --summary
-          Print one line and a summary also for one file, so a script always reads the same document
-
-      --format <FORMAT>
-          The output format: terminal, markdown for a pull request comment, or json for a script
-          
-          [default: terminal]
-          [possible values: terminal, markdown, json]
-
-      --json
-          The same as --format json
-
-      --color [<COLOR>]
-          When to color the terminal report. auto colors only a terminal, and obeys NO_COLOR and CLICOLOR_FORCE
-          
-          [default: auto]
-          [possible values: auto, always, never]
-
-      --no-color
-          The same as --color=never
-
-      --compact
-          Write the JSON on one line
-
-  -q, --quiet
-          Do not write progress messages to standard error
-
-  -h, --help
-          Print help (see a summary with '-h')
+      --project <PROJECT>            Check the records in this project, by uid
+      --project-name <PROJECT_NAME>  The same, by project name
+      --summary                      One line for each record and a summary, also for one file
+      --format <FORMAT>              The report format: terminal, markdown, or json [default: terminal]
+      --json                         The same as --format json
+      --color [<COLOR>]              Color the report: auto, always, or never [default: auto]
+      --no-color                     The same as --color=never
+      --compact                      Write the JSON on one line
+  -q, --quiet                        No progress messages
+  -h, --help                         Print help

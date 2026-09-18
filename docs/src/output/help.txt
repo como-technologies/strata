@@ -1,56 +1,23 @@
 $ strata --help
-Record, compare, and check what Palette holds: cluster profile versions, the clusters that run them, and pack versions in a registry.
-
-A published profile version is a release. Strata writes a release to a snapshot file. It compares two releases layer by layer, and it makes sure that Palette still has the release that a file records. A cluster runs a release, and strata reads a cluster in the same way. It reads a pack version from its registry in the same way, so two pack versions compare like two releases.
+Record, compare, and check Palette profile versions, clusters, and pack versions
 
 Usage: strata <COMMAND>
        strata <A> <B>
 
-Find:
+Commands:
+  candidate     Write a candidate file from a profile version or a record
+  compare       Compare two profile versions, records, or clusters
+  consumers     List the clusters that use a profile version
   list          List the profile versions, clusters, and projects in the scope
   packs         List the versions a registry offers for a pack
-
-Record:
-  snapshot      Record a profile version or a cluster in a snapshot file
-  candidate     Write a candidate file from a profile version or a record
-
-Compare:
-  compare       Compare two profile versions, records, or clusters
   same-release  Make sure that two or more records are one release
-
-Check:
-  verify        Make sure that each record agrees with Palette now
-  consumers     List the clusters that use a profile version
-
-Reference:
   schema        Print the JSON Schema of a document or of the candidate file
-  help          Print this help, or the help of a command
+  snapshot      Record a profile version or a cluster in a snapshot file
+  verify        Make sure that each record agrees with Palette now
+  help          Print this message or the help of the given subcommand(s)
 
 Options:
-  -h, --help
-          Print help (see a summary with '-h')
+  -h, --help     Print help
+  -V, --version  Print version
 
-  -V, --version
-          Print version
-
-Refs:
-  <uid>                        a profile version, by its uid
-  <name>@<version>             a profile version, by its name and version
-  <name>@latest                the highest version of the name in the scope
-  cluster:<cluster>            all profiles that a cluster runs, by its name or uid
-  cluster:<cluster>/<profile>  one profile that a cluster runs
-  <file>                       a snapshot file from strata snapshot
-
-Environment:
-  PALETTE_API_KEY         the API key; SPECTROCLOUD_APIKEY also works
-  PALETTE_PROJECT         the project name; PALETTE_PROJECT_UID has priority
-  PALETTE_API             the Palette address; default https://api.spectrocloud.com
-  STRATA_RETRIES          how many times to send a failed request again; default 3
-  STRATA_MAX_RETRY_AFTER  the longest Retry-After wait in seconds; default 300
-  STRATA_QUIET            any value: the same as --quiet
-  ~/.palette.env          the key, the address, and the project, when the environment does not set them
-
-Exit status:
-  0  the same, unchanged, or not in use
-  1  different, drifted, or in use
-  2  an error: strata cannot answer
+Use "strata <command> --help" for more information about a command.

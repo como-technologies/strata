@@ -1,32 +1,16 @@
 $ strata snapshot --help
 Record a profile version or a cluster in a snapshot file
 
-The file holds the root, the hashes of each pack, the values and manifests, the project, and the clusters that use the version. `compare`, `same-release`, and `verify` read it.
-
 Usage: strata snapshot [OPTIONS] [REF]
 
 Arguments:
-  [REF]
-          A profile uid, <name>@<version>, <name>@latest, or cluster:<cluster>[/<profile>]. With --from-raw, it only names the source and selects one profile of a cluster directory
+  [REF]  What to record: a ref, or the source with --from-raw
 
 Options:
-  -o, --output <OUTPUT>
-          Write the snapshot to this file, not to standard output
-
-      --raw-dir <RAW_DIR>
-          Also save the raw API responses in this directory
-
-      --from-raw <FROM_RAW>
-          Build the snapshot from the raw API responses that --raw-dir saved, with no network
-
-      --from-candidate <FROM_CANDIDATE>
-          Build the snapshot from a candidate file, before the version is in Palette. Strata finds each pack in its registry. See `strata schema candidate`
-
-      --compact
-          Write the JSON on one line
-
-  -q, --quiet
-          Do not write progress messages to standard error
-
-  -h, --help
-          Print help (see a summary with '-h')
+  -o, --output <OUTPUT>                  Write to this file, not to standard output
+      --raw-dir <RAW_DIR>                Also save the raw API answers in this directory
+      --from-raw <FROM_RAW>              Read the raw answers of --raw-dir, with no network
+      --from-candidate <FROM_CANDIDATE>  Read a candidate file, before the version is in Palette
+      --compact                          Write the JSON on one line
+  -q, --quiet                            No progress messages
+  -h, --help                             Print help

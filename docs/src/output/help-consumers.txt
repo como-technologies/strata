@@ -1,40 +1,16 @@
 $ strata consumers --help
 List the clusters that use a profile version
 
-Each line gives the name, uid, project, and state of a cluster. When the copy of a cluster names a version that differs from the profile, the line says so.
-
-Exit status: 0 when no cluster uses the version, 1 when a cluster uses it, 2 on an error.
-
 Usage: strata consumers [OPTIONS] <REF>
 
 Arguments:
-  <REF>
-          A profile uid, <name>@<version>, <name>@latest, or a profile record. Strata always reads the clusters from Palette
+  <REF>  A profile version, by ref or by record
 
 Options:
-      --format <FORMAT>
-          The output format: terminal, markdown for a pull request comment, or json for a script
-          
-          [default: terminal]
-          [possible values: terminal, markdown, json]
-
-      --json
-          The same as --format json
-
-      --color [<COLOR>]
-          When to color the terminal report. auto colors only a terminal, and obeys NO_COLOR and CLICOLOR_FORCE
-          
-          [default: auto]
-          [possible values: auto, always, never]
-
-      --no-color
-          The same as --color=never
-
-      --compact
-          Write the JSON on one line
-
-  -q, --quiet
-          Do not write progress messages to standard error
-
-  -h, --help
-          Print help (see a summary with '-h')
+      --format <FORMAT>  The report format: terminal, markdown, or json [default: terminal]
+      --json             The same as --format json
+      --color [<COLOR>]  Color the report: auto, always, or never [default: auto]
+      --no-color         The same as --color=never
+      --compact          Write the JSON on one line
+  -q, --quiet            No progress messages
+  -h, --help             Print help

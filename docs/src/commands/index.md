@@ -1,6 +1,7 @@
 # Commands
 
-`strata --help` lists the commands by task, in the order that a team uses them:
+`strata --help` lists every command, and `strata <command> --help` gives the
+options of one:
 
 ```text
 {{#include ../output/help.txt}}
@@ -12,6 +13,7 @@
 flowchart LR
   subgraph Find
     list
+    packs
   end
   subgraph Record
     snapshot
@@ -34,6 +36,7 @@ flowchart LR
 | Task | Command | Page |
 | --- | --- | --- |
 | Find a ref, a project, or the profiles with a pack | `strata list` | [list](./list.md) |
+| Find the versions a registry offers for a pack | `strata packs` | [packs](./packs.md) |
 | Record a profile version or a cluster | `strata snapshot` | [snapshot](./snapshot.md) |
 | Write a candidate file for a review | `strata candidate` | [candidate](./candidate.md) |
 | See what changed between two refs | `strata compare` | [compare](./compare.md) |
@@ -54,6 +57,7 @@ details.
 | The highest version of a name | `aws-stack@latest` |
 | All profiles that a cluster runs | `cluster:payments` |
 | One profile that a cluster runs | `cluster:payments/aws-stack` |
+| A pack version in a registry | `pack:csi-aws-ebs@1.65.0` |
 | A snapshot file | `releases/1.1.1/dev.json` |
 
 ## Exit status

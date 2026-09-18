@@ -4,7 +4,7 @@ Print the JSON Schema of a document or of the candidate file
 Usage: strata schema <KIND>
 
 Arguments:
-  <KIND>  The document: snapshot, diff, verify-summary, chain, consumers, list, or candidate [possible values: snapshot, diff, verify-summary, chain, consumers, list, packs, candidate]
+  <KIND>  Which document, or the candidate file [possible values: snapshot, diff, verify-summary, chain, consumers, list, packs, candidate]
 
 Options:
   -h, --help  Print help
