@@ -1085,10 +1085,10 @@ One question is open: whether the cluster listing, `GET /v1/dashboard/spectroclu
 
 ### Acceptance criteria
 
-- [ ] `strata list clusters --applied` prints, for each cluster, the profile versions it applies, in the order Palette applies them
-- [ ] Each applied profile shows its `<name>@<version>`, its uid, and its type, so a person can read the uid when a version was overwritten in place
-- [ ] A cluster whose document cannot be read keeps its row, carries the error, and does not stop the other rows
-- [ ] `--applied` at tenant scope reads each cluster with the client of its own project
-- [ ] `strata list` without the option makes no request for each cluster
-- [ ] `--format json` writes `strata-list/1` with `clusters[].profiles[]`, and `strata schema list` prints the schema
+- [x] `strata list clusters --applied` prints, for each cluster, the profile versions it applies, in the order Palette applies them
+- [x] Each applied profile shows its `<name>@<version>`, its uid, and its type, so a person can read the uid when a version was overwritten in place
+- [x] A cluster whose document cannot be read keeps its row, carries the error, and does not stop the other rows
+- [x] `--applied` at tenant scope reads each cluster with the client of its own project
+- [x] `strata list` without the option makes no request for each cluster
+- [x] `--format json` writes `strata-list/1` with `clusters[].profiles[]`, and `strata schema list` prints the schema
 - [ ] A live check says whether `GET /v1/dashboard/spectroclusters/meta` already names the applied profiles, and the result is recorded in `docs/src/internals/palette.md`
