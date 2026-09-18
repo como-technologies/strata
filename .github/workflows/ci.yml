@@ -47,7 +47,7 @@ jobs:
       # the book the checks passed is the book that is published, so it is built once. There is
       # no configure-pages step: it reads the Pages API, which this job has no token for, and
       # mdbook needs nothing from it. Pages is already set to build from a workflow.
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         if: github.ref == 'refs/heads/main'
         with:
           path: docs/book
