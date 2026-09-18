@@ -28,11 +28,15 @@ runs:
       if: steps.cache.outputs.cache-hit != 'true'
       run: cargo install --locked mdbook mdbook-mermaid mdbook-gruvbox mdbook-lint
       shell: bash
-    # a cache that restored a broken binary fails here, next to its cause, not inside a book build
+    # a cache that restored nothing fails here, next to its cause, not inside a book build.
+    # mdbook-gruvbox answers no --version, it takes a subcommand, so the four are checked for being
+    # there and runnable, and mdbook alone is asked which build it is.
     - name: Check the binaries
       run: |
         set -euo pipefail
         for tool in mdbook mdbook-mermaid mdbook-gruvbox mdbook-lint; do
-          "$tool" --version
+          command -v "$tool" > /dev/null || { echo "$tool is not on the PATH" >&2; exit 1; }
+          [ -x "$(command -v "$tool")" ] || { echo "$tool is not executable" >&2; exit 1; }
         done
+        mdbook --version
       shell: bash
