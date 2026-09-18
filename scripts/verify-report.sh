@@ -82,8 +82,13 @@ gitlab_create_label() {
     --data-urlencode "description=strata: a record that drifted or could not be checked"
 }
 gitlab_open_issue() {
-  gitlab_api POST "/issues" --data-urlencode "title=$1" --data-urlencode "description@$2" \
-    --data-urlencode "labels=$label" | jq -r .iid
+  local answer number
+  answer=$(gitlab_api POST "/issues" --data-urlencode "title=$1" --data-urlencode "description@$2" \
+    --data-urlencode "labels=$label")
+  number=$(jq -r '.iid // empty' <<<"$answer")
+  # without a number the next run cannot find the issue again, so say so instead of printing null
+  [ -n "$number" ] || die "GitLab opened no issue for $1: $(head -c 200 <<<"$answer")"
+  printf '%s' "$number"
 }
 gitlab_update_issue() {
   quietly gitlab_api PUT "/issues/$1" --data-urlencode "title=$2" --data-urlencode "description@$3"
