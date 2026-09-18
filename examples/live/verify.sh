@@ -74,6 +74,24 @@ check consumer-is-the-cluster 0 "#12: listed with its name, project, and state" 
 check consumers-next 0 "#12: nothing runs the newer version" -- \
   "$strata" consumers "$P2"
 
+# ---- #63: the profiles a cluster applies
+check list-applied 0 "#63: list --applied names the profiles each cluster runs" -- \
+  "$strata" list clusters --applied
+check list-applied-json 0 "the same listing as JSON" -- \
+  "$strata" list clusters --applied --json
+check applied-is-what-the-cluster-runs 0 "#63: the listed profiles are those the cluster record names" -- \
+  jq -e --slurpfile record cluster.json --arg c "$C" \
+    '(.clusters | map(select(.uid == $c))) as $m
+     | ($m | length) == 1
+     and ([$m[0].profiles[] | {uid, name, version}]
+          == [$record[0].source.cluster.profiles[] | {uid, name, version}])' \
+    list-applied-json.out
+check cluster-listing 0 "#63: read the cluster listing that strata lists clusters from" -- \
+  "$live/tenant.sh" listing
+check listing-profile-fields '?' "#63: the fields of the cluster listing whose name holds 'profile'" -- \
+  jq -r '[(.items // [])[] | paths | join(".")] | map(select(test("profile"; "i"))) | unique | .[]' \
+    cluster-listing.out
+
 # ---- #4: candidate
 check candidate-file 0 "#21: write the newer version's record as a candidate file" -- \
   "$strata" candidate next.json -o candidate/profile.yaml --files-dir candidate/files

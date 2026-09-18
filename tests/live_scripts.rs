@@ -141,6 +141,11 @@ exit 0
 "#;
 
 fn tenant_cluster(status: &str, body: &str) -> (Output, String) {
+    tenant_sh(&["cluster", "c-123"], status, body)
+}
+
+/// Run tenant.sh with one canned answer, and report what it asked for.
+fn tenant_sh(args: &[&str], status: &str, body: &str) -> (Output, String) {
     let dir = tempfile::tempdir().unwrap();
     let bin = dir.path().join("bin");
     std::fs::create_dir(&bin).unwrap();
@@ -154,7 +159,7 @@ fn tenant_cluster(status: &str, body: &str) -> (Output, String) {
     std::fs::write(&body_file, body).unwrap();
     let o = Command::new("bash")
         .arg(live_script("tenant.sh"))
-        .args(["cluster", "c-123"])
+        .args(args)
         .env(
             "PATH",
             format!("{}:{}", bin.display(), std::env::var("PATH").unwrap()),
@@ -169,6 +174,31 @@ fn tenant_cluster(status: &str, body: &str) -> (Output, String) {
         .unwrap();
     let urls = std::fs::read_to_string(&log).unwrap_or_default();
     (o, urls)
+}
+
+#[test]
+fn tenant_sh_listing_prints_the_cluster_listing_palette_answers() {
+    let body =
+        r#"{"items":[{"metadata":{"name":"fred","uid":"c-123"},"status":{"state":"Running"}}]}"#;
+    let (o, urls) = tenant_sh(&["listing"], "200", body);
+    assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
+    assert!(
+        urls.contains("/v1/dashboard/spectroclusters/meta"),
+        "the listing strata lists clusters from: {urls}"
+    );
+    let printed: serde_json::Value = serde_json::from_str(&text(&o.stdout)).unwrap();
+    assert_eq!(
+        printed["items"][0]["metadata"]["uid"], "c-123",
+        "the answer reaches the caller unchanged, so a run records what Palette sent"
+    );
+
+    let (o, _) = tenant_sh(&["listing"], "403", "{}");
+    assert_eq!(
+        o.status.code(),
+        Some(2),
+        "a refusal is an error, not an empty listing"
+    );
+    assert!(text(&o.stderr).contains("403"), "{}", text(&o.stderr));
 }
 
 #[test]

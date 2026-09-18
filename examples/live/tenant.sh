@@ -55,6 +55,16 @@ get() {
     "$API$1"
 }
 
+# listing: the cluster listing itself, GET /v1/dashboard/spectroclusters/meta, as Palette answers
+# it. #63 asks whether it already names the profiles each cluster applies.
+listing() {
+  local tmp status
+  tmp=$(mktemp -d); trap 'rm -rf "$tmp"' RETURN
+  status=$(get /v1/dashboard/spectroclusters/meta "$tmp/body")
+  [ "$status" = 200 ] || die "the cluster listing answered HTTP $status"
+  cat "$tmp/body"
+}
+
 names() {
   local region=${1:-us-east-2} tmp status
   tmp=$(mktemp -d); trap 'rm -rf "$tmp"' RETURN
@@ -274,6 +284,7 @@ diagnose() {
 
 case "${1:-}" in
   names) shift; names "$@" ;;
+  listing) shift; listing "$@" ;;
   cluster) shift; cluster "$@"; exit $? ;;
   updates) shift; updates "$@" ;;
   diagnose) shift; diagnose "$@" ;;
