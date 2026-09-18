@@ -54,7 +54,15 @@ In a terminal, the part of each pack name that matched is marked, as a search
 tool marks a match. A pipe, a file and `--no-color` get the plain name.
 
 `--pack` reads each profile version, one request for each. It also lists only
-profiles, unless you name the kinds. `--packs` reads the packs with no filter.
+profiles, unless you name the kinds.
+
+`--packs` reads the same packs with no filter, so every profile version shows
+what it carries:
+
+```text
+{{#include ../output/list-packs.txt}}
+```
+
 A pack under another tag name shows the tag: `24.04 (tag LTS__24.x)`. A version
 that strata cannot read stays in the list with its error, because strata
 cannot tell if it carries the pack.

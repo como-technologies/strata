@@ -389,6 +389,7 @@ show list-prod 0 'strata list --project-name prod'
 show list-tenant 0 "strata list clusters --project ''"
 show list-pack 0 'strata list --pack cilium'
 show list-pack-all 0 'for p in dev prod; do strata list --pack cilium --project-name "$p"; done'
+show list-packs 0 'strata list --packs'
 show list-pack-consumers 1 'for v in 1.0.0 1.1.0 1.1.1; do strata consumers aws-stack@$v; done'
 show list-pack-consumers 1 'PALETTE_PROJECT=prod strata consumers aws-stack@1.1.1'
 show list-pack-json 0 "strata list --pack cilium --json | jq -r '.profiles[] | .ref as \$ref | .packs[] | select(.name | contains(\"cilium\")) | \"\(\$ref) \(.name) \(.version)\"'"
