@@ -8,6 +8,208 @@ use std::process::{Command, Output};
 
 use common::*;
 
+/// The scripts a release carries. The release workflow installs the published tag and runs the
+/// help of each one; this is the same check, before a tag exists.
+const SHIPPED: [&str; 4] = [
+    "pr-comment.sh",
+    "merge-gate.sh",
+    "verify-report.sh",
+    "install-strata.sh",
+];
+
+#[test]
+fn every_script_a_release_carries_prints_its_help_and_exits_0() {
+    for name in SHIPPED {
+        let o = Command::new("bash")
+            .arg(script(&format!("ci/{name}")))
+            .arg("--help")
+            .output()
+            .unwrap();
+        assert_eq!(
+            o.status.code(),
+            Some(0),
+            "{name} --help: {}",
+            text(&o.stderr)
+        );
+        let help = text(&o.stdout);
+        assert!(
+            help.contains(name),
+            "{name} --help names the script:\n{help}"
+        );
+        assert!(
+            help.lines().count() >= 5,
+            "{name} --help says what it does:\n{help}"
+        );
+        assert!(
+            !help.contains("scripts/pr-comment.sh") && !help.contains("scripts/verify-report.sh"),
+            "{name} --help names the path the script lives at now:\n{help}"
+        );
+    }
+}
+
+/// The files a team copies, and the reusable workflows they call. They name scripts, options and a
+/// release version, and nothing else reads them: a renamed option or a moved script breaks a
+/// drop-in silently.
+const DROP_INS: [&str; 5] = [
+    "examples/ci/github/strata.yml",
+    "examples/ci/gitlab/strata.yml",
+    ".github/workflows/comment.yml",
+    ".github/workflows/verify.yml",
+    ".github/workflows/merge-gate.yml",
+];
+
+fn repo_file(path: &str) -> String {
+    std::fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join(path))
+        .unwrap_or_else(|e| panic!("{path}: {e}"))
+}
+
+/// The `--help` of one script that ships.
+fn help_of(name: &str) -> String {
+    let o = Command::new("bash")
+        .arg(script(&format!("ci/{name}")))
+        .arg("--help")
+        .output()
+        .unwrap();
+    assert!(o.status.success(), "{name} --help failed");
+    text(&o.stdout)
+}
+
+#[test]
+fn the_ci_drop_ins_name_only_scripts_that_ship() {
+    for file in DROP_INS {
+        for token in repo_file(file).split(|c: char| c.is_whitespace() || c == '"' || c == '\'') {
+            let token = token.trim_end_matches(&[',', ';', ')'][..]);
+            if !token.ends_with(".sh") {
+                continue;
+            }
+            let name = token.rsplit('/').next().unwrap();
+            assert!(
+                SHIPPED.contains(&name),
+                "{file} names {token}, which no release carries"
+            );
+            // a path under scripts/ is this repository's copy, and must be where it says
+            if let Some(rest) = token.split_once("scripts/").map(|(_, r)| r) {
+                let at = Path::new(env!("CARGO_MANIFEST_DIR"))
+                    .join("scripts")
+                    .join(rest);
+                assert!(at.exists(), "{file} names {token}, which is not at {at:?}");
+            }
+        }
+    }
+}
+
+#[test]
+fn the_ci_drop_ins_pass_only_options_the_scripts_have() {
+    let helps: Vec<(&str, String)> = SHIPPED.iter().map(|n| (*n, help_of(n))).collect();
+    // as a word: --thresh is not --threshold, although one contains the other
+    let has_flag = |help: &str, flag: &str| {
+        help.match_indices(flag).any(|(i, _)| {
+            help[i + flag.len()..]
+                .chars()
+                .next()
+                .is_none_or(|c| !c.is_ascii_alphanumeric() && c != '-')
+        })
+    };
+    let known = |flag: &str| helps.iter().any(|(_, h)| has_flag(h, flag));
+    for file in DROP_INS {
+        let body = repo_file(file);
+        let mut lines = body.lines().peekable();
+        while let Some(line) = lines.next() {
+            let Some(name) = SHIPPED.iter().find(|n| line.contains(**n)) else {
+                continue;
+            };
+            // the call, and the lines that continue it: a YAML scalar wraps without a backslash
+            let mut block = line.to_string();
+            let indent = line.len() - line.trim_start().len();
+            while let Some(next) = lines.peek() {
+                let deeper = next.len() - next.trim_start().len() > indent;
+                // "- " starts a list item; "--label" continues the command above it
+                let new_key = next.trim_start().starts_with("- ") || next.trim_end().ends_with(':');
+                if !deeper || new_key || next.trim().is_empty() {
+                    break;
+                }
+                block.push(' ');
+                block.push_str(lines.next().unwrap());
+            }
+            for word in block.split(|c: char| c.is_whitespace() || c == '"' || c == '\'') {
+                if !word.starts_with("--") || word.len() < 4 {
+                    continue;
+                }
+                let flag = word.trim_end_matches(&[',', ';', ')'][..]);
+                assert!(
+                    known(flag),
+                    "{file} passes {flag} to {name}, and no script that ships has it"
+                );
+            }
+        }
+        // a flag the file carries another way: quoted in an environment value, such as
+        // '--no-verify', or assigned to a shell variable, such as rollback=--allow-rollback.
+        // Line by line, and never a comment, because prose holds apostrophes.
+        for line in body.lines() {
+            if line.trim_start().starts_with('#') {
+                continue;
+            }
+            let mut carried: Vec<&str> = line
+                .split('\'')
+                .skip(1)
+                .step_by(2)
+                .filter(|q| q.starts_with("--") && !q.contains(' '))
+                .collect();
+            carried.extend(
+                line.split(|c: char| c.is_whitespace() || c == '"' || c == '\'')
+                    .filter_map(|w| w.split_once("=--").map(|(_, f)| f))
+                    .filter(|f| !f.is_empty())
+                    .map(|f| {
+                        let end = f
+                            .find(|c: char| !c.is_ascii_alphanumeric() && c != '-')
+                            .unwrap_or(f.len());
+                        &f[..end]
+                    })
+                    .map(|f| Box::leak(format!("--{f}").into_boxed_str()) as &str),
+            );
+            for flag in carried {
+                let flag = flag.trim_end_matches(&[';', ',', ')'][..]);
+                if flag.len() < 4 {
+                    continue;
+                }
+                assert!(
+                    known(flag),
+                    "{file} carries {flag}, and no script that ships has it"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn the_ci_drop_ins_name_the_version_this_repository_is_at() {
+    let cargo = repo_file("Cargo.toml");
+    let line = cargo
+        .lines()
+        .find(|l| l.starts_with("version = "))
+        .expect("a version in Cargo.toml");
+    let version = format!("v{}", line.split('"').nth(1).unwrap());
+    for file in DROP_INS {
+        for token in repo_file(file).split(|c: char| c.is_whitespace() || c == '"' || c == '\'') {
+            let token = token.trim_end_matches(&[',', ';', ')', '`'][..]);
+            let named = token.rsplit('@').next().unwrap_or(token);
+            let looks_like_a_tag = named.starts_with('v')
+                && named.len() > 3
+                && named[1..].split('.').count() == 3
+                && named[1..]
+                    .split('.')
+                    .all(|p| !p.is_empty() && p.chars().all(|c| c.is_ascii_digit()));
+            if looks_like_a_tag {
+                assert_eq!(
+                    named, version,
+                    "{file} names {named}, and this repository is at {version}: a release bump \
+                     must move every drop-in with it"
+                );
+            }
+        }
+    }
+}
+
 // ---- pr-comment.sh ---------------------------------------------------------------------------
 
 /// A `gh` that records every invocation, saves any comment body it is handed, and answers the
