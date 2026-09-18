@@ -102,6 +102,26 @@ fn every_use_case_is_in_the_navigation_and_the_list_in_one_order() {
     );
 }
 
+/// The version badge in the README is static, because shields.io cannot read a private
+/// repository: a badge that asks it for the version renders "repo not found". Static means it can
+/// drift, so the drift is a test failure instead of a wrong number on the front page.
+#[test]
+fn the_readme_version_badge_is_the_version_in_cargo_toml() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let manifest = read(&root.join("Cargo.toml"));
+    let version = manifest
+        .lines()
+        .find_map(|l| l.strip_prefix("version = \""))
+        .and_then(|l| l.strip_suffix('"'))
+        .expect("Cargo.toml has a version line");
+    let readme = read(&root.join("README.md"));
+    let badge = format!("badge/version-{version}-blue");
+    assert!(
+        readme.contains(&badge),
+        "the README badge does not name version {version}: bump it with the version in Cargo.toml"
+    );
+}
+
 #[test]
 fn every_page_the_navigation_names_exists() {
     let summary = read(&docs().join("SUMMARY.md"));
