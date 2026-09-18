@@ -21,7 +21,11 @@ note() { echo "tofu-install: $*" >&2; }
 # "OpenTofu v1.12.6" on its first line.
 installed() {
   [ -x "$dest" ] || return 0
-  "$dest" version 2>/dev/null | head -n1 | sed -n 's/^OpenTofu v\([0-9][^ ]*\).*/\1/p'
+  # the answer is read whole first: `tofu version | head -n1` leaves tofu writing into a closed
+  # pipe, and `set -o pipefail` then makes SIGPIPE the answer of the pipeline
+  local said
+  said=$("$dest" version 2>/dev/null) || return 0
+  printf '%s' "${said%%$'\n'*}" | sed -n 's/^OpenTofu v\([0-9][^ ]*\).*/\1/p'
 }
 
 if [ "${1:-}" = --uninstall ]; then
@@ -63,7 +67,7 @@ curl -fsSL --retry 3 -o "$cache/$sums" "$base/$sums" || die "cannot read $base/$
 curl -fsSL --retry 3 -o "$cache/$archive.part" "$base/$archive" || die "cannot read $base/$archive"
 mv "$cache/$archive.part" "$cache/$archive"
 
-want=$(awk -v f="$archive" '$2 == f || $2 == "*" f { print $1 }' "$cache/$sums" | head -n1)
+want=$(awk -v f="$archive" '$2 == f || $2 == "*" f { print $1; exit }' "$cache/$sums")
 [ -n "$want" ] || die "$sums gives no checksum for $archive"
 if command -v sha256sum >/dev/null; then
   got=$(sha256sum "$cache/$archive" | cut -d' ' -f1)

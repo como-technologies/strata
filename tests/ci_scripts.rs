@@ -1205,6 +1205,44 @@ fn merge_gate_passes_a_rollback_that_a_commit_declares() {
     );
 }
 
+/// A declaration the gate must find however long the branch log is. `git log | grep -q` answers
+/// 141 under `set -o pipefail` when grep leaves at the first match and git log still has more to
+/// write, so a long log turned a declared rollback into BEHIND. The long message here fills the
+/// pipe, which makes that race certain instead of occasional.
+#[test]
+fn merge_gate_finds_a_declaration_behind_a_log_too_long_for_one_pipe() {
+    let (g, base) = rollback_gate();
+    // a log larger than one pipe buffer, so git log still has bytes to write when grep leaves.
+    // One message must stay under the limit on a single argument, so this is several commits.
+    // What they write does not matter: the gate reads the record of HEAD, which is written last.
+    for filler in ["{}\n", "[]\n", "{ }\n", "[ ]\n"] {
+        g.pin(
+            filler,
+            &format!(
+                "a commit of the branch\n\n{}",
+                "filler line\n".repeat(5_000)
+            ),
+        );
+    }
+    g.pin(
+        &base,
+        "pin the release of last week\n\nRollback: releases/dev.json to lab-profile@1.2.0\n",
+    );
+    let o = g.run(&["releases/*.json", "--base", "main", "--no-verify"]);
+    assert!(
+        o.status.success(),
+        "a long log must not hide the declaration{}{}{}",
+        text(&o.stdout),
+        text(&o.stderr),
+        g.branch_messages()
+    );
+    assert!(
+        text(&o.stdout).contains("ROLLBACK: releases/dev.json returns to lab-profile@1.2.0"),
+        "{}",
+        text(&o.stdout)
+    );
+}
+
 #[test]
 fn merge_gate_passes_a_rollback_that_the_label_allows() {
     let (g, base) = rollback_gate();

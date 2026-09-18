@@ -4,7 +4,7 @@
 # pushing it is what starts the release workflow.
 set -euo pipefail
 
-version=$(sed -n 's/^version = "\(.*\)"$/\1/p' Cargo.toml | head -1)
+version=$(sed -n '/^version = /{s/^version = "\(.*\)"$/\1/p;q;}' Cargo.toml)
 [ -n "$version" ] || { echo "tag-release: no version line in Cargo.toml" >&2; exit 2; }
 tag="v$version"
 

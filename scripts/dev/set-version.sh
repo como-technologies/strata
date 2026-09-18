@@ -44,7 +44,7 @@ case "$new" in
   *) echo "set-version: '$new' is not a version of the form X.Y.Z" >&2; exit 2 ;;
 esac
 
-old=$(sed -n 's/^version = "\(.*\)"$/\1/p' Cargo.toml | head -1)
+old=$(sed -n '/^version = /{s/^version = "\(.*\)"$/\1/p;q;}' Cargo.toml)
 [ -n "$old" ] || { echo "set-version: no version line in Cargo.toml" >&2; exit 2; }
 if [ "$old" = "$new" ]; then
   echo "set-version: already at $new"

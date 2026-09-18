@@ -161,10 +161,15 @@ wrote_after_target() {
   git merge-base --is-ancestor "$theirs" "$mine"
 }
 
-# declared FILE RELEASE: 0 when a commit of this branch says that this is a rollback
+# declared FILE RELEASE: 0 when a commit of this branch says that this is a rollback.
+# The messages are read into a variable first. `git log | grep -q` looks right and is a race:
+# grep -q leaves at the first match, which is the newest commit, and git log then dies of SIGPIPE
+# with 141, which `set -o pipefail` makes the answer of the whole pipeline. A declared rollback
+# then reads as no declaration, and only when the log is long enough that git had more to write.
 declared() {
-  git log --format=%B HEAD --not "$target" \
-    | grep -qiE "^Rollback:[[:space:]]+$1[[:space:]]+to[[:space:]]+$2([[:space:]]+.*)?$"
+  local messages
+  messages=$(git log --format=%B HEAD --not "$target")
+  grep -qiE "^Rollback:[[:space:]]+$1[[:space:]]+to[[:space:]]+$2([[:space:]]+.*)?$" <<< "$messages"
 }
 
 behind=() rolled=() unverified=()
