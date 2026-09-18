@@ -1116,9 +1116,9 @@ At tenant scope a name can match a cluster in more than one project, and that is
 
 ### Acceptance criteria
 
-- [ ] `strata list --cluster payments` prints that cluster with the profiles it applies, and reads no other cluster
-- [ ] The text matches the name or the uid, in upper or lower case, anywhere in either
-- [ ] At tenant scope, a name that two projects use keeps both clusters, each with its project
-- [ ] A text that matches nothing prints `no clusters matching '<text>'` and exits 0
-- [ ] `--cluster` lists clusters only, unless the kinds are named
-- [ ] The heading and the JSON say which text the listing filtered by
+- [x] `strata list --cluster payments` prints that cluster with the profiles it applies, and reads no other cluster
+- [x] The text matches the name or the uid, in upper or lower case, anywhere in either
+- [x] At tenant scope, a name that two projects use keeps both clusters, each with its project
+- [x] A text that matches nothing prints `no clusters matching '<text>'` and exits 0
+- [x] `--cluster` lists clusters only, unless the kinds are named
+- [x] The heading and the JSON say which text the listing filtered by

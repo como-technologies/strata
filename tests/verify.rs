@@ -2318,6 +2318,129 @@ fn list_with_applied_keeps_a_cluster_it_cannot_read_and_reads_each_project_once(
 }
 
 #[test]
+fn list_with_a_cluster_text_keeps_the_clusters_that_match_and_reads_only_those() {
+    let mut elsewhere = listed_cluster("payments", "c7", "Running");
+    elsewhere["metadata"]["annotations"]["projectUid"] = serde_json::json!("p2");
+    let api = MemoryApi::new()
+        .in_project("p1")
+        .with(
+            "/v1/dashboard/spectroclusters/meta",
+            serde_json::json!([
+                listed_cluster("payments", "c1", "Running"),
+                listed_cluster("search", "c2", "Running"),
+                elsewhere,
+            ]),
+        )
+        .with(
+            "/v1/spectroclusters/c1",
+            cluster_document(
+                "c1",
+                &[(
+                    "lab-profile",
+                    "1.3.0",
+                    "64f0000000000000000000b2",
+                    "cluster",
+                )],
+            ),
+        )
+        .with(
+            "/v1/spectroclusters/c2",
+            cluster_document(
+                "c2",
+                &[(
+                    "lab-profile",
+                    "1.2.0",
+                    "64f0000000000000000000a1",
+                    "cluster",
+                )],
+            ),
+        )
+        .with(
+            "/v1/spectroclusters/c7",
+            cluster_document(
+                "c7",
+                &[(
+                    "lab-profile",
+                    "1.3.0",
+                    "64f0000000000000000000b2",
+                    "cluster",
+                )],
+            ),
+        );
+    let list = |text: &str| {
+        ops::list(
+            &ListOptions {
+                project: Some(String::new()),
+                cluster: Some(text.to_string()),
+                ..ListOptions::default()
+            },
+            |_| Ok(Palette::new(&api)),
+            "t1",
+            &Progress::silent(),
+        )
+        .unwrap()
+    };
+
+    let l = list("payments");
+    assert!(
+        l.profiles.is_none(),
+        "--cluster lists clusters only, as --pack lists profiles only"
+    );
+    let clusters = l.clusters.as_ref().unwrap();
+    assert_eq!(
+        clusters
+            .iter()
+            .map(|c| (c.uid.as_str(), c.project_uid.as_str()))
+            .collect::<Vec<_>>(),
+        [("c1", "p1"), ("c7", "p2")],
+        "one name can be a cluster of two projects, and both are the answer"
+    );
+    assert_eq!(
+        clusters[0].profiles.as_ref().unwrap()[0].version,
+        "1.3.0",
+        "--cluster reads the profiles, as --pack reads the packs"
+    );
+    assert_eq!(
+        api.calls("/v1/spectroclusters/c2"),
+        0,
+        "a cluster the text does not match is never read"
+    );
+    assert_eq!(l.cluster.as_deref(), Some("payments"));
+
+    // the uid, and the case of the text, are the same filter
+    assert_eq!(
+        list("C7").clusters.unwrap().len(),
+        1,
+        "by uid, ignoring case"
+    );
+    assert_eq!(list("PAY").clusters.unwrap().len(), 2, "ignoring case");
+    assert!(list("ledger").clusters.unwrap().is_empty());
+
+    let text = render::renderer(Format::Terminal, Paint::off(), false)
+        .render_list(&list("ledger"))
+        .unwrap();
+    assert!(text.contains("no clusters matching 'ledger'"), "{text}");
+    let text = render::renderer(Format::Terminal, Paint::off(), false)
+        .render_list(&l)
+        .unwrap();
+    assert!(text.contains("2 clusters matching 'payments'"), "{text}");
+    let md = render::renderer(Format::Markdown, Paint::off(), false)
+        .render_list(&l)
+        .unwrap();
+    assert!(md.contains("**2 clusters matching 'payments'**"), "{md}");
+    let json: Value = serde_json::from_str(
+        &render::renderer(Format::Json, Paint::off(), true)
+            .render_list(&l)
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        json["cluster"], "payments",
+        "the document says what it kept"
+    );
+}
+
+#[test]
 fn list_fails_when_a_listing_cannot_be_read() {
     let api = MemoryApi::new().failing("/v1/dashboard/clusterprofiles/metadata", 401, "no key");
     let err = ops::list(

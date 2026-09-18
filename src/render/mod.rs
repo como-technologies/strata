@@ -65,22 +65,36 @@ pub(crate) fn list_scope(l: &Listing) -> String {
     }
 }
 
-/// `2 profiles`, `1 profile`, or `no profiles`; with a pack filter, `... with a pack matching 'x'`.
-pub(crate) fn list_count(n: usize, singular: &str, pack: Option<&str>) -> String {
-    let count = match n {
+/// `2 profiles`, `1 profile`, or `no profiles`.
+pub(crate) fn count_of(n: usize, singular: &str) -> String {
+    match n {
         0 => format!("no {singular}s"),
         1 => format!("1 {singular}"),
         n => format!("{n} {singular}s"),
-    };
+    }
+}
+
+/// `2 profiles`, or, with the `--pack` filter, `2 profiles with a pack matching 'cilium'`.
+pub(crate) fn list_count(n: usize, singular: &str, pack: Option<&str>) -> String {
+    let count = count_of(n, singular);
     match pack {
         Some(text) => format!("{count} with a pack matching '{text}'"),
         None => count,
     }
 }
 
+/// `2 clusters`, or, with the `--cluster` filter, `2 clusters matching 'payments'`.
+pub(crate) fn cluster_count(n: usize, text: Option<&str>) -> String {
+    let count = count_of(n, "cluster");
+    match text {
+        Some(text) => format!("{count} matching '{text}'"),
+        None => count,
+    }
+}
+
 /// `1 consumer`, `2 consumers`, or `no consumers`.
 pub(crate) fn consumer_count(n: usize) -> String {
-    list_count(n, "consumer", None)
+    count_of(n, "consumer")
 }
 
 /// A listed pack's version, with the tag when the profile pins another name for it:
@@ -169,7 +183,7 @@ pub(crate) fn pair_detail(p: &Pair) -> String {
             "root {} -> {}, {} pinned under another tag name, the same build",
             short(&p.root_a),
             short(&p.root_b),
-            list_count(p.packs_retagged, "pack", None)
+            count_of(p.packs_retagged, "pack")
         ),
         PairStatus::SameContent => format!(
             "root {} -> {}, only the packUid minted for each manifest pack differs",

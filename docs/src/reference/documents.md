@@ -146,6 +146,7 @@ is the path as a list: strings for keys, numbers for indexes, and
 
 - `projectUid` and `projectName`: the scope.
 - `pack`: the `--pack` text, when given.
+- `cluster`: the `--cluster` text, when given.
 - `profiles[]`, `clusters[]`, and `projects[]`: only the kinds that were listed.
   - A profile: `ref`, `name`, `version`, `uid`, and `cloudType`. With `--packs`,
     also `type`, `consumers`, and `packs[]` with `layer`, `name`, `tag`, and

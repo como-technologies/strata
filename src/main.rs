@@ -265,6 +265,9 @@ struct ListArgs {
     /// Also read each cluster for the profiles it applies
     #[arg(long)]
     applied: bool,
+    /// Keep the clusters whose name or uid holds TEXT; sets --applied
+    #[arg(long, value_name = "TEXT")]
+    cluster: Option<String>,
     #[command(flatten)]
     out: OutputArgs,
 }
@@ -704,6 +707,7 @@ fn cmd_list(a: &ListArgs) -> Result<ExitCode> {
         packs: a.packs,
         pack: a.pack.clone(),
         applied: a.applied,
+        cluster: a.cluster.clone(),
     };
     let l = ops::list(
         &options,

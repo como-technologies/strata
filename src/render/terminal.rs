@@ -1,12 +1,12 @@
 //! The terminal report: plain when piped, colored on a terminal.
 
 use super::{
-    applied_ref, chain_verdict, cluster_value, consumer_count, consumers_comparable,
-    consumers_heading, consumers_sentence, counts_line, dash, edited_in_place_note, entry_error,
-    list_count, list_scope, overwritten_in_place_notes, pack_version, pair_detail, pair_word,
-    profiles_overwritten_sentence, record_detail, record_label, same_content_note, short, show,
-    subject, tag_rename, traits_suffix, values_changed_suffix, variable_lines, version_display,
-    Renderer, VarLine,
+    applied_ref, chain_verdict, cluster_count, cluster_value, consumer_count, consumers_comparable,
+    consumers_heading, consumers_sentence, count_of, counts_line, dash, edited_in_place_note,
+    entry_error, list_count, list_scope, overwritten_in_place_notes, pack_version, pair_detail,
+    pair_word, profiles_overwritten_sentence, record_detail, record_label, same_content_note,
+    short, show, subject, tag_rename, traits_suffix, values_changed_suffix, variable_lines,
+    version_display, Renderer, VarLine,
 };
 use crate::color::Paint;
 use crate::diff::{
@@ -535,7 +535,7 @@ impl Renderer for TerminalRenderer {
         if let Some(clusters) = &l.clusters {
             out.push_str(&format!(
                 "\n{}\n",
-                list_count(clusters.len(), "cluster", None)
+                cluster_count(clusters.len(), l.cluster.as_deref())
             ));
             let rows: Vec<Vec<String>> = clusters
                 .iter()
@@ -559,6 +559,7 @@ impl Renderer for TerminalRenderer {
             for (c, row) in clusters.iter().zip(&rows) {
                 out.push_str(&table_line("  ", row, &widths, |i, cell| match i {
                     0 => p.bold(cell),
+                    1 => matched(p, cell, l.cluster.as_deref()),
                     2 if c.state == "Running" => p.green(cell),
                     _ => cell.to_string(),
                 }));
@@ -589,10 +590,7 @@ impl Renderer for TerminalRenderer {
             }
         }
         if let Some(projects) = &l.projects {
-            out.push_str(&format!(
-                "\n{}\n",
-                list_count(projects.len(), "project", None)
-            ));
+            out.push_str(&format!("\n{}\n", count_of(projects.len(), "project")));
             let rows: Vec<Vec<String>> = projects
                 .iter()
                 .map(|pr| vec![dash(&pr.name).to_string(), pr.uid.clone()])

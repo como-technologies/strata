@@ -60,6 +60,29 @@ need the identity: a version can be overwritten in place, and then the same
 `<name>@<version>` names another release. A cluster that strata cannot read
 stays in the list with its error.
 
+## Ask about one cluster
+
+`--cluster <text>` keeps the clusters whose name or uid holds the text, in
+upper or lower case. It reads only those clusters, and it lists clusters only,
+unless you name the kinds:
+
+```text
+{{#include ../output/list-cluster.txt}}
+```
+
+`--cluster` sets `--applied`, as `--pack` sets `--packs`: a person who names one
+cluster asks what that cluster runs.
+
+At tenant scope the text can match a cluster in more than one project, and each
+one is an answer:
+
+```text
+{{#include ../output/list-cluster-tenant.txt}}
+```
+
+The two clusters have one name and run different versions. See
+[The same names in two projects](../use-cases/same-names.md).
+
 ## Find the profile versions that carry a pack
 
 A pack is not a ref. `--pack <text>` keeps the profile versions with a pack

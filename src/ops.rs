@@ -1098,15 +1098,27 @@ pub struct ListOptions {
     pub pack: Option<String>,
     /// Read each cluster document for the profiles the cluster applies: one request per cluster.
     pub applied: bool,
+    /// Keep only the clusters whose name or uid contains this text, ignoring case. Implies
+    /// `applied`.
+    pub cluster: Option<String>,
 }
 
 impl ListOptions {
     fn wants(&self, kind: ListKind) -> bool {
-        if self.kinds.is_empty() {
-            kind == ListKind::Profiles || (kind == ListKind::Clusters && self.pack.is_none())
-        } else {
-            self.kinds.contains(&kind)
+        if !self.kinds.is_empty() {
+            return self.kinds.contains(&kind);
         }
+        match kind {
+            ListKind::Profiles => self.cluster.is_none(),
+            ListKind::Clusters => self.pack.is_none(),
+            ListKind::Projects => false,
+        }
+    }
+
+    /// True when the clusters are read for the profiles they apply: `--applied`, or `--cluster`,
+    /// which names one cluster to answer what it runs.
+    fn reads_clusters(&self) -> bool {
+        self.applied || self.cluster.is_some()
     }
 }
 
@@ -1205,6 +1217,9 @@ pub struct Listing {
     /// With `--pack`: the text the pack names were matched against.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pack: Option<String>,
+    /// With `--cluster`: the text the cluster names and uids were matched against.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cluster: Option<String>,
     /// Profile versions, by name and then natural version order.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub profiles: Option<Vec<ListedProfile>>,
@@ -1244,7 +1259,13 @@ where
     let clusters = if options.wants(ListKind::Clusters) {
         progress.note("listing clusters");
         let mut clusters = list_clusters(&home.cluster_listing()?);
-        if options.applied {
+        if let Some(text) = &options.cluster {
+            let text = text.to_lowercase();
+            clusters.retain(|c| {
+                c.name.to_lowercase().contains(&text) || c.uid.to_lowercase().contains(&text)
+            });
+        }
+        if options.reads_clusters() {
             read_applied(&mut clusters, &home, &mut connect, progress);
         }
         Some(clusters)
@@ -1289,6 +1310,7 @@ where
         project_uid,
         project_name,
         pack: options.pack.clone(),
+        cluster: options.cluster.clone(),
         profiles,
         clusters,
         projects,

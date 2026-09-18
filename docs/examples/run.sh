@@ -457,6 +457,8 @@ show list-projects 0 'strata list projects'
 show list-prod 0 'strata list --project-name prod'
 show list-tenant 0 "strata list clusters --project ''"
 show list-applied 0 'strata list clusters --applied'
+show list-cluster 0 'strata list --cluster payments'
+show list-cluster-tenant 0 "strata list --cluster payments --project ''"
 show list-pack 0 'strata list --pack cilium'
 show list-pack-all 0 'for p in dev prod; do strata list --pack cilium --project-name "$p"; done'
 show list-packs 0 'strata list --packs'
@@ -735,6 +737,7 @@ cluster $DEV $PAYMENTS payments $A111
 cluster $PROD $PAYMENTS_PROD payments $A111_PROD
 show names-tenant 0 "strata list clusters --project ''"
 show2 names-ambiguous 2 'strata snapshot cluster:payments -o payments.json'
+show names-cluster 0 "strata list --cluster payments --project ''"
 show2 names-profile 2 'strata snapshot aws-stack@1.1.1 -o aws-stack.json'
 show2 names-by-project 0 'PALETTE_PROJECT=dev strata snapshot cluster:payments -o dev-payments.json'
 show2 names-by-project 0 'PALETTE_PROJECT=prod strata snapshot cluster:payments -o prod-payments.json'

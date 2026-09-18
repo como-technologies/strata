@@ -1,12 +1,12 @@
 //! The pull request comment.
 
 use super::{
-    applied_ref, chain_verdict, cluster_value, consumer_count, consumers_comparable,
-    consumers_heading, consumers_sentence, counts_line, dash, edited_in_place_note, entry_error,
-    list_count, list_scope, overwritten_in_place_notes, pack_version, pair_detail, pair_word,
-    plain_flags, profiles_overwritten_sentence, record_detail, record_label, same_content_note,
-    short, show, subject, traits_suffix, values_changed, values_changed_suffix, variable_lines,
-    version_display, Renderer, VarLine,
+    applied_ref, chain_verdict, cluster_count, cluster_value, consumer_count, consumers_comparable,
+    consumers_heading, consumers_sentence, count_of, counts_line, dash, edited_in_place_note,
+    entry_error, list_count, list_scope, overwritten_in_place_notes, pack_version, pair_detail,
+    pair_word, plain_flags, profiles_overwritten_sentence, record_detail, record_label,
+    same_content_note, short, show, subject, traits_suffix, values_changed, values_changed_suffix,
+    variable_lines, version_display, Renderer, VarLine,
 };
 use crate::color::Paint;
 use crate::diff::{Diff, Leaf, Op, Status, Verify, VerifyStatus};
@@ -389,7 +389,7 @@ impl Renderer for MarkdownRenderer {
         if let Some(clusters) = &l.clusters {
             o.push_str(&format!(
                 "**{}**\n\n",
-                list_count(clusters.len(), "cluster", None)
+                escape(&cluster_count(clusters.len(), l.cluster.as_deref()))
             ));
             let elsewhere = clusters.iter().any(|c| c.project_uid != l.project_uid);
             let with_applied = clusters
@@ -431,10 +431,7 @@ impl Renderer for MarkdownRenderer {
             o.push('\n');
         }
         if let Some(projects) = &l.projects {
-            o.push_str(&format!(
-                "**{}**\n\n",
-                list_count(projects.len(), "project", None)
-            ));
+            o.push_str(&format!("**{}**\n\n", count_of(projects.len(), "project")));
             if !projects.is_empty() {
                 o.push_str("| name | uid |\n|---|---|\n");
             }

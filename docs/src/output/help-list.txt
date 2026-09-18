@@ -12,6 +12,7 @@ Options:
       --packs                        Also read each version for its packs and consumers
       --pack <TEXT>                  Keep the versions with a pack whose name holds TEXT; sets --packs
       --applied                      Also read each cluster for the profiles it applies
+      --cluster <TEXT>               Keep the clusters whose name or uid holds TEXT; sets --applied
       --format <FORMAT>              The report format: terminal, markdown, or json [default: terminal]
       --json                         The same as --format json
       --color [<COLOR>]              Color the report: auto, always, or never [default: auto]

@@ -23,7 +23,12 @@ With no project, the name `payments` matches two clusters:
 {{#include ../output/names-ambiguous.txt}}
 ```
 
-Exit `2`. The error lists the uids.
+Exit `2`. The error lists the uids. `strata list --cluster payments` gives the
+same two clusters, with the profile versions each one runs:
+
+```text
+{{#include ../output/names-cluster.txt}}
+```
 
 A profile name at tenant scope finds only the profiles of the tenant, not of a
 project:

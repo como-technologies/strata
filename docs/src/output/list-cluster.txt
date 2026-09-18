@@ -1,0 +1,6 @@
+$ strata list --cluster payments
+project dev (uid 64f20000000000000000a0d1)
+
+1 cluster matching 'payments'
+  cluster:64f1000000000000000000e1  payments  Running  aws
+    aws-stack@1.1.0  64e0000000000000000000b2  cluster
