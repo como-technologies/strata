@@ -388,6 +388,16 @@ fn main() -> ExitCode {
     let first = argv.get(1).map(String::as_str).unwrap_or("");
     let is_global_flag = matches!(first, "-h" | "--help" | "-V" | "--version");
     if argv.len() > 1 && !is_command(first) && !is_global_flag {
+        // `strata <A> <B>` is a compare, so a command name that is not first would become a ref
+        // and fail as an unexpected argument of `compare`. Say what is wrong instead.
+        if let Some(name) = argv[2..].iter().find(|a| is_command(a)) {
+            command()
+                .error(
+                    clap::error::ErrorKind::InvalidSubcommand,
+                    format!("'{name}' is a command, so it comes first: strata {name} ..."),
+                )
+                .exit();
+        }
         argv.insert(1, "compare".to_string());
     }
     let matches = command().get_matches_from(argv);

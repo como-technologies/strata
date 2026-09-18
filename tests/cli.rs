@@ -123,6 +123,30 @@ fn reordered_yaml_gives_the_same_root() {
 }
 
 #[test]
+fn a_command_name_that_is_not_first_says_so_instead_of_failing_as_a_compare() {
+    let fx = fixtures();
+    let r = run(&["strata", "consumers", "aws-stack@1.2.0"]);
+    assert_eq!(r.code, 2, "{}{}", r.out, r.err);
+    assert!(
+        r.err
+            .contains("'consumers' is a command, so it comes first: strata consumers ..."),
+        "{}",
+        r.err
+    );
+    assert!(
+        !r.err.contains("unexpected argument"),
+        "the old message named compare, which the person did not type: {}",
+        r.err
+    );
+
+    // a compare of two refs keeps working, and a ref is matched as a whole word only
+    let r = run(&[&fx.a, &fx.a2]);
+    assert_eq!(r.code, 0, "{}{}", r.out, r.err);
+    let r = run(&["compare", &fx.a, &fx.a2]);
+    assert_eq!(r.code, 0, "{}{}", r.out, r.err);
+}
+
+#[test]
 fn identical_profiles_exit_zero() {
     let fx = fixtures();
     let r = run(&["compare", &fx.a, &fx.a2]);
