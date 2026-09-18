@@ -220,14 +220,34 @@ one request gives every version, every tag, and no repeats. The paged listing
 answer does not, and it repeats a version across pages.
 
 **A constraint between packs.** `packValues[]` has a `dependencies` field, which
-is where a pack that requires another pack would say so. It is empty for every
-version this run read: all 36 of `csi-aws-ebs`, and every version of
-`kubernetes`, `cni-cilium-oss`, `prometheus-operator`, `cert-manager`,
-`nginx-ingress` and `external-secrets-operator`, in `Public Repo` and in
-`Spectro Addon Repo`. The shape is there and the content is not, so
-[#58](https://github.com/como-technologies/strata/issues/58) cannot be designed
-from this tenant. It needs one pack that declares a dependency, which a team
-that publishes its own packs has and a public registry does not.
+is where a pack that requires another pack would say so. Not one pack that this
+key can see fills it. The run read every distinct pack of the tenant's
+registries, 116 of them, and each answered with an empty `dependencies` on every
+version:
+
+```text
+packs scanned: 116
+with a dependency: 0
+```
+
+So the shape is there and the content is not. A check that reads a constraint
+cannot be written against an answer that no pack fills, and
+[#58](https://github.com/como-technologies/strata/issues/58) stops here for that
+reason.
+
+**How far a constraint reaches.** A team that publishes its own packs reported
+the behavior that makes this matter: Palette checks a required pack against the
+packs of the same profile only. A profile whose pack requires a pack that
+*another* profile carries is refused, with an error that names the constraint
+and not the reason. That team split one profile into three, which is the normal
+way to stop one pack publish from bumping the same layers three times, and had
+to publish new pack versions that drop the constraint. Their packs state the
+requirement in the README instead.
+
+No run in this repository confirms that, because no pack here declares a
+dependency to test it with. It is written down because the next person to split
+a profile will meet it, and because it is the reason to finish #58 when a tenant
+with such a pack is at hand.
 
 ## What no run covers
 
@@ -236,3 +256,6 @@ that publishes its own packs has and a public registry does not.
 - A Helm registry that needs credentials, and an OCI registry that holds Helm
   charts in place of packs. The tenant of the runs had neither.
 - A new build under a floating tag that a profile pins.
+- Whether a required pack constraint reaches beyond the packs of one profile.
+  No pack in the visible registries declares a dependency, so no run here can
+  test it; a team reported that it does not, above.

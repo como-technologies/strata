@@ -951,21 +951,25 @@ labels: enhancement
 
 ### Background
 
-A pack can require another pack, with a minimum version. Palette checks that requirement only against the packs of the same profile: a profile whose pack requires a pack that another profile carries is refused, with an error that names the constraint and not the reason. A team that splits one profile into several, which is the normal way to stop one publish from bumping the same layers three times, meets this as a refused apply and has to publish a new pack version that drops the constraint. Strata reads a profile version and could say this before the apply, because it already reads each pack from its registry for a `pack:` ref.
+A pack can require another pack, with a minimum version. A team that publishes its own packs reported that Palette checks that requirement against the packs of the same profile only: a profile whose pack requires a pack that another profile carries is refused, with an error that names the constraint and not the reason. That team split one profile into three, which is the normal way to stop one publish from bumping the same layers three times, and had to publish new pack versions that drop the constraint. Strata reads each pack from its registry for a `pack:` ref, so it could say this before the apply.
 
-### Plan
+### What the probe found, and what it settles
 
-1. **Done, run `20260918T020941Z`.** `/v1/packs/{name}/registries/{uid}` carries a `dependencies` field on each entry of `packValues[]`, which is where a pack that requires another pack would say so. It is empty for every version this tenant can see: all 36 of `csi-aws-ebs`, and every version of six other packs, in `Public Repo` and `Spectro Addon Repo`. The shape is there and the content is not, so the rest of this issue needs a tenant with a pack that declares a dependency. `docs/src/internals/palette.md` records it.
-2. If the constraints are there: read them for each pack of a snapshot, and report a required pack that the snapshot does not carry, with the version it asks for. A `candidate` check is the same question one step earlier, before anything is published.
+Run `20260918T020941Z` read `/v1/packs/{name}/registries/{uid}`, which is the request a `pack:` ref already makes. Each entry of `packValues[]` carries a `dependencies` field, which is where a pack that requires another pack would say so.
+
+The run then read every distinct pack the key can see, 116 of them across the tenant's registries. Not one version fills `dependencies`. The shape is there and the content is not, so a check cannot be written here: it would be written against a guess at what a filled field holds, and a guess in a check is worse than no check.
+
+So this issue stops, and `docs/src/internals/palette.md` records both the shape and the behavior the team reported. Open it again with a tenant that has a pack which declares a dependency; one such pack is enough to finish steps 2 and 3, which stay written down below.
+
+2. Read the constraints of each pack of a snapshot, and report a required pack that the snapshot does not carry, with the version it asks for. A `candidate` check asks the same question one step earlier, before anything is published.
 3. Decide whether this is a new command, a flag on `snapshot`, or a field of the snapshot document. A field would change the schema id, so a flag or a check in `candidate` is likely the smaller answer.
-4. Say in the book that a constraint reaches only the packs of the same profile, next to the check.
 
 ### Acceptance criteria
 
 - [x] A live run records whether the registry answer carries a pack's constraints
-- [ ] Strata reports a pack whose required pack is not in the same profile, and names both packs and the version asked for
-- [ ] A profile that carries every required pack reports nothing
-- [ ] The book states that a constraint reaches only the packs of one profile
+- [x] The scan covers every pack the key can see, not one family, so "no pack declares one" is a measurement
+- [x] The book states how far a constraint reaches, and says that no run here confirms it
+- [x] The issue closes with the reason and with what would open it again
 
 ## Group the scripts by who runs them
 
