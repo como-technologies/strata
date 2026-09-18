@@ -35,8 +35,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - uses: extractions/setup-just@v2
-      - name: Install mdbook and the preprocessors
-        run: cargo install --locked mdbook mdbook-mermaid mdbook-gruvbox mdbook-lint
+      - uses: ./.github/actions/mdbook
       # each output in the book is the output of this build of strata
       - run: just docs-check
       # mdbook builds a broken link with no message; mdbook-lint finds it

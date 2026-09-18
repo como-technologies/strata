@@ -99,7 +99,9 @@ jobs:
       - name: run the binary and each script it installed
         run: |
           .published/strata --version
-          for s in pr-comment.sh merge-gate.sh verify-report.sh install-strata.sh; do
+          # the scripts the installer installs; it does not install itself, because running it
+          # is how you got it
+          for s in pr-comment.sh merge-gate.sh verify-report.sh; do
             echo "== $s"
             .published/"$s" --help > /dev/null
           done

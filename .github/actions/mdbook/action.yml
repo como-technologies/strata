@@ -1,0 +1,38 @@
+name: install mdbook
+description: >
+  mdbook and the preprocessors the book needs, from a cache. Building the four from source takes
+  minutes on a cold runner, and the ci workflow and the docs workflow both need them on every run,
+  so the binaries are cached and only built when the cache misses.
+inputs:
+  key:
+    description: >
+      Bump this to build the tools again, which is how the book takes a newer mdbook. The cache
+      holds binaries, so nothing else expires them.
+    required: false
+    default: "1"
+runs:
+  using: composite
+  steps:
+    # Swatinem/rust-cache keeps the registry and target/, not the installed binaries
+    - name: Cache the binaries
+      id: cache
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/bin/mdbook
+          ~/.cargo/bin/mdbook-mermaid
+          ~/.cargo/bin/mdbook-gruvbox
+          ~/.cargo/bin/mdbook-lint
+        key: mdbook-${{ runner.os }}-${{ inputs.key }}
+    - name: Build the binaries
+      if: steps.cache.outputs.cache-hit != 'true'
+      run: cargo install --locked mdbook mdbook-mermaid mdbook-gruvbox mdbook-lint
+      shell: bash
+    # a cache that restored a broken binary fails here, next to its cause, not inside a book build
+    - name: Check the binaries
+      run: |
+        set -euo pipefail
+        for tool in mdbook mdbook-mermaid mdbook-gruvbox mdbook-lint; do
+          "$tool" --version
+        done
+      shell: bash

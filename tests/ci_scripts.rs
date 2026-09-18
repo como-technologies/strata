@@ -210,6 +210,48 @@ fn the_ci_drop_ins_name_the_version_this_repository_is_at() {
     }
 }
 
+/// The release workflow installs what it published and runs each script the installer installed.
+/// The two lists are written in two files, so they can disagree: the check named
+/// `install-strata.sh`, which the installer never installs, and the first release to run the check
+/// failed on it. This holds them together.
+#[test]
+fn the_release_check_runs_the_scripts_the_installer_installs() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let installer = std::fs::read_to_string(root.join("scripts/ci/install-strata.sh")).unwrap();
+    let release = std::fs::read_to_string(root.join(".github/workflows/release.yml")).unwrap();
+
+    // `for name in pr-comment.sh merge-gate.sh verify-report.sh; do` in the installer
+    let installs: Vec<&str> = installer
+        .lines()
+        .find(|l| l.trim_start().starts_with("for name in ") && l.contains(".sh"))
+        .expect("the installer names the scripts it installs")
+        .trim()
+        .trim_start_matches("for name in ")
+        .trim_end_matches("; do")
+        .split_whitespace()
+        .collect();
+
+    // `for s in pr-comment.sh merge-gate.sh verify-report.sh; do` in the release check
+    let checks: Vec<&str> = release
+        .lines()
+        .find(|l| l.trim_start().starts_with("for s in ") && l.contains(".sh"))
+        .expect("the release workflow names the scripts it runs")
+        .trim()
+        .trim_start_matches("for s in ")
+        .trim_end_matches("; do")
+        .split_whitespace()
+        .collect();
+
+    assert!(
+        !installs.is_empty() && !checks.is_empty(),
+        "the parsing broke"
+    );
+    assert_eq!(
+        checks, installs,
+        "the release workflow runs scripts the installer does not install, or misses one it does"
+    );
+}
+
 // ---- pr-comment.sh ---------------------------------------------------------------------------
 
 /// A `gh` that records every invocation, saves any comment body it is handed, and answers the
