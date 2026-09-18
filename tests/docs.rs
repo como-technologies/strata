@@ -1,0 +1,125 @@
+//! The book's own consistency: every use case is listed everywhere it belongs, in one order.
+//!
+//! `docs/src/use-cases/index.md` lists every page in the order that teaches the tool, and
+//! `docs/src/SUMMARY.md` is the navigation beside it. A page added to one and forgotten in the
+//! other is invisible to a reader who came the other way. That happened to "What changed between
+//! two pack versions", which reached the navigation and never reached the list.
+
+use std::collections::BTreeSet;
+use std::path::{Path, PathBuf};
+
+fn docs() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("docs/src")
+}
+
+fn read(path: &Path) -> String {
+    std::fs::read_to_string(path).unwrap_or_else(|e| panic!("{}: {e}", path.display()))
+}
+
+/// The use-case pages one markdown text links to, in the order it links to them, without repeats.
+fn linked(text: &str) -> Vec<String> {
+    let mut seen = BTreeSet::new();
+    let mut out = Vec::new();
+    let mut rest = text;
+    while let Some(at) = rest.find("use-cases/") {
+        rest = &rest[at + "use-cases/".len()..];
+        let Some(end) = rest.find(".md)") else { break };
+        let name = &rest[..end];
+        if !name.is_empty()
+            && name != "index"
+            && !name.contains('/')
+            && seen.insert(name.to_string())
+        {
+            out.push(name.to_string());
+        }
+    }
+    out
+}
+
+/// The same, for the index page, whose links are relative: `](./review.md)`.
+fn linked_relative(text: &str) -> Vec<String> {
+    let mut seen = BTreeSet::new();
+    let mut out = Vec::new();
+    let mut rest = text;
+    while let Some(at) = rest.find("](./") {
+        rest = &rest[at + "](./".len()..];
+        let Some(end) = rest.find(".md)") else { break };
+        let name = &rest[..end];
+        if !name.is_empty()
+            && name != "index"
+            && !name.contains('/')
+            && seen.insert(name.to_string())
+        {
+            out.push(name.to_string());
+        }
+    }
+    out
+}
+
+fn section<'a>(text: &'a str, from: &str, to: Option<&str>) -> &'a str {
+    let start = text
+        .find(from)
+        .unwrap_or_else(|| panic!("the index has no {from:?} heading"));
+    let rest = &text[start..];
+    match to.and_then(|t| rest.find(t)) {
+        Some(end) => &rest[..end],
+        None => rest,
+    }
+}
+
+#[test]
+fn every_use_case_is_in_the_navigation_and_the_list_in_one_order() {
+    let index = read(&docs().join("use-cases/index.md"));
+    let summary = read(&docs().join("SUMMARY.md"));
+
+    let nav = linked(&summary);
+    let listed_in_order = linked_relative(section(
+        &index,
+        "## The pages, in order",
+        Some("## The examples"),
+    ));
+
+    assert_eq!(
+        nav, listed_in_order,
+        "the navigation and the list of pages name different pages, or name them in another order"
+    );
+
+    // and every page on disk is one of them
+    let mut on_disk: Vec<String> = std::fs::read_dir(docs().join("use-cases"))
+        .expect("the use-cases directory")
+        .filter_map(|e| {
+            let name = e.ok()?.file_name().to_string_lossy().into_owned();
+            let stem = name.strip_suffix(".md")?.to_string();
+            (stem != "index").then_some(stem)
+        })
+        .collect();
+    on_disk.sort();
+    let mut listed = nav.clone();
+    listed.sort();
+    assert_eq!(
+        listed, on_disk,
+        "a use-case page exists that the book does not list, or the book lists one that is gone"
+    );
+}
+
+#[test]
+fn every_page_the_navigation_names_exists() {
+    let summary = read(&docs().join("SUMMARY.md"));
+    let mut rest = summary.as_str();
+    let mut checked = 0;
+    while let Some(at) = rest.find("](./") {
+        rest = &rest[at + 2..];
+        let Some(end) = rest.find(')') else { break };
+        let link = &rest[..end];
+        let page = docs().join(link.trim_start_matches("./"));
+        assert!(
+            page.is_file(),
+            "SUMMARY.md names {link}, which is not a file"
+        );
+        checked += 1;
+    }
+    assert!(
+        checked > 40,
+        "only {checked} pages checked; the parsing broke"
+    );
+}
