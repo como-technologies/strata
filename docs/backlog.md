@@ -885,11 +885,11 @@ labels: feature
 
 ### Acceptance criteria
 
-- [ ] `strata packs <name>` lists every version in the registry, newest first, with the tags that point at each
-- [ ] `--cloud <type>` keeps the versions that support it, and `--latest` prints one line
-- [ ] A pack with more than 100 versions lists completely, and a repeated version appears once
-- [ ] An unknown registry name is an error with exit 2 that lists the visible registries
-- [ ] `--format json` writes `strata-packs/1`
+- [x] `strata packs <name>` lists every version in the registry, newest first, with the tags that point at each
+- [x] `--cloud <type>` keeps the versions that support it, and `--latest` prints one line
+- [x] A pack with more than 100 versions lists completely, and a repeated version appears once
+- [x] An unknown registry name is an error with exit 2 that lists the visible registries
+- [x] `--format json` writes `strata-packs/1`
 
 ## Give GitLab the same automations as GitHub
 
@@ -955,14 +955,14 @@ A pack can require another pack, with a minimum version. Palette checks that req
 
 ### Plan
 
-1. Find out what the registry answer carries. `/v1/packs/{name}/registries/{uid}` is the request that a `pack:` ref already makes. Confirm in a live tenant whether the answer holds the constraints of a pack, and under which field. Record the answer in `docs/src/internals/palette.md` with the run id, whichever way it goes.
+1. **Done, run `20260918T020941Z`.** `/v1/packs/{name}/registries/{uid}` carries a `dependencies` field on each entry of `packValues[]`, which is where a pack that requires another pack would say so. It is empty for every version this tenant can see: all 36 of `csi-aws-ebs`, and every version of six other packs, in `Public Repo` and `Spectro Addon Repo`. The shape is there and the content is not, so the rest of this issue needs a tenant with a pack that declares a dependency. `docs/src/internals/palette.md` records it.
 2. If the constraints are there: read them for each pack of a snapshot, and report a required pack that the snapshot does not carry, with the version it asks for. A `candidate` check is the same question one step earlier, before anything is published.
 3. Decide whether this is a new command, a flag on `snapshot`, or a field of the snapshot document. A field would change the schema id, so a flag or a check in `candidate` is likely the smaller answer.
 4. Say in the book that a constraint reaches only the packs of the same profile, next to the check.
 
 ### Acceptance criteria
 
-- [ ] A live run records whether the registry answer carries a pack's constraints
+- [x] A live run records whether the registry answer carries a pack's constraints
 - [ ] Strata reports a pack whose required pack is not in the same profile, and names both packs and the version asked for
 - [ ] A profile that carries every required pack reports nothing
 - [ ] The book states that a constraint reaches only the packs of one profile
