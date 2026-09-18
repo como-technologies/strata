@@ -1,14 +1,21 @@
 # Release
 
-1. Set the new version, and commit:
+1. Set the new version. The recipe writes it and commits the change as
+   `chore: release <version>`:
 
    ```bash
-   just version <version>   # Cargo.toml, the README badge, the install commands, the drop-ins
+   just version <version>
    ```
 
-   The version is written in more than a dozen files. The recipe moves all of
-   them, and leaves the recorded live runs alone, because each one says which
-   build produced it. `just test` fails when a file is left behind.
+   The version is in ten files: `Cargo.toml` and `Cargo.lock`, the README badge
+   and its install command, the install page, the CI drop-ins, and the pages
+   that show them. The recipe rewrites the version only where the version
+   follows this repository, so prose that names a release for a reason keeps it:
+   "use v0.5.2 or later, the first release with all four scripts" is a fact
+   about v0.5.2. It leaves the recorded live runs alone for the same reason,
+   because each one says which build produced it. It refuses when a file it must
+   rewrite already holds uncommitted changes, so the commit is the version and
+   nothing else.
 2. Tag the commit:
 
    ```bash
@@ -16,7 +23,12 @@
    ```
 
    The recipe refuses a dirty tree or a tag that exists.
-3. Push the tag.
+3. Push the commit and the tag. The tag starts the release workflow:
+
+   ```bash
+   git push origin main
+   git push origin v<version>
+   ```
 
 The release workflow then:
 
