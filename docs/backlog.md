@@ -903,7 +903,7 @@ labels: ci
 
 1. `scripts/pr-comment.sh` and `scripts/verify-report.sh`: a `--host github|gitlab` option, detected from `GITLAB_CI` or `CI_PROJECT_ID`, else GitHub. A GitLab set of the same host functions, over the REST API v4 with `curl`, `CI_API_V4_URL`, `CI_PROJECT_ID`, `CI_MERGE_REQUEST_IID`, and a token in `GITLAB_TOKEN`. Every host call goes through one `host <name>` dispatcher, so a third host is a third set.
 2. The GitLab functions keep the behavior: one note per merge request, found by the marker and updated on each push; the label added and removed at the threshold; one issue per record, found by its marker, updated, and closed with a comment when the record verifies again.
-3. `examples/gitlab/strata.yml`: the drop-in jobs that a pipeline includes, one for the comment, one for [the merge gate](#stop-a-merge-request-that-would-land-the-wrong-release), and one for the scheduled verify.
+3. `examples/ci/gitlab/strata.yml`: the drop-in jobs that a pipeline includes, one for the comment, one for [the merge gate](#stop-a-merge-request-that-would-land-the-wrong-release), and one for the scheduled verify.
 4. `scripts/install-strata.sh`: one release, for any host and a laptop. It reads the release document, downloads the binary for the machine and the scripts, checks every file against `SHA256SUMS`, and prints the path of the binary.
 5. `.github/workflows/release.yml`: attach the scripts to each release, so a job downloads one release and has everything.
 6. `tests/scripts.rs`: the GitLab host calls against a stand-in `curl`, as the GitHub ones run against a stand-in `gh`.
@@ -914,7 +914,7 @@ labels: ci
 - [x] `pr-comment.sh --host gitlab` posts one note on a merge request, updates that note on a later run, and sets the label from the impact
 - [x] `verify-report.sh --host gitlab` opens one issue for each record that drifted or could not be checked, updates it, and closes it when the record verifies again
 - [x] Both scripts pick the host from the CI variables, so a GitLab job passes no flag
-- [x] `examples/gitlab/strata.yml` needs only the project's variables, and checks what it downloads
+- [x] `examples/ci/gitlab/strata.yml` needs only the project's variables, and checks what it downloads
 - [x] The tests cover the GitLab host calls and use no network
 - [x] The book documents the GitLab jobs beside the GitHub ones
 
@@ -931,7 +931,7 @@ A merge request is reviewed against the default branch as it was when somebody o
 1. `scripts/merge-gate.sh <record or pattern>...`: merge the target branch into the checkout first, so every answer is about the merge result. The target branch comes from `--base`, `CI_MERGE_REQUEST_TARGET_BRANCH_NAME` or `GITHUB_BASE_REF`.
 2. Three checks, each exit 1: a conflict, reported as a comparison of the two records and not as lines; a merge result that pins an older version of a pack or of the profile than the target branch has; a record of the merge result that does not verify against Palette.
 3. A rollback moves a pin backwards on purpose, and only the author knows which one it is. The gate does not guess: it prints the evidence of each backwards pin, and it passes when a commit of the branch carries `Rollback: <record> to <name>@<version>` that names the record and the release of the merge result, or when the job runs with `--allow-rollback` for a merge request with the rollback label. The evidence is whether the target branch pinned that release before, with the date and the commit, and whether the branch wrote its record after the target branch moved.
-4. `.github/workflows/merge-gate.yml`, a reusable workflow for a required status check, and a `strata-merge-gate` job in `examples/gitlab/strata.yml`. Each reads the rollback label of the merge request.
+4. `.github/workflows/merge-gate.yml`, a reusable workflow for a required status check, and a `strata-merge-gate` job in `examples/ci/gitlab/strata.yml`. Each reads the rollback label of the merge request.
 5. The book: an automation page with the output of each check, and how each host holds the merge button. Say why a git hook is not the answer: it runs on one laptop, it is one flag away from being skipped, and it cannot see the target branch a minute before the merge.
 
 ### Acceptance criteria

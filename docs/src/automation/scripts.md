@@ -85,4 +85,6 @@ release and has everything.
 | [`verify-report.sh`](./drift-issues.md) | One issue per record that drifted or could not be checked. |
 | [`install-strata.sh`](./gitlab.md#install-strata-in-a-job) | One release, with the checksums checked. |
 
-They run on GitHub and on GitLab. See [GitLab CI](./gitlab.md).
+They run on GitHub and on GitLab. `examples/ci/github/strata.yml` and
+`examples/ci/gitlab/strata.yml` are the two drop-ins that call them. See
+[GitLab CI](./gitlab.md).

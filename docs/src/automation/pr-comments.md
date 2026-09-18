@@ -39,6 +39,9 @@ script posts the same comment as the job.
 
 ## GitHub Actions
 
+`examples/ci/github/strata.yml` is this job and the other two in one file,
+ready to copy into `.github/workflows/`.
+
 Call the reusable workflow. The caller needs `pull-requests: write`:
 
 ```yaml

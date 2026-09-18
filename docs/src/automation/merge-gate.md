@@ -119,6 +119,9 @@ one developer, with `--no-verify` one word away, and they cannot see what the
 target branch holds a minute before the merge. The gate belongs in the pipeline,
 where the host holds the button.
 
+`examples/ci/github/strata.yml` and `examples/ci/gitlab/strata.yml` hold this
+gate and the other two jobs, ready to copy.
+
 **GitHub.** Call the reusable workflow on `pull_request`, then make the job a
 required status check in the branch protection rule of `main`. Turn on "Require
 branches to be up to date before merging", which re-runs the check after each

@@ -15,8 +15,8 @@ GitHub. A terminal needs `--host gitlab` when no CI variable is set.
 
 ## The pipeline
 
-`examples/gitlab/strata.yml` holds the three jobs, ready to include. Copy it
-into `.gitlab/strata.yml` and include it:
+`examples/ci/gitlab/strata.yml` holds the three jobs, ready to include. Copy
+it into `.gitlab/strata.yml` and include it:
 
 ```yaml
 include:
