@@ -149,6 +149,39 @@ The first attempts found two problems. Both are part of the example now:
 - The candidate check failed until strata accepted a version as a tag, because
   Palette stored that tag.
 
+### Run `20260918T175802Z`: the profiles a cluster applies
+
+Session `20260918T175802Z` on 2026-09-18, in the `strata-test` project on AWS
+us-east-2, with cluster A `fred` and no cluster B. `verify.sh` ran 30 checks and
+29 passed. `registry-digest-oci` failed with HTTP 401 from the OCI registry: the
+login that `crane` needs had expired, and the AWS account of this checkout
+cannot read that registry. The check belongs to #2, and nothing in this run
+changed it.
+
+`strata list clusters --applied` named each profile that the cluster applies
+(#63):
+
+```text
+1 cluster
+  cluster:6aad75f596d137f02ba6fae9  fred  Running  aws
+    strata-live-profile@1.0.0  6aac455f9dde9487f9889fe7  cluster
+    strata-live-addon@1.0.0    6aac455cb6a81bf97d926581  add-on
+```
+
+The uid, name, and version of each listed profile equal those of the profiles in
+a full cluster record, so the option reads the same source as `snapshot
+cluster:<uid>` for one request in place of four.
+
+The compare of the release record against the cluster it runs on named that
+cluster among the consumers of the version:
+
+```text
+consumers  strata-live-profile@1.0.0 has 1 consumer; fred is one of them
+```
+
+The cluster listing named no profile: see
+[What the cluster listing answers](../internals/palette.md#what-the-cluster-listing-answers).
+
 ## registry-move.sh
 
 Run `20260917T150025Z`, flag on, provider 0.30.1. All 16 checks passed.

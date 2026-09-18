@@ -46,6 +46,8 @@ check snapshot-release 0 "record the version the cluster runs" -- \
   "$strata" snapshot "$P" --raw-dir raw/release -o release.json
 check compare-release-cluster 0 "#1: a cluster that runs the recorded version is IDENTICAL" -- \
   "$strata" compare release.json "cluster:$C/$N"
+check consumers-line-names-the-cluster 0 "the compare of a record against its cluster names that cluster among the consumers of the version" -- \
+  grep -qE '^consumers  .* has 1 consumer; .* is one of them$' compare-release-cluster.out
 check snapshot-addon 0 "record the add-on profile version the cluster runs" -- \
   "$strata" snapshot "$AD" --raw-dir raw/addon -o addon.json
 check compare-addon-cluster 0 "#23: the add-on record is IDENTICAL to the cluster's add-on selection" -- \
@@ -88,8 +90,9 @@ check applied-is-what-the-cluster-runs 0 "#63: the listed profiles are those the
     list-applied-json.out
 check cluster-listing 0 "#63: read the cluster listing that strata lists clusters from" -- \
   "$live/tenant.sh" listing
-check listing-profile-fields '?' "#63: the fields of the cluster listing whose name holds 'profile'" -- \
-  jq -r '[(.items // [])[] | paths | join(".")] | map(select(test("profile"; "i"))) | unique | .[]' \
+check listing-profile-fields 0 "#63: the fields of the cluster listing whose name holds 'profile'" -- \
+  jq -er '[(if type == "array" then . else (.items // []) end)[] | paths | join(".")]
+          | map(select(test("profile"; "i"))) | unique | join(" ")' \
     cluster-listing.out
 
 # ---- #4: candidate

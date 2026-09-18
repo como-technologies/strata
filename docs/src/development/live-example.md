@@ -7,7 +7,7 @@ check that needs them. [Live runs](./live-runs.md) records the results, and
 
 | Script | Checks |
 | --- | --- |
-| `verify.sh` | Release against run (#1), consumers (#12), candidates (#4, #21), pack-ref digests (#2, #3), a cluster with two profiles (#23). Read-only. |
+| `verify.sh` | Release against run (#1), consumers (#12), the profiles a cluster applies (#63), candidates (#4, #21), pack-ref digests (#2, #3), a cluster with two profiles (#23). Read-only. |
 | `in-place.sh off`, `in-place.sh on` | An edit in place and a version bump of a version that two clusters run, with the immutable-clusterprofiles flag off and on (#27). |
 | `registry-move.sh` | A pack moved to an OCI registry, and `same-release --allow registry-move` (#24). |
 | `tag-only.sh` | Versions that differ only in a tag name, a cluster move, and a rename in place (#19). |
@@ -52,7 +52,7 @@ its end.
 | `tf.sh` | Runs `tofu` with the key and the Palette address that strata uses. |
 | `lib.sh` | What the scripts share: the checks and their summary, the applies, the wait for a cluster, and the baseline. |
 | `baseline.sh` | Checks that the example is at its baseline. Each script needs it before it starts and after it ends. |
-| `tenant.sh` | Read-only lookups: the names for `terraform.tfvars`, the state of a cluster and what holds it, diagnostics, the repave check of Palette, and a pack digest from its Helm or OCI registry. |
+| `tenant.sh` | Read-only lookups: the names for `terraform.tfvars`, the state of a cluster and what holds it, the cluster listing itself, diagnostics, the repave check of Palette, and a pack digest from its Helm or OCI registry. |
 | `diagnose.sh` | Saves diagnostics for each cluster in the state. The scripts and `just live-up` and `just live-down` run it when an apply fails or a wait stops. |
 | `verify.sh` | Runs each read-only check, and writes `runs/<UTC time>/`. |
 | `in-place.sh` | The edit in place test (#27). |

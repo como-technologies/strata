@@ -249,6 +249,27 @@ dependency to test it with. It is written down because the next person to split
 a profile will meet it, and because it is the reason to finish #58 when a tenant
 with such a pack is at hand.
 
+## What the cluster listing answers
+
+`GET /v1/dashboard/spectroclusters/meta` is the listing that `strata list
+clusters` reads. Run `20260918T175802Z` recorded its answer for the cluster
+`fred`, which applies two profiles. The answer names no profile. Each entry
+holds:
+
+| Part | Fields |
+| --- | --- |
+| `metadata` | `name`, `uid`, `creationTimestamp`, `lastModifiedTimestamp`, `deletionTimestamp`, the labels, and the annotations `projectUid`, `scope`, `scopeVisibility`, `ownerUid`, `tenantUid`, and `permissions` |
+| `spec` | `cloudType`, `cloudAccountUid`, `cloudRegion`, `clusterType`, `archType`, `location`, and `tags` |
+| `status` | `state` |
+
+So the profiles a cluster applies need the cluster document itself, `GET
+/v1/spectroclusters/{uid}`, and its `spec.clusterProfileTemplates`. That is one
+request for each cluster, which is why `strata list clusters --applied` asks for
+them and a plain `strata list` does not.
+
+The listing answers a JSON array at the top level, not an object with `items`.
+Strata reads both shapes.
+
 ## What no run covers
 
 - A pack version pushed again under the same tag, for any registry kind. It is
