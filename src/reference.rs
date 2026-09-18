@@ -89,6 +89,11 @@ impl Ref {
                 };
             }
         }
+        // A ref that is shaped like a path is a file, whether or not the file is there: the loader
+        // then says which file is missing, instead of Palette answering 404 for a uid it never had.
+        if looks_like_a_path(text) {
+            return Ref::Snapshot(PathBuf::from(text));
+        }
         if let Some((name, version)) = text.rsplit_once('@') {
             if !name.is_empty() && !version.is_empty() {
                 return Ref::NameVersion {
@@ -124,9 +129,73 @@ impl fmt::Display for Ref {
     }
 }
 
+/// True when a ref reads as a file path: a separator, a file extension this tool writes, or a
+/// leading `.`, `..` or `~`. A uid, a name, and a name@version hold none of these.
+fn looks_like_a_path(text: &str) -> bool {
+    text.contains('/')
+        || text.contains('\\')
+        || text.starts_with('.')
+        || text.starts_with('~')
+        || [".json", ".yaml", ".yml"]
+            .iter()
+            .any(|end| text.ends_with(end))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_ref_shaped_like_a_path_is_a_file_even_when_the_file_is_not_there() {
+        let no_files = |_: &Path| false;
+        for text in [
+            "/tmp/strata-live-profile-1.1.0.json",
+            "releases/dev.json",
+            "./dev.json",
+            "../dev.json",
+            "~/records/dev.json",
+            "dev.json",
+            "candidate.yaml",
+            "candidate.yml",
+            "C:\\records\\dev.json",
+            // a file whose name carries a version: the path wins over name@version
+            "/tmp/aws-stack@1.1.1.json",
+        ] {
+            assert_eq!(
+                Ref::parse_with(text, no_files),
+                Ref::Snapshot(PathBuf::from(text)),
+                "{text} reads as a file"
+            );
+        }
+
+        // and the forms that are not paths keep their meaning
+        assert_eq!(
+            Ref::parse_with("aws-stack@1.1.1", no_files),
+            Ref::NameVersion {
+                name: "aws-stack".into(),
+                version: "1.1.1".into()
+            }
+        );
+        assert_eq!(
+            Ref::parse_with("64f0a1", no_files),
+            Ref::Uid("64f0a1".into())
+        );
+        assert_eq!(
+            Ref::parse_with("cluster:payments/aws-stack", no_files),
+            Ref::Cluster {
+                uid: "payments".into(),
+                profile: Some("aws-stack".into())
+            }
+        );
+        assert_eq!(
+            Ref::parse_with("pack:Public Repo/csi-aws-ebs@1.65.0", no_files),
+            Ref::Pack {
+                registry: Some("Public Repo".into()),
+                name: "csi-aws-ebs".into(),
+                version: "1.65.0".into()
+            }
+        );
+    }
 
     #[test]
     fn parse_forms() {

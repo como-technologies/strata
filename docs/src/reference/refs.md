@@ -43,6 +43,17 @@ A ref names the thing that a command reads.
   cluster.
 - **A file.** Strata checks for a file first: a ref that names a file that
   exists is a file. A file that is not a strata snapshot is `not-snapshot`.
+  A ref that is *shaped* like a path is a file too, whether or not the file is
+  there: it holds a `/` or a `\`, it starts with `.`, `..` or `~`, or it ends
+  with `.json`, `.yaml` or `.yml`. So a record that is missing, or misspelled,
+  is the error `io` that names the file, and Palette is asked nothing:
+
+  ```text
+  strata: /tmp/dev.json: No such file or directory (os error 2)
+  ```
+
+  A uid, a name, and a `name@version` hold none of those, so they still reach
+  Palette.
 
 ## Which commands take which refs
 

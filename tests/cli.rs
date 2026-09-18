@@ -716,6 +716,31 @@ fn schema_subcommand_prints_json_schema() {
 }
 
 #[test]
+fn a_record_that_is_not_there_names_the_file_and_asks_palette_nothing() {
+    let fx = fixtures();
+    let missing = fx._dir.path().join("releases/dev.json");
+    let r = run(&["compare", missing.to_str().unwrap(), &fx.b]);
+    assert_eq!(r.code, 2, "stderr: {}", r.err);
+    assert!(
+        r.err.contains("releases/dev.json") && r.err.contains("No such file"),
+        "the error names the file that is not there: {}",
+        r.err
+    );
+    assert!(
+        !r.err.contains("clusterprofiles") && !r.err.contains("404"),
+        "and nothing was asked of Palette: {}",
+        r.err
+    );
+
+    // the same in JSON mode, as an io error with the path
+    let r = run(&["compare", "--json", missing.to_str().unwrap(), &fx.b]);
+    assert_eq!(r.code, 2);
+    let e: serde_json::Value = serde_json::from_str(r.err.trim()).unwrap();
+    assert_eq!(e["error"]["kind"], "io");
+    assert!(e["error"]["path"].as_str().unwrap().ends_with("dev.json"));
+}
+
+#[test]
 fn json_mode_writes_one_structured_error_line_on_stderr() {
     let fx = fixtures();
     let not_snapshot = fx.raw.join("a/profile.json");
@@ -733,10 +758,11 @@ fn json_mode_writes_one_structured_error_line_on_stderr() {
         .unwrap()
         .ends_with("profile.json"));
 
-    // the issue's example: a ref that is not a file is a uid, which needs credentials
+    // a ref that is not a file is a uid or a name, which needs credentials. A ref shaped like a
+    // path is a file, and a missing one is the io error above, before any credential is read.
     let home = tempfile::tempdir().unwrap();
     let r = run_in(
-        &["compare", "--json", &fx.a, "missing.json"],
+        &["compare", "--json", &fx.a, "aws-stack@1.1.1"],
         &[("HOME", home.path().to_str().unwrap())],
         &["PALETTE_API_KEY", "SPECTROCLOUD_APIKEY"],
     );
