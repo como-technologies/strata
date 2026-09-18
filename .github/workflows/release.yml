@@ -57,7 +57,8 @@ jobs:
         working-directory: dist
         run: |
           # a CI job on any host downloads one release: the binary and the scripts that use it
-          cp ../scripts/pr-comment.sh ../scripts/verify-report.sh ../scripts/install-strata.sh .
+          cp ../scripts/pr-comment.sh ../scripts/merge-gate.sh ../scripts/verify-report.sh \
+            ../scripts/install-strata.sh .
           sha256sum strata-* *.sh > SHA256SUMS
           files=(strata-* *.sh SHA256SUMS)
           for f in "${files[@]}"; do

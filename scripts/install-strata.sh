@@ -3,9 +3,9 @@
 #
 #   scripts/install-strata.sh [--version vX.Y.Z] [--dir DIR] [--repo OWNER/REPO] [--target TARGET]
 #
-# Downloads the binary for this machine, SHA256SUMS, pr-comment.sh and verify-report.sh into DIR
-# (default .strata), checks the checksums, and prints the path of the binary. A job then sets
-# STRATA_BIN to that path and runs DIR/pr-comment.sh or DIR/verify-report.sh.
+# Downloads the binary for this machine, SHA256SUMS, and the CI scripts pr-comment.sh,
+# merge-gate.sh and verify-report.sh into DIR (default .strata), checks the checksums, and prints
+# the path of the binary. A job then sets STRATA_BIN to that path and runs DIR/<script>.
 #
 # --version defaults to STRATA_VERSION, and latest means the latest release. A private repository
 # needs a token that can read it in STRATA_TOKEN, GITHUB_TOKEN or GH_TOKEN; a public one needs no
@@ -70,7 +70,7 @@ get "$release_url" "$work/release.json" || die "could not read the release $vers
 tag=$(jq -r '.tag_name // empty' "$work/release.json")
 [ -n "$tag" ] || die "the answer for $version is not a release: $(head -c 200 "$work/release.json")"
 
-want=("strata-$target" SHA256SUMS pr-comment.sh verify-report.sh)
+want=("strata-$target" SHA256SUMS pr-comment.sh merge-gate.sh verify-report.sh)
 for name in "${want[@]}"; do
   id=$(jq -r --arg n "$name" '.assets[] | select(.name == $n) | .id' "$work/release.json" | sed -n 1p)
   [ -n "$id" ] || die "the release $tag has no $name"
@@ -91,7 +91,7 @@ done
 
 mv "$work/strata-$target" "$dir/strata"
 chmod +x "$dir/strata"
-for name in pr-comment.sh verify-report.sh; do
+for name in pr-comment.sh merge-gate.sh verify-report.sh; do
   mv "$work/$name" "$dir/$name"
   chmod +x "$dir/$name"
 done

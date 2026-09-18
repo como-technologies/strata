@@ -676,6 +676,7 @@ fn release() -> tempfile::TempDir {
         ("2", "pr-comment.sh", "#!/bin/sh\necho comment\n"),
         ("3", "verify-report.sh", "#!/bin/sh\necho report\n"),
         ("4", "install-strata.sh", "#!/bin/sh\necho installer\n"),
+        ("6", "merge-gate.sh", "#!/bin/sh\necho gate\n"),
     ];
     let mut sums = String::new();
     let mut listed = Vec::new();
@@ -750,13 +751,24 @@ fn install_strata_takes_the_binary_and_the_scripts_of_one_release_and_checks_the
         "here/strata",
         "the path of the binary, for STRATA_BIN"
     );
-    for name in ["strata", "pr-comment.sh", "verify-report.sh", "SHA256SUMS"] {
+    for name in [
+        "strata",
+        "pr-comment.sh",
+        "merge-gate.sh",
+        "verify-report.sh",
+        "SHA256SUMS",
+    ] {
         assert!(d.join("here").join(name).exists(), "{name} is installed");
     }
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        for name in ["strata", "pr-comment.sh", "verify-report.sh"] {
+        for name in [
+            "strata",
+            "pr-comment.sh",
+            "merge-gate.sh",
+            "verify-report.sh",
+        ] {
             let mode = std::fs::metadata(d.join("here").join(name))
                 .unwrap()
                 .permissions()
