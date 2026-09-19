@@ -30,8 +30,10 @@ Exit `0`.
 {{#include ../output/retire-gate.txt}}
 ```
 
-Put the delete after `&&`. It runs only on exit `0`. A cluster that strata
-cannot read still counts, so the delete does not run.
+Strata deletes nothing. The delete is your own command, from the Spectro Cloud
+provider, the Palette API, or the console. Put it after `&&`, so it runs only on
+exit `0`. A cluster that strata cannot read still counts, so the delete does not
+run.
 
 ## 4. The clusters in a script
 
@@ -43,7 +45,9 @@ The third column is the version that the copy of each cluster names.
 
 ## What to do
 
-- After you delete a version, `verify` reports `ERROR` for its record. Keep the
-  record for the history, but move it out of the pattern of the scheduled check.
+- After you delete a version, its record no longer verifies: `verify` of that
+  one record exits `2`, and `verify --summary` over many records counts it as
+  `ERROR`. Keep the record for the history, and move it out of the pattern that
+  the scheduled check reads.
 - `consumers` asks Palette at the time of the command. Run it immediately before
   the delete.

@@ -6,14 +6,14 @@ Some teams promote packs from one registry to another, for example from a
 staging registry to a production registry. They then pin the profile to the new
 registry. The pack is the same build with the same tag, version, and values. But
 the registry uid, the pack uid, the digest, and often the pack type change. So
-the roots differ, and an exact check fails.
+the roots differ, and `same-release` fails without `--allow registry-move`.
 
 In this example, the prod copy of `aws-stack@1.1.1` takes `csi-aws-ebs` 1.65.0
 from the OCI registry `Palette Registry`. The dev copy takes it from the Public
 Repo. The Public Repo values come from the live run `20260917T150025Z`. The
 uid of the OCI registry and the pack uid it gives are stand-ins.
 
-## 1. The exact check fails
+## 1. same-release fails without the option
 
 ```text
 {{#include ../output/move-exact.txt}}

@@ -56,9 +56,10 @@ registry, under another pack uid and digest. That is the pattern of
 {{#include ../output/packs-latest.txt}}
 ```
 
-`strata packs <name>` lists them, newest first, with the tags that point at
-each. `--latest` answers the question a bump asks: is the pin the current
-version? See [packs](../commands/packs.md).
+`strata packs <name> --latest` gives the newest version in each registry, with
+the tags that point at it, which is the question a bump asks: is the pin the
+current version? Without `--latest` the command lists every version. See
+[packs](../commands/packs.md).
 
 ## 4. Record a version, and check it later
 
