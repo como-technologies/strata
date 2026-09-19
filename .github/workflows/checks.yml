@@ -60,9 +60,12 @@ jobs:
       - uses: ./.github/actions/build
         with:
           target: x86_64-unknown-linux-musl
+      # the name carries the `checks-` prefix on purpose: release.yml calls this workflow, and its
+      # own build job uploads `strata-<target>`. Two artifacts of one name in one run collide, and
+      # v0.6.3 published this job's bare `strata` in place of the release binary.
       - uses: actions/upload-artifact@v7
         with:
-          name: strata-x86_64-unknown-linux-musl
+          name: checks-strata-x86_64-unknown-linux-musl
           path: target/x86_64-unknown-linux-musl/release/strata
           if-no-files-found: error
 

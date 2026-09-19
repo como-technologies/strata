@@ -56,8 +56,23 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/download-artifact@v8
         with:
+          pattern: strata-*
           path: dist
           merge-multiple: true
+      # a release with a target missing is worse than no release: v0.6.3 shipped without
+      # strata-x86_64-unknown-linux-musl, and only the install job afterwards found it
+      - name: every target is here
+        working-directory: dist
+        run: |
+          missing=0
+          for t in x86_64-unknown-linux-musl aarch64-unknown-linux-musl \
+                   aarch64-apple-darwin x86_64-apple-darwin; do
+            [ -f "strata-$t" ] || { echo "::error::the build of $t is not here"; missing=1; }
+          done
+          for f in *; do
+            case "$f" in strata-*) ;; *) echo "::error::$f is not a target binary"; missing=1 ;; esac
+          done
+          [ "$missing" = 0 ]
       # installer v4 installs cosign 3, whose bundle format current verifiers read; there is no floating v4 tag
       - uses: sigstore/cosign-installer@v4.1.2
       - name: checksums and signatures
