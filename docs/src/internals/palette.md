@@ -270,15 +270,11 @@ them and a plain `strata list` does not.
 The listing answers a JSON array at the top level, not an object with `items`.
 Strata reads both shapes.
 
-A cluster that is deleted leaves the listing, and its record stays. On
-2026-09-18, after OpenTofu destroyed `fred`, `strata list clusters` in its
-project answered `no clusters`, and `GET /v1/spectroclusters/<uid>` still
-answered `200` with the state `Deleted`. So a name resolves through the listing
-to the clusters that are there, and a uid still reads a cluster that is gone.
-This matters to `cluster:<name>`, which `Palette::cluster_uid_named` resolves
-through this listing: a cluster deleted and built again under one name does not
-make the name ambiguous. One destroy through the provider is the whole of the
-evidence; a deletion by another path may differ.
+A deleted cluster leaves this listing, and keeps its record: the listing holds
+the clusters that are there, and `GET /v1/spectroclusters/<uid>` still answers
+`200` with the state `Deleted`. So `cluster:<name>`, which
+`Palette::cluster_uid_named` resolves through the listing, does not go ambiguous
+when one name is deleted and built again.
 
 ## What no run covers
 
@@ -290,3 +286,6 @@ evidence; a deletion by another path may differ.
 - Whether a required pack constraint reaches beyond the packs of one profile.
   No pack in the visible registries declares a dependency, so no run here can
   test it; a team reported that it does not, above.
+- Deletion. No run records it. That a deleted cluster leaves the cluster listing
+  comes from one teardown through the provider, read by hand, and another path
+  to a deletion may answer differently.
