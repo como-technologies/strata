@@ -5,9 +5,9 @@
 A registry can give one pack build several tag names. The Public Repo gives the
 `ubuntu-aws` build of version 24.04 the tags `LTS__24.x`, `LTS__24.4.x`, and
 `LTS__24.04`, all with one pack uid. Palette stores the tag that the author of
-the profile picked, and a tag can read the same as the version: a profile from
-the Spectro Cloud provider pins the tag `24.04`. The tag is part of
-`IDENTITY`, so two such roots differ, although the nodes run the same build.
+the profile picked. A tag can also read the same as the version: a profile from
+the Spectro Cloud provider pins the tag `24.04`. The tag is part of `IDENTITY`,
+so two such roots differ, although the nodes run the same build.
 
 In this example, `aws-stack@1.1.3` is `aws-stack@1.1.1` with the OS pack pinned as
 `24.04` in place of `LTS__24.x`.

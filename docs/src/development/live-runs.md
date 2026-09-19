@@ -571,8 +571,8 @@ states what the answers show.
 
 [What Palette does](../internals/palette.md) states some results from runs
 before the ones above. Each one is a run of a script on this page, with an
-earlier strata or an earlier fixture. They are here so each run id in the book
-has a record.
+earlier strata or an earlier fixture. The rows are here so that each run id in
+the book has a record.
 
 | Run | Script, strata | Result | What the notes take from it |
 | --- | --- | --- | --- |

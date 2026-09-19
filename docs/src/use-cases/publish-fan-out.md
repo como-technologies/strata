@@ -154,6 +154,6 @@ clusters as well as the profiles. See
 - Compare the two versions in the bump merge request, and let the gate read the
   merge result.
 - Run the same checks in a terminal before the push.
-- Strata does not care how you divide the repositories. It reads refs and
+- Strata makes no rule about how you divide the repositories. It reads refs and
   records, so one repository for each level and one repository for everything
   ask the same questions, with the same commands.

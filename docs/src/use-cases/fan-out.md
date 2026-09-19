@@ -162,7 +162,6 @@ the reports, the markers and the exit codes. See
 - Verify the records on a schedule, and keep one issue open for each record that
   drifted.
 - Run `consumers` at the time of the delete, not before it.
-- A team that keeps one repository per pack, per profile and per cluster asks
-  the same questions one level up, where a publish opens the merge requests
-  instead of a person. See
-  [A publish fans out to what pins it](./publish-fan-out.md).
+- A team can keep one repository per pack, per profile, and per cluster. That
+  team asks the same questions one level up, where a publish opens the merge
+  requests. See [A publish fans out to what pins it](./publish-fan-out.md).

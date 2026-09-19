@@ -98,10 +98,10 @@ When a pack build has a new tag name and a manifest pack has a new uid, one note
 names both. When either side is a cluster, the edit note adds `or changed on a
 cluster`: a person can edit the pack values on a cluster.
 
-One more note comes after the pack lines, not after `root`:
+One more note comes after the pack lines, not after `root`. The line
 `note: pack order changed between the two profiles` says that the two sides
-apply their packs in a different order. The markdown report writes it as a
-quotation, `> note: pack order changed between the two profiles`.
+apply their packs in a different order. The markdown report writes the same line
+as a quotation.
 
 ## What to expect
 

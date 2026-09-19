@@ -16,7 +16,7 @@ check that needs them. [Live runs](./live-runs.md) records the results, and
 | `merge-gate.sh` | `scripts/ci/merge-gate.sh` over records of the live profiles, in a git repository that the script builds (#57). It needs the profiles, and no cluster. |
 
 The example uses AWS, because the recorded runs had an AWS cloud account. Strata
-does not care which cloud runs the cluster. For another cloud, change the cluster
+makes no rule about which cloud runs the cluster. For another cloud, change the cluster
 resource and the OS and CSI packs in `terraform/main.tf`.
 
 ## What it builds

@@ -57,8 +57,8 @@ shows each one: see
 [A cluster does not run its release](../use-cases/cluster-release.md).
 
 `--applied` reads each cluster, one request for each. Read the uid when you
-need the identity: a published version can be edited in place, so one
-`<name>@<version>` means two contents, and a bump can overwrite a uid, so one
+need the identity. A person can edit a published version in place, and then one
+`<name>@<version>` means two contents. A bump can overwrite a uid, and then one
 uid names two versions. A cluster that strata cannot read
 stays in the list with its error.
 

@@ -58,9 +58,8 @@ export, and waits. It runs no step and writes no output file, so a page can be
 tried by hand before its output is generated. It is also how a reader follows
 the book without a tenant.
 
-A chapter that changes its own tenant part way through calls `serve_here` at
-that point, and the playground serves the tenant that the page's steps before
-the change describe. The steps after it read the change in the page, because the
+A chapter that changes its own tenant calls `serve_here` at that point. The
+playground then serves the tenant that the steps before the change describe. The steps after it read the change in the page, because the
 playground does not make it. Put `serve_here` before an `edit`, a second publish
 under one name, or any other line that a step of the page is written to cause.
 
