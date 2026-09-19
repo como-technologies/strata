@@ -13,12 +13,18 @@ the **root**. Two versions with the same root are the same release.
 
 ```mermaid
 flowchart LR
-  pack["pack<br/>a build"] --> version["profile version<br/>a release"]
-  version --> cluster["cluster<br/>a run"]
-  version -- "strata snapshot" --> record[("record<br/>a JSON file")]
-  record -- "strata verify" --> version
-  record -- "strata compare" --> cluster
+  pack["pack version"] -- "a profile pins it" --> version["profile version"]
+  version -- "a cluster runs a copy" --> cluster["cluster"]
+  version -. "snapshot" .-> record[("record<br/>a file you keep")]
+  cluster -. "snapshot" .-> record
+  record -. "verify" .-> version
+  record -. "compare" .-> cluster
 ```
+
+A solid arrow is Palette: a profile version pins a pack version, and a cluster
+runs a copy of a profile version. A dotted arrow is strata, which only reads
+Palette and writes the record: `snapshot` writes one, `verify` asks whether
+Palette still holds what the record says, and `compare` reports what differs.
 
 | Question | Command |
 | --- | --- |
