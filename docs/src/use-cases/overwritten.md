@@ -71,6 +71,10 @@ version, and move the cluster to that version:
 {{#include ../output/overwritten-candidate.txt}}
 ```
 
+Strata writes the file, and stops there. You publish the version with the
+provider or the Palette API, and you move the cluster to it. See
+[The candidate file](../reference/candidate-file.md).
+
 ## What to do next
 
 Set the flag in the provider block:
@@ -91,7 +95,15 @@ then gives:
 {{#include ../output/overwritten-flag-verify.txt}}
 ```
 
-Set `skip_destroy` on each profile before the first bump with the flag. Without
-it, the provider deletes the replaced version, and Palette refuses the delete
-while a cluster runs it. See
+Set `skip_destroy` on each profile before the first bump with the flag. It is an
+argument of the profile resource, not of the provider block above:
+
+```hcl
+resource "spectrocloud_cluster_profile" "aws_stack" {
+  skip_destroy = true
+}
+```
+
+Without it, the provider deletes the replaced version, and Palette refuses the
+delete while a cluster runs it. See
 [What Palette does: version bumps](../internals/palette.md#version-bumps).

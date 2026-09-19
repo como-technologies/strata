@@ -1,2 +1,4 @@
 $ PALETTE_PROJECT=prod strata consumers aws-stack@1.1.1
+strata: looking up project prod
+strata: listing consumers of profile 64e1000000000000000000c3
 aws-stack@1.1.1 (uid 64e1000000000000000000c3): no consumers

@@ -639,7 +639,7 @@ show2 promote-record 0 'PALETTE_PROJECT=dev strata snapshot aws-stack@1.1.1 -o r
 show2 promote-record 0 'PALETTE_PROJECT=prod strata snapshot aws-stack@1.1.1 -o releases/1.1.1/prod.json'
 show promote-different 1 'strata same-release releases/1.1.1/dev.json releases/1.1.1/prod.json'
 show promote-compare 1 'strata compare releases/1.1.1/dev.json releases/1.1.1/prod.json'
-show promote-consumers 0 'PALETTE_PROJECT=prod strata consumers aws-stack@1.1.1'
+show2 promote-consumers 0 'PALETTE_PROJECT=prod strata consumers aws-stack@1.1.1'
 serve_here   # the page describes what follows: the second publish of the same content in prod
 empty_profiles "$PROD"
 profile $PROD $A111_PROD2 1.1.1 aws-stack@1.1.1

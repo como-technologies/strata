@@ -38,7 +38,9 @@ fails a pair because of the pack uid of a manifest pack.
 
 ## 4. A changed manifest still fails
 
-Here the prod manifest sets another Pod Security level:
+Here the two manifests differ in one line: prod sets the Pod Security level to
+`baseline`, and dev sets it to `restricted`. The report names the manifest and
+the hash, not the line:
 
 ```text
 {{#include ../output/manifest-different.txt}}

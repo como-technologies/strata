@@ -32,9 +32,16 @@ digest, with the same configuration. The impact `cluster-wide` comes from the
 layer and the flags, not from Palette. No live run moved a cluster between two
 such versions.
 
+The JSON document names the fields that moved. For each pack whose identity
+changed, it gives the pack uid, the registry uid, and the upstream digest on
+each side:
+
 ```text
 {{#include ../output/move-fields.txt}}
 ```
+
+The pack uid and the registry uid differ, and the upstream digest differs with
+them, because each registry stores its own copy of the build.
 
 ## 3. Accept a move, and nothing else
 

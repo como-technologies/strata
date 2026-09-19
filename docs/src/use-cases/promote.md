@@ -40,7 +40,8 @@ Do not edit the prod copy in place. Make sure that no cluster uses it:
 {{#include ../output/promote-consumers.txt}}
 ```
 
-Delete it, and publish it again from the same source as dev. Palette gives the
+Strata publishes nothing. Delete that copy and publish it again from the source
+that dev came from, with the provider or the Palette API. Palette gives the
 new copy a new uid. Record it again:
 
 ```text
@@ -54,7 +55,8 @@ new copy a new uid. Record it again:
 
 - Publish each project from one source: a candidate file or one OpenTofu module.
 - Run `same-release` after each promotion, before a cluster moves. Give the
-  records in promotion order: `dev.json test.json prod.json`.
+  records in promotion order, `dev.json prod.json`, and add a record for each
+  project that a release passes through.
 - When a cluster already uses the wrong copy, do not delete it. Publish a new
   version from the approved source, and move the cluster to it.
 
