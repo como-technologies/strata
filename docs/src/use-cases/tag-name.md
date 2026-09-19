@@ -35,8 +35,14 @@ counts the packs with a new tag name.
 
 ## 3. A rename in place is still drift
 
-A rename of the tag on a published version changes no build, but it edits a
-published version:
+Record 1.1.2 while it still pins the tag `24.04`:
+
+```text
+{{#include ../output/tag-record.txt}}
+```
+
+Somebody then renames that tag on the published version, to `LTS__24.04`. A
+rename changes no build, but it edits a published version:
 
 ```text
 {{#include ../output/tag-verify.txt}}

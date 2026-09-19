@@ -16,7 +16,11 @@ In this example, `dev` has three clusters:
 | `search` | `aws-stack@1.1.1` |
 | `ledger` | `aws-stack@1.1.0`, with one value edited on the cluster |
 
-The release record is `releases/1.1.0/dev.json`.
+Record the release first. Every step below compares a cluster against this file:
+
+```text
+{{#include ../output/cluster-release-record.txt}}
+```
 
 ## 1. What each cluster runs
 

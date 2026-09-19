@@ -21,6 +21,13 @@ The uid `...c3` names `1.2.0` now.
 
 ## 2. The record of the version
 
+The steps below check two records that the team wrote before the bump: the
+version, and the cluster that runs it.
+
+```text
+{{#include ../output/overwritten-records.txt}}
+```
+
 ```text
 {{#include ../output/overwritten-verify.txt}}
 ```

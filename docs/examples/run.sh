@@ -81,25 +81,34 @@ chapter_env=()
 # serve_wait: the playground. The tenant of the chapter is built, so say how to reach it and
 # wait for the person to stop the script.
 serve_wait() {
-  local port project=dev uid e
+  local port project="" uid e scope
   port=$(cat "$work/port")
   for e in "${chapter_env[@]+"${chapter_env[@]}"}"; do
     case "$e" in PALETTE_PROJECT=*) project=${e#PALETTE_PROJECT=} ;; esac
   done
-  # the uid, not the name: PALETTE_PROJECT_UID has priority, so it beats a ~/.palette.env that
-  # points at a real tenant
-  uid=$(jq -r --arg n "$project" '.items[] | select(.metadata.name == $n) | .metadata.uid' \
-    "$tenant/tenant/v1/dashboard/projects/metadata.json" 2> /dev/null | head -1)
+  # A chapter that names no project runs at tenant scope, and its pages teach the scope itself.
+  # Telling that reader to export a project would answer the question the page asks, so the
+  # scope line unsets both variables instead. PALETTE_PROJECT_UID has priority either way, so
+  # each line beats a ~/.palette.env that points at a real tenant.
+  if [ -n "$project" ]; then
+    uid=$(jq -r --arg n "$project" '.items[] | select(.metadata.name == $n) | .metadata.uid' \
+      "$tenant/tenant/v1/dashboard/projects/metadata.json" 2> /dev/null | head -1)
+    scope="export PALETTE_PROJECT_UID=$uid            # the project \"$project\""
+  else
+    scope="unset PALETTE_PROJECT_UID PALETTE_PROJECT     # this chapter is tenant scope"
+  fi
   cat <<EOF
 
-The tenant of the chapter "$serve" is served on this machine. Export these three, and the commands
-of the book run as the book prints them:
+The tenant of the chapter "$serve" is served on this machine. Export these, and the commands of
+the book run as the book prints them:
 
 export PALETTE_API=http://127.0.0.1:$port
 export PALETTE_API_KEY=docs-example-key
-export PALETTE_PROJECT_UID=$uid            # the project "$project"
+$scope
 
-The three beat a ~/.palette.env that names a real tenant. For example:
+They beat a ~/.palette.env that names a real tenant. When a page describes a change to this
+tenant -- an edit in place, a version bump, a second publish under one name -- the playground
+serves the tenant as the steps before that change see it. For example:
 
   strata list
   strata compare aws-stack@1.0.0 aws-stack@1.1.0
@@ -113,6 +122,16 @@ EOF
     sleep 1
   done
   exit 0
+}
+
+# serve_here: the playground hands the tenant over at this line, and builds no more of the
+# chapter. A chapter that changes its own tenant part way through -- an edit in place, a version
+# bump, a second publish under one name -- serves the state that its page's first steps describe,
+# instead of the state after the change those steps are written to cause. Nothing happens when
+# the script builds the book.
+serve_here() {
+  [ -n "$serve" ] && [ -n "$served" ] || return 0
+  serve_wait
 }
 
 # chapter NAME [VAR=VALUE]...: an empty tenant, a new working directory, and the environment of
@@ -525,7 +544,7 @@ chapter review PALETTE_PROJECT=dev
 projects dev=$DEV
 registries $DEV
 profile $DEV $A100 1.0.0 aws-stack@1.0.0
-quiet 'strata snapshot aws-stack@1.0.0 -o releases/1.0.0/dev.json'
+show2 review-record 0 'strata snapshot aws-stack@1.0.0 -o releases/1.0.0/dev.json'
 cat > "$dir/aws-stack.yaml" <<'YAML'
 name: aws-stack
 version: 1.1.0
@@ -621,6 +640,7 @@ show2 promote-record 0 'PALETTE_PROJECT=prod strata snapshot aws-stack@1.1.1 -o 
 show promote-different 1 'strata same-release releases/1.1.1/dev.json releases/1.1.1/prod.json'
 show promote-compare 1 'strata compare releases/1.1.1/dev.json releases/1.1.1/prod.json'
 show promote-consumers 0 'PALETTE_PROJECT=prod strata consumers aws-stack@1.1.1'
+serve_here   # the page describes what follows: the second publish of the same content in prod
 empty_profiles "$PROD"
 profile $PROD $A111_PROD2 1.1.1 aws-stack@1.1.1
 show2 promote-again 0 'PALETTE_PROJECT=prod strata snapshot aws-stack@1.1.1 -o releases/1.1.1/prod.json'
@@ -636,6 +656,7 @@ show move-exact 1 'strata same-release releases/1.1.1/dev.json releases/1.1.1/pr
 show move-compare 1 'strata compare releases/1.1.1/dev.json releases/1.1.1/prod.json'
 show move-fields 1 "strata compare releases/1.1.1/dev.json releases/1.1.1/prod.json --json | jq '.packs[] | select(.identity) | {name, a: .a | {packUid, registryUid, upstream}, b: .b | {packUid, registryUid, upstream}}'"
 show move-allow 0 'strata same-release --allow registry-move releases/1.1.1/dev.json releases/1.1.1/prod.json'
+serve_here   # the page describes what follows: the move of the pack to the other registry
 empty_profiles "$PROD"
 profile $PROD $A111_PROD 1.1.1 aws-stack@1.1.1 "$OCI_CSI | $RETAIN"
 quiet 'PALETTE_PROJECT=prod strata snapshot aws-stack@1.1.1 -o releases/1.1.1/prod.json'
@@ -648,7 +669,8 @@ profile $DEV $A112 1.1.2 aws-stack@1.1.1 "$TAG_2404"
 show tag-compare 1 'strata compare aws-stack@1.1.1 aws-stack@1.1.2'
 show tag-same 0 'strata same-release aws-stack@1.1.1 aws-stack@1.1.2'
 show tag-json 1 "strata compare aws-stack@1.1.1 aws-stack@1.1.2 --json | jq '{same, sameContent, maxImpact: .summary.maxImpact, renamed: [.packs[] | select(.tagRenamed) | .name]}'"
-quiet 'strata snapshot aws-stack@1.1.2 -o releases/1.1.2/dev.json'
+show2 tag-record 0 'strata snapshot aws-stack@1.1.2 -o releases/1.1.2/dev.json'
+serve_here   # the page describes what follows: the tag rename that the page reports as drift
 edit $DEV $A112 "$TAG_LTS2404"
 show tag-verify 1 'strata verify releases/1.1.2/dev.json'
 
@@ -661,6 +683,7 @@ show2 manifest-record 0 'PALETTE_PROJECT=dev strata snapshot platform-addons@1.0
 show2 manifest-record 0 'PALETTE_PROJECT=prod strata snapshot platform-addons@1.0.0 -o addons/1.0.0/prod.json'
 show manifest-compare 1 'strata compare addons/1.0.0/dev.json addons/1.0.0/prod.json'
 show manifest-same 0 'strata same-release addons/1.0.0/dev.json addons/1.0.0/prod.json'
+serve_here   # the page describes what follows: the second publish of one manifest under another profile
 empty_profiles "$PROD"
 addons $PROD $ADDONS_PROD 64e3000000000000000000d1 baseline
 quiet 'PALETTE_PROJECT=prod strata snapshot platform-addons@1.0.0 -o addons/1.0.0/prod.json'
@@ -673,6 +696,7 @@ cluster $DEV $PAYMENTS payments $A111
 show2 edited-record 0 'strata snapshot aws-stack@1.1.1 -o releases/1.1.1/dev.json'
 show2 edited-record 0 'strata snapshot cluster:payments -o runs/payments.json'
 show edited-verify-ok 0 'strata verify releases/1.1.1/dev.json'
+serve_here   # the page describes what follows: the edit in place that the page reports as drift
 edit $DEV $A111 "$RETAIN"
 show edited-verify 1 'strata verify releases/1.1.1/dev.json'
 show edited-compare 1 'strata compare releases/1.1.1/dev.json aws-stack@1.1.1'
@@ -689,8 +713,9 @@ chapter overwritten PALETTE_PROJECT=dev
 projects dev=$DEV
 profile $DEV $A111 1.1.1 aws-stack@1.1.1
 cluster $DEV $PAYMENTS payments $A111
-quiet 'strata snapshot aws-stack@1.1.1 -o releases/1.1.1/dev.json'
-quiet 'strata snapshot cluster:payments -o runs/payments.json'
+show2 overwritten-records 0 'strata snapshot aws-stack@1.1.1 -o releases/1.1.1/dev.json'
+show2 overwritten-records 0 'strata snapshot cluster:payments -o runs/payments.json'
+serve_here   # the page describes what follows: the version bump that overwrites 1.1.1
 edit $DEV $A111 ".spec.version = \"1.2.0\" | $RETAIN"
 show overwritten-list 0 'strata list profiles'
 show overwritten-verify 1 'strata verify releases/1.1.1/dev.json'
@@ -713,7 +738,7 @@ cluster $DEV $PAYMENTS payments $A110 $ADDONS_DEV
 cluster $DEV $SEARCH search $A111
 cluster $DEV $LEDGER ledger $A110
 on_cluster $DEV $LEDGER "(.spec.clusterProfileTemplates[].packs[] | select(.name == \"csi-aws-ebs\") | .values) |= sub(\"reclaimPolicy: Delete\"; \"reclaimPolicy: Retain\")"
-quiet 'strata snapshot aws-stack@1.1.0 -o releases/1.1.0/dev.json'
+show2 cluster-release-record 0 'strata snapshot aws-stack@1.1.0 -o releases/1.1.0/dev.json'
 show cluster-applied 0 'strata list clusters --applied'
 show cluster-identical 0 'strata compare releases/1.1.0/dev.json cluster:payments/aws-stack'
 show cluster-all-profiles 1 'strata compare releases/1.1.0/dev.json cluster:payments'
@@ -728,7 +753,7 @@ profile $DEV $A111 1.1.1 aws-stack@1.1.1
 cluster $DEV $PAYMENTS payments $A111 -- platform_owner=team-payments
 cluster $DEV $SEARCH search $A111 -- platform_owner=team-search
 show values-compare 0 'strata compare cluster:payments cluster:search'
-quiet 'strata snapshot cluster:payments -o runs/payments.json'
+show2 cluster-values-record 0 'strata snapshot cluster:payments -o runs/payments.json'
 show values-record 0 'jq .source.cluster.variables runs/payments.json'
 set_value $DEV $PAYMENTS platform_owner team-platform
 show values-verify 0 'strata verify runs/payments.json'

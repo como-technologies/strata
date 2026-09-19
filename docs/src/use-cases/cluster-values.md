@@ -21,6 +21,12 @@ each value that differs, as `<profile>.<variable>`.
 
 ## 2. The record keeps the values
 
+Record the cluster first:
+
+```text
+{{#include ../output/cluster-values-record.txt}}
+```
+
 ```text
 {{#include ../output/values-record.txt}}
 ```
