@@ -14,6 +14,7 @@ strata schema diff > diff.schema.json
 | `chain` | `strata-chain/1`: `same-release --json` |
 | `consumers` | `strata-consumers/1`: `consumers --json` |
 | `list` | `strata-list/1`: `list --json` |
+| `packs` | `strata-packs/1`: `packs --json` |
 | `candidate` | the candidate file |
 
 ```text

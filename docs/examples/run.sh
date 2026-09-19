@@ -448,6 +448,7 @@ A111=64e0000000000000000000c3
 A111_PROD=64e1000000000000000000c3
 A111_PROD2=64e1000000000000000000c4
 A112=64e0000000000000000000d4
+A113=64e0000000000000000000d5
 A120=64e0000000000000000000e5
 ADDONS_DEV=64e2000000000000000000a1
 ADDONS_PROD=64e3000000000000000000a1
@@ -673,14 +674,14 @@ show move-allow-edited 1 'strata same-release --allow registry-move releases/1.1
 chapter tag-name PALETTE_PROJECT=dev
 projects dev=$DEV
 profile $DEV $A111 1.1.1 aws-stack@1.1.1
-profile $DEV $A112 1.1.2 aws-stack@1.1.1 "$TAG_2404"
-show tag-compare 1 'strata compare aws-stack@1.1.1 aws-stack@1.1.2'
-show tag-same 0 'strata same-release aws-stack@1.1.1 aws-stack@1.1.2'
-show tag-json 1 "strata compare aws-stack@1.1.1 aws-stack@1.1.2 --json | jq '{same, sameContent, maxImpact: .summary.maxImpact, renamed: [.packs[] | select(.tagRenamed) | .name]}'"
-show2 tag-record 0 'strata snapshot aws-stack@1.1.2 -o releases/1.1.2/dev.json'
+profile $DEV $A113 1.1.3 aws-stack@1.1.1 "$TAG_2404"
+show tag-compare 1 'strata compare aws-stack@1.1.1 aws-stack@1.1.3'
+show tag-same 0 'strata same-release aws-stack@1.1.1 aws-stack@1.1.3'
+show tag-json 1 "strata compare aws-stack@1.1.1 aws-stack@1.1.3 --json | jq '{same, sameContent, maxImpact: .summary.maxImpact, renamed: [.packs[] | select(.tagRenamed) | .name]}'"
+show2 tag-record 0 'strata snapshot aws-stack@1.1.3 -o releases/1.1.3/dev.json'
 serve_here   # the page describes what follows: the tag rename that the page reports as drift
-edit $DEV $A112 "$TAG_LTS2404"
-show tag-verify 1 'strata verify releases/1.1.2/dev.json'
+edit $DEV $A113 "$TAG_LTS2404"
+show tag-verify 1 'strata verify releases/1.1.3/dev.json'
 
 chapter manifest-pack
 projects dev=$DEV prod=$PROD

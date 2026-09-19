@@ -49,8 +49,9 @@ after no other error. The wait starts at one second, doubles, and stops at 30
 seconds. `STRATA_RETRIES` sets the number of retries, and `0` stops them.
 
 Strata obeys a `Retry-After` of up to `STRATA_MAX_RETRY_AFTER` seconds, 300 by
-default. A longer one stops the command at once with exit `2` and the error
-`retry-after-too-long`. A scheduled job then stops early, and can run again at a
+default. A longer one stops the command at once with exit `2`. The error is
+`retry-after-too-long` while a retry remains, and `api` on the last attempt, so
+also with `STRATA_RETRIES=0`. A scheduled job then stops early, and can run again at a
 later time.
 
 [Settings](./reference/settings.md) lists each variable and its default.

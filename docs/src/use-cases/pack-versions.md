@@ -85,6 +85,14 @@ sets on top of them, and no manifests or params, because those belong to a
 profile. To compare what a profile does with a pack, compare the profile
 versions: [Review a change before you publish it](./review.md).
 
+## What to do
+
+- Pin the version, not a floating tag, when the build must not move. A tag can
+  point at another build later.
+- Record the pack, and verify the record on a schedule. `verify` reads the
+  registry again, and answers `DRIFT` with exit `1`.
+- Name the registry with `--registry` when two registries hold the pack name.
+
 ## Palette behavior
 
 A registry answers `@latest` with the highest version it holds, and `strata

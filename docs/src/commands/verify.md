@@ -55,6 +55,8 @@ document shape.
 | `DRIFT: published version <v> now names <v2>: the version recorded <time> was overwritten in place` | The uid holds another version now. | `1` |
 | `DRIFT: cluster <c> runs <v>, but uid <uid> now names <version>: the version was overwritten in place` | A cluster record: its profile uid holds another version now. | `1` |
 | `DRIFT: cluster <c> runs <v>, but uid <uid> no longer exists` | A cluster record: its profile uid is gone. | `1` |
+| `OK: pack <name>@<version> in registry <r> is unchanged since <time>` | A pack record: the registry holds the recorded copy. | `0` |
+| `DRIFT: pack <name>@<version> in registry <r> differs from the copy recorded <time>` | A pack record: the registry holds other content now. | `1` |
 
 Each verdict of a cluster record ends with `; N variable value changed` when the
 cluster gives a variable another value than the record holds.

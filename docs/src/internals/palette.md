@@ -288,6 +288,6 @@ when one name is deleted and built again.
   test it; a team reported that it does not, above.
 - A change to the value a cluster gives a profile variable. No run makes one, so
   no run shows whether Palette records it as a change to the cluster.
-- Deletion. No run records it. That a deleted cluster leaves the cluster listing
-  comes from one teardown through the provider, read by hand, and another path
-  to a deletion may answer differently.
+- What the cluster listing shows after a deletion. That a deleted cluster leaves
+  the listing comes from one teardown through the provider, read by hand, and
+  another path to a deletion may answer differently.

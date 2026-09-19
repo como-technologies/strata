@@ -93,11 +93,15 @@ A `note` line follows `root` in these cases:
 | `the roots differ only by the packUid Palette mints for each profile's manifest pack` | One manifest in two profiles. The result is `SAME CONTENT`. | [One manifest in two profiles](../use-cases/manifest-pack.md) |
 | `both sides are <name>@<version> (uid <uid>): the version was edited in place` | One uid and one version, with two roots. | [A published version is edited in place](../use-cases/edited-in-place.md) |
 | `uid <uid> is <name>@<a> on one side and <name>@<b> on the other` | One uid under two versions. Strata prints one note for each such uid, also under `IDENTICAL`. `verify` leaves it out when its verdict already names the overwrite. | [A version bump overwrites a version](../use-cases/overwritten.md) |
-| `pack order changed between the two profiles` | The two sides apply their packs in a different order. | |
 
 When a pack build has a new tag name and a manifest pack has a new uid, one note
 names both. When either side is a cluster, the edit note adds `or changed on a
 cluster`: a person can edit the pack values on a cluster.
+
+One more note comes after the pack lines, not after `root`:
+`note: pack order changed between the two profiles` says that the two sides
+apply their packs in a different order. The markdown report writes it as a
+quotation, `> note: pack order changed between the two profiles`.
 
 ## What to expect
 

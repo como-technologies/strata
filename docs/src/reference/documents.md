@@ -14,6 +14,7 @@ document.
 | `strata-chain/1` | `same-release --json` | `chain` |
 | `strata-consumers/1` | `consumers --json` | `consumers` |
 | `strata-list/1` | `list --json` | `list` |
+| `strata-packs/1` | `packs --json` | `packs` |
 
 ## strata-snapshot/1
 
