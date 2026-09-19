@@ -5,7 +5,8 @@
 
 Record, compare, and check what Spectro Cloud Palette holds: cluster profile
 versions, the clusters that run them, and pack versions in a registry. A
-published profile version is a release.
+published profile version is what Palette builds a cluster from. Strata calls it
+a release.
 
 A profile version is a stack of packs: OS, Kubernetes, CNI, CSI, and add-ons.
 Palette lets a person edit a published version in place, and each project holds

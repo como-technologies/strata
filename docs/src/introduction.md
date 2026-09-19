@@ -2,7 +2,8 @@
 
 Strata records, compares, and checks what Spectro Cloud Palette holds: a
 cluster profile version, the copy that a cluster runs, and a pack version in a
-registry. A published profile version is a release.
+registry. A published profile version is what Palette builds a cluster from.
+Strata calls it a release.
 
 A cluster profile is a stack of layers: OS, Kubernetes, CNI, CSI, and add-ons.
 Each layer is a pack with a version, a digest, and values. Palette lets a
@@ -71,9 +72,9 @@ builds.
 
 ## The rule
 
-A published profile version is a release. It has a name and a version. Do not
-change it after you publish it. To change a release, publish a new version.
-`strata verify` tells you when a person or a tool breaks this rule.
+A release does not change after you publish it. It keeps its name, its version,
+and its content. To change a release, publish a new version. `strata verify`
+tells you when a person or a tool breaks this rule.
 
 Strata reads Palette and writes files. It publishes nothing. It works in the
 same way when a team publishes with OpenTofu, the API, or the Palette console.
