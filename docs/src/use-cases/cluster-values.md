@@ -16,8 +16,12 @@ team name to `platform_owner`.
 {{#include ../output/values-compare.txt}}
 ```
 
-`IDENTICAL` and exit `0`: one release. The `cluster values CHANGED` block shows
-each value that differs, as `<profile>.<variable>`.
+`IDENTICAL` and exit `0`: one release. The report has two rows about variables,
+and they answer different questions. `variables` is the definitions the profile
+holds, which are part of the release and are equal here. `cluster values` is the
+value each cluster gives a variable, which is not part of the release. The
+`cluster values CHANGED` block shows each value that differs, as
+`<profile>.<variable>`. See [Report formats](../reference/formats.md).
 
 ## 2. The record keeps the values
 

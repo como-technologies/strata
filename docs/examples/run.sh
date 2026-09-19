@@ -93,7 +93,8 @@ serve_wait() {
   if [ -n "$project" ]; then
     uid=$(jq -r --arg n "$project" '.items[] | select(.metadata.name == $n) | .metadata.uid' \
       "$tenant/tenant/v1/dashboard/projects/metadata.json" 2> /dev/null | head -1)
-    scope="export PALETTE_PROJECT_UID=$uid            # the project \"$project\""
+    scope="export PALETTE_PROJECT=$project              # the book names the project
+export PALETTE_PROJECT_UID=$uid            # or its uid, which has priority"
   else
     scope="unset PALETTE_PROJECT_UID PALETTE_PROJECT     # this chapter is tenant scope"
   fi

@@ -83,10 +83,17 @@ tenant on this machine:
 just playground
 ```
 
-It prints three settings to export. A stand-in for the Palette API then answers
+It prints the settings to export. A stand-in for the Palette API then answers
 `strata list`, `strata compare aws-stack@1.0.0 aws-stack@1.1.0`,
 `cluster:payments`, and the rest, with no key and no cost. `just playground
 <chapter>` serves the tenant of another chapter of this book.
+
+Strata writes its report to standard output, and its progress to standard
+error. A block in this book that starts with a `strata:` line shows both. A
+block that shows the report alone has the progress dropped, or the command
+carries `--quiet`. A page that describes a change to the tenant of its chapter
+gets the tenant as its first steps see it, and the page says what changes
+after that.
 
 With your own tenant, the same pages read your profile names.
 [The offline examples](./development/examples.md) tells what `just examples`

@@ -23,7 +23,9 @@ consumers and its packs.
 {{#include ../output/list-pack-all.txt}}
 ```
 
-`strata list projects` gives the names for the loop.
+The loop names each project. `strata list projects` gives the names, one for
+each line of its own report, and a script reads them from
+`strata list projects --json`.
 
 ## 3. Get one line for each match
 
