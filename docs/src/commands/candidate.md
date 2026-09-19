@@ -30,8 +30,39 @@ pipeline publishes the version. Strata tells you what that version will be.
   version. Then run `strata same-release candidate.json published.json`. Exit
   `0` says that the two are one release.
 
-This command writes the first file for you. Write the next one by hand, or from
-the version before it.
+This command writes the first file for you. Write the next one by hand, from the
+version before it, or from what your repository already holds.
+
+## Write one from your own source
+
+A team that publishes with a pipeline already describes each profile somewhere:
+a YAML file of layers, a Terraform module, a chart of values. A candidate file
+is a second view of that description, in the form strata reads, and a job writes
+it beside the source. The fields it needs are few:
+
+| The candidate asks for | Your source usually calls it | When it is missing |
+| --- | --- | --- |
+| `name`, `version` | the profile and the version to publish | required; the name is the name in Palette, with whatever prefix your pipeline adds |
+| `type`, `cloudType` | the kind of profile and its cloud | `type` is `cluster` by default |
+| `layers[].name`, `layers[].version` | each pack and its version | required |
+| `layers[].registry` | the registry a layer comes from | a top-level `registry` covers every layer that names none |
+| `layers[].valuesFile` | the values file of a pack | with no `values` and no `valuesFile`, the layer gets the default values of the pack |
+| `layers[].tag` | the tag, when it is not the version | the tag that equals the version, or the first tag of that version |
+| `variables[]` | the profile variables | none |
+
+Two rules decide whether the roots agree, so a job that writes candidates must
+follow them:
+
+- **The version is the tag by default.** When your pipeline pins a pack by a tag
+  that is not the version, the candidate must say `tag`.
+- **Palette's spelling wins.** Strata takes the form Palette returns, so a
+  variable field such as `display_name` is `displayName` in the candidate.
+
+Prove the mapping once, before a pipeline depends on it: write a candidate from
+a version that Palette already has, and check that the two are one release. The
+steps below do exactly that, and
+[Build the snapshot of a candidate](#build-the-snapshot-of-a-candidate) shows
+the answer. Run it again when the shape of your source changes.
 
 The examples use the project `dev`, which holds `aws-stack@1.1.1`.
 

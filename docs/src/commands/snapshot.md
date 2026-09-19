@@ -77,6 +77,20 @@ snapshot at tenant scope.
 [strata candidate](./candidate.md) and
 [Review a change before you publish it](../use-cases/review.md).
 
+## Where to keep a record
+
+A record is a file. Strata reads it and writes it, and asks nothing about where
+it is. Two places are common, and they answer different questions:
+
+| Where | What it gives | What it costs |
+| --- | --- | --- |
+| The repository, beside the code that publishes | A review, an author, and a date for each release. `git log` on the file says which commit pinned a release. | The job that publishes must push. |
+| An object store, beside the state of the pipeline | Every job that publishes already writes there, and nothing new needs a token that pushes. | The history is the store's, not the repository's. |
+
+`verify` takes a pattern, so a directory of records is one command:
+`strata verify "releases/*.json" --summary`. Read them from the store into a
+directory first when they live outside the repository.
+
 ## What to expect
 
 - Exit `0`, or `2` on an error.

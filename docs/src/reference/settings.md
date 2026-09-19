@@ -31,6 +31,16 @@ Strata obeys a `Retry-After` in seconds, and ignores one that gives a date.
 one command. `--project ''` is tenant scope. `list` and `verify` take these
 options.
 
+## The address in a pipeline
+
+Strata reads the address from `PALETTE_API`, then `SPECTROCLOUD_HOST`, and from
+no other variable. If the tools around it name the address differently, a job
+that sets only that name leaves strata on the default address, and strata says
+nothing: the requests go to `https://api.spectrocloud.com`. Export
+`SPECTROCLOUD_HOST` as well, which the Spectro Cloud provider reads too, so one
+value gives strata and OpenTofu one Palette. The key reads the same way, from
+`PALETTE_API_KEY`, then `SPECTROCLOUD_APIKEY`.
+
 ## The live example
 
 The scripts in `examples/live/` read the same key and address. They pass the
