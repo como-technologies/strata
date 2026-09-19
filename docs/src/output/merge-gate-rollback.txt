@@ -8,5 +8,5 @@ ROLLBACK: releases/dev.json returns to aws-stack@1.0.0, declared in a commit of 
   csi/csi-aws-ebs: main has 1.65.0, the merge result has 1.63.1
   main pinned this release before, on 2026-09-10 in 8c1d4f2
   the branch wrote this record after main moved to aws-stack@1.1.0
-merge-gate: 1 records: 0 behind main, 1 declared rollback, 0 did not verify
+merge-gate: 1 record: 0 behind main, 1 declared rollback, 0 did not verify
 merge-gate: the merge result is clear against main

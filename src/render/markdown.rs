@@ -60,8 +60,9 @@ impl Renderer for MarkdownRenderer {
         ));
         if consumers_comparable(d) {
             o.push_str(&format!(
-                "| consumers | {} clusters | {} clusters |\n",
-                d.a.consumers.count, d.b.consumers.count
+                "| consumers | {} | {} |\n",
+                count_of(d.a.consumers.count, "cluster"),
+                count_of(d.b.consumers.count, "cluster")
             ));
         }
         o.push_str(&format!(

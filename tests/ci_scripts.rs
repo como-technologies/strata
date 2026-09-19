@@ -1158,7 +1158,7 @@ fn merge_gate_stops_a_branch_that_would_replace_a_newer_pin() {
         "the report gives the line that declares a rollback:\n{out}"
     );
     assert!(
-        text(&o.stderr).contains("1 records: 1 behind main"),
+        text(&o.stderr).contains("1 record: 1 behind main"),
         "{}",
         text(&o.stderr)
     );
@@ -1199,7 +1199,7 @@ fn merge_gate_passes_a_rollback_that_a_commit_declares() {
         "the evidence confirms that main ran this release:\n{out}"
     );
     assert!(
-        text(&o.stderr).contains("1 records: 0 behind main, 1 declared rollback"),
+        text(&o.stderr).contains("1 record: 0 behind main, 1 declared rollback"),
         "{}",
         text(&o.stderr)
     );

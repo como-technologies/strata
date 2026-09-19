@@ -1,4 +1,4 @@
 $ strata same-release addons/1.0.0/dev.json addons/1.0.0/prod.json
 DIFFERENT      addons/1.0.0/dev.json -> addons/1.0.0/prod.json   root b49f91f9df85 -> 17b743feafeb
                pack addon/namespace-policy AUTHORED: manifest namespace-policy changed
-NOT THE SAME RELEASE: 1 of 1 pairs failed
+NOT THE SAME RELEASE: 1 of 1 pair failed

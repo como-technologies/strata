@@ -230,7 +230,10 @@ for f in "${files[@]}"; do
   fi
 done
 
-note "${#files[@]} records: ${#behind[@]} behind $base, ${#rolled[@]} declared rollback, ${#unverified[@]} did not verify"
+plural() { # plural COUNT SINGULAR: "1 record", "2 records", "no records"
+  case "$1" in 0) echo "no ${2}s" ;; 1) echo "1 $2" ;; *) echo "$1 ${2}s" ;; esac
+}
+note "$(plural ${#files[@]} record): ${#behind[@]} behind $base, ${#rolled[@]} declared rollback, ${#unverified[@]} did not verify"
 if [ ${#behind[@]} -gt 0 ] || [ ${#unverified[@]} -gt 0 ]; then
   note "the merge button must wait: settle the records above, then push again"
   exit 1

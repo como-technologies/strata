@@ -241,7 +241,9 @@ while IFS= read -r record <&3; do
   fi
 done 3< <(jq -c '.records[]' "$work/summary.json")
 
-line="$((unchanged + drifted + errors)) records: $unchanged unchanged, $drifted drifted, $errors could not be checked"
+total=$((unchanged + drifted + errors))
+case "$total" in 1) records="1 record" ;; *) records="$total records" ;; esac
+line="$records: $unchanged unchanged, $drifted drifted, $errors could not be checked"
 for a in "${actions[@]+"${actions[@]}"}"; do
   line="$line; $a"
 done

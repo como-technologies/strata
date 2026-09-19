@@ -8,7 +8,7 @@ $ scripts/ci/verify-report.sh 'releases/**/*.json' 'runs/*.json' --dry-run
 |---|---|---|
 | uid | `64e0000000000000000000c3` | `64e0000000000000000000c3` |
 | root | `088136c929bd` | `78a86f401545` |
-| consumers | 1 clusters | 2 clusters |
+| consumers | 1 cluster | 2 clusters |
 | fetched | 2026-09-17T09:30:00Z | 2026-09-17T09:30:00Z |
 
 **Result:** CHANGED · max impact: `cluster-wide` · packs: 1 changed, 0 added, 0 removed, 4 unchanged · variables: unchanged

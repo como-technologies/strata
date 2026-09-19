@@ -538,7 +538,7 @@ fn same_release_checks_consecutive_records_with_an_optional_registry_move_policy
         "{first}"
     );
     assert!(
-        r.out.contains("NOT THE SAME RELEASE: 1 of 1 pairs failed"),
+        r.out.contains("NOT THE SAME RELEASE: 1 of 1 pair failed"),
         "{}",
         r.out
     );

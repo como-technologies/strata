@@ -1,4 +1,4 @@
 $ scripts/ci/merge-gate.sh "releases/*.json" --base main
 merge-gate: the branch already carries origin/main; the checkout is the merge result
-merge-gate: 1 records: 0 behind main, 0 declared rollback, 0 did not verify
+merge-gate: 1 record: 0 behind main, 0 declared rollback, 0 did not verify
 merge-gate: the merge result is clear against main

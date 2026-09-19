@@ -197,14 +197,19 @@ pub(crate) fn pair_detail(p: &Pair) -> String {
     }
 }
 
-/// `SAME RELEASE: 2 pairs passed`, or `NOT THE SAME RELEASE: 1 of 2 pairs failed`.
+/// `SAME RELEASE: 2 pairs passed`, or `NOT THE SAME RELEASE: 1 of 2 pairs failed`. One pair is
+/// a pair, not `1 pairs`: the reports count in the singular for one.
 pub(crate) fn chain_verdict(c: &Chain) -> String {
     if c.same {
-        format!("SAME RELEASE: {} pairs passed", c.summary.passed)
+        format!(
+            "SAME RELEASE: {} passed",
+            count_of(c.summary.passed, "pair")
+        )
     } else {
         format!(
-            "NOT THE SAME RELEASE: {} of {} pairs failed",
-            c.summary.failed, c.summary.pairs
+            "NOT THE SAME RELEASE: {} of {} failed",
+            c.summary.failed,
+            count_of(c.summary.pairs, "pair")
         )
     }
 }
@@ -394,12 +399,15 @@ pub(crate) fn record_detail(r: &crate::ops::VerifiedRecord) -> String {
     }
 }
 
-/// `3 records: 2 unchanged, 1 drifted, 0 errors`.
+/// `3 records: 2 unchanged, 1 drifted, 0 errors`, and `1 record` for one.
 pub(crate) fn counts_line(s: &VerifySummary) -> String {
     let c = &s.summary;
     format!(
-        "{} records: {} unchanged, {} drifted, {} errors",
-        c.records, c.unchanged, c.drifted, c.errors
+        "{}: {} unchanged, {} drifted, {}",
+        count_of(c.records, "record"),
+        c.unchanged,
+        c.drifted,
+        count_of(c.errors, "error")
     )
 }
 

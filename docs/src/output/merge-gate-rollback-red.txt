@@ -11,5 +11,5 @@ BEHIND: releases/dev.json would replace what main pinned with an older version
   a rollback says so, in a commit of the branch:
     Rollback: releases/dev.json to aws-stack@1.0.0
   or in the rollback label, which gives the job --allow-rollback.
-merge-gate: 1 records: 1 behind main, 0 declared rollback, 0 did not verify
+merge-gate: 1 record: 1 behind main, 0 declared rollback, 0 did not verify
 merge-gate: the merge button must wait: settle the records above, then push again

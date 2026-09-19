@@ -1,3 +1,3 @@
 $ strata same-release candidate.json published.json
 IDENTICAL      candidate.json -> published.json   root 088136c929bd
-SAME RELEASE: 1 pairs passed
+SAME RELEASE: 1 pair passed
