@@ -270,6 +270,16 @@ them and a plain `strata list` does not.
 The listing answers a JSON array at the top level, not an object with `items`.
 Strata reads both shapes.
 
+A cluster that is deleted leaves the listing, and its record stays. On
+2026-09-18, after OpenTofu destroyed `fred`, `strata list clusters` in its
+project answered `no clusters`, and `GET /v1/spectroclusters/<uid>` still
+answered `200` with the state `Deleted`. So a name resolves through the listing
+to the clusters that are there, and a uid still reads a cluster that is gone.
+This matters to `cluster:<name>`, which `Palette::cluster_uid_named` resolves
+through this listing: a cluster deleted and built again under one name does not
+make the name ambiguous. One destroy through the provider is the whole of the
+evidence; a deletion by another path may differ.
+
 ## What no run covers
 
 - A pack version pushed again under the same tag, for any registry kind. It is
