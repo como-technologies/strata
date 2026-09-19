@@ -60,6 +60,10 @@ gate merges the default branch in first, and checks the merge result:
 {{#include ../output/merge-gate-behind.txt}}
 ```
 
+The gate reads a git history, which the playground does not build. This block
+comes from the repository that [The merge gate](../automation/merge-gate.md)
+describes.
+
 This branch would have pinned `aws-stack@1.0.0` over the `1.1.0` that another
 merge request landed. Git merged it without a word, because the developer
 settled the conflict by keeping their own record. The cluster would have been
@@ -95,7 +99,7 @@ and make sure it is the release that was reviewed:
 
 Exit `0`: the record of the published version and the candidate that the team
 reviewed are one release. A promotion to the next environment asks the same
-question of two records:
+question of the records it passes through, in promotion order:
 
 ```bash
 strata same-release releases/dev.json releases/test.json releases/prod.json

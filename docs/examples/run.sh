@@ -90,6 +90,9 @@ serve_wait() {
   # Telling that reader to export a project would answer the question the page asks, so the
   # scope line unsets both variables instead. PALETTE_PROJECT_UID has priority either way, so
   # each line beats a ~/.palette.env that points at a real tenant.
+  local others
+  others=$(jq -r '.items[] | "#   \(.metadata.name)  \(.metadata.uid)"' \
+    "$tenant/tenant/v1/dashboard/projects/metadata.json" 2> /dev/null)
   if [ -n "$project" ]; then
     uid=$(jq -r --arg n "$project" '.items[] | select(.metadata.name == $n) | .metadata.uid' \
       "$tenant/tenant/v1/dashboard/projects/metadata.json" 2> /dev/null | head -1)
@@ -106,6 +109,9 @@ the book run as the book prints them:
 export PALETTE_API=http://127.0.0.1:$port
 export PALETTE_API_KEY=docs-example-key
 $scope
+
+# every project of this tenant, for a page that reads more than one:
+$others
 
 They beat a ~/.palette.env that names a real tenant. When a page describes a change to this
 tenant -- an edit in place, a version bump, a second publish under one name -- the playground
@@ -569,6 +575,7 @@ show review-markdown 1 'strata compare releases/1.0.0/dev.json candidate.json --
 show review-repave 1 "strata compare releases/1.0.0/dev.json candidate.json --json | jq -r '.packs[] | select(.impact.level == \"repave\") | \"\(.name): \(.impact.text)\"'"
 show2 review-pr-comment 0 'scripts/ci/pr-comment.sh releases/1.0.0/dev.json candidate.json --dry-run > comment.md'
 show review-pr-comment 0 'head -3 comment.md'
+serve_here   # the page describes what follows: the publication of the reviewed version
 profile $DEV $A110 1.1.0 aws-stack@1.1.0
 show2 review-published 0 'strata snapshot aws-stack@1.1.0 -o releases/1.1.0/dev.json'
 show review-same 0 'strata same-release candidate.json releases/1.1.0/dev.json'

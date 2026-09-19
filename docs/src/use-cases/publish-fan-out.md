@@ -23,7 +23,7 @@ artifact of the publish, and the publish job writes it:
 
 ```bash
 # in the publish job of a profile repository, after Palette holds the version
-strata snapshot identity@1.0.1 -o releases/identity/1.0.1.json
+strata snapshot aws-stack@1.1.1 -o releases/1.1.1/dev.json
 ```
 
 Without that file, a later question has nothing to ask. With it, every check
@@ -52,7 +52,7 @@ A bump merge request says "1.0.0 becomes 1.0.1". That is not a review. The
 comparison is:
 
 ```text
-{{#include ../output/pack-compare.txt:1:11}}
+{{#include ../output/pack-compare.txt}}
 ```
 
 Put it in the merge request with
@@ -78,9 +78,9 @@ A job that lowers a pin on purpose — a pack version is withdrawn, so the bump
 pins the one before it — writes the declaration in the commit it makes:
 
 ```text
-Rollback: releases/identity/1.0.1.json to identity@1.0.0
+Rollback: releases/1.1.1/dev.json to aws-stack@1.1.0
 
-spire 1.0.1 was withdrawn: the CRD pack and the server disagree on the namespace
+csi-aws-ebs 1.65.0 was withdrawn: the storage class and the driver disagree
 ```
 
 The gate then reports the rollback and passes. A human doing the same thing
@@ -108,7 +108,10 @@ backstop rather than the messenger.
 
 ## Before you retire a pack version
 
-The chain also answers the question that comes at the end of a version's life:
+The chain also answers the question that comes at the end of a version's life.
+Strata retires nothing: it names the clusters that still run a version, so a
+person or a job can decide. The block gives that answer for three versions of
+one profile:
 
 ```text
 {{#include ../output/list-pack-consumers.txt:1:6}}
