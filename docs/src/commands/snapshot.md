@@ -88,6 +88,12 @@ different question:
 | The repository, beside the code that publishes | A review, an author, and a date for each release. `git log` on the file says which commit pinned a release. | The job that publishes must push. |
 | An object store, beside the state of the pipeline | Every job that publishes already writes there, and nothing new needs a token that pushes. | The history is the store's, not the repository's. |
 
+The book uses two layouts. The use cases keep one record for each version, at
+`releases/<version>/<project>.json`, and one for each cluster, at
+`runs/<cluster>.json`. [A team pins each environment](../use-cases/fan-out.md)
+keeps one record for each environment, at `releases/<environment>.json`. Strata
+reads both.
+
 `verify` takes a pattern, so a directory of records is one command:
 `strata verify "releases/*.json" --summary`. Read them from the store into a
 directory first when they live outside the repository.

@@ -7,7 +7,7 @@ A ref names the thing that a command reads.
 | `<uid>` | the profile version with this uid | `64e0000000000000000000c3` |
 | `<name>@<version>` | the profile version with this name and version in the scope | `aws-stack@1.1.1` |
 | `<name>@latest` | the highest version of the name in the scope | `aws-stack@latest` |
-| `pack:<name>@<version>` | one pack version in a registry, with the values that the registry ships | `pack:csi-aws-ebs@1.65.0` |
+| `pack:<name>@<version>` | one pack version, when one registry has that name and version | `pack:kubernetes@1.36.2` |
 | `pack:<registry>/<name>@<version>` | the same, from the registry of that name or uid | `pack:Public Repo/csi-aws-ebs@1.65.0` |
 | `pack:<name>@latest` | the highest version of the pack in the registry | `pack:kubernetes@latest` |
 | `cluster:<cluster>` | each profile that the cluster runs, in the order that Palette applies them | `cluster:payments` |

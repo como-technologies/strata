@@ -57,8 +57,9 @@ shows each one: see
 [A cluster does not run its release](../use-cases/cluster-release.md).
 
 `--applied` reads each cluster, one request for each. Read the uid when you
-need the identity: a version can be overwritten in place, and then the same
-`<name>@<version>` names another release. A cluster that strata cannot read
+need the identity: a published version can be edited in place, so one
+`<name>@<version>` means two contents, and a bump can overwrite a uid, so one
+uid names two versions. A cluster that strata cannot read
 stays in the list with its error.
 
 ## Ask about one cluster
@@ -81,7 +82,8 @@ one is an answer:
 {{#include ../output/list-cluster-tenant.txt}}
 ```
 
-The two clusters have one name and run different versions. See
+The two clusters have one name. A name is not an identity: two clusters with
+one name can also run one version and different content. See
 [The same names in two projects](../use-cases/same-names.md).
 
 ## Find the profile versions that carry a pack

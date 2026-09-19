@@ -76,8 +76,8 @@ to `examples/profiles/`, so a page that reads a ref by name reads a file here:
 strata compare examples/profiles/aws-stack@1.0.0.json examples/profiles/aws-stack@1.1.0.json
 ```
 
-To run a page as it is printed, with the names and the clusters, serve the same
-tenant on this machine:
+To run the commands of a page, with the names and the clusters it prints, serve
+the same tenant on this machine:
 
 ```bash
 just playground

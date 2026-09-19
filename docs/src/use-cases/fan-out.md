@@ -1,5 +1,7 @@
 # A team pins each environment
 
+## The problem
+
 A dozen developers work in one repository. It holds one record for each
 environment, and CI builds the clusters from what the default branch holds:
 
@@ -101,16 +103,13 @@ Exit `0`: the record of the published version and the candidate that the team
 reviewed are one release. A promotion to the next environment asks the same
 question of the records it passes through, in promotion order:
 
-```bash
-strata same-release releases/dev.json releases/test.json releases/prod.json
-```
-
 ```text
 {{#include ../output/promote-same.txt}}
 ```
 
-Give the records in promotion order. See
-[Promote a release to another project](./promote.md).
+Give the records in promotion order. In the layout of this page that is
+`strata same-release releases/dev.json releases/test.json releases/prod.json`.
+See [Promote a release to another project](./promote.md).
 
 ## Every night, verify
 
@@ -135,7 +134,7 @@ The issue closes itself on the first run where the record verifies again. See
 | --- | --- |
 | Do two environments run one release? | `strata same-release releases/dev.json releases/prod.json` |
 | Do two clusters run one release? | `strata compare cluster:dev-a cluster:dev-b` |
-| Which profiles carry a pack version? | `strata list --pack csi-aws-ebs` |
+| Which profiles carry this pack? | `strata list --pack csi-aws-ebs` |
 | Which clusters use this profile version? | `strata consumers aws-stack@1.1.0` |
 | What changed between two pack versions? | `strata compare 'pack:Public Repo/csi-aws-ebs@1.63.1' 'pack:Public Repo/csi-aws-ebs@1.65.0'` |
 | Which version does the registry offer now? | `strata packs csi-aws-ebs --latest` |
@@ -155,6 +154,15 @@ Both hosts run the same three scripts, so a team that moves between them keeps
 the reports, the markers and the exit codes. See
 [GitLab CI](../automation/gitlab.md).
 
-A team that keeps one repository per pack, per profile and per cluster asks the
-same questions one level up, where a publish opens the merge requests instead of
-a person. See [A publish fans out to what pins it](./publish-fan-out.md).
+## What to do
+
+- Keep one record for each environment, and move an environment only with a
+  merge request that changes its record.
+- Run the comment job on each push, and make the gate a required check.
+- Verify the records on a schedule, and keep one issue open for each record that
+  drifted.
+- Run `consumers` at the time of the delete, not before it.
+- A team that keeps one repository per pack, per profile and per cluster asks
+  the same questions one level up, where a publish opens the merge requests
+  instead of a person. See
+  [A publish fans out to what pins it](./publish-fan-out.md).

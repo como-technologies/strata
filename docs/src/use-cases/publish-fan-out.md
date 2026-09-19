@@ -1,5 +1,7 @@
 # A publish fans out to what pins it
 
+## The problem
+
 Some teams keep one repository per pack, one per profile, and one per cluster.
 A merge in a pack repository publishes a pack version. A job then opens a bump
 merge request on each profile that pins that pack. Merging a bump publishes a
@@ -12,7 +14,7 @@ and each one was written against a level below that keeps moving.
 
 ## What each level holds, and what it records
 
-| Level | The repository holds | A merge publishes | The record |
+| Repository | The repository holds | A merge publishes | The record |
 | --- | --- | --- | --- |
 | pack | the pack content and its version | a pack version in a registry | the registry digest, which `pack:` reads |
 | profile | the pack versions that the profile pins | a profile version in Palette | `strata snapshot <name>@<version>` |
@@ -139,12 +141,19 @@ clusters as well as the profiles. See
 
 ## The checks at each level
 
-| Level | On a merge request | On the merge | On a schedule |
+| Repository | On a merge request | On the merge | On a schedule |
 | --- | --- | --- | --- |
 | pack | `compare pack:<registry>/<name>@<a> pack:<registry>/<name>@<b>` as the comment | the registry holds the digest | — |
 | profile | the comment, and the merge gate | `snapshot <name>@<version>` as the record | `verify` each record |
 | cluster | the comment, and the merge gate | `snapshot cluster:<name>` after the apply | `verify` each record, and `compare` the cluster with it |
 
-Strata does not care how you divide the repositories. It reads refs and
-records, so one repository for each level and one repository for everything ask
-the same questions, with the same commands.
+## What to do
+
+- Write the record in the publish job, at each level. A check that has no record
+  has nothing to ask.
+- Compare the two versions in the bump merge request, and let the gate read the
+  merge result.
+- Run the same checks in a terminal before the push.
+- Strata does not care how you divide the repositories. It reads refs and
+  records, so one repository for each level and one repository for everything
+  ask the same questions, with the same commands.

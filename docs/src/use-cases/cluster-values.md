@@ -60,3 +60,11 @@ sensitive variable was added or removed, but never that its value changed.
 - Use `compare` between clusters to find a value that one cluster sets wrong.
 - Do not treat a value change as drift. To keep a value fixed, make it part of
   the release: put it in the pack values, not in a variable.
+
+## Palette behavior
+
+A cluster holds its own value for each profile variable, and a person can change
+one on the cluster. No live run records such a change: see
+[What no run covers](../internals/palette.md#what-no-run-covers). What the runs
+do show is that a cluster keeps its own copy of a profile, at
+[Cluster copies](../internals/palette.md#cluster-copies).

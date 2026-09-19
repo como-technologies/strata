@@ -286,6 +286,8 @@ when one name is deleted and built again.
 - Whether a required pack constraint reaches beyond the packs of one profile.
   No pack in the visible registries declares a dependency, so no run here can
   test it; a team reported that it does not, above.
+- A change to the value a cluster gives a profile variable. No run makes one, so
+  no run shows whether Palette records it as a change to the cluster.
 - Deletion. No run records it. That a deleted cluster leaves the cluster listing
   comes from one teardown through the provider, read by hand, and another path
   to a deletion may answer differently.

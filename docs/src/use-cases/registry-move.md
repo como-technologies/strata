@@ -9,9 +9,12 @@ the registry uid, the pack uid, the digest, and often the pack type change. So
 the roots differ, and `same-release` fails without `--allow registry-move`.
 
 In this example, the prod copy of `aws-stack@1.1.1` takes `csi-aws-ebs` 1.65.0
-from the OCI registry `Palette Registry`. The dev copy takes it from the Public
-Repo. The Public Repo values come from the live run `20260917T150025Z`. The
+from the OCI pack registry `Palette Registry`. The dev copy takes it from the pack registry `Public Repo`. The Public Repo values come from the live run `20260917T150025Z`. The
 uid of the OCI registry and the pack uid it gives are stand-ins.
+
+Each side is a record of `aws-stack@1.1.1` in its own project, written with
+`strata snapshot` as in
+[Promote a release to another project](./promote.md).
 
 ## 1. same-release fails without the option
 
