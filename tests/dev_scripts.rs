@@ -88,11 +88,24 @@ fn the_playground_serves_the_tenant_of_one_chapter() {
     if !built.exists() || Command::new("python3").arg("--version").output().is_err() {
         return;
     }
+    // The LAST chapter, read from the file so a new chapter cannot make this stale. Serving the
+    // last one skips every chapter before it, so a statement that changes the tenant outside a
+    // guarded helper runs with no tenant to change, and kills the script. Serving an early
+    // chapter runs none of them, which is why this test passed while `just playground packs`
+    // failed for eleven chapters.
+    let script = std::fs::read_to_string(repo.join("docs/examples/run.sh")).unwrap();
+    let last = script
+        .lines()
+        .filter_map(|l| l.strip_prefix("chapter "))
+        .filter_map(|l| l.split_whitespace().next())
+        .next_back()
+        .expect("run.sh names at least one chapter")
+        .to_string();
     let dir = tempfile::tempdir().unwrap();
     let log = dir.path().join("serve.log");
     let mut child = Command::new("bash")
         .arg(repo.join("docs/examples/run.sh"))
-        .args(["--serve", "list"])
+        .args(["--serve", &last])
         .env("STRATA_BIN", env!("CARGO_BIN_EXE_strata"))
         .stdout(std::fs::File::create(&log).unwrap())
         .stderr(std::process::Stdio::null())

@@ -183,8 +183,18 @@ doc() {
   printf '%s\n' "$f"
 }
 
+# empty_profiles PROJECT: remove the profile documents of a project, so the chapter can publish
+# the same name again. Guarded like every other tenant helper: a skipped chapter builds no tenant,
+# and its paths do not exist.
+empty_profiles() {
+  [ -z "$skip" ] || return 0
+  rm -rf "${tenant:?}/$1/v1/clusterprofiles"
+  mkdir -p "$tenant/$1/v1/clusterprofiles"
+}
+
 # rewrite FILE FILTER: apply a jq program to FILE in place
 rewrite() {
+  [ -z "$skip" ] || return 0
   jq "$2" "$1" > "$1.new"
   mv "$1.new" "$1"
 }
@@ -611,7 +621,7 @@ show2 promote-record 0 'PALETTE_PROJECT=prod strata snapshot aws-stack@1.1.1 -o 
 show promote-different 1 'strata same-release releases/1.1.1/dev.json releases/1.1.1/prod.json'
 show promote-compare 1 'strata compare releases/1.1.1/dev.json releases/1.1.1/prod.json'
 show promote-consumers 0 'PALETTE_PROJECT=prod strata consumers aws-stack@1.1.1'
-find "$tenant/$PROD/v1/clusterprofiles" -mindepth 1 -delete
+empty_profiles "$PROD"
 profile $PROD $A111_PROD2 1.1.1 aws-stack@1.1.1
 show2 promote-again 0 'PALETTE_PROJECT=prod strata snapshot aws-stack@1.1.1 -o releases/1.1.1/prod.json'
 show promote-same 0 'strata same-release releases/1.1.1/dev.json releases/1.1.1/prod.json'
@@ -626,7 +636,7 @@ show move-exact 1 'strata same-release releases/1.1.1/dev.json releases/1.1.1/pr
 show move-compare 1 'strata compare releases/1.1.1/dev.json releases/1.1.1/prod.json'
 show move-fields 1 "strata compare releases/1.1.1/dev.json releases/1.1.1/prod.json --json | jq '.packs[] | select(.identity) | {name, a: .a | {packUid, registryUid, upstream}, b: .b | {packUid, registryUid, upstream}}'"
 show move-allow 0 'strata same-release --allow registry-move releases/1.1.1/dev.json releases/1.1.1/prod.json'
-find "$tenant/$PROD/v1/clusterprofiles" -mindepth 1 -delete
+empty_profiles "$PROD"
 profile $PROD $A111_PROD 1.1.1 aws-stack@1.1.1 "$OCI_CSI | $RETAIN"
 quiet 'PALETTE_PROJECT=prod strata snapshot aws-stack@1.1.1 -o releases/1.1.1/prod.json'
 show move-allow-edited 1 'strata same-release --allow registry-move releases/1.1.1/dev.json releases/1.1.1/prod.json'
@@ -651,7 +661,7 @@ show2 manifest-record 0 'PALETTE_PROJECT=dev strata snapshot platform-addons@1.0
 show2 manifest-record 0 'PALETTE_PROJECT=prod strata snapshot platform-addons@1.0.0 -o addons/1.0.0/prod.json'
 show manifest-compare 1 'strata compare addons/1.0.0/dev.json addons/1.0.0/prod.json'
 show manifest-same 0 'strata same-release addons/1.0.0/dev.json addons/1.0.0/prod.json'
-find "$tenant/$PROD/v1/clusterprofiles" -mindepth 1 -delete
+empty_profiles "$PROD"
 addons $PROD $ADDONS_PROD 64e3000000000000000000d1 baseline
 quiet 'PALETTE_PROJECT=prod strata snapshot platform-addons@1.0.0 -o addons/1.0.0/prod.json'
 show manifest-different 1 'strata same-release addons/1.0.0/dev.json addons/1.0.0/prod.json'
@@ -776,6 +786,12 @@ show2 auto-error 2 'strata compare aws-stack@1.1.1 aws-stack@9.9.9 --json --quie
 show2 auto-error-text 2 'strata compare aws-stack@1.1.1 aws-stack@9.9.9 --quiet'
 
 # ---- the result -------------------------------------------------------------------------------
+
+# --serve stops at the chapter after the one it serves. The last chapter has none after it, so it
+# is served here, where the chapters end.
+if [ -n "$serve" ] && [ -n "$served" ]; then
+  serve_wait
+fi
 
 if [ -n "$check" ]; then
   if ! diff -ru "$dest" "$out"; then
