@@ -8,8 +8,8 @@ identical content. The pack uid is part of `IDENTITY`, so two profiles with the
 same manifest never have the same root.
 
 In this example, `dev` and `prod` each have `platform-addons@1.0.0`, with one
-manifest pack and the same Namespace manifest. The pack uids are the two uids
-that Palette gave in the live runs.
+manifest pack and the same Namespace manifest. The two pack uids are stand-ins,
+of the shape Palette gives.
 
 ## 1. Record the version in each project
 

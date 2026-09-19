@@ -33,6 +33,9 @@ Record the cluster first:
 
 ## 3. A value changes on the cluster
 
+A person changes `platform_owner` on the cluster `payments` to `team-platform`,
+in Palette. The record of the cluster keeps the value from before that change:
+
 ```text
 {{#include ../output/values-verify.txt}}
 ```

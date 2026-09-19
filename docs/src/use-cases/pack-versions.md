@@ -19,8 +19,9 @@ registry and hashes it as it hashes that pack inside a profile.
 
 `IDENTITY` says the layer points at another pack build, `UPSTREAM` that the
 content digest moved, and `AUTHORED` that the values the registry ships
-changed. The lines under the values name each changed key: the image tags of
-the pack and of its sidecars. Exit `1`: the versions differ.
+changed. The lines under the values name each changed key. Here they are the
+image tags of the pack, its list of images, and one configuration file. Exit
+`1`: the versions differ.
 
 A version bump with no values change shows the first two flags alone, and the
 impact of the layer:

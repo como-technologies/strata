@@ -138,7 +138,7 @@ clusters as well as the profiles. See
 
 | Level | On a merge request | On the merge | On a schedule |
 | --- | --- | --- | --- |
-| pack | `compare pack:<name>@<a> pack:<name>@<b>` as the comment | the registry holds the digest | — |
+| pack | `compare pack:<registry>/<name>@<a> pack:<registry>/<name>@<b>` as the comment | the registry holds the digest | — |
 | profile | the comment, and the merge gate | `snapshot <name>@<version>` as the record | `verify` each record |
 | cluster | the comment, and the merge gate | `snapshot cluster:<name>` after the apply | `verify` each record, and `compare` the cluster with it |
 

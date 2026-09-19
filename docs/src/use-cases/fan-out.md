@@ -7,6 +7,11 @@ environment, and CI builds the clusters from what the default branch holds:
 releases/dev.json      releases/test.json      releases/stage.json      releases/prod.json
 ```
 
+One record for each environment is the layout of this page. The blocks below
+come from the pages that each step links to, and those pages keep one record
+for each version, at `releases/<version>/<project>.json`. Strata reads a record
+wherever it is: the layout is a choice of the team.
+
 Each change is a merge request. Many are open at once, and each one was written
 against the default branch as it was that morning. Four questions come up, and
 strata answers each one in a job.
@@ -110,9 +115,8 @@ place, a cluster can be changed by hand, and a profile can be deleted. The
 scheduled job checks each record against Palette, and keeps one issue open per
 record that drifted:
 
-```bash
-scripts/ci/verify-report.sh "releases/**/*.json"
-```
+The schedule covers the cluster records as well as the release records, so it
+gives both patterns:
 
 ````text
 {{#include ../output/edited-report.txt}}
@@ -129,7 +133,7 @@ The issue closes itself on the first run where the record verifies again. See
 | Do two clusters run one release? | `strata compare cluster:dev-a cluster:dev-b` |
 | Which profiles carry a pack version? | `strata list --pack csi-aws-ebs` |
 | Which clusters use this profile version? | `strata consumers aws-stack@1.1.0` |
-| What changed between two pack versions? | `strata compare pack:csi-aws-ebs@1.63.1 pack:csi-aws-ebs@1.65.0` |
+| What changed between two pack versions? | `strata compare 'pack:Public Repo/csi-aws-ebs@1.63.1' 'pack:Public Repo/csi-aws-ebs@1.65.0'` |
 | Which version does the registry offer now? | `strata packs csi-aws-ebs --latest` |
 
 The root of a record is the key that ties the fleet together: two records with

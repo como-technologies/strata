@@ -23,8 +23,10 @@ With no project, the name `payments` matches two clusters:
 {{#include ../output/names-ambiguous.txt}}
 ```
 
-Exit `2`. The error lists the uids. `strata list --cluster payments` gives the
-same two clusters, with the profile versions each one runs:
+Exit `2`. The error lists the uids. `strata list --cluster payments --project ''`
+gives the same two clusters, with the profile versions each one runs. The
+`--project ''` is tenant scope: without it, the command answers for one project
+and finds one cluster.
 
 ```text
 {{#include ../output/names-cluster.txt}}
@@ -57,8 +59,10 @@ Two clusters with one name and one version run different content.
 ## What to do
 
 - Set `PALETTE_PROJECT` for each command, or give `--project-name`.
-- In a script, use a uid: `cluster:64f1000000000000000000f1`. A uid also needs
-  the project of the cluster.
+- In a script, name the project and the uid together:
+  `PALETTE_PROJECT=prod strata snapshot cluster:64f1000000000000000000f1`. A uid
+  names one cluster, and it does not widen the scope: strata reads a cluster in
+  the project it works in.
 - Name the records by project: `dev-payments.json`, `prod-payments.json`.
 - To find the cause of the difference, see
   [Promote a release to another project](./promote.md).

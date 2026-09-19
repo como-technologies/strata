@@ -56,8 +56,9 @@ Exit `1`, with `SAME CONTENT` and no node impact.
   cluster between two such versions, and Palette replaced no node.
 - Pick one tag style for a team, so the roots of equal versions are equal.
 - A tag that names another build, with another version or pack uid, is an
-  `IDENTITY` change with the impact `repave`. This rule also applies to a
-  floating tag, because the profile stores a pack uid with it.
+  `IDENTITY` change with the impact `repave`. A floating tag is not covered: no
+  run shows whether Palette moves the pack uid of a profile when a new build
+  lands under a tag that the profile already pins.
 
 ## Palette behavior
 

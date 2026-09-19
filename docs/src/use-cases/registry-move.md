@@ -10,7 +10,8 @@ the roots differ, and an exact check fails.
 
 In this example, the prod copy of `aws-stack@1.1.1` takes `csi-aws-ebs` 1.65.0
 from the OCI registry `Palette Registry`. The dev copy takes it from the Public
-Repo. The field values come from the live run `20260917T150025Z`.
+Repo. The Public Repo values come from the live run `20260917T150025Z`. The
+uid of the OCI registry and the pack uid it gives are stand-ins.
 
 ## 1. The exact check fails
 

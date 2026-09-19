@@ -755,6 +755,7 @@ cluster $DEV $SEARCH search $A111 -- platform_owner=team-search
 show values-compare 0 'strata compare cluster:payments cluster:search'
 show2 cluster-values-record 0 'strata snapshot cluster:payments -o runs/payments.json'
 show values-record 0 'jq .source.cluster.variables runs/payments.json'
+serve_here   # the page describes what follows: the value a person changes on the cluster
 set_value $DEV $PAYMENTS platform_owner team-platform
 show values-verify 0 'strata verify runs/payments.json'
 

@@ -39,8 +39,11 @@ For each version with the pack, list its clusters:
 {{#include ../output/list-pack-consumers.txt}}
 ```
 
-Exit `1` names a version that a cluster still uses. See
-[strata consumers](../commands/consumers.md).
+Exit `1` names a version that a cluster still uses. `consumers` takes no project
+option, so the second command names the project in the environment.
+`PALETTE_PROJECT_UID` has priority over `PALETTE_PROJECT`, so unset the uid
+before you name a project by name. See
+[strata consumers](../commands/consumers.md) and [Configure](../configure.md).
 
 ## What to do
 
