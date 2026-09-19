@@ -106,7 +106,7 @@ directory first when they live outside the repository.
   release directory needs no `mkdir` first.
 - When a profile version has no published template, strata reads its draft.
   `source.template` names the one that it read: `published`, `draft`, `applied`
-  for a cluster, or `candidate`.
+  for a cluster, `candidate`, or `registry` for a pack record.
 
 ## Options
 

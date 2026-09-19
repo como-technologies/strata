@@ -393,8 +393,13 @@ undone    verify-report: 1 records: 1 unchanged, 0 drifted, 0 could not be check
 
 ## packs.sh
 
-The pack ref checks (#55), run `20260918T003543Z` with strata 0.5.2: read-only, no
-cluster, no cost. `just live-packs`. All 15 checks passed.
+The pack ref checks (#55) and the `packs` checks (#54), run `20260918T022255Z`
+with strata 0.5.2: read-only, no cluster, no cost. `just live-packs`. All 27
+checks passed. Run `20260918T003543Z` passed the first 15 of them, before the
+script got the `packs` checks.
+
+`packs-paged` read `kubernetes` from `Public Repo`, which answered with 133
+versions, so the listing passes the 100 of one page.
 
 The tenant holds `csi-aws-ebs` in two registries, `Public Repo` and the OCI
 registry `Palette Registry` that the registry-move run added, so a bare
@@ -437,6 +442,7 @@ the message reads the same on every run.
 | PASS | `packs-json` | 0 | 0 | #54: --json writes strata-packs/1 |
 | PASS | `packs-unknown-registry` | 2 | 2 | #54: an unknown registry is an error that lists the visible ones |
 | PASS | `packs-unknown-pack` | 2 | 2 | #54: a pack no registry has is pack-not-found |
+
 ## merge-gate.sh
 
 The merge gate (#57), run `20260918T003905Z` with strata 0.5.2: the live
@@ -560,3 +566,25 @@ states what the answers show.
 | `b-gone` | PASS 0 | PASS 0 | cluster B is deleted |
 | `a5-matches-addon` | PASS 0 | PASS 0 | cluster A runs the restored add-on version |
 | `baseline-after` | PASS 0 | PASS 0 | the live example is back at its baseline |
+
+## The earlier runs that the notes cite
+
+[What Palette does](../internals/palette.md) states some results from runs
+before the ones above. Each one is a run of a script on this page, with an
+earlier strata or an earlier fixture. They are here so each run id in the book
+has a record.
+
+| Run | Script, strata | Result | What the notes take from it |
+| --- | --- | --- | --- |
+| `20260916T175442Z` | `verify.sh`, 0.4.0 | 21 of 21 passed | The pack-ref digest table: a `spectro`, a `helm`, and an `oci` pack, each with the digest that Palette lists and the registry serves. |
+| `20260916T213303Z` | `in-place.sh off`, 0.4.0 | 26 of 26 passed | The first session of the edit in place. It gave the answers that the later sessions gave again. |
+| `20260916T233556Z` | `registry-move.sh`, 0.4.0 | 14 checks, one failed | The move policy needed an equal pack type, from a fixture that rewrote only the uids and the digests. The real pair failed with `IDENTITY: type spectro -> oci`. |
+| `20260916T233714Z` | `in-place.sh on`, 0.4.0 | 22 of 22 passed | The edit sent a manifest with no uid, so Palette replaced the manifest. `api.sh edit` keeps the uids since then. |
+| `20260917T003010Z` | `registry-move.sh`, 0.4.0 | 15 of 15 passed | The same move after the policy fix. |
+| `20260917T003054Z` | `in-place.sh on`, 0.4.0 | 44 of 44 passed | The second session of the edit in place, with the same answers. |
+| `20260918T020941Z` | a registry probe, read-only | no checks | What `GET /v1/packs/<name>/registries/<uid>` answers for one pack: `csi-aws-ebs` in `Public Repo`, 36 versions and 71 tags in about 1 MB. |
+
+The probe is not a script of the example. It is one read of the registry API,
+kept under `runs/20260918T020941Z/registry-probe/`, which
+[What a registry answers about a pack](../internals/palette.md#what-a-registry-answers-about-a-pack)
+describes.

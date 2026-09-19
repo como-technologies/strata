@@ -68,13 +68,14 @@ details.
 | `1` | different | a pair fails | a record drifted | a cluster uses it |
 | `2` | error | error | strata cannot check a record | error |
 
-`list`, `snapshot`, `candidate`, and `schema` exit `0`, or `2` on an error.
+`list`, `packs`, `snapshot`, `candidate`, and `schema` exit `0`, or `2` on an
+error.
 Treat `2` as a failed job. It never means "no change".
 
 ## Output formats
 
-`compare`, `same-release`, `verify`, `consumers`, and `list` take the same
-options:
+`compare`, `same-release`, `verify`, `consumers`, `list`, and `packs` take the
+same options:
 
 | Option | Output |
 | --- | --- |

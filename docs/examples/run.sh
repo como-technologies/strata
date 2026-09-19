@@ -643,7 +643,7 @@ show2 merge-gate-rollback 0 'scripts/ci/merge-gate.sh "releases/*.json" --base m
 chapter promote
 projects dev=$DEV prod=$PROD
 profile $DEV $A111 1.1.1 aws-stack@1.1.1
-profile $PROD $A111_PROD 1.1.1 aws-stack@1.1.1 "$RETAIN"
+profile $PROD $A111_PROD 1.1.1 aws-stack@1.1.1 "$RETAIN"  # own copy: the promote chapter gives prod a changed value
 show2 promote-record 0 'PALETTE_PROJECT=dev strata snapshot aws-stack@1.1.1 -o releases/1.1.1/dev.json'
 show2 promote-record 0 'PALETTE_PROJECT=prod strata snapshot aws-stack@1.1.1 -o releases/1.1.1/prod.json'
 show promote-different 1 'strata same-release releases/1.1.1/dev.json releases/1.1.1/prod.json'
@@ -658,7 +658,7 @@ show promote-same 0 'strata same-release releases/1.1.1/dev.json releases/1.1.1/
 chapter registry-move
 projects dev=$DEV prod=$PROD
 profile $DEV $A111 1.1.1 aws-stack@1.1.1
-profile $PROD $A111_PROD 1.1.1 aws-stack@1.1.1 "$OCI_CSI"
+profile $PROD $A111_PROD 1.1.1 aws-stack@1.1.1 "$OCI_CSI"  # own copy: the registry-move chapter gives prod the OCI pack
 quiet 'PALETTE_PROJECT=dev strata snapshot aws-stack@1.1.1 -o releases/1.1.1/dev.json'
 quiet 'PALETTE_PROJECT=prod strata snapshot aws-stack@1.1.1 -o releases/1.1.1/prod.json'
 show move-exact 1 'strata same-release releases/1.1.1/dev.json releases/1.1.1/prod.json'
@@ -667,7 +667,7 @@ show move-fields 1 "strata compare releases/1.1.1/dev.json releases/1.1.1/prod.j
 show move-allow 0 'strata same-release --allow registry-move releases/1.1.1/dev.json releases/1.1.1/prod.json'
 serve_here   # the page describes what follows: the move of the pack to the other registry
 empty_profiles "$PROD"
-profile $PROD $A111_PROD 1.1.1 aws-stack@1.1.1 "$OCI_CSI | $RETAIN"
+profile $PROD $A111_PROD 1.1.1 aws-stack@1.1.1 "$OCI_CSI | $RETAIN"  # own copy: and then a changed value on top of the move
 quiet 'PALETTE_PROJECT=prod strata snapshot aws-stack@1.1.1 -o releases/1.1.1/prod.json'
 show move-allow-edited 1 'strata same-release --allow registry-move releases/1.1.1/dev.json releases/1.1.1/prod.json'
 
@@ -771,7 +771,7 @@ show values-verify 0 'strata verify runs/payments.json'
 chapter same-names
 projects dev=$DEV prod=$PROD
 profile $DEV $A111 1.1.1 aws-stack@1.1.1
-profile $PROD $A111_PROD 1.1.1 aws-stack@1.1.1 "$RETAIN"
+profile $PROD $A111_PROD 1.1.1 aws-stack@1.1.1 "$RETAIN"  # own copy: the same-names chapter gives prod a changed value
 cluster $DEV $PAYMENTS payments $A111
 cluster $PROD $PAYMENTS_PROD payments $A111_PROD
 show names-tenant 0 "strata list clusters --project ''"

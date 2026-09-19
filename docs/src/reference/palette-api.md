@@ -29,9 +29,9 @@ variables.
 | Request | Command |
 | --- | --- |
 | `GET /v1/dashboard/projects/metadata` | `list projects`, and the name in `PALETTE_PROJECT` |
-| `GET /v1/registries/metadata` | `snapshot --from-candidate` |
-| `GET /v1/packs?filters=spec.name=<name>&limit=100&offset=<n>` | `snapshot --from-candidate` |
-| `GET /v1/packs/<name>/registries/<uid>` | `snapshot --from-candidate` |
+| `GET /v1/registries/metadata` | `snapshot --from-candidate`, `packs`, and a `pack:` ref |
+| `GET /v1/packs?filters=spec.name=<name>&limit=100&offset=<n>` | `snapshot --from-candidate`, `packs`, and a `pack:` ref |
+| `GET /v1/packs/<name>/registries/<uid>` | `snapshot --from-candidate`, `packs`, and a `pack:` ref |
 
 `list --packs` reads `GET /v1/clusterprofiles/{uid}` for each profile version.
 `consumers` reads each cluster in its own project. `verify` on a cluster record

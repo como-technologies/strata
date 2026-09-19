@@ -143,3 +143,137 @@ fn every_page_the_navigation_names_exists() {
         "only {checked} pages checked; the parsing broke"
     );
 }
+
+/// Rule 6 of the documentation rules: a live result is recorded with its run id in
+/// `internals/palette.md` and in `development/live-runs.md`. A page that cites a run the record
+/// does not hold sends the reader to nothing. Seven ids were only on the notes page.
+#[test]
+fn every_run_id_the_book_cites_has_a_record_in_live_runs() {
+    let runs = read(&docs().join("development/live-runs.md"));
+    let mut cited = BTreeSet::new();
+    for entry in walk(&docs()) {
+        if entry.extension().is_none_or(|e| e != "md") {
+            continue;
+        }
+        for id in run_ids(&read(&entry)) {
+            cited.insert((id, entry.clone()));
+        }
+    }
+    assert!(cited.len() > 10, "only {} run ids found", cited.len());
+    for (id, page) in &cited {
+        assert!(
+            runs.contains(id.as_str()),
+            "{} cites run {id}, which live-runs.md does not record",
+            page.display()
+        );
+    }
+}
+
+/// Each `<name>@<version>` under one uid must be seeded from one content, in every chapter. The
+/// tag-name chapter once gave uid `...d4` version 1.1.2 the tag change, and the compare chapter
+/// gave the same uid and version a changed value, so two pages printed two roots for one identity.
+#[test]
+fn one_uid_and_version_is_seeded_from_one_content() {
+    let script = read(&Path::new(env!("CARGO_MANIFEST_DIR")).join("docs/examples/run.sh"));
+    let mut seeded: std::collections::BTreeMap<(String, String), (String, usize)> =
+        std::collections::BTreeMap::new();
+    let mut parsed = 0;
+    for (n, line) in script.lines().enumerate() {
+        let Some(rest) = line.strip_prefix("profile $") else {
+            continue;
+        };
+        let (rest, own_copy) = match rest.split_once("# own copy") {
+            Some((before, _)) => (before.trim_end(), true),
+            None => (rest, false),
+        };
+        let f: Vec<&str> = rest.splitn(5, ' ').collect();
+        let [project, uid, version, from] = f[..4] else {
+            continue;
+        };
+        let content = format!("{from} {}", f.get(4).unwrap_or(&""));
+        let key = (format!("{project} {uid}"), version.to_string());
+        match seeded.get(&key) {
+            Some((first, first_line)) if first != &content => assert!(
+                own_copy,
+                "run.sh line {}: {project} {uid} {version} is seeded from other content than on \
+                 line {first_line}, and the line does not say the copy differs on purpose. Two \
+                 chapters that print a root for one identity must print one root. Give the \
+                 chapter its own version and uid, or end the line with `# own copy: <why>`.",
+                n + 1
+            ),
+            Some(_) => {}
+            None => {
+                seeded.insert(key, (content, n + 1));
+            }
+        }
+        parsed += 1;
+    }
+    assert!(
+        parsed > 30,
+        "only {parsed} profile lines parsed; the parsing broke"
+    );
+}
+
+/// `strata schema` grew the kind `packs`, and the two hand-written tables that list the kinds did
+/// not. One of them sits above the generated help that names it.
+#[test]
+fn the_kind_tables_list_every_kind_the_help_names() {
+    let help = read(&docs().join("output/help-schema.txt"));
+    let at = help
+        .find("possible values: ")
+        .expect("the help lists the kinds");
+    let list = &help[at + "possible values: ".len()..];
+    let list = &list[..list.find(']').expect("the list ends")];
+    let kinds: Vec<&str> = list.split(", ").collect();
+    assert!(kinds.len() > 5, "only {} kinds parsed", kinds.len());
+
+    for (page, cell) in [
+        ("commands/schema.md", "| `{}` |"),
+        ("reference/documents.md", "| `{}` |"),
+    ] {
+        let text = read(&docs().join(page));
+        for kind in &kinds {
+            if *kind == "candidate" && page == "reference/documents.md" {
+                continue; // the candidate file has no schema id, so that table leaves it out
+            }
+            let row = cell.replace("{}", kind);
+            assert!(
+                text.contains(&row),
+                "{page} does not list the schema kind {kind}"
+            );
+        }
+    }
+}
+
+/// Every `2026MMDDTHHMMSSZ` in a text.
+fn run_ids(text: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    for i in 0..text.len().saturating_sub(15) {
+        let Some(w) = text.get(i..i + 16) else {
+            continue;
+        };
+        let b = w.as_bytes();
+        let digits = |r: std::ops::Range<usize>| b[r].iter().all(u8::is_ascii_digit);
+        if w.starts_with("2026") && b[8] == b'T' && b[15] == b'Z' && digits(4..8) && digits(9..15) {
+            out.push(w.to_string());
+        }
+    }
+    out
+}
+
+/// Each file under a directory, at any depth.
+fn walk(dir: &Path) -> Vec<PathBuf> {
+    let mut out = Vec::new();
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return out;
+    };
+    for e in entries.flatten() {
+        let p = e.path();
+        if p.is_dir() {
+            out.extend(walk(&p));
+        } else {
+            out.push(p);
+        }
+    }
+    out
+}

@@ -12,6 +12,8 @@ check that needs them. [Live runs](./live-runs.md) records the results, and
 | `registry-move.sh` | A pack moved to an OCI registry, and `same-release --allow registry-move` (#24). |
 | `tag-only.sh` | Versions that differ only in a tag name, a cluster move, and a rename in place (#19). |
 | `drift-report.sh off`, `drift-report.sh on` | `scripts/ci/verify-report.sh` around an edit in place and a version bump (#25). |
+| `packs.sh` | `pack:` refs against the tenant's own registries (#55). Read-only, and it needs no cluster. |
+| `merge-gate.sh` | `scripts/ci/merge-gate.sh` over records of the live profiles, in a git repository that the script builds (#57). It needs the profiles, and no cluster. |
 
 The example uses AWS, because the recorded runs had an AWS cloud account. Strata
 does not care which cloud runs the cluster. For another cloud, change the cluster
@@ -60,6 +62,8 @@ its end.
 | `tag-only.sh` | The tag name test (#19). |
 | `drift-report.sh` | The drift report test (#25). It opens and closes issues in this repository with the label `strata-live-drift`. |
 | `api.sh` | The writes outside OpenTofu: an edit in place, a push of a profile to a cluster, and the delete of profile versions. |
+| `packs.sh` | The pack ref test (#55). |
+| `merge-gate.sh` | The merge gate test (#57). |
 | `aws-inventory.sh` | What the cluster still has in AWS, to confirm a teardown. |
 
 ## Design
@@ -86,6 +90,8 @@ found it.
 | `registry-move.sh` | the CSI registry of the move profile, then its values | the flag (on), the other packs, the baseline |
 | `drift-report.sh off` and `on` | the flag, in the plan and in the bump | the edit (`api.sh edit` in both runs), the records, the steps and their order, the issue label, the baseline |
 | `tag-only.sh` | the tag name of the OS pack, and which of two such versions cluster A runs | the pack uid, each other pack, the values, the flag (off), the baseline |
+| `packs.sh` | nothing; it only reads | the baseline |
+| `merge-gate.sh` | the add-on version, which stage 4 edits in place and stage 5 puts back | the profiles, the clusters, the baseline |
 
 **One definition for each kind.** Clusters A and B come from one resource, and
 differ only in their names. Each profile has the same lifecycle:
@@ -219,6 +225,8 @@ OFF_RUN=examples/live/runs/<time>/in-place/off examples/live/in-place.sh on    #
 examples/live/registry-move.sh                                                 # #24
 AWS_PROFILE=<profile> examples/live/tag-only.sh                                # #19
 just live-drift-report                                                         # #25
+just live-packs                                                                # #55, read-only
+just live-merge-gate                                                           # #57, needs just live-profiles
 ```
 
 `just live-session` runs `verify.sh`, `in-place.sh off`, `in-place.sh on`, and

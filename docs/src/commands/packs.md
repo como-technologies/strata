@@ -52,7 +52,7 @@ Strata reads the paged pack listing for the versions, their digests and their
 types, and each registry's own answer for the tags. The listing repeats a
 version across pages, and `packs` counts it once. A pack with more than a
 hundred versions lists completely: `kubernetes` in `Public Repo` had 133
-versions on [run `20260918T020941Z`](../development/live-runs.md#packssh).
+versions on [run `20260918T022255Z`](../development/live-runs.md#packssh).
 
 | Exit | Meaning |
 | --- | --- |

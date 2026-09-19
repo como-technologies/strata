@@ -89,8 +89,7 @@ selection.
 - Before you move a cluster that does not match its record, find why. Then move
   it to a recorded version.
 - To see what a move changes on a cluster, compare the new record with the
-  cluster. A pack the cluster does not have yet reads `REMOVED`, as section 3
-  shows for the add-on profile.
+  cluster. A pack the cluster does not have yet reads `REMOVED`.
 
 ## Palette behavior
 
