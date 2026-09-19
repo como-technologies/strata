@@ -34,11 +34,8 @@ else changes a cluster, so the repository is the history of each environment.
 ## Each merge request carries its comparison
 
 The comment job compares the record that the default branch has with what the
-merge request proposes:
-
-```bash
-scripts/ci/pr-comment.sh releases/dev.json candidate.json
-```
+merge request proposes. [Review a change before you publish it](./review.md)
+runs that job, and prints its command with the record names of that page:
 
 ```text
 {{#include ../output/review-pr-comment.txt}}
