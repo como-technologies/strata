@@ -33,13 +33,13 @@ options.
 
 ## The address in a pipeline
 
-Strata reads the address from `PALETTE_API`, then `SPECTROCLOUD_HOST`, and from
-no other variable. If the tools around it name the address differently, a job
-that sets only that name leaves strata on the default address, and strata says
-nothing: the requests go to `https://api.spectrocloud.com`. Export
-`SPECTROCLOUD_HOST` as well, which the Spectro Cloud provider reads too, so one
-value gives strata and OpenTofu one Palette. The key reads the same way, from
-`PALETTE_API_KEY`, then `SPECTROCLOUD_APIKEY`.
+Strata reads the address from `PALETTE_API`, then from `SPECTROCLOUD_HOST`.
+Strata reads no other variable for the address. The tools around strata can use
+a different name. A job that sets only that name gives strata no address, and
+strata sends its requests to `https://api.spectrocloud.com`. It gives no
+warning. Export `SPECTROCLOUD_HOST` also. The Spectro Cloud provider reads that
+variable, so one value gives strata and OpenTofu the same Palette. Strata reads
+the key in the same way, from `PALETTE_API_KEY`, then `SPECTROCLOUD_APIKEY`.
 
 ## The live example
 

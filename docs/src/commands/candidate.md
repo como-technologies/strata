@@ -36,11 +36,11 @@ version before it, or from what your repository already holds.
 ## Write one from your own source
 
 A team that publishes with a pipeline already describes each profile somewhere:
-a YAML file of layers, a Terraform module, a chart of values. A candidate file
-is a second view of that description, in the form strata reads, and a job writes
-it beside the source. The fields it needs are few:
+a YAML file of layers, a Terraform module, a chart of values. A candidate file is
+that same description, in the form strata reads. A job writes the candidate file
+beside the source. The file needs few fields:
 
-| The candidate asks for | Your source usually calls it | When it is missing |
+| The candidate asks for | Your source usually calls it | If you leave it out |
 | --- | --- | --- |
 | `name`, `version` | the profile and the version to publish | required; the name is the name in Palette, with whatever prefix your pipeline adds |
 | `type`, `cloudType` | the kind of profile and its cloud | `type` is `cluster` by default |
@@ -53,14 +53,14 @@ it beside the source. The fields it needs are few:
 Two rules decide whether the roots agree, so a job that writes candidates must
 follow them:
 
-- **The version is the tag by default.** When your pipeline pins a pack by a tag
-  that is not the version, the candidate must say `tag`.
-- **Palette's spelling wins.** Strata takes the form Palette returns, so a
-  variable field such as `display_name` is `displayName` in the candidate.
+- **The tag is the version by default.** A pipeline can pin a pack under another
+  tag. The candidate must then give that tag in `tag`.
+- **Strata uses the names that Palette uses.** A variable field such as
+  `display_name` is `displayName` in the candidate file.
 
-Prove the mapping once, before a pipeline depends on it: write a candidate from
-a version that Palette already has, and check that the two are one release. The
-steps below do exactly that, and
+Prove the mapping before a pipeline depends on it. Write a candidate file from a
+version that Palette already has. Then check that the two are one release. The
+steps below do this, and
 [Build the snapshot of a candidate](#build-the-snapshot-of-a-candidate) shows
 the answer. Run it again when the shape of your source changes.
 

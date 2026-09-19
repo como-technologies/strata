@@ -79,8 +79,9 @@ snapshot at tenant scope.
 
 ## Where to keep a record
 
-A record is a file. Strata reads it and writes it, and asks nothing about where
-it is. Two places are common, and they answer different questions:
+A record is a file. Strata reads a record and writes a record. Strata does not
+decide where you keep a record. Two places are usual, and each one answers a
+different question:
 
 | Where | What it gives | What it costs |
 | --- | --- | --- |
