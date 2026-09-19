@@ -13,18 +13,34 @@ the **root**. Two versions with the same root are the same release.
 
 ```mermaid
 flowchart LR
-  pack["pack version"] -- "a profile pins it" --> version["profile version"]
-  version -- "a cluster runs a copy" --> cluster["cluster"]
-  version -. "snapshot" .-> record[("record<br/>a file you keep")]
+  candidate[("candidate<br/>YAML in git")]
+  record[("record<br/>JSON in git")]
+  pack["pack version"]
+  version["profile version"]
+  cluster["cluster"]
+  candidate -- "your pipeline publishes" --> version
+  pack -- "a profile pins it" --> version
+  version -- "a cluster runs a copy" --> cluster
+  candidate -. "snapshot --from-candidate" .-> record
+  version -. "snapshot" .-> record
   cluster -. "snapshot" .-> record
   record -. "verify" .-> version
   record -. "compare" .-> cluster
 ```
 
-A solid arrow is Palette: a profile version pins a pack version, and a cluster
-runs a copy of a profile version. A dotted arrow is strata, which only reads
-Palette and writes the record: `snapshot` writes one, `verify` asks whether
-Palette still holds what the record says, and `compare` reports what differs.
+A solid arrow is somebody else. A profile version pins a pack version, a
+cluster runs a copy of a profile version, and your pipeline publishes the
+version. Strata publishes nothing.
+
+A dotted arrow is strata, which reads and writes files. Both files it knows are
+in your repository: a **candidate**, the version as YAML before Palette has it,
+and a **record**, the hashes of a version that Palette holds. `snapshot` writes
+a record from any of the three. `verify` asks whether Palette still holds what a
+record says. `compare` reports what differs between two of them.
+
+The root closes the loop. A candidate and the published version give the same
+root, so `same-release` proves that Palette holds the version that a reviewer
+approved, without trusting a tag or a name.
 
 | Question | Command |
 | --- | --- |
