@@ -53,7 +53,8 @@ scope:
 
 Each line under a cluster is one profile the cluster applies, with its uid and
 its type, in the order Palette applies them. A cluster with an add-on profile
-shows each one: see [A release on a cluster](../use-cases/cluster-release.md).
+shows each one: see
+[A cluster does not run its release](../use-cases/cluster-release.md).
 
 `--applied` reads each cluster, one request for each. Read the uid when you
 need the identity: a version can be overwritten in place, and then the same

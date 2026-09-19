@@ -34,8 +34,8 @@ from a published version, use [strata candidate](../commands/candidate.md).
 {{#include ../output/review-snapshot.txt}}
 ```
 
-Strata finds each pack in its registry. The root is the root of the version
-after somebody publishes it.
+Strata finds each pack in its registry. This root is the root that the
+published version will have.
 
 ## 3. Compare it with the last release
 

@@ -2,9 +2,9 @@
 
 ## The problem
 
-A manifest pack holds Kubernetes manifests and comes from no registry. Palette
-gives the manifest pack of each profile its own pack uid, also for a clone with
-identical content. The pack uid is part of `IDENTITY`, so two profiles with the
+A manifest pack holds Kubernetes manifests. It comes from no registry. Palette
+gives the manifest pack of each profile its own pack uid. A clone with identical
+content gets its own uid too. The pack uid is part of `IDENTITY`, so two profiles with the
 same manifest never have the same root.
 
 In this example, `dev` and `prod` each have `platform-addons@1.0.0`, with one

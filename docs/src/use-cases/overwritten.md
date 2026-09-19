@@ -7,9 +7,9 @@ version bump with the provider updates the profile in place. The uid stays the
 same, and takes the new version number and content. The old version disappears from
 the listing. The clusters that ran it keep copies that name the old version.
 
-In this example, `dev` had `aws-stack@1.1.1` with the uid `...c3`, and the cluster
-`payments` runs it. The team bumped the version to 1.2.0 with one changed value,
-without the flag.
+In this example, `dev` has `aws-stack@1.1.1` with the uid `...c3`, and the
+cluster `payments` runs it. The team then bumps the version to 1.2.0 with one
+changed value, and the flag is off.
 
 ## 1. The old version is gone
 
@@ -75,7 +75,7 @@ Strata writes the file, and stops there. You publish the version with the
 provider or the Palette API, and you move the cluster to it. See
 [The candidate file](../reference/candidate-file.md).
 
-## What to do next
+## What to do
 
 Set the flag in the provider block:
 

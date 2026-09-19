@@ -18,7 +18,7 @@ and each one was written against a level below that keeps moving.
 | profile | the pack versions that the profile pins | a profile version in Palette | `strata snapshot <name>@<version>` |
 | cluster | the profile versions that the cluster pins | the cluster | `strata snapshot cluster:<name>` |
 
-The lifecycle step is build, test, sign, publish, **record**. The record is the
+A publish has these steps: build, test, sign, publish, and **record**. The record is the
 artifact of the publish, and the publish job writes it:
 
 ```bash
@@ -103,8 +103,8 @@ scripts/ci/merge-gate.sh "releases/**/*.json" --base main
 
 The gate writes to no host and needs no token: it fetches the target branch,
 merges it into the checkout, and prints the same report the pipeline prints.
-A developer sees the stomp before anyone reviews it, and the pipeline is the
-backstop rather than the messenger.
+A developer sees the `BEHIND` record before a reviewer does, and the pipeline
+then confirms it.
 
 ## Before you retire a pack version
 
@@ -145,6 +145,6 @@ clusters as well as the profiles. See
 | profile | the comment, and the merge gate | `snapshot <name>@<version>` as the record | `verify` each record |
 | cluster | the comment, and the merge gate | `snapshot cluster:<name>` after the apply | `verify` each record, and `compare` the cluster with it |
 
-Strata takes no view on how the repositories are cut. It reads refs and
-records, so one repository per level and one repository for everything ask the
-same questions with the same commands.
+Strata does not care how you divide the repositories. It reads refs and
+records, so one repository for each level and one repository for everything ask
+the same questions, with the same commands.

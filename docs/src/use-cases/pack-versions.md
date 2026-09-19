@@ -3,10 +3,10 @@
 ## The problem
 
 Palette ships a new version of a pack, and a bump pull request moves a profile
-to it. Before the review, you want what the pack itself changed: the images it
-runs, the values it ships, and whether the change replaces nodes. The Palette
-UI shows each version's values side by side, and the pack has no record that
-outlives the page.
+to it. Before the review, you want to know what the pack itself changed: the
+images it runs, the values it ships, and whether the change replaces nodes. The
+Palette UI shows the values of each version next to each other. It writes no
+record, so nothing of that view is left when you close the page.
 
 A pack version is a ref: `pack:<name>@<version>`. Strata reads it from the
 registry and hashes it as it hashes that pack inside a profile.
@@ -30,7 +30,7 @@ impact of the layer:
 {{#include ../output/pack-os.txt}}
 ```
 
-## 2. Name the registry when two have the pack
+## 2. Name the registry when two registries have the pack
 
 ```text
 {{#include ../output/pack-ambiguous.txt}}
@@ -50,7 +50,7 @@ Comparing the two copies says whether they are the same build:
 registry, under another pack uid and digest. That is the pattern of
 [A pack comes from another registry](./registry-move.md).
 
-## 3. Which versions does the registry have
+## 3. Which versions the registries have
 
 ```text
 {{#include ../output/packs-latest.txt}}

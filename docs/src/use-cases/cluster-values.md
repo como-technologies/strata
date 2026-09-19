@@ -38,7 +38,9 @@ Record the cluster first:
 ## 3. A value changes on the cluster
 
 A person changes `platform_owner` on the cluster `payments` to `team-platform`,
-in Palette. The record of the cluster keeps the value from before that change:
+in Palette. The record of the cluster keeps the cluster value from before that
+change. The verdict counts each changed cluster value, and the report lists
+them:
 
 ```text
 {{#include ../output/values-verify.txt}}

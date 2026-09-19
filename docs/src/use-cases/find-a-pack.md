@@ -4,9 +4,9 @@
 
 A pack version has a security problem, for example a Cilium release. You need
 each profile version that carries the pack, in each project, and the clusters
-that run those versions. `pack:<name>@<version>` reads the pack itself, and
-[What changed between two pack versions](./pack-versions.md) compares two of
-them, but neither says which profiles carry it: that is what `list` is for.
+that run those versions. `pack:<name>@<version>` reads the pack itself.
+[What changed between two pack versions](./pack-versions.md) compares two pack
+versions. Neither says which profiles carry the pack. `list` answers that.
 
 ## 1. Search one project
 
@@ -41,7 +41,7 @@ For each version with the pack, list its clusters:
 {{#include ../output/list-pack-consumers.txt}}
 ```
 
-Exit `1` names a version that a cluster still uses. `consumers` takes no project
+Exit `1` means that a cluster still uses the version. The rows name each cluster. `consumers` takes no project
 option, so the second command names the project in the environment.
 `PALETTE_PROJECT_UID` has priority over `PALETTE_PROJECT`, so unset the uid
 before you name a project by name. See

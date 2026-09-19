@@ -53,7 +53,7 @@ file. See [Pull request comments](../automation/pr-comments.md), and
 
 ## The merge button waits for the gate
 
-A merge request that was right in the morning is not right at five o'clock. The
+A merge request that was right this morning is not right this evening. The
 gate merges the default branch in first, and checks the merge result:
 
 ```text
@@ -65,7 +65,7 @@ comes from the repository that [The merge gate](../automation/merge-gate.md)
 describes.
 
 This branch would have pinned `aws-stack@1.0.0` over the `1.1.0` that another
-merge request landed. Git merged it without a word, because the developer
+merge request landed. Git merged it and gave no warning, because the developer
 settled the conflict by keeping their own record. The cluster would have been
 built one release back.
 
@@ -140,9 +140,9 @@ The issue closes itself on the first run where the record verifies again. See
 | What changed between two pack versions? | `strata compare 'pack:Public Repo/csi-aws-ebs@1.63.1' 'pack:Public Repo/csi-aws-ebs@1.65.0'` |
 | Which version does the registry offer now? | `strata packs csi-aws-ebs --latest` |
 
-The root of a record is the key that ties the fleet together: two records with
+The root of a record is what holds the environments together. Two records with
 one root are one release, whatever the names and the uids say. A report that
-lists the root of each environment answers "what is where" in one line each.
+lists the root of each environment says what runs where, one line for each.
 
 ## The whole pipeline
 

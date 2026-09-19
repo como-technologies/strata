@@ -3,8 +3,8 @@
 ## The problem
 
 A record says which release a cluster must run. A cluster can stay on an old
-version, move to a new version too early, or get an edit of its pack values on
-the cluster. Strata hashes the copy of a profile on a cluster in the same way as
+version. A cluster can move to a new version too early. A person can also edit
+the pack values on the cluster. Strata hashes the copy of a profile on a cluster in the same way as
 the profile. So a cluster that runs a recorded release has the root of the
 record.
 
@@ -42,7 +42,7 @@ cluster needs `/aws-stack` to select one profile.
 
 ## 3. A cluster that runs two profiles
 
-Without the selection, the snapshot covers each profile that the cluster runs.
+Without the selection, the cluster side covers each profile that the cluster runs.
 The cluster side then holds the packs of both profiles:
 
 ```text
@@ -69,8 +69,9 @@ The cluster side reads `aws-stack@1.1.1 on cluster search`: it moved early. The
 ```
 
 The versions are equal, but the value differs. The note gives two causes. Run
-`verify` on the record of the version to find which one: when `verify` passes,
-the version did not change, so somebody edited the values on the cluster.
+`strata verify` on the record of the version to find which one. When `verify`
+passes, the version did not change. A person then changed the values on the
+cluster.
 
 ## 6. Record what the cluster runs
 

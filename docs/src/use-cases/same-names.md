@@ -32,8 +32,8 @@ and finds one cluster.
 {{#include ../output/names-cluster.txt}}
 ```
 
-A profile name at tenant scope finds only the profiles of the tenant, not of a
-project:
+The tenant scope holds no profiles of its own, so a profile name there matches
+nothing. Exit `2`:
 
 ```text
 {{#include ../output/names-profile.txt}}

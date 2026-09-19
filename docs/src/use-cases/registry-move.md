@@ -3,7 +3,7 @@
 ## The problem
 
 Some teams promote packs from one registry to another, for example from a
-staging registry to a production registry. They then pin the profile to the new
+staging registry to a production registry. They then pin each pack to the new
 registry. The pack is the same build with the same tag, version, and values. But
 the registry uid, the pack uid, the digest, and often the pack type change. So
 the roots differ, and `same-release` fails without `--allow registry-move`.
