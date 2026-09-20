@@ -98,14 +98,14 @@ struct OutputArgs {
     )]
     format: FormatArg,
     /// The same as --format json
-    #[arg(long)]
+    #[arg(long, conflicts_with = "format")]
     json: bool,
     /// Color the report: auto, always, or never
     #[arg(long, value_enum, default_value = "auto", num_args = 0..=1,
           default_missing_value = "always", hide_possible_values = true)]
     color: ColorArg,
     /// The same as --color=never
-    #[arg(long)]
+    #[arg(long, conflicts_with = "color")]
     no_color: bool,
     /// Write the JSON on one line
     #[arg(long)]
@@ -162,7 +162,7 @@ struct SnapshotArgs {
     #[arg(long)]
     raw_dir: Option<PathBuf>,
     /// Read the raw answers of --raw-dir, with no network
-    #[arg(long)]
+    #[arg(long, conflicts_with = "raw_dir")]
     from_raw: Option<PathBuf>,
     /// Read a candidate file, before the version is in Palette
     #[arg(long, conflicts_with_all = ["from_raw", "raw_dir", "ref"])]
@@ -527,8 +527,7 @@ fn cmd_snapshot(a: &SnapshotArgs) -> Result<ExitCode> {
             ops::snapshot_from_dir(dir, &reference, &now)?
         }
         (None, None) => {
-            let text = a.r#ref.as_deref().ok_or_else(|| Error::Transport {
-                path: String::new(),
+            let text = a.r#ref.as_deref().ok_or_else(|| Error::Usage {
                 message: "snapshot needs a profile ref or --from-raw DIR".to_string(),
             })?;
             let reference = Ref::parse(text);
@@ -554,7 +553,14 @@ fn cmd_snapshot(a: &SnapshotArgs) -> Result<ExitCode> {
                     &now,
                     &progress,
                 )?,
-                Ref::Snapshot(_) | Ref::Uid(_) | Ref::NameVersion { .. } => {
+                // a file-shaped ref reaches Palette nowhere else, and a path sent as a uid asks
+                // for /v1/clusterprofiles/<path>, which 404s after the retries
+                Ref::Snapshot(path) => {
+                    return Err(Error::RecordNotASource {
+                        path: path.display().to_string(),
+                    })
+                }
+                Ref::Uid(_) | Ref::NameVersion { .. } => {
                     let uid = match &reference {
                         Ref::NameVersion { name, version } => palette.resolve(name, version)?,
                         _ => text.to_string(),

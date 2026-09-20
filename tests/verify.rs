@@ -3968,9 +3968,15 @@ fn packs_refuses_a_registry_that_is_not_visible_and_a_pack_no_registry_has() {
             "/v1/packs?filters=spec.name=nowhere&limit=100&offset=0",
             serde_json::json!({"items": [], "listmeta": {"count": 0}}),
         );
+    // no registry was named and no version was asked for, so the error states neither: it names
+    // the pack name alone, and points at the command that finds a pack inside a profile
     let err = packs_of(&api, "nowhere", ops::PackOptions::default()).unwrap_err();
-    assert_eq!(err.kind(), "pack-not-found");
+    assert_eq!(err.kind(), "pack-name-not-found");
     assert_eq!(err.exit_code(), 2);
+    let text = err.to_string();
+    assert!(text.contains("'nowhere'"), "{text}");
+    assert!(!text.contains("any visible registry"), "{text}");
+    assert!(!text.contains("version ''"), "{text}");
 }
 
 #[test]

@@ -15,7 +15,7 @@ GitHub. A terminal needs `--host gitlab` when no CI variable is set.
 
 ## The pipeline
 
-`examples/ci/gitlab/strata.yml` holds the three jobs, ready to include. Copy
+`examples/ci/gitlab/strata.yml` holds the five jobs, ready to include. Copy
 it into `.gitlab/strata.yml` and include it:
 
 ```yaml
@@ -34,6 +34,8 @@ variables:
 | `strata-comment` | each merge request pipeline | Compares `STRATA_A` with `STRATA_B`, and keeps one note and the label. |
 | `strata-merge-gate` | each merge request pipeline | Checks the merge result. Make the merge button wait for it. |
 | `strata-verify` | a pipeline schedule | Verifies `STRATA_RECORDS` and keeps one issue per record that drifted. |
+| `strata-promote-gate` | a pipeline that carries `STRATA_PROMOTE` | Checks that the records of a promotion are one release. Manual. |
+| `strata-retire-gate` | a pipeline that carries `STRATA_RETIRE` | Checks that no cluster runs the version. Manual. |
 
 Add the schedule in CI/CD, Schedules. Turn the merge button on the gate in
 Settings, Merge requests, "Pipelines must succeed".
@@ -46,6 +48,8 @@ Settings, Merge requests, "Pipelines must succeed".
 | `PALETTE_API_KEY` | verify, and a ref that is not a file | Mask it. |
 | `PALETTE_PROJECT_UID` | a ref in a project | |
 | `STRATA_TOKEN` | the download | A token that can read the strata releases, while that repository is private. |
+| `STRATA_PROMOTE` | the promotion gate | The records, in promotion order. Give it on the pipeline run, not as a project variable: the job appears only in a pipeline that carries it. |
+| `STRATA_RETIRE` | the retire gate | The version to retire, as `name@version`. Give it on the pipeline run, as above. |
 
 The jobs read the merge request from `CI_MERGE_REQUEST_IID`, the project from
 `CI_PROJECT_ID`, and the API from `CI_API_V4_URL`, so a self-hosted GitLab needs

@@ -5,9 +5,16 @@ strata reads at tenant scope.
 
 ```bash
 export PALETTE_API_KEY=...        # the API key
-export PALETTE_PROJECT=dev        # the project name
 strata list projects              # test the key: the projects that it can see
+export PALETTE_PROJECT=<name>     # one name from that list
 ```
+
+Set the project after the listing, not before it. Strata resolves the project
+name before it runs any command, so a name your key cannot see stops
+`strata list projects` too.
+
+A key that is wrong or expired answers HTTP 401 or 403. Check
+`PALETTE_API_KEY`, `SPECTROCLOUD_APIKEY`, and `~/.palette.env`.
 
 Put the values in `~/.palette.env` to keep them out of the shell history.
 Strata reads a variable from that file when the environment does not set it:

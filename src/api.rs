@@ -660,6 +660,7 @@ impl<A: PaletteApi> Palette<A> {
             .ok_or_else(|| Error::ProfileNotFound {
                 name: name.to_string(),
                 version: version.to_string(),
+                tenant_scope: self.project_uid().is_none(),
             })
     }
 
@@ -683,6 +684,7 @@ impl<A: PaletteApi> Palette<A> {
             .ok_or_else(|| Error::ProfileNotFound {
                 name: name.to_string(),
                 version: LATEST.to_string(),
+                tenant_scope: self.project_uid().is_none(),
             })
     }
 
@@ -853,9 +855,22 @@ mod tests {
         let err = p.resolve("aws-stack", "9.9.9").unwrap_err();
         assert!(matches!(err, Error::ProfileNotFound { .. }));
         assert!(err.to_string().contains("'aws-stack' with version '9.9.9'"));
+        // at tenant scope the listing advice is a dead end: the scope holds no profiles at all
+        assert!(
+            err.to_string().contains("this is tenant scope"),
+            "a miss at tenant scope asks for a project first: {err}"
+        );
+
+        // in a project, the listing is the right next command, and the name may be a pack's
+        let in_project = Palette::new(
+            MemoryApi::new()
+                .with("/v1/dashboard/clusterprofiles/metadata", listing())
+                .in_project("p1"),
+        );
+        let err = in_project.resolve("aws-stack", "9.9.9").unwrap_err();
         assert!(
             err.to_string().contains("`strata list --pack aws-stack`"),
-            "a miss points at the listing, since the name may be a pack's: {err}"
+            "a miss in a project points at the listing: {err}"
         );
     }
 
@@ -900,10 +915,13 @@ mod tests {
     fn api_errors_carry_path_status_and_body() {
         let api = MemoryApi::new().failing("/v1/x", 401, r#"{"code":"MissingAuthHeader"}"#);
         let err = api.get_json("/v1/x").unwrap_err();
-        assert_eq!(
-            err.to_string(),
-            r#"GET /v1/x failed with HTTP 401: {"code":"MissingAuthHeader"}"#
+        let text = err.to_string();
+        assert!(
+            text.starts_with(r#"GET /v1/x failed with HTTP 401: {"code":"MissingAuthHeader"}"#),
+            "{text}"
         );
+        // a 401 is almost always the key, and the body names nothing the reader can set
+        assert!(text.contains("check PALETTE_API_KEY"), "{text}");
         assert_eq!(err.exit_code(), 2);
     }
 

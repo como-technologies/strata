@@ -66,7 +66,27 @@ or `STRATA_RETIRE` to `name@version`, and run the job from the pipeline. See
 strata consumers aws-stack@1.0.0 && your_delete_command
 ```
 
-`&&` runs the delete only on exit `0`. A cluster that strata cannot read exits
-`2`, so the delete does not run then either. See
+`&&` runs the delete only on exit `0`. A cluster that strata cannot read counts
+as a consumer, so it exits `1` and the delete does not run.
+
+On GitLab, put that line in the `script:` of `strata-retire-gate`. On GitHub the
+drop-in's job calls a reusable workflow, and such a job holds no steps of its
+own, so the delete goes in a second job:
+
+```yaml
+  delete:
+    needs: retire-gate
+    runs-on: ubuntu-latest
+    steps:
+      - run: your_delete_command
+```
+
+`needs:` runs the delete only when the gate passed. It also puts minutes and
+another runner between the check and the delete, and a cluster can move onto the
+version in that time. A team that needs the two together runs
+`strata consumers <name>@<version> && your_delete_command` in one ordinary job,
+with the binary installed by `scripts/ci/install-strata.sh`.
+
+See
 [Retire a version](../use-cases/retire.md) and
 [Promote a release to another project](../use-cases/promote.md).

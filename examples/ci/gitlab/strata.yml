@@ -1,4 +1,5 @@
-# Strata on GitLab CI: the comment, the merge gate, and the scheduled drift report.
+# Strata on GitLab CI: the comment, the merge gate, the scheduled drift report, and the two gates
+# that run on demand.
 #
 # Include it from .gitlab-ci.yml and set the variables your project needs:
 #

@@ -1,7 +1,8 @@
 # Errors
 
 An error exits `2`. Without `--json`, standard error gets one line that starts
-with `strata:`. With `--json`, standard error gets one JSON line:
+with `strata:`. With `--json --quiet`, standard error gets one JSON line. Use
+`--quiet`, or `STRATA_QUIET`, so that no progress note shares the stream:
 
 ```text
 {{#include ../output/auto-error.txt}}
@@ -23,8 +24,10 @@ the kind.
 | `profile-not-found` | No profile version with this name and version in the scope. | `name`, `version` |
 | `cluster-profile-not-found` | The cluster runs no profile with this name. | `cluster`, `profile`, `applied` |
 | `profile-ref-required` | The command needs a profile, and got a cluster or a pack. | `reference` |
+| `record-not-a-source` | `snapshot` got a record. It writes one, and does not read one. | `path` |
 | `candidate-invalid` | The candidate file has a problem. | `path` |
 | `pack-not-found` | The registry has no such pack version or tag. | `name`, `version`, `registry`, `tag` when given |
+| `pack-name-not-found` | No visible registry offers a pack of that name. | `name` |
 | `registry-not-found` | No visible registry has this name. | `registry`, `available` |
 | `pack-in-several-registries` | A `pack:` ref named no registry, and more than one has the version. | `name`, `version`, `registries` |
 | `project-not-found` | No visible project has this name. | `name`, `available` |

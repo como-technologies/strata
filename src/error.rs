@@ -18,8 +18,13 @@ pub enum Error {
         /// The accepted alternate variable name.
         alternate: &'static str,
     },
-    /// Palette answered with a non-2xx status.
-    #[error("GET {path} failed with HTTP {status}: {body}")]
+    /// Palette answered with a non-2xx status. A 401 or a 403 is almost always the key, so the
+    /// message names where a key comes from; the body alone names nothing the reader can set.
+    #[error("GET {path} failed with HTTP {status}: {body}{}", if *status == 401 || *status == 403 {
+        "; check PALETTE_API_KEY, SPECTROCLOUD_APIKEY, or ~/.palette.env: the key can be wrong, expired, or for another tenant"
+    } else {
+        ""
+    })]
     Api {
         /// Request path.
         path: String,
@@ -79,13 +84,17 @@ pub enum Error {
         source: serde_json::Error,
     },
     /// `name@version` matched nothing in the current scope. The message points at `strata list`,
-    /// because the name is often a pack's rather than a profile's.
-    #[error("no cluster profile named '{name}' with version '{version}' in this scope; `strata list` shows the profiles in it, and `strata list --pack {name}` the profiles with a pack of that name")]
+    /// because the name is often a pack's rather than a profile's. At tenant scope it says so
+    /// first: a tenant holds no profiles of its own, so `strata list` there answers nothing, and
+    /// the reader needs a project before any other advice helps.
+    #[error("no cluster profile named '{name}' with version '{version}' in this scope; {}", profile_not_found_hint(name, *tenant_scope))]
     ProfileNotFound {
         /// Profile name.
         name: String,
         /// Profile version.
         version: String,
+        /// True when no project was set, so the scope holds no profiles at all.
+        tenant_scope: bool,
     },
     /// `cluster:<uid>/<profile>` named a profile the cluster does not run.
     #[error("cluster '{cluster}' has no applied profile named '{profile}'; applied: {}", applied.join(", "))]
@@ -133,6 +142,18 @@ pub enum Error {
         /// The ref as given.
         reference: String,
     },
+    /// The command was called in a way that cannot work, and no request was made.
+    #[error("{message}")]
+    Usage {
+        /// What the caller must do instead.
+        message: String,
+    },
+    /// `snapshot` was given a record file. Every other command reads one; `snapshot` writes one.
+    #[error("'{path}' is a record; snapshot writes a record, and does not read one. To check it against Palette, run: strata verify {path}")]
+    RecordNotASource {
+        /// The path as given.
+        path: String,
+    },
     /// A candidate file does not parse or breaks a rule of the format.
     #[error("'{}': {message}", path.display())]
     CandidateInvalid {
@@ -152,6 +173,13 @@ pub enum Error {
         tag: Option<String>,
         /// The registry, as the candidate names it.
         registry: String,
+    },
+    /// `packs <name>` found the name in no visible registry. It asked for every version, so no
+    /// version and no registry was ever in play, and `PackNotFound` would state both as blanks.
+    #[error("no registry that this key can see offers a pack named '{name}'; `strata list --pack {name}` finds the profiles that carry one")]
+    PackNameNotFound {
+        /// Pack name.
+        name: String,
     },
     /// A pack version is in more than one visible registry, and the ref named none.
     #[error("pack '{name}' at version '{version}' is in several registries: {}; name one, as in pack:<registry>/{name}@{version}", registries.join(", "))]
@@ -230,6 +258,22 @@ fn list_or_none(items: &[String]) -> String {
     }
 }
 
+/// What to try after a profile name matched nothing. At tenant scope the listing advice is a dead
+/// end: a tenant holds no profiles of its own, so `strata list` there answers nothing and the
+/// reader needs a project first.
+fn profile_not_found_hint(name: &str, tenant_scope: bool) -> String {
+    if tenant_scope {
+        "this is tenant scope, which holds no profiles of its own: set PALETTE_PROJECT, or give \
+         --project-name, and `strata list projects` shows the projects this key can see"
+            .to_string()
+    } else {
+        format!(
+            "`strata list` shows the profiles in it, and `strata list --pack {name}` the profiles \
+             with a pack of that name"
+        )
+    }
+}
+
 impl Error {
     /// The process exit status the CLI uses for this error. Every error is 2 today; the method
     /// exists so a future distinction (for example, 3 for "cannot reach Palette") lands in one place.
@@ -251,8 +295,11 @@ impl Error {
             Error::ProfileNotFound { .. } => "profile-not-found",
             Error::ClusterProfileNotFound { .. } => "cluster-profile-not-found",
             Error::ProfileRefRequired { .. } => "profile-ref-required",
+            Error::RecordNotASource { .. } => "record-not-a-source",
+            Error::Usage { .. } => "usage",
             Error::CandidateInvalid { .. } => "candidate-invalid",
             Error::PackNotFound { .. } => "pack-not-found",
+            Error::PackNameNotFound { .. } => "pack-name-not-found",
             Error::PackInSeveralRegistries { .. } => "pack-in-several-registries",
             Error::RegistryNotFound { .. } => "registry-not-found",
             Error::ProjectNotFound { .. } => "project-not-found",
@@ -284,6 +331,11 @@ impl Error {
                 m.insert("variable".into(), Value::from(*primary));
                 m.insert("alternate".into(), Value::from(*alternate));
             }
+            Error::RecordNotASource { path: p } => {
+                m.insert("path".into(), Value::from(p.as_str()));
+            }
+            // the message carries the whole of it, and no field adds to that
+            Error::Usage { .. } => {}
             Error::Api {
                 path: p, status, ..
             } => {
@@ -336,6 +388,10 @@ impl Error {
                 }
                 m.insert("registry".into(), Value::from(registry.as_str()));
             }
+            // no version and no registry was asked for, so the document names neither
+            Error::PackNameNotFound { name } => {
+                m.insert("name".into(), Value::from(name.as_str()));
+            }
             Error::PackInSeveralRegistries {
                 name,
                 version,
@@ -355,9 +411,14 @@ impl Error {
             Error::ProfileRefRequired { reference } => {
                 m.insert("reference".into(), Value::from(reference.as_str()));
             }
-            Error::ProfileNotFound { name, version } => {
+            Error::ProfileNotFound {
+                name,
+                version,
+                tenant_scope,
+            } => {
                 m.insert("name".into(), Value::from(name.as_str()));
                 m.insert("version".into(), Value::from(version.as_str()));
+                m.insert("tenantScope".into(), Value::from(*tenant_scope));
             }
             Error::NotSnapshot(p) | Error::EmptyFile(p) => path(&mut m, p),
             Error::UnsupportedSchema {
@@ -445,6 +506,10 @@ mod tests {
             Error::ProfileNotFound {
                 name: "aws-stack".into(),
                 version: "9.9.9".into(),
+                tenant_scope: false,
+            },
+            Error::PackNameNotFound {
+                name: "no-such-pack".into(),
             },
             Error::ClusterProfileNotFound {
                 cluster: "c1".into(),

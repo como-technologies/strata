@@ -22,8 +22,10 @@ Record the release first. Every step below compares a cluster against this file:
 {{#include ../output/cluster-release-record.txt}}
 ```
 
-**Who runs this.** A person at a terminal for steps 1 to 3. The scheduled verify
-job does step 4 for every record: see [Drift issues](../automation/drift-issues.md).
+**Who runs this.** A person at a terminal for steps 1 to 5. The job that applies
+a cluster does step 6 after each apply. The scheduled verify job then repeats
+step 6 for every cluster record: see
+[Drift issues](../automation/drift-issues.md).
 
 ## 1. What each cluster runs
 

@@ -120,13 +120,14 @@ target branch holds a minute before the merge. The gate belongs in the pipeline,
 where the host holds the button.
 
 `examples/ci/github/strata.yml` and `examples/ci/gitlab/strata.yml` hold this
-gate and the other two jobs, ready to copy.
+gate and the other four jobs, ready to copy.
 
 **GitHub.** Call the reusable workflow on `pull_request`, then make the job a
 required status check in the branch protection rule of `main`. Turn on "Require
 branches to be up to date before merging", which re-runs the check after each
 push to `main`. A merge queue is the strongest form: it runs the gate on the
-merge result of the queue.
+merge result of the queue. A `merge_group` event carries no base ref, so give
+the workflow the `base` input there: `base: main`.
 
 ```yaml
 on: pull_request
@@ -149,6 +150,7 @@ jobs:
 | `strata-version` | yes | The strata release, a tag of this repository. |
 | `verify` | no | `false` leaves the verify check out. Default `true`. |
 | `rollback-label` | no | The label that allows a backwards pin. Default `rollback`. |
+| `base` | no | The branch to merge in, when no event names it. A merge queue run needs it. |
 | `palette-api` | no | A self-hosted Palette address. |
 
 The checkout of a pull request is already the merge result, so the gate finds

@@ -61,7 +61,10 @@ sensitive variable. See [Clusters give variables different values](../use-cases/
 
 ## Record without the network
 
-`--raw-dir` saves the API responses and the time of the read. `--from-raw`
+`--raw-dir` saves the API responses and the time of the read. It cannot be given
+with `--from-raw`, which reads a directory and asks Palette nothing. An optional
+ref after `--from-raw` fills `source.ref` and nothing else: strata does not check
+it against the directory. `--from-raw`
 builds the same snapshot from them later, with no network and no key. The record
 keeps the time of the read, not the time of the rebuild, so `verify` reports the
 version as unchanged since Palette answered:

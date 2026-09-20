@@ -23,6 +23,10 @@ on:
         description: The impact level that earns the label (none, sync, in-place, cluster-wide, may-repave, repave)
         default: repave
         type: string
+      palette-api:
+        description: The Palette API address, for a self-hosted Palette; empty means https://api.spectrocloud.com
+        default: ""
+        type: string
       strata-version:
         description: The strata release to use, a tag of this repository
         required: true
@@ -73,6 +77,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           STRATA_BIN: ${{ github.workspace }}/.strata/bin/strata
           PALETTE_API_KEY: ${{ secrets.palette-api-key }}
+          PALETTE_API: ${{ inputs.palette-api }}
           PALETTE_PROJECT_UID: ${{ secrets.palette-project-uid }}
           A: ${{ inputs.a }}
           B: ${{ inputs.b }}

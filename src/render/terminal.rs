@@ -443,11 +443,16 @@ impl Renderer for TerminalRenderer {
             return Ok(format!("no version of {} supports {cloud}\n", l.name));
         }
         for r in &l.registries {
-            // the heading states what the registry offers; `--latest` shows one of those rows
+            // the heading states what the registry holds. A flag that cuts the list says so, so
+            // that the count is never read as the registry's inventory.
             let count = if r.versions.len() == r.versions_offered {
                 count_of(r.versions_offered, "version")
             } else {
-                format!("newest of {}", count_of(r.versions_offered, "version"))
+                format!(
+                    "{} of {}",
+                    r.versions.len(),
+                    count_of(r.versions_offered, "version")
+                )
             };
             out.push_str(&format!(
                 "{} in {} ({count})\n",

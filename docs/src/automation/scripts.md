@@ -31,6 +31,11 @@ test is false:
 {{#include ../output/auto-gate.txt}}
 ```
 
+The first command exits `1`, because the two versions differ. The gate reads the
+status of `jq`, not of `strata`, so do not join the two with `&&`: that never
+reaches the test. Under `set -e`, run the comparison with `|| true`, or read its
+status on purpose.
+
 Some rules that teams use:
 
 ```bash
@@ -52,8 +57,9 @@ jq -e '.summary.packsAdded == 0 and .summary.packsRemoved == 0' report.json
 
 ## Read an error
 
-With `--json`, an error is one JSON line on standard error, and the exit status
-is `2`:
+With `--json --quiet`, an error is one JSON line on standard error, and the exit
+status is `2`. `--quiet` is what keeps the progress notes off standard error; a
+script that leaves it out gets the notes and the JSON line together:
 
 ```text
 {{#include ../output/auto-error.txt}}

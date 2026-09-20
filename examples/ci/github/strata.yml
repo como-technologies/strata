@@ -1,8 +1,12 @@
-# Strata on GitHub Actions: the comment, the merge gate, and the scheduled drift report.
+# Strata on GitHub Actions: the comment, the merge gate, the scheduled drift report, and the two
+# gates that run on demand.
 #
 # Copy this file to .github/workflows/strata.yml in your own repository and set the refs and the
-# records that your repository holds. It calls the three reusable workflows of the strata
-# repository, so a version bump is one line in three places.
+# records that your repository holds. It calls five reusable workflows of the strata repository.
+# A version bump is ten lines here: each job names the tag twice, once in `uses: ...@TAG` and once
+# in `strata-version:`. Both must carry the same tag. `uses:` selects the workflow file, and
+# `strata-version:` is what each workflow checks this repository out at and downloads the binary
+# for, so a mismatch runs one release's workflow against another release's scripts.
 #
 # Secrets to set in the repository or the organization:
 #   PALETTE_API_KEY     needed to read Palette: for a ref that is not a snapshot file, for the

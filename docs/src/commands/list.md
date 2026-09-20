@@ -123,7 +123,7 @@ kind differently by scope:
 
 | Scope | Profiles | Clusters | Projects |
 | --- | --- | --- | --- |
-| A project | the profiles of the project | the clusters of the project | that project only |
+| A project | the profiles of the project | the clusters of the project | each project the key can see: strata reads the projects at tenant scope in every scope |
 | Tenant scope | the profiles of the tenant only | the clusters of every project | each project that the key can see |
 
 Exit `0`, or `2` when strata cannot read a listing. `--json` writes

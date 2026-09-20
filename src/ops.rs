@@ -1522,8 +1522,8 @@ pub struct PackRegistry {
     pub layer: String,
     /// The versions, newest first. `--latest` keeps one of them.
     pub versions: Vec<PackBuild>,
-    /// How many versions the registry offers. With `--latest` this is more than `versions` holds,
-    /// so a heading states the registry's inventory and not the count of rows a flag left.
+    /// How many versions of the pack the registry holds, before `--latest` or `--cloud` cut the
+    /// list. A heading states the registry's inventory, and not the count of rows a flag left.
     pub versions_offered: usize,
 }
 
@@ -1605,6 +1605,13 @@ where
             continue;
         }
         had_the_pack = true;
+        // every version of this pack that the registry holds, counted before --cloud and --latest
+        // cut the list: the heading states the inventory, not the rows that survived a flag
+        let versions_offered = mine
+            .iter()
+            .filter_map(|e| Some(text(e, "/spec/version")).filter(|v| !v.is_empty()))
+            .collect::<std::collections::BTreeSet<_>>()
+            .len();
         // the registry's own answer holds the tags, which the listing does not
         progress.note(&format!("reading the tags of {name} in {registry}"));
         let entity = palette
@@ -1667,7 +1674,6 @@ where
         if let Some(first) = versions.first_mut() {
             first.latest = true;
         }
-        let versions_offered = versions.len();
         if options.latest {
             versions.truncate(1);
         }
@@ -1684,14 +1690,16 @@ where
     // no registry has the pack at all: strata cannot answer. A cloud that keeps nothing is an
     // answer, and an empty one.
     if !had_the_pack {
+        if options.registry.is_none() {
+            return Err(Error::PackNameNotFound {
+                name: name.to_string(),
+            });
+        }
         return Err(Error::PackNotFound {
             name: name.to_string(),
             version: String::new(),
             tag: None,
-            registry: options
-                .registry
-                .clone()
-                .unwrap_or_else(|| "any visible registry".to_string()),
+            registry: options.registry.clone().unwrap_or_default(),
         });
     }
     Ok(PackListing {

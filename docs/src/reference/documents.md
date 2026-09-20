@@ -171,5 +171,8 @@ is the path as a list: strings for keys, numbers for indexes, and
   `registryUid`, `layer`, and `versions[]`.
   - A version: `version`, `packUid`, `digest`, `type`, `cloudTypes[]`, `tags[]`
     with the exact tag first, and `latest`, which is true for the newest version
-    of that registry.
+    the command listed. With `--cloud`, that is the newest version for that
+    cloud, and not the newest the registry holds.
+  - `versionsOffered`: how many versions of the pack the registry holds, before
+    `--latest` or `--cloud` cut the list.
 

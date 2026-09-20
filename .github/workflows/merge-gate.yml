@@ -9,6 +9,10 @@ name: strata merge gate
 on:
   workflow_call:
     inputs:
+      base:
+        description: The branch to merge in, when no event names it. A merge queue run needs this, because a merge_group event carries no base ref.
+        default: ""
+        type: string
       records:
         description: The records to check in the caller's checkout, snapshot files or patterns such as releases/**/*.json, separated by spaces or newlines. Git expands the patterns over the merge result.
         required: true
@@ -74,7 +78,7 @@ jobs:
           PALETTE_API: ${{ inputs.palette-api }}
           RECORDS: ${{ inputs.records }}
           # the checkout of a pull request is already the merge result; the gate confirms it
-          GITHUB_BASE_REF: ${{ github.base_ref }}
+          GITHUB_BASE_REF: ${{ inputs.base || github.base_ref || github.event.merge_group.base_ref }}
           NO_VERIFY: ${{ inputs.verify && '' || '--no-verify' }}
           # the label is how a reviewer says that a backwards pin is a rollback
           ROLLBACK: ${{ contains(github.event.pull_request.labels.*.name, inputs.rollback-label) && '--allow-rollback' || '' }}

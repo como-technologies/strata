@@ -60,7 +60,8 @@ Two clusters with one name and one version run different content.
 
 ## What to do
 
-- Set `PALETTE_PROJECT` for each command, or give `--project-name`.
+- Set `PALETTE_PROJECT` for each command. `list` and `verify` also take
+  `--project` and `--project-name`; the other commands do not.
 - In a script, name the project and the uid together:
   `PALETTE_PROJECT=prod strata snapshot cluster:64f1000000000000000000f1`. A uid
   names one cluster, and it does not widen the scope: strata reads a cluster in

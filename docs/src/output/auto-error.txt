@@ -1,2 +1,2 @@
 $ strata compare aws-stack@1.1.1 aws-stack@9.9.9 --json --quiet
-{"error":{"kind":"profile-not-found","message":"no cluster profile named 'aws-stack' with version '9.9.9' in this scope; `strata list` shows the profiles in it, and `strata list --pack aws-stack` the profiles with a pack of that name","name":"aws-stack","version":"9.9.9"}}
+{"error":{"kind":"profile-not-found","message":"no cluster profile named 'aws-stack' with version '9.9.9' in this scope; `strata list` shows the profiles in it, and `strata list --pack aws-stack` the profiles with a pack of that name","name":"aws-stack","tenantScope":false,"version":"9.9.9"}}

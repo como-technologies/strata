@@ -10,6 +10,8 @@ checkout, with Rust and `just`, this builds three versions of the profile
 just examples
 ```
 
+Then compare two of the versions it built:
+
 ```text
 {{#include output/quickstart-offline.txt}}
 ```
@@ -33,7 +35,9 @@ export PALETTE_PROJECT=dev
 {{#include output/quickstart-list.txt}}
 ```
 
-The first column is a ref. Each command accepts it.
+The first column is a ref. `compare`, `snapshot`, `same-release` and
+`consumers` read one. `verify` reads a record file, which step 2 writes. See
+[Refs](./reference/refs.md).
 
 ### 2. Record a release
 
