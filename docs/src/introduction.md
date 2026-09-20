@@ -109,6 +109,6 @@ and its content. To change a release, publish a new version. `strata verify`
 tells you when a person or a tool breaks this rule.
 
 Strata reads Palette and writes files. It publishes nothing. It works in the
-same way when a team publishes with OpenTofu, the API, or the Palette console.
+same way when a team publishes with Terraform, the API, or the Palette console.
 It has no opinion about where the records live, which registry holds the packs,
 which cloud the profile targets, or which CI system runs the commands.

@@ -39,7 +39,7 @@ variables:
 | `manifests[]` | no | Each with a `name`, and `content` inline or a `contentFile`. |
 
 > **Set `tag` to the tag that you publish.** Palette stores
-> the tag that a profile was authored with. A profile from OpenTofu pins `24.04`,
+> the tag that a profile was authored with. A profile from Terraform pins `24.04`,
 > where the registry names that version `LTS__24.x`. The tag is part of
 > `IDENTITY`, so another tag for the same build gives another root.
 > `same-release` passes such a pair as `SAME CONTENT`.

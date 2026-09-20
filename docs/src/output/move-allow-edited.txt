@@ -1,4 +1,4 @@
-$ strata same-release --allow registry-move releases/1.1.1/dev.json releases/1.1.1/prod.json
-DIFFERENT      releases/1.1.1/dev.json -> releases/1.1.1/prod.json   root 088136c929bd -> 8c37b25879bc
+$ strata same-release --allow registry-move releases/1.1.1/dev.json releases/1.1.2/prod.json
+DIFFERENT      releases/1.1.1/dev.json -> releases/1.1.2/prod.json   root 088136c929bd -> 8c37b25879bc
                pack csi/csi-aws-ebs AUTHORED: charts.aws-ebs-csi-driver.storageClasses[name=spectro-storage-class].reclaimPolicy
 NOT THE SAME RELEASE: 1 of 1 pair failed

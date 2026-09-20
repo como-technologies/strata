@@ -9,12 +9,11 @@ the registry uid, the pack uid, the digest, and often the pack type change. So
 the roots differ, and `same-release` fails without `--allow registry-move`.
 
 In this example, the prod copy of `aws-stack@1.1.1` takes `csi-aws-ebs` 1.65.0
-from the OCI pack registry `Palette Registry`. The dev copy takes it from the pack registry `Public Repo`. The Public Repo values come from the live run `20260917T150025Z`. The
-uid of the OCI registry and the pack uid it gives are stand-ins.
-
-Each side is a record of `aws-stack@1.1.1` in its own project, written with
-`strata snapshot` as in
-[Promote a release to another project](./promote.md).
+from the OCI pack registry `Palette Registry`. The dev copy takes it from the
+pack registry `Public Repo`. Prod also holds `1.1.2`, which moved the pack and
+changed a CSI value on top of the move. The Public Repo values come from the
+live run `20260917T150025Z`. The uid of the OCI registry and the pack uid it
+gives are stand-ins.
 
 **Who runs this.** A person at a terminal, or the promotion gate, which runs
 `same-release` for a job: see [The promotion gate and the retire gate](../automation/gates.md).
@@ -22,7 +21,13 @@ Each side is a record of `aws-stack@1.1.1` in its own project, written with
 **Follow along.** `just playground registry-move` serves this tenant on this machine,
 with no key and no cost.
 
-## 1. same-release fails without the option
+## 1. Record each project's copy
+
+```text
+{{#include ../output/move-record.txt}}
+```
+
+## 2. same-release fails without the option
 
 ```text
 {{#include ../output/move-exact.txt}}
@@ -30,7 +35,7 @@ with no key and no cost.
 
 The reason names the move. It does not name a value, because no value changed.
 
-## 2. See what moved
+## 3. See what moved
 
 ```text
 {{#include ../output/move-compare-csi.txt}}
@@ -52,7 +57,7 @@ each side:
 The pack uid and the registry uid differ, and the upstream digest differs with
 them, because each registry stores its own copy of the build.
 
-## 3. Accept a move, and nothing else
+## 4. Accept a move, and nothing else
 
 ```text
 {{#include ../output/move-allow.txt}}
@@ -63,7 +68,16 @@ another registry: the same tag, version, values, manifests, and params, with
 the variables unchanged. The pack type can change, because it follows the
 registry.
 
-## 4. A move with a changed value still fails
+## 5. A move with a changed value still fails
+
+`aws-stack@1.1.2` in prod moved the pack and changed a CSI value on top of the
+move. Record it:
+
+```text
+{{#include ../output/move-rerecord.txt}}
+```
+
+The same command as step 4 now fails:
 
 ```text
 {{#include ../output/move-allow-edited.txt}}

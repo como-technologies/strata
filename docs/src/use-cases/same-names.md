@@ -50,8 +50,15 @@ nothing. Exit `2`:
 {{#include ../output/names-by-project.txt}}
 ```
 
-Each record keeps its project uid. `verify` checks each record in its own
-project.
+Each record keeps the project it came from. That is what lets one command check
+both, from tenant scope, with no project set:
+
+```text
+{{#include ../output/names-verify.txt}}
+```
+
+`verify` reads each record in the project the record names. Two clusters of one
+name, in two projects, and one command answers for both.
 
 ## 4. Compare the two clusters
 

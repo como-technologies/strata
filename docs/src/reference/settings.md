@@ -38,7 +38,7 @@ Strata reads no other variable for the address. The tools around strata can use
 a different name. A job that sets only that name gives strata no address, and
 strata sends its requests to `https://api.spectrocloud.com`. It gives no
 warning. Export `SPECTROCLOUD_HOST` also. The Spectro Cloud provider reads that
-variable, so one value gives strata and OpenTofu the same Palette. Strata reads
+variable, so one value gives strata and Terraform the same Palette. Strata reads
 the key in the same way, from `PALETTE_API_KEY`, then `SPECTROCLOUD_APIKEY`.
 
 ## The live example

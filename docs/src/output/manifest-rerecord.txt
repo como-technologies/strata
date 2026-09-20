@@ -1,0 +1,4 @@
+$ PALETTE_PROJECT=prod strata snapshot platform-addons@1.0.1 -o addons/1.0.1/prod.json
+strata: looking up project prod
+strata: fetching profile 64e3000000000000000000a2
+strata: wrote addons/1.0.1/prod.json (root b2fdb2e8ef83)

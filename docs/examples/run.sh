@@ -310,17 +310,17 @@ profile() {
 # manifest pack. Palette gives the manifest pack of each profile a new pack uid.
 addons() {
   [ -z "$skip" ] || return 0
-  local project=$1 uid=$2 pack=$3 label=$4
+  local project=$1 uid=$2 pack=$3 label=$4 version=${5:-1.0.0}
   local content="apiVersion: v1
 kind: Namespace
 metadata:
   name: payments
   labels:
     pod-security.kubernetes.io/enforce: $label"
-  jq -n --arg uid "$uid" --arg pack "$pack" '
+  jq -n --arg uid "$uid" --arg pack "$pack" --arg version "$version" '
     {apiVersion: "v1", kind: "ClusterProfile",
      metadata: {name: "platform-addons", uid: $uid},
-     spec: {version: "1.0.0",
+     spec: {version: $version,
             published: {cloudType: "all", type: "add-on",
                         packs: [{name: "namespace-policy", layer: "addon", type: "manifest",
                                  tag: "1.0.0", version: "1.0.0", packUid: $pack,
@@ -474,11 +474,14 @@ A111=64e0000000000000000000c3
 # other profile and cluster uids
 A111_PROD=64e1000000000000000000c3
 A111_PROD2=64e1000000000000000000c4
+A110_PROD=64e1000000000000000000b2
 A112=64e0000000000000000000d4
 A113=64e0000000000000000000d5
 A120=64e0000000000000000000e5
 ADDONS_DEV=64e2000000000000000000a1
 ADDONS_PROD=64e3000000000000000000a1
+ADDONS_PROD2=64e3000000000000000000a2
+A112_PROD=64e1000000000000000000d4
 PAYMENTS=64f1000000000000000000e1
 SEARCH=64f1000000000000000000e2
 LEDGER=64f1000000000000000000e3
@@ -671,37 +674,39 @@ show2 merge-gate-rollback 0 'scripts/ci/merge-gate.sh "releases/*.json" --base m
 
 chapter promote
 projects dev=$DEV prod=$PROD
+profile $DEV $A110 1.1.0 aws-stack@1.1.0
 profile $DEV $A111 1.1.1 aws-stack@1.1.1
-cluster $DEV $PAYMENTS payments $A111   # the release being promoted runs somewhere, so step 4 discriminates
+cluster $DEV $PAYMENTS payments $A111   # the release under review runs somewhere, so the check discriminates
+# 1.1.0 reached prod by a promotion from the dev source, so its content is dev's content.
+profile $PROD $A110_PROD 1.1.0 aws-stack@1.1.0
+# 1.1.1 was built by hand in prod, and one value differs.
 profile $PROD $A111_PROD 1.1.1 aws-stack@1.1.1 "$RETAIN"  # own copy: the promote chapter gives prod a changed value
+show2 promote-record 0 'PALETTE_PROJECT=dev strata snapshot aws-stack@1.1.0 -o releases/1.1.0/dev.json'
+show2 promote-record 0 'PALETTE_PROJECT=prod strata snapshot aws-stack@1.1.0 -o releases/1.1.0/prod.json'
 show2 promote-record 0 'PALETTE_PROJECT=dev strata snapshot aws-stack@1.1.1 -o releases/1.1.1/dev.json'
 show2 promote-record 0 'PALETTE_PROJECT=prod strata snapshot aws-stack@1.1.1 -o releases/1.1.1/prod.json'
+show promote-same 0 'strata same-release releases/1.1.0/dev.json releases/1.1.0/prod.json'
 show promote-different 1 'strata same-release releases/1.1.1/dev.json releases/1.1.1/prod.json'
 show promote-compare 1 'strata compare releases/1.1.1/dev.json releases/1.1.1/prod.json'
 show2 promote-consumers 0 'PALETTE_PROJECT=prod strata consumers aws-stack@1.1.1'
-serve_here   # the page describes what follows: the second publish of the same content in prod
-empty_profiles "$PROD"
-profile $PROD $A111_PROD2 1.1.1 aws-stack@1.1.1
-show2 promote-again 0 'PALETTE_PROJECT=prod strata snapshot aws-stack@1.1.1 -o releases/1.1.1/prod.json'
-show promote-same 0 'strata same-release releases/1.1.1/dev.json releases/1.1.1/prod.json'
 
 chapter registry-move
 projects dev=$DEV prod=$PROD
 profile $DEV $A111 1.1.1 aws-stack@1.1.1
 profile $PROD $A111_PROD 1.1.1 aws-stack@1.1.1 "$OCI_CSI"  # own copy: the registry-move chapter gives prod the OCI pack
-quiet 'PALETTE_PROJECT=dev strata snapshot aws-stack@1.1.1 -o releases/1.1.1/dev.json'
-quiet 'PALETTE_PROJECT=prod strata snapshot aws-stack@1.1.1 -o releases/1.1.1/prod.json'
+# prod also holds 1.1.2, which moved the pack and changed a value on top of the move. Both exist
+# before the playground hands the tenant over, so every step of the page runs against it.
+profile $PROD $A112_PROD 1.1.2 aws-stack@1.1.1 "$OCI_CSI | $RETAIN"  # own copy: the move, and a changed value
+show2 move-record 0 'PALETTE_PROJECT=dev strata snapshot aws-stack@1.1.1 -o releases/1.1.1/dev.json'
+show2 move-record 0 'PALETTE_PROJECT=prod strata snapshot aws-stack@1.1.1 -o releases/1.1.1/prod.json'
 show move-exact 1 'strata same-release releases/1.1.1/dev.json releases/1.1.1/prod.json'
 show move-compare 1 'strata compare releases/1.1.1/dev.json releases/1.1.1/prod.json'
 # the page teaches the flags on the CSI line and its impact, and not the other packs
 excerpt move-compare-csi move-compare '^(aws-stack|root |note |~ [[]csi)|  +(impact:|upstream digest)'
 show move-fields 1 "strata compare releases/1.1.1/dev.json releases/1.1.1/prod.json --json | jq '.packs[] | select(.identity) | {name, a: .a | {packUid, registryUid, upstream}, b: .b | {packUid, registryUid, upstream}}'"
 show move-allow 0 'strata same-release --allow registry-move releases/1.1.1/dev.json releases/1.1.1/prod.json'
-serve_here   # the page describes what follows: the move of the pack to the other registry
-empty_profiles "$PROD"
-profile $PROD $A111_PROD 1.1.1 aws-stack@1.1.1 "$OCI_CSI | $RETAIN"  # own copy: and then a changed value on top of the move
-quiet 'PALETTE_PROJECT=prod strata snapshot aws-stack@1.1.1 -o releases/1.1.1/prod.json'
-show move-allow-edited 1 'strata same-release --allow registry-move releases/1.1.1/dev.json releases/1.1.1/prod.json'
+show2 move-rerecord 0 'PALETTE_PROJECT=prod strata snapshot aws-stack@1.1.2 -o releases/1.1.2/prod.json'
+show move-allow-edited 1 'strata same-release --allow registry-move releases/1.1.1/dev.json releases/1.1.2/prod.json'
 
 chapter tag-name PALETTE_PROJECT=dev
 projects dev=$DEV
@@ -723,19 +728,18 @@ chapter manifest-pack
 projects dev=$DEV prod=$PROD
 addons $DEV $ADDONS_DEV 64e2000000000000000000d1 restricted
 addons $PROD $ADDONS_PROD 64e3000000000000000000d1 restricted
-quiet 'mkdir -p addons/1.0.0'
+# prod also holds 1.0.1, whose manifest sets another Pod Security level. Both versions exist
+# before the playground hands the tenant over, so every step of the page runs against it.
+addons $PROD $ADDONS_PROD2 64e3000000000000000000d2 baseline 1.0.1
 show2 manifest-record 0 'PALETTE_PROJECT=dev strata snapshot platform-addons@1.0.0 -o addons/1.0.0/dev.json'
 show2 manifest-record 0 'PALETTE_PROJECT=prod strata snapshot platform-addons@1.0.0 -o addons/1.0.0/prod.json'
 show manifest-compare 1 'strata compare addons/1.0.0/dev.json addons/1.0.0/prod.json'
 # the page teaches the root line, the note, and the pack line with its impact
 excerpt manifest-compare-note manifest-compare '^(platform-addons|root |note |~ )|  +impact:'
 show manifest-same 0 'strata same-release addons/1.0.0/dev.json addons/1.0.0/prod.json'
-serve_here   # the page describes what follows: the second publish of one manifest under another profile
-empty_profiles "$PROD"
-addons $PROD $ADDONS_PROD 64e3000000000000000000d1 baseline
-quiet 'PALETTE_PROJECT=prod strata snapshot platform-addons@1.0.0 -o addons/1.0.0/prod.json'
-show manifest-different 1 'strata same-release addons/1.0.0/dev.json addons/1.0.0/prod.json'
-show manifest-full 1 'strata compare addons/1.0.0/dev.json addons/1.0.0/prod.json --full'
+show2 manifest-rerecord 0 'PALETTE_PROJECT=prod strata snapshot platform-addons@1.0.1 -o addons/1.0.1/prod.json'
+show manifest-different 1 'strata same-release addons/1.0.0/dev.json addons/1.0.1/prod.json'
+show manifest-full 1 'strata compare addons/1.0.0/dev.json addons/1.0.1/prod.json --full'
 # the page teaches the one line that differs, which only --full prints
 excerpt manifest-full-diff manifest-full '^([$]|--- |[+][+][+] |[-+] +pod-security)'
 
@@ -824,6 +828,7 @@ show names-cluster 0 "strata list --cluster payments --project ''"
 show2 names-profile 2 'strata snapshot aws-stack@1.1.1 -o aws-stack.json'
 show2 names-by-project 0 'PALETTE_PROJECT=dev strata snapshot cluster:payments -o dev-payments.json'
 show2 names-by-project 0 'PALETTE_PROJECT=prod strata snapshot cluster:payments -o prod-payments.json'
+show names-verify 0 'strata verify dev-payments.json prod-payments.json'
 show names-compare 1 'strata compare dev-payments.json prod-payments.json'
 
 chapter packs PALETTE_PROJECT=dev

@@ -1,4 +1,4 @@
-$ strata compare addons/1.0.0/dev.json addons/1.0.0/prod.json --full
+$ strata compare addons/1.0.0/dev.json addons/1.0.1/prod.json --full
 ...
 --- a: addon/namespace-policy manifest namespace-policy
 +++ b: addon/namespace-policy manifest namespace-policy

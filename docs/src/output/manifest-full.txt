@@ -1,6 +1,6 @@
-$ strata compare addons/1.0.0/dev.json addons/1.0.0/prod.json --full
-platform-addons@1.0.0 (uid 64e2000000000000000000a1)  ->  platform-addons@1.0.0 (uid 64e3000000000000000000a1)
-root       b49f91f9df85 -> 17b743feafeb   CHANGED
+$ strata compare addons/1.0.0/dev.json addons/1.0.1/prod.json --full
+platform-addons@1.0.0 (uid 64e2000000000000000000a1)  ->  platform-addons@1.0.1 (uid 64e3000000000000000000a2)
+root       b49f91f9df85 -> b2fdb2e8ef83   CHANGED
 consumers  0 -> 0 clusters
 
   variables unchanged

@@ -15,8 +15,9 @@ the same content gets its own uid too. The pack uid is part of `IDENTITY`, so
 two profiles with the same manifest never have the same root.
 
 In this example, `dev` and `prod` each have `platform-addons@1.0.0`, with one
-manifest pack and the same Namespace manifest. The two pack uids are stand-ins,
-of the shape Palette gives.
+manifest pack and the same Namespace manifest. Prod also has `1.0.1`, whose
+manifest sets another Pod Security level. The pack uids are stand-ins, of the
+shape Palette gives.
 
 **Who runs this.** A person at a terminal, working out why two roots differ.
 
@@ -50,9 +51,14 @@ because of the pack uid of a manifest pack.
 
 ## 4. A changed manifest still fails
 
-Here the two manifests differ in one line: prod sets the Pod Security level to
-`baseline`, and dev sets it to `restricted`. The report names the manifest that
-changed, and not the line:
+`platform-addons@1.0.1` in prod sets the Pod Security level to `baseline`, where
+1.0.0 keeps `restricted`. Record it:
+
+```text
+{{#include ../output/manifest-rerecord.txt}}
+```
+
+The same command as step 3 now fails, and names the manifest, not the line:
 
 ```text
 {{#include ../output/manifest-different.txt}}
