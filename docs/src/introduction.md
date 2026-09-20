@@ -6,6 +6,8 @@ registry. A published profile version is what Palette builds a cluster from.
 Strata calls it a release.
 
 A cluster profile is a stack of layers: OS, Kubernetes, CNI, CSI, and add-ons.
+An add-on profile is a profile of add-on layers alone, which a cluster runs
+beside its cluster profile; a cluster can run several of them.
 Each layer is a pack with a version, a digest, and values. Palette lets a
 person edit a published version in place. Two projects can hold one version
 name with different contents. Strata calculates one digest for each version,

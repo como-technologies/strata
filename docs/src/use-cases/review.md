@@ -105,7 +105,8 @@ A label can require a second approver. See
 published 1.1.0. Stop the first seed, and export what this one prints. Keep
 `candidate.json` from step 2.
 
-Record the published version, and compare it with the candidate:
+Record the published version, and ask whether it is the release the reviewer
+approved:
 
 ```text
 {{#include ../output/review-published.txt}}
@@ -113,6 +114,14 @@ Record the published version, and compare it with the candidate:
 ```
 
 `IDENTICAL`: Palette has the version that the reviewer approved.
+
+`same-release` is the question "are these one release?", where `compare` is the
+question "what differs?". It takes two or more records, in the order a release
+moves through them, and passes when each pair holds the same content. It reads
+past the differences that carry no content — another uid, another project,
+another tag name for one build — and `compare` reports those as changes because
+its job is to report every difference. Use `same-release` for a gate, and
+`compare` to read what a gate rejected.
 
 ## Palette behavior
 

@@ -36,7 +36,7 @@ drop-ins: [Pull request comments](../automation/pr-comments.md),
 after the merge goes in your own publish job, because the publish is yours.
 
 **Follow along.** This page takes its blocks from the pages it links, so no one
-chapter serves all of it. Each block below runs on the seed that its own page
+page serves all of it. Each block below runs on the seed that its own page
 names: `just playground review-1` for the comment,
 `just playground review-2` and `just playground promote` for the proof after the
 merge, and `just playground edited-in-place-2` for the night verify. The merge

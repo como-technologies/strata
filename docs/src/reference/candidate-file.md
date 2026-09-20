@@ -35,7 +35,7 @@ variables:
 | `values` or `valuesFile` | no | The values, inline or in a file. Not both. With neither, the layer gets the default values of the pack. |
 | `layer` | no | The layer. The default comes from the registry. |
 | `tag` | no | The tag. The default is the tag that equals the version, or else the first tag of that version. An explicit tag must be a tag of that version in the registry, or the version itself. |
-| `params` | no | A map. |
+| `params` | no | A map that Palette carries on a pack beside its values. Every profile of the live runs has it empty. Strata puts it in the authored hash, so a change to it is an `AUTHORED` change. |
 | `manifests[]` | no | Each with a `name`, and `content` inline or a `contentFile`. |
 
 > **Set `tag` to the tag that you publish.** Palette stores

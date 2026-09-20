@@ -14,6 +14,11 @@ with no key and no cost.
 
 ## 1. See every cluster
 
+`strata list` is the command that asks Palette what is there. It takes the kind
+to list, `profiles`, `clusters` or `projects`, and it lists them in one scope.
+The `--project ''` here is tenant scope. Palette answers a tenant-scope listing
+of clusters with the clusters of every project, which is what this step wants:
+
 ```text
 {{#include ../output/names-tenant.txt}}
 ```

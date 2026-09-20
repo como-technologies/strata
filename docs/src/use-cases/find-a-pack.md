@@ -11,7 +11,8 @@ versions. Neither says which profiles carry the pack. `list` answers that.
 **Who runs this.** A person at a terminal, answering an incident. Nothing here writes.
 
 **Follow along.** `just playground list` serves this tenant on this machine, with
-no key and no cost. The chapter is named `list`.
+no key and no cost. Nothing on this page changes the tenant, so one seed serves
+every step. The playground name is `list`, not the page name.
 
 ## 1. Search one project
 

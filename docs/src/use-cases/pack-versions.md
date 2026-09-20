@@ -18,8 +18,9 @@ registry and hashes it as it hashes that pack inside a profile.
 posts the same comparison on a pull request: see
 [Pull request comments](../automation/pr-comments.md).
 
-**Follow along.** `just playground packs` serves this tenant on this machine, with
-no key and no cost. The chapter is named `packs`.
+**Follow along.** `just playground packs` serves this tenant on this machine,
+with no key and no cost. Nothing on this page changes the tenant, so one seed
+serves every step.
 
 ## 1. Compare two versions
 
@@ -71,10 +72,17 @@ registry, under another pack uid and digest. That is the pattern of
 {{#include ../output/packs-latest.txt}}
 ```
 
-`strata packs <name> --latest` gives the newest version in each registry, with
-the tags that point at it, which is the question a bump asks: is the pin the
-current version? Without `--latest` the command lists every version. See
-[packs](../commands/packs.md).
+`strata packs <name> --latest` gives the newest version in each registry, which
+is the question a bump asks: is the pin the current version? Without `--latest`
+the command lists every version. See [packs](../commands/packs.md).
+
+Each row is one build, and its four columns are words the later pages use. The
+**pack uid** is what the registry calls that build, and it is the identity a
+comparison reads: two rows with one uid are one build. The **pack type** says
+how the registry serves it, `spectro` for the Public Repo and `oci` for an OCI
+registry. Then the clouds it builds for. Last come the **tags** that point at
+the build: one build can carry several, so `1.65.0`, `1.65.x` and `1.x` are
+three names for one thing, and a profile stores the one its author picked.
 
 That answers whether you are behind. To see what you get if you catch up, put
 `@latest` on one side of a comparison:

@@ -23,7 +23,7 @@ step in the publish job is yours to write: strata ships no recipe for it,
 because the publish itself is yours.
 
 **Follow along.** This page takes its blocks from the pages it links, so no one
-chapter serves all of it. Each block below runs on the seed that its own page
+page serves all of it. Each block below runs on the seed that its own page
 names: `just playground packs`, `just playground list`,
 `just playground cluster-release`, and `just playground edited-in-place-2` for
 the night verify. The merge gate reads a git repository, which the playground
