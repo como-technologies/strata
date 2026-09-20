@@ -22,6 +22,15 @@ use std::{fs, thread};
 
 /// Serve `root` on a free port of 127.0.0.1, write the port to `port_file`, and never return.
 pub fn serve(root: &Path, port_file: &Path) -> std::io::Result<()> {
+    // The runner holds the write end of this server's standard input. Whatever ends the runner --
+    // a clean exit, a failed step, a panic, a kill -- closes it, and this server stops with it.
+    // A server that outlives its runner keeps the tenant directory and the port, and holds open
+    // whatever the runner's output was piped into.
+    thread::spawn(|| {
+        let mut sink = Vec::new();
+        let _ = std::io::stdin().read_to_end(&mut sink);
+        std::process::exit(0);
+    });
     let root = root.canonicalize()?;
     let listener = TcpListener::bind("127.0.0.1:0")?;
     fs::write(port_file, listener.local_addr()?.port().to_string())?;

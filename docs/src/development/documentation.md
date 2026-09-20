@@ -25,7 +25,7 @@ cargo install mdbook mdbook-mermaid mdbook-gruvbox mdbook-lint
    the README, the help text of the commands, the code comments, and the commit
    messages. See [The style rules](#the-style-rules).
 3. **Include the output. Do not copy it.** Each output of strata in the book is
-   a file in `docs/src/output/`, which `docs/examples/run.sh` writes. Never paste
+   a file in `docs/src/output/`, which `just docs-examples` writes. Never paste
    an output of strata into a page.
 4. **Do not show internal names to a user.** The root is a digest. Only
    [The hashes and the root](../internals/hashes.md) names the Merkle tree.
@@ -65,13 +65,13 @@ under one name, or any other line that a step of the page is written to cause.
 
 ## Add an output
 
-`docs/examples/run.sh` runs each command against `xtask serve`, a local stand-in
-for the Palette API in `xtask/src/palette.rs`. The stand-in serves JSON files, one for each
+`xtask` runs each command against a local stand-in for the Palette API, which is
+`xtask/src/palette.rs`. The stand-in serves JSON files, one for each
 request. Each chapter of the script builds the tenant that one page needs, from
 the real pack data in `examples/`, and changes it between commands as Palette
 changes it.
 
-1. Find the chapter of the page in `docs/examples/run.sh`, or add one.
+1. Find the chapter of the page in `xtask/src/chapters.rs`, or add one.
 2. Build the tenant with `projects`, `profile`, `addons`, `cluster`, and
    `registries`. Change it with `edit`, `on_cluster`, and `set_value`.
 3. Add a step with the expected exit code:

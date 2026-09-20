@@ -16,7 +16,7 @@ These are hard rules. `docs/src/development/documentation.md` explains each one.
 2. **Write ASD-STE100 Simplified Technical English** in the book, the README,
    the command help text, the code comments, and the commit messages.
 3. **Never paste strata output into a page.** Add a step to
-   `docs/examples/run.sh`, run `just docs-examples`, and include the file from
+   `xtask/src/chapters.rs`, run `just docs-examples`, and include the file from
    `docs/src/output/`.
 4. **Do not show "Merkle" to a user.** The root is a digest. Only
    `docs/src/internals/hashes.md` names the tree.

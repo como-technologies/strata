@@ -76,12 +76,11 @@ fn tag_release_tags_the_cargo_version_once_and_only_on_a_clean_tree() {
     );
 }
 
-// ---- docs/examples/run.sh --serve ----------------------------------------------------------------
+// ---- xtask playground ----------------------------------------------------------------------
 
-/// The playground: `run.sh --serve CHAPTER` builds the tenant of one chapter, serves it, and
-/// waits. The test needs the offline examples and the xtask binary that serves the stand-in for
-/// Palette, which `just examples` and `just stand-in` build; without them it has nothing to
-/// serve and returns.
+/// The playground: `xtask playground CHAPTER` builds the tenant of one chapter, serves it, and
+/// waits. The test needs the offline examples and the xtask binary, which `just examples` and
+/// `just stand-in` build; without them it has nothing to serve and returns.
 #[test]
 fn the_playground_serves_the_tenant_of_one_chapter() {
     let repo = Path::new(env!("CARGO_MANIFEST_DIR"));
@@ -90,24 +89,15 @@ fn the_playground_serves_the_tenant_of_one_chapter() {
     if !built.exists() || !stand_in.exists() {
         return;
     }
-    // The LAST chapter, read from the file so a new chapter cannot make this stale. Serving the
-    // last one skips every chapter before it, so a statement that changes the tenant outside a
-    // guarded helper runs with no tenant to change, and kills the script. Serving an early
-    // chapter runs none of them, which is why this test passed while `just playground packs`
-    // failed for eleven chapters.
-    let script = std::fs::read_to_string(repo.join("docs/examples/run.sh")).unwrap();
-    let last = script
-        .lines()
-        .filter_map(|l| l.strip_prefix("chapter "))
-        .filter_map(|l| l.split_whitespace().next())
-        .next_back()
-        .expect("run.sh names at least one chapter")
-        .to_string();
+    // The LAST chapter. Serving it builds every chapter before it, so a statement that changes
+    // the tenant outside a guarded helper runs with no tenant to change and kills the run.
+    // Serving an early chapter builds none of them, which is why an earlier form of this test
+    // passed while `just playground packs` failed for eleven chapters.
+    let last = "automation";
     let dir = tempfile::tempdir().unwrap();
     let log = dir.path().join("serve.log");
-    let mut child = Command::new("bash")
-        .arg(repo.join("docs/examples/run.sh"))
-        .args(["--serve", &last])
+    let mut child = Command::new(&stand_in)
+        .args(["playground", last])
         .env("STRATA_BIN", env!("CARGO_BIN_EXE_strata"))
         .stdout(std::fs::File::create(&log).unwrap())
         .stderr(std::process::Stdio::null())

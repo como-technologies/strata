@@ -1,0 +1,1177 @@
+//! Each chapter builds the tenant that one page needs and runs the commands that page shows.
+//!
+//! A chapter reads as the page does: the tenant, then the steps, with a change to the tenant
+//! where the page describes one. `serve_here` marks a state the playground can hand over.
+
+use crate::book::Runner;
+use crate::tenant::Edit;
+
+const DEV: &str = "64f20000000000000000a0d1";
+const PROD: &str = "64f20000000000000000a0f1";
+
+// the profile uids of the examples, in dev
+const A100: &str = "64e0000000000000000000a1";
+const A110: &str = "64e0000000000000000000b2";
+const A111: &str = "64e0000000000000000000c3";
+// other profile and cluster uids
+const A111_PROD: &str = "64e1000000000000000000c3";
+const A110_PROD: &str = "64e1000000000000000000b2";
+const A112: &str = "64e0000000000000000000d4";
+const A113: &str = "64e0000000000000000000d5";
+const A120: &str = "64e0000000000000000000e5";
+const ADDONS_DEV: &str = "64e2000000000000000000a1";
+const ADDONS_PROD: &str = "64e3000000000000000000a1";
+const ADDONS_PROD2: &str = "64e3000000000000000000a2";
+const A112_PROD: &str = "64e1000000000000000000d4";
+const PAYMENTS: &str = "64f1000000000000000000e1";
+const SEARCH: &str = "64f1000000000000000000e2";
+const LEDGER: &str = "64f1000000000000000000e3";
+const PAYMENTS_PROD: &str = "64f1000000000000000000f1";
+
+const RETAIN: &[Edit] = &[Edit::Reclaim("Retain")];
+const TAG_2404: &[Edit] = &[Edit::Tag {
+    pack: "ubuntu-aws",
+    tag: "24.04",
+}];
+const TAG_LTS2404: &[Edit] = &[Edit::Tag {
+    pack: "ubuntu-aws",
+    tag: "LTS__24.04",
+}];
+const OCI_CSI: &[Edit] = &[Edit::OciCsi];
+
+/// The git settings that the merge-gate chapters need, so a commit is the same on every machine.
+const GIT: &[(&str, &str)] = &[
+    ("PALETTE_PROJECT", "dev"),
+    ("GIT_CONFIG_GLOBAL", "/dev/null"),
+    ("GIT_CONFIG_SYSTEM", "/dev/null"),
+    ("GIT_AUTHOR_NAME", "dev"),
+    ("GIT_AUTHOR_EMAIL", "dev@example.com"),
+    ("GIT_COMMITTER_NAME", "dev"),
+    ("GIT_COMMITTER_EMAIL", "dev@example.com"),
+    ("GIT_AUTHOR_DATE", "2026-09-10T10:00:00+00:00"),
+    ("GIT_COMMITTER_DATE", "2026-09-10T10:00:00+00:00"),
+];
+
+const DEV_ENV: &[(&str, &str)] = &[("PALETTE_PROJECT", "dev")];
+
+/// Every chapter, in the order the book builds them.
+pub fn names() -> Vec<&'static str> {
+    vec![
+        "help",
+        "quickstart",
+        "list",
+        "snapshot",
+        "candidate",
+        "compare",
+        "schema",
+        "review",
+        "merge-gate",
+        "merge-gate-rollback",
+        "promote",
+        "registry-move",
+        "tag-name",
+        "manifest-pack",
+        "edited-in-place",
+        "overwritten",
+        "cluster-release",
+        "cluster-values",
+        "same-names",
+        "packs",
+        "retire",
+        "automation",
+    ]
+}
+
+/// Run every chapter against `r`.
+pub fn run(r: &mut Runner) {
+    getting_started(r);
+    commands(r);
+    use_cases(r);
+    automation(r);
+}
+
+fn getting_started(r: &mut Runner) {
+    r.chapter("help", &[]);
+    r.step("help", 0, false, "strata --help");
+    for c in [
+        "list",
+        "packs",
+        "snapshot",
+        "candidate",
+        "compare",
+        "same-release",
+        "verify",
+        "consumers",
+        "schema",
+    ] {
+        r.step(
+            &format!("help-{c}"),
+            0,
+            false,
+            &format!("strata {c} --help"),
+        );
+    }
+
+    r.chapter("quickstart", DEV_ENV);
+    r.projects(&[("dev", DEV), ("prod", PROD)]);
+    r.profile(DEV, A100, "1.0.0", "aws-stack@1.0.0", &[]);
+    r.profile(DEV, A110, "1.1.0", "aws-stack@1.1.0", &[]);
+    r.profile(DEV, A111, "1.1.1", "aws-stack@1.1.1", &[]);
+    r.cluster(DEV, PAYMENTS, "payments", &[A110]);
+    r.step("quickstart-offline", 1, false, "strata compare examples/profiles/aws-stack@1.1.0.json examples/profiles/aws-stack@1.1.1.json");
+    r.step("quickstart-list", 0, false, "strata list");
+    r.step(
+        "quickstart-snapshot",
+        0,
+        true,
+        "strata snapshot aws-stack@1.1.0 -o aws-stack-1.1.0.json",
+    );
+    r.step(
+        "quickstart-verify",
+        0,
+        false,
+        "strata verify aws-stack-1.1.0.json",
+    );
+    r.step(
+        "quickstart-cluster",
+        0,
+        false,
+        "strata compare aws-stack-1.1.0.json cluster:payments",
+    );
+    r.step(
+        "quickstart-versions",
+        1,
+        false,
+        "strata compare aws-stack@1.1.0 aws-stack@1.1.1",
+    );
+}
+
+fn commands(r: &mut Runner) {
+    r.chapter("list", DEV_ENV);
+    r.projects(&[("dev", DEV), ("prod", PROD)]);
+    r.profile(DEV, A100, "1.0.0", "aws-stack@1.0.0", &[]);
+    r.profile(DEV, A110, "1.1.0", "aws-stack@1.1.0", &[]);
+    r.profile(DEV, A111, "1.1.1", "aws-stack@1.1.1", &[]);
+    r.profile(PROD, A111_PROD, "1.1.1", "aws-stack@1.1.1", &[]);
+    r.cluster(DEV, PAYMENTS, "payments", &[A110]);
+    r.cluster(DEV, SEARCH, "search", &[A111]);
+    r.cluster(PROD, PAYMENTS_PROD, "payments", &[A111_PROD]);
+    r.step("list", 0, false, "strata list");
+    r.step("list-projects", 0, false, "strata list projects");
+    r.step("list-prod", 0, false, "strata list --project-name prod");
+    r.step("list-tenant", 0, false, "strata list clusters --project ''");
+    r.step("list-applied", 0, false, "strata list clusters --applied");
+    r.step("list-cluster", 0, false, "strata list --cluster payments");
+    r.step(
+        "list-cluster-tenant",
+        0,
+        false,
+        "strata list --cluster payments --project ''",
+    );
+    r.step("list-pack", 0, false, "strata list --pack cilium");
+    r.step(
+        "list-pack-all",
+        0,
+        false,
+        r#"for p in dev prod; do strata list --pack cilium --project-name "$p"; done"#,
+    );
+    r.step(
+        "list-pack-tenant",
+        0,
+        false,
+        "strata list --pack cilium --project ''",
+    );
+    r.step("list-packs", 0, false, "strata list --packs");
+    r.step(
+        "list-pack-consumers",
+        1,
+        false,
+        "for v in 1.0.0 1.1.0 1.1.1; do strata consumers aws-stack@$v; done",
+    );
+    // the empty uid is the point of the step: a reader who exported one needs it, and the book
+    // must print the command that works for them, not the one that works only here
+    r.step(
+        "list-pack-consumers",
+        1,
+        false,
+        "PALETTE_PROJECT_UID= PALETTE_PROJECT=prod strata consumers aws-stack@1.1.1",
+    );
+    r.step("list-pack-json", 0, false, r#"strata list --pack cilium --json | jq -r '.profiles[] | .ref as $ref | .packs[] | select(.name | contains("cilium")) | "\($ref) \(.name) \(.version)"'"#);
+
+    r.chapter("snapshot", DEV_ENV);
+    r.projects(&[("dev", DEV)]);
+    r.profile(DEV, A110, "1.1.0", "aws-stack@1.1.0", &[]);
+    r.profile(DEV, A111, "1.1.1", "aws-stack@1.1.1", &[]);
+    r.cluster(DEV, PAYMENTS, "payments", &[A111]);
+    r.step(
+        "snapshot-profile",
+        0,
+        true,
+        "strata snapshot aws-stack@1.1.1 -o releases/1.1.1/dev.json",
+    );
+    r.step("snapshot-record", 0, false, r#"jq '{root, source: (.source | {ref, uid, projectUid, name, version, template, fetchedAt}), packs: [.packs[] | {key, version, node: .hash.node}]}' releases/1.1.1/dev.json"#);
+    r.step(
+        "snapshot-latest",
+        0,
+        true,
+        "strata snapshot aws-stack@latest -o latest.json",
+    );
+    r.step(
+        "snapshot-latest-version",
+        0,
+        false,
+        r#"jq -r '.source | "\(.name)@\(.version)"' latest.json"#,
+    );
+    r.step(
+        "snapshot-cluster",
+        0,
+        true,
+        "strata snapshot cluster:payments -o runs/payments.json",
+    );
+    r.step(
+        "snapshot-cluster-source",
+        0,
+        false,
+        "jq .source.cluster runs/payments.json",
+    );
+    r.step(
+        "snapshot-raw",
+        0,
+        true,
+        "strata snapshot aws-stack@1.1.1 --raw-dir raw/aws-stack-1.1.1 -o online.json",
+    );
+    r.step("snapshot-raw", 0, false, "ls raw/aws-stack-1.1.1");
+    r.step(
+        "snapshot-raw",
+        0,
+        true,
+        "strata snapshot --from-raw raw/aws-stack-1.1.1 -o offline.json",
+    );
+    r.step(
+        "snapshot-raw",
+        0,
+        false,
+        "jq -r .root online.json offline.json",
+    );
+
+    r.chapter("candidate", DEV_ENV);
+    r.projects(&[("dev", DEV)]);
+    r.registries(DEV);
+    r.profile(DEV, A111, "1.1.1", "aws-stack@1.1.1", &[]);
+    r.step(
+        "candidate-write",
+        0,
+        true,
+        "strata candidate aws-stack@1.1.1 -o aws-stack.yaml --files-dir aws-stack",
+    );
+    r.step("candidate-yaml", 0, false, "cat aws-stack.yaml");
+    r.step("candidate-files", 0, false, "find aws-stack -type f | sort");
+    r.step(
+        "candidate-snapshot",
+        0,
+        true,
+        "strata snapshot --from-candidate aws-stack.yaml -o candidate.json",
+    );
+    r.step(
+        "candidate-published",
+        0,
+        true,
+        "strata snapshot aws-stack@1.1.1 -o published.json",
+    );
+    r.step(
+        "candidate-same",
+        0,
+        false,
+        "strata same-release candidate.json published.json",
+    );
+
+    r.chapter("compare", DEV_ENV);
+    r.projects(&[("dev", DEV)]);
+    r.profile(DEV, A100, "1.0.0", "aws-stack@1.0.0", &[]);
+    r.profile(DEV, A110, "1.1.0", "aws-stack@1.1.0", &[]);
+    r.profile(DEV, A111, "1.1.1", "aws-stack@1.1.1", &[]);
+    r.profile(DEV, A112, "1.1.2", "aws-stack@1.1.1", RETAIN);
+    r.step(
+        "compare-identical",
+        0,
+        false,
+        "strata compare aws-stack@1.1.1 aws-stack@1.1.1",
+    );
+    r.step(
+        "compare-repave",
+        1,
+        false,
+        "strata compare aws-stack@1.0.0 aws-stack@1.1.0",
+    );
+    r.step(
+        "compare-values",
+        1,
+        false,
+        "strata compare aws-stack@1.1.1 aws-stack@1.1.2",
+    );
+    r.step(
+        "compare-full",
+        1,
+        false,
+        "strata compare aws-stack@1.1.1 aws-stack@1.1.2 --full",
+    );
+    r.step(
+        "compare-markdown",
+        1,
+        false,
+        "strata compare aws-stack@1.0.0 aws-stack@1.1.0 --format markdown",
+    );
+    r.step(
+        "compare-json",
+        1,
+        false,
+        "strata compare aws-stack@1.0.0 aws-stack@1.1.0 --json | jq .summary",
+    );
+
+    r.chapter("schema", &[]);
+    r.step(
+        "schema-diff",
+        0,
+        false,
+        r#"strata schema diff | jq -r '.required | join(", ")'"#,
+    );
+}
+
+const CANDIDATE_YAML: &str = "\
+name: aws-stack
+version: 1.1.0
+cloudType: aws
+registry: Public Repo
+layers:
+  - name: ubuntu-aws
+    version: \"24.04\"
+  - name: kubernetes
+    version: 1.36.2
+  - name: cni-cilium-oss
+    version: 1.20.1
+  - name: csi-aws-ebs
+    version: 1.65.0
+  - name: cert-manager
+    version: 1.21.1
+";
+
+fn use_cases(r: &mut Runner) {
+    r.chapter("review", DEV_ENV);
+    r.projects(&[("dev", DEV)]);
+    r.registries(DEV);
+    r.profile(DEV, A100, "1.0.0", "aws-stack@1.0.0", &[]);
+    // the release under review runs somewhere: the repave has a target
+    r.cluster(DEV, PAYMENTS, "payments", &[A100]);
+    r.step(
+        "review-record",
+        0,
+        true,
+        "strata snapshot aws-stack@1.0.0 -o releases/1.0.0/dev.json",
+    );
+    r.write_file("aws-stack.yaml", CANDIDATE_YAML);
+    r.step("review-candidate", 0, false, "cat aws-stack.yaml");
+    r.step(
+        "review-snapshot",
+        0,
+        true,
+        "strata snapshot --from-candidate aws-stack.yaml -o candidate.json",
+    );
+    r.step(
+        "review-markdown",
+        1,
+        false,
+        "strata compare releases/1.0.0/dev.json candidate.json --format markdown",
+    );
+    r.step("review-repave", 1, false, r#"strata compare releases/1.0.0/dev.json candidate.json --json | jq -r '.packs[] | select(.impact.level == "repave") | "\(.name): \(.impact.text)"'"#);
+    r.step(
+        "review-pr-comment",
+        0,
+        true,
+        "scripts/ci/pr-comment.sh releases/1.0.0/dev.json candidate.json --dry-run > comment.md",
+    );
+    r.step("review-comment-head", 0, false, "head -3 comment.md");
+    r.serve_here(); // the page describes what follows: the publication of the reviewed version
+    r.profile(DEV, A110, "1.1.0", "aws-stack@1.1.0", &[]);
+    r.step(
+        "review-published",
+        0,
+        true,
+        "strata snapshot aws-stack@1.1.0 -o releases/1.1.0/dev.json",
+    );
+    r.step(
+        "review-same",
+        0,
+        false,
+        "strata same-release candidate.json releases/1.1.0/dev.json",
+    );
+
+    r.chapter("merge-gate", GIT);
+    r.projects(&[("dev", DEV)]);
+    r.registries(DEV);
+    r.profile(DEV, A100, "1.0.0", "aws-stack@1.0.0", &[]);
+    // main pins aws-stack@1.0.0, and a branch changes the record: the profile was edited in place
+    r.quiet("git init -q -b main . && git remote add origin .");
+    r.quiet("strata snapshot aws-stack@1.0.0 -o releases/dev.json &&\n  git add releases && git commit -qm \"dev pins aws-stack@1.0.0\"");
+    r.quiet("git checkout -q -b keep-the-volumes");
+    r.edit(DEV, A100, RETAIN);
+    r.quiet("strata snapshot aws-stack@1.0.0 -o releases/dev.json &&\n  git commit -qam \"keep the volumes on delete\"");
+    // while that branch waited, another merge request published 1.1.0 and pinned it on main
+    r.quiet("git checkout -q main");
+    r.profile(DEV, A110, "1.1.0", "aws-stack@1.1.0", &[]);
+    r.quiet("strata snapshot aws-stack@1.1.0 -o releases/dev.json &&\n  git commit -qam \"dev pins aws-stack@1.1.0\"");
+    // the branch settled the conflict by keeping its own record, which is what a hand merge does
+    r.quiet("git checkout -q keep-the-volumes && git fetch -q origin main &&\n  { git merge -q --no-edit --no-commit origin/main || true; } &&\n  git checkout HEAD -- releases/dev.json &&\n  git commit -qm \"merge main, keep our record\"");
+    r.step(
+        "merge-gate-behind",
+        1,
+        true,
+        r#"scripts/ci/merge-gate.sh "releases/*.json" --base main"#,
+    );
+    // the fix: pin the version that main has, with the change on top
+    r.quiet("strata snapshot aws-stack@1.1.0 -o releases/dev.json && git commit -qam \"pin aws-stack@1.1.0\"");
+    r.step(
+        "merge-gate-clear",
+        0,
+        true,
+        r#"scripts/ci/merge-gate.sh "releases/*.json" --base main"#,
+    );
+    // and the check that git cannot make: the pinned profile is edited in Palette after the record
+    r.edit(DEV, A110, RETAIN);
+    r.step(
+        "merge-gate-drifted",
+        1,
+        true,
+        r#"scripts/ci/merge-gate.sh "releases/*.json" --base main"#,
+    );
+
+    r.chapter("merge-gate-rollback", GIT);
+    r.projects(&[("dev", DEV)]);
+    r.registries(DEV);
+    r.profile(DEV, A100, "1.0.0", "aws-stack@1.0.0", &[]);
+    r.profile(DEV, A110, "1.1.0", "aws-stack@1.1.0", &[]);
+    // dev ran 1.0.0, and then 1.1.0
+    r.quiet("git init -q -b main . && git remote add origin .");
+    r.quiet("strata snapshot aws-stack@1.0.0 -o releases/dev.json &&\n  git add releases && git commit -qm \"dev pins aws-stack@1.0.0\"");
+    r.quiet("strata snapshot aws-stack@1.1.0 -o releases/dev.json &&\n  git commit -qam \"dev pins aws-stack@1.1.0\"");
+    // 1.1.0 repaved the nodes badly, so a branch off main puts back what dev ran before
+    r.quiet("git checkout -q -b roll-dev-back &&\n  git show main~1:releases/dev.json > releases/dev.json &&\n  git commit -qam \"pin what dev ran before 1.1.0\"");
+    r.step(
+        "merge-gate-rollback-red",
+        1,
+        true,
+        r#"scripts/ci/merge-gate.sh "releases/*.json" --base main"#,
+    );
+    // the same change, with the rollback declared in the commit that makes it
+    r.quiet("git commit -q --amend -m \"roll dev back to aws-stack@1.0.0\n\nRollback: releases/dev.json to aws-stack@1.0.0\n1.1.0 repaved the nodes with a CSI driver that lost the volumes\"");
+    r.step(
+        "merge-gate-rollback",
+        0,
+        true,
+        r#"scripts/ci/merge-gate.sh "releases/*.json" --base main"#,
+    );
+
+    r.chapter("promote", &[]);
+    r.projects(&[("dev", DEV), ("prod", PROD)]);
+    r.profile(DEV, A110, "1.1.0", "aws-stack@1.1.0", &[]);
+    r.profile(DEV, A111, "1.1.1", "aws-stack@1.1.1", &[]);
+    // the release under review runs somewhere, so the check discriminates
+    r.cluster(DEV, PAYMENTS, "payments", &[A111]);
+    // 1.1.0 reached prod by a promotion from the dev source, so its content is dev's content.
+    r.profile(PROD, A110_PROD, "1.1.0", "aws-stack@1.1.0", &[]);
+    // 1.1.1 was built by hand in prod, and one value differs.
+    r.profile_own_copy(
+        PROD,
+        A111_PROD,
+        "1.1.1",
+        "aws-stack@1.1.1",
+        RETAIN,
+        "the promote chapter gives prod a changed value",
+    );
+    r.step(
+        "promote-record",
+        0,
+        true,
+        "PALETTE_PROJECT=dev strata snapshot aws-stack@1.1.0 -o releases/1.1.0/dev.json",
+    );
+    r.step(
+        "promote-record",
+        0,
+        true,
+        "PALETTE_PROJECT=prod strata snapshot aws-stack@1.1.0 -o releases/1.1.0/prod.json",
+    );
+    r.step(
+        "promote-record",
+        0,
+        true,
+        "PALETTE_PROJECT=dev strata snapshot aws-stack@1.1.1 -o releases/1.1.1/dev.json",
+    );
+    r.step(
+        "promote-record",
+        0,
+        true,
+        "PALETTE_PROJECT=prod strata snapshot aws-stack@1.1.1 -o releases/1.1.1/prod.json",
+    );
+    r.step(
+        "promote-same",
+        0,
+        false,
+        "strata same-release releases/1.1.0/dev.json releases/1.1.0/prod.json",
+    );
+    r.step(
+        "promote-different",
+        1,
+        false,
+        "strata same-release releases/1.1.1/dev.json releases/1.1.1/prod.json",
+    );
+    r.step(
+        "promote-compare",
+        1,
+        false,
+        "strata compare releases/1.1.1/dev.json releases/1.1.1/prod.json",
+    );
+    r.step(
+        "promote-consumers",
+        0,
+        true,
+        "PALETTE_PROJECT=prod strata consumers aws-stack@1.1.1",
+    );
+
+    r.chapter("registry-move", &[]);
+    r.projects(&[("dev", DEV), ("prod", PROD)]);
+    r.profile(DEV, A111, "1.1.1", "aws-stack@1.1.1", &[]);
+    r.profile_own_copy(
+        PROD,
+        A111_PROD,
+        "1.1.1",
+        "aws-stack@1.1.1",
+        OCI_CSI,
+        "the registry-move chapter gives prod the OCI pack",
+    );
+    // prod also holds 1.1.2, which moved the pack and changed a value on top of the move. Both
+    // exist before the playground hands the tenant over, so every step of the page runs against it.
+    r.profile_own_copy(
+        PROD,
+        A112_PROD,
+        "1.1.2",
+        "aws-stack@1.1.1",
+        &[Edit::OciCsi, Edit::Reclaim("Retain")],
+        "the move, and a changed value",
+    );
+    r.step(
+        "move-record",
+        0,
+        true,
+        "PALETTE_PROJECT=dev strata snapshot aws-stack@1.1.1 -o releases/1.1.1/dev.json",
+    );
+    r.step(
+        "move-record",
+        0,
+        true,
+        "PALETTE_PROJECT=prod strata snapshot aws-stack@1.1.1 -o releases/1.1.1/prod.json",
+    );
+    r.step(
+        "move-exact",
+        1,
+        false,
+        "strata same-release releases/1.1.1/dev.json releases/1.1.1/prod.json",
+    );
+    r.step(
+        "move-compare",
+        1,
+        false,
+        "strata compare releases/1.1.1/dev.json releases/1.1.1/prod.json",
+    );
+    // the page teaches the flags on the CSI line and its impact, and not the other packs
+    r.excerpt(
+        "move-compare-csi",
+        "move-compare",
+        r"^(aws-stack|root |note |~ \[csi)|  +(impact:|upstream digest)",
+    );
+    r.step("move-fields", 1, false, r#"strata compare releases/1.1.1/dev.json releases/1.1.1/prod.json --json | jq '.packs[] | select(.identity) | {name, a: .a | {packUid, registryUid, upstream}, b: .b | {packUid, registryUid, upstream}}'"#);
+    r.step("move-allow", 0, false, "strata same-release --allow registry-move releases/1.1.1/dev.json releases/1.1.1/prod.json");
+    r.step(
+        "move-rerecord",
+        0,
+        true,
+        "PALETTE_PROJECT=prod strata snapshot aws-stack@1.1.2 -o releases/1.1.2/prod.json",
+    );
+    r.step("move-allow-edited", 1, false, "strata same-release --allow registry-move releases/1.1.1/dev.json releases/1.1.2/prod.json");
+
+    r.chapter("tag-name", DEV_ENV);
+    r.projects(&[("dev", DEV)]);
+    r.profile(DEV, A111, "1.1.1", "aws-stack@1.1.1", &[]);
+    r.profile(DEV, A113, "1.1.3", "aws-stack@1.1.1", TAG_2404);
+    r.step(
+        "tag-compare",
+        1,
+        false,
+        "strata compare aws-stack@1.1.1 aws-stack@1.1.3",
+    );
+    // the page teaches the verdict, the note and the OS line; it never reads the other packs
+    r.excerpt(
+        "tag-compare-os",
+        "tag-compare",
+        r"^(aws-stack|root |note |~ \[os)|  +impact:",
+    );
+    r.step(
+        "tag-same",
+        0,
+        false,
+        "strata same-release aws-stack@1.1.1 aws-stack@1.1.3",
+    );
+    r.step("tag-json", 1, false, r#"strata compare aws-stack@1.1.1 aws-stack@1.1.3 --json | jq '{same, sameContent, maxImpact: .summary.maxImpact, renamed: [.packs[] | select(.tagRenamed) | .name]}'"#);
+    r.step(
+        "tag-record",
+        0,
+        true,
+        "strata snapshot aws-stack@1.1.3 -o releases/1.1.3/dev.json",
+    );
+    r.serve_here(); // the page describes what follows: the tag rename that it reports as drift
+    r.edit(DEV, A113, TAG_LTS2404);
+    r.step(
+        "tag-verify",
+        1,
+        false,
+        "strata verify releases/1.1.3/dev.json",
+    );
+    // the page teaches the two notes and the verdict. formats.md keeps the whole report.
+    r.excerpt(
+        "tag-verify-notes",
+        "tag-verify",
+        r"^(aws-stack|root |note |~ \[os|DRIFT)|  +impact:",
+    );
+
+    r.chapter("manifest-pack", &[]);
+    r.projects(&[("dev", DEV), ("prod", PROD)]);
+    r.addons(
+        DEV,
+        ADDONS_DEV,
+        "64e2000000000000000000d1",
+        "restricted",
+        "1.0.0",
+    );
+    r.addons(
+        PROD,
+        ADDONS_PROD,
+        "64e3000000000000000000d1",
+        "restricted",
+        "1.0.0",
+    );
+    // prod also holds 1.0.1, whose manifest sets another Pod Security level. Both versions exist
+    // before the playground hands the tenant over, so every step of the page runs against it.
+    r.addons(
+        PROD,
+        ADDONS_PROD2,
+        "64e3000000000000000000d2",
+        "baseline",
+        "1.0.1",
+    );
+    r.step(
+        "manifest-record",
+        0,
+        true,
+        "PALETTE_PROJECT=dev strata snapshot platform-addons@1.0.0 -o addons/1.0.0/dev.json",
+    );
+    r.step(
+        "manifest-record",
+        0,
+        true,
+        "PALETTE_PROJECT=prod strata snapshot platform-addons@1.0.0 -o addons/1.0.0/prod.json",
+    );
+    r.step(
+        "manifest-compare",
+        1,
+        false,
+        "strata compare addons/1.0.0/dev.json addons/1.0.0/prod.json",
+    );
+    // the page teaches the root line, the note, and the pack line with its impact
+    r.excerpt(
+        "manifest-compare-note",
+        "manifest-compare",
+        r"^(platform-addons|root |note |~ )|  +impact:",
+    );
+    r.step(
+        "manifest-same",
+        0,
+        false,
+        "strata same-release addons/1.0.0/dev.json addons/1.0.0/prod.json",
+    );
+    r.step(
+        "manifest-rerecord",
+        0,
+        true,
+        "PALETTE_PROJECT=prod strata snapshot platform-addons@1.0.1 -o addons/1.0.1/prod.json",
+    );
+    r.step(
+        "manifest-different",
+        1,
+        false,
+        "strata same-release addons/1.0.0/dev.json addons/1.0.1/prod.json",
+    );
+    r.step(
+        "manifest-full",
+        1,
+        false,
+        "strata compare addons/1.0.0/dev.json addons/1.0.1/prod.json --full",
+    );
+    // the page teaches the one line that differs, which only --full prints
+    r.excerpt(
+        "manifest-full-diff",
+        "manifest-full",
+        r"^([$]|--- |[+][+][+] |[-+] +pod-security)",
+    );
+
+    r.chapter("edited-in-place", DEV_ENV);
+    r.projects(&[("dev", DEV)]);
+    r.profile(DEV, A111, "1.1.1", "aws-stack@1.1.1", &[]);
+    r.cluster(DEV, PAYMENTS, "payments", &[A111]);
+    r.step(
+        "edited-record",
+        0,
+        true,
+        "strata snapshot aws-stack@1.1.1 -o releases/1.1.1/dev.json",
+    );
+    r.step(
+        "edited-record",
+        0,
+        true,
+        "strata snapshot cluster:payments -o runs/payments.json",
+    );
+    r.step(
+        "edited-verify-ok",
+        0,
+        false,
+        "strata verify releases/1.1.1/dev.json",
+    );
+    r.serve_here(); // state 1: the records are taken, and nobody has edited the version
+    r.edit(DEV, A111, RETAIN);
+    r.step(
+        "edited-verify",
+        1,
+        false,
+        "strata verify releases/1.1.1/dev.json",
+    );
+    r.step(
+        "edited-compare",
+        1,
+        false,
+        "strata compare releases/1.1.1/dev.json aws-stack@1.1.1",
+    );
+    r.step(
+        "edited-cluster-kept",
+        0,
+        false,
+        "strata verify runs/payments.json",
+    );
+    r.cluster(DEV, SEARCH, "search", &[A111]);
+    r.serve_here(); // state 2: the edit is in Palette, and search started after it
+    r.step(
+        "edited-two-clusters",
+        1,
+        false,
+        "strata compare cluster:payments cluster:search",
+    );
+    r.step(
+        "edited-bulk",
+        1,
+        false,
+        "strata verify 'releases/**/*.json' 'runs/*.json'",
+    );
+    r.step(
+        "edited-bulk-json",
+        1,
+        false,
+        "strata verify 'releases/**/*.json' 'runs/*.json' --json | jq '.summary'",
+    );
+    r.step(
+        "edited-report",
+        1,
+        true,
+        "scripts/ci/verify-report.sh 'releases/**/*.json' 'runs/*.json' --dry-run",
+    );
+    r.cluster(DEV, PAYMENTS, "payments", &[A111]);
+    r.step(
+        "edited-cluster-updated",
+        1,
+        false,
+        "strata verify runs/payments.json",
+    );
+
+    r.chapter("overwritten", DEV_ENV);
+    r.projects(&[("dev", DEV)]);
+    r.profile(DEV, A111, "1.1.1", "aws-stack@1.1.1", &[]);
+    r.cluster(DEV, PAYMENTS, "payments", &[A111]);
+    r.step(
+        "overwritten-records",
+        0,
+        true,
+        "strata snapshot aws-stack@1.1.1 -o releases/1.1.1/dev.json",
+    );
+    r.step(
+        "overwritten-records",
+        0,
+        true,
+        "strata snapshot cluster:payments -o runs/payments.json",
+    );
+    r.serve_here(); // state 1: the records are taken, and nobody has bumped the version
+    r.edit(
+        DEV,
+        A111,
+        &[Edit::Version("1.2.0"), Edit::Reclaim("Retain")],
+    );
+    r.serve_here(); // state 2: the bump took the uid of 1.1.1, with the flag off
+    r.step("overwritten-list", 0, false, "strata list profiles");
+    r.step(
+        "overwritten-verify",
+        1,
+        false,
+        "strata verify releases/1.1.1/dev.json",
+    );
+    r.step(
+        "overwritten-cluster",
+        1,
+        false,
+        "strata verify runs/payments.json",
+    );
+    r.step(
+        "overwritten-consumers",
+        1,
+        false,
+        "strata consumers aws-stack@1.2.0",
+    );
+    r.step(
+        "overwritten-compare",
+        1,
+        false,
+        "strata compare cluster:payments aws-stack@1.2.0",
+    );
+    r.step("overwritten-candidate", 0, true, "strata candidate releases/1.1.1/dev.json -o aws-stack-1.1.1.yaml --files-dir aws-stack-1.1.1");
+    r.edit(
+        DEV,
+        A111,
+        &[Edit::Version("1.1.1"), Edit::Reclaim("Delete")],
+    );
+    r.profile(DEV, A120, "1.2.0", "aws-stack@1.1.1", RETAIN);
+    // state 3, which serve_last reaches at the next chapter: the same bump with the flag on
+    r.step("overwritten-flag-list", 0, false, "strata list profiles");
+    r.step(
+        "overwritten-flag-verify",
+        0,
+        false,
+        "strata verify releases/1.1.1/dev.json runs/payments.json",
+    );
+
+    r.chapter("cluster-release", DEV_ENV);
+    r.projects(&[("dev", DEV)]);
+    r.profile(DEV, A110, "1.1.0", "aws-stack@1.1.0", &[]);
+    r.profile(DEV, A111, "1.1.1", "aws-stack@1.1.1", &[]);
+    r.addons(
+        DEV,
+        ADDONS_DEV,
+        "64e2000000000000000000d1",
+        "restricted",
+        "1.0.0",
+    );
+    r.cluster(DEV, PAYMENTS, "payments", &[A110, ADDONS_DEV]);
+    r.cluster(DEV, SEARCH, "search", &[A111]);
+    r.cluster(DEV, LEDGER, "ledger", &[A110]);
+    r.on_cluster_reclaim(DEV, LEDGER, "Retain");
+    r.step(
+        "cluster-release-record",
+        0,
+        true,
+        "strata snapshot aws-stack@1.1.0 -o releases/1.1.0/dev.json",
+    );
+    r.step(
+        "cluster-applied",
+        0,
+        false,
+        "strata list clusters --applied",
+    );
+    r.step(
+        "cluster-identical",
+        0,
+        false,
+        "strata compare releases/1.1.0/dev.json cluster:payments/aws-stack",
+    );
+    r.step(
+        "cluster-all-profiles",
+        1,
+        false,
+        "strata compare releases/1.1.0/dev.json cluster:payments",
+    );
+    r.step(
+        "cluster-moved",
+        1,
+        false,
+        "strata compare releases/1.1.0/dev.json cluster:search",
+    );
+    r.step(
+        "cluster-edited",
+        1,
+        false,
+        "strata compare releases/1.1.0/dev.json cluster:ledger",
+    );
+    // the page tells the reader to run this next, so the page must show it
+    r.step(
+        "cluster-edited-verify",
+        0,
+        false,
+        "strata verify releases/1.1.0/dev.json",
+    );
+    r.step(
+        "cluster-run-record",
+        0,
+        true,
+        "strata snapshot cluster:payments/aws-stack -o runs/payments.json",
+    );
+    r.step(
+        "cluster-run-record",
+        0,
+        false,
+        "strata verify runs/payments.json",
+    );
+    // the page teaches that verify fetches the cluster again with the same selection: the record,
+    // the two roots and the verdict. The packs of the profile are not its subject.
+    r.excerpt(
+        "cluster-run-verify",
+        "cluster-run-record",
+        r"^([$] |strata: wrote|root |OK:)",
+    );
+
+    r.chapter("cluster-values", DEV_ENV);
+    r.projects(&[("dev", DEV)]);
+    r.profile(DEV, A111, "1.1.1", "aws-stack@1.1.1", &[]);
+    r.cluster_with(
+        DEV,
+        PAYMENTS,
+        "payments",
+        &[A111],
+        &[("platform_owner", "team-payments")],
+    );
+    r.cluster_with(
+        DEV,
+        SEARCH,
+        "search",
+        &[A111],
+        &[("platform_owner", "team-search")],
+    );
+    r.step(
+        "values-compare",
+        0,
+        false,
+        "strata compare cluster:payments cluster:search",
+    );
+    r.step(
+        "cluster-values-record",
+        0,
+        true,
+        "strata snapshot cluster:payments -o runs/payments.json",
+    );
+    r.step(
+        "values-record",
+        0,
+        false,
+        "jq .source.cluster.variables runs/payments.json",
+    );
+    r.serve_here(); // state 1: each cluster keeps the value it started with
+    r.set_value(DEV, PAYMENTS, "platform_owner", "team-platform");
+    // state 2, which serve_last reaches at the next chapter: a person changed the value
+    r.step(
+        "values-verify",
+        0,
+        false,
+        "strata verify runs/payments.json",
+    );
+    // the page tells a job to read records[].clusterVariables, so the page must show that shape
+    r.step(
+        "values-json",
+        0,
+        true,
+        "strata snapshot cluster:search -o runs/search.json",
+    );
+    r.step(
+        "values-json",
+        0,
+        false,
+        r#"strata verify 'runs/*.json' --format json | jq '.records[] | {path, clusterVariables}'"#,
+    );
+
+    r.chapter("same-names", &[]);
+    r.projects(&[("dev", DEV), ("prod", PROD)]);
+    r.profile(DEV, A111, "1.1.1", "aws-stack@1.1.1", &[]);
+    r.profile_own_copy(
+        PROD,
+        A111_PROD,
+        "1.1.1",
+        "aws-stack@1.1.1",
+        RETAIN,
+        "the same-names chapter gives prod a changed value",
+    );
+    r.cluster(DEV, PAYMENTS, "payments", &[A111]);
+    r.cluster(PROD, PAYMENTS_PROD, "payments", &[A111_PROD]);
+    r.step(
+        "names-tenant",
+        0,
+        false,
+        "strata list clusters --project ''",
+    );
+    r.step(
+        "names-ambiguous",
+        2,
+        true,
+        "strata snapshot cluster:payments -o payments.json",
+    );
+    r.step(
+        "names-cluster",
+        0,
+        false,
+        "strata list --cluster payments --project ''",
+    );
+    r.step(
+        "names-profile",
+        2,
+        true,
+        "strata snapshot aws-stack@1.1.1 -o aws-stack.json",
+    );
+    r.step(
+        "names-by-project",
+        0,
+        true,
+        "PALETTE_PROJECT=dev strata snapshot cluster:payments -o dev-payments.json",
+    );
+    r.step(
+        "names-by-project",
+        0,
+        true,
+        "PALETTE_PROJECT=prod strata snapshot cluster:payments -o prod-payments.json",
+    );
+    r.step(
+        "names-verify",
+        0,
+        false,
+        "strata verify dev-payments.json prod-payments.json",
+    );
+    r.step(
+        "names-compare",
+        1,
+        false,
+        "strata compare dev-payments.json prod-payments.json",
+    );
+
+    r.chapter("packs", DEV_ENV);
+    r.projects(&[("dev", DEV), ("prod", PROD)]);
+    r.registries(DEV);
+    r.step(
+        "pack-compare",
+        1,
+        false,
+        "strata compare 'pack:Public Repo/kubernetes@1.35.3' 'pack:Public Repo/kubernetes@1.36.2'",
+    );
+    r.step(
+        "pack-os",
+        1,
+        false,
+        "strata compare 'pack:Public Repo/ubuntu-aws@20.04' 'pack:Public Repo/ubuntu-aws@24.04'",
+    );
+    r.step(
+        "pack-ambiguous",
+        2,
+        true,
+        "strata compare pack:csi-aws-ebs@1.65.0 pack:csi-aws-ebs@1.65.0",
+    );
+    r.step("pack-registries", 1, false, "strata compare 'pack:Public Repo/csi-aws-ebs@1.65.0' 'pack:Palette Registry/csi-aws-ebs@1.65.0'");
+    r.step(
+        "pack-record",
+        0,
+        true,
+        "strata snapshot 'pack:Public Repo/kubernetes@latest' -o kubernetes.json",
+    );
+    r.step("pack-verify", 0, false, "strata verify kubernetes.json");
+    r.step(
+        "packs-list",
+        0,
+        false,
+        "strata packs csi-aws-ebs --registry 'Public Repo'",
+    );
+    r.step(
+        "packs-latest",
+        0,
+        false,
+        "strata packs csi-aws-ebs --latest",
+    );
+    r.step(
+        "pack-behind",
+        1,
+        false,
+        "strata compare 'pack:Public Repo/kubernetes@1.35.3' 'pack:Public Repo/kubernetes@latest'",
+    );
+    // the claim is that @latest resolves, and that the report names the version it resolved to
+    r.excerpt("pack-behind-head", "pack-behind", r"^(pack |root )");
+    r.step(
+        "packs-cloud",
+        0,
+        false,
+        "strata packs kubernetes --registry 'Public Repo' --cloud aws --latest",
+    );
+    r.step("packs-json", 0, false, r#"strata packs csi-aws-ebs --registry 'Public Repo' --latest --json | jq '.registries[0].versions[0]'"#);
+
+    r.chapter("retire", DEV_ENV);
+    r.projects(&[("dev", DEV)]);
+    r.profile(DEV, A100, "1.0.0", "aws-stack@1.0.0", &[]);
+    r.profile(DEV, A110, "1.1.0", "aws-stack@1.1.0", &[]);
+    r.cluster(DEV, PAYMENTS, "payments", &[A110]);
+    r.cluster(DEV, SEARCH, "search", &[A110]);
+    r.step(
+        "retire-in-use",
+        1,
+        false,
+        "strata consumers aws-stack@1.1.0",
+    );
+    r.step("retire-free", 0, false, "strata consumers aws-stack@1.0.0");
+    r.step(
+        "retire-gate",
+        0,
+        false,
+        r#"strata consumers aws-stack@1.0.0 && echo "no cluster uses aws-stack@1.0.0""#,
+    );
+    r.step("retire-json", 1, false, r#"strata consumers aws-stack@1.1.0 --json | jq -r '.consumers[] | "\(.name) \(.state) \(.version)"'"#);
+}
+
+fn automation(r: &mut Runner) {
+    r.chapter("automation", DEV_ENV);
+    r.projects(&[("dev", DEV)]);
+    r.profile(DEV, A100, "1.0.0", "aws-stack@1.0.0", &[]);
+    r.profile(DEV, A110, "1.1.0", "aws-stack@1.1.0", &[]);
+    r.profile(DEV, A111, "1.1.1", "aws-stack@1.1.1", &[]);
+    r.step(
+        "auto-max-impact",
+        1,
+        false,
+        "strata compare aws-stack@1.0.0 aws-stack@1.1.0 --json | jq -r .summary.maxImpact",
+    );
+    r.step(
+        "auto-gate",
+        1,
+        false,
+        "strata compare aws-stack@1.1.0 aws-stack@1.1.1 --json > report.json",
+    );
+    r.step(
+        "auto-gate",
+        0,
+        false,
+        r#"jq -e '.summary.maxImpact != "repave"' report.json"#,
+    );
+    r.step(
+        "auto-error",
+        2,
+        true,
+        "strata compare aws-stack@1.1.1 aws-stack@9.9.9 --json --quiet",
+    );
+    r.step(
+        "auto-error-text",
+        2,
+        true,
+        "strata compare aws-stack@1.1.1 aws-stack@9.9.9 --quiet",
+    );
+}

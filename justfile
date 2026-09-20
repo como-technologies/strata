@@ -63,20 +63,20 @@ docs:
 docs-serve:
     mdbook serve docs --open
 
-# docs/examples/run.sh runs each command against a local stand-in for Palette, which xtask
-# serves. Needs jq.
+# xtask runs each command of the book against a local stand-in for Palette. Needs jq, which the
+# book's own commands use.
 
 # Write the output of each command that the book shows into docs/src/output/
 docs-examples: examples stand-in
-    docs/examples/run.sh
+    cargo run --quiet -p xtask -- docs-examples
 
-# Build the development tooling: the stand-in for the Palette API that the book's commands use
+# Build the development tooling: the stand-in for Palette, and the runner for the book
 stand-in:
     cargo build --quiet -p xtask
 
 # Fail when docs/src/output/ is not the output of this build of strata
 docs-check: examples stand-in
-    docs/examples/run.sh --check
+    cargo run --quiet -p xtask -- docs-examples --check
     docs/examples/check-pages.sh
 
 # Test each link of the book with mdbook-lint
@@ -119,8 +119,8 @@ live-profiles:
     examples/live/tf.sh apply -var cluster=false
 
 # Serve the tenant of one chapter of the book on this machine: no key, no tenant, no cost
-playground chapter="list": build examples
-    docs/examples/run.sh --serve {{chapter}}
+playground chapter="list": build examples stand-in
+    cargo run --quiet -p xtask -- playground {{chapter}}
 
 # Run every read-only live check and write a summary
 live-verify: build

@@ -169,51 +169,6 @@ fn every_run_id_the_book_cites_has_a_record_in_live_runs() {
     }
 }
 
-/// Each `<name>@<version>` under one uid must be seeded from one content, in every chapter. The
-/// tag-name chapter once gave uid `...d4` version 1.1.2 the tag change, and the compare chapter
-/// gave the same uid and version a changed value, so two pages printed two roots for one identity.
-#[test]
-fn one_uid_and_version_is_seeded_from_one_content() {
-    let script = read(&Path::new(env!("CARGO_MANIFEST_DIR")).join("docs/examples/run.sh"));
-    let mut seeded: std::collections::BTreeMap<(String, String), (String, usize)> =
-        std::collections::BTreeMap::new();
-    let mut parsed = 0;
-    for (n, line) in script.lines().enumerate() {
-        let Some(rest) = line.strip_prefix("profile $") else {
-            continue;
-        };
-        let (rest, own_copy) = match rest.split_once("# own copy") {
-            Some((before, _)) => (before.trim_end(), true),
-            None => (rest, false),
-        };
-        let f: Vec<&str> = rest.splitn(5, ' ').collect();
-        let [project, uid, version, from] = f[..4] else {
-            continue;
-        };
-        let content = format!("{from} {}", f.get(4).unwrap_or(&""));
-        let key = (format!("{project} {uid}"), version.to_string());
-        match seeded.get(&key) {
-            Some((first, first_line)) if first != &content => assert!(
-                own_copy,
-                "run.sh line {}: {project} {uid} {version} is seeded from other content than on \
-                 line {first_line}, and the line does not say the copy differs on purpose. Two \
-                 chapters that print a root for one identity must print one root. Give the \
-                 chapter its own version and uid, or end the line with `# own copy: <why>`.",
-                n + 1
-            ),
-            Some(_) => {}
-            None => {
-                seeded.insert(key, (content, n + 1));
-            }
-        }
-        parsed += 1;
-    }
-    assert!(
-        parsed > 30,
-        "only {parsed} profile lines parsed; the parsing broke"
-    );
-}
-
 /// `strata schema` grew the kind `packs`, and the two hand-written tables that list the kinds did
 /// not. One of them sits above the generated help that names it.
 #[test]

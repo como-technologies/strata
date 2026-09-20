@@ -10,7 +10,7 @@ This file is not part of the book. It is the procedure and the progress.
 
 Do them in order. Item 10 is the only one that writes a commit.
 
-1. **Serve the chapter.** `docs/examples/run.sh --serve <chapter>`, and export
+1. **Serve the chapter.** `just playground <chapter>`, and export
    every line it prints. Note the chapter the page belongs to, and whether the
    page spans more than one, or continues past `serve_here`.
 2. **The problem.** Read `## The problem`, then state in one sentence what the
@@ -34,7 +34,7 @@ Do them in order. Item 10 is the only one that writes a commit.
 7. **The excerpts.** Where a claim covers a few lines of a long block, make it
    an `excerpt` so the claim becomes an assertion. Where the page teaches most
    of the block, leave the block whole.
-8. **The exit codes.** The exits the page states are the exits `run.sh` asserts.
+8. **The exit codes.** The exits the page states are the exits `chapters.rs` asserts.
 9. **The links.** Every link resolves, and a named recipe exists.
 10. **Verify and commit.** `just docs-examples`, `just docs-check`, `just docs`,
     `just test`, `just lint`, each as its own step, then one commit.
@@ -70,5 +70,5 @@ two pages. `just docs-check` runs it. Add a rule there rather than remember it.
 
 `serve_here` stops the playground before the change that the page's later steps
 describe. To walk those steps, make the change against the served tenant the way
-the chapter does, and say so in the notes. `run.sh` holds the change: read the
-chapter.
+the chapter does, and say so in the notes. `xtask/src/chapters.rs` holds the
+change: read the chapter.
