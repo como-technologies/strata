@@ -55,6 +55,10 @@ Strata never records the value of a sensitive variable, or a hash of it. The
 record lists the variable with `sensitive: true`. So strata can show that a
 sensitive variable was added or removed, but never that its value changed.
 
+This covers profile variables. A pack's values and manifests go into the record
+in full: see
+[Where to keep a record](../commands/snapshot.md#where-to-keep-a-record).
+
 ## What to do
 
 - Use `compare` between clusters to find a value that one cluster sets wrong.

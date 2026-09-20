@@ -537,7 +537,7 @@ fn cmd_snapshot(a: &SnapshotArgs) -> Result<ExitCode> {
                 Ref::Cluster { uid, profile } => {
                     let raw = palette.fetch_cluster(uid, &progress)?;
                     if let Some(dir) = &a.raw_dir {
-                        raw.save_dir(dir)?;
+                        raw.save_dir(dir, &now)?;
                     }
                     Snapshot::from_cluster(&raw, profile.as_deref(), text, &now)?
                 }
@@ -561,7 +561,7 @@ fn cmd_snapshot(a: &SnapshotArgs) -> Result<ExitCode> {
                     };
                     let raw = palette.fetch_profile(&uid, &progress)?;
                     if let Some(dir) = &a.raw_dir {
-                        raw.save_dir(dir)?;
+                        raw.save_dir(dir, &now)?;
                     }
                     Snapshot::from_raw(&raw, text, &now)?
                 }
@@ -634,9 +634,13 @@ fn cmd_candidate(a: &CandidateArgs) -> Result<ExitCode> {
     match &a.output {
         Some(path) => {
             candidate::write(&c, path, a.files_dir.as_deref())?;
+            // the root is the published version's, which the candidate was written from. The
+            // candidate file carries no digests, so its own root depends on what the registry
+            // holds: `snapshot --from-candidate` is what measures it.
             progress.note(&format!(
-                "wrote {} (root {})",
+                "wrote {} from {} (root {})",
                 path.display(),
+                snap.source.reference,
                 &snap.root[..12]
             ));
         }

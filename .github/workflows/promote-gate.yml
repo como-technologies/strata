@@ -1,0 +1,69 @@
+name: strata promote gate
+
+# Reusable workflow. A repository calls it from its promotion job to check that the records it
+# promotes are one release; see docs/src/use-cases/promote.md.
+# Give the records in promotion order, `dev.json test.json prod.json`. Exit 0 means every pair is
+# the same release. Exit 1 means a pair is not, and the report names the pack and the value path.
+# It downloads the strata release binary and checks it against SHA256SUMS. Other CI systems run
+# `strata same-release` directly, which is all this workflow does.
+on:
+  workflow_call:
+    inputs:
+      records:
+        description: The records to check, in promotion order, separated by spaces or newlines. A record is a snapshot file in the caller's checkout, or a ref such as name@version.
+        required: true
+        type: string
+      allow:
+        description: 'A difference to accept: registry-move, for a promotion that moves packs to another registry. Empty accepts none.'
+        default: ""
+        type: string
+      palette-api:
+        description: The Palette API address, for a self-hosted Palette; empty means https://api.spectrocloud.com
+        default: ""
+        type: string
+      strata-version:
+        description: The strata release to use, a tag of this repository
+        required: true
+        type: string
+    secrets:
+      strata-token:
+        description: A token that can read como-technologies/strata (contents read), needed while that repository is private. The caller's own token cannot read another private repository.
+        required: false
+      palette-api-key:
+        description: PALETTE_API_KEY. Records are files and need no key; a ref does.
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  promote-gate:
+    runs-on: ubuntu-latest
+    steps:
+      # the caller's repository, where the records live
+      - uses: actions/checkout@v7
+      - name: install strata
+        env:
+          GH_TOKEN: ${{ secrets.strata-token || github.token }}
+          VERSION: ${{ inputs.strata-version }}
+        run: |
+          mkdir -p .strata/bin && cd .strata/bin
+          gh release download "$VERSION" --repo como-technologies/strata \
+            --pattern strata-x86_64-unknown-linux-musl --pattern SHA256SUMS
+          sha256sum --check --ignore-missing SHA256SUMS
+          chmod +x strata-x86_64-unknown-linux-musl
+          mv strata-x86_64-unknown-linux-musl strata
+          ./strata --version
+      - name: the records are one release
+        env:
+          PALETTE_API_KEY: ${{ secrets.palette-api-key }}
+          PALETTE_API: ${{ inputs.palette-api }}
+          RECORDS: ${{ inputs.records }}
+          ALLOW: ${{ inputs.allow }}
+        run: |
+          # split the records on whitespace, and keep their order: same-release reads each pair
+          set -f
+          allow=()
+          [ -z "$ALLOW" ] || allow=(--allow "$ALLOW")
+          # shellcheck disable=SC2086
+          .strata/bin/strata same-release $RECORDS "${allow[@]}"

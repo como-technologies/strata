@@ -2,7 +2,6 @@ $ strata verify kubernetes.json
 pack kubernetes@1.36.2 (uid 6a6bd41b16c3cbf9999ad3be)  ->  pack kubernetes@1.36.2 (uid 6a6bd41b16c3cbf9999ad3be)
 root       9e8881b1e813 -> 9e8881b1e813   IDENTICAL
 
-  variables unchanged
 
   [k8s  ] kubernetes                 1.36.2             unchanged
 OK: pack kubernetes@1.36.2 in registry Public Repo is unchanged since 2026-09-17T09:30:00Z

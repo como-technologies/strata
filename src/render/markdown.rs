@@ -1,12 +1,13 @@
 //! The pull request comment.
 
 use super::{
-    applied_ref, chain_verdict, cluster_count, cluster_value, consumer_count, consumers_comparable,
-    consumers_heading, consumers_sentence, count_of, counts_line, dash, edited_in_place_note,
-    entry_error, list_count, list_scope, overwritten_in_place_notes, pack_version, pair_detail,
-    pair_word, plain_flags, profiles_overwritten_sentence, record_detail, record_label,
-    same_content_note, short, show, subject, traits_suffix, values_changed, values_changed_suffix,
-    variable_lines, version_display, Renderer, VarLine,
+    applied_ref, chain_verdict, cluster_count, cluster_value, consumer_count, consumer_counts,
+    consumers_heading, consumers_sentence, count_of, counts_line, cross_kind_note, dash,
+    edited_in_place_note, entry_error, list_count, list_scope, overwritten_in_place_notes,
+    pack_version, pair_detail, pair_word, plain_flags, profiles_overwritten_sentence,
+    record_detail, record_label, same_content_note, short, show, subject, traits_suffix,
+    values_changed, values_changed_suffix, variable_lines, variables_comparable,
+    variables_unavailable_note, version_display, Renderer, VarLine,
 };
 use crate::color::Paint;
 use crate::diff::{Diff, Leaf, Op, Status, Verify, VerifyStatus};
@@ -58,11 +59,11 @@ impl Renderer for MarkdownRenderer {
             short(&d.root_a),
             short(&d.root_b)
         ));
-        if consumers_comparable(d) {
+        if let Some((a, b)) = consumer_counts(d) {
             o.push_str(&format!(
                 "| consumers | {} | {} |\n",
-                count_of(d.a.consumers.count, "cluster"),
-                count_of(d.b.consumers.count, "cluster")
+                count_of(a, "cluster"),
+                count_of(b, "cluster")
             ));
         }
         o.push_str(&format!(
@@ -75,8 +76,21 @@ impl Renderer for MarkdownRenderer {
             .ok()
             .and_then(|v| v.as_str().map(str::to_string))
             .unwrap_or_default();
+        // two packs have no profile variables, and no request asked for any
+        let variables = if variables_comparable(d) {
+            format!(
+                " · variables: {}",
+                if s.variables_changed {
+                    "changed"
+                } else {
+                    "unchanged"
+                }
+            )
+        } else {
+            String::new()
+        };
         o.push_str(&format!(
-            "**Result:** {} · max impact: `{}` · packs: {} changed, {} added, {} removed, {} unchanged · variables: {}\n\n",
+            "**Result:** {} · max impact: `{}` · packs: {} changed, {} added, {} removed, {} unchanged{}\n\n",
             if d.same {
                 "IDENTICAL"
             } else if d.same_content {
@@ -89,7 +103,7 @@ impl Renderer for MarkdownRenderer {
             s.packs_added,
             s.packs_removed,
             s.packs_unchanged,
-            if s.variables_changed { "changed" } else { "unchanged" }
+            variables
         ));
         if let Some(sentence) = consumers_sentence(d) {
             o.push_str(&format!("**Consumers:** {sentence}\n\n"));
@@ -101,6 +115,12 @@ impl Renderer for MarkdownRenderer {
             o.push_str(&format!("**Note:** {note}\n\n"));
         }
         if let Some(note) = same_content_note(d) {
+            o.push_str(&format!("**Note:** {note}\n\n"));
+        }
+        if let Some(note) = variables_unavailable_note(d) {
+            o.push_str(&format!("**Note:** {note}\n\n"));
+        }
+        if let Some(note) = cross_kind_note(d) {
             o.push_str(&format!("**Note:** {note}\n\n"));
         }
         if let Some(v) = &d.verify {
@@ -289,7 +309,11 @@ impl Renderer for MarkdownRenderer {
         }
         o.push_str("| cluster | uid | project | state | runs |\n|---|---|---|---|---|\n");
         for c in &r.consumers {
-            let runs = if c.version.is_empty() {
+            // an empty version means two things: the cluster named none, or strata could not read
+            // the cluster at all. `-` states the first for both, so the error decides the cell.
+            let runs = if let Some(msg) = entry_error(c.error.as_ref()) {
+                format!("not read: {}", escape(msg))
+            } else if c.version.is_empty() {
                 "-".to_string()
             } else if c.version != r.profile.version {
                 format!("`{}`, which the uid no longer names", escape(&c.version))

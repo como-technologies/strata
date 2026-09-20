@@ -49,6 +49,18 @@ The root does not cover the uid, the name, the version, or the project of the
 profile. So the dev and prod copies of a version, and a candidate and its
 published version, can have one root.
 
+## When Palette does not serve the variables
+
+An older Palette does not serve the variables endpoint. Strata then reads the
+version as one with no variables, and the root is the root of a version with no
+variables. That root is correct for what strata read, and it is not the root the
+same version gets from a Palette that serves the endpoint. So a record written
+before such an upgrade does not verify after it, and the report reads like an
+edit in place.
+
+The record says so: `source.variablesUnavailable` is `true`, and `compare`
+prints a note that names the side. Take the record again after the upgrade.
+
 ## The canonical form
 
 Palette rewrites values when it returns them: whitespace, key order, and

@@ -39,10 +39,14 @@ published version will have.
 
 ## 3. Compare it with the last release
 
-````text
-{{#include ../output/review-markdown.txt:1:18}}
-...
-````
+```text
+{{#include ../output/review-markdown.txt:1:1}}
+```
+
+The book renders what that command writes, so the block below is the comment as
+a reviewer reads it on the pull request. Each pack block opens when you click it.
+
+{{#include ../output/review-markdown.txt:2:}}
 
 Read the impact column first. Two layers say `node repave`: this release
 replaces each node. A collapsible block below the table lists each changed

@@ -179,7 +179,7 @@ fn raw_profile_from_directory_matches_the_api_path() {
     let fetched = palette.fetch_profile("x", &Progress::silent()).unwrap();
     let from_api = strata::snapshot::Snapshot::from_raw(&fetched, "b", "t").unwrap();
     assert_eq!(from_raw.root, from_api.root);
-    assert_eq!(from_api.source.consumers.count, 2);
+    assert_eq!(from_api.source.consumers.as_ref().unwrap().count, 2);
 }
 
 // ---- retries ---------------------------------------------------------------------------------
@@ -356,6 +356,54 @@ fn the_retry_after_ceiling_comes_from_the_config() {
         *slept.borrow(),
         vec![Duration::from_secs(900)],
         "fifteen minutes is within the raised ceiling"
+    );
+}
+
+/// Palette 404s the variables endpoint on older versions, and strata reads the version as one with
+/// no variables. That gives the root of a version with no variables, which is a real root for a
+/// different thing. Nothing in the record used to say so, so a record taken before a Palette
+/// upgrade failed `verify` afterwards and read as an edit in place. The record now carries the
+/// flag, and the report prints a note.
+#[test]
+fn an_unavailable_variables_endpoint_is_recorded_and_reported() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let served = serve(MemoryApi::new(), dir.path(), "a", UID_A);
+    let with_vars = Palette::new(served.clone())
+        .fetch_profile(UID_A, &Progress::silent())
+        .unwrap();
+    assert!(!with_vars.variables_unavailable);
+
+    let without = served.failing(
+        format!("/v1/clusterprofiles/{UID_A}/variables"),
+        404,
+        "gone",
+    );
+    let raw = Palette::new(without)
+        .fetch_profile(UID_A, &Progress::silent())
+        .unwrap();
+    assert!(
+        raw.variables_unavailable,
+        "the fallback must say that it happened"
+    );
+
+    let a = Snapshot::from_raw(&with_vars, "a", "t0").unwrap();
+    let b = Snapshot::from_raw(&raw, "b", "t0").unwrap();
+    assert!(b.source.variables_unavailable, "the record carries it");
+    assert!(
+        serde_json::to_value(&b).unwrap()["source"]["variablesUnavailable"] == true,
+        "and the JSON does too"
+    );
+
+    // the roots differ for an infrastructure reason, and the report must say which
+    let d = ops::compare(&a, &b, "t1");
+    assert!(!d.same, "a missing endpoint changes the root");
+    let text = render::renderer(Format::Terminal, Paint::off(), false)
+        .render(&d, &a, &b, false)
+        .unwrap();
+    assert!(
+        text.contains("side B: Palette did not serve the variables endpoint"),
+        "{text}"
     );
 }
 
@@ -579,7 +627,7 @@ fn a_raw_directory_keeps_the_project_a_profile_or_cluster_was_fetched_in() {
     profile
         .fetch_profile(UID_A, &silent)
         .unwrap()
-        .save_dir(&saved)
+        .save_dir(&saved, "t0")
         .unwrap();
     assert_eq!(project_of(&saved, UID_A), "p1");
 
@@ -589,7 +637,7 @@ fn a_raw_directory_keeps_the_project_a_profile_or_cluster_was_fetched_in() {
     cluster
         .fetch_cluster(CLUSTER_UID, &silent)
         .unwrap()
-        .save_dir(&saved)
+        .save_dir(&saved, "t0")
         .unwrap();
     assert_eq!(project_of(&saved, &format!("cluster:{CLUSTER_UID}")), "p1");
 
@@ -598,7 +646,7 @@ fn a_raw_directory_keeps_the_project_a_profile_or_cluster_was_fetched_in() {
     tenant
         .fetch_profile(UID_A, &silent)
         .unwrap()
-        .save_dir(&saved)
+        .save_dir(&saved, "t0")
         .unwrap();
     assert_eq!(project_of(&saved, UID_A), "", "fetched at tenant scope");
     assert_eq!(
@@ -618,7 +666,7 @@ fn a_record_rebuilt_from_a_raw_directory_is_verified_in_its_own_project() {
     before
         .fetch_profile(UID_A, &Progress::silent())
         .unwrap()
-        .save_dir(&saved)
+        .save_dir(&saved, "t0")
         .unwrap();
     let record = dir.path().join("rebuilt.json");
     let rebuilt = ops::snapshot_from_dir(&saved, UID_A, "t1").unwrap();
@@ -1320,10 +1368,10 @@ fn a_compare_against_a_cluster_gives_the_consumers_of_the_profile_side_alone() {
         None,
     )
     .unwrap();
-    assert_eq!(recorded.source.consumers.count, 2);
-    assert_eq!(
-        on_cluster.source.consumers.count, 0,
-        "a cluster has no consumers"
+    assert_eq!(recorded.source.consumers.as_ref().unwrap().count, 2);
+    assert!(
+        on_cluster.source.consumers.is_none(),
+        "no request asks which clusters use a cluster, so the record carries no count at all"
     );
     let text = |a: &Snapshot, b: &Snapshot| {
         let d = ops::compare(a, b, "t1");
@@ -1344,12 +1392,9 @@ fn a_compare_against_a_cluster_gives_the_consumers_of_the_profile_side_alone() {
     assert!(!t.contains("-> 0 clusters"), "{t}");
 
     // Palette lists it, whichever side the cluster is on.
-    recorded
-        .source
-        .consumers
-        .clusters
-        .push(CLUSTER_UID.to_string());
-    recorded.source.consumers.count = 3;
+    let consumers = recorded.source.consumers.as_mut().unwrap();
+    consumers.clusters.push(CLUSTER_UID.to_string());
+    consumers.count = 3;
     let t = text(&recorded, &on_cluster);
     assert!(
         t.contains("consumers  lab-profile@1.3.0 has 3 consumers; lab-cluster is one of them\n"),
@@ -2731,6 +2776,19 @@ fn a_candidate_carries_values_and_manifests_inline_or_from_files_next_to_it() {
     .unwrap();
     assert_eq!(snap.root, recorded_b.root);
     assert!(ops::compare(&recorded_b, &snap, "t1").same);
+
+    // Palette does not hold a candidate, so nothing asked which clusters use it. The field is
+    // absent, and the JSON a team commits carries no count that nothing counted.
+    assert!(
+        snap.source.consumers.is_none(),
+        "a candidate carries no consumer count"
+    );
+    let json = serde_json::to_value(&snap).unwrap();
+    assert!(
+        json["source"].get("consumers").is_none(),
+        "and the serialized record has no consumers key: {}",
+        json["source"]
+    );
 
     // a layer that leaves values out gets the registry defaults, which differ from b's
     let mut doc: Value = serde_yaml::from_str(&fs::read_to_string(&file).unwrap()).unwrap();

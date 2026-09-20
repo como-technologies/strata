@@ -61,8 +61,10 @@ sensitive variable. See [Clusters give variables different values](../use-cases/
 
 ## Record without the network
 
-`--raw-dir` saves the API responses. `--from-raw` builds the same snapshot from
-them later, with no network and no key:
+`--raw-dir` saves the API responses, with the time it read them. `--from-raw`
+builds the same snapshot from them later, with no network and no key. The record
+keeps the time of the read, not the time of the rebuild, so `verify` reports the
+version as unchanged since Palette answered:
 
 ```text
 {{#include ../output/snapshot-raw.txt}}
@@ -87,6 +89,11 @@ different question:
 | --- | --- | --- |
 | The repository, beside the code that publishes | A review, an author, and a date for each release. `git log` on the file says which commit pinned a release. | The job that publishes must push. |
 | An object store, beside the state of the pipeline | Every job that publishes already writes there, and nothing new needs a token that pushes. | The history is the store's, not the repository's. |
+
+A record holds each pack's values, params, and manifests in full. Only the value
+of a sensitive profile variable is left out. So a record of a profile whose pack
+values or manifests hold a secret carries that secret. Keep that record in the
+object store, and not in the repository.
 
 The book uses two layouts. The use cases keep one record for each version, at
 `releases/<version>/<project>.json`, and one for each cluster, at

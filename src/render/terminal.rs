@@ -1,11 +1,12 @@
 //! The terminal report: plain when piped, colored on a terminal.
 
 use super::{
-    applied_ref, chain_verdict, cluster_count, cluster_value, consumer_count, consumers_comparable,
-    consumers_heading, consumers_sentence, count_of, counts_line, dash, edited_in_place_note,
-    entry_error, list_count, list_scope, overwritten_in_place_notes, pack_version, pair_detail,
-    pair_word, profiles_overwritten_sentence, record_detail, record_label, same_content_note,
-    short, show, subject, tag_rename, traits_suffix, values_changed_suffix, variable_lines,
+    applied_ref, chain_verdict, cluster_count, cluster_value, consumer_count, consumer_counts,
+    consumers_heading, consumers_sentence, count_of, counts_line, cross_kind_note, dash,
+    edited_in_place_note, entry_error, list_count, list_scope, overwritten_in_place_notes,
+    pack_version, pair_detail, pair_word, profiles_overwritten_sentence, record_detail,
+    record_label, same_content_note, short, show, subject, tag_rename, traits_suffix,
+    values_changed_suffix, variable_lines, variables_comparable, variables_unavailable_note,
     version_display, Renderer, VarLine,
 };
 use crate::color::Paint;
@@ -261,23 +262,28 @@ impl Renderer for TerminalRenderer {
         if let Some(note) = same_content_note(d) {
             out.push(format!("note       {}", p.bgreen(&note)));
         }
-        if consumers_comparable(d) {
-            out.push(format!(
-                "consumers  {} -> {} clusters",
-                d.a.consumers.count, d.b.consumers.count
-            ));
+        if let Some(note) = variables_unavailable_note(d) {
+            out.push(format!("note       {}", p.byellow(&note)));
+        }
+        if let Some(note) = cross_kind_note(d) {
+            out.push(format!("note       {}", p.byellow(&note)));
+        }
+        if let Some((a, b)) = consumer_counts(d) {
+            out.push(format!("consumers  {a} -> {b} clusters"));
         } else if let Some(sentence) = consumers_sentence(d) {
             out.push(format!("consumers  {sentence}"));
         }
         out.push(String::new());
-        out.push(format!(
-            "  variables {}",
-            if d.variables.changed {
-                p.byellow("CHANGED")
-            } else {
-                p.dim("unchanged")
-            }
-        ));
+        if variables_comparable(d) {
+            out.push(format!(
+                "  variables {}",
+                if d.variables.changed {
+                    p.byellow("CHANGED")
+                } else {
+                    p.dim("unchanged")
+                }
+            ));
+        }
         for v in variable_lines(&d.variables.by_name) {
             out.push(format!("        {}", variable_line(&v, p)));
         }
@@ -437,16 +443,16 @@ impl Renderer for TerminalRenderer {
             return Ok(format!("no version of {} supports {cloud}\n", l.name));
         }
         for r in &l.registries {
+            // the heading states what the registry offers; `--latest` shows one of those rows
+            let count = if r.versions.len() == r.versions_offered {
+                count_of(r.versions_offered, "version")
+            } else {
+                format!("newest of {}", count_of(r.versions_offered, "version"))
+            };
             out.push_str(&format!(
-                "{} in {} ({} {})\n",
+                "{} in {} ({count})\n",
                 p.bold(&l.name),
-                p.bold(&r.registry),
-                r.versions.len(),
-                if r.versions.len() == 1 {
-                    "version"
-                } else {
-                    "versions"
-                }
+                p.bold(&r.registry)
             ));
             let rows: Vec<Vec<String>> = r
                 .versions

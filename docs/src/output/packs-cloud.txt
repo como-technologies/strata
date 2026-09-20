@@ -1,4 +1,4 @@
 $ strata packs kubernetes --registry 'Public Repo' --cloud aws --latest
-kubernetes in Public Repo (1 version)
+kubernetes in Public Repo (newest of 133 versions)
   1.36.2  6a6bd41b16c3cbf9999ad3be  spectro  aws,azure,vsphere,gcp,maas,apache-cloudstack  1.36.2 1.36.x 1.x
 

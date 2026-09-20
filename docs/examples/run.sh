@@ -88,8 +88,9 @@ serve_wait() {
   done
   # A chapter that names no project runs at tenant scope, and its pages teach the scope itself.
   # Telling that reader to export a project would answer the question the page asks, so the
-  # scope line unsets both variables instead. PALETTE_PROJECT_UID has priority either way, so
-  # each line beats a ~/.palette.env that points at a real tenant.
+  # scope line gives both variables an empty value instead. An empty value says tenant scope and
+  # beats a ~/.palette.env that points at a real tenant; `unset` does not, because strata reads
+  # that file whenever a variable is unset.
   local others
   others=$(jq -r '.items[] | "#   \(.metadata.name)  \(.metadata.uid)"' \
     "$tenant/tenant/v1/dashboard/projects/metadata.json" 2> /dev/null)
@@ -99,7 +100,10 @@ serve_wait() {
     scope="export PALETTE_PROJECT=$project              # the book names the project
 export PALETTE_PROJECT_UID=$uid            # or its uid, which has priority"
   else
-    scope="unset PALETTE_PROJECT_UID PALETTE_PROJECT     # this chapter is tenant scope"
+    # An empty value, not `unset`: strata reads ~/.palette.env when a variable is unset, so
+    # `unset` would leave a real project in place. An empty one says tenant scope and wins.
+    scope="export PALETTE_PROJECT_UID=                  # this chapter is tenant scope
+export PALETTE_PROJECT=                    # an empty value beats a ~/.palette.env"
   fi
   cat <<EOF
 
@@ -552,6 +556,7 @@ chapter review PALETTE_PROJECT=dev
 projects dev=$DEV
 registries $DEV
 profile $DEV $A100 1.0.0 aws-stack@1.0.0
+cluster $DEV $PAYMENTS payments $A100   # the release under review runs somewhere: the repave has a target
 show2 review-record 0 'strata snapshot aws-stack@1.0.0 -o releases/1.0.0/dev.json'
 cat > "$dir/aws-stack.yaml" <<'YAML'
 name: aws-stack
@@ -826,6 +831,12 @@ show2 auto-error-text 2 'strata compare aws-stack@1.1.1 aws-stack@9.9.9 --quiet'
 # is served here, where the chapters end.
 if [ -n "$serve" ] && [ -n "$served" ]; then
   serve_wait
+fi
+
+# A name that is no chapter skipped every chapter, so $out is empty. Falling through from here
+# would delete docs/src/output/ and write nothing back. Stop, and name the chapters.
+if [ -n "$serve" ] && [ -z "$served" ]; then
+  die "no chapter '$serve'. The chapters are: $(sed -n 's/^chapter \([^ ]*\).*/\1/p' "$0" | tr '\n' ' ')"
 fi
 
 if [ -n "$check" ]; then

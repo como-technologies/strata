@@ -95,6 +95,8 @@ where
     let raw = crate::candidate::resolve(&loaded, &palette, progress)?;
     let mut snap = Snapshot::from_raw(&raw, &path.display().to_string(), fetched_at)?;
     snap.source.template = crate::candidate::TEMPLATE.to_string();
+    // Palette does not hold a candidate, so no request asked which clusters use it
+    snap.source.consumers = None;
     Ok(snap.with_project(palette.project_uid()))
 }
 
@@ -108,12 +110,21 @@ pub fn snapshot_from_dir(dir: &Path, reference: &str, fetched_at: &str) -> Resul
             _ => None,
         };
         let raw = RawCluster::load_dir(dir)?;
+        // the responses were read when they were saved; this run read a directory
+        let at = raw
+            .fetched_at
+            .clone()
+            .unwrap_or_else(|| fetched_at.to_string());
         return Ok(
-            Snapshot::from_cluster(&raw, profile.as_deref(), reference, fetched_at)?
+            Snapshot::from_cluster(&raw, profile.as_deref(), reference, &at)?
                 .with_project(raw.project_uid.as_deref()),
         );
     }
     let raw = RawProfile::load_dir(dir)?;
+    let fetched_at = &raw
+        .fetched_at
+        .clone()
+        .unwrap_or_else(|| fetched_at.to_string());
     Ok(Snapshot::from_raw(&raw, reference, fetched_at)?.with_project(raw.project_uid.as_deref()))
 }
 
@@ -972,7 +983,9 @@ where
         Ref::Cluster { .. } | Ref::Pack { .. } => return Err(refused()),
         Ref::Snapshot(path) => {
             let recorded = Snapshot::load(path)?;
-            if recorded.source.cluster.is_some() {
+            // a pack record is not a profile version either, and NoUid below would name `verify`,
+            // a command that is not running
+            if recorded.source.cluster.is_some() || recorded.source.pack.is_some() {
                 return Err(refused());
             }
             if recorded.source.uid.is_empty() {
@@ -1507,8 +1520,11 @@ pub struct PackRegistry {
     pub registry_uid: String,
     /// The layer the pack belongs to, as the registry gives it.
     pub layer: String,
-    /// The versions, newest first.
+    /// The versions, newest first. `--latest` keeps one of them.
     pub versions: Vec<PackBuild>,
+    /// How many versions the registry offers. With `--latest` this is more than `versions` holds,
+    /// so a heading states the registry's inventory and not the count of rows a flag left.
+    pub versions_offered: usize,
 }
 
 /// One version of a pack in one registry.
@@ -1651,6 +1667,7 @@ where
         if let Some(first) = versions.first_mut() {
             first.latest = true;
         }
+        let versions_offered = versions.len();
         if options.latest {
             versions.truncate(1);
         }
@@ -1660,6 +1677,7 @@ where
                 registry_uid: uid,
                 layer,
                 versions,
+                versions_offered,
             });
         }
     }

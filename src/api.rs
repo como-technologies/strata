@@ -376,9 +376,14 @@ pub struct RawProfile {
     pub manifests: Value,
     /// `GET /v1/clusterprofiles/{uid}/variables`, or `{"variables": []}` when unavailable
     pub variables: Value,
+    /// True when the variables endpoint was unavailable, so `variables` stands in for it
+    pub variables_unavailable: bool,
     /// The project the responses came from; `None` at tenant scope, or for a directory saved
     /// without `scope.json`
     pub project_uid: Option<String>,
+    /// When the responses were read from Palette; `None` for a fetch, which stamps the time
+    /// itself, and for a directory that an older build saved
+    pub fetched_at: Option<String>,
 }
 
 /// The file that records the project a raw directory's responses came from.
@@ -386,20 +391,35 @@ const SCOPE_FILE: &str = "scope.json";
 
 /// The project saved in `dir`, or `None` when it has no scope file or names no project.
 fn read_scope(dir: &Path) -> Result<Option<String>> {
+    scope_field(dir, "projectUid")
+}
+
+/// When the responses in `dir` were read from Palette. `None` for a directory that an older build
+/// saved, which recorded no time.
+fn read_scope_fetched_at(dir: &Path) -> Result<Option<String>> {
+    scope_field(dir, "fetchedAt")
+}
+
+fn scope_field(dir: &Path, key: &str) -> Result<Option<String>> {
     if !dir.join(SCOPE_FILE).is_file() {
         return Ok(None);
     }
     let scope = read_json_file(dir, SCOPE_FILE)?;
     Ok(scope
-        .get("projectUid")
+        .get(key)
         .and_then(Value::as_str)
         .filter(|p| !p.is_empty())
         .map(str::to_string))
 }
 
-/// The scope file's document: the project uid, empty at tenant scope.
-fn scope_document(project_uid: &Option<String>) -> Value {
-    serde_json::json!({ "projectUid": project_uid.as_deref().unwrap_or("") })
+/// The scope file's document: the project uid, empty at tenant scope, and the time the responses
+/// were read. Without the time, a snapshot rebuilt from the directory would stamp the rebuild as
+/// the fetch, and `verify` would report a version as unchanged since a moment nothing was read.
+fn scope_document(project_uid: &Option<String>, fetched_at: &str) -> Value {
+    serde_json::json!({
+        "projectUid": project_uid.as_deref().unwrap_or(""),
+        "fetchedAt": fetched_at,
+    })
 }
 
 /// Read one JSON file from `dir`; an empty file is an error of its own.
@@ -436,19 +456,21 @@ impl RawProfile {
             profile: read_json_file(dir, "profile.json")?,
             manifests: read_json_file(dir, "manifests.json")?,
             variables: read_json_file(dir, "variables.json")?,
+            variables_unavailable: false,
             project_uid: read_scope(dir)?,
+            fetched_at: read_scope_fetched_at(dir)?,
         })
     }
 
     /// Write the three files and `scope.json` under `dir`, creating it.
-    pub fn save_dir(&self, dir: &Path) -> Result<()> {
+    pub fn save_dir(&self, dir: &Path, fetched_at: &str) -> Result<()> {
         write_json_files(
             dir,
             &[
                 ("profile.json", &self.profile),
                 ("manifests.json", &self.manifests),
                 ("variables.json", &self.variables),
-                (SCOPE_FILE, &scope_document(&self.project_uid)),
+                (SCOPE_FILE, &scope_document(&self.project_uid, fetched_at)),
             ],
         )
     }
@@ -467,9 +489,14 @@ pub struct RawCluster {
     /// `GET /v1/spectroclusters/{uid}/variables`: one entry per applied profile, or `[]` when
     /// unavailable
     pub variables: Value,
+    /// True when the variables endpoint was unavailable, so `variables` stands in for it
+    pub variables_unavailable: bool,
     /// The project the responses came from; `None` at tenant scope, or for a directory saved
     /// without `scope.json`
     pub project_uid: Option<String>,
+    /// When the responses were read from Palette; `None` for a fetch, and for a directory that an
+    /// older build saved
+    pub fetched_at: Option<String>,
 }
 
 impl RawCluster {
@@ -482,19 +509,21 @@ impl RawCluster {
             cluster: read_json_file(dir, Self::MARKER)?,
             manifests: read_json_file(dir, "manifests.json")?,
             variables: read_json_file(dir, "variables.json")?,
+            variables_unavailable: false,
             project_uid: read_scope(dir)?,
+            fetched_at: read_scope_fetched_at(dir)?,
         })
     }
 
     /// Write the three files and `scope.json` under `dir`, creating it.
-    pub fn save_dir(&self, dir: &Path) -> Result<()> {
+    pub fn save_dir(&self, dir: &Path, fetched_at: &str) -> Result<()> {
         write_json_files(
             dir,
             &[
                 (Self::MARKER, &self.cluster),
                 ("manifests.json", &self.manifests),
                 ("variables.json", &self.variables),
-                (SCOPE_FILE, &scope_document(&self.project_uid)),
+                (SCOPE_FILE, &scope_document(&self.project_uid, fetched_at)),
             ],
         )
     }
@@ -557,7 +586,9 @@ impl RawCluster {
             profile,
             manifests,
             variables: serde_json::json!({ "variables": variables }),
+            variables_unavailable: self.variables_unavailable,
             project_uid: self.project_uid.clone(),
+            fetched_at: self.fetched_at.clone(),
         }
     }
 }
@@ -714,14 +745,17 @@ impl<A: PaletteApi> Palette<A> {
 
     /// GET a variables endpoint; a missing endpoint (404 or 405, as on older Palette versions) is
     /// `none`, other errors propagate.
-    fn variables_or(&self, path: &str, none: Value, progress: &Progress) -> Result<Value> {
+    /// The second value is true when the endpoint was unavailable and `none` stands in for it. A
+    /// caller must record that: "no variables" and "the variables could not be read" give the same
+    /// root, and only this flag tells them apart afterwards.
+    fn variables_or(&self, path: &str, none: Value, progress: &Progress) -> Result<(Value, bool)> {
         match self.api.get_json(path) {
-            Ok(v) => Ok(v),
+            Ok(v) => Ok((v, false)),
             Err(Error::Api { status, .. }) if status == 404 || status == 405 => {
                 progress.note(&format!(
                     "note: {path} is unavailable; treating as no variables"
                 ));
-                Ok(none)
+                Ok((none, true))
             }
             Err(e) => Err(e),
         }
@@ -735,7 +769,7 @@ impl<A: PaletteApi> Palette<A> {
         let manifests = self
             .api
             .get_json(&format!("/v1/clusterprofiles/{uid}/packs/manifests"))?;
-        let variables = self.variables_or(
+        let (variables, variables_unavailable) = self.variables_or(
             &format!("/v1/clusterprofiles/{uid}/variables"),
             serde_json::json!({ "variables": [] }),
             progress,
@@ -744,7 +778,9 @@ impl<A: PaletteApi> Palette<A> {
             profile,
             manifests,
             variables,
+            variables_unavailable,
             project_uid: self.project_uid().map(str::to_string),
+            fetched_at: None,
         })
     }
 
@@ -780,7 +816,7 @@ impl<A: PaletteApi> Palette<A> {
         let manifests = self.api.get_json(&format!(
             "/v1/spectroclusters/{uid}/profiles/packs/manifests"
         ))?;
-        let variables = self.variables_or(
+        let (variables, variables_unavailable) = self.variables_or(
             &format!("/v1/spectroclusters/{uid}/variables"),
             serde_json::json!([]),
             progress,
@@ -789,7 +825,9 @@ impl<A: PaletteApi> Palette<A> {
             cluster,
             manifests,
             variables,
+            variables_unavailable,
             project_uid: self.project_uid().map(str::to_string),
+            fetched_at: None,
         })
     }
 }
@@ -897,9 +935,11 @@ mod tests {
             profile: json!({"a": 1}),
             manifests: json!({"b": 2}),
             variables: json!({"variables": []}),
+            variables_unavailable: false,
             project_uid: Some("p1".into()),
+            fetched_at: None,
         };
-        raw.save_dir(dir.path()).unwrap();
+        raw.save_dir(dir.path(), "t0").unwrap();
         let back = RawProfile::load_dir(dir.path()).unwrap();
         assert_eq!(back.profile, raw.profile);
         assert_eq!(back.project_uid.as_deref(), Some("p1"));

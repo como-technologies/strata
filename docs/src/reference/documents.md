@@ -26,8 +26,14 @@ A record of one profile version or cluster.
   - `ref`: the ref as typed, a name or a uid.
   - `uid`, `projectUid` (empty for tenant scope), `name`, `version`,
     `cloudType`, `type`, and `tags`.
-  - `template`: `published`, `draft`, `applied` for a cluster, or `candidate`.
-  - `consumers`: the uids of the clusters that used the version, and the count.
+  - `template`: `published`, `draft`, `applied` for a cluster, `candidate`, or
+    `registry` for a pack record.
+  - `consumers`, for a published or a draft version: the uids of the clusters
+    that used the version, and the count. A candidate, a cluster record, and a
+    pack record leave it out, because no request asked.
+  - `variablesUnavailable`, only when true: Palette did not serve the variables
+    endpoint, so the root is the root of a version with no variables. See
+    [When Palette does not serve the variables](../internals/hashes.md#when-palette-does-not-serve-the-variables).
   - `fetchedAt`: the time of the read.
   - `pack`, for a pack record: the pack's `name` and `version`, the
     `registryUid` and `registryName` it came from, and `packUid`, the uid of
@@ -59,7 +65,8 @@ A comparison of two sides, `a` and `b`.
 
 - `legend`: the flags, each `status`, each `op`, and each impact level, in
   words. `generatedAt` is the time of the comparison.
-- `a` and `b`: the two sources, with uid, version, consumers, and fetch time.
+- `a` and `b`: the two sources, with uid, version, and fetch time. Each carries
+  its consumers when it has them.
 - `same`: the roots are equal. `rootA` and `rootB` are the roots.
 - `sameContent`: the roots are equal, or differ only by the pack uids of
   manifest packs and the tag names of the same builds. `same` stays `false` in

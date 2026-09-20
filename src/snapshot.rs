@@ -89,9 +89,17 @@ pub struct Source {
     /// Profile labels.
     #[serde(default)]
     pub tags: BTreeMap<String, String>,
-    /// Clusters using this profile version at snapshot time
-    #[serde(default)]
-    pub consumers: Consumers,
+    /// Clusters using this profile version at snapshot time. Absent when no request asked: a
+    /// candidate is not in Palette, and a cluster record and a pack record are not a version that
+    /// a cluster can use. `0` there would state a count that nothing counted.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub consumers: Option<Consumers>,
+    /// True when Palette did not serve the variables endpoint, so the snapshot was taken as if
+    /// the version had no variables. The root is the root of a version with no variables, so a
+    /// record with this flag does not compare equal to one taken from a Palette that serves the
+    /// endpoint. The flag is the only thing that tells the two apart.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub variables_unavailable: bool,
     /// When the snapshot was taken, RFC 3339 UTC.
     pub fetched_at: String,
     /// Present when the snapshot records what a cluster runs rather than a published profile.
@@ -550,11 +558,12 @@ impl Snapshot {
             cloud_type: s(prof, &format!("{tpl_ptr}/cloudType")),
             kind: s(prof, &format!("{tpl_ptr}/type")),
             template: template.to_string(),
+            variables_unavailable: raw.variables_unavailable,
             tags,
-            consumers: Consumers {
+            consumers: Some(Consumers {
                 count: clusters.len(),
                 clusters,
-            },
+            }),
             fetched_at: fetched_at.to_string(),
             cluster: None,
             pack: None,
@@ -661,8 +670,9 @@ impl Snapshot {
                 .unwrap_or_else(|| s(&raw.cluster, "/spec/cloudType")),
             kind: joined(|s| &s.kind),
             template: "applied".to_string(),
+            variables_unavailable: raw.variables_unavailable,
             tags: BTreeMap::new(),
-            consumers: Consumers::default(),
+            consumers: None,
             fetched_at: fetched_at.to_string(),
             pack: None,
             cluster: Some(ClusterSource {

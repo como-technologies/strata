@@ -80,9 +80,10 @@ published build must never do.
 
 ## What a pack record does not carry
 
-A pack record holds the values the registry ships, not the values a profile
-sets on top of them, and no manifests or params, because those belong to a
-profile. To compare what a profile does with a pack, compare the profile
+A pack has no profile variables, so the reports say nothing about variables when
+both sides are packs. A pack record holds the values the registry ships, not the
+values a profile sets on top of them, and no manifests or params, because those
+belong to a profile. To compare what a profile does with a pack, compare the profile
 versions: [Review a change before you publish it](./review.md).
 
 ## What to do

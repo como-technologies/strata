@@ -1,2 +1,2 @@
 $ strata candidate releases/1.1.1/dev.json -o aws-stack-1.1.1.yaml --files-dir aws-stack-1.1.1
-strata: wrote aws-stack-1.1.1.yaml (root 088136c929bd)
+strata: wrote aws-stack-1.1.1.yaml from aws-stack@1.1.1 (root 088136c929bd)

@@ -117,15 +117,69 @@ pub(crate) fn applied_ref(a: &crate::snapshot::AppliedProfile) -> String {
     record_label(&a.name, &a.version)
 }
 
-/// True when Palette lists the clusters that use a side: a profile version has consumers, but a
-/// side that records a cluster, or one pack from a registry, has none.
+/// True when Palette lists the clusters that use a side: a published profile version has
+/// consumers, but a side that records a cluster, or one pack from a registry, has none. A
+/// candidate has none either, and for another reason: Palette does not hold it yet, so no request
+/// asked about it. `no clusters` would state a count that nothing counted.
 pub(crate) fn lists_consumers(s: &Source) -> bool {
-    s.cluster.is_none() && s.pack.is_none()
+    s.consumers.is_some()
 }
 
-/// True when both sides are profile versions, and the reports compare the two counts.
-pub(crate) fn consumers_comparable(d: &Diff) -> bool {
-    lists_consumers(&d.a) && lists_consumers(&d.b)
+/// True when the two sides are releases of each other: two profile-shaped sides, or two versions
+/// of one pack. A pack against a profile, or one pack against another pack, is a comparison a
+/// reader can ask for, and no cluster can make that transition. The pack rows and the impact then
+/// describe a move that cannot happen.
+pub(crate) fn releases_of_each_other(d: &Diff) -> bool {
+    match (&d.a.pack, &d.b.pack) {
+        (None, None) => true,
+        (Some(a), Some(b)) => a.name == b.name,
+        _ => false,
+    }
+}
+
+/// The note for a comparison whose two sides are not releases of each other.
+pub(crate) fn cross_kind_note(d: &Diff) -> Option<String> {
+    if releases_of_each_other(d) {
+        return None;
+    }
+    Some(
+        "the two sides are not releases of each other, so the added and removed packs, and the \
+         impact, describe no change a cluster can make"
+            .to_string(),
+    )
+}
+
+/// True when a side can have profile variables. A registry pack cannot, and no request asks for
+/// any, so `variables unchanged` there would state a comparison that nothing compared.
+pub(crate) fn lists_variables(s: &Source) -> bool {
+    s.pack.is_none()
+}
+
+/// True when the reports can state anything about the variables of a comparison.
+pub(crate) fn variables_comparable(d: &Diff) -> bool {
+    lists_variables(&d.a) || lists_variables(&d.b)
+}
+
+/// A note for a side whose variables endpoint Palette did not serve. That side's root is the root
+/// of a version with no variables, so it cannot be compared with a side read from a Palette that
+/// serves the endpoint. Nothing else in the report tells the two apart.
+pub(crate) fn variables_unavailable_note(d: &Diff) -> Option<String> {
+    let sides = match (d.a.variables_unavailable, d.b.variables_unavailable) {
+        (true, true) => "both sides",
+        (true, false) => "side A",
+        (false, true) => "side B",
+        (false, false) => return None,
+    };
+    Some(format!(
+        "{sides}: Palette did not serve the variables endpoint, so the root is the root of a \
+         version with no variables"
+    ))
+}
+
+/// The two counts, when a request gave one for each side. None when either side has none, so a
+/// renderer cannot print a count that nothing counted.
+pub(crate) fn consumer_counts(d: &Diff) -> Option<(usize, usize)> {
+    Some((d.a.consumers.as_ref()?.count, d.b.consumers.as_ref()?.count))
 }
 
 /// What the consumers of the profile side say, when the other side is a cluster or a pack:
@@ -138,13 +192,14 @@ pub(crate) fn consumers_sentence(d: &Diff) -> Option<String> {
         (false, true) => (&d.b, &d.a),
         _ => return None,
     };
-    let count = consumer_count(profile.consumers.count);
+    let consumers = profile.consumers.as_ref()?;
+    let count = consumer_count(consumers.count);
     let has = format!("{}@{} has {count}", profile.name, profile.version);
     match &other.cluster {
-        Some(c) if profile.consumers.count > 0 => Some(format!(
+        Some(c) if consumers.count > 0 => Some(format!(
             "{has}; {} is {}one of them",
             c.name,
-            if profile.consumers.clusters.contains(&c.uid) {
+            if consumers.clusters.contains(&c.uid) {
                 ""
             } else {
                 "not "
@@ -191,7 +246,10 @@ pub(crate) fn pair_detail(p: &Pair) -> String {
             short(&p.root_b)
         ),
         PairStatus::RegistryMove => {
-            format!("{} packs re-pinned, same configuration", p.packs_repinned)
+            format!(
+                "{} re-pinned, same configuration",
+                count_of(p.packs_repinned, "pack")
+            )
         }
         PairStatus::Different => format!("root {} -> {}", short(&p.root_a), short(&p.root_b)),
     }
@@ -380,13 +438,13 @@ pub(crate) fn record_detail(r: &crate::ops::VerifiedRecord) -> String {
             values_changed_suffix(record_values_changed(r))
         ),
         RecordStatus::Drifted => format!(
-            "differs from the copy recorded {}; max impact {}, {} packs changed{}",
+            "differs from the copy recorded {}; max impact {}, {} changed{}",
             r.recorded_at,
             r.max_impact
                 .and_then(|l| serde_json::to_value(l).ok())
                 .and_then(|v| v.as_str().map(str::to_string))
                 .unwrap_or_default(),
-            r.packs_changed.unwrap_or(0),
+            count_of(r.packs_changed.unwrap_or(0), "pack"),
             values_changed_suffix(record_values_changed(r))
         ),
         RecordStatus::Error => r

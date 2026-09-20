@@ -5,10 +5,11 @@ $ strata compare releases/1.0.0/dev.json candidate.json --format markdown
 |---|---|---|
 | uid | `64e0000000000000000000a1` | `-` |
 | root | `aee66c68d829` | `8a8a64d3f95d` |
-| consumers | no clusters | no clusters |
 | fetched | 2026-09-17T09:30:00Z | 2026-09-17T09:30:00Z |
 
 **Result:** CHANGED · max impact: `repave` · packs: 4 changed, 0 added, 0 removed, 1 unchanged · variables: unchanged
+
+**Consumers:** aws-stack@1.0.0 has 1 consumer
 
 | | layer | pack | version | change | impact |
 |---|---|---|---|---|---|

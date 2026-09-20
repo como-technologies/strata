@@ -2,7 +2,6 @@ $ strata compare 'pack:Public Repo/csi-aws-ebs@1.65.0' 'pack:Palette Registry/cs
 pack csi-aws-ebs@1.65.0 (uid 6aa410ec144aaec79d547a9e)  ->  pack csi-aws-ebs@1.65.0 (uid 64ec000000000000000000b1)
 root       2aa9e638cf78 -> 65744f14f03f   CHANGED
 
-  variables unchanged
 
 ~ [csi  ] csi-aws-ebs                1.65.0             IDENTITY UPSTREAM
       upstream digest  sha256:bd09e -> sha256:a746e   (packRef.digest)

@@ -547,6 +547,8 @@ pub fn pack_snapshot<A: PaletteApi>(
     let mut snap = Snapshot::from_raw(&raw, reference, fetched_at)?;
     snap.source.kind = PACK_TYPE.to_string();
     snap.source.template = PACK_TEMPLATE.to_string();
+    // a pack version is not a profile version, so no cluster uses it and nothing asked
+    snap.source.consumers = None;
     snap.source.pack = Some(PackSource {
         name: name.to_string(),
         version: resolved,
@@ -708,6 +710,8 @@ pub fn resolve<A: PaletteApi>(
         }),
         manifests: json!({"metadata": {"name": c.name, "uid": ""}, "spec": {"packs": entries}}),
         variables: json!({ "variables": c.variables }),
+        variables_unavailable: false,
+        fetched_at: None,
         project_uid: None,
     })
 }

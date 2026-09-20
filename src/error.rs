@@ -127,8 +127,8 @@ pub enum Error {
         /// The uids of the clusters with that name, in order.
         uids: Vec<String>,
     },
-    /// A command that works on a profile was given a cluster, or a record of one.
-    #[error("'{reference}' is a cluster; this command takes a profile uid, <name>@<version>, or a profile record")]
+    /// A command that works on a profile was given a cluster, a pack, or a record of one.
+    #[error("'{reference}' is not a profile version; this command takes a profile uid, <name>@<version>, or a profile record")]
     ProfileRefRequired {
         /// The ref as given.
         reference: String,

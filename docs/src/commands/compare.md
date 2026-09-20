@@ -66,10 +66,11 @@ Exit `0`.
 `--format markdown` writes the same comparison as tables, with one
 collapsible block for each changed pack:
 
-````text
-{{#include ../output/compare-markdown.txt:1:18}}
-...
-````
+```text
+{{#include ../output/compare-markdown.txt:1:1}}
+```
+
+{{#include ../output/compare-markdown.txt:2:}}
 
 `scripts/ci/pr-comment.sh` posts it: see
 [Pull request comments](../automation/pr-comments.md).

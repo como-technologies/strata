@@ -64,7 +64,19 @@ impl Config {
     /// `PALETTE_PROJECT_UID` (or the name `PALETTE_PROJECT`), `STRATA_RETRIES`, and
     /// `STRATA_MAX_RETRY_AFTER` from the environment, then from `~/.palette.env`.
     pub fn from_env() -> Result<Self> {
-        Self::from_lookup(|key| env_nonempty(key).or_else(|| dotenv_lookup(key)))
+        Self::from_lookup(|key| {
+            // An empty project variable is a choice, not an absence: it says tenant scope, as
+            // `--project ''` does, and it must beat `~/.palette.env`. Without this, a reader who
+            // keeps a project in that file cannot reach tenant scope from the environment at all:
+            // `unset` and an empty value both fall through to the file. For every other variable
+            // an empty value stays the same as an unset one.
+            if PROJECT_VARS.contains(&key) || key == PROJECT_NAME_VAR {
+                if let Ok(value) = std::env::var(key) {
+                    return Some(value);
+                }
+            }
+            env_nonempty(key).or_else(|| dotenv_lookup(key))
+        })
     }
 
     /// Like [`Config::from_env`] but with a caller-supplied lookup; this is what tests use.
@@ -76,9 +88,12 @@ impl Config {
         })?;
         let base_url = first(&URL_VARS).unwrap_or_else(|| DEFAULT_BASE_URL.to_string());
         let mut cfg = Config::new(base_url, api_key);
-        cfg.project_uid = first(&PROJECT_VARS);
-        if cfg.project_uid.is_none() {
-            cfg.project_name = lookup(PROJECT_NAME_VAR);
+        // An empty value asks for tenant scope, so it stops the search: no uid, and no name from
+        // a later source either.
+        match first(&PROJECT_VARS) {
+            Some(uid) if !uid.is_empty() => cfg.project_uid = Some(uid),
+            Some(_) => {}
+            None => cfg.project_name = lookup(PROJECT_NAME_VAR).filter(|n| !n.is_empty()),
         }
         if let Some(v) = lookup(RETRIES_VAR) {
             cfg.retries = v.trim().parse().map_err(|_| Error::InvalidSetting {
@@ -176,6 +191,29 @@ mod tests {
         .unwrap();
         assert_eq!(cfg.base_url, DEFAULT_BASE_URL);
         assert_eq!(cfg.project_uid.as_deref(), Some("p1"));
+    }
+
+    /// An empty project variable asks for tenant scope. It must stop the search, so that no later
+    /// source — the name variable, or `~/.palette.env` — puts a project back. Without this a
+    /// reader who keeps a project in that file cannot reach tenant scope from the environment.
+    #[test]
+    fn an_empty_project_variable_is_tenant_scope_and_stops_the_search() {
+        let cfg = Config::from_lookup(lookup(&[
+            ("PALETTE_API_KEY", "k"),
+            ("PALETTE_PROJECT_UID", ""),
+            ("PALETTE_PROJECT", "dev"),
+        ]))
+        .unwrap();
+        assert!(cfg.project_uid.is_none(), "an empty uid is tenant scope");
+        assert!(
+            cfg.project_name.is_none(),
+            "an empty uid must not fall through to the project name"
+        );
+
+        let cfg = Config::from_lookup(lookup(&[("PALETTE_API_KEY", "k"), ("PALETTE_PROJECT", "")]))
+            .unwrap();
+        assert!(cfg.project_uid.is_none());
+        assert!(cfg.project_name.is_none(), "an empty name is tenant scope");
     }
 
     #[test]
