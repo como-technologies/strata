@@ -147,7 +147,8 @@ is the path as a list: strings for keys, numbers for indexes, and
 - `count`: the number of consumers. Exit `0` when it is `0`.
 - `overwritten`: the number of consumers whose copy names another version.
 - `consumers[]`: `uid`, `name`, `projectUid`, `state`, `version`, and `error`
-  when strata cannot read the cluster. The names and the projects come from
+  when strata cannot read the cluster. `projectName` joins them when strata
+  could read the project listing. The names and the projects come from
   `status.inUseClusters` of the profile.
 
 ## strata-list/1
@@ -160,6 +161,7 @@ is the path as a list: strings for keys, numbers for indexes, and
     also `type`, `consumers`, and `packs[]` with `layer`, `name`, `tag`, and
     `version`, or `error`.
   - A cluster: `ref`, `name`, `uid`, `state`, `cloudType`, and `projectUid`.
+    `projectName` joins them when strata could read the project listing.
     With `--applied`, also `profiles[]` with the `uid`, `name`, `version`, and
     `type` of each profile the cluster applies, or `error`.
   - A project: `name` and `uid`.

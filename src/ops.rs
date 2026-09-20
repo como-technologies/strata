@@ -918,6 +918,10 @@ pub struct Consumer {
     pub name: String,
     /// The project the cluster is in; empty for tenant scope or when unknown.
     pub project_uid: String,
+    /// That project's name. A name is a convenience, so it is empty when the project listing
+    /// could not be read, and the reports fall back to the uid.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub project_name: String,
     /// The cluster's `status.state`, for example `Running`, or `unknown` when it could not be read.
     pub state: String,
     /// The version the cluster's own copy of the profile names, from the cluster document; empty
@@ -1021,6 +1025,7 @@ where
         let mut c = Consumer {
             name: known.map(|n| text(n, "/name")).unwrap_or_default(),
             project_uid: known.map(|n| text(n, "/projectUid")).unwrap_or_default(),
+            project_name: String::new(),
             state: UNKNOWN_STATE.to_string(),
             version: String::new(),
             error: None,
@@ -1052,6 +1057,13 @@ where
         }
         list.push(c);
     }
+    // a uid names no project to a reader, so give each row the project's name as well
+    name_projects_of(
+        &mut list,
+        |c| &c.project_uid,
+        |c| &mut c.project_name,
+        &home,
+    );
 
     let version = text(&doc, "/spec/version");
     let overwritten = list
@@ -1192,6 +1204,10 @@ pub struct ListedCluster {
     /// The project the cluster is in; empty for a tenant cluster. The ref works only in this
     /// project, which a tenant-scope listing can differ from.
     pub project_uid: String,
+    /// That project's name. A name is a convenience, so it is empty when the project listing
+    /// could not be read, and the reports fall back to the uid.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub project_name: String,
     /// With applied: the profile versions the cluster applies, in the order Palette applies them.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub profiles: Option<Vec<AppliedProfile>>,
@@ -1278,6 +1294,13 @@ where
         if options.reads_clusters() {
             read_applied(&mut clusters, &home, &mut connect, progress);
         }
+        // a uid names no project to a reader, so give each line the project's name as well
+        name_projects_of(
+            &mut clusters,
+            |c| &c.project_uid,
+            |c| &mut c.project_name,
+            &home,
+        );
         Some(clusters)
     } else {
         None
@@ -1412,6 +1435,29 @@ fn list_profiles<A: PaletteApi>(
     Ok(profiles)
 }
 
+/// Fill in each row's project name from the project listing. The name is a convenience, so a
+/// listing that cannot be read leaves every name empty and the reports print the uid alone. No
+/// request is made when no row names a project.
+fn name_projects_of<T, A: PaletteApi>(
+    rows: &mut [T],
+    uid_of: impl Fn(&T) -> &String,
+    name_of: impl Fn(&mut T) -> &mut String,
+    home: &Palette<A>,
+) {
+    if rows.iter().all(|r| uid_of(r).is_empty()) {
+        return;
+    }
+    let Ok(doc) = home.project_listing() else {
+        return;
+    };
+    let names = list_projects(&doc);
+    for r in rows.iter_mut() {
+        if let Some(p) = names.iter().find(|p| p.uid == *uid_of(r)).cloned() {
+            *name_of(r) = p.name;
+        }
+    }
+}
+
 fn list_clusters(doc: &Value) -> Vec<ListedCluster> {
     let mut clusters: Vec<ListedCluster> = items(doc)
         .map(|it| {
@@ -1422,6 +1468,7 @@ fn list_clusters(doc: &Value) -> Vec<ListedCluster> {
                 state: text(it, "/status/state"),
                 cloud_type: text(it, "/spec/cloudType"),
                 project_uid: text(it, "/metadata/annotations/projectUid"),
+                project_name: String::new(),
                 uid,
                 profiles: None,
                 error: None,

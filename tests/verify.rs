@@ -1595,6 +1595,51 @@ fn cluster_doc(uid: &str, name: &str, project: &str, state: &str) -> Value {
     })
 }
 
+/// A uid names no project to a reader, so each row carries the project's name as well. The name
+/// is a convenience: a project listing that cannot be read leaves the uid alone.
+#[test]
+fn a_consumer_row_names_its_project_and_falls_back_to_the_uid() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let api = serve_b_with_named_consumer(dir.path()).with(
+        "/v1/spectroclusters/cluster-aaa",
+        cluster_doc("cluster-aaa", "alpha", "p1", "Running"),
+    );
+
+    // with no project listing, the row prints the uid it has
+    let r = ops::consumers(
+        &Ref::Uid(UID_B.into()),
+        |_| Ok(Palette::new(api.clone())),
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert_eq!(r.consumers[0].project_uid, "p1");
+    assert_eq!(r.consumers[0].project_name, "");
+    let text = render::renderer(Format::Terminal, Paint::off(), false)
+        .render_consumers(&r)
+        .unwrap();
+    assert!(text.contains("project p1"), "{text}");
+
+    // with one, it names the project and keeps the uid
+    let named = api.with(
+        "/v1/dashboard/projects/metadata",
+        serde_json::json!({"items": [{"metadata": {"name": "dev", "uid": "p1"}}]}),
+    );
+    let r = ops::consumers(
+        &Ref::Uid(UID_B.into()),
+        |_| Ok(Palette::new(named.clone())),
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert_eq!(r.consumers[0].project_name, "dev");
+    let text = render::renderer(Format::Terminal, Paint::off(), false)
+        .render_consumers(&r)
+        .unwrap();
+    assert!(text.contains("project dev (uid p1)"), "{text}");
+}
+
 #[test]
 fn a_consumer_with_no_project_is_read_in_the_scope_the_profile_was_read_in() {
     let dir = tempfile::tempdir().unwrap();
@@ -2183,8 +2228,32 @@ fn list_at_tenant_scope_names_the_project_of_each_cluster() {
         .render_list(&l)
         .unwrap();
     assert!(
-        md.contains("| `cluster:c1` | workload-a | Running | aws | `p1` |"),
+        md.contains("| `cluster:c1` | workload-a | Running | aws | p1 |"),
         "{md}"
+    );
+
+    // With the project listing, each line names the project. A uid names no project to a reader,
+    // and the listing is one request that `list projects` already makes.
+    let named = api.clone().with(
+        "/v1/dashboard/projects/metadata",
+        serde_json::json!({"items": [
+            {"metadata": {"name": "dev", "uid": "p1"}},
+            {"metadata": {"name": "prod", "uid": "p2"}},
+        ]}),
+    );
+    let l = ops::list(
+        &options,
+        |_| Ok(Palette::new(named.clone())),
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    let text = render::renderer(Format::Terminal, Paint::off(), false)
+        .render_list(&l)
+        .unwrap();
+    assert!(
+        text.contains("project prod (uid p2)"),
+        "the line names the project: {text}"
     );
 }
 

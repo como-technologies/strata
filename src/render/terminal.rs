@@ -4,10 +4,10 @@ use super::{
     applied_ref, chain_verdict, cluster_count, cluster_value, consumer_count, consumer_counts,
     consumers_heading, consumers_sentence, count_of, counts_line, cross_kind_note, dash,
     edited_in_place_note, entry_error, list_count, list_scope, overwritten_in_place_notes,
-    pack_version, pair_detail, pair_word, profiles_overwritten_sentence, record_detail,
-    record_label, same_content_note, short, show, subject, tag_rename, traits_suffix,
-    values_changed_suffix, variable_lines, variables_comparable, variables_unavailable_note,
-    version_display, Renderer, VarLine,
+    pack_version, pair_detail, pair_word, profiles_overwritten_sentence, project_label,
+    record_detail, record_label, same_content_note, short, show, subject, tag_rename,
+    traits_suffix, values_changed_suffix, variable_lines, variables_comparable,
+    variables_unavailable_note, version_display, Renderer, VarLine,
 };
 use crate::color::Paint;
 use crate::diff::{
@@ -412,7 +412,7 @@ impl Renderer for TerminalRenderer {
                 "  {}  {}  project {}  {}",
                 p.bold(&format!("{:<width$}", dash(&c.name))),
                 p.dim(&c.uid),
-                dash(&c.project_uid),
+                project_label(&c.project_uid, &c.project_name),
                 state
             ));
             if !c.version.is_empty() && c.version != r.profile.version {
@@ -560,7 +560,10 @@ impl Renderer for TerminalRenderer {
                         dash(&c.cloud_type).to_string(),
                     ];
                     if c.project_uid != l.project_uid {
-                        row.push(format!("project {}", dash(&c.project_uid)));
+                        row.push(format!(
+                            "project {}",
+                            project_label(&c.project_uid, &c.project_name)
+                        ));
                     }
                     if let Some(msg) = entry_error(c.error.as_ref()) {
                         row.push(format!("({msg})"));

@@ -5,8 +5,8 @@ use super::{
     consumers_heading, consumers_sentence, count_of, counts_line, cross_kind_note, dash,
     edited_in_place_note, entry_error, list_count, list_scope, overwritten_in_place_notes,
     pack_version, pair_detail, pair_word, plain_flags, profiles_overwritten_sentence,
-    record_detail, record_label, same_content_note, short, show, subject, traits_suffix,
-    values_changed, values_changed_suffix, variable_lines, variables_comparable,
+    project_label, record_detail, record_label, same_content_note, short, show, subject,
+    traits_suffix, values_changed, values_changed_suffix, variable_lines, variables_comparable,
     variables_unavailable_note, version_display, Renderer, VarLine,
 };
 use crate::color::Paint;
@@ -324,7 +324,7 @@ impl Renderer for MarkdownRenderer {
                 "| `{}` | `{}` | `{}` | {} | {runs} |\n",
                 escape(dash(&c.name)),
                 escape(&c.uid),
-                escape(dash(&c.project_uid)),
+                escape(&project_label(&c.project_uid, &c.project_name)),
                 escape(&c.state)
             ));
         }
@@ -436,7 +436,10 @@ impl Renderer for MarkdownRenderer {
                     escape(dash(&c.cloud_type))
                 ));
                 if elsewhere {
-                    o.push_str(&format!(" `{}` |", escape(dash(&c.project_uid))));
+                    o.push_str(&format!(
+                        " {} |",
+                        escape(&project_label(&c.project_uid, &c.project_name))
+                    ));
                 }
                 if with_applied {
                     let profiles = match entry_error(c.error.as_ref()) {

@@ -18,7 +18,9 @@ with no key and no cost.
 {{#include ../output/names-tenant.txt}}
 ```
 
-Each line ends with the project of the cluster.
+Each line ends with the project of the cluster, by name and by uid. The name
+comes from the project listing, and a listing that strata cannot read leaves
+the uid alone.
 
 ## 2. A name at tenant scope
 

@@ -2,7 +2,7 @@ $ strata list --cluster payments --project ''
 tenant scope
 
 2 clusters matching 'payments'
-  cluster:64f1000000000000000000e1  payments  Running  aws  project 64f20000000000000000a0d1
+  cluster:64f1000000000000000000e1  payments  Running  aws  project dev (uid 64f20000000000000000a0d1)
     aws-stack@1.1.1  64e0000000000000000000c3  cluster
-  cluster:64f1000000000000000000f1  payments  Running  aws  project 64f20000000000000000a0f1
+  cluster:64f1000000000000000000f1  payments  Running  aws  project prod (uid 64f20000000000000000a0f1)
     aws-stack@1.1.1  64e1000000000000000000c3  cluster

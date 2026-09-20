@@ -12,7 +12,9 @@ The first examples use the project `dev`, which holds `aws-stack@1.0.0` and
 {{#include ../output/retire-in-use.txt}}
 ```
 
-Exit `1`. Each line gives the name, uid, project, and state of a cluster.
+Exit `1`. Each line gives the name, uid, project, and state of a cluster. The
+project reads as a name and a uid, and as the uid alone when strata could not
+read the project listing.
 
 ## A version that no cluster uses
 

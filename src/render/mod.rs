@@ -65,6 +65,16 @@ pub(crate) fn list_scope(l: &Listing) -> String {
     }
 }
 
+/// A cluster's project, in the shape the scope line uses: `dev (uid 64f2...)`, or the uid alone
+/// when the name could not be read. A uid names no project to a reader.
+pub(crate) fn project_label(uid: &str, name: &str) -> String {
+    match (uid, name) {
+        ("", _) => dash("").to_string(),
+        (uid, "") => uid.to_string(),
+        (uid, name) => format!("{name} (uid {uid})"),
+    }
+}
+
 /// `2 profiles`, `1 profile`, or `no profiles`.
 pub(crate) fn count_of(n: usize, singular: &str) -> String {
     match n {
