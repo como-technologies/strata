@@ -71,8 +71,9 @@ cluster. `no consumers` and exit `0` means the version is free to retire.
 
 `consumers` takes no project option, so the last command names the project in
 the environment. It sets `PALETTE_PROJECT_UID` to nothing first, because a uid
-has priority over a name: with a uid still set, `PALETTE_PROJECT=prod` is
-ignored and the answer comes from the other project, with nothing to say so. The
+has priority over a name: with a uid still set, `PALETTE_PROJECT=prod` decides
+nothing and the answer comes from the other project. Leave the uid in place and
+strata warns that it did so, and still answers for the uid, so clear it. The
 playground exports a uid, so keep the empty assignment when you follow along.
 See [strata consumers](../commands/consumers.md) and
 [Configure](../configure.md).

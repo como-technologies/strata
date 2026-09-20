@@ -31,6 +31,11 @@ pub struct Config {
     /// A project by name, from `PALETTE_PROJECT` when `PALETTE_PROJECT_UID` is unset. A client
     /// resolves it to a uid with [`crate::api::Palette::project_uid_named`] at tenant scope.
     pub project_name: Option<String>,
+    /// A name from `PALETTE_PROJECT` that a uid in `PALETTE_PROJECT_UID` overrode. Both were set,
+    /// so the name decided nothing. The caller asked for one project by two means, and the two
+    /// can name two projects: a caller that acts on the answer reads the wrong project and
+    /// nothing says so. A command resolves this name and warns when the uids differ.
+    pub shadowed_project_name: Option<String>,
     /// Per-request timeout.
     pub timeout: Duration,
     /// Retries after a failed attempt on a transient error; `STRATA_RETRIES`, default 3.
@@ -48,6 +53,7 @@ impl Config {
             base_url: normalize_url(base_url.into()),
             project_uid: None,
             project_name: None,
+            shadowed_project_name: None,
             timeout: Duration::from_secs(120),
             retries: DEFAULT_RETRIES,
             max_retry_after: DEFAULT_MAX_RETRY_AFTER,
@@ -76,6 +82,15 @@ impl Config {
                 }
             }
             env_nonempty(key).or_else(|| dotenv_lookup(key))
+        })
+        .map(|mut cfg| {
+            cfg.shadowed_project_name = shadowed_project_name(
+                env_nonempty(PROJECT_VARS[0]),
+                env_nonempty(PROJECT_NAME_VAR),
+                dotenv_lookup(PROJECT_VARS[0]),
+                dotenv_lookup(PROJECT_NAME_VAR),
+            );
+            cfg
         })
     }
 
@@ -121,6 +136,31 @@ fn normalize_url(url: String) -> String {
         format!("https://{url}")
     };
     with_scheme.trim_end_matches('/').to_string()
+}
+
+/// The name that a uid overrode, and that is worth a warning.
+///
+/// The environment is above `~/.palette.env`, and a uid is above a name. A name loses without
+/// complaint only to a uid from a higher place: a name in the file, under a uid in the
+/// environment, is the fallback doing its job. A name the caller set at or above the uid's place
+/// lost to something they did not mean to give twice, so say so. The worst of those is a name in
+/// the environment under a uid in the file, where a command the caller typed loses to a file they
+/// wrote months ago.
+fn shadowed_project_name(
+    env_uid: Option<String>,
+    env_name: Option<String>,
+    file_uid: Option<String>,
+    file_name: Option<String>,
+) -> Option<String> {
+    let set = |v: Option<String>| v.filter(|s| !s.is_empty());
+    let (env_uid, env_name) = (set(env_uid), set(env_name));
+    if env_uid.is_some() {
+        env_name
+    } else if set(file_uid).is_some() {
+        env_name.or_else(|| set(file_name))
+    } else {
+        None
+    }
 }
 
 fn env_nonempty(key: &str) -> Option<String> {
@@ -304,5 +344,55 @@ mod tests {
         );
         assert_eq!(parse_dotenv(text, "EMPTY"), None);
         assert_eq!(parse_dotenv(text, "MISSING"), None);
+    }
+}
+
+#[cfg(test)]
+mod scope_conflict_tests {
+    use super::shadowed_project_name as shadowed;
+
+    fn s(v: &str) -> Option<String> {
+        Some(v.to_string())
+    }
+
+    /// The environment gave both, so the caller named one project twice and a uid won.
+    #[test]
+    fn a_name_beside_a_uid_in_the_environment_is_shadowed() {
+        assert_eq!(shadowed(s("uid"), s("dev"), None, None), s("dev"));
+    }
+
+    /// `~/.palette.env` is the fallback. A uid in the environment is meant to override the file,
+    /// so the name in the file lost to a higher place and nothing is wrong.
+    #[test]
+    fn a_name_in_the_file_under_a_uid_in_the_environment_is_not_shadowed() {
+        assert_eq!(shadowed(s("uid"), None, None, s("dev")), None);
+    }
+
+    /// The worst case: the caller typed a name for this command, and a uid they wrote into the
+    /// file months ago decided the scope instead.
+    #[test]
+    fn a_name_in_the_environment_under_a_uid_in_the_file_is_shadowed() {
+        assert_eq!(shadowed(None, s("dev"), s("uid"), None), s("dev"));
+    }
+
+    /// One place gave both, so the file names one project twice.
+    #[test]
+    fn a_name_and_a_uid_in_the_file_alone_are_shadowed() {
+        assert_eq!(shadowed(None, None, s("uid"), s("dev")), s("dev"));
+    }
+
+    /// No uid decides anything, so the name decides and shadows nothing.
+    #[test]
+    fn a_name_with_no_uid_anywhere_is_not_shadowed() {
+        assert_eq!(shadowed(None, s("dev"), None, None), None);
+        assert_eq!(shadowed(None, None, None, s("dev")), None);
+    }
+
+    /// An empty value is tenant scope asked for on purpose, and not a name to compare.
+    #[test]
+    fn an_empty_value_is_never_shadowed_and_never_shadows() {
+        assert_eq!(shadowed(s("uid"), s(""), None, None), None);
+        assert_eq!(shadowed(s(""), s("dev"), None, None), None);
+        assert_eq!(shadowed(None, s("dev"), s(""), None), None);
     }
 }

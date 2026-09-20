@@ -954,3 +954,83 @@ fn candidate_writes_a_record_as_a_candidate_file_with_values_and_manifests_in_fi
     let r = run(&["candidate", &fx.b, "--files-dir", files.to_str().unwrap()]);
     assert_eq!(r.code, 2, "--files-dir needs -o");
 }
+
+/// Like [`first_request`] but without `STRATA_QUIET`, so the warnings a person sees are on.
+fn first_request_loud(args: &[&str], envs: &[(&str, &str)]) -> Run {
+    let home = tempfile::tempdir().unwrap();
+    let mut c = Command::new(bin());
+    c.args(args)
+        .env("HOME", home.path())
+        .env("PALETTE_API_KEY", "k")
+        .env("PALETTE_API", "http://127.0.0.1:9")
+        .env("STRATA_RETRIES", "0")
+        .env_remove("STRATA_QUIET")
+        .env_remove("PALETTE_PROJECT_UID")
+        .env_remove("PALETTE_PROJECT")
+        .env_remove("SPECTROCLOUD_APIKEY")
+        .env_remove("SPECTROCLOUD_HOST");
+    for (k, v) in envs {
+        c.env(k, v);
+    }
+    let o = c.output().expect("binary runs");
+    Run {
+        code: o.status.code().unwrap_or(-1),
+        out: String::from_utf8_lossy(&o.stdout).into_owned(),
+        err: String::from_utf8_lossy(&o.stderr).into_owned(),
+    }
+}
+
+/// A uid and a name both reach strata and the uid decides, so the name decided nothing. Strata
+/// resolves the name to find out whether the two name one project, and that listing is the first
+/// request it makes. Before this check a person read an answer about the uid's project while
+/// they had asked for the name's, and nothing said so.
+#[test]
+fn a_scope_conflict_is_looked_up_before_the_work() {
+    let r = first_request_loud(
+        &["consumers", "aws-stack@1.0.0"],
+        &[("PALETTE_PROJECT_UID", "p1"), ("PALETTE_PROJECT", "lab")],
+    );
+    assert!(
+        r.err.contains("looking up project lab"),
+        "the name is resolved to compare it with the uid: {}",
+        r.err
+    );
+}
+
+/// The name that a uid overrode is read from the place the uid came from, and no lower. A name
+/// in `~/.palette.env` under a uid in the environment is the fallback doing its job, so strata
+/// makes no listing and says nothing.
+#[test]
+fn a_name_in_the_file_under_a_uid_in_the_environment_starts_no_lookup() {
+    let home = tempfile::tempdir().unwrap();
+    std::fs::write(home.path().join(".palette.env"), "PALETTE_PROJECT=lab\n").unwrap();
+    let mut c = Command::new(bin());
+    c.args(["consumers", "aws-stack@1.0.0"])
+        .env("HOME", home.path())
+        .env("PALETTE_API_KEY", "k")
+        .env("PALETTE_API", "http://127.0.0.1:9")
+        .env("STRATA_RETRIES", "0")
+        .env("PALETTE_PROJECT_UID", "p1")
+        .env_remove("STRATA_QUIET")
+        .env_remove("PALETTE_PROJECT");
+    let o = c.output().expect("binary runs");
+    let err = String::from_utf8_lossy(&o.stderr);
+    assert!(
+        !err.contains("looking up project") && !err.contains("warning:"),
+        "the fallback is not a conflict: {err}"
+    );
+}
+
+/// A quiet run writes no warning, so it also skips the listing that would find one. With `--json`
+/// a quiet run writes one JSON object to standard error and nothing else, which a caller reads.
+#[test]
+fn a_quiet_run_skips_the_scope_conflict_lookup() {
+    let (_, e) = first_request(
+        &["list", "profiles", "--json"],
+        &[("PALETTE_PROJECT", "lab"), ("PALETTE_PROJECT_UID", "p1")],
+    );
+    assert_eq!(
+        e["path"], "/v1/dashboard/clusterprofiles/metadata",
+        "no project listing on a quiet run: {e}"
+    );
+}

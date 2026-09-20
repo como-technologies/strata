@@ -451,9 +451,43 @@ fn connect(progress: Progress, project: Option<&str>) -> Result<Palette<Retry<Ht
             if let Some(name) = config.project_name.clone() {
                 config.project_uid = Some(project_uid_named(&config, &name, progress)?);
             }
+            warn_on_scope_conflict(&config, progress);
         }
     }
     Ok(client(config, progress))
+}
+
+/// `PALETTE_PROJECT_UID` and `PALETTE_PROJECT` were both set, so the name decided nothing. Say so
+/// when the two name two projects, because every answer that follows is about the uid's project
+/// and the caller asked for the name's.
+///
+/// This costs one listing, and only when both are set. It says nothing when the two agree, which
+/// is the common setting: the playground prints both lines, and so do many `~/.palette.env`
+/// files. A name that resolves to nothing is a warning too, and not an error: a stale variable
+/// that decides nothing must not fail a command that asked about something else.
+///
+/// A quiet run skips the listing as well as the warning. The warning is the only reason to make
+/// that request, and with `--json` a quiet run writes one JSON object to stderr and nothing else,
+/// which a caller reads.
+fn warn_on_scope_conflict(config: &Config, progress: Progress) {
+    if progress.is_quiet() {
+        return;
+    }
+    let (Some(uid), Some(name)) = (&config.project_uid, &config.shadowed_project_name) else {
+        return;
+    };
+    match project_uid_named(config, name, progress) {
+        Ok(named) if &named == uid => {}
+        Ok(named) => progress.warn(&format!(
+            "PALETTE_PROJECT_UID is {uid} and PALETTE_PROJECT is '{name}', which is {named}. \
+             A uid has priority, so this answers for {uid}. Clear one of the two: \
+             `PALETTE_PROJECT_UID= PALETTE_PROJECT={name}` asks for the project you named."
+        )),
+        Err(e) => progress.warn(&format!(
+            "PALETTE_PROJECT is '{name}', which no project matches ({e}). \
+             PALETTE_PROJECT_UID is {uid}, and a uid has priority, so this answers for {uid}."
+        )),
+    }
 }
 
 fn client(config: Config, progress: Progress) -> Palette<Retry<HttpApi>> {

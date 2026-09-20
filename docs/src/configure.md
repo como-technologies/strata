@@ -36,6 +36,33 @@ this order:
    see.
 4. No project: tenant scope.
 
+Set a uid and a name together and the uid decides, so the name changes nothing.
+When the two name two projects, strata answers for the uid and writes a warning
+to standard error first:
+
+```text
+strata: warning: PALETTE_PROJECT_UID is 64f2…a0d1 and PALETTE_PROJECT is 'prod',
+which is 64f2…a0f1. A uid has priority, so this answers for 64f2…a0d1. Clear one
+of the two: `PALETTE_PROJECT_UID= PALETTE_PROJECT=prod` asks for the project you
+named.
+```
+
+The warning costs one project listing, and only when both are set. It says
+nothing when the two agree, which is the common setting: the playground prints
+both lines. A name that no project matches is a warning too, and not an error,
+because a stale variable that decides nothing must not fail a command.
+
+`-q` and `STRATA_QUIET` hide the warning, and skip the listing that finds it.
+The warning is for the person at the terminal. With `--json` strata writes the
+error as one JSON object on standard error, and a caller that reads that stream
+passes `-q` to keep it clean, so a warning there would break the caller instead
+of helping it.
+
+A name in `~/.palette.env` under a uid in the environment is the fallback doing
+its job, so that pair is silent. The pair that warns loudest is the other way
+round: a name you type for one command, under a uid that file has held for
+months.
+
 A snapshot file records the project uid. `strata verify` checks each record in
 its own project, so one scheduled job checks the records of all projects. A
 record from tenant scope has no project uid, so `verify` checks it in the
