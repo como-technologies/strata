@@ -1,0 +1,19 @@
+$ strata compare 'pack:Public Repo/kubernetes@1.35.3' 'pack:Public Repo/kubernetes@latest'
+pack kubernetes@1.35.3 (uid 69f778872d19e4c57df8f630)  ->  pack kubernetes@1.36.2 (uid 6a6bd41b16c3cbf9999ad3be)
+root       f466249ad0ae -> 9e8881b1e813   CHANGED
+
+~ [k8s  ] kubernetes                 1.35.3 -> 1.36.2   IDENTITY UPSTREAM AUTHORED
+      upstream digest  sha256:ff3df -> sha256:c4f7f   (packRef.digest)
+      values: 9 changed, 2 added, 0 removed
+        ~ kubeadmconfig.dns.imageTag: "v1.13.1" -> "v1.14.2"
+        ~ kubeadmconfig.etcd.local.imageTag: "3.6.6-0" -> "3.6.8-0"
+        ~ kubeadmconfig.files[2].content: "apiVersion: apiserver.config.k8s.io/v1\nkind: AdmissionConfiguration\nplugins:\n- name: PodSecurity... (649 chars, see --full) -> "apiVersion: apiserver.config.k8s.io/v1\nkind: AdmissionConfiguration\nplugins:\n- name: PodSecurity... (649 chars, see --full)
+        ~ pack.content.images[0].image: "us-docker.pkg.dev/palette-images/k8s/coredns/coredns:v1.13.1" -> "us-docker.pkg.dev/palette-images/k8s/coredns/coredns:v1.14.2"
+        + pack.content.images[10].image: "registry.k8s.io/pause:3.10.2"
+        ~ pack.content.images[1].image: "us-docker.pkg.dev/palette-images/k8s/etcd:3.6.6-0" -> "us-docker.pkg.dev/palette-images/k8s/etcd:3.6.8-0"
+        ~ pack.content.images[2].image: "us-docker.pkg.dev/palette-images/k8s/kube-apiserver:v1.35.3" -> "us-docker.pkg.dev/palette-images/k8s/kube-apiserver:v1.36.2"
+        ~ pack.content.images[3].image: "us-docker.pkg.dev/palette-images/k8s/kube-controller-manager:v1.35.3" -> "us-docker.pkg.dev/palette-images/k8s/kube-controller-manager:v1.36.2"
+        ~ pack.content.images[4].image: "us-docker.pkg.dev/palette-images/k8s/kube-proxy:v1.35.3" -> "us-docker.pkg.dev/palette-images/k8s/kube-proxy:v1.36.2"
+        ~ pack.content.images[5].image: "us-docker.pkg.dev/palette-images/k8s/kube-scheduler:v1.35.3" -> "us-docker.pkg.dev/palette-images/k8s/kube-scheduler:v1.36.2"
+        + pack.content.images[9].image: "registry.k8s.io/pause:3.10.1"
+      impact: node repave (Kubernetes version change)

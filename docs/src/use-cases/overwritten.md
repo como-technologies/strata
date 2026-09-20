@@ -15,6 +15,9 @@ changed value, and the flag is off.
 scheduled verify job is what reports the overwrite first: see
 [Drift issues](../automation/drift-issues.md).
 
+**Follow along.** `just playground overwritten` serves this tenant on this machine,
+with no key and no cost.
+
 ## 1. The old version is gone
 
 ```text

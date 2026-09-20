@@ -13,6 +13,9 @@ team name to `platform_owner`.
 **Who runs this.** A person at a terminal. The scheduled verify job does not
 report a changed cluster value, so somebody must look.
 
+**Follow along.** `just playground cluster-values` serves this tenant on this machine,
+with no key and no cost.
+
 ## 1. Compare the clusters
 
 ```text

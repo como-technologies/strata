@@ -65,6 +65,8 @@ Rollback: releases/dev.json to aws-stack@1.0.0
 1.1.0 repaved the nodes with a CSI driver that lost the volumes
 ```
 
+The gate reads the declaration, and passes:
+
 ```text
 {{#include ../output/merge-gate-rollback.txt}}
 ```
@@ -101,7 +103,9 @@ See [A published version is edited in place](../use-cases/edited-in-place.md).
 | `--no-verify` | | Leave the verify check out. |
 | `--allow-rollback` | | Accept a backwards pin, as the `rollback` label does. |
 
-The script needs `strata` (or `STRATA_BIN`), `git`, `jq`, and `sort -V`. It
+The script is in this repository, at `scripts/ci/merge-gate.sh`, and every
+release carries it beside the binary. It needs `strata` (or `STRATA_BIN`),
+`git`, `jq`, and `sort -V`. It
 needs the history, so a job that clones with a depth gives it `GIT_DEPTH: 0` or
 `fetch-depth: 0`. It writes to no host: the exit status is the gate, and
 [the comment](./pr-comments.md) is what people read.

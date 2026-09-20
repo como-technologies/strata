@@ -10,6 +10,9 @@ builds the prod copy by hand can change one value.
 **Who runs this.** The publish job records each project, and the promotion gate
 checks the pair: see [The promotion gate and the retire gate](../automation/gates.md).
 
+**Follow along.** `just playground promote` serves this tenant on this machine,
+with no key and no cost.
+
 ## 1. Record the version in each project
 
 ```text

@@ -24,12 +24,20 @@ strata answers each one in a job.
 | Is this merge request still right? | before the merge button | `merge-gate.sh` | a red check, with the reason |
 | Did the environments get what the branch says? | every night | `verify-report.sh` | one issue per record that drifted |
 | Which clusters use this profile version? | when a version is retired | `strata consumers` | the list, with the count |
+| Did the environment get the release that was reviewed? | after each merge | the publish job: `snapshot`, then `same-release` | a failed job when Palette holds something else |
 
 **Who runs this.** Jobs, almost entirely. A developer writes a record in a merge
-request and reads a comment; the three jobs below do the rest. Each one is a
-drop-in: [Pull request comments](../automation/pr-comments.md),
+request and reads a comment; the jobs below do the rest. Three of them are
+drop-ins: [Pull request comments](../automation/pr-comments.md),
 [The merge gate](../automation/merge-gate.md), and
-[Drift issues](../automation/drift-issues.md).
+[Drift issues](../automation/drift-issues.md). The retire question is
+[The promotion gate and the retire gate](../automation/gates.md). The proof
+after the merge goes in your own publish job, because the publish is yours.
+
+**Follow along.** This page takes its blocks from the pages it links, so no one
+chapter serves all of it. `just playground review`, `just playground promote` and
+`just playground edited-in-place` each serve their own. The merge gate reads a
+git repository, which the playground does not build.
 
 ## One record for each environment
 
@@ -98,8 +106,9 @@ settings that hold the button on both hosts.
 
 ## After the merge, prove what shipped
 
-The merge is not the release. Record the version that the environment now runs,
-and make sure it is the release that was reviewed:
+The publish job does this, after each merge. The merge is not the release.
+Record the version that the environment now runs, and make sure it is the
+release that was reviewed:
 
 ```text
 {{#include ../output/review-same.txt}}
@@ -125,7 +134,9 @@ scheduled job checks each record against Palette, and keeps one issue open per
 record that drifted:
 
 The schedule covers the cluster records as well as the release records, so it
-gives both patterns:
+gives both patterns. A cluster record comes from the job that applies the
+cluster, which runs `strata snapshot cluster:<name> -o runs/<name>.json` after
+the apply; this page keeps only the environment records under `releases/`:
 
 ```text
 {{#include ../output/edited-report.txt:1:3}}
@@ -167,8 +178,10 @@ lists the root of each environment says what runs where, one line for each.
 | GitHub | `comment.yml` on `pull_request` | `merge-gate.yml` as a required check | `verify.yml` on a schedule |
 | GitLab | `strata-comment` | `strata-merge-gate`, with "Pipelines must succeed" | `strata-verify` on a pipeline schedule |
 
-Both hosts run the same three scripts, so a team that moves between them keeps
-the reports, the markers and the exit codes. See
+Both hosts also run the two gates on demand: see
+[The promotion gate and the retire gate](../automation/gates.md). Every job runs
+the same commands on either host, so a team that moves between them keeps the
+reports, the markers and the exit codes. See
 [GitLab CI](../automation/gitlab.md).
 
 ## What to do

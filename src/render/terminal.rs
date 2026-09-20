@@ -273,8 +273,10 @@ impl Renderer for TerminalRenderer {
         } else if let Some(sentence) = consumers_sentence(d) {
             out.push(format!("consumers  {sentence}"));
         }
-        out.push(String::new());
+        // the blank line belongs to the variables block, so two packs, which have no variables,
+        // leave neither the line nor the gap where it was
         if variables_comparable(d) {
+            out.push(String::new());
             out.push(format!(
                 "  variables {}",
                 if d.variables.changed {

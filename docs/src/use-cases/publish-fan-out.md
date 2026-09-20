@@ -21,6 +21,11 @@ records, and opens the next merge request. The recipes are
 step in the publish job is yours to write: strata ships no recipe for it,
 because the publish itself is yours.
 
+**Follow along.** This page takes its blocks from the pages it links, so no one
+chapter serves all of it. `just playground packs`, `just playground list` and
+`just playground cluster-release` each serve their own. The merge gate reads a
+git repository, which the playground does not build.
+
 ## What each level holds, and what it records
 
 | Repository | The repository holds | A merge publishes | The record |
@@ -104,12 +109,20 @@ because a job was running from an old base.
 Every check above also runs in a terminal, which is where a developer wants
 them: before the push, not after the pipeline.
 
+The gate is a script of the strata release, not of your repository. Get it once,
+beside the binary:
+
+```bash
+# from a release of strata, into .strata/ of your checkout
+bash install-strata.sh --version v0.6.3 --dir .strata
+```
+
 ```bash
 # what do the environments run right now, and does any record no longer match?
 strata verify "releases/**/*.json" --summary
 
 # what would my branch land, against the default branch as it is now?
-scripts/ci/merge-gate.sh "releases/**/*.json" --base main
+.strata/merge-gate.sh "releases/**/*.json" --base main
 ```
 
 The gate writes to no host and needs no token: it fetches the target branch,

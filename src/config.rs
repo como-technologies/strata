@@ -88,12 +88,12 @@ impl Config {
         })?;
         let base_url = first(&URL_VARS).unwrap_or_else(|| DEFAULT_BASE_URL.to_string());
         let mut cfg = Config::new(base_url, api_key);
-        // An empty value asks for tenant scope, so it stops the search: no uid, and no name from
-        // a later source either.
+        // An empty uid means no uid, and it stops `~/.palette.env` from giving one. It does not
+        // stop the name: `PALETTE_PROJECT_UID= PALETTE_PROJECT=dev` is a project, and the
+        // playground prints both lines. Tenant scope is an empty name as well as an empty uid.
         match first(&PROJECT_VARS) {
             Some(uid) if !uid.is_empty() => cfg.project_uid = Some(uid),
-            Some(_) => {}
-            None => cfg.project_name = lookup(PROJECT_NAME_VAR).filter(|n| !n.is_empty()),
+            _ => cfg.project_name = lookup(PROJECT_NAME_VAR).filter(|n| !n.is_empty()),
         }
         if let Some(v) = lookup(RETRIES_VAR) {
             cfg.retries = v.trim().parse().map_err(|_| Error::InvalidSetting {
@@ -198,16 +198,19 @@ mod tests {
     /// reader who keeps a project in that file cannot reach tenant scope from the environment.
     #[test]
     fn an_empty_project_variable_is_tenant_scope_and_stops_the_search() {
+        // an empty uid is not tenant scope on its own: the playground prints an empty uid and a
+        // project name together, and the pages then run `PALETTE_PROJECT=dev strata ...`
         let cfg = Config::from_lookup(lookup(&[
             ("PALETTE_API_KEY", "k"),
             ("PALETTE_PROJECT_UID", ""),
             ("PALETTE_PROJECT", "dev"),
         ]))
         .unwrap();
-        assert!(cfg.project_uid.is_none(), "an empty uid is tenant scope");
-        assert!(
-            cfg.project_name.is_none(),
-            "an empty uid must not fall through to the project name"
+        assert!(cfg.project_uid.is_none(), "an empty uid gives no uid");
+        assert_eq!(
+            cfg.project_name.as_deref(),
+            Some("dev"),
+            "an empty uid must not suppress an explicit project name"
         );
 
         let cfg = Config::from_lookup(lookup(&[("PALETTE_API_KEY", "k"), ("PALETTE_PROJECT", "")]))

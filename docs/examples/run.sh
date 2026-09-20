@@ -192,6 +192,29 @@ step() {
 show() { step "$1" "$2" out "$3"; }
 show2() { step "$1" "$2" both "$3"; }
 
+# excerpt NAME FROM PATTERN: the lines of FROM.txt that a page teaches, written as NAME.txt. The
+# command line is kept, and each gap becomes "...". A page includes the excerpt instead of the whole
+# transcript, so a change to a part the page never discusses leaves the page alone.
+#
+# The pattern is the page's claim, so nothing matching is an error: when the line a page is built on
+# stops being printed, this build fails instead of the page going quietly wrong.
+#
+# Write the pattern in POSIX ERE, with [+] and [[] rather than \+ and \[: awk reads a pattern that
+# comes from a string twice, and turns \+ into a quantifier with nothing before it.
+excerpt() {
+  [ -z "$serve" ] || return 0
+  local name=$1 from=$2 pattern=$3
+  local src=$out/$from.txt
+  [ -s "$src" ] || die "excerpt $name: there is no output named '$from'"
+  awk -v pat="$pattern" '
+    NR == 1 { print; next }
+    $0 ~ pat { if (gap) print "..."; gap = 0; print; hits++; next }
+    { gap = 1 }
+    END { if (gap) print "..."; if (!hits) exit 3 }
+  ' "$src" > "$out/$name.txt" ||
+    die "excerpt $name: no line of $from matches /$pattern/; the page's claim is no longer printed"
+}
+
 # quiet COMMAND: a step that the book does not show
 quiet() {
   [ -z "$serve" ] || return 0
@@ -670,6 +693,8 @@ quiet 'PALETTE_PROJECT=dev strata snapshot aws-stack@1.1.1 -o releases/1.1.1/dev
 quiet 'PALETTE_PROJECT=prod strata snapshot aws-stack@1.1.1 -o releases/1.1.1/prod.json'
 show move-exact 1 'strata same-release releases/1.1.1/dev.json releases/1.1.1/prod.json'
 show move-compare 1 'strata compare releases/1.1.1/dev.json releases/1.1.1/prod.json'
+# the page teaches the flags on the CSI line and its impact, and not the other packs
+excerpt move-compare-csi move-compare '^(aws-stack|root |note |~ [[]csi)|  +(impact:|upstream digest)'
 show move-fields 1 "strata compare releases/1.1.1/dev.json releases/1.1.1/prod.json --json | jq '.packs[] | select(.identity) | {name, a: .a | {packUid, registryUid, upstream}, b: .b | {packUid, registryUid, upstream}}'"
 show move-allow 0 'strata same-release --allow registry-move releases/1.1.1/dev.json releases/1.1.1/prod.json'
 serve_here   # the page describes what follows: the move of the pack to the other registry
@@ -683,12 +708,16 @@ projects dev=$DEV
 profile $DEV $A111 1.1.1 aws-stack@1.1.1
 profile $DEV $A113 1.1.3 aws-stack@1.1.1 "$TAG_2404"
 show tag-compare 1 'strata compare aws-stack@1.1.1 aws-stack@1.1.3'
+# the page teaches the verdict, the note and the OS line; it never reads the other packs
+excerpt tag-compare-os tag-compare '^(aws-stack|root |note |~ [[]os)|  +impact:'
 show tag-same 0 'strata same-release aws-stack@1.1.1 aws-stack@1.1.3'
 show tag-json 1 "strata compare aws-stack@1.1.1 aws-stack@1.1.3 --json | jq '{same, sameContent, maxImpact: .summary.maxImpact, renamed: [.packs[] | select(.tagRenamed) | .name]}'"
 show2 tag-record 0 'strata snapshot aws-stack@1.1.3 -o releases/1.1.3/dev.json'
 serve_here   # the page describes what follows: the tag rename that the page reports as drift
 edit $DEV $A113 "$TAG_LTS2404"
 show tag-verify 1 'strata verify releases/1.1.3/dev.json'
+# the page teaches the two notes and the verdict. formats.md keeps the whole report.
+excerpt tag-verify-notes tag-verify '^(aws-stack|root |note |~ [[]os|DRIFT)|  +impact:'
 
 chapter manifest-pack
 projects dev=$DEV prod=$PROD
@@ -698,12 +727,17 @@ quiet 'mkdir -p addons/1.0.0'
 show2 manifest-record 0 'PALETTE_PROJECT=dev strata snapshot platform-addons@1.0.0 -o addons/1.0.0/dev.json'
 show2 manifest-record 0 'PALETTE_PROJECT=prod strata snapshot platform-addons@1.0.0 -o addons/1.0.0/prod.json'
 show manifest-compare 1 'strata compare addons/1.0.0/dev.json addons/1.0.0/prod.json'
+# the page teaches the root line, the note, and the pack line with its impact
+excerpt manifest-compare-note manifest-compare '^(platform-addons|root |note |~ )|  +impact:'
 show manifest-same 0 'strata same-release addons/1.0.0/dev.json addons/1.0.0/prod.json'
 serve_here   # the page describes what follows: the second publish of one manifest under another profile
 empty_profiles "$PROD"
 addons $PROD $ADDONS_PROD 64e3000000000000000000d1 baseline
 quiet 'PALETTE_PROJECT=prod strata snapshot platform-addons@1.0.0 -o addons/1.0.0/prod.json'
 show manifest-different 1 'strata same-release addons/1.0.0/dev.json addons/1.0.0/prod.json'
+show manifest-full 1 'strata compare addons/1.0.0/dev.json addons/1.0.0/prod.json --full'
+# the page teaches the one line that differs, which only --full prints
+excerpt manifest-full-diff manifest-full '^([$]|--- |[+][+][+] |[-+] +pod-security)'
 
 chapter edited-in-place PALETTE_PROJECT=dev
 projects dev=$DEV
@@ -762,6 +796,9 @@ show cluster-moved 1 'strata compare releases/1.1.0/dev.json cluster:search'
 show cluster-edited 1 'strata compare releases/1.1.0/dev.json cluster:ledger'
 show2 cluster-run-record 0 'strata snapshot cluster:payments/aws-stack -o runs/payments.json'
 show cluster-run-record 0 'strata verify runs/payments.json'
+# the page teaches that verify fetches the cluster again with the same selection: the record, the
+# two roots and the verdict. The packs of the profile are not its subject.
+excerpt cluster-run-verify cluster-run-record '^([$] |strata: wrote|root |OK:)'
 
 chapter cluster-values PALETTE_PROJECT=dev
 projects dev=$DEV
@@ -800,6 +837,9 @@ show2 pack-record 0 "strata snapshot 'pack:Public Repo/kubernetes@latest' -o kub
 show pack-verify 0 'strata verify kubernetes.json'
 show packs-list 0 "strata packs csi-aws-ebs --registry 'Public Repo'"
 show packs-latest 0 'strata packs csi-aws-ebs --latest'
+show pack-behind 1 "strata compare 'pack:Public Repo/kubernetes@1.35.3' 'pack:Public Repo/kubernetes@latest'"
+# the claim is that @latest resolves, and that the report names the version it resolved to
+excerpt pack-behind-head pack-behind '^(pack |root )'
 show packs-cloud 0 "strata packs kubernetes --registry 'Public Repo' --cloud aws --latest"
 show packs-json 0 "strata packs csi-aws-ebs --registry 'Public Repo' --latest --json | jq '.registries[0].versions[0]'"
 

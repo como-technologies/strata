@@ -1,0 +1,21 @@
+$ strata compare addons/1.0.0/dev.json addons/1.0.0/prod.json --full
+platform-addons@1.0.0 (uid 64e2000000000000000000a1)  ->  platform-addons@1.0.0 (uid 64e3000000000000000000a1)
+root       b49f91f9df85 -> 17b743feafeb   CHANGED
+consumers  0 -> 0 clusters
+
+  variables unchanged
+
+~ [addon] namespace-policy           1.0.0              IDENTITY AUTHORED
+      ~ manifest namespace-policy
+      impact: in-place addon upgrade
+
+--- a: addon/namespace-policy manifest namespace-policy
++++ b: addon/namespace-policy manifest namespace-policy
+@@ -3,4 +3,4 @@
+ metadata:
+   name: payments
+   labels:
+-    pod-security.kubernetes.io/enforce: restricted
+\ No newline at end of file
++    pod-security.kubernetes.io/enforce: baseline
+\ No newline at end of file

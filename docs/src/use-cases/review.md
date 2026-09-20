@@ -3,27 +3,25 @@
 ## The problem
 
 A pull request changes a profile: here, four infrastructure packs get new
-versions. The new profile version is not in Palette yet. The reviewer must see
-which layers change, and whether the change replaces nodes, before anybody
-publishes it.
+versions. The new profile version (1.1.0) is not in Palette yet. The reviewer
+must see which layers change, and whether the change replaces nodes, before
+anybody publishes it.
 After the publication, the team must know that Palette has the version that the
 reviewer approved.
 
 ## Who runs each step
 
-Three people and one job share this page. Read the step headings: they name the
-actor. The author writes one file, the job runs the commands, and the reviewer
-reads what the job posts.
+Two people and two jobs share this page. Read the step headings: they name the
+actor. The author writes one file. The comment job runs steps 2 to 4 and posts
+the result. The reviewer reads that comment. The publish job proves what shipped.
 
-| Step | Who | When |
-| --- | --- | --- |
-| 1 | the author of the change | once, in the pull request |
-| 2, 3, 4 | the comment job | each push to the pull request |
-| 3 | the reviewer | when the comment appears |
-| 5 | the publish job | after the merge |
-
-Steps 2 to 4 are [Pull request comments](../automation/pr-comments.md), which
-ships as a drop-in for GitHub and GitLab.
+| Step | Who | When | Needs `PALETTE_API_KEY` |
+| --- | --- | --- | --- |
+| 1 | the author of the change | once, in the pull request | no |
+| 2 | the [comment job](../automation/pr-comments.md) | each push to the pull request | yes |
+| 3 | the [comment job](../automation/pr-comments.md) writes it, and the reviewer reads it | each push to the pull request | no |
+| 4 | the [comment job](../automation/pr-comments.md) | each push to the pull request | no |
+| 5 | the publish job | after the merge | yes |
 
 The project `dev` has `aws-stack@1.0.0`, and a record of it is already in the
 repository, because the job that published 1.0.0 wrote one. The block below
@@ -32,6 +30,9 @@ writes that record, so this page has one to compare against:
 ```text
 {{#include ../output/review-record.txt}}
 ```
+
+**Follow along.** `just playground review` serves this tenant on this machine,
+with no key and no cost.
 
 ## 1. The author writes the candidate file
 

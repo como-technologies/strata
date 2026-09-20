@@ -22,8 +22,11 @@ replaces no node.
 
 ## With a tenant
 
-The project `dev` holds the versions 1.0.0, 1.1.0, and 1.1.1 of `aws-stack`. The
-cluster `payments` runs 1.1.0.
+These steps use the tenant of this book, where the project `dev` holds the
+versions 1.0.0, 1.1.0, and 1.1.1 of `aws-stack`, and the cluster `payments` runs
+1.1.0. Run `just playground quickstart` to serve that tenant on this machine, or
+put your own project, profile and cluster names in place of these. `strata list`
+prints yours.
 
 ```bash
 export PALETTE_PROJECT=dev

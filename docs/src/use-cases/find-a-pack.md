@@ -10,6 +10,9 @@ versions. Neither says which profiles carry the pack. `list` answers that.
 
 **Who runs this.** A person at a terminal, answering an incident. Nothing here writes.
 
+**Follow along.** `just playground list` serves this tenant on this machine, with
+no key and no cost. The chapter is named `list`.
+
 ## 1. Search one project
 
 ```text

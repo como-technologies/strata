@@ -27,6 +27,9 @@ a cluster does step 6 after each apply. The scheduled verify job then repeats
 step 6 for every cluster record: see
 [Drift issues](../automation/drift-issues.md).
 
+**Follow along.** `just playground cluster-release` serves this tenant on this machine,
+with no key and no cost.
+
 ## 1. What each cluster runs
 
 ```text
@@ -81,7 +84,7 @@ cluster.
 ## 6. Record what the cluster runs
 
 ```text
-{{#include ../output/cluster-run-record.txt}}
+{{#include ../output/cluster-run-verify.txt}}
 ```
 
 `verify` on a cluster record fetches the cluster again, with the same

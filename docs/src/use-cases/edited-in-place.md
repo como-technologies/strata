@@ -18,6 +18,9 @@ In this example, `dev` has `aws-stack@1.1.1`, and the cluster `payments` runs it
 terminal works out what changed. The job is
 [Drift issues](../automation/drift-issues.md).
 
+**Follow along.** `just playground edited-in-place` serves this tenant on this machine,
+with no key and no cost.
+
 ## 1. Record the version and the cluster
 
 ```text
@@ -52,6 +55,21 @@ The same comparison, from the record to the live version:
 ```
 
 The edit did not reach `payments`.
+
+### Read the two verdicts as a pair
+
+The release record and the cluster record answer different questions, and the
+pair is the diagnosis. Run both before you act:
+
+| `verify` of the release | `verify` of the cluster | What happened | What to do |
+| --- | --- | --- | --- |
+| `DRIFT` | `OK` | Palette changed, and the cluster has not taken the change | Fix Palette first. The cluster is safe until something updates it, and a new cluster gets the edit at once, as step 4 shows. |
+| `DRIFT` | `DRIFT` | the change reached the cluster too | The cluster runs content that nobody reviewed. Step 6 shows this. |
+| `OK` | `DRIFT` | the cluster differs from its record, and Palette does not | Somebody changed the cluster. See [A cluster does not run its release](./cluster-release.md). |
+
+A changed cluster *value* is not in this table. `verify` exits `0` for it and
+adds `1 variable value changed` to the verdict: see
+[Clusters give variables different values](./cluster-values.md).
 
 ## 4. A new cluster gets the edit
 

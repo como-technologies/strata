@@ -11,6 +11,9 @@ In this example, `dev` has `aws-stack@1.0.0`, which no cluster uses, and
 **Who runs this.** A person at a terminal, or the retire gate, which runs
 `consumers` for a job: see [The promotion gate and the retire gate](../automation/gates.md).
 
+**Follow along.** `just playground retire` serves this tenant on this machine,
+with no key and no cost.
+
 ## 1. A version in use
 
 ```text

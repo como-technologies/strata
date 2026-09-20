@@ -7,7 +7,7 @@
 | `strata` | The command line. One static binary. |
 | A Palette API key | Reads the profiles and clusters. |
 | `jq` | Reads the JSON documents in scripts and in this book. |
-| `gh` | Posts pull request comments and drift issues. Optional. |
+| `gh` | Downloads a release while this repository is private, and checks its signature. Also posts pull request comments and drift issues. |
 | `cosign` 3 or later | Checks the signature of a release file. Optional. |
 | Rust, `just` | Build from source. `cross` builds another target. |
 

@@ -19,6 +19,9 @@ Each side is a record of `aws-stack@1.1.1` in its own project, written with
 **Who runs this.** A person at a terminal, or the promotion gate, which runs
 `same-release` for a job: see [The promotion gate and the retire gate](../automation/gates.md).
 
+**Follow along.** `just playground registry-move` serves this tenant on this machine,
+with no key and no cost.
+
 ## 1. same-release fails without the option
 
 ```text
@@ -30,7 +33,7 @@ The reason names the move. It does not name a value, because no value changed.
 ## 2. See what moved
 
 ```text
-{{#include ../output/move-compare.txt}}
+{{#include ../output/move-compare-csi.txt}}
 ```
 
 `IDENTITY UPSTREAM` with no `AUTHORED`: another pack reference and another
