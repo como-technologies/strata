@@ -22,6 +22,15 @@ A new field keeps the id. Strata ignores fields that it does not know, so it
 reads a record of its own id that a later release wrote. `source.projectUid` and
 `source.cluster` joined `strata-snapshot/1` in this way.
 
+A field can also become absent, and that keeps the id as well. A field is
+absent when strata cannot state it, so absent is not a value: read it as
+unknown, and not as zero or empty. In 0.7.0 `source.consumers` became absent on
+a record that no consumers request produced, where 0.6.3 wrote `count: 0` and
+stated a count that nothing counted. A reader that takes absent for zero reads
+such a record wrong, so each release names the fields that changed this way.
+The id stays, because the root does not cover these fields and every record of
+the id still compares.
+
 Roots are comparable only within one snapshot schema id. Strata refuses a
 snapshot of another id with `unsupported-schema`, which names both ids.
 
