@@ -13,8 +13,10 @@ team name to `platform_owner`.
 **Who runs this.** A person at a terminal. The scheduled verify job does not
 report a changed cluster value, so somebody must look.
 
-**Follow along.** `just playground cluster-values` serves this tenant on this machine,
-with no key and no cost.
+**Follow along.** `just playground cluster-values-1` serves this tenant on this
+machine, with no key and no cost. A person changes a value in step 3, so this
+page has two seeds. Each section names the one it needs, and each seed serves on
+its own port.
 
 ## 1. Compare the clusters
 
@@ -31,29 +33,37 @@ value each cluster gives a variable, which is not part of the release. The
 
 ## 2. The record keeps the values
 
-Record the cluster first:
+Record the cluster first. Step 3 reads this file, so keep it:
 
 ```text
 {{#include ../output/cluster-values-record.txt}}
 ```
 
+The record holds the value that `payments` gave each variable, under
+`source.cluster.variables`:
+
 ```text
 {{#include ../output/values-record.txt}}
 ```
 
+Each entry names the profile that declares the variable, and its uid. A cluster
+can run more than one profile, so the name alone does not identify a value.
+
 ## 3. A value changes on the cluster
 
-A person changes `platform_owner` on the cluster `payments` to `team-platform`,
-in Palette. The record of the cluster keeps the cluster value from before that
-change. The verdict counts each changed cluster value, and the report lists
-them:
+**Follow along.** `just playground cluster-values-2` is the same tenant after a
+person changed `platform_owner` on `payments` to `team-platform`. Stop the first
+seed, and export what this one prints. Keep the record from step 2.
+
+The record of the cluster keeps the cluster value from before that change:
 
 ```text
 {{#include ../output/values-verify.txt}}
 ```
 
-Exit `0`: the release is the same. The verdict counts the changed values, and
-the report lists each one.
+Exit `0`: the release is the same. The root did not move, because a cluster
+value is not part of the release. The verdict says
+`1 variable value changed`, and the `cluster values CHANGED` block names it.
 
 ## Sensitive variables
 
@@ -71,8 +81,18 @@ in full: see
 - Do not treat a value change as drift. To keep a value fixed, make it part of
   the release: put it in the pack values, not in a variable.
 - `verify` exits `0` for a changed cluster value, so the scheduled job opens no
-  issue for it. To watch the values, read `records[].clusterVariables` from
-  `strata verify --format json`.
+  issue for it. To watch the values, read the JSON.
+
+`verify` of many records gives one `records` array, and each entry carries the
+values of its own cluster. This is the shape a scheduled job reads:
+
+```text
+{{#include ../output/values-json.txt}}
+```
+
+`clusterVariables` is `null` for a record whose values did not change, so a job
+selects on it. `verify` of one record gives the report itself, with no `records`
+array: there the same object is at the top level, as `.clusterVariables`.
 
 ## Palette behavior
 

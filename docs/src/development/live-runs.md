@@ -288,7 +288,7 @@ consumers  1 -> 0 clusters
 `drift-report.sh off` and `drift-report.sh on` in session `20260917T150538Z`,
 provider 0.30.1, against cluster A `fred`, with the issues in this repository
 under the label `strata-live-drift`. The two runs differ only in the
-immutable-clusterprofiles flag. No check failed: 28 with the flag off and 27 with
+`immutable-clusterprofiles` flag. No check failed: 28 with the flag off and 27 with
 it on. Each started from the baseline with no open issue, and restored it with
 each issue that it opened closed. `hold_versions` changed nothing with the flag
 off, and only `skip_destroy` on the four profiles with it on. The flag-on bump
@@ -499,7 +499,7 @@ DRIFTED: releases/addon.json does not verify; a cluster built from it would not 
 
 `in-place.sh off` and `in-place.sh on` in session `20260917T151426Z`, provider
 0.30.1, against cluster A `fred`, with cluster B `barney` created and deleted in
-each. The two runs differ only in the immutable-clusterprofiles flag. Both edit
+each. The two runs differ only in the `immutable-clusterprofiles` flag. Both edit
 the add-on version through the API, and `plan-edit` records what the provider
 does with the same edit. Each started from the baseline and restored it
 (`baseline-after`). No check failed: 51 with the flag off and 53 with it on.

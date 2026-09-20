@@ -14,19 +14,20 @@ come from the pages that each step links to, and those pages keep one record
 for each version, at `releases/<version>/<project>.json`. Strata reads a record
 wherever it is: the layout is a choice of the team.
 
-Each change is a merge request. Many are open at once, and each one was written
-against the default branch as it was that morning. Four questions come up, and
+Each change is a pull request, which GitLab calls a merge request. This page
+says pull request for both. Many are open at once, and each one was written
+against the default branch as it was that morning. Five questions come up, and
 strata answers each one in a job.
 
 | Question | When | Job | What the team sees |
 | --- | --- | --- | --- |
-| What does this change do to the cluster? | each push to a merge request | `pr-comment.sh` | one comment, and a label on a repave |
-| Is this merge request still right? | before the merge button | `merge-gate.sh` | a red check, with the reason |
+| What does this change do to the cluster? | each push to a pull request | `pr-comment.sh` | one comment, and a label on a repave |
+| Is this pull request still right? | before the merge button | `merge-gate.sh` | a red check, with the reason |
 | Did the environments get what the branch says? | every night | `verify-report.sh` | one issue per record that drifted |
 | Which clusters use this profile version? | when a version is retired | `strata consumers` | the list, with the count |
 | Did the environment get the release that was reviewed? | after each merge | the publish job: `snapshot`, then `same-release` | a failed job when Palette holds something else |
 
-**Who runs this.** Jobs, almost entirely. A developer writes a record in a merge
+**Who runs this.** Jobs, almost entirely. A developer writes a record in a pull
 request and reads a comment; the jobs below do the rest. Three of them are
 drop-ins: [Pull request comments](../automation/pr-comments.md),
 [The merge gate](../automation/merge-gate.md), and
@@ -35,27 +36,29 @@ drop-ins: [Pull request comments](../automation/pr-comments.md),
 after the merge goes in your own publish job, because the publish is yours.
 
 **Follow along.** This page takes its blocks from the pages it links, so no one
-chapter serves all of it. `just playground review`, `just playground promote` and
-`just playground edited-in-place` each serve their own. The merge gate reads a
-git repository, which the playground does not build.
+chapter serves all of it. Each block below runs on the seed that its own page
+names: `just playground review-1` for the comment,
+`just playground review-2` and `just playground promote` for the proof after the
+merge, and `just playground edited-in-place-2` for the night verify. The merge
+gate reads a git repository, which the playground does not build.
 
 ## One record for each environment
 
 A record is a snapshot of the profile version that the environment runs. The
-merge request proposes the next one, as [a candidate
+pull request proposes the next one, as [a candidate
 file](../reference/candidate-file.md) or as a record of a published version:
 
 ```bash
 strata snapshot aws-stack@1.1.0 -o releases/dev.json
 ```
 
-An environment moves forward when a merge request changes its record. Nothing
+An environment moves forward when a pull request changes its record. Nothing
 else changes a cluster, so the repository is the history of each environment.
 
-## Each merge request carries its comparison
+## Each pull request carries its comparison
 
 The comment job compares the record that the default branch has with what the
-merge request proposes. [Review a change before you publish it](./review.md)
+pull request proposes. [Review a change before you publish it](./review.md)
 runs that job, and prints its command with the record names of that page:
 
 ```text
@@ -65,11 +68,11 @@ runs that job, and prints its command with the record names of that page:
 The comment follows each push, and the label follows the impact: `repave` on a
 change that replaces nodes. A reviewer reads the impact, not the diff of a JSON
 file. See [Pull request comments](../automation/pr-comments.md), and
-[GitLab CI](../automation/gitlab.md) for the same job as a merge request note.
+[GitLab CI](../automation/gitlab.md) for the same job as a pull request note.
 
 ## The merge button waits for the gate
 
-A merge request that was right this morning is not right this evening. The
+A pull request that was right this morning is not right this evening. The
 gate merges the default branch in first, and checks the merge result:
 
 ```text
@@ -81,7 +84,7 @@ comes from the repository that [The merge gate](../automation/merge-gate.md)
 describes.
 
 This branch would have pinned `aws-stack@1.0.0` over the `1.1.0` that another
-merge request landed. Git merged it and gave no warning, because the developer
+pull request landed. Git merged it and gave no warning, because the developer
 settled the conflict by keeping their own record. The cluster would have been
 built one release back.
 
@@ -97,7 +100,7 @@ Rollback: releases/dev.json to aws-stack@1.0.0
 ```
 
 The reason stays in the history, where the next person reads it. A team that
-works in the merge request uses the `rollback` label instead.
+works in the pull request uses the `rollback` label instead.
 
 The gate also catches what git cannot see: a record that Palette no longer
 matches, because the version it names was edited in place. See
@@ -131,7 +134,7 @@ See [Promote a release to another project](./promote.md).
 Palette is not a store that only the team writes to. A version can be edited in
 place, a cluster can be changed by hand, and a profile can be deleted. The
 scheduled job checks each record against Palette, and keeps one issue open per
-record that drifted:
+record that drifted.
 
 The schedule covers the cluster records as well as the release records, so it
 gives both patterns. A cluster record comes from the job that applies the
@@ -187,11 +190,11 @@ reports, the markers and the exit codes. See
 ## What to do
 
 - Keep one record for each environment, and move an environment only with a
-  merge request that changes its record.
+  pull request that changes its record.
 - Run the comment job on each push, and make the gate a required check.
 - Verify the records on a schedule, and keep one issue open for each record that
   drifted.
 - Run `consumers` at the time of the delete, not before it.
 - A team can keep one repository per pack, per profile, and per cluster. That
-  team asks the same questions one level up, where a publish opens the merge
+  team asks the same questions one level up, where a publish opens the pull
   requests. See [A publish fans out to what pins it](./publish-fan-out.md).

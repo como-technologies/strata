@@ -23,6 +23,11 @@ the result. The reviewer reads that comment. The publish job proves what shipped
 | 4 | the [comment job](../automation/pr-comments.md) | each push to the pull request | no |
 | 5 | the publish job | after the merge | yes |
 
+**Follow along.** `just playground review-1` serves this tenant on this machine,
+with no key and no cost. The publication in step 5 changes the tenant, so this
+page has two seeds. Each section names the one it needs, and each seed serves on
+its own port.
+
 The project `dev` has `aws-stack@1.0.0`, and a record of it is already in the
 repository, because the job that published 1.0.0 wrote one. The block below
 writes that record, so this page has one to compare against:
@@ -30,9 +35,6 @@ writes that record, so this page has one to compare against:
 ```text
 {{#include ../output/review-record.txt}}
 ```
-
-**Follow along.** `just playground review` serves this tenant on this machine,
-with no key and no cost.
 
 ## 1. The author writes the candidate file
 
@@ -98,6 +100,10 @@ A label can require a second approver. See
 [Pull request comments](../automation/pr-comments.md).
 
 ## 5. The publish job proves it is the approved version
+
+**Follow along.** `just playground review-2` is the same tenant after somebody
+published 1.1.0. Stop the first seed, and export what this one prints. Keep
+`candidate.json` from step 2.
 
 Record the published version, and compare it with the candidate:
 

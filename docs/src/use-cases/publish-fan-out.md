@@ -4,16 +4,17 @@
 
 Some teams keep one repository per pack, one per profile, and one per cluster.
 A merge in a pack repository publishes a pack version. A job then opens a bump
-merge request on each profile that pins that pack. Merging a bump publishes a
+pull request on each profile that pins that pack. Merging a bump publishes a
 profile version, and that publish opens a bump on each cluster that pins the
 profile. Nobody types a version number: the chain does.
 
 This is the same problem as [A team pins each environment](./fan-out.md), one
-level up. Many merge requests are open at once, most of them opened by a job,
-and each one was written against a level below that keeps moving.
+level up. Many pull requests are open at once, most of them opened by a job,
+and each one was written against a level below that keeps moving. GitLab calls
+a pull request a merge request; this page says pull request for both.
 
 **Who runs this.** Jobs at every level. A person merges, and a job publishes,
-records, and opens the next merge request. The recipes are
+records, and opens the next pull request. The recipes are
 [Pull request comments](../automation/pr-comments.md),
 [The merge gate](../automation/merge-gate.md),
 [Drift issues](../automation/drift-issues.md), and
@@ -22,9 +23,11 @@ step in the publish job is yours to write: strata ships no recipe for it,
 because the publish itself is yours.
 
 **Follow along.** This page takes its blocks from the pages it links, so no one
-chapter serves all of it. `just playground packs`, `just playground list` and
-`just playground cluster-release` each serve their own. The merge gate reads a
-git repository, which the playground does not build.
+chapter serves all of it. Each block below runs on the seed that its own page
+names: `just playground packs`, `just playground list`,
+`just playground cluster-release`, and `just playground edited-in-place-2` for
+the night verify. The merge gate reads a git repository, which the playground
+does not build.
 
 ## What each level holds, and what it records
 
@@ -64,23 +67,27 @@ drifted, on either host. See [Drift issues](../automation/drift-issues.md).
 
 ## Review a bump that a job opened
 
-A bump merge request says "1.0.0 becomes 1.0.1". That is not a review. The
+A bump pull request says "1.35.3 becomes 1.36.2". That is not a review. The
 comparison is:
 
 ```text
 {{#include ../output/pack-compare.txt}}
 ```
 
-Put it in the merge request with
+The two lines a reviewer needs are the first two: the root changed, and the
+pack is `IDENTITY UPSTREAM AUTHORED`, so the build, its digest and its values
+all moved. The value lines below them say which.
+
+Put it in the pull request with
 [`pr-comment.sh`](../automation/pr-comments.md), which posts one comment on
-GitHub or one note on GitLab, and labels the merge request when the impact
+GitHub or one note on GitLab, and labels the pull request when the impact
 reaches `repave`. The reviewer reads what the bump does to a node, not a
 version string.
 
 ## Two bumps race, and the second one wins
 
 The fan-out opens a bump against the profile as it was at the publish. While it
-waits for review, another bump merges. The second merge request is now behind,
+waits for review, another bump merges. The second pull request is now behind,
 and merging it puts the earlier pack version back.
 
 [The merge gate](../automation/merge-gate.md) is the check for this. It merges
@@ -100,7 +107,7 @@ csi-aws-ebs 1.65.0 was withdrawn: the storage class and the driver disagree
 ```
 
 The gate then reports the rollback and passes. A human doing the same thing
-writes the same line, or a reviewer puts the `rollback` label on the merge
+writes the same line, or a reviewer puts the `rollback` label on the pull
 request. Nothing else turns a backwards pin green, so no bump slips through
 because a job was running from an old base.
 
@@ -119,7 +126,7 @@ bash install-strata.sh --version v0.6.3 --dir .strata
 
 ```bash
 # what do the environments run right now, and does any record no longer match?
-strata verify "releases/**/*.json" --summary
+strata verify "releases/**/*.json"
 
 # what would my branch land, against the default branch as it is now?
 .strata/merge-gate.sh "releases/**/*.json" --base main
@@ -151,19 +158,26 @@ version. See [Find the profiles that carry a pack](./find-a-pack.md) and
 ## Does the cluster run what the repository says
 
 The apply is not the proof. A cluster keeps its own copy of what a profile held
-when it was attached, and a change on the cluster does not reach the profile:
+when it was attached, so the profile record does not answer for the cluster.
+Give the cluster a record of its own, and check that one:
 
 ```text
 {{#include ../output/cluster-run-record.txt}}
 ```
 
+`IDENTICAL` and exit `0`: this cluster runs what it was given. The record names
+the profile it selected, `payments/aws-stack`, because `payments` runs two
+profiles.
+
 Record each cluster after its apply, and the scheduled verify covers the
-clusters as well as the profiles. See
-[A cluster does not run its release](./cluster-release.md).
+clusters as well as the profiles. A cluster that drifts from its own record,
+and a version that Palette changed under the cluster, are different findings:
+see [A cluster does not run its release](./cluster-release.md) and
+[A published version is edited in place](./edited-in-place.md).
 
 ## The checks at each level
 
-| Repository | On a merge request | On the merge | On a schedule |
+| Repository | On a pull request | On the merge | On a schedule |
 | --- | --- | --- | --- |
 | pack | `compare pack:<registry>/<name>@<a> pack:<registry>/<name>@<b>` as the comment | the registry holds the digest | — |
 | profile | the comment, and the merge gate | `snapshot <name>@<version>` as the record | `verify` each record |
@@ -173,7 +187,7 @@ clusters as well as the profiles. See
 
 - Write the record in the publish job, at each level. A check that has no record
   has nothing to ask.
-- Compare the two versions in the bump merge request, and let the gate read the
+- Compare the two versions in the bump pull request, and let the gate read the
   merge result.
 - Run the same checks in a terminal before the push.
 - Strata makes no rule about how you divide the repositories. It reads refs and

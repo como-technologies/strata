@@ -8,7 +8,7 @@ check that needs them. [Live runs](./live-runs.md) records the results, and
 | Script | Checks |
 | --- | --- |
 | `verify.sh` | Release against run (#1), consumers (#12), the profiles a cluster applies (#63), candidates (#4, #21), pack-ref digests (#2, #3), a cluster with two profiles (#23). Read-only. |
-| `in-place.sh off`, `in-place.sh on` | An edit in place and a version bump of a version that two clusters run, with the immutable-clusterprofiles flag off and on (#27). |
+| `in-place.sh off`, `in-place.sh on` | An edit in place and a version bump of a version that two clusters run, with the `immutable-clusterprofiles` flag off and on (#27). |
 | `registry-move.sh` | A pack moved to an OCI registry, and `same-release --allow registry-move` (#24). |
 | `tag-only.sh` | Versions that differ only in a tag name, a cluster move, and a rename in place (#19). |
 | `drift-report.sh off`, `drift-report.sh on` | `scripts/ci/verify-report.sh` around an edit in place and a version bump (#25). |
@@ -86,7 +86,7 @@ found it.
 | Script | Changes | Holds |
 | --- | --- | --- |
 | `verify.sh` | nothing; it only reads | the baseline |
-| `in-place.sh off` and `on` | the immutable-clusterprofiles flag, in each plan and apply | the edit (`api.sh edit` in both runs), the clusters, the steps and their order, the baseline |
+| `in-place.sh off` and `on` | the `immutable-clusterprofiles` flag, in each plan and apply | the edit (`api.sh edit` in both runs), the clusters, the steps and their order, the baseline |
 | `registry-move.sh` | the CSI registry of the move profile, then its values | the flag (on), the other packs, the baseline |
 | `drift-report.sh off` and `on` | the flag, in the plan and in the bump | the edit (`api.sh edit` in both runs), the records, the steps and their order, the issue label, the baseline |
 | `tag-only.sh` | the tag name of the OS pack, and which of two such versions cluster A runs | the pack uid, each other pack, the values, the flag (off), the baseline |

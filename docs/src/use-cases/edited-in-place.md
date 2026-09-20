@@ -4,7 +4,7 @@
 
 Palette accepts an edit of a published profile version through the API. The
 version keeps its uid and its number, and no new version appears. The
-immutable-clusterprofiles flag of the Spectro Cloud provider stops the edit only
+`immutable-clusterprofiles` flag of the Spectro Cloud provider stops the edit only
 in the provider, at plan time. The API accepts the edit with the flag on or off.
 So the version name `aws-stack@1.1.1` can mean two contents at two times.
 
@@ -18,8 +18,10 @@ In this example, `dev` has `aws-stack@1.1.1`, and the cluster `payments` runs it
 terminal works out what changed. The job is
 [Drift issues](../automation/drift-issues.md).
 
-**Follow along.** `just playground edited-in-place` serves this tenant on this machine,
-with no key and no cost.
+**Follow along.** `just playground edited-in-place-1` serves this tenant on this
+machine, with no key and no cost. An edit in place changes the tenant, so this
+page has three seeds. Each section names the one it needs, and each seed serves
+on its own port.
 
 ## 1. Record the version and the cluster
 
@@ -33,7 +35,11 @@ with no key and no cost.
 
 ## 2. A person edits the version: verify reports drift
 
-The person changes the CSI reclaim policy from `Delete` to `Retain`:
+**Follow along.** `just playground edited-in-place-2` is the same tenant after
+the edit. Stop the first seed, and export what this one prints.
+
+The person changed the CSI reclaim policy from `Delete` to `Retain`. Your
+records from step 1 still hold the content from before it:
 
 ```text
 {{#include ../output/edited-verify.txt}}
@@ -109,11 +115,19 @@ See [Drift issues](../automation/drift-issues.md).
 
 ## 6. The update reaches the old cluster
 
+**Follow along.** `just playground edited-in-place-3` is the same tenant after
+`payments` takes the update. Stop the second seed, and export what this one
+prints.
+
 A person accepts the update on `payments`. Now its record drifts too:
 
 ```text
 {{#include ../output/edited-cluster-updated.txt}}
 ```
+
+Exit `1`, and the same CSI value as step 2. Both verdicts now say `DRIFT`, which
+is the second row of the table above: the cluster runs content that nobody
+reviewed.
 
 ## What to do
 

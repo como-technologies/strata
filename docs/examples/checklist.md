@@ -52,14 +52,19 @@ In the order the book teaches them.
 | 5 | `registry-move.md` | `registry-move` | walked 2026-09-19: records now shown; step 5 reachable; every line replayed |
 | 6 | `promote.md` | `promote` | walked 2026-09-19: two promoted versions, one right and one hand-built; every command replays |
 | 7 | `same-names.md` | `same-names` | walked 2026-09-19: all 7 commands replay; the verify claim is now shown, not asserted |
-| 8 | `edited-in-place.md` | `edited-in-place` | walked 2026-09-19: the two verdicts are a pair |
-| 9 | `overwritten.md` | `overwritten` | |
-| 10 | `cluster-release.md` | `cluster-release` | steps run; excerpt added. Items 4 to 9 open |
-| 11 | `cluster-values.md` | `cluster-values` | |
-| 12 | `find-a-pack.md` | `list` | |
-| 13 | `retire.md` | `retire` | |
-| 14 | `fan-out.md` | several | |
-| 15 | `publish-fan-out.md` | several | |
+| 8 | `edited-in-place.md` | `edited-in-place` | walked 2026-09-19: three seeds, one per state; all 6 steps replay; the two verdicts are a pair |
+| 9 | `overwritten.md` | `overwritten` | walked 2026-09-19: three seeds; the recording is now step 1, so the order is runnable; `...c3` named |
+| 10 | `cluster-release.md` | `cluster-release` | walked 2026-09-19: one static seed; `/aws-stack` explained where it first appears; step 5 now runs the verify it names |
+| 11 | `cluster-values.md` | `cluster-values` | walked 2026-09-19: two seeds; the JSON path in "What to do" was wrong for one record, and is now shown |
+| 12 | `find-a-pack.md` | `list` | walked 2026-09-19: one static seed; the prod command silently answered dev for a follower, and now clears the uid |
+| 13 | `retire.md` | `retire` | walked 2026-09-19: one static seed; all 4 commands replay; the delete aftermath and the pipe trap are now stated |
+| 14 | `fan-out.md` | several | walked 2026-09-20: all 6 fleet commands run; the seeds are named; run.sh now checks that a page names the seed it needs |
+| 15 | `publish-fan-out.md` | several | walked 2026-09-20: the bump narrative now matches its block; check-pages pins every copyable release tag to the crate version |
+
+## What a walk found twice
+
+`docs/examples/check-pages.sh` holds each rule that two walks found broken on
+two pages. `just docs-check` runs it. Add a rule there rather than remember it.
 
 ## What a walk cannot reach
 

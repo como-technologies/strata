@@ -1,0 +1,25 @@
+$ strata snapshot cluster:search -o runs/search.json
+strata: looking up project dev
+strata: fetching cluster search
+strata: cluster 'search' is 64f1000000000000000000e2
+strata: wrote runs/search.json (root 088136c929bd)
+$ strata verify 'runs/*.json' --format json | jq '.records[] | {path, clusterVariables}'
+{
+  "path": "runs/payments.json",
+  "clusterVariables": {
+    "changed": true,
+    "values": [
+      {
+        "op": "changed",
+        "profile": "aws-stack",
+        "name": "platform_owner",
+        "old": "team-payments",
+        "new": "team-platform"
+      }
+    ]
+  }
+}
+{
+  "path": "runs/search.json",
+  "clusterVariables": null
+}

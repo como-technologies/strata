@@ -15,8 +15,10 @@ In this example, `aws-stack@1.1.3` is `aws-stack@1.1.1` with the OS pack pinned 
 **Who runs this.** A person at a terminal. The scheduled verify job reports the
 rename of step 3: see [Drift issues](../automation/drift-issues.md).
 
-**Follow along.** `just playground tag-name` serves this tenant on this machine,
-with no key and no cost.
+**Follow along.** `just playground tag-name-1` serves this tenant on this
+machine, with no key and no cost. The rename in step 3 changes the tenant, so
+this page has two seeds. Each section names the one it needs, and each seed
+serves on its own port.
 
 ## 1. Compare the versions
 
@@ -50,6 +52,10 @@ Record 1.1.3 while it still pins the tag `24.04`:
 ```text
 {{#include ../output/tag-record.txt}}
 ```
+
+**Follow along.** `just playground tag-name-2` is the same tenant after the
+rename. Stop the first seed, and export what this one prints. Keep the record
+above.
 
 Somebody then renames that tag on the published version, to `LTS__24.04`. A
 rename changes no build, but it edits a published version:

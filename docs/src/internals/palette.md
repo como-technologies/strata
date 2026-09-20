@@ -52,7 +52,7 @@ pack-ref digest follows. A preset that a profile applies goes into the values.
 
 `examples/live/registry-move.sh` moved a pack as a team promotes one. Version
 1.0.0 took each pack from the pack registry `Public Repo`. A version bump to
-1.0.1, with the immutable-clusterprofiles flag on, pinned `csi-aws-ebs` 1.65.0
+1.0.1, with the `immutable-clusterprofiles` flag on, pinned `csi-aws-ebs` 1.65.0
 to the OCI pack registry `Palette Registry`. Run `20260917T150025Z`, provider
 0.30.1:
 
@@ -123,7 +123,7 @@ the copy of the old manifest on A, and the add-on had no manifest on the cluster
 ## Cluster copies
 
 `examples/live/in-place.sh` edits and then bumps the add-on profile version that
-two clusters run. It runs once with the immutable-clusterprofiles flag off, and
+two clusters run. It runs once with the `immutable-clusterprofiles` flag off, and
 once with it on. Nothing else differs between the two runs. Session
 `20260917T151426Z`, provider 0.30.1, cluster A `fred` and cluster B `barney`.
 Session `20260917T031126Z` gave the same answers with provider 0.29.7 and its

@@ -31,14 +31,28 @@ dest=$repo/docs/src/output
 die() { echo "docs-examples: $*" >&2; exit 2; }
 
 check=""
-serve=""
+serve=""        # the chapter to serve
+serve_seed=1    # which of its states: CHAPTER-2 serves the state after its second change
+seed=0          # how many states of the served chapter have been reached
+chapter_name="" # the chapter now building
+# Which seed of the playground reaches the output of the next step. `serve_here` hands the tenant
+# over as it stands, so an output is on that same seed until a helper changes the tenant again.
+serves_seen=0
+mutated=1
+chapter_state() { echo $((serves_seen + mutated)); }
 served=""
 skip=""
 case "${1:-}" in
   --check) check=1 ;;
-  --serve) serve=${2:-list} ;;
+  --serve)
+    serve=${2:-list}
+    # CHAPTER-N picks a state. A chapter with no dash, or a name that ends in a word, is state 1.
+    case "$serve" in
+      *-[0-9]) serve_seed=${serve##*-}; serve=${serve%-*} ;;
+    esac
+    ;;
   "") ;;
-  *) die "usage: run.sh [--check | --serve CHAPTER]" ;;
+  *) die "usage: run.sh [--check | --serve CHAPTER[-N]]" ;;
 esac
 
 [ -x "$tool" ] || die "no strata binary at $tool. Run: just build"
@@ -52,7 +66,12 @@ cleanup() {
   [ -z "$server" ] || kill "$server" 2>/dev/null || true
   rm -rf "$work"
 }
+# EXIT alone leaks the server: a SIGTERM from another terminal kills this shell without running an
+# EXIT trap, and the python process and its tenant directory stay behind
 trap cleanup EXIT
+trap 'exit 143' TERM
+trap 'exit 130' INT
+trap 'exit 129' HUP
 
 tenant=$work/tenant
 out=$work/output
@@ -141,8 +160,20 @@ EOF
 # instead of the state after the change those steps are written to cause. Nothing happens when
 # the script builds the book.
 serve_here() {
+  serves_seen=$((serves_seen + 1))
+  mutated=0
   [ -n "$serve" ] && [ -n "$served" ] || return 0
+  seed=$((seed + 1))
+  [ "$seed" = "$serve_seed" ] || return 0
   serve_wait
+}
+
+# serve_last: the end of the served chapter is its last state. A seed past the end is an error
+# that says how many the chapter has, so a wrong number never serves the wrong tenant.
+serve_last() {
+  seed=$((seed + 1))
+  [ "$seed" = "$serve_seed" ] && serve_wait
+  die "the chapter '$serve' has $seed states; '$serve-$serve_seed' asks for state $serve_seed"
 }
 
 # chapter NAME [VAR=VALUE]...: an empty tenant, a new working directory, and the environment of
@@ -151,7 +182,7 @@ chapter() {
   # --serve: build the tenant of the wanted chapter only, and stop when the next one starts
   if [ -n "$serve" ]; then
     if [ -n "$served" ]; then
-      serve_wait
+      serve_last
     fi
     if [ "$1" = "$serve" ]; then
       served=1
@@ -160,6 +191,9 @@ chapter() {
       skip=1
     fi
   fi
+  chapter_name=$1
+  serves_seen=0
+  mutated=1
   dir=$work/chapters/$1
   shift
   mkdir -p "$dir"
@@ -187,6 +221,8 @@ step() {
   fi
   sed -E -e 's/[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z/2026-09-17T09:30:00Z/g' \
     -e 's/ in [0-9a-f]{7,40}$/ in 8c1d4f2/' "$raw" >> "$out/$name.txt"
+  # which seed of the playground reaches this output, for the page check
+  printf "%s %s %s\n" "$name" "$chapter_name" "$(chapter_state)" >> "$work/states"
 }
 
 show() { step "$1" "$2" out "$3"; }
@@ -213,6 +249,7 @@ excerpt() {
     END { if (gap) print "..."; if (!hits) exit 3 }
   ' "$src" > "$out/$name.txt" ||
     die "excerpt $name: no line of $from matches /$pattern/; the page's claim is no longer printed"
+  printf "%s %s %s\n" "$name" "$chapter_name" "$(chapter_state)" >> "$work/states"
 }
 
 # quiet COMMAND: a step that the book does not show
@@ -241,6 +278,7 @@ doc() {
 # and its paths do not exist.
 empty_profiles() {
   [ -z "$skip" ] || return 0
+  mutated=1   # this helper changes the tenant, so the next output needs a later seed
   rm -rf "${tenant:?}/$1/v1/clusterprofiles"
   mkdir -p "$tenant/$1/v1/clusterprofiles"
 }
@@ -248,6 +286,7 @@ empty_profiles() {
 # rewrite FILE FILTER: apply a jq program to FILE in place
 rewrite() {
   [ -z "$skip" ] || return 0
+  mutated=1   # this helper changes the tenant, so the next output needs a later seed
   jq "$2" "$1" > "$1.new"
   mv "$1.new" "$1"
 }
@@ -255,6 +294,7 @@ rewrite() {
 # projects NAME=UID...: the projects the key can see
 projects() {
   [ -z "$skip" ] || return 0
+  mutated=1   # this helper changes the tenant, so the next output needs a later seed
   local pair items=()
   for pair in "$@"; do
     items+=("$(jq -cn --arg n "${pair%%=*}" --arg u "${pair#*=}" '{metadata: {name: $n, uid: $u}}')")
@@ -268,6 +308,7 @@ projects() {
 # tenant scope Palette lists the tenant's own profiles, and the clusters of every project.
 listings() {
   [ -z "$skip" ] || return 0
+  mutated=1   # this helper changes the tenant, so the next output needs a later seed
   local scope project profiles clusters all=()
   shopt -s nullglob
   for scope in "$tenant"/*/; do
@@ -295,6 +336,7 @@ listings() {
 # document: a changed value or tag.
 profile() {
   [ -z "$skip" ] || return 0
+  mutated=1   # this helper changes the tenant, so the next output needs a later seed
   local project=$1 uid=$2 version=$3 from=$repo/examples/profiles/raw/$4 filter=${5:-.}
   jq --arg uid "$uid" --arg v "$version" \
     ".metadata.uid = \$uid | .spec.version = \$v
@@ -310,6 +352,7 @@ profile() {
 # manifest pack. Palette gives the manifest pack of each profile a new pack uid.
 addons() {
   [ -z "$skip" ] || return 0
+  mutated=1   # this helper changes the tenant, so the next output needs a later seed
   local project=$1 uid=$2 pack=$3 label=$4 version=${5:-1.0.0}
   local content="apiVersion: v1
 kind: Namespace
@@ -342,6 +385,7 @@ metadata:
 # edit PROJECT UID FILTER: change a published profile in place, as an edit through the API does
 edit() {
   [ -z "$skip" ] || return 0
+  mutated=1   # this helper changes the tenant, so the next output needs a later seed
   rewrite "$(doc "$1" "v1/clusterprofiles/$2")" "$3"
   listings
 }
@@ -352,6 +396,7 @@ edit() {
 # waits for the cluster.
 cluster() {
   [ -z "$skip" ] || return 0
+  mutated=1   # this helper changes the tenant, so the next output needs a later seed
   local project=$1 uid=$2 name=$3 p kv
   shift 3
   local profiles=() values='{}'
@@ -401,12 +446,14 @@ cluster() {
 # on the cluster does
 on_cluster() {
   [ -z "$skip" ] || return 0
+  mutated=1   # this helper changes the tenant, so the next output needs a later seed
   rewrite "$(doc "$1" "v1/spectroclusters/$2")" "$3"
 }
 
 # set_value PROJECT UID VARIABLE VALUE: give a cluster variable a new value
 set_value() {
   [ -z "$skip" ] || return 0
+  mutated=1   # this helper changes the tenant, so the next output needs a later seed
   rewrite "$(doc "$1" "v1/spectroclusters/$2/variables")" \
     "map(.variables |= map(if .name == \"$3\" then .value = \"$4\" else . end))"
 }
@@ -415,6 +462,7 @@ set_value() {
 # as the registry lookups of a candidate read them
 registries() {
   [ -z "$skip" ] || return 0
+  mutated=1   # this helper changes the tenant, so the next output needs a later seed
   local project=$1 d name count listing
   jq -n --arg uid "$PUBLIC_REPO" --arg oci "$PALETTE_REGISTRY" \
     '{items: [{name: "Public Repo", uid: $uid, kind: "pack"},
@@ -531,7 +579,9 @@ show list-pack-all 0 'for p in dev prod; do strata list --pack cilium --project-
 show list-pack-tenant 0 "strata list --pack cilium --project ''"
 show list-packs 0 'strata list --packs'
 show list-pack-consumers 1 'for v in 1.0.0 1.1.0 1.1.1; do strata consumers aws-stack@$v; done'
-show list-pack-consumers 1 'PALETTE_PROJECT=prod strata consumers aws-stack@1.1.1'
+# the empty uid is the point of the step: a reader who exported one needs it, and the book must
+# print the command that works for them, not the one that works only here
+show list-pack-consumers 1 'PALETTE_PROJECT_UID= PALETTE_PROJECT=prod strata consumers aws-stack@1.1.1'
 show list-pack-json 0 "strata list --pack cilium --json | jq -r '.profiles[] | .ref as \$ref | .packs[] | select(.name | contains(\"cilium\")) | \"\(\$ref) \(.name) \(.version)\"'"
 
 chapter snapshot PALETTE_PROJECT=dev
@@ -750,12 +800,13 @@ cluster $DEV $PAYMENTS payments $A111
 show2 edited-record 0 'strata snapshot aws-stack@1.1.1 -o releases/1.1.1/dev.json'
 show2 edited-record 0 'strata snapshot cluster:payments -o runs/payments.json'
 show edited-verify-ok 0 'strata verify releases/1.1.1/dev.json'
-serve_here   # the page describes what follows: the edit in place that the page reports as drift
+serve_here   # state 1: the records are taken, and nobody has edited the version
 edit $DEV $A111 "$RETAIN"
 show edited-verify 1 'strata verify releases/1.1.1/dev.json'
 show edited-compare 1 'strata compare releases/1.1.1/dev.json aws-stack@1.1.1'
 show edited-cluster-kept 0 'strata verify runs/payments.json'
 cluster $DEV $SEARCH search $A111
+serve_here   # state 2: the edit is in Palette, and search started after it
 show edited-two-clusters 1 'strata compare cluster:payments cluster:search'
 show edited-bulk 1 "strata verify 'releases/**/*.json' 'runs/*.json'"
 show edited-bulk-json 1 "strata verify 'releases/**/*.json' 'runs/*.json' --json | jq '.summary'"
@@ -769,8 +820,9 @@ profile $DEV $A111 1.1.1 aws-stack@1.1.1
 cluster $DEV $PAYMENTS payments $A111
 show2 overwritten-records 0 'strata snapshot aws-stack@1.1.1 -o releases/1.1.1/dev.json'
 show2 overwritten-records 0 'strata snapshot cluster:payments -o runs/payments.json'
-serve_here   # the page describes what follows: the version bump that overwrites 1.1.1
+serve_here   # state 1: the records are taken, and nobody has bumped the version
 edit $DEV $A111 ".spec.version = \"1.2.0\" | $RETAIN"
+serve_here   # state 2: the bump took the uid of 1.1.1, with the flag off
 show overwritten-list 0 'strata list profiles'
 show overwritten-verify 1 'strata verify releases/1.1.1/dev.json'
 show overwritten-cluster 1 'strata verify runs/payments.json'
@@ -780,6 +832,7 @@ show2 overwritten-candidate 0 'strata candidate releases/1.1.1/dev.json -o aws-s
 edit $DEV $A111 '.spec.version = "1.1.1"'
 rewrite "$(doc $DEV "v1/clusterprofiles/$A111")" "$(pack_values csi-aws-ebs) |= sub(\"reclaimPolicy: Retain\"; \"reclaimPolicy: Delete\")"
 profile $DEV $A120 1.2.0 aws-stack@1.1.1 "$RETAIN"
+# state 3, which serve_last reaches at the next chapter: the same bump with the flag on
 show overwritten-flag-list 0 'strata list profiles'
 show overwritten-flag-verify 0 'strata verify releases/1.1.1/dev.json runs/payments.json'
 
@@ -798,6 +851,8 @@ show cluster-identical 0 'strata compare releases/1.1.0/dev.json cluster:payment
 show cluster-all-profiles 1 'strata compare releases/1.1.0/dev.json cluster:payments'
 show cluster-moved 1 'strata compare releases/1.1.0/dev.json cluster:search'
 show cluster-edited 1 'strata compare releases/1.1.0/dev.json cluster:ledger'
+# the page tells the reader to run this next, so the page must show it
+show cluster-edited-verify 0 'strata verify releases/1.1.0/dev.json'
 show2 cluster-run-record 0 'strata snapshot cluster:payments/aws-stack -o runs/payments.json'
 show cluster-run-record 0 'strata verify runs/payments.json'
 # the page teaches that verify fetches the cluster again with the same selection: the record, the
@@ -812,9 +867,13 @@ cluster $DEV $SEARCH search $A111 -- platform_owner=team-search
 show values-compare 0 'strata compare cluster:payments cluster:search'
 show2 cluster-values-record 0 'strata snapshot cluster:payments -o runs/payments.json'
 show values-record 0 'jq .source.cluster.variables runs/payments.json'
-serve_here   # the page describes what follows: the value a person changes on the cluster
+serve_here   # state 1: each cluster keeps the value it started with
 set_value $DEV $PAYMENTS platform_owner team-platform
+# state 2, which serve_last reaches at the next chapter: a person changed the value on payments
 show values-verify 0 'strata verify runs/payments.json'
+# the page tells a job to read records[].clusterVariables, so the page must show that shape
+show2 values-json 0 'strata snapshot cluster:search -o runs/search.json'
+show values-json 0 "strata verify 'runs/*.json' --format json | jq '.records[] | {path, clusterVariables}'"
 
 chapter same-names
 projects dev=$DEV prod=$PROD
@@ -877,13 +936,43 @@ show2 auto-error-text 2 'strata compare aws-stack@1.1.1 aws-stack@9.9.9 --quiet'
 # --serve stops at the chapter after the one it serves. The last chapter has none after it, so it
 # is served here, where the chapters end.
 if [ -n "$serve" ] && [ -n "$served" ]; then
-  serve_wait
+  serve_last
 fi
 
 # A name that is no chapter skipped every chapter, so $out is empty. Falling through from here
 # would delete docs/src/output/ and write nothing back. Stop, and name the chapters.
 if [ -n "$serve" ] && [ -z "$served" ]; then
   die "no chapter '$serve'. The chapters are: $(sed -n 's/^chapter \([^ ]*\).*/\1/p' "$0" | tr '\n' ' ')"
+fi
+
+# check_seeds: a page that includes an output from past the first `serve_here` of its chapter must
+# name the seed that reaches it. `just playground CHAPTER` serves state 1, so a page that shows a
+# later state and says only "CHAPTER" sends the reader to a tenant where its own blocks cannot run.
+check_seeds() {
+  local bad=0 page name chapter state seen want
+  for page in "$repo"/docs/src/use-cases/*.md; do
+    # every chapter state this page draws from, as "chapter state" pairs
+    # a page with no output block matches nothing, and pipefail would stop the run
+    seen=$( { grep -o '{{#include \.\./output/[a-z0-9-]*\.txt' "$page" || true; } |
+      sed 's#.*/##; s#\.txt$##' |
+      while read -r name; do awk -v n="$name" '$1 == n { print $2, $3 }' "$work/states"; done |
+      sort -u)
+    [ -n "$seen" ] || continue
+    while read -r chapter state; do
+      [ "$state" = 1 ] && continue
+      want="$chapter-$state"
+      grep -q -- "$want" "$page" || {
+        echo "docs-examples: $(basename "$page") shows state $state of the chapter '$chapter'" \
+          "and never names the seed '$want'; a reader on 'just playground $chapter' cannot run it" >&2
+        bad=1
+      }
+    done <<<"$seen"
+  done
+  [ "$bad" = 0 ] || exit 1
+}
+
+if [ -z "$serve" ]; then
+  check_seeds
 fi
 
 if [ -n "$check" ]; then

@@ -10,9 +10,11 @@ In this example, `dev` has `aws-stack@1.0.0`, which no cluster uses, and
 
 **Who runs this.** A person at a terminal, or the retire gate, which runs
 `consumers` for a job: see [The promotion gate and the retire gate](../automation/gates.md).
+Every step reads Palette, so each one needs a key.
 
 **Follow along.** `just playground retire` serves this tenant on this machine,
-with no key and no cost.
+with no key and no cost. Nothing on this page changes the tenant, so one seed
+serves every step.
 
 ## 1. A version in use
 
@@ -20,7 +22,8 @@ with no key and no cost.
 {{#include ../output/retire-in-use.txt}}
 ```
 
-Exit `1`. Move each cluster first.
+Exit `1`, and a row for each cluster: `payments` and `search` both run 1.1.0.
+Move them first.
 
 ## 2. A version that no cluster uses
 
@@ -28,7 +31,7 @@ Exit `1`. Move each cluster first.
 {{#include ../output/retire-free.txt}}
 ```
 
-Exit `0`.
+`no consumers` and exit `0`: Palette will accept the delete.
 
 ## 3. Gate the delete
 
@@ -47,14 +50,22 @@ run.
 {{#include ../output/retire-json.txt}}
 ```
 
-The third column is the version that the copy of each cluster names.
+The third column is the version that the copy of each cluster names, which is
+not always the version the uid holds now: see
+[A version bump overwrites a version](./overwritten.md).
+
+A pipe hides the exit code of step 3. `strata consumers` exits `1` here, and the
+shell reports the exit of `jq`, which is `0`. A script that reads the rows and
+gates on the exit must set `pipefail`, or run the two commands apart.
 
 ## What to do
 
-- After you delete a version, its record no longer verifies: `verify` of that
-  one record exits `2`, and `verify --summary` over many records counts it as
-  `ERROR`. Keep the record for the history, and move it out of the pattern that
-  the scheduled check reads.
+- After you delete a version, its record no longer verifies. Palette answers
+  404, and strata reports the error rather than a verdict: `verify` of that one
+  record exits `2`, and `verify` over many records gives the record the label
+  `ERROR`, counts it in `errors`, and exits `2` as well. An error outranks a
+  drift, so one deleted version turns the whole run red. Keep the record for the
+  history, and move it out of the pattern that the scheduled check reads.
 - `consumers` asks Palette at the time of the command. Run it immediately before
   the delete.
 - To run this as a job, see

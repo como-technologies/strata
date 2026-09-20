@@ -1,7 +1,7 @@
 $ strata verify aws-stack-1.1.0.json
 aws-stack@1.1.0 (uid 64e0000000000000000000b2)  ->  aws-stack@1.1.0 (uid 64e0000000000000000000b2)
 root       8a8a64d3f95d -> 8a8a64d3f95d   IDENTICAL
-consumers  1 -> 1 clusters
+consumers  1 -> 1 cluster
 
   variables unchanged
 

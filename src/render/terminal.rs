@@ -269,7 +269,9 @@ impl Renderer for TerminalRenderer {
             out.push(format!("note       {}", p.byellow(&note)));
         }
         if let Some((a, b)) = consumer_counts(d) {
-            out.push(format!("consumers  {a} -> {b} clusters"));
+            // the noun agrees with the count next to it: `1 -> 2 clusters`, `2 -> 1 cluster`
+            let noun = if b == 1 { "cluster" } else { "clusters" };
+            out.push(format!("consumers  {a} -> {b} {noun}"));
         } else if let Some(sentence) = consumers_sentence(d) {
             out.push(format!("consumers  {sentence}"));
         }
