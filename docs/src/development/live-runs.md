@@ -86,12 +86,14 @@ strata-live-addon@1.0.0 (uid 64e2000000000000000000f1)  ->  strata-live-addon@1.
 root       9c68e5319d53 -> 9c68e5319d53   IDENTICAL
 ```
 
-A newer record against the same cluster shows the one value that differs:
+A newer record against the same cluster shows the one value that differs. The
+block below carries the consumers line of the run's own output: a cluster side
+has no consumer count, so the report states the profile side alone.
 
 ```text
 strata-live-profile@1.0.1 (uid 64e0000000000000000000f2)  ->  strata-live-profile@1.0.0 on cluster fred (uid 64f1000000000000000000f5)
 root       7d7689e8321c -> eada36c2e3fd   CHANGED
-consumers  0 -> 0 clusters
+consumers  strata-live-profile@1.0.1 has no consumers
 
   variables unchanged
 

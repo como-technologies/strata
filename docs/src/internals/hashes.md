@@ -53,13 +53,12 @@ published version, can have one root.
 
 An older Palette does not serve the variables endpoint. Strata then reads the
 version as one with no variables, and the root is the root of a version with no
-variables. That root is correct for what strata read, and it is not the root the
-same version gets from a Palette that serves the endpoint. So a record written
-before such an upgrade does not verify after it, and the report reads like an
-edit in place.
+variables. That root is correct for what strata read. It is not the root that the same
+version gets from a Palette that serves the endpoint. So a record written before
+such an upgrade does not verify after it, and `verify` reports drift.
 
-The record says so: `source.variablesUnavailable` is `true`, and `compare`
-prints a note that names the side. Take the record again after the upgrade.
+The record holds `source.variablesUnavailable`, which is `true`, and `compare`
+prints a note that names the side. Record the version again after the upgrade.
 
 ## The canonical form
 
@@ -102,7 +101,11 @@ copy exactly as it hashes the profile:
   the profile.
 - The variable definitions come from the cluster.
 
-So a cluster that runs a recorded version has the root of that record. An edit
+So a cluster that runs a recorded version has the root of that record. That
+equality needs the cluster's variables endpoint to repeat the definition fields
+that the profile endpoint returns. The live runs used profiles with no
+variables, so no run shows that shape: see
+[What no run covers](./palette.md#what-no-run-covers). An edit
 of the pack values on the cluster shows as `AUTHORED`. A cluster on an older
 version shows `IDENTITY`.
 

@@ -84,3 +84,25 @@ strata-verify:
     - if: $CI_PIPELINE_SOURCE == "schedule"
   script:
     - .strata/verify-report.sh $STRATA_RECORDS --label "$STRATA_DRIFT_LABEL"
+
+# The records of a promotion are one release, before a cluster moves. A manual job: run it from the
+# pipeline view, with STRATA_PROMOTE set to the records in promotion order.
+strata-promote-gate:
+  extends: .strata
+  stage: test
+  when: manual
+  rules:
+    - if: $STRATA_PROMOTE
+  script:
+    - $STRATA_BIN same-release $STRATA_PROMOTE
+
+# No cluster runs the version, so a delete can follow. A manual job: set STRATA_RETIRE to
+# name@version. Exit 1 names each cluster that still runs it, and the delete must not run.
+strata-retire-gate:
+  extends: .strata
+  stage: test
+  when: manual
+  rules:
+    - if: $STRATA_RETIRE
+  script:
+    - $STRATA_BIN consumers "$STRATA_RETIRE"

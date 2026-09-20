@@ -7,6 +7,8 @@ Names repeat across projects. Here `dev` and `prod` each have a cluster named
 scope, so the scope decides which object a name means. The prod copy of the
 profile has one changed value.
 
+**Who runs this.** A person at a terminal, working out which object a name means.
+
 ## 1. See every cluster
 
 ```text

@@ -11,6 +11,10 @@ In this example, `dev` has `aws-stack@1.1.1` with the uid `...c3`, and the
 cluster `payments` runs it. The team then bumps the version to 1.2.0 with one
 changed value, and the flag is off.
 
+**Who runs this.** A person at a terminal, after a bump surprised them. The
+scheduled verify job is what reports the overwrite first: see
+[Drift issues](../automation/drift-issues.md).
+
 ## 1. The old version is gone
 
 ```text

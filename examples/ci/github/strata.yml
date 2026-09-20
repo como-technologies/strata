@@ -19,6 +19,16 @@ on:
   schedule:
     # the drift report, every morning; the runs of one repository must stand minutes apart
     - cron: "17 6 * * *"
+  # the two gates below answer a question a person asks at a moment of their choosing, so they run
+  # on demand and not on a pull request or a schedule
+  workflow_dispatch:
+    inputs:
+      promote:
+        description: The records to check, in promotion order, such as "releases/dev.json releases/prod.json"
+        default: ""
+      retire:
+        description: The profile version to retire, as name@version
+        default: ""
 
 permissions:
   contents: read
@@ -55,6 +65,28 @@ jobs:
     uses: como-technologies/strata/.github/workflows/verify.yml@v0.6.3
     with:
       records: releases/**/*.json
+      strata-version: v0.6.3
+    secrets:
+      strata-token: ${{ secrets.STRATA_READ_TOKEN }}
+      palette-api-key: ${{ secrets.PALETTE_API_KEY }}
+
+  # the records of a promotion are one release, before a cluster moves
+  promote-gate:
+    if: github.event_name == 'workflow_dispatch' && inputs.promote != ''
+    uses: como-technologies/strata/.github/workflows/promote-gate.yml@v0.6.3
+    with:
+      records: ${{ inputs.promote }}
+      strata-version: v0.6.3
+    secrets:
+      strata-token: ${{ secrets.STRATA_READ_TOKEN }}
+      palette-api-key: ${{ secrets.PALETTE_API_KEY }}
+
+  # no cluster runs the version, so the delete that follows is safe
+  retire-gate:
+    if: github.event_name == 'workflow_dispatch' && inputs.retire != ''
+    uses: como-technologies/strata/.github/workflows/retire-gate.yml@v0.6.3
+    with:
+      version: ${{ inputs.retire }}
       strata-version: v0.6.3
     secrets:
       strata-token: ${{ secrets.STRATA_READ_TOKEN }}

@@ -11,6 +11,10 @@ record, so nothing of that view is left when you close the page.
 A pack version is a ref: `pack:<name>@<version>`. Strata reads it from the
 registry and hashes it as it hashes that pack inside a profile.
 
+**Who runs this.** A person reviewing a bump, at a terminal. The comment job
+posts the same comparison on a pull request: see
+[Pull request comments](../automation/pr-comments.md).
+
 ## 1. Compare two versions
 
 ```text
@@ -81,10 +85,10 @@ published build must never do.
 ## What a pack record does not carry
 
 A pack has no profile variables, so the reports say nothing about variables when
-both sides are packs. A pack record holds the values the registry ships, not the
-values a profile sets on top of them, and no manifests or params, because those
-belong to a profile. To compare what a profile does with a pack, compare the profile
-versions: [Review a change before you publish it](./review.md).
+both sides are packs. A pack record holds the values the registry ships, and
+not the values a profile sets on top of them. It holds no manifests and no
+params, because those belong to a profile. To compare what a profile does with a
+pack, compare the profile versions: [Review a change before you publish it](./review.md).
 
 ## What to do
 

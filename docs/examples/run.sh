@@ -502,6 +502,7 @@ show list-cluster 0 'strata list --cluster payments'
 show list-cluster-tenant 0 "strata list --cluster payments --project ''"
 show list-pack 0 'strata list --pack cilium'
 show list-pack-all 0 'for p in dev prod; do strata list --pack cilium --project-name "$p"; done'
+show list-pack-tenant 0 "strata list --pack cilium --project ''"
 show list-packs 0 'strata list --packs'
 show list-pack-consumers 1 'for v in 1.0.0 1.1.0 1.1.1; do strata consumers aws-stack@$v; done'
 show list-pack-consumers 1 'PALETTE_PROJECT=prod strata consumers aws-stack@1.1.1'
@@ -580,7 +581,7 @@ show2 review-snapshot 0 'strata snapshot --from-candidate aws-stack.yaml -o cand
 show review-markdown 1 'strata compare releases/1.0.0/dev.json candidate.json --format markdown'
 show review-repave 1 "strata compare releases/1.0.0/dev.json candidate.json --json | jq -r '.packs[] | select(.impact.level == \"repave\") | \"\(.name): \(.impact.text)\"'"
 show2 review-pr-comment 0 'scripts/ci/pr-comment.sh releases/1.0.0/dev.json candidate.json --dry-run > comment.md'
-show review-pr-comment 0 'head -3 comment.md'
+show review-comment-head 0 'head -3 comment.md'
 serve_here   # the page describes what follows: the publication of the reviewed version
 profile $DEV $A110 1.1.0 aws-stack@1.1.0
 show2 review-published 0 'strata snapshot aws-stack@1.1.0 -o releases/1.1.0/dev.json'
@@ -648,6 +649,7 @@ show2 merge-gate-rollback 0 'scripts/ci/merge-gate.sh "releases/*.json" --base m
 chapter promote
 projects dev=$DEV prod=$PROD
 profile $DEV $A111 1.1.1 aws-stack@1.1.1
+cluster $DEV $PAYMENTS payments $A111   # the release being promoted runs somewhere, so step 4 discriminates
 profile $PROD $A111_PROD 1.1.1 aws-stack@1.1.1 "$RETAIN"  # own copy: the promote chapter gives prod a changed value
 show2 promote-record 0 'PALETTE_PROJECT=dev strata snapshot aws-stack@1.1.1 -o releases/1.1.1/dev.json'
 show2 promote-record 0 'PALETTE_PROJECT=prod strata snapshot aws-stack@1.1.1 -o releases/1.1.1/prod.json'

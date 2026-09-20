@@ -8,6 +8,9 @@ stay until the cluster moves to a newer version.
 In this example, `dev` has `aws-stack@1.0.0`, which no cluster uses, and
 `aws-stack@1.1.0`, which `payments` and `search` run.
 
+**Who runs this.** A person at a terminal, or the retire gate, which runs
+`consumers` for a job: see [The promotion gate and the retire gate](../automation/gates.md).
+
 ## 1. A version in use
 
 ```text
@@ -51,3 +54,5 @@ The third column is the version that the copy of each cluster names.
   the scheduled check reads.
 - `consumers` asks Palette at the time of the command. Run it immediately before
   the delete.
+- To run this as a job, see
+  [The promotion gate and the retire gate](../automation/gates.md).

@@ -32,6 +32,10 @@ The script exits like `verify`, after it handles the issues: `0` when each
 record is unchanged, `1` when a record drifted, `2` when a record could not be
 checked.
 
+A changed cluster value is not drift. `verify` exits `0` for it, so this job
+opens no issue for it. See
+[Clusters give variables different values](../use-cases/cluster-values.md).
+
 ## Options
 
 | Option | Default | Function |

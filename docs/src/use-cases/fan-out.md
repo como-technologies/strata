@@ -23,7 +23,13 @@ strata answers each one in a job.
 | What does this change do to the cluster? | each push to a merge request | `pr-comment.sh` | one comment, and a label on a repave |
 | Is this merge request still right? | before the merge button | `merge-gate.sh` | a red check, with the reason |
 | Did the environments get what the branch says? | every night | `verify-report.sh` | one issue per record that drifted |
-| Which clusters carry this pack? | when a version is retired | `strata consumers` | the list, with the count |
+| Which clusters use this profile version? | when a version is retired | `strata consumers` | the list, with the count |
+
+**Who runs this.** Jobs, almost entirely. A developer writes a record in a merge
+request and reads a comment; the three jobs below do the rest. Each one is a
+drop-in: [Pull request comments](../automation/pr-comments.md),
+[The merge gate](../automation/merge-gate.md), and
+[Drift issues](../automation/drift-issues.md).
 
 ## One record for each environment
 
@@ -121,9 +127,20 @@ record that drifted:
 The schedule covers the cluster records as well as the release records, so it
 gives both patterns:
 
-````text
-{{#include ../output/edited-report.txt}}
-````
+```text
+{{#include ../output/edited-report.txt:1:3}}
+```
+
+The issue body is markdown, and the host renders it. This is what a person sees
+in the issue:
+
+{{#include ../output/edited-report.txt:4:38}}
+
+The script then prints what it would do:
+
+```text
+{{#include ../output/edited-report.txt:40:}}
+```
 
 The issue closes itself on the first run where the record verifies again. See
 [Drift issues](../automation/drift-issues.md).

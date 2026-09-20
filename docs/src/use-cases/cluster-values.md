@@ -10,6 +10,9 @@ so they do not change the root. But a team wants to see them.
 In this example, `payments` and `search` run `aws-stack@1.1.1`. Each gives its own
 team name to `platform_owner`.
 
+**Who runs this.** A person at a terminal. The scheduled verify job does not
+report a changed cluster value, so somebody must look.
+
 ## 1. Compare the clusters
 
 ```text
@@ -64,6 +67,9 @@ in full: see
 - Use `compare` between clusters to find a value that one cluster sets wrong.
 - Do not treat a value change as drift. To keep a value fixed, make it part of
   the release: put it in the pack values, not in a variable.
+- `verify` exits `0` for a changed cluster value, so the scheduled job opens no
+  issue for it. To watch the values, read `records[].clusterVariables` from
+  `strata verify --format json`.
 
 ## Palette behavior
 

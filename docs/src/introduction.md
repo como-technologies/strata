@@ -60,9 +60,12 @@ approved, without trusting a tag or a name.
 
 ## The profile that the pages use
 
-Every page uses one profile, `aws-stack`, with the versions 1.0.0, 1.1.0 and
-1.1.1, and the clusters `payments`, `search` and `ledger`. It is not a profile
-of your tenant. Strata builds it from the pack data that this repository tracks:
+Most pages use one profile, `aws-stack`, with the versions 1.0.0, 1.1.0 and
+1.1.1, and the clusters `payments`, `search` and `ledger`. A page that needs a
+second profile adds the add-on profile `platform-addons`. A page that needs
+another version adds one, such as 1.1.3 or 1.2.0. The pack pages read a pack
+from a registry and use no profile. None of it is a profile of your tenant.
+Strata builds it from the pack data that this repository tracks:
 
 ```bash
 just examples

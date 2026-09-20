@@ -12,6 +12,15 @@ This is the same problem as [A team pins each environment](./fan-out.md), one
 level up. Many merge requests are open at once, most of them opened by a job,
 and each one was written against a level below that keeps moving.
 
+**Who runs this.** Jobs at every level. A person merges, and a job publishes,
+records, and opens the next merge request. The recipes are
+[Pull request comments](../automation/pr-comments.md),
+[The merge gate](../automation/merge-gate.md),
+[Drift issues](../automation/drift-issues.md), and
+[The promotion gate and the retire gate](../automation/gates.md). The record
+step in the publish job is yours to write: strata ships no recipe for it,
+because the publish itself is yours.
+
 ## What each level holds, and what it records
 
 | Repository | The repository holds | A merge publishes | The record |

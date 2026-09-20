@@ -46,6 +46,7 @@
 - [Pull request comments](./automation/pr-comments.md)
 - [The merge gate](./automation/merge-gate.md)
 - [Drift issues](./automation/drift-issues.md)
+- [The promotion gate and the retire gate](./automation/gates.md)
 - [GitLab CI](./automation/gitlab.md)
 - [The Rust library](./automation/library.md)
 

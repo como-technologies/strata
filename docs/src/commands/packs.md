@@ -5,6 +5,7 @@ pack, newest first, with the tags that point at each version.
 
 ```text
 {{#include ../output/packs-list.txt:1:8}}
+...
 ```
 
 The columns are the version, the pack uid of that build, the pack type, the

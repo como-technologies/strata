@@ -8,6 +8,8 @@ that run those versions. `pack:<name>@<version>` reads the pack itself.
 [What changed between two pack versions](./pack-versions.md) compares two pack
 versions. Neither says which profiles carry the pack. `list` answers that.
 
+**Who runs this.** A person at a terminal, answering an incident. Nothing here writes.
+
 ## 1. Search one project
 
 ```text
@@ -26,6 +28,17 @@ consumers and its packs.
 The loop names each project. `strata list projects` gives the names, one for
 each line of its own report, and a script reads them from
 `strata list projects --json`.
+
+The projects are not the whole tenant. A profile at tenant scope belongs to no
+project, so no project listing holds it. A search of the projects alone does not
+find it. Read the tenant scope too:
+
+```text
+{{#include ../output/list-pack-tenant.txt}}
+```
+
+This example keeps its profiles in projects, so the tenant scope holds none. A
+profile that belongs to no project is in this listing only.
 
 ## 3. Get one line for each match
 

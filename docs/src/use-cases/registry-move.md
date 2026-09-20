@@ -16,6 +16,9 @@ Each side is a record of `aws-stack@1.1.1` in its own project, written with
 `strata snapshot` as in
 [Promote a release to another project](./promote.md).
 
+**Who runs this.** A person at a terminal, or the promotion gate, which runs
+`same-release` for a job: see [The promotion gate and the retire gate](../automation/gates.md).
+
 ## 1. same-release fails without the option
 
 ```text

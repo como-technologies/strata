@@ -288,6 +288,10 @@ when one name is deleted and built again.
   test it; a team reported that it does not, above.
 - A change to the value a cluster gives a profile variable. No run makes one, so
   no run shows whether Palette records it as a change to the cluster.
+- The shape of `GET /v1/spectroclusters/<uid>/variables`. No run used a profile
+  with variables, so no run shows whether each entry repeats the definition
+  fields that the profile endpoint returns. A cluster copy's root equals the
+  profile's root only if it does.
 - What the cluster listing shows after a deletion. One teardown through the
   provider, read by hand, showed that a deleted cluster leaves the listing.
   Another path to a deletion may answer differently.

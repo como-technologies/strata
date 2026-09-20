@@ -7,6 +7,9 @@ The projects `dev` and `prod` both have `aws-stack@1.1.1`. The name and the vers
 are the same, but nothing in Palette makes the content the same. A person who
 builds the prod copy by hand can change one value.
 
+**Who runs this.** The publish job records each project, and the promotion gate
+checks the pair: see [The promotion gate and the retire gate](../automation/gates.md).
+
 ## 1. Record the version in each project
 
 ```text
@@ -34,7 +37,9 @@ The impact is `cluster-wide`.
 
 ## 4. Replace the prod copy
 
-Do not edit the prod copy in place. Make sure that no cluster uses it:
+Do not edit the prod copy in place. Make sure that no cluster uses it. In this
+example a cluster runs the dev copy, and no cluster runs the prod copy. The
+check answers for one copy, and not for the version name:
 
 ```text
 {{#include ../output/promote-consumers.txt}}
@@ -56,7 +61,8 @@ new copy a new uid. Record it again:
 - Publish each project from one source: a candidate file or one OpenTofu module.
 - Run `same-release` after each promotion, before a cluster moves. Give the
   records in promotion order, `dev.json prod.json`, and add a record for each
-  project that a release passes through.
+  project that a release passes through. To run it as a job, see
+  [The promotion gate and the retire gate](../automation/gates.md).
 - When a cluster already uses the wrong copy, do not delete it. Publish a new
   version from the approved source, and move the cluster to it.
 

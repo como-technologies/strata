@@ -50,15 +50,17 @@ priority over it. The diffs of `--full` use the same colors.
 ## The markdown comment
 
 ```text
-{{#include ../output/compare-markdown.txt:1:1}}
+{{#include ../output/compare-markdown.txt:1:2}}
 ```
 
-{{#include ../output/compare-markdown.txt:2:}}
+{{#include ../output/compare-markdown.txt:3:}}
 
 The comment has:
 
-- a header table with the two uids, the two roots, and the fetch times
-- a consumers line, when Palette lists the clusters of a side
+- a header table with the two uids, the two roots, the consumers of each side,
+  and the fetch times
+- a `Consumers:` line in place of that row, when only one side is a profile
+  version: against a candidate, a cluster, or a pack
 - a result line with the result, the maximum impact, the pack counts, and the
   state of the variables
 - one table row for each pack, with the layer, name, version, flags, and impact

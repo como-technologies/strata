@@ -14,6 +14,10 @@ first cluster brings the edit there too.
 
 In this example, `dev` has `aws-stack@1.1.1`, and the cluster `payments` runs it.
 
+**Who runs this.** The scheduled verify job finds this, and a person at a
+terminal works out what changed. The job is
+[Drift issues](../automation/drift-issues.md).
+
 ## 1. Record the version and the cluster
 
 ```text
@@ -68,9 +72,20 @@ Two clusters on `aws-stack@1.1.1` run different content.
 In a scheduled job, the report script opens one issue for each record that
 drifted:
 
-````text
-{{#include ../output/edited-report.txt}}
-````
+```text
+{{#include ../output/edited-report.txt:1:3}}
+```
+
+The issue body is markdown, and the host renders it. This is what a person sees
+in the issue:
+
+{{#include ../output/edited-report.txt:4:38}}
+
+The script then prints what it would do:
+
+```text
+{{#include ../output/edited-report.txt:40:}}
+```
 
 See [Drift issues](../automation/drift-issues.md).
 

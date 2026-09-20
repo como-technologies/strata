@@ -61,7 +61,7 @@ sensitive variable. See [Clusters give variables different values](../use-cases/
 
 ## Record without the network
 
-`--raw-dir` saves the API responses, with the time it read them. `--from-raw`
+`--raw-dir` saves the API responses and the time of the read. `--from-raw`
 builds the same snapshot from them later, with no network and no key. The record
 keeps the time of the read, not the time of the rebuild, so `verify` reports the
 version as unchanged since Palette answered:

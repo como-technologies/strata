@@ -14,7 +14,9 @@ impact no longer reaches the threshold.
 
 ## Try it first
 
-`--dry-run` prints the comment and the label action, and calls no host:
+`--dry-run` writes the comment to standard output, says what it would do with
+the label on standard error, and calls no host. The run below sends the comment
+to a file, so the block holds the label line alone:
 
 ```text
 {{#include ../output/review-pr-comment.txt}}

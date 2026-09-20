@@ -1,0 +1,4 @@
+$ strata list --pack cilium --project ''
+tenant scope
+
+no profiles with a pack matching 'cilium'

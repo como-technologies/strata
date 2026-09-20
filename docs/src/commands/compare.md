@@ -67,10 +67,10 @@ Exit `0`.
 collapsible block for each changed pack:
 
 ```text
-{{#include ../output/compare-markdown.txt:1:1}}
+{{#include ../output/compare-markdown.txt:1:2}}
 ```
 
-{{#include ../output/compare-markdown.txt:2:}}
+{{#include ../output/compare-markdown.txt:3:}}
 
 `scripts/ci/pr-comment.sh` posts it: see
 [Pull request comments](../automation/pr-comments.md).

@@ -12,6 +12,9 @@ so two such roots differ, although the nodes run the same build.
 In this example, `aws-stack@1.1.3` is `aws-stack@1.1.1` with the OS pack pinned as
 `24.04` in place of `LTS__24.x`.
 
+**Who runs this.** A person at a terminal. The scheduled verify job reports the
+rename of step 3: see [Drift issues](../automation/drift-issues.md).
+
 ## 1. Compare the versions
 
 ```text

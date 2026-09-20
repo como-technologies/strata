@@ -11,6 +11,8 @@ In this example, `dev` and `prod` each have `platform-addons@1.0.0`, with one
 manifest pack and the same Namespace manifest. The two pack uids are stand-ins,
 of the shape Palette gives.
 
+**Who runs this.** A person at a terminal, working out why two roots differ.
+
 ## 1. Record the version in each project
 
 ```text
