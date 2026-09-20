@@ -5,6 +5,8 @@ set -euo pipefail
 
 here=$(cd "$(dirname "$0")/../.." && pwd)
 backlog="$here/docs/backlog.md"
+xtask=${XTASK_BIN:-$here/target/debug/xtask}
+[ -x "$xtask" ] || { echo "open-backlog-issues: no xtask at $xtask. Run: just stand-in" >&2; exit 2; }
 
 gh repo view --json nameWithOwner --jq .nameWithOwner >/dev/null 2>&1 \
   || { echo "open-backlog-issues: this repository has no GitHub remote that gh can see" >&2; exit 2; }
@@ -22,19 +24,8 @@ for name in "${!LABEL_COLORS[@]}"; do
   grep -Fxq "$name" <<<"$have_labels" || gh label create "$name" --color "${LABEL_COLORS[$name]}" --force >/dev/null
 done
 
-python3 - "$backlog" <<'PY' | while IFS=$'\t' read -r title labels body_file; do
-import re, sys, tempfile, pathlib
-text = pathlib.Path(sys.argv[1]).read_text()
-sections = re.split(r"^## ", text, flags=re.M)[1:]
-for sec in sections:
-    title, _, rest = sec.partition("\n")
-    m = re.search(r"^labels:\s*(.+)$", rest, flags=re.M)
-    labels = m.group(1).strip() if m else ""
-    body = re.sub(r"^labels:.*\n", "", rest, flags=re.M).strip() + "\n"
-    body = re.sub(r"^### ", "## ", body, flags=re.M)  # file uses ### so issue titles stay unique at ##
-    f = tempfile.NamedTemporaryFile("w", delete=False, suffix=".md"); f.write(body); f.close()
-    print(f"{title.strip()}\t{labels}\t{f.name}")
-PY
+body_dir=$(mktemp -d); trap 'rm -rf "$body_dir"' EXIT
+"$xtask" backlog "$backlog" "$body_dir" | while IFS=$'\t' read -r title labels body_file; do
   number=$(awk -F'\t' -v t="$title" '$1 == t { print $2; exit }' <<<"$existing")
   if [ -n "$number" ]; then
     args=(--body-file "$body_file")
@@ -47,5 +38,4 @@ PY
     url=$(gh issue create "${args[@]}")
     echo "opened $title -> $url"
   fi
-  rm -f "$body_file"
 done

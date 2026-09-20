@@ -79,13 +79,15 @@ fn tag_release_tags_the_cargo_version_once_and_only_on_a_clean_tree() {
 // ---- docs/examples/run.sh --serve ----------------------------------------------------------------
 
 /// The playground: `run.sh --serve CHAPTER` builds the tenant of one chapter, serves it, and
-/// waits. The test needs the offline examples and python3, which `just examples` and CI provide;
-/// without them it has nothing to serve and returns.
+/// waits. The test needs the offline examples and the xtask binary that serves the stand-in for
+/// Palette, which `just examples` and `just stand-in` build; without them it has nothing to
+/// serve and returns.
 #[test]
 fn the_playground_serves_the_tenant_of_one_chapter() {
     let repo = Path::new(env!("CARGO_MANIFEST_DIR"));
     let built = repo.join("examples/profiles/raw/aws-stack@1.1.1/profile.json");
-    if !built.exists() || Command::new("python3").arg("--version").output().is_err() {
+    let stand_in = repo.join("target/debug/xtask");
+    if !built.exists() || !stand_in.exists() {
         return;
     }
     // The LAST chapter, read from the file so a new chapter cannot make this stale. Serving the

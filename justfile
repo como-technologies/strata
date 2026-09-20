@@ -28,13 +28,13 @@ build-target target:
     esac
 
 # Run the unit, library, binary, and script tests. No network.
-test:
+test: stand-in
     cargo test
 
 # Test the format, the clippy lints, and the rustdoc
 lint:
     cargo fmt --check
-    cargo clippy --all-targets -- -D warnings
+    cargo clippy --workspace --all-targets -- -D warnings
     RUSTDOCFLAGS="-D warnings" cargo doc --no-deps
 
 # Build and run examples/library, a separate crate that uses strata as a library
@@ -63,15 +63,19 @@ docs:
 docs-serve:
     mdbook serve docs --open
 
-# docs/examples/run.sh runs each command against a local stand-in for Palette. Needs python3
-# and jq.
+# docs/examples/run.sh runs each command against a local stand-in for Palette, which xtask
+# serves. Needs jq.
 
 # Write the output of each command that the book shows into docs/src/output/
-docs-examples: examples
+docs-examples: examples stand-in
     docs/examples/run.sh
 
+# Build the development tooling: the stand-in for the Palette API that the book's commands use
+stand-in:
+    cargo build --quiet -p xtask
+
 # Fail when docs/src/output/ is not the output of this build of strata
-docs-check: examples
+docs-check: examples stand-in
     docs/examples/run.sh --check
     docs/examples/check-pages.sh
 

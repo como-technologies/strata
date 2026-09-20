@@ -2,7 +2,7 @@
 # Run each strata command that the book shows, and write its output into docs/src/output/. The
 # book includes those files, so each output in the book is the output of this build of strata.
 #
-# The commands talk to docs/examples/palette.py, a local stand-in for the Palette API. Its tenant
+# The commands talk to `xtask serve`, a local stand-in for the Palette API. Its tenant
 # holds the profiles and clusters that `just examples` builds from real registry data. Each
 # chapter below builds the tenant that one page needs. Between two commands, a chapter changes
 # the tenant in the same way that Palette changes: an edit in place, a version bump, a cluster
@@ -13,7 +13,7 @@
 # the output of strata changes.
 #
 # Needs: target/release/strata (or STRATA_BIN), the examples that `just examples` builds,
-# python3, and jq.
+# the xtask binary (`just stand-in`), and jq.
 #
 #   docs/examples/run.sh                   write docs/src/output/
 #   docs/examples/run.sh --check           exit 1 when docs/src/output/ is not current
@@ -55,9 +55,11 @@ case "${1:-}" in
   *) die "usage: run.sh [--check | --serve CHAPTER[-N]]" ;;
 esac
 
+stand_in=${XTASK_BIN:-$repo/target/debug/xtask}
+
 [ -x "$tool" ] || die "no strata binary at $tool. Run: just build"
 [ -f "$repo/examples/profiles/raw/aws-stack@1.1.1/profile.json" ] || die "the examples are not built. Run: just examples"
-command -v python3 >/dev/null || die "python3 is not installed"
+[ -x "$stand_in" ] || die "no stand-in for Palette at $stand_in. Run: cargo build -p xtask"
 command -v jq >/dev/null || die "jq is not installed"
 
 work=$(mktemp -d)
@@ -67,7 +69,7 @@ cleanup() {
   rm -rf "$work"
 }
 # EXIT alone leaks the server: a SIGTERM from another terminal kills this shell without running an
-# EXIT trap, and the python process and its tenant directory stay behind
+# EXIT trap, and the stand-in and its tenant directory stay behind
 trap cleanup EXIT
 trap 'exit 143' TERM
 trap 'exit 130' INT
@@ -78,7 +80,7 @@ out=$work/output
 mkdir -p "$tenant" "$out" "$work/bin" "$work/home"
 ln -s "$tool" "$work/bin/strata"
 
-python3 "$repo/docs/examples/palette.py" "$tenant" "$work/port" &
+"$stand_in" serve "$tenant" "$work/port" &
 server=$!
 for _ in $(seq 100); do
   [ -s "$work/port" ] && break

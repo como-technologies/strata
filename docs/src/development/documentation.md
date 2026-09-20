@@ -65,8 +65,8 @@ under one name, or any other line that a step of the page is written to cause.
 
 ## Add an output
 
-`docs/examples/run.sh` runs each command against `docs/examples/palette.py`, a
-local stand-in for the Palette API. The stand-in serves JSON files, one for each
+`docs/examples/run.sh` runs each command against `xtask serve`, a local stand-in
+for the Palette API in `xtask/src/palette.rs`. The stand-in serves JSON files, one for each
 request. Each chapter of the script builds the tenant that one page needs, from
 the real pack data in `examples/`, and changes it between commands as Palette
 changes it.

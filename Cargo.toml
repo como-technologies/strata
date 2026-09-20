@@ -1,3 +1,9 @@
+[workspace]
+members = [".", "xtask"]
+# `cargo build` and `cargo test` at the root stay about strata alone. The development tooling in
+# xtask/ builds when a recipe asks for it, and it never reaches a release.
+default-members = ["."]
+
 [package]
 name = "strata"
 version = "0.7.1"

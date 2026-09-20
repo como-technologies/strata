@@ -84,7 +84,7 @@ To work on strata:
 | Tool | Function |
 | --- | --- |
 | Rust, `just` | Build and test. `cross` builds another target. |
-| `python3` | Runs the commands of the book: `just docs-examples`. |
+| `jq` | Builds the tenant that the book's commands run against. |
 | `mdbook`, `mdbook-mermaid`, `mdbook-gruvbox`, `mdbook-lint` | Build the book and test its links. |
 | `tofu`, `crane`, `helm`, AWS CLI | The live example. `just tofu-install` installs `tofu`. |
 
