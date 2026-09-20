@@ -91,5 +91,6 @@ The secret `palette-api-key` is required. `strata-token` reads this repository
 while it is private. Another scheduler runs the script directly.
 
 [Pull request comments](./pr-comments.md#while-this-repository-is-private)
-gives the two steps for a private repository. The live example ran this
-workflow with `act`: see [Live runs](../development/live-runs.md#through-the-reusable-workflow).
+gives the two steps for a private repository. The live example runs this
+workflow with `act`: see
+[What the live example verifies](../development/live-runs.md#drift-reportsh).

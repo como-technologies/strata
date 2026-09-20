@@ -74,4 +74,4 @@
 - [Write the documentation](./development/documentation.md)
 - [The offline examples](./development/examples.md)
 - [The live example](./development/live-example.md)
-- [Live runs](./development/live-runs.md)
+- [What the live example verifies](./development/live-runs.md)

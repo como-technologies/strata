@@ -67,7 +67,8 @@ registry name that the key cannot see is `registry-not-found`.
 The snapshot has `source.template` `candidate` and no uid. The digest on the
 pack reference of a published profile equals the registry digest, so a
 candidate with the published tags, values, and manifests has the published root.
-The live example checks that: see [Live runs](../development/live-runs.md).
+The live example checks that: see
+[What the live example verifies](../development/live-runs.md).
 
 ## Write one from a published version
 

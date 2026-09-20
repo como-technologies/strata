@@ -24,7 +24,8 @@ These are hard rules. `docs/src/development/documentation.md` explains each one.
    and its options. **A use case** shows the problem, the commands, the output,
    and the fix. When it depends on a behavior of Palette, it links to the live
    run that shows that behavior.
-6. **Record a live result with its run id** in `docs/src/internals/palette.md`
+6. **State a live result as a fact**, with no run id and no date, in
+   `docs/src/internals/palette.md`
    and `docs/src/development/live-runs.md`.
 
 ## Before you finish

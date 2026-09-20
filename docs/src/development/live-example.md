@@ -2,8 +2,9 @@
 
 The offline examples build profiles and a cluster from real registry data. The
 live example builds the real objects in a Palette tenant, and runs each strata
-check that needs them. [Live runs](./live-runs.md) records the results, and
-[What Palette does](../internals/palette.md) states what they show.
+check that needs them. [What the live example verifies](./live-runs.md) lists
+those checks, and [What Palette does](../internals/palette.md) states what they
+show.
 
 | Script | Checks |
 | --- | --- |
@@ -315,11 +316,10 @@ These rules come from the teardowns of this kind of cluster:
   `aws-inventory.sh` counted fewer kinds of resource, so a healthy deletion
   looked stuck. Palette then logs the event
   `Cluster <name> has been deleted`, but the state stays `Deleting` for several
-  minutes, and OpenTofu waits for the state. On 2026-09-17, cluster B (`barney`,
-  run `20260917T031126Z`) got its delete at 03:33:11 UTC. Its VPC went, and the
-  event came at 03:44:39, with the inventory at 0. The state became `Deleted`
-  and the destroy finished at 03:52, 19 minutes after the delete, with no manual
-  step.
+  minutes, and OpenTofu waits for the state. A deletion seen end to end took
+  19 minutes: the VPC went first, the event came 11 minutes after the delete
+  with the inventory at 0, and the state became `Deleted` 8 minutes after that.
+  No step was manual.
 - **If the state stays `Deleting` and the inventory does not change** for
   several readings, read the events of the cluster in the Palette console. The
   message usually names what holds the deletion. A cluster with Pause Agent

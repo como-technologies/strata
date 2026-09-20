@@ -1,592 +1,226 @@
-# Live runs
+# What the live example verifies
 
-The recorded runs of [the live example](./live-example.md), newest last in each
-section. `examples/live/runs/` is not tracked, so this page and the issue
-comments keep the evidence. The runs used Terraform 1.16.2. The check
-descriptions are quoted as each run recorded them.
+[The live example](./live-example.md) builds a real tenant and asserts what
+Palette does with it. This page lists what each script sets up and what each of
+its checks establishes, so you can see the coverage without running anything.
 
-Each uid below is an example, as everywhere in this book. The check tables, the
-run ids, the counts, and the roots are the recorded ones.
+`verify.sh` is the read-only script, and
+[its checks are on the live example page](./live-example.md#the-checks-of-verifysh).
+The scripts below write to the tenant.
 
-## The first run with OpenTofu
+Each check names its expected exit code. A run that gets another code fails, and
+prints both. The issue numbers name what the check was written for.
 
-Run `20260917T183929Z-tofu`, with OpenTofu 1.12.6 and the Spectro Cloud provider
-0.30.1. It is the run that moved the example from Terraform to OpenTofu, and the
-only run that OpenTofu made. The earlier runs used Terraform 1.16.2.
+## in-place.sh
 
-| Step | Result |
-| --- | --- |
-| `tofu init` | Read the state that Terraform wrote, and took the provider from `registry.opentofu.org`. The lock file names that registry now. |
-| `tofu plan` | Exit 2 with the creates of the whole example, and no other change. |
-| `tofu apply` | `Apply complete! Resources: 5 added`. The four profiles took 3 to 4 seconds each, and cluster A 16m3s. |
-| `verify.sh` | 24 of 24 checks passed, with the same answers as the Terraform runs. |
-| `tofu destroy` | `Destroy complete! Resources: 5 destroyed`. Cluster A took 19m17s. |
-| `api.sh delete-named` | Each of the four profile names holds no version. |
-| After the teardown | The cluster has the state `Deleted`, the project holds no profile, and `aws-inventory.sh` prints 0 on each line. |
+Edits a published add-on version in place through the API, pushes the update to
+a cluster, and then bumps the version. It runs twice, once with the provider's
+`immutable-clusterprofiles` flag off and once with it on, and nothing else
+differs between the two runs. Cluster A exists before the edit; cluster B is
+created from the edited version, and deleted at the end.
 
-The plan and apply text that the checks read did not change: OpenTofu writes the
-same `Plan:`, `Apply complete!`, and `# <resource> will be updated in-place`
-lines, and `-detailed-exitcode` answers 2 for a change.
-
-`registry-digest-oci` failed in the first attempt of `verify.sh` with HTTP 401.
-The cause was the login, not the tool: `aws ecr get-login-password` had failed
-with `AccessDeniedException`, and `crane auth login` then stored an empty
-credential and reported a success. A login with an AWS profile that has
-`ecr:GetAuthorizationToken` fixed it, and the check read the recorded digest
-`sha256:99cac22f712b...`.
-
-The scripts that write to the tenant (`in-place.sh`, `registry-move.sh`,
-`tag-only.sh`, `drift-report.sh`) have no OpenTofu run yet.
-
-## verify.sh
-
-Session `20260917T031126Z` on 2026-09-17: one `just live-up`, then `just
-live-session`, in the `strata-test` project on AWS us-east-2, with cluster A
-`fred` and cluster B `barney`. The four scripts ran 144 checks, and none failed:
-`verify.sh` 24, `in-place.sh off` 51, `in-place.sh on` 53, and
-`registry-move.sh` 16. No step was manual.
-
-| Result | Check | Expected exit | Got | What it shows |
-|---|---|---|---|---|
-| PASS | `snapshot-cluster` | 0 | 0 | strata reads what a live cluster runs |
-| PASS | `cluster-runs-release` | 0 | 0 | the cluster reports the release profile version |
-| PASS | `cluster-runs-two-profiles` | 0 | 0 | #23: the cluster runs the release profile, then the add-on profile |
-| PASS | `snapshot-release` | 0 | 0 | record the version the cluster runs |
-| PASS | `compare-release-cluster` | 0 | 0 | #1: a cluster that runs the recorded version is IDENTICAL |
-| PASS | `snapshot-addon` | 0 | 0 | record the add-on profile version the cluster runs |
-| PASS | `compare-addon-cluster` | 0 | 0 | #23: the add-on record is IDENTICAL to the cluster's add-on selection |
-| PASS | `snapshot-next` | 0 | 0 | record the newer version |
-| PASS | `compare-next-cluster` | 1 | 1 | #1: against a newer record, the cluster shows the change |
-| PASS | `compare-next-cluster-json` | 1 | 1 | the same comparison as JSON |
-| PASS | `only-the-edited-value` | 0 | 0 | #1: the only change is csi-aws-ebs reclaimPolicy |
-| PASS | `consumers-release` | 1 | 1 | #12: the release version has a consumer |
-| PASS | `consumers-release-json` | 1 | 1 | the same listing as JSON |
-| PASS | `consumer-is-the-cluster` | 0 | 0 | #12: listed with its name, project, and state |
-| PASS | `consumers-next` | 0 | 0 | #12: nothing runs the newer version |
-| PASS | `candidate-file` | 0 | 0 | #21: write the newer version's record as a candidate file |
-| PASS | `snapshot-candidate` | 0 | 0 | #4: snapshot the candidate through registry lookups |
-| PASS | `candidate-same-release` | 0 | 0 | #4: the candidate's root equals the published root |
-| PASS | `verify-release` | 0 | 0 | an untouched published version verifies |
-| PASS | `verify-cluster-record` | 0 | 0 | a cluster record verifies against the cluster |
-| PASS | `snapshot-registries` | 0 | 0 | record the profile with a Helm pack and an OCI pack |
-| PASS | `registries-kinds` | 0 | 0 | #2: the profile holds one helm pack and one oci pack |
-| PASS | `registry-digest-helm` | 0 | 0 | #2: read the helm pack's digest from the registry itself |
-| PASS | `registry-digest-oci` | 0 | 0 | #2: read the oci pack's digest from the registry itself |
-
-The cluster runs the release, and the add-on profile after it. Each record
-compares `IDENTICAL` with its selection:
-
-```text
-strata-live-profile@1.0.0 (uid 64e0000000000000000000f1)  ->  strata-live-profile@1.0.0 on cluster fred (uid 64f1000000000000000000f5)
-root       eada36c2e3fd -> eada36c2e3fd   IDENTICAL
-```
-
-```text
-strata-live-addon@1.0.0 (uid 64e2000000000000000000f1)  ->  strata-live-addon@1.0.0 on cluster fred (uid 64f1000000000000000000f5)
-root       9c68e5319d53 -> 9c68e5319d53   IDENTICAL
-```
-
-A newer record against the same cluster shows the one value that differs. The
-block below carries the consumers line of the run's own output: a cluster side
-has no consumer count, so the report states the profile side alone.
-
-```text
-strata-live-profile@1.0.1 (uid 64e0000000000000000000f2)  ->  strata-live-profile@1.0.0 on cluster fred (uid 64f1000000000000000000f5)
-root       7d7689e8321c -> eada36c2e3fd   CHANGED
-consumers  strata-live-profile@1.0.1 has no consumers
-
-  variables unchanged
-
-  [os   ] ubuntu-aws                 24.04              unchanged
-  [k8s  ] kubernetes                 1.36.2             unchanged
-  [cni  ] cni-cilium-oss             1.20.1             unchanged
-~ [csi  ] csi-aws-ebs                1.65.0             AUTHORED
-      values: 1 changed, 0 added, 0 removed
-        ~ charts.aws-ebs-csi-driver.storageClasses[name=spectro-storage-class].reclaimPolicy: "Retain" -> "Delete"
-      impact: cluster-wide infra addon update
-```
-
-The version that the cluster runs lists it. The candidate from the 1.0.1 record,
-with its values in files, gives the root of 1.0.1:
-
-```text
-strata-live-profile@1.0.0 (uid 64e0000000000000000000f1): 1 consumer
-  fred  64f1000000000000000000f5  project 64f20000000000000000a0d1  Running
-```
-
-```text
-IDENTICAL      candidate-snapshot.json -> next.json   root 7d7689e8321c
-SAME RELEASE: 1 pairs passed
-```
-
-Each pack-ref digest equals the digest that Palette lists for the pack version.
-For the Helm and OCI packs, `tenant.sh digest` read the same digest from the
-registry itself:
-
-| Pack | Type | Ref digest | Digest of Palette | Digest of the registry | Fed UPSTREAM | |
-|---|---|---|---|---|---|---|
-| ubuntu-aws | spectro | `sha256:2df05daa4eb4` | `sha256:2df05daa4eb4` | - | packRef.digest | equal |
-| kubernetes | spectro | `sha256:c4f7f20f40c7` | `sha256:c4f7f20f40c7` | - | packRef.digest | equal |
-| cni-cilium-oss | spectro | `sha256:917d9de9a696` | `sha256:917d9de9a696` | - | packRef.digest | equal |
-| csi-aws-ebs | spectro | `sha256:bd09e8b4187b` | `sha256:bd09e8b4187b` | - | packRef.digest | equal |
-| nginx | helm | `08816cde6bea` | `08816cde6bea` | `08816cde6bea` | packRef.digest | equal |
-| argocd | oci | `sha256:99cac22f712b` | `sha256:99cac22f712b` | `sha256:99cac22f712b` | packRef.digest | equal |
-
-In the earlier run `20260916T153806Z`, an optional edit in place changed
-`volumeBindingMode` on the published 1.0.1. `strata verify` on the earlier
-record exited `1`:
-
-```text
-root       7d7689e8321c -> 6fdc871ef9a6   CHANGED
-~ [csi  ] csi-aws-ebs                1.65.0             AUTHORED
-        ~ charts.aws-ebs-csi-driver.storageClasses[name=spectro-storage-class].volumeBindingMode: "WaitForFirstConsumer" -> "Immediate"
-DRIFT: published version strata-live-profile@1.0.1 differs from the copy recorded 2026-09-16T15:38:09Z
-```
-
-The first attempts found two problems. Both are part of the example now:
-
-- Palette refused the cluster with one 4-core worker: "A minimum allocation of
-  '4.1' CPU cores is required across all worker nodes". Two workers have enough.
-  The cluster then took 19 minutes to become `Running`.
-- The candidate check failed until strata accepted a version as a tag, because
-  Palette stored that tag.
-
-### Run `20260918T175802Z`: the profiles a cluster applies
-
-Session `20260918T175802Z` on 2026-09-18, in the `strata-test` project on AWS
-us-east-2, with cluster A `fred` and no cluster B. `verify.sh` ran 30 checks and
-29 passed. `registry-digest-oci` failed with HTTP 401 from the OCI registry,
-because the ECR login that `crane` needs had expired. A login with an AWS
-profile that can get an ECR token gives the expected digest
-`sha256:99cac22f712b` for the same pack, so the failure is a credential of the
-machine, not a result. The check belongs to #2, and nothing in this run changed
-it.
-
-`strata list clusters --applied` named each profile that the cluster applies
-(#63):
-
-```text
-1 cluster
-  cluster:6aad75f596d137f02ba6fae9  fred  Running  aws
-    strata-live-profile@1.0.0  6aac455f9dde9487f9889fe7  cluster
-    strata-live-addon@1.0.0    6aac455cb6a81bf97d926581  add-on
-```
-
-The uid, name, and version of each listed profile equal those of the profiles in
-a full cluster record, so the option reads the same source as `snapshot
-cluster:<uid>` for one request in place of four.
-
-The compare of the release record against the cluster it runs on named that
-cluster among the consumers of the version:
-
-```text
-consumers  strata-live-profile@1.0.0 has 1 consumer; fred is one of them
-```
-
-The cluster listing named no profile: see
-[What the cluster listing answers](../internals/palette.md#what-the-cluster-listing-answers).
-
-## registry-move.sh
-
-Run `20260917T150025Z`, flag on, provider 0.30.1. All 16 checks passed.
-`hold_versions` changed only `skip_destroy` on the four profiles (`0 added, 4
-changed, 0 destroyed`). A flag-on plan then changed nothing (`plan-no-change`).
-Each apply ran without `-target`. The bump pinned `csi-aws-ebs` 1.65.0 from
-`Public Repo` to `Palette Registry`, and changed its type, registry uid, pack
-uid, and digest, and nothing else. The flag kept 1.0.0 (`move1-kept`).
-`same-release --allow registry-move` passed the pair with 1 pack re-pinned. After
-an edit in place of the values of 1.0.1, it failed the pair and named only
-`pack csi/csi-aws-ebs AUTHORED: charts.aws-ebs-csi-driver.storageClasses[name=spectro-storage-class].reclaimPolicy`.
-`apply_baseline` removed the move profile from the state and set `skip_destroy`
-back to false (`0 added, 4 changed, 1 destroyed`). The API deleted both versions,
-and the run ended at the baseline.
-
-| Result | Check | Expected exit | Got | What it shows |
-|---|---|---|---|---|
-| PASS | `plan-no-change` | 0 | 0 | Terraform plans no change once skip_destroy is held for the flag |
-| PASS | `move1` | 0 | 0 | record 1.0.0, every pack from the pack registry |
-| PASS | `move-new-uid` | 1 | 1 | the flag made 1.0.1 a new profile version |
-| PASS | `move1-kept` | 0 | 0 | 1.0.0 is still there, unchanged |
-| PASS | `move2` | 0 | 0 | record 1.0.1 |
-| PASS | `move2-csi-is-oci` | 0 | 0 | 1.0.1's CSI pack comes from the OCI registry |
-| PASS | `compare-move` | 1 | 1 | every field that differs between the two records |
-| PASS | `same-release-exact` | 1 | 1 | an exact check fails: the registry moved |
-| PASS | `same-release-registry-move` | 0 | 0 | #24: the registry-move policy passes a real move, which changes the pack type |
-| PASS | `api-edit-move2` | 0 | 0 | edit 1.0.1's CSI values through the API |
-| PASS | `move2-edited` | 0 | 0 | record the edited 1.0.1 |
-| PASS | `same-release-after-edit` | 1 | 1 | #24: the policy fails the pair after an in-place edit |
-| PASS | `edit-is-authored` | 0 | 0 | the reason names the AUTHORED change |
-| PASS | `delete-move2` | 0 | 0 | delete 1.0.1 |
-| PASS | `delete-move1` | 0 | 0 | delete 1.0.0 |
-| PASS | `baseline-after` | 0 | 0 | the live example is back at its baseline |
-
-## tag-only.sh
-
-Run `20260917T124102Z`, flag off. All 32 checks passed. Versions 1.0.2 and 1.0.3
-differ from 1.0.0 only in the tag of the OS pack, `LTS__24.04` and `LTS__24.x`,
-with one pack uid and version for all three. `compare` calls each pair `SAME
-CONTENT` with the impact `none (tag renamed, same pack build)`, and
-`same-release` passes the three. The repave check of Palette answers no repave
-for each move, and a repave for the control. Cluster A ran 1.0.2 and then 1.0.0
-again, each for 15 minutes, on the same four EC2 instances. After the rename of
-the tag of 1.0.2 in place, `verify` of its earlier record reports `DRIFT` with
-no node impact. The first run, `20260917T044135Z`, recorded the same answers
-before the expectations were set.
-
-```text
-strata-live-profile@1.0.0 (uid 64e0000000000000000000f1)  ->  strata-live-profile@1.0.2 (uid 64e0000000000000000000f3)
-root       eada36c2e3fd -> afdc4d3e06d1   SAME CONTENT
-note       the roots differ only by the tag name a pack is pinned under: the same pack build
-consumers  1 -> 0 clusters
-
-  variables unchanged
-
-~ [os   ] ubuntu-aws                 24.04              tag 24.04 -> LTS__24.04
-      impact: none (tag renamed, same pack build)
-  [k8s  ] kubernetes                 1.36.2             unchanged
-  [cni  ] cni-cilium-oss             1.20.1             unchanged
-  [csi  ] csi-aws-ebs                1.65.0             unchanged
-```
-
-| Result | Check | Expected exit | Got | What it shows |
-|---|---|---|---|---|
-| PASS | `release1` | 0 | 0 | record 1.0.0, the OS pack under tag 24.04 |
-| PASS | `a1` | 0 | 0 | record cluster A's release selection |
-| PASS | `instances1` | 0 | 0 | cluster A's EC2 instances before any move |
-| PASS | `exact1` | 0 | 0 | record 1.0.2 |
-| PASS | `floating1` | 0 | 0 | record 1.0.3 |
-| PASS | `os-packs` | 0 | 0 | the OS pack's tag, version, and pack uid as Palette stored each version |
-| PASS | `one-build` | 0 | 0 | Palette stored the tag each version was authored with, and one pack uid and version for all three |
-| PASS | `compare-exact` | 1 | 1 | 1.0.0 against 1.0.2, the exact tag: the roots differ |
-| PASS | `compare-exact-says` | 0 | 0 | #19: the pair is SAME CONTENT, names the rename, and gives no node impact |
-| PASS | `compare-exact-json` | 1 | 1 | the same comparison as JSON |
-| PASS | `compare-exact-json-says` | 0 | 0 | #19: sameContent, the OS pack tagRenamed, max impact none |
-| PASS | `compare-floating` | 1 | 1 | 1.0.0 against 1.0.3, the floating tag: the roots differ |
-| PASS | `compare-floating-says` | 0 | 0 | #19: the floating tag is the same content too |
-| PASS | `same-release-tags` | 0 | 0 | #19: 1.0.0, 1.0.2, and 1.0.3 are one release |
-| PASS | `palette-repave-exact` | 0 | 0 | Palette: a move from 1.0.0 to 1.0.2 repaves nothing |
-| PASS | `palette-repave-floating` | 0 | 0 | Palette: a move from 1.0.0 to 1.0.3 repaves nothing |
-| PASS | `palette-repave-control` | 1 | 1 | the control: 1.0.0 with one more kubeadm command repaves |
-| PASS | `a2` | 0 | 0 | record cluster A's release selection |
-| PASS | `a2-runs-exact` | 0 | 0 | cluster A's selection is IDENTICAL to 1.0.2 |
-| PASS | `instances2` | 0 | 0 | cluster A's EC2 instances after the move |
-| PASS | `repaved-to-exact` | 1 | 1 | #19: the move to 1.0.2 kept cluster A's instances (a repave replaces them: 0) |
-| PASS | `palette-repave-back` | 0 | 0 | Palette: a move from 1.0.2 back to 1.0.0 repaves nothing |
-| PASS | `a3` | 0 | 0 | record cluster A's release selection |
-| PASS | `a3-runs-release` | 0 | 0 | cluster A's selection is IDENTICAL to 1.0.0 |
-| PASS | `instances3` | 0 | 0 | cluster A's EC2 instances after the move back |
-| PASS | `repaved-back` | 1 | 1 | #19: the move back to 1.0.0 kept cluster A's instances (a repave replaces them: 0) |
-| PASS | `retag` | 0 | 0 | #19: rename 1.0.2's OS pack tag through the API, keeping its pack uid |
-| PASS | `exact2` | 0 | 0 | record the renamed 1.0.2 |
-| PASS | `retag-kept-pack-uid` | 0 | 0 | the rename kept the pack uid |
-| PASS | `verify-exact1` | 1 | 1 | #19: verify of 1.0.2's record from before the rename reports DRIFT |
-| PASS | `verify-exact1-says` | 0 | 0 | #19: the drift names the rename, the same content, and no node impact |
-| PASS | `baseline-after` | 0 | 0 | the live example is back at its baseline |
-
-## drift-report.sh
-
-`drift-report.sh off` and `drift-report.sh on` in session `20260917T150538Z`,
-provider 0.30.1, against cluster A `fred`, with the issues in this repository
-under the label `strata-live-drift`. The two runs differ only in the
-`immutable-clusterprofiles` flag. No check failed: 28 with the flag off and 27 with
-it on. Each started from the baseline with no open issue, and restored it with
-each issue that it opened closed. `hold_versions` changed nothing with the flag
-off, and only `skip_destroy` on the four profiles with it on. The flag-on bump
-ran without `-target` (`1 added, 0 changed, 1 destroyed`).
-
-In both runs, the edit in place through the API opened one issue for the add-on
-record, the second report updated that issue, and the undo closed it. The record
-of cluster A, whose copy the edit did not reach, stayed `OK`. The bump
-differed with the flag. Without it, the bump overwrote the first add-on uid in
-place. The report opened one issue for the add-on record, whose report says the
-version "now names strata-live-addon@1.0.1 ... was overwritten in place", and one
-for the record of cluster A, whose add-on version was gone. The restore closed
-both. With the flag, the bump kept 1.0.0, and no issue opened:
-
-```text
-off  verify-report: 3 records: 2 unchanged, 1 drifted, 0 could not be checked; opened #48 for records-off/addon.json
-off  verify-report: 3 records: 1 unchanged, 2 drifted, 0 could not be checked; opened #49 for records-off/addon.json; opened #50 for records-off/cluster-a.json
-off  verify-report: 3 records: 3 unchanged, 0 drifted, 0 could not be checked; closed #49 for records-off/addon.json; closed #50 for records-off/cluster-a.json
-on   verify-report: 3 records: 3 unchanged, 0 drifted, 0 could not be checked
-```
-
-Session `20260917T133523Z` passed the same checks with provider 0.29.7 and its
-workaround (#47). The session before, `20260917T132642Z`, found two problems in
-the example, both fixed. GitHub lists a new or closed issue about five seconds
-later, so the checks now wait for the listing. The flag-on bump asked Palette to
-delete the version that cluster A runs, because the state still held
-`skip_destroy = false`.
+This is the source for
+[Cluster copies](../internals/palette.md#cluster-copies) and
+[Version bumps](../internals/palette.md#version-bumps).
 
 | Check | Flag off | Flag on | What it shows |
 |---|---|---|---|
-| `record-release` | PASS 0 | PASS 0 | record the release version |
-| `record-addon` | PASS 0 | PASS 0 | record the add-on version |
-| `record-cluster-a` | PASS 0 | PASS 0 | record cluster A |
-| `report-baseline` | PASS 0 | PASS 0 | #25: the report over the three records at the baseline |
-| `report-baseline-says` | PASS 0 | PASS 0 | every record verifies, and no issue opens |
-| `plan-edit` | PASS 2 | PASS 1 | Terraform's plan for an in-place edit of the add-on version: an update in place without the flag, a refusal with it |
-| `plan-edit-says` | PASS 0 | PASS 0 | the plan says which |
-| `api-edit` | PASS 0 | PASS 0 | edit the add-on version in place through the API, which Palette accepts whatever the flag |
-| `report-edit` | PASS 1 | PASS 1 | #25: the report after the edit exits 1 |
-| `report-edit-opened` | PASS 0 | PASS 0 | #25: it opens one issue, for the add-on record; cluster A's copy is untouched |
-| `issues-after-edit` | PASS 0 | PASS 0 | #25: one open issue, for the add-on record |
-| `issue-has-report` | PASS 0 | PASS 0 | #25: the issue holds the report of the drift |
-| `report-edit-again` | PASS 1 | PASS 1 | #25: a second report while the edit stands |
-| `report-edit-again-updated` | PASS 0 | PASS 0 | #25: it updates the issue and opens none |
-| `issues-after-edit-again` | PASS 0 | PASS 0 | #25: still exactly one open issue |
-| `api-undo` | PASS 0 | PASS 0 | undo the edit through the API |
-| `report-undo` | PASS 0 | PASS 0 | #25: the report after the undo exits 0 |
-| `report-undo-closed` | PASS 0 | PASS 0 | #25: it closes the issue |
-| `issue-edit-closed` | PASS 0 | PASS 0 | #25: the issue is closed on the host |
-| `issues-after-undo` | PASS 0 | PASS 0 | no issue is open |
-| `report-bump` | PASS 1 | PASS 0 | #25, #27: the report after the bump: drift only without the flag |
-| `report-bump-opened` | PASS 0 | PASS 0 | #25, #27: the issues the bump opens: the add-on record's and cluster A's without the flag, none with it |
-| `issues-after-bump` | PASS 0 | PASS 0 | #27, #30: without the flag, one open issue each for the add-on record and cluster A's record; with it, none |
-| `bump-issue-names-overwrite` | PASS 0 | - | #27: the add-on record's issue says the version was overwritten in place |
-| `report-restored` | PASS 0 | PASS 0 | #25: the report after the restore exits 0 |
-| `report-restored-closed` | PASS 0 | PASS 0 | #25: it closes each issue the bump opened |
-| `issues-after-restore` | PASS 0 | PASS 0 | no issue is open |
-| `baseline-after` | PASS 0 | PASS 0 | the live example is back at its baseline |
+| `a1`, `a1-addon` | 0 | 0 | record cluster A and its add-on selection |
+| `release1`, `addon1` | 0 | 0 | record the release version and the add-on version |
+| `addon1-is-1.0.0` | 0 | 0 | the add-on version is the one the run expects |
+| `a1-updates` | 0 | 0 | what waits for cluster A |
+| `a-owns-manifest-copy` | 0 | 0 | cluster A runs its own copy of the add-on manifest, not the profile's |
+| `plan-no-change` | 0 | 0 | the provider plans no change once `skip_destroy` is held for the flag |
+| `plan-edit` | 2 | 1 | #27: the provider's plan for an edit in place: an update without the flag, a refusal with it |
+| `plan-edit-says` | 0 | 0 | the plan says which |
+| `api-edit` | 0 | 0 | #27: the API accepts an edit in place, whatever the flag |
+| `a2`, `a2-addon`, `b2-addon` | 0 | 0 | record each cluster's add-on selection after the edit |
+| `addon2` | 0 | 0 | record the edited add-on version |
+| `edit-kept-manifest-uid` | 0 | 0 | the edit kept the manifest's uid, so cluster copies still name it |
+| `b-owns-manifest-copy` | 0 | 0 | cluster B was created with its own copy of the manifest |
+| `a-kept-old-content` | 0 | 0 | #27: cluster A keeps its copy from before the edit |
+| `a-vs-b` | 1 | 1 | #27: cluster A differs from cluster B, created from the edited version |
+| `a-vs-b-edited-in-place` | 0 | 0 | #27: the comparison says the version was edited in place |
+| `verify-a1` | 0 | 0 | #27: cluster A's record from before the edit still verifies |
+| `verify-release1` | 0 | 0 | #23: the release record is untouched by the add-on edit |
+| `verify-addon1` | 1 | 1 | #23: the add-on record reports `DRIFT` after its edit in place |
+| `addon1-vs-a2` | 0 | 0 | #27: the record from before the edit matches cluster A's selection |
+| `consumers-addon` | 1 | 1 | both clusters use the add-on version |
+| `apply-keeping-notification` | 0 | 0 | push the content to cluster A without resolving its notification |
+| `a-changed-without-resolve` | 1 | 1 | #27: three minutes after that push, cluster A's copy has taken the edit |
+| `apply-to-a` | 0 | 0 | #27: accept the waiting update, resolving the notification |
+| `a3`, `a3-updates` | 0 | 0 | record cluster A after the apply, and what waits for it |
+| `a3-matches-b` | 0 | 0 | #27: cluster A now runs what cluster B runs |
+| `verify-a1-after-apply` | 1 | 1 | #27: the record from before the edit reports `DRIFT` once the update is applied |
+| `addon-uid-kept` | 0 | 1 | #27: the bump keeps the uid without the flag, and makes a new one with it |
+| `addon-old4`, `addon-new4` | 0 | 0 | record what the first uid holds now, and the bumped version |
+| `a4-addon`, `b4-addon` | 0 | 0 | record each cluster's add-on selection after the bump |
+| `verify-addon1-after-bump` | 1 | 1 | #27: the record from before the edit still reports `DRIFT` |
+| `addon1-overwritten` | 0 | 1 | #27: `verify` says the recorded version was overwritten, only without the flag |
+| `a4-matches-old-version` | 1 | 0 | #23, #27: the selection equals the first uid only with the flag, which keeps the old version |
+| `a4-vs-old-json` | 1 | 0 | the same comparison as JSON |
+| `a4-names-overwrite` | 0 | 1 | #29: the comparison names the first uid as overwritten, only without the flag |
+| `a4-still-a3` | 0 | 0 | #27: the bump left cluster A as it was |
+| `verify-a3-after-bump` | 1 | 0 | #30: `verify` of cluster A's record fails only without the flag: the version it runs was overwritten |
+| `a3-names-overwritten-profile` | 0 | 1 | #30: the verify names the add-on profile, only without the flag |
+| `consumers-old` | 1 | 1 | #27: both clusters are still consumers of the first uid |
+| `consumers-old-overwritten` | 0 | 1 | #28: `consumers` marks both clusters as running a version the uid no longer names, only without the flag |
+| `clone-carried-nothing` | - | 0 | #27, #32: the flag's clone is the same release as the legacy bump of the same configuration, whatever pack uid Palette minted |
+| `clone-same-content` | - | 0 | #27: the clone has the values, manifests, and variables of the legacy bump |
+| `b-gone` | 0 | 0 | cluster B is deleted |
+| `a5-matches-addon` | 0 | 0 | cluster A runs the restored add-on version |
+| `baseline-after` | 0 | 0 | the live example is back at its baseline |
 
-### Through the reusable workflow
+## registry-move.sh
 
-The same report through `.github/workflows/verify.yml@v0.5.0`, run on 2026-09-17
-(`runs/20260917T134851Z/workflow/`) with [act](https://github.com/nektos/act)
-0.2.82 and the runner image `catthehacker/ubuntu:gh-latest`, which has `gh` as
-the runners of GitHub do. The caller was a scratch repository whose `origin` is
-this repository, with one record of the add-on version and this workflow:
+Publishes a version that takes every pack from the pack registry, then bumps it
+with the CSI pack re-pinned to an OCI registry. It runs with the flag on, so the
+bump makes a new version and keeps the old one. The source for
+[A pack that moves between registries](../internals/palette.md#a-pack-that-moves-between-registries).
 
-```yaml
-name: strata drift
-# A caller of the reusable verify workflow, run with act for #25.
-on:
-  workflow_dispatch:
-permissions:
-  contents: read
-  issues: write
-jobs:
-  strata:
-    uses: como-technologies/strata/.github/workflows/verify.yml@v0.5.0
-    with:
-      records: records/*.json
-      label: strata-live-drift
-      strata-version: v0.5.0
-    secrets:
-      strata-token: ${{ secrets.STRATA_READ_TOKEN }}
-      palette-api-key: ${{ secrets.PALETTE_API_KEY }}
-```
+| Check | Expected exit | What it shows |
+|---|---|---|
+| `plan-no-change` | 0 | the provider plans no change once `skip_destroy` is held for the flag |
+| `move1` | 0 | record the first version, every pack from the pack registry |
+| `move-new-uid` | 1 | the flag made the bump a new profile version |
+| `move1-kept` | 0 | the first version is still there, unchanged |
+| `move2` | 0 | record the bumped version |
+| `move2-csi-is-oci` | 0 | its CSI pack comes from the OCI registry |
+| `compare-move` | 1 | every field that differs between the two records |
+| `same-release-exact` | 1 | an exact check fails: the registry moved |
+| `same-release-registry-move` | 0 | #24: the registry-move policy passes a real move, which changes the pack type |
+| `api-edit-move2` | 0 | edit the moved version's CSI values through the API |
+| `move2-edited` | 0 | record the edited version |
+| `same-release-after-edit` | 1 | #24: the policy fails the pair after an edit in place |
+| `edit-is-authored` | 0 | the reason names the `AUTHORED` change |
+| `delete-move2`, `delete-move1` | 0 | delete both versions |
+| `baseline-after` | 0 | the live example is back at its baseline |
 
-```bash
-act workflow_dispatch -W .github/workflows/drift.yml -P ubuntu-latest=catthehacker/ubuntu:gh-latest --secret-file <file with GITHUB_TOKEN, STRATA_READ_TOKEN, PALETTE_API_KEY>
-```
+## tag-only.sh
 
-Each run checked out the caller and this repository at `v0.5.0`, downloaded the
-`v0.5.0` binary, checked it against `SHA256SUMS`, and ran the script. At the
-baseline, the job succeeded and opened nothing. After an edit in place through
-`api.sh edit`, it opened issue #46 with the report, and the job failed with exit
-1. After the undo, it closed #46 and succeeded:
+Publishes two versions that differ from the first only in the tag of the OS
+pack, one an exact tag and one a floating tag. It moves a cluster to one of them
+and back, holding each state long enough for a repave to show, and then renames
+a tag on a published version through the API. The source for
+[Tag names](../internals/palette.md#tag-names).
 
-```text
-baseline  verify-report: 1 records: 1 unchanged, 0 drifted, 0 could not be checked
-edited    verify-report: 1 records: 0 unchanged, 1 drifted, 0 could not be checked; opened #46 for records/addon.json
-edited    exitcode '1': failure
-undone    verify-report: 1 records: 1 unchanged, 0 drifted, 0 could not be checked; closed #46 for records/addon.json
-```
+| Check | Expected exit | What it shows |
+|---|---|---|
+| `release1`, `exact1`, `floating1` | 0 | record the three versions |
+| `a1`, `instances1` | 0 | record the cluster's selection and its EC2 instances before any move |
+| `os-packs` | 0 | the tag, version, and pack uid that Palette stored for each version |
+| `one-build` | 0 | Palette stored the authored tag, with one pack uid and version behind all three |
+| `compare-exact` | 1 | the exact tag: the roots differ |
+| `compare-exact-says` | 0 | #19: the pair is `SAME CONTENT`, names the rename, and gives no node impact |
+| `compare-exact-json`, `compare-exact-json-says` | 1, 0 | #19: the same as JSON: `sameContent`, the OS pack `tagRenamed`, max impact none |
+| `compare-floating`, `compare-floating-says` | 1, 0 | #19: the floating tag is the same content too |
+| `same-release-tags` | 0 | #19: the three versions are one release |
+| `palette-repave-exact`, `palette-repave-floating` | 0 | Palette repaves nothing for a move between them |
+| `palette-repave-control` | 1 | the control, one more kubeadm command, does repave |
+| `a2`, `a2-runs-exact`, `instances2` | 0 | after the move, the selection is `IDENTICAL` to the target |
+| `repaved-to-exact` | 1 | #19: the move kept the cluster's instances |
+| `palette-repave-back` | 0 | Palette repaves nothing for the move back |
+| `a3`, `a3-runs-release`, `instances3` | 0 | after the move back, the selection is `IDENTICAL` to the first version |
+| `repaved-back` | 1 | #19: the move back kept the instances |
+| `retag` | 0 | #19: rename a published version's OS pack tag through the API, keeping its pack uid |
+| `exact2`, `retag-kept-pack-uid` | 0 | record the renamed version; the rename kept the pack uid |
+| `verify-exact1` | 1 | #19: `verify` of the record from before the rename reports `DRIFT` |
+| `verify-exact1-says` | 0 | #19: the drift names the rename, the same content, and no node impact |
+| `baseline-after` | 0 | the live example is back at its baseline |
+
+## drift-report.sh
+
+Runs `scripts/ci/verify-report.sh` around an edit in place and a version bump,
+with the flag off and on, against real GitHub issues under a label. It starts
+from a baseline with no open issue and restores it, closing each issue it
+opened. GitHub lists a new or closed issue about five seconds later, so the
+checks wait for the listing.
+
+| Check | Flag off | Flag on | What it shows |
+|---|---|---|---|
+| `record-release`, `record-addon`, `record-cluster-a` | 0 | 0 | record the two versions and the cluster |
+| `report-baseline`, `report-baseline-says` | 0 | 0 | #25: at the baseline every record verifies, and no issue opens |
+| `plan-edit`, `plan-edit-says` | 2, 0 | 1, 0 | the provider's plan for the edit: an update without the flag, a refusal with it |
+| `api-edit` | 0 | 0 | the API accepts the edit whatever the flag |
+| `report-edit` | 1 | 1 | #25: the report after the edit exits 1 |
+| `report-edit-opened` | 0 | 0 | #25: it opens one issue, for the add-on record; the cluster's copy is untouched |
+| `issues-after-edit`, `issue-has-report` | 0 | 0 | #25: one open issue, holding the report of the drift |
+| `report-edit-again`, `report-edit-again-updated` | 1, 0 | 1, 0 | #25: a second report updates that issue and opens none |
+| `issues-after-edit-again` | 0 | 0 | #25: still exactly one open issue |
+| `api-undo`, `report-undo`, `report-undo-closed` | 0 | 0 | #25: the undo makes the report pass again, and closes the issue |
+| `issue-edit-closed`, `issues-after-undo` | 0 | 0 | #25: the issue is closed on the host, and none is open |
+| `report-bump` | 1 | 0 | #25, #27: the report after the bump: drift only without the flag |
+| `report-bump-opened` | 0 | 0 | #25, #27: without the flag it opens an issue for the add-on record and one for the cluster's; with it, none |
+| `issues-after-bump` | 0 | 0 | #27, #30: the open issues match that |
+| `bump-issue-names-overwrite` | 0 | - | #27: the add-on record's issue says the version was overwritten in place |
+| `report-restored`, `report-restored-closed` | 0 | 0 | #25: the restore makes the report pass, and closes each issue the bump opened |
+| `issues-after-restore`, `baseline-after` | 0 | 0 | no issue is open, and the example is back at its baseline |
+
+The same report runs through the reusable workflow
+`.github/workflows/verify.yml`, driven by
+[act](https://github.com/nektos/act) against a scratch caller repository. The
+job checks out the caller and this repository at the release tag, downloads that
+release's binary, checks it against `SHA256SUMS`, and runs the script. At the
+baseline it succeeds and opens nothing; after an edit in place it opens an issue
+with the report and fails with exit 1; after the undo it closes the issue and
+succeeds.
+
+## merge-gate.sh
+
+Builds a local repository with a bare origin, so the fetch and the merge are
+real git and every record and verify is live. The default branch pins one
+version and then a newer one, and a branch pins the older one again. The source
+for [The merge gate](../automation/merge-gate.md).
+
+| Check | Expected exit | What it shows |
+|---|---|---|
+| `record-newer`, `record-older`, `record-addon` | 0 | #57: record the version each side pins |
+| `behind` | 1 | #57: the gate is red: the merge result pins the earlier version |
+| `behind-says` | 0 | #57: the report names the record and both versions |
+| `behind-evidence` | 0 | #57: the evidence says the default branch pinned this release before |
+| `behind-declares` | 0 | #57: the report gives the line that declares a rollback |
+| `declared`, `declared-says` | 0 | #57: the gate passes once the commit declares the rollback, and names it one |
+| `api-edit` | 0 | #57: edit a pinned version in place through the API |
+| `drifted` | 1 | #57: the gate is red on a record that Palette no longer matches |
+| `drifted-says` | 0 | #57: the report names the record that does not verify |
+| `drifted-keeps-rollback` | 0 | #57: the declared rollback still passes; only the record fails |
+| `api-undo`, `restored` | 0 | #57: the gate passes again once Palette matches the record |
 
 ## packs.sh
 
-The pack ref checks (#55) and the `packs` checks (#54), run `20260918T022255Z`
-with strata 0.5.2: read-only, no cluster, no cost. `just live-packs`. All 27
-checks passed. Run `20260918T003543Z` passed the first 15 of them, before the
-script got the `packs` checks.
+Read-only, with no cluster and no cost. It reads pack versions from the
+registries the tenant can see, including one pack that two registries hold.
 
-`packs-paged` read `kubernetes` from `Public Repo`, which answered with 133
-versions, so the listing passes the 100 of one page.
+| Check | Expected exit | What it shows |
+|---|---|---|
+| `list-packs` | 0 | #55: the profiles list the pack versions they pin |
+| `compare-versions`, `compare-json` | 1 | #55: two versions of one pack differ, and the document names the pack on both sides |
+| `compare-same` | 0 | #55: a pack version against itself is identical |
+| `record`, `record-title` | 0 | #55: `snapshot` writes a record of a pack version, which names the pack and not a profile |
+| `verify-record` | 0 | #55: the record verifies against the registry it came from |
+| `latest`, `latest-is-newest` | 0 | #55: `@latest` resolves to the newest version the registry offers |
+| `two-registries`, `two-registries-says` | 2, 0 | #55: a bare ref for a pack in two registries is an error that names both, and the ref that fixes it |
+| `other-registry`, `registries-differ` | 0, 1 | #55: the version reads from either registry, and the two hold different builds |
+| `unknown-version`, `unknown-registry` | 2 | #55: a version or a registry the tenant does not have is an error |
+| `packs-one`, `packs-newest` | 0 | #54: `packs` lists a registry's versions newest first, and the newest carries the floating tag |
+| `packs-latest`, `packs-two-registries` | 0 | #54: `--latest` gives one line for each registry that has the pack |
+| `packs-paged`, `packs-paged-count` | 0 | #54: a pack with more than 100 versions lists completely, past the 100 of one page |
+| `packs-cloud` | 0 | #54: `--cloud` keeps the versions of one cloud |
+| `packs-cloud-none`, `packs-cloud-none-says` | 0 | #54: a cloud no version supports is an empty answer, not an error, and it says so |
+| `packs-json` | 0 | #54: `--json` writes `strata-packs/1` |
+| `packs-unknown-registry`, `packs-unknown-pack` | 2 | #54: an unknown registry lists the visible ones; a pack no registry has is `pack-not-found` |
 
-The tenant holds `csi-aws-ebs` in two registries, `Public Repo` and the OCI
-registry `Palette Registry` that the registry-move run added, so a bare
-`pack:csi-aws-ebs@1.63.1` is ambiguous and every reading ref names its registry:
+Palette lists the registries of a tenant in no fixed order, so strata sorts them
+and the ambiguous-ref message reads the same every time:
 
 ```text
 strata: pack 'csi-aws-ebs' at version '1.63.1' is in several registries: Palette Registry, Public Repo; name one, as in pack:<registry>/csi-aws-ebs@1.63.1
 ```
 
-The first run of this script printed those two names in the other order, because
-Palette lists the registries in the order it likes. Strata now sorts them, so
-the message reads the same on every run.
+## What has no live run
 
-| result | check | expected exit | got | what it shows |
-|---|---|---|---|---|
-| PASS | `list-packs` | 0 | 0 | #55: the profiles list the pack versions they pin |
-| PASS | `compare-versions` | 1 | 1 | #55: pack:Public Repo/csi-aws-ebs@1.63.1 against @1.65.0 differs |
-| PASS | `compare-json` | 1 | 1 | #55: the diff document names the pack on both sides |
-| PASS | `compare-same` | 0 | 0 | #55: pack:Public Repo/csi-aws-ebs@1.65.0 against itself is identical |
-| PASS | `record` | 0 | 0 | #55: snapshot writes a record of a pack version |
-| PASS | `record-title` | 0 | 0 | #55: the record names the pack, not a profile |
-| PASS | `verify-record` | 0 | 0 | #55: the record verifies against the registry it came from |
-| PASS | `latest` | 0 | 0 | #55: pack:Public Repo/csi-aws-ebs@latest resolves to a version |
-| PASS | `latest-is-newest` | 0 | 0 | #55: latest gives the newest version the registry offers |
-| PASS | `two-registries` | 2 | 2 | #55: a bare ref for a pack in two registries is an error that names both |
-| PASS | `two-registries-says` | 0 | 0 | #55: the error names each registry and the ref that fixes it |
-| PASS | `other-registry` | 0 | 0 | #55: the same pack version reads from the other registry too |
-| PASS | `registries-differ` | 1 | 1 | #55: the two registries hold different builds of the version |
-| PASS | `unknown-version` | 2 | 2 | #55: a version the registry does not have is an error |
-| PASS | `unknown-registry` | 2 | 2 | #55: a registry the tenant does not have is an error |
-| PASS | `packs-one` | 0 | 0 | #54: packs lists the versions of one registry, newest first |
-| PASS | `packs-newest` | 0 | 0 | #54: the newest version is the first line, and it carries the floating tag |
-| PASS | `packs-latest` | 0 | 0 | #54: --latest gives one line for each registry that has the pack |
-| PASS | `packs-two-registries` | 0 | 0 | #54: both registries of this tenant answer |
-| PASS | `packs-paged` | 0 | 0 | #54: a pack with more than 100 versions lists completely |
-| PASS | `packs-paged-count` | 0 | 0 | #54: the listing passes the 100 of one page |
-| PASS | `packs-cloud` | 0 | 0 | #54: --cloud keeps the versions of one cloud |
-| PASS | `packs-cloud-none` | 0 | 0 | #54: a cloud no version supports is an empty answer, not an error |
-| PASS | `packs-cloud-none-says` | 0 | 0 | #54: and it says so |
-| PASS | `packs-json` | 0 | 0 | #54: --json writes strata-packs/1 |
-| PASS | `packs-unknown-registry` | 2 | 2 | #54: an unknown registry is an error that lists the visible ones |
-| PASS | `packs-unknown-pack` | 2 | 2 | #54: a pack no registry has is pack-not-found |
-
-## merge-gate.sh
-
-The merge gate (#57), run `20260918T003905Z` with strata 0.5.2: the live
-profiles, no cluster, and one in-place edit that the run undoes. `just
-live-merge-gate`. All 15 checks passed.
-
-The repository is local, with a bare origin, so the fetch and the merge are real
-git; every record and every verify is live. Main pinned
-`strata-live-profile@1.0.0` and then `@1.0.1`, and the branch pins `1.0.0`
-again:
-
-```text
-BEHIND: releases/dev.json would replace what main pinned with an older version
-  the profile: main has 1.0.1, the merge result has 1.0.0
-  main pinned this release before, on 2026-09-17 in 53e65a4
-  the branch wrote this record after main moved to strata-live-profile@1.0.1
-  a rollback says so, in a commit of the branch:
-    Rollback: releases/dev.json to strata-live-profile@1.0.0
-  or in the rollback label, which gives the job --allow-rollback.
-```
-
-With the rollback declared in the branch's commit, the gate passes. Then the
-add-on version is edited in place through the API, and the gate goes red on a
-record that git cannot fault, while the declared rollback still passes:
-
-```text
-DRIFTED: releases/addon.json does not verify; a cluster built from it would not get what it says
-  strata-live-addon@1.0.0 (uid 6aac455cb6a81bf97d926581)  ->  strata-live-addon@1.0.0 (uid 6aac455cb6a81bf97d926581)
-  root       2d6991fdf460 -> e264fb17e249   CHANGED
-  note       both sides are strata-live-addon@1.0.0 (uid 6aac455cb6a81bf97d926581): the version was edited in place
-```
-
-| result | check | expected exit | got | what it shows |
-|---|---|---|---|---|
-| PASS | `record-newer` | 0 | 0 | #57: record strata-live-profile@1.0.1, which main pins |
-| PASS | `record-addon` | 0 | 0 | #57: record strata-live-addon@1.0.0, which both sides pin |
-| PASS | `record-older` | 0 | 0 | #57: record strata-live-profile@1.0.0, which the branch pins |
-| PASS | `behind` | 1 | 1 | #57: the gate is red: the merge result pins the earlier version |
-| PASS | `behind-says` | 0 | 0 | #57: the report names the record and both versions |
-| PASS | `behind-evidence` | 0 | 0 | #57: the evidence says main pinned this release before |
-| PASS | `behind-declares` | 0 | 0 | #57: the report gives the line that declares a rollback |
-| PASS | `declared` | 0 | 0 | #57: the gate passes once the commit declares the rollback |
-| PASS | `declared-says` | 0 | 0 | #57: the report names it a rollback, declared in a commit |
-| PASS | `api-edit` | 0 | 0 | #57: edit the add-on version in place through the API |
-| PASS | `drifted` | 1 | 1 | #57: the gate is red on a record Palette no longer matches |
-| PASS | `drifted-says` | 0 | 0 | #57: the report names the record that does not verify |
-| PASS | `drifted-keeps-rollback` | 0 | 0 | #57: the declared rollback still passes; only the record fails |
-| PASS | `api-undo` | 0 | 0 | #57: undo the edit through the API |
-| PASS | `restored` | 0 | 0 | #57: the gate passes again once Palette matches the record |
-
-## in-place.sh
-
-`in-place.sh off` and `in-place.sh on` in session `20260917T151426Z`, provider
-0.30.1, against cluster A `fred`, with cluster B `barney` created and deleted in
-each. The two runs differ only in the `immutable-clusterprofiles` flag. Both edit
-the add-on version through the API, and `plan-edit` records what the provider
-does with the same edit. Each started from the baseline and restored it
-(`baseline-after`). No check failed: 51 with the flag off and 53 with it on.
-Each apply took the flag of the run with no `-target`, except the restore of the
-baseline. With the flag on, `hold_versions` changed only `skip_destroy` on the
-four profiles. The apply that created cluster B after the edit through the API
-changed no profile. The bump kept the first add-on uid (`1 added, 0 changed, 1
-destroyed`). Each deletion of cluster B finished with no help, in 19m1s and
-19m44s. Each answer is the answer that session `20260917T031126Z` recorded with
-provider 0.29.7 and its workaround, except `plan-no-change`, which that provider
-refused with the flag on. [What Palette does](../internals/palette.md#cluster-copies)
-states what the answers show.
-
-| Check | Flag off | Flag on | What it shows |
-|---|---|---|---|
-| `a1` | PASS 0 | PASS 0 | record cluster A |
-| `a1-addon` | PASS 0 | PASS 0 | record cluster A's add-on selection |
-| `release1` | PASS 0 | PASS 0 | record the release version |
-| `addon1` | PASS 0 | PASS 0 | record the add-on version |
-| `addon1-is-1.0.0` | PASS 0 | PASS 0 | the add-on version is 1.0.0 |
-| `a1-updates` | PASS 0 | PASS 0 | what waits for cluster A |
-| `a-owns-manifest-copy` | PASS 0 | PASS 0 | cluster A runs its own copy of the add-on manifest, not the profile's |
-| `plan-no-change` | PASS 0 | PASS 0 | Terraform plans no change once skip_destroy is held for the flag |
-| `plan-edit` | PASS 2 | PASS 1 | #27: Terraform's plan for an in-place edit of the add-on version: an update in place without the flag, a refusal with it |
-| `plan-edit-says` | PASS 0 | PASS 0 | the plan says which |
-| `api-edit` | PASS 0 | PASS 0 | #27: edit the add-on version in place through the API |
-| `a2` | PASS 0 | PASS 0 | record cluster A again, applying nothing |
-| `a2-addon` | PASS 0 | PASS 0 | record cluster A's add-on selection |
-| `b2-addon` | PASS 0 | PASS 0 | record cluster B's add-on selection |
-| `addon2` | PASS 0 | PASS 0 | record the edited add-on version |
-| `edit-kept-manifest-uid` | PASS 0 | PASS 0 | the edit kept the add-on manifest's uid, so cluster copies still name it |
-| `a2-updates` | PASS 0 | PASS 0 | what waits for cluster A |
-| `b-owns-manifest-copy` | PASS 0 | PASS 0 | cluster B was created with its own copy of the add-on manifest |
-| `a-kept-old-content` | PASS 0 | PASS 0 | #27: cluster A keeps its copy from before the edit |
-| `a-vs-b` | PASS 1 | PASS 1 | #27: cluster A differs from cluster B, created from the edited version |
-| `a-vs-b-edited-in-place` | PASS 0 | PASS 0 | #27: the comparison says the version was edited in place |
-| `verify-a1` | PASS 0 | PASS 0 | #27: cluster A's record from before the edit still verifies |
-| `verify-release1` | PASS 0 | PASS 0 | #23: the release record is untouched by the add-on edit |
-| `verify-addon1` | PASS 1 | PASS 1 | #23: the add-on record reports DRIFT after its in-place edit |
-| `addon1-vs-a2` | PASS 0 | PASS 0 | #27: the add-on record from before the edit matches cluster A's selection |
-| `consumers-addon` | PASS 1 | PASS 1 | both clusters use the add-on version |
-| `apply-keeping-notification` | PASS 0 | PASS 0 | push the add-on's content to cluster A without resolving its notification |
-| `a-changed-without-resolve` | PASS 1 | PASS 1 | #27: three minutes after that push, cluster A's copy has taken the edit |
-| `apply-to-a` | PASS 0 | PASS 0 | #27: accept the waiting update on cluster A, resolving the notification |
-| `a3` | PASS 0 | PASS 0 | record cluster A after the apply |
-| `a3-updates` | PASS 0 | PASS 0 | what waits for cluster A |
-| `a3-matches-b` | PASS 0 | PASS 0 | #27: after the apply, cluster A runs what cluster B runs |
-| `verify-a1-after-apply` | PASS 1 | PASS 1 | #27: once the update is applied, cluster A's record from before the edit reports DRIFT |
-| `addon-uid-kept` | PASS 0 | PASS 1 | #27: the bump keeps the add-on uid without the flag and makes a new one with it |
-| `addon-old4` | PASS 0 | PASS 0 | record what the first add-on uid holds now |
-| `addon-new4` | PASS 0 | PASS 0 | record the bumped add-on version |
-| `a4-addon` | PASS 0 | PASS 0 | record cluster A's add-on selection |
-| `b4-addon` | PASS 0 | PASS 0 | record cluster B's add-on selection |
-| `verify-addon1-after-bump` | PASS 1 | PASS 1 | #27: the add-on record from before the edit still reports DRIFT |
-| `addon1-overwritten` | PASS 0 | PASS 1 | #27: verify says the recorded version was overwritten, only without the flag |
-| `a4-matches-old-version` | PASS 1 | PASS 0 | #23, #27: cluster A's selection equals the first add-on uid only with the flag, which keeps the old version |
-| `a4-vs-old-json` | PASS 1 | PASS 0 | the same comparison as JSON |
-| `a4-names-overwrite` | PASS 0 | PASS 1 | #29: the comparison names the first add-on uid as overwritten in place, only without the flag |
-| `a4-still-a3` | PASS 0 | PASS 0 | #27: the bump left cluster A as it was |
-| `verify-a3-after-bump` | PASS 1 | PASS 0 | #30: verify of cluster A's record from stage 3 fails only without the flag: the version it runs was overwritten |
-| `a3-names-overwritten-profile` | PASS 0 | PASS 1 | #30: the verify names the add-on profile, only without the flag |
-| `consumers-old` | PASS 1 | PASS 1 | #27: both clusters are still consumers of the first add-on uid |
-| `consumers-old-overwritten` | PASS 0 | PASS 1 | #28: consumers of the first add-on uid marks both clusters as running a version it no longer names, only without the flag |
-| `clone-carried-nothing` | - | PASS 0 | #27, #32: the flag's clone is the same release as the legacy bump of the same configuration, whatever packUid Palette minted |
-| `clone-same-content` | - | PASS 0 | #27: the clone has the values, manifests, and variables of the legacy bump of the same configuration |
-| `b-gone` | PASS 0 | PASS 0 | cluster B is deleted |
-| `a5-matches-addon` | PASS 0 | PASS 0 | cluster A runs the restored add-on version |
-| `baseline-after` | PASS 0 | PASS 0 | the live example is back at its baseline |
-
-## The earlier runs that the notes cite
-
-[What Palette does](../internals/palette.md) states some results from runs
-before the ones above. Each one is a run of a script on this page, with an
-earlier strata or an earlier fixture. The rows are here so that each run id in
-the book has a record.
-
-| Run | Script, strata | Result | What the notes take from it |
-| --- | --- | --- | --- |
-| `20260916T175442Z` | `verify.sh`, 0.4.0 | 21 of 21 passed | The pack-ref digest table: a `spectro`, a `helm`, and an `oci` pack, each with the digest that Palette lists and the registry serves. |
-| `20260916T213303Z` | `in-place.sh off`, 0.4.0 | 26 of 26 passed | The first session of the edit in place. It gave the answers that the later sessions gave again. |
-| `20260916T233556Z` | `registry-move.sh`, 0.4.0 | 14 checks, one failed | The move policy needed an equal pack type, from a fixture that rewrote only the uids and the digests. The real pair failed with `IDENTITY: type spectro -> oci`. |
-| `20260916T233714Z` | `in-place.sh on`, 0.4.0 | 22 of 22 passed | The edit sent a manifest with no uid, so Palette replaced the manifest. `api.sh edit` keeps the uids since then. |
-| `20260917T003010Z` | `registry-move.sh`, 0.4.0 | 15 of 15 passed | The same move after the policy fix. |
-| `20260917T003054Z` | `in-place.sh on`, 0.4.0 | 44 of 44 passed | The second session of the edit in place, with the same answers. |
-| `20260918T020941Z` | a registry probe, read-only | no checks | What `GET /v1/packs/<name>/registries/<uid>` answers for one pack: `csi-aws-ebs` in `Public Repo`, 36 versions and 71 tags in about 1 MB. |
-
-The probe is not a script of the example. It is one read of the registry API,
-kept under `runs/20260918T020941Z/registry-probe/`, which
-[What a registry answers about a pack](../internals/palette.md#what-a-registry-answers-about-a-pack)
-describes.
+- The scripts that write to the tenant have run under Terraform. The example
+  uses OpenTofu now, with the same provider, and `verify.sh` gives the same
+  answers under both. The writing scripts have no OpenTofu run yet.
+- [What Palette does](../internals/palette.md#what-no-run-covers) lists the
+  behaviors that no script here establishes.

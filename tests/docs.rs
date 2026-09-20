@@ -144,29 +144,27 @@ fn every_page_the_navigation_names_exists() {
     );
 }
 
-/// Rule 6 of the documentation rules: a live result is recorded with its run id in
-/// `internals/palette.md` and in `development/live-runs.md`. A page that cites a run the record
-/// does not hold sends the reader to nothing. Seven ids were only on the notes page.
+/// Rule 6 of the documentation rules: a live result is a fact, with no run id and no date. A
+/// reader cannot look a run id up, and a date tells them nothing about what strata does now. The
+/// pages once carried more than twenty of them, which said only when somebody happened to run
+/// the example.
 #[test]
-fn every_run_id_the_book_cites_has_a_record_in_live_runs() {
-    let runs = read(&docs().join("development/live-runs.md"));
-    let mut cited = BTreeSet::new();
+fn no_page_cites_a_run_id() {
+    let mut cited = Vec::new();
     for entry in walk(&docs()) {
         if entry.extension().is_none_or(|e| e != "md") {
             continue;
         }
         for id in run_ids(&read(&entry)) {
-            cited.insert((id, entry.clone()));
+            cited.push(format!("{}: {id}", entry.display()));
         }
     }
-    assert!(cited.len() > 10, "only {} run ids found", cited.len());
-    for (id, page) in &cited {
-        assert!(
-            runs.contains(id.as_str()),
-            "{} cites run {id}, which live-runs.md does not record",
-            page.display()
-        );
-    }
+    assert!(
+        cited.is_empty(),
+        "a run id is provenance, and not something a reader can use. State what the run \
+         established, in the present tense, and put the check in live-runs.md:\n  {}",
+        cited.join("\n  ")
+    );
 }
 
 /// `strata schema` grew the kind `packs`, and the two hand-written tables that list the kinds did

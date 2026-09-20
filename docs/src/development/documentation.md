@@ -30,9 +30,11 @@ cargo install mdbook mdbook-mermaid mdbook-gruvbox mdbook-lint
 4. **Do not show internal names to a user.** The root is a digest. Only
    [The hashes and the root](../internals/hashes.md) names the Merkle tree.
 5. **Put each fact in one place.** Link to it from other pages.
-6. **Record a live result with its run id** in
-   [What Palette does](../internals/palette.md) and
-   [Live runs](./live-runs.md).
+6. **State a live result as a fact** in
+   [What Palette does](../internals/palette.md), and add the check that
+   establishes it to
+   [What the live example verifies](./live-runs.md). Neither page tells the
+   reader which day a run happened on.
 
 ## Where a page goes
 
