@@ -493,6 +493,13 @@ impl Runner {
             ));
         }
         self.check_seeds();
+        let problems = crate::checks::check(&self.repo);
+        if !problems.is_empty() {
+            for problem in &problems {
+                eprintln!("docs-examples: {problem}");
+            }
+            std::process::exit(1);
+        }
         let dest = self.repo.join("docs/src/output");
         let files = sorted_files(&self.out);
         if self.mode == Mode::Check {

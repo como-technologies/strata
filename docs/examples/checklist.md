@@ -63,8 +63,8 @@ In the order the book teaches them.
 
 ## What a walk found twice
 
-`docs/examples/check-pages.sh` holds each rule that two walks found broken on
-two pages. `just docs-check` runs it. Add a rule there rather than remember it.
+`xtask/src/checks.rs` holds each rule that two walks found broken on two pages.
+`just docs-check` runs it. Add a rule there rather than remember it.
 
 ## What a walk cannot reach
 

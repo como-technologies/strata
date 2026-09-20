@@ -96,4 +96,4 @@ so the pair fails and the reason names the value.
 
 A real move to an OCI registry changes the pack type from `spectro` to `oci`,
 and the registry uid, pack uid, and digest. See
-[What Palette does: a registry move](../internals/palette.md#a-registry-move).
+[What Palette does: a pack that moves between registries](../internals/palette.md#a-pack-that-moves-between-registries).

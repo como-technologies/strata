@@ -12,6 +12,7 @@
 mod backlog;
 mod book;
 mod chapters;
+mod checks;
 mod palette;
 mod tenant;
 

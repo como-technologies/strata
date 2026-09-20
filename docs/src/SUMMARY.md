@@ -70,8 +70,8 @@
 # Development
 
 - [Build and test](./development/build-test.md)
+- [Release](./development/release.md)
 - [Write the documentation](./development/documentation.md)
 - [The offline examples](./development/examples.md)
 - [The live example](./development/live-example.md)
 - [Live runs](./development/live-runs.md)
-- [Release](./development/release.md)

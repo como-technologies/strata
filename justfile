@@ -77,7 +77,6 @@ stand-in:
 # Fail when docs/src/output/ is not the output of this build of strata
 docs-check: examples stand-in
     cargo run --quiet -p xtask -- docs-examples --check
-    docs/examples/check-pages.sh
 
 # Test each link of the book with mdbook-lint
 docs-lint:
