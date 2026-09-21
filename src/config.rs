@@ -20,7 +20,7 @@ const MAX_RETRY_AFTER_VAR: &str = "STRATA_MAX_RETRY_AFTER";
 const DEFAULT_MAX_RETRY_AFTER: Duration = Duration::from_secs(300);
 
 /// Connection settings for one Palette tenant or project.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Config {
     /// The tenant or project API key, sent as the `ApiKey` header.
     pub api_key: String,
@@ -43,6 +43,24 @@ pub struct Config {
     /// The longest `Retry-After` strata waits for; a longer one fails the request at once.
     /// `STRATA_MAX_RETRY_AFTER` in seconds, default five minutes.
     pub max_retry_after: Duration,
+}
+
+// Written by hand, and not derived: a derived Debug prints `api_key`. One `{:?}` on a Config, in
+// this crate or in a program that uses it as a library, would put the key in a log or on a
+// terminal. The key is the one secret strata holds, so it never leaves this type.
+impl std::fmt::Debug for Config {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Config")
+            .field("api_key", &"<redacted>")
+            .field("base_url", &self.base_url)
+            .field("project_uid", &self.project_uid)
+            .field("project_name", &self.project_name)
+            .field("shadowed_project_name", &self.shadowed_project_name)
+            .field("timeout", &self.timeout)
+            .field("retries", &self.retries)
+            .field("max_retry_after", &self.max_retry_after)
+            .finish()
+    }
 }
 
 impl Config {
@@ -344,6 +362,19 @@ mod tests {
         );
         assert_eq!(parse_dotenv(text, "EMPTY"), None);
         assert_eq!(parse_dotenv(text, "MISSING"), None);
+    }
+
+    #[test]
+    fn the_debug_of_a_config_hides_the_api_key() {
+        let cfg = Config::new("https://api.example.com", "the-key-value-itself");
+        let shown = format!("{cfg:?}");
+        assert!(
+            !shown.contains("the-key-value-itself"),
+            "the Debug of Config shows the key: {shown}"
+        );
+        assert!(shown.contains("<redacted>"), "{shown}");
+        // Every other setting still prints, so the Debug keeps its use.
+        assert!(shown.contains("api.example.com"), "{shown}");
     }
 }
 
