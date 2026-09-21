@@ -8,8 +8,8 @@
 # merge-gate.sh and verify-report.sh into DIR (default .strata), checks the checksums, and prints
 # the path of the binary. A job then sets STRATA_BIN to that path and runs DIR/<script>.
 #
-# --bin-only keeps the binary alone, for a person installing into a directory on their PATH. The
-# checksums are still checked before anything is installed.
+# --bin-only installs the binary alone, into a directory on your PATH. The installer checks the
+# checksums before it installs any file.
 #
 # --version defaults to STRATA_VERSION, and latest means the latest release. A private repository
 # needs a token that can read it in STRATA_TOKEN, GITHUB_TOKEN or GH_TOKEN; a public one needs no

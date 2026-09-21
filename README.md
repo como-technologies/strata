@@ -46,11 +46,13 @@ Run `strata --help` for the list, and `strata <command> --help` for the options.
 ## Install
 
 ```bash
-v=v0.7.1; t=x86_64-unknown-linux-musl
-gh release download $v --repo como-technologies/strata --pattern strata-$t --pattern SHA256SUMS
-sha256sum --check --ignore-missing SHA256SUMS
-chmod +x strata-$t && sudo mv strata-$t /usr/local/bin/strata
+gh release download --repo como-technologies/strata --pattern install-strata.sh -O - \
+  | GH_TOKEN=$(gh auth token) bash -s -- --bin-only --dir ~/.local/bin
 ```
+
+The installer finds the binary for this machine and checks it against
+`SHA256SUMS`. It installs `strata` alone. To install one release, add
+`--version v0.7.0`. The default is the latest release.
 
 [Install](docs/src/install.md) gives the other platforms, the signature check,
 and the source build.
