@@ -10,8 +10,19 @@ program can use the same parts:
 | `diff::compute` | The comparison of two snapshots. |
 | `render::Renderer` | The terminal, markdown, and JSON output. |
 | `ops` | The operations of the commands: `compare`, `verify`, `same_release`, `consumers`, `list`. |
+| `Snapshot::content_digest` | The digest of what a version is. See [The content digest](../internals/hashes.md#the-content-digest). |
+| `Snapshot::pins` | Each pack that a version takes from a registry: its name, its version, and its digest. |
+| `Snapshot::each_from_cluster` | A snapshot for each profile that a cluster applies, from one read of the cluster. |
+| `Error::class` | `Transient`, `Terminal`, or `Unknown`: what a caller does before it tries again. `Retry` uses the same rule. |
 
 The command line adds only the arguments, the output, and the exit codes.
+
+## Pin a version by digest
+
+A program that promotes a version, or that compares two environments, needs two
+answers. `snapshot.root` says if one object changed. `snapshot.content_digest()`
+says if two objects are the same version. Keep the root to verify a record, and
+compare content digests across registries, projects, and tenants.
 
 ## Add the dependency
 

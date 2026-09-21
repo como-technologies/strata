@@ -22,6 +22,11 @@ A record of one profile version or cluster.
 
 - `root`: the sha256 digest of the release. See
   [The hashes and the root](../internals/hashes.md).
+- `contentDigest`: the sha256 digest of what the version is, without the ids
+  that Palette gives. Two publishes of one definition have two roots and one
+  content digest. An older record has no such field, and the library calculates
+  the digest from the pack hashes. See
+  [The content digest](../internals/hashes.md#the-content-digest).
 - `source`: where the record comes from.
   - `ref`: the ref as typed, a name or a uid.
   - `uid`, `projectUid` (empty for tenant scope), `name`, `version`,

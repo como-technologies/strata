@@ -10,7 +10,7 @@ use std::time::Duration;
 use serde_json::Value;
 
 use crate::config::Config;
-use crate::error::{Error, Result};
+use crate::error::{Error, FailureClass, Result};
 use crate::progress::Progress;
 use crate::reference::LATEST;
 use crate::version;
@@ -200,12 +200,10 @@ impl<A: PaletteApi> Retry<A> {
     }
 }
 
+/// What `Retry` tries again. The rule is [`Error::class`]. `RetryAfterTooLong` is transient too,
+/// and it is how `Retry` itself says "not now", so `Retry` does not try that one again.
 fn is_transient(e: &Error) -> bool {
-    match e {
-        Error::Transport { .. } => true,
-        Error::Api { status, .. } => *status == 429 || (500..600).contains(status),
-        _ => false,
-    }
+    e.class() == FailureClass::Transient && !matches!(e, Error::RetryAfterTooLong { .. })
 }
 
 impl<A: PaletteApi> PaletteApi for Retry<A> {

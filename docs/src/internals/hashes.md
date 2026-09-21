@@ -79,6 +79,37 @@ prints a unified diff for such values and for each changed manifest.
 | The values that a cluster gives its variables | They are the input of a run, not the release. Some are secrets. |
 | The consumers, the fetch time, and the project | They describe a moment, not the release. |
 
+## The content digest
+
+The root answers "did this object change". A second question is "is this the
+same version", and the root cannot answer it: Palette gives a manifest pack a
+new uid for each profile, and the uid of a registry pack belongs to one
+registry. So two publishes of one definition have two roots.
+
+The content digest answers the second question:
+
+```text
+content = sha256("content/1", variablesHash,
+                 [key, version, upstream, authored] for each pack, in profile order)
+```
+
+It leaves out the tag, the pack uid, the registry uid, and the pack type. It
+keeps `upstream`, so a pack that a team copies to another registry by digest
+keeps its content digest, and a pack with other bytes under the same version
+does not.
+
+| Case | The root | The content digest |
+| --- | --- | --- |
+| Two publishes of one definition | different | equal |
+| The same build under another tag name | different | equal |
+| A pack copied to another registry by digest | different | equal |
+| A pack from another kind of registry, with another archive | different | different |
+| An edit of a value, a manifest, or a variable | different | different |
+| Palette returns the values in another key order | equal | equal |
+
+A tool that pins a profile version by digest pins the content digest. `verify`
+keeps the root, because an edit in place is a change to one object.
+
 ## Two differences that are not content
 
 The hash keeps two fields that can differ for the same content. Strata does not

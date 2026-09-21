@@ -37,6 +37,22 @@ pub struct Snapshot {
     pub packs: Vec<Pack>,
     /// sha256 of canonical JSON {"packs": [[key, node]...], "variables": variablesHash}
     pub root: String,
+    /// The content digest, as [`Snapshot::content_digest`] gives it. A record from before this
+    /// field has none, so read the digest with the function and not from this field.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    content_digest: String,
+}
+
+/// One pack that a profile version takes from a registry: the reference that another tool
+/// pins by. See [`Snapshot::pins`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PinRef {
+    /// Pack name.
+    pub name: String,
+    /// Resolved version.
+    pub version: String,
+    /// The digest of the pack in its registry, as Palette stores it. A Helm digest is bare hex.
+    pub digest: String,
 }
 
 /// Which tool wrote a document.
@@ -342,6 +358,22 @@ pub struct PackHash {
     pub node: String,
 }
 
+/// The content digest: what a version is, without the ids that Palette gives. It covers the
+/// variables hash and, for each pack in order, the key, the version, the upstream hash, and the
+/// authored hash. It leaves out the tag, the pack uid, the registry uid, and the pack type, so it
+/// is equal for two publishes of one definition and for a copy of a pack to another registry.
+fn content_of(variables_hash: &str, packs: &[Pack]) -> String {
+    sha256_hex(&canonical_json(&json!({
+        // The key keeps this digest apart from every other one, and gives the encoding a version.
+        "digest": "content/1",
+        "variables": variables_hash,
+        "packs": packs
+            .iter()
+            .map(|p| json!([p.key, p.version, p.hash.upstream, p.hash.authored]))
+            .collect::<Vec<_>>(),
+    })))
+}
+
 /// The root: one sha256 digest over the variables hash and the node hash of each pack, in order.
 fn root_of(variables_hash: &str, packs: &[Pack]) -> String {
     sha256_hex(&canonical_json(&json!({
@@ -584,10 +616,48 @@ impl Snapshot {
             tool: Tool::current(),
             source,
             variables,
+            content_digest: content_of(&variables_hash, &packs),
             variables_hash,
             packs,
             root,
         })
+    }
+
+    /// The content digest: equal for two objects that are the same version, where the root is
+    /// not. Palette gives a manifest pack a new uid for each profile, and a pack uid belongs to
+    /// one registry, so two publishes of one definition have two roots and one content digest.
+    /// The root answers "did this object change". This digest answers "is this the same version".
+    pub fn content_digest(&self) -> String {
+        content_of(&self.variables_hash, &self.packs)
+    }
+
+    /// The packs that this version takes from a registry, each with its version and the digest
+    /// of the registry. A manifest pack comes from no registry, so it is authored content and
+    /// not a pin.
+    pub fn pins(&self) -> Vec<PinRef> {
+        self.packs
+            .iter()
+            .filter(|p| p.kind != "manifest")
+            .map(|p| PinRef {
+                name: p.name.clone(),
+                version: p.version.clone(),
+                digest: p.hash.upstream_raw.clone(),
+            })
+            .collect()
+    }
+
+    /// A snapshot for each profile that a cluster applies, from one read of the cluster. Each
+    /// one is the snapshot that `cluster:<cluster>/<profile>` gives.
+    pub fn each_from_cluster(
+        raw: &RawCluster,
+        reference: &str,
+        fetched_at: &str,
+    ) -> Result<Vec<Snapshot>> {
+        raw.templates()
+            .iter()
+            .map(AppliedProfile::from_template)
+            .map(|applied| Snapshot::from_cluster(raw, Some(&applied.uid), reference, fetched_at))
+            .collect()
     }
 
     /// Record the project scope the snapshot was taken in; `None` is tenant scope. The scope is
@@ -684,6 +754,7 @@ impl Snapshot {
             tool: Tool::current(),
             source,
             variables,
+            content_digest: content_of(&variables_hash, &packs),
             variables_hash,
             packs,
             root,
