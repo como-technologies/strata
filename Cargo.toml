@@ -7,7 +7,7 @@ default-members = ["."]
 [package]
 name = "strata"
 version = "0.7.1"
-edition = "2021"
+edition = "2024"
 description = "Record, compare, and check Spectro Cloud Palette profile versions, clusters, and pack versions"
 license = "Apache-2.0"
 repository = "https://github.com/como-technologies/strata"

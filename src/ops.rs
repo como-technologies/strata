@@ -827,14 +827,29 @@ pub fn same_release(records: &[(String, Snapshot)], policy: Policy, generated_at
         generated_at: generated_at.to_string(),
         legend: ChainLegend {
             status: m(&[
-                ("identical", "The two records have the same root: the same release."),
-                ("same-content", "The roots differ only by the packUid Palette mints for each profile's manifest packs, or by the tag name a pack is pinned under for the same build: the same content, so the same release under either policy."),
-                ("registry-move", "The roots differ only because packs were re-pinned from another registry with the same tag, version, values, and manifests; accepted by the registry-move policy."),
-                ("different", "Not the same release; reasons lists each difference."),
+                (
+                    "identical",
+                    "The two records have the same root: the same release.",
+                ),
+                (
+                    "same-content",
+                    "The roots differ only by the packUid Palette mints for each profile's manifest packs, or by the tag name a pack is pinned under for the same build: the same content, so the same release under either policy.",
+                ),
+                (
+                    "registry-move",
+                    "The roots differ only because packs were re-pinned from another registry with the same tag, version, values, and manifests; accepted by the registry-move policy.",
+                ),
+                (
+                    "different",
+                    "Not the same release; reasons lists each difference.",
+                ),
             ]),
             policy: m(&[
                 ("exact", "Only equal roots pass."),
-                ("registry-move", "Equal roots pass, and so does a pair whose only difference is packs re-pinned from another registry."),
+                (
+                    "registry-move",
+                    "Equal roots pass, and so does a pair whose only difference is packs re-pinned from another registry.",
+                ),
             ]),
         },
         policy,
@@ -1036,11 +1051,7 @@ where
         match doc {
             Ok(d) => {
                 let or_keep = |current: String, found: String| {
-                    if found.is_empty() {
-                        current
-                    } else {
-                        found
-                    }
+                    if found.is_empty() { current } else { found }
                 };
                 c.name = or_keep(c.name, text(&d, "/metadata/name"));
                 c.project_uid =
@@ -1685,10 +1696,10 @@ where
                         .collect()
                 })
                 .unwrap_or_default();
-            if let Some(cloud) = &options.cloud {
-                if !cloud_types.iter().any(|c| c == cloud) {
-                    continue;
-                }
+            if let Some(cloud) = &options.cloud
+                && !cloud_types.iter().any(|c| c == cloud)
+            {
+                continue;
             }
             // a tag row names its version, and names the build it points at; match on either,
             // because a registry that answers with one and not the other still says enough

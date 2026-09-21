@@ -1,7 +1,7 @@
 [package]
 name = "strata-library-example"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 description = "A program that uses the strata library without its command line"
 publish = false
 

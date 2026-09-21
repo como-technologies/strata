@@ -1,13 +1,13 @@
 //! The pull request comment.
 
 use super::{
-    applied_ref, chain_verdict, cluster_count, cluster_value, consumer_count, consumer_counts,
-    consumers_heading, consumers_sentence, count_of, counts_line, cross_kind_note, dash,
-    edited_in_place_note, entry_error, list_count, list_scope, overwritten_in_place_notes,
+    Renderer, VarLine, applied_ref, chain_verdict, cluster_count, cluster_value, consumer_count,
+    consumer_counts, consumers_heading, consumers_sentence, count_of, counts_line, cross_kind_note,
+    dash, edited_in_place_note, entry_error, list_count, list_scope, overwritten_in_place_notes,
     pack_version, pair_detail, pair_word, plain_flags, profiles_overwritten_sentence,
     project_label, record_detail, record_label, same_content_note, short, show, subject,
     traits_suffix, values_changed, values_changed_suffix, variable_lines, variables_comparable,
-    variables_unavailable_note, version_display, Renderer, VarLine,
+    variables_unavailable_note, version_display,
 };
 use crate::color::Paint;
 use crate::diff::{Diff, Leaf, Op, Status, Verify, VerifyStatus};
@@ -181,15 +181,15 @@ impl Renderer for MarkdownRenderer {
         }
         for pd in d.packs.iter().filter(|p| p.status == Status::Changed) {
             let mut body = String::new();
-            if pd.upstream {
-                if let (Some(x), Some(y)) = (&pd.a, &pd.b) {
-                    body.push_str(&format!(
-                        "upstream digest: `{}` → `{}` ({})\n\n",
-                        dash(&x.upstream),
-                        dash(&y.upstream),
-                        y.upstream_source
-                    ));
-                }
+            if pd.upstream
+                && let (Some(x), Some(y)) = (&pd.a, &pd.b)
+            {
+                body.push_str(&format!(
+                    "upstream digest: `{}` → `{}` ({})\n\n",
+                    dash(&x.upstream),
+                    dash(&y.upstream),
+                    y.upstream_source
+                ));
             }
             if pd.values.changed && pd.values.parseable && !pd.values.diff.is_empty() {
                 body.push_str("```diff\n");

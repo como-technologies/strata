@@ -181,7 +181,10 @@ fn changed_profiles_report_every_kind_of_change() {
     let r = run(&[&fx.a, &fx.b]); // default subcommand
     assert_eq!(r.code, 1, "{}", r.err);
     let t = &r.out;
-    assert!(has_line(t, "^lab-profile@1.2.0 (uid 64f0000000000000000000a1)  ->  lab-profile@1.3.0 (uid 64f0000000000000000000b2)"));
+    assert!(has_line(
+        t,
+        "^lab-profile@1.2.0 (uid 64f0000000000000000000a1)  ->  lab-profile@1.3.0 (uid 64f0000000000000000000b2)"
+    ));
     assert!(t.contains("CHANGED"));
     assert!(has_line(t, "^consumers  0 -> 2 clusters"));
     assert!(has_line(
@@ -311,34 +314,40 @@ fn markdown_report_has_table_and_details() {
     let fx = fixtures();
     let r = run(&["compare", "--format", "markdown", &fx.a, &fx.b]);
     assert_eq!(r.code, 1);
-    assert!(r
-        .out
-        .starts_with("### lab-profile@1.2.0 → lab-profile@1.3.0"));
-    assert!(r
-        .out
-        .contains("| | layer | pack | version | change | impact |"));
+    assert!(
+        r.out
+            .starts_with("### lab-profile@1.2.0 → lab-profile@1.3.0")
+    );
+    assert!(
+        r.out
+            .contains("| | layer | pack | version | change | impact |")
+    );
     assert!(r.out.contains("| `~` | k8s | `kubernetes` | 1.29.4 → 1.30.2 | IDENTITY UPSTREAM AUTHORED | node repave (Kubernetes version change) |"));
     assert!(r.out.contains(
         "<details><summary><code>kubernetes</code> values: 3 changed, 1 added, 0 removed</summary>"
     ));
-    assert!(r
-        .out
-        .contains("+ kubeadmconfig.apiServer.extraArgs.profiling: \"false\""));
+    assert!(
+        r.out
+            .contains("+ kubeadmconfig.apiServer.extraArgs.profiling: \"false\"")
+    );
     assert!(r.out.contains("max impact: `repave`"));
-    assert!(r
-        .out
-        .contains("<details><summary>variables: 1 added, 0 removed, 1 changed</summary>"));
-    assert!(r
-        .out
-        .contains("+ variable db_password (required, sensitive)\n"));
+    assert!(
+        r.out
+            .contains("<details><summary>variables: 1 added, 0 removed, 1 changed</summary>")
+    );
+    assert!(
+        r.out
+            .contains("+ variable db_password (required, sensitive)\n")
+    );
     assert!(r.out.contains(
         "- cluster_env.defaultValue: \"dev\"\n+ cluster_env.defaultValue: \"staging\"\n"
     ));
     assert!(!r.out.contains("db_password.name"));
     let full = run(&["compare", "--format", "markdown", "--full", &fx.a, &fx.b]);
-    assert!(full
-        .out
-        .contains("```diff\n--- a: addon/prometheus-operator manifest extra-rules"));
+    assert!(
+        full.out
+            .contains("```diff\n--- a: addon/prometheus-operator manifest extra-rules")
+    );
 }
 
 #[test]
@@ -352,29 +361,39 @@ fn color_policy() {
         stripped, plain,
         "colored output must equal plain output once escapes are stripped"
     );
-    assert!(!run(&["compare", "--color=never", &fx.a, &fx.b])
+    assert!(
+        !run(&["compare", "--color=never", &fx.a, &fx.b])
+            .out
+            .contains(ESC)
+    );
+    assert!(
+        !run(&["compare", "--no-color", &fx.a, &fx.b])
+            .out
+            .contains(ESC)
+    );
+    assert!(
+        run_in(
+            &["compare", &fx.a, &fx.b],
+            &[("CLICOLOR_FORCE", "1")],
+            &["NO_COLOR"]
+        )
         .out
-        .contains(ESC));
-    assert!(!run(&["compare", "--no-color", &fx.a, &fx.b])
+        .contains(ESC)
+    );
+    assert!(
+        !run_in(
+            &["compare", &fx.a, &fx.b],
+            &[("CLICOLOR_FORCE", "1"), ("NO_COLOR", "1")],
+            &[]
+        )
         .out
-        .contains(ESC));
-    assert!(run_in(
-        &["compare", &fx.a, &fx.b],
-        &[("CLICOLOR_FORCE", "1")],
-        &["NO_COLOR"]
-    )
-    .out
-    .contains(ESC));
-    assert!(!run_in(
-        &["compare", &fx.a, &fx.b],
-        &[("CLICOLOR_FORCE", "1"), ("NO_COLOR", "1")],
-        &[]
-    )
-    .out
-    .contains(ESC));
-    assert!(!run(&["compare", "--color=always", "--json", &fx.a, &fx.b])
-        .out
-        .contains(ESC));
+        .contains(ESC)
+    );
+    assert!(
+        !run(&["compare", "--color=always", "--json", &fx.a, &fx.b])
+            .out
+            .contains(ESC)
+    );
     let bad = run(&["compare", "--color=bogus", &fx.a, &fx.b]);
     assert_eq!(bad.code, 2);
     let full = run(&["compare", "--color=always", "--full", &fx.a, &fx.b]).out;
@@ -613,7 +632,9 @@ fn a_cluster_snapshot_from_raw_compares_against_profile_records() {
     assert!(
         has_line(
             &r.out,
-            &format!("^lab-profile@1.3.0 (uid 64f0000000000000000000b2)  ->  lab-profile@1.3.0 on cluster lab-cluster (uid {uid})")
+            &format!(
+                "^lab-profile@1.3.0 (uid 64f0000000000000000000b2)  ->  lab-profile@1.3.0 on cluster lab-cluster (uid {uid})"
+            )
         ),
         "{}",
         r.out
@@ -793,14 +814,18 @@ fn json_mode_writes_one_structured_error_line_on_stderr() {
     assert_eq!(r.err.lines().count(), 1, "stderr: {}", r.err);
     let e: serde_json::Value = serde_json::from_str(r.err.trim()).unwrap();
     assert_eq!(e["error"]["kind"], "not-snapshot");
-    assert!(e["error"]["message"]
-        .as_str()
-        .unwrap()
-        .contains("not a strata snapshot"));
-    assert!(e["error"]["path"]
-        .as_str()
-        .unwrap()
-        .ends_with("profile.json"));
+    assert!(
+        e["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("not a strata snapshot")
+    );
+    assert!(
+        e["error"]["path"]
+            .as_str()
+            .unwrap()
+            .ends_with("profile.json")
+    );
 
     // a ref that is not a file is a uid or a name, which needs credentials. A ref shaped like a
     // path is a file, and a missing one is the io error above, before any credential is read.
@@ -814,10 +839,12 @@ fn json_mode_writes_one_structured_error_line_on_stderr() {
     let e: serde_json::Value = serde_json::from_str(r.err.trim()).unwrap();
     assert_eq!(e["error"]["kind"], "missing-credential");
     assert_eq!(e["error"]["variable"], "PALETTE_API_KEY");
-    assert!(e["error"]["message"]
-        .as_str()
-        .unwrap()
-        .contains("PALETTE_API_KEY is required"));
+    assert!(
+        e["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("PALETTE_API_KEY is required")
+    );
 
     // --format json works the same as --json, on verify too
     let r = run_in(

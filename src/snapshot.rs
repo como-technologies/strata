@@ -7,10 +7,10 @@ use std::path::Path;
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use crate::api::{RawCluster, RawProfile};
-use crate::canon::{canon_yaml, canonical_json, hash_yaml, sha256_hex, Canon};
+use crate::canon::{Canon, canon_yaml, canonical_json, hash_yaml, sha256_hex};
 use crate::error::{Error, Result};
 
 /// Schema id written into every snapshot.
@@ -365,11 +365,7 @@ fn arr(v: &Value, ptr: &str) -> Vec<Value> {
 }
 
 fn or(v: String, default: &str) -> String {
-    if v.is_empty() {
-        default.to_string()
-    } else {
-        v
-    }
+    if v.is_empty() { default.to_string() } else { v }
 }
 
 fn first_nonempty(candidates: &[String]) -> String {
@@ -709,7 +705,7 @@ impl Snapshot {
                     path: path.to_path_buf(),
                     found: other.to_string(),
                     supported: SNAPSHOT_SCHEMA,
-                })
+                });
             }
             _ => return Err(Error::NotSnapshot(path.to_path_buf())),
         }

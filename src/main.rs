@@ -16,7 +16,7 @@ use strata::progress::Progress;
 use strata::reference::Ref;
 use strata::render::{self, Format};
 use strata::snapshot::Snapshot;
-use strata::{candidate, diff, ops, TOOL_NAME};
+use strata::{TOOL_NAME, candidate, diff, ops};
 
 /// Every command, in the order that `strata --help` lists them. A first argument that is not one
 /// of these makes `strata <A> <B>` a compare.
@@ -592,7 +592,7 @@ fn cmd_snapshot(a: &SnapshotArgs) -> Result<ExitCode> {
                 Ref::Snapshot(path) => {
                     return Err(Error::RecordNotASource {
                         path: path.display().to_string(),
-                    })
+                    });
                 }
                 Ref::Uid(_) | Ref::NameVersion { .. } => {
                     let uid = match &reference {

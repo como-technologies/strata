@@ -94,10 +94,10 @@ impl Config {
             // keeps a project in that file cannot reach tenant scope from the environment at all:
             // `unset` and an empty value both fall through to the file. For every other variable
             // an empty value stays the same as an unset one.
-            if PROJECT_VARS.contains(&key) || key == PROJECT_NAME_VAR {
-                if let Ok(value) = std::env::var(key) {
-                    return Some(value);
-                }
+            if (PROJECT_VARS.contains(&key) || key == PROJECT_NAME_VAR)
+                && let Ok(value) = std::env::var(key)
+            {
+                return Some(value);
             }
             env_nonempty(key).or_else(|| dotenv_lookup(key))
         })
@@ -199,12 +199,12 @@ fn parse_dotenv(text: &str, key: &str) -> Option<String> {
             continue;
         }
         let line = line.strip_prefix("export ").unwrap_or(line);
-        if let Some((k, v)) = line.split_once('=') {
-            if k.trim() == key {
-                let v = v.trim().trim_matches('"').trim_matches('\'');
-                if !v.is_empty() {
-                    return Some(v.to_string());
-                }
+        if let Some((k, v)) = line.split_once('=')
+            && k.trim() == key
+        {
+            let v = v.trim().trim_matches('"').trim_matches('\'');
+            if !v.is_empty() {
+                return Some(v.to_string());
             }
         }
     }
@@ -216,7 +216,7 @@ mod tests {
     use super::*;
     use std::collections::HashMap;
 
-    fn lookup(pairs: &[(&str, &str)]) -> impl Fn(&str) -> Option<String> {
+    fn lookup(pairs: &[(&str, &str)]) -> impl Fn(&str) -> Option<String> + use<> {
         let m: HashMap<String, String> = pairs
             .iter()
             .map(|(k, v)| (k.to_string(), v.to_string()))

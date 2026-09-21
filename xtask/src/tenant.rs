@@ -9,7 +9,7 @@
 
 use std::path::{Path, PathBuf};
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 /// The uid of the Public Repo pack registry, as Palette gives it.
 pub const PUBLIC_REPO: &str = "5eecc89d0b150045ae661cef";
@@ -47,15 +47,15 @@ impl Edit {
                     "Retain"
                 };
                 for pack in packs_mut(doc) {
-                    if pack["name"] == "csi-aws-ebs" {
-                        if let Some(values) = pack["values"].as_str() {
-                            let next = values.replacen(
-                                &format!("reclaimPolicy: {from}"),
-                                &format!("reclaimPolicy: {policy}"),
-                                1,
-                            );
-                            pack["values"] = json!(next);
-                        }
+                    if pack["name"] == "csi-aws-ebs"
+                        && let Some(values) = pack["values"].as_str()
+                    {
+                        let next = values.replacen(
+                            &format!("reclaimPolicy: {from}"),
+                            &format!("reclaimPolicy: {policy}"),
+                            1,
+                        );
+                        pack["values"] = json!(next);
                     }
                 }
             }
@@ -427,15 +427,15 @@ impl Tenant {
             for template in templates {
                 if let Some(packs) = template["packs"].as_array_mut() {
                     for pack in packs {
-                        if pack["name"] == "csi-aws-ebs" {
-                            if let Some(values) = pack["values"].as_str() {
-                                let next = values.replacen(
-                                    &format!("reclaimPolicy: {from}"),
-                                    &format!("reclaimPolicy: {policy}"),
-                                    1,
-                                );
-                                pack["values"] = json!(next);
-                            }
+                        if pack["name"] == "csi-aws-ebs"
+                            && let Some(values) = pack["values"].as_str()
+                        {
+                            let next = values.replacen(
+                                &format!("reclaimPolicy: {from}"),
+                                &format!("reclaimPolicy: {policy}"),
+                                1,
+                            );
+                            pack["values"] = json!(next);
                         }
                     }
                 }

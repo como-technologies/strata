@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use crate::api::{Palette, PaletteApi, RawProfile};
 use crate::error::{Error, Result};
@@ -321,7 +321,7 @@ pub fn load(path: &Path) -> Result<LoadedCandidate> {
             })?;
         let values = match (&l.values, &l.values_file) {
             (Some(_), Some(_)) => {
-                return Err(invalid(format!("{whom} sets both values and valuesFile")))
+                return Err(invalid(format!("{whom} sets both values and valuesFile")));
             }
             (Some(v), None) => Some(v.clone()),
             (None, Some(f)) => Some(read(f)?),
@@ -336,7 +336,7 @@ pub fn load(path: &Path) -> Result<LoadedCandidate> {
                     return Err(invalid(format!(
                         "manifest {} of {whom} needs exactly one of content and contentFile",
                         m.name
-                    )))
+                    )));
                 }
             };
             manifests.push((m.name.clone(), content));

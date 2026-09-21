@@ -9,7 +9,7 @@
 use std::path::Path;
 use std::process::Command;
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use strata::api::{MemoryApi, Palette};
 use strata::ops;
 use strata::progress::Progress;

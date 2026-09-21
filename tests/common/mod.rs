@@ -30,7 +30,7 @@
 use std::fs;
 use std::path::Path;
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 // comment-only values, as the real ubuntu-aws pack ships: canonical form must be null
 const OS_VALUES: &str = "\n# Spectro Golden images include most of the hardening standards recommended by CIS benchmarking\n\n# Uncomment below section to\n# 1. Include custom files to be copied over to the nodes and/or\n# 2. Execute list of commands before or after kubeadm init/join is executed\n#\n# kubeadmconfig:\n#   preKubeadmCommands:\n#   - echo \"Executing pre kube admin config commands\"\n#   - update-ca-certificates";

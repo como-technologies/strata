@@ -1,13 +1,13 @@
 //! The terminal report: plain when piped, colored on a terminal.
 
 use super::{
-    applied_ref, chain_verdict, cluster_count, cluster_value, consumer_count, consumer_counts,
-    consumers_heading, consumers_sentence, count_of, counts_line, cross_kind_note, dash,
-    edited_in_place_note, entry_error, list_count, list_scope, overwritten_in_place_notes,
+    Renderer, VarLine, applied_ref, chain_verdict, cluster_count, cluster_value, consumer_count,
+    consumer_counts, consumers_heading, consumers_sentence, count_of, counts_line, cross_kind_note,
+    dash, edited_in_place_note, entry_error, list_count, list_scope, overwritten_in_place_notes,
     pack_version, pair_detail, pair_word, profiles_overwritten_sentence, project_label,
     record_detail, record_label, same_content_note, short, show, subject, tag_rename,
     traits_suffix, values_changed_suffix, variable_lines, variables_comparable,
-    variables_unavailable_note, version_display, Renderer, VarLine,
+    variables_unavailable_note, version_display,
 };
 use crate::color::Paint;
 use crate::diff::{
@@ -197,15 +197,15 @@ fn packline(pd: &PackDiff, p: &Paint) -> String {
 }
 
 fn packdetail(pd: &PackDiff, p: &Paint, out: &mut Vec<String>) {
-    if pd.upstream {
-        if let (Some(a), Some(b)) = (&pd.a, &pd.b) {
-            out.push(format!(
-                "      upstream digest  {} -> {}   {}",
-                p.red(short(&a.upstream)),
-                p.green(short(&b.upstream)),
-                p.dim(&format!("({})", b.upstream_source))
-            ));
-        }
+    if pd.upstream
+        && let (Some(a), Some(b)) = (&pd.a, &pd.b)
+    {
+        out.push(format!(
+            "      upstream digest  {} -> {}   {}",
+            p.red(short(&a.upstream)),
+            p.green(short(&b.upstream)),
+            p.dim(&format!("({})", b.upstream_source))
+        ));
     }
     if pd.values.changed && pd.values.parseable && !pd.values.diff.is_empty() {
         out.push(format!(

@@ -3,7 +3,7 @@
 //! and prints the `strata-diff/1` summary. Exits 1 if the library does not report the one
 //! change the second version makes.
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use strata::api::{MemoryApi, Palette};
 use strata::color::Paint;
 use strata::diff::ImpactLevel;

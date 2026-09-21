@@ -32,7 +32,9 @@ fn main() -> ExitCode {
         ["docs-examples", "--check"] => examples(book::Mode::Check),
         ["playground", name] => {
             let (chapter, seed) = match name.rsplit_once('-') {
-                Some((head, tail)) if tail.len() == 1 && tail.chars().all(|c| c.is_ascii_digit()) => {
+                Some((head, tail))
+                    if tail.len() == 1 && tail.chars().all(|c| c.is_ascii_digit()) =>
+                {
                     (head.to_string(), tail.parse().unwrap_or(1))
                 }
                 _ => ((*name).to_string(), 1),
@@ -46,7 +48,9 @@ fn main() -> ExitCode {
             }
             examples(book::Mode::Serve { chapter, seed })
         }
-        _ => fail("usage: xtask [docs-examples [--check] | playground CHAPTER[-N] | serve ROOT PORT_FILE]"),
+        _ => fail(
+            "usage: xtask [docs-examples [--check] | playground CHAPTER[-N] | serve ROOT PORT_FILE]",
+        ),
     }
 }
 

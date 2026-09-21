@@ -90,11 +90,11 @@ impl Runner {
         let hold = server.stdin.take();
         let mut port = None;
         for _ in 0..100 {
-            if let Ok(text) = std::fs::read_to_string(&port_file) {
-                if let Ok(p) = text.trim().parse() {
-                    port = Some(p);
-                    break;
-                }
+            if let Ok(text) = std::fs::read_to_string(&port_file)
+                && let Ok(p) = text.trim().parse()
+            {
+                port = Some(p);
+                break;
             }
             std::thread::sleep(std::time::Duration::from_millis(100));
         }
@@ -318,10 +318,10 @@ impl Runner {
             return;
         }
         self.seed += 1;
-        if let Mode::Serve { seed, .. } = self.mode {
-            if self.seed == seed {
-                self.serve_wait();
-            }
+        if let Mode::Serve { seed, .. } = self.mode
+            && self.seed == seed
+        {
+            self.serve_wait();
         }
     }
 

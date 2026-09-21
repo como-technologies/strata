@@ -62,19 +62,19 @@ impl Ref {
         if is_file(Path::new(text)) {
             return Ref::Snapshot(PathBuf::from(text));
         }
-        if let Some(rest) = text.strip_prefix(PACK_PREFIX) {
-            if let Some((left, version)) = rest.rsplit_once('@') {
-                let (registry, name) = match left.split_once('/') {
-                    Some((registry, name)) => (Some(registry), name),
-                    None => (None, left),
+        if let Some(rest) = text.strip_prefix(PACK_PREFIX)
+            && let Some((left, version)) = rest.rsplit_once('@')
+        {
+            let (registry, name) = match left.split_once('/') {
+                Some((registry, name)) => (Some(registry), name),
+                None => (None, left),
+            };
+            if !name.is_empty() && !version.is_empty() {
+                return Ref::Pack {
+                    registry: registry.filter(|r| !r.is_empty()).map(str::to_string),
+                    name: name.to_string(),
+                    version: version.to_string(),
                 };
-                if !name.is_empty() && !version.is_empty() {
-                    return Ref::Pack {
-                        registry: registry.filter(|r| !r.is_empty()).map(str::to_string),
-                        name: name.to_string(),
-                        version: version.to_string(),
-                    };
-                }
             }
         }
         if let Some(rest) = text.strip_prefix(CLUSTER_PREFIX) {
@@ -94,13 +94,14 @@ impl Ref {
         if looks_like_a_path(text) {
             return Ref::Snapshot(PathBuf::from(text));
         }
-        if let Some((name, version)) = text.rsplit_once('@') {
-            if !name.is_empty() && !version.is_empty() {
-                return Ref::NameVersion {
-                    name: name.to_string(),
-                    version: version.to_string(),
-                };
-            }
+        if let Some((name, version)) = text.rsplit_once('@')
+            && !name.is_empty()
+            && !version.is_empty()
+        {
+            return Ref::NameVersion {
+                name: name.to_string(),
+                version: version.to_string(),
+            };
         }
         Ref::Uid(text.to_string())
     }

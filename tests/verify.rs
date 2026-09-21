@@ -70,11 +70,12 @@ fn verify_reports_drift_when_the_published_version_was_edited() {
         v.diff.verify.as_ref().unwrap().status,
         VerifyStatus::Drifted
     );
-    assert!(v
-        .diff
-        .packs
-        .iter()
-        .any(|p| p.name == "kubernetes" && p.identity && p.authored));
+    assert!(
+        v.diff
+            .packs
+            .iter()
+            .any(|p| p.name == "kubernetes" && p.identity && p.authored)
+    );
     assert_eq!(v.diff.summary.max_impact, strata::diff::ImpactLevel::Repave);
 }
 
@@ -457,9 +458,11 @@ fn transport_errors_are_retried() {
         drops: RefCell::new(2),
     };
     let retry = Retry::with_sleep(flaky, RetryPolicy::new(2), Progress::silent(), |_| {});
-    assert!(Palette::new(retry)
-        .fetch_profile(UID_A, &Progress::silent())
-        .is_ok());
+    assert!(
+        Palette::new(retry)
+            .fetch_profile(UID_A, &Progress::silent())
+            .is_ok()
+    );
 }
 
 #[test]
@@ -473,9 +476,11 @@ fn zero_retries_means_one_attempt() {
         "busy",
     );
     let (retry, slept) = retrying(&api, 0);
-    assert!(Palette::new(retry)
-        .fetch_profile(UID_A, &Progress::silent())
-        .is_err());
+    assert!(
+        Palette::new(retry)
+            .fetch_profile(UID_A, &Progress::silent())
+            .is_err()
+    );
     assert_eq!(api.calls(&profile_path()), 1);
     assert!(slept.borrow().is_empty());
 }
@@ -582,13 +587,15 @@ fn verify_many_checks_each_record_in_its_own_scope_and_counts_the_outcomes() {
     assert_eq!(drifted.path, rec_p2.display().to_string());
     assert_eq!(drifted.project_uid, "p2");
     assert_eq!(drifted.max_impact, Some(strata::diff::ImpactLevel::Repave));
-    assert!(drifted
-        .diff
-        .as_ref()
-        .expect("a drifted record carries its diff")
-        .packs
-        .iter()
-        .any(|p| p.name == "kubernetes" && p.identity));
+    assert!(
+        drifted
+            .diff
+            .as_ref()
+            .expect("a drifted record carries its diff")
+            .packs
+            .iter()
+            .any(|p| p.name == "kubernetes" && p.identity)
+    );
     assert!(
         s.records[0].diff.is_none(),
         "an unchanged record carries no diff"
@@ -1445,13 +1452,14 @@ fn verify_reports_a_cluster_record_whose_profile_version_was_overwritten_or_dele
     let v = ops::verify(&recorded, &Palette::new(&api), "t1", &Progress::silent()).unwrap();
     assert_eq!(api.calls(&format!("/v1/clusterprofiles/{UID_A}")), 1);
     assert!(v.unchanged);
-    assert!(v
-        .diff
-        .verify
-        .as_ref()
-        .unwrap()
-        .profiles_overwritten
-        .is_empty());
+    assert!(
+        v.diff
+            .verify
+            .as_ref()
+            .unwrap()
+            .profiles_overwritten
+            .is_empty()
+    );
 
     // a legacy version bump renamed the profile the cluster runs; the cluster did not change
     let mut renamed = read(&dir.path().join("a/profile.json"));
@@ -1568,10 +1576,12 @@ fn verify_refetches_the_cluster_for_a_cluster_record() {
             format!("/v1/spectroclusters/{CLUSTER_UID}/profiles/packs/manifests"),
             read(&d.join("manifests.json")),
         );
-    assert!(snapshot_cluster(&no_vars, None)
-        .unwrap()
-        .variables
-        .is_empty());
+    assert!(
+        snapshot_cluster(&no_vars, None)
+            .unwrap()
+            .variables
+            .is_empty()
+    );
 }
 
 // ---- consumers -------------------------------------------------------------------------------
@@ -1979,9 +1989,11 @@ fn list_names_each_profile_and_cluster_as_a_ref_in_sorted_order() {
         (profiles[1].uid.as_str(), profiles[1].cloud_type.as_str()),
         ("u2", "aws")
     );
-    assert!(profiles
-        .iter()
-        .all(|p| p.packs.is_none() && p.error.is_none()));
+    assert!(
+        profiles
+            .iter()
+            .all(|p| p.packs.is_none() && p.error.is_none())
+    );
     let clusters = l.clusters.as_ref().expect("clusters are listed by default");
     assert_eq!(
         clusters

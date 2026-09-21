@@ -220,15 +220,15 @@ impl<A: PaletteApi> PaletteApi for Retry<A> {
                         _ => None,
                     };
                     let limit = self.policy.max_retry_after.as_secs();
-                    if let (Some(secs), Error::Api { status, .. }) = (retry_after, &e) {
-                        if secs > limit {
-                            return Err(Error::RetryAfterTooLong {
-                                path: path.to_string(),
-                                status: *status,
-                                retry_after: secs,
-                                limit,
-                            });
-                        }
+                    if let (Some(secs), Error::Api { status, .. }) = (retry_after, &e)
+                        && secs > limit
+                    {
+                        return Err(Error::RetryAfterTooLong {
+                            path: path.to_string(),
+                            status: *status,
+                            retry_after: secs,
+                            limit,
+                        });
                     }
                     let delay = self.policy.delay(attempt, retry_after);
                     attempt += 1;
@@ -333,16 +333,16 @@ impl MemoryApi {
 impl PaletteApi for MemoryApi {
     fn get_json(&self, path: &str) -> Result<Value> {
         *self.calls.borrow_mut().entry(path.to_string()).or_insert(0) += 1;
-        if let Some(t) = self.transient.borrow_mut().get_mut(path) {
-            if t.remaining > 0 {
-                t.remaining -= 1;
-                return Err(Error::Api {
-                    path: path.to_string(),
-                    status: t.status,
-                    body: t.body.clone(),
-                    retry_after: t.retry_after,
-                });
-            }
+        if let Some(t) = self.transient.borrow_mut().get_mut(path)
+            && t.remaining > 0
+        {
+            t.remaining -= 1;
+            return Err(Error::Api {
+                path: path.to_string(),
+                status: t.status,
+                body: t.body.clone(),
+                retry_after: t.retry_after,
+            });
         }
         if let Some((status, body)) = self.fail.get(path) {
             return Err(Error::Api {

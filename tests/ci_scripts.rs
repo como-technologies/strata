@@ -538,9 +538,10 @@ fn pr_comment_posts_one_marked_comment_and_adds_the_label_at_the_threshold() {
         "{:?}",
         h.calls()
     );
-    assert!(h
-        .calls()
-        .contains(&"pr edit 7 --repo o/r --add-label repave".to_string()));
+    assert!(
+        h.calls()
+            .contains(&"pr edit 7 --repo o/r --add-label repave".to_string())
+    );
 }
 
 #[test]
@@ -607,9 +608,10 @@ fn pr_comment_removes_the_label_below_the_threshold_and_touches_nothing_when_alr
         "in-place",
     ]);
     assert!(o.status.success(), "{}", text(&o.stderr));
-    assert!(h
-        .calls()
-        .contains(&"pr edit 7 --repo o/r --add-label needs-window".to_string()));
+    assert!(
+        h.calls()
+            .contains(&"pr edit 7 --repo o/r --add-label needs-window".to_string())
+    );
 }
 
 #[test]
@@ -691,9 +693,10 @@ fn pr_comment_snapshots_a_live_ref_once_and_compares_files_offline() {
         compares.iter().all(|c| !c.contains("lab-profile@1.3.0")),
         "the comparisons read the snapshot file, not Palette: {calls:?}"
     );
-    assert!(h
-        .saved_body()
-        .contains("### lab-profile@1.3.0 → lab-profile@1.2.0"));
+    assert!(
+        h.saved_body()
+            .contains("### lab-profile@1.3.0 → lab-profile@1.2.0")
+    );
 }
 
 #[test]

@@ -137,7 +137,9 @@ pub enum Error {
         uids: Vec<String>,
     },
     /// A command that works on a profile was given a cluster, a pack, or a record of one.
-    #[error("'{reference}' is not a profile version; this command takes a profile uid, <name>@<version>, or a profile record")]
+    #[error(
+        "'{reference}' is not a profile version; this command takes a profile uid, <name>@<version>, or a profile record"
+    )]
     ProfileRefRequired {
         /// The ref as given.
         reference: String,
@@ -149,7 +151,9 @@ pub enum Error {
         message: String,
     },
     /// `snapshot` was given a record file. Every other command reads one; `snapshot` writes one.
-    #[error("'{path}' is a record; snapshot writes a record, and does not read one. To check it against Palette, run: strata verify {path}")]
+    #[error(
+        "'{path}' is a record; snapshot writes a record, and does not read one. To check it against Palette, run: strata verify {path}"
+    )]
     RecordNotASource {
         /// The path as given.
         path: String,
@@ -176,7 +180,9 @@ pub enum Error {
     },
     /// `packs <name>` found the name in no visible registry. It asked for every version, so no
     /// version and no registry was ever in play, and `PackNotFound` would state both as blanks.
-    #[error("no registry that this key can see offers a pack named '{name}'; `strata list --pack {name}` finds the profiles that carry one")]
+    #[error(
+        "no registry that this key can see offers a pack named '{name}'; `strata list --pack {name}` finds the profiles that carry one"
+    )]
     PackNameNotFound {
         /// Pack name.
         name: String,
@@ -623,10 +629,12 @@ mod tests {
         assert_eq!(by_kind("project-not-found")["name"], "staging");
         assert_eq!(by_kind("project-not-found")["available"][1], "prod");
         assert_eq!(by_kind("cluster-not-found")["cluster"], "nope");
-        assert!(by_kind("cluster-not-found")["message"]
-            .as_str()
-            .unwrap()
-            .ends_with("clusters: none"));
+        assert!(
+            by_kind("cluster-not-found")["message"]
+                .as_str()
+                .unwrap()
+                .ends_with("clusters: none")
+        );
         assert_eq!(by_kind("cluster-name-ambiguous")["uids"][0], "c7");
         assert_eq!(by_kind("pattern")["pattern"], "releases/**/*.json");
         let cp = by_kind("cluster-profile-not-found");

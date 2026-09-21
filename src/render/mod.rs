@@ -500,11 +500,7 @@ pub(crate) fn short(s: &str) -> &str {
 
 /// `-` for an empty string.
 pub(crate) fn dash(s: &str) -> &str {
-    if s.is_empty() {
-        "-"
-    } else {
-        s
-    }
+    if s.is_empty() { "-" } else { s }
 }
 
 /// JSON rendering of a leaf value, truncated for the text reports; the JSON document carries all of it.

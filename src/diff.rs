@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::canon::canonical_json;
 use crate::layer::Layer;
@@ -957,7 +957,7 @@ fn cluster_values_diff(a: &[ClusterVariable], b: &[ClusterVariable]) -> ClusterV
             let (x, y) = (ka.get(k), kb.get(k));
             let op = match (x, y) {
                 (Some(x), Some(y)) if x.value == y.value && x.sensitive == y.sensitive => {
-                    return None
+                    return None;
                 }
                 (Some(_), Some(_)) => Op::Changed,
                 (None, Some(_)) => Op::Added,
