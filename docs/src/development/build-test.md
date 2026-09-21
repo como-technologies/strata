@@ -11,6 +11,11 @@ just docs-check        # docs/src/output/ is the output of this build
 
 `just --list` shows each recipe.
 
+The development tooling is the `xtask` crate. A `just` recipe wraps each command
+that the book and the examples need, and `cargo xtask <command>` runs the same
+command directly. `cargo xtask` with no command prints the list. The alias is in
+`.cargo/config.toml`, and the crate reaches no release.
+
 ## The tests
 
 `cargo test` runs:

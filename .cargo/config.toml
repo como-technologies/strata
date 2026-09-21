@@ -1,0 +1,5 @@
+# `cargo xtask <command>` runs the development tooling in xtask/. The crate carries that name for
+# this alias, which is the convention a Rust reader expects. The `just` recipes run the same
+# binary, so the two entry points do the same work.
+[alias]
+xtask = "run --package xtask --"

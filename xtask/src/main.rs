@@ -1,5 +1,8 @@
 //! Development tooling for strata. It builds no part of the release: the `strata` crate ships
-//! alone, and this one runs only from a `just` recipe.
+//! alone, and nothing here reaches a published binary.
+//!
+//! Run a command with `cargo xtask <command>`, which the alias in `.cargo/config.toml` gives, or
+//! through the `just` recipe that wraps it.
 //!
 //! ```text
 //! xtask docs-examples            write docs/src/output/

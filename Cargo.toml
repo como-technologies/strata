@@ -14,8 +14,10 @@ repository = "https://github.com/como-technologies/strata"
 readme = "README.md"
 keywords = ["kubernetes", "spectrocloud", "palette", "drift", "diff"]
 categories = ["command-line-utilities", "development-tools"]
-# The book and the examples belong to this repository. A package a consumer builds needs neither.
-exclude = ["docs/", "examples/", ".github/"]
+# The book and the examples belong to this repository, and a package a consumer builds needs
+# neither. `.cargo/` goes with them: its alias names the xtask package, which a published package
+# does not carry, so the alias would fail for whoever unpacks one.
+exclude = ["docs/", "examples/", ".github/", ".cargo/"]
 # crates.io carries no private crate, and this repository is private, so a publish would make the
 # sources public. Two things must happen before this line goes: the repository becomes public, and
 # the package takes another name, because `strata` on crates.io belongs to another crate.
