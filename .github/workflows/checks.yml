@@ -29,6 +29,29 @@ jobs:
       # the examples are built, not tracked: this keeps the generator working
       - run: just examples
 
+  msrv:
+    name: the lowest Rust version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      # The version comes out of Cargo.toml, so the number a reader trusts and the number this job
+      # builds with cannot drift apart. Edition 2024 alone says 1.85, and the `if let` chains that
+      # the edition's lints introduced say 1.88, which no edition field records.
+      - id: msrv
+        run: |
+          version=$(sed -n 's/^rust-version = "\(.*\)"$/\1/p' Cargo.toml)
+          [ -n "$version" ] || { echo "::error::Cargo.toml names no rust-version"; exit 1; }
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ steps.msrv.outputs.version }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: msrv
+      # A build, and not the lints: clippy and rustfmt follow stable, and this job asks one
+      # question only, which is whether the oldest compiler the crate claims still compiles it.
+      - run: cargo check --workspace --all-targets
+
   docs:
     name: docs
     runs-on: ubuntu-latest
