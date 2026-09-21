@@ -1,11 +1,15 @@
 #!/usr/bin/env bash
 # Install one strata release, with its CI scripts, and check every file against SHA256SUMS.
 #
-#   scripts/ci/install-strata.sh [--version vX.Y.Z] [--dir DIR] [--repo OWNER/REPO] [--target TARGET]
+#   scripts/ci/install-strata.sh [--version vX.Y.Z] [--dir DIR] [--repo OWNER/REPO]
+#                                [--target TARGET] [--bin-only]
 #
 # Downloads the binary for this machine, SHA256SUMS, and the CI scripts pr-comment.sh,
 # merge-gate.sh and verify-report.sh into DIR (default .strata), checks the checksums, and prints
 # the path of the binary. A job then sets STRATA_BIN to that path and runs DIR/<script>.
+#
+# --bin-only keeps the binary alone, for a person installing into a directory on their PATH. The
+# checksums are still checked before anything is installed.
 #
 # --version defaults to STRATA_VERSION, and latest means the latest release. A private repository
 # needs a token that can read it in STRATA_TOKEN, GITHUB_TOKEN or GH_TOKEN; a public one needs no
@@ -22,13 +26,15 @@ version="${STRATA_VERSION:-latest}"
 dir=".strata"
 repo="${STRATA_REPO:-como-technologies/strata}"
 target=""
+bin_only=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --version) version=$2; shift 2 ;;
     --dir) dir=$2; shift 2 ;;
     --repo) repo=$2; shift 2 ;;
     --target) target=$2; shift 2 ;;
-    -h|--help) sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    --bin-only) bin_only=1; shift ;;
+    -h|--help) sed -n '2,19p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) die "unknown option $1" ;;
   esac
 done
@@ -70,7 +76,11 @@ get "$release_url" "$work/release.json" || die "could not read the release $vers
 tag=$(jq -r '.tag_name // empty' "$work/release.json")
 [ -n "$tag" ] || die "the answer for $version is not a release: $(head -c 200 "$work/release.json")"
 
-want=("strata-$target" SHA256SUMS pr-comment.sh merge-gate.sh verify-report.sh)
+# SHA256SUMS comes down either way: it is what every file is checked against. The bash on macOS is
+# 3.2, where "${empty[@]}" under set -u is an error, so an empty list expands through the + form.
+scripts=(pr-comment.sh merge-gate.sh verify-report.sh)
+[ -z "$bin_only" ] || scripts=()
+want=("strata-$target" SHA256SUMS ${scripts[@]+"${scripts[@]}"})
 for name in "${want[@]}"; do
   id=$(jq -r --arg n "$name" '.assets[] | select(.name == $n) | .id' "$work/release.json" | sed -n 1p)
   [ -n "$id" ] || die "the release $tag has no $name"
@@ -91,11 +101,12 @@ done
 
 mv "$work/strata-$target" "$dir/strata"
 chmod +x "$dir/strata"
-for name in pr-comment.sh merge-gate.sh verify-report.sh; do
+for name in ${scripts[@]+"${scripts[@]}"}; do
   mv "$work/$name" "$dir/$name"
   chmod +x "$dir/$name"
 done
-mv "$work/SHA256SUMS" "$dir/SHA256SUMS"
+# A person installing onto their PATH gets the binary and nothing beside it.
+[ -n "$bin_only" ] || mv "$work/SHA256SUMS" "$dir/SHA256SUMS"
 
 note "$tag installed in $dir, checksums verified"
 echo "$dir/strata"
