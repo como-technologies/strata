@@ -1117,6 +1117,12 @@ impl Gate {
             .env("STRATA_QUIET", "1")
             .env_remove("PALETTE_API_KEY")
             .env_remove("SPECTROCLOUD_APIKEY")
+            // The script reads its target branch and its remote from the CI of the caller. A pull
+            // request run of this repository sets GITHUB_BASE_REF, so without these lines a test
+            // gets the base of that run and not the one it gives.
+            .env_remove("GITHUB_BASE_REF")
+            .env_remove("CI_MERGE_REQUEST_TARGET_BRANCH_NAME")
+            .env_remove("STRATA_REMOTE")
             .output()
             .unwrap()
     }
