@@ -52,7 +52,7 @@ gh release download --repo como-technologies/strata --pattern install-strata.sh 
 
 The installer finds the binary for this machine and checks it against
 `SHA256SUMS`. It installs `strata` alone. To install one release, add
-`--version v0.7.0`. The default is the latest release.
+`--version v0.7.1`. The default is the latest release.
 
 [Install](docs/src/install.md) gives the other platforms, the signature check,
 and the source build.

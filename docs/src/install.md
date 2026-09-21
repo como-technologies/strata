@@ -36,7 +36,7 @@ gh release download --repo como-technologies/strata --pattern install-strata.sh 
 
 | Option | Effect |
 | --- | --- |
-| `--version v0.7.0` | Installs that release. The default, `latest`, is the newest one. |
+| `--version v0.7.1` | Installs that release. The default, `latest`, is the newest one. |
 | `--bin-only` | Installs `strata` alone. Without it, the CI scripts land beside the binary. |
 | `--dir DIR` | Where to install. The default is `.strata`. |
 | `--target TARGET` | Overrides the target this machine detects. |
