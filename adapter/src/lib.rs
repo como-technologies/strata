@@ -149,6 +149,59 @@ where
         ops::snapshot_for(&reference, || (self.connect)(None), at, &Progress::silent())
             .map_err(port_error)
     }
+
+    /// The two digests of a leaf. An address has no registry, and a real tenant has a pack in
+    /// two or more of them. A raise copies a pack by digest, so the content is the same in each
+    /// one, and then this is one leaf. Two kinds of registry can also hold two archives under
+    /// one name and version. Then knurl cannot say which one it means, and the failure names
+    /// each registry and its digest.
+    fn leaf(&self, unit: &UnitRef, at: &str) -> Result<(ExactDigest, ContentDigest)> {
+        let of = format!("{} {}", unit.name, unit.version);
+        let read = |registry: Option<String>| {
+            let reference = Ref::Pack {
+                registry,
+                name: unit.name.to_string(),
+                version: unit.version.to_string(),
+            };
+            ops::snapshot_for(&reference, || (self.connect)(None), at, &Progress::silent())
+        };
+        let archive = |snapshot: &Snapshot| match snapshot.packs.first() {
+            Some(pack) => Ok(pack.hash.upstream_raw.clone()),
+            None => Err(refused(format!("{of} has no pack"))),
+        };
+        let registries = match read(None) {
+            Ok(one) => return Ok((digest(&one.root, &of)?, digest(&archive(&one)?, &of)?)),
+            Err(strata::Error::PackInSeveralRegistries { registries, .. }) => registries,
+            Err(error) => return Err(port_error(error)),
+        };
+
+        // One entry for each registry: its name, the root of the object, and the archive.
+        let mut copies = Vec::new();
+        for registry in registries {
+            let snapshot = read(Some(registry.clone())).map_err(port_error)?;
+            copies.push((registry, snapshot.root.clone(), archive(&snapshot)?));
+        }
+        copies.sort();
+        let archives: BTreeSet<&str> = copies.iter().map(|copy| copy.2.as_str()).collect();
+        if archives.len() > 1 {
+            let each: Vec<String> = copies
+                .iter()
+                .map(|(registry, _, archive)| format!("{registry} has {archive}"))
+                .collect();
+            return Err(refused(format!(
+                "{of} is {} archives under one version: {}. An address has no registry, so knurl cannot say which one it means",
+                archives.len(),
+                each.join(", ")
+            )));
+        }
+        // Several objects hold the one leaf. The exact digest covers each of them, so it
+        // changes when a registry gets a copy or loses one.
+        let mut exact = ExactDigest::builder().number(copies.len() as u64);
+        for (registry, root, _) in &copies {
+            exact = exact.text(registry).text(root);
+        }
+        Ok((exact.finish(), digest(&copies[0].2, &of)?))
+    }
 }
 
 /// The definition of a published profile version, in the form that [`PlatformRead::identity_of`]
@@ -216,33 +269,29 @@ where
 {
     async fn observe_unit(&self, unit: &UnitRef) -> Result<UnitObservation> {
         let (observed_at, at) = now();
-        let snapshot = self.snapshot_at(unit, &at)?;
-        let of = format!("{} {}", unit.name, unit.version);
         let mut pins = BTreeMap::new();
-        let (exact, content) = match unit.level {
-            // The content of a leaf is the archive in the registry, so its digest is the
-            // content digest. It pins nothing that Palette holds.
-            Level::Leaf => {
-                let pack = snapshot
-                    .packs
-                    .first()
-                    .ok_or_else(|| refused(format!("{of} has no pack")))?;
-                (
-                    digest(&snapshot.root, &of)?,
-                    digest(&pack.hash.upstream_raw, &of)?,
-                )
-            }
-            _ => {
-                for pin in snapshot.pins() {
-                    let held = Pin {
-                        version: version(&pin.version)?,
-                        digest: digest(&pin.digest, &pin.name)?,
-                    };
-                    pins.insert(unit_name(&pin.name)?, held);
-                }
-                digests(&snapshot, &of)?
-            }
-        };
+        // The content of a leaf is the archive in the registry, so its digest is the content
+        // digest. It pins nothing that Palette holds.
+        if unit.level == Level::Leaf {
+            let (exact, content) = self.leaf(unit, &at)?;
+            return Ok(UnitObservation::new(
+                unit.clone(),
+                exact,
+                content,
+                pins,
+                observed_at,
+            ));
+        }
+        let snapshot = self.snapshot_at(unit, &at)?;
+        for pin in snapshot.pins() {
+            let held = Pin {
+                version: version(&pin.version)?,
+                digest: digest(&pin.digest, &pin.name)?,
+            };
+            pins.insert(unit_name(&pin.name)?, held);
+        }
+        let of = format!("{} {}", unit.name, unit.version);
+        let (exact, content) = digests(&snapshot, &of)?;
         Ok(UnitObservation::new(
             unit.clone(),
             exact,

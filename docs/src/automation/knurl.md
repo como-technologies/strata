@@ -61,11 +61,51 @@ installs the layers in order, so the order is content.
   says `Unknown`.
 - **A root.** Palette holds no root unit. The adapter gives a terminal failure.
 - **Who uses a pack.** Palette names the clusters of a profile version alone.
-- **A pack in two registries.** An address has no registry. When two registries
-  hold the pack version, strata gives `pack-in-several-registries`, and the
-  adapter gives a terminal failure. A raise copies a pack by digest, so the
-  answer is the same in each registry, and the adapter must learn to say so.
+- **Which of two archives.** An address has no registry, and a tenant can have
+  a pack version in two of them. The adapter reads each one. When the digests
+  are equal, it is one leaf: a raise copies a pack by digest. Two kinds of
+  registry can also hold two archives under one name and version. Then the
+  adapter gives a terminal failure that names each registry and its digest,
+  because knurl cannot say which one it means.
 - **A publish.** Strata does not write.
+
+## Run it by hand
+
+`adapter/examples/observe.rs` calls the port by hand, over HTTP. It reads the
+settings that the `strata` command reads, so it runs against a tenant or against
+the playground. It reads, and it never writes.
+
+```bash
+just playground cluster-release        # in one terminal: it prints four export lines
+```
+
+```bash
+# in another terminal, after the four export lines
+just adapter-observe unit intermediate aws-stack 1.1.0
+just adapter-observe instance payments
+just adapter-observe pinned-by aws-stack 1.1.0
+just adapter-observe verify aws-stack 1.1.0
+```
+
+Put each answer next to the answer of strata. `exact` is `root`, and `content` is
+`contentDigest`, each with the prefix `sha256:`:
+
+```bash
+strata snapshot aws-stack@1.1.0 -o record.json
+jq '{root, contentDigest}' record.json
+strata consumers aws-stack@1.1.0
+```
+
+A chapter of the playground serves what its page needs, and no more. Two
+commands need a chapter that serves the registries:
+
+| Command | Chapter | Why |
+| --- | --- | --- |
+| `unit intermediate`, `instance`, `pinned-by`, `verify` | `cluster-release` | It has the clusters. It serves no registry. |
+| `identity aws-stack 1.1.1`, `unit leaf cert-manager 1.21.1` | `candidate` | It serves the registries. It has no cluster. |
+
+In the chapter `candidate`, `unit leaf csi-aws-ebs 1.65.0` is the failure for two
+archives: that tenant has the version in two kinds of registry.
 
 ## Test it
 

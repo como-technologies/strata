@@ -72,10 +72,25 @@ fn move_ids(doc: &mut Value) {
     }
 }
 
+const SECOND_REGISTRY: &str = "reg-second";
+const SECOND_PACK_UID: &str = "second-pack-uid";
+const OTHER_ARCHIVE: &str =
+    "sha256:a746e14689085b14531566f9c9cfb2bc7716e96a394547ef50a1c52eab510c9e";
+
+/// What a test changes in the example tenant.
+#[derive(Clone, Copy, Default)]
+struct Setup {
+    /// Each profile names the ids of another registry.
+    moved: bool,
+    /// A second registry holds csi-aws-ebs 1.65.0 too, with this digest. `None` is the same
+    /// digest: a copy by digest. A real tenant has a pack in two registries.
+    second_registry: Option<Option<&'static str>>,
+}
+
 /// The example tenant: one registry with five packs, three versions of `aws-stack`, and the
-/// cluster `workload-a`, which runs 1.1.0. With `moved`, each profile names the ids of another
-/// registry.
-fn tenant(moved: bool) -> MemoryApi {
+/// cluster `workload-a`, which runs 1.1.0.
+fn tenant(setup: Setup) -> MemoryApi {
+    let moved = setup.moved;
     let dir = examples();
     let registry = registry();
     let registry = registry.as_str();
@@ -83,8 +98,42 @@ fn tenant(moved: bool) -> MemoryApi {
         "/v1/registries/metadata",
         json!({"items": [{"name": "Public Repo", "uid": registry, "kind": "pack"}]}),
     );
+    if setup.second_registry.is_some() {
+        api = api.with(
+            "/v1/registries/metadata",
+            json!({"items": [
+                {"name": "Public Repo", "uid": registry, "kind": "pack"},
+                {"name": "Second Repo", "uid": SECOND_REGISTRY, "kind": "pack"},
+            ]}),
+        );
+    }
     for name in PACKS {
-        let summaries = read(&dir.join("packs").join(name).join("_summaries.json"));
+        let mut summaries = read(&dir.join("packs").join(name).join("_summaries.json"));
+        if let (Some(digest), "csi-aws-ebs") = (setup.second_registry, name) {
+            // The same version in the second registry, as its own pack with its own uid.
+            let items = summaries.as_array_mut().unwrap();
+            let mut copy = items
+                .iter()
+                .find(|item| item["spec"]["version"] == "1.65.0")
+                .unwrap()
+                .clone();
+            let first_uid = copy["metadata"]["uid"].as_str().unwrap().to_string();
+            copy["metadata"]["uid"] = json!(SECOND_PACK_UID);
+            copy["spec"]["registryUid"] = json!(SECOND_REGISTRY);
+            if let Some(digest) = digest {
+                copy["spec"]["digest"] = json!(digest);
+            }
+            items.push(copy);
+            let entity =
+                fs::read_to_string(dir.join("packs").join(name).join("_entity.json")).unwrap();
+            let entity = entity
+                .replace(&first_uid, SECOND_PACK_UID)
+                .replace(registry, SECOND_REGISTRY);
+            api = api.with(
+                format!("/v1/packs/{name}/registries/{SECOND_REGISTRY}"),
+                serde_json::from_str(&entity).unwrap(),
+            );
+        }
         let count = summaries.as_array().map(Vec::len).unwrap_or(0);
         api = api
             .with(
@@ -154,11 +203,36 @@ fn registry() -> String {
 type Connect = fn(Option<&str>) -> strata::Result<Palette<MemoryApi>>;
 
 fn platform() -> StrataPlatform<MemoryApi, Connect> {
-    StrataPlatform::new(|_project| Ok(Palette::new(tenant(false))))
+    StrataPlatform::new(|_project| Ok(Palette::new(tenant(Setup::default()))))
 }
 
 fn moved_platform() -> StrataPlatform<MemoryApi, Connect> {
-    StrataPlatform::new(|_project| Ok(Palette::new(tenant(true))))
+    StrataPlatform::new(|_project| {
+        Ok(Palette::new(tenant(Setup {
+            moved: true,
+            ..Setup::default()
+        })))
+    })
+}
+
+/// csi-aws-ebs 1.65.0 is in two registries, with one digest: a copy by digest.
+fn copied_platform() -> StrataPlatform<MemoryApi, Connect> {
+    StrataPlatform::new(|_project| {
+        Ok(Palette::new(tenant(Setup {
+            second_registry: Some(None),
+            ..Setup::default()
+        })))
+    })
+}
+
+/// csi-aws-ebs 1.65.0 is in two registries, with two digests: two archives under one version.
+fn two_archives_platform() -> StrataPlatform<MemoryApi, Connect> {
+    StrataPlatform::new(|_project| {
+        Ok(Palette::new(tenant(Setup {
+            second_registry: Some(Some(OTHER_ARCHIVE)),
+            ..Setup::default()
+        })))
+    })
 }
 
 fn unit(level: Level, name: &str, version: &str) -> UnitRef {
@@ -230,6 +304,39 @@ fn a_leaf_has_the_digest_that_the_registry_gives() {
         "aws-stack 1.1.0 has five packs from a registry"
     );
     assert_eq!(profile.pins["csi-aws-ebs"].digest, leaf.content);
+}
+
+#[test]
+fn a_leaf_in_two_registries_with_one_digest_is_one_leaf() {
+    // A raise copies a pack to another registry by digest. The content is the same there, so
+    // the adapter can answer with no registry in the address.
+    let alone = block_on(platform().observe_unit(&world().leaf)).unwrap();
+    let copied = block_on(copied_platform().observe_unit(&world().leaf)).unwrap();
+    assert_eq!(copied.content, alone.content);
+    assert_ne!(
+        copied.exact, alone.exact,
+        "two objects hold the leaf now, and not one"
+    );
+}
+
+#[test]
+fn a_leaf_with_two_archives_is_a_terminal_failure_that_names_each_one() {
+    // Two kinds of registry can hold two archives under one name and version. An address has
+    // no registry, so knurl cannot say which one it means. The failure gives what it needs.
+    let error = block_on(two_archives_platform().observe_unit(&world().leaf)).unwrap_err();
+    assert_eq!(error.class(), FailureClass::Terminal);
+    let message = error.to_string();
+    for part in [
+        "Public Repo",
+        "Second Repo",
+        "sha256:bd09e8b4187b",
+        OTHER_ARCHIVE,
+    ] {
+        assert!(
+            message.contains(part),
+            "the failure does not name {part}: {message}"
+        );
+    }
 }
 
 #[test]

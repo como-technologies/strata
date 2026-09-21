@@ -51,6 +51,10 @@ adapter-test: examples
     CARGO_NET_GIT_FETCH_WITH_CLI=true cargo clippy --manifest-path adapter/Cargo.toml --target-dir target/adapter --all-targets -- -D warnings
     CARGO_NET_GIT_FETCH_WITH_CLI=true cargo test --manifest-path adapter/Cargo.toml --target-dir target/adapter
 
+# Call the platform port of knurl by hand, over HTTP: just adapter-observe unit intermediate aws-stack 1.1.0
+adapter-observe *args:
+    @CARGO_NET_GIT_FETCH_WITH_CLI=true cargo run --quiet --manifest-path adapter/Cargo.toml --target-dir target/adapter --example observe -- {{args}}
+
 # ---- examples -------------------------------------------------------------------------------
 
 # Build examples/ from the tracked registry responses. Needs no API key.
