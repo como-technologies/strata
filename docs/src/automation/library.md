@@ -24,6 +24,9 @@ answers. `snapshot.root` says if one object changed. `snapshot.content_digest()`
 says if two objects are the same version. Keep the root to verify a record, and
 compare content digests across registries, projects, and tenants.
 
+[The knurl adapter](./knurl.md) is a program that does this: it gives both
+digests to another tool, behind a trait of that tool.
+
 ## Add the dependency
 
 Pin a release tag. The repository is private, so Cargo must fetch it with the

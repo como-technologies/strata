@@ -41,6 +41,16 @@ lint:
 library-example:
     cargo run --quiet --manifest-path examples/library/Cargo.toml --target-dir target/library-example
 
+# knurl is a private repository, so Cargo fetches it with the git command line. The adapter is
+# its own package: `cargo build` and `cargo test` at the root never build it, and no release
+# carries it.
+
+# Test the knurl adapter against the rules of knurl, on the built examples. Needs git access to knurl.
+adapter-test: examples
+    CARGO_NET_GIT_FETCH_WITH_CLI=true cargo fmt --check --manifest-path adapter/Cargo.toml
+    CARGO_NET_GIT_FETCH_WITH_CLI=true cargo clippy --manifest-path adapter/Cargo.toml --target-dir target/adapter --all-targets -- -D warnings
+    CARGO_NET_GIT_FETCH_WITH_CLI=true cargo test --manifest-path adapter/Cargo.toml --target-dir target/adapter
+
 # ---- examples -------------------------------------------------------------------------------
 
 # Build examples/ from the tracked registry responses. Needs no API key.
