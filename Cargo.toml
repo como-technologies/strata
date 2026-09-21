@@ -9,6 +9,16 @@ name = "strata"
 version = "0.7.1"
 edition = "2021"
 description = "Record, compare, and check Spectro Cloud Palette profile versions, clusters, and pack versions"
+license = "Apache-2.0"
+repository = "https://github.com/como-technologies/strata"
+readme = "README.md"
+keywords = ["kubernetes", "spectrocloud", "palette", "drift", "diff"]
+categories = ["command-line-utilities", "development-tools"]
+# The book and the examples belong to this repository. A package a consumer builds needs neither.
+exclude = ["docs/", "examples/", ".github/"]
+# crates.io carries no private crate, and this repository is private, so a publish would make the
+# sources public. Two things must happen before this line goes: the repository becomes public, and
+# the package takes another name, because `strata` on crates.io belongs to another crate.
 publish = false
 
 [lib]
