@@ -220,14 +220,15 @@ fn the_release_check_runs_the_scripts_the_installer_installs() {
     let installer = std::fs::read_to_string(root.join("scripts/ci/install-strata.sh")).unwrap();
     let release = std::fs::read_to_string(root.join(".github/workflows/release.yml")).unwrap();
 
-    // `for name in pr-comment.sh merge-gate.sh verify-report.sh; do` in the installer
+    // `scripts=(pr-comment.sh merge-gate.sh verify-report.sh)` in the installer. --bin-only empties
+    // that list at run time; this is the declaration, which names every script a full install gets.
     let installs: Vec<&str> = installer
         .lines()
-        .find(|l| l.trim_start().starts_with("for name in ") && l.contains(".sh"))
+        .find(|l| l.trim_start().starts_with("scripts=(") && l.contains(".sh"))
         .expect("the installer names the scripts it installs")
         .trim()
-        .trim_start_matches("for name in ")
-        .trim_end_matches("; do")
+        .trim_start_matches("scripts=(")
+        .trim_end_matches(')')
         .split_whitespace()
         .collect();
 
@@ -932,6 +933,47 @@ fn install_strata_takes_the_binary_and_the_scripts_of_one_release_and_checks_the
         "{}",
         text(&o.stderr)
     );
+}
+
+/// `--bin-only` is how a person installs onto their PATH. The binary arrives, and nothing beside
+/// it: no CI scripts, and no SHA256SUMS.
+#[test]
+fn install_strata_bin_only_installs_the_binary_and_nothing_beside_it() {
+    let r = release();
+    let d = r.path();
+    let o = install(
+        d,
+        &[
+            "--version",
+            "v9.9.9",
+            "--dir",
+            "here",
+            "--target",
+            "x86_64-unknown-linux-musl",
+            "--bin-only",
+        ],
+    );
+    assert!(o.status.success(), "{}{}", text(&o.stdout), text(&o.stderr));
+    assert_eq!(
+        text(&o.stdout).trim(),
+        "here/strata",
+        "the path of the binary, for STRATA_BIN"
+    );
+    assert!(
+        d.join("here").join("strata").exists(),
+        "strata is installed"
+    );
+    for name in [
+        "pr-comment.sh",
+        "merge-gate.sh",
+        "verify-report.sh",
+        "SHA256SUMS",
+    ] {
+        assert!(
+            !d.join("here").join(name).exists(),
+            "{name} is not installed with --bin-only"
+        );
+    }
 }
 
 #[test]
