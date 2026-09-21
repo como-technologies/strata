@@ -1122,3 +1122,45 @@ At tenant scope a name can match a cluster in more than one project, and that is
 - [x] A text that matches nothing prints `no clusters matching '<text>'` and exits 0
 - [x] `--cluster` lists clusters only, unless the kinds are named
 - [x] The heading and the JSON say which text the listing filtered by
+
+## Make the repository public and publish the crate
+
+labels: ci
+
+### Background
+
+The repository is private. `install-strata.sh` reaches a release only with a token that can read the repository, so a person outside the organization cannot install strata at all, and the book at GitHub Pages answers `public: false` to `GET /repos/{owner}/{repo}/pages`. The first command in the README works for a member and for nobody else.
+
+crates.io carries no private crate. A publish uploads the sources, and a version there is permanent: a yank stops a new dependent from resolving it and leaves the file downloadable. Going public and publishing the crate are therefore one decision, taken once, and this section holds every step that decision needs.
+
+Two findings block a publish on their own. The name `strata` on crates.io belongs to another crate, published in 2019, and `strata-cli` belongs to another one; on 2026-09-20 `spectro-strata`, `strata-palette`, `palette-strata` and `como-strata` were free. `Cargo.toml` carries `publish = false`, which is a guard against an accidental publish and not an oversight, and its comment names both blockers.
+
+The repository also carries text that assumes it is private. `https://legendary-train-pzq9ojj.pages.github.io/` is a generated Pages URL that no outside reader can open, and it sits in the README badge, in the README, in `src/main.rs`, and in `docs/src/output/help.txt`. `xtask` writes `help.txt` by running `strata --help`, so the source and the file move together or `docs-check` fails.
+
+### Plan
+
+1. Choose the name of the package. Keep `[[bin]] name = "strata"`, so the command keeps its name whatever the package is called, and a reader still types `strata`.
+2. Replace the book URL in `README.md`, in `src/main.rs` and in the badge, then run `just docs-examples` so `docs/src/output/help.txt` carries the new help text.
+3. Make the Pages site public, so the book opens without a login.
+4. Give the repository a description and topics. Both are empty today.
+5. Turn on private vulnerability reporting, which GitHub offers to a public repository only, and drop the paragraph in `SECURITY.md` that says to write to a maintainer instead.
+6. Collapse the "when the repository becomes public" paragraphs in `README.md` and `docs/src/install.md`. The installer needs no token against a public repository, so the `curl` one-liner becomes the first command and the `gh` form goes.
+7. Add `CODE_OF_CONDUCT.md`. The Contributor Covenant needs an address that receives a report.
+8. Decide what `docs/backlog.md` becomes. A public repository shows it, and it holds the internal planning of every issue.
+9. Decide whether each source file carries an Apache-2.0 header. The license does not require one, and its appendix recommends one.
+10. Remove `publish = false` from `Cargo.toml` and set the name from step 1.
+11. Decide the lowest Rust version that strata supports. There is no `rust-version`, and CI builds on `stable`, so nothing tests a floor today. `cargo-msrv` finds one, or the field stays out on purpose.
+12. Run `cargo publish --dry-run`, read the file list it prints, and publish only then.
+13. Check the signature in `install-strata.sh`. The installer checks `SHA256SUMS`, which shows that a file arrived whole; the same release serves the file and the checksums, so it does not show where the file came from. `cosign verify-blob` against the Sigstore bundle of the release does. Add `--verify-signature` for a host that carries `cosign`. A public repository makes the one command the front door, which is why this belongs here.
+
+### Acceptance criteria
+
+- [ ] No file names `legendary-train-pzq9ojj.pages.github.io`, and `strata --help` prints a URL that opens without a login
+- [ ] `just docs-check` passes with the regenerated `help.txt`
+- [ ] A person outside the organization installs a release with one command and no token
+- [ ] The repository has a description, topics, a public book, and private vulnerability reporting
+- [ ] `CODE_OF_CONDUCT.md` names an address that receives a report
+- [ ] `Cargo.toml` carries no `publish = false`, and names a package that crates.io accepts
+- [ ] `cargo publish --dry-run` passes, and its file list carries `LICENSE` and `README.md` and carries no `docs/` and no `examples/`
+- [ ] `cargo install <name>` on a machine with no checkout gives a working `strata`
+- [ ] The book, the README and `SECURITY.md` say nothing that assumes a private repository
