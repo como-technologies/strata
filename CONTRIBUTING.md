@@ -1,5 +1,8 @@
 # Contribute to strata
 
+This project has a [code of conduct](CODE_OF_CONDUCT.md). Taking part here means
+that you keep to it.
+
 ## Before you write code
 
 Open an issue first, or write in the issue that you want to take. Two people

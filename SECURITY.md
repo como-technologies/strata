@@ -5,8 +5,8 @@
 Do not open a public issue for a security problem, and do not put one in a pull
 request.
 
-This repository is private today, so report the problem to a maintainer
-directly.
+This repository is private today, so send the report to
+<security@comotechnologies.io>.
 
 When the repository becomes public, use the private advisory form at
 <https://github.com/como-technologies/strata/security/advisories/new>. GitHub
