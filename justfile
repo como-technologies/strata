@@ -183,7 +183,3 @@ version VERSION:
 # Tag the version in Cargo.toml as v<version>
 release:
     scripts/dev/tag-release.sh
-
-# Open or update one GitHub issue for each section of docs/backlog.md. Needs gh.
-backlog-issues:
-    scripts/dev/open-backlog-issues.sh

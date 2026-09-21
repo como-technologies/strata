@@ -6,10 +6,8 @@
 //! xtask docs-examples --check    exit 1 when docs/src/output/ is not current
 //! xtask playground CHAPTER[-N]   build that chapter's tenant, serve it, and wait
 //! xtask serve ROOT PORT_FILE     serve ROOT as the Palette API, and write the port to PORT_FILE
-//! xtask backlog FILE DIR         one line for each section of FILE, with its body in DIR
 //! ```
 
-mod backlog;
 mod book;
 mod chapters;
 mod checks;
@@ -45,11 +43,7 @@ fn main() -> ExitCode {
             }
             examples(book::Mode::Serve { chapter, seed })
         }
-        ["backlog", file, dir] => match backlog::split(Path::new(file), Path::new(dir)) {
-            Ok(()) => ExitCode::SUCCESS,
-            Err(e) => fail(&format!("backlog: {e}")),
-        },
-        _ => fail("usage: xtask [docs-examples [--check] | playground CHAPTER[-N] | serve ROOT PORT_FILE | backlog FILE DIR]"),
+        _ => fail("usage: xtask [docs-examples [--check] | playground CHAPTER[-N] | serve ROOT PORT_FILE]"),
     }
 }
 

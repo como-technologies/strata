@@ -77,12 +77,6 @@ git worktree add --detach ../strata-check HEAD
 cd ../strata-check && just lint && just test && just library-example && just examples && just docs-check
 ```
 
-## The backlog
-
-`docs/backlog.md` holds one section for each GitHub issue, and it is the source
-of each issue body. `just backlog-issues` opens the issues that do not exist, and
-updates the body of each issue that does, by title.
-
 ## A change to how strata reads Palette
 
 The fixtures follow the shapes of the Palette API, but only a real tenant proves
