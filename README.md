@@ -102,3 +102,9 @@ just docs-check          # the output in the book is the output of this build
 
 [Build and test](docs/src/development/build-test.md) and
 [Write the documentation](docs/src/development/documentation.md) give the rules.
+[CONTRIBUTING](CONTRIBUTING.md) gives the steps for a pull request, and
+[SECURITY](SECURITY.md) says how to report a vulnerability.
+
+## License
+
+Apache License 2.0. See [LICENSE](LICENSE).
