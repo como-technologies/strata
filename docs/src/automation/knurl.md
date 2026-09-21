@@ -71,29 +71,49 @@ installs the layers in order, so the order is content.
 
 ## Run it by hand
 
-`adapter/examples/observe.rs` calls the port by hand, over HTTP. It reads the
-settings that the `strata` command reads, so it runs against a tenant or against
-the playground. It reads, and it never writes.
+One command runs the two sides against the playground. It needs no tenant and no
+key:
 
 ```bash
-just playground cluster-release        # in one terminal: it prints four export lines
+just adapter-by-hand                 # a profile version, its cluster, and who uses it
+just adapter-by-hand candidate       # the identity of a definition, and a leaf
+```
+
+It serves one chapter of the playground on this machine, runs the `strata`
+command and then the platform port of knurl, and stops the server. Each line is
+a command, its answer, and its exit code.
+
+Read the two sides together. On the strata side, `root` and `contentDigest` are
+bare hex. On the knurl side, `exact` and `content` are the same two values with
+the prefix `sha256:`. The clusters that `consumers` names are the instances that
+`pinned-by` names.
+
+The second chapter ends with a failure on purpose. That tenant has
+`csi-aws-ebs` 1.65.0 in two kinds of registry, with two archives, so knurl cannot
+say which one an address means.
+
+### One command at a time
+
+The knurl side is `adapter/examples/observe.rs`. It is not a command on the
+`PATH`, and it is not in the repository of knurl: `just adapter-observe` builds it
+and runs it. It reads the settings that the `strata` command reads, so it runs
+against a tenant too. It reads, and it never writes.
+
+```bash
+just playground cluster-release        # terminal 1: it prints four export lines, and waits
 ```
 
 ```bash
-# in another terminal, after the four export lines
+# terminal 2, in this repository
+export PATH="$PWD/target/release:$PATH"   # the strata that this checkout built
+# paste the four export lines of terminal 1 here
+
+strata snapshot aws-stack@1.1.0 -o /tmp/record.json
+jq -c '{root, contentDigest}' /tmp/record.json
 just adapter-observe unit intermediate aws-stack 1.1.0
 just adapter-observe instance payments
 just adapter-observe pinned-by aws-stack 1.1.0
 just adapter-observe verify aws-stack 1.1.0
-```
-
-Put each answer next to the answer of strata. `exact` is `root`, and `content` is
-`contentDigest`, each with the prefix `sha256:`:
-
-```bash
-strata snapshot aws-stack@1.1.0 -o record.json
-jq '{root, contentDigest}' record.json
-strata consumers aws-stack@1.1.0
 ```
 
 A chapter of the playground serves what its page needs, and no more. Two
@@ -103,9 +123,6 @@ commands need a chapter that serves the registries:
 | --- | --- | --- |
 | `unit intermediate`, `instance`, `pinned-by`, `verify` | `cluster-release` | It has the clusters. It serves no registry. |
 | `identity aws-stack 1.1.1`, `unit leaf cert-manager 1.21.1` | `candidate` | It serves the registries. It has no cluster. |
-
-In the chapter `candidate`, `unit leaf csi-aws-ebs 1.65.0` is the failure for two
-archives: that tenant has the version in two kinds of registry.
 
 ## Test it
 
