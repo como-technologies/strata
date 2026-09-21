@@ -1,6 +1,6 @@
 [package]
 name = "xtask"
-version = "0.0.0"
+version = "0.1.0"
 edition = "2024"
 description = "Development tooling for strata: the stand-in for the Palette API, and the book's examples"
 publish = false
