@@ -20,11 +20,11 @@ layer, the value, and the impact on running clusters.
 export PALETTE_API_KEY=...        # or put it in ~/.palette.env
 export PALETTE_PROJECT=dev
 
-strata list                                    # the refs in the project
-strata snapshot aws-stack@1.1.1 -o aws-stack.json  # record a release
-strata verify aws-stack.json                     # exit 1 when somebody changed it
-strata compare aws-stack.json cluster:payments   # does the cluster run it?
-strata compare aws-stack@1.1.0 aws-stack@1.1.1     # what changed, and the impact
+strata list                                                     # the refs in the project
+strata snapshot aws-stack@1.1.1 -o aws-stack.json               # record a release
+strata verify aws-stack.json                                    # exit 1 when somebody changed it
+strata compare aws-stack.json cluster:payments                  # does the cluster run it?
+strata compare aws-stack@1.1.0 aws-stack@1.1.1                  # what changed, and the impact
 strata compare pack:csi-aws-ebs@1.63.1 pack:csi-aws-ebs@1.65.0  # two pack versions
 ```
 
@@ -52,7 +52,7 @@ gh release download --repo como-technologies/strata --pattern install-strata.sh 
 
 The installer finds the binary for this machine and checks it against
 `SHA256SUMS`. It installs `strata` alone. To install one release, add
-`--version v0.7.1`. The default is the latest release.
+`--version vX.Y.Z`. The default is the latest release.
 
 [Install](docs/src/install.md) gives the other platforms, the signature check,
 and the source build.
