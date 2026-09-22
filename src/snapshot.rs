@@ -19,6 +19,11 @@ pub const SNAPSHOT_SCHEMA: &str = "strata-snapshot/1";
 /// The part of a snapshot schema id shared by every version of it.
 const SNAPSHOT_FAMILY: &str = "strata-snapshot/";
 
+/// The version of the content digest encoding. It is in the input of the digest, so a change to
+/// what the digest covers is a change of this tag, and a digest of one version is never equal to
+/// a digest of another. A tool that pins a version by content digest depends on this tag.
+pub const CONTENT_DIGEST: &str = "content/1";
+
 /// One published profile version: its root, per-pack hashes, canonical values, and raw contents.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
@@ -365,7 +370,7 @@ pub struct PackHash {
 fn content_of(variables_hash: &str, packs: &[Pack]) -> String {
     sha256_hex(&canonical_json(&json!({
         // The key keeps this digest apart from every other one, and gives the encoding a version.
-        "digest": "content/1",
+        "digest": CONTENT_DIGEST,
         "variables": variables_hash,
         "packs": packs
             .iter()

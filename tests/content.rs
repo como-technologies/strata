@@ -80,6 +80,20 @@ fn another_archive_is_another_content_digest() {
     );
 }
 
+/// The content digest is a contract with every tool that pins a version by it. This test holds
+/// the digest of one fixture. It fails when the encoding changes, whether by its tag or by the
+/// fields it covers, so the change is a decision and not an accident. A new encoding is a new
+/// tag, `content/2`, and a new value here; an edit to the fixture `a` is a new value here too.
+#[test]
+fn the_content_digest_encoding_is_pinned() {
+    assert_eq!(strata::snapshot::CONTENT_DIGEST, "content/1");
+    let dir = fixtures();
+    assert_eq!(
+        profile(dir.path(), "a").content_digest(),
+        "44680519d410b0a10413a10c3668323d9b30e991529eae3d4b0a0464b50a15ea"
+    );
+}
+
 #[test]
 fn a_record_carries_the_content_digest_and_an_old_record_still_loads() {
     let dir = fixtures();
