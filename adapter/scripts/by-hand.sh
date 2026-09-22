@@ -72,6 +72,10 @@ else
   run observe unit leaf cert-manager 1.21.1
   echo
   echo "# The next one is a failure on purpose: this tenant has the version in two kinds of"
-  echo "# registry, with two archives, and an address of knurl has no registry."
+  echo "# registry, with two archives, and the address has no digest."
   run observe unit leaf csi-aws-ebs 1.65.0
+  echo
+  echo "# The failure names each archive. The address with the digest of one chooses it."
+  archive=$({ observe unit leaf csi-aws-ebs 1.65.0 2>&1 || true; } | grep -o 'sha256:[0-9a-f]\{64\}' | head -1 || true)
+  run observe unit leaf csi-aws-ebs 1.65.0 "$archive"
 fi

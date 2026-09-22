@@ -228,7 +228,7 @@ cluster, and are `SEEN` without one.
 |---|---|---|
 | `unit`, `unit-record` | 0 | `observe_unit` reads the release version, and strata records it |
 | `unit-exact-is-root`, `unit-content-is-digest` | 0 | the exact digest of knurl is the root, and its content digest is `contentDigest` |
-| `unit-pins-are-packs` | 0 | each pin is a pack of the record from a registry, with its version and its digest |
+| `unit-pins-are-packs` | 0 | each pin is a pack of the record from a registry, with its version and its digest, in the order of the record |
 | `verify`, `verify-strata` | 0 | `verify` of knurl says `Unchanged`, as `strata verify` says of the record |
 | `identity`, `identity-says-same` | 0 | the definition of the version, resolved against the real registries, gives its content digest |
 | `pinned-by`, `consumers`, `pinned-by-is-consumers` | 0, ?, 0 | the instances of `pinned_by` are the consumers of strata, by name |
@@ -236,7 +236,8 @@ cluster, and are `SEEN` without one.
 | `instance-<name>-copies` | 0 | each copy the cluster holds has the two digests of its cluster record, `cluster:<uid>/<profile>` |
 | `leaf`, `leaf-record` | 0 | a pack in one registry reads as a leaf, and strata records it from that registry |
 | `leaf-exact-is-root`, `leaf-content-is-archive`, `leaf-no-pins` | 0 | its exact digest is the root, its content digest is the digest of the pack in its registry, and it pins nothing |
-| `two-archives`, `two-archives-says` | 2, 0 | #55: a pack that two registries hold as two archives is a terminal failure that names each registry and its digest |
+| `two-archives`, `two-archives-says` | 2, 0 | #55: a pack that two registries hold as two archives, with no digest in the address, is a terminal failure that names each registry and its digest |
+| `two-archives-by-digest`, `two-archives-by-digest-content` | 0 | the address with the digest of one archive chooses it, and the content of knurl is that archive |
 | `not-found`, `not-found-terminal` | 2, 0 | a version the tenant does not have is a terminal failure |
 
 The one-registry leaf is the OCI pack of the registries profile. The release

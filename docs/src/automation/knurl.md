@@ -29,7 +29,7 @@ are in two namespaces, and they can have one name.
 
 | Method | Reads | Gives |
 | --- | --- | --- |
-| `observe_unit` | the record of a profile version, or of a pack version | the two digests, and each pack from a registry as a pin |
+| `observe_unit` | the record of a profile version, or of a pack version | the two digests, and each pack from a registry as a pin, in the order of the layers |
 | `observe_instance` | the cluster, one time | the state, and the two digests of each profile copy that the cluster holds |
 | `pinned_by` | `consumers` | the clusters that use a profile version |
 | `identity_of` | a candidate | the content digest before the version is in Palette |
@@ -46,17 +46,18 @@ its cause.
 
 ## The definition of a unit
 
-knurl gives a defined unit its pins, as name and version, and its own
+knurl gives a defined unit its pins, as name and version in order, and its own
 parameters, as named text. The adapter reads one parameter, `candidate`: a
 [candidate file](../reference/candidate-file.md), as JSON. It holds what the pins
-do not: the order of the layers, the tag and the registry of each one, the
-values, the manifests, and the variables. The order is there because Palette
-installs the layers in order, so the order is content.
+do not: the tag and the registry of each layer, the values, the manifests, and
+the variables. The pins give the order of the layers. Palette installs the
+layers in order, so the order is content, and knurl keeps it in the pin set.
 
 `strata_knurl::definition_of` writes that definition from a published version.
-`identity_of` reads it back: it sets the name, the version, and the version of
-each layer from the definition, gives the candidate to strata in memory, and
-writes no file.
+`identity_of` reads it back: it sets the name and the version from the
+definition, puts the layers in the order of the pins, each at the pinned
+version, gives the candidate to strata in memory, and writes no file. A layer
+with no pin, or a pin with no layer, is a terminal failure.
 
 ## What the adapter cannot answer
 
@@ -64,12 +65,14 @@ writes no file.
   says `Unknown`.
 - **A root.** Palette holds no root unit. The adapter gives a terminal failure.
 - **Who uses a pack.** Palette names the clusters of a profile version alone.
-- **Which of two archives.** An address has no registry, and a tenant can have
-  a pack version in two of them. The adapter reads each one. When the digests
-  are equal, it is one leaf: a raise copies a pack by digest. Two kinds of
-  registry can also hold two archives under one name and version. Then the
-  adapter gives a terminal failure that names each registry and its digest,
-  because knurl cannot say which one it means.
+- **Which of two archives, with no digest.** An address has no registry, and a
+  tenant can have a pack version in two of them. The adapter reads each one.
+  When the digests are equal, it is one leaf: a raise copies a pack by digest.
+  Two kinds of registry can also hold two archives under one name and version.
+  An address can hold the content digest, and then the adapter gives the
+  archive with that digest: a pin holds it, so what pins the leaf can say
+  which one it means. With no digest, the adapter gives a terminal failure
+  that names each registry and its archive.
 - **A publish.** Strata does not write.
 
 ## Run it by hand
@@ -91,9 +94,10 @@ bare hex. On the knurl side, `exact` and `content` are the same two values with
 the prefix `sha256:`. The clusters that `consumers` names are the instances that
 `pinned-by` names.
 
-The second chapter ends with a failure on purpose. That tenant has
-`csi-aws-ebs` 1.65.0 in two kinds of registry, with two archives, so knurl cannot
-say which one an address means.
+The second chapter has a failure on purpose. That tenant has `csi-aws-ebs`
+1.65.0 in two kinds of registry, with two archives, so an address with no
+digest cannot say which one it means. The chapter then asks again with the
+digest of one archive, and gets that one.
 
 ### One command at a time
 

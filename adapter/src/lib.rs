@@ -19,12 +19,19 @@
 //!
 //! # The definition of a unit
 //!
-//! knurl gives a defined unit its pins, as name and version, and its own parameters, as named
-//! text. This crate reads one parameter, `candidate`: a strata candidate document, as JSON.
-//! It holds what the pins do not: the order of the layers, the tag and the registry of each
-//! one, the values, the manifests, and the variables. The order is there because Palette
-//! installs the layers in order, so the order is content. [`definition_of`] writes that
-//! parameter from a published version.
+//! knurl gives a defined unit its pins, as name and version in order, and its own parameters,
+//! as named text. This crate reads one parameter, `candidate`: a strata candidate document, as
+//! JSON. It holds what the pins do not: the tag and the registry of each layer, the values, the
+//! manifests, and the variables. The pins give the order of the layers. Palette installs the
+//! layers in order, so the order is content, and knurl keeps it in the pin set.
+//! [`definition_of`] writes that parameter from a published version.
+//!
+//! # The address of a leaf
+//!
+//! An address has no registry, and a tenant can hold one pack version in two kinds of registry
+//! as two archives. The address can hold the content digest, and then the adapter gives the
+//! archive with that digest. A pin holds the digest, so what pins the leaf can say which one it
+//! means. With no digest, two archives are a terminal failure that names each one.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::marker::PhantomData;
@@ -32,14 +39,14 @@ use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use knurl_core::{
-    ContentDigest, Digest, ExactDigest, Health, InstanceName, InstanceObservation, Level, Pin,
-    PinObservation, ReportedState, Timestamp, UnitDefinition, UnitName, UnitObservation, UnitRef,
-    Version,
+    Content, ContentDigest, Digest, ExactDigest, Health, InstanceName, InstanceObservation, Level,
+    Pin, PinObservation, Pins, ReportedState, Timestamp, UnitDefinition, UnitName, UnitObservation,
+    UnitRef, Version,
 };
 use knurl_ports::{PlatformRead, PortError, Result};
 use serde_json::Value;
 use strata::api::{Palette, PaletteApi};
-use strata::candidate::{self, Candidate};
+use strata::candidate::{self, Candidate, CandidateLayer};
 use strata::ops;
 use strata::progress::Progress;
 use strata::reference::Ref;
@@ -193,8 +200,8 @@ impl<A: PaletteApi, F: Connect<A>> StrataPlatform<A, F> {
     /// The two digests of a leaf. An address has no registry, and a real tenant has a pack in
     /// two or more of them. A raise copies a pack by digest, so the content is the same in each
     /// one, and then this is one leaf. Two kinds of registry can also hold two archives under
-    /// one name and version. Then knurl cannot say which one it means, and the failure names
-    /// each registry and its digest.
+    /// one name and version. Then the digest of the address chooses one. With no digest, the
+    /// failure names each registry and its archive.
     fn leaf(&self, unit: &UnitRef, at: &str) -> Result<(ExactDigest, ContentDigest)> {
         let of = label(unit);
         let read = |registry: Option<String>| {
@@ -206,6 +213,8 @@ impl<A: PaletteApi, F: Connect<A>> StrataPlatform<A, F> {
             None => Err(refused(format!("{of} has no pack"))),
         };
         let registries = match read(None) {
+            // One object. The digest of the address chooses nothing, and it refuses nothing:
+            // the caller compares.
             Ok(one) => return Ok((digest(&one.root, &of)?, digest(&archive(&one)?, &of)?)),
             Err(strata::Error::PackInSeveralRegistries { registries, .. }) => registries,
             Err(error) => return Err(port_error(error)),
@@ -222,34 +231,54 @@ impl<A: PaletteApi, F: Connect<A>> StrataPlatform<A, F> {
         }
         copies.sort();
         let archives: BTreeSet<&str> = copies.iter().map(|copy| copy.archive.as_str()).collect();
-        if archives.len() > 1 {
+        let each = || -> String {
             let each: Vec<String> = copies
                 .iter()
                 .map(|copy| format!("{} has {}", copy.registry, copy.archive))
                 .collect();
-            return Err(refused(format!(
-                "{of} is {} archives under one version: {}. An address has no registry, so knurl cannot say which one it means",
-                archives.len(),
-                each.join(", ")
-            )));
-        }
-        // Several objects hold the one leaf. The exact digest covers each of them, so it
+            each.join(", ")
+        };
+        let held: Vec<&Copy> = match (archives.len(), unit.digest) {
+            // One archive, in each registry: one leaf.
+            (1, _) => copies.iter().collect(),
+            (count, None) => {
+                return Err(refused(format!(
+                    "{of} is {count} archives under one version: {}. An address with no digest cannot say which one it means",
+                    each()
+                )));
+            }
+            (count, Some(wanted)) => {
+                let held: Vec<&Copy> = copies
+                    .iter()
+                    .filter(|copy| digest::<Content>(&copy.archive, &of).ok() == Some(wanted))
+                    .collect();
+                if held.is_empty() {
+                    return Err(refused(format!(
+                        "{of} is {count} archives under one version, and none is {wanted}: {}",
+                        each()
+                    )));
+                }
+                held
+            }
+        };
+        // Several objects hold the one content. The exact digest covers each of them, so it
         // changes when a registry gets a copy or loses one.
-        let mut exact = ExactDigest::builder().number(copies.len() as u64);
-        for copy in &copies {
+        let mut exact = ExactDigest::builder().number(held.len() as u64);
+        for copy in &held {
             exact = exact.text(&copy.registry).text(&copy.root);
         }
-        Ok((exact.finish(), digest(&copies[0].archive, &of)?))
+        Ok((exact.finish(), digest(&held[0].archive, &of)?))
     }
 
-    /// The digests and the pins of an intermediate: what its record holds.
+    /// The digests and the pins of an intermediate: what its record holds. The pins are in
+    /// the order of the layers, because Palette installs them in order.
     fn intermediate(
         &self,
         unit: &UnitRef,
         at: &str,
-    ) -> Result<(ExactDigest, ContentDigest, BTreeMap<UnitName, Pin>)> {
+    ) -> Result<(ExactDigest, ContentDigest, Pins<Pin>)> {
         let snapshot = self.snapshot_at(unit, at)?;
-        let mut pins = BTreeMap::new();
+        let mut pins = Pins::new();
         for pin in snapshot.pins() {
             let held = Pin {
                 version: version(&pin.version)?,
@@ -263,10 +292,10 @@ impl<A: PaletteApi, F: Connect<A>> StrataPlatform<A, F> {
 }
 
 /// The definition of a published profile version, in the form that [`PlatformRead::identity_of`]
-/// reads: each layer as a pin, and the candidate document as the one parameter.
+/// reads: each layer as a pin, in order, and the candidate document as the one parameter.
 pub fn definition_of(snapshot: &Snapshot) -> Result<UnitDefinition> {
     let candidate = Candidate::from_snapshot(snapshot).map_err(port_error)?;
-    let mut pins = BTreeMap::new();
+    let mut pins = Pins::new();
     for layer in &candidate.layers {
         pins.insert(unit_name(&layer.name)?, version(&layer.version)?);
     }
@@ -285,8 +314,10 @@ pub fn definition_of(snapshot: &Snapshot) -> Result<UnitDefinition> {
     })
 }
 
-/// The strata candidate of a definition: the document of the parameter, with the name, the
-/// version, and the version of each layer from the definition.
+/// The strata candidate of a definition: the document of the parameter, with the name and the
+/// version of the definition, and the layers in the order of its pins, each at the pinned
+/// version. The pins own the order and the version. The document gives the rest of each layer,
+/// by name.
 fn candidate_of(unit: &UnitDefinition) -> Result<Candidate> {
     let bad = |why: String| {
         refused(format!(
@@ -302,20 +333,28 @@ fn candidate_of(unit: &UnitDefinition) -> Result<Candidate> {
         .map_err(|e| bad(format!("'{CANDIDATE}' is not a candidate: {e}")))?;
     candidate.name = unit.name.to_string();
     candidate.version = unit.version.to_string();
-    if candidate.layers.is_empty() {
-        return Err(bad("it has no layers".into()));
+    if unit.pins.is_empty() {
+        return Err(bad("it has no pins".into()));
     }
-    for layer in &mut candidate.layers {
-        let pinned = unit
-            .pins
-            .get(layer.name.as_str())
-            .ok_or_else(|| bad(format!("no pin for the layer '{}'", layer.name)))?;
-        layer.version = pinned.to_string();
+    let mut rest: BTreeMap<String, CandidateLayer> = candidate
+        .layers
+        .drain(..)
+        .map(|layer| (layer.name.clone(), layer))
+        .collect();
+    let mut layers = Vec::with_capacity(unit.pins.len());
+    for (name, version) in &unit.pins {
+        let mut layer = rest
+            .remove(name.as_str())
+            .ok_or_else(|| bad(format!("'{CANDIDATE}' has no layer '{name}'")))?;
+        layer.version = version.to_string();
+        layers.push(layer);
     }
-    // Each layer has a pin. When the counts are equal too, each pin has a layer.
-    if candidate.layers.len() != unit.pins.len() {
-        return Err(bad("a pin has no layer in the candidate document".into()));
+    if let Some(extra) = rest.keys().next() {
+        return Err(bad(format!(
+            "the layer '{extra}' of '{CANDIDATE}' has no pin"
+        )));
     }
+    candidate.layers = layers;
     Ok(candidate)
 }
 
@@ -327,7 +366,7 @@ impl<A: PaletteApi, F: Connect<A>> PlatformRead for StrataPlatform<A, F> {
             // content digest. It pins nothing that Palette holds.
             Level::Leaf => {
                 let (exact, content) = self.leaf(unit, &now.text)?;
-                (exact, content, BTreeMap::new())
+                (exact, content, Pins::new())
             }
             Level::Intermediate | Level::Root => self.intermediate(unit, &now.text)?,
         };
@@ -347,8 +386,9 @@ impl<A: PaletteApi, F: Connect<A>> PlatformRead for StrataPlatform<A, F> {
             .fetch_cluster(instance.as_str(), &Progress::silent())
             .map_err(port_error)?;
         let reference = format!("cluster:{instance}");
-        let mut pins = BTreeMap::new();
-        // Each one is the copy that the cluster holds, and not the published profile.
+        let mut pins = Pins::new();
+        // Each one is the copy that the cluster holds, and not the published profile. They
+        // are in the order the cluster applies them.
         for copy in Snapshot::each_from_cluster(&raw, &reference, &now.text).map_err(port_error)? {
             let (exact, content) = digests(&copy, &copy.source.name)?;
             let held = PinObservation::new(version(&copy.source.version)?, exact, content);

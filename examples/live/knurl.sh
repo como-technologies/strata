@@ -70,10 +70,11 @@ digest_of() { echo "sha256:$(jq -r ".$2" "$1" | sed 's/^sha256://')"; }
 
 exact_is_root() { [ "$(field unit.out exact)" = "$(digest_of record.json root)" ]; }
 content_is_digest() { [ "$(field unit.out content)" = "$(digest_of record.json contentDigest)" ]; }
-# Each pin: a pack from a registry, with its version and the digest of the registry.
+# Each pin: a pack from a registry, with its version and the digest of the registry, in the
+# order of the record. The order is content: Palette installs the layers in order.
 pins_are_packs() {
-  diff <(awk '$1 == "pin" { print $2, $3, $4 }' unit.out | sort) \
-       <(jq -r '.packs[] | select(.type != "manifest") | "\(.name) \(.version) sha256:\(.hash.upstreamRaw | sub("^sha256:"; ""))"' record.json | sort)
+  diff <(awk '$1 == "pin" { print $2, $3, $4 }' unit.out) \
+       <(jq -r '.packs[] | select(.type != "manifest") | "\(.name) \(.version) sha256:\(.hash.upstreamRaw | sub("^sha256:"; ""))"' record.json)
 }
 pinned_by_is_consumers() {
   diff <(awk 'NR > 1 { print $1 }' pinned-by.out | sort) \
@@ -101,6 +102,9 @@ two_archives_named() {
   grep -q 'Palette Registry has sha256:' two-archives.err &&
   grep -q 'Public Repo has sha256:' two-archives.err
 }
+# The first archive that the two-archive failure names, in the written form of knurl.
+one_archive() { grep -o 'sha256:[0-9a-f]\{64\}' two-archives.err | head -1; }
+by_digest_is_that_archive() { [ "$(field two-archives-by-digest.out content)" = "$(one_archive)" ]; }
 not_found_is_terminal() { grep -q 'Terminal failure' not-found.err; }
 
 # ---- the checks ---------------------------------------------------------------------------------
@@ -151,9 +155,12 @@ check leaf-record 0 "strata: the record of pack:$leaf@$leaf_version, in the one 
 check leaf-exact-is-root 0 'the exact digest of a leaf in one registry is the root of its record' -- leaf_exact_is_root
 check leaf-content-is-archive 0 'the content digest of a leaf is the digest of the pack in its registry' -- leaf_content_is_archive
 check leaf-no-pins 0 'a leaf pins nothing' -- leaf_has_no_pin
-check two-archives 2 "#55: $two $two_version is two archives in two registries, so knurl cannot say which one an address means" -- \
+check two-archives 2 "#55: $two $two_version is two archives in two registries, so an address with no digest cannot say which one it means" -- \
   "$observe" unit leaf "$two" "$two_version"
 check two-archives-says 0 'the failure is terminal, and names each registry with its digest' -- two_archives_named
+check two-archives-by-digest 0 'the address with the digest of one archive chooses it' -- \
+  "$observe" unit leaf "$two" "$two_version" "$(one_archive)"
+check two-archives-by-digest-content 0 'and the content of knurl is that archive' -- by_digest_is_that_archive
 
 echo "== a version the tenant does not have" | tee -a steps.log
 check not-found 2 "a version of $N that Palette does not have is a failure" -- \

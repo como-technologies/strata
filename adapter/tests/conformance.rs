@@ -10,7 +10,9 @@ use std::path::{Path, PathBuf};
 use std::pin::pin;
 use std::task::{Context, Poll, Waker};
 
-use knurl_core::{FailureClass, InstanceName, Level, UnitName, UnitRef, Version};
+use knurl_core::{
+    ContentDigest, FailureClass, InstanceName, Level, Pins, UnitName, UnitRef, Version,
+};
 use knurl_ports::conformance::{World, read_half};
 use knurl_ports::{PlatformRead, PlatformReadExt};
 use serde_json::{Value, json};
@@ -240,7 +242,19 @@ fn unit(level: Level, name: &str, version: &str) -> UnitRef {
         level,
         name: UnitName::new(name).unwrap(),
         version: Version::new(version).unwrap(),
+        digest: None,
     }
+}
+
+/// The digest of csi-aws-ebs 1.65.0 in the registry answers that this repository tracks.
+fn tracked_archive() -> ContentDigest {
+    block_on(platform().observe_unit(&world().leaf))
+        .unwrap()
+        .content
+}
+
+fn other_archive() -> ContentDigest {
+    OTHER_ARCHIVE.parse().unwrap()
 }
 
 fn world() -> World {
@@ -320,9 +334,9 @@ fn a_leaf_in_two_registries_with_one_digest_is_one_leaf() {
 }
 
 #[test]
-fn a_leaf_with_two_archives_is_a_terminal_failure_that_names_each_one() {
-    // Two kinds of registry can hold two archives under one name and version. An address has
-    // no registry, so knurl cannot say which one it means. The failure gives what it needs.
+fn a_leaf_with_two_archives_and_no_digest_is_a_terminal_failure_that_names_each_one() {
+    // Two kinds of registry can hold two archives under one name and version. An address with
+    // no digest cannot say which one it means. The failure gives what the next address needs.
     let error = block_on(two_archives_platform().observe_unit(&world().leaf)).unwrap_err();
     assert_eq!(error.class(), FailureClass::Terminal);
     let message = error.to_string();
@@ -337,6 +351,89 @@ fn a_leaf_with_two_archives_is_a_terminal_failure_that_names_each_one() {
             "the failure does not name {part}: {message}"
         );
     }
+}
+
+#[test]
+fn the_digest_of_an_address_chooses_one_of_two_archives() {
+    // A pin holds the content digest, so what pins the leaf can say which archive it means.
+    let platform = two_archives_platform();
+    let first = world().leaf.with_digest(tracked_archive());
+    let first = block_on(platform.observe_unit(&first)).unwrap();
+    assert_eq!(first.content, tracked_archive());
+
+    let second = world().leaf.with_digest(other_archive());
+    let second = block_on(platform.observe_unit(&second)).unwrap();
+    assert_eq!(second.content, other_archive());
+    assert_ne!(first.exact, second.exact, "two objects hold two contents");
+}
+
+#[test]
+fn a_digest_that_no_archive_has_is_a_terminal_failure_that_names_each_one() {
+    let none: ContentDigest = format!("sha256:{}", "0".repeat(64)).parse().unwrap();
+    let address = world().leaf.with_digest(none);
+    let error = block_on(two_archives_platform().observe_unit(&address)).unwrap_err();
+    assert_eq!(error.class(), FailureClass::Terminal);
+    let message = error.to_string();
+    for part in [
+        "none is sha256:0000",
+        "Public Repo",
+        "Second Repo",
+        "sha256:bd09e8b4187b",
+        OTHER_ARCHIVE,
+    ] {
+        assert!(
+            message.contains(part),
+            "the failure does not name {part}: {message}"
+        );
+    }
+}
+
+#[test]
+fn the_digest_of_an_address_never_refuses_the_one_archive() {
+    // One registry holds the leaf. A read by another digest gives it, and the caller compares.
+    let address = world().leaf.with_digest(other_archive());
+    let given = block_on(platform().observe_unit(&address)).unwrap();
+    assert_eq!(given.content, tracked_archive());
+    assert_ne!(given.content, other_archive());
+}
+
+#[test]
+fn the_pins_of_a_profile_are_in_the_order_of_its_layers() {
+    // Palette installs the layers in order, so the order is content, and knurl keeps it.
+    let platform = platform();
+    let published = platform.snapshot(&world().intermediate).unwrap();
+    let profile = block_on(platform.observe_unit(&world().intermediate)).unwrap();
+    let packs: Vec<String> = published.pins().into_iter().map(|p| p.name).collect();
+    let pins: Vec<&str> = profile.pins.names().map(UnitName::as_str).collect();
+    assert_eq!(pins, packs);
+    assert_eq!(
+        pins[0], "ubuntu-aws",
+        "the operating system is the first layer"
+    );
+}
+
+#[test]
+fn the_order_of_the_pins_is_content() {
+    // The pins of a definition own the order of the layers. Two orders are two units.
+    let platform = platform();
+    let published = platform.snapshot(&world().intermediate).unwrap();
+    let definition = definition_of(&published).unwrap();
+    let forward = block_on(platform.identity_of(&definition)).unwrap();
+
+    // The last two layers, the other way round.
+    let count = definition.pins.len();
+    let mut order: Vec<(UnitName, Version)> = definition
+        .pins
+        .iter()
+        .map(|(name, version)| (name.clone(), version.clone()))
+        .collect();
+    order.swap(count - 2, count - 1);
+    let swapped = knurl_core::UnitDefinition {
+        pins: order.into_iter().collect::<Pins<Version>>(),
+        ..definition
+    };
+    let backward = block_on(platform.identity_of(&swapped)).unwrap();
+    assert_ne!(forward, backward);
 }
 
 #[test]
