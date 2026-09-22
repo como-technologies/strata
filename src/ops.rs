@@ -412,7 +412,8 @@ impl VerifiedRecord {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct VerifySummary {
-    /// Always "strata-verify-summary/1"
+    /// The schema id of this document
+    #[schemars(extend("const" = VERIFY_SUMMARY_SCHEMA))]
     pub schema: String,
     /// Which tool wrote the document.
     pub tool: Tool,
@@ -639,7 +640,8 @@ pub struct ChainLegend {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct Chain {
-    /// Always "strata-chain/1"
+    /// The schema id of this document
+    #[schemars(extend("const" = CHAIN_SCHEMA))]
     pub schema: String,
     /// Which tool wrote the document.
     pub tool: Tool,
@@ -953,7 +955,8 @@ pub struct Consumer {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ConsumersReport {
-    /// Always "strata-consumers/1"
+    /// The schema id of this document
+    #[schemars(extend("const" = CONSUMERS_SCHEMA))]
     pub schema: String,
     /// Which tool wrote the document.
     pub tool: Tool,
@@ -1241,7 +1244,8 @@ pub struct ListedProject {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct Listing {
-    /// Always "strata-list/1"
+    /// The schema id of this document
+    #[schemars(extend("const" = LIST_SCHEMA))]
     pub schema: String,
     /// Which tool wrote the document.
     pub tool: Tool,
@@ -1553,7 +1557,8 @@ fn list_projects(doc: &Value) -> Vec<ListedProject> {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct PackListing {
-    /// Always "strata-packs/1"
+    /// The schema id of this document
+    #[schemars(extend("const" = PACKS_SCHEMA))]
     pub schema: String,
     /// Which tool wrote the document.
     pub tool: Tool,

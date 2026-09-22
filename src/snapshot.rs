@@ -28,7 +28,8 @@ pub const CONTENT_DIGEST: &str = "content/1";
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct Snapshot {
-    /// Always "strata-snapshot/1"
+    /// The schema id of this document
+    #[schemars(extend("const" = SNAPSHOT_SCHEMA))]
     pub schema: String,
     /// Which tool wrote the snapshot.
     pub tool: Tool,

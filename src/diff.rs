@@ -19,7 +19,8 @@ pub const DIFF_SCHEMA: &str = "strata-diff/1";
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct Diff {
-    /// Always "strata-diff/1"
+    /// The schema id of this document
+    #[schemars(extend("const" = DIFF_SCHEMA))]
     pub schema: String,
     /// Which tool wrote the document.
     pub tool: Tool,

@@ -738,14 +738,15 @@ fn snapshot_from_candidate_reports_local_problems_without_credentials() {
 
 #[test]
 fn schema_subcommand_prints_json_schema() {
-    for kind in [
-        "snapshot",
-        "diff",
-        "verify-summary",
-        "chain",
-        "consumers",
-        "list",
-        "candidate",
+    for (kind, id) in [
+        ("snapshot", "strata-snapshot/1"),
+        ("diff", "strata-diff/1"),
+        ("verify-summary", "strata-verify-summary/1"),
+        ("chain", "strata-chain/1"),
+        ("consumers", "strata-consumers/1"),
+        ("list", "strata-list/1"),
+        ("packs", "strata-packs/1"),
+        ("candidate", ""),
     ] {
         let r = run(&["schema", kind]);
         assert_eq!(r.code, 0, "{}", r.err);
@@ -759,7 +760,9 @@ fn schema_subcommand_prints_json_schema() {
             );
             continue;
         }
-        assert!(v["properties"]["schema"].is_object());
+        // The id is a `const` in the JSON Schema, so a validator rejects a document of another
+        // version, and the id it holds is the one the writer puts in the document.
+        assert_eq!(v["properties"]["schema"]["const"], id, "{kind}");
         if kind == "snapshot" {
             let cluster = &v["$defs"]["ClusterSource"]["properties"];
             assert!(cluster["uid"].is_object() && cluster["profiles"].is_object());
