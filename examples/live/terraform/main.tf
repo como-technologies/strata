@@ -234,6 +234,20 @@ resource "spectrocloud_cluster_profile" "addon" {
     }
   }
 
+  # One profile variable, with a default, so the cluster variables endpoint has an entry for this
+  # profile. verify.sh checks that the copy the cluster holds has the variables hash of the
+  # profile (#66).
+  profile_variables {
+    variable {
+      name          = "purpose"
+      display_name  = "Purpose"
+      format        = "string"
+      description   = "What this profile is for"
+      default_value = "strata live example"
+      required      = false
+    }
+  }
+
   lifecycle {
     create_before_destroy = true
   }

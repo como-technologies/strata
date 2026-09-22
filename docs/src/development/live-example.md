@@ -29,7 +29,7 @@ resource and the OS and CSI packs in `terraform/main.tf`.
 | --- | --- |
 | profile `strata-live-profile` 1.0.0 | Ubuntu 24.04, Kubernetes 1.36.2, Cilium 1.20.1, EBS CSI 1.65.0, default values. Cluster A runs it. |
 | profile `strata-live-profile` 1.0.1 | The same, with the EBS storage class `reclaimPolicy` `Retain` in place of `Delete`. No cluster runs it. |
-| profile `strata-live-addon` 1.0.0 | An add-on profile with one manifest, the ConfigMap `strata-live-config` in `default`. Cluster A runs it after the release profile. |
+| profile `strata-live-addon` 1.0.0 | An add-on profile with one manifest, the ConfigMap `strata-live-config` in `default`, and one variable, `purpose`, with a default. Cluster A runs it after the release profile. |
 | cluster `fred` (cluster A) | One control plane node and two workers, `t3.xlarge`, one availability zone. |
 | profile `strata-live-registries` 1.0.0 | An add-on profile with one chart from a Helm registry (default `nginx` 25.1.5 from `Bitnami`), and one pack from the OCI pack registry that `terraform.tfvars` names. No cluster runs it. |
 
@@ -347,11 +347,15 @@ These rules come from the teardowns of this kind of cluster:
 | --- | --- | --- |
 | `snapshot-cluster` | 0 | strata reads what a live cluster runs |
 | `cluster-runs-release` | 0 | the cluster reports the release profile version |
-| `cluster-runs-two-profiles` | 0 | #23: the cluster runs the release profile, then the add-on profile |
+| `cluster-runs-two-profiles` | 0 | #23: the cluster runs the release profile and the add-on profile. Palette lists the two in either order. |
 | `snapshot-release` | 0 | record the version that the cluster runs |
 | `compare-release-cluster` | 0 | #1: a cluster that runs the recorded version is `IDENTICAL` |
 | `snapshot-addon` | 0 | record the add-on profile version that the cluster runs |
 | `compare-addon-cluster` | 0 | #23: the add-on record is `IDENTICAL` to the add-on selection of the cluster |
+| `addon-has-a-variable` | 0 | #66: the add-on profile declares one variable, `purpose` |
+| `cluster-variables-endpoint` | 0 | #66: `GET /v1/spectroclusters/<uid>/variables` serves the variable of the add-on profile |
+| `snapshot-addon-copy` | 0 | #66: record the copy of the add-on profile that the cluster holds |
+| `addon-copy-variables-hash` | 0 | #66: the copy has the variables hash of the profile, so the endpoint repeats the definition fields |
 | `snapshot-next` | 0 | record the newer version |
 | `compare-next-cluster` | 1 | #1: against a newer record, the cluster shows the change |
 | `only-the-edited-value` | 0 | #1: the only change is `csi-aws-ebs` `reclaimPolicy` |

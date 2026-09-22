@@ -134,6 +134,22 @@ So `compare` of two cluster records shows a change exactly when the clusters run
 different content, and strata needs no record of the updates that wait for a
 cluster.
 
+A copy has the variables of its profile too. `GET
+/v1/spectroclusters/<uid>/variables` is an array with one entry for each applied
+profile that declares a variable: the profile uid, and each variable with the
+fields that the profile endpoint serves, plus `value`, the value the cluster
+gives it. So the copy of a profile with a variable has the variables hash of the
+profile, and its root equals the root of the profile.
+
+## The order of the profiles of a cluster
+
+`spec.clusterProfileTemplates` of a cluster lists its profiles in an order that
+is not the order the provider attached them. Two clusters built from one
+definition, with the cluster profile first and the add-on profile second, listed
+the two in the two orders. So a check of what a cluster runs compares the set of
+profiles and not the sequence, and [the knurl adapter](../automation/knurl.md)
+gives the copies that a cluster holds by name.
+
 ## Version bumps
 
 A version bump behaves differently with the provider's
@@ -262,10 +278,6 @@ These are open. Strata makes no claim about them.
   test it; a team reports that it does not, above.
 - A change to the value a cluster gives a profile variable. Nothing here makes
   one, so nothing shows whether Palette records it as a change to the cluster.
-- The shape of `GET /v1/spectroclusters/<uid>/variables`. No profile used here
-  has variables, so nothing shows whether each entry repeats the definition
-  fields that the profile endpoint returns. A cluster copy's root equals the
-  profile's root only if it does.
 - What the cluster listing shows after a deletion by a path other than the
   provider.
 
