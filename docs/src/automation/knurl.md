@@ -35,7 +35,7 @@ are in two namespaces, and they can have one name.
 | Method | Reads | Gives |
 | --- | --- | --- |
 | `observe_unit` | the record of a profile version, or of a pack version | the two digests, and each pack from a registry as a pin, in the order of the layers |
-| `observe_instance` | the cluster, one time | the state, and the two digests of each profile copy that the cluster holds |
+| `observe_instance` | the cluster, one time | the state, and the two digests of each profile copy that the cluster holds, by name |
 | `pinned_by` | `consumers` | the clusters that use a profile version |
 | `identity_of` | a candidate | the content digest before the version is in Palette |
 | `verify`, from knurl | `observe_unit` again | unchanged, or what changed |
@@ -68,6 +68,9 @@ with no pin, or a pin with no layer, is a terminal failure.
 
 - **Health.** Strata reads the state of a cluster and no health. The adapter
   says `Unknown`.
+- **The order of the profiles of a cluster.** Palette lists them in an order
+  that differs between two clusters built from one definition, so the order
+  says nothing. The adapter gives the copies by name.
 - **A root.** Palette holds no root unit. The adapter gives a terminal failure.
 - **Who uses a pack.** Palette names the clusters of a profile version alone.
 - **Which of two archives, with no digest.** An address has no registry, and a

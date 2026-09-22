@@ -417,10 +417,14 @@ impl<A: PaletteApi + 'static, F: Connect<A> + 'static> StrataPlatform<A, F> {
             .fetch_cluster(instance.as_str(), &Progress::silent())
             .map_err(port_error)?;
         let reference = format!("cluster:{instance}");
+        // Each one is the copy that the cluster holds, and not the published profile. Palette
+        // lists the profiles of a cluster in an order that differs between two clusters built
+        // from one definition, so the order says nothing. The copies are by name (knurl D49).
+        let mut copies =
+            Snapshot::each_from_cluster(&raw, &reference, &now.text).map_err(port_error)?;
+        copies.sort_by(|a, b| a.source.name.cmp(&b.source.name));
         let mut pins = Pins::new();
-        // Each one is the copy that the cluster holds, and not the published profile. They
-        // are in the order the cluster applies them.
-        for copy in Snapshot::each_from_cluster(&raw, &reference, &now.text).map_err(port_error)? {
+        for copy in copies {
             let (exact, content) = digests(&copy, &copy.source.name)?;
             let held = PinObservation::new(version(&copy.source.version)?, exact, content);
             pins.insert(unit_name(&copy.source.name)?, held);
