@@ -11,6 +11,18 @@ just docs-check        # docs/src/output/ is the output of this build
 
 `just --list` shows each recipe.
 
+## Where a script goes
+
+| Who runs it | Directory | Examples |
+| --- | --- | --- |
+| A user, in a pipeline | `scripts/ci/` | `install-strata.sh`, `merge-gate.sh`, `verify-report.sh` |
+| A maintainer, for the repository | `scripts/dev/` | `set-version.sh`, `tag-release.sh` |
+| A maintainer, for one crate or one example | beside that crate or example | `examples/live/`, `adapter/scripts/` |
+
+A script in `scripts/ci/` is a product: a page under Automation documents it, and
+`tests/ci_scripts.rs` tests it. A script beside a crate or an example is a
+harness for that one thing, and a `just` recipe runs it.
+
 The development tooling is the `xtask` crate. A `just` recipe wraps each command
 that the book and the examples need, and `cargo xtask <command>` runs the same
 command directly. `cargo xtask` with no command prints the list. The alias is in

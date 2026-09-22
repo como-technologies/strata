@@ -22,8 +22,9 @@ strata schema diff > diff.schema.json
 ```
 
 Give the schema to a script or a language model that reads the documents. The
-diff, verify-summary, and chain documents also have a `legend` that explains
-their values in words.
+`schema` field is a `const` in it, so a validator refuses a document of another
+id. The diff, verify-summary, and chain documents also have a `legend` that
+explains their values in words.
 [JSON documents](../reference/documents.md) describes each field.
 
 ## Options

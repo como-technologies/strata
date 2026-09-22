@@ -32,7 +32,9 @@ The id stays, because the root does not cover these fields and every record of
 the id still compares.
 
 Roots are comparable only within one snapshot schema id. Strata refuses a
-snapshot of another id with `unsupported-schema`, which names both ids.
+snapshot of another id with `unsupported-schema`, which names both ids. The
+JSON Schema of each document holds its id as a `const`, so a validator that
+reads `strata schema <kind>` refuses a document of another id too.
 
 ## The command line
 

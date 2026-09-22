@@ -54,6 +54,9 @@ values, the manifests, and the variables. The order is there because Palette
 installs the layers in order, so the order is content.
 
 `strata_knurl::definition_of` writes that definition from a published version.
+`identity_of` reads it back: it sets the name, the version, and the version of
+each layer from the definition, gives the candidate to strata in memory, and
+writes no file.
 
 ## What the adapter cannot answer
 
