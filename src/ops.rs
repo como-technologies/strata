@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::api::{Palette, PaletteApi, RawCluster, RawProfile};
+use crate::candidate::LoadedCandidate;
 use crate::diff::{
     self, ClusterProfileOverwritten, Diff, ImpactLevel, PackDiff, Status, Verify, VerifyStatus,
 };
@@ -90,10 +91,31 @@ where
     A: PaletteApi,
     F: FnOnce() -> Result<Palette<A>>,
 {
-    let loaded = crate::candidate::load(path)?;
+    snapshot_from_loaded(
+        &crate::candidate::load(path)?,
+        connect,
+        fetched_at,
+        progress,
+    )
+}
+
+/// Build a snapshot of a candidate that is checked and in memory: resolve its packs through the
+/// [`Palette`] that `connect` returns. [`snapshot_from_candidate`] reads a file and then does
+/// this; a caller with a [`Candidate`](crate::candidate::Candidate) value gives it to
+/// [`candidate::check`](crate::candidate::check) and starts here.
+pub fn snapshot_from_loaded<A, F>(
+    loaded: &LoadedCandidate,
+    connect: F,
+    fetched_at: &str,
+    progress: &Progress,
+) -> Result<Snapshot>
+where
+    A: PaletteApi,
+    F: FnOnce() -> Result<Palette<A>>,
+{
     let palette = connect()?;
-    let raw = crate::candidate::resolve(&loaded, &palette, progress)?;
-    let mut snap = Snapshot::from_raw(&raw, &path.display().to_string(), fetched_at)?;
+    let raw = crate::candidate::resolve(loaded, &palette, progress)?;
+    let mut snap = Snapshot::from_raw(&raw, &loaded.path.display().to_string(), fetched_at)?;
     snap.source.template = crate::candidate::TEMPLATE.to_string();
     // Palette does not hold a candidate, so no request asked which clusters use it
     snap.source.consumers = None;

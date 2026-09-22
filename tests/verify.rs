@@ -3486,6 +3486,46 @@ fn a_candidate_written_from_a_record_reproduces_its_root_inline_or_with_files() 
 }
 
 #[test]
+fn a_candidate_in_memory_reproduces_the_root_with_no_file() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let recorded_b = ops::snapshot_from_dir(&dir.path().join("b"), "b", "t0").unwrap();
+    let candidate = Candidate::from_snapshot(&recorded_b).unwrap();
+
+    // The name is the ref of the record, as the path of a candidate file would be.
+    let loaded = candidate::check(candidate.clone(), Path::new("b@1")).unwrap();
+    let snap = ops::snapshot_from_loaded(
+        &loaded,
+        || Ok(Palette::new(serve_registry_for_b(dir.path()))),
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert_eq!(snap.root, recorded_b.root);
+    assert_eq!(snap.source.template, "candidate");
+    assert_eq!(snap.source.reference, "b@1");
+
+    // The rules of a candidate file hold for a value too, and need no network.
+    let mut empty = candidate.clone();
+    empty.layers.clear();
+    let err = candidate::check(empty, Path::new("b@1")).unwrap_err();
+    assert!(
+        matches!(&err, Error::CandidateInvalid { path, message }
+            if path == Path::new("b@1") && message.contains("at least one layer")),
+        "{err}"
+    );
+    let mut both = candidate;
+    both.registry = Some("Public Repo".into());
+    both.registry_uid = Some("r1".into());
+    let err = candidate::check(both, Path::new("b@1")).unwrap_err();
+    assert!(
+        matches!(&err, Error::CandidateInvalid { message, .. }
+            if message.contains("both registry and registryUid")),
+        "{err}"
+    );
+}
+
+#[test]
 fn a_candidate_stops_matching_a_version_edited_in_place_and_same_release_names_the_edit() {
     let dir = tempfile::tempdir().unwrap();
     common::make_fixtures(dir.path());
