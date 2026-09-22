@@ -28,6 +28,13 @@ root = sha256(variablesHash, [key, node] for each pack, in profile order)
 configuration interface of each deployment. The variables are not part of a
 pack, so they have their own hash.
 
+The hash keeps a fixed set of fields of each variable: the name, the display
+name, the description, the format, the default value, the regex, the flags
+`required`, `immutable`, `hidden` and `isSensitive`, the input type, and the
+label, value and description of each option. It keeps no id. The profile
+variables endpoint serves those fields and no uid, so no field that Palette
+mints reaches the hash.
+
 ```mermaid
 flowchart TD
   root["root"]

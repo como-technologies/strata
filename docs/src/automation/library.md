@@ -11,7 +11,7 @@ program can use the same parts:
 | `render::Renderer` | The terminal, markdown, and JSON output. |
 | `ops` | The operations of the commands: `compare`, `verify`, `same_release`, `consumers`, `list`. |
 | `Snapshot::content_digest` | The digest of what a version is. See [The content digest](../internals/hashes.md#the-content-digest). |
-| `Snapshot::pins` | Each pack that a version takes from a registry: its name, its version, and its digest. |
+| `Snapshot::pins` | Each pack that a version takes from a registry: its name, its version, and its digest as the registry wrote it. A Helm registry writes bare hex, and a pack registry writes `sha256:` and hex. Both are sha256. |
 | `Snapshot::each_from_cluster` | A snapshot for each profile that a cluster applies, from one read of the cluster. |
 | `candidate::check`, `ops::snapshot_from_loaded` | A candidate that a program builds, with no file: the rules of a [candidate file](../reference/candidate-file.md) hold for it, and it gives the snapshot that `snapshot --from-candidate` gives. |
 | `Error::class` | `Transient`, `Terminal`, or `Unknown`: what a caller does before it tries again. `Retry` uses the same rule. |

@@ -9,6 +9,7 @@
 //!   a5  a3 with every pack of type oci: a move to an OCI registry, where the type follows the
 //!       registry
 //!   a6  a with every pack a manifest: type manifest and no registry
+//!   a7  a with the OS pack pinned under another tag name for the same version: the same build
 //!   b   the next version: k8s bump + values edits, cilium same tag but new digest, prometheus
 //!       manifest edited + one added, cert-manager added, external-dns removed, metrics-server
 //!       values unparseable on both sides but different, variables changed, two consumers.
@@ -425,6 +426,12 @@ pub fn make_fixtures(root: &Path) {
             ("\"type\": \"spectro\"", "\"type\": \"manifest\""),
             ("\"registryUid\": \"reg-public\"", "\"registryUid\": \"\""),
         ],
+    );
+    // The tag is the OS pack's alone: the version stays 22.04, and so do the uid and the digest.
+    rewrite(
+        &root.join("a"),
+        &root.join("a7"),
+        &[("\"tag\": \"22.04\"", "\"tag\": \"LTS__22.4\"")],
     );
 
     let packs_b = vec![

@@ -45,11 +45,22 @@ fn a_rewrite_of_the_values_keeps_the_content_digest() {
 }
 
 #[test]
-fn an_edit_of_the_values_changes_the_content_digest() {
+fn an_edit_of_the_values_changes_both_digests() {
     let dir = fixtures();
     // a4 is a3 with another pod subnet in the kubernetes values.
     let (a3, a4) = (profile(dir.path(), "a3"), profile(dir.path(), "a4"));
+    assert_ne!(a3.root, a4.root);
     assert_ne!(a3.content_digest(), a4.content_digest());
+}
+
+#[test]
+fn another_tag_name_is_another_root_and_the_same_content() {
+    let dir = fixtures();
+    // a7 is a with the OS pack pinned under another tag name for the same version. The tag is
+    // a name a registry gives a build, and not the build.
+    let (a, a7) = (profile(dir.path(), "a"), profile(dir.path(), "a7"));
+    assert_ne!(a.root, a7.root);
+    assert_eq!(a.content_digest(), a7.content_digest());
 }
 
 #[test]
