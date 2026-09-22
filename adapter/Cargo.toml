@@ -15,7 +15,6 @@ knurl-core = { git = "ssh://git@github.com/como-technologies/knurl.git", branch 
 knurl-ports = { git = "ssh://git@github.com/como-technologies/knurl.git", branch = "platform-port" }
 chrono = "0.4"
 serde_json = "1"
-tempfile = "3"
 
 [dev-dependencies]
 # The rules of the port, which knurl writes one time and each adapter runs.

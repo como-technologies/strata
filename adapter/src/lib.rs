@@ -28,12 +28,13 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::marker::PhantomData;
+use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use knurl_core::{
-    ContentDigest, Digest, ExactDigest, FailureClass, Health, InstanceName, InstanceObservation,
-    Level, Pin, PinObservation, ReportedState, Timestamp, UnitDefinition, UnitName,
-    UnitObservation, UnitRef, Version,
+    ContentDigest, Digest, ExactDigest, Health, InstanceName, InstanceObservation, Level, Pin,
+    PinObservation, ReportedState, Timestamp, UnitDefinition, UnitName, UnitObservation, UnitRef,
+    Version,
 };
 use knurl_ports::{PlatformRead, PortError, Result};
 use serde_json::Value;
@@ -47,12 +48,43 @@ use strata::snapshot::Snapshot;
 /// The parameter of a [`UnitDefinition`] that holds the strata candidate document.
 pub const CANDIDATE: &str = "candidate";
 
-/// Palette, through strata. `connect` gives a client for a project, or for the scope of the
-/// adapter with `None`. The environment owns the project, so a caller makes one adapter value
-/// for each environment.
+/// A function that gives a client of Palette: for a project, or for the scope of the adapter
+/// with `None`. The environment owns the project, so a caller makes one adapter value for each
+/// environment.
+pub trait Connect<A: PaletteApi>:
+    Fn(Option<&str>) -> strata::Result<Palette<A>> + Send + Sync
+{
+}
+
+impl<A: PaletteApi, F> Connect<A> for F where
+    F: Fn(Option<&str>) -> strata::Result<Palette<A>> + Send + Sync
+{
+}
+
+/// Palette, through strata, by the clients that a [`Connect`] gives.
 pub struct StrataPlatform<A, F> {
     connect: F,
     api: PhantomData<fn() -> A>,
+}
+
+/// The time of one read: for knurl, and for the record of strata.
+struct Now {
+    stamp: Timestamp,
+    text: String,
+}
+
+fn now() -> Now {
+    let seconds = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let text = chrono::DateTime::from_timestamp(seconds as i64, 0)
+        .unwrap_or_default()
+        .to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+    Now {
+        stamp: Timestamp(seconds),
+        text,
+    }
 }
 
 /// A failure of strata, with the class that strata gives it and the error as the cause.
@@ -68,8 +100,29 @@ fn port_error(error: strata::Error) -> PortError {
 
 /// A value that the data of Palette cannot give is a failure that stays.
 fn refused(message: String) -> PortError {
-    debug_assert_eq!(PortError::terminal("").class(), FailureClass::Terminal);
     PortError::terminal(message)
+}
+
+/// `name version`: how a failure names a unit.
+fn label(unit: &UnitRef) -> String {
+    format!("{} {}", unit.name, unit.version)
+}
+
+/// The strata ref of an intermediate: a profile version.
+fn profile_ref(unit: &UnitRef) -> Ref {
+    Ref::NameVersion {
+        name: unit.name.to_string(),
+        version: unit.version.to_string(),
+    }
+}
+
+/// The strata ref of a leaf: a pack version, in one registry or in any.
+fn pack_ref(unit: &UnitRef, registry: Option<String>) -> Ref {
+    Ref::Pack {
+        registry,
+        name: unit.name.to_string(),
+        version: unit.version.to_string(),
+    }
 }
 
 /// A digest of strata or of a registry, in the written form of knurl. A Helm digest is bare
@@ -91,18 +144,6 @@ fn version(text: &str) -> Result<Version> {
     Version::new(text).map_err(|error| refused(error.to_string()))
 }
 
-/// The time of a read, for knurl and for the record of strata.
-fn now() -> (Timestamp, String) {
-    let seconds = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
-    let text = chrono::DateTime::from_timestamp(seconds as i64, 0)
-        .unwrap_or_default()
-        .to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
-    (Timestamp(seconds), text)
-}
-
 /// The two digests of a strata record.
 fn digests(snapshot: &Snapshot, of: &str) -> Result<(ExactDigest, ContentDigest)> {
     Ok((
@@ -111,11 +152,15 @@ fn digests(snapshot: &Snapshot, of: &str) -> Result<(ExactDigest, ContentDigest)
     ))
 }
 
-impl<A, F> StrataPlatform<A, F>
-where
-    A: PaletteApi,
-    F: Fn(Option<&str>) -> strata::Result<Palette<A>> + Send + Sync,
-{
+/// One registry's copy of a leaf: the root of the object there, and the archive it serves.
+#[derive(PartialEq, Eq, PartialOrd, Ord)]
+struct Copy {
+    registry: String,
+    root: String,
+    archive: String,
+}
+
+impl<A: PaletteApi, F: Connect<A>> StrataPlatform<A, F> {
     /// An adapter that reads Palette through the clients that `connect` gives.
     pub fn new(connect: F) -> Self {
         Self {
@@ -127,22 +172,17 @@ where
     /// The strata record of a unit: all that the observation leaves out. A root is a terminal
     /// failure, because Palette holds no root.
     pub fn snapshot(&self, unit: &UnitRef) -> Result<Snapshot> {
-        self.snapshot_at(unit, &now().1)
+        self.snapshot_at(unit, &now().text)
     }
 
     fn snapshot_at(&self, unit: &UnitRef, at: &str) -> Result<Snapshot> {
-        let (name, version) = (unit.name.to_string(), unit.version.to_string());
         let reference = match unit.level {
-            Level::Intermediate => Ref::NameVersion { name, version },
-            Level::Leaf => Ref::Pack {
-                registry: None,
-                name,
-                version,
-            },
+            Level::Intermediate => profile_ref(unit),
+            Level::Leaf => pack_ref(unit, None),
             Level::Root => {
                 return Err(refused(format!(
-                    "Palette holds no root unit, so it cannot give {} {}: a root is in the forge",
-                    unit.name, unit.version
+                    "Palette holds no root unit, so it cannot give {}: a root is in the forge",
+                    label(unit)
                 )));
             }
         };
@@ -156,13 +196,9 @@ where
     /// one name and version. Then knurl cannot say which one it means, and the failure names
     /// each registry and its digest.
     fn leaf(&self, unit: &UnitRef, at: &str) -> Result<(ExactDigest, ContentDigest)> {
-        let of = format!("{} {}", unit.name, unit.version);
+        let of = label(unit);
         let read = |registry: Option<String>| {
-            let reference = Ref::Pack {
-                registry,
-                name: unit.name.to_string(),
-                version: unit.version.to_string(),
-            };
+            let reference = pack_ref(unit, registry);
             ops::snapshot_for(&reference, || (self.connect)(None), at, &Progress::silent())
         };
         let archive = |snapshot: &Snapshot| match snapshot.packs.first() {
@@ -175,18 +211,21 @@ where
             Err(error) => return Err(port_error(error)),
         };
 
-        // One entry for each registry: its name, the root of the object, and the archive.
-        let mut copies = Vec::new();
+        let mut copies = Vec::with_capacity(registries.len());
         for registry in registries {
             let snapshot = read(Some(registry.clone())).map_err(port_error)?;
-            copies.push((registry, snapshot.root.clone(), archive(&snapshot)?));
+            copies.push(Copy {
+                registry,
+                root: snapshot.root.clone(),
+                archive: archive(&snapshot)?,
+            });
         }
         copies.sort();
-        let archives: BTreeSet<&str> = copies.iter().map(|copy| copy.2.as_str()).collect();
+        let archives: BTreeSet<&str> = copies.iter().map(|copy| copy.archive.as_str()).collect();
         if archives.len() > 1 {
             let each: Vec<String> = copies
                 .iter()
-                .map(|(registry, _, archive)| format!("{registry} has {archive}"))
+                .map(|copy| format!("{} has {}", copy.registry, copy.archive))
                 .collect();
             return Err(refused(format!(
                 "{of} is {} archives under one version: {}. An address has no registry, so knurl cannot say which one it means",
@@ -197,10 +236,29 @@ where
         // Several objects hold the one leaf. The exact digest covers each of them, so it
         // changes when a registry gets a copy or loses one.
         let mut exact = ExactDigest::builder().number(copies.len() as u64);
-        for (registry, root, _) in &copies {
-            exact = exact.text(registry).text(root);
+        for copy in &copies {
+            exact = exact.text(&copy.registry).text(&copy.root);
         }
-        Ok((exact.finish(), digest(&copies[0].2, &of)?))
+        Ok((exact.finish(), digest(&copies[0].archive, &of)?))
+    }
+
+    /// The digests and the pins of an intermediate: what its record holds.
+    fn intermediate(
+        &self,
+        unit: &UnitRef,
+        at: &str,
+    ) -> Result<(ExactDigest, ContentDigest, BTreeMap<UnitName, Pin>)> {
+        let snapshot = self.snapshot_at(unit, at)?;
+        let mut pins = BTreeMap::new();
+        for pin in snapshot.pins() {
+            let held = Pin {
+                version: version(&pin.version)?,
+                digest: digest(&pin.digest, &pin.name)?,
+            };
+            pins.insert(unit_name(&pin.name)?, held);
+        }
+        let (exact, content) = digests(&snapshot, &label(unit))?;
+        Ok((exact, content, pins))
     }
 }
 
@@ -240,69 +298,50 @@ fn candidate_of(unit: &UnitDefinition) -> Result<Candidate> {
         .parameters
         .get(CANDIDATE)
         .ok_or_else(|| bad(format!("it has no parameter '{CANDIDATE}'")))?;
-    let mut document: Value =
-        serde_json::from_str(text).map_err(|e| bad(format!("'{CANDIDATE}' is not JSON: {e}")))?;
-    document["name"] = Value::from(unit.name.as_str());
-    document["version"] = Value::from(unit.version.as_str());
-    let layers = document["layers"]
-        .as_array_mut()
-        .ok_or_else(|| bad("it has no layers".into()))?;
-    for layer in layers.iter_mut() {
-        let name = layer["name"].as_str().unwrap_or_default().to_string();
+    let mut candidate: Candidate = serde_json::from_str(text)
+        .map_err(|e| bad(format!("'{CANDIDATE}' is not a candidate: {e}")))?;
+    candidate.name = unit.name.to_string();
+    candidate.version = unit.version.to_string();
+    if candidate.layers.is_empty() {
+        return Err(bad("it has no layers".into()));
+    }
+    for layer in &mut candidate.layers {
         let pinned = unit
             .pins
-            .get(name.as_str())
-            .ok_or_else(|| bad(format!("no pin for the layer '{name}'")))?;
-        layer["version"] = Value::from(pinned.as_str());
+            .get(layer.name.as_str())
+            .ok_or_else(|| bad(format!("no pin for the layer '{}'", layer.name)))?;
+        layer.version = pinned.to_string();
     }
-    if layers.len() != unit.pins.len() {
+    // Each layer has a pin. When the counts are equal too, each pin has a layer.
+    if candidate.layers.len() != unit.pins.len() {
         return Err(bad("a pin has no layer in the candidate document".into()));
     }
-    serde_json::from_value(document)
-        .map_err(|e| bad(format!("'{CANDIDATE}' is not a candidate: {e}")))
+    Ok(candidate)
 }
 
-impl<A, F> PlatformRead for StrataPlatform<A, F>
-where
-    A: PaletteApi,
-    F: Fn(Option<&str>) -> strata::Result<Palette<A>> + Send + Sync,
-{
+impl<A: PaletteApi, F: Connect<A>> PlatformRead for StrataPlatform<A, F> {
     async fn observe_unit(&self, unit: &UnitRef) -> Result<UnitObservation> {
-        let (observed_at, at) = now();
-        let mut pins = BTreeMap::new();
-        // The content of a leaf is the archive in the registry, so its digest is the content
-        // digest. It pins nothing that Palette holds.
-        if unit.level == Level::Leaf {
-            let (exact, content) = self.leaf(unit, &at)?;
-            return Ok(UnitObservation::new(
-                unit.clone(),
-                exact,
-                content,
-                pins,
-                observed_at,
-            ));
-        }
-        let snapshot = self.snapshot_at(unit, &at)?;
-        for pin in snapshot.pins() {
-            let held = Pin {
-                version: version(&pin.version)?,
-                digest: digest(&pin.digest, &pin.name)?,
-            };
-            pins.insert(unit_name(&pin.name)?, held);
-        }
-        let of = format!("{} {}", unit.name, unit.version);
-        let (exact, content) = digests(&snapshot, &of)?;
+        let now = now();
+        let (exact, content, pins) = match unit.level {
+            // The content of a leaf is the archive in the registry, so its digest is the
+            // content digest. It pins nothing that Palette holds.
+            Level::Leaf => {
+                let (exact, content) = self.leaf(unit, &now.text)?;
+                (exact, content, BTreeMap::new())
+            }
+            Level::Intermediate | Level::Root => self.intermediate(unit, &now.text)?,
+        };
         Ok(UnitObservation::new(
             unit.clone(),
             exact,
             content,
             pins,
-            observed_at,
+            now.stamp,
         ))
     }
 
     async fn observe_instance(&self, instance: &InstanceName) -> Result<InstanceObservation> {
-        let (observed_at, at) = now();
+        let now = now();
         let palette = (self.connect)(None).map_err(port_error)?;
         let raw = palette
             .fetch_cluster(instance.as_str(), &Progress::silent())
@@ -310,7 +349,7 @@ where
         let reference = format!("cluster:{instance}");
         let mut pins = BTreeMap::new();
         // Each one is the copy that the cluster holds, and not the published profile.
-        for copy in Snapshot::each_from_cluster(&raw, &reference, &at).map_err(port_error)? {
+        for copy in Snapshot::each_from_cluster(&raw, &reference, &now.text).map_err(port_error)? {
             let (exact, content) = digests(&copy, &copy.source.name)?;
             let held = PinObservation::new(version(&copy.source.version)?, exact, content);
             pins.insert(unit_name(&copy.source.name)?, held);
@@ -326,7 +365,7 @@ where
             ReportedState(state.to_string()),
             Health::Unknown,
             pins,
-            observed_at,
+            now.stamp,
         ))
     }
 
@@ -337,14 +376,10 @@ where
                 unit.name, unit.level
             )));
         }
-        let reference = Ref::NameVersion {
-            name: unit.name.to_string(),
-            version: unit.version.to_string(),
-        };
         let report = ops::consumers(
-            &reference,
+            &profile_ref(unit),
             |project| (self.connect)(project),
-            &now().1,
+            &now().text,
             &Progress::silent(),
         )
         .map_err(port_error)?;
@@ -366,16 +401,14 @@ where
 
     async fn identity_of(&self, unit: &UnitDefinition) -> Result<ContentDigest> {
         let candidate = candidate_of(unit)?;
-        let io = |error: std::io::Error| {
-            PortError::unknown(format!("no place for the candidate file: {error}"))
-        };
-        let dir = tempfile::tempdir().map_err(io)?;
-        let path = dir.path().join("candidate.yaml");
-        candidate::write(&candidate, &path, None).map_err(port_error)?;
-        let snapshot = ops::snapshot_from_candidate(
-            &path,
+        // The candidate is in memory, and its values and manifests are in it, so no file is
+        // read. The name is the ref of the record, as the path of a candidate file would be.
+        let named = format!("{}@{}", unit.name, unit.version);
+        let loaded = candidate::check(candidate, Path::new(&named)).map_err(port_error)?;
+        let snapshot = ops::snapshot_from_loaded(
+            &loaded,
             || (self.connect)(None),
-            &now().1,
+            &now().text,
             &Progress::silent(),
         )
         .map_err(port_error)?;
