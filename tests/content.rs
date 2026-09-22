@@ -162,6 +162,34 @@ fn one_read_of_a_cluster_gives_a_snapshot_for_each_profile_it_applies() {
 }
 
 #[test]
+fn a_merged_record_has_one_root_whatever_order_palette_lists_the_profiles() {
+    let dir = fixtures();
+    // cluster-merged-reversed is cluster-merged with the two templates the other way round, as
+    // Palette lists them for another cluster built from the same definition.
+    let listed = RawCluster::load_dir(&dir.path().join("cluster-merged")).unwrap();
+    let reversed = RawCluster::load_dir(&dir.path().join("cluster-merged-reversed")).unwrap();
+    let one = Snapshot::from_cluster(&listed, None, "cluster:lab-cluster", "t").unwrap();
+    let other = Snapshot::from_cluster(&reversed, None, "cluster:lab-cluster", "t").unwrap();
+    assert_eq!(one.root, other.root);
+    assert_eq!(one.content_digest(), other.content_digest());
+
+    // The cluster profile comes first, then the add-on profile, in both records.
+    assert_eq!(one.source.name, "lab-profile+lab-addons");
+    assert_eq!(other.source.name, "lab-profile+lab-addons");
+    let names = |snapshot: &Snapshot| -> Vec<String> {
+        let cluster = snapshot.source.cluster.as_ref().unwrap();
+        cluster.profiles.iter().map(|p| p.name.clone()).collect()
+    };
+    assert_eq!(names(&one), ["lab-profile", "lab-addons"]);
+    assert_eq!(names(&other), ["lab-profile", "lab-addons"]);
+
+    // One snapshot for each profile comes in the same order.
+    let each = Snapshot::each_from_cluster(&reversed, "cluster:lab-cluster", "t").unwrap();
+    let each: Vec<&str> = each.iter().map(|s| s.source.name.as_str()).collect();
+    assert_eq!(each, ["lab-profile", "lab-addons"]);
+}
+
+#[test]
 fn an_error_has_a_failure_class() {
     let api = |status| Error::Api {
         status,

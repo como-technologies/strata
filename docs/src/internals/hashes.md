@@ -147,9 +147,12 @@ variables, so no run shows that shape: see
 of the pack values on the cluster shows as `AUTHORED`. A cluster on an older
 version shows `IDENTITY`.
 
-Without a profile selection, a cluster snapshot covers each applied profile:
-the packs in the order that Palette applies them, and the variables merged and
-sorted by name.
+Without a profile selection, a cluster snapshot covers each applied profile in
+canonical order: the cluster or infra profile first, then the others by name,
+with the packs of each in its order, and the variables merged and sorted by
+name. Palette lists the profiles of a cluster in an order that differs between
+two clusters built from one definition, so the record does not follow that
+order, and two such clusters have one merged root.
 
 ## The digest of each registry kind
 

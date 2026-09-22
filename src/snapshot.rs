@@ -184,7 +184,9 @@ pub struct ClusterSource {
     /// covers every applied profile.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub profile: Option<String>,
-    /// The applied profiles this snapshot covers, in the order Palette applies them.
+    /// The applied profiles this snapshot covers, in the canonical order of
+    /// [`AppliedProfile::of_cluster`]: the cluster or infra profile first, then the others by
+    /// name.
     pub profiles: Vec<AppliedProfile>,
     /// The values the cluster gives the variables of those profiles, in profile order and then by
     /// name. Outside the root: two clusters on one release can differ here. A sensitive variable
@@ -255,15 +257,43 @@ pub struct AppliedProfile {
 }
 
 impl AppliedProfile {
-    /// The profiles a cluster document applies, in the order Palette applies them:
-    /// `spec.clusterProfileTemplates` of `GET /v1/spectroclusters/{uid}`.
+    /// The profiles a cluster document applies, in canonical order: the cluster or infra
+    /// profile first, then the others by name. Palette lists them in
+    /// `spec.clusterProfileTemplates` of `GET /v1/spectroclusters/{uid}` in an order that
+    /// differs between two clusters built from one definition, so that order says nothing.
     pub fn of_cluster(doc: &Value) -> Vec<AppliedProfile> {
-        doc.pointer("/spec/clusterProfileTemplates")
+        AppliedProfile::templates_of(doc)
+            .into_iter()
+            .map(|(_, applied)| applied)
+            .collect()
+    }
+
+    /// Each template of `spec.clusterProfileTemplates` with the profile it applies, in
+    /// canonical order. Two profiles of one type are by name, then by version, then by uid.
+    fn templates_of(doc: &Value) -> Vec<(Value, AppliedProfile)> {
+        let mut pairs: Vec<(Value, AppliedProfile)> = doc
+            .pointer("/spec/clusterProfileTemplates")
             .and_then(Value::as_array)
             .into_iter()
             .flatten()
-            .map(AppliedProfile::from_template)
-            .collect()
+            .map(|t| (t.clone(), AppliedProfile::from_template(t)))
+            .collect();
+        pairs.sort_by(|(_, a), (_, b)| {
+            a.rank()
+                .cmp(&b.rank())
+                .then_with(|| a.name.cmp(&b.name))
+                .then_with(|| a.version.cmp(&b.version))
+                .then_with(|| a.uid.cmp(&b.uid))
+        });
+        pairs
+    }
+
+    /// The cluster or infra profile comes first: a cluster runs it before any add-on.
+    fn rank(&self) -> u8 {
+        match self.kind.as_str() {
+            "cluster" | "infra" => 0,
+            _ => 1,
+        }
     }
 
     fn from_template(t: &Value) -> AppliedProfile {
@@ -652,16 +682,16 @@ impl Snapshot {
             .collect()
     }
 
-    /// A snapshot for each profile that a cluster applies, from one read of the cluster. Each
-    /// one is the snapshot that `cluster:<cluster>/<profile>` gives.
+    /// A snapshot for each profile that a cluster applies, from one read of the cluster, in the
+    /// canonical order of [`AppliedProfile::of_cluster`]. Each one is the snapshot that
+    /// `cluster:<cluster>/<profile>` gives.
     pub fn each_from_cluster(
         raw: &RawCluster,
         reference: &str,
         fetched_at: &str,
     ) -> Result<Vec<Snapshot>> {
-        raw.templates()
+        AppliedProfile::of_cluster(&raw.cluster)
             .iter()
-            .map(AppliedProfile::from_template)
             .map(|applied| Snapshot::from_cluster(raw, Some(&applied.uid), reference, fetched_at))
             .collect()
     }
@@ -683,11 +713,12 @@ impl Snapshot {
         reference: &str,
         fetched_at: &str,
     ) -> Result<Snapshot> {
-        let templates = raw.templates();
-        let applied: Vec<AppliedProfile> = templates
-            .iter()
-            .map(AppliedProfile::from_template)
-            .collect();
+        // In canonical order, so two clusters built from one definition have one merged root
+        // whatever order Palette lists their profiles in.
+        let (templates, applied): (Vec<Value>, Vec<AppliedProfile>) =
+            AppliedProfile::templates_of(&raw.cluster)
+                .into_iter()
+                .unzip();
         let chosen: Vec<usize> = match profile {
             None => (0..templates.len()).collect(),
             Some(p) => {

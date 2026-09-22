@@ -146,9 +146,12 @@ profile, and its root equals the root of the profile.
 `spec.clusterProfileTemplates` of a cluster lists its profiles in an order that
 is not the order the provider attached them. Two clusters built from one
 definition, with the cluster profile first and the add-on profile second, listed
-the two in the two orders. So a check of what a cluster runs compares the set of
-profiles and not the sequence, and [the knurl adapter](../automation/knurl.md)
-gives the copies that a cluster holds by name.
+the two in the two orders. So strata orders them itself: a cluster record lists
+the cluster or infra profile first and then the others by name, and merges their
+packs in that order, so two clusters built from one definition have one merged
+root. A check of what a cluster runs compares the set of profiles, and [the
+knurl adapter](../automation/knurl.md) gives the copies that a cluster holds by
+name.
 
 ## Version bumps
 

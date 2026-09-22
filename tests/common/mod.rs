@@ -22,6 +22,7 @@
 //!   cluster-a-staging  cluster-a, with the value "staging" for cluster_env
 //!   cluster-b          lab-cluster (CLUSTER_UID) running b
 //!   cluster-merged     lab-cluster (CLUSTER_UID) running b and addons
+//!   cluster-merged-reversed  the same, with the two templates listed the other way round
 //!
 //! A cluster gives each variable its default value, or the value in its `values`; a sensitive
 //! variable always gets SECRET_VALUE, which no document may contain.
@@ -608,6 +609,7 @@ pub fn make_fixtures(root: &Path) {
         vec![],
     );
     rename_profile(&root.join("addons"), "lab-addons");
+    retype_profile(&root.join("addons"), "add-on");
 
     write_cluster(root, "cluster-a", &["a"], &[]);
     write_cluster(
@@ -618,6 +620,9 @@ pub fn make_fixtures(root: &Path) {
     );
     write_cluster(root, "cluster-b", &["b"], &[]);
     write_cluster(root, "cluster-merged", &["b", "addons"], &[]);
+    // The same cluster, with its templates listed the other way round, as Palette lists them
+    // for another cluster built from one definition.
+    write_cluster(root, "cluster-merged-reversed", &["addons", "b"], &[]);
 }
 
 /// Give the profile in `dir` another name; `write_profile` names every profile lab-profile.
@@ -628,6 +633,14 @@ fn rename_profile(dir: &Path, name: &str) {
         v["metadata"]["name"] = json!(name);
         fs::write(&path, serde_json::to_string_pretty(&v).unwrap()).unwrap();
     }
+}
+
+/// Give the profile in `dir` another type; `write_profile` gives every profile the type cluster.
+fn retype_profile(dir: &Path, kind: &str) {
+    let path = dir.join("profile.json");
+    let mut v = read_json(&path);
+    v["spec"]["published"]["type"] = json!(kind);
+    fs::write(&path, serde_json::to_string_pretty(&v).unwrap()).unwrap();
 }
 
 // ---- the shell script helpers ------------------------------------------------------------------
