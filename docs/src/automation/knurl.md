@@ -127,6 +127,23 @@ commands need a chapter that serves the registries:
 | `unit intermediate`, `instance`, `pinned-by`, `verify` | `cluster-release` | It has the clusters. It serves no registry. |
 | `identity aws-stack 1.1.1`, `unit leaf cert-manager 1.21.1` | `candidate` | It serves the registries. It has no cluster. |
 
+## Run it against a tenant
+
+```bash
+just live-profiles     # the live profile versions: seconds, and no cost
+just live-knurl        # each method of the port, against the strata answer for the same object
+just live-up           # the cluster too, for the instance checks: billable until live-down
+```
+
+`examples/live/knurl.sh` runs each method against the real profile versions,
+the real registries, and each cluster that runs a version, and compares each
+answer with the strata command for the same object: the exact digest with the
+root, the content digest with `contentDigest`, the content of a leaf with the
+digest of the pack in its registry, and `pinned_by` with `consumers`. The
+two-archive failure runs on a real pack that two registries of the tenant hold.
+[What the live example verifies](../development/live-runs.md#knurlsh) lists
+its checks.
+
 ## Test it
 
 knurl writes the rules of its port one time, as a suite. Its in-memory fake runs

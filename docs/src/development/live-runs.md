@@ -217,6 +217,32 @@ and the ambiguous-ref message reads the same every time:
 strata: pack 'csi-aws-ebs' at version '1.63.1' is in several registries: Palette Registry, Public Repo; name one, as in pack:<registry>/csi-aws-ebs@1.63.1
 ```
 
+## knurl.sh
+
+Read-only. It runs each method of [the knurl adapter](../automation/knurl.md)
+against the tenant, and then the strata command for the same object, and
+compares the two answers. It needs the profiles; the instance checks need the
+cluster, and are `SEEN` without one.
+
+| Check | Expected exit | What it shows |
+|---|---|---|
+| `unit`, `unit-record` | 0 | `observe_unit` reads the release version, and strata records it |
+| `unit-exact-is-root`, `unit-content-is-digest` | 0 | the exact digest of knurl is the root, and its content digest is `contentDigest` |
+| `unit-pins-are-packs` | 0 | each pin is a pack of the record from a registry, with its version and its digest |
+| `verify`, `verify-strata` | 0 | `verify` of knurl says `Unchanged`, as `strata verify` says of the record |
+| `identity`, `identity-says-same` | 0 | the definition of the version, resolved against the real registries, gives its content digest |
+| `pinned-by`, `consumers`, `pinned-by-is-consumers` | 0, ?, 0 | the instances of `pinned_by` are the consumers of strata, by name |
+| `instance-<name>`, `instance-<name>-running` | 0 | `observe_instance` reads each cluster that runs the version, and its state is `Running` |
+| `instance-<name>-copies` | 0 | each copy the cluster holds has the two digests of its cluster record, `cluster:<uid>/<profile>` |
+| `leaf`, `leaf-record` | 0 | a pack in one registry reads as a leaf, and strata records it from that registry |
+| `leaf-exact-is-root`, `leaf-content-is-archive`, `leaf-no-pins` | 0 | its exact digest is the root, its content digest is the digest of the pack in its registry, and it pins nothing |
+| `two-archives`, `two-archives-says` | 2, 0 | #55: a pack that two registries hold as two archives is a terminal failure that names each registry and its digest |
+| `not-found`, `not-found-terminal` | 2, 0 | a version the tenant does not have is a terminal failure |
+
+The one-registry leaf is the OCI pack of the registries profile. The release
+packs are of no use for it: this tenant has each of them in Public Repo and in
+Palette Registry, as two archives, so each is the two-archive case.
+
 ## What has no live run
 
 - The scripts that write to the tenant have run under Terraform. The example

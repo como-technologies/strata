@@ -147,6 +147,12 @@ live-verify: build
 live-packs: build
     examples/live/packs.sh
 
+# Read-only. It needs live-profiles; the instance checks need live-up, and are SEEN without it.
+
+# The knurl adapter against the tenant: each port method against the strata answer for the same object
+live-knurl: build
+    examples/live/knurl.sh
+
 # The merge gate over records of the live profiles: needs live-profiles, no cluster, no cost (#57)
 live-merge-gate: build
     examples/live/merge-gate.sh

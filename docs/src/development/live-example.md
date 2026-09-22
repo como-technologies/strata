@@ -15,6 +15,7 @@ show.
 | `drift-report.sh off`, `drift-report.sh on` | `scripts/ci/verify-report.sh` around an edit in place and a version bump (#25). |
 | `packs.sh` | `pack:` refs against the tenant's own registries (#55). Read-only, and it needs no cluster. |
 | `merge-gate.sh` | `scripts/ci/merge-gate.sh` over records of the live profiles, in a git repository that the script builds (#57). It needs the profiles, and no cluster. |
+| `knurl.sh` | [The knurl adapter](../automation/knurl.md): each method of the port against the strata answer for the same real object. Read-only. It needs the profiles; the instance checks need the cluster. |
 
 The example uses AWS, because the recorded runs had an AWS cloud account. Strata
 makes no rule about which cloud runs the cluster. For another cloud, change the cluster
@@ -65,6 +66,7 @@ its end.
 | `api.sh` | The writes outside OpenTofu: an edit in place, a push of a profile to a cluster, and the delete of profile versions. |
 | `packs.sh` | The pack ref test (#55). |
 | `merge-gate.sh` | The merge gate test (#57). |
+| `knurl.sh` | The knurl adapter test. |
 | `aws-inventory.sh` | What the cluster still has in AWS, to confirm a teardown. |
 
 ## Design
@@ -93,6 +95,7 @@ found it.
 | `tag-only.sh` | the tag name of the OS pack, and which of two such versions cluster A runs | the pack uid, each other pack, the values, the flag (off), the baseline |
 | `packs.sh` | nothing; it only reads | the baseline |
 | `merge-gate.sh` | the add-on version, which stage 4 edits in place and stage 5 puts back | the profiles, the clusters, the baseline |
+| `knurl.sh` | nothing; it only reads | the baseline |
 
 **One definition for each kind.** Clusters A and B come from one resource, and
 differ only in their names. Each profile has the same lifecycle:
