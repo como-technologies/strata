@@ -12,6 +12,10 @@
 //!
 //! strata reads, and it never writes. So this crate gives `PlatformRead` alone.
 //!
+//! The port is `async`, and strata blocks. The adapter moves each read to a blocking task, so
+//! the thread that polls the future stays free. It uses tokio for that. The port of knurl names
+//! no runtime, and a caller runs the future on a tokio runtime.
+//!
 //! The digests are those that strata prints. The exact digest is the root. The content digest
 //! of an intermediate is `Snapshot::content_digest`, and the content digest of a leaf is the
 //! digest of the pack in its registry. This crate gives each one the written form of knurl and
@@ -36,6 +40,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::marker::PhantomData;
 use std::path::Path;
+use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use knurl_core::{
@@ -70,8 +75,18 @@ impl<A: PaletteApi, F> Connect<A> for F where
 
 /// Palette, through strata, by the clients that a [`Connect`] gives.
 pub struct StrataPlatform<A, F> {
-    connect: F,
+    connect: Arc<F>,
     api: PhantomData<fn() -> A>,
+}
+
+/// A copy reads the same place through the same clients.
+impl<A, F> Clone for StrataPlatform<A, F> {
+    fn clone(&self) -> Self {
+        Self {
+            connect: Arc::clone(&self.connect),
+            api: PhantomData,
+        }
+    }
 }
 
 /// The time of one read: for knurl, and for the record of strata.
@@ -171,7 +186,7 @@ impl<A: PaletteApi, F: Connect<A>> StrataPlatform<A, F> {
     /// An adapter that reads Palette through the clients that `connect` gives.
     pub fn new(connect: F) -> Self {
         Self {
-            connect,
+            connect: Arc::new(connect),
             api: PhantomData,
         }
     }
@@ -358,8 +373,24 @@ fn candidate_of(unit: &UnitDefinition) -> Result<Candidate> {
     Ok(candidate)
 }
 
-impl<A: PaletteApi, F: Connect<A>> PlatformRead for StrataPlatform<A, F> {
-    async fn observe_unit(&self, unit: &UnitRef) -> Result<UnitObservation> {
+/// Each read of the port, on this thread. The port runs each one on a blocking task.
+impl<A: PaletteApi + 'static, F: Connect<A> + 'static> StrataPlatform<A, F> {
+    /// Runs `read` on a blocking task, and waits for its answer. strata blocks, and the port is
+    /// `async`, so the thread that polls the future stays free (knurl D43). A panic in the read
+    /// is a panic here.
+    async fn blocking<T: Send + 'static>(
+        &self,
+        read: impl FnOnce(&Self) -> Result<T> + Send + 'static,
+    ) -> Result<T> {
+        let this = self.clone();
+        match tokio::task::spawn_blocking(move || read(&this)).await {
+            Ok(answer) => answer,
+            Err(join) if join.is_panic() => std::panic::resume_unwind(join.into_panic()),
+            Err(join) => Err(PortError::unknown(format!("the read was canceled: {join}"))),
+        }
+    }
+
+    fn observe_unit_blocking(&self, unit: &UnitRef) -> Result<UnitObservation> {
         let now = now();
         let (exact, content, pins) = match unit.level {
             // The content of a leaf is the archive in the registry, so its digest is the
@@ -379,7 +410,7 @@ impl<A: PaletteApi, F: Connect<A>> PlatformRead for StrataPlatform<A, F> {
         ))
     }
 
-    async fn observe_instance(&self, instance: &InstanceName) -> Result<InstanceObservation> {
+    fn observe_instance_blocking(&self, instance: &InstanceName) -> Result<InstanceObservation> {
         let now = now();
         let palette = (self.connect)(None).map_err(port_error)?;
         let raw = palette
@@ -409,7 +440,7 @@ impl<A: PaletteApi, F: Connect<A>> PlatformRead for StrataPlatform<A, F> {
         ))
     }
 
-    async fn pinned_by(&self, unit: &UnitRef) -> Result<BTreeSet<InstanceName>> {
+    fn pinned_by_blocking(&self, unit: &UnitRef) -> Result<BTreeSet<InstanceName>> {
         if unit.level != Level::Intermediate {
             return Err(refused(format!(
                 "Palette names the clusters of a profile version alone, and {} is a {:?}",
@@ -439,7 +470,7 @@ impl<A: PaletteApi, F: Connect<A>> PlatformRead for StrataPlatform<A, F> {
             .collect()
     }
 
-    async fn identity_of(&self, unit: &UnitDefinition) -> Result<ContentDigest> {
+    fn identity_of_blocking(&self, unit: &UnitDefinition) -> Result<ContentDigest> {
         let candidate = candidate_of(unit)?;
         // The candidate is in memory, and its values and manifests are in it, so no file is
         // read. The name is the ref of the record, as the path of a candidate file would be.
@@ -456,5 +487,31 @@ impl<A: PaletteApi, F: Connect<A>> PlatformRead for StrataPlatform<A, F> {
             &snapshot.content_digest(),
             &format!("{} {}", unit.name, unit.version),
         )
+    }
+}
+
+impl<A: PaletteApi + 'static, F: Connect<A> + 'static> PlatformRead for StrataPlatform<A, F> {
+    async fn observe_unit(&self, unit: &UnitRef) -> Result<UnitObservation> {
+        let unit = unit.clone();
+        self.blocking(move |this| this.observe_unit_blocking(&unit))
+            .await
+    }
+
+    async fn observe_instance(&self, instance: &InstanceName) -> Result<InstanceObservation> {
+        let instance = instance.clone();
+        self.blocking(move |this| this.observe_instance_blocking(&instance))
+            .await
+    }
+
+    async fn pinned_by(&self, unit: &UnitRef) -> Result<BTreeSet<InstanceName>> {
+        let unit = unit.clone();
+        self.blocking(move |this| this.pinned_by_blocking(&unit))
+            .await
+    }
+
+    async fn identity_of(&self, unit: &UnitDefinition) -> Result<ContentDigest> {
+        let unit = unit.clone();
+        self.blocking(move |this| this.identity_of_blocking(&unit))
+            .await
     }
 }

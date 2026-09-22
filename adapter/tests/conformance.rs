@@ -7,8 +7,6 @@
 use std::fs;
 use std::future::Future;
 use std::path::{Path, PathBuf};
-use std::pin::pin;
-use std::task::{Context, Poll, Waker};
 
 use knurl_core::{
     ContentDigest, FailureClass, InstanceName, Level, Pins, UnitName, UnitRef, Version,
@@ -28,15 +26,13 @@ const PACKS: [&str; 5] = [
 ];
 const VERSIONS: [&str; 3] = ["1.0.0", "1.1.0", "1.1.1"];
 
-/// Runs a future that is ready at its first poll. The adapter does not wait: strata blocks.
+/// Runs a future on a runtime of this thread. The adapter moves each read to a blocking task,
+/// and the future waits for it.
 fn block_on<F: Future>(future: F) -> F::Output {
-    let mut context = Context::from_waker(Waker::noop());
-    let mut future = pin!(future);
-    loop {
-        if let Poll::Ready(output) = future.as_mut().poll(&mut context) {
-            return output;
-        }
-    }
+    tokio::runtime::Builder::new_current_thread()
+        .build()
+        .expect("a runtime of this thread")
+        .block_on(future)
 }
 
 fn examples() -> PathBuf {

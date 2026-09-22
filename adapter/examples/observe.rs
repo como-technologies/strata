@@ -20,9 +20,7 @@
 //! failure.
 
 use std::future::Future;
-use std::pin::pin;
 use std::process::ExitCode;
-use std::task::{Context, Poll, Waker};
 
 use knurl_core::{ContentDigest, InstanceName, Level, UnitName, UnitRef, Verification, Version};
 use knurl_ports::{PlatformRead, PlatformReadExt, PortError};
@@ -53,15 +51,13 @@ fn client(config: Config) -> Palette<Retry<HttpApi>> {
     Palette::new(Retry::new(HttpApi::new(config), policy, Progress::silent()))
 }
 
-/// Runs a future that is ready at its first poll. The adapter does not wait: strata blocks.
+/// Runs a future on a runtime of this thread. The adapter moves each read to a blocking task,
+/// and the future waits for it.
 fn block_on<F: Future>(future: F) -> F::Output {
-    let mut context = Context::from_waker(Waker::noop());
-    let mut future = pin!(future);
-    loop {
-        if let Poll::Ready(output) = future.as_mut().poll(&mut context) {
-            return output;
-        }
-    }
+    tokio::runtime::Builder::new_current_thread()
+        .build()
+        .expect("a runtime of this thread")
+        .block_on(future)
 }
 
 fn unit(level: &str, name: &str, version: &str, digest: Option<&str>) -> Result<UnitRef, String> {

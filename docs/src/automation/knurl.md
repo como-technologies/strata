@@ -9,6 +9,11 @@ system is behind a trait, and an adapter gives the trait.
 port of knurl, `PlatformRead`, and it reads Palette through the strata library.
 Strata reads and never writes, so there is no write half here.
 
+The port is `async`, and strata blocks. The adapter moves each read to a
+blocking task of tokio, so the thread that waits on the future stays free. The
+port of knurl names no runtime. A caller of this adapter runs the future on a
+tokio runtime, as `adapter/examples/observe.rs` does.
+
 The `strata` crate does not depend on knurl. `adapter/` is its own package, as
 `examples/library/` is. `cargo build` and `cargo test` at the root do not build
 it, and no release carries it.
