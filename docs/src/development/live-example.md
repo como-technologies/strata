@@ -248,6 +248,7 @@ just live-packs                                                                #
 just live-merge-gate                                                           # #57, needs just live-profiles
 just live-registry                                                             # #66, needs just live-profiles, oras, helm, and aws
 just live-template                                                             # #66, needs just live-profiles and no cluster; ends with live-down
+just live-cluster                                                              # #66, needs just live-up; ends with the cluster gone
 ```
 
 `just live-session` runs `verify.sh`, `in-place.sh off`, `in-place.sh on`, and
@@ -279,6 +280,10 @@ AWS_PROFILE=<profile> examples/live/aws-inventory.sh   # exit 0: nothing left
 uses (the `profile_names` output), by exact name. With the flag on,
 `skip_destroy` keeps the versions that a bump replaced out of the state, so a
 destroy alone leaves them in Palette.
+
+The destroy asks for approval. A run with no person at the terminal answers it
+with `yes yes | just live-down`; the second attempt, after a refused read,
+reads the answer too.
 
 > **Do not take "Destroy complete" as the confirmation.** During a gateway
 > outage, Palette answers a plain-text 404, and the provider can take it for a
