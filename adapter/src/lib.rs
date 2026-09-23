@@ -7,7 +7,7 @@
 //! | --- | --- | --- |
 //! | leaf | a pack version in a registry | `pack:<name>@<version>` |
 //! | intermediate | a cluster profile version | `<name>@<version>` |
-//! | root | nothing: a root is in the forge | none |
+//! | root | nothing: Palette holds no root unit | none |
 //! | instance | a cluster | `cluster:<name>` |
 //!
 //! strata reads, and it never writes. So this crate gives `PlatformRead` alone.
@@ -244,7 +244,7 @@ impl<A: PaletteApi, F: Connect<A>> StrataPlatform<A, F> {
             Level::Leaf => pack_ref(unit, None),
             Level::Root => {
                 return Err(refused(format!(
-                    "Palette holds no root unit, so it cannot give {}: a root is in the forge",
+                    "Palette holds no root unit, so it cannot give {}",
                     label(unit)
                 )));
             }

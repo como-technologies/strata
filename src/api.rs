@@ -398,6 +398,20 @@ fn read_scope_fetched_at(dir: &Path) -> Result<Option<String>> {
     scope_field(dir, "fetchedAt")
 }
 
+/// Whether the variables endpoint was unavailable when `dir` was saved. A directory that an older
+/// build saved records nothing, which reads as available: the stand-in and a real empty list look
+/// alike, and only this flag tells them apart.
+fn read_scope_variables_unavailable(dir: &Path) -> Result<bool> {
+    if !dir.join(SCOPE_FILE).is_file() {
+        return Ok(false);
+    }
+    let scope = read_json_file(dir, SCOPE_FILE)?;
+    Ok(scope
+        .get("variablesUnavailable")
+        .and_then(Value::as_bool)
+        .unwrap_or(false))
+}
+
 fn scope_field(dir: &Path, key: &str) -> Result<Option<String>> {
     if !dir.join(SCOPE_FILE).is_file() {
         return Ok(None);
@@ -410,13 +424,21 @@ fn scope_field(dir: &Path, key: &str) -> Result<Option<String>> {
         .map(str::to_string))
 }
 
-/// The scope file's document: the project uid, empty at tenant scope, and the time the responses
-/// were read. Without the time, a snapshot rebuilt from the directory would stamp the rebuild as
-/// the fetch, and `verify` would report a version as unchanged since a moment nothing was read.
-fn scope_document(project_uid: &Option<String>, fetched_at: &str) -> Value {
+/// The scope file's document: the project uid, empty at tenant scope, the time the responses were
+/// read, and whether the variables endpoint was unavailable. Without the time, a snapshot rebuilt
+/// from the directory would stamp the rebuild as the fetch, and `verify` would report a version as
+/// unchanged since a moment nothing was read. Without the flag, a rebuild would read the stand-in
+/// `{"variables": []}` as a real empty list, and its root would claim to cover variables that
+/// nothing read.
+fn scope_document(
+    project_uid: &Option<String>,
+    fetched_at: &str,
+    variables_unavailable: bool,
+) -> Value {
     serde_json::json!({
         "projectUid": project_uid.as_deref().unwrap_or(""),
         "fetchedAt": fetched_at,
+        "variablesUnavailable": variables_unavailable,
     })
 }
 
@@ -454,7 +476,7 @@ impl RawProfile {
             profile: read_json_file(dir, "profile.json")?,
             manifests: read_json_file(dir, "manifests.json")?,
             variables: read_json_file(dir, "variables.json")?,
-            variables_unavailable: false,
+            variables_unavailable: read_scope_variables_unavailable(dir)?,
             project_uid: read_scope(dir)?,
             fetched_at: read_scope_fetched_at(dir)?,
         })
@@ -468,7 +490,10 @@ impl RawProfile {
                 ("profile.json", &self.profile),
                 ("manifests.json", &self.manifests),
                 ("variables.json", &self.variables),
-                (SCOPE_FILE, &scope_document(&self.project_uid, fetched_at)),
+                (
+                    SCOPE_FILE,
+                    &scope_document(&self.project_uid, fetched_at, self.variables_unavailable),
+                ),
             ],
         )
     }
@@ -507,7 +532,7 @@ impl RawCluster {
             cluster: read_json_file(dir, Self::MARKER)?,
             manifests: read_json_file(dir, "manifests.json")?,
             variables: read_json_file(dir, "variables.json")?,
-            variables_unavailable: false,
+            variables_unavailable: read_scope_variables_unavailable(dir)?,
             project_uid: read_scope(dir)?,
             fetched_at: read_scope_fetched_at(dir)?,
         })
@@ -521,12 +546,16 @@ impl RawCluster {
                 (Self::MARKER, &self.cluster),
                 ("manifests.json", &self.manifests),
                 ("variables.json", &self.variables),
-                (SCOPE_FILE, &scope_document(&self.project_uid, fetched_at)),
+                (
+                    SCOPE_FILE,
+                    &scope_document(&self.project_uid, fetched_at, self.variables_unavailable),
+                ),
             ],
         )
     }
 
-    /// The applied profile templates, in the order Palette applies them.
+    /// The applied profile templates, in the order the cluster document lists them. That order is
+    /// no install order; `AppliedProfile::of_cluster` puts them in canonical order.
     pub fn templates(&self) -> Vec<Value> {
         self.cluster
             .pointer("/spec/clusterProfileTemplates")

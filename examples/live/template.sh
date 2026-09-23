@@ -72,7 +72,7 @@ echo "== 2. an edit in place of the linked release version" | tee -a steps.log
 check lock-edit 2 "#66: an edit in place of a version that a template links is refused" -- \
   "$live/api.sh" edit "$P" "reclaimPolicy: Delete" "reclaimPolicy: Retain"
 check lock-edit-says 0 "the refusal names the reason" -- \
-  grep -qiE 'template|forbidden|cannot be modified|not allowed' lock-edit.err
+  grep -q ClusterProfileUpdateValidationFailure lock-edit.err
 check lock-verify 0 "#66: the release version is unchanged" -- "$strata" verify release.json
 
 # ---- 3. a cluster outside the template -----------------------------------------------------------

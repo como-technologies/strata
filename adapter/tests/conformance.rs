@@ -433,7 +433,8 @@ fn the_digest_of_an_address_never_refuses_the_one_archive() {
 
 #[test]
 fn the_pins_of_a_profile_are_in_the_order_of_its_layers() {
-    // Palette installs the layers in order, so the order is content, and knurl keeps it.
+    // Palette stores the layers in the order given and keeps it, so the order is content, and
+    // knurl keeps it.
     let platform = platform();
     let published = platform.snapshot(&world().intermediate).unwrap();
     let profile = block_on(platform.observe_unit(&world().intermediate)).unwrap();

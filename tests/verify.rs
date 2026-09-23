@@ -4019,6 +4019,31 @@ fn packs_of(
     )
 }
 
+/// One build under an exact tag and the floating tags above it, as a registry answers it: each
+/// row names every tag above it, so the exact tag names the most and the top floating tag names
+/// none.
+fn tagged_entity() -> Value {
+    serde_json::json!({"layer": "csi", "tags": [
+        {"tag": "LTS__24.x", "packUid": "pk-65", "parentTags": null},
+        {"tag": "LTS__24.04", "packUid": "pk-65", "parentTags": ["LTS__24.4.x", "LTS__24.x"]},
+        {"tag": "LTS__24.4.x", "packUid": "pk-65", "parentTags": ["LTS__24.x"]},
+    ]})
+}
+
+#[test]
+fn the_exact_tag_leads_the_floating_tags_above_it_whatever_their_length() {
+    let api = serve_registry(vec![], &[("reg-public", tagged_entity())]);
+    let l = packs_of(&api, "csi-aws-ebs", ops::PackOptions::default()).unwrap();
+    let newest = &l.registries[0].versions[0];
+    assert_eq!(newest.version, "1.65.0");
+    // the exact tag is the shortest of the three, so a sort by length buries it
+    assert_eq!(
+        newest.tags,
+        vec!["LTS__24.04", "LTS__24.4.x", "LTS__24.x"],
+        "the exact tag first, then each floating tag above it"
+    );
+}
+
 #[test]
 fn packs_lists_what_a_registry_offers_newest_first_with_the_tags_of_each_version() {
     let api = serve_registry(vec![], &[("reg-public", public_entity())]);

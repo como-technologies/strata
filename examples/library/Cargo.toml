@@ -6,7 +6,8 @@ description = "A program that uses the strata library without its command line"
 publish = false
 
 [dependencies]
-# Inside this repository. Elsewhere, a git dependency on a release tag; see the README's Library section.
+# Inside this repository. Elsewhere, a git dependency on a release tag; see
+# docs/src/automation/library.md, Add the dependency.
 strata = { path = "../.." }
 serde_json = "1"
 

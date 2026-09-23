@@ -34,7 +34,8 @@ pub enum Ref {
         version: String,
     },
     /// `cluster:<uid>` or `cluster:<uid>/<profile>`: what a cluster runs. Without a profile,
-    /// every profile applied to the cluster, in order; with one, only the profile of that name.
+    /// every profile applied to the cluster, in canonical order: the cluster or infra profile
+    /// first, then the others by name. With one, only the profile of that name.
     Cluster {
         /// Cluster uid.
         uid: String,

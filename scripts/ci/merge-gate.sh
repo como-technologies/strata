@@ -29,8 +29,9 @@
 #      Palette, or is gone. A cluster built from it would not get what the record says. --no-verify,
 #      or no PALETTE_API_KEY, leaves this check out.
 #
-# Exit 0 when the merge result is clear, 1 when the gate is red, 2 when strata or git could not
-# answer. Needs strata (or STRATA_BIN), git, jq, and sort -V. The target branch is --base, or the
+# Exit 0 when the merge result is clear, 1 when the gate is red, and 2 when the script could not
+# run at all. A record that strata could not check is red, not 2: the gate fails closed.
+# Needs strata (or STRATA_BIN), git, jq, and sort -V. The target branch is --base, or the
 # CI variable of the merge request: CI_MERGE_REQUEST_TARGET_BRANCH_NAME on GitLab, GITHUB_BASE_REF
 # on GitHub.
 set -euo pipefail

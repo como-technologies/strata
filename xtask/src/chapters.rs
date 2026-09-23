@@ -210,6 +210,13 @@ fn commands(r: &mut Runner) {
         "strata snapshot aws-stack@1.1.1 -o releases/1.1.1/dev.json",
     );
     r.step("snapshot-record", 0, false, r#"jq '{root, source: (.source | {ref, uid, projectUid, name, version, template, fetchedAt}), packs: [.packs[] | {key, version, node: .hash.node}]}' releases/1.1.1/dev.json"#);
+    // What a ref that looks like a file gets when no such file is there; the refs page shows it.
+    r.step(
+        "refs-missing-file",
+        2,
+        true,
+        "strata verify releases/1.1.1/missing.json",
+    );
     r.step(
         "snapshot-latest",
         0,

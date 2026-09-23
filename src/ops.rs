@@ -1350,7 +1350,8 @@ pub struct ListedCluster {
     /// could not be read, and the reports fall back to the uid.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub project_name: String,
-    /// With applied: the profile versions the cluster applies, in the order Palette applies them.
+    /// With applied: the profile versions the cluster applies, in the order the cluster document
+    /// lists them. That order is no install order.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub profiles: Option<Vec<AppliedProfile>>,
     /// With applied: why the cluster document could not be read, when it could not.
@@ -1837,7 +1838,7 @@ where
             // a tag row names its version, and names the build it points at; match on either,
             // because a registry that answers with one and not the other still says enough
             let pack_uid = text(e, "/metadata/uid");
-            let mut for_version: Vec<String> = tags
+            let mut rows: Vec<(usize, String)> = tags
                 .iter()
                 .filter(|t| {
                     let v = text(t, "/version");
@@ -1847,10 +1848,19 @@ where
                         v == version
                     }
                 })
-                .map(|t| text(t, "/tag"))
+                .map(|t| {
+                    let above = t
+                        .pointer("/parentTags")
+                        .and_then(Value::as_array)
+                        .map_or(0, Vec::len);
+                    (above, text(t, "/tag"))
+                })
                 .collect();
-            // the exact tag first, then the floating tags above it, longest first
-            for_version.sort_by(|a, b| b.len().cmp(&a.len()).then_with(|| a.cmp(b)));
+            // the exact tag first, then the floating tags above it. A tag row names every tag
+            // above it, so the row with the most of them is the most exact. A registry that
+            // names none leaves the tags of one version in name order.
+            rows.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.1.cmp(&b.1)));
+            let for_version: Vec<String> = rows.into_iter().map(|(_, tag)| tag).collect();
             versions.push(PackBuild {
                 version,
                 pack_uid,

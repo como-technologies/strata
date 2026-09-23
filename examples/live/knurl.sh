@@ -71,7 +71,7 @@ digest_of() { echo "sha256:$(jq -r ".$2" "$1" | sed 's/^sha256://')"; }
 exact_is_root() { [ "$(field unit.out exact)" = "$(digest_of record.json root)" ]; }
 content_is_digest() { [ "$(field unit.out content)" = "$(digest_of record.json contentDigest)" ]; }
 # Each pin: a pack from a registry, with its version and the digest of the registry, in the
-# order of the record. The order is content: Palette installs the layers in order.
+# order of the record. The order is content: Palette stores the layers in the order given.
 pins_are_packs() {
   diff <(awk '$1 == "pin" { print $2, $3, $4 }' unit.out) \
        <(jq -r '.packs[] | select(.type != "manifest") | "\(.name) \(.version) sha256:\(.hash.upstreamRaw | sub("^sha256:"; ""))"' record.json)
