@@ -39,8 +39,8 @@ status on purpose.
 Some rules that teams use:
 
 ```bash
-# a repave needs a second approver
-jq -e '.summary.maxImpact != "repave"' report.json || gh pr edit "$PR" --add-label repave
+# a repave needs a second approver: pr-comment.sh adds the label on both hosts
+scripts/ci/pr-comment.sh A B --threshold repave --label needs-second-approver
 
 # the layers that replace nodes
 jq -r '.packs[] | select(.impact.level == "repave") | "\(.name): \(.impact.text)"' report.json
@@ -76,8 +76,8 @@ fields.
 
 ## Progress messages
 
-Strata writes progress messages to standard error. `-q`, `--quiet`, or
-`STRATA_QUIET=1` stops them.
+Strata writes progress messages to standard error. `--quiet` stops them.
+[Settings](../reference/settings.md) names the variable that does the same.
 
 ## The scripts in this repository
 

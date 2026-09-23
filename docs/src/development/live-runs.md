@@ -4,9 +4,9 @@
 Palette does with it. This page lists what each script sets up and what each of
 its checks establishes, so you can see the coverage without running anything.
 
-`verify.sh` is the read-only script, and
+`verify.sh` is the read-only script over the cluster, and
 [its checks are on the live example page](./live-example.md#the-checks-of-verifysh).
-The scripts below write to the tenant.
+`packs.sh` and `knurl.sh` read too. The other scripts below write to the tenant.
 
 Each check names its expected exit code. A run that gets another code fails, and
 prints both. The issue numbers name what the check was written for.
@@ -34,7 +34,7 @@ This is the source for
 | `plan-edit` | 2 | 1 | #27: the provider's plan for an edit in place: an update without the flag, a refusal with it |
 | `plan-edit-says` | 0 | 0 | the plan says which |
 | `api-edit` | 0 | 0 | #27: the API accepts an edit in place, whatever the flag |
-| `a2`, `a2-addon`, `b2-addon` | 0 | 0 | record each cluster's add-on selection after the edit |
+| `a2`, `a2-addon`, `b2-addon`, `a2-updates` | 0 | 0 | record each cluster's add-on selection after the edit, and what waits for cluster A |
 | `addon2` | 0 | 0 | record the edited add-on version |
 | `edit-kept-manifest-uid` | 0 | 0 | the edit kept the manifest's uid, so cluster copies still name it |
 | `b-owns-manifest-copy` | 0 | 0 | cluster B was created with its own copy of the manifest |
@@ -46,7 +46,7 @@ This is the source for
 | `verify-addon1` | 1 | 1 | #23: the add-on record reports `DRIFT` after its edit in place |
 | `addon1-vs-a2` | 0 | 0 | #27: the record from before the edit matches cluster A's selection |
 | `consumers-addon` | 1 | 1 | both clusters use the add-on version |
-| `apply-keeping-notification` | 0 | 0 | push the content to cluster A without resolving its notification |
+| `apply-keeping-notification` | 0 | 0 | push the content to cluster A with its notification kept |
 | `a-changed-without-resolve` | 1 | 1 | #27: three minutes after that push, cluster A's copy has taken the edit |
 | `apply-to-a` | 0 | 0 | #27: accept the waiting update, resolving the notification |
 | `a3`, `a3-updates` | 0 | 0 | record cluster A after the apply, and what waits for it |
@@ -100,7 +100,7 @@ bump makes a new version and keeps the old one. The source for
 
 Publishes two versions that differ from the first only in the tag of the OS
 pack, one an exact tag and one a floating tag. It moves a cluster to one of them
-and back, holding each state long enough for a repave to show, and then renames
+and back, and holds each state until a repave has time to show. It then renames
 a tag on a published version through the API. The source for
 [Tag names](../internals/palette.md#tag-names).
 
@@ -208,7 +208,7 @@ registries the tenant can see, including one pack that two registries hold.
 | `packs-cloud` | 0 | #54: `--cloud` keeps the versions of one cloud |
 | `packs-cloud-none`, `packs-cloud-none-says` | 0 | #54: a cloud no version supports is an empty answer, not an error, and it says so |
 | `packs-json` | 0 | #54: `--json` writes `strata-packs/1` |
-| `packs-unknown-registry`, `packs-unknown-pack` | 2 | #54: an unknown registry lists the visible ones; a pack no registry has is `pack-not-found` |
+| `packs-unknown-registry`, `packs-unknown-pack` | 2 | #54: an unknown registry lists the visible ones; a pack no registry has is an error |
 
 Palette lists the registries of a tenant in no fixed order, so strata sorts them
 and the ambiguous-ref message reads the same every time:
@@ -220,8 +220,8 @@ strata: pack 'csi-aws-ebs' at version '1.63.1' is in several registries: Palette
 ## knurl.sh
 
 Read-only. It runs each method of [the knurl adapter](../automation/knurl.md)
-against the tenant, and then the strata command for the same object, and
-compares the two answers. It needs the profiles; the instance checks need the
+against the tenant. It then runs the strata command for the same object, and
+compares the two answers. It needs the profiles. The instance checks need the
 cluster, and are `SEEN` without one.
 
 | Check | Expected exit | What it shows |
@@ -250,9 +250,10 @@ Palette Registry, as two archives, so each is the two-archive case.
 Read-write, in the example's own registries alone: the ECR repositories and
 the Palette registries that `terraform/` creates, which no other user reads.
 It needs the profiles and no cluster. The script pushes the packs under
-`examples/live/pack/` with `oras` and the chart under `examples/live/chart/`
-with `helm push`, as the Palette documentation shows, and asks Palette to read
-the registry again after each push.
+`examples/live/pack/` with `oras`, and the chart under `examples/live/chart/`
+with `helm push`, as
+[Add packs to an OCI registry](https://docs.spectrocloud.com/registries-and-packs/registries/oci-registry/add-oci-packs/)
+shows. It then asks Palette to read the registry again after each push.
 
 | Check | Expected exit | What it shows |
 |---|---|---|
@@ -266,10 +267,10 @@ the registry again after each push.
 | `leaf-verify` | 1 | #66: the record of the pack from before the push reports `DRIFT` |
 | `profile-verify`, `profile-keeps-pin` | 0 | #66: the published profile that pins the version does not follow the push: its record verifies, and its pack reference keeps the digest of the first push |
 | `profile-after`, `push-3`, `sync-3` | 0 | 1.0.1 is pushed |
-| `packs-two`, `packs-two-order` | 0 | #66: `packs` lists 1.0.1 first, then 1.0.0, and 1.0.1 carries the floating tags `1.0.x` and `1.x` |
+| `packs-two`, `packs-two-order` | 0 | #66: `packs` lists 1.0.1 first, then 1.0.0 |
 | `profile-stays` | 0 | #66: the profile pinned to 1.0.0 does not move to 1.0.1 |
 | `profile-floating`, `push-4`, `sync-4` | 0 | a profile pins the pack under `1.0.x`, and 1.0.2 is pushed, which the tag now names |
-| `floating-moves` | 1 | #66: the profile pinned under the floating tag moves with it, some minutes after the push: the script verifies its record again until it reports `DRIFT`, for up to ten minutes |
+| `floating-moves` | 1 | #66: the profile pinned under the floating tag moves with it. The script verifies its record again until it reports `DRIFT`, for up to ten minutes |
 | `chart-empty` | 0 | the chart repository starts empty, and two applies remove the Palette registry over it and make it again, so Palette reads the chart for the first time |
 | `chart-push-1`, `chart-sync-1`, `chart-packs`, `chart-leaf` | 0 | `strata-live-chart` 1.0.0 is pushed with `helm push` into the example's OCI Helm registry, Palette reads it, and `packs` and `snapshot` read the chart as a pack of type `oci` |
 | `chart-digest` | 0 | #66: Palette lists the manifest digest of the push for a chart in an OCI registry, as for a pack, not the digest of the chart archive |
@@ -289,10 +290,10 @@ made. The pushed versions stay in the registry until `live-down`.
 ## template.sh
 
 Read-write. It links the release version and the add-on version to a cluster
-template before any cluster runs them, tries to change a linked version, tries to
-build a cluster outside the template, and then builds the cluster without the
-template, with a second add-on profile. It needs the profiles and no cluster,
-and it ends with the removal of the whole example, because step 4 edits a
+template before any cluster runs them. It then tries to change a linked version,
+and tries to build a cluster outside the template. Last, it builds the cluster
+without the template, with a second add-on profile. It needs the profiles and no
+cluster. It ends with the removal of the whole example, because step 4 edits a
 version that the cluster runs.
 
 | Check | Expected exit | What it shows |
@@ -300,12 +301,12 @@ version that the cluster runs.
 | `release-before` | 0 | a record of the release version before the link |
 | `template`, `template-links` | 0 | #66: the template links the release version and the add-on version |
 | `release-doc`, `release-names-template` | 0 | #66: the version names the template that uses it, and no cluster |
-| `lock-edit`, `lock-edit-says` | 2, 0 | #66: an edit in place of a linked version is refused, `ClusterProfileUpdateValidationFailure` |
+| `lock-edit`, `lock-edit-says` | 2, 0 | #66: an edit in place of a linked version is refused, and the refusal carries the code `ClusterProfileUpdateValidationFailure` |
 | `lock-verify` | 0 | #66: the version is unchanged |
 | `cluster-outside-template`, `refusal-says` | 1, 0 | #66: a cluster outside the template with a linked version is refused, `ClusterCreateWithTemplateProfileForbidden` |
 | `cluster-runs-release`, `cluster-doc`, `cluster-three-profiles` | 0 | with the template gone, the cluster runs the release version and two add-on profiles |
 | `lock-gone`, `lock-gone-verify` | 0, 1 | #66: the edit in place is accepted again, and the record from before reports `DRIFT`: the lock was the template's |
-| `addon-order` | 0 | #66: the packs of the two add-on profiles start within thirty seconds of each other, whatever order the cluster lists the profiles in: the listed order is no install order |
+| `addon-order` | 0 | #66: the packs of the two add-on profiles start within thirty seconds of each other, whatever order the cluster lists the profiles in: the listed order is no install order. No run has passed this check yet. |
 
 ## cluster.sh
 
@@ -318,7 +319,7 @@ line. It ends with the cluster gone and the profiles in place.
 |---|---|---|
 | `variables-before`, `copy-before`, `audits-before` | 0 | the cluster variables endpoint, a record of the cluster's copy of the add-on profile, and the audit entries of the cluster, before |
 | `variables-after`, `value-changed` | 0 | #66: after an apply that gives the variable the value `changed`, the endpoint gives that value |
-| `copy-after`, `copy-verify`, `copy-compare` | 0 | #66: the record of the copy from before verifies, and the two records compare `IDENTICAL`: the value is the cluster's, and no part of the copy |
+| `copy-after`, `copy-verify`, `copy-compare`, `copy-source-value` | 0 | #66: the record of the copy from before verifies, the two records compare `IDENTICAL`, and the record from after carries the value under `source.cluster.variables`, outside the root |
 | `audits-after`, `audit-records-change` | 0 | #66: the audit log has a new entry for the cluster |
 | `audit-says` | 0 | #66: that entry names who updated the cluster variables on the cluster |
 | `listing-before`, `listing-has-cluster`, `consumers-before`, `consumers-has-cluster` | 0, 0, 1, 0 | the listing holds the cluster, and `consumers` lists it under the add-on version, with exit 1: the version has a consumer |
@@ -331,18 +332,18 @@ line. It ends with the cluster gone and the profiles in place.
 
 ## order.sh
 
-Read-write. It needs the example at its baseline with cluster A, sends a `PUT`
-of two published versions with their packs in the other order, and a `PUT` of
-the cluster's profiles in the other order, and reads what Palette stores, what
+Read-write. It needs the example at its baseline with cluster A. It sends a
+`PUT` of two published versions with their packs in the other order, and a `PUT`
+of the cluster's profiles in the other order. It reads what Palette stores, what
 it audits, and what `verify` says. It leaves the two versions edited, so
 `live-down` follows it. A second run reverses them again, and passes the same
 way.
 
 | Check | Expected exit | What it shows |
 |---|---|---|
-| `release-before`, `registries-before`, `cluster-before`, the `*-doc-before` and `*-audits-before` checks | 0 | records of the release version, the registries version, and cluster A, with each document and its audit entries |
+| `release-before`, `registries-before`, `cluster-before`, and the `*-doc-before`, `*-doc-after`, `*-audits-before`, and `*-audits-after` checks | 0 | records of the release version, the registries version, and cluster A, and each document and its audit entries before and after each `PUT` |
 | `reorder-addon`, `addon-doc-reversed`, `addon-audited` | 0 | #66: a `PUT` of the registries version with its two packs in the other order is accepted, stored in that order, and audited as an update of the profile |
-| `addon-verify`, `addon-verify-says`, `addon-record-reversed` | 1, 0, 0 | #66: the record from before reports `DRIFT`, the report says `pack order changed` with every pack unchanged, and a new record lists the packs in the new order |
+| `addon-verify`, `addon-verify-says`, `registries-after`, `addon-record-reversed` | 1, 0, 0, 0 | #66: the record from before reports `DRIFT`, the report says `pack order changed`, and a new record lists the packs in the new order |
 | `reorder-release`, `release-doc-reversed`, `release-audited` | 0 | #66: Palette accepts the four infrastructure layers of the release version in the other order, on a version cluster A runs: the CSI layer first, the OS layer last, and an audit entry |
 | `release-verify`, `release-verify-says` | 1, 0 | #66: the record from before reports `DRIFT`, and the report says `pack order changed` |
 | `reorder-cluster`, `cluster-order-kept`, `cluster-audited` | 0 | #66: a `PUT` of the cluster's profiles in the other order is accepted, the document keeps the stored order, and the audit log has an update of the cluster all the same |
@@ -350,8 +351,10 @@ way.
 
 ## What has no live run
 
-- The scripts that write to the tenant have run under Terraform. The example
-  uses OpenTofu now, with the same provider, and `verify.sh` gives the same
-  answers under both. The writing scripts have no OpenTofu run yet.
+- `in-place.sh`, `registry-move.sh`, `registry.sh`, `template.sh`, and
+  `cluster.sh` have run under OpenTofu, with the same provider that Terraform
+  used, and give the same answers. `tag-only.sh` and `drift-report.sh` have run
+  under Terraform only. `order.sh` reads the OpenTofu outputs and applies
+  nothing.
 - [What Palette does](../internals/palette.md#what-no-run-covers) lists the
   behaviors that no script here establishes.

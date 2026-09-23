@@ -13,9 +13,10 @@ digests are real.
 
 ## The pack-ref digest
 
-On a published profile, the `digest` that Palette puts on each pack reference
-equals the digest that Palette lists for that pack version. For a Helm pack and
-an OCI pack, it also equals the digest that the registry itself serves.
+On a published profile, the `digest` that Palette puts on each pack reference is
+the digest that Palette lists for that pack version. For a pack in an OCI pack
+registry, and for a chart in an OCI Helm registry, that digest is the manifest
+digest of the push.
 
 | Pack | Type, registry | Version | Pack-ref digest | What the digest is |
 | --- | --- | --- | --- | --- |
@@ -26,22 +27,21 @@ an OCI pack, it also equals the digest that the registry itself serves.
 | nginx | `helm`, Helm registry | 25.1.5 | `08816cde6bea...` | the sha256 of the chart archive, as the repository index records it |
 | argocd | `oci`, OCI pack registry | 10.4.0.1 | `sha256:99cac22f712b...` | the manifest digest of `<base path>/spectro-packs/archive/argocd:10.4.0.1` |
 
-So for each registry kind, the pack-ref digest is a digest of the content of the
-pack version. **Strata reads no registry of its own for a published profile: the
-profile document carries what it needs.**
+So the pack-ref digest is the digest of the pack version as Palette read it. For
+a pack in an OCI pack registry it follows each push. For a chart in an OCI Helm
+registry it is the digest of the first push that Palette read: see
+[A pack version pushed again](#a-pack-version-pushed-again). **Strata reads no
+registry of its own for a published profile: the profile document carries what
+it needs.**
 
 - A Helm digest is bare hex, with no `sha256:` prefix.
-- A Helm entry can point at a chart in an OCI registry. The digest is still the
-  sha256 of the chart archive, which is the digest of the chart layer, and not
-  the manifest digest.
 - A chart in an OCI Helm registry that Palette reads itself, the example's own
   in ECR, is a pack of type `oci`, and its digest is the manifest digest of the
   first `helm push` Palette read, as for a pack in an OCI pack registry. It is
   not the sha256 of the chart archive, and a push again does not move it: see
   [A pack version pushed again](#a-pack-version-pushed-again).
-- Palette takes the digest from its own copy of the registry, and that copy can
-  be late: Palette listed `nginx` up to 25.1.5 while the repository index had
-  25.1.12.
+- Palette takes the digest from its own copy of the registry, which a sync
+  refreshes. `@latest` is the newest version of that copy.
 
 ## A pack that requires another pack
 
@@ -62,14 +62,15 @@ that holds it.
 
 ## Pack schema and presets
 
-Palette stores neither the pack schema nor the presets on a profile. The pack
-references and the manifests entries of a published profile carry no schema and
-no presets. They belong to the pack version in the registry, which lists 20
-presets for `cni-cilium-oss` and 6 for `kubernetes`.
+Palette stores neither the pack schema nor the presets on a profile. They belong
+to the pack version in the registry.
 
 So a change to a schema or a preset under one version is a change to the content
-of the pack, and the pack-ref digest follows it. A preset that a profile applies
-goes into the values of that profile, where strata reads it.
+of the pack. The digest that Palette lists for the version follows it, and a
+published profile keeps the digest it was pinned with. A preset that a profile
+applies goes into the values of that profile, where strata reads it. Strata
+applies no pack preset of its own. What the values of a profile must carry for a
+preset is open: see [What no run covers](#what-no-run-covers).
 
 ## A pack that moves between registries
 
@@ -86,15 +87,15 @@ another registry, four fields change and the content does not:
 | tag, version | `1.65.0` | `1.65.0` |
 | values, manifests, params | | unchanged |
 
-A pack pushed to an OCI registry gets the digest of that push, and that is not
-the digest a pack registry lists for the same version
-([Add packs to an OCI registry](https://docs.spectrocloud.com/registries-and-packs/registries/oci-registry/add-oci-packs/)).
+A pack pushed to an OCI registry gets the digest of that push
+([Add a pack to an ECR registry](https://docs.spectrocloud.com/registries-and-packs/registries/oci-registry/add-pack-oci/add-pack-oci-ecr/)).
+That is not the digest a pack registry lists for the same version.
 So between two kinds of registry the digest differs too, as the table shows.
 
 So `same-release --allow registry-move` accepts a type change between two
 registries, and the pair passes as `REGISTRY MOVE`. It refuses a `manifest`
-pack, which comes from no registry. It also keeps its grip on the content: after
-an edit of the CSI values in place on top of the move, the check fails and names
+pack, which comes from no registry. It still checks the content: after
+an edit of the CSI values in place on the moved version, the check fails and names
 `charts.aws-ebs-csi-driver.storageClasses[name=spectro-storage-class].reclaimPolicy`.
 
 ## A pack version pushed again
@@ -106,12 +107,11 @@ OCI pack registry of the example's own, after Palette reads the registry again:
 | --- | --- |
 | The pack version Palette lists | The digest of the new push, under the same version and the same pack uid. |
 | A record of the pack from before | `verify` reports `DRIFT`: the digest moved. |
-| A published profile that pins the version | Keeps the digest and the pack uid it was pinned with. Its record verifies, minutes after the sync too. |
+| A published profile that pins the version | Keeps the digest it was pinned with. Its record verifies after the sync, and after the next push and sync too. |
 
 So a profile pins one build. A registry that changes under the version does not
 move the profile. A record of the pack and a record of a profile answer two
-different questions, and `verify` on the pack record is what finds such a push:
-it reports `UPSTREAM`, and `AUTHORED` too when the values changed.
+different questions, and `verify` on the pack record is what finds such a push.
 
 A new version pushed beside the pinned one, `1.0.1` beside `1.0.0`, does not
 move a profile pinned to `1.0.0` either. A profile pinned under a floating tag
@@ -122,8 +122,7 @@ The first time Palette reads a chart version, it lists the manifest digest of
 the push, and a profile that pins the chart carries it. A push again under the
 same version, with other bytes, and a sync after it, change nothing: Palette
 keeps the digest it listed first, and a record of the chart from before the
-push verifies. The digest stayed through an emptied repository, two syncs, and
-two new pushes, for an hour. A sync does read a new version: `1.0.1` pushed
+push verifies. A sync does read a new version: `1.0.1` pushed
 beside `1.0.0` is listed, newest first. So for a chart in an OCI Helm registry,
 `verify` on a record of the chart says what Palette lists, and not what the
 registry serves now. A pack in an OCI pack registry follows each push.
@@ -131,12 +130,12 @@ registry serves now. A pack in an OCI pack registry follows each push.
 ## Tag names
 
 A registry can give one pack build several tags.
-`GET /v1/packs/<name>/registries/<uid>` lists `LTS__24.04`, `LTS__24.4.x`, and
-`LTS__24.x` for `ubuntu-aws`, each with the version `24.04` and the pack uid
-`6917446d9da9b9852faf5f60`. A profile from the Spectro Cloud provider pins
-`24.04`. Palette stores the tag that the author picked, and the version that
-the tag named, so two profiles on one build can hold two tags. A record carries
-both.
+`GET /v1/packs/<name>/registries/<uid>` lists several tags for one build of
+`ubuntu-aws`. A profile from the Spectro Cloud provider pins `24.04`, and the
+example publishes the same build under `LTS__24.04` and under `LTS__24.x`. All
+three hold one pack uid and one version. Palette stores the tag that the author
+picked, and the version that the tag named, so two profiles on one build can
+hold two tags. A record carries both.
 
 Two versions that differ only in that tag run the same build:
 
@@ -144,23 +143,20 @@ Two versions that differ only in that tag run the same build:
 | --- | --- |
 | What does Palette store? | The tag as authored, with one pack uid and one version behind all of them. |
 | Does Palette repave a cluster that moves between them? (`POST /v1/spectroclusters/<uid>/validate/repave`) | No. The control, one more entry in `kubeadmconfig.postKubeadmCommands`, repaves: `PackValuesUpdated`. |
-| What happens to the nodes on such a move, and on the move back? | The same EC2 instances throughout. The cluster stays `Running`, and its selection matches the target version from the first poll. |
-| What does Palette record for the move? | One audit, "Profile ... is dissociated from the cluster" and "... is associated to the cluster". No repave: `GET /v1/spectroclusters/<uid>/repave/status` answers 404. |
-| Can the tag be renamed on a published version? | Yes, through the API, and the pack uid stays. The renamed version then has the root of the version it was renamed to match. |
+| What happens to the nodes on such a move, and on the move back? | The same EC2 instances throughout. The cluster is `Running` on the target version, and stays so. |
+| Can the tag be renamed on a published version? | Yes, through the API, and the pack uid stays. A record from before the rename reports `DRIFT`, and the pair is `SAME CONTENT`. |
 
-The repave check of Palette also answers "no repave" for a request that gives
-the OS pack an altogether different tag. **A tag in the request is no control
-for that check; a change of the values is.**
+The repave check answers "no repave" for a request whose only change is the tag
+name of the OS pack, exact or floating. **A tag in the request is no control for
+that check; a change of the values is.**
 
 A floating tag moves a published profile. In an OCI pack registry of the
 example's own, Palette lists `1.0.x` and `1.x` beside the version `1.0.1`. A
-profile pinned to the pack under `1.0.x`, and then a push of `1.0.2`, which the
-tag now names: some minutes after the push, and not within the sync the
-example asks for, the published profile carries `1.0.2`, with its pack uid and
-its digest, and the tag `1.0.x` stays. The move took up to four minutes in
-the runs. No person acted, and no publish happened. `verify` on a record of the profile
-from before reports `DRIFT` with `IDENTITY UPSTREAM`. A profile pinned to the
-exact version `1.0.0` does not move when `1.0.1` arrives.
+profile pins the pack under `1.0.x`. Then `1.0.2` is pushed, and the tag names
+it. Within ten minutes of the sync, the published profile moves: `verify` on a
+record of the profile from before reports `DRIFT` with `IDENTITY UPSTREAM`. No
+person acted, and no publish happened. A profile pinned to the exact version
+`1.0.0` does not move when `1.0.1` arrives.
 
 ## Edits in place
 
@@ -171,25 +167,24 @@ appears. A pack can also be pushed again under one version, with
 `spectro pack push --force`
 ([Spectro CLI reference](https://docs.spectrocloud.com/registries-and-packs/spectro-cli-reference/))
 or `oras push`. A published profile that pins the version keeps the digest it
-was pinned with: see [A pack version pushed again](#a-pack-version-pushed-again).
+was pinned with, in an OCI registry: see
+[A pack version pushed again](#a-pack-version-pushed-again). A Spectro pack
+registry is not covered: see [What no run covers](#what-no-run-covers).
 
-This is why [`strata verify`](../commands/verify.md) exists: a record from
-before such a change exits `1` with `DRIFT`, and names the changed value.
-`DRIFT` says that the published version changed. It does not say who changed
-it: a person, a registry whose floating tag moved, or an update that a cluster
-accepted.
+This is why [`strata verify`](../commands/verify.md) exists. A record of a
+version from before a person's edit, or from before a floating tag moved, exits
+`1` with `DRIFT`, and names the change. A record of a cluster's copy from before
+the cluster accepted an update does the same. `DRIFT` says that the object
+changed. It does not say who changed it.
 
-An edit through the API must keep the uid of each manifest. An edit that sends a
-manifest with no uid makes Palette replace that manifest with a new one. When a
-cluster then accepts the update, Palette removes the copy of the old manifest
-from the cluster, and the add-on is left with no manifest there.
+An edit through the API keeps the uid of each manifest. The live example sends
+each uid back, and a cluster copy still names it.
 
 A reorder is an edit in place too. A `PUT` of a published version with the same
 packs, values, and manifests in the other order is accepted, stored in the new
-order, and audited as an update of the profile, with the user's name. Palette
-accepts it for the four infrastructure layers of a version a cluster runs as
-well: the CSI layer first and the OS layer last. `verify` on a record from
-before reports `DRIFT`, every pack `unchanged`, and
+order, and audited as an update of the profile. Palette accepts it for the four
+infrastructure layers of a version a cluster runs as well: the CSI layer first
+and the OS layer last. `verify` on a record from before reports `DRIFT` and
 `note: pack order changed between the two profiles`.
 
 ## Cluster copies
@@ -226,28 +221,27 @@ gives is in the record, under `source.cluster.variables`, and not in the root.
 
 A change of that value is a change to the cluster, and not to the copy. The
 Spectro Cloud provider sends it as `variables` of the profile on the cluster
-resource, and plans one change. The cluster stays `Running`. The audit log gets
-two entries with the user's name: an update of the cluster, and the action
-"updated the cluster variables on the cluster <name>". The variables endpoint
+resource. The audit log gets a new entry for the cluster, and its action says
+who "updated the cluster variables on the cluster `<name>`". The variables endpoint
 gives the new value. A record of the copy from before verifies, and a comparison
 of the records from before and after reports the copy unchanged and one
 variable value changed.
 
 Palette says when a copy is behind its profile.
-`GET /v1/spectroclusters/<uid>/profileUpdates` gives the profile set the cluster
-would get, and the notifications of the cluster list the update that waits
+`GET /v1/spectroclusters/<uid>/profileUpdates` gives the profile content that
+waits for the cluster, and the notifications of the cluster list the update that
+waits
 ([Cluster updates](https://docs.spectrocloud.com/clusters/cluster-management/cluster-updates/)).
 A record does not carry that yet.
 
 ## The order of the profiles of a cluster
 
 `spec.clusterProfileTemplates` of a cluster lists its profiles in the order the
-request that made the cluster gave them, and that order carries no meaning: the
-Spectro Cloud provider gives them in the order of a set, hashed over the whole
-`cluster_profile` block with the profile uid in it, so each apply sends them in
-a new order. Two clusters built from one definition, with the cluster profile
-first and the add-on profile second, listed the two in the two orders. So strata
-orders them itself: a cluster record lists
+request that made the cluster gave them. That order carries no meaning. Since
+provider 0.28.1, the Spectro Cloud provider sends `cluster_profile` as a set,
+hashed over the whole block with the profile uid in it. A new uid moves a
+profile to another position. So two clusters built from one definition can list
+the profiles in two orders. So strata orders them itself: a cluster record lists
 the cluster or infra profile first and then the others by name, and merges their
 packs in that order, so two clusters built from one definition have one merged
 root. A check of what a cluster runs compares the set of profiles, and [the
@@ -256,19 +250,19 @@ name.
 
 A `PUT` of a cluster's profiles in the other order, with the uids it has,
 changes nothing: the document keeps the stored order. The audit log gets an
-update of the cluster all the same. So the order strata gives a cluster record
+update of the cluster. So the order strata gives a cluster record
 drops nothing that can change: the stored order is set when the cluster is
 made, and stays.
 
-That order is no install order either. A cluster that ran two add-on profiles,
-each with one manifest pack, listed the second one first, and started the two
-packs in the same second, three minutes after the last pack of the cluster
-profile. The add-on profiles start together.
+That order is no install order either. No run establishes the install order of
+the packs of two add-on profiles: see
+[What no run covers](#what-no-run-covers).
 
 The order of the packs inside a profile is no install order either. Each add-on
-pack has an install priority, `pack.spectrocloud.com/install-priority` in its
-values, `0` unless set; the lowest installs first, packs with one value install
-together, and the next value waits for their readiness checks
+pack has an install priority: the key `spectrocloud.com/install-priority` under
+`pack:` in its values, `0` unless set. The lowest value installs first. Packs
+with one value install together, and the next value waits for their readiness
+checks
 ([Install Order](https://docs.spectrocloud.com/profiles/cluster-profiles/create-cluster-profiles/create-addon-profile/#install-order)).
 The priority is in the values, so the values hash and the root cover it, and a
 change to it is an `AUTHORED` change. The list order is content because Palette
@@ -284,7 +278,7 @@ what that lock is:
 
 | Request | Answer |
 | --- | --- |
-| An edit in place of a version that a template links, through the API | Refused: `ClusterProfileUpdateValidationFailure`, "cluster profile is associated with 1 cluster templates and cannot be modified". The version verifies. |
+| An edit in place of a version that a template links, through the API | Refused: `ClusterProfileUpdateValidationFailure`, "cluster profile is associated with 1 cluster templates (`<uid>`) and cannot be modified". The version verifies. |
 | A cluster outside the template, built with a linked version | Refused: `ClusterCreateWithTemplateProfileForbidden`, "Cluster creation is not allowed as profile ... is already attached to one or more cluster templates". |
 | The same edit, after the template is removed | Accepted. A record from before reports `DRIFT`. |
 
@@ -300,24 +294,24 @@ A version bump behaves differently with the provider's
 
 | Result | Flag off | Flag on |
 | --- | --- | --- |
-| The uid | Keeps its place, and names the new version. | The new version is a clone under a new uid. The old version stays under the old uid. |
+| The uid | Keeps the uid, which names the new version. | The new version is a clone under a new uid. The old version stays under the old uid. |
 | `verify` of the old record | Reports it overwritten by the new version. | Reports the edit in place, and nothing overwritten. |
-| The clusters | Keep their copies, which name the old version, and stay consumers of the uid. | Keep their copies, which equal the old record, and stay consumers of the old version only. |
+| The clusters | Keep their copies, which name the old version, and stay consumers of the uid. | Keep their copies, which match what the old uid holds, and stay consumers of the old uid. |
 
 The clone carries the content over exactly: the values, the manifests, and the
 variables of a flag-on bump equal those of a flag-off bump from the same
 configuration.
 
-A version is `major.minor.patch`. Palette checks it when the version is
-created, and the provider does not
+A version is a semantic version. Palette normalizes a short form and a lowercase
+`v` prefix, `1.2` to `1.2.0` and `v1.2.3` to `1.2.3`, and refuses a malformed
+string. Palette checks the version when it is created and when it is changed,
+and the provider does not
 ([Version a cluster profile](https://docs.spectrocloud.com/profiles/cluster-profiles/modify-cluster-profiles/version-cluster-profile/)).
 
 With the flag on, set `skip_destroy` on each profile **before** the first bump.
 A flag-on bump replaces the profile resource, and the provider deletes the
 replaced version with the `skip_destroy` value already in its state, not the new
-value (provider 0.30.1, `resourceClusterProfileDelete`). Without it, the bump
-asks Palette to delete the version that a cluster runs, and Palette refuses with
-`DeletionResourceInUseError`.
+value (provider 0.30.1, `resourceClusterProfileDelete`). Without it, the bump asks Palette to delete the version that a cluster runs.
 
 ## Manifest pack uids
 
@@ -334,8 +328,7 @@ equality of roots does not: see
 ## What a registry answers about a pack
 
 `GET /v1/packs/<name>/registries/<uid>` answers with everything the registry
-holds for one pack, in one request. For `csi-aws-ebs` in `Public Repo` that is
-36 versions in about 1 MB:
+holds for one pack, in one request:
 
 | Field | Holds |
 | --- | --- |
@@ -343,15 +336,15 @@ holds for one pack, in one request. For `csi-aws-ebs` in `Public Repo` that is
 | `tags[]` | one row per tag: `tag`, `version`, `packUid`, and `parentTags` |
 | `packValues[]` | one row per build: `packUid`, `values`, `schema`, `presets`, `readme`, `annotations`, `dependencies` |
 
-Those 36 versions carry 71 tag rows and 36 pack uids: one build for each
-version, under several tags. A version carries its exact tag and the floating
-tags above it, each as its own row, and `parentTags` names the tags above that
-one:
+A version carries its exact tag and the floating tags above it, each as its own
+row, with one pack uid for the build behind them. `parentTags` names the tags
+above that one
+([Palette API reference](https://docs.spectrocloud.com/api/v1/)):
 
 ```text
-{"packUid":"6aa410ec…","parentTags":null,          "tag":"1.x",    "version":"1.65.0"}
-{"packUid":"6aa410ec…","parentTags":["1.x"],       "tag":"1.65.x", "version":"1.65.0"}
-{"packUid":"6aa410ec…","parentTags":["1.65.x","1.x"],"tag":"1.65.0","version":"1.65.0"}
+{"packUid":"<uid>","parentTags":null,                 "tag":"1.x",    "version":"1.65.0"}
+{"packUid":"<uid>","parentTags":["1.x"],              "tag":"1.65.x", "version":"1.65.0"}
+{"packUid":"<uid>","parentTags":["1.65.x","1.x"],     "tag":"1.65.0", "version":"1.65.0"}
 ```
 
 So the newest version of a line is the version that the floating tag names, and
@@ -359,33 +352,8 @@ one request gives every version, every tag, and no repeats. The paged listing
 `/v1/packs?filters=spec.name=<name>` holds the digest of each build, which this
 answer does not, and it repeats a version across pages.
 
-**A constraint between packs.** `packValues[]` has a `dependencies` field, which
-is where a pack that requires another pack would say so. No pack that this key
-can see fills it: a read of every distinct pack of the tenant's registries, 116
-of them, found an empty `dependencies` on every version.
-
-```text
-packs scanned: 116
-with a dependency: 0
-```
-
-So the shape is there and the content is not. A check that reads a constraint
-cannot be written against a field that no pack fills, and
-[#58](https://github.com/como-technologies/strata/issues/58) stops for that
-reason.
-
-**How far a constraint reaches.** A team that publishes its own packs reports
-that Palette checks a required pack against the packs of the same profile only.
-A profile whose pack requires a pack that *another* profile carries is refused,
-with an error that names the constraint and not the reason. That team split one
-profile into three, which is the normal way to stop one pack publish from
-bumping the same layers three times, and had to publish new pack versions that
-drop the constraint. Their packs state the requirement in the README instead.
-
-No run in this repository confirms that, because no pack here declares a
-dependency to test it with. It is written down because the next person to split
-a profile will meet it, and because it is the reason to finish #58 when a tenant
-with such a pack is at hand.
+Palette applies a pack constraint when a profile is created, and not through this
+answer: see [A pack that requires another pack](#a-pack-that-requires-another-pack).
 
 ## What the cluster listing answers
 
@@ -394,7 +362,7 @@ clusters` reads. **It names no profile.** Each entry holds:
 
 | Part | Fields |
 | --- | --- |
-| `metadata` | `name`, `uid`, `creationTimestamp`, `lastModifiedTimestamp`, `deletionTimestamp`, the labels, and the annotations `projectUid`, `scope`, `scopeVisibility`, `ownerUid`, `tenantUid`, and `permissions` |
+| `metadata` | `name`, `uid`, `creationTimestamp`, `lastModifiedTimestamp`, `deletionTimestamp`, the labels, and the annotations |
 | `spec` | `cloudType`, `cloudAccountUid`, `cloudRegion`, `clusterType`, `archType`, `location`, and `tags` |
 | `status` | `state` |
 
@@ -409,39 +377,52 @@ cluster summary, `GET /v1/dashboard/spectroclusters/{uid}`, gives
 it so. [The knurl adapter](../automation/knurl.md) reads it there.
 
 The consumer list of a profile version, `status.inUseClusters`, is what Palette
-computes when it is asked, in the projects the key can read. It is empty on an
-error too. So `consumers` reads each cluster the key can list as well, and names
-a cluster that applies the version and is not in the list.
+computes when it is asked, in the projects the key can read. So `consumers`
+reads each cluster the key can list as well, and names a cluster that applies
+the version and is not in the list.
 
 The listing answers a JSON array at the top level, and not an object with
-`items`. Strata reads both shapes.
+`items` ([Palette API reference](https://docs.spectrocloud.com/api/v1/)). Strata
+reads both shapes.
 
 A deleted cluster leaves this listing and keeps its document:
 `GET /v1/spectroclusters/<uid>` still answers `200`, with the state `Deleted`.
 So `cluster:<name>`, which strata resolves through the listing, does not go
 ambiguous when one name is deleted and built again.
 
-A deletion by a path other than the provider looks the same. `DELETE
-/v1/spectroclusters/<uid>` is accepted at once. While the cluster goes,
-seventeen to twenty minutes for three nodes, the listing keeps it with the state
-`Deleting`, and `consumers` lists it with that state and exits `1`. After,
-the listing drops it, the document reports `Deleted` with a
-`deletionTimestamp`, and `consumers` lists nothing and exits `0`. The Spectro
-Cloud provider sees the deletion on its next refresh and drops the cluster from
-the OpenTofu state, with nothing to change.
+A deletion through the API behaves in the same way. `DELETE
+/v1/spectroclusters/<uid>` is accepted at once. While the cluster goes, the
+listing keeps it with the state `Deleting`, and `consumers` lists it with that
+state and exits `1`. After, the listing drops it, the document reports
+`Deleted`, and `consumers` lists nothing and exits `0`. An apply of the Spectro
+Cloud provider then holds no cluster in the OpenTofu state.
 
 ## What no run covers
 
-These are open. Strata makes no claim about them.
+Strata makes no claim about the behaviors in this section.
 
-- A pack version pushed again under the same tag in a Spectro pack registry,
-  or in a Helm registry that is not an OCI registry. The example owns neither.
-  An OCI pack registry and an OCI Helm registry are covered:
-  [A pack version pushed again](#a-pack-version-pushed-again).
+A run shows that Palette lists a digest for a pack in an OCI pack registry, and
+for a chart in an OCI Helm registry that Palette syncs. For a Spectro pack
+registry, and for a Helm registry over HTTP with no credentials, every record of
+every run carries a pack-ref digest, and no check asserts it. No run shows a
+pack with no digest.
+
+These are open:
+
 - A Helm registry that Palette does not sync, such as a chart repository over
-  HTTP with credentials. For such a registry Palette can list no digest for a
-  chart; a record then says `upstreamSource: none`, and its root covers no
-  archive.
+  HTTP with credentials.
+- A Helm registry of type `helm` whose endpoint is `oci://`.
+- A pack version pushed again under the same tag in a Spectro pack registry, or
+  in a Helm registry that is not an OCI registry. The example owns neither. An
+  OCI pack registry and an OCI Helm registry are covered:
+  [A pack version pushed again](#a-pack-version-pushed-again).
+- The keys that the values of a profile must carry for the preset option that
+  they select.
+- The order in which a cluster installs the packs of two add-on profiles.
+- An install priority other than `0` on an add-on pack.
+- A version bump with the `immutable-clusterprofiles` flag on and `skip_destroy`
+  off.
+- The variables of a cluster template while the template applies.
 
 ## Where these answers come from
 

@@ -7,8 +7,8 @@ pack. See [The hashes and the root](../internals/hashes.md).
 
 | Flag | Changes when | Meaning for the release |
 | --- | --- | --- |
-| `IDENTITY` | the pack name, layer, type, tag, version, pack uid, or registry uid changes | The release points at another pack build. |
-| `UPSTREAM` | the digest on the pack reference changes | The content of the pack changed, possibly under the same version. A published build must never do this. |
+| `IDENTITY` | the type, tag, version, pack uid, or registry uid of the pack changes | The release points at another pack build. The name and the layer are the key of the pack, so a change to either gives an `ADDED` line and a `REMOVED` line. |
+| `UPSTREAM` | the digest on the pack reference changes | The content of the pack changed under the same version. A push again under that version does this, and a floating tag that the registry moved does it too. See [A pack version pushed again](../internals/palette.md#a-pack-version-pushed-again) and [Tag names](../internals/palette.md#tag-names). A pack whose `upstreamSource` is `none` never shows this flag. |
 | `AUTHORED` | the values, the attached manifests, or the params change | The configuration of the release changed. |
 
 Other pack lines:
@@ -36,14 +36,18 @@ impact is a hint. It is not an answer from Palette.
 
 A pack key is `<layer>/<name>`. So a release that exchanges one pack for a pack
 of another name gives one `ADDED` line and one `REMOVED` line, and no `IDENTITY`
-change. Such a pack takes the impact of its layer, as an identity change does:
-`repave` on the OS, Kubernetes, or kernel layer, `cluster-wide` on the CNI or
-CSI layer, and `in-place` on any other layer.
+change. Such a pack takes the impact of its layer, as an identity change does. That is
+`repave` on the OS, Kubernetes, or kernel layer. It is `cluster-wide` on the
+CNI or CSI layer, and `in-place` on any other layer.
 
 The list goes from the most severe level to the least severe. The JSON summary
 gives the most severe level of a comparison as `maxImpact`. A renamed tag
 together with a changed value on the OS layer is `may-repave`, as the changed
 value alone is.
+
+A change of the pack order alone moves no flag and no level. Every pack stays
+`unchanged`, and `maxImpact` is `none`. The report adds the line `note: pack
+order changed between the two profiles`.
 
 ## Where to see it
 

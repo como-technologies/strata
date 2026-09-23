@@ -36,7 +36,9 @@ question a bump asks: the pin is current when it names the version that
 
 A cloud that no version supports is an answer, and an empty one: exit `0` and
 one line. A registry the key cannot see is an error that lists the visible
-registries, and a pack that no registry has is `pack-not-found`. Both exit `2`.
+registries. A pack that no registry has is `pack-name-not-found`. With
+`--registry`, a pack that this registry does not have is `pack-not-found`. Each
+exits `2`.
 
 ## For a script
 

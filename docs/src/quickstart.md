@@ -22,11 +22,11 @@ replaces no node.
 
 ## With a tenant
 
-These steps use the tenant of this book, where the project `dev` holds the
-versions 1.0.0, 1.1.0, and 1.1.1 of `aws-stack`, and the cluster `payments` runs
-1.1.0. Run `just playground quickstart` to serve that tenant on this machine, or
-put your own project, profile and cluster names in place of these. `strata list`
-prints yours.
+These steps use the tenant of this book. Its project `dev` holds the versions
+1.0.0, 1.1.0, and 1.1.1 of `aws-stack`. Its cluster `payments` runs 1.1.0.
+`just playground quickstart` serves that tenant on this machine. With your own
+tenant, put your project, profile, and cluster names in place of these.
+`strata list` prints yours.
 
 ```bash
 export PALETTE_PROJECT=dev
@@ -57,8 +57,9 @@ Keep the file with the release: in a repository, for example. The root
 {{#include output/quickstart-verify.txt}}
 ```
 
-Exit `0`. `DRIFT` and exit `1` tell you that a person edited the version after
-you recorded it. Run this check on a schedule:
+Exit `0`. `DRIFT` and exit `1` tell you that the published version changed after
+you recorded it. [What Palette does](./internals/palette.md#edits-in-place)
+names who can change it. Run this check on a schedule:
 [A published version is edited in place](./use-cases/edited-in-place.md).
 
 ### 4. Make sure that a cluster runs it

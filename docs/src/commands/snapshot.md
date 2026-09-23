@@ -1,7 +1,7 @@
 # strata snapshot
 
-Record a profile version or a cluster in a snapshot file. `compare`,
-`same-release`, and `verify` read the file later.
+Record a profile version, a cluster, or a pack version in a snapshot file.
+`compare`, `same-release`, and `verify` read the file later.
 
 The examples use the project `dev`, which holds `aws-stack@1.1.0` and
 `aws-stack@1.1.1`. The cluster `payments` runs 1.1.1.
@@ -47,8 +47,10 @@ lists each field.
 
 A cluster that runs a recorded version has the root of that record: here
 `088136c929bd`, the root of `aws-stack@1.1.1`. `cluster:<cluster>` records every
-profile that the cluster runs. `cluster:<cluster>/<profile>` records one. The
-record keeps the uid of the cluster, so `verify` finds a renamed cluster.
+profile that the cluster runs, in the order that strata gives them: see
+[The order of the profiles of a cluster](../internals/palette.md#the-order-of-the-profiles-of-a-cluster).
+`cluster:<cluster>/<profile>` records one. The record keeps the uid of the
+cluster, so `verify` finds a renamed cluster.
 
 `pack:<name>@<version>` records one pack version from a registry, with the
 values that the registry ships. `verify` on that record reads the registry
@@ -61,13 +63,14 @@ sensitive variable. See [Clusters give variables different values](../use-cases/
 
 ## Record without the network
 
-`--raw-dir` saves the API responses and the time of the read. It cannot be given
-with `--from-raw`, which reads a directory and asks Palette nothing. An optional
-ref after `--from-raw` fills `source.ref` and nothing else: strata does not check
-it against the directory. `--from-raw`
-builds the same snapshot from them later, with no network and no key. The record
-keeps the time of the read, not the time of the rebuild, so `verify` reports the
-version as unchanged since Palette answered:
+`--raw-dir` saves the API responses and the time of the read. `--from-raw`
+builds the same snapshot from them later, with no network and no key. The two
+options exclude each other. An optional ref after `--from-raw` fills
+`source.ref`. For a directory of a cluster, a ref of the form
+`cluster:<uid>/<profile>` also selects that one profile. Strata checks the ref
+against nothing else in the directory. The record keeps the time of the read,
+not the time of the rebuild, so `verify` reports the version as unchanged since
+Palette answered:
 
 ```text
 {{#include ../output/snapshot-raw.txt}}

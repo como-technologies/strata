@@ -95,8 +95,14 @@ it:
 - no cluster B (`barney`) exists
 - each profile name holds exactly the versions that OpenTofu manages
 
-Each script needs the baseline before it starts, and leaves the example as it
-found it.
+`verify.sh`, `in-place.sh`, `registry-move.sh`, `tag-only.sh`, and
+`drift-report.sh` check the baseline before they start, and leave the example as
+they found it. `packs.sh` and `knurl.sh` read the profiles and change nothing.
+`merge-gate.sh` makes one edit in place, and puts it back.
+`registry.sh` leaves the pushed versions in its own registry.
+`template.sh` ends with the example removed, `cluster.sh` ends with the cluster
+gone, and `order.sh` leaves two versions edited: run `just live-down` after
+each.
 
 | Script | Changes | Holds |
 | --- | --- | --- |
@@ -108,6 +114,10 @@ found it.
 | `packs.sh` | nothing; it only reads | the baseline |
 | `merge-gate.sh` | the add-on version, which stage 4 edits in place and stage 5 puts back | the profiles, the clusters, the baseline |
 | `knurl.sh` | nothing; it only reads | the baseline |
+| `registry.sh` | the images of the example's own registries, and the profiles that pin them | the shared registries, the clusters, the release and add-on versions |
+| `template.sh` | a template over the release and add-on versions; then the release version, in place | the pack versions; it ends with the example removed |
+| `cluster.sh` | the value cluster A gives one variable; then the cluster, deleted through the API | the profiles |
+| `order.sh` | the pack order of two published versions, and the profile order of cluster A | the packs, the values, the manifests; it leaves the versions edited |
 
 **One definition for each kind.** Clusters A and B come from one resource, and
 differ only in their names. Each profile has the same lifecycle:
@@ -153,8 +163,7 @@ back to false with the default variables (`apply_baseline`).
   `nodes.cluster-api-provider-aws.sigs.k8s.io`. Without it, the EBS CSI
   controller fails on each cluster with `UnauthorizedOperation` on
   `ec2:DescribeAvailabilityZones`. No strata check needs volumes, and Palette
-  still reports such a cluster `Running`. The runs before 2026-09-17 01:35 UTC
-  ran without the policy.
+  still reports such a cluster `Running`.
 
 For a self-hosted Palette, set `PALETTE_API` in the environment or in
 `~/.palette.env`. Strata reads it, and `tf.sh` and `tenant.sh` pass it on.
@@ -198,6 +207,7 @@ $EDITOR examples/live/terraform/terraform.tfvars
 | `region`, `az` | the region and a zone |
 | `ssh_key_name` | a key pair |
 | `oci_registry_name` | an OCI pack registry that you can log in to |
+| `aws_profile` | an AWS profile that can create an ECR repository and an IAM user in the account; every apply needs it |
 | `oci_pack`, `oci_pack_version` | an add-on pack in that registry, and its version |
 | `helm_registry_name`, `helm_chart`, `helm_chart_version` | optional; the default is `nginx` 25.1.5 from `Bitnami` |
 
@@ -287,7 +297,7 @@ The destroy asks for approval. A run with no person at the terminal answers it
 with `yes yes | just live-down`; the second attempt, after a refused read,
 reads the answer too.
 
-> **Do not take "Destroy complete" as the confirmation.** During a gateway
+> **"Destroy complete" is not the confirmation.** During a gateway
 > outage, Palette answers a plain-text 404, and the provider can take it for a
 > finished deletion while the cluster still runs. A deleted cluster has the
 > state `Deleted`. `tenant.sh cluster` exits `2` on a 404 that is not the JSON
@@ -314,13 +324,13 @@ in Palette, which exists from the start of the creation.
 | `live-up` fails with "A minimum allocation of '4.1' CPU cores is required across all worker nodes" | The workers have 4 cores or fewer in total. The default of two `t3.xlarge` workers has more. |
 | `snapshot-candidate` fails with `pack-not-found` that names a tag | A strata build from before the tag fix. The tag of the profile is the version. |
 | A flag-on bump fails with `DeletionResourceInUseError: Unable to delete the resource as fred spectrocluster(s) in-use` | The state held `skip_destroy = false`, and the provider deletes a replaced version with the value in its state (provider 0.29.7, and `resourceClusterProfileDelete` in 0.30.1). Each script now runs `hold_versions` right after it checks the baseline. |
-| A script stops with `target/release/strata is older than <file>; run just build` | The sources changed after the last release build. A script that you run directly does not build first. Without this check, the `drift-report.sh off` run of 2026-09-17 used a binary with no `verify --summary`, and failed 18 checks. Run `just build`, then run the script again. |
+| A script stops with `target/release/strata is older than <file>; run just build` | The sources changed after the last release build. A script that you run directly does not build first. Without this check, a run can use a binary that lacks an option the script needs, and fail every check that uses it. Run `just build`, then run the script again. |
 | `consumer-is-the-cluster` fails with state `unknown` | The key cannot read the cluster in its project. `consumers-release.out` prints the error next to the cluster. |
 | `only-the-edited-value` fails with two changed values | Somebody edited 1.0.1 in place and did not undo it. `baseline.sh` names it. |
 | A script stops with "not at its baseline" | An earlier run did not finish, or a person changed the example. `baseline-before.txt` names each difference. `just live-down && just live-up` builds it again. |
 | `registry-digest-oci` fails with "crane digest ... failed" or HTTP 401 | No login to the OCI registry, or an expired one. An AWS registry login lasts 12 hours. A login also stores an empty credential, and reports a success, when the token request before it failed: run `aws ecr get-login-password` alone first, and use a profile that has `ecr:GetAuthorizationToken`. |
 | `ebs-csi-controller` pods in `CrashLoopBackOff`, with `UnauthorizedOperation` on `ec2:DescribeAvailabilityZones` | The worker node role does not have `AmazonEBSCSIDriverPolicy`. See Prerequisites. |
-| A cluster stays `Provisioning` with `not done: WorkerNodeAdditionDone: provision worker nodes`, although its machines are `Running` and its nodes `Ready` | Palette did not check the workers again after a node that was not yet in the cluster failed its first check (`fred`, 2026-09-17). A restart of the Palette controller in the cluster did not help. Its deletion ran normally: delete it, and send its diagnostics to Palette support. |
+| A cluster stays `Provisioning` with `not done: WorkerNodeAdditionDone: provision worker nodes`, although its machines are `Running` and its nodes `Ready` | Palette did not check the workers again. A restart of the Palette controller in the cluster does not help. The deletion of such a cluster runs normally: delete it, and send its diagnostics to Palette support. |
 
 ## When a teardown is slow or stuck
 
@@ -339,14 +349,11 @@ These rules come from the teardowns of this kind of cluster:
 - **Judge the progress by `aws-inventory.sh`, not by the time.** Only 0 on each
   line means that AWS is empty. The instances, the NAT gateway, and the load
   balancer go first. The security groups, route tables, subnets, internet
-  gateway, and VPC go last, some after a retry. Before 2026-09-17,
-  `aws-inventory.sh` counted fewer kinds of resource, so a healthy deletion
-  looked stuck. Palette then logs the event
-  `Cluster <name> has been deleted`, but the state stays `Deleting` for several
-  minutes, and OpenTofu waits for the state. A deletion seen end to end took
-  19 minutes: the VPC went first, the event came 11 minutes after the delete
-  with the inventory at 0, and the state became `Deleted` 8 minutes after that.
-  No step was manual.
+  gateway, and VPC go last, some after a retry. Palette logs the event
+  `Cluster <name> has been deleted` before the state changes: the state stays
+  `Deleting` for several minutes after that event, and OpenTofu waits for the
+  state. So an inventory at 0 with the state still `Deleting` is a deletion that
+  runs, and not one that is stuck.
 - **If the state stays `Deleting` and the inventory does not change** for
   several readings, read the events of the cluster in the Palette console. The
   message usually names what holds the deletion. A cluster with Pause Agent
@@ -374,6 +381,7 @@ These rules come from the teardowns of this kind of cluster:
 | `cluster-runs-two-profiles` | 0 | #23: the cluster runs the release profile and the add-on profile. Palette lists the two in either order. |
 | `snapshot-release` | 0 | record the version that the cluster runs |
 | `compare-release-cluster` | 0 | #1: a cluster that runs the recorded version is `IDENTICAL` |
+| `consumers-line-names-the-cluster` | 0 | #12: the comparison of a record against its cluster names that cluster among the consumers of the version |
 | `snapshot-addon` | 0 | record the add-on profile version that the cluster runs |
 | `compare-addon-cluster` | 0 | #23: the add-on record is `IDENTICAL` to the add-on selection of the cluster |
 | `addon-has-a-variable` | 0 | #66: the add-on profile declares one variable, `purpose` |
@@ -382,10 +390,16 @@ These rules come from the teardowns of this kind of cluster:
 | `addon-copy-variables-hash` | 0 | #66: the copy has the variables hash of the profile, so the endpoint repeats the definition fields |
 | `snapshot-next` | 0 | record the newer version |
 | `compare-next-cluster` | 1 | #1: against a newer record, the cluster shows the change |
+| `compare-next-cluster-json` | 1 | #1: the same comparison as JSON |
 | `only-the-edited-value` | 0 | #1: the only change is `csi-aws-ebs` `reclaimPolicy` |
 | `consumers-release` | 1 | #12: the release version has a consumer |
+| `consumers-release-json` | 1 | #12: the same listing as JSON |
 | `consumer-is-the-cluster` | 0 | #12: listed with its name, project, and state |
 | `consumers-next` | 0 | #12: no cluster runs the newer version |
+| `list-applied`, `list-applied-json` | 0 | #63: `list --applied` names the profiles each cluster runs, as text and as JSON |
+| `applied-is-what-the-cluster-runs` | 0 | #63: the listed profiles are those the cluster record names |
+| `cluster-listing` | 0 | #63: read the cluster listing that strata lists clusters from |
+| `listing-profile-fields` | 0 | #63: the fields of the cluster listing whose name holds `profile` |
 | `candidate-file` | 0 | #21: write the record of the newer version as a candidate file |
 | `snapshot-candidate` | 0 | #4: snapshot the candidate through registry lookups |
 | `candidate-same-release` | 0 | #4: the root of the candidate equals the published root |

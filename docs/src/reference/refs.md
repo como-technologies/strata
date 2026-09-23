@@ -10,7 +10,7 @@ A ref names the thing that a command reads.
 | `pack:<name>@<version>` | one pack version, when one registry has that name and version | `pack:kubernetes@1.36.2` |
 | `pack:<registry>/<name>@<version>` | the same, from the registry of that name or uid | `pack:Public Repo/csi-aws-ebs@1.65.0` |
 | `pack:<name>@latest` | the highest version of the pack in the registry | `pack:kubernetes@latest` |
-| `cluster:<cluster>` | each profile that the cluster runs, in the order that Palette applies them | `cluster:payments` |
+| `cluster:<cluster>` | each profile that the cluster runs | `cluster:payments` |
 | `cluster:<cluster>/<profile>` | one profile that the cluster runs, by its name or uid | `cluster:payments/aws-stack` |
 | a file | a snapshot file from `strata snapshot` | `releases/1.1.1/dev.json` |
 
@@ -32,28 +32,31 @@ A ref names the thing that a command reads.
   [What changed between two pack versions](../use-cases/pack-versions.md).
 - **`<registry>`.** The name or the uid of a registry. Without one, strata uses
   the registry that has the pack version. When several do, the error
-  `pack-in-several-registries` lists them, because registries hold copies of
-  the same pack.
+  `pack-in-several-registries` lists them. Two registries can hold two builds
+  under one version, so the ref must name one.
 - **`<cluster>`.** A uid, or the name of one cluster in the scope. A name that
   two clusters have is the error `cluster-name-ambiguous`, which lists their
   uids. A name that no cluster has is `cluster-not-found`, which lists the
-  names.
+  names. A record lists the profiles of a cluster in one order, whatever order
+  Palette gives them: see
+  [The order of the profiles of a cluster](../internals/palette.md#the-order-of-the-profiles-of-a-cluster).
 - **`<profile>`.** The name or the uid of a profile that the cluster runs. An
   unknown one is `cluster-profile-not-found`, which lists the profiles of the
   cluster.
 - **A file.** Strata checks for a file first: a ref that names a file that
   exists is a file. A file that is not a strata snapshot is `not-snapshot`.
-  A ref that is *shaped* like a path is a file too, whether or not the file is
-  there: it holds a `/` or a `\`, it starts with `.`, `..` or `~`, or it ends
-  with `.json`, `.yaml` or `.yml`. So a record that is missing, or misspelled,
-  is the error `io` that names the file, and Palette is asked nothing:
+  A ref that is shaped like a path is a file too, whether or not the file is
+  there. A path holds a `/` or a `\`. A path starts with `.`, `..`, or `~`. A
+  path ends with `.json`, `.yaml`, or `.yml`. A `pack:` ref and a `cluster:`
+  ref can hold a `/`, and each one stays what its prefix names. A uid, a name,
+  and a `name@version` hold none of these shapes, so they reach Palette.
 
-  ```text
-  strata: /tmp/dev.json: No such file or directory (os error 2)
-  ```
+A record that is missing or misspelled is the error `io`, which names the file.
+Strata asks Palette nothing:
 
-  A uid, a name, and a `name@version` hold none of those, so they still reach
-  Palette.
+```text
+{{#include ../output/refs-missing-file.txt}}
+```
 
 ## Which commands take which refs
 

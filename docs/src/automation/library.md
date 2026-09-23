@@ -6,12 +6,16 @@ program can use the same parts:
 | Item | Function |
 | --- | --- |
 | `api::PaletteApi` | The Palette API. `HttpApi` calls Palette. `MemoryApi` serves documents from memory, for tests. |
+| `api::Palette` | The client over a `PaletteApi`: the reads of a profile, a cluster, and a cluster summary. `api::Retry` tries a transient failure again. |
+| `config::Config` | Where Palette is, and the key. `Config::from_env` reads the environment and then `~/.palette.env`, as the command does. |
+| `reference::Ref` | What a ref means: a record file, `<name>@<version>`, a uid, `cluster:<name>`, or `pack:<name>@<version>`. |
+| `ops::snapshot_for` | A record of what a ref names, through a `Palette` that a closure gives. The example in the crate documentation starts here. |
 | `snapshot::Snapshot` | A record. |
 | `diff::compute` | The comparison of two snapshots. |
 | `render::Renderer` | The terminal, markdown, and JSON output. |
-| `ops` | The operations of the commands: `compare`, `verify`, `same_release`, `consumers`, `list`. |
+| `ops` | The operations of the commands: `snapshot_for`, `compare`, `verify`, `verify_many`, `same_release`, `consumers`, `list`, and `registry_packs`. |
 | `Snapshot::content_digest` | The digest of what a version is. See [The content digest](../internals/hashes.md#the-content-digest). |
-| `Snapshot::pins` | Each pack that a version takes from a registry: its name, its version, and its digest as the registry wrote it. A Helm registry writes bare hex, and a pack registry writes `sha256:` and hex. Both are sha256. |
+| `Snapshot::pins` | Each pack that a version takes from a registry: its name, its version, and its digest as Palette lists it. [The pack-ref digest](../internals/palette.md#the-pack-ref-digest) says what that digest is for each kind of registry. |
 | `Snapshot::each_from_cluster` | A snapshot for each profile that a cluster applies, from one read of the cluster. |
 | `candidate::check`, `ops::snapshot_from_loaded` | A candidate that a program builds, with no file: the rules of a [candidate file](../reference/candidate-file.md) hold for it, and it gives the snapshot that `snapshot --from-candidate` gives. |
 | `Error::class` | `Transient`, `Terminal`, or `Unknown`: what a caller does before it tries again. `Retry` uses the same rule. |
@@ -22,8 +26,8 @@ The command line adds only the arguments, the output, and the exit codes.
 
 A program that promotes a version, or that compares two environments, needs two
 answers. `snapshot.root` says if one object changed. `snapshot.content_digest()`
-says if two objects are the same version. Keep the root to verify a record, and
-compare content digests across registries, projects, and tenants.
+says if two objects are the same version. Keep the root to check a record later.
+Compare content digests across registries, projects, and tenants.
 
 [The knurl adapter](./knurl.md) is a program that does this: it gives both
 digests to another tool, behind a trait of that tool.
@@ -45,11 +49,16 @@ CARGO_NET_GIT_FETCH_WITH_CLI=true cargo build
 `git-fetch-with-cli = true` under `[net]` in `.cargo/config.toml` does the same.
 Without it, the git of Cargo fails with "no authentication methods succeeded".
 
+The crate is not on crates.io. The name `strata` there belongs to another crate,
+so `cargo add strata` gets the wrong one.
+
 ## Read the API
 
 ```bash
 cargo doc --open
 ```
+
+Each public item has documentation. The build refuses an item without it.
 
 The crate documentation starts with an example that runs as a test.
 `examples/library/` is a separate crate that uses strata as a library, with no

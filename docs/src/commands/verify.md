@@ -21,8 +21,9 @@ One file prints the full report and a verdict line. Exit `0`.
 {{#include ../output/edited-verify.txt}}
 ```
 
-Exit `1`. A person edited the published version in place: same uid, same
-version, other content. See
+Exit `1`. The published version changed in place: same uid, same version, other
+content. [What Palette does](../internals/palette.md#edits-in-place) names who
+can change it. See
 [A published version is edited in place](../use-cases/edited-in-place.md).
 
 ## Check many records
@@ -62,9 +63,9 @@ Each verdict of a cluster record ends with `; N variable value changed` when the
 cluster gives a variable another value than the record holds.
 
 A record whose packs are in another order now is `DRIFT`, with `no packs
-changed, the packs in another order` in the summary line. Palette keeps the
-order a profile gives its packs, so the order is content and two orders are two
-roots. It is not an install order: that is the priority in each pack's values.
+changed, the packs in another order` in the summary line. The order is content:
+see
+[What Palette does](../internals/palette.md#the-order-of-the-profiles-of-a-cluster).
 
 A renamed tag in place is `DRIFT` too, with the result `SAME CONTENT` and no
 node impact. It changes no build, but it edits a published version. See

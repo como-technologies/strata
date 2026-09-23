@@ -14,8 +14,8 @@ impact no longer reaches the threshold.
 
 ## Try it first
 
-`--dry-run` writes the comment to standard output, says what it would do with
-the label on standard error, and calls no host. The run below sends the comment
+`--dry-run` writes the comment to standard output, writes the label decision to
+standard error, and calls no host. The run below sends the comment
 to a file, so the block holds the label line alone:
 
 ```text
@@ -26,7 +26,7 @@ to a file, so the block holds the label line alone:
 
 | Option | Default | Function |
 | --- | --- | --- |
-| `--pr N` | from `gh` in a checkout of the branch | The pull request. |
+| `--pr N` | from `gh` in a checkout of the branch, or `CI_MERGE_REQUEST_IID` on GitLab | The pull request, or the merge request. |
 | `--repo OWNER/REPO` | `GITHUB_REPOSITORY`, or from `gh` | The repository, or the GitLab project. |
 | `--host github\|gitlab` | from the CI variables | The code host. |
 | `--label NAME` | `repave` | The label. |
@@ -38,6 +38,15 @@ The script is in this repository, at `scripts/ci/pr-comment.sh`. It needs `strat
 `curl` and a `GITLAB_TOKEN`. See [GitLab CI](./gitlab.md). A ref that is not a file gets
 one snapshot, so Palette gets one set of requests. Run from a terminal, the
 script posts the same comment as the job.
+
+## Exit status
+
+| Exit | Meaning |
+| --- | --- |
+| `0` | The comment is posted or updated, and the label is set. A dry run also exits `0`. |
+| `2` | The script could not run, or strata could not answer. |
+
+A host call that fails ends the script with the status of that call.
 
 ## GitHub Actions
 
@@ -69,6 +78,7 @@ jobs:
 | `strata-version` | yes | The strata release, a tag of this repository. |
 | `label` | no | The label. Default `repave`. |
 | `threshold` | no | The impact that earns the label. Default `repave`. |
+| `palette-api` | no | A self-hosted Palette address. |
 
 | Secret | Needed for |
 | --- | --- |

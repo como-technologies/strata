@@ -19,12 +19,13 @@ the kind.
 | `retry-after-too-long` | Palette asked for a longer wait than `STRATA_MAX_RETRY_AFTER`. | `path`, `status`, `retryAfter`, `limit` |
 | `invalid-setting` | A variable has a value that strata cannot read. | `variable`, `value` |
 | `pattern` | A record pattern is not valid, or matches no file. | `pattern` |
-| `transport` | The request did not reach Palette. Also: `snapshot` got no ref and no `--from-raw`. | `path` |
+| `transport` | The request did not reach Palette, or the answer did not arrive whole. | `path` |
 | `not-json` | Palette answered with a body that is not JSON. | `path` |
-| `profile-not-found` | No profile version with this name and version in the scope. | `name`, `version` |
-| `cluster-profile-not-found` | The cluster runs no profile with this name. | `cluster`, `profile`, `applied` |
+| `profile-not-found` | No profile version with this name and version in the scope. | `name`, `version`, `tenantScope` |
+| `cluster-profile-not-found` | The cluster runs no profile with this name or uid. | `cluster`, `profile`, `applied` |
 | `profile-ref-required` | The command needs a profile, and got a cluster or a pack. | `reference` |
 | `record-not-a-source` | `snapshot` got a record. It writes one, and does not read one. | `path` |
+| `usage` | The command line cannot work as given, so strata sent no request. `snapshot` with no ref and no `--from-raw` is the one case. `snapshot` takes no `--json`, so this kind prints as a `strata:` line. | |
 | `candidate-invalid` | The candidate file has a problem. | `path` |
 | `pack-not-found` | The registry has no such pack version or tag. | `name`, `version`, `registry`, `tag` when given |
 | `pack-name-not-found` | No visible registry offers a pack of that name. | `name` |

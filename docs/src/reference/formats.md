@@ -4,6 +4,9 @@
 comment or an issue. `--format json`, or `--json`, is for a script or a language
 model.
 
+Every report goes to standard output. Progress notes go to standard error: see
+[Settings](./settings.md).
+
 ## The terminal report
 
 ```text
@@ -12,11 +15,11 @@ model.
 
 | Line | Content |
 | --- | --- |
-| first | The two sides and their uids. A cluster side reads `<name>@<version> on cluster <cluster>`, with the cluster uid. |
+| first | The two sides and their uids. A cluster side reads `<name>@<version> on cluster <cluster>`, with the cluster uid. A pack side reads `pack <name>@<version>`, with the pack uid. |
 | `root` | The two roots, and `IDENTICAL`, `SAME CONTENT`, or `CHANGED`. |
 | `note` | A cause of the result. [strata compare](../commands/compare.md#notes-in-the-report) lists the notes. |
-| `consumers` | The number of clusters that used each side. |
-| `variables` | `unchanged`, or `CHANGED` with one line for each added or removed variable, and one line for each changed field. |
+| `consumers` | The number of clusters that used each side. When one side is a cluster, a candidate, or a pack, the line is a sentence about the profile side alone: see [strata compare](../commands/compare.md#compare-two-versions). Between two clusters, or two packs, there is no line. |
+| `variables` | `unchanged`, or `CHANGED` with one line for each added or removed variable, and one line for each changed field. Between two packs there is no line. |
 | `cluster values` | Only between two clusters with different variable values: one line for each value, as `<profile>.<variable>: "old" -> "new"`. A sensitive variable shows `(sensitive)`. |
 | a pack | The layer, the name, the version, and the flags. Below a changed pack: the upstream digest, the changed values, the manifest changes, and the impact. |
 | `DRIFT:` or `OK:` | Only after `verify`: the verdict. |
@@ -36,16 +39,22 @@ does change it.
 
 | Color | Used for |
 | --- | --- |
-| bold red | `repave` and `may-repave`, removed packs, old values |
-| yellow | `cluster-wide`, changed packs |
-| cyan | `in-place` |
-| dim | `sync` and `none`, unchanged packs |
-| green | added packs, new values |
+| bold green | `IDENTICAL`, `SAME CONTENT`, `OK`, `ADDED`, and the same-content note |
+| bold red | `CHANGED`, `DRIFT`, `REMOVED`, `repave`, and `may-repave` |
+| bold yellow | the other notes, and `variables CHANGED` |
+| blue | `IDENTITY`, and a renamed tag |
+| magenta | `UPSTREAM` |
+| yellow | `AUTHORED`, `cluster-wide`, the `~` of a changed pack, and the pack-order note |
+| cyan | `in-place`, and the `@@` line of a unified diff |
+| red | old values, and the `-` of a removed line |
+| green | new values, and the `+` of an added line |
+| dim | `sync`, `none`, unchanged packs, uids, and roots |
 
-Strata colors the report only when standard output is a terminal, and not when
-`TERM` is `dumb`. `--color=always` forces color. `--color=never` or `--no-color`
-removes it. `CLICOLOR_FORCE` forces color for a pipe, and `NO_COLOR` has
-priority over it. The diffs of `--full` use the same colors.
+Strata decides the color in this order. `--color=never` or `--no-color`
+removes it. `--color=always`, or `--color` with no value, forces it. Then
+`NO_COLOR` removes it. Then `CLICOLOR_FORCE` forces it, also for a pipe and
+also when `TERM` is `dumb`. Then `TERM=dumb` removes it. Then a terminal on
+standard output gets it. The diffs of `--full` use the same colors.
 
 ## The markdown comment
 
@@ -63,6 +72,9 @@ The comment has:
   version: against a candidate, a cluster, or a pack
 - a result line with the result, the maximum impact, the pack counts, and the
   state of the variables
+- a `Note:` line for each note of the terminal report, and the order note as a
+  quotation after the pack blocks. [strata compare](../commands/compare.md#notes-in-the-report)
+  lists the notes
 - one table row for each pack, with the layer, name, version, flags, and impact
 - one collapsible `diff` block for the variables, and one for the cluster values
   when two clusters give different values
@@ -79,8 +91,11 @@ The JSON is never colored and never cut. `--compact` writes it on one line.
 
 ## The one-line reports
 
-`verify` with many files, `same-release`, `consumers`, and `list` print one line
-for each item and a summary. Each command page shows the lines:
+`verify` with many files or with `--summary`, `same-release`, `consumers`,
+`list`, and `packs` print one line for each item. `verify` and `same-release`
+close with a summary line. `consumers`, `list`, and `packs` head each group
+with a count. Each command page shows the lines:
 [verify](../commands/verify.md), [same-release](../commands/same-release.md),
-[consumers](../commands/consumers.md), [list](../commands/list.md).
-`--format markdown` writes the same lines as a table.
+[consumers](../commands/consumers.md), [list](../commands/list.md),
+[packs](../commands/packs.md). `--format markdown` writes the same lines as a
+table.

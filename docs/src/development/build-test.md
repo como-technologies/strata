@@ -11,6 +11,9 @@ just docs-check        # docs/src/output/ is the output of this build
 
 `just --list` shows each recipe.
 
+The crate is edition 2024 and needs Rust 1.88 or later. `rust-version` in
+`Cargo.toml` says so, and the `msrv` job of CI builds with that version.
+
 ## Where a script goes
 
 | Who runs it | Directory | Examples |
@@ -25,7 +28,7 @@ harness for that one thing, and a `just` recipe runs it.
 
 The development tooling is the `xtask` crate. A `just` recipe wraps each command
 that the book and the examples need, and `cargo xtask <command>` runs the same
-command directly. `cargo xtask` with no command prints the list. The alias is in
+command directly. `cargo xtask` with no command prints its usage and exits `2`. The alias is in
 `.cargo/config.toml`, and the crate reaches no release.
 
 ## The tests
@@ -44,10 +47,14 @@ No test uses the network.
 ### The fuzzing
 
 `tests/fuzz.rs` sends random and hostile input to each entry point that reads a
-ref, a file, a directory, or an answer from Palette: refs of punctuation and
-text that is not ASCII, records of junk bytes, a path that names a directory,
-API answers of the right keys with the wrong types, and the binary itself with
-random arguments against an address that refuses the connection.
+ref, a file, a directory, or an answer from Palette. The cases are:
+
+- refs of punctuation, and text that is not ASCII
+- records of junk bytes
+- a path that names a directory
+- API answers with the right keys and the wrong types
+- the binary itself with random arguments, against an address that refuses the
+  connection
 
 One property holds everywhere: strata answers, or it errors with a kind and
 exit `2`. It never panics.
@@ -64,7 +71,7 @@ seed to look for more.
 
 One test measures itself, because a fuzz test that stops reaching the code it
 fuzzes still passes. `a_profile_of_junk_gives_a_record_that_round_trips`
-fails when fewer than 50 of its 2000 cases build a record.
+fails when 50 or fewer of its 2000 cases build a record.
 
 ## Continuous integration
 
@@ -76,10 +83,11 @@ fails when fewer than 50 of its 2000 cases build a record.
 | lint and test | `just lint`, `just test`, `just library-example`, and `just examples` |
 | docs | `just docs-check`, and `just docs` with `mdbook-lint` |
 | build | the Linux musl binary, with the step that a release uses |
+| the lowest Rust version | `cargo check --workspace --all-targets` with the `rust-version` of `Cargo.toml`, so the number a reader trusts is the number CI builds with |
 
 `ci` adds one job of its own, `publish the book`, which needs the checks and runs
 only on `main`, so the site is a build that every check passed. The `docs` job
-builds the book once and hands it over, so no job builds it twice.
+builds the book once and passes it to the publish job, so no job builds it twice.
 
 The checks are a workflow of their own because a caller cannot grant a called
 workflow more than it has itself. `publish the book` needs `pages: write`, which

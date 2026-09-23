@@ -5,13 +5,13 @@ strata.
 
 ## Three hashes for each pack
 
-A profile is a list of packs in layer order. Strata calculates three hashes for
+A profile is a list of packs, in the order the profile stores them. Strata calculates three hashes for
 each pack, so a report can say which part of a pack changed:
 
 | Hash | Calculated from | Palette concept |
 | --- | --- | --- |
 | `identity` | the pack name, layer, type, tag, version, `packUid`, and `registryUid` | which pack build the layer references |
-| `upstream` | the `digest` on the pack reference of the profile | the content of the pack in the registry |
+| `upstream` | the `digest` on the pack reference of the profile | the digest that Palette lists for the pack version: see [The pack-ref digest](./palette.md#the-pack-ref-digest) |
 | `authored` | the canonical values, the content of each attached manifest, and the params | the configuration of the pack on the profile |
 
 The [change flags](../reference/impact.md) `IDENTITY`, `UPSTREAM`, and
@@ -28,16 +28,20 @@ root = sha256(variablesHash, [key, node] for each pack, in profile order)
 configuration interface of each deployment. The variables are not part of a
 pack, so they have their own hash.
 
-The hash keeps a fixed set of fields of each variable: the name, the display
-name, the description, the format, the default value, the regex, the flags
-`required`, `immutable`, `hidden` and `isSensitive`, the input type, and the
-label, value and description of each option. It keeps no id. The profile
-variables endpoint serves those fields and no uid, so no field that Palette
-mints reaches the hash.
+The hash keeps a fixed set of fields of each variable, and drops the rest:
 
-A sensitive variable arrives masked: its default value is `********` over the
-API. So the hash reads the mask, and a change to the secret does not move the
-root.
+- the name, the display name, and the description
+- the format, the default value, and the regex
+- the flags `required`, `immutable`, `hidden`, and `isSensitive`
+- the input type
+- the label, the value, and the description of each option
+
+It keeps no id. Strata sorts the variables by name before it hashes them, so the
+order in which Palette lists them does not reach the hash either.
+
+A sensitive variable arrives masked. Palette serves asterisks in place of the
+secret, in the default value or in the option values. So the hash reads the
+mask, and a change to the secret does not move the root.
 
 ```mermaid
 flowchart TD
@@ -56,46 +60,51 @@ The root and the node hashes form a Merkle tree. A change in any pack changes
 its node hash, and so the root. Two profile versions with the same root are the
 same release.
 
-The root does not cover the uid, the name, the version, or the project of the
-profile. So the dev and prod copies of a version, and a candidate and its
-published version, can have one root.
+The root does not cover the uid, the name, the version, the project, the labels,
+the cloud type, or the type of the profile. So the dev and prod copies of a
+version, and a candidate and its published version, can have one root.
 
 ## When Palette does not serve the variables
 
-An older Palette does not serve the variables endpoint. Strata then reads the
-version as one with no variables, and the root is the root of a version with no
-variables. That root is correct for what strata read. It is not the root that the same
-version gets from a Palette that serves the endpoint. So a record written before
-such an upgrade does not verify after it, and `verify` reports drift.
+A Palette that does not serve the variables endpoint answers `404` or `405`: see
+[The Palette API](../reference/palette-api.md). Strata then reads the version as
+one with no variables, and the root is the root of a version with no variables.
+That root is correct for what strata read. It is not the root that the same
+version gets from a Palette that serves the endpoint. So a record of a version
+that has variables, written before such an upgrade, does not verify after it:
+`verify` reports drift. A record of a version with no variables keeps its root.
 
 The record holds `source.variablesUnavailable`, which is `true`, and `compare`
 prints a note that names the side. Record the version again after the upgrade.
 
 ## The canonical form
 
-Palette rewrites values when it returns them: whitespace, key order, and
-template expansion change. A text diff changes with each rewrite. The hashes do
-not. Strata reads the values and the manifests as YAML, and writes them as JSON
+The text of a value can change between two reads, in whitespace or in key order,
+while its meaning does not. A text diff changes with each such rewrite. The
+hashes do not. Strata reads the values and the manifests as YAML, and writes them as JSON
 with sorted keys, before it calculates a hash.
 
 A value that is not valid YAML, such as an unquoted Go template, gets another
 treatment. Strata hashes the trimmed text, and the report says so. `--full`
-prints a unified diff for such values and for each changed manifest.
+prints a unified diff of the raw text for each changed value and for each changed
+manifest, so such a value shows its change too.
 
 ## What the root does not cover
 
 | Not hashed | Why |
 | --- | --- |
-| The pack schema and the presets | Palette does not store them on a profile. They belong to the pack version in the registry, so the pack-ref digest follows them. A preset that a profile applies goes into the values, which `authored` covers. See [What Palette does](./palette.md#pack-schema-and-presets). |
+| The pack schema and the presets | Palette does not store them on a profile. They belong to the pack version in the registry. A preset that a profile applies goes into the values, which `authored` covers. See [What Palette does](./palette.md#pack-schema-and-presets). |
 | The values that a cluster gives its variables | They are the input of a run, not the release. Some are secrets. |
 | The consumers, the fetch time, and the project | They describe a moment, not the release. |
+| The uid of a manifest, and the digest Palette reports for it | Palette mints the uid for each copy. `authored` covers the name and the content hash of each manifest, sorted by name. |
+| The annotations of a pack in the registry | Strata does not read them. |
 
 ## The content digest
 
 The root answers "did this object change". A second question is "is this the
-same version", and the root cannot answer it: Palette gives a manifest pack a
-new uid for each profile, and the uid of a registry pack belongs to one
-registry. So two publishes of one definition have two roots.
+same version", and the root cannot always answer it: see
+[Manifest pack uids](./palette.md#manifest-pack-uids). So two publishes of one definition can have two roots: when the definition holds
+a manifest pack, or when the second publish takes a pack from another registry.
 
 The content digest answers the second question:
 
@@ -104,14 +113,19 @@ content = sha256("content/1", variablesHash,
                  [key, version, upstream, authored] for each pack, in profile order)
 ```
 
+The input is a JSON object with sorted keys and no whitespace: `digest`,
+`packs`, and `variables`. A change to what the digest covers is a new tag,
+`content/2`. A test holds the digest of one fixture, so such a change is a
+decision and not an accident.
+
 It leaves out the tag, the pack uid, the registry uid, and the pack type. It
-keeps `upstream`, so a pack that a team copies to another registry by digest
-keeps its content digest, and a pack with other bytes under the same version
-does not.
+keeps `upstream`. So a pack that a team copies to another registry by digest
+keeps its content digest. A pack with other bytes under the same version does
+not.
 
 | Case | The root | The content digest |
 | --- | --- | --- |
-| Two publishes of one definition | different | equal |
+| Two publishes of one definition, with a manifest pack or from another registry | different | equal |
 | The same build under another tag name | different | equal |
 | A pack copied to another registry by digest | different | equal |
 | A pack from another kind of registry, with another archive | different | different |
@@ -120,10 +134,11 @@ does not.
 | The same packs in another order | different | different |
 | A pack whose registry lists no digest, as two archives | equal | equal |
 
-The last row is a gap, not a rule. A registry that Palette does not sync lists
-no digest for a pack. Then `upstreamSource` is `none`, and neither digest covers
-the archive: two archives under that version have one root. The knurl adapter
-refuses such a leaf, because nothing pins it by content.
+The last row is a gap, not a rule. Palette can list no digest for a pack: see
+[What no run covers](./palette.md#what-no-run-covers). Then `upstreamSource` is
+`none`, and neither digest covers the archive: two archives under that version
+have one root. The knurl adapter refuses such a leaf, because nothing pins it by
+content.
 
 A tool that pins a profile version by digest pins the content digest. `verify`
 keeps the root, because an edit in place is a change to one object.
@@ -131,13 +146,13 @@ keeps the root, because an edit in place is a change to one object.
 ## Two differences that are not content
 
 The hash keeps two fields that can differ for the same content. Strata does not
-drop them from the hash: then each existing root changes, and the snapshot needs
-a new schema id, `strata-snapshot/2`. `compare` and `same-release` recognize the
+drop them from the hash: then each root that exists changes, and the snapshot
+needs a new schema id, `strata-snapshot/2`. `compare` and `same-release` recognize the
 two cases instead.
 
 | Case | Hash field | What strata does |
 | --- | --- | --- |
-| The same build under another tag name | `tag` in `identity` | `compare` marks the pack `tagRenamed` and says `SAME CONTENT`. `same-release` passes the pair. `verify` still reports a rename in place as `DRIFT`: without the tag in the hash, it would miss that edit. |
+| The same build under another tag name | `tag` in `identity` | `compare` marks the pack `tagRenamed` and says `SAME CONTENT`. `same-release` passes the pair. `verify` reports a rename in place as `DRIFT`. A hash without the tag misses that edit. |
 | A manifest pack in two profiles | `packUid` in `identity`, which Palette gives each profile | `compare` marks the pack `mintedUidOnly` and says `SAME CONTENT`. `same-release` passes the pair. A pack from a registry keeps its `packUid`, which names the build of the registry. |
 
 ## Clusters
@@ -150,25 +165,26 @@ copy exactly as it hashes the profile:
   the profile.
 - The variable definitions come from the cluster.
 
-So a cluster that runs a recorded version has the root of that record. That
-equality needs the cluster's variables endpoint to repeat the definition fields
-that the profile endpoint returns. The live runs used profiles with no
-variables, so no run shows that shape: see
-[What no run covers](./palette.md#what-no-run-covers). An edit
-of the pack values on the cluster shows as `AUTHORED`. A cluster on an older
-version shows `IDENTITY`.
+So a cluster that runs a recorded version has the root of that record. The
+cluster variables endpoint repeats the definition fields of the profile
+endpoint, so the copy of a profile with a variable has the variables hash of the
+profile: see [Cluster copies](./palette.md#cluster-copies). A cluster on a
+version that pins other pack builds shows `IDENTITY`. An edit of the pack values
+on the cluster, and a version that differs in values alone, each show
+`AUTHORED`.
 
 Without a profile selection, a cluster snapshot covers each applied profile in
-canonical order: the cluster or infra profile first, then the others by name,
-with the packs of each in its order, and the variables merged and sorted by
-name. Palette lists the profiles of a cluster in an order that differs between
-two clusters built from one definition, so the record does not follow that
-order, and two such clusters have one merged root.
+canonical order. The cluster or infra profile comes first, then the others by
+name. The packs of each profile keep their order. The variables are merged and
+sorted by name. Palette lists the profiles of a cluster in an order that carries
+no meaning: see
+[The order of the profiles of a cluster](./palette.md#the-order-of-the-profiles-of-a-cluster).
+So two clusters built from one definition have one merged root.
 
 ## The digest of each registry kind
 
 `upstream` comes from the pack reference digest, or from the pack summary
 digest when the reference has none. `hash.upstreamSource` in the snapshot says
-which. A Helm digest is bare hex, with no `sha256:` prefix. Strata hashes the
-digest as Palette stores it. See
+which. Strata hashes the digest as Palette stores it, a Helm digest in bare hex
+included. See
 [What Palette does: the pack-ref digest](./palette.md#the-pack-ref-digest).

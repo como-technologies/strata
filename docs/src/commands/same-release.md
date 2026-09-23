@@ -31,7 +31,7 @@ names the first changed value. See
 | --- | --- | --- |
 | `IDENTICAL` | The roots are equal. | yes |
 | `SAME CONTENT` | The roots differ only by the tag name of a pack build, or by the uid that Palette gives each manifest pack. | yes |
-| `REGISTRY MOVE` | The roots differ only by packs from another registry, with the same tag, version, values, manifests, and params. | only with `--allow registry-move` |
+| `REGISTRY MOVE` | The roots differ only by packs from another registry, with the same tag, version, values, manifests, and params. The digest of each moved pack can differ. | only with `--allow registry-move` |
 | `DIFFERENT` | Any other difference. | no |
 
 ```text

@@ -5,10 +5,12 @@ cluster profile version, the copy that a cluster runs, and a pack version in a
 registry. A published profile version is what Palette builds a cluster from.
 Strata calls it a release.
 
-A cluster profile is a stack of layers: OS, Kubernetes, CNI, CSI, and add-ons.
+A cluster profile is a set of layers, kept in the order given: OS, Kubernetes,
+CNI, CSI, and add-ons.
 An add-on profile is a profile of add-on layers alone, which a cluster runs
 beside its cluster profile; a cluster can run several of them.
-Each layer is a pack with a version, a digest, and values. Palette lets a
+Each layer is a pack with a version, values, and the digest that Palette lists
+for it. Palette lets a
 person edit a published version in place. Two projects can hold one version
 name with different contents. Strata calculates one digest for each version,
 the **root**. Two versions with the same root are the same release.
@@ -26,7 +28,10 @@ flowchart LR
   candidate -. "snapshot --from-candidate" .-> record
   version -. "snapshot" .-> record
   cluster -. "snapshot" .-> record
+  pack -. "snapshot pack:" .-> record
   record -. "verify" .-> version
+  record -. "verify" .-> cluster
+  record -. "verify" .-> pack
   record -. "compare" .-> cluster
 ```
 
@@ -34,15 +39,16 @@ A solid arrow is somebody else. A profile version pins a pack version, a
 cluster runs a copy of a profile version, and your pipeline publishes the
 version. Strata publishes nothing.
 
-A dotted arrow is strata, which reads and writes files. Both files it knows are
-in your repository: a **candidate**, the version as YAML before Palette has it,
-and a **record**, the hashes of a version that Palette holds. `snapshot` writes
-a record from any of the three. `verify` asks whether Palette still holds what a
-record says. `compare` reports what differs between two of them.
+A dotted arrow is strata, which reads and writes files. It knows two files, and
+where you keep them is your choice: a **candidate**, the version as YAML before
+Palette has it, and a **record**, the hashes of a version that Palette holds.
+`snapshot` writes a record from any of the four. `verify` asks whether Palette,
+or the registry, still holds what a record says. `compare` reports what differs
+between two of them.
 
-The root closes the loop. A candidate and the published version give the same
+The root joins the two. A candidate and the published version give the same
 root, so `same-release` proves that Palette holds the version that a reviewer
-approved, without trusting a tag or a name.
+approved, with no trust in a tag or a name.
 
 | Question | Command |
 | --- | --- |
@@ -108,7 +114,9 @@ builds.
 
 A release does not change after you publish it. It keeps its name, its version,
 and its content. To change a release, publish a new version. `strata verify`
-tells you when a person or a tool breaks this rule.
+tells you when the content changed.
+[What Palette does](./internals/palette.md#edits-in-place) names who can change
+it.
 
 Strata reads Palette and writes files. It publishes nothing. It works in the
 same way when a team publishes with Terraform, the API, or the Palette console.

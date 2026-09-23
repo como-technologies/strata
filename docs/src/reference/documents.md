@@ -1,6 +1,7 @@
 # JSON documents
 
-Each document has a `schema` id and a `tool` block. `strata-diff/1`,
+Each document has a `schema` id and a `tool` block with `name`, `version`, and
+`impl`. A record of the first bash release has no `impl`. `strata-diff/1`,
 `strata-verify-summary/1`, and `strata-chain/1` also have a `legend` that
 explains their values in words, so a program or a language model can read them
 without this book. `strata schema <kind>` prints the JSON Schema of each
@@ -23,9 +24,10 @@ A record of one profile version or cluster.
 - `root`: the sha256 digest of the release. See
   [The hashes and the root](../internals/hashes.md).
 - `contentDigest`: the sha256 digest of what the version is, without the ids
-  that Palette gives. Two publishes of one definition have two roots and one
-  content digest. An older record has no such field, and the library calculates
-  the digest from the pack hashes. See
+  that Palette gives. Two publishes of one definition can have two roots and
+  one content digest: when the definition holds a manifest pack, or when the
+  second publish takes a pack from another registry. An older record has no
+  such field, and the library calculates the digest from the pack hashes. See
   [The content digest](../internals/hashes.md#the-content-digest).
 - `source`: where the record comes from.
   - `ref`: the ref as typed, a name or a uid.
@@ -33,9 +35,9 @@ A record of one profile version or cluster.
     `cloudType`, `type`, and `tags`.
   - `template`: `published`, `draft`, `applied` for a cluster, `candidate`, or
     `registry` for a pack record.
-  - `consumers`, for a published or a draft version: the uids of the clusters
-    that used the version, and the count. A candidate, a cluster record, and a
-    pack record leave it out, because no request asked.
+  - `consumers`, for a published or a draft version: `clusters[]`, the uids of
+    the clusters that used the version, and `count`. A candidate, a cluster
+    record, and a pack record have no `consumers`, because no request asked.
   - `variablesUnavailable`, only when true: Palette did not serve the variables
     endpoint, so the root is the root of a version with no variables. See
     [When Palette does not serve the variables](../internals/hashes.md#when-palette-does-not-serve-the-variables).
@@ -45,16 +47,28 @@ A record of one profile version or cluster.
     that version in the registry. `template` is `registry` and `type` is
     `pack`.
   - `cluster`, for a cluster record: its `uid` and `name`, the `profile` that
-    `cluster:<cluster>/<profile>` selected, the applied `profiles`, and
-    `variables`, the value that the cluster gives each variable. `verify` reads
-    only the uids, so a rename does not stop it. `variables` is not part of the
-    root. A sensitive variable has `sensitive: true`, and no value or hash.
+    `cluster:<cluster>/<profile>` selected, `profiles[]`, and `variables[]`.
+    Each entry of `profiles[]` has `uid`, `name`, `version`, and `type`, in the
+    order [The order of the profiles of a cluster](../internals/palette.md#the-order-of-the-profiles-of-a-cluster)
+    gives. Each entry of `variables[]` has `profile`, `profileUid`, `name`,
+    `value`, and `sensitive`. `verify` reads only the uids, so a rename does
+    not stop it. `variables` is not part of the root. A sensitive variable has
+    `sensitive: true`, and no value or hash.
 - `variables` and `variablesHash`: the profile variables.
-- `packs[]`: one entry for each pack, in layer order.
+- `packs[]`: one entry for each pack, in the order the profile holds them. The
+  diff document sorts its packs by layer and then by name; the snapshot does
+  not.
   - The identity fields: `key` (`<layer>/<name>`), `name`, `layer`, `type`,
     `tag`, `version`, `packUid`, and `registryUid`.
-  - The two digests, the raw values, the canonical values, and the values hash.
-  - The manifests, with their content and content hash.
+  - `refDigest`, the digest on the pack reference, and `registryDigest`, the
+    digest of the pack in the manifests document.
+  - `params`: the params of the pack on the profile, as a map.
+  - `values`: the raw values YAML. `valuesCanon`: the values as JSON with
+    sorted keys, or `null` when the values do not parse. `valuesHash`: the
+    sha256 of `valuesCanon`, or of the trimmed text when the values do not
+    parse. `valuesParseError`, only then: why.
+  - `manifests[]`, sorted by name: `name`, `uid`, `digest`, `content`,
+    `contentHash`, and `contentParseError` when the content does not parse.
   - `hash`: `identity`, `upstream`, `upstreamRaw`, `upstreamSource`,
     `authored`, and `node`. `upstreamSource` is the field that gave `UPSTREAM`:
     `packRef.digest`, `packSummary.digest`, or `none`.
@@ -68,14 +82,15 @@ profile.
 
 A comparison of two sides, `a` and `b`.
 
+- `generatedAt`: the time of the comparison.
 - `legend`: the flags, each `status`, each `op`, and each impact level, in
-  words. `generatedAt` is the time of the comparison.
-- `a` and `b`: the two sources, with uid, version, and fetch time. Each carries
-  its consumers when it has them.
+  words.
+- `a` and `b`: the `source` block of each side, as
+  [strata-snapshot/1](#strata-snapshot1) gives it.
 - `same`: the roots are equal. `rootA` and `rootB` are the roots.
 - `sameContent`: the roots are equal, or differ only by the pack uids of
-  manifest packs and the tag names of the same builds. `same` stays `false` in
-  the second case.
+  manifest packs and the tag names of the same builds, with the variables and
+  the pack order unchanged. `same` stays `false` in the second case.
 - `editedInPlace`: both sides name the same uid and version, and the roots
   differ.
 - `overwrittenInPlace`: each uid that the sides name under different versions,
@@ -105,12 +120,12 @@ A comparison of two sides, `a` and `b`.
     `upstreamSource`, `valuesHash`, and `node`.
   - `values`: `changed`, `parseable`, `changedCount`, `addedCount`,
     `removedCount`, and `diff[]`.
-  - `manifests[]`: the manifest changes, with their content hashes.
+  - `manifests[]`: `op`, `name`, `hashA`, and `hashB`.
 - `verify`, only after `verify`: `status`, `uid`, `recordedAt`, and `checkedAt`.
   - `overwrittenBy`: for a profile record, the `name@version` that the uid names
     now. The status is `drifted`, also when the roots are equal.
-  - `clusterValuesChanged`: for a cluster record, the number of variable values
-    that differ from the record.
+  - `clusterValuesChanged`, only when it is not `0`: for a cluster record, the
+    number of variable values that differ from the record.
   - `profilesOverwritten`: for a cluster record, each profile that the cluster
     runs whose uid names another version now, or no longer exists: `uid`,
     `name`, `clusterVersion`, and `profileVersion` (empty for a uid that is
@@ -130,7 +145,7 @@ is the path as a list: strings for keys, numbers for indexes, and
   the exit status in words.
 - `records[]`: one entry for each file, in the order given: `path`, `status`,
   `name`, `version`, `uid`, `projectUid`, `recordedAt`, `rootRecorded`, and
-  `rootLive`.
+  `rootLive` when strata read the live profile.
   - A drifted record adds `maxImpact`, `packsChanged`, and the full `diff`.
   - A cluster record with changed variable values adds `clusterVariables`,
     whatever its status.
@@ -156,9 +171,9 @@ is the path as a list: strings for keys, numbers for indexes, and
   could read the project listing. The names and the projects come from
   `status.inUseClusters` of the profile. `unlisted`, only when true: the profile
   did not list the cluster, and the second reading found it.
-- `clustersRead`: the second reading. `read`, the cluster documents read;
-  `unread`, the clusters the listing names that could not be read; and `error`
-  when the cluster listing itself could not be read, so `read` is `0`.
+- `clustersRead`: the second reading. `read`: the cluster documents read.
+  `unread`: the clusters the listing names that strata could not read. `error`:
+  why strata could not read the cluster listing. Then `read` is `0`.
 
 ## strata-list/1
 
@@ -166,6 +181,8 @@ is the path as a list: strings for keys, numbers for indexes, and
 - `pack`: the `--pack` text, when given.
 - `cluster`: the `--cluster` text, when given.
 - `profiles[]`, `clusters[]`, and `projects[]`: only the kinds that were listed.
+  A kind that was listed and holds nothing is `[]`. Profiles come by name and
+  then by version, clusters by name, and projects by name.
   - A profile: `ref`, `name`, `version`, `uid`, and `cloudType`. With `--packs`,
     also `type`, `consumers`, and `packs[]` with `layer`, `name`, `tag`, and
     `version`, or `error`.

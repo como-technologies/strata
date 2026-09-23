@@ -40,8 +40,9 @@ gets the change.
 {{#include ../output/compare-full.txt}}
 ```
 
-The text report cuts a value longer than 120 characters. `--full` and the JSON
-document keep each full value.
+The text report cuts a long value. `--full` and the JSON document keep each full
+value. [Report formats](../reference/formats.md#the-terminal-report) gives the
+length at which the report cuts.
 
 ## A version that replaces nodes
 
@@ -50,8 +51,11 @@ document keep each full value.
 ...
 ```
 
-`IDENTITY` on the OS or Kubernetes layer means a new pack build: Palette
-replaces the nodes (`repave`). Schedule a maintenance window for this release.
+`IDENTITY` with a new pack uid on the OS or Kubernetes layer means a new pack
+build: Palette replaces the nodes (`repave`). Schedule a maintenance window for
+this release. `IDENTITY` with the same pack uid and another tag name replaces no
+node: see
+[One pack build under two tag names](../use-cases/tag-name.md).
 
 ## Compare two identical refs
 
@@ -101,11 +105,10 @@ cluster`: a person can edit the pack values on a cluster.
 
 One more note comes after the pack lines, not after `root`. The line
 `note: pack order changed between the two profiles` says that the two sides
-list their packs in another order. Palette keeps the order a profile gives its
-packs, so the order is content and two orders are two roots, whether or not a
-pack changed. It is not an install order: that is the priority in each pack's
-values ([What Palette does](../internals/palette.md#the-order-of-the-profiles-of-a-cluster)). The markdown report writes the same line
-as a quotation.
+list their packs in another order. The order is content, whether or not a pack
+changed:
+[What Palette does](../internals/palette.md#the-order-of-the-profiles-of-a-cluster).
+The markdown report writes the same line as a quotation.
 
 ## What to expect
 

@@ -40,23 +40,36 @@ a YAML file of layers, a Terraform module, a chart of values. A candidate file i
 that same description, in the form strata reads. A job writes the candidate file
 beside the source. The file needs few fields:
 
-| The candidate asks for | Your source usually calls it | If you leave it out |
-| --- | --- | --- |
-| `name`, `version` | the profile and the version to publish | required; the name is the name in Palette, with whatever prefix your pipeline adds |
-| `type`, `cloudType` | the kind of profile and its cloud | `type` is `cluster` by default |
-| `layers[].name`, `layers[].version` | each pack and its version | required |
-| `layers[].registry` | the registry a layer comes from | a top-level `registry` covers every layer that names none |
-| `layers[].valuesFile` | the values file of a pack | with no `values` and no `valuesFile`, the layer gets the default values of the pack |
-| `layers[].tag` | the tag, when it is not the version | the tag that equals the version, or the first tag of that version |
-| `variables[]` | the profile variables | none |
+| The candidate asks for | Your source usually calls it |
+| --- | --- |
+| `name`, `version` | the profile and the version to publish; the name is the name in Palette, with whatever prefix your pipeline adds |
+| `type`, `cloudType` | the kind of profile and its cloud |
+| `layers[].name`, `layers[].version` | each pack and its version |
+| `layers[].registry` | the registry a layer comes from |
+| `layers[].valuesFile` | the values file of a pack |
+| `layers[].tag` | the tag, when it is not the version |
+| `variables[]` | the profile variables |
 
-Two rules decide whether the roots agree, so a job that writes candidates must
+[The candidate file](../reference/candidate-file.md#the-fields-of-a-layer) gives
+each field, the ones that are required, and each default.
+
+Four rules decide whether the roots agree, so a job that writes candidates must
 follow them:
 
-- **The tag is the version by default.** A pipeline can pin a pack under another
-  tag. The candidate must then give that tag in `tag`.
+- **The tag is the version by default, when the registry lists that tag.** A
+  pipeline can pin a pack under another tag. The candidate must then give that
+  tag in `tag`.
 - **Strata uses the names that Palette uses.** A variable field such as
   `display_name` is `displayName` in the candidate file.
+- **Strata applies no pack preset.** The documents that strata builds for a
+  candidate carry an empty `presets` list.
+  [What no run covers](../internals/palette.md#what-no-run-covers) names the
+  open question about the values that a preset option needs.
+- **A candidate pins a pack version, and not a tag.** A record of a profile
+  pinned under a floating tag gives a candidate with that version and that tag.
+  After the registry moves the tag to another version, `snapshot
+  --from-candidate` stops with `pack-not-found`. Give the new version in the
+  candidate.
 
 Prove the mapping before a pipeline depends on it. Write a candidate file from a
 version that Palette already has. Then check that the two are one release. The
