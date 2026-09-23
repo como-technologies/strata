@@ -99,6 +99,26 @@ tf_apply() {
 }
 # apply ARG...: an apply with the script's flag
 apply() { tf_apply "$flag" "$@"; }
+# try_apply ARG...: an apply whose refusal is the result. The exit code is tofu's, the output goes
+# to stdout, and the script goes on; a check judges the code. An OperationForbidden read runs it
+# again, as tf_apply does.
+try_apply() {
+  applies=$((applies + 1))
+  echo "tofu apply -var immutable_profiles=$flag $*" >> steps.log
+  "$live/tf.sh" apply -input=false -auto-approve -no-color -var "immutable_profiles=$flag" "$@" \
+    > "apply-$applies.txt" 2>&1
+  local code=$?
+  if [ "$code" != 0 ] && command grep -q 'OperationForbidden' "apply-$applies.txt"; then
+    echo "tofu apply again: Palette refused a read with OperationForbidden" >> steps.log
+    "$live/tf.sh" apply -input=false -auto-approve -no-color -var "immutable_profiles=$flag" "$@" \
+      >> "apply-$applies.txt" 2>&1
+    code=$?
+  fi
+  command grep -E '^(Plan|Apply complete|Error)' "apply-$applies.txt" >> steps.log
+  cat "apply-$applies.txt"
+  load_outputs
+  return "$code"
+}
 # hold_versions: at the baseline, store skip_destroy for the script's flag on every profile in the
 # state, changing nothing else. Every script that applies runs it right after require_baseline. A
 # flag-on version bump replaces the profile resource, and the provider deletes the replaced object with

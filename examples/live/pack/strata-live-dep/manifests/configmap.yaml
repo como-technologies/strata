@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: strata-live-dep
+  namespace: strata-live
+data:
+  purpose: the pack that strata-live-pack 1.1.0 requires

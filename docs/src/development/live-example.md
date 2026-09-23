@@ -32,8 +32,13 @@ resource and the OS and CSI packs in `terraform/main.tf`.
 | profile `strata-live-addon` 1.0.0 | An add-on profile with one manifest, the ConfigMap `strata-live-config` in `default`, and one variable, `purpose`, with a default. Cluster A runs it after the release profile. |
 | cluster `fred` (cluster A) | One control plane node and two workers, `t3.xlarge`, one availability zone. |
 | profile `strata-live-registries` 1.0.0 | An add-on profile with one chart from a Helm registry (default `nginx` 25.1.5 from `Bitnami`), and one pack from the OCI pack registry that `terraform.tfvars` names. No cluster runs it. |
-| registry `strata-live-registry` | The example's own OCI pack registry: an ECR repository `strata-live/spectro-packs/archive/strata-live-pack` in the AWS account that `aws_profile` names, a user that reads it, and a Palette registry over it. `registry.sh` pushes into it; nothing else does. |
+| registry `strata-live-registry` | The example's own OCI pack registry: two ECR repositories, `strata-live/spectro-packs/archive/strata-live-pack` and `.../strata-live-dep`, in the AWS account that `aws_profile` names, a user that reads them, and a Palette registry over them. `registry.sh` pushes into it; nothing else does. |
 | profile `strata-live-owned` 1.0.0 | An add-on profile with the one pack of that registry. `registry.sh` makes it after the first push, and removes it at its end. |
+| profile `strata-live-dep` 1.0.0 | An add-on profile with `strata-live-pack` 1.1.0, which requires `strata-live-dep`, and that pack. `registry.sh` makes it after the pushes, and removes it at its end. |
+| registry `strata-live-helm-registry` | The same repository host, read by Palette as an OCI Helm registry, with one chart repository. `registry.sh` pushes into it. |
+| profile `strata-live-owned-helm` 1.0.0 | An add-on profile with the one chart of that registry. `registry.sh` makes it after the first push, and removes it at its end. |
+| policy `strata-live-maintenance`, template `strata-live-template` | A maintenance policy, and a cluster template that links the release version and the add-on version. `template.sh` makes them before it builds a cluster, and removes them at its end. |
+| profile `strata-live-addon2` 1.0.0 | A second add-on profile with one manifest. `template.sh` runs it on the cluster beside the first, for the install order of add-on packs. |
 
 The pack versions are those of `examples/profiles/aws-stack@1.1.0.json`.
 
@@ -65,12 +70,14 @@ its end.
 | `registry-move.sh` | The registry move test (#24). |
 | `tag-only.sh` | The tag name test (#19). |
 | `drift-report.sh` | The drift report test (#25). It opens and closes issues in this repository with the label `strata-live-drift`. |
-| `api.sh` | The writes outside OpenTofu: an edit in place, a push of a profile to a cluster, and the delete of profile versions. |
+| `api.sh` | The writes outside OpenTofu: an edit in place, a push of a profile to a cluster, the delete of profile versions, and the delete of a cluster. |
 | `packs.sh` | The pack ref test (#55). |
 | `merge-gate.sh` | The merge gate test (#57). |
 | `knurl.sh` | The knurl adapter test. |
-| `registry.sh` | The registry test (#66): pushes into the example's own OCI pack registry, and reads what Palette does with each push. |
-| `pack/` | The one pack that `registry.sh` pushes. |
+| `registry.sh` | The registry test (#66): pushes into the example's own OCI pack registry and OCI Helm registry, and reads what Palette does with each push. |
+| `pack/`, `chart/` | The two packs and the one chart that `registry.sh` pushes. |
+| `template.sh` | The cluster template test (#66): the lock on a linked version, a cluster outside the template, and the install order of add-on packs. It ends with the removal of the example. |
+| `cluster.sh` | The cluster test (#66): a change of the value the cluster gives a variable, and a deletion through the API. It ends with the cluster gone. |
 | `aws-inventory.sh` | What the cluster still has in AWS, to confirm a teardown. |
 
 ## Design
@@ -239,7 +246,8 @@ AWS_PROFILE=<profile> examples/live/tag-only.sh                                #
 just live-drift-report                                                         # #25
 just live-packs                                                                # #55, read-only
 just live-merge-gate                                                           # #57, needs just live-profiles
-just live-registry                                                             # #66, needs just live-profiles, oras, and aws
+just live-registry                                                             # #66, needs just live-profiles, oras, helm, and aws
+just live-template                                                             # #66, needs just live-profiles and no cluster; ends with live-down
 ```
 
 `just live-session` runs `verify.sh`, `in-place.sh off`, `in-place.sh on`, and

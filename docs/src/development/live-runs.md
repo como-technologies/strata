@@ -247,11 +247,12 @@ Palette Registry, as two archives, so each is the two-archive case.
 
 ## registry.sh
 
-Read-write, in the example's own OCI pack registry alone: an ECR repository
-and a Palette registry that `terraform/` creates, which no other user reads.
-It needs the profiles and no cluster. The script pushes the pack under
-`examples/live/pack/` with `oras`, as the Palette documentation shows, and asks
-Palette to read the registry again after each push.
+Read-write, in the example's own registries alone: the ECR repositories and
+the Palette registries that `terraform/` creates, which no other user reads.
+It needs the profiles and no cluster. The script pushes the packs under
+`examples/live/pack/` with `oras` and the chart under `examples/live/chart/`
+with `helm push`, as the Palette documentation shows, and asks Palette to read
+the registry again after each push.
 
 | Check | Expected exit | What it shows |
 |---|---|---|
@@ -268,10 +269,65 @@ Palette to read the registry again after each push.
 | `packs-two`, `packs-two-order` | 0 | #66: `packs` lists 1.0.1 first, then 1.0.0, and 1.0.1 carries the floating tags `1.0.x` and `1.x` |
 | `profile-stays` | 0 | #66: the profile pinned to 1.0.0 does not move to 1.0.1 |
 | `profile-floating`, `push-4`, `sync-4` | 0 | a profile pins the pack under `1.0.x`, and 1.0.2 is pushed, which the tag now names |
-| `floating-moves` | 1 | #66: the profile pinned under the floating tag moves with it: its record reports `DRIFT` |
+| `floating-moves` | 1 | #66: the profile pinned under the floating tag moves with it, some minutes after the push: the script verifies its record again until it reports `DRIFT`, for up to ten minutes |
+| `chart-empty` | 0 | the chart repository starts empty, and two applies remove the Palette registry over it and make it again, so Palette reads the chart for the first time |
+| `chart-push-1`, `chart-sync-1`, `chart-packs`, `chart-leaf` | 0 | `strata-live-chart` 1.0.0 is pushed with `helm push` into the example's OCI Helm registry, Palette reads it, and `packs` and `snapshot` read the chart as a pack of type `oci` |
+| `chart-digest` | 0 | #66: Palette lists the manifest digest of the push for a chart in an OCI registry, as for a pack, not the digest of the chart archive |
+| `chart-profile`, `chart-profile-digest` | 0 | #66: a profile that pins the chart carries that manifest digest in its pack reference |
+| `chart-push-2`, `chart-push-2-differs`, `chart-sync-2`, `chart-leaf-after` | 0 | the same chart version is pushed again with other bytes, and Palette reads the registry again |
+| `chart-listing-keeps`, `chart-listing-not-new` | 0 | #66: Palette keeps the digest it listed first for the version: the listing does not follow the push, unlike the pack registry |
+| `chart-leaf-verify`, `chart-profile-verify` | 0 | #66: the record of the chart from before the push verifies, and so does the profile that pins it: Palette lists what it listed |
+| `chart-push-3`, `chart-sync-3`, `chart-packs-two`, `chart-packs-two-versions` | 0 | #66: 1.0.1 is pushed, and the sync reads it: `packs` lists 1.0.1 first, then 1.0.0. A sync reads new versions, and keeps the digest of a known one |
+| `dep-push`, `dep-push-requiring`, `dep-sync`, `dep-packs` | 0 | `strata-live-dep` 1.0.0 is pushed, then `strata-live-pack` 1.1.0, whose `pack.json` requires `strata-live-dep` 1.0.0 or newer; Palette reads both |
+| `dep-profile-alone`, `dep-profile-alone-says` | 1, 0 | #66: a profile with the requiring pack and not the required one is refused at creation, and the refusal names the required pack |
+| `dep-profile-both` | 0 | #66: a profile with both packs is accepted |
+| `dep-record`, `dep-record-packs` | 0 | a record of that profile lists the two packs, the requiring one first, as authored |
 
-The script ends with an apply of the baseline, which removes the profile it
+The script ends with an apply of the baseline, which removes the profiles it
 made. The pushed versions stay in the registry until `live-down`.
+
+## template.sh
+
+Read-write. It links the release version and the add-on version to a cluster
+template before any cluster runs them, tries to change a linked version, tries to
+build a cluster outside the template, and then builds the cluster without the
+template, with a second add-on profile. It needs the profiles and no cluster,
+and it ends with the removal of the whole example, because step 4 edits a
+version that the cluster runs.
+
+| Check | Expected exit | What it shows |
+|---|---|---|
+| `release-before` | 0 | a record of the release version before the link |
+| `template`, `template-links` | 0 | #66: the template links the release version and the add-on version |
+| `release-doc`, `release-names-template` | 0 | #66: the version names the template that uses it, and no cluster |
+| `lock-edit`, `lock-edit-says` | 2, 0 | #66: an edit in place of a linked version is refused, `ClusterProfileUpdateValidationFailure` |
+| `lock-verify` | 0 | #66: the version is unchanged |
+| `cluster-outside-template`, `refusal-says` | 1, 0 | #66: a cluster outside the template with a linked version is refused, `ClusterCreateWithTemplateProfileForbidden` |
+| `cluster-runs-release`, `cluster-doc`, `cluster-three-profiles` | 0 | with the template gone, the cluster runs the release version and two add-on profiles |
+| `lock-gone`, `lock-gone-verify` | 0, 1 | #66: the edit in place is accepted again, and the record from before reports `DRIFT`: the lock was the template's |
+| `addon-order` | 0 | #66: the packs of the two add-on profiles start within thirty seconds of each other, whatever order the cluster lists the profiles in: the listed order is no install order |
+
+## cluster.sh
+
+Read-write. It needs the example at its baseline with cluster A, changes the
+value the cluster gives the variable of the add-on profile, then deletes the
+cluster through the API and not the provider, and brings the OpenTofu state in
+line. It ends with the cluster gone and the profiles in place.
+
+| Check | Expected exit | What it shows |
+|---|---|---|
+| `variables-before`, `copy-before`, `audits-before` | 0 | the cluster variables endpoint, a record of the cluster's copy of the add-on profile, and the audit entries of the cluster, before |
+| `variables-after`, `value-changed` | 0 | #66: after an apply that gives the variable the value `changed`, the endpoint gives that value |
+| `copy-after`, `copy-verify`, `copy-compare` | 0 | #66: the record of the copy from before verifies, and the two records compare `IDENTICAL`: the value is the cluster's, and no part of the copy |
+| `audits-after`, `audit-records-change` | 0 | #66: the audit log has a new entry for the cluster |
+| `audit-says` | 0 | #66: that entry names who updated the cluster variables on the cluster |
+| `listing-before`, `listing-has-cluster`, `consumers-before`, `consumers-has-cluster` | 0, 0, 1, 0 | the listing holds the cluster, and `consumers` lists it under the add-on version, with exit 1: the version has a consumer |
+| `delete` | 0 | #66: `DELETE /v1/spectroclusters/<uid>` |
+| `listing-deleting`, `consumers-deleting`, `consumers-shows-deleting` | 0, 1, 0 | #66: while the cluster goes, the listing keeps it with the state `Deleting`, and `consumers` lists it with that state |
+| `doc-after`, `doc-after-deleted` | 0 | #66: the cluster document still answers, with the state `Deleted` |
+| `listing-after`, `listing-drops-cluster` | 0 | #66: the listing no longer holds the cluster |
+| `consumers-after`, `consumers-drops-cluster` | 0 | #66: `consumers` no longer lists it, and exits 0: the version has no consumer |
+| `state-has-no-cluster` | 0 | an apply with `cluster=false` sees the deletion, and the OpenTofu state holds no cluster |
 
 ## What has no live run
 

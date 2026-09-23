@@ -1,0 +1,6 @@
+apiVersion: v2
+name: strata-live-chart
+description: The one chart of the strata live example, pushed to the example's own OCI registry
+type: application
+version: 1.0.0
+appVersion: "1.0.0"

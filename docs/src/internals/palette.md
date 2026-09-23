@@ -34,9 +34,31 @@ profile document carries what it needs.**
 - A Helm entry can point at a chart in an OCI registry. The digest is still the
   sha256 of the chart archive, which is the digest of the chart layer, and not
   the manifest digest.
+- A chart in an OCI Helm registry that Palette reads itself, the example's own
+  in ECR, is a pack of type `oci`, and its digest is the manifest digest of the
+  first `helm push` Palette read, as for a pack in an OCI pack registry. It is
+  not the sha256 of the chart archive, and a push again does not move it: see
+  [A pack version pushed again](#a-pack-version-pushed-again).
 - Palette takes the digest from its own copy of the registry, and that copy can
   be late: Palette listed `nginx` up to 25.1.5 while the repository index had
   25.1.12.
+
+## A pack that requires another pack
+
+`pack.json` can name a pack that this pack requires: `constraints.dependencies`,
+with `type: required` and a least version
+([Pack constraints](https://docs.spectrocloud.com/registries-and-packs/pack-constraints/)).
+In the example's own OCI pack registry, `strata-live-pack` 1.1.0 requires
+`strata-live-dep` 1.0.0 or newer. A profile that holds the requiring pack and
+not the required one is refused at creation:
+`ClusterProfileCreationValidationFailure`, "Pack 'strata-live-dep' is required
+with minimum compatible version '1.0.0'". A profile that holds both is
+accepted, and its record lists the two packs in the order authored.
+
+So a required dependency is met inside the profile. It does not reach the other
+profiles of a cluster, because a profile that lacks the required pack cannot
+exist. A record carries no constraint: the profile Palette accepted is the one
+that holds it.
 
 ## Pack schema and presets
 
@@ -95,6 +117,17 @@ A new version pushed beside the pinned one, `1.0.1` beside `1.0.0`, does not
 move a profile pinned to `1.0.0` either. A profile pinned under a floating tag
 is the other case: see [Tag names](#tag-names).
 
+An OCI Helm registry of the example's own answers the same push differently.
+The first time Palette reads a chart version, it lists the manifest digest of
+the push, and a profile that pins the chart carries it. A push again under the
+same version, with other bytes, and a sync after it, change nothing: Palette
+keeps the digest it listed first, and a record of the chart from before the
+push verifies. The digest stayed through an emptied repository, two syncs, and
+two new pushes, for an hour. A sync does read a new version: `1.0.1` pushed
+beside `1.0.0` is listed, newest first. So for a chart in an OCI Helm registry,
+`verify` on a record of the chart says what Palette lists, and not what the
+registry serves now. A pack in an OCI pack registry follows each push.
+
 ## Tag names
 
 A registry can give one pack build several tags.
@@ -122,9 +155,10 @@ for that check; a change of the values is.**
 A floating tag moves a published profile. In an OCI pack registry of the
 example's own, Palette lists `1.0.x` and `1.x` beside the version `1.0.1`. A
 profile pinned to the pack under `1.0.x`, and then a push of `1.0.2`, which the
-tag now names: after Palette reads the registry again, the published profile
-carries `1.0.2`, with its pack uid and its digest, and the tag `1.0.x` stays.
-No person acted, and no publish happened. `verify` on a record of the profile
+tag now names: some minutes after the push, and not within the sync the
+example asks for, the published profile carries `1.0.2`, with its pack uid and
+its digest, and the tag `1.0.x` stays. The move took up to four minutes in
+the runs. No person acted, and no publish happened. `verify` on a record of the profile
 from before reports `DRIFT` with `IDENTITY UPSTREAM`. A profile pinned to the
 exact version `1.0.0` does not move when `1.0.1` arrives.
 
@@ -182,6 +216,15 @@ gives it. So the copy of a profile with a variable has the variables hash of the
 profile, and its root equals the root of the profile. The value that a cluster
 gives is in the record, under `source.cluster.variables`, and not in the root.
 
+A change of that value is a change to the cluster, and not to the copy. The
+Spectro Cloud provider sends it as `variables` of the profile on the cluster
+resource, and plans one change. The cluster stays `Running`. The audit log gets
+two entries with the user's name: an update of the cluster, and the action
+"updated the cluster variables on the cluster <name>". The variables endpoint
+gives the new value. A record of the copy from before verifies, and a comparison
+of the records from before and after reports the copy unchanged and one
+variable value changed.
+
 Palette says when a copy is behind its profile.
 `GET /v1/spectroclusters/<uid>/profileUpdates` gives the profile set the cluster
 would get, and the notifications of the cluster list the update that waits
@@ -202,6 +245,30 @@ packs in that order, so two clusters built from one definition have one merged
 root. A check of what a cluster runs compares the set of profiles, and [the
 knurl adapter](../automation/knurl.md) gives the copies that a cluster holds by
 name.
+
+That order is no install order either. A cluster that ran two add-on profiles,
+each with one manifest pack, listed the second one first, and started the two
+packs in the same second, three minutes after the last pack of the cluster
+profile. The add-on profiles start together.
+
+## The lock of a cluster template
+
+A cluster template links profile versions and a maintenance policy, and applies
+them to the clusters attached to it
+([Cluster templates](https://docs.spectrocloud.com/cluster-templates/)). The
+documentation says that a linked version becomes immutable. A live run shows
+what that lock is:
+
+| Request | Answer |
+| --- | --- |
+| An edit in place of a version that a template links, through the API | Refused: `ClusterProfileUpdateValidationFailure`, "cluster profile is associated with 1 cluster templates and cannot be modified". The version verifies. |
+| A cluster outside the template, built with a linked version | Refused: `ClusterCreateWithTemplateProfileForbidden`, "Cluster creation is not allowed as profile ... is already attached to one or more cluster templates". |
+| The same edit, after the template is removed | Accepted. A record from before reports `DRIFT`. |
+
+So the lock belongs to the template, not to the version. It holds while the
+template links the version, and it keeps every cluster outside the template
+away from that version. A cluster that runs a linked version is a cluster the
+template applies.
 
 ## Version bumps
 
@@ -331,25 +398,27 @@ A deleted cluster leaves this listing and keeps its document:
 So `cluster:<name>`, which strata resolves through the listing, does not go
 ambiguous when one name is deleted and built again.
 
+A deletion by a path other than the provider looks the same. `DELETE
+/v1/spectroclusters/<uid>` is accepted at once. While the cluster goes,
+seventeen to twenty minutes for three nodes, the listing keeps it with the state
+`Deleting`, and `consumers` lists it with that state and exits `1`. After,
+the listing drops it, the document reports `Deleted` with a
+`deletionTimestamp`, and `consumers` lists nothing and exits `0`. The Spectro
+Cloud provider sees the deletion on its next refresh and drops the cluster from
+the OpenTofu state, with nothing to change.
+
 ## What no run covers
 
 These are open. Strata makes no claim about them.
 
-- A pack version pushed again under the same tag in a pack registry or a Helm
-  registry. An OCI pack registry is covered:
+- A pack version pushed again under the same tag in a Spectro pack registry,
+  or in a Helm registry that is not an OCI registry. The example owns neither.
+  An OCI pack registry and an OCI Helm registry are covered:
   [A pack version pushed again](#a-pack-version-pushed-again).
-- A Helm registry that needs credentials, and an OCI registry that holds Helm
-  charts in place of packs. For such a registry Palette can list no digest for
-  a pack; a record then says `upstreamSource: none`, and its root covers no
+- A Helm registry that Palette does not sync, such as a chart repository over
+  HTTP with credentials. For such a registry Palette can list no digest for a
+  chart; a record then says `upstreamSource: none`, and its root covers no
   archive.
-- The order in which a cluster installs the packs of its add-on profiles.
-- Whether a required pack constraint reaches beyond the packs of one profile.
-  No pack in the visible registries declares a dependency, so nothing here can
-  test it; a team reports that it does not, above.
-- A change to the value a cluster gives a profile variable. Nothing here makes
-  one, so nothing shows whether Palette records it as a change to the cluster.
-- What the cluster listing shows after a deletion by a path other than the
-  provider.
 
 ## Where these answers come from
 

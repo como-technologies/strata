@@ -27,9 +27,14 @@
 #       Delete every version of each profile named exactly NAME, found in the profile listing:
 #       the versions skip_destroy kept out of the OpenTofu state. A name with no versions is not
 #       an error.
+#   api.sh delete-cluster CLUSTER_UID
+#       Ask Palette to delete a cluster, by the API and not the provider: DELETE the cluster. The
+#       deletion runs after the request ends.
 #   api.sh sync-oci REGISTRY_UID
 #       Ask Palette to read an OCI pack registry in ECR again, and wait until that sync ends.
 #       Prints the sync status. Exit 2 when the sync does not end in five minutes.
+#   api.sh get PATH
+#       GET one path, `/v1/...`, and print the answer. A read, for a check.
 #
 # The key comes from PALETTE_API_KEY or ~/.palette.env and is never printed; the address from
 # PALETTE_API (default https://api.spectrocloud.com). PALETTE_PROJECT_UID scopes the requests.
@@ -209,6 +214,13 @@ delete_named() {
   done
 }
 
+delete_cluster() {
+  local uid=${1:-}
+  [ -n "$uid" ] || die "usage: api.sh delete-cluster CLUSTER_UID"
+  call DELETE "/v1/spectroclusters/$uid" > /dev/null || return 2
+  echo "the deletion of cluster $uid is requested"
+}
+
 # sync_oci UID: POST the sync, then wait until a run newer than the last one has ended
 sync_oci() {
   local uid=${1:-} before status after
@@ -234,6 +246,8 @@ case "${1:-}" in
   detach) shift; detach "$@" ;;
   delete) shift; delete "$@" ;;
   delete-named) shift; delete_named "$@" ;;
+  delete-cluster) shift; delete_cluster "$@" ;;
   sync-oci) shift; sync_oci "$@" ;;
+  get) shift; [ -n "${1:-}" ] || die "usage: api.sh get PATH"; call GET "$1" ;;
   *) sed -n '2,/^set -uo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; exit 2 ;;
 esac

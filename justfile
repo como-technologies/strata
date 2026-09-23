@@ -161,6 +161,14 @@ live-merge-gate: build
 live-registry: build
     examples/live/registry.sh
 
+# The cluster template test: the lock on a linked version, and a cluster outside the template (#66). Needs live-profiles and no cluster; ends with the removal of the example.
+live-template: build
+    examples/live/template.sh
+
+# The cluster test: a change of the value a cluster gives a variable, and a deletion through the API (#66). Needs live-up; ends with the cluster gone.
+live-cluster: build
+    examples/live/cluster.sh
+
 # The scripts run in order from the baseline: verify.sh, in-place.sh off, in-place.sh on (against
 # that off run), and registry-move.sh. The recipe stops at the first script that fails. Billable:
 # about 3 to 4 hours, with cluster B two times.

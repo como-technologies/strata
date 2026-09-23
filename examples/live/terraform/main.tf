@@ -285,6 +285,91 @@ resource "spectrocloud_cluster_profile" "owned" {
   }
 }
 
+# The profile of the dependency check (registry.sh, step 6): strata-live-pack 1.1.0, which
+# requires strata-live-dep, alone or with that pack. Both packs exist after the pushes and the
+# sync.
+data "spectrocloud_pack" "requiring" {
+  count        = var.dep_profile == "none" ? 0 : 1
+  name         = local.pack_name
+  version      = "1.1.0"
+  registry_uid = spectrocloud_registry_oci.pack.id
+}
+
+data "spectrocloud_pack" "dep" {
+  count        = var.dep_profile == "both" ? 1 : 0
+  name         = local.dep_name
+  version      = "1.0.0"
+  registry_uid = spectrocloud_registry_oci.pack.id
+}
+
+resource "spectrocloud_cluster_profile" "dep" {
+  count        = var.dep_profile == "none" ? 0 : 1
+  name         = "${var.name_prefix}-dep"
+  version      = "1.0.0"
+  description  = "strata live example: a pack that requires another pack; nothing runs it"
+  cloud        = "all"
+  type         = "add-on"
+  skip_destroy = var.immutable_profiles
+
+  pack {
+    name         = local.pack_name
+    type         = "oci"
+    tag          = "1.1.0"
+    uid          = data.spectrocloud_pack.requiring[0].id
+    registry_uid = spectrocloud_registry_oci.pack.id
+    values       = data.spectrocloud_pack.requiring[0].values
+  }
+
+  dynamic "pack" {
+    for_each = data.spectrocloud_pack.dep
+    content {
+      name         = local.dep_name
+      type         = "oci"
+      tag          = "1.0.0"
+      uid          = pack.value.id
+      registry_uid = spectrocloud_registry_oci.pack.id
+      values       = pack.value.values
+    }
+  }
+
+  lifecycle {
+    create_before_destroy = true
+  }
+}
+
+# The profile that pins the chart of the example's own OCI Helm registry, after registry.sh has
+# pushed it and Palette has read the registry.
+data "spectrocloud_pack" "owned_chart" {
+  count        = var.owned_chart_profile ? 1 : 0
+  name         = local.chart_name
+  version      = var.owned_chart_version
+  registry_uid = spectrocloud_registry_oci.helm[0].id
+}
+
+resource "spectrocloud_cluster_profile" "owned_helm" {
+  count        = var.owned_chart_profile ? 1 : 0
+  name         = "${var.name_prefix}-owned-helm"
+  version      = "1.0.0"
+  description  = "strata live example: a chart from the example's own OCI Helm registry; nothing runs it"
+  cloud        = "all"
+  type         = "add-on"
+  skip_destroy = var.immutable_profiles
+
+  # Palette lists the chart of an OCI Helm registry as a pack of type oci, and refuses helm here.
+  pack {
+    name         = local.chart_name
+    type         = "oci"
+    tag          = var.owned_chart_version
+    uid          = data.spectrocloud_pack.owned_chart[0].id
+    registry_uid = spectrocloud_registry_oci.helm[0].id
+    values       = data.spectrocloud_pack.owned_chart[0].values
+  }
+
+  lifecycle {
+    create_before_destroy = true
+  }
+}
+
 data "spectrocloud_registry" "move" {
   count = var.registry_move ? 1 : 0
   name  = var.move_registry_name
@@ -345,6 +430,16 @@ resource "spectrocloud_cluster_aws" "cluster" {
 
   cluster_profile {
     id = local.cluster_addon_uid
+    # The value the cluster gives the add-on profile's variable, when cluster.sh sets one.
+    variables = var.addon_purpose == "" ? null : { purpose = var.addon_purpose }
+  }
+
+  # The second add-on profile, for the install order of add-on packs across profiles.
+  dynamic "cluster_profile" {
+    for_each = var.second_addon ? [spectrocloud_cluster_profile.addon2[0].id] : []
+    content {
+      id = cluster_profile.value
+    }
   }
 
   cloud_config {

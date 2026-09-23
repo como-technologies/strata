@@ -43,7 +43,41 @@ output "move_profile_uid" {
 # Every profile name the example uses, for just live-down and baseline.sh, whether or not the
 # optional profiles exist now.
 output "profile_names" {
-  value = [local.profile_name, "${var.name_prefix}-registries", "${var.name_prefix}-addon", "${var.name_prefix}-move", "${var.name_prefix}-owned"]
+  value = [local.profile_name, "${var.name_prefix}-registries", "${var.name_prefix}-addon", "${var.name_prefix}-move", "${var.name_prefix}-owned", "${var.name_prefix}-owned-helm", "${var.name_prefix}-addon2", "${var.name_prefix}-dep"]
+}
+
+# The example's own OCI Helm registry, and the chart profile, for examples/live/registry.sh.
+output "owned_helm_registry_uid" {
+  value = try(spectrocloud_registry_oci.helm[0].id, "")
+}
+
+output "owned_helm_registry_name" {
+  value = try(spectrocloud_registry_oci.helm[0].name, "")
+}
+
+output "owned_chart_repository" {
+  value = aws_ecr_repository.chart.repository_url
+}
+
+output "owned_chart_name" {
+  value = local.chart_name
+}
+
+output "owned_helm_profile_uid" {
+  value = try(spectrocloud_cluster_profile.owned_helm[0].id, "")
+}
+
+# The cluster template and the second add-on profile, for examples/live/template.sh.
+output "template_uid" {
+  value = try(spectrocloud_cluster_config_template.release[0].id, "")
+}
+
+output "addon2_profile_uid" {
+  value = try(spectrocloud_cluster_profile.addon2[0].id, "")
+}
+
+output "addon2_profile_name" {
+  value = "${var.name_prefix}-addon2"
 }
 
 # The example's own OCI pack registry, for examples/live/registry.sh.
@@ -69,6 +103,19 @@ output "owned_pack_name" {
 
 output "owned_profile_uid" {
   value = try(spectrocloud_cluster_profile.owned[0].id, "")
+}
+
+# The second pack of the pack registry, and the profile of the dependency check.
+output "dep_pack_name" {
+  value = local.dep_name
+}
+
+output "owned_dep_repository" {
+  value = aws_ecr_repository.dep.repository_url
+}
+
+output "dep_profile_uid" {
+  value = try(spectrocloud_cluster_profile.dep[0].id, "")
 }
 
 output "aws_profile" {
