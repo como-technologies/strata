@@ -9,7 +9,7 @@ use std::future::Future;
 use std::path::{Path, PathBuf};
 
 use knurl_core::{
-    ContentDigest, FailureClass, InstanceName, Level, Pins, UnitName, UnitRef, Version,
+    ContentDigest, FailureClass, Health, InstanceName, Level, Pins, UnitName, UnitRef, Version,
 };
 use knurl_ports::conformance::{World, read_half};
 use knurl_ports::{PlatformRead, PlatformReadExt};
@@ -75,6 +75,22 @@ const SECOND_PACK_UID: &str = "second-pack-uid";
 const OTHER_ARCHIVE: &str =
     "sha256:a746e14689085b14531566f9c9cfb2bc7716e96a394547ef50a1c52eab510c9e";
 
+/// Blanks every `digest` in a document, as a registry that Palette does not sync lists none.
+fn blank_digests(doc: &mut Value) {
+    match doc {
+        Value::Object(map) => {
+            for (key, value) in map.iter_mut() {
+                match value {
+                    Value::String(digest) if key == "digest" => digest.clear(),
+                    other => blank_digests(other),
+                }
+            }
+        }
+        Value::Array(items) => items.iter_mut().for_each(blank_digests),
+        _ => {}
+    }
+}
+
 /// What a test changes in the example tenant.
 #[derive(Clone, Copy, Default)]
 struct Setup {
@@ -83,6 +99,14 @@ struct Setup {
     /// A second registry holds csi-aws-ebs 1.65.0 too, with this digest. `None` is the same
     /// digest: a copy by digest. A real tenant has a pack in two registries.
     second_registry: Option<Option<&'static str>>,
+    /// The registry lists no digest for csi-aws-ebs, as one that Palette does not sync.
+    no_digest: bool,
+    /// The cluster summary gives this health state. `None` serves no summary, as a Palette
+    /// without the dashboard endpoint.
+    health: Option<&'static str>,
+    /// The profile the cluster runs does not list the cluster among its consumers, as Palette
+    /// answers on an error, or from a project the key cannot read.
+    unlisted_consumer: bool,
 }
 
 /// The example tenant: one registry with five packs, three versions of `aws-stack`, and the
@@ -133,15 +157,17 @@ fn tenant(setup: Setup) -> MemoryApi {
             );
         }
         let count = summaries.as_array().map(Vec::len).unwrap_or(0);
+        let mut entity = read(&dir.join("packs").join(name).join("_entity.json"));
+        if setup.no_digest && name == "csi-aws-ebs" {
+            blank_digests(&mut summaries);
+            blank_digests(&mut entity);
+        }
         api = api
             .with(
                 format!("/v1/packs?filters=spec.name={name}&limit=100&offset=0"),
                 json!({"items": summaries, "listmeta": {"count": count}}),
             )
-            .with(
-                format!("/v1/packs/{name}/registries/{registry}"),
-                read(&dir.join("packs").join(name).join("_entity.json")),
-            );
+            .with(format!("/v1/packs/{name}/registries/{registry}"), entity);
     }
 
     let cluster = read(&dir.join("clusters/raw/workload-a/cluster.json"));
@@ -153,7 +179,7 @@ fn tenant(setup: Setup) -> MemoryApi {
             .join(format!("aws-stack@{version}"));
         let mut profile = read(&raw.join("profile.json"));
         let uid = profile["metadata"]["uid"].as_str().unwrap().to_string();
-        if version == "1.1.0" {
+        if version == "1.1.0" && !setup.unlisted_consumer {
             profile["status"]["inUseClusters"] =
                 json!([{"uid": cluster_uid, "name": "workload-a", "projectUid": ""}]);
         }
@@ -175,6 +201,18 @@ fn tenant(setup: Setup) -> MemoryApi {
             );
     }
     let raw = dir.join("clusters/raw/workload-a");
+    if let Some(state) = setup.health {
+        // The health is on the cluster summary, and not on the cluster document.
+        let conditions = if state == "UnHealthy" {
+            json!([{"type": "HeartbeatFailure", "message": "no heartbeat for 10m"}])
+        } else {
+            json!([])
+        };
+        api = api.with(
+            format!("/v1/dashboard/spectroclusters/{cluster_uid}"),
+            json!({"status": {"health": {"state": state, "conditions": conditions}}}),
+        );
+    }
     api.with("/v1/dashboard/clusterprofiles/metadata", json!({"items": listing}))
         .with(
             "/v1/dashboard/spectroclusters/meta",
@@ -439,10 +477,65 @@ fn an_instance_gives_the_state_and_the_copy_that_it_holds() {
     assert_eq!(seen.state.0, "Running");
     assert_eq!(
         seen.health,
-        knurl_core::Health::Unknown,
-        "strata reads no health"
+        Health::Unknown,
+        "this tenant serves no cluster summary, so the health is unknown"
     );
     assert_eq!(seen.pins["aws-stack"].version.as_str(), "1.1.0");
+}
+
+#[test]
+fn an_instance_gives_its_health_from_the_cluster_summary() {
+    // Palette keeps the health on the cluster summary, with two states. The adapter maps them,
+    // and an unhealthy instance names its first condition.
+    let healthy: StrataPlatform<MemoryApi, Connect> = StrataPlatform::new(|_project| {
+        Ok(Palette::new(tenant(Setup {
+            health: Some("Healthy"),
+            ..Setup::default()
+        })))
+    });
+    let seen = block_on(healthy.observe_instance(&world().instance)).unwrap();
+    assert_eq!(seen.health, Health::Healthy);
+
+    let unhealthy: StrataPlatform<MemoryApi, Connect> = StrataPlatform::new(|_project| {
+        Ok(Palette::new(tenant(Setup {
+            health: Some("UnHealthy"),
+            ..Setup::default()
+        })))
+    });
+    let seen = block_on(unhealthy.observe_instance(&world().instance)).unwrap();
+    assert_eq!(
+        seen.health,
+        Health::Unhealthy("no heartbeat for 10m".into())
+    );
+}
+
+#[test]
+fn a_leaf_with_no_digest_is_a_terminal_failure() {
+    // A registry that Palette does not sync lists no digest. Then there is no content to pin by.
+    let platform: StrataPlatform<MemoryApi, Connect> = StrataPlatform::new(|_project| {
+        Ok(Palette::new(tenant(Setup {
+            no_digest: true,
+            ..Setup::default()
+        })))
+    });
+    let error = block_on(platform.observe_unit(&world().leaf)).unwrap_err();
+    assert_eq!(error.class(), FailureClass::Terminal);
+    assert!(error.to_string().contains("lists no digest"), "{error}");
+}
+
+#[test]
+fn pinned_by_finds_an_instance_the_profile_does_not_list() {
+    // Palette computes the consumer list of a profile when it is asked, and gives an empty list
+    // on an error too. The adapter reads each cluster as well, so the precondition before a
+    // retire does not trust an empty answer.
+    let platform: StrataPlatform<MemoryApi, Connect> = StrataPlatform::new(|_project| {
+        Ok(Palette::new(tenant(Setup {
+            unlisted_consumer: true,
+            ..Setup::default()
+        })))
+    });
+    let holders = block_on(platform.pinned_by(&world().intermediate)).unwrap();
+    assert!(holders.contains(&world().instance), "{holders:?}");
 }
 
 #[test]

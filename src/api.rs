@@ -796,6 +796,14 @@ impl<A: PaletteApi> Palette<A> {
         self.api.get_json(&format!("/v1/spectroclusters/{uid}"))
     }
 
+    /// The cluster summary, `GET /v1/dashboard/spectroclusters/{uid}`: what the dashboard shows
+    /// for one cluster. Its `status.health` is the health of the cluster, which the cluster
+    /// document does not carry.
+    pub fn fetch_cluster_summary(&self, uid: &str) -> Result<Value> {
+        self.api
+            .get_json(&format!("/v1/dashboard/spectroclusters/{uid}"))
+    }
+
     /// Fetch the three documents for one cluster: the cluster with its applied profile templates,
     /// the pack manifests of each applied profile, and each applied profile's variables. A missing
     /// variables endpoint is treated as "no variables"; other errors propagate. `cluster` is a uid,

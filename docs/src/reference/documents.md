@@ -154,7 +154,11 @@ is the path as a list: strings for keys, numbers for indexes, and
 - `consumers[]`: `uid`, `name`, `projectUid`, `state`, `version`, and `error`
   when strata cannot read the cluster. `projectName` joins them when strata
   could read the project listing. The names and the projects come from
-  `status.inUseClusters` of the profile.
+  `status.inUseClusters` of the profile. `unlisted`, only when true: the profile
+  did not list the cluster, and the second reading found it.
+- `clustersRead`: the second reading. `read`, the cluster documents read;
+  `unread`, the clusters the listing names that could not be read; and `error`
+  when the cluster listing itself could not be read, so `read` is `0`.
 
 ## strata-list/1
 

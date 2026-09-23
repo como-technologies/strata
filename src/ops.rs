@@ -971,6 +971,27 @@ pub struct Consumer {
     /// Why the cluster could not be read, when it could not.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<Value>,
+    /// True when the consumer list of the profile did not name this cluster, and the cluster
+    /// document did: the second reading found it.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub unlisted: bool,
+}
+
+/// The second reading of `consumers`: the clusters the key can list, each read for the profiles
+/// it applies. Palette computes the consumer list of a profile when it is asked, in the projects
+/// the key can read, and gives an empty list on an error too. The second reading finds a consumer
+/// that the list omits.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ClustersRead {
+    /// Cluster documents read: each cluster the listing names and the consumer list did not.
+    pub read: usize,
+    /// Clusters the listing names that could not be read. Each one can be a consumer.
+    pub unread: usize,
+    /// Why the cluster listing could not be read, when it could not. Then `read` is 0, and the
+    /// consumer list of the profile stands alone.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<Value>,
 }
 
 /// The document `consumers` writes: `strata-consumers/1`.
@@ -992,8 +1013,12 @@ pub struct ConsumersReport {
     /// was overwritten in place.
     #[serde(default)]
     pub overwritten: usize,
-    /// One entry per cluster, in the order Palette lists them.
+    /// One entry per cluster: those Palette lists, in its order, then those the second reading
+    /// found.
     pub consumers: Vec<Consumer>,
+    /// The second reading: the clusters read for the profiles they apply.
+    #[serde(default)]
+    pub clusters_read: ClustersRead,
 }
 
 impl ConsumersReport {
@@ -1069,6 +1094,7 @@ where
             state: UNKNOWN_STATE.to_string(),
             version: String::new(),
             error: None,
+            unlisted: false,
             uid: cluster,
         };
         let doc = client_for(&mut clients, &home, &c.project_uid, &mut connect)
@@ -1093,6 +1119,11 @@ where
         }
         list.push(c);
     }
+    // Palette computes the list above when it is asked, in the projects the key can read, and
+    // gives an empty list on an error too. So each cluster the key can list is read for the
+    // profiles it applies, and a cluster that applies the version joins the list (#66).
+    let clusters_read =
+        second_reading(&mut list, &uid, &home, &mut clients, &mut connect, progress);
     // a uid names no project to a reader, so give each row the project's name as well
     name_projects_of(
         &mut list,
@@ -1118,7 +1149,82 @@ where
         count: list.len(),
         overwritten,
         consumers: list,
+        clusters_read,
     })
+}
+
+/// The second reading of `consumers`. The listing is read at tenant scope, so a cluster in any
+/// project the key can read is in it; a key that cannot list at tenant scope lists its own scope.
+/// A cluster the consumer list named is not read again. A cluster that applies `uid` joins
+/// `list`, marked `unlisted`, with what its document and the listing say of it.
+fn second_reading<A, F>(
+    list: &mut Vec<Consumer>,
+    uid: &str,
+    home: &Palette<A>,
+    clients: &mut HashMap<String, Palette<A>>,
+    connect: &mut F,
+    progress: &Progress,
+) -> ClustersRead
+where
+    A: PaletteApi,
+    F: FnMut(Option<&str>) -> Result<Palette<A>>,
+{
+    progress.note("reading each cluster for the profiles it applies");
+    let listing = connect(Some(TENANT_SCOPE))
+        .and_then(|tenant| tenant.cluster_listing())
+        .or_else(|_| home.cluster_listing());
+    let listing = match listing {
+        Ok(listing) => listing,
+        Err(e) => {
+            return ClustersRead {
+                error: Some(e.to_json()),
+                ..ClustersRead::default()
+            };
+        }
+    };
+    let mut clusters_read = ClustersRead::default();
+    for listed in list_clusters(&listing) {
+        if list.iter().any(|c| c.uid == listed.uid) {
+            continue;
+        }
+        let doc = client_for(clients, home, &listed.project_uid, connect)
+            .and_then(|p| p.cluster_document(&listed.uid));
+        let doc = match doc {
+            Ok(doc) => doc,
+            Err(_) => {
+                clusters_read.unread += 1;
+                continue;
+            }
+        };
+        clusters_read.read += 1;
+        let copy = doc
+            .pointer("/spec/clusterProfileTemplates")
+            .and_then(Value::as_array)
+            .and_then(|ts| ts.iter().find(|t| text(t, "/uid") == uid));
+        if let Some(copy) = copy {
+            let or_listed = |found: String, listed: &str| {
+                if found.is_empty() {
+                    listed.to_string()
+                } else {
+                    found
+                }
+            };
+            list.push(Consumer {
+                uid: listed.uid.clone(),
+                name: or_listed(text(&doc, "/metadata/name"), &listed.name),
+                project_uid: or_listed(
+                    text(&doc, "/metadata/annotations/projectUid"),
+                    &listed.project_uid,
+                ),
+                project_name: String::new(),
+                state: or_listed(text(&doc, "/status/state"), &listed.state),
+                version: text(copy, "/profileVersion"),
+                error: None,
+                unlisted: true,
+            });
+        }
+    }
+    clusters_read
 }
 
 /// Schema id of the document `list` writes.

@@ -35,6 +35,10 @@ label, value and description of each option. It keeps no id. The profile
 variables endpoint serves those fields and no uid, so no field that Palette
 mints reaches the hash.
 
+A sensitive variable arrives masked: its default value is `********` over the
+API. So the hash reads the mask, and a change to the secret does not move the
+root.
+
 ```mermaid
 flowchart TD
   root["root"]
@@ -113,6 +117,12 @@ does not.
 | A pack from another kind of registry, with another archive | different | different |
 | An edit of a value, a manifest, or a variable | different | different |
 | Palette returns the values in another key order | equal | equal |
+| A pack whose registry lists no digest, as two archives | equal | equal |
+
+The last row is a gap, not a rule. A registry that Palette does not sync lists
+no digest for a pack. Then `upstreamSource` is `none`, and neither digest covers
+the archive: two archives under that version have one root. The knurl adapter
+refuses such a leaf, because nothing pins it by content.
 
 A tool that pins a profile version by digest pins the content digest. `verify`
 keeps the root, because an edit in place is a change to one object.

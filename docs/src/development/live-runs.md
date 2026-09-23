@@ -233,6 +233,7 @@ cluster, and are `SEEN` without one.
 | `identity`, `identity-says-same` | 0 | the definition of the version, resolved against the real registries, gives its content digest |
 | `pinned-by`, `consumers`, `pinned-by-is-consumers` | 0, ?, 0 | the instances of `pinned_by` are the consumers of strata, by name |
 | `instance-<name>`, `instance-<name>-running` | 0 | `observe_instance` reads each cluster that runs the version, and its state is `Running` |
+| `instance-<name>-health` | 0 | its health is `Healthy`, read from the cluster summary |
 | `instance-<name>-copies` | 0 | each copy the cluster holds has the two digests of its cluster record, `cluster:<uid>/<profile>` |
 | `leaf`, `leaf-record` | 0 | a pack in one registry reads as a leaf, and strata records it from that registry |
 | `leaf-exact-is-root`, `leaf-content-is-archive`, `leaf-no-pins` | 0 | its exact digest is the root, its content digest is the digest of the pack in its registry, and it pins nothing |

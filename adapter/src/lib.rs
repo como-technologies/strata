@@ -26,9 +26,9 @@
 //! knurl gives a defined unit its pins, as name and version in order, and its own parameters,
 //! as named text. This crate reads one parameter, `candidate`: a strata candidate document, as
 //! JSON. It holds what the pins do not: the tag and the registry of each layer, the values, the
-//! manifests, and the variables. The pins give the order of the layers. Palette installs the
-//! layers in order, so the order is content, and knurl keeps it in the pin set.
-//! [`definition_of`] writes that parameter from a published version.
+//! manifests, and the variables. The pins give the order of the layers. Palette stores the
+//! layers in the order given and keeps it, so the order is content, and knurl keeps it in the
+//! pin set. [`definition_of`] writes that parameter from a published version.
 //!
 //! # The address of a leaf
 //!
@@ -123,6 +123,47 @@ fn port_error(error: strata::Error) -> PortError {
 /// A value that the data of Palette cannot give is a failure that stays.
 fn refused(message: String) -> PortError {
     PortError::terminal(message)
+}
+
+/// The health of a cluster, from its summary: `status.health.state` is `Healthy` or
+/// `UnHealthy`. An unhealthy cluster names its first condition. Any other state, or none, is
+/// Unknown: the port does not invent a health.
+fn health_of(summary: &Value) -> Health {
+    let text = |pointer: &str| {
+        summary
+            .pointer(pointer)
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_string()
+    };
+    match text("/status/health/state").as_str() {
+        "Healthy" => Health::Healthy,
+        "UnHealthy" => {
+            let reason = summary
+                .pointer("/status/health/conditions")
+                .and_then(Value::as_array)
+                .and_then(|conditions| {
+                    conditions.iter().find_map(|condition| {
+                        let message = condition
+                            .pointer("/message")
+                            .and_then(Value::as_str)
+                            .unwrap_or("");
+                        let kind = condition
+                            .pointer("/type")
+                            .and_then(Value::as_str)
+                            .unwrap_or("");
+                        match (kind, message) {
+                            ("", "") => None,
+                            (kind, "") => Some(kind.to_string()),
+                            (_, message) => Some(message.to_string()),
+                        }
+                    })
+                })
+                .unwrap_or_else(|| "UnHealthy".to_string());
+            Health::Unhealthy(reason)
+        }
+        _ => Health::Unknown,
+    }
 }
 
 /// `name version`: how a failure names a unit.
@@ -223,7 +264,12 @@ impl<A: PaletteApi, F: Connect<A>> StrataPlatform<A, F> {
             let reference = pack_ref(unit, registry);
             ops::snapshot_for(&reference, || (self.connect)(None), at, &Progress::silent())
         };
+        // A registry that Palette does not sync lists no digest for a pack. Then there is no
+        // content to pin by, and the leaf is refused (knurl D52).
         let archive = |snapshot: &Snapshot| match snapshot.packs.first() {
+            Some(pack) if pack.hash.upstream_raw.is_empty() => Err(refused(format!(
+                "{of}: the registry lists no digest for this pack, so it cannot be pinned by content"
+            ))),
             Some(pack) => Ok(pack.hash.upstream_raw.clone()),
             None => Err(refused(format!("{of} has no pack"))),
         };
@@ -286,7 +332,7 @@ impl<A: PaletteApi, F: Connect<A>> StrataPlatform<A, F> {
     }
 
     /// The digests and the pins of an intermediate: what its record holds. The pins are in
-    /// the order of the layers, because Palette installs them in order.
+    /// the order of the layers, as Palette stores them.
     fn intermediate(
         &self,
         unit: &UnitRef,
@@ -434,11 +480,22 @@ impl<A: PaletteApi + 'static, F: Connect<A> + 'static> StrataPlatform<A, F> {
             .pointer("/status/state")
             .and_then(Value::as_str)
             .unwrap_or("");
-        // strata reads no health. The port says so, and does not invent one.
+        // The health is on the cluster summary, and not on the cluster document. A Palette that
+        // does not serve the summary gives no health, and the port says Unknown for that.
+        let uid = raw
+            .cluster
+            .pointer("/metadata/uid")
+            .and_then(Value::as_str)
+            .unwrap_or("");
+        let health = match palette.fetch_cluster_summary(uid) {
+            Ok(summary) => health_of(&summary),
+            Err(strata::Error::Api { status: 404, .. }) => Health::Unknown,
+            Err(error) => return Err(port_error(error)),
+        };
         Ok(InstanceObservation::new(
             instance.clone(),
             ReportedState(state.to_string()),
-            Health::Unknown,
+            health,
             pins,
             now.stamp,
         ))

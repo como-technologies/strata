@@ -143,6 +143,8 @@ for cluster in $clusters; do
     "$observe" instance "$cluster"
   check "instance-$cluster-running" 0 "the state of $cluster is Running" -- \
     grep -q '^state *Running$' "instance-$cluster.out"
+  check "instance-$cluster-health" 0 "the health of $cluster is Healthy, from the cluster summary" -- \
+    grep -q '^health *Healthy$' "instance-$cluster.out"
   check "instance-$cluster-copies" 0 "each copy that $cluster holds has the two digests of its cluster record" -- \
     copies_match "$cluster" "$uid"
 done

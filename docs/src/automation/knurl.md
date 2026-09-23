@@ -35,8 +35,8 @@ are in two namespaces, and they can have one name.
 | Method | Reads | Gives |
 | --- | --- | --- |
 | `observe_unit` | the record of a profile version, or of a pack version | the two digests, and each pack from a registry as a pin, in the order of the layers |
-| `observe_instance` | the cluster, one time | the state, and the two digests of each profile copy that the cluster holds, by name |
-| `pinned_by` | `consumers` | the clusters that use a profile version |
+| `observe_instance` | the cluster, one time, and its summary | the state, the health from the summary, and the two digests of each profile copy that the cluster holds, by name |
+| `pinned_by` | `consumers` | the clusters that use a profile version: those the profile lists, and those the second reading of `consumers` finds |
 | `identity_of` | a candidate | the content digest before the version is in Palette |
 | `verify`, from knurl | `observe_unit` again | unchanged, or what changed |
 
@@ -55,8 +55,9 @@ knurl gives a defined unit its pins, as name and version in order, and its own
 parameters, as named text. The adapter reads one parameter, `candidate`: a
 [candidate file](../reference/candidate-file.md), as JSON. It holds what the pins
 do not: the tag and the registry of each layer, the values, the manifests, and
-the variables. The pins give the order of the layers. Palette installs the
-layers in order, so the order is content, and knurl keeps it in the pin set.
+the variables. The pins give the order of the layers. Palette stores the layers
+in the order given and keeps it, so the order is content, and knurl keeps it in
+the pin set.
 
 `strata_knurl::definition_of` writes that definition from a published version.
 `identity_of` reads it back: it sets the name and the version from the
@@ -66,13 +67,19 @@ with no pin, or a pin with no layer, is a terminal failure.
 
 ## What the adapter cannot answer
 
-- **Health.** Strata reads the state of a cluster and no health. The adapter
-  says `Unknown`.
+- **Health, where Palette serves no cluster summary.** The health is on the
+  summary, `GET /v1/dashboard/spectroclusters/{uid}`, as `Healthy` or
+  `UnHealthy` with its conditions. The adapter maps the two, and says `Unknown`
+  where there is no summary.
+- **A leaf with no digest.** A registry that Palette does not sync lists no
+  digest for a pack. The adapter refuses the leaf: nothing pins it by content.
 - **The order of the profiles of a cluster.** Palette lists them in an order
   that differs between two clusters built from one definition, so the order
   says nothing. The adapter gives the copies by name.
 - **A root.** Palette holds no root unit. The adapter gives a terminal failure.
 - **Who uses a pack.** Palette names the clusters of a profile version alone.
+  That list is empty on an error too, so `pinned_by` reads each cluster the key
+  can list as well, as `consumers` does.
 - **Which of two archives, with no digest.** An address has no registry, and a
   tenant can have a pack version in two of them. The adapter reads each one.
   When the digests are equal, it is one leaf: a raise copies a pack by digest.
