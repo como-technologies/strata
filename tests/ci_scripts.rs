@@ -1987,7 +1987,10 @@ fn live_applies_take_the_script_flag_and_the_baseline_restore_turns_it_off() {
             .filter_map(|c| c.split_once(' ').map(|(_, rest)| rest))
             .filter(|c| c.starts_with("apply "))
             .collect();
-        let with = "apply -input=false -auto-approve -no-color -var immutable_profiles=";
+        // tf.sh reads one object at a time: Palette refuses a read now and then under a
+        // parallel refresh.
+        let with =
+            "apply -parallelism=1 -input=false -auto-approve -no-color -var immutable_profiles=";
         assert_eq!(
             applies,
             [
@@ -1995,7 +1998,7 @@ fn live_applies_take_the_script_flag_and_the_baseline_restore_turns_it_off() {
                 format!("{with}{flag} -var addon_version=1.0.1"),
                 format!("{with}false"),
             ],
-            "hold_versions and apply take the flag with no -target, and apply_baseline turns it off: {calls}"
+            "hold_versions and apply take the flag with no -target, read serially, and apply_baseline turns it off: {calls}"
         );
     }
 }
