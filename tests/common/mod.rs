@@ -3,6 +3,7 @@
 //!
 //!   a   baseline
 //!   a2  same content as a, but the kubernetes values YAML is reordered and re-indented
+//!   a-reversed  the packs of a in the other order: another root, because Palette keeps the order
 //!   a3  a re-pinned from another registry: same packs, values, and manifests, but registryUid,
 //!       packUid, and every digest differ, so each pack shows IDENTITY UPSTREAM and nothing else
 //!   a4  a3 with one kubernetes value edited (podSubnet): a registry move plus an AUTHORED change
@@ -386,6 +387,18 @@ pub fn make_fixtures(root: &Path) {
         "64f0000000000000000000a1",
         "1.2.0",
         packs_a(K8S_VALUES_A),
+        manifests_a(K8S_VALUES_A),
+        vars_a.clone(),
+        vec![],
+    );
+    // The packs of a in the other order: Palette keeps the order given, so this is another root.
+    let mut reversed = packs_a(K8S_VALUES_A);
+    reversed.reverse();
+    write_profile(
+        &root.join("a-reversed"),
+        "64f0000000000000000000a1",
+        "1.2.0",
+        reversed,
         manifests_a(K8S_VALUES_A),
         vars_a.clone(),
         vec![],

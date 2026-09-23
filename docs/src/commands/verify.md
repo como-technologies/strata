@@ -61,6 +61,11 @@ document shape.
 Each verdict of a cluster record ends with `; N variable value changed` when the
 cluster gives a variable another value than the record holds.
 
+A record whose packs are in another order now is `DRIFT`, with `no packs
+changed, the packs in another order` in the summary line. Palette keeps the
+order a profile gives its packs, so the order is content and two orders are two
+roots. It is not an install order: that is the priority in each pack's values.
+
 A renamed tag in place is `DRIFT` too, with the result `SAME CONTENT` and no
 node impact. It changes no build, but it edits a published version. See
 [One pack build under two tag names](../use-cases/tag-name.md).

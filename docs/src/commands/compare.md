@@ -101,7 +101,10 @@ cluster`: a person can edit the pack values on a cluster.
 
 One more note comes after the pack lines, not after `root`. The line
 `note: pack order changed between the two profiles` says that the two sides
-apply their packs in a different order. The markdown report writes the same line
+list their packs in another order. Palette keeps the order a profile gives its
+packs, so the order is content and two orders are two roots, whether or not a
+pack changed. It is not an install order: that is the priority in each pack's
+values ([What Palette does](../internals/palette.md#the-order-of-the-profiles-of-a-cluster)). The markdown report writes the same line
 as a quotation.
 
 ## What to expect

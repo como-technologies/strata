@@ -117,6 +117,7 @@ does not.
 | A pack from another kind of registry, with another archive | different | different |
 | An edit of a value, a manifest, or a variable | different | different |
 | Palette returns the values in another key order | equal | equal |
+| The same packs in another order | different | different |
 | A pack whose registry lists no digest, as two archives | equal | equal |
 
 The last row is a gap, not a rule. A registry that Palette does not sync lists

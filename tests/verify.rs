@@ -4326,3 +4326,46 @@ fn verify_rechecks_a_pack_version_against_its_registry() {
         VerifyStatus::Drifted
     );
 }
+
+#[test]
+fn verify_reports_drift_and_names_the_order_when_only_the_order_of_the_packs_changed() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let recorded = ops::snapshot_from_dir(&dir.path().join("a"), "a", "t0").unwrap();
+    let live = serve(MemoryApi::new(), dir.path(), "a-reversed", UID_A);
+    let v = ops::verify(
+        &recorded,
+        &Palette::new(live.clone()),
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert!(
+        !v.unchanged,
+        "Palette keeps the order given, so two orders are two roots"
+    );
+    assert!(v.diff.order_changed);
+    assert_eq!(v.diff.summary.packs_changed, 0, "every pack is as it was");
+    assert!(!v.diff.same_content, "a reorder is not the same content");
+
+    let path = dir.path().join("a.json");
+    fs::write(&path, recorded.to_json(true).unwrap()).unwrap();
+    let s = ops::verify_many(
+        &[path],
+        None,
+        |_| Ok(Palette::new(live.clone())),
+        "t1",
+        &Progress::silent(),
+    );
+    assert_eq!(
+        (s.records[0].status, s.exit_code()),
+        (RecordStatus::Drifted, 1)
+    );
+    let lines = render::renderer(Format::Terminal, Paint::off(), false)
+        .render_verify_summary(&s)
+        .unwrap();
+    assert!(
+        lines.contains("no packs changed, the packs in another order"),
+        "{lines}"
+    );
+}

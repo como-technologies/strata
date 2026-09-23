@@ -448,13 +448,20 @@ pub(crate) fn record_detail(r: &crate::ops::VerifiedRecord) -> String {
             values_changed_suffix(record_values_changed(r))
         ),
         RecordStatus::Drifted => format!(
-            "differs from the copy recorded {}; max impact {}, {} changed{}",
+            "differs from the copy recorded {}; max impact {}, {} changed{}{}",
             r.recorded_at,
             r.max_impact
                 .and_then(|l| serde_json::to_value(l).ok())
                 .and_then(|v| v.as_str().map(str::to_string))
                 .unwrap_or_default(),
             count_of(r.packs_changed.unwrap_or(0), "pack"),
+            // Palette keeps the order of the packs, so two orders are two roots: a reorder alone
+            // is drift, and the line says so.
+            if r.diff.as_ref().is_some_and(|d| d.order_changed) {
+                ", the packs in another order"
+            } else {
+                ""
+            },
             values_changed_suffix(record_values_changed(r))
         ),
         RecordStatus::Error => r
