@@ -251,6 +251,15 @@ each with one manifest pack, listed the second one first, and started the two
 packs in the same second, three minutes after the last pack of the cluster
 profile. The add-on profiles start together.
 
+The order of the packs inside a profile is no install order either. Each add-on
+pack has an install priority, `pack.spectrocloud.com/install-priority` in its
+values, `0` unless set; the lowest installs first, packs with one value install
+together, and the next value waits for their readiness checks
+([Install Order](https://docs.spectrocloud.com/profiles/cluster-profiles/create-cluster-profiles/create-addon-profile/#install-order)).
+The priority is in the values, so the values hash and the root cover it, and a
+change to it is an `AUTHORED` change. The list order is content because Palette
+keeps it: two orders are two published versions.
+
 ## The lock of a cluster template
 
 A cluster template links profile versions and a maintenance policy, and applies
