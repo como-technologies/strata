@@ -169,6 +169,10 @@ live-template: build
 live-cluster: build
     examples/live/cluster.sh
 
+# The order test: a reorder of the packs of a published version, and of the profiles of a cluster, through the API (#66). Needs live-up; leaves the versions edited, so run live-down after it.
+live-order: build
+    examples/live/order.sh
+
 # The scripts run in order from the baseline: verify.sh, in-place.sh off, in-place.sh on (against
 # that off run), and registry-move.sh. The recipe stops at the first script that fails. Billable:
 # about 3 to 4 hours, with cluster B two times.

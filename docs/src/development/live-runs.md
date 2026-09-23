@@ -329,6 +329,25 @@ line. It ends with the cluster gone and the profiles in place.
 | `consumers-after`, `consumers-drops-cluster` | 0 | #66: `consumers` no longer lists it, and exits 0: the version has no consumer |
 | `state-has-no-cluster` | 0 | an apply with `cluster=false` sees the deletion, and the OpenTofu state holds no cluster |
 
+## order.sh
+
+Read-write. It needs the example at its baseline with cluster A, sends a `PUT`
+of two published versions with their packs in the other order, and a `PUT` of
+the cluster's profiles in the other order, and reads what Palette stores, what
+it audits, and what `verify` says. It leaves the two versions edited, so
+`live-down` follows it. A second run reverses them again, and passes the same
+way.
+
+| Check | Expected exit | What it shows |
+|---|---|---|
+| `release-before`, `registries-before`, `cluster-before`, the `*-doc-before` and `*-audits-before` checks | 0 | records of the release version, the registries version, and cluster A, with each document and its audit entries |
+| `reorder-addon`, `addon-doc-reversed`, `addon-audited` | 0 | #66: a `PUT` of the registries version with its two packs in the other order is accepted, stored in that order, and audited as an update of the profile |
+| `addon-verify`, `addon-verify-says`, `addon-record-reversed` | 1, 0, 0 | #66: the record from before reports `DRIFT`, the report says `pack order changed` with every pack unchanged, and a new record lists the packs in the new order |
+| `reorder-release`, `release-doc-reversed`, `release-audited` | 0 | #66: Palette accepts the four infrastructure layers of the release version in the other order, on a version cluster A runs: the CSI layer first, the OS layer last, and an audit entry |
+| `release-verify`, `release-verify-says` | 1, 0 | #66: the record from before reports `DRIFT`, and the report says `pack order changed` |
+| `reorder-cluster`, `cluster-order-kept`, `cluster-audited` | 0 | #66: a `PUT` of the cluster's profiles in the other order is accepted, the document keeps the stored order, and the audit log has an update of the cluster all the same |
+| `cluster-verify` | 0 | #66: the cluster record verifies: strata orders the profiles itself, so a stored order is never a change |
+
 ## What has no live run
 
 - The scripts that write to the tenant have run under Terraform. The example

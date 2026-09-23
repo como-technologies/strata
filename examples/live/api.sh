@@ -8,6 +8,13 @@
 #       through the API, which Palette accepts whatever the Spectro Cloud provider's
 #       immutable-clusterprofiles flag says. Exit 2 when no place, or more than one, contains
 #       FROM.
+#   api.sh reorder PROFILE_UID
+#       Reverse the order of the packs of a published profile version, in place: PUT the version
+#       with the same packs, values, and manifests in the other order, then publish it. Nothing
+#       else changes.
+#   api.sh reorder-cluster CLUSTER_UID
+#       PUT the profiles of a cluster in the other order, with the uids it already has and each
+#       pack's values and manifests as api.sh apply sends them, and without resolveNotification.
 #   api.sh retag PROFILE_UID PACK FROM_TAG TO_TAG
 #       Rename the tag of one pack in a published profile version, in place, keeping its pack uid,
 #       values, and manifests: PUT the version, then publish it. Exit 2 when the version has no
@@ -107,6 +114,26 @@ body() {
 put_published() {
   call PUT "/v1/clusterprofiles/$1" "$2/body" > /dev/null || exit 2
   call PATCH "/v1/clusterprofiles/$1/publish" > /dev/null || exit 2
+}
+
+reorder() {
+  local uid=${1:-} tmp
+  [ -n "$uid" ] || die "usage: api.sh reorder PROFILE_UID"
+  tmp=$(mktemp -d); trap 'rm -rf "${tmp:-}"' RETURN EXIT
+  fetch_published "$uid" "$tmp"
+  body "$tmp" '.' | jq '.spec.template.packs |= reverse' > "$tmp/body"
+  put_published "$uid" "$tmp"
+  echo "reversed the packs of $uid in place: $(jq -r '[.spec.template.packs[].name] | join(", ")' "$tmp/body")"
+}
+
+reorder_cluster() {
+  local cluster=${1:-} tmp
+  [ -n "$cluster" ] || die "usage: api.sh reorder-cluster CLUSTER_UID"
+  tmp=$(mktemp -d); trap 'rm -rf "${tmp:-}"' RETURN EXIT
+  profiles_body "$cluster" "$tmp"
+  jq '.profiles |= reverse' "$tmp/body" > "$tmp/reversed" && mv "$tmp/reversed" "$tmp/body"
+  call PUT "/v1/spectroclusters/$cluster/profiles" "$tmp/body" > /dev/null || exit 2
+  echo "sent the profiles of cluster $cluster in the other order: $(jq -r '[.profiles[].uid] | join(", ")' "$tmp/body")"
 }
 
 edit() {
@@ -241,6 +268,8 @@ sync_oci() {
 
 case "${1:-}" in
   edit) shift; edit "$@" ;;
+  reorder) shift; reorder "$@" ;;
+  reorder-cluster) shift; reorder_cluster "$@" ;;
   retag) shift; retag "$@" ;;
   apply) shift; apply "$@" ;;
   detach) shift; detach "$@" ;;

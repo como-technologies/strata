@@ -184,6 +184,14 @@ manifest with no uid makes Palette replace that manifest with a new one. When a
 cluster then accepts the update, Palette removes the copy of the old manifest
 from the cluster, and the add-on is left with no manifest there.
 
+A reorder is an edit in place too. A `PUT` of a published version with the same
+packs, values, and manifests in the other order is accepted, stored in the new
+order, and audited as an update of the profile, with the user's name. Palette
+accepts it for the four infrastructure layers of a version a cluster runs as
+well: the CSI layer first and the OS layer last. `verify` on a record from
+before reports `DRIFT`, every pack `unchanged`, and
+`note: pack order changed between the two profiles`.
+
 ## Cluster copies
 
 Each cluster runs its own copy of the manifests of a profile. The copy has its
@@ -245,6 +253,12 @@ packs in that order, so two clusters built from one definition have one merged
 root. A check of what a cluster runs compares the set of profiles, and [the
 knurl adapter](../automation/knurl.md) gives the copies that a cluster holds by
 name.
+
+A `PUT` of a cluster's profiles in the other order, with the uids it has,
+changes nothing: the document keeps the stored order. The audit log gets an
+update of the cluster all the same. So the order strata gives a cluster record
+drops nothing that can change: the stored order is set when the cluster is
+made, and stays.
 
 That order is no install order either. A cluster that ran two add-on profiles,
 each with one manifest pack, listed the second one first, and started the two

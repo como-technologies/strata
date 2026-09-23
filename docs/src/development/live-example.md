@@ -78,6 +78,7 @@ its end.
 | `pack/`, `chart/` | The two packs and the one chart that `registry.sh` pushes. |
 | `template.sh` | The cluster template test (#66): the lock on a linked version, a cluster outside the template, and the install order of add-on packs. It ends with the removal of the example. |
 | `cluster.sh` | The cluster test (#66): a change of the value the cluster gives a variable, and a deletion through the API. It ends with the cluster gone. |
+| `order.sh` | The order test (#66): a reorder of the packs of two published versions, and of the profiles of the cluster, through the API. It leaves the versions edited; `live-down` follows it. |
 | `aws-inventory.sh` | What the cluster still has in AWS, to confirm a teardown. |
 
 ## Design
@@ -249,6 +250,7 @@ just live-merge-gate                                                           #
 just live-registry                                                             # #66, needs just live-profiles, oras, helm, and aws
 just live-template                                                             # #66, needs just live-profiles and no cluster; ends with live-down
 just live-cluster                                                              # #66, needs just live-up; ends with the cluster gone
+just live-order                                                                # #66, needs just live-up; leaves the versions edited, so live-down follows
 ```
 
 `just live-session` runs `verify.sh`, `in-place.sh off`, `in-place.sh on`, and
