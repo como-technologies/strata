@@ -32,6 +32,8 @@ resource and the OS and CSI packs in `terraform/main.tf`.
 | profile `strata-live-addon` 1.0.0 | An add-on profile with one manifest, the ConfigMap `strata-live-config` in `default`, and one variable, `purpose`, with a default. Cluster A runs it after the release profile. |
 | cluster `fred` (cluster A) | One control plane node and two workers, `t3.xlarge`, one availability zone. |
 | profile `strata-live-registries` 1.0.0 | An add-on profile with one chart from a Helm registry (default `nginx` 25.1.5 from `Bitnami`), and one pack from the OCI pack registry that `terraform.tfvars` names. No cluster runs it. |
+| registry `strata-live-registry` | The example's own OCI pack registry: an ECR repository `strata-live/spectro-packs/archive/strata-live-pack` in the AWS account that `aws_profile` names, a user that reads it, and a Palette registry over it. `registry.sh` pushes into it; nothing else does. |
+| profile `strata-live-owned` 1.0.0 | An add-on profile with the one pack of that registry. `registry.sh` makes it after the first push, and removes it at its end. |
 
 The pack versions are those of `examples/profiles/aws-stack@1.1.0.json`.
 
@@ -67,6 +69,8 @@ its end.
 | `packs.sh` | The pack ref test (#55). |
 | `merge-gate.sh` | The merge gate test (#57). |
 | `knurl.sh` | The knurl adapter test. |
+| `registry.sh` | The registry test (#66): pushes into the example's own OCI pack registry, and reads what Palette does with each push. |
+| `pack/` | The one pack that `registry.sh` pushes. |
 | `aws-inventory.sh` | What the cluster still has in AWS, to confirm a teardown. |
 
 ## Design
@@ -133,6 +137,10 @@ back to false with the default variables (`apply_baseline`).
   even when it reads an empty password, so make sure of the login with `crane
   digest <registry>/<repository>:<tag>`.
 - The AWS CLI with read access to the account, only for `aws-inventory.sh`.
+- An AWS profile that can create an ECR repository and an IAM user in the
+  account, named in `terraform.tfvars` as `aws_profile`. Every apply needs it,
+  because the example's own pack registry lives there. `registry.sh` needs
+  `oras` as well, and logs in to the repository with that profile.
 - The AWS managed policy `AmazonEBSCSIDriverPolicy` on the worker node role
   `nodes.cluster-api-provider-aws.sigs.k8s.io`. Without it, the EBS CSI
   controller fails on each cluster with `UnauthorizedOperation` on
@@ -231,6 +239,7 @@ AWS_PROFILE=<profile> examples/live/tag-only.sh                                #
 just live-drift-report                                                         # #25
 just live-packs                                                                # #55, read-only
 just live-merge-gate                                                           # #57, needs just live-profiles
+just live-registry                                                             # #66, needs just live-profiles, oras, and aws
 ```
 
 `just live-session` runs `verify.sh`, `in-place.sh off`, `in-place.sh on`, and

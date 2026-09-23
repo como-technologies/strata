@@ -245,6 +245,34 @@ The one-registry leaf is the OCI pack of the registries profile. The release
 packs are of no use for it: this tenant has each of them in Public Repo and in
 Palette Registry, as two archives, so each is the two-archive case.
 
+## registry.sh
+
+Read-write, in the example's own OCI pack registry alone: an ECR repository
+and a Palette registry that `terraform/` creates, which no other user reads.
+It needs the profiles and no cluster. The script pushes the pack under
+`examples/live/pack/` with `oras`, as the Palette documentation shows, and asks
+Palette to read the registry again after each push.
+
+| Check | Expected exit | What it shows |
+|---|---|---|
+| `empty`, `sync-0` | 0 | the repository starts empty: the images a run before left are removed, and Palette reads the registry again |
+| `push-1`, `sync-1` | 0 | `strata-live-pack` 1.0.0 is pushed, and Palette reads the registry |
+| `packs`, `packs-version` | 0 | #66: `packs` lists the one version |
+| `leaf`, `leaf-digest-is-push` | 0 | #66: a record of the pack carries the digest of the push |
+| `profile`, `profile-digest-is-push` | 0 | #66: a profile that pins the version carries that digest in its pack reference |
+| `push-2`, `push-2-differs`, `sync-2` | 0 | the same version is pushed again with other bytes, and the two pushes have two digests |
+| `leaf-after`, `listing-follows` | 0 | #66: Palette lists the digest of the new push, under the same version |
+| `leaf-verify` | 1 | #66: the record of the pack from before the push reports `DRIFT` |
+| `profile-verify`, `profile-keeps-pin` | 0 | #66: the published profile that pins the version does not follow the push: its record verifies, and its pack reference keeps the digest of the first push |
+| `profile-after`, `push-3`, `sync-3` | 0 | 1.0.1 is pushed |
+| `packs-two`, `packs-two-order` | 0 | #66: `packs` lists 1.0.1 first, then 1.0.0, and 1.0.1 carries the floating tags `1.0.x` and `1.x` |
+| `profile-stays` | 0 | #66: the profile pinned to 1.0.0 does not move to 1.0.1 |
+| `profile-floating`, `push-4`, `sync-4` | 0 | a profile pins the pack under `1.0.x`, and 1.0.2 is pushed, which the tag now names |
+| `floating-moves` | 1 | #66: the profile pinned under the floating tag moves with it: its record reports `DRIFT` |
+
+The script ends with an apply of the baseline, which removes the profile it
+made. The pushed versions stay in the registry until `live-down`.
+
 ## What has no live run
 
 - The scripts that write to the tenant have run under Terraform. The example

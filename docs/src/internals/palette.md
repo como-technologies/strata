@@ -75,6 +75,26 @@ pack, which comes from no registry. It also keeps its grip on the content: after
 an edit of the CSI values in place on top of the move, the check fails and names
 `charts.aws-ebs-csi-driver.storageClasses[name=spectro-storage-class].reclaimPolicy`.
 
+## A pack version pushed again
+
+A pack version can be pushed again under the same tag, with other bytes. In an
+OCI pack registry of the example's own, after Palette reads the registry again:
+
+| What | After the second push |
+| --- | --- |
+| The pack version Palette lists | The digest of the new push, under the same version and the same pack uid. |
+| A record of the pack from before | `verify` reports `DRIFT`: the digest moved. |
+| A published profile that pins the version | Keeps the digest and the pack uid it was pinned with. Its record verifies, minutes after the sync too. |
+
+So a profile pins one build. A registry that changes under the version does not
+move the profile. A record of the pack and a record of a profile answer two
+different questions, and `verify` on the pack record is what finds such a push:
+it reports `UPSTREAM`, and `AUTHORED` too when the values changed.
+
+A new version pushed beside the pinned one, `1.0.1` beside `1.0.0`, does not
+move a profile pinned to `1.0.0` either. A profile pinned under a floating tag
+is the other case: see [Tag names](#tag-names).
+
 ## Tag names
 
 A registry can give one pack build several tags.
@@ -99,10 +119,14 @@ The repave check of Palette also answers "no repave" for a request that gives
 the OS pack an altogether different tag. **A tag in the request is no control
 for that check; a change of the values is.**
 
-Not covered: a new build published under a floating tag that a profile already
-pins. It is not known whether Palette then moves the pack uid of the profile. If
-it does, the pack uid or the version changes, and strata reports an `IDENTITY`
-change.
+A floating tag moves a published profile. In an OCI pack registry of the
+example's own, Palette lists `1.0.x` and `1.x` beside the version `1.0.1`. A
+profile pinned to the pack under `1.0.x`, and then a push of `1.0.2`, which the
+tag now names: after Palette reads the registry again, the published profile
+carries `1.0.2`, with its pack uid and its digest, and the tag `1.0.x` stays.
+No person acted, and no publish happened. `verify` on a record of the profile
+from before reports `DRIFT` with `IDENTITY UPSTREAM`. A profile pinned to the
+exact version `1.0.0` does not move when `1.0.1` arrives.
 
 ## Edits in place
 
@@ -111,13 +135,15 @@ A person can edit a published profile version through the API
 The version keeps its uid and its number, stays published, and no new version
 appears. A pack can also be pushed again under one version, with
 `spectro pack push --force`
-([Spectro CLI reference](https://docs.spectrocloud.com/registries-and-packs/spectro-cli-reference/));
-whether the published profiles that pin it follow, no run here shows yet.
+([Spectro CLI reference](https://docs.spectrocloud.com/registries-and-packs/spectro-cli-reference/))
+or `oras push`. A published profile that pins the version keeps the digest it
+was pinned with: see [A pack version pushed again](#a-pack-version-pushed-again).
 
 This is why [`strata verify`](../commands/verify.md) exists: a record from
 before such a change exits `1` with `DRIFT`, and names the changed value.
 `DRIFT` says that the published version changed. It does not say who changed
-it: a person, a registry, or an update that a cluster accepted.
+it: a person, a registry whose floating tag moved, or an update that a cluster
+accepted.
 
 An edit through the API must keep the uid of each manifest. An edit that sends a
 manifest with no uid makes Palette replace that manifest with a new one. When a
@@ -309,16 +335,13 @@ ambiguous when one name is deleted and built again.
 
 These are open. Strata makes no claim about them.
 
-- A pack version pushed again under the same tag, for any registry kind. It is
-  not known whether the pack-ref digest of a published profile follows such a
-  push. The check needs a pack registry of the example's own, that no other
-  user reads.
+- A pack version pushed again under the same tag in a pack registry or a Helm
+  registry. An OCI pack registry is covered:
+  [A pack version pushed again](#a-pack-version-pushed-again).
 - A Helm registry that needs credentials, and an OCI registry that holds Helm
   charts in place of packs. For such a registry Palette can list no digest for
   a pack; a record then says `upstreamSource: none`, and its root covers no
   archive.
-- A new build under a floating tag that a profile pins. The check needs the
-  same registry.
 - The order in which a cluster installs the packs of its add-on profiles.
 - Whether a required pack constraint reaches beyond the packs of one profile.
   No pack in the visible registries declares a dependency, so nothing here can

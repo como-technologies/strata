@@ -43,7 +43,36 @@ output "move_profile_uid" {
 # Every profile name the example uses, for just live-down and baseline.sh, whether or not the
 # optional profiles exist now.
 output "profile_names" {
-  value = [local.profile_name, "${var.name_prefix}-registries", "${var.name_prefix}-addon", "${var.name_prefix}-move"]
+  value = [local.profile_name, "${var.name_prefix}-registries", "${var.name_prefix}-addon", "${var.name_prefix}-move", "${var.name_prefix}-owned"]
+}
+
+# The example's own OCI pack registry, for examples/live/registry.sh.
+output "owned_registry_uid" {
+  value = spectrocloud_registry_oci.pack.id
+}
+
+output "owned_registry_name" {
+  value = spectrocloud_registry_oci.pack.name
+}
+
+output "owned_registry_host" {
+  value = local.registry_host
+}
+
+output "owned_repository" {
+  value = aws_ecr_repository.pack.repository_url
+}
+
+output "owned_pack_name" {
+  value = local.pack_name
+}
+
+output "owned_profile_uid" {
+  value = try(spectrocloud_cluster_profile.owned[0].id, "")
+}
+
+output "aws_profile" {
+  value = var.aws_profile
 }
 
 output "cluster_names" {

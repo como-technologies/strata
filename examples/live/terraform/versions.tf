@@ -5,7 +5,22 @@ terraform {
       source  = "spectrocloud/spectrocloud"
       version = "0.30.1"
     }
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
+    time = {
+      source  = "hashicorp/time"
+      version = "~> 0.12"
+    }
   }
+}
+
+# The example's own OCI pack registry is an ECR repository in the account that aws_profile names.
+# The clusters use Palette's cloud account and need no AWS credential here.
+provider "aws" {
+  region  = var.region
+  profile = var.aws_profile
 }
 
 # Auth: SPECTROCLOUD_APIKEY rides the environment; examples/live/tf.sh sets it from

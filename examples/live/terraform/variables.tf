@@ -174,6 +174,31 @@ variable "move_registry_name" {
   default     = "Palette Registry"
 }
 
+# examples/live/registry.sh's variables: the example's own OCI pack registry, and the profile that
+# pins the pack the script pushes into it.
+variable "aws_profile" {
+  description = "The AWS profile that creates the ECR repository of the example's own pack registry"
+  type        = string
+}
+
+variable "owned_pack_profile" {
+  description = "Create the profile that pins the pack of the example's own registry; registry.sh sets it after the push"
+  type        = bool
+  default     = false
+}
+
+variable "owned_pack_version" {
+  description = "The version of that pack the profile pins"
+  type        = string
+  default     = "1.0.0"
+}
+
+variable "owned_pack_tag" {
+  description = "The tag the profile pins the pack under; a floating tag such as 1.x when the registry lists one"
+  type        = string
+  default     = "1.0.0"
+}
+
 # examples/live/tag-only.sh's variables (#19).
 variable "tag_only_versions" {
   description = "Release versions that differ from 1.0.0 only in the OS pack's tag name, as version => tag"

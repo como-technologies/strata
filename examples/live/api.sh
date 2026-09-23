@@ -27,6 +27,9 @@
 #       Delete every version of each profile named exactly NAME, found in the profile listing:
 #       the versions skip_destroy kept out of the OpenTofu state. A name with no versions is not
 #       an error.
+#   api.sh sync-oci REGISTRY_UID
+#       Ask Palette to read an OCI pack registry in ECR again, and wait until that sync ends.
+#       Prints the sync status. Exit 2 when the sync does not end in five minutes.
 #
 # The key comes from PALETTE_API_KEY or ~/.palette.env and is never printed; the address from
 # PALETTE_API (default https://api.spectrocloud.com). PALETTE_PROJECT_UID scopes the requests.
@@ -206,6 +209,24 @@ delete_named() {
   done
 }
 
+# sync_oci UID: POST the sync, then wait until a run newer than the last one has ended
+sync_oci() {
+  local uid=${1:-} before status after
+  [ -n "$uid" ] || die "usage: api.sh sync-oci REGISTRY_UID"
+  before=$(call GET "/v1/registries/oci/$uid/ecr/sync/status" | jq -r '.lastRunTime // ""') || return 2
+  call POST "/v1/registries/oci/$uid/ecr/sync" > /dev/null || return 2
+  for _ in $(seq 1 60); do
+    status=$(call GET "/v1/registries/oci/$uid/ecr/sync/status") || return 2
+    after=$(jq -r '.lastRunTime // ""' <<<"$status")
+    if [ "$(jq -r '.status // ""' <<<"$status")" != InProgress ] && [ "$after" != "$before" ]; then
+      echo "$status"
+      return 0
+    fi
+    sleep 5
+  done
+  die "the sync of registry $uid did not end in five minutes"
+}
+
 case "${1:-}" in
   edit) shift; edit "$@" ;;
   retag) shift; retag "$@" ;;
@@ -213,5 +234,6 @@ case "${1:-}" in
   detach) shift; detach "$@" ;;
   delete) shift; delete "$@" ;;
   delete-named) shift; delete_named "$@" ;;
+  sync-oci) shift; sync_oci "$@" ;;
   *) sed -n '2,/^set -uo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; exit 2 ;;
 esac

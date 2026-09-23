@@ -253,6 +253,38 @@ resource "spectrocloud_cluster_profile" "addon" {
   }
 }
 
+# The profile that pins the pack of the example's own registry. It exists after registry.sh has
+# pushed the pack and Palette has read the registry: the pack lookup needs both.
+data "spectrocloud_pack" "owned" {
+  count        = var.owned_pack_profile ? 1 : 0
+  name         = local.pack_name
+  version      = var.owned_pack_version
+  registry_uid = spectrocloud_registry_oci.pack.id
+}
+
+resource "spectrocloud_cluster_profile" "owned" {
+  count        = var.owned_pack_profile ? 1 : 0
+  name         = "${var.name_prefix}-owned"
+  version      = "1.0.0"
+  description  = "strata live example: a pack from the example's own registry; nothing runs it"
+  cloud        = "all"
+  type         = "add-on"
+  skip_destroy = var.immutable_profiles
+
+  pack {
+    name         = local.pack_name
+    type         = "oci"
+    tag          = var.owned_pack_tag
+    uid          = data.spectrocloud_pack.owned[0].id
+    registry_uid = spectrocloud_registry_oci.pack.id
+    values       = data.spectrocloud_pack.owned[0].values
+  }
+
+  lifecycle {
+    create_before_destroy = true
+  }
+}
+
 data "spectrocloud_registry" "move" {
   count = var.registry_move ? 1 : 0
   name  = var.move_registry_name

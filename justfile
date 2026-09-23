@@ -157,6 +157,10 @@ live-knurl: build
 live-merge-gate: build
     examples/live/merge-gate.sh
 
+# The registry test: push into the example's own OCI pack registry, and read what Palette does with each push (#66). Needs live-profiles.
+live-registry: build
+    examples/live/registry.sh
+
 # The scripts run in order from the baseline: verify.sh, in-place.sh off, in-place.sh on (against
 # that off run), and registry-move.sh. The recipe stops at the first script that fails. Billable:
 # about 3 to 4 hours, with cluster B two times.
@@ -193,7 +197,9 @@ live-down:
     outputs=$(examples/live/tf.sh output -json) || { echo "live-down: no tofu outputs" >&2; exit 1; }
     export PALETTE_PROJECT_UID=$(jq -r '.project_uid.value' <<<"$outputs")
     names=$(jq -r '.profile_names.value[]' <<<"$outputs")
-    examples/live/tf.sh destroy || { examples/live/diagnose.sh; exit 1; }
+    # Palette now and then refuses one read of a profile with OperationForbidden, and the next
+    # read passes: a destroy that fails gets one more try before the diagnostics.
+    examples/live/tf.sh destroy || examples/live/tf.sh destroy || { examples/live/diagnose.sh; exit 1; }
     examples/live/api.sh delete-named $names
 
 # ---- release --------------------------------------------------------------------------------

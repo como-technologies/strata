@@ -82,6 +82,14 @@ tf_apply() {
   "$live/tf.sh" apply -input=false -auto-approve -no-color -var "immutable_profiles=$with" "$@" \
     > "apply-$applies.txt" 2>&1
   local code=$?
+  # Palette now and then refuses one read of a profile with OperationForbidden and no cause, and
+  # the next read passes. One apply again, when that was the failure.
+  if [ "$code" != 0 ] && command grep -q 'OperationForbidden' "apply-$applies.txt"; then
+    echo "tofu apply again: Palette refused a read with OperationForbidden" | tee -a steps.log
+    "$live/tf.sh" apply -input=false -auto-approve -no-color -var "immutable_profiles=$with" "$@" \
+      >> "apply-$applies.txt" 2>&1
+    code=$?
+  fi
   command grep -E '^(Plan|Apply complete|Error)' "apply-$applies.txt" | tee -a steps.log
   if [ "$code" != 0 ]; then
     "$live/diagnose.sh" "$PWD/diagnostics" >&2
