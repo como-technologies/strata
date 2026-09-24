@@ -6,7 +6,8 @@ its checks establishes, so you can see the coverage without running anything.
 
 `verify.sh` is the read-only script over the cluster, and
 [its checks are on the live example page](./live-example.md#the-checks-of-verifysh).
-`packs.sh` and `knurl.sh` read too. The other scripts below write to the tenant.
+`packs.sh` and `knurl.sh` read too. The other scripts below write to the tenant;
+`pack-states.sh` keeps nothing that it writes.
 
 Each check names its expected exit code. A run that gets another code fails, and
 prints both. The issue numbers name what the check was written for.
@@ -216,6 +217,27 @@ and the ambiguous-ref message reads the same every time:
 ```text
 strata: pack 'csi-aws-ebs' at version '1.63.1' is in several registries: Palette Registry, Public Repo; name one, as in pack:<registry>/csi-aws-ebs@1.63.1
 ```
+
+## pack-states.sh
+
+No cluster, and no cost. It uses three packs that Spectro Cloud retired in the
+public registries, one for each state: `nginx` 1.15.1 (disabled) and
+`generic-vm-libvirt` 1.0.0 (deleted) in `Public Repo`, and `argo-cd` 3.26.7
+(deprecated) in `Palette Community Registry`. None of them requires another
+pack. It asks Palette for a profile that pins each one, and deletes the profile
+that Palette creates at once.
+
+| Check | Expected exit | What it shows |
+|---|---|---|
+| `states-disabled`, `states-disabled-says` | 0 | #68: `packs` lists a disabled registry from the listing, and the heading says `disabled, no tags` |
+| `states-deleted`, `states-deleted-says` | 0 | #68: the same for a deleted registry: `deleted, no tags` |
+| `states-deprecated`, `states-deprecated-says` | 0 | #68: a deprecated version keeps its tags, and the heading and the row say `deprecated` |
+| `snapshot-disabled`, `snapshot-disabled-says` | 2, 0 | #68: a disabled version is `pack-unavailable`, and the error names the state and the registry |
+| `snapshot-deleted` | 2 | #68: a deleted version is `pack-unavailable` |
+| `snapshot-deprecated` | 0 | #68: a deprecated version records as usual |
+| `profile-disabled`, `profile-disabled-says` | 1, 0 | #68: Palette refuses a profile that pins a disabled version, with `ClusterProfileInvalidPackState` |
+| `profile-deleted`, `profile-deleted-says` | 1, 0 | #68: the same for a deleted version |
+| `profile-deprecated` | 0 | #68: Palette creates a profile that pins a deprecated version |
 
 ## knurl.sh
 

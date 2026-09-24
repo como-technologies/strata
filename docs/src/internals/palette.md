@@ -352,6 +352,38 @@ one request gives every version, every tag, and no repeats. The paged listing
 `/v1/packs?filters=spec.name=<name>` holds the digest of each build, which this
 answer does not, and it repeats a version across pages.
 
+The listing can name a registry that then answers 404 for the pack. It does so
+for a pack that Spectro Cloud disabled or deleted: see
+[Pack states](#pack-states).
+
+## Pack states
+
+Spectro Cloud retires a pack version in the registries it owns. The listing
+`/v1/packs?filters=spec.name=<name>` keeps each retired version, and gives it a
+state in `spec.annotations.system_state`, with the time in
+`system_deprecatedTimestamp` or `system_disabledTimestamp`:
+
+| State | `GET /v1/packs/<name>/registries/<uid>` | A new profile that pins it |
+| --- | --- | --- |
+| none | the tags and the values | Palette creates it |
+| `deprecated` | the tags and the values | Palette creates it |
+| `disabled` | 404, `ResourceNotFound` | Palette refuses it: HTTP 500, `ClusterProfileInvalidPackState`, "pack `<name>:<version>` is disabled" |
+| `deleted` | 404, `ResourceNotFound` | Palette refuses it: HTTP 500, `ClusterProfileInvalidPackState`, "pack `<name>:<version>` is deleted" |
+
+So a 404 for a pack that the listing names is a fact about one registry, and
+not about the pack: `nginx` is disabled in `Public Repo` and in `Palette
+Registry`, and `Bitnami` serves it. Strata reads the state from the listing:
+
+- `strata packs` gives the state of each version, and lists a registry that
+  answers 404 from the listing, with no tags. See
+  [strata packs](../commands/packs.md#what-to-expect).
+- `strata snapshot pack:` and a candidate stop with `pack-unavailable` on a
+  disabled or a deleted version, because Palette refuses a profile that pins
+  it.
+- A deprecated version records as usual.
+
+[The live example checks each state](../development/live-runs.md#pack-statessh).
+
 Palette applies a pack constraint when a profile is created, and not through this
 answer: see [A pack that requires another pack](#a-pack-that-requires-another-pack).
 
@@ -423,6 +455,9 @@ These are open:
 - A version bump with the `immutable-clusterprofiles` flag on and `skip_destroy`
   off.
 - The variables of a cluster template while the template applies.
+- A published profile, or a cluster, that pins a pack version when Spectro Cloud
+  later disables or deletes it. Palette refuses a new profile that pins one, so
+  the example cannot make this case.
 
 ## Where these answers come from
 

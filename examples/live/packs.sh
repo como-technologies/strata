@@ -29,6 +29,8 @@ reg="Public Repo"
 run=${OUT:-$live/runs/$(date -u +%Y%m%dT%H%M%SZ)/packs}
 mkdir -p "$run" && cd "$run" || exit 2
 export STRATA_QUIET=1
+# the newest version the registry offers today; it moves when a new version is published
+newest=$("$strata" packs "$pack" --registry "$reg" --latest --json | jq -r '.registries[0].versions[0].version')
 
 summary() {
   {
@@ -66,7 +68,7 @@ echo "== the other forms, and the errors" | tee -a steps.log
 check latest 0 "#55: pack:$reg/$pack@latest resolves to a version" -- \
   "$strata" snapshot "pack:$reg/$pack@latest" -o latest.json
 check latest-is-newest 0 '#55: latest gives the newest version the registry offers' -- \
-  grep -q "\"version\": \"$new\"" latest.json
+  grep -q "\"version\": \"$newest\"" latest.json
 check two-registries 2 '#55: a bare ref for a pack in two registries is an error that names both' -- \
   "$strata" compare "pack:$pack@$old" "pack:$pack@$new"
 check two-registries-says 0 '#55: the error names each registry and the ref that fixes it' -- \
@@ -84,11 +86,11 @@ echo "== the versions a registry offers (#54)" | tee -a steps.log
 check packs-one 0 '#54: packs lists the versions of one registry, newest first' -- \
   "$strata" packs "$pack" --registry "$reg"
 check packs-newest 0 '#54: the newest version is the first line, and it carries the floating tag' -- \
-  bash -c "head -2 packs-one.out | tail -1 | grep -q '$new' && head -2 packs-one.out | tail -1 | grep -q '1.x'"
+  bash -c "head -2 packs-one.out | tail -1 | grep -q '$newest' && head -2 packs-one.out | tail -1 | grep -q '1.x'"
 check packs-latest 0 '#54: --latest gives one line for each registry that has the pack' -- \
   "$strata" packs "$pack" --latest
 check packs-two-registries 0 '#54: both registries of this tenant answer' -- \
-  bash -c "grep -c 'version)' packs-latest.out | grep -qx 2"
+  bash -c "grep -c '^$pack in ' packs-latest.out | grep -qx 2"
 check packs-paged 0 '#54: a pack with more than 100 versions lists completely' -- \
   "$strata" packs kubernetes --registry "$reg"
 check packs-paged-count 0 '#54: the listing passes the 100 of one page' -- \

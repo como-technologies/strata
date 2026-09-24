@@ -76,6 +76,17 @@ pub(crate) fn project_label(uid: &str, name: &str) -> String {
 }
 
 /// `2 profiles`, `1 profile`, or `no profiles`.
+/// What a packs heading adds for a registry: the state that all its versions share, and that it
+/// has no tags when Palette answered 404 for it.
+pub(crate) fn registry_note(r: &crate::ops::PackRegistry) -> Option<String> {
+    match (&r.state, r.tags_unavailable) {
+        (Some(state), true) => Some(format!("{state}, no tags")),
+        (Some(state), false) => Some(state.clone()),
+        (None, true) => Some("no tags: the registry answered 404".to_string()),
+        (None, false) => None,
+    }
+}
+
 pub(crate) fn count_of(n: usize, singular: &str) -> String {
     match n {
         0 => format!("no {singular}s"),

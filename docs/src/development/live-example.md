@@ -14,6 +14,7 @@ show.
 | `tag-only.sh` | Versions that differ only in a tag name, a cluster move, and a rename in place (#19). |
 | `drift-report.sh off`, `drift-report.sh on` | `scripts/ci/verify-report.sh` around an edit in place and a version bump (#25). |
 | `packs.sh` | `pack:` refs against the tenant's own registries (#55). Read-only, and it needs no cluster. |
+| `pack-states.sh` | Pack versions that Spectro Cloud deprecated, disabled, or deleted: what `packs` and `snapshot` report, and which profiles Palette refuses (#68). It needs no cluster. |
 | `merge-gate.sh` | `scripts/ci/merge-gate.sh` over records of the live profiles, in a git repository that the script builds (#57). It needs the profiles, and no cluster. |
 | `knurl.sh` | [The knurl adapter](../automation/knurl.md): each method of the port against the strata answer for the same real object. Read-only. It needs the profiles; the instance checks need the cluster. |
 
@@ -70,8 +71,9 @@ its end.
 | `registry-move.sh` | The registry move test (#24). |
 | `tag-only.sh` | The tag name test (#19). |
 | `drift-report.sh` | The drift report test (#25). It opens and closes issues in this repository with the label `strata-live-drift`. |
-| `api.sh` | The writes outside OpenTofu: an edit in place, a push of a profile to a cluster, the delete of profile versions, and the delete of a cluster. |
+| `api.sh` | The writes outside OpenTofu: an edit in place, a push of a profile to a cluster, the delete of profile versions, the delete of a cluster, and a probe profile that it deletes at once. |
 | `packs.sh` | The pack ref test (#55). |
+| `pack-states.sh` | The pack state test (#68). |
 | `merge-gate.sh` | The merge gate test (#57). |
 | `knurl.sh` | The knurl adapter test. |
 | `registry.sh` | The registry test (#66): pushes into the example's own OCI pack registry and OCI Helm registry, and reads what Palette does with each push. |
@@ -98,6 +100,8 @@ it:
 `verify.sh`, `in-place.sh`, `registry-move.sh`, `tag-only.sh`, and
 `drift-report.sh` check the baseline before they start, and leave the example as
 they found it. `packs.sh` and `knurl.sh` read the profiles and change nothing.
+`pack-states.sh` asks for three profiles, and deletes the one that Palette
+creates at once.
 `merge-gate.sh` makes one edit in place, and puts it back.
 `registry.sh` leaves the pushed versions in its own registry.
 `template.sh` ends with the example removed, `cluster.sh` ends with the cluster
@@ -112,6 +116,7 @@ each.
 | `drift-report.sh off` and `on` | the flag, in the plan and in the bump | the edit (`api.sh edit` in both runs), the records, the steps and their order, the issue label, the baseline |
 | `tag-only.sh` | the tag name of the OS pack, and which of two such versions cluster A runs | the pack uid, each other pack, the values, the flag (off), the baseline |
 | `packs.sh` | nothing; it only reads | the baseline |
+| `pack-states.sh` | nothing that stays: a probe profile, deleted at once | the baseline |
 | `merge-gate.sh` | the add-on version, which stage 4 edits in place and stage 5 puts back | the profiles, the clusters, the baseline |
 | `knurl.sh` | nothing; it only reads | the baseline |
 | `registry.sh` | the images of the example's own registries, and the profiles that pin them | the shared registries, the clusters, the release and add-on versions |

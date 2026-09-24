@@ -200,7 +200,14 @@ is the path as a list: strings for keys, numbers for indexes, and
   - A version: `version`, `packUid`, `digest`, `type`, `cloudTypes[]`, `tags[]`
     with the exact tag first, and `latest`, which is true for the newest version
     the command listed. With `--cloud`, that is the newest version for that
-    cloud, and not the newest the registry holds.
+    cloud, and not the newest the registry holds. `state` is `deprecated`,
+    `disabled`, or `deleted` when the listing gives one, and strata leaves out
+    the field when it gives none.
   - `versionsOffered`: how many versions of the pack the registry holds, before
     `--latest` or `--cloud` cut the list.
+  - `tagsUnavailable`: `true` when Palette lists the pack under the registry and
+    then answers 404 for it. The versions come from the listing, with no tags.
+    When it is `false`, strata leaves out the field.
+  - `state`: the state that every version in the registry has, when they all
+    have the same one. Strata leaves out the field otherwise.
 

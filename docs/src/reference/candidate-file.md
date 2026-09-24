@@ -89,7 +89,10 @@ registry by name. It gives each registry name its uid. Then, for each layer:
 A version or a tag that the registry does not have is `pack-not-found`. A
 registry name that the key cannot see is `registry-not-found`. A `registryUid`
 that the key cannot see goes out as given, so its packs are `pack-not-found`,
-and the error names the uid.
+and the error names the uid. A version that the listing gives as `disabled` or
+`deleted` is `pack-unavailable`: Palette does not serve it, and refuses a
+profile that pins it. See
+[Pack states](../internals/palette.md#pack-states).
 
 The snapshot has `source.template` `candidate`, no uid, and no `consumers`.
 Strata takes the digest of each pack from the registry, as Palette does for a

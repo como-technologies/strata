@@ -147,6 +147,10 @@ live-verify: build
 live-packs: build
     examples/live/packs.sh
 
+# The pack state checks: deprecated, disabled, and deleted packs; no cluster, and no profile stays (#68)
+live-pack-states: build
+    examples/live/pack-states.sh
+
 # Read-only. It needs live-profiles; the instance checks need live-up, and are SEEN without it.
 
 # The knurl adapter against the tenant: each port method against the strata answer for the same object

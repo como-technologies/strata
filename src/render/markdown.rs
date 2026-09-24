@@ -5,9 +5,9 @@ use super::{
     consumer_counts, consumers_heading, consumers_sentence, count_of, counts_line, cross_kind_note,
     dash, edited_in_place_note, entry_error, list_count, list_scope, overwritten_in_place_notes,
     pack_version, pair_detail, pair_word, plain_flags, profiles_overwritten_sentence,
-    project_label, record_detail, record_label, same_content_note, short, show, subject,
-    traits_suffix, values_changed, values_changed_suffix, variable_lines, variables_comparable,
-    variables_unavailable_note, version_display,
+    project_label, record_detail, record_label, registry_note, same_content_note, short, show,
+    subject, traits_suffix, values_changed, values_changed_suffix, variable_lines,
+    variables_comparable, variables_unavailable_note, version_display,
 };
 use crate::color::Paint;
 use crate::diff::{Diff, Leaf, Op, Status, Verify, VerifyStatus};
@@ -353,13 +353,24 @@ impl Renderer for MarkdownRenderer {
     fn render_packs(&self, l: &PackListing) -> Result<String> {
         let mut out = String::new();
         for r in &l.registries {
-            out.push_str(&format!("### {} in {}\n\n", l.name, r.registry));
+            out.push_str(&format!(
+                "### {} in {}{}\n\n",
+                l.name,
+                r.registry,
+                registry_note(r)
+                    .map(|n| format!(" ({n})"))
+                    .unwrap_or_default()
+            ));
             out.push_str("| version | tags | type | clouds | pack uid |\n");
             out.push_str("| --- | --- | --- | --- | --- |\n");
             for v in &r.versions {
                 out.push_str(&format!(
-                    "| `{}` | {} | {} | {} | `{}` |\n",
+                    "| `{}`{} | {} | {} | {} | `{}` |\n",
                     v.version,
+                    v.state
+                        .as_ref()
+                        .map(|s| format!(" {s}"))
+                        .unwrap_or_default(),
                     if v.tags.is_empty() {
                         "-".to_string()
                     } else {

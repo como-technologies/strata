@@ -29,6 +29,7 @@ the kind.
 | `candidate-invalid` | The candidate file has a problem. | `path` |
 | `pack-not-found` | The registry has no such pack version or tag. | `name`, `version`, `registry`, `tag` when given |
 | `pack-name-not-found` | No visible registry offers a pack of that name. | `name` |
+| `pack-unavailable` | The registry lists the version as `disabled` or `deleted`. Palette does not serve it, and refuses a profile that pins it. | `name`, `version`, `registry`, `state` |
 | `registry-not-found` | No visible registry has this name. | `registry`, `available` |
 | `pack-in-several-registries` | A `pack:` ref named no registry, and more than one has the version. | `name`, `version`, `registries` |
 | `project-not-found` | No visible project has this name. | `name`, `available` |

@@ -178,6 +178,21 @@ pub enum Error {
         /// The registry, as the candidate names it.
         registry: String,
     },
+    /// The registry lists a pack version that Spectro Cloud disabled or deleted. Palette serves no
+    /// such pack, and refuses a profile that pins one.
+    #[error(
+        "pack '{name}' at version '{version}' is {state} in registry '{registry}': Palette does not serve it, and refuses a profile that pins it; `strata packs {name}` lists the versions and their states"
+    )]
+    PackUnavailable {
+        /// Pack name.
+        name: String,
+        /// Pack version.
+        version: String,
+        /// The registry, as the ref or the candidate names it.
+        registry: String,
+        /// The state that the registry listing gives: `disabled` or `deleted`.
+        state: String,
+    },
     /// `packs <name>` found the name in no visible registry. It asked for every version, so no
     /// version and no registry was ever in play, and `PackNotFound` would state both as blanks.
     #[error(
@@ -325,6 +340,7 @@ impl Error {
             Error::CandidateInvalid { .. } => "candidate-invalid",
             Error::PackNotFound { .. } => "pack-not-found",
             Error::PackNameNotFound { .. } => "pack-name-not-found",
+            Error::PackUnavailable { .. } => "pack-unavailable",
             Error::PackInSeveralRegistries { .. } => "pack-in-several-registries",
             Error::RegistryNotFound { .. } => "registry-not-found",
             Error::ProjectNotFound { .. } => "project-not-found",
@@ -343,7 +359,7 @@ impl Error {
 
     /// The machine-readable form: `kind`, `message`, and the variant's own fields (`path`,
     /// `status`, `retryAfter`, `limit`, `name`, `version`, `schema`, `variable`, `alternate`, `value`, `cluster`,
-    /// `profile`, `applied`, `reference`, `tag`, `registry`, `available`) when it has them.
+    /// `profile`, `applied`, `reference`, `tag`, `registry`, `state`, `available`) when it has them.
     pub fn to_json(&self) -> Value {
         let mut m = Map::new();
         m.insert("kind".into(), Value::from(self.kind()));
@@ -412,6 +428,17 @@ impl Error {
                     m.insert("tag".into(), Value::from(t.as_str()));
                 }
                 m.insert("registry".into(), Value::from(registry.as_str()));
+            }
+            Error::PackUnavailable {
+                name,
+                version,
+                registry,
+                state,
+            } => {
+                m.insert("name".into(), Value::from(name.as_str()));
+                m.insert("version".into(), Value::from(version.as_str()));
+                m.insert("registry".into(), Value::from(registry.as_str()));
+                m.insert("state".into(), Value::from(state.as_str()));
             }
             // no version and no registry was asked for, so the document names neither
             Error::PackNameNotFound { name } => {
@@ -553,6 +580,12 @@ mod tests {
                 version: "9.9.9".into(),
                 tag: Some("2.x".into()),
                 registry: "Public Repo".into(),
+            },
+            Error::PackUnavailable {
+                name: "nginx".into(),
+                version: "1.15.1".into(),
+                registry: "Public Repo".into(),
+                state: "disabled".into(),
             },
             Error::PackInSeveralRegistries {
                 name: "csi-aws-ebs".into(),

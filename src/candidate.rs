@@ -580,6 +580,17 @@ fn text(v: &Value, ptr: &str) -> Option<String> {
     v.pointer(ptr).and_then(Value::as_str).map(str::to_string)
 }
 
+/// The state that the registry listing gives a pack version: `deprecated`, `disabled`, or
+/// `deleted`, and nothing for a pack in use.
+pub(crate) fn pack_state(summary: &Value) -> Option<String> {
+    text(summary, "/spec/annotations/system_state").filter(|s| !s.is_empty())
+}
+
+/// The state of a pack version that Palette no longer serves: `disabled` or `deleted`.
+fn retired_state(summary: &Value) -> Option<String> {
+    pack_state(summary).filter(|s| s == "disabled" || s == "deleted")
+}
+
 /// The registry's summary of `name` at `version` in `registry`, paging through the listing.
 fn find_version<A: PaletteApi>(
     palette: &Palette<A>,
@@ -644,6 +655,24 @@ pub fn resolve<A: PaletteApi>(
         };
         let summary = find_version(palette, &l.name, &l.version, &registry)?
             .ok_or_else(|| not_found(None))?;
+        // Palette serves no disabled or deleted pack: the registry answers 404 for it, and a
+        // profile that pins one is refused. Say so before that read.
+        if let Some(state) = retired_state(&summary) {
+            // a `pack:` ref comes here with the uid of the registry; the error gives its name
+            let registry = match &loaded_layer.registry {
+                RegistryRef::Name(n) => n.clone(),
+                RegistryRef::Uid(u) => registries(palette)?
+                    .into_iter()
+                    .find(|(_, uid)| uid == u)
+                    .map_or_else(|| u.clone(), |(name, _)| name),
+            };
+            return Err(Error::PackUnavailable {
+                name: l.name.clone(),
+                version: l.version.clone(),
+                registry,
+                state,
+            });
+        }
         let pack_uid = text(&summary, "/metadata/uid").unwrap_or_default();
         let entity = palette
             .api()

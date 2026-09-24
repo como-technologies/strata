@@ -4144,6 +4144,156 @@ fn packs_pages_past_a_hundred_versions_and_counts_a_repeated_one_once() {
     );
 }
 
+/// A listing row with the state Palette gives a pack that Spectro Cloud retired.
+fn in_state(mut summary: Value, state: &str) -> Value {
+    summary["spec"]["annotations"] = serde_json::json!({
+        "system_state": state,
+        "system_deprecatedTimestamp": "2025-03-28T19:00:15",
+    });
+    summary
+}
+
+#[test]
+fn packs_lists_a_disabled_registry_from_the_listing_and_marks_each_retired_version() {
+    // Palette lists the Mirror's disabled version, and then answers 404 for the Mirror: it serves
+    // no disabled or deleted pack. A deprecated version it still serves, with its tags.
+    let api = serve_summaries(
+        vec![
+            pack_summary("pk-63", "1.63.1", "reg-public", "sha256:aaa", CSI_63),
+            in_state(
+                pack_summary("pk-65", "1.65.0", "reg-public", "sha256:bbb", CSI_65),
+                "deprecated",
+            ),
+            in_state(
+                pack_summary("pk-m", "1.64.0", "reg-mirror", "sha256:mmm", CSI_63),
+                "disabled",
+            ),
+        ],
+        &[("reg-public", public_entity())],
+    );
+    let l = packs_of(&api, "csi-aws-ebs", ops::PackOptions::default()).unwrap();
+    assert_eq!(
+        l.registries.len(),
+        2,
+        "the 404 does not take the listing down"
+    );
+    let public = &l.registries[0];
+    assert_eq!(public.registry, "Public Repo");
+    assert!(!public.tags_unavailable);
+    assert_eq!(
+        public.state, None,
+        "the versions of Public Repo differ in state"
+    );
+    assert_eq!(public.versions[0].state.as_deref(), Some("deprecated"));
+    assert_eq!(
+        public.versions[0].tags,
+        vec!["1.65.0", "1.x"],
+        "a deprecated version keeps its tags"
+    );
+    assert_eq!(public.versions[1].state, None);
+    let mirror = &l.registries[1];
+    assert_eq!(mirror.registry, "Mirror");
+    assert!(mirror.tags_unavailable);
+    assert_eq!(
+        mirror.state.as_deref(),
+        Some("disabled"),
+        "every version of the Mirror is disabled"
+    );
+    assert_eq!(mirror.layer, "csi", "the layer comes from the listing");
+    assert_eq!(mirror.versions[0].version, "1.64.0");
+    assert_eq!(mirror.versions[0].digest, "sha256:mmm");
+    assert_eq!(mirror.versions[0].state.as_deref(), Some("disabled"));
+    assert!(mirror.versions[0].tags.is_empty());
+
+    // the heading and the row say so, in both text formats
+    let text = render::renderer(Format::Terminal, Paint::off(), false)
+        .render_packs(&l)
+        .unwrap();
+    assert!(
+        text.contains("csi-aws-ebs in Mirror (1 version, disabled, no tags)"),
+        "{text}"
+    );
+    assert!(
+        text.lines()
+            .any(|l| l.contains("1.65.0") && l.trim_end().ends_with("deprecated")),
+        "{text}"
+    );
+    let md = render::renderer(Format::Markdown, Paint::off(), false)
+        .render_packs(&l)
+        .unwrap();
+    assert!(
+        md.contains("### csi-aws-ebs in Mirror (disabled, no tags)"),
+        "{md}"
+    );
+    assert!(md.contains("`1.65.0` deprecated"), "{md}");
+}
+
+#[test]
+fn packs_lists_a_registry_that_answers_404_with_no_state_and_stops_on_any_other_failure() {
+    let api = serve_registry(
+        vec![pack_summary(
+            "pk-m",
+            "1.64.0",
+            "reg-mirror",
+            "sha256:mmm",
+            CSI_63,
+        )],
+        &[("reg-public", public_entity())],
+    );
+    let l = packs_of(&api, "csi-aws-ebs", ops::PackOptions::default()).unwrap();
+    let mirror = &l.registries[1];
+    assert!(mirror.tags_unavailable);
+    assert_eq!(mirror.state, None);
+    let text = render::renderer(Format::Terminal, Paint::off(), false)
+        .render_packs(&l)
+        .unwrap();
+    assert!(
+        text.contains("csi-aws-ebs in Mirror (1 version, no tags: the registry answered 404)"),
+        "{text}"
+    );
+
+    let api = serve_registry(vec![], &[]).failing(
+        "/v1/packs/csi-aws-ebs/registries/reg-public",
+        403,
+        "forbidden",
+    );
+    let err = packs_of(&api, "csi-aws-ebs", ops::PackOptions::default()).unwrap_err();
+    assert_eq!(err.kind(), "api");
+}
+
+#[test]
+fn a_disabled_or_deleted_pack_version_is_unavailable_and_a_deprecated_one_resolves() {
+    for state in ["disabled", "deleted"] {
+        let api = serve_summaries(
+            vec![in_state(
+                pack_summary("pk-65", "1.65.0", "reg-public", "sha256:bbb", CSI_65),
+                state,
+            )],
+            &[],
+        );
+        let err = snapshot_pack(&api, "pack:Public Repo/csi-aws-ebs@1.65.0").unwrap_err();
+        assert_eq!(err.kind(), "pack-unavailable", "{state}: {err}");
+        assert_eq!(err.exit_code(), 2);
+        let msg = format!("{err}");
+        assert!(
+            msg.contains(&format!("is {state} in registry 'Public Repo'")),
+            "{msg}"
+        );
+        let json = err.to_json();
+        assert_eq!(json["state"], state);
+        assert_eq!(json["version"], "1.65.0");
+    }
+    let api = serve_summaries(
+        vec![in_state(
+            pack_summary("pk-65", "1.65.0", "reg-public", "sha256:bbb", CSI_65),
+            "deprecated",
+        )],
+        &[("reg-public", public_entity())],
+    );
+    let snap = snapshot_pack(&api, "pack:Public Repo/csi-aws-ebs@1.65.0").unwrap();
+    assert_eq!(snap.packs[0].tag, "1.65.0");
+}
+
 #[test]
 fn packs_keeps_the_versions_of_one_cloud_and_answers_with_none_when_no_version_has_it() {
     let api = serve_registry(vec![], &[("reg-public", public_entity())]);

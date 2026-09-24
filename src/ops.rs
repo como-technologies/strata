@@ -1717,6 +1717,14 @@ pub struct PackRegistry {
     /// How many versions of the pack the registry holds, before `--latest` or `--cloud` cut the
     /// list. A heading states the registry's inventory, and not the count of rows a flag left.
     pub versions_offered: usize,
+    /// True when Palette listed the pack under this registry and then answered 404 for the
+    /// registry's entity: the versions come from the listing alone, with no tags.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub tags_unavailable: bool,
+    /// The state that every version of the pack in this registry has, when they all have the
+    /// same one: `deprecated`, `disabled`, or `deleted`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub state: Option<String>,
 }
 
 /// One version of a pack in one registry.
@@ -1738,6 +1746,10 @@ pub struct PackBuild {
     pub tags: Vec<String>,
     /// True for the newest version of the registry's copy.
     pub latest: bool,
+    /// The state that the registry listing gives this version: `deprecated`, `disabled`, or
+    /// `deleted`. Palette serves no disabled or deleted pack, and refuses a profile that pins one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub state: Option<String>,
 }
 
 /// What `packs` was asked for.
@@ -1804,12 +1816,31 @@ where
             .filter_map(|e| Some(text(e, "/spec/version")).filter(|v| !v.is_empty()))
             .collect::<std::collections::BTreeSet<_>>()
             .len();
-        // the registry's own answer holds the tags, which the listing does not
+        // one state for the registry, when every version of the pack in it has the same one
+        let states: std::collections::BTreeSet<Option<String>> = mine
+            .iter()
+            .map(|e| crate::candidate::pack_state(e))
+            .collect();
+        let state = match states.into_iter().collect::<Vec<_>>().as_slice() {
+            [Some(one)] => Some(one.clone()),
+            _ => None,
+        };
+        // the registry's own answer holds the tags, which the listing does not. Palette serves no
+        // disabled or deleted pack, so it can list a pack under a registry and then answer 404
+        // for it; that registry keeps the versions of the listing, with no tags, and the other
+        // registries still answer
         progress.note(&format!("reading the tags of {name} in {registry}"));
-        let entity = palette
+        let (entity, tags_unavailable) = match palette
             .api()
-            .get_json(&format!("/v1/packs/{name}/registries/{uid}"))?;
-        let layer = text(&entity, "/layer");
+            .get_json(&format!("/v1/packs/{name}/registries/{uid}"))
+        {
+            Ok(entity) => (entity, false),
+            Err(Error::Api { status: 404, .. }) => (Value::Null, true),
+            Err(e) => return Err(e),
+        };
+        let layer = Some(text(&entity, "/layer"))
+            .filter(|l| !l.is_empty())
+            .unwrap_or_else(|| text(mine[0], "/spec/layer"));
         let tags = entity
             .get("tags")
             .and_then(Value::as_array)
@@ -1869,6 +1900,7 @@ where
                 cloud_types,
                 tags: for_version,
                 latest: false,
+                state: crate::candidate::pack_state(e),
             });
         }
         versions.sort_by(|a, b| version::compare(&b.version, &a.version));
@@ -1885,6 +1917,8 @@ where
                 layer,
                 versions,
                 versions_offered,
+                tags_unavailable,
+                state,
             });
         }
     }

@@ -40,6 +40,11 @@
 #   api.sh sync-oci REGISTRY_UID
 #       Ask Palette to read an OCI pack registry in ECR again, and wait until that sync ends.
 #       Prints the sync status. Exit 2 when the sync does not end in five minutes.
+#   api.sh probe-profile NAME REGISTRY_UID VERSION
+#       Ask Palette to create an add-on profile that pins one pack version, with the values the
+#       registry lists for it. When Palette creates it, delete it at once, print `accepted`, and
+#       exit 0. When Palette refuses it, print `refused`, the HTTP status, and the error code, and
+#       exit 1. Exit 2 when the registry lists no such version.
 #   api.sh get PATH
 #       GET one path, `/v1/...`, and print the answer. A read, for a check.
 #
@@ -227,6 +232,39 @@ delete() {
   esac
 }
 
+probe_profile() {
+  local name=${1:-} registry=${2:-} version=${3:-} row="" offset=0 page count body out status uid
+  [ -n "$version" ] || die "usage: api.sh probe-profile NAME REGISTRY_UID VERSION"
+  while :; do
+    page=$(call GET "/v1/packs?filters=spec.name=$name&limit=100&offset=$offset") || return 2
+    row=$(jq -c --arg r "$registry" --arg v "$version" \
+      '[.items[] | select(.spec.registryUid == $r and .spec.version == $v)][0] // empty' <<<"$page")
+    count=$(jq '.listmeta.count // 0' <<<"$page")
+    [ -n "$row" ] && break
+    offset=$((offset + 100))
+    [ "$offset" -lt "$count" ] || die "registry $registry lists no $name@$version"
+  done
+  body=$(mktemp); out=$(mktemp)
+  jq '{metadata: {name: "strata-probe-\(.spec.name)"},
+       spec: {version: "1.0.0", template: {type: "add-on", cloudType: "all",
+         packs: [{name: .spec.name, tag: .spec.version, uid: .metadata.uid,
+                  registryUid: .spec.registryUid, type: .spec.type, layer: .spec.layer,
+                  values: .spec.values}]}}}' <<<"$row" >"$body"
+  status=$(curl -sS -o "$out" -w '%{http_code}' -X POST \
+    -H "ApiKey: $KEY" -H 'Accept: application/json' -H 'Content-Type: application/json' \
+    ${PROJECT:+-H "ProjectUid: $PROJECT"} --data-binary "@$body" "$API/v1/clusterprofiles")
+  rm -f "$body"
+  if [ "${status:0:1}" = 2 ]; then
+    uid=$(jq -r '.uid' "$out"); rm -f "$out"
+    delete "$uid" >/dev/null || return 2
+    echo "accepted"
+    return 0
+  fi
+  echo "refused HTTP $status $(jq -r '"\(.code): \(.message)"' "$out" 2>/dev/null || head -c 300 "$out")"
+  rm -f "$out"
+  return 1
+}
+
 delete_named() {
   local name uids uid
   [ $# -gt 0 ] || die "usage: api.sh delete-named NAME..."
@@ -277,6 +315,7 @@ case "${1:-}" in
   delete-named) shift; delete_named "$@" ;;
   delete-cluster) shift; delete_cluster "$@" ;;
   sync-oci) shift; sync_oci "$@" ;;
+  probe-profile) shift; probe_profile "$@" ;;
   get) shift; [ -n "${1:-}" ] || die "usage: api.sh get PATH"; call GET "$1" ;;
   *) sed -n '2,/^set -uo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; exit 2 ;;
 esac

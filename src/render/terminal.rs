@@ -5,8 +5,8 @@ use super::{
     consumer_counts, consumers_heading, consumers_sentence, count_of, counts_line, cross_kind_note,
     dash, edited_in_place_note, entry_error, list_count, list_scope, overwritten_in_place_notes,
     pack_version, pair_detail, pair_word, profiles_overwritten_sentence, project_label,
-    record_detail, record_label, same_content_note, short, show, subject, tag_rename,
-    traits_suffix, values_changed_suffix, variable_lines, variables_comparable,
+    record_detail, record_label, registry_note, same_content_note, short, show, subject,
+    tag_rename, traits_suffix, values_changed_suffix, variable_lines, variables_comparable,
     variables_unavailable_note, version_display,
 };
 use crate::color::Paint;
@@ -480,15 +480,20 @@ impl Renderer for TerminalRenderer {
                 )
             };
             out.push_str(&format!(
-                "{} in {} ({count})\n",
+                "{} in {} ({count}{})\n",
                 p.bold(&l.name),
-                p.bold(&r.registry)
+                p.bold(&r.registry),
+                registry_note(r)
+                    .map(|n| format!(", {n}"))
+                    .unwrap_or_default()
             ));
+            // the state column only where a version has a state, so a registry in use reads as before
+            let any_state = r.versions.iter().any(|v| v.state.is_some());
             let rows: Vec<Vec<String>> = r
                 .versions
                 .iter()
                 .map(|v| {
-                    vec![
+                    let mut row = vec![
                         v.version.clone(),
                         v.pack_uid.clone(),
                         dash(&v.kind).to_string(),
@@ -502,16 +507,23 @@ impl Renderer for TerminalRenderer {
                         } else {
                             v.tags.join(" ")
                         },
-                    ]
+                    ];
+                    if any_state {
+                        row.push(v.state.clone().unwrap_or_default());
+                    }
+                    row
                 })
                 .collect();
             let widths = column_widths(&rows);
             for (v, row) in r.versions.iter().zip(&rows) {
-                out.push_str(&table_line("  ", row, &widths, |i, cell| match i {
+                let line = table_line("  ", row, &widths, |i, cell| match i {
                     0 if v.latest => p.bold(cell),
                     1 => p.dim(cell),
                     _ => cell.to_string(),
-                }));
+                });
+                // a version with no state leaves the state column empty: no spaces at the end
+                out.push_str(line.trim_end());
+                out.push('\n');
             }
             out.push('\n');
         }
