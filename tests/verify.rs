@@ -556,7 +556,7 @@ fn verify_many_checks_each_record_in_its_own_scope_and_counts_the_outcomes() {
     };
 
     let paths = [rec_p1.clone(), rec_p2.clone(), not_a_record.clone()];
-    let s = ops::verify_many(&paths, None, connect, "t1", &Progress::silent());
+    let s = ops::verify_many(&paths, None, connect, "t1", false, &Progress::silent());
     assert_eq!(s.schema, "strata-verify-summary/1");
     let statuses: Vec<RecordStatus> = s.records.iter().map(|r| r.status).collect();
     assert_eq!(
@@ -605,13 +605,20 @@ fn verify_many_checks_each_record_in_its_own_scope_and_counts_the_outcomes() {
     assert!(failed.name.is_empty());
 
     // every record unchanged is exit 0
-    let s = ops::verify_many(&paths[..1], None, connect, "t1", &Progress::silent());
+    let s = ops::verify_many(&paths[..1], None, connect, "t1", false, &Progress::silent());
     assert_eq!(s.summary.status, SummaryStatus::Unchanged);
     assert_eq!(s.exit_code(), 0);
 
     // an explicit project overrides every recorded scope, so one client serves every record
     scopes.borrow_mut().clear();
-    let s = ops::verify_many(&paths[..2], Some("p9"), connect, "t1", &Progress::silent());
+    let s = ops::verify_many(
+        &paths[..2],
+        Some("p9"),
+        connect,
+        "t1",
+        false,
+        &Progress::silent(),
+    );
     assert_eq!(*scopes.borrow(), vec![Some("p9".to_string())]);
     assert_eq!(s.summary.status, SummaryStatus::Drifted);
     assert_eq!(s.exit_code(), 1);
@@ -689,7 +696,7 @@ fn a_record_rebuilt_from_a_raw_directory_is_verified_in_its_own_project() {
             _ => MemoryApi::new(),
         }))
     };
-    let s = ops::verify_many(&[record], None, connect, "t2", &Progress::silent());
+    let s = ops::verify_many(&[record], None, connect, "t2", false, &Progress::silent());
     assert_eq!(
         *scopes.borrow(),
         vec![Some("p1".to_string())],
@@ -3494,6 +3501,7 @@ fn verify_names_a_cluster_value_changed_since_the_record_without_calling_it_drif
         None,
         |_| Ok(Palette::new(live.clone())),
         "t1",
+        false,
         &Progress::silent(),
     );
     assert_eq!(
@@ -3723,6 +3731,7 @@ fn verify_reports_a_version_overwritten_under_the_same_uid_even_when_the_root_ma
         None,
         |_| Ok(Palette::new(live.clone())),
         "t1",
+        false,
         &Progress::silent(),
     );
     assert_eq!(
@@ -4530,6 +4539,7 @@ fn verify_reports_drift_and_names_the_order_when_only_the_order_of_the_packs_cha
         None,
         |_| Ok(Palette::new(live.clone())),
         "t1",
+        false,
         &Progress::silent(),
     );
     assert_eq!(
@@ -4542,5 +4552,263 @@ fn verify_reports_drift_and_names_the_order_when_only_the_order_of_the_packs_cha
     assert!(
         lines.contains("no packs changed, the packs in another order"),
         "{lines}"
+    );
+}
+
+// ---- verify --who --------------------------------------------------------------------------
+
+/// One item of `GET /v1/audits`, in the shape Palette gives it.
+fn audit(uid: &str, time: &str, actor: Value, action: &str, content: Option<&str>) -> Value {
+    let mut spec = serde_json::json!({
+        "actionType": action,
+        "actor": actor,
+        "resource": {"kind": "clusterprofile", "uid": UID_A},
+    });
+    if let Some(c) = content {
+        spec["contentMsg"] = Value::from(c);
+    }
+    serde_json::json!({
+        "metadata": {"uid": uid, "creationTimestamp": time},
+        "spec": spec,
+    })
+}
+
+fn person() -> Value {
+    serde_json::json!({
+        "actorType": "user",
+        "user": {"firstName": "Sam", "lastName": "Rivera", "emailId": "sam@example.com", "uid": "u1"}
+    })
+}
+
+fn system() -> Value {
+    serde_json::json!({"actorType": "service", "serviceName": "system", "user": {}})
+}
+
+fn audits_page(items: Vec<Value>, next: &str) -> Value {
+    serde_json::json!({"items": items, "listmeta": {"continue": next, "limit": 100}})
+}
+
+const PROFILE_AUDITS: &str = "/v1/audits?resourceKind=clusterprofile&resourceUid=64f0000000000000000000a1&startTime=t0&limit=100";
+
+#[test]
+fn verify_who_reads_every_page_of_the_audit_log_and_lists_the_writes_oldest_first() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let recorded = ops::snapshot_from_dir(&dir.path().join("a"), "a", "t0").unwrap();
+    // Palette lists the newest first, 100 on a page, and names the next page in `continue`
+    let api = serve(MemoryApi::new(), dir.path(), "b", UID_A)
+        .with(
+            PROFILE_AUDITS,
+            audits_page(
+                vec![audit(
+                    "au3",
+                    "2026-09-18T15:00:00.000Z",
+                    system(),
+                    "update",
+                    Some("strata pack version is updated\n1.0.1 > 1.0.2"),
+                )],
+                "tok",
+            ),
+        )
+        .with(
+            format!("{PROFILE_AUDITS}&continue=tok"),
+            audits_page(
+                vec![audit(
+                    "au1",
+                    "2026-09-18T14:02:11.482Z",
+                    person(),
+                    "update",
+                    None,
+                )],
+                "",
+            ),
+        );
+    let v = ops::verify_with(
+        &recorded,
+        &Palette::new(&api),
+        "t1",
+        true,
+        &Progress::silent(),
+    )
+    .unwrap();
+    let ver = v.diff.verify.as_ref().unwrap();
+    let who = ver.who.as_ref().unwrap();
+    let got: Vec<(&str, &str, &str, &str, &str)> = who
+        .iter()
+        .map(|e| {
+            (
+                e.audit_uid.as_str(),
+                e.actor.as_str(),
+                e.actor_type.as_str(),
+                e.actor_uid.as_str(),
+                e.summary.as_str(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        got,
+        [
+            ("au1", "Sam Rivera", "user", "u1", ""),
+            (
+                "au3",
+                "system",
+                "service",
+                "",
+                "strata pack version is updated 1.0.1 > 1.0.2"
+            ),
+        ]
+    );
+    let verdict = render::renderer(Format::Terminal, Paint::off(), false)
+        .verdict(ver, &recorded.source)
+        .unwrap();
+    assert!(
+        verdict.ends_with(
+            "\nwho: 2 writes in the audit log since the record\n  \
+             2026-09-18T14:02:11.482Z  Sam Rivera (user)  update\n  \
+             2026-09-18T15:00:00.000Z  system (service)  update: strata pack version is updated 1.0.1 > 1.0.2"
+        ),
+        "{verdict}"
+    );
+    let json = serde_json::to_value(&v.diff).unwrap();
+    assert_eq!(json["verify"]["who"][0]["auditUid"], "au1");
+    assert_eq!(json["verify"]["who"][0]["actorType"], "user");
+    assert!(json["verify"]["who"][0].get("summary").is_none());
+}
+
+#[test]
+fn verify_who_says_so_when_the_log_holds_no_write_and_reads_nothing_for_an_unchanged_record() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let recorded = ops::snapshot_from_dir(&dir.path().join("a"), "a", "t0").unwrap();
+    let api = serve(MemoryApi::new(), dir.path(), "b", UID_A)
+        .with(PROFILE_AUDITS, audits_page(vec![], ""));
+    let v = ops::verify_with(
+        &recorded,
+        &Palette::new(&api),
+        "t1",
+        true,
+        &Progress::silent(),
+    )
+    .unwrap();
+    let ver = v.diff.verify.as_ref().unwrap();
+    assert_eq!(ver.who.as_deref(), Some(&[][..]));
+    let terminal = render::renderer(Format::Terminal, Paint::off(), false)
+        .verdict(ver, &recorded.source)
+        .unwrap();
+    assert!(
+        terminal.ends_with("\nwho: no audit entry since the record"),
+        "{terminal}"
+    );
+    let json = serde_json::to_value(&v.diff).unwrap();
+    assert_eq!(json["verify"]["who"], serde_json::json!([]));
+
+    // an unchanged record reads no audit log, and without --who a drifted one reads none either
+    let same = serve(MemoryApi::new(), dir.path(), "a", UID_A);
+    let v = ops::verify_with(
+        &recorded,
+        &Palette::new(&same),
+        "t1",
+        true,
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert!(v.unchanged && v.diff.verify.unwrap().who.is_none());
+    let v = ops::verify(&recorded, &Palette::new(&api), "t1", &Progress::silent()).unwrap();
+    assert!(v.diff.verify.unwrap().who.is_none());
+    assert_eq!(api.calls(PROFILE_AUDITS), 1);
+}
+
+#[test]
+fn verify_who_reads_the_audit_log_of_the_cluster_for_a_cluster_record() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let recorded = snapshot_cluster(
+        &serve_cluster(MemoryApi::new(), dir.path(), "cluster-a"),
+        None,
+    )
+    .unwrap();
+    let path = format!(
+        "/v1/audits?resourceKind=spectrocluster&resourceUid={CLUSTER_UID}&startTime=t0&limit=100"
+    );
+    let api = serve_cluster(MemoryApi::new(), dir.path(), "cluster-b").with(
+        path.clone(),
+        audits_page(
+            vec![audit(
+                "au1",
+                "2026-09-18T14:02:11.482Z",
+                person(),
+                "update",
+                None,
+            )],
+            "",
+        ),
+    );
+    let v = ops::verify_with(
+        &recorded,
+        &Palette::new(&api),
+        "t1",
+        true,
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert!(!v.unchanged);
+    assert_eq!(api.calls(&path), 1);
+    let who = v.diff.verify.unwrap().who.unwrap();
+    assert_eq!((who.len(), who[0].actor.as_str()), (1, "Sam Rivera"));
+}
+
+#[test]
+fn verify_who_encodes_a_time_with_an_offset_in_the_query() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let recorded =
+        ops::snapshot_from_dir(&dir.path().join("a"), "a", "2026-09-17T09:30:00+00:00").unwrap();
+    let path = "/v1/audits?resourceKind=clusterprofile&resourceUid=64f0000000000000000000a1&startTime=2026-09-17T09:30:00%2B00:00&limit=100";
+    let api = serve(MemoryApi::new(), dir.path(), "b", UID_A).with(path, audits_page(vec![], ""));
+    ops::verify_with(
+        &recorded,
+        &Palette::new(&api),
+        "t1",
+        true,
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert_eq!(api.calls(path), 1);
+}
+
+#[test]
+fn verify_who_names_the_last_write_on_the_summary_line_of_a_drifted_record() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let recorded = ops::snapshot_from_dir(&dir.path().join("a"), "a", "t0").unwrap();
+    let path = dir.path().join("rec.json");
+    fs::write(&path, recorded.to_json(true).unwrap()).unwrap();
+    let api = serve(MemoryApi::new(), dir.path(), "b", UID_A).with(
+        PROFILE_AUDITS,
+        audits_page(
+            vec![audit(
+                "au1",
+                "2026-09-18T14:02:11.482Z",
+                person(),
+                "update",
+                None,
+            )],
+            "",
+        ),
+    );
+    let s = ops::verify_many(
+        &[path],
+        None,
+        |_| Ok(Palette::new(api.clone())),
+        "t1",
+        true,
+        &Progress::silent(),
+    );
+    let text = render::renderer(Format::Terminal, Paint::off(), false)
+        .render_verify_summary(&s)
+        .unwrap();
+    assert!(
+        text.contains("; last write: Sam Rivera (user), update at 2026-09-18T14:02:11.482Z\n"),
+        "{text}"
     );
 }

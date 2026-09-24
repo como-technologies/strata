@@ -7,7 +7,7 @@ use super::{
     pack_version, pair_detail, pair_word, plain_flags, profiles_overwritten_sentence,
     project_label, record_detail, record_label, registry_note, same_content_note, short, show,
     subject, traits_suffix, values_changed, values_changed_suffix, variable_lines,
-    variables_comparable, variables_unavailable_note, version_display,
+    variables_comparable, variables_unavailable_note, version_display, who_entry, who_heading,
 };
 use crate::color::Paint;
 use crate::diff::{Diff, Leaf, Op, Status, Verify, VerifyStatus};
@@ -258,6 +258,17 @@ impl Renderer for MarkdownRenderer {
                     values_changed_suffix(v.cluster_values_changed)
                 ),
             },
+        })
+        .map(|mut line| {
+            if let Some(heading) = who_heading(v) {
+                line.push_str("\n\n");
+                line.push_str(&heading);
+                line.push('\n');
+                for e in v.who.iter().flatten() {
+                    line.push_str(&format!("\n- {}", escape(&who_entry(e))));
+                }
+            }
+            line
         })
     }
 

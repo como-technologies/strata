@@ -11,7 +11,8 @@ use serde_json::Value;
 use crate::api::{Palette, PaletteApi, RawCluster, RawProfile};
 use crate::candidate::LoadedCandidate;
 use crate::diff::{
-    self, ClusterProfileOverwritten, Diff, ImpactLevel, PackDiff, Status, Verify, VerifyStatus,
+    self, AuditEntry, ClusterProfileOverwritten, Diff, ImpactLevel, PackDiff, Status, Verify,
+    VerifyStatus,
 };
 use crate::error::{Error, Result};
 use crate::progress::Progress;
@@ -217,8 +218,24 @@ pub fn verify<A: PaletteApi>(
     checked_at: &str,
     progress: &Progress,
 ) -> Result<Verification> {
+    verify_with(recorded, palette, checked_at, false, progress)
+}
+
+/// [`verify`], and with `who`, for a profile or cluster record that drifted, the writes to it
+/// that the audit log of Palette holds since the record was taken, in `verify.who`.
+pub fn verify_with<A: PaletteApi>(
+    recorded: &Snapshot,
+    palette: &Palette<A>,
+    checked_at: &str,
+    who: bool,
+    progress: &Progress,
+) -> Result<Verification> {
     // a pack record names a registry pack, not a profile or a cluster
     if let Some(p) = &recorded.source.pack {
+        if who {
+            progress
+                .note("note: Palette keeps no audit log for a registry pack; --who reads nothing");
+        }
         progress.note(&format!(
             "verifying {} against its registry; recorded {}",
             recorded.source.title(),
@@ -247,6 +264,7 @@ pub fn verify<A: PaletteApi>(
             overwritten_by: None,
             profiles_overwritten: Vec::new(),
             cluster_values_changed: 0,
+            who: None,
         };
         let diff = diff::compute(recorded, &live, checked_at, Some(verify));
         return Ok(Verification {
@@ -297,14 +315,35 @@ pub fn verify<A: PaletteApi>(
         overwritten_by,
         profiles_overwritten,
         cluster_values_changed: 0,
+        who: None,
     };
     let mut diff = diff::compute(recorded, &live, checked_at, Some(verify));
     let values_changed = diff
         .cluster_variables
         .as_ref()
         .map_or(0, |c| c.values.len());
+    let who = if who && !unchanged {
+        let kind = match recorded.source.cluster {
+            Some(_) => "spectrocluster",
+            None => "clusterprofile",
+        };
+        progress.note(&format!(
+            "reading the audit log of {kind} {uid} since {}",
+            recorded.source.fetched_at
+        ));
+        let mut entries: Vec<AuditEntry> = palette
+            .audits(kind, uid, &recorded.source.fetched_at)?
+            .iter()
+            .map(AuditEntry::from_palette)
+            .collect();
+        entries.reverse(); // Palette lists the newest first
+        Some(entries)
+    } else {
+        None
+    };
     if let Some(v) = diff.verify.as_mut() {
         v.cluster_values_changed = values_changed;
+        v.who = who;
     }
     Ok(Verification {
         diff,
@@ -462,12 +501,14 @@ impl VerifySummary {
 
 /// Verify several records. Each record is checked in the project it was taken in, or in
 /// `project` when given; `connect` is called once per distinct scope. A record that cannot be
-/// read or checked is an `error` entry, and the other records are still checked.
+/// read or checked is an `error` entry, and the other records are still checked. `who` is as in
+/// [`verify_with`].
 pub fn verify_many<A, F>(
     paths: &[PathBuf],
     project: Option<&str>,
     mut connect: F,
     checked_at: &str,
+    who: bool,
     progress: &Progress,
 ) -> VerifySummary
 where
@@ -497,29 +538,31 @@ where
                 }
             },
         };
-        records.push(match verify(&recorded, palette, checked_at, progress) {
-            Ok(v) => VerifiedRecord {
-                path: path.display().to_string(),
-                status: if v.unchanged {
-                    RecordStatus::Unchanged
-                } else {
-                    RecordStatus::Drifted
+        records.push(
+            match verify_with(&recorded, palette, checked_at, who, progress) {
+                Ok(v) => VerifiedRecord {
+                    path: path.display().to_string(),
+                    status: if v.unchanged {
+                        RecordStatus::Unchanged
+                    } else {
+                        RecordStatus::Drifted
+                    },
+                    name: recorded.source.name.clone(),
+                    version: recorded.source.version.clone(),
+                    uid: recorded.source.uid.clone(),
+                    project_uid: scope.clone().unwrap_or_default(),
+                    recorded_at: recorded.source.fetched_at.clone(),
+                    root_recorded: recorded.root.clone(),
+                    root_live: Some(v.live.root.clone()),
+                    max_impact: (!v.unchanged).then_some(v.diff.summary.max_impact),
+                    packs_changed: (!v.unchanged).then_some(v.diff.summary.packs_changed),
+                    cluster_variables: v.diff.cluster_variables.clone().filter(|c| c.changed),
+                    diff: (!v.unchanged).then_some(v.diff),
+                    error: None,
                 },
-                name: recorded.source.name.clone(),
-                version: recorded.source.version.clone(),
-                uid: recorded.source.uid.clone(),
-                project_uid: scope.clone().unwrap_or_default(),
-                recorded_at: recorded.source.fetched_at.clone(),
-                root_recorded: recorded.root.clone(),
-                root_live: Some(v.live.root.clone()),
-                max_impact: (!v.unchanged).then_some(v.diff.summary.max_impact),
-                packs_changed: (!v.unchanged).then_some(v.diff.summary.packs_changed),
-                cluster_variables: v.diff.cluster_variables.clone().filter(|c| c.changed),
-                diff: (!v.unchanged).then_some(v.diff),
-                error: None,
+                Err(e) => VerifiedRecord::failed(path, Some(&recorded), e),
             },
-            Err(e) => VerifiedRecord::failed(path, Some(&recorded), e),
-        });
+        );
     }
     let count = |s: RecordStatus| records.iter().filter(|r| r.status == s).count();
     let (unchanged, drifted, errors) = (

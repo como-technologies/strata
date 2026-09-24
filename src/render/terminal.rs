@@ -7,7 +7,7 @@ use super::{
     pack_version, pair_detail, pair_word, profiles_overwritten_sentence, project_label,
     record_detail, record_label, registry_note, same_content_note, short, show, subject,
     tag_rename, traits_suffix, values_changed_suffix, variable_lines, variables_comparable,
-    variables_unavailable_note, version_display,
+    variables_unavailable_note, version_display, who_entry, who_heading,
 };
 use crate::color::Paint;
 use crate::diff::{
@@ -341,6 +341,17 @@ impl Renderer for TerminalRenderer {
                     values_changed_suffix(v.cluster_values_changed)
                 ),
             },
+        })
+        .map(|mut line| {
+            if let Some(heading) = who_heading(v) {
+                line.push('\n');
+                line.push_str(&heading);
+                for e in v.who.iter().flatten() {
+                    line.push_str("\n  ");
+                    line.push_str(&who_entry(e));
+                }
+            }
+            line
         })
     }
 

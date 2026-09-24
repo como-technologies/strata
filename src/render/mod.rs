@@ -439,6 +439,51 @@ fn record_profiles_overwritten(r: &crate::ops::VerifiedRecord) -> Option<String>
     profiles_overwritten_sentence(d.verify.as_ref()?, &d.a)
 }
 
+/// What `verify --who` found: `who: 2 writes in the audit log since the record`, or `who: no
+/// audit entry since the record`. `None` without `--who`.
+pub(crate) fn who_heading(v: &Verify) -> Option<String> {
+    let who = v.who.as_ref()?;
+    Some(if who.is_empty() {
+        "who: no audit entry since the record".to_string()
+    } else {
+        format!(
+            "who: {} in the audit log since the record",
+            count_of(who.len(), "write")
+        )
+    })
+}
+
+/// One write: `2026-09-18T14:02:11.482Z  Sam Rivera (user)  update`, and `: <summary>` when
+/// Palette gives one.
+pub(crate) fn who_entry(e: &crate::diff::AuditEntry) -> String {
+    let mut line = format!("{}  {} ({})  {}", e.time, e.actor, e.actor_type, e.action);
+    if !e.summary.is_empty() {
+        line.push_str(": ");
+        line.push_str(&e.summary);
+    }
+    line
+}
+
+/// What the summary line of a drifted record adds with `--who`: the last write, or that the log
+/// holds none.
+fn who_suffix(r: &crate::ops::VerifiedRecord) -> String {
+    let Some(who) = r
+        .diff
+        .as_ref()
+        .and_then(|d| d.verify.as_ref())
+        .and_then(|v| v.who.as_ref())
+    else {
+        return String::new();
+    };
+    match who.last() {
+        Some(e) => format!(
+            "; last write: {} ({}), {} at {}",
+            e.actor, e.actor_type, e.action, e.time
+        ),
+        None => "; no audit entry since the record".to_string(),
+    }
+}
+
 pub(crate) fn record_detail(r: &crate::ops::VerifiedRecord) -> String {
     use crate::ops::RecordStatus;
     match r.status {
@@ -448,18 +493,20 @@ pub(crate) fn record_detail(r: &crate::ops::VerifiedRecord) -> String {
             values_changed_suffix(record_values_changed(r))
         ),
         RecordStatus::Drifted if record_profiles_overwritten(r).is_some() => format!(
-            "{}{}",
+            "{}{}{}",
             record_profiles_overwritten(r).unwrap_or_default(),
-            values_changed_suffix(record_values_changed(r))
+            values_changed_suffix(record_values_changed(r)),
+            who_suffix(r)
         ),
         RecordStatus::Drifted if overwritten_by(r).is_some() => format!(
-            "now names {}: the version recorded {} was overwritten in place{}",
+            "now names {}: the version recorded {} was overwritten in place{}{}",
             overwritten_by(r).unwrap_or_default(),
             r.recorded_at,
-            values_changed_suffix(record_values_changed(r))
+            values_changed_suffix(record_values_changed(r)),
+            who_suffix(r)
         ),
         RecordStatus::Drifted => format!(
-            "differs from the copy recorded {}; max impact {}, {} changed{}{}",
+            "differs from the copy recorded {}; max impact {}, {} changed{}{}{}",
             r.recorded_at,
             r.max_impact
                 .and_then(|l| serde_json::to_value(l).ok())
@@ -473,7 +520,8 @@ pub(crate) fn record_detail(r: &crate::ops::VerifiedRecord) -> String {
             } else {
                 ""
             },
-            values_changed_suffix(record_values_changed(r))
+            values_changed_suffix(record_values_changed(r)),
+            who_suffix(r)
         ),
         RecordStatus::Error => r
             .error

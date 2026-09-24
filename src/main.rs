@@ -204,6 +204,9 @@ struct VerifyArgs {
     /// One line for each record and a summary, also for one file
     #[arg(long)]
     summary: bool,
+    /// For a record that drifted, read who changed it, and when, from the audit log of Palette
+    #[arg(long)]
+    who: bool,
     #[command(flatten)]
     out: OutputArgs,
 }
@@ -700,6 +703,7 @@ fn cmd_verify(a: &VerifyArgs) -> Result<ExitCode> {
             project.as_deref(),
             |scope| connect(progress, scope),
             &now_utc(),
+            a.who,
             &progress,
         );
         print!("{}", a.out.renderer().render_verify_summary(&s)?);
@@ -710,7 +714,7 @@ fn cmd_verify(a: &VerifyArgs) -> Result<ExitCode> {
         .as_deref()
         .or(Some(recorded.source.project_uid.as_str()).filter(|p| !p.is_empty()));
     let palette = connect(progress, scope)?;
-    let v = ops::verify(&recorded, &palette, &now_utc(), &progress)?;
+    let v = ops::verify_with(&recorded, &palette, &now_utc(), a.who, &progress)?;
     let renderer = a.out.renderer();
     print!("{}", renderer.render(&v.diff, &recorded, &v.live, false)?);
     if let Some(line) = v

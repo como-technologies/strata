@@ -521,6 +521,76 @@ pub struct Verify {
     /// record. They do not change `status`.
     #[serde(default, skip_serializing_if = "is_zero")]
     pub cluster_values_changed: usize,
+    /// With `--who`, for a drifted profile or cluster record: each write to the profile, or to the
+    /// cluster, that the audit log of Palette holds from `recordedAt`, oldest first. Empty when
+    /// the log holds none. Absent without `--who`, for an unchanged record, and for a pack record.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub who: Option<Vec<AuditEntry>>,
+}
+
+/// One write to a profile or a cluster, as the audit log of Palette holds it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AuditEntry {
+    /// When Palette logged the write, as Palette gives it.
+    pub time: String,
+    /// Who wrote: the name of a user, else the email or the uid of the user; or the name of a
+    /// Palette service, such as `system` or `cluster-agent`.
+    pub actor: String,
+    /// `user` or `service`, as Palette gives it.
+    pub actor_type: String,
+    /// The uid of the user; empty for a service.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub actor_uid: String,
+    /// `create`, `update`, `delete`, `activity`, or `action`, as Palette gives it.
+    pub action: String,
+    /// What Palette says changed, when it says it. Palette writes one for some writes of a
+    /// service, such as a floating tag that moved, and none for an edit through the API.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub summary: String,
+    /// The uid of the entry: `GET /v1/audits/{uid}` reads it again. Palette gives no request id.
+    pub audit_uid: String,
+}
+
+impl AuditEntry {
+    /// Read one item of `GET /v1/audits`.
+    pub fn from_palette(item: &Value) -> AuditEntry {
+        let text = |ptr: &str| {
+            item.pointer(ptr)
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .trim()
+                .to_string()
+        };
+        let actor_type = text("/spec/actor/actorType");
+        let full_name = format!(
+            "{} {}",
+            text("/spec/actor/user/firstName"),
+            text("/spec/actor/user/lastName")
+        );
+        let actor = [
+            full_name.trim().to_string(),
+            text("/spec/actor/user/emailId"),
+            text("/spec/actor/user/uid"),
+            text("/spec/actor/serviceName"),
+        ]
+        .into_iter()
+        .find(|s| !s.is_empty())
+        .unwrap_or_else(|| actor_type.clone());
+        AuditEntry {
+            time: text("/metadata/creationTimestamp"),
+            actor,
+            actor_type,
+            actor_uid: text("/spec/actor/user/uid"),
+            action: text("/spec/actionType"),
+            // a summary can span lines, as a list of the values that changed does
+            summary: text("/spec/contentMsg")
+                .split_whitespace()
+                .collect::<Vec<_>>()
+                .join(" "),
+            audit_uid: text("/metadata/uid"),
+        }
+    }
 }
 
 /// A profile a cluster runs whose uid no longer names the version the cluster's copy names.

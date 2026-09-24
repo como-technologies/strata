@@ -638,6 +638,20 @@ fn named_entries(listing: &Value) -> Vec<(String, String)> {
         .collect()
 }
 
+/// `text` as a value in a query string: each byte that is not a letter, a digit, or one of
+/// `-._~:` becomes `%XX`, so a time with `+00:00` keeps its `+`.
+fn query_value(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    for b in text.bytes() {
+        if b.is_ascii_alphanumeric() || b"-._~:".contains(&b) {
+            out.push(b as char);
+        } else {
+            out.push_str(&format!("%{b:02X}"));
+        }
+    }
+    out
+}
+
 /// The names of `entries`, sorted.
 fn sorted_names(entries: &[(String, String)]) -> Vec<String> {
     let mut names: Vec<String> = entries.iter().map(|(n, _)| n.clone()).collect();
@@ -823,6 +837,49 @@ impl<A: PaletteApi> Palette<A> {
     /// `projectUid` annotation, and its state in `status.state`.
     pub fn cluster_document(&self, uid: &str) -> Result<Value> {
         self.api.get_json(&format!("/v1/spectroclusters/{uid}"))
+    }
+
+    /// The entries of the audit log of Palette for one resource, `GET /v1/audits`, that it logged
+    /// at `since` or after, every page. `kind` is `clusterprofile` or `spectrocluster`. Palette
+    /// lists them newest first, and at most 100 on a page; `listmeta.continue` names the next
+    /// page, and is empty on the last one. An empty `since` reads the full log of the resource.
+    pub fn audits(&self, kind: &str, uid: &str, since: &str) -> Result<Vec<Value>> {
+        let mut query = format!(
+            "resourceKind={}&resourceUid={}",
+            query_value(kind),
+            query_value(uid)
+        );
+        if !since.is_empty() {
+            query.push_str(&format!("&startTime={}", query_value(since)));
+        }
+        query.push_str("&limit=100");
+        let mut entries = Vec::new();
+        let mut next = String::new();
+        loop {
+            let page = if next.is_empty() {
+                self.api.get_json(&format!("/v1/audits?{query}"))?
+            } else {
+                self.api.get_json(&format!(
+                    "/v1/audits?{query}&continue={}",
+                    query_value(&next)
+                ))?
+            };
+            let items = page
+                .get("items")
+                .and_then(Value::as_array)
+                .cloned()
+                .unwrap_or_default();
+            let done = items.is_empty();
+            entries.extend(items);
+            next = page
+                .pointer("/listmeta/continue")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string();
+            if next.is_empty() || done {
+                return Ok(entries);
+            }
+        }
     }
 
     /// The cluster summary, `GET /v1/dashboard/spectroclusters/{uid}`: what the dashboard shows
