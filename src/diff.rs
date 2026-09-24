@@ -544,8 +544,7 @@ pub struct AuditEntry {
     pub actor_uid: String,
     /// `create`, `update`, `delete`, `activity`, or `action`, as Palette gives it.
     pub action: String,
-    /// What Palette says changed, when it says it. Palette writes one for some writes of a
-    /// service, such as a floating tag that moved, and none for an edit through the API.
+    /// What Palette says changed, when it says it, such as the manifest that an edit changed.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub summary: String,
     /// The uid of the entry: `GET /v1/audits/{uid}` reads it again. Palette gives no request id.

@@ -1,0 +1,11 @@
+$ strata verify releases/1.1.1/dev.json --who --json | jq '.verify.who'
+[
+  {
+    "time": "2026-09-18T14:02:11.482Z",
+    "actor": "John Doe",
+    "actorType": "user",
+    "actorUid": "64fb00000000000000000001",
+    "action": "update",
+    "auditUid": "64fa00000000000000000001"
+  }
+]

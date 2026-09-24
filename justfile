@@ -177,6 +177,10 @@ live-cluster: build
 live-order: build
     examples/live/order.sh
 
+# The audit log test: who made an edit through the API, and an update a cluster accepted (#69). Needs live-profiles; the cluster stage needs live-up. Undoes each edit.
+live-who: build
+    examples/live/who.sh
+
 # The scripts run in order from the baseline: verify.sh, in-place.sh off, in-place.sh on (against
 # that off run), and registry-move.sh. The recipe stops at the first script that fails. Billable:
 # about 3 to 4 hours, with cluster B two times.

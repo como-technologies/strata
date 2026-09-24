@@ -130,6 +130,12 @@ A comparison of two sides, `a` and `b`.
     runs whose uid names another version now, or no longer exists: `uid`,
     `name`, `clusterVersion`, and `profileVersion` (empty for a uid that is
     gone). The status is `drifted`.
+  - `who`, only with `--who` and for a drifted profile or cluster record: each
+    write to the profile, or to the cluster, that the audit log of Palette
+    holds since `recordedAt`, oldest first: `time`, `actor`, `actorType`
+    (`user` or `service`), `actorUid` (for a user), `action`, `summary` (when
+    Palette gives one), and `auditUid`. An empty list means the log holds no
+    write since the record.
 
 Each changed value is a leaf with `op`, `path`, `segments`, `old`, and `new`. A
 leaf is a scalar or an empty container. The path joins keys with a dot. A list

@@ -175,7 +175,8 @@ This is why [`strata verify`](../commands/verify.md) exists. A record of a
 version from before a person's edit, or from before a floating tag moved, exits
 `1` with `DRIFT`, and names the change. A record of a cluster's copy from before
 the cluster accepted an update does the same. `DRIFT` says that the object
-changed. It does not say who changed it.
+changed. The audit log of Palette says who changed it, and when: see
+[The audit log](#the-audit-log).
 
 An edit through the API keeps the uid of each manifest. The live example sends
 each uid back, and a cluster copy still names it.
@@ -186,6 +187,35 @@ order, and audited as an update of the profile. Palette accepts it for the four
 infrastructure layers of a version a cluster runs as well: the CSI layer first
 and the OS layer last. `verify` on a record from before reports `DRIFT` and
 `note: pack order changed between the two profiles`.
+
+## The audit log
+
+Palette logs each write to a profile and to a cluster.
+`GET /v1/audits?resourceKind=<kind>&resourceUid=<uid>&startTime=<time>` lists
+the writes to one resource since a time, newest first, at most 100 on a page.
+`listmeta.continue` names the next page, and is empty on the last one. The kind
+is `clusterprofile` or `spectrocluster`. Each entry gives the time, the action
+(`create`, `update`, `delete`, `activity`, or `action`), and the actor: a user,
+with a name and a uid, or a Palette service, with a name. Some entries also
+give `contentMsg`, a summary of the change. An entry has a uid, and no request
+id. [`verify --who`](../commands/verify.md#who-changed-it) reads this log.
+
+An edit in place through the API, a `PUT` of the version and then its publish,
+is one entry: an `update` by the user who owns the key, with a summary that
+names the manifest that changed.
+
+The log does not hold the content of the change. The record holds it.
+
+A floating tag that moves is logged too. When a profile pins a pack under
+`1.0.x` and the registry gets `1.0.2`, the sync that reads it gives the profile
+two entries: an `update` by the Palette service `system` with no summary, and
+one whose summary names the pack and both versions, such as `version is updated
+1.0.1 > 1.0.2`. No person is in either entry.
+
+A cluster that accepts an update through the API gives the cluster one entry:
+an `update` by the user who sent the `PUT`, with a summary that names the uid
+of the profile and the manifest that changed. The entry names who accepted the
+update. The edit of the profile before it is an entry of the profile.
 
 ## Cluster copies
 

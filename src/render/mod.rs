@@ -453,7 +453,7 @@ pub(crate) fn who_heading(v: &Verify) -> Option<String> {
     })
 }
 
-/// One write: `2026-09-18T14:02:11.482Z  Sam Rivera (user)  update`, and `: <summary>` when
+/// One write: `2026-09-18T14:02:11.482Z  John Doe (user)  update`, and `: <summary>` when
 /// Palette gives one.
 pub(crate) fn who_entry(e: &crate::diff::AuditEntry) -> String {
     let mut line = format!("{}  {} ({})  {}", e.time, e.actor, e.actor_type, e.action);

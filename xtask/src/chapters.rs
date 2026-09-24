@@ -758,6 +758,24 @@ fn use_cases(r: &mut Runner) {
         false,
         "strata verify releases/1.1.1/dev.json",
     );
+    // the same drift, and who made it: the page teaches the lines that --who adds
+    r.step(
+        "edited-verify-who-full",
+        1,
+        false,
+        "strata verify releases/1.1.1/dev.json --who",
+    );
+    r.excerpt(
+        "edited-verify-who",
+        "edited-verify-who-full",
+        r"^(aws-stack|DRIFT|who:|  \d{4}-)",
+    );
+    r.step(
+        "edited-verify-who-json",
+        1,
+        false,
+        "strata verify releases/1.1.1/dev.json --who --json | jq '.verify.who'",
+    );
     r.step(
         "edited-compare",
         1,

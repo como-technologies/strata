@@ -12,7 +12,7 @@
 #   3  push 1.0.0 again with other bytes, and sync: the pack listing, the record of the pack, and
 #      the published profile, each against its record from before the push
 #   4  push 1.0.1 and sync: the profile pinned to 1.0.0 stays; and the floating tag, when the
-#      registry lists one
+#      registry lists one, and who the audit log of Palette says moved the profile (#69)
 #   5  a chart in the example's own OCI Helm registry: the digest Palette lists for it, and what a
 #      push again does to the listing and to a profile that pins it
 #   6  a pack that requires another pack: whether a profile that holds the one and not the other
@@ -184,6 +184,12 @@ if [ -n "$floating" ]; then
   check sync-4 0 "Palette reads $REG_NAME again" -- "$live/api.sh" sync-oci "$REG"
   check floating-moves 1 "#66: the profile pinned under the floating tag moves to 1.0.2, after the sync: its record reports DRIFT" -- \
     wait_drift profile-3.json
+  check floating-who 1 "#69: verify --who on the same record reads the audit log of the profile" -- \
+    "$strata" verify profile-3.json --who
+  check floating-who-system 0 "#69: the log names the move: an update by the Palette service system" -- \
+    grep -Eq '^  [0-9TZ:.-]+  system \(service\)  update' floating-who.out
+  check floating-who-versions 0 "#69: its summary names the two versions" -- \
+    grep -Eq '^  [0-9TZ:.-]+  system \(service\)  update: .*1\.0\.1 > 1\.0\.2' floating-who.out
 else
   printf '%-4s  %-32s %s\n' SEEN floating "$REG_NAME lists no floating tag for $PACK, so the floating tag case does not apply to this registry kind" | tee -a steps.log
   printf '%s\t%s\n' floating "no floating tag in this registry kind; the case does not apply" >> checks.tsv

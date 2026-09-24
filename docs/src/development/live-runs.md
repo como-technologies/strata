@@ -293,6 +293,7 @@ shows. It then asks Palette to read the registry again after each push.
 | `profile-stays` | 0 | #66: the profile pinned to 1.0.0 does not move to 1.0.1 |
 | `profile-floating`, `push-4`, `sync-4` | 0 | a profile pins the pack under `1.0.x`, and 1.0.2 is pushed, which the tag now names |
 | `floating-moves` | 1 | #66: the profile pinned under the floating tag moves with it. The script verifies its record again until it reports `DRIFT`, for up to ten minutes |
+| `floating-who`, `floating-who-system`, `floating-who-versions` | 1, 0, 0 | #69: `verify --who` on the same record reads the audit log of the profile: updates by the Palette service `system`, one of which names the two versions, `1.0.1 > 1.0.2` |
 | `chart-empty` | 0 | the chart repository starts empty, and two applies remove the Palette registry over it and make it again, so Palette reads the chart for the first time |
 | `chart-push-1`, `chart-sync-1`, `chart-packs`, `chart-leaf` | 0 | `strata-live-chart` 1.0.0 is pushed with `helm push` into the example's OCI Helm registry, Palette reads it, and `packs` and `snapshot` read the chart as a pack of type `oci` |
 | `chart-digest` | 0 | #66: Palette lists the manifest digest of the push for a chart in an OCI registry, as for a pack, not the digest of the chart archive |
@@ -370,6 +371,23 @@ way.
 | `release-verify`, `release-verify-says` | 1, 0 | #66: the record from before reports `DRIFT`, and the report says `pack order changed` |
 | `reorder-cluster`, `cluster-order-kept`, `cluster-audited` | 0 | #66: a `PUT` of the cluster's profiles in the other order is accepted, the document keeps the stored order, and the audit log has an update of the cluster all the same |
 | `cluster-verify` | 0 | #66: the cluster record verifies: strata orders the profiles itself, so a stored order is never a change |
+
+## who.sh
+
+Read-write. Stage 1 needs the profiles and no cluster. Stage 2 needs cluster A,
+and records nothing without it. Each stage makes one edit in place through the
+API, reads what `verify --who` says, and puts the edit back.
+
+| Check | Expected exit | What it shows |
+|---|---|---|
+| `record`, `unchanged-who`, `unchanged-no-line` | 0, 0, 1 | #69: a record that is unchanged reads no audit log, and the output has no `who:` line |
+| `api-edit`, `edit-who`, `edit-who-says` | 0, 1, 0 | #69: after an edit in place, the record reports `DRIFT`, and `--who` lists the writes since the record |
+| `edit-who-person` | 0 | #69: the edit is one `update` by the user who owns the key, with a summary that names the manifest |
+| `edit-who-json` | 0 | #69: `verify.who` in `--json` ends with that update: `actorType` `user`, an `actorUid`, and a time after the record |
+| `api-undo`, `restored` | 0 | the edit is put back, and the record verifies again |
+| `cluster-record`, `cluster-edit`, `cluster-apply` | 0 | record cluster A, edit the add-on version it runs, and accept the update on the cluster through the API |
+| `cluster-who`, `cluster-who-says`, `cluster-who-person`, `cluster-who-json` | 1, 0, 0, 0 | #69: the cluster record reports `DRIFT`, and `--who` reads the audit log of the cluster: an `update` by the user who accepted it |
+| `cluster-restored` | 0 | the edit is put back and accepted again, and the cluster record verifies |
 
 ## What has no live run
 

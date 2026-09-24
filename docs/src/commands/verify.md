@@ -26,6 +26,41 @@ content. [What Palette does](../internals/palette.md#edits-in-place) names who
 can change it. See
 [A published version is edited in place](../use-cases/edited-in-place.md).
 
+## Who changed it
+
+`DRIFT` says that the object changed. It does not say who changed it, or when.
+`--who` reads that from the audit log of Palette: for a record that drifted,
+strata reads each write to the profile, or to the cluster of a cluster record,
+since the record was taken. Palette has who and when. The record has what the
+content was.
+
+```text
+{{#include ../output/edited-verify-who.txt}}
+```
+
+Each line gives the time, the actor, the actor type, and the action, oldest
+first. The actor is the name of a person (`user`), or the name of a Palette
+service (`service`), such as `system`. When Palette logs a summary of the
+change, the line ends with it. When the log holds no write since the record,
+the line is `who: no audit entry since the record`.
+
+```text
+{{#include ../output/edited-verify-who-json.txt}}
+```
+
+`--json` puts the same entries in `verify.who`. Each entry has `time`, `actor`,
+`actorType`, `actorUid` for a person, `action`, `summary` when Palette gives
+one, and `auditUid`. Palette gives no request id: `auditUid` names the entry,
+and `GET /v1/audits/{auditUid}` reads it again.
+
+- Strata reads the log only for a record that drifted. An unchanged record
+  costs no request.
+- With many records, the line of a drifted record ends with the last write.
+- Palette keeps no audit log for a pack in a registry. `--who` reads nothing
+  for a pack record.
+- What the log holds for each writer:
+  [The audit log](../internals/palette.md#the-audit-log).
+
 ## Check many records
 
 Give two or more files, or a pattern in quotes. Strata expands the pattern, so

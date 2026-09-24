@@ -11,6 +11,8 @@
 //! GET <path>?<query>    ...                 ->  <root>/.../<path>@<query>.json
 //! ```
 //!
+//! The query leaves out `startTime` and `endTime`: see `without_time`.
+//!
 //! When the file does not exist, the answer is HTTP 404 with the body that Palette gives. The
 //! server reads each file at each request, so the runner can change the tenant between two
 //! commands, and a page can show what Palette does after an edit in place.
@@ -125,15 +127,26 @@ fn file_for(root: &Path, project: Option<&str>, target: &str) -> Option<PathBuf>
     if path.is_empty() || path.split('/').any(|p| p == ".." || p.is_empty()) {
         return None;
     }
-    let name = match query {
-        Some(q) => format!("{path}@{}", percent_decode(q)),
-        None => path,
+    let name = match query.map(without_time) {
+        Some(q) if !q.is_empty() => format!("{path}@{}", percent_decode(&q)),
+        _ => path,
     };
     let scope = project.filter(|p| !p.is_empty()).unwrap_or("tenant");
     if scope.contains('/') || scope == ".." {
         return None;
     }
     Some(root.join(scope).join(name + ".json"))
+}
+
+/// The query without `startTime` and `endTime`. A command sends the real time, as `verify --who`
+/// sends the time of its record, and a file name cannot hold it. The server gives the full audit
+/// log of a resource, and the tenant logs a write only after a record.
+fn without_time(query: &str) -> String {
+    query
+        .split('&')
+        .filter(|p| !p.starts_with("startTime=") && !p.starts_with("endTime="))
+        .collect::<Vec<_>>()
+        .join("&")
 }
 
 fn percent_decode(text: &str) -> String {
@@ -192,6 +205,20 @@ mod tests {
         assert_eq!(
             got.unwrap(),
             Path::new("/r/p1/v1/packs@filters=a=b&limit=1.json")
+        );
+    }
+
+    /// The time in a query is the real time, so the file name leaves it out.
+    #[test]
+    fn a_query_leaves_out_the_time() {
+        let got = file_for(
+            Path::new("/r"),
+            Some("p1"),
+            "/v1/audits?resourceKind=clusterprofile&resourceUid=u1&startTime=2026-09-24T10:00:00Z&limit=100",
+        );
+        assert_eq!(
+            got.unwrap(),
+            Path::new("/r/p1/v1/audits@resourceKind=clusterprofile&resourceUid=u1&limit=100.json")
         );
     }
 

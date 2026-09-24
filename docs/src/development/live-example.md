@@ -81,6 +81,7 @@ its end.
 | `template.sh` | The cluster template test (#66): the lock on a linked version, a cluster outside the template, and the install order of add-on packs. It ends with the removal of the example. |
 | `cluster.sh` | The cluster test (#66): a change of the value the cluster gives a variable, and a deletion through the API. It ends with the cluster gone. |
 | `order.sh` | The order test (#66): a reorder of the packs of two published versions, and of the profiles of the cluster, through the API. It leaves the versions edited; `live-down` follows it. |
+| `who.sh` | The audit log test (#69): who made an edit through the API, and an update that a cluster accepted, as `verify --who` reads them. |
 | `aws-inventory.sh` | What the cluster still has in AWS, to confirm a teardown. |
 
 ## Design
@@ -103,6 +104,7 @@ they found it. `packs.sh` and `knurl.sh` read the profiles and change nothing.
 `pack-states.sh` asks for three profiles, and deletes the one that Palette
 creates at once.
 `merge-gate.sh` makes one edit in place, and puts it back.
+`who.sh` makes one edit in place at a time, and puts each back.
 `registry.sh` leaves the pushed versions in its own registry.
 `template.sh` ends with the example removed, `cluster.sh` ends with the cluster
 gone, and `order.sh` leaves two versions edited: run `just live-down` after
@@ -123,6 +125,7 @@ each.
 | `template.sh` | a template over the release and add-on versions; then the release version, in place | the pack versions; it ends with the example removed |
 | `cluster.sh` | the value cluster A gives one variable; then the cluster, deleted through the API | the profiles |
 | `order.sh` | the pack order of two published versions, and the profile order of cluster A | the packs, the values, the manifests; it leaves the versions edited |
+| `who.sh` | the add-on version, edited in place and put back; with a cluster, the update that cluster A accepts, and its undo | the profiles, the clusters |
 
 **One definition for each kind.** Clusters A and B come from one resource, and
 differ only in their names. Each profile has the same lifecycle:

@@ -291,7 +291,8 @@ impl Tenant {
         self.listings();
     }
 
-    /// Change a published profile in place, as an edit through the API does.
+    /// Change a published profile in place, as an edit through the API does, and log the write
+    /// in the audit log, as Palette does.
     pub fn edit(&self, project: &str, uid: &str, edits: &[Edit]) {
         let path = format!("v1/clusterprofiles/{uid}");
         let mut doc = self.read(project, &path);
@@ -299,7 +300,47 @@ impl Tenant {
             edit.apply(&mut doc);
         }
         self.write(project, &path, &doc);
+        self.log_write(project, "clusterprofile", uid, &doc);
         self.listings();
+    }
+
+    /// Add one entry to the audit log of a resource: an update by the person of the examples.
+    /// The server leaves the time out of the query, so one file holds the log of the resource,
+    /// newest first, as Palette lists it. Each entry is one minute after the one before it.
+    fn log_write(&self, project: &str, kind: &str, uid: &str, doc: &Value) {
+        let path = format!("v1/audits@resourceKind={kind}&resourceUid={uid}&limit=100");
+        let mut log = if self.doc(project, &path).is_file() {
+            self.read(project, &path)
+        } else {
+            json!({"items": [], "listmeta": {"continue": "", "limit": 100}})
+        };
+        let items = log["items"].as_array_mut().expect("an audit log has items");
+        let n = items.len();
+        let name = doc["metadata"]["name"].as_str().unwrap_or_default();
+        items.insert(
+            0,
+            json!({
+                "metadata": {
+                    "uid": format!("64fa{:020x}", n + 1),
+                    "creationTimestamp": format!("2026-09-18T14:{:02}:11.482Z", 2 + n),
+                },
+                "spec": {
+                    "actionMsg": format!("John Doe updated {name} Profile"),
+                    "actionType": "update",
+                    "actor": {
+                        "actorType": "user",
+                        "user": {
+                            "emailId": "john.doe@example.com",
+                            "firstName": "John",
+                            "lastName": "Doe",
+                            "uid": "64fb00000000000000000001",
+                        },
+                    },
+                    "resource": {"kind": kind, "label": "Profile", "name": name, "uid": uid},
+                },
+            }),
+        );
+        self.write(project, &path, &log);
     }
 
     /// Create a cluster that runs `profiles` in order, with its own copy of what each profile

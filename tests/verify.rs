@@ -4576,7 +4576,7 @@ fn audit(uid: &str, time: &str, actor: Value, action: &str, content: Option<&str
 fn person() -> Value {
     serde_json::json!({
         "actorType": "user",
-        "user": {"firstName": "Sam", "lastName": "Rivera", "emailId": "sam@example.com", "uid": "u1"}
+        "user": {"firstName": "John", "lastName": "Doe", "emailId": "john.doe@example.com", "uid": "u1"}
     })
 }
 
@@ -4648,7 +4648,7 @@ fn verify_who_reads_every_page_of_the_audit_log_and_lists_the_writes_oldest_firs
     assert_eq!(
         got,
         [
-            ("au1", "Sam Rivera", "user", "u1", ""),
+            ("au1", "John Doe", "user", "u1", ""),
             (
                 "au3",
                 "system",
@@ -4664,7 +4664,7 @@ fn verify_who_reads_every_page_of_the_audit_log_and_lists_the_writes_oldest_firs
     assert!(
         verdict.ends_with(
             "\nwho: 2 writes in the audit log since the record\n  \
-             2026-09-18T14:02:11.482Z  Sam Rivera (user)  update\n  \
+             2026-09-18T14:02:11.482Z  John Doe (user)  update\n  \
              2026-09-18T15:00:00.000Z  system (service)  update: strata pack version is updated 1.0.1 > 1.0.2"
         ),
         "{verdict}"
@@ -4754,7 +4754,7 @@ fn verify_who_reads_the_audit_log_of_the_cluster_for_a_cluster_record() {
     assert!(!v.unchanged);
     assert_eq!(api.calls(&path), 1);
     let who = v.diff.verify.unwrap().who.unwrap();
-    assert_eq!((who.len(), who[0].actor.as_str()), (1, "Sam Rivera"));
+    assert_eq!((who.len(), who[0].actor.as_str()), (1, "John Doe"));
 }
 
 #[test]
@@ -4808,7 +4808,7 @@ fn verify_who_names_the_last_write_on_the_summary_line_of_a_drifted_record() {
         .render_verify_summary(&s)
         .unwrap();
     assert!(
-        text.contains("; last write: Sam Rivera (user), update at 2026-09-18T14:02:11.482Z\n"),
+        text.contains("; last write: John Doe (user), update at 2026-09-18T14:02:11.482Z\n"),
         "{text}"
     );
 }
