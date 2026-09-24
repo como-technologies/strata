@@ -48,9 +48,9 @@ The cluster `workload-a` runs `aws-stack@1.1.0`, so its snapshot has the root of
 the 1.1.0 record.
 
 Between 1.0.0 and 1.1.0, the OS pack moves from 20.04 to 24.04 with `IDENTITY
-UPSTREAM` but no `AUTHORED`: the values of the two versions differ only in one
-comment line, and the canonical form ignores it. The Cilium pack moves from
-1.19.6 to 1.20.1 with many changed values: a chart upgrade, value by value.
+UPSTREAM` and no `AUTHORED`. The values of the two versions differ in one comment
+line, and the canonical form drops it. The Cilium pack moves from 1.19.6 to
+1.20.1 with many changed values: a chart upgrade, value by value.
 
 ## What was fetched
 

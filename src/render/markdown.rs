@@ -304,14 +304,27 @@ impl Renderer for MarkdownRenderer {
 
     fn render_consumers(&self, r: &ConsumersReport) -> Result<String> {
         let mut o = format!("### consumers: {}\n\n", consumers_heading(r));
+        // The consumer list of a profile is empty on an error too, so the second reading says
+        // how far it got.
+        let read = &r.clusters_read;
+        let second = match entry_error(read.error.as_ref()) {
+            Some(msg) => format!("Second reading: not done ({}).", escape(msg)),
+            None => format!(
+                "Second reading: {} of {} clusters read.",
+                read.read,
+                read.read + read.unread
+            ),
+        };
         if r.consumers.is_empty() {
+            o.push_str(&second);
+            o.push('\n');
             return Ok(o);
         }
         o.push_str("| cluster | uid | project | state | runs |\n|---|---|---|---|---|\n");
         for c in &r.consumers {
             // an empty version means two things: the cluster named none, or strata could not read
             // the cluster at all. `-` states the first for both, so the error decides the cell.
-            let runs = if let Some(msg) = entry_error(c.error.as_ref()) {
+            let mut runs = if let Some(msg) = entry_error(c.error.as_ref()) {
                 format!("not read: {}", escape(msg))
             } else if c.version.is_empty() {
                 "-".to_string()
@@ -320,6 +333,9 @@ impl Renderer for MarkdownRenderer {
             } else {
                 format!("`{}`", escape(&c.version))
             };
+            if c.unlisted {
+                runs.push_str(" (not in the consumer list of the profile)");
+            }
             o.push_str(&format!(
                 "| `{}` | `{}` | `{}` | {} | {runs} |\n",
                 escape(dash(&c.name)),
@@ -328,6 +344,8 @@ impl Renderer for MarkdownRenderer {
                 escape(&c.state)
             ));
         }
+        o.push('\n');
+        o.push_str(&second);
         o.push('\n');
         Ok(o)
     }

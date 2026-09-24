@@ -434,8 +434,29 @@ impl Renderer for TerminalRenderer {
             {
                 out.push_str(&format!("  {}", p.dim(&format!("({msg})"))));
             }
+            if c.unlisted {
+                out.push_str(&format!(
+                    "  {}",
+                    p.byellow("not in the consumer list of the profile")
+                ));
+            }
             out.push('\n');
         }
+        // The consumer list of a profile is empty on an error too, so the second reading says
+        // how far it got.
+        let read = &r.clusters_read;
+        let second = match read.error.as_ref().and_then(|e| e.get("message")) {
+            Some(msg) => format!(
+                "second reading: not done ({})",
+                msg.as_str().unwrap_or("error")
+            ),
+            None => format!(
+                "second reading: {} of {} clusters read",
+                read.read,
+                read.read + read.unread
+            ),
+        };
+        out.push_str(&format!("  {}\n", p.dim(&second)));
         Ok(out)
     }
 

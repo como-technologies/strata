@@ -6,13 +6,13 @@ Usage: strata <COMMAND>
 
 Commands:
   candidate     Write a candidate file from a profile version or a record
-  compare       Compare two profile versions, records, or clusters
+  compare       Compare two profile versions, records, clusters, or pack versions
   consumers     List the clusters that use a profile version
   list          List the profile versions, clusters, and projects in the scope
   packs         List the versions a registry offers for a pack
   same-release  Make sure that two or more records are one release
   schema        Print the JSON Schema of a document or of the candidate file
-  snapshot      Record a profile version or a cluster in a snapshot file
+  snapshot      Record a profile version, a cluster, or a pack version in a snapshot file
   verify        Make sure that each record agrees with Palette now
   help          Print this message or the help of the given subcommand(s)
 

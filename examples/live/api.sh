@@ -8,6 +8,13 @@
 #       through the API, which Palette accepts whatever the Spectro Cloud provider's
 #       immutable-clusterprofiles flag says. Exit 2 when no place, or more than one, contains
 #       FROM.
+#   api.sh reorder PROFILE_UID
+#       Reverse the order of the packs of a published profile version, in place: PUT the version
+#       with the same packs, values, and manifests in the other order, then publish it. Nothing
+#       else changes.
+#   api.sh reorder-cluster CLUSTER_UID
+#       PUT the profiles of a cluster in the other order, with the uids it already has and each
+#       pack's values and manifests as api.sh apply sends them, and without resolveNotification.
 #   api.sh retag PROFILE_UID PACK FROM_TAG TO_TAG
 #       Rename the tag of one pack in a published profile version, in place, keeping its pack uid,
 #       values, and manifests: PUT the version, then publish it. Exit 2 when the version has no
@@ -27,6 +34,14 @@
 #       Delete every version of each profile named exactly NAME, found in the profile listing:
 #       the versions skip_destroy kept out of the OpenTofu state. A name with no versions is not
 #       an error.
+#   api.sh delete-cluster CLUSTER_UID
+#       Ask Palette to delete a cluster, by the API and not the provider: DELETE the cluster. The
+#       deletion runs after the request ends.
+#   api.sh sync-oci REGISTRY_UID
+#       Ask Palette to read an OCI pack registry in ECR again, and wait until that sync ends.
+#       Prints the sync status. Exit 2 when the sync does not end in five minutes.
+#   api.sh get PATH
+#       GET one path, `/v1/...`, and print the answer. A read, for a check.
 #
 # The key comes from PALETTE_API_KEY or ~/.palette.env and is never printed; the address from
 # PALETTE_API (default https://api.spectrocloud.com). PALETTE_PROJECT_UID scopes the requests.
@@ -99,6 +114,26 @@ body() {
 put_published() {
   call PUT "/v1/clusterprofiles/$1" "$2/body" > /dev/null || exit 2
   call PATCH "/v1/clusterprofiles/$1/publish" > /dev/null || exit 2
+}
+
+reorder() {
+  local uid=${1:-} tmp
+  [ -n "$uid" ] || die "usage: api.sh reorder PROFILE_UID"
+  tmp=$(mktemp -d); trap 'rm -rf "${tmp:-}"' RETURN EXIT
+  fetch_published "$uid" "$tmp"
+  body "$tmp" '.' | jq '.spec.template.packs |= reverse' > "$tmp/body"
+  put_published "$uid" "$tmp"
+  echo "reversed the packs of $uid in place: $(jq -r '[.spec.template.packs[].name] | join(", ")' "$tmp/body")"
+}
+
+reorder_cluster() {
+  local cluster=${1:-} tmp
+  [ -n "$cluster" ] || die "usage: api.sh reorder-cluster CLUSTER_UID"
+  tmp=$(mktemp -d); trap 'rm -rf "${tmp:-}"' RETURN EXIT
+  profiles_body "$cluster" "$tmp"
+  jq '.profiles |= reverse' "$tmp/body" > "$tmp/reversed" && mv "$tmp/reversed" "$tmp/body"
+  call PUT "/v1/spectroclusters/$cluster/profiles" "$tmp/body" > /dev/null || exit 2
+  echo "sent the profiles of cluster $cluster in the other order: $(jq -r '[.profiles[].uid] | join(", ")' "$tmp/body")"
 }
 
 edit() {
@@ -206,12 +241,42 @@ delete_named() {
   done
 }
 
+delete_cluster() {
+  local uid=${1:-}
+  [ -n "$uid" ] || die "usage: api.sh delete-cluster CLUSTER_UID"
+  call DELETE "/v1/spectroclusters/$uid" > /dev/null || return 2
+  echo "the deletion of cluster $uid is requested"
+}
+
+# sync_oci UID: POST the sync, then wait until a run newer than the last one has ended
+sync_oci() {
+  local uid=${1:-} before status after
+  [ -n "$uid" ] || die "usage: api.sh sync-oci REGISTRY_UID"
+  before=$(call GET "/v1/registries/oci/$uid/ecr/sync/status" | jq -r '.lastRunTime // ""') || return 2
+  call POST "/v1/registries/oci/$uid/ecr/sync" > /dev/null || return 2
+  for _ in $(seq 1 60); do
+    status=$(call GET "/v1/registries/oci/$uid/ecr/sync/status") || return 2
+    after=$(jq -r '.lastRunTime // ""' <<<"$status")
+    if [ "$(jq -r '.status // ""' <<<"$status")" != InProgress ] && [ "$after" != "$before" ]; then
+      echo "$status"
+      return 0
+    fi
+    sleep 5
+  done
+  die "the sync of registry $uid did not end in five minutes"
+}
+
 case "${1:-}" in
   edit) shift; edit "$@" ;;
+  reorder) shift; reorder "$@" ;;
+  reorder-cluster) shift; reorder_cluster "$@" ;;
   retag) shift; retag "$@" ;;
   apply) shift; apply "$@" ;;
   detach) shift; detach "$@" ;;
   delete) shift; delete "$@" ;;
   delete-named) shift; delete_named "$@" ;;
+  delete-cluster) shift; delete_cluster "$@" ;;
+  sync-oci) shift; sync_oci "$@" ;;
+  get) shift; [ -n "${1:-}" ] || die "usage: api.sh get PATH"; call GET "$1" ;;
   *) sed -n '2,/^set -uo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; exit 2 ;;
 esac

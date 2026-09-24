@@ -40,8 +40,9 @@ check snapshot-cluster 0 "strata reads what a live cluster runs" -- \
   "$strata" snapshot "cluster:$C" --raw-dir raw/cluster -o cluster.json
 check cluster-runs-release 0 "the cluster reports the release profile version" -- \
   jq -e --arg p "$P" '[.source.cluster.profiles[].uid] | index($p) != null' cluster.json
-check cluster-runs-two-profiles 0 "#23: the cluster runs the release profile, then the add-on profile" -- \
-  jq -e --arg p "$N" --arg a "$AN" '[.source.cluster.profiles[].name] == [$p, $a]' cluster.json
+# Palette lists the profiles of a cluster in either order, so the check compares the set.
+check cluster-runs-two-profiles 0 "#23: the cluster runs the release profile and the add-on profile" -- \
+  jq -e --arg p "$N" --arg a "$AN" '([.source.cluster.profiles[].name] | sort) == ([$p, $a] | sort)' cluster.json
 check snapshot-release 0 "record the version the cluster runs" -- \
   "$strata" snapshot "$P" --raw-dir raw/release -o release.json
 check compare-release-cluster 0 "#1: a cluster that runs the recorded version is IDENTICAL" -- \
@@ -52,6 +53,19 @@ check snapshot-addon 0 "record the add-on profile version the cluster runs" -- \
   "$strata" snapshot "$AD" --raw-dir raw/addon -o addon.json
 check compare-addon-cluster 0 "#23: the add-on record is IDENTICAL to the cluster's add-on selection" -- \
   "$strata" compare addon.json "cluster:$C/$AN"
+
+# ---- #66: the cluster variables endpoint. The add-on profile declares one variable, so the
+# copy that the cluster holds has a variables hash to compare with the profile's.
+check addon-has-a-variable 0 "#66: the add-on profile declares one variable, purpose" -- \
+  jq -e '[.variables[].name] == ["purpose"] and .variablesUnavailable != true' addon.json
+check cluster-variables-endpoint 0 "#66: GET /v1/spectroclusters/<uid>/variables serves the variable of the add-on profile" -- \
+  jq -e '[.. | objects | select(.name? == "purpose")] | length >= 1' raw/cluster/variables.json
+check snapshot-addon-copy 0 "#66: record the copy of the add-on profile that the cluster holds" -- \
+  "$strata" snapshot "cluster:$C/$AN" -o addon-copy.json
+check addon-copy-variables-hash 0 "#66: the copy has the variables hash of the profile, so the cluster variables endpoint repeats the definition fields" -- \
+  jq -e --slurpfile a addon.json \
+    '.variablesUnavailable != true and .variablesHash == $a[0].variablesHash and [.variables[].name] == ["purpose"]' \
+    addon-copy.json
 check snapshot-next 0 "record the newer version" -- \
   "$strata" snapshot "$P2" --raw-dir raw/next -o next.json
 check compare-next-cluster 1 "#1: against a newer record, the cluster shows the change" -- \

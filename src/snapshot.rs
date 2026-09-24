@@ -19,11 +19,17 @@ pub const SNAPSHOT_SCHEMA: &str = "strata-snapshot/1";
 /// The part of a snapshot schema id shared by every version of it.
 const SNAPSHOT_FAMILY: &str = "strata-snapshot/";
 
+/// The version of the content digest encoding. It is in the input of the digest, so a change to
+/// what the digest covers is a change of this tag, and a digest of one version is never equal to
+/// a digest of another. A tool that pins a version by content digest depends on this tag.
+pub const CONTENT_DIGEST: &str = "content/1";
+
 /// One published profile version: its root, per-pack hashes, canonical values, and raw contents.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct Snapshot {
-    /// Always "strata-snapshot/1"
+    /// The schema id of this document
+    #[schemars(extend("const" = SNAPSHOT_SCHEMA))]
     pub schema: String,
     /// Which tool wrote the snapshot.
     pub tool: Tool,
@@ -37,6 +43,22 @@ pub struct Snapshot {
     pub packs: Vec<Pack>,
     /// sha256 of canonical JSON {"packs": [[key, node]...], "variables": variablesHash}
     pub root: String,
+    /// The content digest, as [`Snapshot::content_digest`] gives it. A record from before this
+    /// field has none, so read the digest with the function and not from this field.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    content_digest: String,
+}
+
+/// One pack that a profile version takes from a registry: the reference that another tool
+/// pins by. See [`Snapshot::pins`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PinRef {
+    /// Pack name.
+    pub name: String,
+    /// Resolved version.
+    pub version: String,
+    /// The digest of the pack in its registry, as Palette stores it. A Helm digest is bare hex.
+    pub digest: String,
 }
 
 /// Which tool wrote a document.
@@ -162,7 +184,9 @@ pub struct ClusterSource {
     /// covers every applied profile.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub profile: Option<String>,
-    /// The applied profiles this snapshot covers, in the order Palette applies them.
+    /// The applied profiles this snapshot covers, in the canonical order of
+    /// [`AppliedProfile::of_cluster`]: the cluster or infra profile first, then the others by
+    /// name.
     pub profiles: Vec<AppliedProfile>,
     /// The values the cluster gives the variables of those profiles, in profile order and then by
     /// name. Outside the root: two clusters on one release can differ here. A sensitive variable
@@ -233,15 +257,43 @@ pub struct AppliedProfile {
 }
 
 impl AppliedProfile {
-    /// The profiles a cluster document applies, in the order Palette applies them:
-    /// `spec.clusterProfileTemplates` of `GET /v1/spectroclusters/{uid}`.
+    /// The profiles a cluster document applies, in canonical order: the cluster or infra
+    /// profile first, then the others by name. Palette lists them in
+    /// `spec.clusterProfileTemplates` of `GET /v1/spectroclusters/{uid}` in an order that
+    /// differs between two clusters built from one definition, so that order says nothing.
     pub fn of_cluster(doc: &Value) -> Vec<AppliedProfile> {
-        doc.pointer("/spec/clusterProfileTemplates")
+        AppliedProfile::templates_of(doc)
+            .into_iter()
+            .map(|(_, applied)| applied)
+            .collect()
+    }
+
+    /// Each template of `spec.clusterProfileTemplates` with the profile it applies, in
+    /// canonical order. Two profiles of one type are by name, then by version, then by uid.
+    fn templates_of(doc: &Value) -> Vec<(Value, AppliedProfile)> {
+        let mut pairs: Vec<(Value, AppliedProfile)> = doc
+            .pointer("/spec/clusterProfileTemplates")
             .and_then(Value::as_array)
             .into_iter()
             .flatten()
-            .map(AppliedProfile::from_template)
-            .collect()
+            .map(|t| (t.clone(), AppliedProfile::from_template(t)))
+            .collect();
+        pairs.sort_by(|(_, a), (_, b)| {
+            a.rank()
+                .cmp(&b.rank())
+                .then_with(|| a.name.cmp(&b.name))
+                .then_with(|| a.version.cmp(&b.version))
+                .then_with(|| a.uid.cmp(&b.uid))
+        });
+        pairs
+    }
+
+    /// The cluster or infra profile comes first: a cluster runs it before any add-on.
+    fn rank(&self) -> u8 {
+        match self.kind.as_str() {
+            "cluster" | "infra" => 0,
+            _ => 1,
+        }
     }
 
     fn from_template(t: &Value) -> AppliedProfile {
@@ -340,6 +392,22 @@ pub struct PackHash {
     pub authored: String,
     /// sha256(identity + upstream + authored)
     pub node: String,
+}
+
+/// The content digest: what a version is, without the ids that Palette gives. It covers the
+/// variables hash and, for each pack in order, the key, the version, the upstream hash, and the
+/// authored hash. It leaves out the tag, the pack uid, the registry uid, and the pack type, so it
+/// is equal for two publishes of one definition and for a copy of a pack to another registry.
+fn content_of(variables_hash: &str, packs: &[Pack]) -> String {
+    sha256_hex(&canonical_json(&json!({
+        // The key keeps this digest apart from every other one, and gives the encoding a version.
+        "digest": CONTENT_DIGEST,
+        "variables": variables_hash,
+        "packs": packs
+            .iter()
+            .map(|p| json!([p.key, p.version, p.hash.upstream, p.hash.authored]))
+            .collect::<Vec<_>>(),
+    })))
 }
 
 /// The root: one sha256 digest over the variables hash and the node hash of each pack, in order.
@@ -584,10 +652,48 @@ impl Snapshot {
             tool: Tool::current(),
             source,
             variables,
+            content_digest: content_of(&variables_hash, &packs),
             variables_hash,
             packs,
             root,
         })
+    }
+
+    /// The content digest: equal for two objects that are the same version, where the root is
+    /// not. Palette gives a manifest pack a new uid for each profile, and a pack uid belongs to
+    /// one registry, so two publishes of one definition have two roots and one content digest.
+    /// The root answers "did this object change". This digest answers "is this the same version".
+    pub fn content_digest(&self) -> String {
+        content_of(&self.variables_hash, &self.packs)
+    }
+
+    /// The packs that this version takes from a registry, each with its version and the digest
+    /// of the registry. A manifest pack comes from no registry, so it is authored content and
+    /// not a pin.
+    pub fn pins(&self) -> Vec<PinRef> {
+        self.packs
+            .iter()
+            .filter(|p| p.kind != "manifest")
+            .map(|p| PinRef {
+                name: p.name.clone(),
+                version: p.version.clone(),
+                digest: p.hash.upstream_raw.clone(),
+            })
+            .collect()
+    }
+
+    /// A snapshot for each profile that a cluster applies, from one read of the cluster, in the
+    /// canonical order of [`AppliedProfile::of_cluster`]. Each one is the snapshot that
+    /// `cluster:<cluster>/<profile>` gives.
+    pub fn each_from_cluster(
+        raw: &RawCluster,
+        reference: &str,
+        fetched_at: &str,
+    ) -> Result<Vec<Snapshot>> {
+        AppliedProfile::of_cluster(&raw.cluster)
+            .iter()
+            .map(|applied| Snapshot::from_cluster(raw, Some(&applied.uid), reference, fetched_at))
+            .collect()
     }
 
     /// Record the project scope the snapshot was taken in; `None` is tenant scope. The scope is
@@ -607,11 +713,12 @@ impl Snapshot {
         reference: &str,
         fetched_at: &str,
     ) -> Result<Snapshot> {
-        let templates = raw.templates();
-        let applied: Vec<AppliedProfile> = templates
-            .iter()
-            .map(AppliedProfile::from_template)
-            .collect();
+        // In canonical order, so two clusters built from one definition have one merged root
+        // whatever order Palette lists their profiles in.
+        let (templates, applied): (Vec<Value>, Vec<AppliedProfile>) =
+            AppliedProfile::templates_of(&raw.cluster)
+                .into_iter()
+                .unzip();
         let chosen: Vec<usize> = match profile {
             None => (0..templates.len()).collect(),
             Some(p) => {
@@ -684,6 +791,7 @@ impl Snapshot {
             tool: Tool::current(),
             source,
             variables,
+            content_digest: content_of(&variables_hash, &packs),
             variables_hash,
             packs,
             root,

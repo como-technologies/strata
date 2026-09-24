@@ -41,6 +41,24 @@ lint:
 library-example:
     cargo run --quiet --manifest-path examples/library/Cargo.toml --target-dir target/library-example
 
+# knurl is a private repository, so Cargo fetches it with the git command line. The adapter is
+# its own package: `cargo build` and `cargo test` at the root never build it, and no release
+# carries it.
+
+# Test the knurl adapter against the rules of knurl, on the built examples. Needs git access to knurl.
+adapter-test: examples
+    CARGO_NET_GIT_FETCH_WITH_CLI=true cargo fmt --check --manifest-path adapter/Cargo.toml
+    CARGO_NET_GIT_FETCH_WITH_CLI=true cargo clippy --manifest-path adapter/Cargo.toml --target-dir target/adapter --all-targets -- -D warnings
+    CARGO_NET_GIT_FETCH_WITH_CLI=true cargo test --manifest-path adapter/Cargo.toml --target-dir target/adapter
+
+# Run the strata command and the port of knurl side by side, against the playground: no tenant, no key
+adapter-by-hand chapter="cluster-release":
+    adapter/scripts/by-hand.sh {{chapter}}
+
+# Call the platform port of knurl by hand, over HTTP: just adapter-observe unit intermediate aws-stack 1.1.0
+adapter-observe *args:
+    @CARGO_NET_GIT_FETCH_WITH_CLI=true cargo run --quiet --manifest-path adapter/Cargo.toml --target-dir target/adapter --example observe -- {{args}}
+
 # ---- examples -------------------------------------------------------------------------------
 
 # Build examples/ from the tracked registry responses. Needs no API key.
@@ -129,9 +147,31 @@ live-verify: build
 live-packs: build
     examples/live/packs.sh
 
+# Read-only. It needs live-profiles; the instance checks need live-up, and are SEEN without it.
+
+# The knurl adapter against the tenant: each port method against the strata answer for the same object
+live-knurl: build
+    examples/live/knurl.sh
+
 # The merge gate over records of the live profiles: needs live-profiles, no cluster, no cost (#57)
 live-merge-gate: build
     examples/live/merge-gate.sh
+
+# The registry test: push into the example's own OCI pack registry, and read what Palette does with each push (#66). Needs live-profiles.
+live-registry: build
+    examples/live/registry.sh
+
+# The cluster template test: the lock on a linked version, and a cluster outside the template (#66). Needs live-profiles and no cluster; ends with the removal of the example.
+live-template: build
+    examples/live/template.sh
+
+# The cluster test: a change of the value a cluster gives a variable, and a deletion through the API (#66). Needs live-up; ends with the cluster gone.
+live-cluster: build
+    examples/live/cluster.sh
+
+# The order test: a reorder of the packs of a published version, and of the profiles of a cluster, through the API (#66). Needs live-up; leaves the versions edited, so run live-down after it.
+live-order: build
+    examples/live/order.sh
 
 # The scripts run in order from the baseline: verify.sh, in-place.sh off, in-place.sh on (against
 # that off run), and registry-move.sh. The recipe stops at the first script that fails. Billable:
@@ -169,7 +209,9 @@ live-down:
     outputs=$(examples/live/tf.sh output -json) || { echo "live-down: no tofu outputs" >&2; exit 1; }
     export PALETTE_PROJECT_UID=$(jq -r '.project_uid.value' <<<"$outputs")
     names=$(jq -r '.profile_names.value[]' <<<"$outputs")
-    examples/live/tf.sh destroy || { examples/live/diagnose.sh; exit 1; }
+    # Palette now and then refuses one read of a profile with OperationForbidden, and the next
+    # read passes: a destroy that fails gets one more try before the diagnostics.
+    examples/live/tf.sh destroy || examples/live/tf.sh destroy || { examples/live/diagnose.sh; exit 1; }
     examples/live/api.sh delete-named $names
 
 # ---- release --------------------------------------------------------------------------------

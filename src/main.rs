@@ -65,7 +65,7 @@ impl Cli {
 enum Cmd {
     /// Write a candidate file from a profile version or a record
     Candidate(CandidateArgs),
-    /// Compare two profile versions, records, or clusters
+    /// Compare two profile versions, records, clusters, or pack versions
     Compare(CompareArgs),
     /// List the clusters that use a profile version
     Consumers(ConsumersArgs),
@@ -81,7 +81,7 @@ enum Cmd {
         #[arg(value_enum)]
         kind: SchemaKind,
     },
-    /// Record a profile version or a cluster in a snapshot file
+    /// Record a profile version, a cluster, or a pack version in a snapshot file
     Snapshot(SnapshotArgs),
     /// Make sure that each record agrees with Palette now
     Verify(VerifyArgs),

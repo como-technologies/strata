@@ -3,12 +3,14 @@
 //!
 //!   a   baseline
 //!   a2  same content as a, but the kubernetes values YAML is reordered and re-indented
+//!   a-reversed  the packs of a in the other order: another root, because Palette keeps the order
 //!   a3  a re-pinned from another registry: same packs, values, and manifests, but registryUid,
 //!       packUid, and every digest differ, so each pack shows IDENTITY UPSTREAM and nothing else
 //!   a4  a3 with one kubernetes value edited (podSubnet): a registry move plus an AUTHORED change
 //!   a5  a3 with every pack of type oci: a move to an OCI registry, where the type follows the
 //!       registry
 //!   a6  a with every pack a manifest: type manifest and no registry
+//!   a7  a with the OS pack pinned under another tag name for the same version: the same build
 //!   b   the next version: k8s bump + values edits, cilium same tag but new digest, prometheus
 //!       manifest edited + one added, cert-manager added, external-dns removed, metrics-server
 //!       values unparseable on both sides but different, variables changed, two consumers.
@@ -21,6 +23,7 @@
 //!   cluster-a-staging  cluster-a, with the value "staging" for cluster_env
 //!   cluster-b          lab-cluster (CLUSTER_UID) running b
 //!   cluster-merged     lab-cluster (CLUSTER_UID) running b and addons
+//!   cluster-merged-reversed  the same, with the two templates listed the other way round
 //!
 //! A cluster gives each variable its default value, or the value in its `values`; a sensitive
 //! variable always gets SECRET_VALUE, which no document may contain.
@@ -388,6 +391,18 @@ pub fn make_fixtures(root: &Path) {
         vars_a.clone(),
         vec![],
     );
+    // The packs of a in the other order: Palette keeps the order given, so this is another root.
+    let mut reversed = packs_a(K8S_VALUES_A);
+    reversed.reverse();
+    write_profile(
+        &root.join("a-reversed"),
+        "64f0000000000000000000a1",
+        "1.2.0",
+        reversed,
+        manifests_a(K8S_VALUES_A),
+        vars_a.clone(),
+        vec![],
+    );
     write_profile(
         &root.join("a2"),
         "64f0000000000000000000a1",
@@ -425,6 +440,12 @@ pub fn make_fixtures(root: &Path) {
             ("\"type\": \"spectro\"", "\"type\": \"manifest\""),
             ("\"registryUid\": \"reg-public\"", "\"registryUid\": \"\""),
         ],
+    );
+    // The tag is the OS pack's alone: the version stays 22.04, and so do the uid and the digest.
+    rewrite(
+        &root.join("a"),
+        &root.join("a7"),
+        &[("\"tag\": \"22.04\"", "\"tag\": \"LTS__22.4\"")],
     );
 
     let packs_b = vec![
@@ -601,6 +622,7 @@ pub fn make_fixtures(root: &Path) {
         vec![],
     );
     rename_profile(&root.join("addons"), "lab-addons");
+    retype_profile(&root.join("addons"), "add-on");
 
     write_cluster(root, "cluster-a", &["a"], &[]);
     write_cluster(
@@ -611,6 +633,9 @@ pub fn make_fixtures(root: &Path) {
     );
     write_cluster(root, "cluster-b", &["b"], &[]);
     write_cluster(root, "cluster-merged", &["b", "addons"], &[]);
+    // The same cluster, with its templates listed the other way round, as Palette lists them
+    // for another cluster built from one definition.
+    write_cluster(root, "cluster-merged-reversed", &["addons", "b"], &[]);
 }
 
 /// Give the profile in `dir` another name; `write_profile` names every profile lab-profile.
@@ -621,6 +646,14 @@ fn rename_profile(dir: &Path, name: &str) {
         v["metadata"]["name"] = json!(name);
         fs::write(&path, serde_json::to_string_pretty(&v).unwrap()).unwrap();
     }
+}
+
+/// Give the profile in `dir` another type; `write_profile` gives every profile the type cluster.
+fn retype_profile(dir: &Path, kind: &str) {
+    let path = dir.join("profile.json");
+    let mut v = read_json(&path);
+    v["spec"]["published"]["type"] = json!(kind);
+    fs::write(&path, serde_json::to_string_pretty(&v).unwrap()).unwrap();
 }
 
 // ---- the shell script helpers ------------------------------------------------------------------

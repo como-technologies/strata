@@ -2,7 +2,8 @@ name: strata retire gate
 
 # Reusable workflow. A repository calls it before it deletes a profile version, to check that no
 # cluster still runs that version; see docs/src/use-cases/retire.md.
-# Exit 0 means no cluster uses the version, and the delete can follow. Exit 1 means a cluster does,
+# Exit 0 means no cluster in the projects the key can read uses the version, and the delete can
+# follow. Exit 1 means a cluster does,
 # and the report names each one. A cluster that strata cannot read counts as a consumer, so it also
 # exits 1. Exit 2 means strata could not answer at all. Strata deletes nothing: the delete is the
 # caller's own step, after this one.

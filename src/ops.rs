@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::api::{Palette, PaletteApi, RawCluster, RawProfile};
+use crate::candidate::LoadedCandidate;
 use crate::diff::{
     self, ClusterProfileOverwritten, Diff, ImpactLevel, PackDiff, Status, Verify, VerifyStatus,
 };
@@ -90,10 +91,31 @@ where
     A: PaletteApi,
     F: FnOnce() -> Result<Palette<A>>,
 {
-    let loaded = crate::candidate::load(path)?;
+    snapshot_from_loaded(
+        &crate::candidate::load(path)?,
+        connect,
+        fetched_at,
+        progress,
+    )
+}
+
+/// Build a snapshot of a candidate that is checked and in memory: resolve its packs through the
+/// [`Palette`] that `connect` returns. [`snapshot_from_candidate`] reads a file and then does
+/// this; a caller with a [`Candidate`](crate::candidate::Candidate) value gives it to
+/// [`candidate::check`](crate::candidate::check) and starts here.
+pub fn snapshot_from_loaded<A, F>(
+    loaded: &LoadedCandidate,
+    connect: F,
+    fetched_at: &str,
+    progress: &Progress,
+) -> Result<Snapshot>
+where
+    A: PaletteApi,
+    F: FnOnce() -> Result<Palette<A>>,
+{
     let palette = connect()?;
-    let raw = crate::candidate::resolve(&loaded, &palette, progress)?;
-    let mut snap = Snapshot::from_raw(&raw, &path.display().to_string(), fetched_at)?;
+    let raw = crate::candidate::resolve(loaded, &palette, progress)?;
+    let mut snap = Snapshot::from_raw(&raw, &loaded.path.display().to_string(), fetched_at)?;
     snap.source.template = crate::candidate::TEMPLATE.to_string();
     // Palette does not hold a candidate, so no request asked which clusters use it
     snap.source.consumers = None;
@@ -412,7 +434,8 @@ impl VerifiedRecord {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct VerifySummary {
-    /// Always "strata-verify-summary/1"
+    /// The schema id of this document
+    #[schemars(extend("const" = VERIFY_SUMMARY_SCHEMA))]
     pub schema: String,
     /// Which tool wrote the document.
     pub tool: Tool,
@@ -639,7 +662,8 @@ pub struct ChainLegend {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct Chain {
-    /// Always "strata-chain/1"
+    /// The schema id of this document
+    #[schemars(extend("const" = CHAIN_SCHEMA))]
     pub schema: String,
     /// Which tool wrote the document.
     pub tool: Tool,
@@ -947,13 +971,35 @@ pub struct Consumer {
     /// Why the cluster could not be read, when it could not.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<Value>,
+    /// True when the consumer list of the profile did not name this cluster, and the cluster
+    /// document did: the second reading found it.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub unlisted: bool,
+}
+
+/// The second reading of `consumers`: the clusters the key can list, each read for the profiles
+/// it applies. Palette computes the consumer list of a profile when it is asked, in the projects
+/// the key can read, and gives an empty list on an error too. The second reading finds a consumer
+/// that the list omits.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ClustersRead {
+    /// Cluster documents read: each cluster the listing names and the consumer list did not.
+    pub read: usize,
+    /// Clusters the listing names that could not be read. Each one can be a consumer.
+    pub unread: usize,
+    /// Why the cluster listing could not be read, when it could not. Then `read` is 0, and the
+    /// consumer list of the profile stands alone.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<Value>,
 }
 
 /// The document `consumers` writes: `strata-consumers/1`.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ConsumersReport {
-    /// Always "strata-consumers/1"
+    /// The schema id of this document
+    #[schemars(extend("const" = CONSUMERS_SCHEMA))]
     pub schema: String,
     /// Which tool wrote the document.
     pub tool: Tool,
@@ -967,8 +1013,12 @@ pub struct ConsumersReport {
     /// was overwritten in place.
     #[serde(default)]
     pub overwritten: usize,
-    /// One entry per cluster, in the order Palette lists them.
+    /// One entry per cluster: those Palette lists, in its order, then those the second reading
+    /// found.
     pub consumers: Vec<Consumer>,
+    /// The second reading: the clusters read for the profiles they apply.
+    #[serde(default)]
+    pub clusters_read: ClustersRead,
 }
 
 impl ConsumersReport {
@@ -1044,6 +1094,7 @@ where
             state: UNKNOWN_STATE.to_string(),
             version: String::new(),
             error: None,
+            unlisted: false,
             uid: cluster,
         };
         let doc = client_for(&mut clients, &home, &c.project_uid, &mut connect)
@@ -1068,6 +1119,11 @@ where
         }
         list.push(c);
     }
+    // Palette computes the list above when it is asked, in the projects the key can read, and
+    // gives an empty list on an error too. So each cluster the key can list is read for the
+    // profiles it applies, and a cluster that applies the version joins the list (#66).
+    let clusters_read =
+        second_reading(&mut list, &uid, &home, &mut clients, &mut connect, progress);
     // a uid names no project to a reader, so give each row the project's name as well
     name_projects_of(
         &mut list,
@@ -1093,7 +1149,82 @@ where
         count: list.len(),
         overwritten,
         consumers: list,
+        clusters_read,
     })
+}
+
+/// The second reading of `consumers`. The listing is read at tenant scope, so a cluster in any
+/// project the key can read is in it; a key that cannot list at tenant scope lists its own scope.
+/// A cluster the consumer list named is not read again. A cluster that applies `uid` joins
+/// `list`, marked `unlisted`, with what its document and the listing say of it.
+fn second_reading<A, F>(
+    list: &mut Vec<Consumer>,
+    uid: &str,
+    home: &Palette<A>,
+    clients: &mut HashMap<String, Palette<A>>,
+    connect: &mut F,
+    progress: &Progress,
+) -> ClustersRead
+where
+    A: PaletteApi,
+    F: FnMut(Option<&str>) -> Result<Palette<A>>,
+{
+    progress.note("reading each cluster for the profiles it applies");
+    let listing = connect(Some(TENANT_SCOPE))
+        .and_then(|tenant| tenant.cluster_listing())
+        .or_else(|_| home.cluster_listing());
+    let listing = match listing {
+        Ok(listing) => listing,
+        Err(e) => {
+            return ClustersRead {
+                error: Some(e.to_json()),
+                ..ClustersRead::default()
+            };
+        }
+    };
+    let mut clusters_read = ClustersRead::default();
+    for listed in list_clusters(&listing) {
+        if list.iter().any(|c| c.uid == listed.uid) {
+            continue;
+        }
+        let doc = client_for(clients, home, &listed.project_uid, connect)
+            .and_then(|p| p.cluster_document(&listed.uid));
+        let doc = match doc {
+            Ok(doc) => doc,
+            Err(_) => {
+                clusters_read.unread += 1;
+                continue;
+            }
+        };
+        clusters_read.read += 1;
+        let copy = doc
+            .pointer("/spec/clusterProfileTemplates")
+            .and_then(Value::as_array)
+            .and_then(|ts| ts.iter().find(|t| text(t, "/uid") == uid));
+        if let Some(copy) = copy {
+            let or_listed = |found: String, listed: &str| {
+                if found.is_empty() {
+                    listed.to_string()
+                } else {
+                    found
+                }
+            };
+            list.push(Consumer {
+                uid: listed.uid.clone(),
+                name: or_listed(text(&doc, "/metadata/name"), &listed.name),
+                project_uid: or_listed(
+                    text(&doc, "/metadata/annotations/projectUid"),
+                    &listed.project_uid,
+                ),
+                project_name: String::new(),
+                state: or_listed(text(&doc, "/status/state"), &listed.state),
+                version: text(copy, "/profileVersion"),
+                error: None,
+                unlisted: true,
+            });
+        }
+    }
+    clusters_read
 }
 
 /// Schema id of the document `list` writes.
@@ -1219,7 +1350,8 @@ pub struct ListedCluster {
     /// could not be read, and the reports fall back to the uid.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub project_name: String,
-    /// With applied: the profile versions the cluster applies, in the order Palette applies them.
+    /// With applied: the profile versions the cluster applies, in the order the cluster document
+    /// lists them. That order is no install order.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub profiles: Option<Vec<AppliedProfile>>,
     /// With applied: why the cluster document could not be read, when it could not.
@@ -1241,7 +1373,8 @@ pub struct ListedProject {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct Listing {
-    /// Always "strata-list/1"
+    /// The schema id of this document
+    #[schemars(extend("const" = LIST_SCHEMA))]
     pub schema: String,
     /// Which tool wrote the document.
     pub tool: Tool,
@@ -1553,7 +1686,8 @@ fn list_projects(doc: &Value) -> Vec<ListedProject> {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct PackListing {
-    /// Always "strata-packs/1"
+    /// The schema id of this document
+    #[schemars(extend("const" = PACKS_SCHEMA))]
     pub schema: String,
     /// Which tool wrote the document.
     pub tool: Tool,
@@ -1704,7 +1838,7 @@ where
             // a tag row names its version, and names the build it points at; match on either,
             // because a registry that answers with one and not the other still says enough
             let pack_uid = text(e, "/metadata/uid");
-            let mut for_version: Vec<String> = tags
+            let mut rows: Vec<(usize, String)> = tags
                 .iter()
                 .filter(|t| {
                     let v = text(t, "/version");
@@ -1714,10 +1848,19 @@ where
                         v == version
                     }
                 })
-                .map(|t| text(t, "/tag"))
+                .map(|t| {
+                    let above = t
+                        .pointer("/parentTags")
+                        .and_then(Value::as_array)
+                        .map_or(0, Vec::len);
+                    (above, text(t, "/tag"))
+                })
                 .collect();
-            // the exact tag first, then the floating tags above it, longest first
-            for_version.sort_by(|a, b| b.len().cmp(&a.len()).then_with(|| a.cmp(b)));
+            // the exact tag first, then the floating tags above it. A tag row names every tag
+            // above it, so the row with the most of them is the most exact. A registry that
+            // names none leaves the tags of one version in name order.
+            rows.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.1.cmp(&b.1)));
+            let for_version: Vec<String> = rows.into_iter().map(|(_, tag)| tag).collect();
             versions.push(PackBuild {
                 version,
                 pack_uid,

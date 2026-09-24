@@ -8,7 +8,7 @@ exit status of those commands is the gate.
 | File | Copy it to | Runs |
 | --- | --- | --- |
 | `github/strata.yml` | `.github/workflows/strata.yml` of your repository | the comment and the merge gate on a pull request, the drift report on a schedule, the promotion gate and the retire gate on demand |
-| `gitlab/strata.yml` | `.gitlab/strata.yml` of your project, and include it | the comment and the merge gate on a merge request pipeline, the drift report on a pipeline schedule |
+| `gitlab/strata.yml` | `.gitlab/strata.yml` of your project, and include it | the comment and the merge gate on a merge request pipeline, the drift report on a pipeline schedule, the promotion gate and the retire gate as manual jobs |
 
 Set the refs and the records that your repository holds, and the version of
 strata that the jobs install. [The book](../../docs/src/automation/scripts.md)

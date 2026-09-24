@@ -26,21 +26,35 @@ variables:
     required: true
 ```
 
+## The fields at the top
+
+| Field | Required | Function |
+| --- | --- | --- |
+| `name`, `version` | yes | The profile and its version. Neither can be empty. |
+| `type` | no | `cluster`, `infra`, `add-on`, or `system`. The default is `cluster`. |
+| `cloudType` | no | The cloud of the profile. The default is empty. |
+| `registry` or `registryUid` | no | The registry for each layer that names none. |
+| `layers[]` | yes | One entry for each pack, in profile order. At least one. |
+| `variables[]` | no | The profile variable definitions, in the form Palette returns them. |
+
+A program can also give strata a candidate in memory, as JSON, through the
+library. It then writes no file.
+
 ## The fields of a layer
 
 | Field | Required | Function |
 | --- | --- | --- |
 | `name`, `version` | yes | The pack and its version. |
-| `registry` or `registryUid` | yes, on the layer or at the top | The registry, by name or uid. |
+| `registry` or `registryUid` | yes, on the layer or at the top | The registry, by name or uid. Not both. The setting on the layer has priority over the one at the top. |
 | `values` or `valuesFile` | no | The values, inline or in a file. Not both. With neither, the layer gets the default values of the pack. |
 | `layer` | no | The layer. The default comes from the registry. |
-| `tag` | no | The tag. The default is the tag that equals the version, or else the first tag of that version. An explicit tag must be a tag of that version in the registry, or the version itself. |
-| `params` | no | A map that Palette carries on a pack beside its values. Every profile of the live runs has it empty. Strata puts it in the authored hash, so a change to it is an `AUTHORED` change. |
+| `tag` | no | The tag. The default is the tag that equals the version, else the first tag of that version, else the version itself. An explicit tag must be a tag of that version in the registry, or the version itself. A floating tag, such as `1.0.x`, pins the build that the tag names now: see [Tag names](../internals/palette.md#tag-names). |
+| `params` | no | A map that Palette carries on a pack beside its values. Strata puts it in the authored hash, so a change to it is an `AUTHORED` change. |
 | `manifests[]` | no | Each with a `name`, and `content` inline or a `contentFile`. |
 
-> **Set `tag` to the tag that you publish.** Palette stores
-> the tag that a profile was authored with. A profile from Terraform pins `24.04`,
-> where the registry names that version `LTS__24.x`. The tag is part of
+> **Set `tag` to the tag that you publish.** Palette stores the tag that a
+> profile was authored with, and a registry can give one build several tags:
+> see [Tag names](../internals/palette.md#tag-names). The tag is part of
 > `IDENTITY`, so another tag for the same build gives another root.
 > `same-release` passes such a pair as `SAME CONTENT`.
 
@@ -48,30 +62,49 @@ variables:
 
 Strata reads the whole file before it sends a request:
 
-- An unknown field, or a file that breaks a rule, is `candidate-invalid`. So
-  strata reports a misspelled field such as `valuesfile`.
+- A file that does not parse, an unknown field, or a file that breaks one of
+  these rules is `candidate-invalid`. The message names the layer, by number
+  and pack name.
+  - `name` and `version` must not be empty.
+  - `layers` needs at least one layer.
+  - A layer sets `registry` or `registryUid`, or the top of the file does. Not
+    both, and not neither.
+  - A layer sets `values` or `valuesFile`, or neither. Not both.
+  - A manifest sets `content` or `contentFile`. Not both, and not neither.
+
+  So strata reports a misspelled field such as `valuesfile`.
 - A values file or a manifest file that strata cannot read is `io`.
 
 ## The registry lookups
 
-For each layer, strata reads the registry:
+Strata reads `GET /v1/registries/metadata` once, and only when a layer names its
+registry by name. It gives each registry name its uid. Then, for each layer:
 
-1. `GET /v1/registries/metadata`: a registry name to its uid.
-2. `GET /v1/packs?filters=spec.name=<name>`: the pack uid, digest, layer, type,
-   and default values of the version in that registry.
-3. `GET /v1/packs/<name>/registries/<uid>`: the tags of that version.
+1. `GET /v1/packs?filters=spec.name=<name>`, in pages of 100: the pack uid, the
+   digest, the layer, the type, and the default values of the version in that
+   registry.
+2. `GET /v1/packs/<name>/registries/<uid>`: the tags of that version, and the
+   default values and the layer when the listing gives none.
 
 A version or a tag that the registry does not have is `pack-not-found`. A
-registry name that the key cannot see is `registry-not-found`.
+registry name that the key cannot see is `registry-not-found`. A `registryUid`
+that the key cannot see goes out as given, so its packs are `pack-not-found`,
+and the error names the uid.
 
-The snapshot has `source.template` `candidate` and no uid. The digest on the
-pack reference of a published profile equals the registry digest, so a
-candidate with the published tags, values, and manifests has the published root.
-The live example checks that: see
+The snapshot has `source.template` `candidate`, no uid, and no `consumers`.
+Strata takes the digest of each pack from the registry, as Palette does for a
+published profile: see
+[The pack-ref digest](../internals/palette.md#the-pack-ref-digest). So a
+candidate with the published tags, values, and manifests has the published
+root. The live example checks that: see
 [What the live example verifies](../development/live-runs.md).
+
+Strata applies no pack preset. Whether a candidate must carry, in its values,
+the keys of the preset option that the values select is open: see
+[What no run covers](../internals/palette.md#what-no-run-covers).
 
 ## Write one from a published version
 
 [`strata candidate`](../commands/candidate.md) writes the file of a published
-version, with each tag and registry uid pinned, and each value and manifest
-spelled out.
+version, with each tag and registry uid pinned, and each value and manifest in
+full.

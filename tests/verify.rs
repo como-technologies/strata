@@ -1686,9 +1686,13 @@ fn a_consumer_with_no_project_is_read_in_the_scope_the_profile_was_read_in() {
     assert!(r.consumers[0].error.is_none());
     assert_eq!(
         *scopes.borrow(),
-        vec![Some("p1".to_string())],
-        "the record names p1, so its consumers are read there: one client, and never the scope of \
-         the environment"
+        vec![Some("p1".to_string()), Some(String::new())],
+        "the record names p1, so its consumers are read there, and never in the scope of the \
+         environment; then the second reading lists the clusters at tenant scope"
+    );
+    assert!(
+        r.clusters_read.error.is_some(),
+        "this tenant serves no cluster listing, so the second reading says it was not done"
     );
 }
 
@@ -1745,8 +1749,9 @@ fn consumers_lists_each_cluster_with_name_project_and_state_from_its_own_project
     assert_eq!(unknown.error.as_ref().unwrap()["kind"], "api");
     assert_eq!(
         *scopes.borrow(),
-        vec![None, Some("p1".to_string())],
-        "one client per project; the profile and unscoped clusters share one"
+        vec![None, Some("p1".to_string()), Some(String::new())],
+        "one client per project; the profile and unscoped clusters share one; the second reading \
+         lists at tenant scope"
     );
 
     let text = render::renderer(Format::Terminal, Paint::off(), false)
@@ -1855,12 +1860,15 @@ fn consumers_shows_the_version_each_cluster_runs_and_marks_one_the_uid_no_longer
 fn a_profile_without_consumers_exits_zero_and_fetches_no_cluster() {
     let dir = tempfile::tempdir().unwrap();
     common::make_fixtures(dir.path());
-    let api = serve(MemoryApi::new(), dir.path(), "a", UID_A).with(
-        "/v1/dashboard/clusterprofiles/metadata",
-        serde_json::json!({"items": [
-            {"metadata": {"name": "lab-profile", "uid": UID_A}, "spec": {"version": "1.2.0"}}
-        ]}),
-    );
+    let api = serve(MemoryApi::new(), dir.path(), "a", UID_A)
+        .with(
+            "/v1/dashboard/clusterprofiles/metadata",
+            serde_json::json!({"items": [
+                {"metadata": {"name": "lab-profile", "uid": UID_A}, "spec": {"version": "1.2.0"}}
+            ]}),
+        )
+        // the second reading lists the clusters, and this tenant has none
+        .with("/v1/dashboard/spectroclusters/meta", serde_json::json!([]));
     let r = ops::consumers(
         &Ref::NameVersion {
             name: "lab-profile".into(),
@@ -1873,13 +1881,91 @@ fn a_profile_without_consumers_exits_zero_and_fetches_no_cluster() {
     .unwrap();
     assert_eq!((r.count, r.exit_code()), (0, 0));
     assert!(r.consumers.is_empty());
+    assert_eq!((r.clusters_read.read, r.clusters_read.unread), (0, 0));
+    assert!(r.clusters_read.error.is_none());
     let text = render::renderer(Format::Terminal, Paint::off(), false)
         .render_consumers(&r)
         .unwrap();
     assert_eq!(
         text,
-        "lab-profile@1.2.0 (uid 64f0000000000000000000a1): no consumers\n"
+        "lab-profile@1.2.0 (uid 64f0000000000000000000a1): no consumers\n  second reading: 0 of 0 clusters read\n"
     );
+}
+
+#[test]
+fn the_second_reading_finds_a_consumer_the_profile_does_not_list() {
+    // Palette computes the consumer list of a profile when it is asked, in the projects the key
+    // can read, and gives an empty list on an error too. So a cluster that applies the version
+    // can be missing from it. The second reading reads each cluster the key can list, and finds
+    // it.
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let mut applies = cluster_doc("cluster-ccc", "gamma", "p1", "Running");
+    applies["spec"] = serde_json::json!({"clusterProfileTemplates": [
+        {"uid": UID_A, "name": "lab-profile", "profileVersion": "1.2.0", "type": "cluster"}
+    ]});
+    let api = serve(MemoryApi::new(), dir.path(), "a", UID_A)
+        .with(
+            "/v1/dashboard/spectroclusters/meta",
+            serde_json::json!([{
+                "metadata": {"name": "gamma", "uid": "cluster-ccc", "annotations": {"projectUid": "p1"}},
+                "status": {"state": "Running"}
+            }]),
+        )
+        .with("/v1/spectroclusters/cluster-ccc", applies);
+    let r = ops::consumers(
+        &Ref::Uid(UID_A.into()),
+        |_| Ok(Palette::new(api.clone())),
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert_eq!(
+        (r.count, r.exit_code()),
+        (1, 1),
+        "the second reading found a consumer, so a delete step must not proceed"
+    );
+    let found = &r.consumers[0];
+    assert!(found.unlisted, "the profile did not list it");
+    assert_eq!(
+        (
+            found.uid.as_str(),
+            found.name.as_str(),
+            found.project_uid.as_str(),
+            found.state.as_str(),
+            found.version.as_str()
+        ),
+        ("cluster-ccc", "gamma", "p1", "Running", "1.2.0")
+    );
+    assert_eq!((r.clusters_read.read, r.clusters_read.unread), (1, 0));
+
+    let text = render::renderer(Format::Terminal, Paint::off(), false)
+        .render_consumers(&r)
+        .unwrap();
+    assert!(
+        text.contains("not in the consumer list of the profile"),
+        "{text}"
+    );
+    assert!(
+        text.ends_with("  second reading: 1 of 1 clusters read\n"),
+        "{text}"
+    );
+    let md = render::renderer(Format::Markdown, Paint::off(), false)
+        .render_consumers(&r)
+        .unwrap();
+    assert!(
+        md.contains("(not in the consumer list of the profile)")
+            && md.contains("Second reading: 1 of 1 clusters read."),
+        "{md}"
+    );
+    let json: Value = serde_json::from_str(
+        &render::renderer(Format::Json, Paint::off(), true)
+            .render_consumers(&r)
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(json["consumers"][0]["unlisted"], true);
+    assert_eq!(json["clustersRead"]["read"], 1);
 }
 
 #[test]
@@ -3486,6 +3572,46 @@ fn a_candidate_written_from_a_record_reproduces_its_root_inline_or_with_files() 
 }
 
 #[test]
+fn a_candidate_in_memory_reproduces_the_root_with_no_file() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let recorded_b = ops::snapshot_from_dir(&dir.path().join("b"), "b", "t0").unwrap();
+    let candidate = Candidate::from_snapshot(&recorded_b).unwrap();
+
+    // The name is the ref of the record, as the path of a candidate file would be.
+    let loaded = candidate::check(candidate.clone(), Path::new("b@1")).unwrap();
+    let snap = ops::snapshot_from_loaded(
+        &loaded,
+        || Ok(Palette::new(serve_registry_for_b(dir.path()))),
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert_eq!(snap.root, recorded_b.root);
+    assert_eq!(snap.source.template, "candidate");
+    assert_eq!(snap.source.reference, "b@1");
+
+    // The rules of a candidate file hold for a value too, and need no network.
+    let mut empty = candidate.clone();
+    empty.layers.clear();
+    let err = candidate::check(empty, Path::new("b@1")).unwrap_err();
+    assert!(
+        matches!(&err, Error::CandidateInvalid { path, message }
+            if path == Path::new("b@1") && message.contains("at least one layer")),
+        "{err}"
+    );
+    let mut both = candidate;
+    both.registry = Some("Public Repo".into());
+    both.registry_uid = Some("r1".into());
+    let err = candidate::check(both, Path::new("b@1")).unwrap_err();
+    assert!(
+        matches!(&err, Error::CandidateInvalid { message, .. }
+            if message.contains("both registry and registryUid")),
+        "{err}"
+    );
+}
+
+#[test]
 fn a_candidate_stops_matching_a_version_edited_in_place_and_same_release_names_the_edit() {
     let dir = tempfile::tempdir().unwrap();
     common::make_fixtures(dir.path());
@@ -3893,6 +4019,31 @@ fn packs_of(
     )
 }
 
+/// One build under an exact tag and the floating tags above it, as a registry answers it: each
+/// row names every tag above it, so the exact tag names the most and the top floating tag names
+/// none.
+fn tagged_entity() -> Value {
+    serde_json::json!({"layer": "csi", "tags": [
+        {"tag": "LTS__24.x", "packUid": "pk-65", "parentTags": null},
+        {"tag": "LTS__24.04", "packUid": "pk-65", "parentTags": ["LTS__24.4.x", "LTS__24.x"]},
+        {"tag": "LTS__24.4.x", "packUid": "pk-65", "parentTags": ["LTS__24.x"]},
+    ]})
+}
+
+#[test]
+fn the_exact_tag_leads_the_floating_tags_above_it_whatever_their_length() {
+    let api = serve_registry(vec![], &[("reg-public", tagged_entity())]);
+    let l = packs_of(&api, "csi-aws-ebs", ops::PackOptions::default()).unwrap();
+    let newest = &l.registries[0].versions[0];
+    assert_eq!(newest.version, "1.65.0");
+    // the exact tag is the shortest of the three, so a sort by length buries it
+    assert_eq!(
+        newest.tags,
+        vec!["LTS__24.04", "LTS__24.4.x", "LTS__24.x"],
+        "the exact tag first, then each floating tag above it"
+    );
+}
+
 #[test]
 fn packs_lists_what_a_registry_offers_newest_first_with_the_tags_of_each_version() {
     let api = serve_registry(vec![], &[("reg-public", public_entity())]);
@@ -4198,5 +4349,48 @@ fn verify_rechecks_a_pack_version_against_its_registry() {
     assert_eq!(
         v.diff.verify.as_ref().unwrap().status,
         VerifyStatus::Drifted
+    );
+}
+
+#[test]
+fn verify_reports_drift_and_names_the_order_when_only_the_order_of_the_packs_changed() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let recorded = ops::snapshot_from_dir(&dir.path().join("a"), "a", "t0").unwrap();
+    let live = serve(MemoryApi::new(), dir.path(), "a-reversed", UID_A);
+    let v = ops::verify(
+        &recorded,
+        &Palette::new(live.clone()),
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert!(
+        !v.unchanged,
+        "Palette keeps the order given, so two orders are two roots"
+    );
+    assert!(v.diff.order_changed);
+    assert_eq!(v.diff.summary.packs_changed, 0, "every pack is as it was");
+    assert!(!v.diff.same_content, "a reorder is not the same content");
+
+    let path = dir.path().join("a.json");
+    fs::write(&path, recorded.to_json(true).unwrap()).unwrap();
+    let s = ops::verify_many(
+        &[path],
+        None,
+        |_| Ok(Palette::new(live.clone())),
+        "t1",
+        &Progress::silent(),
+    );
+    assert_eq!(
+        (s.records[0].status, s.exit_code()),
+        (RecordStatus::Drifted, 1)
+    );
+    let lines = render::renderer(Format::Terminal, Paint::off(), false)
+        .render_verify_summary(&s)
+        .unwrap();
+    assert!(
+        lines.contains("no packs changed, the packs in another order"),
+        "{lines}"
     );
 }

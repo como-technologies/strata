@@ -1,7 +1,8 @@
 # Drift issues
 
 `scripts/ci/verify-report.sh` runs `strata verify` over the records. It keeps one
-open GitHub issue for each record that drifted or that strata could not check.
+open issue on the code host for each record that drifted or that strata could
+not check.
 
 ```bash
 scripts/ci/verify-report.sh 'releases/**/*.json' 'runs/*.json'
@@ -31,6 +32,10 @@ give.
 The script exits like `verify`, after it handles the issues: `0` when each
 record is unchanged, `1` when a record drifted, `2` when a record could not be
 checked.
+
+When `verify` checks nothing, for example when no pattern matches a file, the
+script exits `2` and touches no issue. A host call that fails ends the script
+with the status of that call.
 
 A changed cluster value is not drift. `verify` exits `0` for it, so this job
 opens no issue for it. See
@@ -91,6 +96,4 @@ The secret `palette-api-key` is required. `strata-token` reads this repository
 while it is private. Another scheduler runs the script directly.
 
 [Pull request comments](./pr-comments.md#while-this-repository-is-private)
-gives the two steps for a private repository. The live example runs this
-workflow with `act`: see
-[What the live example verifies](../development/live-runs.md#drift-reportsh).
+gives the two steps for a private repository.

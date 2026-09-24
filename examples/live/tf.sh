@@ -28,4 +28,11 @@ if [ -z "${SPECTROCLOUD_HOST:-}" ]; then
   fi
 fi
 
+# Palette refuses one read of a profile with OperationForbidden now and then, and the refusals
+# came under the provider's parallel refresh of the profiles: a serial refresh did not see one.
+# So a plan, an apply, and a destroy run one resource at a time. The example is small.
+case "${1:-}" in
+  plan | apply | destroy) set -- "$1" -parallelism=1 "${@:2}" ;;
+esac
+
 exec tofu -chdir="$here/terraform" "$@"

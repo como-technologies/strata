@@ -176,16 +176,13 @@ lists the root of each environment says what runs where, one line for each.
 
 ## The whole pipeline
 
-| Host | Comment | Gate | Verify |
-| --- | --- | --- | --- |
-| GitHub | `comment.yml` on `pull_request` | `merge-gate.yml` as a required check | `verify.yml` on a schedule |
-| GitLab | `strata-comment` | `strata-merge-gate`, with "Pipelines must succeed" | `strata-verify` on a pipeline schedule |
+[GitLab CI](../automation/gitlab.md) names the comment job, the merge gate, and
+the scheduled report on each host.
 
 Both hosts also run the two gates on demand: see
 [The promotion gate and the retire gate](../automation/gates.md). Every job runs
 the same commands on either host, so a team that moves between them keeps the
-reports, the markers and the exit codes. See
-[GitLab CI](../automation/gitlab.md).
+reports, the markers and the exit codes.
 
 ## What to do
 

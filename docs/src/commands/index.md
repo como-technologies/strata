@@ -37,7 +37,7 @@ flowchart LR
 | --- | --- | --- |
 | Find a ref, a project, or the profiles with a pack | `strata list` | [list](./list.md) |
 | Find the versions a registry offers for a pack | `strata packs` | [packs](./packs.md) |
-| Record a profile version or a cluster | `strata snapshot` | [snapshot](./snapshot.md) |
+| Record a profile version, a cluster, or a pack version | `strata snapshot` | [snapshot](./snapshot.md) |
 | Write a candidate file for a review | `strata candidate` | [candidate](./candidate.md) |
 | See what changed between two refs | `strata compare` | [compare](./compare.md) |
 | Make sure that records in several projects are one release | `strata same-release` | [same-release](./same-release.md) |
@@ -64,7 +64,7 @@ details.
 
 | Exit | `compare` | `same-release` | `verify` | `consumers` |
 | --- | --- | --- | --- | --- |
-| `0` | identical | each pair passes | each record unchanged | no cluster uses it |
+| `0` | identical | each pair passes | each record unchanged | no cluster the key can read uses it |
 | `1` | different | a pair fails | a record drifted | a cluster uses it |
 | `2` | error | error | strata cannot check a record | error |
 

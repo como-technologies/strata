@@ -13,7 +13,7 @@ Set the project after the listing, not before it. Strata resolves the project
 name before it runs any command, so a name your key cannot see stops
 `strata list projects` too.
 
-A key that is wrong or expired answers HTTP 401 or 403. Check
+On HTTP 401 or HTTP 403, strata names the key in the error. Check
 `PALETTE_API_KEY`, `SPECTROCLOUD_APIKEY`, and `~/.palette.env`.
 
 Put the values in `~/.palette.env` to keep them out of the shell history.
@@ -54,12 +54,11 @@ because a stale variable that decides nothing must not fail a command.
 
 `-q` and `STRATA_QUIET` hide the warning, and skip the listing that finds it.
 The warning is for the person at the terminal. With `--json` strata writes the
-error as one JSON object on standard error, and a caller that reads that stream
-passes `-q` to keep it clean, so a warning there would break the caller instead
-of helping it.
+error as one JSON object on standard error. A caller that reads that stream
+passes `-q` to keep it clean. A warning there breaks the caller.
 
-A name in `~/.palette.env` under a uid in the environment is the fallback doing
-its job, so that pair is silent. The pair that warns loudest is the other way
+A name in `~/.palette.env` under a uid in the environment is the fallback at
+work, so that pair is silent. The pair that gets the warning is the other way
 round: a name you type for one command, under a uid that file has held for
 months.
 
@@ -78,16 +77,12 @@ The default is `https://api.spectrocloud.com`.
 
 ## Retries
 
-Strata sends a request again after HTTP 5xx, HTTP 429, or a transport error, and
-after no other error. The wait starts at one second, doubles, and stops at 30
-seconds. `STRATA_RETRIES` sets the number of retries, and `0` stops them.
+Strata sends a request again after HTTP 5xx, HTTP 429, or a transport error. A
+`Retry-After` that is longer than the limit stops the command at once. A
+scheduled job then stops early, and can run again at a later time.
 
-Strata obeys a `Retry-After` of up to `STRATA_MAX_RETRY_AFTER` seconds, 300 by
-default. A longer one stops the command at once with exit `2`. The error is
-`retry-after-too-long` while a retry remains, and `api` on the last attempt, so
-also with `STRATA_RETRIES=0`. A scheduled job then stops early, and can run again at a
-later time.
-
-[Settings](./reference/settings.md) lists each variable and its default.
+[Settings](./reference/settings.md) gives `STRATA_RETRIES`,
+`STRATA_MAX_RETRY_AFTER`, the wait between attempts, and each other variable
+with its default.
 
 Next: [Quick start](./quickstart.md).

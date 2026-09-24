@@ -9,3 +9,7 @@ ssh_key_name       = "my-key-pair"
 oci_registry_name = "my-oci-pack-registry"
 oci_pack          = "my-addon-pack"
 oci_pack_version  = "1.0.0"
+
+# The AWS profile that creates the example's own pack registry: an ECR repository, read by a
+# Palette registry that the example creates too. registry.sh pushes into it; live-down removes it.
+aws_profile = "my-aws-profile"

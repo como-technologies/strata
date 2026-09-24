@@ -174,6 +174,81 @@ variable "move_registry_name" {
   default     = "Palette Registry"
 }
 
+# examples/live/registry.sh's variables: the example's own OCI pack registry, and the profile that
+# pins the pack the script pushes into it.
+variable "aws_profile" {
+  description = "The AWS profile that creates the ECR repository of the example's own pack registry"
+  type        = string
+}
+
+variable "owned_pack_profile" {
+  description = "Create the profile that pins the pack of the example's own registry; registry.sh sets it after the push"
+  type        = bool
+  default     = false
+}
+
+variable "owned_pack_version" {
+  description = "The version of that pack the profile pins"
+  type        = string
+  default     = "1.0.0"
+}
+
+variable "owned_pack_tag" {
+  description = "The tag the profile pins the pack under; a floating tag such as 1.x when the registry lists one"
+  type        = string
+  default     = "1.0.0"
+}
+
+variable "owned_chart_profile" {
+  description = "Create the profile that pins the chart of the example's own OCI Helm registry; registry.sh sets it after the push"
+  type        = bool
+  default     = false
+}
+
+variable "owned_chart_version" {
+  description = "The version of that chart the profile pins"
+  type        = string
+  default     = "1.0.0"
+}
+
+variable "owned_helm_registry" {
+  description = "The Palette registry over the example's OCI Helm repository; registry.sh removes it and makes it again, so Palette reads the chart for the first time"
+  type        = bool
+  default     = true
+}
+
+variable "dep_profile" {
+  description = "The profile of the dependency check: none; alone, with strata-live-pack 1.1.0 and not the pack it requires; both, with the two packs. registry.sh sets it after the pushes"
+  type        = string
+  default     = "none"
+  validation {
+    condition     = contains(["none", "alone", "both"], var.dep_profile)
+    error_message = "dep_profile is none, alone, or both."
+  }
+}
+
+# examples/live/cluster.sh's variable: the value cluster A gives the variable of the add-on
+# profile. Empty gives none, and the variable has its default.
+variable "addon_purpose" {
+  description = "The value the cluster gives the add-on profile's variable purpose; empty gives none"
+  type        = string
+  default     = ""
+}
+
+# examples/live/template.sh's variables (#66): a cluster template over the release and add-on
+# versions, and a second add-on profile the cluster runs beside the first.
+variable "template" {
+  description = "Create the maintenance policy and the cluster template that link the release and add-on versions"
+  type        = bool
+  default     = false
+}
+
+variable "second_addon" {
+  description = "Create a second add-on profile, and run it on the clusters beside the first"
+  type        = bool
+  default     = false
+}
+
 # examples/live/tag-only.sh's variables (#19).
 variable "tag_only_versions" {
   description = "Release versions that differ from 1.0.0 only in the OS pack's tag name, as version => tag"

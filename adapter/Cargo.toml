@@ -1,0 +1,27 @@
+[package]
+name = "strata-knurl"
+version = "0.1.0"
+edition = "2024"
+description = "The read half of the knurl platform port, on the strata library"
+publish = false
+
+[dependencies]
+# Inside this repository. The strata crate never depends on knurl: this crate is the only
+# place where the two meet.
+strata = { path = ".." }
+# knurl is private, so Cargo must fetch it with the git command line:
+# CARGO_NET_GIT_FETCH_WITH_CLI=true. The branch becomes `main` when knurl#2 merges.
+knurl-core = { git = "ssh://git@github.com/como-technologies/knurl.git", branch = "platform-port" }
+knurl-ports = { git = "ssh://git@github.com/como-technologies/knurl.git", branch = "platform-port" }
+chrono = "0.4"
+serde_json = "1"
+# The port of knurl is async, and strata blocks. Each read runs on a blocking task of tokio.
+tokio = { version = "1", features = ["rt"] }
+
+[dev-dependencies]
+# The rules of the port, which knurl writes one time and each adapter runs.
+knurl-ports = { git = "ssh://git@github.com/como-technologies/knurl.git", branch = "platform-port", features = ["conformance"] }
+
+# Not a member of the strata package: built on its own with `just adapter-test`, so the build
+# and the CI of strata never reach knurl.
+[workspace]

@@ -1,0 +1,9 @@
+{
+  "name": "strata-live-pack",
+  "displayName": "strata live pack",
+  "layer": "addon",
+  "addonType": "system app",
+  "version": "1.0.0",
+  "cloudTypes": ["all"],
+  "kubeManifests": ["manifests/configmap.yaml"]
+}

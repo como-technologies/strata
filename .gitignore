@@ -46,6 +46,9 @@ examples/reports/
 # the library example resolves its own dependencies
 examples/library/Cargo.lock
 
+# the knurl adapter is its own package, and it resolves its own dependencies too
+adapter/Cargo.lock
+
 # the book: `just docs` builds it
 docs/book/
 

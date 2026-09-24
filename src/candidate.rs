@@ -253,10 +253,11 @@ struct LoadedLayer {
     manifests: Vec<(String, String)>,
 }
 
-/// A candidate file read and checked, with every file it points at read.
+/// A candidate read and checked, with every file it points at read.
 #[derive(Debug, Clone)]
 pub struct LoadedCandidate {
-    /// The candidate file.
+    /// The candidate file, or the text that names a candidate that came from no file. A problem
+    /// names it, and the record it gives holds it as the ref.
     pub path: PathBuf,
     /// Its contents.
     pub candidate: Candidate,
@@ -287,11 +288,23 @@ pub fn load(path: &Path) -> Result<LoadedCandidate> {
         path: path.to_path_buf(),
         source,
     })?;
+    let candidate: Candidate =
+        serde_yaml::from_str(&text).map_err(|e| Error::CandidateInvalid {
+            path: path.to_path_buf(),
+            message: e.to_string(),
+        })?;
+    check(candidate, path)
+}
+
+/// Check a candidate that is in memory, and read the files it points at, relative to the
+/// directory of `path`. `path` names the candidate: in a problem, and as the ref of the record.
+/// [`load`] reads a file and then does this; a caller that builds the candidate itself, as
+/// [`Candidate::from_snapshot`] does, starts here and writes no file.
+pub fn check(candidate: Candidate, path: &Path) -> Result<LoadedCandidate> {
     let invalid = |message: String| Error::CandidateInvalid {
         path: path.to_path_buf(),
         message,
     };
-    let candidate: Candidate = serde_yaml::from_str(&text).map_err(|e| invalid(e.to_string()))?;
     if candidate.name.is_empty() || candidate.version.is_empty() {
         return Err(invalid("name and version must not be empty".to_string()));
     }

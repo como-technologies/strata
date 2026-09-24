@@ -28,7 +28,7 @@ cargo install mdbook mdbook-mermaid mdbook-gruvbox mdbook-lint
    a file in `docs/src/output/`, which `just docs-examples` writes. Never paste
    an output of strata into a page.
 4. **Do not show internal names to a user.** The root is a digest. Only
-   [The hashes and the root](../internals/hashes.md) names the Merkle tree.
+   [The hashes and the root](../internals/hashes.md) names the tree behind it.
 5. **Put each fact in one place.** Link to it from other pages.
 6. **State a live result as a fact** in
    [What Palette does](../internals/palette.md), and add the check that
@@ -55,7 +55,7 @@ just playground          # the tenant of the chapter "list"
 just playground compare  # another chapter
 ```
 
-The script builds the tenant of that chapter, serves it, prints the settings to
+The runner builds the tenant of that chapter, serves it, prints the settings to
 export, and waits. It runs no step and writes no output file, so a page can be
 tried by hand before its output is generated. It is also how a reader follows
 the book without a tenant.
@@ -69,21 +69,25 @@ under one name, or any other line that a step of the page is written to cause.
 
 `xtask` runs each command against a local stand-in for the Palette API, which is
 `xtask/src/palette.rs`. The stand-in serves JSON files, one for each
-request. Each chapter of the script builds the tenant that one page needs, from
+request. Each chapter of the runner builds the tenant that one page needs, from
 the real pack data in `examples/`, and changes it between commands as Palette
 changes it.
 
-1. Find the chapter of the page in `xtask/src/chapters.rs`, or add one.
-2. Build the tenant with `projects`, `profile`, `addons`, `cluster`, and
-   `registries`. Change it with `edit`, `on_cluster`, and `set_value`.
-3. Add a step with the expected exit code:
+1. Find the chapter of the page in `xtask/src/chapters.rs`, or add one with
+   `r.chapter("name", env)`.
+2. Build the tenant with `projects`, `profile`, `profile_own_copy`, `addons`,
+   `cluster`, `cluster_with`, and `registries`. Change it with `edit`,
+   `on_cluster_reclaim`, and `set_value`.
+3. Add a step with its name, the expected exit code, whether to keep standard
+   error, and the command:
 
-   ```bash
-   show  verify-drift 1 'strata verify releases/1.1.1/dev.json'   # standard output
-   show2 snapshot-profile 0 'strata snapshot aws-stack@1.1.1 -o r.json'   # and standard error
+   ```rust
+   r.step("verify-drift", 1, false, "strata verify releases/1.1.1/dev.json");
+   r.step("snapshot-profile", 0, true, "strata snapshot aws-stack@1.1.1 -o r.json");
    ```
 
-   Two steps with one name go into one file.
+   Two steps with one name go into one file. `r.excerpt(name, from, pattern)`
+   writes the lines of an output that a page teaches.
 4. Run `just docs-examples`, and include the file:
 
    ````markdown
@@ -94,7 +98,7 @@ changes it.
 
    `\{{#include ../output/file.txt:1:20}}` includes lines 1 to 20.
 
-A step with another exit code stops the script. The script replaces each time
+A step with another exit code stops the runner. The runner replaces each time
 stamp with `2026-09-17T09:30:00Z`, so a file changes only when strata changes.
 A change to Palette behavior in the stand-in needs a live run that shows it.
 

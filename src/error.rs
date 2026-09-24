@@ -287,6 +287,25 @@ impl Error {
         2
     }
 
+    /// How a caller treats the failure when it decides to try again. [`crate::api::Retry`]
+    /// decides with the same rule.
+    pub fn class(&self) -> FailureClass {
+        match self {
+            Error::Transport { .. } | Error::RetryAfterTooLong { .. } => FailureClass::Transient,
+            Error::Api { status, .. } if *status == 429 || (500..600).contains(status) => {
+                FailureClass::Transient
+            }
+            // A 2xx that is not JSON can be a gateway page or a real fault, and a file or a
+            // serializer that fails says nothing about the next try.
+            Error::NotJson { .. } | Error::NoUid | Error::Io { .. } | Error::Serialize(_) => {
+                FailureClass::Unknown
+            }
+            // Every other failure stays while the inputs stay: another HTTP status, a thing that
+            // is not there, a file or a setting that is not valid.
+            _ => FailureClass::Terminal,
+        }
+    }
+
     /// A stable kebab-case name for the variant, for programs that read errors. The `match` is
     /// exhaustive, so a new variant cannot be added without naming it here.
     pub fn kind(&self) -> &'static str {
@@ -660,4 +679,17 @@ mod tests {
             serde_json::json!(["Public Repo", "Mirror"])
         );
     }
+}
+
+/// The class of a failure, for a caller that decides to try again.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum FailureClass {
+    /// Time can remove it: a transport error, HTTP 5xx, HTTP 429, or a `Retry-After` that is
+    /// longer than strata waits.
+    Transient,
+    /// It stays while the inputs stay: another HTTP 4xx, a thing that is not there, a file or a
+    /// setting that is not valid.
+    Terminal,
+    /// Strata cannot tell.
+    Unknown,
 }

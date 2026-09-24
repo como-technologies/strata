@@ -49,6 +49,7 @@
 - [The promotion gate and the retire gate](./automation/gates.md)
 - [GitLab CI](./automation/gitlab.md)
 - [The Rust library](./automation/library.md)
+- [The knurl adapter](./automation/knurl.md)
 
 # Reference
 

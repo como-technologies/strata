@@ -7,15 +7,15 @@
    just version <version>
    ```
 
-   The version is in ten files: `Cargo.toml` and `Cargo.lock`, the README badge
-   and its install command, the install page, the CI drop-ins, and the pages
-   that show them. The recipe rewrites the version only where the version
-   follows this repository, so prose that names a release for a reason keeps it:
+   The version is in `Cargo.toml` and `Cargo.lock`, the README badge and its
+   install command, the install page, the CI drop-ins, and the pages that show
+   them. The recipe rewrites the version only where the version
+   follows this repository. Prose that names a release for a reason keeps it:
    "use v0.5.2 or later, the first release with all four scripts" is a fact
-   about v0.5.2. It leaves the recorded live runs alone for the same reason,
-   because each one says which build produced it. It refuses when a file it must
-   rewrite already holds uncommitted changes, so the commit is the version and
-   nothing else.
+   about v0.5.2. The recipe leaves the recorded live runs alone for the same
+   reason, because each one says which build produced it. It refuses when a file
+   it must rewrite already holds uncommitted changes, so the commit is the
+   version and nothing else.
 2. Tag the commit:
 
    ```bash
@@ -32,11 +32,14 @@
 
 The release workflow then:
 
-1. builds the four binaries
-2. writes `SHA256SUMS`
-3. signs each file with cosign
-4. checks the signatures
+1. runs every check of `checks.yml`, so a tag cannot ship what CI refuses
+2. builds the four binaries
+3. copies the CI scripts and the installer beside them, and writes `SHA256SUMS`
+   over all of them
+4. signs each file with cosign, and checks the signatures
 5. publishes the GitHub release with generated notes
+6. installs the published release with `install-strata.sh`, and runs each script
+   it installed
 
 Users install it as [Install](../install.md) shows. The version rules are in
 [Versions and compatibility](../reference/compatibility.md).

@@ -15,6 +15,7 @@ show.
 | `drift-report.sh off`, `drift-report.sh on` | `scripts/ci/verify-report.sh` around an edit in place and a version bump (#25). |
 | `packs.sh` | `pack:` refs against the tenant's own registries (#55). Read-only, and it needs no cluster. |
 | `merge-gate.sh` | `scripts/ci/merge-gate.sh` over records of the live profiles, in a git repository that the script builds (#57). It needs the profiles, and no cluster. |
+| `knurl.sh` | [The knurl adapter](../automation/knurl.md): each method of the port against the strata answer for the same real object. Read-only. It needs the profiles; the instance checks need the cluster. |
 
 The example uses AWS, because the recorded runs had an AWS cloud account. Strata
 makes no rule about which cloud runs the cluster. For another cloud, change the cluster
@@ -28,9 +29,16 @@ resource and the OS and CSI packs in `terraform/main.tf`.
 | --- | --- |
 | profile `strata-live-profile` 1.0.0 | Ubuntu 24.04, Kubernetes 1.36.2, Cilium 1.20.1, EBS CSI 1.65.0, default values. Cluster A runs it. |
 | profile `strata-live-profile` 1.0.1 | The same, with the EBS storage class `reclaimPolicy` `Retain` in place of `Delete`. No cluster runs it. |
-| profile `strata-live-addon` 1.0.0 | An add-on profile with one manifest, the ConfigMap `strata-live-config` in `default`. Cluster A runs it after the release profile. |
+| profile `strata-live-addon` 1.0.0 | An add-on profile with one manifest, the ConfigMap `strata-live-config` in `default`, and one variable, `purpose`, with a default. Cluster A runs it after the release profile. |
 | cluster `fred` (cluster A) | One control plane node and two workers, `t3.xlarge`, one availability zone. |
 | profile `strata-live-registries` 1.0.0 | An add-on profile with one chart from a Helm registry (default `nginx` 25.1.5 from `Bitnami`), and one pack from the OCI pack registry that `terraform.tfvars` names. No cluster runs it. |
+| registry `strata-live-registry` | The example's own OCI pack registry: two ECR repositories, `strata-live/spectro-packs/archive/strata-live-pack` and `.../strata-live-dep`, in the AWS account that `aws_profile` names, a user that reads them, and a Palette registry over them. `registry.sh` pushes into it; nothing else does. |
+| profile `strata-live-owned` 1.0.0 | An add-on profile with the one pack of that registry. `registry.sh` makes it after the first push, and removes it at its end. |
+| profile `strata-live-dep` 1.0.0 | An add-on profile with `strata-live-pack` 1.1.0, which requires `strata-live-dep`, and that pack. `registry.sh` makes it after the pushes, and removes it at its end. |
+| registry `strata-live-helm-registry` | The same repository host, read by Palette as an OCI Helm registry, with one chart repository. `registry.sh` pushes into it. |
+| profile `strata-live-owned-helm` 1.0.0 | An add-on profile with the one chart of that registry. `registry.sh` makes it after the first push, and removes it at its end. |
+| policy `strata-live-maintenance`, template `strata-live-template` | A maintenance policy, and a cluster template that links the release version and the add-on version. `template.sh` makes them before it builds a cluster, and removes them at its end. |
+| profile `strata-live-addon2` 1.0.0 | A second add-on profile with one manifest. `template.sh` runs it on the cluster beside the first, for the install order of add-on packs. |
 
 The pack versions are those of `examples/profiles/aws-stack@1.1.0.json`.
 
@@ -62,9 +70,15 @@ its end.
 | `registry-move.sh` | The registry move test (#24). |
 | `tag-only.sh` | The tag name test (#19). |
 | `drift-report.sh` | The drift report test (#25). It opens and closes issues in this repository with the label `strata-live-drift`. |
-| `api.sh` | The writes outside OpenTofu: an edit in place, a push of a profile to a cluster, and the delete of profile versions. |
+| `api.sh` | The writes outside OpenTofu: an edit in place, a push of a profile to a cluster, the delete of profile versions, and the delete of a cluster. |
 | `packs.sh` | The pack ref test (#55). |
 | `merge-gate.sh` | The merge gate test (#57). |
+| `knurl.sh` | The knurl adapter test. |
+| `registry.sh` | The registry test (#66): pushes into the example's own OCI pack registry and OCI Helm registry, and reads what Palette does with each push. |
+| `pack/`, `chart/` | The two packs and the one chart that `registry.sh` pushes. |
+| `template.sh` | The cluster template test (#66): the lock on a linked version, a cluster outside the template, and the install order of add-on packs. It ends with the removal of the example. |
+| `cluster.sh` | The cluster test (#66): a change of the value the cluster gives a variable, and a deletion through the API. It ends with the cluster gone. |
+| `order.sh` | The order test (#66): a reorder of the packs of two published versions, and of the profiles of the cluster, through the API. It leaves the versions edited; `live-down` follows it. |
 | `aws-inventory.sh` | What the cluster still has in AWS, to confirm a teardown. |
 
 ## Design
@@ -81,8 +95,14 @@ it:
 - no cluster B (`barney`) exists
 - each profile name holds exactly the versions that OpenTofu manages
 
-Each script needs the baseline before it starts, and leaves the example as it
-found it.
+`verify.sh`, `in-place.sh`, `registry-move.sh`, `tag-only.sh`, and
+`drift-report.sh` check the baseline before they start, and leave the example as
+they found it. `packs.sh` and `knurl.sh` read the profiles and change nothing.
+`merge-gate.sh` makes one edit in place, and puts it back.
+`registry.sh` leaves the pushed versions in its own registry.
+`template.sh` ends with the example removed, `cluster.sh` ends with the cluster
+gone, and `order.sh` leaves two versions edited: run `just live-down` after
+each.
 
 | Script | Changes | Holds |
 | --- | --- | --- |
@@ -93,6 +113,11 @@ found it.
 | `tag-only.sh` | the tag name of the OS pack, and which of two such versions cluster A runs | the pack uid, each other pack, the values, the flag (off), the baseline |
 | `packs.sh` | nothing; it only reads | the baseline |
 | `merge-gate.sh` | the add-on version, which stage 4 edits in place and stage 5 puts back | the profiles, the clusters, the baseline |
+| `knurl.sh` | nothing; it only reads | the baseline |
+| `registry.sh` | the images of the example's own registries, and the profiles that pin them | the shared registries, the clusters, the release and add-on versions |
+| `template.sh` | a template over the release and add-on versions; then the release version, in place | the pack versions; it ends with the example removed |
+| `cluster.sh` | the value cluster A gives one variable; then the cluster, deleted through the API | the profiles |
+| `order.sh` | the pack order of two published versions, and the profile order of cluster A | the packs, the values, the manifests; it leaves the versions edited |
 
 **One definition for each kind.** Clusters A and B come from one resource, and
 differ only in their names. Each profile has the same lifecycle:
@@ -130,12 +155,15 @@ back to false with the default variables (`apply_baseline`).
   even when it reads an empty password, so make sure of the login with `crane
   digest <registry>/<repository>:<tag>`.
 - The AWS CLI with read access to the account, only for `aws-inventory.sh`.
+- An AWS profile that can create an ECR repository and an IAM user in the
+  account, named in `terraform.tfvars` as `aws_profile`. Every apply needs it,
+  because the example's own pack registry lives there. `registry.sh` needs
+  `oras` as well, and logs in to the repository with that profile.
 - The AWS managed policy `AmazonEBSCSIDriverPolicy` on the worker node role
   `nodes.cluster-api-provider-aws.sigs.k8s.io`. Without it, the EBS CSI
   controller fails on each cluster with `UnauthorizedOperation` on
   `ec2:DescribeAvailabilityZones`. No strata check needs volumes, and Palette
-  still reports such a cluster `Running`. The runs before 2026-09-17 01:35 UTC
-  ran without the policy.
+  still reports such a cluster `Running`.
 
 For a self-hosted Palette, set `PALETTE_API` in the environment or in
 `~/.palette.env`. Strata reads it, and `tf.sh` and `tenant.sh` pass it on.
@@ -179,6 +207,7 @@ $EDITOR examples/live/terraform/terraform.tfvars
 | `region`, `az` | the region and a zone |
 | `ssh_key_name` | a key pair |
 | `oci_registry_name` | an OCI pack registry that you can log in to |
+| `aws_profile` | an AWS profile that can create an ECR repository and an IAM user in the account; every apply needs it |
 | `oci_pack`, `oci_pack_version` | an add-on pack in that registry, and its version |
 | `helm_registry_name`, `helm_chart`, `helm_chart_version` | optional; the default is `nginx` 25.1.5 from `Bitnami` |
 
@@ -228,6 +257,10 @@ AWS_PROFILE=<profile> examples/live/tag-only.sh                                #
 just live-drift-report                                                         # #25
 just live-packs                                                                # #55, read-only
 just live-merge-gate                                                           # #57, needs just live-profiles
+just live-registry                                                             # #66, needs just live-profiles, oras, helm, and aws
+just live-template                                                             # #66, needs just live-profiles and no cluster; ends with live-down
+just live-cluster                                                              # #66, needs just live-up; ends with the cluster gone
+just live-order                                                                # #66, needs just live-up; leaves the versions edited, so live-down follows
 ```
 
 `just live-session` runs `verify.sh`, `in-place.sh off`, `in-place.sh on`, and
@@ -260,7 +293,11 @@ uses (the `profile_names` output), by exact name. With the flag on,
 `skip_destroy` keeps the versions that a bump replaced out of the state, so a
 destroy alone leaves them in Palette.
 
-> **Do not take "Destroy complete" as the confirmation.** During a gateway
+The destroy asks for approval. A run with no person at the terminal answers it
+with `yes yes | just live-down`; the second attempt, after a refused read,
+reads the answer too.
+
+> **"Destroy complete" is not the confirmation.** During a gateway
 > outage, Palette answers a plain-text 404, and the provider can take it for a
 > finished deletion while the cluster still runs. A deleted cluster has the
 > state `Deleted`. `tenant.sh cluster` exits `2` on a 404 that is not the JSON
@@ -287,13 +324,13 @@ in Palette, which exists from the start of the creation.
 | `live-up` fails with "A minimum allocation of '4.1' CPU cores is required across all worker nodes" | The workers have 4 cores or fewer in total. The default of two `t3.xlarge` workers has more. |
 | `snapshot-candidate` fails with `pack-not-found` that names a tag | A strata build from before the tag fix. The tag of the profile is the version. |
 | A flag-on bump fails with `DeletionResourceInUseError: Unable to delete the resource as fred spectrocluster(s) in-use` | The state held `skip_destroy = false`, and the provider deletes a replaced version with the value in its state (provider 0.29.7, and `resourceClusterProfileDelete` in 0.30.1). Each script now runs `hold_versions` right after it checks the baseline. |
-| A script stops with `target/release/strata is older than <file>; run just build` | The sources changed after the last release build. A script that you run directly does not build first. Without this check, the `drift-report.sh off` run of 2026-09-17 used a binary with no `verify --summary`, and failed 18 checks. Run `just build`, then run the script again. |
+| A script stops with `target/release/strata is older than <file>; run just build` | The sources changed after the last release build. A script that you run directly does not build first. Without this check, a run can use a binary that lacks an option the script needs, and fail every check that uses it. Run `just build`, then run the script again. |
 | `consumer-is-the-cluster` fails with state `unknown` | The key cannot read the cluster in its project. `consumers-release.out` prints the error next to the cluster. |
 | `only-the-edited-value` fails with two changed values | Somebody edited 1.0.1 in place and did not undo it. `baseline.sh` names it. |
 | A script stops with "not at its baseline" | An earlier run did not finish, or a person changed the example. `baseline-before.txt` names each difference. `just live-down && just live-up` builds it again. |
 | `registry-digest-oci` fails with "crane digest ... failed" or HTTP 401 | No login to the OCI registry, or an expired one. An AWS registry login lasts 12 hours. A login also stores an empty credential, and reports a success, when the token request before it failed: run `aws ecr get-login-password` alone first, and use a profile that has `ecr:GetAuthorizationToken`. |
 | `ebs-csi-controller` pods in `CrashLoopBackOff`, with `UnauthorizedOperation` on `ec2:DescribeAvailabilityZones` | The worker node role does not have `AmazonEBSCSIDriverPolicy`. See Prerequisites. |
-| A cluster stays `Provisioning` with `not done: WorkerNodeAdditionDone: provision worker nodes`, although its machines are `Running` and its nodes `Ready` | Palette did not check the workers again after a node that was not yet in the cluster failed its first check (`fred`, 2026-09-17). A restart of the Palette controller in the cluster did not help. Its deletion ran normally: delete it, and send its diagnostics to Palette support. |
+| A cluster stays `Provisioning` with `not done: WorkerNodeAdditionDone: provision worker nodes`, although its machines are `Running` and its nodes `Ready` | Palette did not check the workers again. A restart of the Palette controller in the cluster does not help. The deletion of such a cluster runs normally: delete it, and send its diagnostics to Palette support. |
 
 ## When a teardown is slow or stuck
 
@@ -312,14 +349,11 @@ These rules come from the teardowns of this kind of cluster:
 - **Judge the progress by `aws-inventory.sh`, not by the time.** Only 0 on each
   line means that AWS is empty. The instances, the NAT gateway, and the load
   balancer go first. The security groups, route tables, subnets, internet
-  gateway, and VPC go last, some after a retry. Before 2026-09-17,
-  `aws-inventory.sh` counted fewer kinds of resource, so a healthy deletion
-  looked stuck. Palette then logs the event
-  `Cluster <name> has been deleted`, but the state stays `Deleting` for several
-  minutes, and OpenTofu waits for the state. A deletion seen end to end took
-  19 minutes: the VPC went first, the event came 11 minutes after the delete
-  with the inventory at 0, and the state became `Deleted` 8 minutes after that.
-  No step was manual.
+  gateway, and VPC go last, some after a retry. Palette logs the event
+  `Cluster <name> has been deleted` before the state changes: the state stays
+  `Deleting` for several minutes after that event, and OpenTofu waits for the
+  state. So an inventory at 0 with the state still `Deleting` is a deletion that
+  runs, and not one that is stuck.
 - **If the state stays `Deleting` and the inventory does not change** for
   several readings, read the events of the cluster in the Palette console. The
   message usually names what holds the deletion. A cluster with Pause Agent
@@ -344,17 +378,28 @@ These rules come from the teardowns of this kind of cluster:
 | --- | --- | --- |
 | `snapshot-cluster` | 0 | strata reads what a live cluster runs |
 | `cluster-runs-release` | 0 | the cluster reports the release profile version |
-| `cluster-runs-two-profiles` | 0 | #23: the cluster runs the release profile, then the add-on profile |
+| `cluster-runs-two-profiles` | 0 | #23: the cluster runs the release profile and the add-on profile. Palette lists the two in either order. |
 | `snapshot-release` | 0 | record the version that the cluster runs |
 | `compare-release-cluster` | 0 | #1: a cluster that runs the recorded version is `IDENTICAL` |
+| `consumers-line-names-the-cluster` | 0 | #12: the comparison of a record against its cluster names that cluster among the consumers of the version |
 | `snapshot-addon` | 0 | record the add-on profile version that the cluster runs |
 | `compare-addon-cluster` | 0 | #23: the add-on record is `IDENTICAL` to the add-on selection of the cluster |
+| `addon-has-a-variable` | 0 | #66: the add-on profile declares one variable, `purpose` |
+| `cluster-variables-endpoint` | 0 | #66: `GET /v1/spectroclusters/<uid>/variables` serves the variable of the add-on profile |
+| `snapshot-addon-copy` | 0 | #66: record the copy of the add-on profile that the cluster holds |
+| `addon-copy-variables-hash` | 0 | #66: the copy has the variables hash of the profile, so the endpoint repeats the definition fields |
 | `snapshot-next` | 0 | record the newer version |
 | `compare-next-cluster` | 1 | #1: against a newer record, the cluster shows the change |
+| `compare-next-cluster-json` | 1 | #1: the same comparison as JSON |
 | `only-the-edited-value` | 0 | #1: the only change is `csi-aws-ebs` `reclaimPolicy` |
 | `consumers-release` | 1 | #12: the release version has a consumer |
+| `consumers-release-json` | 1 | #12: the same listing as JSON |
 | `consumer-is-the-cluster` | 0 | #12: listed with its name, project, and state |
 | `consumers-next` | 0 | #12: no cluster runs the newer version |
+| `list-applied`, `list-applied-json` | 0 | #63: `list --applied` names the profiles each cluster runs, as text and as JSON |
+| `applied-is-what-the-cluster-runs` | 0 | #63: the listed profiles are those the cluster record names |
+| `cluster-listing` | 0 | #63: read the cluster listing that strata lists clusters from |
+| `listing-profile-fields` | 0 | #63: the fields of the cluster listing whose name holds `profile` |
 | `candidate-file` | 0 | #21: write the record of the newer version as a candidate file |
 | `snapshot-candidate` | 0 | #4: snapshot the candidate through registry lookups |
 | `candidate-same-release` | 0 | #4: the root of the candidate equals the published root |

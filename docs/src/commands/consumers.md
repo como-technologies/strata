@@ -52,10 +52,20 @@ version bump or a rename overwrote the version that the cluster runs. See
   version that its copy names.
 - A cluster that strata cannot read shows `unknown` and the error. Strata counts
   it as a consumer, so the exit status is `1`.
+- Palette computes `status.inUseClusters` when it is asked, in the projects the
+  key can read. So strata reads each
+  cluster the key can list as well, for the profiles it applies. A cluster that
+  applies the version and is not in the list joins the answer, marked
+  `not in the consumer list of the profile`. The last line says how far that
+  second reading got: `second reading: 3 of 3 clusters read`, or
+  `second reading: not done` with the reason.
+- A cluster that Palette is deleting stays in the list with the state
+  `Deleting`, and the exit is `1`. After the deletion, the list drops it. See
+  [What the cluster listing answers](../internals/palette.md#what-the-cluster-listing-answers).
 
 | Exit | Meaning |
 | --- | --- |
-| `0` | No cluster uses the version. |
+| `0` | No cluster uses the version: the profile lists none, and no cluster the key can list applies it. |
 | `1` | A cluster uses the version. |
 | `2` | Strata could not answer. |
 
