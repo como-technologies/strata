@@ -204,6 +204,41 @@ pub struct ClusterSource {
     /// Each change that waits, as the open notifications name it.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub pending_updates: Vec<PendingUpdate>,
+    /// With `snapshot --macros`: each user macro the recorded content uses, and the `sha256:` of
+    /// the value Palette gives it for this cluster, or `unresolved`. A value can be a secret, so
+    /// the record holds its digest and not the value. Outside the root; `verify` reads the values
+    /// again and compares.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub macro_values: Option<BTreeMap<String, String>>,
+}
+
+/// The digest of each macro in `names` that `resolved` gives for one of `profiles`:
+/// `sha256:<hex>` of the value, or `unresolved` when no profile has it.
+pub fn macro_digests(
+    resolved: &Value,
+    profiles: &[AppliedProfile],
+    names: &[String],
+) -> BTreeMap<String, String> {
+    let maps: Vec<&Value> = resolved
+        .get("profiles")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter(|p| profiles.iter().any(|a| s(p, "/uid") == a.uid))
+        .map(|p| &p["resolved"])
+        .collect();
+    names
+        .iter()
+        .map(|name| {
+            let key = format!("{{{{.spectro.macro.{name}}}}}");
+            let digest = maps
+                .iter()
+                .find_map(|m| m.get(&key).and_then(Value::as_str))
+                .map(|v| format!("sha256:{}", sha256_hex(v)))
+                .unwrap_or_else(|| "unresolved".to_string());
+            (name.clone(), digest)
+        })
+        .collect()
 }
 
 /// One change that waits for a cluster, from an open notification of Palette.
@@ -654,7 +689,51 @@ impl Pack {
     }
 }
 
+/// The user macros that `packs` use, by name and sorted: in the values and the manifests.
+fn macros_of(packs: &[Pack]) -> Vec<String> {
+    let mut names = std::collections::BTreeSet::new();
+    for p in packs {
+        names.extend(macro_names(&p.values));
+        for m in &p.manifests {
+            names.extend(macro_names(&m.content));
+        }
+    }
+    names.into_iter().collect()
+}
+
+/// The names of the user macros that `text` uses: each `{{.spectro.macro.NAME}}`, with spaces
+/// after `{{` allowed. A name holds letters, digits, `_`, `-`, and `.`. A system macro,
+/// `{{.spectro.system.NAME}}`, is not a user macro: Palette gives it from the cluster, and no
+/// person edits it.
+pub fn macro_names(text: &str) -> std::collections::BTreeSet<String> {
+    const PREFIX: &str = ".spectro.macro.";
+    let mut names = std::collections::BTreeSet::new();
+    let mut rest = text;
+    while let Some(i) = rest.find("{{") {
+        rest = &rest[i + 2..];
+        let body = rest.trim_start();
+        if let Some(after) = body.strip_prefix(PREFIX) {
+            let name: String = after
+                .chars()
+                .take_while(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.'))
+                .collect();
+            let name = name.trim_end_matches('.').to_string();
+            if !name.is_empty() {
+                names.insert(name);
+            }
+        }
+    }
+    names
+}
+
 impl Snapshot {
+    /// The user macros that the recorded content uses, by name and sorted: in the values and the
+    /// manifests of each pack. The root covers these names and not the values Palette gives
+    /// them, so an edit of a macro does not move the root.
+    pub fn macros(&self) -> Vec<String> {
+        macros_of(&self.packs)
+    }
+
     /// The key of each pack whose upstream is unknown, in pack order: see
     /// [`Pack::upstream_unknown`].
     pub fn upstream_unknown(&self) -> Vec<String> {
@@ -871,6 +950,10 @@ impl Snapshot {
                         .map(|_| !pending_updates.is_empty()),
                     updates_pending_error: raw.notifications_error.clone(),
                     pending_updates,
+                    macro_values: raw
+                        .resolved_values
+                        .as_ref()
+                        .map(|r| macro_digests(r, &covered, &macros_of(&packs))),
                     profiles: covered,
                 }
             }),

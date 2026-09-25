@@ -170,6 +170,9 @@ struct SnapshotArgs {
     /// Write the JSON on one line
     #[arg(long)]
     compact: bool,
+    /// For a cluster: record the digest of the value Palette gives each macro the content uses
+    #[arg(long, conflicts_with_all = ["from_raw", "from_candidate"])]
+    macros: bool,
     /// No progress messages
     #[arg(short, long)]
     quiet: bool,
@@ -554,7 +557,8 @@ fn cmd_compare(a: &CompareArgs) -> Result<ExitCode> {
     )?;
     let d = ops::compare(&sa, &sb, &now);
     print!("{}", a.out.renderer().render(&d, &sa, &sb, a.full)?);
-    Ok(exit_for(d.same))
+    // two clusters whose macros resolve two ways run other content, also where the roots are equal
+    Ok(exit_for(d.same && d.macros_changed.is_empty()))
 }
 
 fn cmd_snapshot(a: &SnapshotArgs) -> Result<ExitCode> {
@@ -573,10 +577,26 @@ fn cmd_snapshot(a: &SnapshotArgs) -> Result<ExitCode> {
                 message: "snapshot needs a profile ref or --from-raw DIR".to_string(),
             })?;
             let reference = Ref::parse(text);
+            if a.macros && !matches!(reference, Ref::Cluster { .. }) {
+                return Err(Error::Usage {
+                    message: "--macros needs a cluster ref: a cluster resolves the macros, and \
+                              a profile does not"
+                        .to_string(),
+                });
+            }
             let palette = connect(progress, None)?;
             let snap = match &reference {
                 Ref::Cluster { uid, profile } => {
-                    let raw = palette.fetch_cluster(uid, &progress)?;
+                    let mut raw = palette.fetch_cluster(uid, &progress)?;
+                    if a.macros {
+                        let uid = raw
+                            .cluster
+                            .pointer("/metadata/uid")
+                            .and_then(serde_json::Value::as_str)
+                            .unwrap_or(uid)
+                            .to_string();
+                        raw.resolved_values = Some(palette.resolved_values(&uid)?);
+                    }
                     if let Some(dir) = &a.raw_dir {
                         raw.save_dir(dir, &now)?;
                     }

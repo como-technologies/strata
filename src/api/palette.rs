@@ -303,7 +303,20 @@ impl<A: PaletteApi> Palette<A> {
             fetched_at: None,
             notifications,
             notifications_error,
+            resolved_values: None,
         })
+    }
+
+    /// The value Palette gives each macro for one cluster, `GET
+    /// /v1/spectroclusters/{uid}/packs/resolvedValues`: `profiles[]`, each with its `uid` and a
+    /// `resolved` map from each placeholder, such as `{{.spectro.macro.region}}`, to its value. The
+    /// map holds every macro Palette can resolve for the profile, the system ones too, and not
+    /// only the ones it uses.
+    pub fn resolved_values(&self, uid: &str) -> Result<Value> {
+        self.api.get_json(&format!(
+            "/v1/spectroclusters/{}/packs/resolvedValues",
+            query_value(uid)
+        ))
     }
 
     /// The notifications of one cluster, `GET /v1/notifications/spectrocluster/{uid}`, every page,

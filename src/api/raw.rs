@@ -169,6 +169,9 @@ pub struct RawCluster {
     pub notifications: Option<Value>,
     /// Why Palette did not give the notifications, when it did not
     pub notifications_error: Option<String>,
+    /// `GET /v1/spectroclusters/{uid}/packs/resolvedValues`: for each applied profile, the value
+    /// Palette gives each macro. `None` unless asked for, with `snapshot --macros`.
+    pub resolved_values: Option<Value>,
 }
 
 impl RawCluster {
@@ -190,8 +193,16 @@ impl RawCluster {
                 None
             },
             notifications_error: None,
+            resolved_values: if dir.join(Self::RESOLVED_VALUES).is_file() {
+                Some(read_json_file(dir, Self::RESOLVED_VALUES)?)
+            } else {
+                None
+            },
         })
     }
+
+    /// The file that holds the values Palette gives the macros, when they were read.
+    pub const RESOLVED_VALUES: &'static str = "resolved-values.json";
 
     /// The file that holds the notifications of the cluster, when they were read.
     pub const NOTIFICATIONS: &'static str = "notifications.json";
@@ -208,6 +219,9 @@ impl RawCluster {
         ];
         if let Some(n) = &self.notifications {
             files.push((Self::NOTIFICATIONS, n));
+        }
+        if let Some(r) = &self.resolved_values {
+            files.push((Self::RESOLVED_VALUES, r));
         }
         write_json_files(dir, &files)
     }

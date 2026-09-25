@@ -3,12 +3,13 @@
 use super::{
     Renderer, VarLine, applied_ref, chain_verdict, cluster_count, cluster_value, consumer_count,
     consumer_counts, consumers_heading, consumers_sentence, count_of, counts_line, cross_kind_note,
-    dash, edited_in_place_note, entry_error, list_count, list_scope, overwritten_in_place_notes,
-    pack_version, pair_detail, pair_word, profiles_overwritten_sentence, project_label,
-    record_detail, record_label, registry_note, same_content_note, short, show, subject,
-    tag_rename, traits_suffix, unverified_sentence, updates_pending_notes, upstream_unknown_note,
-    values_changed_suffix, variable_lines, variables_comparable, variables_unavailable_note,
-    version_display, who_entry, who_heading,
+    dash, edited_in_place_note, entry_error, list_count, list_scope, macros_changed_note,
+    macros_changed_sentence, macros_note, overwritten_in_place_notes, pack_version, pair_detail,
+    pair_word, profiles_overwritten_sentence, project_label, record_detail, record_label,
+    registry_note, same_content_note, short, show, subject, tag_rename, traits_suffix,
+    unverified_sentence, updates_pending_notes, upstream_unknown_note, values_changed_suffix,
+    variable_lines, variables_comparable, variables_unavailable_note, version_display, who_entry,
+    who_heading,
 };
 use crate::color::Paint;
 use crate::diff::{
@@ -272,6 +273,12 @@ impl Renderer for TerminalRenderer {
         if let Some(note) = upstream_unknown_note(d) {
             out.push(format!("note       {}", p.byellow(&note)));
         }
+        if let Some(note) = macros_note(d) {
+            out.push(format!("note       {}", p.byellow(&note)));
+        }
+        if let Some(note) = macros_changed_note(d) {
+            out.push(format!("note       {}", p.byellow(&note)));
+        }
         if let Some(note) = same_content_note(d) {
             out.push(format!("note       {}", p.bgreen(&note)));
         }
@@ -352,6 +359,12 @@ impl Renderer for TerminalRenderer {
                 Some(now) => format!(
                     "{}: {what} now names {now}: the version recorded {at} was overwritten in place{}",
                     p.bred("DRIFT"),
+                    values_changed_suffix(v.cluster_values_changed)
+                ),
+                None if !v.macros_changed.is_empty() => format!(
+                    "{}: {what} has the content recorded {at}, but {}{}",
+                    p.bred("DRIFT"),
+                    macros_changed_sentence(&v.macros_changed),
                     values_changed_suffix(v.cluster_values_changed)
                 ),
                 None => format!(

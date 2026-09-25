@@ -5308,3 +5308,163 @@ fn same_release_refuses_a_pair_with_no_digest_unless_allowed() {
         c.pairs[0].reasons
     );
 }
+
+// ---- macros ------------------------------------------------------------------------------------
+
+#[test]
+fn a_macro_is_found_by_name_in_values_and_manifests_and_a_system_macro_is_not() {
+    use strata::snapshot::macro_names;
+    let names = macro_names(
+        "region: {{.spectro.macro.region}}\nid: {{ .spectro.macro.cloudanix.partnerIdentifier }}\n\
+         name: {{.spectro.system.cluster.name}}\nagain: {{.spectro.macro.region}}\nnot: {{ .Values.x }}",
+    );
+    assert_eq!(
+        names.into_iter().collect::<Vec<_>>(),
+        ["cloudanix.partnerIdentifier", "region"]
+    );
+    assert!(macro_names("no macro here").is_empty());
+}
+
+/// Fixture `a` as `dir`, with the kubernetes values reading a macro.
+fn with_macro(raw_root: &Path, dir: &str) -> Snapshot {
+    with_os_pack(raw_root, dir, |p| {
+        let values = p["values"].as_str().unwrap_or_default();
+        p["values"] = Value::from(format!(
+            "{values}\nregion: \"{{{{.spectro.macro.region}}}}\"\n"
+        ));
+    })
+}
+
+#[test]
+fn every_report_names_the_macros_the_content_uses() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let a = with_macro(dir.path(), "macro");
+    assert_eq!(a.macros(), ["region"]);
+    let d = ops::compare(&a, &a, "t1");
+    assert_eq!(d.macros, ["region"]);
+    let text = render::renderer(Format::Terminal, Paint::off(), false)
+        .render(&d, &a, &a, false)
+        .unwrap();
+    assert!(
+        text.contains("note       the content uses macro region: the root covers its name and not its value, so an edit of a macro does not show\n"),
+        "{text}"
+    );
+    let plain = ops::snapshot_from_dir(&dir.path().join("a"), "a", "t0").unwrap();
+    assert!(ops::compare(&plain, &plain, "t1").macros.is_empty());
+}
+
+/// A resolvedValues answer for the one profile of cluster-a: `region` as given.
+fn resolved(region: &str) -> Value {
+    serde_json::json!({"profiles": [{"uid": UID_A, "resolved": {
+        "{{.spectro.macro.region}}": region,
+        "{{.spectro.system.cluster.name}}": "lab-cluster",
+    }}]})
+}
+
+/// cluster-a as `dir`, with the values of each applied pack reading the macro `region`.
+fn cluster_with_macro(raw_root: &Path, dir: &str) {
+    let (from, to) = (raw_root.join("cluster-a"), raw_root.join(dir));
+    fs::create_dir_all(&to).unwrap();
+    for f in ["manifests.json", "variables.json"] {
+        fs::copy(from.join(f), to.join(f)).unwrap();
+    }
+    let mut cluster = read(&from.join("cluster.json"));
+    for t in cluster["spec"]["clusterProfileTemplates"]
+        .as_array_mut()
+        .unwrap()
+    {
+        for p in t["packs"].as_array_mut().unwrap() {
+            let values = p["values"].as_str().unwrap_or_default().to_string();
+            p["values"] = Value::from(format!(
+                "{values}\nregion: \"{{{{.spectro.macro.region}}}}\"\n"
+            ));
+        }
+    }
+    fs::write(
+        to.join("cluster.json"),
+        serde_json::to_string_pretty(&cluster).unwrap(),
+    )
+    .unwrap();
+}
+
+#[test]
+fn a_cluster_record_with_macro_digests_drifts_when_a_macro_value_moves() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    cluster_with_macro(dir.path(), "cluster-macro");
+    let path = "/v1/spectroclusters/c1a5000000000000000000c1/packs/resolvedValues";
+    let tenant = |region: &str| {
+        serve_cluster(MemoryApi::new(), dir.path(), "cluster-macro").with(path, resolved(region))
+    };
+
+    // the record holds the digest of the value, and not the value
+    let mut raw = Palette::new(tenant("us-east-2"))
+        .fetch_cluster(CLUSTER_UID, &Progress::silent())
+        .unwrap();
+    raw.resolved_values = Some(resolved("us-east-2"));
+    let recorded = Snapshot::from_cluster(&raw, None, "cluster:lab", "t0").unwrap();
+    assert_eq!(recorded.macros(), ["region"]);
+    let digests = recorded
+        .source
+        .cluster
+        .as_ref()
+        .unwrap()
+        .macro_values
+        .clone()
+        .unwrap();
+    assert!(digests["region"].starts_with("sha256:"), "{digests:?}");
+    assert!(!recorded.to_json(false).unwrap().contains("us-east-2"));
+
+    // the same value: unchanged
+    let v = ops::verify(
+        &recorded,
+        &Palette::new(tenant("us-east-2")),
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert_eq!(v.status, VerifyStatus::Unchanged);
+
+    // another value: the root is the same, and the record drifts, and the verdict names the macro
+    let v = ops::verify(
+        &recorded,
+        &Palette::new(tenant("eu-west-1")),
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert!(
+        v.diff.same,
+        "the content names the macro, so the root does not move"
+    );
+    assert_eq!(v.status, VerifyStatus::Drifted);
+    let ver = v.diff.verify.as_ref().unwrap();
+    assert_eq!(ver.macros_changed, ["region"]);
+    let verdict = render::renderer(Format::Terminal, Paint::off(), false)
+        .verdict(ver, &recorded.source)
+        .unwrap();
+    assert!(
+        verdict.contains("but macro region has another value now"),
+        "{verdict}"
+    );
+    assert_eq!(v.diff.macros_changed, ["region"]);
+
+    // a record without the digests cannot see it: that is the hole the digests close
+    let mut plain = recorded.clone();
+    plain.source.cluster.as_mut().unwrap().macro_values = None;
+    let v = ops::verify(
+        &plain,
+        &Palette::new(tenant("eu-west-1")),
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert_eq!(v.status, VerifyStatus::Unchanged);
+
+    // a raw directory keeps the values, so a record rebuilt from it keeps the digests
+    let saved = dir.path().join("raw-macro");
+    raw.save_dir(&saved, "t0").unwrap();
+    let again = ops::snapshot_from_dir(&saved, "cluster:lab", "t0").unwrap();
+    assert_eq!(again.source.cluster.unwrap().macro_values, Some(digests));
+}

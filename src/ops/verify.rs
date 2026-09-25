@@ -152,6 +152,7 @@ pub fn verify_with<A: PaletteApi>(
             cluster_values_changed: 0,
             who: None,
             upstream_unknown: Vec::new(),
+            macros_changed: Vec::new(),
         };
         let mut diff = diff::compute(recorded, &live, checked_at, Some(verify));
         let status = settle(unchanged, &mut diff, options);
@@ -172,12 +173,19 @@ pub fn verify_with<A: PaletteApi>(
         recorded.source.fetched_at
     ));
     let live = match &recorded.source.cluster {
-        Some(c) => Snapshot::from_cluster(
-            &palette.fetch_cluster(uid, progress)?,
-            c.profile.as_deref(),
-            &recorded.source.reference,
-            checked_at,
-        )?,
+        Some(c) => {
+            let mut raw = palette.fetch_cluster(uid, progress)?;
+            // a record that holds the digests of the macro values is checked on them too
+            if c.macro_values.is_some() {
+                raw.resolved_values = Some(palette.resolved_values(uid)?);
+            }
+            Snapshot::from_cluster(
+                &raw,
+                c.profile.as_deref(),
+                &recorded.source.reference,
+                checked_at,
+            )?
+        }
         None => Snapshot::from_raw(&palette.fetch_profile(uid, progress)?, uid, checked_at)?,
     }
     .with_project(palette.project_uid());
@@ -190,8 +198,11 @@ pub fn verify_with<A: PaletteApi>(
         Some(c) => profiles_overwritten(&c.profiles, palette)?,
         None => Vec::new(),
     };
-    let unchanged =
-        recorded.root == live.root && overwritten_by.is_none() && profiles_overwritten.is_empty();
+    let macros_changed = crate::diff::macros_changed(recorded, &live);
+    let unchanged = recorded.root == live.root
+        && overwritten_by.is_none()
+        && profiles_overwritten.is_empty()
+        && macros_changed.is_empty();
     let verify = Verify {
         status: if unchanged {
             VerifyStatus::Unchanged
@@ -206,6 +217,7 @@ pub fn verify_with<A: PaletteApi>(
         cluster_values_changed: 0,
         who: None,
         upstream_unknown: Vec::new(),
+        macros_changed: macros_changed.clone(),
     };
     let mut diff = diff::compute(recorded, &live, checked_at, Some(verify));
     let values_changed = diff

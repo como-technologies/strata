@@ -416,6 +416,42 @@ pub(crate) fn tag_rename(pd: &PackDiff) -> Option<String> {
 
 /// `both sides are name@version (uid u): the version was edited in place`, for a diff whose sides
 /// name one profile version with different content.
+/// The note for the user macros the content uses: `the content uses macro region: the root
+/// covers its name and not its value, so an edit of the macro does not show`. None when it uses
+/// none.
+pub(crate) fn macros_note(d: &Diff) -> Option<String> {
+    let (noun, pron) = match d.macros.len() {
+        0 => return None,
+        1 => ("macro", "its name and not its value"),
+        _ => ("macros", "their names and not their values"),
+    };
+    Some(format!(
+        "the content uses {noun} {}: the root covers {pron}, so an edit of a macro does not show",
+        d.macros.join(", ")
+    ))
+}
+
+/// Why a record drifted when only macro values moved: `macro region has another value now`.
+pub(crate) fn macros_changed_sentence(names: &[String]) -> String {
+    match names {
+        [one] => format!("macro {one} has another value now"),
+        many => format!("macros {} have other values now", many.join(", ")),
+    }
+}
+
+/// The note for two cluster records whose macro values differ.
+pub(crate) fn macros_changed_note(d: &Diff) -> Option<String> {
+    (!d.macros_changed.is_empty()).then(|| {
+        format!(
+            "{}: the clusters run other content, also where the roots are equal",
+            match d.macros_changed.as_slice() {
+                [one] => format!("macro {one} has another value on each side"),
+                many => format!("macros {} have other values on each side", many.join(", ")),
+            }
+        )
+    })
+}
+
 /// The note for the packs with no upstream digest: `pack csi/x has no upstream digest: Palette
 /// gives none, so a change of its archive does not show`. None when every pack has one.
 pub(crate) fn upstream_unknown_note(d: &Diff) -> Option<String> {
@@ -531,6 +567,16 @@ fn who_suffix(r: &crate::ops::VerifiedRecord) -> String {
     }
 }
 
+/// The macros of a drifted record whose values moved; empty when none did, or the root moved.
+fn record_macros_changed(r: &crate::ops::VerifiedRecord) -> Vec<String> {
+    r.diff
+        .as_ref()
+        .filter(|d| d.same)
+        .and_then(|d| d.verify.as_ref())
+        .map(|v| v.macros_changed.clone())
+        .unwrap_or_default()
+}
+
 pub(crate) fn record_detail(r: &crate::ops::VerifiedRecord) -> String {
     use crate::ops::RecordStatus;
     match r.status {
@@ -552,6 +598,13 @@ pub(crate) fn record_detail(r: &crate::ops::VerifiedRecord) -> String {
         RecordStatus::Drifted if record_profiles_overwritten(r).is_some() => format!(
             "{}{}{}",
             record_profiles_overwritten(r).unwrap_or_default(),
+            values_changed_suffix(record_values_changed(r)),
+            who_suffix(r)
+        ),
+        RecordStatus::Drifted if !record_macros_changed(r).is_empty() => format!(
+            "has the content recorded {}, but {}{}{}",
+            r.recorded_at,
+            macros_changed_sentence(&record_macros_changed(r)),
             values_changed_suffix(record_values_changed(r)),
             who_suffix(r)
         ),

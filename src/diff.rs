@@ -74,6 +74,15 @@ pub struct Diff {
     /// the same.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub upstream_unknown: Vec<String>,
+    /// The user macros that either side uses, by name: see [`Snapshot::macros`]. The root covers
+    /// their names and not their values, so an edit of a macro does not show here.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub macros: Vec<String>,
+    /// Between two cluster records that each hold the digests of their macro values: each macro
+    /// whose value differs, or that one side resolves and the other does not. The roots can be
+    /// equal: the content names the macro, and Palette gives it another value.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub macros_changed: Vec<String>,
 }
 
 /// Plain-language meaning of every flag and enum value, for readers without the docs.
@@ -459,6 +468,26 @@ pub struct ValuesDiff {
     pub diff: Vec<Leaf>,
 }
 
+/// Each macro whose value digest differs between two cluster records, by name: see
+/// [`Diff::macros_changed`]. Empty unless both records hold the digests.
+pub fn macros_changed(a: &Snapshot, b: &Snapshot) -> Vec<String> {
+    let digests = |s: &Snapshot| {
+        s.source
+            .cluster
+            .as_ref()
+            .and_then(|c| c.macro_values.clone())
+    };
+    let (Some(x), Some(y)) = (digests(a), digests(b)) else {
+        return Vec::new();
+    };
+    let names: std::collections::BTreeSet<&String> = x.keys().chain(y.keys()).collect();
+    names
+        .into_iter()
+        .filter(|n| x.get(*n) != y.get(*n))
+        .cloned()
+        .collect()
+}
+
 /// One manifest across the two sides.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
@@ -509,6 +538,10 @@ pub struct Verify {
     /// For an `unverified` record: the key of each pack with no upstream digest.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub upstream_unknown: Vec<String>,
+    /// For a cluster record that holds the digests of its macro values: each macro whose value is
+    /// another one now. The status is `drifted`, also when the roots are equal.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub macros_changed: Vec<String>,
 }
 
 /// One write to a profile or a cluster, as the audit log of Palette holds it.
@@ -1075,6 +1108,14 @@ pub fn compute(a: &Snapshot, b: &Snapshot, generated_at: &str, verify: Option<Ve
             && a.source.uid == b.source.uid
             && a.source.version == b.source.version,
         overwritten_in_place: overwritten_in_place(a, b),
+        macros: {
+            let mut names = a.macros();
+            names.extend(b.macros());
+            names.sort();
+            names.dedup();
+            names
+        },
+        macros_changed: macros_changed(a, b),
         upstream_unknown: packs
             .iter()
             .filter(|p| p.upstream_unknown)
