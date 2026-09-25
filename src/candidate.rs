@@ -367,8 +367,6 @@ pub fn check(candidate: Candidate, path: &Path) -> Result<LoadedCandidate> {
     })
 }
 
-/// Every version of `name` the pack listing returns, across registries. The listing caps `limit`
-/// at 100, so this pages until it has them all.
 /// Read `/v1/packs?filters=spec.name=<name>` and give each entry to `each`. Palette serves this
 /// listing 100 entries at a time, so one pack name can take several requests. `each` returns false
 /// to stop the walk.
@@ -404,6 +402,8 @@ fn each_pack_named<A: PaletteApi>(
     }
 }
 
+/// Every version of `name` the pack listing returns, across registries. The listing caps `limit`
+/// at 100, so this pages until it has them all.
 pub(crate) fn versions_of<A: PaletteApi>(palette: &Palette<A>, name: &str) -> Result<Vec<Value>> {
     let mut out: Vec<Value> = Vec::new();
     each_pack_named(palette, name, |it| {
