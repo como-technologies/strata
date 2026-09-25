@@ -1,0 +1,6 @@
+$ jq -r '.packs[] | "\(.name) \(.hash.upstreamSource)"' releases/1.1.5/dev.json
+ubuntu-aws packRef.digest
+kubernetes packRef.digest
+cni-cilium-oss packRef.digest
+csi-aws-ebs none
+cert-manager packRef.digest

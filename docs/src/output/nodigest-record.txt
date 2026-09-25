@@ -1,0 +1,4 @@
+$ strata snapshot aws-stack@1.1.5 -o releases/1.1.5/dev.json
+strata: looking up project dev
+strata: fetching profile 64e0000000000000000000f8
+strata: wrote releases/1.1.5/dev.json (root 91970ef9289b)

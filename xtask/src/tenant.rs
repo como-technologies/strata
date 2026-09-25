@@ -35,6 +35,9 @@ pub enum Edit {
     OciCsi,
     /// Give the version another number, which a bump without the immutability flag does.
     Version(&'static str),
+    /// Remove the digest of a pack, on its pack reference and in its pack summary, as a registry
+    /// that Palette does not sync gives it.
+    NoDigest(&'static str),
     /// Make one value of a pack read a project macro: a line `<macro>: "{{.spectro.macro.<macro>}}"`
     /// at the end of the pack's values.
     Macro {
@@ -46,6 +49,21 @@ pub enum Edit {
 }
 
 impl Edit {
+    /// The part of an edit that lands in the pack summaries of `packs/manifests`.
+    fn apply_manifests(&self, manifests: &mut Value) {
+        if let Edit::NoDigest(name) = self {
+            for pack in manifests["spec"]["packs"]
+                .as_array_mut()
+                .into_iter()
+                .flatten()
+            {
+                if pack["spec"]["name"] == *name {
+                    pack["spec"]["digest"] = json!("");
+                }
+            }
+        }
+    }
+
     fn apply(&self, doc: &mut Value) {
         match self {
             Edit::Reclaim(policy) => {
@@ -85,6 +103,13 @@ impl Edit {
                 }
             }
             Edit::Version(version) => doc["spec"]["version"] = json!(version),
+            Edit::NoDigest(name) => {
+                for pack in packs_mut(doc) {
+                    if pack["name"] == *name {
+                        pack["digest"] = json!("");
+                    }
+                }
+            }
             Edit::Macro {
                 pack: name,
                 name: m,
@@ -257,6 +282,9 @@ impl Tenant {
         let text = std::fs::read_to_string(from.join("manifests.json")).unwrap_or_default();
         let mut manifests: Value = serde_json::from_str(&text).unwrap_or_else(|_| json!({}));
         manifests["metadata"]["uid"] = json!(uid);
+        for edit in edits {
+            edit.apply_manifests(&mut manifests);
+        }
         self.write(
             project,
             &format!("v1/clusterprofiles/{uid}/packs/manifests"),

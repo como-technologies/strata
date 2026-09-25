@@ -1,0 +1,15 @@
+$ strata verify releases/1.1.5/dev.json
+aws-stack@1.1.5 (uid 64e0000000000000000000f8)  ->  aws-stack@1.1.5 (uid 64e0000000000000000000f8)
+root       91970ef9289b -> 91970ef9289b   IDENTICAL
+note       pack csi/csi-aws-ebs has no upstream digest: Palette gives none, so a change of the archive does not show
+consumers  0 -> 0 clusters
+
+  variables unchanged
+
+  [os   ] ubuntu-aws                 24.04              unchanged
+  [k8s  ] kubernetes                 1.36.2             unchanged
+  [cni  ] cni-cilium-oss             1.20.1             unchanged
+  [csi  ] csi-aws-ebs                1.65.0             unchanged
+      upstream unknown: no digest, so a change of the archive does not show
+  [addon] cert-manager               1.21.1             unchanged
+UNVERIFIED: published version aws-stack@1.1.5 has the content recorded 2026-09-17T09:30:00Z, but pack csi/csi-aws-ebs has no upstream digest, so a change of the archive would not show; --allow-no-digest accepts it

@@ -48,6 +48,16 @@ records from step 1 still hold the content from before it:
 Exit `1`. The note says that both sides are the same uid and version: the
 version was edited in place.
 
+`--who` adds who made the edit, and when, from the audit log of Palette:
+
+```text
+{{#include ../output/edited-verify-who.txt}}
+```
+
+The record has what the content was, and Palette has who wrote it. See
+[Who changed it](../commands/verify.md#who-changed-it), and what the log holds
+for each writer at [The audit log](../internals/palette.md#the-audit-log).
+
 The same comparison, from the record to the live version:
 
 ```text

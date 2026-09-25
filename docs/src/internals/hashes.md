@@ -98,6 +98,9 @@ manifest, so such a value shows its change too.
 | The consumers, the fetch time, and the project | They describe a moment, not the release. |
 | The uid of a manifest, and the digest Palette reports for it | Palette mints the uid for each copy. `authored` covers the name and the content hash of each manifest, sorted by name. |
 | The annotations of a pack in the registry | Strata does not read them. |
+| The value of a macro | The content holds the macro name, `{{.spectro.macro.<name>}}`, and the root covers that text. Palette gives the value when it applies the profile, and a value can be a secret. `snapshot --macros` keeps the digest of each value on a cluster record, outside the root, and `verify` checks it. See [A macro value changes](../use-cases/macros.md). |
+| Whether an update waits for a cluster | It is what Palette says about the copy, not the copy. A cluster record keeps it as `updatesPending`. See [Whether an update waits](../commands/snapshot.md#whether-an-update-waits). |
+| Who changed a version, and when | The audit log of Palette holds that. `verify --who` reads it. See [Who changed it](../commands/verify.md#who-changed-it). |
 
 ## The content digest
 

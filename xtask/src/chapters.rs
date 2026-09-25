@@ -21,6 +21,8 @@ const A113: &str = "64e0000000000000000000d5";
 const A120: &str = "64e0000000000000000000e5";
 // aws-stack@1.1.4: the content of 1.1.1, with the CSI values reading a project macro
 const A114: &str = "64e0000000000000000000f7";
+// aws-stack@1.1.5: the content of 1.1.1, with no digest for the CSI pack
+const A115: &str = "64e0000000000000000000f8";
 const ADDONS_DEV: &str = "64e2000000000000000000a1";
 const ADDONS_PROD: &str = "64e3000000000000000000a1";
 const ADDONS_PROD2: &str = "64e3000000000000000000a2";
@@ -82,6 +84,7 @@ pub fn names() -> Vec<&'static str> {
         "cluster-release",
         "cluster-values",
         "macros",
+        "no-digest",
         "same-names",
         "packs",
         "retire",
@@ -1084,6 +1087,54 @@ fn use_cases(r: &mut Runner) {
         "macros-verify-cluster",
         "macros-verify-cluster-full",
         r"^(aws-stack|root |note |DRIFT)",
+    );
+
+    // a pack with no upstream digest, as a registry that Palette does not sync gives it
+    r.chapter("no-digest", DEV_ENV);
+    r.projects(&[("dev", DEV)]);
+    r.profile(DEV, A111, "1.1.1", "aws-stack@1.1.1", &[]);
+    r.profile(
+        DEV,
+        A115,
+        "1.1.5",
+        "aws-stack@1.1.1",
+        &[Edit::NoDigest("csi-aws-ebs")],
+    );
+    r.step(
+        "nodigest-record",
+        0,
+        true,
+        "strata snapshot aws-stack@1.1.5 -o releases/1.1.5/dev.json",
+    );
+    r.step(
+        "nodigest-source",
+        0,
+        false,
+        r#"jq -r '.packs[] | "\(.name) \(.hash.upstreamSource)"' releases/1.1.5/dev.json"#,
+    );
+    r.step(
+        "nodigest-verify-full",
+        1,
+        false,
+        "strata verify releases/1.1.5/dev.json",
+    );
+    r.excerpt(
+        "nodigest-verify",
+        "nodigest-verify-full",
+        r"^(aws-stack|root |note |  \[csi|      upstream unknown|UNVERIFIED)",
+    );
+    r.step(
+        "nodigest-allow-full",
+        0,
+        false,
+        "strata verify releases/1.1.5/dev.json --allow-no-digest",
+    );
+    r.excerpt("nodigest-allow", "nodigest-allow-full", r"^(note |OK)");
+    r.step(
+        "nodigest-same-release",
+        1,
+        false,
+        "strata same-release aws-stack@1.1.1 aws-stack@1.1.5",
     );
 
     r.chapter("same-names", &[]);

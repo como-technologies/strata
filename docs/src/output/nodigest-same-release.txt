@@ -1,0 +1,5 @@
+$ strata same-release aws-stack@1.1.1 aws-stack@1.1.5
+DIFFERENT      aws-stack@1.1.1 -> aws-stack@1.1.5   root 088136c929bd -> 91970ef9289b
+               pack csi/csi-aws-ebs UPSTREAM in the same registry: sha256:bd09e8b4187bdef2e5f1fca88203ecd0504224087a0cd97e41a42f0a3930601c -> 
+               pack csi/csi-aws-ebs has no upstream digest, so an equal root does not show an equal archive; --allow no-digest accepts it
+NOT THE SAME RELEASE: 1 of 1 pair failed

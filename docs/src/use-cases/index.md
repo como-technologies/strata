@@ -86,6 +86,8 @@ can give different roots, and how strata says so.
   manifest have different roots.
 - [A pack comes from another registry](./registry-move.md): a team pins a pack
   to another registry, and `same-release` fails without `--allow registry-move`.
+- [A pack has no digest](./no-digest.md): `verify` reports `UNVERIFIED`, or
+  `same-release` reports `NO DIGEST`.
 
 **5. Move a release, and end its life.** What the groups above make possible.
 
@@ -93,7 +95,7 @@ can give different roots, and how strata says so.
   same version name, and nothing yet says they have the same content.
 - [Retire a version](./retire.md): you want to delete an old version.
 
-**6. A version that changes after you record it.** These two are what a team
+**6. A version that changes after you record it.** These three are what a team
 should not do, and what to do when somebody already did. This is why a record
 is worth keeping, and what `verify` is for.
 
@@ -101,6 +103,8 @@ is worth keeping, and what `verify` is for.
   reports `DRIFT` on a version that nobody bumped.
 - [A version bump overwrites a version](./overwritten.md): a version
   disappeared from the list, and clusters still run it.
+- [A macro value changes](./macros.md): a profile reads a macro, and the value
+  changed with no change to any record.
 
 **7. Many profiles and many clusters.** The same questions, for a whole tenant
 and a whole team.
