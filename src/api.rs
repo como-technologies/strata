@@ -520,6 +520,11 @@ pub struct RawCluster {
     /// When the responses were read from Palette; `None` for a fetch, and for a directory that an
     /// older build saved
     pub fetched_at: Option<String>,
+    /// `GET /v1/notifications/spectrocluster/{uid}`, every page, as one array of its items;
+    /// `None` when they were not read, and for a directory that an older build saved
+    pub notifications: Option<Value>,
+    /// Why Palette did not give the notifications, when it did not
+    pub notifications_error: Option<String>,
 }
 
 impl RawCluster {
@@ -535,23 +540,32 @@ impl RawCluster {
             variables_unavailable: read_scope_variables_unavailable(dir)?,
             project_uid: read_scope(dir)?,
             fetched_at: read_scope_fetched_at(dir)?,
+            notifications: if dir.join(Self::NOTIFICATIONS).is_file() {
+                Some(read_json_file(dir, Self::NOTIFICATIONS)?)
+            } else {
+                None
+            },
+            notifications_error: None,
         })
     }
 
-    /// Write the three files and `scope.json` under `dir`, creating it.
+    /// The file that holds the notifications of the cluster, when they were read.
+    pub const NOTIFICATIONS: &'static str = "notifications.json";
+
+    /// Write the three files, the notifications when they were read, and `scope.json` under
+    /// `dir`, creating it.
     pub fn save_dir(&self, dir: &Path, fetched_at: &str) -> Result<()> {
-        write_json_files(
-            dir,
-            &[
-                (Self::MARKER, &self.cluster),
-                ("manifests.json", &self.manifests),
-                ("variables.json", &self.variables),
-                (
-                    SCOPE_FILE,
-                    &scope_document(&self.project_uid, fetched_at, self.variables_unavailable),
-                ),
-            ],
-        )
+        let scope = scope_document(&self.project_uid, fetched_at, self.variables_unavailable);
+        let mut files: Vec<(&str, &Value)> = vec![
+            (Self::MARKER, &self.cluster),
+            ("manifests.json", &self.manifests),
+            ("variables.json", &self.variables),
+            (SCOPE_FILE, &scope),
+        ];
+        if let Some(n) = &self.notifications {
+            files.push((Self::NOTIFICATIONS, n));
+        }
+        write_json_files(dir, &files)
     }
 
     /// The applied profile templates, in the order the cluster document lists them. That order is
@@ -915,6 +929,18 @@ impl<A: PaletteApi> Palette<A> {
             serde_json::json!([]),
             progress,
         )?;
+        // the updates that wait for the cluster are a statement of Palette beside the copy, not
+        // part of it: a failed read is recorded, and the record is still taken
+        let (notifications, notifications_error) = match self.cluster_notifications(&uid) {
+            Ok(items) => (Some(Value::Array(items)), None),
+            Err(Error::Api { status, body, .. }) => {
+                progress.note(&format!(
+                    "note: the notifications of cluster {uid} are unavailable (HTTP {status})"
+                ));
+                (None, Some(format!("HTTP {status}: {body}")))
+            }
+            Err(e) => return Err(e),
+        };
         Ok(RawCluster {
             cluster,
             manifests,
@@ -922,7 +948,41 @@ impl<A: PaletteApi> Palette<A> {
             variables_unavailable,
             project_uid: self.project_uid().map(str::to_string),
             fetched_at: None,
+            notifications,
+            notifications_error,
         })
+    }
+
+    /// The notifications of one cluster, `GET /v1/notifications/spectrocluster/{uid}`, every page,
+    /// newest first. Palette gives `items: null` when there are none, and at most 50 on a page;
+    /// `listmeta.continue` names the next page, and is empty on the last one.
+    pub fn cluster_notifications(&self, uid: &str) -> Result<Vec<Value>> {
+        let base = format!("/v1/notifications/spectrocluster/{}", query_value(uid));
+        let mut items = Vec::new();
+        let mut next = String::new();
+        loop {
+            let page = if next.is_empty() {
+                self.api.get_json(&base)?
+            } else {
+                self.api
+                    .get_json(&format!("{base}?continue={}", query_value(&next)))?
+            };
+            let got = page
+                .get("items")
+                .and_then(Value::as_array)
+                .cloned()
+                .unwrap_or_default();
+            let done = got.is_empty();
+            items.extend(got);
+            next = page
+                .pointer("/listmeta/continue")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string();
+            if next.is_empty() || done {
+                return Ok(items);
+            }
+        }
     }
 }
 

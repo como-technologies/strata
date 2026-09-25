@@ -2415,6 +2415,19 @@ fn list_with_applied_reads_each_cluster_for_the_profiles_it_applies() {
                     "cluster",
                 )],
             ),
+        )
+        // an update of the add-on waits for c1; c2 serves no notifications, so it is unknown
+        .with(
+            "/v1/notifications/spectrocluster/c1",
+            notifications_page(
+                vec![notification(
+                    "n1",
+                    "2026-09-24T23:55:02.083Z",
+                    false,
+                    &[("64f0000000000000000000d4", "m")],
+                )],
+                "",
+            ),
         );
     let list = |options: &ListOptions| {
         ops::list(
@@ -2467,7 +2480,7 @@ fn list_with_applied_reads_each_cluster_for_the_profiles_it_applies() {
         text.contains(
             "  cluster:c1  workload-a  Running  aws
     lab-profile@1.3.0  64f0000000000000000000b2  cluster
-    lab-addons@2.0.0   64f0000000000000000000d4  add-on
+    lab-addons@2.0.0   64f0000000000000000000d4  add-on  behind: an update waits
   cluster:c2  workload-b  Running  aws
     lab-profile@1.2.0  64f0000000000000000000a1  cluster
 "
@@ -2478,11 +2491,13 @@ fn list_with_applied_reads_each_cluster_for_the_profiles_it_applies() {
         .render_list(&l)
         .unwrap();
     assert!(
-        md.contains("| ref | name | state | cloud | profiles |\n|---|---|---|---|---|\n"),
+        md.contains(
+            "| ref | name | state | cloud | profiles | behind |\n|---|---|---|---|---|---|\n"
+        ),
         "{md}"
     );
     assert!(
-        md.contains("| `cluster:c1` | workload-a | Running | aws | lab-profile@1.3.0 (cluster)<br>lab-addons@2.0.0 (add-on) |"),
+        md.contains("| `cluster:c1` | workload-a | Running | aws | lab-profile@1.3.0 (cluster)<br>lab-addons@2.0.0 (add-on) | yes: lab-addons |"),
         "{md}"
     );
     let json: Value = serde_json::from_str(
@@ -4811,4 +4826,219 @@ fn verify_who_names_the_last_write_on_the_summary_line_of_a_drifted_record() {
         text.contains("; last write: John Doe (user), update at 2026-09-18T14:02:11.482Z\n"),
         "{text}"
     );
+}
+
+// ---- the updates that wait for a cluster -----------------------------------------------------
+
+const NOTIFICATIONS: &str = "/v1/notifications/spectrocluster/c1a5000000000000000000c1";
+
+/// One notification of a profile update, in the shape Palette gives it.
+fn notification(uid: &str, at: &str, done: bool, profiles: &[(&str, &str)]) -> Value {
+    let events: serde_json::Map<String, Value> = profiles
+        .iter()
+        .enumerate()
+        .map(|(i, (profile_uid, message))| {
+            (
+                format!("e{i}"),
+                serde_json::json!({"profileUid": profile_uid, "message": message, "type": "PackManifestUpdate"}),
+            )
+        })
+        .collect();
+    serde_json::json!({
+        "metadata": {"uid": uid, "creationTimestamp": at},
+        "type": "NotificationPackUpdate",
+        "action": {"actionType": "NotifyActionClusterProfileUpdate", "isDone": done, "events": events},
+    })
+}
+
+fn notifications_page(items: Vec<Value>, next: &str) -> Value {
+    let items = if items.is_empty() {
+        Value::Null // Palette gives null, not [], when a cluster has none
+    } else {
+        Value::Array(items)
+    };
+    serde_json::json!({"items": items, "listmeta": {"continue": next}})
+}
+
+/// The uids of the two profiles that cluster-merged runs: the cluster profile, then the add-on.
+fn merged_uids(dir: &Path) -> (String, String) {
+    let recorded = snapshot_cluster(
+        &serve_cluster(MemoryApi::new(), dir, "cluster-merged"),
+        None,
+    )
+    .unwrap();
+    let p = &recorded.source.cluster.unwrap().profiles;
+    (p[0].uid.clone(), p[1].uid.clone())
+}
+
+#[test]
+fn a_cluster_record_says_which_update_waits_from_the_open_notifications() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let (infra, addon) = merged_uids(dir.path());
+    // newest first, on two pages; a done notification and one of another profile are not pending
+    let api = serve_cluster(MemoryApi::new(), dir.path(), "cluster-merged")
+        .with(
+            NOTIFICATIONS,
+            notifications_page(
+                vec![notification(
+                    "n3",
+                    "2026-09-24T23:55:02.083Z",
+                    false,
+                    &[(&addon, "Manifest 'm' is updated in the pack 'm(m)'")],
+                )],
+                "tok",
+            ),
+        )
+        .with(
+            format!("{NOTIFICATIONS}?continue=tok"),
+            notifications_page(
+                vec![
+                    notification(
+                        "n2",
+                        "2026-09-24T23:50:00.000Z",
+                        false,
+                        &[("gone-uid", "x")],
+                    ),
+                    notification("n1", "2026-09-24T23:48:38.990Z", true, &[(&addon, "old")]),
+                ],
+                "",
+            ),
+        );
+    let all = snapshot_cluster(&api, None).unwrap();
+    let c = all.source.cluster.as_ref().unwrap();
+    assert_eq!(c.updates_pending, Some(true));
+    assert_eq!(c.updates_pending_error, None);
+    assert_eq!(
+        c.pending_updates
+            .iter()
+            .map(|u| (
+                u.profile_uid.as_str(),
+                u.profile.as_str(),
+                u.message.as_str(),
+                u.since.as_str()
+            ))
+            .collect::<Vec<_>>(),
+        [(
+            addon.as_str(),
+            "lab-addons",
+            "Manifest 'm' is updated in the pack 'm(m)'",
+            "2026-09-24T23:55:02.083Z"
+        )]
+    );
+    // the statement is outside the root: the copy is the same with or without it
+    let quiet = serve_cluster(MemoryApi::new(), dir.path(), "cluster-merged")
+        .with(NOTIFICATIONS, notifications_page(vec![], ""));
+    let none = snapshot_cluster(&quiet, None).unwrap();
+    assert_eq!(none.root, all.root);
+    assert_eq!(
+        none.source.cluster.as_ref().unwrap().updates_pending,
+        Some(false)
+    );
+    // a record of the other profile alone has no update waiting
+    let infra_only = snapshot_cluster(&api, Some(&infra)).unwrap();
+    assert_eq!(
+        infra_only.source.cluster.unwrap().updates_pending,
+        Some(false)
+    );
+
+    let json = serde_json::to_value(&all).unwrap();
+    assert_eq!(json["source"]["cluster"]["updatesPending"], true);
+    assert_eq!(
+        json["source"]["cluster"]["pendingUpdates"][0]["profile"],
+        "lab-addons"
+    );
+}
+
+#[test]
+fn a_cluster_record_says_when_it_could_not_read_whether_an_update_waits() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    // no notifications path: the in-memory API answers 404, and the record is still taken
+    let recorded = snapshot_cluster(
+        &serve_cluster(MemoryApi::new(), dir.path(), "cluster-a"),
+        None,
+    )
+    .unwrap();
+    let c = recorded.source.cluster.as_ref().unwrap();
+    assert_eq!(c.updates_pending, None);
+    assert!(
+        c.updates_pending_error
+            .as_deref()
+            .unwrap()
+            .starts_with("HTTP 404"),
+        "{:?}",
+        c.updates_pending_error
+    );
+    let json = serde_json::to_value(&recorded).unwrap();
+    assert!(json["source"]["cluster"].get("updatesPending").is_none());
+}
+
+#[test]
+fn a_raw_cluster_directory_keeps_the_notifications() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let (_, addon) = merged_uids(dir.path());
+    let api = serve_cluster(MemoryApi::new(), dir.path(), "cluster-merged").with(
+        NOTIFICATIONS,
+        notifications_page(vec![notification("n1", "t", false, &[(&addon, "m")])], ""),
+    );
+    let saved = dir.path().join("raw");
+    Palette::new(api)
+        .fetch_cluster(CLUSTER_UID, &Progress::silent())
+        .unwrap()
+        .save_dir(&saved, "t0")
+        .unwrap();
+    let loaded = strata::api::RawCluster::load_dir(&saved).unwrap();
+    let snap = Snapshot::from_cluster(&loaded, None, "raw", "t0").unwrap();
+    assert_eq!(snap.source.cluster.unwrap().updates_pending, Some(true));
+}
+
+#[test]
+fn list_and_compare_name_a_cluster_that_is_behind() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let (_, addon) = merged_uids(dir.path());
+    let api = serve_cluster(MemoryApi::new(), dir.path(), "cluster-merged").with(
+        NOTIFICATIONS,
+        notifications_page(
+            vec![notification(
+                "n1",
+                "2026-09-24T23:55:02.083Z",
+                false,
+                &[(&addon, "m")],
+            )],
+            "",
+        ),
+    );
+    let before = snapshot_cluster(
+        &serve_cluster(MemoryApi::new(), dir.path(), "cluster-merged")
+            .with(NOTIFICATIONS, notifications_page(vec![], "")),
+        None,
+    )
+    .unwrap();
+    let now = snapshot_cluster(&api, None).unwrap();
+    let d = ops::compare(&before, &now, "t1");
+    let text = render::renderer(Format::Terminal, Paint::off(), false)
+        .render(&d, &before, &now, false)
+        .unwrap();
+    assert!(
+        text.contains(
+            "note       cluster lab-cluster is behind: Palette says an update of lab-addons waits for it, since 2026-09-24T23:55:02.083Z\n"
+        ),
+        "{text}"
+    );
+    let md = render::renderer(Format::Markdown, Paint::off(), false)
+        .render(&d, &before, &now, false)
+        .unwrap();
+    assert!(
+        md.contains("**Note:** cluster lab-cluster is behind"),
+        "{md}"
+    );
+    // a side read when nothing waited gets no note
+    let d = ops::compare(&before, &before, "t1");
+    let text = render::renderer(Format::Terminal, Paint::off(), false)
+        .render(&d, &before, &before, false)
+        .unwrap();
+    assert!(!text.contains("is behind"), "{text}");
 }

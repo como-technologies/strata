@@ -413,6 +413,35 @@ pub(crate) fn tag_rename(pd: &PackDiff) -> Option<String> {
 
 /// `both sides are name@version (uid u): the version was edited in place`, for a diff whose sides
 /// name one profile version with different content.
+/// One note for each cluster side that Palette says is behind its profile: `cluster fred is
+/// behind: an update of strata-live-addon waits, since <time>`. A side read when nothing waited,
+/// or whose notifications were not read, gets none.
+pub(crate) fn updates_pending_notes(d: &Diff) -> Vec<String> {
+    [&d.a, &d.b]
+        .into_iter()
+        .filter_map(|side| side.cluster.as_ref())
+        .filter(|c| c.updates_pending == Some(true))
+        .map(|c| {
+            let mut names: Vec<&str> = c
+                .pending_updates
+                .iter()
+                .map(|u| u.profile.as_str())
+                .collect();
+            names.dedup();
+            let since = c
+                .pending_updates
+                .first()
+                .map(|u| format!(", since {}", u.since))
+                .unwrap_or_default();
+            format!(
+                "cluster {} is behind: Palette says an update of {} waits for it{since}",
+                c.name,
+                names.join(", ")
+            )
+        })
+        .collect()
+}
+
 pub(crate) fn edited_in_place_note(d: &Diff) -> Option<String> {
     d.edited_in_place.then(|| {
         let clusters = d.a.cluster.is_some() || d.b.cluster.is_some();

@@ -193,6 +193,65 @@ pub struct ClusterSource {
     /// is listed without its value.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub variables: Vec<ClusterVariable>,
+    /// Whether Palette says that an update waits for the cluster: an open notification of an
+    /// update of a profile that this record covers. Absent when the notifications were not read.
+    /// Outside the root: it is Palette's statement about the copy, not the copy.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub updates_pending: Option<bool>,
+    /// Why the notifications could not be read, when `updatesPending` is absent for that reason.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub updates_pending_error: Option<String>,
+    /// Each change that waits, as the open notifications name it.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub pending_updates: Vec<PendingUpdate>,
+}
+
+/// One change that waits for a cluster, from an open notification of Palette.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct PendingUpdate {
+    /// The uid of the profile whose change waits.
+    pub profile_uid: String,
+    /// The name of that profile, as the cluster's copy names it.
+    pub profile: String,
+    /// What Palette says changed, such as `Manifest 'x' is updated in the pack 'x(x)'`.
+    pub message: String,
+    /// When Palette made the notification.
+    pub since: String,
+}
+
+/// The notification type of an update of a profile that waits for a cluster.
+const PROFILE_UPDATE_ACTION: &str = "NotifyActionClusterProfileUpdate";
+
+impl PendingUpdate {
+    /// The open updates in `notifications` that concern one of `covered`, oldest first, and one
+    /// line for each change a notification names. Palette marks a notification done when the
+    /// cluster's copy takes the change, whether or not the request that pushed it resolved it.
+    pub fn read(notifications: &Value, covered: &[AppliedProfile]) -> Vec<PendingUpdate> {
+        let mut out = Vec::new();
+        for n in notifications.as_array().into_iter().flatten().rev() {
+            let open = n.pointer("/action/actionType").and_then(Value::as_str)
+                == Some(PROFILE_UPDATE_ACTION)
+                && n.pointer("/action/isDone").and_then(Value::as_bool) != Some(true);
+            if !open {
+                continue;
+            }
+            let events = n.pointer("/action/events").and_then(Value::as_object);
+            for e in events.into_iter().flat_map(|m| m.values()) {
+                let uid = s(e, "/profileUid");
+                let Some(p) = covered.iter().find(|p| p.uid == uid) else {
+                    continue;
+                };
+                out.push(PendingUpdate {
+                    profile_uid: uid,
+                    profile: p.name.clone(),
+                    message: s(e, "/message"),
+                    since: s(n, "/metadata/creationTimestamp"),
+                });
+            }
+        }
+        out
+    }
 }
 
 /// The value a cluster gives one profile variable.
@@ -778,12 +837,25 @@ impl Snapshot {
             consumers: None,
             fetched_at: fetched_at.to_string(),
             pack: None,
-            cluster: Some(ClusterSource {
-                uid: s(&raw.cluster, "/metadata/uid"),
-                name: s(&raw.cluster, "/metadata/name"),
-                profile: profile.map(str::to_string),
-                variables: ClusterVariable::read(raw, &covered),
-                profiles: covered,
+            cluster: Some({
+                let pending_updates = raw
+                    .notifications
+                    .as_ref()
+                    .map(|n| PendingUpdate::read(n, &covered))
+                    .unwrap_or_default();
+                ClusterSource {
+                    uid: s(&raw.cluster, "/metadata/uid"),
+                    name: s(&raw.cluster, "/metadata/name"),
+                    profile: profile.map(str::to_string),
+                    variables: ClusterVariable::read(raw, &covered),
+                    updates_pending: raw
+                        .notifications
+                        .as_ref()
+                        .map(|_| !pending_updates.is_empty()),
+                    updates_pending_error: raw.notifications_error.clone(),
+                    pending_updates,
+                    profiles: covered,
+                }
             }),
         };
         Ok(Snapshot {

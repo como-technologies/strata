@@ -1400,6 +1400,13 @@ pub struct ListedCluster {
     /// With applied: why the cluster document could not be read, when it could not.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<Value>,
+    /// With applied: whether Palette says that an update waits for the cluster, as
+    /// `source.cluster.updatesPending` of a record. Absent when the notifications were not read.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub updates_pending: Option<bool>,
+    /// With applied: each change that waits, as a record gives it.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub pending_updates: Vec<crate::snapshot::PendingUpdate>,
 }
 
 /// One project.
@@ -1659,6 +1666,8 @@ fn list_clusters(doc: &Value) -> Vec<ListedCluster> {
                 uid,
                 profiles: None,
                 error: None,
+                updates_pending: None,
+                pending_updates: Vec::new(),
             }
         })
         .collect();
@@ -1704,12 +1713,26 @@ fn read_applied<A, F>(
     let mut clients: HashMap<String, Palette<A>> = HashMap::new();
     for c in clusters.iter_mut() {
         progress.note(&format!("reading cluster {}", c.uid));
-        let doc = client_for(&mut clients, home, &c.project_uid, connect)
-            .and_then(|p| p.cluster_document(&c.uid));
-        match doc {
-            Ok(d) => c.profiles = Some(AppliedProfile::of_cluster(&d)),
-            Err(e) => c.error = Some(e.to_json()),
+        let palette = match client_for(&mut clients, home, &c.project_uid, connect) {
+            Ok(p) => p,
+            Err(e) => {
+                c.error = Some(e.to_json());
+                continue;
+            }
+        };
+        let profiles = match palette.cluster_document(&c.uid) {
+            Ok(d) => AppliedProfile::of_cluster(&d),
+            Err(e) => {
+                c.error = Some(e.to_json());
+                continue;
+            }
+        };
+        // the updates that wait are a second statement; a failed read leaves them unknown
+        if let Ok(n) = palette.cluster_notifications(&c.uid) {
+            c.pending_updates = crate::snapshot::PendingUpdate::read(&Value::Array(n), &profiles);
+            c.updates_pending = Some(!c.pending_updates.is_empty());
         }
+        c.profiles = Some(profiles);
     }
 }
 

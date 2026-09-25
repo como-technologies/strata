@@ -6,8 +6,8 @@ use super::{
     dash, edited_in_place_note, entry_error, list_count, list_scope, overwritten_in_place_notes,
     pack_version, pair_detail, pair_word, profiles_overwritten_sentence, project_label,
     record_detail, record_label, registry_note, same_content_note, short, show, subject,
-    tag_rename, traits_suffix, values_changed_suffix, variable_lines, variables_comparable,
-    variables_unavailable_note, version_display, who_entry, who_heading,
+    tag_rename, traits_suffix, updates_pending_notes, values_changed_suffix, variable_lines,
+    variables_comparable, variables_unavailable_note, version_display, who_entry, who_heading,
 };
 use crate::color::Paint;
 use crate::diff::{
@@ -257,6 +257,9 @@ impl Renderer for TerminalRenderer {
             out.push(format!("note       {}", p.byellow(&note)));
         }
         for note in overwritten_in_place_notes(d) {
+            out.push(format!("note       {}", p.byellow(&note)));
+        }
+        for note in updates_pending_notes(d) {
             out.push(format!("note       {}", p.byellow(&note)));
         }
         if let Some(note) = same_content_note(d) {
@@ -630,11 +633,15 @@ impl Renderer for TerminalRenderer {
                     .iter()
                     .flatten()
                     .map(|a| {
-                        vec![
+                        let mut row = vec![
                             applied_ref(a),
                             dash(&a.uid).to_string(),
                             dash(&a.kind).to_string(),
-                        ]
+                        ];
+                        if c.pending_updates.iter().any(|u| u.profile_uid == a.uid) {
+                            row.push("behind: an update waits".to_string());
+                        }
+                        row
                     })
                     .collect();
                 let applied_widths = column_widths(&applied);
@@ -645,6 +652,7 @@ impl Renderer for TerminalRenderer {
                         &applied_widths,
                         |i, cell| match i {
                             1 => p.dim(cell),
+                            3 => p.yellow(cell),
                             _ => cell.to_string(),
                         },
                     ));
