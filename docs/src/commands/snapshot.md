@@ -81,6 +81,44 @@ clusters --applied` say when a cluster is behind. What Palette says for each
 kind of change is in
 [Cluster copies](../internals/palette.md#cluster-copies).
 
+## Macros
+
+A macro is a name and a value that a tenant or a project defines. The values
+and the manifests of a profile can read one as `{{.spectro.macro.<name>}}`, and
+Palette gives it its value when it applies the profile. A record holds the text
+with the name, so the root covers the name and not the value: an edit of a
+macro does not move the root. Each report names the macros that the content
+uses.
+
+`--macros` records the value that Palette gives each of them, for one cluster.
+It costs one request, and it needs a cluster ref:
+
+```text
+{{#include ../output/macros-record.txt}}
+{{#include ../output/macros-digests.txt}}
+```
+
+The record holds `sha256:` of each value, and not the value: a macro can hold
+a secret. `unresolved` is a macro that Palette gives no value. The digests are
+not part of the root. When the macro gets another value, the record of the
+version still verifies, and names the macro:
+
+```text
+{{#include ../output/macros-verify-release.txt}}
+```
+
+`verify` on the cluster record reads the values again, and reports each macro
+that has another value now:
+
+```text
+{{#include ../output/macros-verify-cluster.txt}}
+```
+
+`compare` of two cluster records with the digests names each macro that
+differs, and exits `1`, also when the roots are equal. What Palette does with a
+running cluster when a macro changes is in
+[Macros](../internals/palette.md#macros).
+
 ## Record without the network
 
 `--raw-dir` saves the API responses and the time of the read. `--from-raw`

@@ -7,10 +7,19 @@ Arguments:
   [REF]  What to record: a ref, or the source with --from-raw
 
 Options:
-  -o, --output <OUTPUT>                  Write to this file, not to standard output
-      --raw-dir <RAW_DIR>                Also save the raw API answers in this directory
-      --from-raw <FROM_RAW>              Read the raw answers of --raw-dir, with no network
-      --from-candidate <FROM_CANDIDATE>  Read a candidate file, before the version is in Palette
-      --compact                          Write the JSON on one line
-  -q, --quiet                            No progress messages
-  -h, --help                             Print help
+  -o, --output <OUTPUT>
+          Write to this file, not to standard output
+      --raw-dir <RAW_DIR>
+          Also save the raw API answers in this directory
+      --from-raw <FROM_RAW>
+          Read the raw answers of --raw-dir, with no network
+      --from-candidate <FROM_CANDIDATE>
+          Read a candidate file, before the version is in Palette
+      --compact
+          Write the JSON on one line
+      --macros
+          For a cluster: record the digest of the value Palette gives each macro the content uses
+  -q, --quiet
+          No progress messages
+  -h, --help
+          Print help

@@ -35,6 +35,14 @@ pub enum Edit {
     OciCsi,
     /// Give the version another number, which a bump without the immutability flag does.
     Version(&'static str),
+    /// Make one value of a pack read a project macro: a line `<macro>: "{{.spectro.macro.<macro>}}"`
+    /// at the end of the pack's values.
+    Macro {
+        /// The pack whose values read the macro.
+        pack: &'static str,
+        /// The macro name, and the key of the new line.
+        name: &'static str,
+    },
 }
 
 impl Edit {
@@ -77,6 +85,20 @@ impl Edit {
                 }
             }
             Edit::Version(version) => doc["spec"]["version"] = json!(version),
+            Edit::Macro {
+                pack: name,
+                name: m,
+            } => {
+                for pack in packs_mut(doc) {
+                    if pack["name"] == *name {
+                        let values = pack["values"].as_str().unwrap_or_default();
+                        pack["values"] = json!(format!(
+                            "{}\n{m}: \"{{{{.spectro.macro.{m}}}}}\"\n",
+                            values.trim_end()
+                        ));
+                    }
+                }
+            }
         }
     }
 }
@@ -538,6 +560,7 @@ impl Tenant {
             &json!(variables),
         );
 
+        self.resolve_macros(project, uid);
         // the cluster now holds what each profile holds, so no update waits for it
         let mut items = self.notifications(project, uid);
         for n in &mut items {
@@ -605,6 +628,61 @@ impl Tenant {
             }
         }
         self.write(project, &path, &doc);
+    }
+
+    /// Give a project macro a value, as `PATCH /v1/projects/{uid}/macros` does, and let each
+    /// cluster of the project resolve it again: Palette answers `packs/resolvedValues` with the
+    /// value the macro has now.
+    pub fn set_macro(&self, project: &str, name: &str, value: &str) {
+        let path = format!("v1/projects/{project}/macros");
+        let mut doc = if self.doc(project, &path).is_file() {
+            self.read(project, &path)
+        } else {
+            json!({"macros": []})
+        };
+        let macros = doc["macros"].as_array_mut().expect("macros is a list");
+        macros.retain(|m| m["name"] != name);
+        macros.push(json!({"name": name, "value": value}));
+        self.write(project, &path, &doc);
+        let dir = self.doc(project, "v1/spectroclusters/x").with_file_name("");
+        for entry in std::fs::read_dir(&dir).into_iter().flatten().flatten() {
+            let file = entry.file_name().to_string_lossy().to_string();
+            if let Some(uid) = file.strip_suffix(".json") {
+                self.resolve_macros(project, uid);
+            }
+        }
+    }
+
+    /// The `packs/resolvedValues` answer of one cluster: for each profile it runs, each project
+    /// macro and its value, and the system macro of the cluster name, as Palette gives them.
+    fn resolve_macros(&self, project: &str, cluster: &str) {
+        let doc = self.read(project, &format!("v1/spectroclusters/{cluster}"));
+        let macros_path = format!("v1/projects/{project}/macros");
+        let macros = if self.doc(project, &macros_path).is_file() {
+            self.read(project, &macros_path)["macros"].clone()
+        } else {
+            json!([])
+        };
+        let mut resolved = Map::new();
+        for m in macros.as_array().into_iter().flatten() {
+            let name = m["name"].as_str().unwrap_or_default();
+            resolved.insert(format!("{{{{.spectro.macro.{name}}}}}"), m["value"].clone());
+        }
+        resolved.insert(
+            "{{.spectro.system.cluster.name}}".to_string(),
+            doc["metadata"]["name"].clone(),
+        );
+        let profiles: Vec<Value> = doc["spec"]["clusterProfileTemplates"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .map(|t| json!({"uid": t["uid"], "resolved": resolved}))
+            .collect();
+        self.write(
+            project,
+            &format!("v1/spectroclusters/{cluster}/packs/resolvedValues"),
+            &json!({"profiles": profiles}),
+        );
     }
 
     /// Give a cluster variable a new value, as a person changing it in Palette does.

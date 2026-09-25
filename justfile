@@ -185,6 +185,10 @@ live-who: build
 live-pending: build
     examples/live/pending.sh
 
+# The macro test: what a project macro does to a version, a cluster copy, and a record, when it changes (#72). Needs live-up; undoes each change.
+live-macros: build
+    examples/live/macros.sh
+
 # The scripts run in order from the baseline: verify.sh, in-place.sh off, in-place.sh on (against
 # that off run), and registry-move.sh. The recipe stops at the first script that fails. Billable:
 # about 3 to 4 hours, with cluster B two times.

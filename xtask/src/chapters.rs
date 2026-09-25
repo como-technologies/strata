@@ -19,6 +19,8 @@ const A110_PROD: &str = "64e1000000000000000000b2";
 const A112: &str = "64e0000000000000000000d4";
 const A113: &str = "64e0000000000000000000d5";
 const A120: &str = "64e0000000000000000000e5";
+// aws-stack@1.1.4: the content of 1.1.1, with the CSI values reading a project macro
+const A114: &str = "64e0000000000000000000f7";
 const ADDONS_DEV: &str = "64e2000000000000000000a1";
 const ADDONS_PROD: &str = "64e3000000000000000000a1";
 const ADDONS_PROD2: &str = "64e3000000000000000000a2";
@@ -38,6 +40,10 @@ const TAG_LTS2404: &[Edit] = &[Edit::Tag {
     tag: "LTS__24.04",
 }];
 const OCI_CSI: &[Edit] = &[Edit::OciCsi];
+const MACRO_REGION: &[Edit] = &[Edit::Macro {
+    pack: "csi-aws-ebs",
+    name: "region",
+}];
 
 /// The git settings that the merge-gate chapters need, so a commit is the same on every machine.
 const GIT: &[(&str, &str)] = &[
@@ -75,6 +81,7 @@ pub fn names() -> Vec<&'static str> {
         "overwritten",
         "cluster-release",
         "cluster-values",
+        "macros",
         "same-names",
         "packs",
         "retire",
@@ -1027,6 +1034,56 @@ fn use_cases(r: &mut Runner) {
         0,
         false,
         r#"strata verify 'runs/*.json' --format json | jq '.records[] | {path, clusterVariables}'"#,
+    );
+
+    // a project macro that the values of a pack read: the root covers its name, and a cluster
+    // record with --macros holds the digest of its value
+    r.chapter("macros", DEV_ENV);
+    r.projects(&[("dev", DEV)]);
+    r.profile(DEV, A114, "1.1.4", "aws-stack@1.1.1", MACRO_REGION);
+    r.set_macro(DEV, "region", "us-east-2");
+    r.cluster(DEV, PAYMENTS, "payments", &[A114]);
+    r.step(
+        "macros-record",
+        0,
+        true,
+        "strata snapshot aws-stack@1.1.4 -o releases/1.1.4/dev.json",
+    );
+    r.step(
+        "macros-record",
+        0,
+        true,
+        "strata snapshot cluster:payments --macros -o runs/payments.json",
+    );
+    r.step(
+        "macros-digests",
+        0,
+        false,
+        "jq .source.cluster.macroValues runs/payments.json",
+    );
+    r.serve_here(); // state 1: the records are taken, and the macro has its first value
+    r.set_macro(DEV, "region", "eu-west-1");
+    r.step(
+        "macros-verify-release-full",
+        0,
+        false,
+        "strata verify releases/1.1.4/dev.json",
+    );
+    r.excerpt(
+        "macros-verify-release",
+        "macros-verify-release-full",
+        r"^(aws-stack|root |note |OK)",
+    );
+    r.step(
+        "macros-verify-cluster-full",
+        1,
+        false,
+        "strata verify runs/payments.json",
+    );
+    r.excerpt(
+        "macros-verify-cluster",
+        "macros-verify-cluster-full",
+        r"^(aws-stack|root |note |DRIFT)",
     );
 
     r.chapter("same-names", &[]);

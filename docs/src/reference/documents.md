@@ -52,7 +52,9 @@ A record of one profile version or cluster.
     record covers waits, `false` when none waits, and absent when strata could
     not read it; `updatesPendingError` then says why. `pendingUpdates[]` has
     `profileUid`, `profile`, `message`, and `since` for each change that waits.
-    None of these is part of the root.
+    `macroValues`, only with `snapshot --macros`: each user macro the content
+    uses, and `sha256:` of the value Palette gives it for this cluster, or
+    `unresolved`. None of these is part of the root.
     Each entry of `profiles[]` has `uid`, `name`, `version`, and `type`, in the
     order [The order of the profiles of a cluster](../internals/palette.md#the-order-of-the-profiles-of-a-cluster)
     gives. Each entry of `variables[]` has `profile`, `profileUid`, `name`,
@@ -130,9 +132,14 @@ A comparison of two sides, `a` and `b`.
     digest on either side.
 - `upstreamUnknown`, only when it is not empty: the key of each such pack. An
   equal root does not show an equal archive for it.
+- `macros`, only when it is not empty: each user macro that either side uses.
+- `macrosChanged`, only when it is not empty: between two cluster records with
+  `macroValues`, each macro whose value differs.
 - `verify`, only after `verify`: `status` (`unchanged`, `drifted`, or
   `unverified`), `uid`, `recordedAt`, and `checkedAt`.
   - `upstreamUnknown`: for an `unverified` record, the packs that make it so.
+  - `macrosChanged`: for a cluster record with `macroValues`, each macro whose
+    value moved. The status is `drifted`, also when the roots are equal.
   - `overwrittenBy`: for a profile record, the `name@version` that the uid names
     now. The status is `drifted`, also when the roots are equal.
   - `clusterValuesChanged`, only when it is not `0`: for a cluster record, the

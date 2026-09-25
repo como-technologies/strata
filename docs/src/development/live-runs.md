@@ -410,6 +410,28 @@ makes one change in place and puts it back, so it ends at the baseline.
 | `values-baseline-none` | 0 | #70: the apply of the baseline, which writes the same content, opens no update |
 | `bump-uid-kept`, `bump-record`, `bump-none` | 0 | #70: a new version number alone, in place with the flag off, keeps the uid and opens no update |
 
+## macros.sh
+
+Read-write. It needs the example at its baseline with cluster A, and `kubectl`.
+It makes a project macro, has the manifest of the add-on version read it, and
+changes its value. It reads the value inside the cluster with a kubeconfig that
+it keeps in a temporary file. It puts each change back, and deletes the macro.
+
+| Check | Expected exit | What it shows |
+|---|---|---|
+| `base-flag`, `base-record`, `base-no-note` | 0, 0, 1 | #72: at the baseline, Palette says the add-on version has no user macros, and a report names none |
+| `macro-set`, `macro-edit`, `macro-flag` | 0 | #72: with the manifest reading a project macro, Palette says `hasUserMacros: true` |
+| `macro-record`, `macro-names` | 0 | #72: a report of the record names the macro, and says the root covers its name and not its value |
+| `macro-accept`, `macro-settled`, `macro-cluster`, `macro-cluster-plain`, `macro-digest` | 0 | #72: cluster A takes the update; a record with `--macros` holds `sha256:` of the value, and not the value |
+| `macro-resolved-1` | 0 | #72: `resolvedValues` gives the value of the macro |
+| `change`, `change-resolved` | 0 | #72: the macro gets another value, and `resolvedValues` gives it at once |
+| `change-version`, `change-plain` | 0 | #72: the record of the version, and a cluster record without the digests, still verify |
+| `change-cluster`, `change-cluster-says` | 1, 0 | #72: the cluster record with the digests reports `DRIFT`, and the verdict names the macro |
+| `change-compare`, `change-compare-says` | 1, 0 | #72: `compare` of the two cluster records exits `1` with equal roots, and names the macro |
+| `change-no-notification`, `change-no-audit` | 0 | #72: no notification opens for the cluster, and its audit log holds no new entry |
+| `propagation` | 0 | #72: Palette writes the new value inside the cluster with no update to accept: after 11 minutes in the recorded run, where the check was recorded without an expected code |
+| `undo-edit`, `undo-accept`, `undo-settled`, `undo-macro`, `undo-flag`, `undo-baseline` | 0 | the manifest back, the macro deleted, and the baseline |
+
 ## What has no live run
 
 - `in-place.sh`, `registry-move.sh`, `registry.sh`, `template.sh`, and

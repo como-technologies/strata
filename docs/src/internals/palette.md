@@ -217,6 +217,37 @@ an `update` by the user who sent the `PUT`, with a summary that names the uid
 of the profile and the manifest that changed. The entry names who accepted the
 update. The edit of the profile before it is an entry of the profile.
 
+## Macros
+
+A macro is a name and a value, with no version, no history, and no digest
+([Macros](https://docs.spectrocloud.com/clusters/cluster-management/macros/)).
+`GET /v1/projects/<uid>/macros` lists the macros of a project; `POST` adds one,
+`PATCH` changes one, and `DELETE` removes one.
+
+A profile whose manifest reads a user macro, `{{.spectro.macro.<name>}}`, has
+`status.hasUserMacros: true`. A profile that reads none has `false`.
+
+`GET /v1/spectroclusters/<uid>/packs/resolvedValues` gives, for each profile a
+cluster runs, a map from each placeholder to the value Palette gives it now.
+The map holds every macro Palette can resolve for the profile, the system ones
+too, such as the cluster name and the region, and not only the ones the profile
+reads. It gives a new macro value at once.
+
+When a macro gets another value:
+
+- The profile and its record do not change: `verify` of the record reports `OK`.
+- The copy that a cluster holds does not change: `verify` of a cluster record
+  without the digests of its macro values reports `OK`.
+- No notification opens for the cluster, and the audit log of the cluster
+  holds no entry for it.
+
+The cluster still gets the new value. Palette writes it into the running
+cluster on its own, with no update to accept: a live run read it inside the
+cluster 11 minutes after the change, and a run before it 13 minutes after. So a
+cluster runs other content, and its record, its copy, its notifications, and
+its audit log say nothing. The digests of `snapshot --macros` are how strata
+sees it: see [Macros](../commands/snapshot.md#macros).
+
 ## Cluster copies
 
 Each cluster runs its own copy of the manifests of a profile. The copy has its

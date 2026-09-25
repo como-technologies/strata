@@ -1,0 +1,9 @@
+$ strata snapshot aws-stack@1.1.4 -o releases/1.1.4/dev.json
+strata: looking up project dev
+strata: fetching profile 64e0000000000000000000f7
+strata: wrote releases/1.1.4/dev.json (root 8b03f6ed94cb)
+$ strata snapshot cluster:payments --macros -o runs/payments.json
+strata: looking up project dev
+strata: fetching cluster payments
+strata: cluster 'payments' is 64f1000000000000000000e1
+strata: wrote runs/payments.json (root 8b03f6ed94cb)

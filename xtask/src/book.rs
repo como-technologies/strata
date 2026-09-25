@@ -280,6 +280,15 @@ impl Runner {
         self.tenant.on_cluster_reclaim(project, uid, policy);
     }
 
+    /// Give a project macro a value, and let each cluster of the project resolve it again.
+    pub fn set_macro(&mut self, project: &str, name: &str, value: &str) {
+        if !self.building() {
+            return;
+        }
+        self.changed();
+        self.tenant.set_macro(project, name, value);
+    }
+
     /// Give a cluster variable a new value.
     pub fn set_value(&mut self, project: &str, uid: &str, variable: &str, value: &str) {
         if !self.building() {

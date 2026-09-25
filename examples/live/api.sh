@@ -45,6 +45,14 @@
 #       registry lists for it. When Palette creates it, delete it at once, print `accepted`, and
 #       exit 0. When Palette refuses it, print `refused`, the HTTP status, and the error code, and
 #       exit 1. Exit 2 when the registry lists no such version.
+#   api.sh macro-set NAME VALUE
+#       Give the project macro NAME the value VALUE: create it, or change it when it exists. The
+#       project is PALETTE_PROJECT_UID.
+#   api.sh macro-delete NAME
+#       Delete the project macro NAME; a missing one is not an error.
+#   api.sh get-kubeconfig CLUSTER_UID
+#       Print the kubeconfig of a cluster, for a caller that writes it to a temporary file and
+#       deletes it. It is a credential: do not save it, and do not print it to a log.
 #   api.sh get PATH
 #       GET one path, `/v1/...`, and print the answer. A read, for a check.
 #
@@ -304,6 +312,47 @@ sync_oci() {
   die "the sync of registry $uid did not end in five minutes"
 }
 
+# macro-set NAME VALUE: POST creates a project macro, PATCH changes one that exists
+macro_set() {
+  local name=${1:-} value=${2:-} body
+  [ -n "$name" ] && [ $# -eq 2 ] || die "usage: api.sh macro-set NAME VALUE"
+  [ -n "$PROJECT" ] || die "macro-set needs PALETTE_PROJECT_UID"
+  body=$(mktemp); trap 'rm -f "${body:-}"' RETURN
+  jq -n --arg n "$name" --arg v "$value" '{macros: [{name: $n, value: $v}]}' > "$body"
+  if call GET "/v1/projects/$PROJECT/macros" 2>/dev/null | jq -e --arg n "$name" '.macros[]? | select(.name == $n)' > /dev/null; then
+    call PATCH "/v1/projects/$PROJECT/macros" "$body" > /dev/null || exit 2
+  else
+    call POST "/v1/projects/$PROJECT/macros" "$body" > /dev/null || exit 2
+  fi
+  echo "macro $name = $value in project $PROJECT"
+}
+
+# get-kubeconfig CLUSTER_UID: Palette gives the kubeconfig for any Accept but JSON
+get_kubeconfig() {
+  local uid=${1:-} out status
+  [ -n "$uid" ] || die "usage: api.sh get-kubeconfig CLUSTER_UID"
+  out=$(mktemp); trap 'rm -f "${out:-}"' RETURN
+  status=$(curl -sS -o "$out" -w '%{http_code}' -H "ApiKey: $KEY" -H 'Accept: */*' \
+    ${PROJECT:+-H "ProjectUid: $PROJECT"} "$API/v1/spectroclusters/$uid/assets/kubeconfig")
+  [ "$status" = 200 ] && grep -q '^apiVersion:' "$out" || die "no kubeconfig for $uid: HTTP $status"
+  cat "$out"
+}
+
+# macro-delete NAME
+macro_delete() {
+  local name=${1:-} body
+  [ -n "$name" ] || die "usage: api.sh macro-delete NAME"
+  [ -n "$PROJECT" ] || die "macro-delete needs PALETTE_PROJECT_UID"
+  if ! call GET "/v1/projects/$PROJECT/macros" 2>/dev/null | jq -e --arg n "$name" '.macros[]? | select(.name == $n)' > /dev/null; then
+    echo "no macro $name in project $PROJECT"
+    return 0
+  fi
+  body=$(mktemp); trap 'rm -f "${body:-}"' RETURN
+  jq -n --arg n "$name" '{macros: [{name: $n}]}' > "$body"
+  call DELETE "/v1/projects/$PROJECT/macros" "$body" > /dev/null || exit 2
+  echo "deleted macro $name in project $PROJECT"
+}
+
 case "${1:-}" in
   edit) shift; edit "$@" ;;
   reorder) shift; reorder "$@" ;;
@@ -316,6 +365,9 @@ case "${1:-}" in
   delete-cluster) shift; delete_cluster "$@" ;;
   sync-oci) shift; sync_oci "$@" ;;
   probe-profile) shift; probe_profile "$@" ;;
+  macro-set) shift; macro_set "$@" ;;
+  macro-delete) shift; macro_delete "$@" ;;
+  get-kubeconfig) shift; get_kubeconfig "$@" ;;
   get) shift; [ -n "${1:-}" ] || die "usage: api.sh get PATH"; call GET "$1" ;;
   *) sed -n '2,/^set -uo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; exit 2 ;;
 esac

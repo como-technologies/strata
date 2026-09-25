@@ -1,0 +1,4 @@
+$ jq .source.cluster.macroValues runs/payments.json
+{
+  "region": "sha256:72252b46fadf7e7c0388cc3b33ffa26f54e14b2de909f8b41e42e6343fb6ce33"
+}

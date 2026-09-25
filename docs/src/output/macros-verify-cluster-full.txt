@@ -1,0 +1,14 @@
+$ strata verify runs/payments.json
+aws-stack@1.1.4 on cluster payments (uid 64f1000000000000000000e1)  ->  aws-stack@1.1.4 on cluster payments (uid 64f1000000000000000000e1)
+root       8b03f6ed94cb -> 8b03f6ed94cb   IDENTICAL
+note       the content uses macro region: the root covers its name and not its value, so an edit of a macro does not show
+note       macro region has another value on each side: the clusters run other content, also where the roots are equal
+
+  variables unchanged
+
+  [os   ] ubuntu-aws                 24.04              unchanged
+  [k8s  ] kubernetes                 1.36.2             unchanged
+  [cni  ] cni-cilium-oss             1.20.1             unchanged
+  [csi  ] csi-aws-ebs                1.65.0             unchanged
+  [addon] cert-manager               1.21.1             unchanged
+DRIFT: cluster payments running aws-stack@1.1.4 has the content recorded 2026-09-17T09:30:00Z, but macro region has another value now

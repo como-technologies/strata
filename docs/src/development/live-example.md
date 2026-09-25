@@ -83,6 +83,7 @@ its end.
 | `order.sh` | The order test (#66): a reorder of the packs of two published versions, and of the profiles of the cluster, through the API. It leaves the versions edited; `live-down` follows it. |
 | `who.sh` | The audit log test (#69): who made an edit through the API, and an update that a cluster accepted, as `verify --who` reads them. |
 | `pending.sh` | The pending update test (#70): when Palette says that an update waits for cluster A, and what a record, the listing, and `compare` say. |
+| `macros.sh` | The macro test (#72): what a project macro does to a version, to the copy that cluster A runs, and to a record, when the macro gets another value. |
 | `aws-inventory.sh` | What the cluster still has in AWS, to confirm a teardown. |
 
 ## Design
@@ -107,6 +108,7 @@ creates at once.
 `merge-gate.sh` makes one edit in place, and puts it back.
 `who.sh` makes one edit in place at a time, and puts each back.
 `pending.sh` checks the baseline before it starts, and puts each change back.
+`macros.sh` does the same, and deletes the macro it makes.
 `registry.sh` leaves the pushed versions in its own registry.
 `template.sh` ends with the example removed, `cluster.sh` ends with the cluster
 gone, and `order.sh` leaves two versions edited: run `just live-down` after
@@ -129,6 +131,7 @@ each.
 | `order.sh` | the pack order of two published versions, and the profile order of cluster A | the packs, the values, the manifests; it leaves the versions edited |
 | `who.sh` | the add-on version, edited in place and put back; with a cluster, the update that cluster A accepts, and its undo | the profiles, the clusters |
 | `pending.sh` | a manifest of the add-on version, a value of the release version, and the add-on version number, each in place and put back; the updates that cluster A accepts | the clusters, the flag (off), the baseline |
+| `macros.sh` | a project macro, and the manifest of the add-on version that reads it; the update that cluster A accepts; all put back | the clusters, the flag (off), the baseline |
 
 **One definition for each kind.** Clusters A and B come from one resource, and
 differ only in their names. Each profile has the same lifecycle:

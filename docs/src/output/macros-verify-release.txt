@@ -1,0 +1,6 @@
+$ strata verify releases/1.1.4/dev.json
+aws-stack@1.1.4 (uid 64e0000000000000000000f7)  ->  aws-stack@1.1.4 (uid 64e0000000000000000000f7)
+root       8b03f6ed94cb -> 8b03f6ed94cb   IDENTICAL
+note       the content uses macro region: the root covers its name and not its value, so an edit of a macro does not show
+...
+OK: published version aws-stack@1.1.4 is unchanged since 2026-09-17T09:30:00Z
