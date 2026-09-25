@@ -92,8 +92,10 @@ See [A published version is edited in place](../use-cases/edited-in-place.md).
 {{#include ../output/merge-gate-drifted.txt}}
 ```
 
-`--no-verify`, or no API key in the environment, leaves this check out. See
-[Settings](../reference/settings.md).
+`--no-verify`, or no API key where strata looks for one (`PALETTE_API_KEY`,
+`SPECTROCLOUD_APIKEY`, or `~/.palette.env`), leaves this check out. Then the
+last line says `not verified` and why, in place of the count of records that
+did not verify. See [Settings](../reference/settings.md).
 
 The gate checks the record at the merge. Palette can change a published version
 after that. Run `strata verify` on the record again in the job that builds the

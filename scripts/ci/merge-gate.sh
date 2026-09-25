@@ -27,7 +27,8 @@
 #      whether the branch wrote its record before or after the target branch moved.
 #   3. A record of the merge result does not verify: the profile or cluster it names changed in
 #      Palette, or is gone. A cluster built from it would not get what the record says. --no-verify,
-#      or no PALETTE_API_KEY, leaves this check out.
+#      or no Palette key where strata looks for one (PALETTE_API_KEY, SPECTROCLOUD_APIKEY, or
+#      ~/.palette.env), leaves this check out, and the last line says so.
 #
 # Exit 0 when the merge result is clear, 1 when the gate is red, and 2 when the script could not
 # run at all. A record that strata could not check is red, not 2: the gate fails closed.
@@ -62,7 +63,19 @@ done
 git rev-parse --is-inside-work-tree > /dev/null 2>&1 || die "not a git checkout"
 
 strata=${STRATA_BIN:-strata}
-[ -n "${PALETTE_API_KEY:-${SPECTROCLOUD_APIKEY:-}}" ] || verify=""
+# the key where strata looks for it: the environment, then ~/.palette.env
+has_key() {
+  [ -n "${PALETTE_API_KEY:-${SPECTROCLOUD_APIKEY:-}}" ] && return 0
+  [ -f "${HOME:-}/.palette.env" ] &&
+    grep -qE '^[[:space:]]*(export[[:space:]]+)?(PALETTE_API_KEY|SPECTROCLOUD_APIKEY)=[^[:space:]]' "$HOME/.palette.env"
+}
+unchecked=""
+if [ -z "$verify" ]; then
+  unchecked="--no-verify"
+elif ! has_key; then
+  verify=""
+  unchecked="no Palette key in PALETTE_API_KEY, SPECTROCLOUD_APIKEY, or ~/.palette.env"
+fi
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 
@@ -234,7 +247,11 @@ done
 plural() { # plural COUNT SINGULAR: "1 record", "2 records", "no records"
   case "$1" in 0) echo "no ${2}s" ;; 1) echo "1 $2" ;; *) echo "$1 ${2}s" ;; esac
 }
-note "$(plural ${#files[@]} record): ${#behind[@]} behind $base, ${#rolled[@]} declared rollback, ${#unverified[@]} did not verify"
+if [ -n "$unchecked" ]; then
+  note "$(plural ${#files[@]} record): ${#behind[@]} behind $base, ${#rolled[@]} declared rollback, not verified: $unchecked"
+else
+  note "$(plural ${#files[@]} record): ${#behind[@]} behind $base, ${#rolled[@]} declared rollback, ${#unverified[@]} did not verify"
+fi
 if [ ${#behind[@]} -gt 0 ] || [ ${#unverified[@]} -gt 0 ]; then
   note "the merge button must wait: settle the records above, then push again"
   exit 1

@@ -1103,10 +1103,17 @@ impl Gate {
     }
 
     fn run(&self, args: &[&str]) -> Output {
+        self.run_env(args, &[])
+    }
+
+    /// The same run, with these variables set after the others.
+    fn run_env(&self, args: &[&str], env: &[(&str, &std::path::Path)]) -> Output {
         Command::new("bash")
             .arg(script("ci/merge-gate.sh"))
             .args(args)
             .current_dir(self.dir.path())
+            // a key in the ~/.palette.env of the machine must not reach the gate
+            .env("HOME", self.dir.path())
             .env("GIT_CONFIG_GLOBAL", "/dev/null")
             .env("GIT_CONFIG_SYSTEM", "/dev/null")
             .env("GIT_AUTHOR_NAME", "t")
@@ -1123,6 +1130,7 @@ impl Gate {
             .env_remove("GITHUB_BASE_REF")
             .env_remove("CI_MERGE_REQUEST_TARGET_BRANCH_NAME")
             .env_remove("STRATA_REMOTE")
+            .envs(env.iter().copied())
             .output()
             .unwrap()
     }
@@ -1398,6 +1406,56 @@ fn merge_gate_needs_a_target_branch_and_a_record() {
     assert_eq!(o.status.code(), Some(2));
     assert!(
         text(&o.stderr).contains("no record in the merge result matches"),
+        "{}",
+        text(&o.stderr)
+    );
+}
+
+#[test]
+fn merge_gate_says_when_it_does_not_verify_and_finds_the_key_where_strata_does() {
+    let (base, branch, _) = gate_records();
+    // a branch that merges cleanly and moves no pin back, so verify is the only check left
+    let g = Gate::new(&base, &branch, &base);
+
+    let o = g.run(&["releases/*.json", "--base", "main", "--no-verify"]);
+    assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
+    assert!(
+        text(&o.stderr).contains("not verified: --no-verify"),
+        "{}",
+        text(&o.stderr)
+    );
+
+    // no key anywhere: the gate leaves verify out, and the last line says so
+    let o = g.run(&["releases/*.json", "--base", "main"]);
+    assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
+    assert!(
+        text(&o.stderr).contains(
+            "not verified: no Palette key in PALETTE_API_KEY, SPECTROCLOUD_APIKEY, or ~/.palette.env"
+        ),
+        "{}",
+        text(&o.stderr)
+    );
+
+    // a key in ~/.palette.env alone is a key, as strata reads it: the gate verifies. This address
+    // answers nothing, so the record cannot be checked, and the gate fails closed.
+    let home = tempfile::tempdir().unwrap();
+    std::fs::write(
+        home.path().join(".palette.env"),
+        "PALETTE_API_KEY=k\nPALETTE_API=http://127.0.0.1:9\nSTRATA_RETRIES=0\n",
+    )
+    .unwrap();
+    let o = g.run_env(
+        &["releases/*.json", "--base", "main"],
+        &[("HOME", home.path())],
+    );
+    assert_eq!(o.status.code(), Some(1), "{}", text(&o.stderr));
+    assert!(
+        text(&o.stdout).contains("ERROR: releases/dev.json could not be checked"),
+        "{}",
+        text(&o.stdout)
+    );
+    assert!(
+        text(&o.stderr).contains("1 did not verify"),
         "{}",
         text(&o.stderr)
     );
