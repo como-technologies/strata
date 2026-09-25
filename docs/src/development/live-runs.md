@@ -502,6 +502,36 @@ Each answer agrees with the impact table, on AWS and on GCP: the two clouds run
 the kubeadm engine alone. The edit in place also opens an update notification for cluster A, and
 `compare` names it; the undo closes it.
 
+## registry-kinds.sh
+
+Read-write in the registries of its own host alone, and it needs no cluster. It
+turns `registry_kinds` on: a host in AWS that serves a Helm repository, a Helm
+repository with credentials, an OCI registry with basic auth, and a Spectro
+pack registry, and a Palette registry over each. It removes each at its end.
+[The digest of each registry kind](../internals/palette.md#the-digest-of-each-registry-kind)
+states what it shows.
+
+| Check | Expected exit | What it shows |
+|---|---|---|
+| `push-*`, `packs-registry` | 0 | version `1.0.0` into each kind, and a Palette registry over the Spectro pack registry |
+| `sync-<kind>-first`, `record-<kind>-first` | 0 | Palette reads each registry, and a record of each pack |
+| `charts-digest` | 0 | #75: the Helm repository: the sha256 of the chart archive, bare hex |
+| `oci-pack-digest`, `oci-helm-digest` | 0 | #75: OCI `pack` and `helm`: the manifest digest of the push |
+| `oci-zarf-digest` | 0 | #75: OCI `zarf`: no digest |
+| `provider-types` | 0 | #75: each record of an OCI pack names `pack`, `helm`, or `zarf`, and the Helm record names none |
+| `packs-served-first`, `packs-listed-first` | 0, ? | the Spectro pack registry serves `1.0.0` with the digest of the push to the user that Palette reads as, and Palette lists no pack of it (recorded 1) |
+| `auth-listed` | ? | #75: Palette lists no chart of the Helm repository with credentials while no profile pins one (recorded 2) |
+| `auth-pin`, `auth-record` | 0 | a profile that pins the chart by name, and a record of it |
+| `auth-no-digest` | 0 | #75 #71: the pack reference carries no digest, and Palette made a pack uid |
+| `auth-verify`, `auth-verify-says`, `auth-verify-allowed` | 1, 0, 0 | #71: `verify` reports `UNVERIFIED`, and `--allow-no-digest` accepts it |
+| `auth-same-release`, `auth-same-release-allowed` | 1, 0 | #71: `same-release` refuses it, and `--allow no-digest` accepts it |
+| `push2-*`, `push2-differs` | 0 | `1.0.0` again into each kind, with other bytes |
+| `charts-keeps`, `charts-verify` | 0 | #75: the Helm repository keeps the first digest, and the record from before verifies |
+| `oci-pack-follows`, `oci-pack-verify` | 0, 1 | #75: OCI `pack` gives the digest of the new push, and the record from before reports `DRIFT` |
+| `oci-helm-keeps`, `oci-helm-verify` | 0 | #75: OCI `helm` keeps the first digest, and the record from before verifies |
+| `oci-zarf-none`, `oci-zarf-verify` | 0, 1 | #75: OCI `zarf` still gives no digest, and the record from before reports `UNVERIFIED` |
+| `packs-served-second`, `packs-listed-second` | 0, ? | the Spectro pack registry serves the new push, and Palette still lists no pack of it (recorded 1) |
+
 ## A second cloud: GCP
 
 The scripts run on GCP with `cloud = "gcp"`, and with no other change. The
@@ -556,7 +586,5 @@ What differs is outside strata:
   other upgrade engine.
 - [What Palette does](../internals/palette.md#what-no-run-covers) lists the
   behaviors that no script here establishes.
-- No script produces a pack with no digest, so no live run shows `verify`
-  reporting one as `UNVERIFIED`, or `same-release` refusing one (#71). The
-  offline tests cover each. A Helm registry that needs credentials is the case
-  that gives one, and its check is open (#75).
+- No script watches a pack of a Spectro pack registry: Palette lists no pack of
+  the one that `registry-kinds.sh` serves.

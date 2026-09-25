@@ -17,6 +17,7 @@ show.
 | `pack-states.sh` | Pack versions that Spectro Cloud deprecated, disabled, or deleted: what `packs` and `snapshot` report, and which profiles Palette refuses (#68). It needs no cluster. |
 | `merge-gate.sh` | `scripts/ci/merge-gate.sh` over records of the live profiles, in a git repository that the script builds (#57). It needs the profiles, and no cluster. |
 | `knurl.sh` | [The knurl adapter](../automation/knurl.md): each method of the port against the strata answer for the same real object. Read-only. It needs the profiles; the instance checks need the cluster. |
+| `registry-kinds.sh` | The digest of each registry kind, and a push again of one version into each (#75); a Helm registry with credentials, the case with no digest (#71). It needs no cluster. |
 
 The example runs on AWS or GCP: the variable `cloud` in `terraform.tfvars`
 selects one. Strata makes no rule about which cloud runs the cluster. The
@@ -82,6 +83,9 @@ its end.
 | `knurl.sh` | The knurl adapter test. |
 | `registry.sh` | The registry test (#66): pushes into the example's own OCI pack registry and OCI Helm registry, and reads what Palette does with each push. |
 | `pack/`, `chart/` | The two packs and the one chart that `registry.sh` pushes. |
+| `registry-kinds.sh` | The registry kinds test (#75). |
+| `zarf/` | The Zarf package that `registry-kinds.sh` publishes. |
+| `terraform/registry-kinds.tf`, `terraform/registry-host.sh.tftpl` | The registry host of `registry-kinds.sh`: one EC2 instance that serves a Helm repository, one with credentials, an OCI registry with basic auth, and a Spectro pack registry, behind Caddy with a certificate for each `<service>.<IP>.sslip.io`; and a Palette registry over each. Off unless `registry_kinds` is set. |
 | `template.sh` | The cluster template test (#66): the lock on a linked version, a cluster outside the template, and the install order of add-on packs. It ends with the removal of the example. |
 | `cluster.sh` | The cluster test (#66): a change of the value the cluster gives a variable, and a deletion through the API. It ends with the cluster gone. |
 | `order.sh` | The order test (#66): a reorder of the packs of two published versions, and of the profiles of the cluster, through the API. It leaves the versions edited; `live-down` follows it. |
@@ -135,6 +139,7 @@ each.
 | `merge-gate.sh` | the add-on version, which stage 4 edits in place and stage 5 puts back | the profiles, the clusters, the baseline |
 | `knurl.sh` | nothing; it only reads | the baseline |
 | `registry.sh` | the images of the example's own registries, and the profiles that pin them | the shared registries, the clusters, the release and add-on versions |
+| `registry-kinds.sh` | the registry host and a Palette registry over each kind, then pushes of `1.0.0` into each, and one profile of stage 2; it removes each at its end | the profiles, the clusters, the baseline |
 | `template.sh` | a template over the release and add-on versions; then the release version, in place | the pack versions; it ends with the example removed |
 | `cluster.sh` | the value cluster A gives one variable; then the cluster, deleted through the API | the profiles |
 | `order.sh` | the pack order of two published versions, and the profile order of cluster A | the packs, the values, the manifests; it leaves the versions edited |
@@ -200,6 +205,10 @@ back to false with the default variables (`apply_baseline`).
   account, named in `terraform.tfvars` as `aws_profile`. Every apply needs it,
   because the example's own pack registry lives there. `registry.sh` needs
   `oras` as well, and logs in to the repository with that profile.
+- For `registry-kinds.sh`: `oras`, `helm`, `zarf`, and the `spectro` CLI of
+  Spectro Cloud ([Spectro Cloud CLI](https://docs.spectrocloud.com/registries-and-packs/spectro-cli-reference/)).
+  The host needs no login of a person: the script reads its password from the
+  OpenTofu outputs.
 - On AWS, the AWS managed policy `AmazonEBSCSIDriverPolicy` on the worker node role
   `nodes.cluster-api-provider-aws.sigs.k8s.io`. Without it, the EBS CSI
   controller fails on each cluster with `UnauthorizedOperation` on
@@ -302,6 +311,7 @@ just live-drift-report                                                         #
 just live-packs                                                                # #55, read-only
 just live-merge-gate                                                           # #57, needs just live-profiles
 just live-registry                                                             # #66, needs just live-profiles, oras, helm, and aws
+just live-registry-kinds                                                       # #75, needs just live-profiles, oras, helm, zarf, and spectro
 just live-template                                                             # #66, needs just live-profiles and no cluster; ends with live-down
 just live-cluster                                                              # #66, needs just live-up; ends with the cluster gone
 just live-order                                                                # #66, needs just live-up; leaves the versions edited, so live-down follows
@@ -453,6 +463,7 @@ These rules come from the teardowns of this kind of cluster:
 | `verify-cluster-record` | 0 | `verify` passes on a cluster record |
 | `snapshot-registries` | 0 | record the profile with a Helm pack and an OCI pack |
 | `registries-kinds` | 0 | #2: the profile holds one helm pack and one oci pack |
+| `registries-provider-type` | 0 | #75: the oci pack records `registryProviderType` `pack`; the helm pack records none |
 | `registry-digest-helm` | 0 | #2: read the digest of the helm pack from the registry itself |
 | `registry-digest-oci` | 0 | #2: read the digest of the oci pack from the registry itself |
 

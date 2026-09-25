@@ -6,6 +6,7 @@
 //! the same documents a published profile returns, so the candidate hashes exactly as the
 //! published version will.
 
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use schemars::JsonSchema;
@@ -416,6 +417,22 @@ pub(crate) fn versions_of<A: PaletteApi>(palette: &Palette<A>, name: &str) -> Re
 }
 
 /// The registries this key can see, name and uid, in the order Palette lists them.
+/// The provider type of each OCI registry, `pack`, `helm`, or `zarf`, by uid, from
+/// `GET /v1/registries/oci/summary`. The pack listing does not carry it. Empty when Palette does
+/// not answer: a record then names no provider type, and is otherwise the same.
+fn oci_provider_types<A: PaletteApi>(palette: &Palette<A>) -> BTreeMap<String, String> {
+    let Ok(listing) = palette.api().get_json("/v1/registries/oci/summary") else {
+        return BTreeMap::new();
+    };
+    listing
+        .get("items")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|it| Some((text(it, "/metadata/uid")?, text(it, "/spec/providerType")?)))
+        .collect()
+}
+
 pub(crate) fn registries<A: PaletteApi>(palette: &Palette<A>) -> Result<Vec<(String, String)>> {
     let listing = palette.api().get_json("/v1/registries/metadata")?;
     Ok(listing
@@ -627,6 +644,8 @@ pub fn resolve<A: PaletteApi>(
     ));
     // registry names to uids, in the order Palette lists them; fetched once, and only when needed
     let mut names: Option<Vec<(String, String)>> = None;
+    // the provider type of each OCI registry; fetched once, and only for an OCI pack
+    let mut oci_types: Option<BTreeMap<String, String>> = None;
     let mut refs = Vec::with_capacity(c.layers.len());
     let mut entries = Vec::with_capacity(c.layers.len());
     for (l, loaded_layer) in c.layers.iter().zip(&loaded.layers) {
@@ -727,6 +746,14 @@ pub fn resolve<A: PaletteApi>(
         });
         if !digest.is_empty() {
             pack_ref["digest"] = json!(digest);
+        }
+        // the provider type of an OCI registry, as a published profile carries it on the pack
+        // reference
+        if kind == "oci" {
+            let types = oci_types.get_or_insert_with(|| oci_provider_types(palette));
+            if let Some(t) = types.get(&registry) {
+                pack_ref["annotations"] = json!({ "ociRegistryProviderType": t });
+            }
         }
         refs.push(pack_ref);
         entries.push(json!({

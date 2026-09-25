@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: strata-live-zarf
+  namespace: default
+data:
+  purpose: strata live example, a Zarf package

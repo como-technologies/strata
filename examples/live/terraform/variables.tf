@@ -303,3 +303,10 @@ variable "cluster_release_profile_uid" {
   type        = string
   default     = ""
 }
+
+# examples/live/registry-kinds.sh's variable (#75).
+variable "registry_kinds" {
+  description = "Create the registry host of registry-kinds.tf and a Palette registry over each kind it serves; registry-kinds.sh sets it"
+  type        = bool
+  default     = false
+}

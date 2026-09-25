@@ -3,9 +3,10 @@
 ## The problem
 
 Strata knows that the archive of a pack changed from the digest that Palette
-gives for it. A registry that Palette does not sync gives no digest, such as a
-Helm registry that needs credentials: see
-[What no run covers](../internals/palette.md#what-no-run-covers). For such a
+gives for it. Some registries give no digest: a Helm registry that needs
+credentials, which Palette does not sync, and an OCI registry with the provider
+type `zarf`. See
+[The digest of each registry kind](../internals/palette.md#the-digest-of-each-registry-kind). For such a
 pack, the upstream hash is the hash of nothing on each side. A change of its
 archive cannot move the root, and an equal root does not say that the archive
 is the same.
@@ -68,6 +69,9 @@ digest to one that gives none loses what the root can show.
 
 ## Palette behavior
 
-No live run produces a pack with no digest yet: see
-[What no run covers](../internals/palette.md#what-no-run-covers). The rule for
+Two registry kinds give a pack with no digest, live: a Helm registry with
+credentials, which Palette does not synchronize, and an OCI registry with the
+provider type `zarf`. On a record of each, `verify` reports `UNVERIFIED`, and on
+the Helm one `same-release` refuses it: see
+[The digest of each registry kind](../internals/palette.md#the-digest-of-each-registry-kind). The rule for
 each hash is at [The content digest](../internals/hashes.md#the-content-digest).

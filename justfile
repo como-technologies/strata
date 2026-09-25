@@ -165,6 +165,10 @@ live-merge-gate: build
 live-registry: build
     examples/live/registry.sh
 
+# The registry kinds test: the digest of each registry kind, and a push again of one version into each (#75). Needs live-profiles; builds and removes its own registry host.
+live-registry-kinds: build
+    examples/live/registry-kinds.sh
+
 # The cluster template test: the lock on a linked version, and a cluster outside the template (#66). Needs live-profiles and no cluster; ends with the removal of the example.
 live-template: build
     examples/live/template.sh

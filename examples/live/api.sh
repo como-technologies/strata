@@ -40,6 +40,17 @@
 #   api.sh sync-oci REGISTRY_UID
 #       Ask Palette to read an OCI pack registry in ECR again, and wait until that sync ends.
 #       Prints the sync status. Exit 2 when the sync does not end in five minutes.
+#   api.sh sync KIND REGISTRY_UID
+#       The same for a registry of KIND: oci-ecr, oci-basic (an OCI registry with basic auth),
+#       helm, or pack (a Spectro pack registry).
+#   KINDS_PASSWORD=... api.sh pack-registry-create NAME ENDPOINT USER
+#       Make a Spectro pack registry over ENDPOINT with basic auth, and print its uid.
+#   api.sh pack-registry-delete REGISTRY_UID
+#       Remove a Spectro pack registry.
+#   api.sh pin-profile NAME REGISTRY_UID TYPE PACK VERSION
+#       Make and publish an add-on profile NAME@1.0.0 that pins PACK at VERSION by name, with no
+#       pack uid, as the console does for a registry that Palette does not synchronize. Prints
+#       its uid.
 #   api.sh probe-profile NAME REGISTRY_UID VERSION
 #       Ask Palette to create an add-on profile that pins one pack version, with the values the
 #       registry lists for it. When Palette creates it, delete it at once, print `accepted`, and
@@ -294,14 +305,28 @@ delete_cluster() {
   echo "the deletion of cluster $uid is requested"
 }
 
-# sync_oci UID: POST the sync, then wait until a run newer than the last one has ended
+# sync_oci UID: sync_registry of an OCI registry on ECR
 sync_oci() {
-  local uid=${1:-} before status after
-  [ -n "$uid" ] || die "usage: api.sh sync-oci REGISTRY_UID"
-  before=$(call GET "/v1/registries/oci/$uid/ecr/sync/status" | jq -r '.lastRunTime // ""') || return 2
-  call POST "/v1/registries/oci/$uid/ecr/sync" > /dev/null || return 2
+  [ -n "${1:-}" ] || die "usage: api.sh sync-oci REGISTRY_UID"
+  sync_registry oci-ecr "$1"
+}
+
+# sync_registry KIND UID: POST the sync of a registry of KIND (oci-ecr, oci-basic, helm, or pack),
+# then wait until a run newer than the last one has ended
+sync_registry() {
+  local kind=${1:-} uid=${2:-} base before status after
+  case "$kind" in
+    oci-ecr) base=/v1/registries/oci/$uid/ecr ;;
+    oci-basic) base=/v1/registries/oci/$uid/basic ;;
+    helm) base=/v1/registries/helm/$uid ;;
+    pack) base=/v1/registries/pack/$uid ;;
+    *) die "usage: api.sh sync KIND REGISTRY_UID, where KIND is oci-ecr, oci-basic, helm, or pack" ;;
+  esac
+  [ -n "$uid" ] || die "usage: api.sh sync KIND REGISTRY_UID"
+  before=$(call GET "$base/sync/status" | jq -r '.lastRunTime // ""') || return 2
+  call POST "$base/sync" > /dev/null || return 2
   for _ in $(seq 1 60); do
-    status=$(call GET "/v1/registries/oci/$uid/ecr/sync/status") || return 2
+    status=$(call GET "$base/sync/status") || return 2
     after=$(jq -r '.lastRunTime // ""' <<<"$status")
     if [ "$(jq -r '.status // ""' <<<"$status")" != InProgress ] && [ "$after" != "$before" ]; then
       echo "$status"
@@ -310,6 +335,46 @@ sync_oci() {
     sleep 5
   done
   die "the sync of registry $uid did not end in five minutes"
+}
+
+# pack_registry_create NAME ENDPOINT USER: a Spectro pack registry over ENDPOINT, with basic auth;
+# the password is KINDS_PASSWORD in the environment, so it is on no command line. Prints the uid.
+pack_registry_create() {
+  local name=${1:-} endpoint=${2:-} user=${3:-} body
+  [ -n "$user" ] || die "usage: KINDS_PASSWORD=... api.sh pack-registry-create NAME ENDPOINT USER"
+  [ -n "${KINDS_PASSWORD:-}" ] || die "pack-registry-create needs KINDS_PASSWORD"
+  body=$(mktemp); trap 'rm -f "${body:-}"' RETURN
+  jq -n --arg n "$name" --arg e "$endpoint" --arg u "$user" --arg p "$KINDS_PASSWORD" \
+    '{metadata: {name: $n}, spec: {name: $n, endpoint: $e, private: true,
+      auth: {type: "basic", username: $u, password: $p}}}' > "$body"
+  PROJECT="" call POST /v1/registries/pack "$body" | jq -r '.uid'
+}
+
+# pack_registry_delete UID: remove a Spectro pack registry; one that is gone is not an error
+pack_registry_delete() {
+  local uid=${1:-}
+  [ -n "$uid" ] || die "usage: api.sh pack-registry-delete REGISTRY_UID"
+  if PROJECT="" call GET "/v1/registries/pack/$uid" > /dev/null 2>&1; then
+    PROJECT="" call DELETE "/v1/registries/pack/$uid" > /dev/null || return 2
+    echo "deleted pack registry $uid"
+  else
+    echo "pack registry $uid: not found"
+  fi
+}
+
+# pin_profile NAME REGISTRY_UID TYPE PACK VERSION: create and publish an add-on profile NAME@1.0.0
+# that pins PACK at VERSION by name, with no pack uid, as the console does for a registry that
+# Palette does not synchronize. Prints the uid of the profile.
+pin_profile() {
+  local name=${1:-} registry=${2:-} kind=${3:-} pack=${4:-} version=${5:-} body uid
+  [ -n "$version" ] || die "usage: api.sh pin-profile NAME REGISTRY_UID TYPE PACK VERSION"
+  body=$(mktemp); trap 'rm -f "${body:-}"' RETURN
+  jq -n --arg n "$name" --arg r "$registry" --arg t "$kind" --arg p "$pack" --arg v "$version" \
+    '{metadata: {name: $n}, spec: {version: "1.0.0", template: {type: "add-on", cloudType: "all",
+      packs: [{name: $p, tag: $v, registryUid: $r, type: $t, layer: "addon", values: ""}]}}}' > "$body"
+  uid=$(call POST /v1/clusterprofiles "$body" | jq -r '.uid') || return 2
+  call PATCH "/v1/clusterprofiles/$uid/publish" > /dev/null || return 2
+  echo "$uid"
 }
 
 # macro-set NAME VALUE: POST creates a project macro, PATCH changes one that exists
@@ -364,6 +429,10 @@ case "${1:-}" in
   delete-named) shift; delete_named "$@" ;;
   delete-cluster) shift; delete_cluster "$@" ;;
   sync-oci) shift; sync_oci "$@" ;;
+  sync) shift; sync_registry "$@" ;;
+  pack-registry-create) shift; pack_registry_create "$@" ;;
+  pack-registry-delete) shift; pack_registry_delete "$@" ;;
+  pin-profile) shift; pin_profile "$@" ;;
   probe-profile) shift; probe_profile "$@" ;;
   macro-set) shift; macro_set "$@" ;;
   macro-delete) shift; macro_delete "$@" ;;

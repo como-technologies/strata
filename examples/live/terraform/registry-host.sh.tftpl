@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+# The registry host of registry-kinds.tf (#75): each registry kind that the example does not get
+# from ECR, on one machine, behind Caddy, which gets a certificate for each name from Let's Encrypt.
+# The names are <service>.<public IP with dashes>.sslip.io, which resolve to the public IP.
+#
+#   charts       a Helm repository over HTTPS: anyone reads, a push needs the user
+#   charts-auth  a Helm repository over HTTPS: a read needs the user too
+#   oci          an OCI registry with basic auth, for the pack, helm, and zarf provider types
+#   packs        a Spectro pack registry (the legacy kind) with basic auth: admin pushes, and
+#                the user reads, as Spectro Cloud's own page sets it up
+#
+# Every service lets the same version be pushed again, which is what the checks do.
+set -euxo pipefail
+user='${user}'
+password='${password}'
+
+apt-get update
+apt-get install -y docker.io apache2-utils
+systemctl enable --now docker
+
+ip=$(curl -s http://checkip.amazonaws.com)
+host=$(echo "$ip" | tr . -).sslip.io
+mkdir -p /srv/auth /srv/charts /srv/charts-auth /srv/oci /srv/packs /srv/caddy
+htpasswd -Bbn "$user" "$password" > /srv/auth/htpasswd
+# The Spectro pack registry lets the user admin push, and each other user read
+htpasswd -Bbn admin "$password" >> /srv/auth/htpasswd
+# ChartMuseum runs as uid 1000, and writes each chart into its directory
+chown 1000:1000 /srv/charts /srv/charts-auth
+
+docker run -d --name charts --restart=always -p 127.0.0.1:8081:8080 -v /srv/charts:/charts \
+  -e STORAGE=local -e STORAGE_LOCAL_ROOTDIR=/charts -e ALLOW_OVERWRITE=true \
+  -e BASIC_AUTH_USER="$user" -e BASIC_AUTH_PASS="$password" -e AUTH_ANONYMOUS_GET=true \
+  ghcr.io/helm/chartmuseum:v0.16.2
+docker run -d --name charts-auth --restart=always -p 127.0.0.1:8082:8080 -v /srv/charts-auth:/charts \
+  -e STORAGE=local -e STORAGE_LOCAL_ROOTDIR=/charts -e ALLOW_OVERWRITE=true \
+  -e BASIC_AUTH_USER="$user" -e BASIC_AUTH_PASS="$password" \
+  ghcr.io/helm/chartmuseum:v0.16.2
+docker run -d --name oci --restart=always -p 127.0.0.1:5000:5000 -v /srv/oci:/var/lib/registry -v /srv/auth:/auth:ro \
+  -e REGISTRY_AUTH=htpasswd -e REGISTRY_AUTH_HTPASSWD_REALM=oci -e REGISTRY_AUTH_HTPASSWD_PATH=/auth/htpasswd \
+  -e REGISTRY_STORAGE_DELETE_ENABLED=true \
+  registry:2
+docker run -d --name packs --restart=always -p 127.0.0.1:5001:5000 -v /srv/packs:/data -v /srv/auth:/auth:ro \
+  -e REGISTRY_AUTH=htpasswd -e REGISTRY_AUTH_HTPASSWD_REALM=packs -e REGISTRY_AUTH_HTPASSWD_PATH=/auth/htpasswd \
+  -e REGISTRY_STORAGE_FILESYSTEM_ROOTDIRECTORY=/data \
+  gcr.io/spectro-images-public/release/spectro-registry:4.0.2
+
+cat > /srv/caddy/Caddyfile <<EOF
+charts.$host {
+  reverse_proxy 127.0.0.1:8081
+}
+charts-auth.$host {
+  reverse_proxy 127.0.0.1:8082
+}
+oci.$host {
+  reverse_proxy 127.0.0.1:5000
+}
+packs.$host {
+  reverse_proxy 127.0.0.1:5001
+}
+EOF
+docker run -d --name caddy --restart=always --network host -v /srv/caddy:/etc/caddy -v /srv/caddy/data:/data \
+  caddy:2

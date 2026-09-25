@@ -69,6 +69,11 @@ A record of one profile version or cluster.
     `tag`, `version`, `packUid`, and `registryUid`.
   - `refDigest`, the digest on the pack reference, and `registryDigest`, the
     digest of the pack in the manifests document.
+  - `registryProviderType`, only for a pack from an OCI registry: `pack`,
+    `helm`, or `zarf`, the provider type of the registry, from the annotations of
+    the pack reference. Palette follows a new digest in a different way for each:
+    see [The digest of each registry kind](../internals/palette.md#the-digest-of-each-registry-kind).
+    It is outside the root.
   - `params`: the params of the pack on the profile, as a map.
   - `values`: the raw values YAML. `valuesCanon`: the values as JSON with
     sorted keys, or `null` when the values do not parse. `valuesHash`: the

@@ -128,6 +128,9 @@ check snapshot-registries 0 "record the profile with a Helm pack and an OCI pack
   "$strata" snapshot "$R" --raw-dir raw/registries -o registries.json
 check registries-kinds 0 "#2: the profile holds one helm pack and one oci pack" -- \
   jq -e '[.packs[].type] | sort == ["helm", "oci"]' registries.json
+check registries-provider-type 0 "#75: the oci pack records the provider type of its registry, pack; the helm pack records none" -- \
+  jq -e '([.packs[] | select(.type == "oci") | .registryProviderType] == ["pack"])
+         and ([.packs[] | select(.type == "helm") | .registryProviderType] == [null])' registries.json
 while IFS=$'\t' read -r kind reg name version; do
   check "registry-digest-$kind" 0 "#2: read the $kind pack's digest from the registry itself" -- \
     "$live/tenant.sh" digest "$kind" "$reg" "$name" "$version"

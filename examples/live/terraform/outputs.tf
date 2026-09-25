@@ -161,3 +161,27 @@ output "csi_previous_version" {
 output "csi_reclaim_delete" {
   value = local.cloud.csi_reclaim
 }
+
+# The registry kinds of #75, for examples/live/registry-kinds.sh.
+output "kinds_host" {
+  value = local.kinds_host
+}
+
+output "kinds_user" {
+  value = local.kinds_user
+}
+
+output "kinds_password" {
+  value     = try(random_password.kinds[0].result, "")
+  sensitive = true
+}
+
+output "kinds_registries" {
+  value = var.registry_kinds ? merge(
+    {
+      charts      = { uid = spectrocloud_registry_helm.kinds_charts[0].id, name = spectrocloud_registry_helm.kinds_charts[0].name }
+      charts-auth = { uid = spectrocloud_registry_helm.kinds_charts_auth[0].id, name = spectrocloud_registry_helm.kinds_charts_auth[0].name }
+    },
+    { for k, r in spectrocloud_registry_oci.kinds : "oci-${k}" => { uid = r.id, name = r.name } },
+  ) : {}
+}

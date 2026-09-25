@@ -5595,3 +5595,68 @@ fn compare_asks_palette_and_names_a_disagreement_with_the_impact_table() {
     let err = ops::palette_repave(&palette, &target, &target, d.summary.max_impact).unwrap_err();
     assert!(matches!(err, Error::Usage { .. }), "{err}");
 }
+
+// ---- the provider type of an OCI registry ---------------------------------------------------------
+
+#[test]
+fn a_pack_from_an_oci_registry_records_the_provider_type_outside_the_root() {
+    use strata::snapshot::Pack;
+    let pack = |annotations: Value| {
+        serde_json::json!({"name": "argocd", "type": "oci", "layer": "addon", "tag": "10.4.0.1",
+            "packUid": "p1", "registryUid": "r1", "values": "a: 1", "annotations": annotations})
+    };
+    for kind in ["pack", "helm", "zarf"] {
+        let p = Pack::from_api(
+            &pack(serde_json::json!({"ociRegistryProviderType": kind})),
+            &[],
+        );
+        assert_eq!(p.registry_provider_type.as_deref(), Some(kind));
+        let doc = serde_json::to_value(&p).unwrap();
+        assert_eq!(doc["registryProviderType"], kind);
+    }
+    // a pack ref with no such annotation, as a spectro or helm pack has, records none
+    let plain = Pack::from_api(&pack(serde_json::json!({"source": "community"})), &[]);
+    assert_eq!(plain.registry_provider_type, None);
+    assert!(
+        serde_json::to_value(&plain)
+            .unwrap()
+            .get("registryProviderType")
+            .is_none()
+    );
+    // and the node hash is the same with and without it: an old record verifies as before
+    let helm = Pack::from_api(
+        &pack(serde_json::json!({"ociRegistryProviderType": "helm"})),
+        &[],
+    );
+    assert_eq!(helm.hash.node, plain.hash.node);
+}
+
+#[test]
+fn a_record_of_a_pack_from_an_oci_registry_names_its_provider_type() {
+    // the pack listing does not name the provider type: the listing of the OCI registries does
+    let mut oci = pack_summary("pk-m", "1.64.0", "reg-mirror", "sha256:mmm", CSI_63);
+    oci["spec"]["type"] = serde_json::json!("oci");
+    let mirror =
+        serde_json::json!({"layer": "csi", "tags": [{"tag": "1.64.0", "packUid": "pk-m"}]});
+    let api = serve_registry(
+        vec![oci],
+        &[("reg-public", public_entity()), ("reg-mirror", mirror)],
+    );
+    let listed = api.clone().with(
+        "/v1/registries/oci/summary",
+        serde_json::json!({"items": [
+            {"metadata": {"uid": "reg-mirror", "name": "Mirror"}, "spec": {"providerType": "helm"}},
+        ]}),
+    );
+    let pack = snapshot_pack(&listed, "pack:Mirror/csi-aws-ebs@1.64.0").unwrap();
+    assert_eq!(
+        pack.packs[0].registry_provider_type.as_deref(),
+        Some("helm")
+    );
+    // a Palette that does not answer the listing gives a record that names no provider type
+    let unnamed = snapshot_pack(&api, "pack:Mirror/csi-aws-ebs@1.64.0").unwrap();
+    assert_eq!(unnamed.packs[0].registry_provider_type, None);
+    // and a pack from a pack registry names none, with no read of the listing
+    let spectro = snapshot_pack(&listed, "pack:Public Repo/csi-aws-ebs@1.65.0").unwrap();
+    assert_eq!(spectro.packs[0].registry_provider_type, None);
+}

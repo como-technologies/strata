@@ -434,6 +434,11 @@ pub struct Pack {
     pub ref_digest: String,
     /// The digest of the pack in its registry, from the packs/manifests endpoint
     pub registry_digest: String,
+    /// For a pack from an OCI registry: the provider type of that registry, `pack`, `helm`, or
+    /// `zarf`, as the pack ref of the profile gives it in its annotations. Palette follows a new
+    /// digest in a different way for each. Outside the root: the registry uid is in it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub registry_provider_type: Option<String>,
     /// Pack params as set on the profile.
     pub params: Value,
     /// Raw values YAML as returned by the API
@@ -609,6 +614,8 @@ impl Pack {
         let registry_uid = s(pk, "/registryUid");
         let ref_digest = s(pk, "/digest");
         let registry_digest = s(&mm, "/spec/digest");
+        let registry_provider_type =
+            Some(s(pk, "/annotations/ociRegistryProviderType")).filter(|t| !t.is_empty());
         let params = pk
             .get("params")
             .cloned()
@@ -671,6 +678,7 @@ impl Pack {
             registry_uid,
             ref_digest,
             registry_digest,
+            registry_provider_type,
             params,
             values,
             values_canon,
