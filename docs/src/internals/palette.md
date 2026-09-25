@@ -257,12 +257,33 @@ gives the new value. A record of the copy from before verifies, and a comparison
 of the records from before and after reports the copy unchanged and one
 variable value changed.
 
-Palette says when a copy is behind its profile.
-`GET /v1/spectroclusters/<uid>/profileUpdates` gives the profile content that
-waits for the cluster, and the notifications of the cluster list the update that
-waits
+Palette says when a copy is behind its profile
 ([Cluster updates](https://docs.spectrocloud.com/clusters/cluster-management/cluster-updates/)).
-A record does not carry that yet.
+`GET /v1/notifications/spectrocluster/<uid>` lists the notifications of a
+cluster, newest first, with `items: null` when there are none. An edit in place
+of a profile that the cluster runs opens one notification: `action.actionType`
+is `NotifyActionClusterProfileUpdate`, `action.isDone` is `false`, and
+`action.events` names the profile uid and each change:
+
+| Change | Event `type` | `message` |
+| --- | --- | --- |
+| A manifest | `PackManifestUpdate` | `Manifest '<m>' is updated in the pack '<p>(<p>)'` |
+| Pack values | `PackValuesUpdate` | `<display name> <pack> <version> values are updated` |
+
+The notification is done (`isDone: true`) when:
+
+- The cluster takes the change. A push of the content without
+  `resolveNotification` closes it too.
+- An edit gives the profile the content of the cluster's copy again. The
+  cluster does not update.
+
+A new version number alone, in place, opens no notification: the copy holds
+the same content. A notification that is done stays in the list.
+
+`GET /v1/spectroclusters/<uid>/profileUpdates` is no flag: it lists each profile
+of the cluster also when no update waits. So strata reads the notifications,
+and a cluster record says whether an update waits: see
+[Whether an update waits](../commands/snapshot.md#whether-an-update-waits).
 
 ## The order of the profiles of a cluster
 

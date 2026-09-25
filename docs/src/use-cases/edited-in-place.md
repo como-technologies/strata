@@ -60,7 +60,16 @@ The same comparison, from the record to the live version:
 {{#include ../output/edited-cluster-kept.txt}}
 ```
 
-The edit did not reach `payments`.
+The edit did not reach `payments`. Palette says so too: the `note` line says
+that an update waits for the cluster, and the listing marks the profile:
+
+```text
+{{#include ../output/edited-list-behind.txt}}
+```
+
+The cluster is behind its profile until it takes the update. A record of the
+cluster says `updatesPending: true`: see
+[Whether an update waits](../commands/snapshot.md#whether-an-update-waits).
 
 ### Read the two verdicts as a pair
 

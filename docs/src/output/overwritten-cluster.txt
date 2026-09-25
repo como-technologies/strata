@@ -1,6 +1,7 @@
 $ strata verify runs/payments.json
 aws-stack@1.1.1 on cluster payments (uid 64f1000000000000000000e1)  ->  aws-stack@1.1.1 on cluster payments (uid 64f1000000000000000000e1)
 root       088136c929bd -> 088136c929bd   IDENTICAL
+note       cluster payments is behind: Palette says an update of aws-stack waits for it, since 2026-09-18T14:02:12.107Z
 
   variables unchanged
 

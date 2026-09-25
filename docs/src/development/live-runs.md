@@ -389,6 +389,27 @@ API, reads what `verify --who` says, and puts the edit back.
 | `cluster-who`, `cluster-who-says`, `cluster-who-person`, `cluster-who-json` | 1, 0, 0, 0 | #69: the cluster record reports `DRIFT`, and `--who` reads the audit log of the cluster: an `update` by the user who accepted it |
 | `cluster-restored` | 0 | the edit is put back and accepted again, and the cluster record verifies |
 
+## pending.sh
+
+Read-write. It needs the example at its baseline with cluster A. Each stage
+makes one change in place and puts it back, so it ends at the baseline.
+
+| Check | Expected exit | What it shows |
+|---|---|---|
+| `base-record`, `base-none` | 0 | #70: at the baseline, a record of cluster A says `updatesPending: false` |
+| `base-profile-updates` | 0 | #70: `profileUpdates` lists each profile of the cluster also when no update waits: it is no flag |
+| `addon-edit`, `addon-pending`, `addon-record`, `addon-names` | 0 | #70: an edit in place of a manifest of the add-on version opens an update: the record says `updatesPending: true`, and `pendingUpdates` names the add-on and `Manifest ... is updated` |
+| `addon-root` | 0 | #70: the root of that record is the root at the baseline: the statement is outside the root |
+| `addon-release-only` | 0 | #70: a record of the release profile alone says that no update waits for it |
+| `addon-list`, `addon-list-says` | 0 | #70: `list clusters --applied` marks the add-on `behind: an update waits` |
+| `addon-compare`, `addon-compare-says` | 1, 0 | #70: `compare` of the add-on version with its copy on cluster A says `cluster ... is behind` |
+| `accept`, `accept-none` | 0 | #70: a push of the content without `resolveNotification` closes the update all the same |
+| `accept-undo`, `accept-undo-pending`, `accept-again`, `accept-again-none` | 0 | #70: the undo is an edit too, and opens an update; the accept with `resolveNotification` closes it |
+| `values-edit`, `values-pending`, `values-record`, `values-names` | 0 | #70: an edit in place of a value of the release version opens an update, and Palette names the pack: `csi-aws-ebs ... values are updated` |
+| `values-undo`, `values-undo-none` | 0 | #70: an edit that gives the profile the content of the copy again closes the update, with no update of the cluster |
+| `values-baseline-none` | 0 | #70: the apply of the baseline, which writes the same content, opens no update |
+| `bump-uid-kept`, `bump-record`, `bump-none` | 0 | #70: a new version number alone, in place with the flag off, keeps the uid and opens no update |
+
 ## What has no live run
 
 - `in-place.sh`, `registry-move.sh`, `registry.sh`, `template.sh`, and

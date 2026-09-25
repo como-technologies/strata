@@ -301,7 +301,118 @@ impl Tenant {
         }
         self.write(project, &path, &doc);
         self.log_write(project, "clusterprofile", uid, &doc);
+        self.notify_clusters(project, uid, &doc);
         self.listings();
+    }
+
+    /// Tell each cluster that runs profile `uid` whether an update waits for it, as Palette does
+    /// after an edit in place. A live run gives the rules: a change of a pack opens one
+    /// notification, a change of the version number alone opens none, and an edit that gives the
+    /// profile the content of the cluster's copy again closes the open ones. `cluster` closes
+    /// them too, when the cluster takes the update.
+    fn notify_clusters(&self, project: &str, uid: &str, doc: &Value) {
+        let clusters: Vec<String> = doc["status"]["inUseClusterUids"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|c| c.as_str().map(str::to_string))
+            .collect();
+        let packs = doc["spec"]["published"]["packs"]
+            .as_array()
+            .cloned()
+            .unwrap_or_default();
+        for cluster in clusters {
+            let copy: Vec<Value> = self.read(project, &format!("v1/spectroclusters/{cluster}"))
+                ["spec"]["clusterProfileTemplates"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .find(|t| t["uid"] == json!(uid))
+                .and_then(|t| t["packs"].as_array().cloned())
+                .unwrap_or_default();
+            let path = format!("v1/notifications/spectrocluster/{cluster}");
+            let mut items = self.notifications(project, &cluster);
+            if copy == packs {
+                for n in &mut items {
+                    n["action"]["isDone"] = json!(true);
+                }
+                self.write_notifications(project, &path, items);
+                continue;
+            }
+            // one event for each pack that the edit changed, as Palette names it
+            let events: Map<String, Value> = packs
+                .iter()
+                .filter(|p| !copy.contains(p))
+                .enumerate()
+                .map(|(i, p)| {
+                    let name = p["name"].as_str().unwrap_or_default();
+                    let version = p["version"]
+                        .as_str()
+                        .or(p["tag"].as_str())
+                        .unwrap_or_default();
+                    let values_only = copy.iter().any(|c| {
+                        c["name"] == p["name"] && c["tag"] == p["tag"] && c["values"] != p["values"]
+                    });
+                    let (kind, message) = if values_only {
+                        (
+                            "PackValuesUpdate",
+                            format!("{name} {version} values are updated"),
+                        )
+                    } else {
+                        ("PackUpdate", format!("Pack '{name}' is updated"))
+                    };
+                    (
+                        format!("e{i}"),
+                        json!({"profileUid": uid, "type": kind, "message": message}),
+                    )
+                })
+                .collect();
+            items.insert(
+                0,
+                json!({
+                    "metadata": {
+                        "uid": format!("64fc{:020x}", items.len() + 1),
+                        "creationTimestamp": format!("2026-09-18T14:{:02}:12.107Z", 2 + items.len()),
+                        "name": format!("spectrocluster '{cluster}' notification"),
+                    },
+                    "type": "NotificationPackUpdate",
+                    "action": {
+                        "actionType": "NotifyActionClusterProfileUpdate",
+                        "actionMessage": "Apply cluster profile pack updates",
+                        "isDone": false,
+                        "events": events,
+                    },
+                    "relatedObject": {"kind": "spectrocluster", "uid": cluster},
+                }),
+            );
+            self.write_notifications(project, &path, items);
+        }
+    }
+
+    /// The notifications of a cluster, newest first; none for a cluster that has no file yet.
+    fn notifications(&self, project: &str, cluster: &str) -> Vec<Value> {
+        let path = format!("v1/notifications/spectrocluster/{cluster}");
+        if !self.doc(project, &path).is_file() {
+            return Vec::new();
+        }
+        self.read(project, &path)["items"]
+            .as_array()
+            .cloned()
+            .unwrap_or_default()
+    }
+
+    /// Palette gives `items: null`, not an empty list, for a cluster with no notification.
+    fn write_notifications(&self, project: &str, path: &str, items: Vec<Value>) {
+        let items = if items.is_empty() {
+            Value::Null
+        } else {
+            Value::Array(items)
+        };
+        self.write(
+            project,
+            path,
+            &json!({"items": items, "listmeta": {"continue": "", "limit": 50}}),
+        );
     }
 
     /// Add one entry to the audit log of a resource: an update by the person of the examples.
@@ -425,6 +536,17 @@ impl Tenant {
             project,
             &format!("v1/spectroclusters/{uid}/variables"),
             &json!(variables),
+        );
+
+        // the cluster now holds what each profile holds, so no update waits for it
+        let mut items = self.notifications(project, uid);
+        for n in &mut items {
+            n["action"]["isDone"] = json!(true);
+        }
+        self.write_notifications(
+            project,
+            &format!("v1/notifications/spectrocluster/{uid}"),
+            items,
         );
 
         for p in profiles {

@@ -48,6 +48,11 @@ A record of one profile version or cluster.
     `pack`.
   - `cluster`, for a cluster record: its `uid` and `name`, the `profile` that
     `cluster:<cluster>/<profile>` selected, `profiles[]`, and `variables[]`.
+    `updatesPending` is `true` when Palette says an update of a profile the
+    record covers waits, `false` when none waits, and absent when strata could
+    not read it; `updatesPendingError` then says why. `pendingUpdates[]` has
+    `profileUid`, `profile`, `message`, and `since` for each change that waits.
+    None of these is part of the root.
     Each entry of `profiles[]` has `uid`, `name`, `version`, and `type`, in the
     order [The order of the profiles of a cluster](../internals/palette.md#the-order-of-the-profiles-of-a-cluster)
     gives. Each entry of `variables[]` has `profile`, `profileUid`, `name`,
@@ -195,7 +200,9 @@ is the path as a list: strings for keys, numbers for indexes, and
   - A cluster: `ref`, `name`, `uid`, `state`, `cloudType`, and `projectUid`.
     `projectName` joins them when strata could read the project listing.
     With `--applied`, also `profiles[]` with the `uid`, `name`, `version`, and
-    `type` of each profile the cluster applies, or `error`.
+    `type` of each profile the cluster applies, or `error`, and
+    `updatesPending` and `pendingUpdates[]` as a cluster record gives them.
+    `updatesPending` is absent when strata could not read the notifications.
   - A project: `name` and `uid`.
 
 ## strata-packs/1

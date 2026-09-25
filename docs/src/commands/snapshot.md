@@ -61,6 +61,26 @@ served. See [What changed between two pack versions](../use-cases/pack-versions.
 variable. The values are not part of the root. Strata writes no value for a
 sensitive variable. See [Clusters give variables different values](../use-cases/cluster-values.md).
 
+## Whether an update waits
+
+A cluster runs its own copy of each profile. When a person edits the profile in
+place, the copy stays, and Palette tells the cluster that an update waits. The
+record carries that statement in `source.cluster`:
+
+- `updatesPending`: `true` when an update of a profile that the record covers
+  waits, and `false` when none waits.
+- `pendingUpdates[]`: for each change that waits, `profileUid`, `profile`, the
+  `message` that Palette gives, such as `Manifest 'x' is updated in the pack
+  'x(x)'`, and `since`.
+- `updatesPendingError`: why strata could not read it. `updatesPending` is then
+  absent, and the record is still taken.
+
+These fields are not part of the root: they are Palette's statement about the
+copy, and the copy is the same with or without them. `compare` and `list
+clusters --applied` say when a cluster is behind. What Palette says for each
+kind of change is in
+[Cluster copies](../internals/palette.md#cluster-copies).
+
 ## Record without the network
 
 `--raw-dir` saves the API responses and the time of the read. `--from-raw`

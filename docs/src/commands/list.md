@@ -58,7 +58,14 @@ order: see
 shows each one: see
 [A cluster does not run its release](../use-cases/cluster-release.md).
 
-`--applied` reads each cluster, one request for each. Read the uid when you
+A profile whose line ends with `behind: an update waits` has a change that the
+cluster has not taken: Palette says an update waits for it. See
+[A cluster record says whether an update waits](./snapshot.md#whether-an-update-waits).
+With `--format markdown`, the `behind` column says `yes` and names the
+profiles, `no`, or `-` when Palette did not say.
+
+`--applied` reads each cluster and its notifications, two requests for each.
+Read the uid when you
 need the identity. A person can edit a published version in place, and then one
 `<name>@<version>` means two contents. A bump can overwrite a uid, and then one
 uid names two versions. A cluster that strata cannot read

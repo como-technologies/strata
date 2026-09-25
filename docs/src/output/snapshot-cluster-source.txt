@@ -17,5 +17,6 @@ $ jq .source.cluster runs/payments.json
       "name": "platform_owner",
       "value": ""
     }
-  ]
+  ],
+  "updatesPending": false
 }

@@ -181,6 +181,10 @@ live-order: build
 live-who: build
     examples/live/who.sh
 
+# The pending update test: when Palette says an update waits for cluster A, and what a record, the listing, and compare say (#70). Needs live-up; undoes each change.
+live-pending: build
+    examples/live/pending.sh
+
 # The scripts run in order from the baseline: verify.sh, in-place.sh off, in-place.sh on (against
 # that off run), and registry-move.sh. The recipe stops at the first script that fails. Billable:
 # about 3 to 4 hours, with cluster B two times.

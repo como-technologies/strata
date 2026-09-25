@@ -770,6 +770,13 @@ fn use_cases(r: &mut Runner) {
         "edited-verify-who-full",
         r"^(aws-stack|DRIFT|who:|  \d{4}-)",
     );
+    // the edit waits for payments, which runs the version: the listing says so
+    r.step(
+        "edited-list-behind",
+        0,
+        false,
+        "strata list clusters --applied",
+    );
     r.step(
         "edited-verify-who-json",
         1,

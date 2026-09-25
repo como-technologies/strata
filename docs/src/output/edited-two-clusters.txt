@@ -2,6 +2,7 @@ $ strata compare cluster:payments cluster:search
 aws-stack@1.1.1 on cluster payments (uid 64f1000000000000000000e1)  ->  aws-stack@1.1.1 on cluster search (uid 64f1000000000000000000e2)
 root       088136c929bd -> 78a86f401545   CHANGED
 note       both sides are aws-stack@1.1.1 (uid 64e0000000000000000000c3): the version was edited in place, or changed on a cluster
+note       cluster payments is behind: Palette says an update of aws-stack waits for it, since 2026-09-18T14:02:12.107Z
 
   variables unchanged
 
