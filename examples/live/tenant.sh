@@ -3,7 +3,8 @@
 #
 #   tenant.sh names [REGION]   the names terraform.tfvars needs: projects, AWS cloud accounts, and
 #                              for each account the availability zones and EC2 key pairs in REGION
-#                              (default us-east-2)
+#                              (default us-east-2), and GCP cloud accounts with the projects each
+#                              can use
 #   tenant.sh cluster UID      a cluster's status.state, and while it is neither Running nor
 #                              Deleted, each condition not yet done and its three latest events;
 #                              exit 0 once it is Deleted or not found, 1 while it exists, 2 when
@@ -88,6 +89,18 @@ names() {
       echo "    key pairs: $(jq -r '(.keyNames // []) | if length == 0 then "none" else join(", ") end' "$tmp/keys")"
     else
       echo "    key pairs: unavailable (HTTP $status)"
+    fi
+  done
+  echo "GCP cloud accounts (gcp_cloud_account_name), with the projects each can use (gcp_project):"
+  status=$(get /v1/cloudaccounts/gcp "$tmp/gcp")
+  [ "$status" = 200 ] || die "listing GCP cloud accounts answered HTTP $status"
+  jq -r '(.items // [])[] | "\(.metadata.uid) \(.metadata.name)"' "$tmp/gcp" | while read -r uid name; do
+    echo "  $name"
+    status=$(get "/v1/clouds/gcp/projects?cloudAccountUid=$uid" "$tmp/gcp-projects")
+    if [ "$status" = 200 ]; then
+      echo "    projects: $(jq -r '[(.projects // [])[].id] | join(", ")' "$tmp/gcp-projects")"
+    else
+      echo "    projects: unavailable (HTTP $status)"
     fi
   done
   echo "Helm registries (helm_registry_name):"

@@ -535,6 +535,28 @@ state and exits `1`. After, the listing drops it, the document reports
 `Deleted`, and `consumers` lists nothing and exits `0`. An apply of the Spectro
 Cloud provider then holds no cluster in the OpenTofu state.
 
+## A cluster on GCP
+
+A GCP cluster takes its node image from the project `spectro-image-build` of
+Spectro Cloud, one image for each pair of OS and Kubernetes versions, such as
+`u-2404-0-k-1356-0` for Ubuntu 24.04 and Kubernetes 1.35.6. Spectro Cloud shares
+some of these images and not others: the image of Kubernetes 1.36.2 is not
+shared, although that Kubernetes pack lists `gcp`. Palette accepts such a
+profile and such a cluster. The cluster then stays `Provisioning`, and each
+attempt to make a machine fails with
+`Required 'compute.images.useReadOnly' permission`.
+
+The nodes of a GCP cluster run as the Compute Engine default service account of
+the project, and the GCE cloud controller in the cluster calls the Compute API
+with it. Without a role for that account on the project, the cloud controller
+exits, the node keeps the taint `node.cloudprovider.kubernetes.io/uninitialized`,
+no other pod starts, and the cluster stays `Provisioning` with its control plane
+instance running. The cluster continues when the account gets
+`roles/compute.admin`.
+
+Strata reads a GCP cluster and its profiles with no change: see
+[A second cloud: GCP](../development/live-runs.md#a-second-cloud-gcp).
+
 ## What no run covers
 
 Strata makes no claim about the behaviors in this section.
@@ -545,8 +567,11 @@ registry, and for a Helm registry over HTTP with no credentials, every record of
 every run carries a pack-ref digest, and no check asserts it. No run shows a
 pack with no digest.
 
-Every live run used one cloud, AWS, and one upgrade engine: a kubeadm cluster
-that Palette builds with the cluster API. The public pages give other rules. On
+The live runs used two clouds, AWS and GCP, and one upgrade engine: a kubeadm
+cluster that Palette builds with the cluster API. On each cloud Palette gives
+the same answers, and each repave answer agrees with the impact table (see
+[A second cloud: GCP](../development/live-runs.md#a-second-cloud-gcp)). The
+public pages give other rules for the other engines. On
 an Edge cluster a change to the Kubernetes layer repaves nothing, and on the OS
 layer only the `uri` repaves; a managed cluster takes a rolling upgrade for any
 override of a node pool

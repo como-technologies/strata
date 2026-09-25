@@ -5,7 +5,7 @@ output "project_uid" {
 }
 
 output "cluster_uid" {
-  value = try(spectrocloud_cluster_aws.cluster["a"].id, "")
+  value = try(local.cluster_uids["a"], "")
 }
 
 output "profile_name" {
@@ -33,7 +33,7 @@ output "addon_profile_name" {
 }
 
 output "cluster_b_uid" {
-  value = try(spectrocloud_cluster_aws.cluster["b"].id, "")
+  value = try(local.cluster_uids["b"], "")
 }
 
 output "move_profile_uid" {
@@ -130,6 +130,34 @@ output "tagged_profile_uids" {
   value = { for version, p in spectrocloud_cluster_profile.tagged : version => p.id }
 }
 
+# The region of the clusters: the AWS region, or the GCP region.
 output "region" {
-  value = var.region
+  value = var.cloud == "gcp" ? var.gcp_region : var.region
+}
+
+# The cloud of the clusters, and what the scripts need from it: the names of the OS and CSI packs,
+# and the one line of the CSI values that version 1.0.1 changes, as the pack writes it, with its
+# indentation, so that an edit through the API changes that line alone.
+output "cloud" {
+  value = var.cloud
+}
+
+output "os_pack_name" {
+  value = local.cloud.os_pack
+}
+
+output "csi_pack_name" {
+  value = local.cloud.csi_pack
+}
+
+output "csi_version" {
+  value = local.csi_version
+}
+
+output "csi_previous_version" {
+  value = local.cloud.csi_previous_version
+}
+
+output "csi_reclaim_delete" {
+  value = local.cloud.csi_reclaim
 }

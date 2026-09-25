@@ -18,9 +18,13 @@ show.
 | `merge-gate.sh` | `scripts/ci/merge-gate.sh` over records of the live profiles, in a git repository that the script builds (#57). It needs the profiles, and no cluster. |
 | `knurl.sh` | [The knurl adapter](../automation/knurl.md): each method of the port against the strata answer for the same real object. Read-only. It needs the profiles; the instance checks need the cluster. |
 
-The example uses AWS, because the recorded runs had an AWS cloud account. Strata
-makes no rule about which cloud runs the cluster. For another cloud, change the cluster
-resource and the OS and CSI packs in `terraform/main.tf`.
+The example runs on AWS or GCP: the variable `cloud` in `terraform.tfvars`
+selects one. Strata makes no rule about which cloud runs the cluster. The
+profiles and the checks are the same on each cloud. `terraform/cloud-aws.tf` and
+`terraform/cloud-gcp.tf` hold what changes: the cloud account, the cluster
+resource, and the names and versions of the OS and CSI packs. For a third cloud,
+add a file of the same shape. The scripts read the pack names from the outputs
+`os_pack_name` and `csi_pack_name`, and hold none.
 
 ## What it builds
 
@@ -49,7 +53,7 @@ prefix or substring finds both. `registry-move.sh` adds the profile
 `strata-live-move` 1.0.0 and 1.0.1 with the release packs, and deletes both at
 its end.
 
-> **The cluster costs money while it exists.** In the recorded run, it had four
+> **The cluster costs money while it exists.** In the recorded AWS run, it had four
 > EC2 instances (three `t3.xlarge` nodes and a `t3.micro`), a NAT gateway, an
 > elastic IP, a classic load balancer, a VPC, and four volumes. Creation took 15
 > to 19 minutes. A deletion took 9 to 29 minutes. Remove it when the checks are
@@ -59,7 +63,7 @@ its end.
 
 | File | Function |
 | --- | --- |
-| `terraform/` | The profiles and the clusters, and the variables that the scripts set. |
+| `terraform/` | The profiles and the clusters, and the variables that the scripts set. `main.tf` holds the profiles; `cloud-aws.tf` and `cloud-gcp.tf` hold the cloud account, the clusters, and the OS and CSI packs of each cloud. |
 | `tofu-install.sh` | Installs the pinned OpenTofu. `just tofu-install` runs it. |
 | `tf.sh` | Runs `tofu` with the key and the Palette address that strata uses. |
 | `lib.sh` | What the scripts share: the checks and their summary, the applies, the wait for a cluster, and the baseline. |
@@ -84,10 +88,11 @@ its end.
 | `who.sh` | The audit log test (#69): who made an edit through the API, and an update that a cluster accepted, as `verify --who` reads them. |
 | `pending.sh` | The pending update test (#70): when Palette says that an update waits for cluster A, and what a record, the listing, and `compare` say. |
 | `macros.sh` | The macro test (#72): what a project macro does to a version, to the copy that cluster A runs, and to a record, when the macro gets another value. |
-| `repave.sh` | the Kubernetes pack of the release version, and a manifest of the add-on version, each in place and put back; no update is accepted | the clusters, the flag (off), the baseline |
 | `macro-repave.sh` | The macro repave test (#72): a macro in a field that repaves cluster A, and what a change of its value alone does. It ends with a repave that waits for approval; `live-down` follows it. |
 | `repave.sh` | The repave test (#73): `compare --repave` asks Palette if a change repaves cluster A, and prints its answer beside the impact level. |
-| `aws-inventory.sh` | What the cluster still has in AWS, to confirm a teardown. |
+| `inventory.sh` | What clusters A and B still have in the cloud that `terraform.tfvars` names, to confirm a teardown. `just live-inventory` runs it. It reads the variables and not the outputs, so it works after `live-down`. |
+| `aws-inventory.sh` | What one cluster still has in AWS. `inventory.sh` runs it on AWS. |
+| `gcp-inventory.sh` | What one cluster still has in a GCP project. `inventory.sh` runs it on GCP. |
 
 ## Design
 
@@ -137,6 +142,7 @@ each.
 | `pending.sh` | a manifest of the add-on version, a value of the release version, and the add-on version number, each in place and put back; the updates that cluster A accepts | the clusters, the flag (off), the baseline |
 | `macros.sh` | a project macro, and the manifest of the add-on version that reads it; the update that cluster A accepts; all put back | the clusters, the flag (off), the baseline |
 | `macro-repave.sh` | a project macro in the Kubernetes pack of the release version, and then its value alone; it leaves a repave that waits for approval | the flag (off); it ends with the removal of the example |
+| `repave.sh` | the Kubernetes pack of the release version, and a manifest of the add-on version, each in place and put back; no update is accepted | the clusters, the flag (off), the baseline |
 
 **One definition for each kind.** Clusters A and B come from one resource, and
 differ only in their names. Each profile has the same lifecycle:
@@ -155,8 +161,24 @@ back to false with the default variables (`apply_baseline`).
 
 ## Prerequisites
 
-- A Palette tenant with a project, and an AWS cloud account in it.
+- A Palette tenant with a project, and an AWS cloud account in it. The example's
+  own pack registry is in AWS for each cloud.
 - An EC2 key pair in the region. The provider requires one.
+- For `cloud = "gcp"`: a GCP cloud account in the tenant, and a GCP project that
+  holds the example alone, with the Compute Engine API on. The service account
+  of the cloud account needs `compute.admin`, `container.admin`,
+  `iam.serviceAccountTokenCreator`, `iam.serviceAccountUser`, and
+  `storage.admin` on the project. `tenant.sh names` lists the projects that each
+  account can use. `gcp-inventory.sh` needs `gcloud` with read access to the
+  project.
+- For `cloud = "gcp"`, `roles/compute.admin` on the project for its Compute
+  Engine default service account, `<project number>-compute@developer.gserviceaccount.com`.
+  The nodes run as that account, and the GCE cloud controller in the cluster
+  calls the Compute API with it. An organization that enforces
+  `iam.automaticIamGrantsForDefaultServiceAccounts` gives it no role. Without
+  one, the cloud controller exits, the node keeps the taint
+  `node.cloudprovider.kubernetes.io/uninitialized`, no pod starts, and the
+  cluster stays `Provisioning`.
 - A Palette API key in `PALETTE_API_KEY` or `~/.palette.env`.
 - `tofu` 1.6 or later (`just tofu-install` installs 1.12.6), `jq`, `just`,
   `curl`, `helm`, `crane`, and a Rust toolchain.
@@ -173,12 +195,12 @@ back to false with the default variables (`apply_baseline`).
   after some hours needs the login again. `crane auth login` reports success
   even when it reads an empty password, so make sure of the login with `crane
   digest <registry>/<repository>:<tag>`.
-- The AWS CLI with read access to the account, only for `aws-inventory.sh`.
+- The AWS CLI with read access to the account, for `aws-inventory.sh`.
 - An AWS profile that can create an ECR repository and an IAM user in the
   account, named in `terraform.tfvars` as `aws_profile`. Every apply needs it,
   because the example's own pack registry lives there. `registry.sh` needs
   `oras` as well, and logs in to the repository with that profile.
-- The AWS managed policy `AmazonEBSCSIDriverPolicy` on the worker node role
+- On AWS, the AWS managed policy `AmazonEBSCSIDriverPolicy` on the worker node role
   `nodes.cluster-api-provider-aws.sigs.k8s.io`. Without it, the EBS CSI
   controller fails on each cluster with `UnauthorizedOperation` on
   `ec2:DescribeAvailabilityZones`. No strata check needs volumes, and Palette
@@ -222,6 +244,7 @@ $EDITOR examples/live/terraform/terraform.tfvars
 | Variable | Value |
 | --- | --- |
 | `palette_project` | a project name |
+| `cloud` | optional; `aws` (the default) or `gcp`. Change it only after `just live-down` |
 | `cloud_account_name` | an AWS cloud account name |
 | `region`, `az` | the region and a zone |
 | `ssh_key_name` | a key pair |
@@ -229,6 +252,8 @@ $EDITOR examples/live/terraform/terraform.tfvars
 | `aws_profile` | an AWS profile that can create an ECR repository and an IAM user in the account; every apply needs it |
 | `oci_pack`, `oci_pack_version` | an add-on pack in that registry, and its version |
 | `helm_registry_name`, `helm_chart`, `helm_chart_version` | optional; the default is `nginx` 25.1.5 from `Bitnami` |
+| `gcp_cloud_account_name`, `gcp_project` | for `cloud = "gcp"`: a GCP cloud account name, and a project it can use |
+| `gcp_region`, `gcp_zone`, `gcp_instance_type` | optional; the defaults are `us-east1`, `us-east1-b`, and `e2-standard-4` |
 
 The file is not tracked. It holds names only. The API key never goes in it.
 
@@ -272,7 +297,7 @@ baseline and restores it, so they run in any order:
 examples/live/in-place.sh off                                                  # #27, legacy provider behavior
 OFF_RUN=examples/live/runs/<time>/in-place/off examples/live/in-place.sh on    # #27, with the flag
 examples/live/registry-move.sh                                                 # #24
-AWS_PROFILE=<profile> examples/live/tag-only.sh                                # #19
+examples/live/tag-only.sh                                                      # #19
 just live-drift-report                                                         # #25
 just live-packs                                                                # #55, read-only
 just live-merge-gate                                                           # #57, needs just live-profiles
@@ -304,7 +329,7 @@ C=$(examples/live/tf.sh output -raw cluster_uid)
 export PALETTE_PROJECT_UID=$(examples/live/tf.sh output -raw project_uid)
 just live-down
 examples/live/tenant.sh cluster "$C"                  # exit 0: Deleted
-AWS_PROFILE=<profile> examples/live/aws-inventory.sh   # exit 0: nothing left
+just live-inventory                                   # exit 0: nothing left
 ```
 
 `live-down` also deletes each version of each profile name that the example
@@ -349,6 +374,8 @@ in Palette, which exists from the start of the creation.
 | A script stops with "not at its baseline" | An earlier run did not finish, or a person changed the example. `baseline-before.txt` names each difference. `just live-down && just live-up` builds it again. |
 | `registry-digest-oci` fails with "crane digest ... failed" or HTTP 401 | No login to the OCI registry, or an expired one. An AWS registry login lasts 12 hours. A login also stores an empty credential, and reports a success, when the token request before it failed: run `aws ecr get-login-password` alone first, and use a profile that has `ecr:GetAuthorizationToken`. |
 | `ebs-csi-controller` pods in `CrashLoopBackOff`, with `UnauthorizedOperation` on `ec2:DescribeAvailabilityZones` | The worker node role does not have `AmazonEBSCSIDriverPolicy`. See Prerequisites. |
+| A GCP cluster stays `Provisioning` with no instance, and the events say `Required 'compute.images.useReadOnly' permission for 'projects/spectro-image-build/global/images/<image>'` | Spectro Cloud shares no GCP image for that pair of OS and Kubernetes versions. The Kubernetes pack still lists `gcp`. Use a version whose image `gcloud compute images describe <image> --project spectro-image-build` reads; `cloud-gcp.tf` sets one. |
+| A GCP cluster stays `Provisioning` with its control plane instance running; `cloud-controller-manager` is in `CrashLoopBackOff`, and every other pod is `Pending` | The Compute Engine default service account has no role on the project. See Prerequisites. The cluster continues when it gets one. |
 | A cluster stays `Provisioning` with `not done: WorkerNodeAdditionDone: provision worker nodes`, although its machines are `Running` and its nodes `Ready` | Palette did not check the workers again. A restart of the Palette controller in the cluster does not help. The deletion of such a cluster runs normally: delete it, and send its diagnostics to Palette support. |
 
 ## When a teardown is slow or stuck
@@ -356,7 +383,7 @@ in Palette, which exists from the start of the creation.
 These rules come from the teardowns of this kind of cluster:
 
 - **Save what holds the cluster first.** Run `examples/live/diagnose.sh` (with
-  `AWS_PROFILE` for the AWS inventory), or `tenant.sh diagnose <uid> <dir>` for
+  `AWS_PROFILE` or `gcloud` for the inventory), or `tenant.sh diagnose <uid> <dir>` for
   one cluster. When the cluster is gone, the evidence is gone.
 - **Do not delete a cluster that is still provisioning**, unless its machines are
   `Running` and its nodes `Ready`. Palette then does not complete the deletion,
@@ -365,9 +392,9 @@ These rules come from the teardowns of this kind of cluster:
   `tenant.sh cluster`, and do not start again. While the state is not `Running`
   or `Deleted`, it prints the conditions that are not done and the three latest
   events.
-- **Judge the progress by `aws-inventory.sh`, not by the time.** Only 0 on each
-  line means that AWS is empty. The instances, the NAT gateway, and the load
-  balancer go first. The security groups, route tables, subnets, internet
+- **Judge the progress by `just live-inventory`, not by the time.** Only 0 on each
+  line means that the cloud is empty. On AWS, the instances, the NAT gateway,
+  and the load balancer go first. The security groups, route tables, subnets, internet
   gateway, and VPC go last, some after a retry. Palette logs the event
   `Cluster <name> has been deleted` before the state changes: the state stays
   `Deleting` for several minutes after that event, and OpenTofu waits for the
@@ -377,8 +404,8 @@ These rules come from the teardowns of this kind of cluster:
   several readings, read the events of the cluster in the Palette console. The
   message usually names what holds the deletion. A cluster with Pause Agent
   Upgrades on can stay in `Deleting`: disable that option and delete again.
-- **Force a delete only when `aws-inventory.sh` exits 0.** A forced delete
-  removes the records of Palette and nothing in AWS. An earlier force leaves
+- **Force a delete only when `just live-inventory` exits 0.** A forced delete
+  removes the records of Palette and nothing in the cloud. An earlier force leaves
   resources that cost money with nothing to track them. Palette refuses a forced
   delete for about 15 minutes after the deletion starts, and can answer 500
   before it accepts one. A forced delete in that gap does no harm once the

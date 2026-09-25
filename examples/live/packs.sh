@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # The pack ref test (#55): `pack:` refs read against the tenant's own registries. It reads and
-# writes nothing in Palette, builds no cluster, and needs no OpenTofu, so it runs whenever the key
-# works.
+# writes nothing in Palette, and builds no cluster. It reads the CSI pack of the cloud and its two
+# versions from the OpenTofu outputs, so it needs `just live-profiles` or `just live-up` once.
 #
 #   examples/live/packs.sh
 #
@@ -10,8 +10,8 @@
 #   3  the refs that name a registry or a tag, and the errors for a version and a registry that
 #      the tenant does not have
 #
-# The pack versions below are the ones the live profiles pin, and the two csi versions that the
-# offline examples also use. Results go under runs/<UTC time>/packs/, or OUT. Exit 0 only when no
+# The CSI versions are the one the live profiles pin and an older one, from the file of the cloud
+# in terraform/. On AWS they are the two that the offline examples also use. Results go under runs/<UTC time>/packs/, or OUT. Exit 0 only when no
 # check fails.
 set -uo pipefail
 script=packs
@@ -21,10 +21,12 @@ script=packs
 # What the tenant holds: the csi pack of the live profiles, the version before it, and the same
 # pack in two registries, which the registry-move run put there. A bare ref is ambiguous here, so
 # every reading ref names its registry.
-pack=csi-aws-ebs
-old=1.63.1
-new=1.65.0
+load_outputs
+pack=$(out csi_pack_name)
+old=$(out csi_previous_version)
+new=$(out csi_version)
 reg="Public Repo"
+[ -n "$pack" ] && [ -n "$old" ] && [ -n "$new" ] || die "no CSI pack in the tofu outputs; run just live-profiles"
 
 run=${OUT:-$live/runs/$(date -u +%Y%m%dT%H%M%SZ)/packs}
 mkdir -p "$run" && cd "$run" || exit 2
@@ -96,7 +98,7 @@ check packs-paged 0 '#54: a pack with more than 100 versions lists completely' -
 check packs-paged-count 0 '#54: the listing passes the 100 of one page' -- \
   bash -c "head -1 packs-paged.out | grep -oE '[0-9]+ versions' | grep -oE '^[0-9]+' | awk '{exit !(\$1 > 100)}'"
 check packs-cloud 0 '#54: --cloud keeps the versions of one cloud' -- \
-  "$strata" packs kubernetes --registry "$reg" --cloud aws --latest
+  "$strata" packs kubernetes --registry "$reg" --cloud "$(out cloud)" --latest
 check packs-cloud-none 0 '#54: a cloud no version supports is an empty answer, not an error' -- \
   "$strata" packs kubernetes --registry "$reg" --cloud no-such-cloud
 check packs-cloud-none-says 0 '#54: and it says so' -- \

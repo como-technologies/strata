@@ -60,7 +60,7 @@ check move-new-uid 1 "the flag made 1.0.1 a new profile version" -- test "$M2" =
 check move1-kept 0 "1.0.0 is still there, unchanged" -- "$strata" verify move1.json
 check move2 0 "record 1.0.1" -- "$strata" snapshot "$M2" -o move2.json
 check move2-csi-is-oci 0 "1.0.1's CSI pack comes from the OCI registry" -- \
-  jq -e '[.packs[] | select(.name == "csi-aws-ebs") | .type] == ["oci"]' move2.json
+  jq -e --arg csi "$(out csi_pack_name)" '[.packs[] | select(.name == $csi) | .type] == ["oci"]' move2.json
 
 echo "== 3: same-release on the two records" | tee -a steps.log
 check compare-move 1 "every field that differs between the two records" -- \
@@ -72,7 +72,7 @@ check same-release-registry-move 0 "#24: the registry-move policy passes a real 
 
 echo "== 4: edit 1.0.1 in place and check again" | tee -a steps.log
 check api-edit-move2 0 "edit 1.0.1's CSI values through the API" -- \
-  "$live/api.sh" edit "$M2" "reclaimPolicy: Delete" "reclaimPolicy: Retain"
+  "$live/api.sh" edit "$M2" "$(out csi_reclaim_delete)" "$(out csi_reclaim_delete | sed 's/Delete/Retain/')"
 check move2-edited 0 "record the edited 1.0.1" -- "$strata" snapshot "$M2" -o move2-edited.json
 check same-release-after-edit 1 "#24: the policy fails the pair after an in-place edit" -- \
   "$strata" same-release --allow registry-move move1.json move2-edited.json --json

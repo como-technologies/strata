@@ -223,6 +223,10 @@ live-drift-report: build
     OUT=$session/drift-report/on examples/live/drift-report.sh on || exit 1
     echo "live-drift-report: both passed; results in $session"
 
+# What clusters A and B still have in the cloud that terraform.tfvars names; 0 on every line after live-down
+live-inventory:
+    examples/live/inventory.sh
+
 # The recipe also deletes the versions that skip_destroy kept out of the OpenTofu state. When the
 # destroy fails, examples/live/diagnose.sh saves what holds each cluster.
 

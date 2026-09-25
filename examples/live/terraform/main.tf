@@ -1,4 +1,4 @@
-# strata live example: one AWS cluster that runs profile version 1.0.0, and a version 1.0.1 of the
+# strata live example: one cluster that runs profile version 1.0.0, and a version 1.0.1 of the
 # same profile that nothing runs. 1.0.1 differs by one value, the EBS storage class reclaimPolicy,
 # so every strata check has a known answer. An add-on profile runs on the cluster next to it. A
 # third profile, attached to nothing, holds one pack from a Helm registry and one from an OCI
@@ -6,9 +6,16 @@
 # cluster, edit the add-on profile in place, bump its version, and move a profile's CSI pack to an
 # OCI registry. docs/src/development/live-example.md lists the checks.
 #
+# The cloud is var.cloud. cloud-aws.tf and cloud-gcp.tf hold what changes with it: the cloud
+# account, the clusters, and the names of the OS and CSI packs. This file holds the rest.
+#
 # Billable while it exists: tear it down with `just live-down`.
 
 locals {
+  # The packs and the text of the cloud that var.cloud names.
+  cloud        = { aws = local.aws_cloud, gcp = local.gcp_cloud }[var.cloud]
+  csi_version  = var.csi_version != "" ? var.csi_version : local.cloud.csi_version
+  k8s_version  = var.k8s_version != "" ? var.k8s_version : local.cloud.k8s_version
   profile_name = "${var.name_prefix}-profile"
   tags         = ["purpose:strata-live-example", "managed-by:opentofu"]
 
@@ -17,7 +24,7 @@ locals {
     { name = p.name, tag = p.version, uid = p.id, values = p.values }
   ]
   # The one difference between the two versions.
-  next_csi_values = replace(data.spectrocloud_pack.csi.values, "reclaimPolicy: Delete", "reclaimPolicy: Retain")
+  next_csi_values = replace(data.spectrocloud_pack.csi.values, local.cloud.csi_reclaim, replace(local.cloud.csi_reclaim, "Delete", "Retain"))
   next_packs = [
     for p in local.release_packs :
     p.name == data.spectrocloud_pack.csi.name ? merge(p, { values = local.next_csi_values }) : p
@@ -56,23 +63,19 @@ data "spectrocloud_project" "this" {
   name = var.palette_project
 }
 
-data "spectrocloud_cloudaccount_aws" "this" {
-  name = var.cloud_account_name
-}
-
 data "spectrocloud_registry" "packs" {
   name = var.registry_name
 }
 
 data "spectrocloud_pack" "os" {
-  name         = "ubuntu-aws"
+  name         = local.cloud.os_pack
   version      = var.os_version
   registry_uid = data.spectrocloud_registry.packs.id
 }
 
 data "spectrocloud_pack" "k8s" {
   name         = "kubernetes"
-  version      = var.k8s_version
+  version      = local.k8s_version
   registry_uid = data.spectrocloud_registry.packs.id
 }
 
@@ -83,8 +86,8 @@ data "spectrocloud_pack" "cni" {
 }
 
 data "spectrocloud_pack" "csi" {
-  name         = "csi-aws-ebs"
-  version      = var.csi_version
+  name         = local.cloud.csi_pack
+  version      = local.csi_version
   registry_uid = data.spectrocloud_registry.packs.id
 }
 
@@ -92,7 +95,7 @@ resource "spectrocloud_cluster_profile" "release" {
   name         = local.profile_name
   version      = "1.0.0"
   description  = "strata live example: the version the cluster runs"
-  cloud        = "aws"
+  cloud        = var.cloud
   type         = "cluster"
   skip_destroy = var.immutable_profiles
 
@@ -115,7 +118,7 @@ resource "spectrocloud_cluster_profile" "next" {
   name         = local.profile_name
   version      = "1.0.1"
   description  = "strata live example: a newer version nothing runs"
-  cloud        = "aws"
+  cloud        = var.cloud
   type         = "cluster"
   skip_destroy = var.immutable_profiles
 
@@ -143,7 +146,7 @@ resource "spectrocloud_cluster_profile" "tagged" {
   name         = local.profile_name
   version      = each.key
   description  = "strata live example: the release with the OS pack pinned under the tag ${each.value}"
-  cloud        = "aws"
+  cloud        = var.cloud
   type         = "cluster"
   skip_destroy = var.immutable_profiles
 
@@ -377,8 +380,8 @@ data "spectrocloud_registry" "move" {
 
 data "spectrocloud_pack" "csi_oci" {
   count        = var.registry_move ? 1 : 0
-  name         = "csi-aws-ebs"
-  version      = var.csi_version
+  name         = local.cloud.csi_pack
+  version      = local.csi_version
   registry_uid = data.spectrocloud_registry.move[0].id
 }
 
@@ -387,7 +390,7 @@ resource "spectrocloud_cluster_profile" "move" {
   name         = "${var.name_prefix}-move"
   version      = var.move_version
   description  = "strata live example: the release packs, for a real registry move; nothing runs it"
-  cloud        = "aws"
+  cloud        = var.cloud
   type         = "cluster"
   skip_destroy = var.immutable_profiles
 
@@ -408,9 +411,9 @@ resource "spectrocloud_cluster_profile" "move" {
   }
 }
 
-# The clusters: A always, and B while second_cluster is set, for examples/live/in-place.sh. One
-# definition, so the two differ only in their names. Billable while they exist. An apply waits for
-# each to be Running.
+# The clusters: A always, and B while second_cluster is set, for examples/live/in-place.sh. The
+# resource of the cloud makes them, from one definition, so the two differ only in their names.
+# Billable while they exist. An apply waits for each to be Running.
 locals {
   clusters = merge(
     var.cluster ? { a = var.cluster_name } : {},
@@ -418,64 +421,10 @@ locals {
   )
 }
 
-resource "spectrocloud_cluster_aws" "cluster" {
-  for_each         = local.clusters
-  name             = each.value
-  cloud_account_id = data.spectrocloud_cloudaccount_aws.this.id
-  tags             = local.tags
-
-  cluster_profile {
-    id = local.cluster_release_uid
-  }
-
-  cluster_profile {
-    id = local.cluster_addon_uid
-    # The value the cluster gives the add-on profile's variable, when cluster.sh sets one.
-    variables = var.addon_purpose == "" ? null : { purpose = var.addon_purpose }
-  }
-
-  # The second add-on profile, for the install order of add-on packs across profiles.
-  dynamic "cluster_profile" {
-    for_each = var.second_addon ? [spectrocloud_cluster_profile.addon2[0].id] : []
-    content {
-      id = cluster_profile.value
-    }
-  }
-
-  cloud_config {
-    region       = var.region
-    ssh_key_name = var.ssh_key_name
-  }
-
-  machine_pool {
-    name          = "cp-pool"
-    count         = 1
-    control_plane = true
-    instance_type = var.instance_type
-    azs           = [var.az]
-  }
-
-  machine_pool {
-    name          = "worker-pool"
-    count         = var.worker_count
-    instance_type = var.instance_type
-    azs           = [var.az]
-  }
-
-  timeouts {
-    create = "60m"
-    delete = "45m"
-  }
-}
-
-# The two resources this one replaced, so an existing cluster moves in the state instead of being
-# replaced.
-moved {
-  from = spectrocloud_cluster_aws.this
-  to   = spectrocloud_cluster_aws.cluster["a"]
-}
-
-moved {
-  from = spectrocloud_cluster_aws.b[0]
-  to   = spectrocloud_cluster_aws.cluster["b"]
+# The IDs of the clusters, from the resource of the cloud that var.cloud names.
+locals {
+  cluster_uids = merge(
+    { for k, c in spectrocloud_cluster_aws.cluster : k => c.id },
+    { for k, c in spectrocloud_cluster_gcp.cluster : k => c.id },
+  )
 }

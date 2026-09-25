@@ -3,6 +3,16 @@ variable "palette_project" {
   type        = string
 }
 
+variable "cloud" {
+  description = "The cloud of the clusters: aws or gcp. cloud-aws.tf and cloud-gcp.tf hold what changes with it"
+  type        = string
+  default     = "aws"
+  validation {
+    condition     = contains(["aws", "gcp"], var.cloud)
+    error_message = "cloud is aws or gcp."
+  }
+}
+
 variable "cloud_account_name" {
   description = "Name of the AWS cloud account registered in Palette"
   type        = string
@@ -21,6 +31,36 @@ variable "az" {
 variable "ssh_key_name" {
   description = "Name of an EC2 key pair that exists in the region; the provider requires one"
   type        = string
+}
+
+# The GCP clusters, when cloud is gcp.
+variable "gcp_cloud_account_name" {
+  description = "Name of the GCP cloud account registered in Palette"
+  type        = string
+  default     = ""
+}
+
+variable "gcp_project" {
+  description = "The GCP project the clusters land in; the cloud account needs access to it"
+  type        = string
+  default     = ""
+}
+
+variable "gcp_region" {
+  type    = string
+  default = "us-east1"
+}
+
+variable "gcp_zone" {
+  description = "The single zone both machine pools use"
+  type        = string
+  default     = "us-east1-b"
+}
+
+variable "gcp_instance_type" {
+  description = "Machine type for both pools: 4 cores, as t3.xlarge has"
+  type        = string
+  default     = "e2-standard-4"
 }
 
 variable "name_prefix" {
@@ -55,15 +95,16 @@ variable "registry_name" {
 }
 
 # The pack versions of examples/profiles/aws-stack@1.1.0.json, so the live run and the offline
-# examples describe the same stack.
+# examples describe the same stack. The OS pack of each cloud has 24.04.
 variable "os_version" {
   type    = string
   default = "24.04"
 }
 
 variable "k8s_version" {
-  type    = string
-  default = "1.36.2"
+  description = "The version of the Kubernetes pack; empty takes the version of the cloud's file"
+  type        = string
+  default     = ""
 }
 
 variable "cni_version" {
@@ -72,8 +113,9 @@ variable "cni_version" {
 }
 
 variable "csi_version" {
-  type    = string
-  default = "1.65.0"
+  description = "The version of the CSI pack; empty takes the version of the cloud's file"
+  type        = string
+  default     = ""
 }
 
 # The registries profile. verify.sh reads each pack's digest from its registry as well as from
@@ -169,7 +211,7 @@ variable "move_csi_to_oci" {
 }
 
 variable "move_registry_name" {
-  description = "An OCI pack registry that holds csi-aws-ebs at csi_version"
+  description = "An OCI pack registry that holds the CSI pack of the cloud at its version"
   type        = string
   default     = "Palette Registry"
 }

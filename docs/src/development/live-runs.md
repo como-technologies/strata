@@ -498,17 +498,62 @@ and puts each edit back. Cluster A takes no update.
 | `no-update`, `same-nodes` | 0 | #73: the questions took no update, and cluster A kept each EC2 instance |
 | `undo-baseline` | 0 | the example is at its baseline |
 
-Each answer agrees with the impact table: this cloud runs the kubeadm engine
-alone. The edit in place also opens an update notification for cluster A, and
+Each answer agrees with the impact table, on AWS and on GCP: the two clouds run
+the kubeadm engine alone. The edit in place also opens an update notification for cluster A, and
 `compare` names it; the undo closes it.
+
+## A second cloud: GCP
+
+The scripts run on GCP with `cloud = "gcp"`, and with no other change. The
+profiles hold `ubuntu-gcp` 24.04, Kubernetes 1.35.6, `cni-cilium-oss` 1.20.1,
+and `csi-gcp-driver` 1.26.4, and cluster A has three `e2-standard-4` nodes.
+
+| Script | Checks passed | Failed |
+|---|---|---|
+| `verify.sh` | 34 | 0 |
+| `in-place.sh off` | 51 | 0 |
+| `in-place.sh on` | 53 | 0 |
+| `registry-move.sh` | 16 | 0 |
+| `packs.sh` | 27 | 0 |
+| `knurl.sh` | 26 | 0 |
+| `repave.sh` | 23 | 0 |
+| `pending.sh` | 29 | 0 |
+| `tag-only.sh` | 32 | 0 |
+
+Each check gives the answer that it gives on AWS: strata reads the same
+documents, and Palette answers the same way. `tag-only.sh` moves cluster A to a
+version with another tag name and back, and Palette keeps each machine, as on
+AWS. `repave.sh` gets `repave` for one more kubeadm command and `no repave` for
+a manifest of the add-on, as on AWS: the two clouds use one upgrade engine.
+
+What differs is outside strata:
+
+- **The pack names and versions.** The OS and CSI packs are the packs of the
+  cloud. The CSI values write the reclaim line as `reclaimPolicy: "Delete"`,
+  and not `reclaimPolicy: Delete`: the edit of each script comes from the output
+  `csi_reclaim_delete`.
+- **The Kubernetes version.** Spectro Cloud shares no GCP image for Kubernetes
+  1.36.2 with Ubuntu 24.04, although the Kubernetes pack lists `gcp`. GCP answers
+  `Required 'compute.images.useReadOnly' permission` for the image in the project
+  `spectro-image-build`, and no machine starts. The image of 1.35.6 is shared.
+- **The service account of the nodes.** The nodes run as the Compute Engine
+  default service account of the project. In an organization that gives that
+  account no role, the GCE cloud controller exits, the node keeps the taint
+  `node.cloudprovider.kubernetes.io/uninitialized`, and the cluster stays
+  `Provisioning`. `roles/compute.admin` on the project lets it continue.
 
 ## What has no live run
 
-- `in-place.sh`, `registry-move.sh`, `registry.sh`, `template.sh`, and
-  `cluster.sh` have run under OpenTofu, with the same provider that Terraform
-  used, and give the same answers. `tag-only.sh` and `drift-report.sh` have run
-  under Terraform only. `order.sh` reads the OpenTofu outputs and applies
+- `in-place.sh`, `registry-move.sh`, `registry.sh`, `template.sh`,
+  `cluster.sh`, and `tag-only.sh` have run under OpenTofu, with the same
+  provider that Terraform used, and give the same answers. `drift-report.sh` has
+  run under Terraform only. `order.sh` reads the OpenTofu outputs and applies
   nothing.
+- On GCP, the scripts in [A second cloud: GCP](#a-second-cloud-gcp) have run.
+  `drift-report.sh`, `merge-gate.sh`, `pack-states.sh`, `registry.sh`,
+  `template.sh`, `cluster.sh`, `order.sh`, `who.sh`, `macros.sh`, and
+  `macro-repave.sh` have run on AWS only. No live run uses an Edge cluster, the
+  other upgrade engine.
 - [What Palette does](../internals/palette.md#what-no-run-covers) lists the
   behaviors that no script here establishes.
 - No script produces a pack with no digest, so no live run shows `verify`

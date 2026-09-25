@@ -83,7 +83,7 @@ wait_gone() {
   done
   return 1
 }
-state_has_no_cluster() { ! "$live/tf.sh" state list | command grep -q spectrocloud_cluster_aws; }
+state_has_no_cluster() { ! "$live/tf.sh" state list | command grep -qE "spectrocloud_cluster_(aws|gcp)"; }
 
 # ---- 1. the value of the variable changes --------------------------------------------------------
 

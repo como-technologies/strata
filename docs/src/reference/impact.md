@@ -32,7 +32,7 @@ cluster, a change to the Kubernetes layer repaves nothing, and on the OS layer
 only the `uri` repaves. The nodes of a managed cluster take a rolling upgrade
 for any override of a node pool. Palette keeps a fixed list of the fields that
 repave, for each engine, and no document gives it, so strata does not encode a
-second table. Every live run so far used one cloud and one engine: see
+second table. The live runs used two clouds, AWS and GCP, and one engine: see
 [What no run covers](../internals/palette.md#what-no-run-covers).
 
 For a cluster, ask Palette: `compare --repave` prints its answer beside

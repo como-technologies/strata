@@ -72,8 +72,8 @@ check compare-next-cluster 1 "#1: against a newer record, the cluster shows the 
   "$strata" compare next.json "cluster:$C/$N"
 check compare-next-cluster-json 1 "the same comparison as JSON" -- \
   "$strata" compare next.json "cluster:$C/$N" --json
-check only-the-edited-value 0 "#1: the only change is csi-aws-ebs reclaimPolicy" -- \
-  jq -e '[.packs[] | select(.status != "unchanged") | .name] == ["csi-aws-ebs"]
+check only-the-edited-value 0 "#1: the only change is $(out csi_pack_name) reclaimPolicy" -- \
+  jq -e --arg csi "$(out csi_pack_name)" '[.packs[] | select(.status != "unchanged") | .name] == [$csi]
          and ([.packs[] | .values.diff[]? | .path] | length == 1 and (.[0] | endswith("reclaimPolicy")))
          and .summary.variablesChanged == false' compare-next-cluster-json.out
 

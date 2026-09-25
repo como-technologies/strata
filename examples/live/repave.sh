@@ -13,8 +13,8 @@
 #   5  a side that is not a cluster is a usage error, and the request changes nothing: cluster A
 #      keeps its instances
 #
-# This cloud runs one upgrade engine, so every answer here agrees with the table. A disagreement
-# needs another engine, and no live run has one (#74). Needs the live example at its baseline with
+# AWS and GCP run one upgrade engine, so every answer here agrees with the table. A disagreement
+# needs another engine, such as Edge, and no live run has one. Needs the live example at its baseline with
 # cluster A (just live-up), the strata release binary, jq, and the key as verify.sh needs it. Each
 # stage puts its change back and takes no update on cluster A. Results go under
 # runs/<UTC time>/repave/, or OUT; FROM_STAGE resumes a run in OUT. Exit 0 only when no
@@ -101,18 +101,14 @@ if stage 4 "a manifest of the add-on"; then
 fi
 
 if stage 5 "what the option refuses, and what it changes"; then
-  before=$(aws ec2 describe-instances --region "$(out region)" \
-    --filters "Name=tag-key,Values=sigs.k8s.io/cluster-api-provider-aws/cluster/$CN" \
-    "Name=instance-state-name,Values=pending,running" --query 'Reservations[].Instances[].InstanceId' --output text 2> /dev/null | tr '\t' '\n' | sort | paste -sd ' ' -)
+  before=$(instances)
   check usage 2 "#73: two profile versions and no cluster: a usage error" -- \
     "$strata" compare "$R" "$AD" --repave
   check usage-says 0 "and it says what it needs" -- grep -q 'needs one side that is a cluster' usage.err
   check no-update 0 "the questions took no update: cluster A has no update waiting" -- \
     bash -c "\"$strata\" snapshot cluster:$C | jq -e '.source.cluster.updatesPending == false'"
-  after=$(aws ec2 describe-instances --region "$(out region)" \
-    --filters "Name=tag-key,Values=sigs.k8s.io/cluster-api-provider-aws/cluster/$CN" \
-    "Name=instance-state-name,Values=pending,running" --query 'Reservations[].Instances[].InstanceId' --output text 2> /dev/null | tr '\t' '\n' | sort | paste -sd ' ' -)
-  check same-nodes 0 "#73: the same instances after each question: nothing was repaved" -- test -n "$before" -a "$before" = "$after"
+  after=$(instances)
+  check same-nodes 0 "#73: the same machines after each question: nothing was repaved" -- test -n "$before" -a "$before" = "$after"
   check undo-baseline 0 "the example is at its baseline" -- "$live/baseline.sh"
 fi
 

@@ -103,13 +103,13 @@ fi
 
 if stage 4 "an edit of a value of the release version, and its undo"; then
   check values-edit 0 '#70: edit the reclaim policy of the CSI pack of the release version in place' -- \
-    "$live/api.sh" edit "$R" '  reclaimPolicy: Delete' '  reclaimPolicy: Retain'
+    "$live/api.sh" edit "$R" "$(out csi_reclaim_delete)" "$(out csi_reclaim_delete | sed 's/Delete/Retain/')"
   check values-pending 0 '#70: an update waits' -- settled true
   check values-record 0 'record cluster A' -- record values
   check values-names 0 '#70: Palette names the pack whose values changed' -- \
-    jq -e --arg u "$R" '.source.cluster.pendingUpdates | any(.profileUid == $u and (.message | test("csi-aws-ebs .* values are updated")))' values.json
+    jq -e --arg u "$R" --arg csi "$(out csi_pack_name)" '.source.cluster.pendingUpdates | any(.profileUid == $u and (.message | test($csi + " .* values are updated")))' values.json
   check values-undo 0 'put the value back through the API' -- \
-    "$live/api.sh" edit "$R" '  reclaimPolicy: Retain' '  reclaimPolicy: Delete'
+    "$live/api.sh" edit "$R" "$(out csi_reclaim_delete | sed 's/Delete/Retain/')" "$(out csi_reclaim_delete)"
   check values-undo-none 0 '#70: the undo closes the update with no update of the cluster: none waits' -- settled false
   # the round trip through the API leaves the values text other than OpenTofu wrote it, so its
   # plan is not empty; the apply of the baseline writes the text again

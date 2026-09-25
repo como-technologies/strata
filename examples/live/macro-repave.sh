@@ -5,7 +5,7 @@
 #
 #   examples/live/macro-repave.sh [FROM_STAGE]
 #
-#   1  at the baseline: the EC2 instances of cluster A, its open notifications, and its state
+#   1  at the baseline: the machines of cluster A, its open notifications, and its state
 #   2  the Kubernetes pack of the release version reads a project macro in postKubeadmCommands,
 #      through the API; cluster A takes the update, and holds the same instances for STABLE_MINUTES
 #      (default 12). This edit is a change of the profile, and Palette notifies for it
@@ -19,7 +19,7 @@
 #
 # It measures. It names nothing to evade: the record of each signal, and where it is missing, is
 # the result. Needs the live example at its baseline with cluster A (just live-up), the strata
-# release binary, jq, and the key as verify.sh needs it, and AWS_PROFILE for the instances.
+# release binary, jq, and the key as verify.sh needs it.
 # Billable: cluster A can replace its nodes twice, about 20 minutes each. Results go under
 # runs/<UTC time>/macro-repave/, or OUT; FROM_STAGE resumes a run in OUT. Each check compares an
 # exit code with the expected one; `?` records it without judging. Exit 0 only when no check fails.
@@ -30,7 +30,6 @@ from=${1:-1}
 case "$from" in 1|2|3|4|5) ;; *) sed -n '2,/^set -uo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; exit 2 ;; esac
 . "$(cd "$(dirname "$0")" && pwd)/lib.sh"
 [ -x "$strata" ] || die "no strata binary at $strata"
-[ -n "${AWS_PROFILE:-}" ] || die "set AWS_PROFILE to a profile that can describe EC2 instances"
 
 macro=strata_probe
 # the one line of the Kubernetes pack under postKubeadmCommands; the OS pack has the key too
@@ -65,13 +64,6 @@ CN=$(out cluster_names | jq -r .a)
 [ -n "$C" ] && [ -n "$CN" ] || die "no cluster A; run just live-up"
 export PALETTE_PROJECT_UID=$P
 
-# instances: the EC2 instances of cluster A that are not terminated, sorted
-instances() {
-  aws ec2 describe-instances --region "$(out region)" \
-    --filters "Name=tag-key,Values=sigs.k8s.io/cluster-api-provider-aws/cluster/$CN" \
-    "Name=instance-state-name,Values=pending,running,stopping,stopped,shutting-down" \
-    --query 'Reservations[].Instances[].InstanceId' --output text | tr '\t' '\n' | sort | paste -sd ' ' -
-}
 open_notifications() {
   "$live/api.sh" get "/v1/notifications/spectrocluster/$C" \
     | jq -c '[.items[]? | select(.action.isDone == false) | [.action.events[]? | .message]]'
@@ -113,7 +105,7 @@ hold() {
 if stage 1 "the baseline"; then
   require_baseline
   hold baseline 2
-  check base-instances 0 "the EC2 instances of cluster A" -- instances
+  check base-instances 0 "the machines of cluster A" -- instances
   cp base-instances.out instances-0.txt
   check base-notifications 0 "the open notifications of cluster A" -- open_notifications
   check base-macro 0 "the project macro $macro does not exist" -- \
@@ -128,7 +120,7 @@ if stage 2 "a macro in an infrastructure layer"; then
     bash -c "sleep 15; \"$live/api.sh\" get /v1/notifications/spectrocluster/$C | jq -e '[.items[]? | select(.action.isDone == false)] | length > 0'"
   check macro-accept 0 "cluster A takes the update" -- "$live/api.sh" apply "$C"
   hold accepted "$stable"
-  check accepted-instances 0 "the EC2 instances after the update" -- instances
+  check accepted-instances 0 "the machines after the update" -- instances
   check accepted-changed ? "the update replaced the nodes (0), or kept them (1)" -- \
     bash -c '! cmp -s instances-0.txt accepted-instances.out'
   check accepted-resolved 0 "resolvedValues gives the macro the value one" -- test "$(resolved)" = one

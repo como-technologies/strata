@@ -16,10 +16,21 @@ write the layer in brackets, as `[os   ]`, `[k8s  ]`, `[cni  ]`, `[csi  ]`, and
 `[addon]`.
 
 **A profile** is a stack of those layers, published under a name and a version,
-such as `aws-stack@1.1.1`. A **cluster profile** carries the OS and Kubernetes
-layers that build a cluster. An **add-on profile** carries only add-on layers,
-and a cluster can run one cluster profile and several add-on profiles at once.
+such as `aws-stack@1.1.1`. A **cluster profile** carries the layers that build
+a cluster. An **add-on profile** carries only add-on layers, and a cluster can
+run one cluster profile and several add-on profiles at once.
 `platform-addons@1.0.0` in these pages is an add-on profile.
+
+The layers of a cluster profile come from its environment, not from strata. On
+AWS and GCP, as in these pages, it has four: an OS, Kubernetes, a CNI, and a
+CSI. An Edge profile needs no CSI
+([Model edge cluster profile](https://docs.spectrocloud.com/clusters/edge/site-deployment/model-profile/)),
+a Nutanix profile leaves the OS and Kubernetes layers empty
+([Nutanix](https://docs.spectrocloud.com/clusters/data-center/nutanix/)), and
+an imported cluster runs add-on profiles alone
+([Attach an add-on profile](https://docs.spectrocloud.com/clusters/imported-clusters/attach-add-on-profile/)).
+Strata records the layers that a profile has, and a layer that is not there
+gives no impact.
 
 **The root** is one digest over the whole content of a profile version: every
 pack, its build, its values, and its manifests. Two versions with the same root

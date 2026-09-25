@@ -37,8 +37,8 @@ V=1.0.0
 # Public Repo and Palette Registry, with two archives each (packs.sh, registries-differ), so the
 # csi pack is the two-archive leaf.
 R=strata-live-registries
-two=csi-aws-ebs
-two_version=1.65.0
+two=$(out csi_pack_name)
+two_version=$(out csi_version)
 
 run=${OUT:-$live/runs/$(date -u +%Y%m%dT%H%M%SZ)/knurl}
 mkdir -p "$run" && cd "$run" || exit 2

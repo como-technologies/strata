@@ -13,3 +13,13 @@ oci_pack_version  = "1.0.0"
 # The AWS profile that creates the example's own pack registry: an ECR repository, read by a
 # Palette registry that the example creates too. registry.sh pushes into it; live-down removes it.
 aws_profile = "my-aws-profile"
+
+# The cloud of the clusters: aws (the default) or gcp. Set it here, and not with -var, so that
+# every apply of every script uses the same cloud. Change it only after `just live-down`.
+# cloud = "gcp"
+
+# The GCP clusters: a GCP cloud account in Palette, and a project that its service account can
+# create machines in. The AWS names above stay: the example's own registry is in AWS for either
+# cloud.
+gcp_cloud_account_name = "my-gcp-account"
+gcp_project            = "my-gcp-project"

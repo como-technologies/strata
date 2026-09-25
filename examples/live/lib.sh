@@ -33,6 +33,24 @@ out() {
   jq -r --arg k "$1" '.[$k].value // empty | if type == "string" then . else tojson end' <<<"$json"
 }
 
+# ---- the machines of a cluster -----------------------------------------------------------------------
+
+# instances [UID]: the machines of a cluster, cluster A ($C) by default, that are not deleted, by
+# name, sorted, on one line.
+# Palette lists them for each cloud under /v1/cloudconfigs/<cloud type>/<config uid>, so this works
+# on each cloud. A repave replaces each machine, and so each name. The list is empty until the
+# agent of the cluster reports, so read it on a cluster that has been Running.
+instances() {
+  local doc kind cfg pool
+  doc=$("$live/api.sh" get "/v1/spectroclusters/${1:-$C}") || return 2
+  kind=$(jq -r .spec.cloudType <<<"$doc")
+  cfg=$(jq -r .spec.cloudConfigRef.uid <<<"$doc")
+  "$live/api.sh" get "/v1/cloudconfigs/$kind/$cfg" | jq -r '.spec.machinePoolConfig[]?.name' | while read -r pool; do
+    "$live/api.sh" get "/v1/cloudconfigs/$kind/$cfg/machinePools/$pool/machines" \
+      | jq -r '.items[]? | select(.status.instanceState != "Deleted") | .metadata.name'
+  done | sort | paste -sd ' ' -
+}
+
 # ---- checks ------------------------------------------------------------------------------------------
 
 failures=0

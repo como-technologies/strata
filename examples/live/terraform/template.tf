@@ -19,7 +19,7 @@ resource "spectrocloud_cluster_config_policy" "maintenance" {
 resource "spectrocloud_cluster_config_template" "release" {
   count      = var.template ? 1 : 0
   name       = "${var.name_prefix}-template"
-  cloud_type = "aws"
+  cloud_type = var.cloud
   context    = "project"
   tags       = ["purpose:strata-live-example", "managed-by:opentofu"]
 

@@ -2,10 +2,10 @@
 # The tag-only test (#19): what a release version that differs only in the tag name its OS pack is
 # pinned under does to strata's hashes and to a cluster that moves to it.
 #
-#   AWS_PROFILE=<profile> examples/live/tag-only.sh [FROM_STAGE]
+#   examples/live/tag-only.sh [FROM_STAGE]
 #
 #   1  record the release (1.0.0, OS pack tag 24.04), cluster A's release selection, and cluster
-#      A's EC2 instances
+#      A's machines
 #   2  publish 1.0.2 with the same OS pack under the exact tag LTS__24.04, and 1.0.3 under the
 #      floating tag LTS__24.x; record both, compare them with 1.0.0, and ask Palette whether a
 #      move to either repaves cluster A, with a values change that does as the control
@@ -22,7 +22,7 @@
 # node impact, Palette neither plans nor does a repave, and the in-place rename is DRIFT.
 #
 # Needs the live example at its baseline (baseline.sh), the strata release binary, jq, and an AWS
-# profile that can describe EC2 instances. Billable: the watch holds cluster A for at least 15
+# profile that can describe machines. Billable: the watch holds cluster A for at least 15
 # minutes per move, and up to an hour. Results go under runs/<UTC time>/tag-only/, or OUT;
 # FROM_STAGE resumes a run in OUT. Exit 0 only when no check fails.
 set -uo pipefail
@@ -31,7 +31,6 @@ flag=false
 from=${1:-1}
 . "$(cd "$(dirname "$0")" && pwd)/lib.sh"
 [ -x "$strata" ] || die "no strata binary at $strata"
-[ -n "${AWS_PROFILE:-}" ] || die "set AWS_PROFILE to a profile that can describe EC2 instances"
 
 exact=LTS__24.04
 floating=LTS__24.x
@@ -75,13 +74,6 @@ if [ "$from" -le 1 ]; then
 fi
 export PALETTE_PROJECT_UID
 
-# instances: cluster A's EC2 instances that are not terminated, sorted
-instances() {
-  aws ec2 describe-instances --region "$(out region)" \
-    --filters "Name=tag-key,Values=sigs.k8s.io/cluster-api-provider-aws/cluster/$CN" \
-    "Name=instance-state-name,Values=pending,running,stopping,stopped,shutting-down" \
-    --query 'Reservations[].Instances[].InstanceId' --output text | tr '\t' '\n' | sort | paste -sd ' ' -
-}
 
 # watch LABEL RECORD: every minute, log cluster A's state (with its conditions and latest events
 # while it is not Running), whether its release selection equals RECORD, and its instances to
@@ -110,7 +102,7 @@ watch() {
 if stage 1 "record the baseline"; then
   check release1 0 "record 1.0.0, the OS pack under tag 24.04" -- "$strata" snapshot "$P" --raw-dir raw/release1 -o release1.json
   check a1 0 "record cluster A's release selection" -- "$strata" snapshot "cluster:$C/$N" --raw-dir raw/a1 -o a1.json
-  check instances1 0 "cluster A's EC2 instances before any move" -- instances
+  check instances1 0 "cluster A's machines before any move" -- instances
 fi
 
 if stage 2 "publish 1.0.2 and 1.0.3, which differ only in the OS pack's tag"; then
@@ -134,7 +126,7 @@ if stage 2 "publish 1.0.2 and 1.0.3, which differ only in the OS pack's tag"; th
       && grep -q 'impact: none (tag renamed, same pack build)' compare-exact.out && ! grep -q repave compare-exact.out"
   check compare-exact-json 1 "the same comparison as JSON" -- "$strata" compare release1.json exact1.json --json
   check compare-exact-json-says 0 "#19: sameContent, the OS pack tagRenamed, max impact none" -- \
-    jq -e '.sameContent and ([.packs[] | select(.tagRenamed) | .name] == ["ubuntu-aws"]) and .summary.maxImpact == "none"' \
+    jq -e --arg os "$(out os_pack_name)" '.sameContent and ([.packs[] | select(.tagRenamed) | .name] == [$os]) and .summary.maxImpact == "none"' \
       compare-exact-json.out
   check compare-floating 1 "1.0.0 against 1.0.3, the floating tag: the roots differ" -- "$strata" compare release1.json floating1.json
   check compare-floating-says 0 "#19: the floating tag is the same content too" -- \
@@ -155,7 +147,7 @@ if stage 3 "move cluster A to 1.0.2"; then
   watch to-exact exact1.json
   check a2 0 "record cluster A's release selection" -- "$strata" snapshot "cluster:$C/$N" --raw-dir raw/a2 -o a2.json
   check a2-runs-exact 0 "cluster A's selection is IDENTICAL to 1.0.2" -- "$strata" compare exact1.json a2.json
-  check instances2 0 "cluster A's EC2 instances after the move" -- instances
+  check instances2 0 "cluster A's machines after the move" -- instances
   check repaved-to-exact 1 "#19: the move to 1.0.2 kept cluster A's instances (a repave replaces them: 0)" -- \
     bash -c '! cmp -s instances1.out instances2.out'
 fi
@@ -167,14 +159,14 @@ if stage 4 "move cluster A back to 1.0.0"; then
   watch to-release release1.json
   check a3 0 "record cluster A's release selection" -- "$strata" snapshot "cluster:$C/$N" --raw-dir raw/a3 -o a3.json
   check a3-runs-release 0 "cluster A's selection is IDENTICAL to 1.0.0" -- "$strata" compare release1.json a3.json
-  check instances3 0 "cluster A's EC2 instances after the move back" -- instances
+  check instances3 0 "cluster A's machines after the move back" -- instances
   check repaved-back 1 "#19: the move back to 1.0.0 kept cluster A's instances (a repave replaces them: 0)" -- \
     bash -c '! cmp -s instances2.out instances3.out'
 fi
 
 if stage 5 "rename 1.0.2's OS pack tag in place"; then
   check retag 0 "#19: rename 1.0.2's OS pack tag through the API, keeping its pack uid" -- \
-    "$live/api.sh" retag "$EXACT" ubuntu-aws "$exact" "$renamed"
+    "$live/api.sh" retag "$EXACT" "$(out os_pack_name)" "$exact" "$renamed"
   check exact2 0 "record the renamed 1.0.2" -- "$strata" snapshot "$EXACT" --raw-dir raw/exact2 -o exact2.json
   check retag-kept-pack-uid 0 "the rename kept the pack uid" -- \
     jq -e -n --slurpfile a exact1.json --slurpfile b exact2.json \

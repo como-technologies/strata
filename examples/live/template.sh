@@ -70,7 +70,7 @@ check release-names-template 0 "#66: the version names the template that uses it
 
 echo "== 2. an edit in place of the linked release version" | tee -a steps.log
 check lock-edit 2 "#66: an edit in place of a version that a template links is refused" -- \
-  "$live/api.sh" edit "$P" "reclaimPolicy: Delete" "reclaimPolicy: Retain"
+  "$live/api.sh" edit "$P" "$(out csi_reclaim_delete)" "$(out csi_reclaim_delete | sed 's/Delete/Retain/')"
 check lock-edit-says 0 "the refusal names the reason" -- \
   grep -q ClusterProfileUpdateValidationFailure lock-edit.err
 check lock-verify 0 "#66: the release version is unchanged" -- "$strata" verify release.json
@@ -97,7 +97,7 @@ check cluster-doc 0 "the cluster document" -- "$live/api.sh" get "/v1/spectroclu
 check cluster-three-profiles 0 "the cluster runs the release version and the two add-on profiles" -- \
   jq -e --arg a "$AD" --arg b "$A2" '[.spec.clusterProfileTemplates[].uid] | (index($a) != null) and (index($b) != null)' cluster-doc.out
 check lock-gone 0 "#66: with the template gone, the edit in place of the release version is accepted again" -- \
-  "$live/api.sh" edit "$P" "reclaimPolicy: Delete" "reclaimPolicy: Retain"
+  "$live/api.sh" edit "$P" "$(out csi_reclaim_delete)" "$(out csi_reclaim_delete | sed 's/Delete/Retain/')"
 check lock-gone-verify 1 "#66: the record from before reports DRIFT: the lock was the template's, not the version's" -- \
   "$strata" verify release.json
 # The order the cluster lists the add-on profiles, and when the pack of each one started. The

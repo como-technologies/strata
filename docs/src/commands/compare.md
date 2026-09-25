@@ -99,8 +99,8 @@ Edge cluster, where that change repaves nothing:
 ```
 
 That note is the signal that the table is wrong for the environment. No live
-run has produced it: the one cloud that the runs used gives the answer of the
-table each time. It costs two requests, the cluster document and one `POST` to
+run has produced it: AWS and GCP, the two clouds that the runs used, have one
+upgrade engine, and give the answer of the table each time. It costs two requests, the cluster document and one `POST` to
 `/v1/spectroclusters/<uid>/validate/repave`. The `POST` asks a question and
 changes nothing: the cluster keeps its instances.
 
