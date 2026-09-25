@@ -419,3 +419,7 @@ makes one change in place and puts it back, so it ends at the baseline.
   nothing.
 - [What Palette does](../internals/palette.md#what-no-run-covers) lists the
   behaviors that no script here establishes.
+- No script produces a pack with no digest, so no live run shows `verify`
+  reporting one as `UNVERIFIED`, or `same-release` refusing one (#71). The
+  offline tests cover each. A Helm registry that needs credentials is the case
+  that gives one, and its check is open (#75).

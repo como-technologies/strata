@@ -33,6 +33,7 @@ names the first changed value. See
 | `SAME CONTENT` | The roots differ only by the tag name of a pack build, or by the uid that Palette gives each manifest pack. | yes |
 | `REGISTRY MOVE` | The roots differ only by packs from another registry, with the same tag, version, values, manifests, and params. The digest of each moved pack can differ. | only with `--allow registry-move` |
 | `DIFFERENT` | Any other difference. | no |
+| `NO DIGEST` | The pair would pass, and a pack from a registry has no upstream digest on one side, so an equal root does not show an equal archive. | only with `--allow no-digest` |
 
 ```text
 {{#include ../output/tag-same.txt}}
@@ -45,6 +46,12 @@ registry: `spectro`, `helm`, or `oci`. A `manifest` pack comes from no
 registry, so it never moves. Without `--allow registry-move`, the reason names
 the move, so you can decide to allow it. See
 [A pack comes from another registry](../use-cases/registry-move.md).
+
+A move from a registry that gives a digest to one that gives none is a loss of
+what the root can show. A pair that differs for another reason stays
+`DIFFERENT`, and its reasons name each pack with no digest too. `--allow` takes
+more than one value: `--allow registry-move --allow no-digest`. See
+[The content digest](../internals/hashes.md#the-content-digest).
 
 ## Refs
 

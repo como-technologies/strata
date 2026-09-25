@@ -126,7 +126,13 @@ A comparison of two sides, `a` and `b`.
   - `values`: `changed`, `parseable`, `changedCount`, `addedCount`,
     `removedCount`, and `diff[]`.
   - `manifests[]`: `op`, `name`, `hashA`, and `hashB`.
-- `verify`, only after `verify`: `status`, `uid`, `recordedAt`, and `checkedAt`.
+  - `upstreamUnknown`, only when true: a pack from a registry with no upstream
+    digest on either side.
+- `upstreamUnknown`, only when it is not empty: the key of each such pack. An
+  equal root does not show an equal archive for it.
+- `verify`, only after `verify`: `status` (`unchanged`, `drifted`, or
+  `unverified`), `uid`, `recordedAt`, and `checkedAt`.
+  - `upstreamUnknown`: for an `unverified` record, the packs that make it so.
   - `overwrittenBy`: for a profile record, the `name@version` that the uid names
     now. The status is `drifted`, also when the roots are equal.
   - `clusterValuesChanged`, only when it is not `0`: for a cluster record, the
@@ -151,26 +157,30 @@ is the path as a list: strings for keys, numbers for indexes, and
 
 ## strata-verify-summary/1
 
-- `legend.status`: `unchanged`, `drifted`, and `error`.
+- `legend.status`: `unchanged`, `drifted`, `unverified`, and `error`.
 - `summary`: `records`, `unchanged`, `drifted`, `errors`, and `status`, which is
-  the exit status in words.
+  the exit status in words. `unverified`, only when it is not `0`: the records
+  whose content is the same and that hold a pack with no upstream digest.
 - `records[]`: one entry for each file, in the order given: `path`, `status`,
   `name`, `version`, `uid`, `projectUid`, `recordedAt`, `rootRecorded`, and
   `rootLive` when strata read the live profile.
-  - A drifted record adds `maxImpact`, `packsChanged`, and the full `diff`.
+  - A drifted record adds `maxImpact`, `packsChanged`, and the full `diff`. An
+    unverified record adds the `diff`, which names the packs.
   - A cluster record with changed variable values adds `clusterVariables`,
     whatever its status.
   - A failed record adds `error`. See [Errors](./errors.md).
 
 ## strata-chain/1
 
-- `legend`, and `policy`: `exact` or `registry-move`.
+- `legend`, and `policy`: `exact` or `registry-move`. `allowNoDigest`, only
+  when true: `--allow no-digest` was given.
 - `same`: each pair passed.
 - `summary`: `pairs`, `passed`, and `failed`.
 - `records[]`: `label`, `name`, `version`, `uid`, `projectUid`, and `root`.
-- `pairs[]`: `a`, `b`, `status` (`identical`, `same-content`, `registry-move`, or
-  `different`), `rootA`, `rootB`, `packsRepinned`, `packsRetagged`, and
-  `reasons[]`.
+- `pairs[]`: `a`, `b`, `status` (`identical`, `same-content`, `registry-move`,
+  `different`, or `unknown-upstream`), `rootA`, `rootB`, `packsRepinned`,
+  `packsRetagged`, and `reasons[]`. `upstreamUnknown`, only when it is not
+  empty: the packs with no upstream digest, also when they are allowed.
 
 ## strata-consumers/1
 

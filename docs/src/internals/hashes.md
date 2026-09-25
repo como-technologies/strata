@@ -140,6 +140,20 @@ The last row is a gap, not a rule. Palette can list no digest for a pack: see
 have one root. The knurl adapter refuses such a leaf, because nothing pins it by
 content.
 
+Strata names such a pack in each report, because an equal root does not show an
+equal archive for it:
+
+- `compare` prints a `note` that names it, and a line under the pack.
+- `verify` reports a record that holds one as `UNVERIFIED` and exits `1`, when
+  the content is the same. `--allow-no-digest` accepts it: see
+  [verify](../commands/verify.md#the-verdicts).
+- `same-release` refuses a pair that holds one, unless `--allow no-digest`
+  accepts it.
+
+A manifest pack also has `upstreamSource: none`, and it is not such a pack. It
+comes from no registry and has no archive: its content is the manifests of the
+profile, which `authored` covers.
+
 A tool that pins a profile version by digest pins the content digest. `verify`
 keeps the root, because an edit in place is a change to one object.
 
@@ -185,6 +199,8 @@ So two clusters built from one definition have one merged root.
 
 `upstream` comes from the pack reference digest, or from the pack summary
 digest when the reference has none. `hash.upstreamSource` in the snapshot says
-which. Strata hashes the digest as Palette stores it, a Helm digest in bare hex
+which: `packRef.digest`, `packSummary.digest`, or `none` when Palette gives
+neither. A pack from a registry with `none` has an unknown upstream: see
+[The content digest](#the-content-digest). Strata hashes the digest as Palette stores it, a Helm digest in bare hex
 included. See
 [What Palette does: the pack-ref digest](./palette.md#the-pack-ref-digest).

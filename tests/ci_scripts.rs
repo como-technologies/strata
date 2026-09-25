@@ -1876,6 +1876,47 @@ fn verify_report_dry_run_prints_each_report_and_calls_no_host() {
 }
 
 #[test]
+fn verify_report_opens_an_issue_for_an_unverified_record_and_passes_allow_no_digest_on() {
+    let d = Drift::new();
+    d.summary(
+        1,
+        &[
+            ("releases/a.json", "unchanged", "lab-profile", "1.2.0"),
+            ("releases/b.json", "unverified", "lab-profile", "1.3.0"),
+        ],
+    );
+    d.record(
+        "b",
+        1,
+        "**UNVERIFIED**: pack addon/x has no upstream digest\n",
+        "",
+    );
+    let o = d.run(&["releases/*.json", "--dry-run"]);
+    assert_eq!(o.status.code(), Some(1), "{}", text(&o.stderr));
+    let out = text(&o.stdout);
+    assert!(out.contains("cannot verify the record"), "{out}");
+    assert!(out.contains("**UNVERIFIED**: pack addon/x"), "{out}");
+    let err = text(&o.stderr);
+    assert!(
+        err.contains("would open or update the issue for releases/b.json: strata verify: lab-profile@1.3.0 cannot be verified (releases/b.json)"),
+        "{err}"
+    );
+    assert!(
+        err.contains("2 records: 1 unchanged, 0 drifted, 1 unverified, 0 could not be checked"),
+        "{err}"
+    );
+
+    // the option reaches both calls of verify
+    let o = d.run(&["releases/*.json", "--allow-no-digest", "--dry-run"]);
+    assert_eq!(o.status.code(), Some(1), "{}", text(&o.stderr));
+    let log = d.log("strata.log");
+    assert!(
+        log.len() == 2 && log.iter().all(|l| l.contains("--allow-no-digest")),
+        "{log:?}"
+    );
+}
+
+#[test]
 fn live_scripts_refuse_a_strata_binary_older_than_the_sources() {
     let root = tempfile::tempdir().unwrap();
     let live = root.path().join("examples/live");

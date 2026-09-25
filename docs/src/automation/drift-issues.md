@@ -1,8 +1,8 @@
 # Drift issues
 
 `scripts/ci/verify-report.sh` runs `strata verify` over the records. It keeps one
-open issue on the code host for each record that drifted or that strata could
-not check.
+open issue on the code host for each record that drifted, that is unverified, or
+that strata could not check.
 
 ```bash
 scripts/ci/verify-report.sh 'releases/**/*.json' 'runs/*.json'
@@ -30,8 +30,10 @@ give.
 ## Exit status
 
 The script exits like `verify`, after it handles the issues: `0` when each
-record is unchanged, `1` when a record drifted, `2` when a record could not be
-checked.
+record is unchanged, `1` when a record drifted or is unverified, `2` when a
+record could not be checked. An unverified record holds a pack with no upstream
+digest: its issue says that `--allow-no-digest` accepts it. See
+[verify](../commands/verify.md#the-verdicts).
 
 When `verify` checks nothing, for example when no pattern matches a file, the
 script exits `2` and touches no issue. A host call that fails ends the script
@@ -48,6 +50,7 @@ opens no issue for it. See
 | `--repo OWNER/REPO` | `GITHUB_REPOSITORY`, or from `gh` | The repository, or the GitLab project. |
 | `--host github\|gitlab` | from the CI variables | The code host. |
 | `--label NAME` | `strata-drift` | The label of the issues. |
+| `--allow-no-digest` | | Accept a pack with no upstream digest, as `verify --allow-no-digest` does. |
 | `--dry-run` | | Print, and change nothing. |
 
 The script is in this repository, at `scripts/ci/verify-report.sh`. It needs

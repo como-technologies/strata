@@ -1,22 +1,25 @@
 #!/usr/bin/env bash
-# Report the records a scheduled `strata verify` finds drifted, or cannot check, as issues.
+# Report the records a scheduled `strata verify` finds drifted, unverified, or cannot check, as
+# issues.
 #
-#   scripts/ci/verify-report.sh <record or pattern>... [--repo OWNER/REPO] [--label NAME] [--dry-run]
+#   scripts/ci/verify-report.sh <record or pattern>... [--repo OWNER/REPO] [--label NAME]
+#                               [--allow-no-digest] [--dry-run]
 #
 # Runs `strata verify --summary --format json` over the records; strata expands a quoted pattern
 # such as 'releases/**/*.json'. Each record that did not verify is checked again on its own for its
-# markdown report, and that check decides. A record that drifted, or could not be checked, has one
-# open issue labeled NAME (default strata-drift), found by the marker
+# markdown report, and that check decides. A record that drifted, is unverified (it holds a pack
+# with no upstream digest, which --allow-no-digest accepts), or could not be checked, has one open
+# issue labeled NAME (default strata-drift), found by the marker
 # <!-- strata-verify: <path> --> on the first line of its body: opened on the first run that finds
 # it, updated with the latest report on each later run, and closed with a comment on the first run
 # where the record verifies again. Issues of records not given are left alone. --dry-run prints
 # each issue body and what would happen, and calls no host.
 #
-# Exit 0 when every record verified, 1 when any drifted, 2 when any could not be checked or verify
-# checked nothing; the issues are handled first, so a scheduled job shows the state too. A host
-# call that fails stops the script with a nonzero status and what the host said. GitHub lists a new
-# or closed issue a few seconds later, so two runs that close together can open a second issue for
-# one record: schedule runs minutes apart.
+# Exit 0 when every record verified, 1 when any drifted or is unverified, 2 when any could not be
+# checked or verify checked nothing; the issues are handled first, so a scheduled job shows the
+# state too. A host call that fails stops the script with a nonzero status and what the host said.
+# GitHub lists a new or closed issue a few seconds later, so two runs that close together can open
+# a second issue for one record: schedule runs minutes apart.
 #
 # Hosts: GitHub through `gh`, and GitLab through the REST API v4 with `curl`. --host picks one;
 # without it, the CI variables do: GITLAB_CI or CI_PROJECT_ID means GitLab, else GitHub. On GitLab
@@ -106,18 +109,20 @@ repo="${GITHUB_REPOSITORY:-}"
 label="strata-drift"
 dry=""
 host_kind=""
+allow=()
 while [ $# -gt 0 ]; do
   case "$1" in
     --repo) repo=$2; shift 2 ;;
     --host) host_kind=$2; shift 2 ;;
     --label) label=$2; shift 2 ;;
     --dry-run) dry=1; shift ;;
-    -h|--help) sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    --allow-no-digest) allow=(--allow-no-digest); shift ;;
+    -h|--help) sed -n '2,28p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     --*) die "unknown option $1" ;;
     *) patterns+=("$1"); shift ;;
   esac
 done
-[ ${#patterns[@]} -gt 0 ] || die "usage: verify-report.sh <record or pattern>... [--repo OWNER/REPO] [--host github|gitlab] [--label NAME] [--dry-run]"
+[ ${#patterns[@]} -gt 0 ] || die "usage: verify-report.sh <record or pattern>... [--repo OWNER/REPO] [--host github|gitlab] [--label NAME] [--allow-no-digest] [--dry-run]"
 
 # The CI variables name the host when nothing else does.
 if [ -z "$host_kind" ]; then
@@ -142,7 +147,7 @@ now=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
 # ---- the check -------------------------------------------------------------------------------
 code=0
-"$strata" verify --summary --quiet --format json "${patterns[@]}" > "$work/summary.json" 2> "$work/summary.err" || code=$?
+"$strata" verify --summary --quiet --format json "${allow[@]+"${allow[@]}"}" "${patterns[@]}" > "$work/summary.json" 2> "$work/summary.err" || code=$?
 if ! jq -e '.schema == "strata-verify-summary/1"' "$work/summary.json" > /dev/null 2>&1; then
   cat "$work/summary.err" >&2
   die "strata verify checked nothing (exit $code); no issue was touched"
@@ -170,7 +175,7 @@ ensure_label() {
   label_ready=1
 }
 
-unchanged=0 drifted=0 errors=0
+unchanged=0 drifted=0 unverified=0 errors=0
 actions=()
 # the records come on descriptor 3, so a host call that reads stdin cannot take them
 while IFS= read -r record <&3; do
@@ -180,10 +185,11 @@ while IFS= read -r record <&3; do
   body="$work/body.md"
   if [ "$status" != unchanged ]; then
     rc=0
-    "$strata" verify "$path" --quiet --format markdown > "$work/report.md" 2> "$work/report.err" || rc=$?
+    "$strata" verify "$path" --quiet --format markdown "${allow[@]+"${allow[@]}"}" > "$work/report.md" 2> "$work/report.err" || rc=$?
+    # exit 1 is drift or unverified; the summary says which, unless the second check disagrees
     case "$rc" in
       0) status=unchanged ;;
-      1) status=drifted ;;
+      1) [ "$status" = unverified ] || status=drifted ;;
       *) status=error ;;
     esac
   fi
@@ -207,6 +213,16 @@ while IFS= read -r record <&3; do
       {
         echo "<!-- strata-verify: $path -->"
         echo "\`strata verify $path\` reports drift, checked $now."
+        echo
+        cat "$work/report.md"
+      } > "$body"
+      ;;
+    unverified)
+      unverified=$((unverified + 1))
+      title="strata verify: $subject cannot be verified ($path)"
+      {
+        echo "<!-- strata-verify: $path -->"
+        echo "\`strata verify $path\` cannot verify the record, checked $now: a pack has no upstream digest, so a change of its archive would not show. \`--allow-no-digest\` accepts it."
         echo
         cat "$work/report.md"
       } > "$body"
@@ -241,13 +257,15 @@ while IFS= read -r record <&3; do
   fi
 done 3< <(jq -c '.records[]' "$work/summary.json")
 
-total=$((unchanged + drifted + errors))
+total=$((unchanged + drifted + unverified + errors))
 case "$total" in 1) records="1 record" ;; *) records="$total records" ;; esac
-line="$records: $unchanged unchanged, $drifted drifted, $errors could not be checked"
+line="$records: $unchanged unchanged, $drifted drifted"
+[ "$unverified" -eq 0 ] || line="$line, $unverified unverified"
+line="$line, $errors could not be checked"
 for a in "${actions[@]+"${actions[@]}"}"; do
   line="$line; $a"
 done
 note "$line"
 if [ "$errors" -gt 0 ]; then exit 2; fi
-if [ "$drifted" -gt 0 ]; then exit 1; fi
+if [ "$drifted" -gt 0 ] || [ "$unverified" -gt 0 ]; then exit 1; fi
 exit 0

@@ -93,6 +93,12 @@ document shape.
 | `DRIFT: cluster <c> runs <v>, but uid <uid> no longer exists` | A cluster record: its profile uid is gone. | `1` |
 | `OK: pack <name>@<version> in registry <r> is unchanged since <time>` | A pack record: the registry holds the recorded copy. | `0` |
 | `DRIFT: pack <name>@<version> in registry <r> differs from the copy recorded <time>` | A pack record: the registry holds other content now. | `1` |
+| `UNVERIFIED: <subject> has the content recorded <time>, but pack <key> has no upstream digest, so a change of the archive would not show; --allow-no-digest accepts it` | The content is the same, and a pack from a registry has no digest: an equal root does not show an equal archive for it. Drift wins over this verdict. | `1` |
+
+`--allow-no-digest` accepts a pack with no upstream digest: the verdict is `OK`,
+the exit is `0`, and the report still names the pack in a `note`. A manifest
+pack has no archive, so it never makes a record `UNVERIFIED`. See
+[The content digest](../internals/hashes.md#the-content-digest).
 
 Each verdict of a cluster record ends with `; N variable value changed` when the
 cluster gives a variable another value than the record holds.
@@ -120,7 +126,7 @@ issue open for each record that drifted. See
 | Exit | Meaning |
 | --- | --- |
 | `0` | Each record is unchanged. |
-| `1` | A record drifted. |
+| `1` | A record drifted, or a record is unverified. |
 | `2` | Strata could not check a record. |
 
 - Strata checks each record in the project that the record names. A record from
