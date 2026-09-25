@@ -35,7 +35,7 @@ are in two namespaces, and they can have one name.
 | Method | Reads | Gives |
 | --- | --- | --- |
 | `observe_unit` | the record of a profile version, or of a pack version | the two digests, and each pack from a registry as a pin, in the order of the layers |
-| `observe_instance` | the cluster, one time, and its summary | the state, the health from the summary, and the two digests of each profile copy that the cluster holds, by name |
+| `observe_instance` | the cluster, one time, its summary, and its notifications | the state, the health from the summary, the two digests of each profile copy that the cluster holds, by name, and whether Palette says an update waits |
 | `pinned_by` | `consumers` | the clusters that use a profile version: those the profile lists, and those the second reading of `consumers` finds. Each one by name, or by uid where Palette gives no name |
 | `identity_of` | a candidate | the content digest before the version is in Palette |
 | `verify`, from knurl | `observe_unit` again | unchanged, or what changed |
@@ -79,6 +79,12 @@ with no `candidate` parameter are each a terminal failure.
   adapter maps the two states, and it names the first condition of an unhealthy
   cluster. Where Palette serves no summary, the adapter says `Unknown`. Any
   other failure of the summary is a failure of the read.
+- **Whether an update waits, where Palette serves no notifications.** The
+  adapter gives `pending` as a cluster record reads it:
+  [Whether an update waits](../commands/snapshot.md#whether-an-update-waits).
+  `Waiting` names each profile that has an open update, and `Clear` says that
+  none waits. Where Palette does not serve the notifications, the adapter says
+  `Unknown`, and the read still succeeds.
 - **A leaf with no digest.** Where Palette lists no digest for a pack, the
   adapter refuses the leaf: nothing pins it by content.
   [What no run covers](../internals/palette.md#what-no-run-covers) names the

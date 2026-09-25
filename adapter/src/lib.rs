@@ -45,8 +45,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use knurl_core::{
     Content, ContentDigest, Digest, ExactDigest, Health, InstanceName, InstanceObservation, Level,
-    Pin, PinObservation, Pins, ReportedState, Timestamp, UnitDefinition, UnitName, UnitObservation,
-    UnitRef, Version,
+    PendingChange, Pin, PinObservation, Pins, ReportedState, Timestamp, UnitDefinition, UnitName,
+    UnitObservation, UnitRef, Version,
 };
 use knurl_ports::{PlatformRead, PortError, Result};
 use serde_json::Value;
@@ -55,7 +55,7 @@ use strata::candidate::{self, Candidate, CandidateLayer};
 use strata::ops;
 use strata::progress::Progress;
 use strata::reference::Ref;
-use strata::snapshot::Snapshot;
+use strata::snapshot::{AppliedProfile, PendingUpdate, Snapshot};
 
 /// The parameter of a [`UnitDefinition`] that holds the strata candidate document.
 pub const CANDIDATE: &str = "candidate";
@@ -196,6 +196,24 @@ fn digest<K>(text: &str, of: &str) -> Result<Digest<K>> {
         refused(format!(
             "{of} has the digest '{text}', which is not a sha256 digest"
         ))
+    })
+}
+
+/// Whether Palette says a change waits for the cluster: an open notification of an update of a
+/// profile it runs, as a cluster record reads it. `Unknown` when the notifications were not read.
+fn pending_of(raw: &strata::api::RawCluster) -> Result<PendingChange> {
+    let Some(notifications) = &raw.notifications else {
+        return Ok(PendingChange::Unknown);
+    };
+    let applied = AppliedProfile::of_cluster(&raw.cluster);
+    let mut waiting = BTreeSet::new();
+    for update in PendingUpdate::read(notifications, &applied) {
+        waiting.insert(unit_name(&update.profile)?);
+    }
+    Ok(if waiting.is_empty() {
+        PendingChange::Clear
+    } else {
+        PendingChange::Waiting(waiting)
     })
 }
 
@@ -498,7 +516,8 @@ impl<A: PaletteApi + 'static, F: Connect<A> + 'static> StrataPlatform<A, F> {
             health,
             pins,
             now.stamp,
-        ))
+        )
+        .with_pending(pending_of(&raw)?))
     }
 
     fn pinned_by_blocking(&self, unit: &UnitRef) -> Result<BTreeSet<InstanceName>> {

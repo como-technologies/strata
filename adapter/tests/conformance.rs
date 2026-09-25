@@ -9,7 +9,8 @@ use std::future::Future;
 use std::path::{Path, PathBuf};
 
 use knurl_core::{
-    ContentDigest, FailureClass, Health, InstanceName, Level, Pins, UnitName, UnitRef, Version,
+    ContentDigest, FailureClass, Health, InstanceName, Level, PendingChange, Pins, UnitName,
+    UnitRef, Version,
 };
 use knurl_ports::conformance::{World, read_half};
 use knurl_ports::{PlatformRead, PlatformReadExt};
@@ -107,6 +108,9 @@ struct Setup {
     /// The profile the cluster runs does not list the cluster among its consumers, as Palette
     /// answers on an error, or from a project the key cannot read.
     unlisted_consumer: bool,
+    /// The notifications of the cluster: `Some(true)` holds an open update of the profile the
+    /// cluster runs, `Some(false)` holds none, and `None` serves no notifications.
+    waiting: Option<bool>,
 }
 
 /// The example tenant: one registry with five packs, three versions of `aws-stack`, and the
@@ -211,6 +215,22 @@ fn tenant(setup: Setup) -> MemoryApi {
         api = api.with(
             format!("/v1/dashboard/spectroclusters/{cluster_uid}"),
             json!({"status": {"health": {"state": state, "conditions": conditions}}}),
+        );
+    }
+    if let Some(open) = setup.waiting {
+        let items = if open {
+            let profile = &cluster["spec"]["clusterProfileTemplates"][0]["uid"];
+            json!([{
+                "metadata": {"uid": "n1", "creationTimestamp": "2026-09-24T23:55:02.083Z"},
+                "action": {"actionType": "NotifyActionClusterProfileUpdate", "isDone": false,
+                    "events": {"e1": {"profileUid": profile, "message": "Manifest 'm' is updated"}}},
+            }])
+        } else {
+            Value::Null // Palette gives null, not [], when a cluster has none
+        };
+        api = api.with(
+            format!("/v1/notifications/spectrocluster/{cluster_uid}"),
+            json!({"items": items, "listmeta": {"continue": ""}}),
         );
     }
     api.with("/v1/dashboard/clusterprofiles/metadata", json!({"items": listing}))
@@ -482,6 +502,38 @@ fn an_instance_gives_the_state_and_the_copy_that_it_holds() {
         "this tenant serves no cluster summary, so the health is unknown"
     );
     assert_eq!(seen.pins["aws-stack"].version.as_str(), "1.1.0");
+}
+
+#[test]
+fn an_instance_says_whether_palette_has_an_update_waiting_for_it() {
+    // Connect is a plain function, so each tenant gets its own closure.
+    let seen = |platform: StrataPlatform<MemoryApi, Connect>| {
+        block_on(platform.observe_instance(&world().instance))
+            .unwrap()
+            .pending
+    };
+    let waiting: StrataPlatform<MemoryApi, Connect> = StrataPlatform::new(|_project| {
+        Ok(Palette::new(tenant(Setup {
+            waiting: Some(true),
+            ..Setup::default()
+        })))
+    });
+    let clear: StrataPlatform<MemoryApi, Connect> = StrataPlatform::new(|_project| {
+        Ok(Palette::new(tenant(Setup {
+            waiting: Some(false),
+            ..Setup::default()
+        })))
+    });
+    assert_eq!(
+        seen(waiting),
+        PendingChange::Waiting(["aws-stack".parse::<UnitName>().unwrap()].into())
+    );
+    assert_eq!(seen(clear), PendingChange::Clear);
+    assert_eq!(
+        seen(platform()),
+        PendingChange::Unknown,
+        "a tenant that serves no notifications gives no answer"
+    );
 }
 
 #[test]
