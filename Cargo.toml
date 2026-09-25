@@ -6,7 +6,7 @@ default-members = ["."]
 
 [package]
 name = "strata"
-version = "0.7.1"
+version = "0.8.0"
 edition = "2024"
 # Edition 2024 needs 1.85, and the `if let` chains in this crate need 1.88, which is where they
 # became stable. The msrv job of .github/workflows/checks.yml builds with the version named here,

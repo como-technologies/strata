@@ -43,11 +43,11 @@ jobs:
   # one comment on the pull request, and a label from the impact
   comment:
     if: github.event_name == 'pull_request'
-    uses: como-technologies/strata/.github/workflows/comment.yml@v0.7.1
+    uses: como-technologies/strata/.github/workflows/comment.yml@v0.8.0
     with:
       a: releases/dev.json          # the record the default branch has
       b: candidate.yaml             # what this pull request proposes
-      strata-version: v0.7.1
+      strata-version: v0.8.0
     secrets:
       strata-token: ${{ secrets.STRATA_READ_TOKEN }}
       palette-api-key: ${{ secrets.PALETTE_API_KEY }}
@@ -55,10 +55,10 @@ jobs:
   # the records of the merge result, against the default branch as it is now
   gate:
     if: github.event_name == 'pull_request'
-    uses: como-technologies/strata/.github/workflows/merge-gate.yml@v0.7.1
+    uses: como-technologies/strata/.github/workflows/merge-gate.yml@v0.8.0
     with:
       records: releases/**/*.json
-      strata-version: v0.7.1
+      strata-version: v0.8.0
     secrets:
       strata-token: ${{ secrets.STRATA_READ_TOKEN }}
       palette-api-key: ${{ secrets.PALETTE_API_KEY }}
@@ -66,10 +66,10 @@ jobs:
   # one issue per record that drifted or could not be checked
   verify:
     if: github.event_name == 'schedule'
-    uses: como-technologies/strata/.github/workflows/verify.yml@v0.7.1
+    uses: como-technologies/strata/.github/workflows/verify.yml@v0.8.0
     with:
       records: releases/**/*.json
-      strata-version: v0.7.1
+      strata-version: v0.8.0
     secrets:
       strata-token: ${{ secrets.STRATA_READ_TOKEN }}
       palette-api-key: ${{ secrets.PALETTE_API_KEY }}
@@ -77,10 +77,10 @@ jobs:
   # the records of a promotion are one release, before a cluster moves
   promote-gate:
     if: github.event_name == 'workflow_dispatch' && inputs.promote != ''
-    uses: como-technologies/strata/.github/workflows/promote-gate.yml@v0.7.1
+    uses: como-technologies/strata/.github/workflows/promote-gate.yml@v0.8.0
     with:
       records: ${{ inputs.promote }}
-      strata-version: v0.7.1
+      strata-version: v0.8.0
     secrets:
       strata-token: ${{ secrets.STRATA_READ_TOKEN }}
       palette-api-key: ${{ secrets.PALETTE_API_KEY }}
@@ -88,10 +88,10 @@ jobs:
   # no cluster runs the version, so the delete that follows is safe
   retire-gate:
     if: github.event_name == 'workflow_dispatch' && inputs.retire != ''
-    uses: como-technologies/strata/.github/workflows/retire-gate.yml@v0.7.1
+    uses: como-technologies/strata/.github/workflows/retire-gate.yml@v0.8.0
     with:
       version: ${{ inputs.retire }}
-      strata-version: v0.7.1
+      strata-version: v0.8.0
     secrets:
       strata-token: ${{ secrets.STRATA_READ_TOKEN }}
       palette-api-key: ${{ secrets.PALETTE_API_KEY }}
