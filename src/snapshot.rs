@@ -550,6 +550,13 @@ fn normalize_variable(v: &Value) -> Value {
 }
 
 impl Pack {
+    /// True when the upstream of the pack is unknown: Palette gave no digest for it, so the
+    /// `upstream` hash is the hash of nothing and a change of its archive cannot show. A manifest
+    /// pack has no archive: its content is the manifests of the profile, which `authored` covers.
+    pub fn upstream_unknown(&self) -> bool {
+        self.hash.upstream_source == "none" && self.kind != "manifest"
+    }
+
     /// Build one pack from its ref on the profile template and the matching entry of the
     /// packs/manifests response (matched by name; missing entries leave those fields empty).
     pub fn from_api(pk: &Value, manifests_packs: &[Value]) -> Pack {
@@ -648,6 +655,16 @@ impl Pack {
 }
 
 impl Snapshot {
+    /// The key of each pack whose upstream is unknown, in pack order: see
+    /// [`Pack::upstream_unknown`].
+    pub fn upstream_unknown(&self) -> Vec<String> {
+        self.packs
+            .iter()
+            .filter(|p| p.upstream_unknown())
+            .map(|p| p.key.clone())
+            .collect()
+    }
+
     /// Build a snapshot from the raw API responses of one profile.
     pub fn from_raw(raw: &RawProfile, reference: &str, fetched_at: &str) -> Result<Snapshot> {
         let prof = &raw.profile;

@@ -23,8 +23,42 @@ pub struct Verification {
     pub diff: Diff,
     /// The live profile as fetched.
     pub live: Snapshot,
-    /// True when the roots are equal.
+    /// True when Palette holds the recorded content: the roots are equal, and no uid names
+    /// another version now.
     pub unchanged: bool,
+    /// The outcome: `unchanged`, `drifted`, or `unverified` when the content is unchanged and a
+    /// pack has no upstream digest. The exit status follows it.
+    pub status: VerifyStatus,
+}
+
+/// What `verify` checks beyond the content.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct VerifyOptions {
+    /// For a profile or cluster record that drifted, read the writes to it from the audit log of
+    /// Palette since the record was taken, into `verify.who`.
+    pub who: bool,
+    /// Accept a pack with no upstream digest: the record is `unchanged` and not `unverified`. The
+    /// report still names the pack.
+    pub allow_no_digest: bool,
+}
+
+/// The outcome of one record, from whether its content is unchanged and which of its packs have
+/// no upstream digest. Drift wins: a record that drifted is `drifted`, whatever its packs.
+fn settle(unchanged: bool, diff: &mut Diff, options: &VerifyOptions) -> VerifyStatus {
+    let status = if !unchanged {
+        VerifyStatus::Drifted
+    } else if !diff.upstream_unknown.is_empty() && !options.allow_no_digest {
+        VerifyStatus::Unverified
+    } else {
+        VerifyStatus::Unchanged
+    };
+    if let Some(v) = diff.verify.as_mut() {
+        v.status = status;
+        if status == VerifyStatus::Unverified {
+            v.upstream_unknown = diff.upstream_unknown.clone();
+        }
+    }
+    status
 }
 
 /// Each profile a cluster runs whose uid no longer names the version the cluster's copy names,
@@ -65,21 +99,26 @@ pub fn verify<A: PaletteApi>(
     checked_at: &str,
     progress: &Progress,
 ) -> Result<Verification> {
-    verify_with(recorded, palette, checked_at, false, progress)
+    verify_with(
+        recorded,
+        palette,
+        checked_at,
+        &VerifyOptions::default(),
+        progress,
+    )
 }
 
-/// [`verify`], and with `who`, for a profile or cluster record that drifted, the writes to it
-/// that the audit log of Palette holds since the record was taken, in `verify.who`.
+/// [`verify`], with the checks that `options` adds.
 pub fn verify_with<A: PaletteApi>(
     recorded: &Snapshot,
     palette: &Palette<A>,
     checked_at: &str,
-    who: bool,
+    options: &VerifyOptions,
     progress: &Progress,
 ) -> Result<Verification> {
     // a pack record names a registry pack, not a profile or a cluster
     if let Some(p) = &recorded.source.pack {
-        if who {
+        if options.who {
             progress
                 .note("note: Palette keeps no audit log for a registry pack; --who reads nothing");
         }
@@ -112,12 +151,15 @@ pub fn verify_with<A: PaletteApi>(
             profiles_overwritten: Vec::new(),
             cluster_values_changed: 0,
             who: None,
+            upstream_unknown: Vec::new(),
         };
-        let diff = diff::compute(recorded, &live, checked_at, Some(verify));
+        let mut diff = diff::compute(recorded, &live, checked_at, Some(verify));
+        let status = settle(unchanged, &mut diff, options);
         return Ok(Verification {
             diff,
             live,
             unchanged,
+            status,
         });
     }
     let uid = recorded.source.shown_uid();
@@ -163,13 +205,14 @@ pub fn verify_with<A: PaletteApi>(
         profiles_overwritten,
         cluster_values_changed: 0,
         who: None,
+        upstream_unknown: Vec::new(),
     };
     let mut diff = diff::compute(recorded, &live, checked_at, Some(verify));
     let values_changed = diff
         .cluster_variables
         .as_ref()
         .map_or(0, |c| c.values.len());
-    let who = if who && !unchanged {
+    let who = if options.who && !unchanged {
         let kind = match recorded.source.cluster {
             Some(_) => "spectrocluster",
             None => "clusterprofile",
@@ -192,10 +235,12 @@ pub fn verify_with<A: PaletteApi>(
         v.cluster_values_changed = values_changed;
         v.who = who;
     }
+    let status = settle(unchanged, &mut diff, options);
     Ok(Verification {
         diff,
         live,
         unchanged,
+        status,
     })
 }
 
@@ -210,6 +255,8 @@ pub enum RecordStatus {
     Unchanged,
     /// The live profile differs from the record.
     Drifted,
+    /// Same content, and a pack has no upstream digest: a change of its archive would not show.
+    Unverified,
     /// The record could not be checked.
     Error,
 }
@@ -223,6 +270,8 @@ pub enum SummaryStatus {
     Unchanged,
     /// At least one record drifted and none failed: exit 1.
     Drifted,
+    /// No record drifted or failed, and at least one is unverified: exit 1.
+    Unverified,
     /// At least one record could not be checked: exit 2.
     Error,
 }
@@ -246,7 +295,12 @@ pub struct VerifyCounts {
     pub drifted: usize,
     /// Records that could not be checked.
     pub errors: usize,
-    /// `error` if any record failed, else `drifted` if any drifted, else `unchanged`.
+    /// Records whose content is unchanged and that hold a pack with no upstream digest; only when
+    /// it is not `0`.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub unverified: usize,
+    /// `error` if any record failed, else `drifted` if any drifted, else `unverified` if any is,
+    /// else `unchanged`.
     pub status: SummaryStatus,
 }
 
@@ -316,6 +370,10 @@ impl VerifiedRecord {
     }
 }
 
+fn is_zero(n: &usize) -> bool {
+    *n == 0
+}
+
 /// The document `verify` writes for several records: `strata-verify-summary/1`.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
@@ -336,11 +394,11 @@ pub struct VerifySummary {
 }
 
 impl VerifySummary {
-    /// The exit status: 0 all unchanged, 1 any drift, 2 any error.
+    /// The exit status: 0 all unchanged, 1 any drift or any unverified record, 2 any error.
     pub fn exit_code(&self) -> u8 {
         match self.summary.status {
             SummaryStatus::Unchanged => 0,
-            SummaryStatus::Drifted => 1,
+            SummaryStatus::Drifted | SummaryStatus::Unverified => 1,
             SummaryStatus::Error => 2,
         }
     }
@@ -348,14 +406,14 @@ impl VerifySummary {
 
 /// Verify several records. Each record is checked in the project it was taken in, or in
 /// `project` when given; `connect` is called once per distinct scope. A record that cannot be
-/// read or checked is an `error` entry, and the other records are still checked. `who` is as in
-/// [`verify_with`].
+/// read or checked is an `error` entry, and the other records are still checked. `options` is as
+/// in [`verify_with`].
 pub fn verify_many<A, F>(
     paths: &[PathBuf],
     project: Option<&str>,
     mut connect: F,
     checked_at: &str,
-    who: bool,
+    options: &VerifyOptions,
     progress: &Progress,
 ) -> VerifySummary
 where
@@ -386,13 +444,13 @@ where
             },
         };
         records.push(
-            match verify_with(&recorded, palette, checked_at, who, progress) {
+            match verify_with(&recorded, palette, checked_at, options, progress) {
                 Ok(v) => VerifiedRecord {
                     path: path.display().to_string(),
-                    status: if v.unchanged {
-                        RecordStatus::Unchanged
-                    } else {
-                        RecordStatus::Drifted
+                    status: match v.status {
+                        VerifyStatus::Unchanged => RecordStatus::Unchanged,
+                        VerifyStatus::Drifted => RecordStatus::Drifted,
+                        VerifyStatus::Unverified => RecordStatus::Unverified,
                     },
                     name: recorded.source.name.clone(),
                     version: recorded.source.version.clone(),
@@ -404,7 +462,8 @@ where
                     max_impact: (!v.unchanged).then_some(v.diff.summary.max_impact),
                     packs_changed: (!v.unchanged).then_some(v.diff.summary.packs_changed),
                     cluster_variables: v.diff.cluster_variables.clone().filter(|c| c.changed),
-                    diff: (!v.unchanged).then_some(v.diff),
+                    // an unverified record keeps its diff too: it names the packs
+                    diff: (v.status != VerifyStatus::Unchanged).then_some(v.diff),
                     error: None,
                 },
                 Err(e) => VerifiedRecord::failed(path, Some(&recorded), e),
@@ -412,15 +471,18 @@ where
         );
     }
     let count = |s: RecordStatus| records.iter().filter(|r| r.status == s).count();
-    let (unchanged, drifted, errors) = (
+    let (unchanged, drifted, unverified, errors) = (
         count(RecordStatus::Unchanged),
         count(RecordStatus::Drifted),
+        count(RecordStatus::Unverified),
         count(RecordStatus::Error),
     );
     let status = if errors > 0 {
         SummaryStatus::Error
     } else if drifted > 0 {
         SummaryStatus::Drifted
+    } else if unverified > 0 {
+        SummaryStatus::Unverified
     } else {
         SummaryStatus::Unchanged
     };
@@ -432,6 +494,7 @@ where
             status: [
                 ("unchanged", "The live profile has the same root as the record."),
                 ("drifted", "The live profile differs from the record: the published version was edited in place, or the record is stale. The diff is attached."),
+                ("unverified", "The live profile has the same content as the record, and a pack has no upstream digest, so a change of its archive would not show. The diff names the packs. --allow-no-digest accepts them."),
                 ("error", "The record could not be checked: the file is not a record, or Palette could not be reached. The error is attached."),
             ]
             .into_iter()
@@ -443,6 +506,7 @@ where
             unchanged,
             drifted,
             errors,
+            unverified,
             status,
         },
         records,

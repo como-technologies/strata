@@ -69,6 +69,11 @@ pub struct Diff {
     /// Present only for `verify`
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub verify: Option<Verify>,
+    /// The key of each pack, on either side, that has no upstream digest, in pack order. For each
+    /// one, a change of its archive does not show, and an equal root does not say the archive is
+    /// the same.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub upstream_unknown: Vec<String>,
 }
 
 /// Plain-language meaning of every flag and enum value, for readers without the docs.
@@ -430,6 +435,10 @@ pub struct PackDiff {
     pub values: ValuesDiff,
     /// Manifest changes by name.
     pub manifests: Vec<ManifestChange>,
+    /// True when either side of the pack has no upstream digest: a change of its archive does
+    /// not show. A manifest pack has no archive, so it is never true for one.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub upstream_unknown: bool,
 }
 
 /// The values of one pack compared.
@@ -497,6 +506,9 @@ pub struct Verify {
     /// the log holds none. Absent without `--who`, for an unchanged record, and for a pack record.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub who: Option<Vec<AuditEntry>>,
+    /// For an `unverified` record: the key of each pack with no upstream digest.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub upstream_unknown: Vec<String>,
 }
 
 /// One write to a profile or a cluster, as the audit log of Palette holds it.
@@ -589,6 +601,9 @@ pub enum VerifyStatus {
     Unchanged,
     /// Different root: the published version was edited, or the record is stale.
     Drifted,
+    /// Same content, and a pack has no upstream digest, so a change of its archive would not
+    /// show. `--allow-no-digest` makes it `unchanged`.
+    Unverified,
 }
 
 enum Seg {
@@ -912,6 +927,7 @@ pub fn compute(a: &Snapshot, b: &Snapshot, generated_at: &str, verify: Option<Ve
                     impact: imp,
                     values: ValuesDiff::default(),
                     manifests: Vec::new(),
+                    upstream_unknown: y.upstream_unknown(),
                 }
             }
             (Some(x), None) => {
@@ -936,6 +952,7 @@ pub fn compute(a: &Snapshot, b: &Snapshot, generated_at: &str, verify: Option<Ve
                     impact: imp,
                     values: ValuesDiff::default(),
                     manifests: Vec::new(),
+                    upstream_unknown: x.upstream_unknown(),
                 }
             }
             (Some(x), Some(y)) => {
@@ -1008,6 +1025,7 @@ pub fn compute(a: &Snapshot, b: &Snapshot, generated_at: &str, verify: Option<Ve
                     impact: imp,
                     values: values_diff(x, y),
                     manifests: manifests_diff(x, y),
+                    upstream_unknown: x.upstream_unknown() || y.upstream_unknown(),
                 }
             }
             (None, None) => unreachable!("key came from one of the maps"),
@@ -1057,6 +1075,11 @@ pub fn compute(a: &Snapshot, b: &Snapshot, generated_at: &str, verify: Option<Ve
             && a.source.uid == b.source.uid
             && a.source.version == b.source.version,
         overwritten_in_place: overwritten_in_place(a, b),
+        upstream_unknown: packs
+            .iter()
+            .filter(|p| p.upstream_unknown)
+            .map(|p| p.key.clone())
+            .collect(),
         root_a: a.root.clone(),
         root_b: b.root.clone(),
         summary,

@@ -6,8 +6,9 @@ use super::{
     dash, edited_in_place_note, entry_error, list_count, list_scope, overwritten_in_place_notes,
     pack_version, pair_detail, pair_word, profiles_overwritten_sentence, project_label,
     record_detail, record_label, registry_note, same_content_note, short, show, subject,
-    tag_rename, traits_suffix, updates_pending_notes, values_changed_suffix, variable_lines,
-    variables_comparable, variables_unavailable_note, version_display, who_entry, who_heading,
+    tag_rename, traits_suffix, unverified_sentence, updates_pending_notes, upstream_unknown_note,
+    values_changed_suffix, variable_lines, variables_comparable, variables_unavailable_note,
+    version_display, who_entry, who_heading,
 };
 use crate::color::Paint;
 use crate::diff::{
@@ -197,6 +198,12 @@ fn packline(pd: &PackDiff, p: &Paint) -> String {
 }
 
 fn packdetail(pd: &PackDiff, p: &Paint, out: &mut Vec<String>) {
+    if pd.upstream_unknown {
+        out.push(format!(
+            "      {}",
+            p.yellow("upstream unknown: no digest, so a change of the archive does not show")
+        ));
+    }
     if pd.upstream
         && let (Some(a), Some(b)) = (&pd.a, &pd.b)
     {
@@ -260,6 +267,9 @@ impl Renderer for TerminalRenderer {
             out.push(format!("note       {}", p.byellow(&note)));
         }
         for note in updates_pending_notes(d) {
+            out.push(format!("note       {}", p.byellow(&note)));
+        }
+        if let Some(note) = upstream_unknown_note(d) {
             out.push(format!("note       {}", p.byellow(&note)));
         }
         if let Some(note) = same_content_note(d) {
@@ -326,6 +336,12 @@ impl Renderer for TerminalRenderer {
                 p.bgreen("OK"),
                 values_changed_suffix(v.cluster_values_changed)
             ),
+            VerifyStatus::Unverified => format!(
+                "{}: {what} has the content recorded {at}, but {}{}",
+                p.byellow("UNVERIFIED"),
+                unverified_sentence(&v.upstream_unknown),
+                values_changed_suffix(v.cluster_values_changed)
+            ),
             VerifyStatus::Drifted => match &v.overwritten_by {
                 _ if !v.profiles_overwritten.is_empty() => format!(
                     "{}: {}{}",
@@ -365,6 +381,7 @@ impl Renderer for TerminalRenderer {
             let word = match r.status {
                 RecordStatus::Unchanged => p.bgreen("OK   "),
                 RecordStatus::Drifted => p.bred("DRIFT"),
+                RecordStatus::Unverified => p.byellow("UNVERIFIED"),
                 RecordStatus::Error => p.byellow("ERROR"),
             };
             out.push_str(&format!(
@@ -387,7 +404,7 @@ impl Renderer for TerminalRenderer {
             let word = match pair.status {
                 PairStatus::Identical | PairStatus::SameContent => p.bgreen(&word),
                 PairStatus::RegistryMove => p.byellow(&word),
-                PairStatus::Different => p.bred(&word),
+                PairStatus::Different | PairStatus::UnknownUpstream => p.bred(&word),
             };
             out.push_str(&format!(
                 "{word}  {} -> {}   {}\n",

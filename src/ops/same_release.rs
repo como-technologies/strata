@@ -36,12 +36,15 @@ pub enum PairStatus {
     RegistryMove,
     /// Not the same release; `reasons` says why.
     Different,
+    /// The roots would pass, and a pack on either side has no upstream digest, so an equal root
+    /// does not show an equal archive. `--allow no-digest` accepts it.
+    UnknownUpstream,
 }
 
 impl PairStatus {
     /// True for the statuses that count as the same release.
     pub fn passed(self) -> bool {
-        self != PairStatus::Different
+        !matches!(self, PairStatus::Different | PairStatus::UnknownUpstream)
     }
 }
 
@@ -85,6 +88,9 @@ pub struct Pair {
     /// Why the pair is not the same release, one sentence per difference; empty when it passed.
     /// Under the exact policy a registry move is listed too, so the reader can decide to allow it.
     pub reasons: Vec<String>,
+    /// The key of each pack, on either side, with no upstream digest; also when it is allowed.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub upstream_unknown: Vec<String>,
 }
 
 /// Counts over the pairs.
@@ -122,6 +128,9 @@ pub struct Chain {
     pub legend: ChainLegend,
     /// The policy applied to every pair.
     pub policy: Policy,
+    /// True when a pack with no upstream digest is accepted: `--allow no-digest`.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub allow_no_digest: bool,
     /// True when every pair passed: the records are one release.
     pub same: bool,
     /// The counts.
@@ -260,13 +269,25 @@ fn pair_reasons(
 /// Compare consecutive records, in the order given, and decide whether they are one release
 /// under `policy`. Fewer than two records is an empty chain that passes.
 pub fn same_release(records: &[(String, Snapshot)], policy: Policy, generated_at: &str) -> Chain {
+    same_release_with(records, policy, false, generated_at)
+}
+
+/// [`same_release`], and with `allow_no_digest`, a pair that holds a pack with no upstream digest
+/// can pass. Without it, such a pair is `unknown-upstream`: a move from a registry that gives a
+/// digest to one that gives none is a loss of what the root can show.
+pub fn same_release_with(
+    records: &[(String, Snapshot)],
+    policy: Policy,
+    allow_no_digest: bool,
+    generated_at: &str,
+) -> Chain {
     let pairs: Vec<Pair> = records
         .windows(2)
         .map(|w| {
             let ((la, a), (lb, b)) = (&w[0], &w[1]);
             let d = diff::compute(a, b, generated_at, None);
-            let (reasons, packs_repinned, packs_retagged) = pair_reasons(&d, a, b, policy);
-            let status = if d.same {
+            let (mut reasons, packs_repinned, packs_retagged) = pair_reasons(&d, a, b, policy);
+            let mut status = if d.same {
                 PairStatus::Identical
             } else if d.same_content {
                 PairStatus::SameContent
@@ -275,6 +296,19 @@ pub fn same_release(records: &[(String, Snapshot)], policy: Policy, generated_at
             } else {
                 PairStatus::Different
             };
+            if !d.upstream_unknown.is_empty() && !allow_no_digest {
+                reasons.push(format!(
+                    "{} no upstream digest, so an equal root does not show an equal archive; \
+                     --allow no-digest accepts it",
+                    match d.upstream_unknown.as_slice() {
+                        [one] => format!("pack {one} has"),
+                        many => format!("packs {} have", many.join(", ")),
+                    }
+                ));
+                if status.passed() {
+                    status = PairStatus::UnknownUpstream;
+                }
+            }
             Pair {
                 a: la.clone(),
                 b: lb.clone(),
@@ -284,6 +318,7 @@ pub fn same_release(records: &[(String, Snapshot)], policy: Policy, generated_at
                 packs_repinned,
                 packs_retagged,
                 reasons,
+                upstream_unknown: d.upstream_unknown,
             }
         })
         .collect();
@@ -316,6 +351,10 @@ pub fn same_release(records: &[(String, Snapshot)], policy: Policy, generated_at
                     "different",
                     "Not the same release; reasons lists each difference.",
                 ),
+                (
+                    "unknown-upstream",
+                    "The roots would pass, and a pack on either side has no upstream digest, so an equal root does not show an equal archive. --allow no-digest accepts it.",
+                ),
             ]),
             policy: m(&[
                 ("exact", "Only equal roots pass."),
@@ -326,6 +365,7 @@ pub fn same_release(records: &[(String, Snapshot)], policy: Policy, generated_at
             ]),
         },
         policy,
+        allow_no_digest,
         same: passed == pairs.len(),
         summary: ChainCounts {
             pairs: pairs.len(),

@@ -248,6 +248,7 @@ pub(crate) fn pair_word(status: PairStatus) -> &'static str {
         PairStatus::SameContent => "SAME CONTENT",
         PairStatus::RegistryMove => "REGISTRY MOVE",
         PairStatus::Different => "DIFFERENT",
+        PairStatus::UnknownUpstream => "NO DIGEST",
     }
 }
 
@@ -272,7 +273,9 @@ pub(crate) fn pair_detail(p: &Pair) -> String {
                 count_of(p.packs_repinned, "pack")
             )
         }
-        PairStatus::Different => format!("root {} -> {}", short(&p.root_a), short(&p.root_b)),
+        PairStatus::Different | PairStatus::UnknownUpstream => {
+            format!("root {} -> {}", short(&p.root_a), short(&p.root_b))
+        }
     }
 }
 
@@ -413,6 +416,21 @@ pub(crate) fn tag_rename(pd: &PackDiff) -> Option<String> {
 
 /// `both sides are name@version (uid u): the version was edited in place`, for a diff whose sides
 /// name one profile version with different content.
+/// The note for the packs with no upstream digest: `pack csi/x has no upstream digest: Palette
+/// gives none, so a change of its archive does not show`. None when every pack has one.
+pub(crate) fn upstream_unknown_note(d: &Diff) -> Option<String> {
+    let (noun, verb) = match d.upstream_unknown.len() {
+        0 => return None,
+        1 => ("pack", "has"),
+        _ => ("packs", "have"),
+    };
+    Some(format!(
+        "{noun} {} {verb} no upstream digest: Palette gives none, so a change of the archive does \
+         not show",
+        d.upstream_unknown.join(", ")
+    ))
+}
+
 /// One note for each cluster side that Palette says is behind its profile: `cluster fred is
 /// behind: an update of strata-live-addon waits, since <time>`. A side read when nothing waited,
 /// or whose notifications were not read, gets none.
@@ -521,6 +539,16 @@ pub(crate) fn record_detail(r: &crate::ops::VerifiedRecord) -> String {
             r.recorded_at,
             values_changed_suffix(record_values_changed(r))
         ),
+        RecordStatus::Unverified => format!(
+            "same content as recorded {}, but {}",
+            r.recorded_at,
+            unverified_sentence(
+                r.diff
+                    .as_ref()
+                    .map(|d| d.upstream_unknown.as_slice())
+                    .unwrap_or_default()
+            )
+        ),
         RecordStatus::Drifted if record_profiles_overwritten(r).is_some() => format!(
             "{}{}{}",
             record_profiles_overwritten(r).unwrap_or_default(),
@@ -565,12 +593,32 @@ pub(crate) fn record_detail(r: &crate::ops::VerifiedRecord) -> String {
 /// `3 records: 2 unchanged, 1 drifted, 0 errors`, and `1 record` for one.
 pub(crate) fn counts_line(s: &VerifySummary) -> String {
     let c = &s.summary;
+    let unverified = if c.unverified > 0 {
+        format!(", {} unverified", c.unverified)
+    } else {
+        String::new()
+    };
     format!(
-        "{}: {} unchanged, {} drifted, {}",
+        "{}: {} unchanged, {} drifted{unverified}, {}",
         count_of(c.records, "record"),
         c.unchanged,
         c.drifted,
         count_of(c.errors, "error")
+    )
+}
+
+/// Why a record is unverified: `pack csi/x has no upstream digest, so a change of its archive
+/// would not show; --allow-no-digest accepts it`.
+pub(crate) fn unverified_sentence(packs: &[String]) -> String {
+    let (noun, verb) = if packs.len() == 1 {
+        ("pack", "has")
+    } else {
+        ("packs", "have")
+    };
+    format!(
+        "{noun} {} {verb} no upstream digest, so a change of the archive would not show; \
+         --allow-no-digest accepts it",
+        packs.join(", ")
     )
 }
 

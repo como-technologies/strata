@@ -6,9 +6,9 @@ use super::{
     dash, edited_in_place_note, entry_error, list_count, list_scope, overwritten_in_place_notes,
     pack_version, pair_detail, pair_word, plain_flags, profiles_overwritten_sentence,
     project_label, record_detail, record_label, registry_note, same_content_note, short, show,
-    subject, traits_suffix, updates_pending_notes, values_changed, values_changed_suffix,
-    variable_lines, variables_comparable, variables_unavailable_note, version_display, who_entry,
-    who_heading,
+    subject, traits_suffix, unverified_sentence, updates_pending_notes, upstream_unknown_note,
+    values_changed, values_changed_suffix, variable_lines, variables_comparable,
+    variables_unavailable_note, version_display, who_entry, who_heading,
 };
 use crate::color::Paint;
 use crate::diff::{Diff, Leaf, Op, Status, Verify, VerifyStatus};
@@ -116,6 +116,9 @@ impl Renderer for MarkdownRenderer {
             o.push_str(&format!("**Note:** {note}\n\n"));
         }
         for note in updates_pending_notes(d) {
+            o.push_str(&format!("**Note:** {note}\n\n"));
+        }
+        if let Some(note) = upstream_unknown_note(d) {
             o.push_str(&format!("**Note:** {note}\n\n"));
         }
         if let Some(note) = same_content_note(d) {
@@ -247,6 +250,11 @@ impl Renderer for MarkdownRenderer {
                 "\n**OK**: {what} is unchanged since {at}{}",
                 values_changed_suffix(v.cluster_values_changed)
             ),
+            VerifyStatus::Unverified => format!(
+                "\n**UNVERIFIED**: {what} has the content recorded {at}, but {}{}",
+                unverified_sentence(&v.upstream_unknown),
+                values_changed_suffix(v.cluster_values_changed)
+            ),
             VerifyStatus::Drifted => match &v.overwritten_by {
                 _ if !v.profiles_overwritten.is_empty() => format!(
                     "\n**DRIFT**: {}{}",
@@ -283,6 +291,7 @@ impl Renderer for MarkdownRenderer {
             let word = match r.status {
                 RecordStatus::Unchanged => "OK",
                 RecordStatus::Drifted => "DRIFT",
+                RecordStatus::Unverified => "UNVERIFIED",
                 RecordStatus::Error => "ERROR",
             };
             o.push_str(&format!(

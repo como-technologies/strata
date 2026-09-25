@@ -556,7 +556,14 @@ fn verify_many_checks_each_record_in_its_own_scope_and_counts_the_outcomes() {
     };
 
     let paths = [rec_p1.clone(), rec_p2.clone(), not_a_record.clone()];
-    let s = ops::verify_many(&paths, None, connect, "t1", false, &Progress::silent());
+    let s = ops::verify_many(
+        &paths,
+        None,
+        connect,
+        "t1",
+        &ops::VerifyOptions::default(),
+        &Progress::silent(),
+    );
     assert_eq!(s.schema, "strata-verify-summary/1");
     let statuses: Vec<RecordStatus> = s.records.iter().map(|r| r.status).collect();
     assert_eq!(
@@ -605,7 +612,14 @@ fn verify_many_checks_each_record_in_its_own_scope_and_counts_the_outcomes() {
     assert!(failed.name.is_empty());
 
     // every record unchanged is exit 0
-    let s = ops::verify_many(&paths[..1], None, connect, "t1", false, &Progress::silent());
+    let s = ops::verify_many(
+        &paths[..1],
+        None,
+        connect,
+        "t1",
+        &ops::VerifyOptions::default(),
+        &Progress::silent(),
+    );
     assert_eq!(s.summary.status, SummaryStatus::Unchanged);
     assert_eq!(s.exit_code(), 0);
 
@@ -616,7 +630,7 @@ fn verify_many_checks_each_record_in_its_own_scope_and_counts_the_outcomes() {
         Some("p9"),
         connect,
         "t1",
-        false,
+        &ops::VerifyOptions::default(),
         &Progress::silent(),
     );
     assert_eq!(*scopes.borrow(), vec![Some("p9".to_string())]);
@@ -696,7 +710,14 @@ fn a_record_rebuilt_from_a_raw_directory_is_verified_in_its_own_project() {
             _ => MemoryApi::new(),
         }))
     };
-    let s = ops::verify_many(&[record], None, connect, "t2", false, &Progress::silent());
+    let s = ops::verify_many(
+        &[record],
+        None,
+        connect,
+        "t2",
+        &ops::VerifyOptions::default(),
+        &Progress::silent(),
+    );
     assert_eq!(
         *scopes.borrow(),
         vec![Some("p1".to_string())],
@@ -3516,7 +3537,7 @@ fn verify_names_a_cluster_value_changed_since_the_record_without_calling_it_drif
         None,
         |_| Ok(Palette::new(live.clone())),
         "t1",
-        false,
+        &ops::VerifyOptions::default(),
         &Progress::silent(),
     );
     assert_eq!(
@@ -3746,7 +3767,7 @@ fn verify_reports_a_version_overwritten_under_the_same_uid_even_when_the_root_ma
         None,
         |_| Ok(Palette::new(live.clone())),
         "t1",
-        false,
+        &ops::VerifyOptions::default(),
         &Progress::silent(),
     );
     assert_eq!(
@@ -4554,7 +4575,7 @@ fn verify_reports_drift_and_names_the_order_when_only_the_order_of_the_packs_cha
         None,
         |_| Ok(Palette::new(live.clone())),
         "t1",
-        false,
+        &ops::VerifyOptions::default(),
         &Progress::silent(),
     );
     assert_eq!(
@@ -4642,7 +4663,10 @@ fn verify_who_reads_every_page_of_the_audit_log_and_lists_the_writes_oldest_firs
         &recorded,
         &Palette::new(&api),
         "t1",
-        true,
+        &ops::VerifyOptions {
+            who: true,
+            ..Default::default()
+        },
         &Progress::silent(),
     )
     .unwrap();
@@ -4701,7 +4725,10 @@ fn verify_who_says_so_when_the_log_holds_no_write_and_reads_nothing_for_an_uncha
         &recorded,
         &Palette::new(&api),
         "t1",
-        true,
+        &ops::VerifyOptions {
+            who: true,
+            ..Default::default()
+        },
         &Progress::silent(),
     )
     .unwrap();
@@ -4723,7 +4750,10 @@ fn verify_who_says_so_when_the_log_holds_no_write_and_reads_nothing_for_an_uncha
         &recorded,
         &Palette::new(&same),
         "t1",
-        true,
+        &ops::VerifyOptions {
+            who: true,
+            ..Default::default()
+        },
         &Progress::silent(),
     )
     .unwrap();
@@ -4762,7 +4792,10 @@ fn verify_who_reads_the_audit_log_of_the_cluster_for_a_cluster_record() {
         &recorded,
         &Palette::new(&api),
         "t1",
-        true,
+        &ops::VerifyOptions {
+            who: true,
+            ..Default::default()
+        },
         &Progress::silent(),
     )
     .unwrap();
@@ -4784,7 +4817,10 @@ fn verify_who_encodes_a_time_with_an_offset_in_the_query() {
         &recorded,
         &Palette::new(&api),
         "t1",
-        true,
+        &ops::VerifyOptions {
+            who: true,
+            ..Default::default()
+        },
         &Progress::silent(),
     )
     .unwrap();
@@ -4816,7 +4852,10 @@ fn verify_who_names_the_last_write_on_the_summary_line_of_a_drifted_record() {
         None,
         |_| Ok(Palette::new(api.clone())),
         "t1",
-        true,
+        &ops::VerifyOptions {
+            who: true,
+            ..Default::default()
+        },
         &Progress::silent(),
     );
     let text = render::renderer(Format::Terminal, Paint::off(), false)
@@ -5041,4 +5080,231 @@ fn list_and_compare_name_a_cluster_that_is_behind() {
         .render(&d, &before, &before, false)
         .unwrap();
     assert!(!text.contains("is behind"), "{text}");
+}
+
+// ---- a pack with no upstream digest ------------------------------------------------------------
+
+/// Fixture `a` as `dir`, with no digest for the OS pack anywhere: not on its pack reference, and
+/// not in the pack summary. Palette gives such a pack for a registry it does not sync.
+fn without_digest(raw_root: &Path, dir: &str) -> Snapshot {
+    let (from, to) = (raw_root.join("a"), raw_root.join(dir));
+    fs::create_dir_all(&to).unwrap();
+    let mut profile = read(&from.join("profile.json"));
+    for pack in profile["spec"]["published"]["packs"]
+        .as_array_mut()
+        .unwrap()
+    {
+        if pack["name"] == "ubuntu-aws" {
+            pack["digest"] = Value::from("");
+        }
+    }
+    let mut manifests = read(&from.join("manifests.json"));
+    for pack in manifests["spec"]["packs"].as_array_mut().unwrap() {
+        if pack["spec"]["name"] == "ubuntu-aws" {
+            pack["spec"]["digest"] = Value::from("");
+        }
+    }
+    for (name, doc) in [("profile.json", &profile), ("manifests.json", &manifests)] {
+        fs::write(to.join(name), serde_json::to_string_pretty(doc).unwrap()).unwrap();
+    }
+    fs::copy(from.join("variables.json"), to.join("variables.json")).unwrap();
+    ops::snapshot_from_dir(&to, dir, "t0").unwrap()
+}
+
+#[test]
+fn a_pack_with_no_digest_makes_verify_unverified_and_names_the_pack() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let recorded = without_digest(dir.path(), "nodigest");
+    let os = recorded
+        .packs
+        .iter()
+        .find(|p| p.name == "ubuntu-aws")
+        .unwrap();
+    assert_eq!(os.hash.upstream_source, "none");
+    assert_eq!(recorded.upstream_unknown(), ["os/ubuntu-aws"]);
+
+    // the same content, and the empty digest on both sides: the upstream check cannot fail
+    let api = serve(MemoryApi::new(), dir.path(), "nodigest", UID_A);
+    let v = ops::verify(&recorded, &Palette::new(&api), "t1", &Progress::silent()).unwrap();
+    assert!(v.unchanged, "the content is the same");
+    assert_eq!(v.status, VerifyStatus::Unverified);
+    let ver = v.diff.verify.as_ref().unwrap();
+    assert_eq!(ver.upstream_unknown, ["os/ubuntu-aws"]);
+    let verdict = render::renderer(Format::Terminal, Paint::off(), false)
+        .verdict(ver, &recorded.source)
+        .unwrap();
+    assert!(
+        verdict.starts_with("UNVERIFIED: published version lab-profile@1.2.0 has the content recorded t0, but pack os/ubuntu-aws has no upstream digest, so a change of the archive would not show; --allow-no-digest accepts it"),
+        "{verdict}"
+    );
+    let json = serde_json::to_value(&v.diff).unwrap();
+    assert_eq!(json["verify"]["status"], "unverified");
+    assert_eq!(json["upstreamUnknown"][0], "os/ubuntu-aws");
+
+    // a team that accepts it gets unchanged, and the report still names the pack
+    let allow = ops::VerifyOptions {
+        allow_no_digest: true,
+        ..Default::default()
+    };
+    let v = ops::verify_with(
+        &recorded,
+        &Palette::new(&api),
+        "t1",
+        &allow,
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert_eq!(v.status, VerifyStatus::Unchanged);
+    let text = render::renderer(Format::Terminal, Paint::off(), false)
+        .render(&v.diff, &recorded, &v.live, false)
+        .unwrap();
+    assert!(
+        text.contains("note       pack os/ubuntu-aws has no upstream digest: Palette gives none, so a change of the archive does not show\n"),
+        "{text}"
+    );
+
+    // drift wins: a record that also changed is drifted
+    let changed = serve(MemoryApi::new(), dir.path(), "b", UID_A);
+    let v = ops::verify(
+        &recorded,
+        &Palette::new(&changed),
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert_eq!(v.status, VerifyStatus::Drifted);
+}
+
+#[test]
+fn many_records_count_an_unverified_one_and_exit_1() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let recorded = without_digest(dir.path(), "nodigest");
+    let path = dir.path().join("rec.json");
+    fs::write(&path, recorded.to_json(true).unwrap()).unwrap();
+    let api = serve(MemoryApi::new(), dir.path(), "nodigest", UID_A);
+    let s = ops::verify_many(
+        std::slice::from_ref(&path),
+        None,
+        |_| Ok(Palette::new(api.clone())),
+        "t1",
+        &ops::VerifyOptions::default(),
+        &Progress::silent(),
+    );
+    assert_eq!(
+        (s.records[0].status, s.summary.unverified, s.exit_code()),
+        (RecordStatus::Unverified, 1, 1)
+    );
+    let text = render::renderer(Format::Terminal, Paint::off(), false)
+        .render_verify_summary(&s)
+        .unwrap();
+    assert!(text.contains("UNVERIFIED"), "{text}");
+    assert!(
+        text.contains("same content as recorded t0, but pack os/ubuntu-aws has no upstream digest"),
+        "{text}"
+    );
+    assert!(
+        text.contains("1 record: 0 unchanged, 0 drifted, 1 unverified, no errors"),
+        "{text}"
+    );
+    let allowed = ops::verify_many(
+        &[path],
+        None,
+        |_| Ok(Palette::new(api.clone())),
+        "t1",
+        &ops::VerifyOptions {
+            allow_no_digest: true,
+            ..Default::default()
+        },
+        &Progress::silent(),
+    );
+    assert_eq!(allowed.exit_code(), 0);
+}
+
+#[test]
+fn compare_names_a_pack_with_no_digest_beside_its_line() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let a = without_digest(dir.path(), "nodigest");
+    let b = without_digest(dir.path(), "nodigest2");
+    let d = ops::compare(&a, &b, "t1");
+    assert!(
+        d.same,
+        "equal roots: the empty digest hashes the same on both sides"
+    );
+    assert_eq!(d.upstream_unknown, ["os/ubuntu-aws"]);
+    let os = d.packs.iter().find(|p| p.name == "ubuntu-aws").unwrap();
+    assert!(os.upstream_unknown);
+    let text = render::renderer(Format::Terminal, Paint::off(), false)
+        .render(&d, &a, &b, false)
+        .unwrap();
+    assert!(
+        text.contains("upstream unknown: no digest, so a change of the archive does not show"),
+        "{text}"
+    );
+    let md = render::renderer(Format::Markdown, Paint::off(), false)
+        .render(&d, &a, &b, false)
+        .unwrap();
+    assert!(
+        md.contains("**Note:** pack os/ubuntu-aws has no upstream digest"),
+        "{md}"
+    );
+    // a record with every digest names nothing
+    let full = ops::snapshot_from_dir(&dir.path().join("a"), "a", "t0").unwrap();
+    assert!(ops::compare(&full, &full, "t1").upstream_unknown.is_empty());
+}
+
+#[test]
+fn a_manifest_pack_has_no_archive_and_is_never_upstream_unknown() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let mut recorded = ops::snapshot_from_dir(&dir.path().join("a"), "a", "t0").unwrap();
+    let pack = &mut recorded.packs[0];
+    pack.hash.upstream_source = "none".to_string();
+    pack.kind = "manifest".to_string();
+    assert!(!pack.upstream_unknown());
+    pack.kind = "helm".to_string();
+    assert!(pack.upstream_unknown());
+}
+
+#[test]
+fn same_release_refuses_a_pair_with_no_digest_unless_allowed() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let records = vec![
+        ("a.json".to_string(), without_digest(dir.path(), "nodigest")),
+        (
+            "b.json".to_string(),
+            without_digest(dir.path(), "nodigest2"),
+        ),
+    ];
+    let c = ops::same_release(&records, Policy::Exact, "t1");
+    assert_eq!(c.pairs[0].status, PairStatus::UnknownUpstream);
+    assert!(!c.same);
+    assert_eq!(c.exit_code(), 1);
+    assert!(
+        c.pairs[0].reasons.iter().any(|r| r
+            == "pack os/ubuntu-aws has no upstream digest, so an equal root does not show an equal archive; --allow no-digest accepts it"),
+        "{:?}",
+        c.pairs[0].reasons
+    );
+    let allowed = ops::same_release_with(&records, Policy::Exact, true, "t1");
+    assert_eq!(allowed.pairs[0].status, PairStatus::Identical);
+    assert_eq!(allowed.pairs[0].upstream_unknown, ["os/ubuntu-aws"]);
+    assert!(allowed.same);
+
+    // a move from a registry that gives a digest to one that gives none: different, and it says so
+    let full = ops::snapshot_from_dir(&dir.path().join("a"), "a", "t0").unwrap();
+    let moved = vec![("a.json".to_string(), full), records[1].clone()];
+    let c = ops::same_release(&moved, Policy::Exact, "t1");
+    assert_eq!(c.pairs[0].status, PairStatus::Different);
+    assert!(
+        c.pairs[0]
+            .reasons
+            .iter()
+            .any(|r| r.contains("has no upstream digest")),
+        "{:?}",
+        c.pairs[0].reasons
+    );
 }

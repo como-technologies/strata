@@ -207,6 +207,9 @@ struct VerifyArgs {
     /// For a record that drifted, read who changed it, and when, from the audit log of Palette
     #[arg(long)]
     who: bool,
+    /// Accept a pack with no upstream digest: exit 0 and not 1, and still name it
+    #[arg(long)]
+    allow_no_digest: bool,
     #[command(flatten)]
     out: OutputArgs,
 }
@@ -216,9 +219,9 @@ struct SameReleaseArgs {
     /// Two or more refs, in promotion order
     #[arg(required = true, num_args = 2..)]
     records: Vec<String>,
-    /// Pass a pair that differs only in this way
+    /// Pass a pair that differs only in this way; give it more than one time for more
     #[arg(long, value_enum)]
-    allow: Option<Allow>,
+    allow: Vec<Allow>,
     #[command(flatten)]
     out: OutputArgs,
 }
@@ -298,6 +301,8 @@ impl From<KindArg> for ListKind {
 enum Allow {
     /// Packs from another registry, with the same tag, version, values, and manifests
     RegistryMove,
+    /// A pack with no upstream digest, whose archive the root cannot show
+    NoDigest,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, ValueEnum)]
@@ -697,13 +702,17 @@ fn cmd_verify(a: &VerifyArgs) -> Result<ExitCode> {
     let paths = expand_records(&a.snapshots)?;
     let project = project_arg(progress, &a.project, &a.project_name)?;
     let bulk = a.summary || a.snapshots.len() > 1 || a.snapshots.iter().any(|s| is_pattern(s));
+    let options = ops::VerifyOptions {
+        who: a.who,
+        allow_no_digest: a.allow_no_digest,
+    };
     if bulk {
         let s = ops::verify_many(
             &paths,
             project.as_deref(),
             |scope| connect(progress, scope),
             &now_utc(),
-            a.who,
+            &options,
             &progress,
         );
         print!("{}", a.out.renderer().render_verify_summary(&s)?);
@@ -714,7 +723,7 @@ fn cmd_verify(a: &VerifyArgs) -> Result<ExitCode> {
         .as_deref()
         .or(Some(recorded.source.project_uid.as_str()).filter(|p| !p.is_empty()));
     let palette = connect(progress, scope)?;
-    let v = ops::verify_with(&recorded, &palette, &now_utc(), a.who, &progress)?;
+    let v = ops::verify_with(&recorded, &palette, &now_utc(), &options, &progress)?;
     let renderer = a.out.renderer();
     print!("{}", renderer.render(&v.diff, &recorded, &v.live, false)?);
     if let Some(line) = v
@@ -725,7 +734,7 @@ fn cmd_verify(a: &VerifyArgs) -> Result<ExitCode> {
     {
         println!("{line}");
     }
-    Ok(exit_for(v.unchanged))
+    Ok(exit_for(v.status == diff::VerifyStatus::Unchanged))
 }
 
 fn cmd_same_release(a: &SameReleaseArgs) -> Result<ExitCode> {
@@ -736,11 +745,12 @@ fn cmd_same_release(a: &SameReleaseArgs) -> Result<ExitCode> {
         let snap = ops::snapshot_for(&Ref::parse(r), || connect(progress, None), &now, &progress)?;
         records.push((r.clone(), snap));
     }
-    let policy = match a.allow {
-        Some(Allow::RegistryMove) => Policy::RegistryMove,
-        None => Policy::Exact,
+    let policy = if a.allow.contains(&Allow::RegistryMove) {
+        Policy::RegistryMove
+    } else {
+        Policy::Exact
     };
-    let c = ops::same_release(&records, policy, &now);
+    let c = ops::same_release_with(&records, policy, a.allow.contains(&Allow::NoDigest), &now);
     print!("{}", a.out.renderer().render_chain(&c)?);
     Ok(ExitCode::from(c.exit_code()))
 }
