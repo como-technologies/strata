@@ -25,6 +25,8 @@ const A114: &str = "64e0000000000000000000f7";
 const A115: &str = "64e0000000000000000000f8";
 // aws-stack@1.1.6: the content of 1.1.1, with one more kubeadm command in the Kubernetes pack
 const A116: &str = "64e0000000000000000000f9";
+// aws-stack@1.1.7: the content of 1.1.1, with Kubernetes 1.36.3 in place of 1.36.2
+const A117: &str = "64e0000000000000000000fa";
 const ADDONS_DEV: &str = "64e2000000000000000000a1";
 const ADDONS_PROD: &str = "64e3000000000000000000a1";
 const ADDONS_PROD2: &str = "64e3000000000000000000a2";
@@ -1176,7 +1178,7 @@ fn use_cases(r: &mut Runner) {
     r.excerpt(
         "repave-kubeadm-lines",
         "repave-kubeadm",
-        r"^(aws-stack|root |note |palette|  \[k8s|      impact)",
+        r"^(aws-stack|root |note |palette|[ ~] \[k8s|      impact)",
     );
     r.step(
         "repave-kubeadm-json",
@@ -1194,7 +1196,29 @@ fn use_cases(r: &mut Runner) {
     r.excerpt(
         "repave-csi-lines",
         "repave-csi",
-        r"^(aws-stack|root |note |palette|  \[csi|      impact)",
+        r"^(aws-stack|root |note |palette|[ ~] \[csi|      impact)",
+    );
+    r.profile(
+        DEV,
+        A117,
+        "1.1.7",
+        "aws-stack@1.1.1",
+        &[Edit::Upgrade {
+            pack: "kubernetes",
+            uid: "64ea0000000000000000a117",
+            version: "1.36.3",
+        }],
+    );
+    r.step(
+        "repave-disagree",
+        1,
+        false,
+        "strata compare cluster:payments aws-stack@1.1.7 --repave",
+    );
+    r.excerpt(
+        "repave-disagree-lines",
+        "repave-disagree",
+        r"^(aws-stack|root |note |palette|[ ~] \[k8s|      impact)",
     );
     r.step(
         "repave-usage",

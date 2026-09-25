@@ -38,6 +38,16 @@ pub enum Edit {
     /// Add one command to `kubeadmconfig.postKubeadmCommands` of the Kubernetes pack: a key that
     /// Palette repaves on.
     KubeadmCommand(&'static str),
+    /// Move a pack to another version: its `packUid`, tag, and version change, as an upgrade of
+    /// the pack does. The impact table calls this a repave for the OS and Kubernetes layers.
+    Upgrade {
+        /// The pack that moves.
+        pack: &'static str,
+        /// The `packUid` of the other version.
+        uid: &'static str,
+        /// The other version, also its tag.
+        version: &'static str,
+    },
     /// Remove the digest of a pack, on its pack reference and in its pack summary, as a registry
     /// that Palette does not sync gives it.
     NoDigest(&'static str),
@@ -117,6 +127,19 @@ impl Edit {
                             &format!("{anchor}    - '{command}'\n"),
                             1
                         ));
+                    }
+                }
+            }
+            Edit::Upgrade {
+                pack: name,
+                uid,
+                version,
+            } => {
+                for pack in packs_mut(doc) {
+                    if pack["name"] == *name {
+                        pack["packUid"] = json!(uid);
+                        pack["tag"] = json!(version);
+                        pack["version"] = json!(version);
                     }
                 }
             }
