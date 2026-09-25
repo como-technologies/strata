@@ -66,6 +66,10 @@ does.
   them in each report.
 - Keep macro values out of the fields that repave a cluster, such as
   `kubeadmconfig.postKubeadmCommands`. See the Palette behavior below.
+- Do not count on the `immutable-clusterprofiles` flag of the Spectro Cloud
+  provider here. It applies to `spectrocloud_cluster_profile` alone: it keeps a
+  published version the same, and not the value of a macro that the version
+  reads. `spectrocloud_macros` updates in place, with the flag on or off.
 
 ## Palette behavior
 
