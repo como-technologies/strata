@@ -24,18 +24,25 @@ impl HttpApi {
     }
 }
 
-impl PaletteApi for HttpApi {
-    fn get_json(&self, path: &str) -> Result<Value> {
-        let url = format!("{}{}", self.config.base_url, path);
-        let mut req = self
-            .agent
-            .get(url.as_str())
+impl HttpApi {
+    /// The headers every request carries: the key, JSON, and the project when there is one.
+    fn headers<B>(&self, req: ureq::RequestBuilder<B>) -> ureq::RequestBuilder<B> {
+        let req = req
             .header("ApiKey", self.config.api_key.as_str())
             .header("Accept", "application/json");
-        if let Some(p) = &self.config.project_uid {
-            req = req.header("ProjectUid", p.as_str());
+        match &self.config.project_uid {
+            Some(p) => req.header("ProjectUid", p.as_str()),
+            None => req,
         }
-        let mut resp = req.call().map_err(|e| Error::Transport {
+    }
+
+    /// The JSON of a response, or the error it stands for: a status out of 2xx, a body that could
+    /// not be read, or a body that is not JSON.
+    fn read(
+        path: &str,
+        answer: std::result::Result<ureq::http::Response<ureq::Body>, ureq::Error>,
+    ) -> Result<Value> {
+        let mut resp = answer.map_err(|e| Error::Transport {
             path: path.to_string(),
             message: e.to_string(),
         })?;
@@ -70,6 +77,21 @@ impl PaletteApi for HttpApi {
             path: path.to_string(),
             source,
         })
+    }
+}
+
+impl PaletteApi for HttpApi {
+    fn get_json(&self, path: &str) -> Result<Value> {
+        let url = format!("{}{}", self.config.base_url, path);
+        Self::read(path, self.headers(self.agent.get(url.as_str())).call())
+    }
+
+    fn post_json(&self, path: &str, body: &Value) -> Result<Value> {
+        let url = format!("{}{}", self.config.base_url, path);
+        let req = self
+            .headers(self.agent.post(url.as_str()))
+            .header("Content-Type", "application/json");
+        Self::read(path, req.send(body.to_string()))
     }
 
     fn project_uid(&self) -> Option<&str> {

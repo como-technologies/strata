@@ -319,6 +319,15 @@ impl<A: PaletteApi> Palette<A> {
         ))
     }
 
+    /// Palette's answer to whether a change of the profiles of a cluster replaces its nodes:
+    /// `POST /v1/spectroclusters/{uid}/validate/repave`. The request changes nothing.
+    pub fn validate_repave(&self, uid: &str, body: &Value) -> Result<Value> {
+        self.api.post_json(
+            &format!("/v1/spectroclusters/{}/validate/repave", query_value(uid)),
+            body,
+        )
+    }
+
     /// The notifications of one cluster, `GET /v1/notifications/spectrocluster/{uid}`, every page,
     /// newest first. Palette gives `items: null` when there are none, and at most 50 on a page;
     /// `listmeta.continue` names the next page, and is empty on the last one.

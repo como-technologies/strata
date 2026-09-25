@@ -9,6 +9,7 @@ Arguments:
 
 Options:
       --full             Also print the unified diffs of the values and the manifests
+      --repave           Ask Palette if the change repaves the cluster side; one side must be a cluster
       --format <FORMAT>  The report format: terminal, markdown, or json [default: terminal]
       --json             The same as --format json
       --color [<COLOR>]  Color the report: auto, always, or never [default: auto]

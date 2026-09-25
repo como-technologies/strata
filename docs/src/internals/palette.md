@@ -545,6 +545,16 @@ registry, and for a Helm registry over HTTP with no credentials, every record of
 every run carries a pack-ref digest, and no check asserts it. No run shows a
 pack with no digest.
 
+Every live run used one cloud, AWS, and one upgrade engine: a kubeadm cluster
+that Palette builds with the cluster API. The public pages give other rules. On
+an Edge cluster a change to the Kubernetes layer repaves nothing, and on the OS
+layer only the `uri` repaves; a managed cluster takes a rolling upgrade for any
+override of a node pool
+([Node pools](https://docs.spectrocloud.com/clusters/cluster-management/node-pool/),
+[Upgrade behavior](https://docs.spectrocloud.com/clusters/edge/cluster-management/upgrade-behavior/)).
+No run shows any of this, so the table of impact levels is not scoped by a
+live result, and `compare --repave` is how a reader asks Palette.
+
 These are open:
 
 - A Helm registry that Palette does not sync, such as a chart repository over

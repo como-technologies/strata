@@ -280,6 +280,15 @@ impl Runner {
         self.tenant.on_cluster_reclaim(project, uid, policy);
     }
 
+    /// The answer that Palette gives when asked if a change repaves a cluster.
+    pub fn repave_answer(&mut self, project: &str, cluster: &str, required: bool) {
+        if !self.building() {
+            return;
+        }
+        self.changed();
+        self.tenant.repave_answer(project, cluster, required);
+    }
+
     /// Give a project macro a value, and let each cluster of the project resolve it again.
     pub fn set_macro(&mut self, project: &str, name: &str, value: &str) {
         if !self.building() {

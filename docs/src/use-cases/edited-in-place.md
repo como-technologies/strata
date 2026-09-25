@@ -81,6 +81,17 @@ The cluster is behind its profile until it takes the update. A record of the
 cluster says `updatesPending: true`: see
 [Whether an update waits](../commands/snapshot.md#whether-an-update-waits).
 
+Before anybody accepts the update, ask Palette if it replaces the nodes:
+
+```text
+{{#include ../output/edited-repave-lines.txt}}
+```
+
+The `palette` line is Palette's own answer for `payments`, and the level above
+it is strata's hint. Here a change of the CSI values repaves nothing, and the
+two agree. See
+[Ask Palette if the change repaves](../commands/compare.md#ask-palette-if-the-change-repaves).
+
 ### Read the two verdicts as a pair
 
 The release record and the cluster record answer different questions, and the

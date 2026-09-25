@@ -6,6 +6,8 @@ program can use the same parts:
 | Item | Function |
 | --- | --- |
 | `api::PaletteApi` | The Palette API. `HttpApi` calls Palette. `MemoryApi` serves documents from memory, for tests. |
+| `api::PaletteApi::post_json` | A `POST` that asks a question and changes nothing. `HttpApi` and `Retry` send it, and `MemoryApi::posted` keeps each body for a test. An API that cannot send it says so. |
+| `api::Palette::validate_repave`, `ops::palette_repave`, `diff::PaletteRepave` | Palette's answer to whether a change of the profiles of a cluster replaces its nodes, for a cluster and a profile version, with its reasons and whether it agrees with the impact table. |
 | `api::Palette` | The client over a `PaletteApi`: the reads of a profile, a cluster, and a cluster summary. `audits`, `cluster_notifications`, and `resolved_values` read the audit log of a resource, the notifications of a cluster, and the value Palette gives each macro of a cluster. `api::Retry` tries a transient failure again. |
 | `config::Config` | Where Palette is, and the key. `Config::from_env` reads the environment and then `~/.palette.env`, as the command does. |
 | `reference::Ref` | What a ref means: a record file, `<name>@<version>`, a uid, `cluster:<name>`, or `pack:<name>@<version>`. |

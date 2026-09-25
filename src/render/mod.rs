@@ -452,6 +452,45 @@ pub(crate) fn macros_changed_note(d: &Diff) -> Option<String> {
     })
 }
 
+/// Palette's answer to `--repave`, one line for each reason: `repave: PackValuesUpdated
+/// kubernetes (kubeadmconfig.postKubeadmCommands)`, or `no repave`. Empty without the option.
+pub(crate) fn palette_repave_lines(d: &Diff) -> Vec<String> {
+    let Some(r) = &d.palette_repave else {
+        return Vec::new();
+    };
+    if !r.required {
+        return vec!["no repave".to_string()];
+    }
+    if r.reasons.is_empty() {
+        return vec!["repave".to_string()];
+    }
+    r.reasons
+        .iter()
+        .map(|x| {
+            let keys = if x.keys.is_empty() {
+                String::new()
+            } else {
+                format!(" ({})", x.keys.join(", "))
+            };
+            format!("repave: {} {}{keys}", x.code, dash(&x.pack))
+        })
+        .collect()
+}
+
+/// The note when the impact table and Palette disagree about a repave.
+pub(crate) fn palette_repave_note(d: &Diff) -> Option<String> {
+    let r = d.palette_repave.as_ref().filter(|r| !r.agrees)?;
+    let level = serde_json::to_value(d.summary.max_impact)
+        .ok()
+        .and_then(|v| v.as_str().map(str::to_string))
+        .unwrap_or_default();
+    Some(format!(
+        "the impact table says {level}, and Palette says {} for this cluster: the table does not \
+         describe its upgrade engine",
+        if r.required { "repave" } else { "no repave" }
+    ))
+}
+
 /// The note for the packs with no upstream digest: `pack csi/x has no upstream digest: Palette
 /// gives none, so a change of its archive does not show`. None when every pack has one.
 pub(crate) fn upstream_unknown_note(d: &Diff) -> Option<String> {

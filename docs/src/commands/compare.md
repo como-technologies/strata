@@ -52,10 +52,62 @@ length at which the report cuts.
 ```
 
 `IDENTITY` with a new pack uid on the OS or Kubernetes layer means a new pack
-build: Palette replaces the nodes (`repave`). Schedule a maintenance window for
-this release. `IDENTITY` with the same pack uid and another tag name replaces no
+build: on a kubeadm cluster, Palette replaces the nodes (`repave`). Schedule a
+maintenance window for this release. The level is a hint from a table that
+describes one upgrade engine: see
+[Ask Palette if the change repaves](#ask-palette-if-the-change-repaves). `IDENTITY` with the same pack uid and another tag name replaces no
 node: see
 [One pack build under two tag names](../use-cases/tag-name.md).
+
+## Ask Palette if the change repaves
+
+The `repave` level comes from a table, and Palette does not use that table. For
+a cluster, Palette answers the question itself. `--repave` sends it the
+change from what the cluster runs to a profile version, and prints the answer
+beside the level. One side must be a cluster, and the other a profile version
+that Palette holds, in either order:
+
+```text
+{{#include ../output/repave-kubeadm-lines.txt}}
+```
+
+The `palette` line gives Palette's reason: the code, the pack, and the config
+keys that differ. Strata does not compare the values: Palette does. The key
+`kubeadmconfig.postKubeadmCommands` is on its list, and a change of a key that
+is not on it repaves nothing. A change of the CSI values does not:
+
+```text
+{{#include ../output/repave-csi-lines.txt}}
+```
+
+`--json` carries the answer as `paletteRepave`, with `required`, each reason,
+and `agrees`:
+
+```text
+{{#include ../output/repave-kubeadm-json.txt}}
+```
+
+`agrees` is `false` when the level says `repave` and Palette says no, or when the
+level says `in-place`, `sync`, or `none` and Palette says repave. A level of
+`may-repave` or `cluster-wide` says that a repave is possible, so it agrees with
+both answers. When the two disagree, the report adds a `note`:
+
+```text
+note       the impact table says repave, and Palette says no repave for this cluster: the table does not describe its upgrade engine
+```
+
+That note is the signal that the table is wrong for the environment. No live
+run has produced it: the one cloud that the runs used gives the answer of the
+table each time. It costs two requests, the cluster document and one `POST` to
+`/v1/spectroclusters/<uid>/validate/repave`. The `POST` asks a question and
+changes nothing: the cluster keeps its instances.
+
+Two profile versions, or two clusters, are a usage error, because Palette
+answers for one cluster:
+
+```text
+{{#include ../output/repave-usage.txt}}
+```
 
 ## Compare two identical refs
 
@@ -100,6 +152,7 @@ A `note` line follows `root` in these cases:
 | `the content uses macro <m>: the root covers its name and not its value, so an edit of a macro does not show` | The values or the manifests of either side name a user macro. | [Macros](./snapshot.md#macros) |
 | `macro <m> has another value on each side: ...` | Two cluster records with the digests of their macro values, and a macro that differs. `compare` exits `1`, also when the roots are equal. | [Macros](./snapshot.md#macros) |
 | `pack <key> has no upstream digest: Palette gives none, so a change of the archive does not show` | A pack from a registry with `upstreamSource: none`, on either side. A line under the pack says it too. | [The content digest](../internals/hashes.md#the-content-digest) |
+| `the impact table says <level>, and Palette says <repave or no repave> for this cluster: the table does not describe its upgrade engine` | `--repave`, and the level and Palette's answer disagree. | [Ask Palette if the change repaves](#ask-palette-if-the-change-repaves) |
 | `cluster <c> is behind: Palette says an update of <profile> waits for it, since <time>` | A cluster side whose record says that an update waits. The copy is not the profile. | [Whether an update waits](./snapshot.md#whether-an-update-waits) |
 | `uid <uid> is <name>@<a> on one side and <name>@<b> on the other` | One uid under two versions. Strata prints one note for each such uid, also under `IDENTICAL`. `verify` leaves it out when its verdict already names the overwrite. | [A version bump overwrites a version](../use-cases/overwritten.md) |
 

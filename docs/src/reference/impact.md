@@ -25,10 +25,24 @@ Other pack lines:
 Strata calculates an impact for each changed pack, from its layer and flags. The
 impact is a hint. It is not an answer from Palette.
 
+**The table describes one upgrade engine.** It is the engine of the clusters that
+the live runs built: a kubeadm cluster on a cloud that Palette builds with the
+cluster API. The public pages give another rule for other clusters. On an Edge
+cluster, a change to the Kubernetes layer repaves nothing, and on the OS layer
+only the `uri` repaves. The nodes of a managed cluster take a rolling upgrade
+for any override of a node pool. Palette keeps a fixed list of the fields that
+repave, for each engine, and no document gives it, so strata does not encode a
+second table. Every live run so far used one cloud and one engine: see
+[What no run covers](../internals/palette.md#what-no-run-covers).
+
+For a cluster, ask Palette: `compare --repave` prints its answer beside
+the level, and says when the two disagree. See
+[Ask Palette if the change repaves](../commands/compare.md#ask-palette-if-the-change-repaves).
+
 | Level | Condition | Meaning |
 | --- | --- | --- |
-| `repave` | OS, Kubernetes, or kernel layer with `IDENTITY`, other than a renamed tag | Palette replaces the nodes. |
-| `may-repave` | OS, Kubernetes, or kernel layer with `AUTHORED` | Node or control plane configuration changed. Palette can replace the nodes. |
+| `repave` | OS, Kubernetes, or kernel layer with `IDENTITY`, other than a renamed tag | On a cluster of the engine above, Palette replaces the nodes. |
+| `may-repave` | OS, Kubernetes, or kernel layer with `AUTHORED` | Node or control plane configuration changed. Palette can replace the nodes: it does for a key on its list, such as `kubeadmconfig.postKubeadmCommands`, and not for another. |
 | `cluster-wide` | CNI or CSI layer with `IDENTITY` or `AUTHORED` | Each node gets the change. A repave is possible. |
 | `in-place` | any other layer with `IDENTITY` or `AUTHORED` | Palette upgrades or configures the pack in place. |
 | `sync` | only `UPSTREAM`, on any layer | Palette applies the change at the next profile sync. |

@@ -20,12 +20,14 @@ use crate::snapshot::Snapshot;
 mod consumers;
 mod list;
 mod packs;
+mod repave;
 mod same_release;
 mod verify;
 
 pub use consumers::*;
 pub use list::*;
 pub use packs::*;
+pub use repave::*;
 pub use same_release::*;
 pub use verify::*;
 

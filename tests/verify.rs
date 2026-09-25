@@ -5468,3 +5468,130 @@ fn a_cluster_record_with_macro_digests_drifts_when_a_macro_value_moves() {
     let again = ops::snapshot_from_dir(&saved, "cluster:lab", "t0").unwrap();
     assert_eq!(again.source.cluster.unwrap().macro_values, Some(digests));
 }
+
+// ---- compare --repave ------------------------------------------------------------------
+
+fn applied(uid: &str, name: &str, kind: &str) -> strata::snapshot::AppliedProfile {
+    strata::snapshot::AppliedProfile {
+        uid: uid.into(),
+        name: name.into(),
+        version: "1.0.0".into(),
+        kind: kind.into(),
+    }
+}
+
+#[test]
+fn the_repave_request_names_each_profile_the_target_cluster_would_run() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let a = ops::snapshot_from_dir(&dir.path().join("a"), "a", "t0").unwrap();
+    let uids = |body: &Value| -> Vec<String> {
+        body["profiles"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|p| p["uid"].as_str().unwrap().to_string())
+            .collect()
+    };
+    let running = [
+        applied(&a.source.uid, &a.source.name, "cluster"),
+        applied("addon-uid", "lab-addons", "add-on"),
+    ];
+
+    // the same uid: an edit of the profile the cluster runs, so its packs carry the target values
+    let body = ops::validate_body(&running, &a);
+    assert_eq!(uids(&body), [a.source.uid.as_str(), "addon-uid"]);
+    let packs = body["profiles"][0]["packValues"].as_array().unwrap();
+    assert_eq!(packs.len(), a.packs.len());
+    assert!(
+        packs
+            .iter()
+            .all(|p| p.get("tag").is_some() && p.get("values").is_some())
+    );
+    assert!(body["profiles"][1].get("packValues").is_none());
+
+    // another uid with the same name: the new version replaces the one the cluster runs
+    let mut v2 = a.clone();
+    v2.source.uid = "v2-uid".into();
+    assert_eq!(
+        uids(&ops::validate_body(&running, &v2)),
+        ["v2-uid", "addon-uid"]
+    );
+
+    // another name, and a cluster profile: it replaces the one that builds the cluster
+    let mut other = v2.clone();
+    other.source.name = "other-stack".into();
+    other.source.kind = "cluster".into();
+    assert_eq!(
+        uids(&ops::validate_body(&running, &other)),
+        ["v2-uid", "addon-uid"]
+    );
+
+    // an add-on with a new name replaces nothing: it is added
+    let mut addon = v2.clone();
+    addon.source.name = "new-addon".into();
+    addon.source.kind = "add-on".into();
+    assert_eq!(
+        uids(&ops::validate_body(&running, &addon)),
+        ["v2-uid", a.source.uid.as_str(), "addon-uid"]
+    );
+}
+
+#[test]
+fn compare_asks_palette_and_names_a_disagreement_with_the_impact_table() {
+    use strata::diff::{ImpactLevel, PaletteRepave};
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let cluster_api = serve_cluster(MemoryApi::new(), dir.path(), "cluster-a");
+    let cluster = snapshot_cluster(&cluster_api, None).unwrap();
+    let target = ops::snapshot_from_dir(&dir.path().join("b"), "b", "t0").unwrap();
+    let path = format!("POST /v1/spectroclusters/{CLUSTER_UID}/validate/repave");
+    let answer = serde_json::json!({"isRepaveRequired": true, "reasons": [{
+        "code": "PackValuesUpdated", "message": "Pack 'kubernetes' values are updated",
+        "pack": {"current": {"name": "kubernetes"}, "diffConfigKeys": ["kubeadmconfig.postKubeadmCommands"]}}]});
+    let api = cluster_api.clone().with(path.clone(), answer.clone());
+    let palette = Palette::new(&api);
+
+    // either order: the cluster side is what runs now
+    let d = ops::compare(&cluster, &target, "t1");
+    let r = ops::palette_repave(&palette, &cluster, &target, d.summary.max_impact).unwrap();
+    assert!(r.required);
+    assert_eq!(r.reasons[0].keys, ["kubeadmconfig.postKubeadmCommands"]);
+    assert_eq!(api.posted().len(), 1);
+    assert_eq!(
+        api.posted()[0].0,
+        format!("/v1/spectroclusters/{CLUSTER_UID}/validate/repave")
+    );
+    ops::palette_repave(&palette, &target, &cluster, d.summary.max_impact).unwrap();
+
+    // the table and Palette: a repave both ways agrees; in-place against a repave does not
+    assert!(PaletteRepave::from_palette("c", &answer, ImpactLevel::Repave).agrees);
+    assert!(PaletteRepave::from_palette("c", &answer, ImpactLevel::MayRepave).agrees);
+    let r = PaletteRepave::from_palette("c", &answer, ImpactLevel::InPlace);
+    assert!(!r.agrees);
+    let none = serde_json::json!({"isRepaveRequired": false});
+    assert!(!PaletteRepave::from_palette("c", &none, ImpactLevel::Repave).agrees);
+
+    let mut d = ops::compare(&cluster, &target, "t1");
+    d.summary.max_impact = ImpactLevel::InPlace;
+    d.palette_repave = Some(r);
+    let text = render::renderer(Format::Terminal, Paint::off(), false)
+        .render(&d, &cluster, &target, false)
+        .unwrap();
+    assert!(
+        text.contains(
+            "palette    repave: PackValuesUpdated kubernetes (kubeadmconfig.postKubeadmCommands)\n"
+        ),
+        "{text}"
+    );
+    assert!(
+        text.contains(
+            "note       the impact table says in-place, and Palette says repave for this cluster"
+        ),
+        "{text}"
+    );
+
+    // two profile versions, and no cluster: a usage error
+    let err = ops::palette_repave(&palette, &target, &target, d.summary.max_impact).unwrap_err();
+    assert!(matches!(err, Error::Usage { .. }), "{err}");
+}

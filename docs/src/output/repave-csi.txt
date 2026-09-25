@@ -1,0 +1,16 @@
+$ strata compare cluster:payments aws-stack@1.1.2 --repave
+aws-stack@1.1.1 on cluster payments (uid 64f1000000000000000000e1)  ->  aws-stack@1.1.2 (uid 64e0000000000000000000d4)
+root       088136c929bd -> 78a86f401545   CHANGED
+palette    no repave
+consumers  aws-stack@1.1.2 has no consumers
+
+  variables unchanged
+
+  [os   ] ubuntu-aws                 24.04              unchanged
+  [k8s  ] kubernetes                 1.36.2             unchanged
+  [cni  ] cni-cilium-oss             1.20.1             unchanged
+~ [csi  ] csi-aws-ebs                1.65.0             AUTHORED
+      values: 1 changed, 0 added, 0 removed
+        ~ charts.aws-ebs-csi-driver.storageClasses[name=spectro-storage-class].reclaimPolicy: "Delete" -> "Retain"
+      impact: cluster-wide infra addon update
+  [addon] cert-manager               1.21.1             unchanged

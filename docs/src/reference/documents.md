@@ -135,6 +135,10 @@ A comparison of two sides, `a` and `b`.
 - `macros`, only when it is not empty: each user macro that either side uses.
 - `macrosChanged`, only when it is not empty: between two cluster records with
   `macroValues`, each macro whose value differs.
+- `paletteRepave`, only with `compare --repave`: `clusterUid`, `required`
+  (Palette's `isRepaveRequired`), `reasons[]` with `code`, `message`, `pack`, and
+  `keys` (the config keys that differ), and `agrees`. `agrees` is `false` when
+  the most severe level of the table and Palette's answer disagree.
 - `verify`, only after `verify`: `status` (`unchanged`, `drifted`, or
   `unverified`), `uid`, `recordedAt`, and `checkedAt`.
   - `upstreamUnknown`: for an `unverified` record, the packs that make it so.

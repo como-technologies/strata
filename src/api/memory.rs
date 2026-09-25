@@ -8,13 +8,15 @@ use serde_json::Value;
 use super::PaletteApi;
 use crate::error::{Error, Result};
 
-/// Canned responses keyed by path. Paths not registered answer 404.
+/// Canned responses keyed by path. Paths not registered answer 404. A POST answers from the key
+/// `POST <path>`, and the body it was sent is kept for [`MemoryApi::posted`].
 #[derive(Debug, Default, Clone)]
 pub struct MemoryApi {
     ok: HashMap<String, Value>,
     fail: HashMap<String, (u16, String)>,
     transient: RefCell<HashMap<String, Transient>>,
     calls: RefCell<HashMap<String, u32>>,
+    posted: RefCell<Vec<(String, Value)>>,
     project_uid: Option<String>,
 }
 
@@ -31,6 +33,11 @@ impl MemoryApi {
     /// An API that knows no paths.
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Each POST it was sent, in order: the path and the body.
+    pub fn posted(&self) -> Vec<(String, Value)> {
+        self.posted.borrow().clone()
     }
 
     /// Answer `path` with `value`.
@@ -118,6 +125,13 @@ impl PaletteApi for MemoryApi {
             body: r#"{"code":"ResourceNotFound"}"#.to_string(),
             retry_after: None,
         })
+    }
+
+    fn post_json(&self, path: &str, body: &Value) -> Result<Value> {
+        self.posted
+            .borrow_mut()
+            .push((path.to_string(), body.clone()));
+        self.get_json(&format!("POST {path}"))
     }
 
     fn project_uid(&self) -> Option<&str> {

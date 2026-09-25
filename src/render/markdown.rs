@@ -5,11 +5,12 @@ use super::{
     consumer_counts, consumers_heading, consumers_sentence, count_of, counts_line, cross_kind_note,
     dash, edited_in_place_note, entry_error, list_count, list_scope, macros_changed_note,
     macros_changed_sentence, macros_note, overwritten_in_place_notes, pack_version, pair_detail,
-    pair_word, plain_flags, profiles_overwritten_sentence, project_label, record_detail,
-    record_label, registry_note, same_content_note, short, show, subject, traits_suffix,
-    unverified_sentence, updates_pending_notes, upstream_unknown_note, values_changed,
-    values_changed_suffix, variable_lines, variables_comparable, variables_unavailable_note,
-    version_display, who_entry, who_heading,
+    pair_word, palette_repave_lines, palette_repave_note, plain_flags,
+    profiles_overwritten_sentence, project_label, record_detail, record_label, registry_note,
+    same_content_note, short, show, subject, traits_suffix, unverified_sentence,
+    updates_pending_notes, upstream_unknown_note, values_changed, values_changed_suffix,
+    variable_lines, variables_comparable, variables_unavailable_note, version_display, who_entry,
+    who_heading,
 };
 use crate::color::Paint;
 use crate::diff::{Diff, Leaf, Op, Status, Verify, VerifyStatus};
@@ -126,6 +127,13 @@ impl Renderer for MarkdownRenderer {
             o.push_str(&format!("**Note:** {note}\n\n"));
         }
         if let Some(note) = macros_changed_note(d) {
+            o.push_str(&format!("**Note:** {note}\n\n"));
+        }
+        let palette = palette_repave_lines(d);
+        if !palette.is_empty() {
+            o.push_str(&format!("**Palette:** {}\n\n", escape(&palette.join("; "))));
+        }
+        if let Some(note) = palette_repave_note(d) {
             o.push_str(&format!("**Note:** {note}\n\n"));
         }
         if let Some(note) = same_content_note(d) {

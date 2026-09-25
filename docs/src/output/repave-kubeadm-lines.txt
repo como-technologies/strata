@@ -1,0 +1,7 @@
+$ strata compare cluster:payments aws-stack@1.1.6 --repave
+aws-stack@1.1.1 on cluster payments (uid 64f1000000000000000000e1)  ->  aws-stack@1.1.6 (uid 64e0000000000000000000f9)
+root       088136c929bd -> 43c398e763d7   CHANGED
+palette    repave: PackValuesUpdated kubernetes (kubeadmconfig.postKubeadmCommands)
+...
+      impact: node/control plane config change, may repave
+...

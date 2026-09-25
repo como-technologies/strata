@@ -476,6 +476,32 @@ in `Deleting` with its EC2 instances running for 37 minutes, until
 the machines 45 seconds later, and no instance was left at 04:46:42. The audit
 log holds no entry for the approval.
 
+## repave.sh
+
+Read-write, and it replaces no node. It needs the example at its baseline with
+cluster A, and `AWS_PROFILE` to read the EC2 instances. It edits the release
+version and the add-on version in place, asks Palette with `compare --repave`,
+and puts each edit back. Cluster A takes no update.
+
+| Check | Expected exit | What it shows |
+|---|---|---|
+| `none`, `none-says`, `none-json` | 0 | #73: at the baseline, Palette says `no repave`; `--json` gives `required` false and `agrees` true |
+| `k8s-edit` | 0 | the Kubernetes pack of the release version gets one more kubeadm command |
+| `k8s`, `k8s-says` | 1, 0 | #73: Palette says `repave: PackValuesUpdated kubernetes (kubeadmconfig.postKubeadmCommands)` |
+| `k8s-agrees`, `k8s-json` | 0 | #73: the impact table says `may repave`, so strata prints no disagreement; `--json` names the key |
+| `k8s-reversed`, `k8s-reversed-says` | 1, 0 | #73: the two sides in the other order give the same answer |
+| `helper`, `helper-says` | 1, 0 | #73: `tenant.sh repave` asks for the same change and gets the same key |
+| `k8s-undo` | 0 | the Kubernetes pack back |
+| `addon-edit`, `addon`, `addon-says`, `addon-agrees` | 0, 1, 0, 0 | #73: a manifest of the add-on changes; Palette says `no repave`, and the table says in-place |
+| `addon-undo` | 0 | the manifest back |
+| `usage`, `usage-says` | 2, 0 | #73: two profile versions and no cluster are a usage error |
+| `no-update`, `same-nodes` | 0 | #73: the questions took no update, and cluster A kept each EC2 instance |
+| `undo-baseline` | 0 | the example is at its baseline |
+
+Each answer agrees with the impact table: this cloud runs the kubeadm engine
+alone. The edit in place also opens an update notification for cluster A, and
+`compare` names it; the undo closes it.
+
 ## What has no live run
 
 - `in-place.sh`, `registry-move.sh`, `registry.sh`, `template.sh`, and

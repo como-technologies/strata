@@ -23,6 +23,8 @@ const A120: &str = "64e0000000000000000000e5";
 const A114: &str = "64e0000000000000000000f7";
 // aws-stack@1.1.5: the content of 1.1.1, with no digest for the CSI pack
 const A115: &str = "64e0000000000000000000f8";
+// aws-stack@1.1.6: the content of 1.1.1, with one more kubeadm command in the Kubernetes pack
+const A116: &str = "64e0000000000000000000f9";
 const ADDONS_DEV: &str = "64e2000000000000000000a1";
 const ADDONS_PROD: &str = "64e3000000000000000000a1";
 const ADDONS_PROD2: &str = "64e3000000000000000000a2";
@@ -85,6 +87,7 @@ pub fn names() -> Vec<&'static str> {
         "cluster-values",
         "macros",
         "no-digest",
+        "repave",
         "same-names",
         "packs",
         "retire",
@@ -805,6 +808,19 @@ fn use_cases(r: &mut Runner) {
         false,
         "strata verify runs/payments.json",
     );
+    // the update waits: does accepting it repave? A change of the CSI values repaves nothing.
+    r.repave_answer(DEV, PAYMENTS, false);
+    r.step(
+        "edited-repave",
+        1,
+        false,
+        "strata compare cluster:payments aws-stack@1.1.1 --repave",
+    );
+    r.excerpt(
+        "edited-repave-lines",
+        "edited-repave",
+        r"^(aws-stack|root |note |palette|      impact)",
+    );
     r.cluster(DEV, SEARCH, "search", &[A111]);
     r.serve_here(); // state 2: the edit is in Palette, and search started after it
     r.step(
@@ -1135,6 +1151,56 @@ fn use_cases(r: &mut Runner) {
         1,
         false,
         "strata same-release aws-stack@1.1.1 aws-stack@1.1.5",
+    );
+
+    // Palette's own answer beside the impact table: a change that repaves, and one that does not
+    r.chapter("repave", DEV_ENV);
+    r.projects(&[("dev", DEV)]);
+    r.profile(DEV, A111, "1.1.1", "aws-stack@1.1.1", &[]);
+    r.profile(
+        DEV,
+        A116,
+        "1.1.6",
+        "aws-stack@1.1.1",
+        &[Edit::KubeadmCommand("echo strata-repave-test")],
+    );
+    r.profile(DEV, A112, "1.1.2", "aws-stack@1.1.1", RETAIN);
+    r.cluster(DEV, PAYMENTS, "payments", &[A111]);
+    r.repave_answer(DEV, PAYMENTS, true);
+    r.step(
+        "repave-kubeadm",
+        1,
+        false,
+        "strata compare cluster:payments aws-stack@1.1.6 --repave",
+    );
+    r.excerpt(
+        "repave-kubeadm-lines",
+        "repave-kubeadm",
+        r"^(aws-stack|root |note |palette|  \[k8s|      impact)",
+    );
+    r.step(
+        "repave-kubeadm-json",
+        1,
+        false,
+        "strata compare cluster:payments aws-stack@1.1.6 --repave --json | jq .paletteRepave",
+    );
+    r.repave_answer(DEV, PAYMENTS, false);
+    r.step(
+        "repave-csi",
+        1,
+        false,
+        "strata compare cluster:payments aws-stack@1.1.2 --repave",
+    );
+    r.excerpt(
+        "repave-csi-lines",
+        "repave-csi",
+        r"^(aws-stack|root |note |palette|  \[csi|      impact)",
+    );
+    r.step(
+        "repave-usage",
+        2,
+        true,
+        "strata compare aws-stack@1.1.1 aws-stack@1.1.6 --repave",
     );
 
     r.chapter("same-names", &[]);

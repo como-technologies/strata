@@ -193,6 +193,10 @@ live-macros: build
 live-macro-repave: build
     examples/live/macro-repave.sh
 
+# The repave test: compare --repave asks Palette if a change repaves cluster A (#73). Needs live-up; takes no update on the cluster.
+live-repave: build
+    examples/live/repave.sh
+
 # The scripts run in order from the baseline: verify.sh, in-place.sh off, in-place.sh on (against
 # that off run), and registry-move.sh. The recipe stops at the first script that fails. Billable:
 # about 3 to 4 hours, with cluster B two times.

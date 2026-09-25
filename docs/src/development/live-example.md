@@ -84,7 +84,9 @@ its end.
 | `who.sh` | The audit log test (#69): who made an edit through the API, and an update that a cluster accepted, as `verify --who` reads them. |
 | `pending.sh` | The pending update test (#70): when Palette says that an update waits for cluster A, and what a record, the listing, and `compare` say. |
 | `macros.sh` | The macro test (#72): what a project macro does to a version, to the copy that cluster A runs, and to a record, when the macro gets another value. |
+| `repave.sh` | the Kubernetes pack of the release version, and a manifest of the add-on version, each in place and put back; no update is accepted | the clusters, the flag (off), the baseline |
 | `macro-repave.sh` | The macro repave test (#72): a macro in a field that repaves cluster A, and what a change of its value alone does. It ends with a repave that waits for approval; `live-down` follows it. |
+| `repave.sh` | The repave test (#73): `compare --repave` asks Palette if a change repaves cluster A, and prints its answer beside the impact level. |
 | `aws-inventory.sh` | What the cluster still has in AWS, to confirm a teardown. |
 
 ## Design
@@ -110,6 +112,7 @@ creates at once.
 `who.sh` makes one edit in place at a time, and puts each back.
 `pending.sh` checks the baseline before it starts, and puts each change back.
 `macros.sh` does the same, and deletes the macro it makes.
+`repave.sh` checks the baseline before it starts, puts each change back, and takes no update on cluster A.
 `registry.sh` leaves the pushed versions in its own registry.
 `template.sh` ends with the example removed, `cluster.sh` ends with the cluster
 gone, and `order.sh` leaves two versions edited: run `just live-down` after

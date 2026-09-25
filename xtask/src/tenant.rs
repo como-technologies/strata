@@ -35,6 +35,9 @@ pub enum Edit {
     OciCsi,
     /// Give the version another number, which a bump without the immutability flag does.
     Version(&'static str),
+    /// Add one command to `kubeadmconfig.postKubeadmCommands` of the Kubernetes pack: a key that
+    /// Palette repaves on.
+    KubeadmCommand(&'static str),
     /// Remove the digest of a pack, on its pack reference and in its pack summary, as a registry
     /// that Palette does not sync gives it.
     NoDigest(&'static str),
@@ -103,6 +106,20 @@ impl Edit {
                 }
             }
             Edit::Version(version) => doc["spec"]["version"] = json!(version),
+            Edit::KubeadmCommand(command) => {
+                for pack in packs_mut(doc) {
+                    if pack["name"] == "kubernetes"
+                        && let Some(values) = pack["values"].as_str()
+                    {
+                        let anchor = "    - 'chmod 600 /var/lib/kubelet/config.yaml'\n";
+                        pack["values"] = json!(values.replacen(
+                            anchor,
+                            &format!("{anchor}    - '{command}'\n"),
+                            1
+                        ));
+                    }
+                }
+            }
             Edit::NoDigest(name) => {
                 for pack in packs_mut(doc) {
                     if pack["name"] == *name {
@@ -656,6 +673,29 @@ impl Tenant {
             }
         }
         self.write(project, &path, &doc);
+    }
+
+    /// The answer of `POST /v1/spectroclusters/{uid}/validate/repave` for a cluster: whether the
+    /// asked change repaves it, and the reason, as a live run gave it for a kubeadm command. The
+    /// stand-in gives one answer for every request; it does not compare anything.
+    pub fn repave_answer(&self, project: &str, cluster: &str, required: bool) {
+        let reasons = if required {
+            json!([{
+                "code": "PackValuesUpdated",
+                "message": "Pack 'kubernetes' values are updated",
+                "pack": {
+                    "current": {"name": "kubernetes"},
+                    "diffConfigKeys": ["kubeadmconfig.postKubeadmCommands"],
+                },
+            }])
+        } else {
+            json!([])
+        };
+        self.write(
+            project,
+            &format!("v1/spectroclusters/{cluster}/validate/repave"),
+            &json!({"isRepaveRequired": required, "reasons": reasons}),
+        );
     }
 
     /// Give a project macro a value, as `PATCH /v1/projects/{uid}/macros` does, and let each

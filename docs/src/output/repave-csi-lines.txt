@@ -1,0 +1,7 @@
+$ strata compare cluster:payments aws-stack@1.1.2 --repave
+aws-stack@1.1.1 on cluster payments (uid 64f1000000000000000000e1)  ->  aws-stack@1.1.2 (uid 64e0000000000000000000d4)
+root       088136c929bd -> 78a86f401545   CHANGED
+palette    no repave
+...
+      impact: cluster-wide infra addon update
+...

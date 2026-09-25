@@ -1,0 +1,16 @@
+$ strata compare cluster:payments aws-stack@1.1.6 --repave --json | jq .paletteRepave
+{
+  "clusterUid": "64f1000000000000000000e1",
+  "required": true,
+  "reasons": [
+    {
+      "code": "PackValuesUpdated",
+      "message": "Pack 'kubernetes' values are updated",
+      "pack": "kubernetes",
+      "keys": [
+        "kubeadmconfig.postKubeadmCommands"
+      ]
+    }
+  ],
+  "agrees": true
+}

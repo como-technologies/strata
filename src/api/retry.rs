@@ -99,11 +99,13 @@ fn is_transient(e: &Error) -> bool {
     e.class() == FailureClass::Transient && !matches!(e, Error::RetryAfterTooLong { .. })
 }
 
-impl<A: PaletteApi> PaletteApi for Retry<A> {
-    fn get_json(&self, path: &str) -> Result<Value> {
+impl<A: PaletteApi> Retry<A> {
+    /// Run `call` until it succeeds, fails for a reason that does not pass, or runs out of
+    /// retries. A GET and a POST that changes nothing retry the same way.
+    fn attempts(&self, path: &str, call: impl Fn() -> Result<Value>) -> Result<Value> {
         let mut attempt = 0;
         loop {
-            match self.inner.get_json(path) {
+            match call() {
                 Ok(v) => return Ok(v),
                 Err(e) if attempt < self.policy.retries && is_transient(&e) => {
                     let retry_after = match &e {
@@ -132,6 +134,16 @@ impl<A: PaletteApi> PaletteApi for Retry<A> {
                 Err(e) => return Err(e),
             }
         }
+    }
+}
+
+impl<A: PaletteApi> PaletteApi for Retry<A> {
+    fn get_json(&self, path: &str) -> Result<Value> {
+        self.attempts(path, || self.inner.get_json(path))
+    }
+
+    fn post_json(&self, path: &str, body: &Value) -> Result<Value> {
+        self.attempts(path, || self.inner.post_json(path, body))
     }
 
     fn project_uid(&self) -> Option<&str> {
