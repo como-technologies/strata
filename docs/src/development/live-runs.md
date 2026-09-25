@@ -458,10 +458,23 @@ follows it.
 | `undo-macro` | 2 | #72: Palette refuses to delete a macro that cluster A reads |
 
 The recorded run reads the repave state of cluster A in a second log, once a
-minute: it became `Pending` 16 minutes after the change of the value, at the
-next read of the agent. The run expected `undo-accept` to exit `0`, and it got
-`2`; the script now expects the refusal. It stopped at `undo-accept`, so
+minute: it became `Pending` 14 minutes 58 seconds after the change of the value,
+at the next read of the agent. `GET /v1/spectroclusters/<uid>/repave/status`
+gives the record: source `hubble`, reason `PackValuesUpdated` with the message
+`Pack 'kubernetes' values are updated`, `diffConfigKeys`
+`kubeadmconfig.postKubeadmCommands`, and the resolved values on each side, `echo
+one` and `echo two`. The record names no macro.
+
+The run expected `undo-accept` to exit `0`, and it got `2`; the script now
+expects the refusal. It stopped at `undo-accept`, so
 `undo-accept-says` and `undo-macro` come from the same refusal read by hand.
+
+The teardown after this run showed that the repave also holds a delete. `tofu
+destroy` asked Palette to delete cluster A at 04:05:45, and the cluster stayed
+in `Deleting` with its EC2 instances running for 37 minutes, until
+`PATCH /v1/spectroclusters/<uid>/repave/approve` at 04:42:43. The agent deleted
+the machines 45 seconds later, and no instance was left at 04:46:42. The audit
+log holds no entry for the approval.
 
 ## What has no live run
 

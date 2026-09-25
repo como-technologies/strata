@@ -255,10 +255,22 @@ When a macro is in a field that repaves a cluster, such as
 `kubeadmconfig.postKubeadmCommands` in the Kubernetes pack, a change of its
 value does not replace the nodes. At the next read of the agent, Palette puts
 the cluster in a repave that waits for approval (`status.repave.state:
-Pending`). It opens no notification for it. While the repave waits, Palette
+Pending`), one agent poll after the change. It opens no notification for it.
+`GET /v1/spectroclusters/<uid>/repave/status` gives the record: the source is
+`hubble`, and not a person. The one reason is `PackValuesUpdated`, `Pack
+'kubernetes' values are updated`, with the key that differs and the resolved
+values on each side. It names no macro, so nothing in the record says that a
+macro caused it. While the repave waits, Palette
 refuses an update of the cluster profiles: `Cluster update failure as cluster
 repave is pending for approval`. Palette also refuses to delete a macro that a
 cluster reads.
+
+A repave that waits for approval also holds a delete of the cluster. The delete
+puts the cluster in `Deleting`, and the agent removes nothing while the repave
+waits: in a live run, the cluster stayed in `Deleting` for 37 minutes, its EC2
+instances kept running, and `tofu destroy` failed with `context deadline
+exceeded`. After an approval of the repave, the instances were gone in four
+minutes. The approval writes no audit entry.
 
 ## Cluster copies
 
