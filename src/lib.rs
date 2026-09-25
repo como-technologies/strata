@@ -70,6 +70,7 @@ pub mod color;
 pub mod config;
 pub mod diff;
 pub mod error;
+pub mod impact;
 pub mod layer;
 pub mod ops;
 pub mod progress;

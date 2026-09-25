@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 use crate::canon::canonical_json;
+pub use crate::impact::{Flags, Impact, ImpactLevel, impact, presence_impact};
 use crate::layer::Layer;
 use crate::snapshot::{ClusterVariable, Pack, Snapshot, Source, Tool};
 
@@ -349,36 +350,6 @@ pub struct Leaf {
     pub new: Option<Value>,
 }
 
-/// Ordered by severity, so `max` picks the worst.
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default, Serialize, Deserialize, JsonSchema,
-)]
-#[serde(rename_all = "kebab-case")]
-pub enum ImpactLevel {
-    /// No change.
-    #[default]
-    None,
-    /// Only the upstream digest changed; applied on the next profile sync.
-    Sync,
-    /// Add-on upgraded or reconfigured in place.
-    InPlace,
-    /// CNI or CSI changed; every node affected, may repave.
-    ClusterWide,
-    /// OS or Kubernetes configuration changed; Palette may repave.
-    MayRepave,
-    /// Nodes are replaced.
-    Repave,
-}
-
-/// What a change does to running clusters; a hint from the layer and the flags.
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-pub struct Impact {
-    /// Severity level.
-    pub level: ImpactLevel,
-    /// Human sentence, the same text the terminal report prints
-    pub text: String,
-}
-
 /// What happened to one pack.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "lowercase")]
@@ -618,148 +589,6 @@ pub enum VerifyStatus {
     Unchanged,
     /// Different root: the published version was edited, or the record is stale.
     Drifted,
-}
-
-/// Which of the three hashes moved for one pack.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub struct Flags {
-    /// The identity hash moved.
-    pub identity: bool,
-    /// The upstream hash moved.
-    pub upstream: bool,
-    /// The authored hash moved.
-    pub authored: bool,
-}
-
-/// Which layers a rule applies to.
-#[derive(Debug, Clone, Copy)]
-enum Layers {
-    Only(Layer),
-    NodeImage,
-    InfraAddon,
-    Any,
-}
-
-impl Layers {
-    fn matches(self, layer: Layer) -> bool {
-        match self {
-            Layers::Only(l) => layer == l,
-            Layers::NodeImage => matches!(layer, Layer::Kernel | Layer::Os | Layer::K8s),
-            Layers::InfraAddon => matches!(layer, Layer::Cni | Layer::Csi),
-            Layers::Any => true,
-        }
-    }
-}
-
-/// Which flags a rule needs.
-#[derive(Debug, Clone, Copy)]
-enum Needs {
-    Identity,
-    Authored,
-    IdentityOrAuthored,
-    UpstreamOnly,
-}
-
-impl Needs {
-    fn matches(self, f: Flags) -> bool {
-        match self {
-            Needs::Identity => f.identity,
-            Needs::Authored => f.authored,
-            Needs::IdentityOrAuthored => f.identity || f.authored,
-            Needs::UpstreamOnly => f.upstream && !f.identity && !f.authored,
-        }
-    }
-}
-
-struct Rule {
-    layers: Layers,
-    needs: Needs,
-    level: ImpactLevel,
-    text: &'static str,
-}
-
-/// The impact rules, first match wins. The order encodes severity: a Kubernetes version bump is a
-/// repave even when its values also changed.
-const RULES: &[Rule] = &[
-    Rule {
-        layers: Layers::Only(Layer::Os),
-        needs: Needs::Identity,
-        level: ImpactLevel::Repave,
-        text: "node repave (OS image change)",
-    },
-    Rule {
-        layers: Layers::Only(Layer::K8s),
-        needs: Needs::Identity,
-        level: ImpactLevel::Repave,
-        text: "node repave (Kubernetes version change)",
-    },
-    Rule {
-        layers: Layers::Only(Layer::Kernel),
-        needs: Needs::Identity,
-        level: ImpactLevel::Repave,
-        text: "node repave (kernel change)",
-    },
-    Rule {
-        layers: Layers::NodeImage,
-        needs: Needs::Authored,
-        level: ImpactLevel::MayRepave,
-        text: "node/control plane config change, may repave",
-    },
-    Rule {
-        layers: Layers::InfraAddon,
-        needs: Needs::IdentityOrAuthored,
-        level: ImpactLevel::ClusterWide,
-        text: "cluster-wide infra addon update",
-    },
-    Rule {
-        layers: Layers::Any,
-        needs: Needs::IdentityOrAuthored,
-        level: ImpactLevel::InPlace,
-        text: "in-place addon upgrade",
-    },
-    Rule {
-        layers: Layers::Any,
-        needs: Needs::UpstreamOnly,
-        level: ImpactLevel::Sync,
-        text: "pack content changed under the same tag, applied on next profile sync",
-    },
-];
-
-/// The impact of a change on a layer, from the rules table.
-pub fn impact(layer: Layer, flags: Flags) -> Impact {
-    RULES
-        .iter()
-        .find(|r| r.layers.matches(layer) && r.needs.matches(flags))
-        .map(|r| Impact {
-            level: r.level,
-            text: r.text.to_string(),
-        })
-        .unwrap_or(Impact {
-            level: ImpactLevel::None,
-            text: String::new(),
-        })
-}
-
-/// The impact of a pack that only one side has. A pack key is `<layer>/<name>`, so a profile that
-/// exchanges one pack for a pack of another name gives one removed pack and one added pack, and no
-/// identity change. The level therefore follows the layer, as an identity change does.
-pub fn presence_impact(layer: &str, added: bool) -> Impact {
-    let level = impact(
-        Layer::parse(layer),
-        Flags {
-            identity: true,
-            upstream: false,
-            authored: false,
-        },
-    )
-    .level;
-    let what = if added { "added" } else { "removed" };
-    let text = match level {
-        ImpactLevel::Repave => format!("node repave ({layer} pack {what})"),
-        ImpactLevel::ClusterWide => format!("cluster-wide infra addon {what}"),
-        _ => format!("addon {what} in place"),
-    };
-    Impact { level, text }
 }
 
 enum Seg {
@@ -1343,44 +1172,6 @@ mod tests {
             g.added[0].traits(),
             vec!["required", "sensitive"],
             "the words the report prints in parentheses"
-        );
-    }
-
-    #[test]
-    fn impact_levels_order_by_severity() {
-        assert!(ImpactLevel::Repave > ImpactLevel::MayRepave);
-        assert!(ImpactLevel::MayRepave > ImpactLevel::ClusterWide);
-        assert!(ImpactLevel::ClusterWide > ImpactLevel::InPlace);
-        assert!(ImpactLevel::InPlace > ImpactLevel::Sync);
-        assert!(ImpactLevel::Sync > ImpactLevel::None);
-        let f = |identity, upstream, authored| Flags {
-            identity,
-            upstream,
-            authored,
-        };
-        assert_eq!(
-            impact(Layer::K8s, f(true, true, true)).level,
-            ImpactLevel::Repave
-        );
-        assert_eq!(
-            impact(Layer::Cni, f(false, true, false)).level,
-            ImpactLevel::Sync
-        );
-        assert_eq!(
-            impact(Layer::Addon, f(false, false, true)).level,
-            ImpactLevel::InPlace
-        );
-        assert_eq!(
-            impact(Layer::Os, f(false, false, true)).level,
-            ImpactLevel::MayRepave
-        );
-        assert_eq!(
-            impact(Layer::Other, f(true, false, false)).level,
-            ImpactLevel::InPlace
-        );
-        assert_eq!(
-            impact(Layer::Addon, f(false, false, false)).level,
-            ImpactLevel::None
         );
     }
 }
