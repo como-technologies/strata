@@ -248,6 +248,18 @@ cluster runs other content, and its record, its copy, its notifications, and
 its audit log say nothing. The digests of `snapshot --macros` are how strata
 sees it: see [Macros](../commands/snapshot.md#macros).
 
+A create, a change, or a delete of a project macro writes no audit entry, at
+project or tenant scope. The audit log has no resource kind for a macro.
+
+When a macro is in a field that repaves a cluster, such as
+`kubeadmconfig.postKubeadmCommands` in the Kubernetes pack, a change of its
+value does not replace the nodes. At the next read of the agent, Palette puts
+the cluster in a repave that waits for approval (`status.repave.state:
+Pending`). It opens no notification for it. While the repave waits, Palette
+refuses an update of the cluster profiles: `Cluster update failure as cluster
+repave is pending for approval`. Palette also refuses to delete a macro that a
+cluster reads.
+
 ## Cluster copies
 
 Each cluster runs its own copy of the manifests of a profile. The copy has its

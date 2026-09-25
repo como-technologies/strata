@@ -189,6 +189,10 @@ live-pending: build
 live-macros: build
     examples/live/macros.sh
 
+# The macro repave test: a macro in a field that repaves cluster A, and what a change of its value alone does (#72). Needs live-up; ends with a repave that waits for approval, so live-down follows it.
+live-macro-repave: build
+    examples/live/macro-repave.sh
+
 # The scripts run in order from the baseline: verify.sh, in-place.sh off, in-place.sh on (against
 # that off run), and registry-move.sh. The recipe stops at the first script that fails. Billable:
 # about 3 to 4 hours, with cluster B two times.

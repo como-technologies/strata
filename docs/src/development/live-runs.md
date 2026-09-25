@@ -432,6 +432,37 @@ it keeps in a temporary file. It puts each change back, and deletes the macro.
 | `propagation` | 0 | #72: Palette writes the new value inside the cluster with no update to accept: after 11 minutes in the recorded run, where the check was recorded without an expected code |
 | `undo-edit`, `undo-accept`, `undo-settled`, `undo-macro`, `undo-flag`, `undo-baseline` | 0 | the manifest back, the macro deleted, and the baseline |
 
+## macro-repave.sh
+
+Read-write, and it replaces the nodes of cluster A. It needs the example at its
+baseline with cluster A, and `AWS_PROFILE` to read the EC2 instances. It puts a
+project macro in `kubeadmconfig.postKubeadmCommands` of the Kubernetes pack,
+has cluster A take that, then changes only the value of the macro, and watches
+for 45 minutes. It ends with a repave that waits for approval, so `live-down`
+follows it.
+
+| Check | Expected exit | What it shows |
+|---|---|---|
+| `base-instances`, `base-notifications`, `base-macro` | 0 | the EC2 instances of cluster A, no open notification, and no macro, at the baseline |
+| `macro-set`, `macro-edit`, `edit-notification`, `macro-accept` | 0 | #72: the Kubernetes pack reads the macro; Palette opens a notification for that edit of the profile, and cluster A takes it |
+| `accepted-instances`, `accepted-changed` | 0, ? | the edit of the profile replaced the nodes (`accepted-changed` recorded 0) |
+| `accepted-resolved`, `accepted-record`, `accepted-record-plain`, `accepted-names` | 0 | the macro has its first value; cluster records with and without its digest |
+| `change` | 0 | #72: only the value of the macro changes |
+| `replaced` | ? | #72: the change of the value alone replaced no node in 45 minutes (recorded 1) |
+| `notifications`, `notifications-none` | 0, ? | #72: no notification opened (recorded 1) |
+| `audits`, `audits-macro`, `audits-cluster` | 0, ?, ? | #72: no audit entry names a macro, and no audit entry from a person names cluster A (recorded 1, 1) |
+| `verify-plain` | ? | #72: a cluster record without the digest reports `OK` (recorded 0) |
+| `verify-macros`, `verify-macros-says` | ?, ? | #72: a cluster record with the digest reports `DRIFT`, and names the macro (recorded 1, 0) |
+| `undo-edit` | 0 | the Kubernetes pack back |
+| `undo-accept`, `undo-accept-says` | 2, 0 | #72: while the repave waits for approval, Palette refuses the update of cluster A: `Cluster update failure as cluster repave is pending for approval` |
+| `undo-macro` | 2 | #72: Palette refuses to delete a macro that cluster A reads |
+
+The recorded run reads the repave state of cluster A in a second log, once a
+minute: it became `Pending` 16 minutes after the change of the value, at the
+next read of the agent. The run expected `undo-accept` to exit `0`, and it got
+`2`; the script now expects the refusal. It stopped at `undo-accept`, so
+`undo-accept-says` and `undo-macro` come from the same refusal read by hand.
+
 ## What has no live run
 
 - `in-place.sh`, `registry-move.sh`, `registry.sh`, `template.sh`, and
