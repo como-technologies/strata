@@ -116,6 +116,9 @@ resource "aws_instance" "kinds" {
   })
   # The script runs at the first boot alone: a new script needs a new instance.
   user_data_replace_on_change = true
+  # A destroy removes the instance, and its public address, before the gateway: AWS refuses to
+  # detach a gateway while an address of the VPC is mapped.
+  depends_on = [aws_internet_gateway.kinds]
   root_block_device {
     volume_size = 20
     volume_type = "gp3"

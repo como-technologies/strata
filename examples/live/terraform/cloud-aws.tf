@@ -46,6 +46,15 @@ resource "spectrocloud_cluster_aws" "cluster" {
     }
   }
 
+  # More add-on profiles that a script made through the API, such as the profiles that pin a chart
+  # of the registry host.
+  dynamic "cluster_profile" {
+    for_each = var.extra_addon_profile_uids
+    content {
+      id = cluster_profile.value
+    }
+  }
+
   cloud_config {
     region       = var.region
     ssh_key_name = var.ssh_key_name

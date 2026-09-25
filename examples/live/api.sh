@@ -47,10 +47,10 @@
 #       Make a Spectro pack registry over ENDPOINT with basic auth, and print its uid.
 #   api.sh pack-registry-delete REGISTRY_UID
 #       Remove a Spectro pack registry.
-#   api.sh pin-profile NAME REGISTRY_UID TYPE PACK VERSION
+#   api.sh pin-profile NAME REGISTRY_UID TYPE PACK VERSION [VALUES_FILE]
 #       Make and publish an add-on profile NAME@1.0.0 that pins PACK at VERSION by name, with no
-#       pack uid, as the console does for a registry that Palette does not synchronize. Prints
-#       its uid.
+#       pack uid, as the console does for a registry that Palette does not synchronize, and with
+#       the values of VALUES_FILE, or none. Prints its uid.
 #   api.sh probe-profile NAME REGISTRY_UID VERSION
 #       Ask Palette to create an add-on profile that pins one pack version, with the values the
 #       registry lists for it. When Palette creates it, delete it at once, print `accepted`, and
@@ -338,14 +338,15 @@ sync_registry() {
 }
 
 # pack_registry_create NAME ENDPOINT USER: a Spectro pack registry over ENDPOINT, with basic auth;
-# the password is KINDS_PASSWORD in the environment, so it is on no command line. Prints the uid.
+# the password is KINDS_PASSWORD in the environment, so it is on no command line. It is not private:
+# Palette synchronizes no private pack registry. Prints the uid.
 pack_registry_create() {
   local name=${1:-} endpoint=${2:-} user=${3:-} body
   [ -n "$user" ] || die "usage: KINDS_PASSWORD=... api.sh pack-registry-create NAME ENDPOINT USER"
   [ -n "${KINDS_PASSWORD:-}" ] || die "pack-registry-create needs KINDS_PASSWORD"
   body=$(mktemp); trap 'rm -f "${body:-}"' RETURN
   jq -n --arg n "$name" --arg e "$endpoint" --arg u "$user" --arg p "$KINDS_PASSWORD" \
-    '{metadata: {name: $n}, spec: {name: $n, endpoint: $e, private: true,
+    '{metadata: {name: $n}, spec: {name: $n, endpoint: $e, private: false,
       auth: {type: "basic", username: $u, password: $p}}}' > "$body"
   PROJECT="" call POST /v1/registries/pack "$body" | jq -r '.uid'
 }
@@ -362,16 +363,24 @@ pack_registry_delete() {
   fi
 }
 
-# pin_profile NAME REGISTRY_UID TYPE PACK VERSION: create and publish an add-on profile NAME@1.0.0
-# that pins PACK at VERSION by name, with no pack uid, as the console does for a registry that
-# Palette does not synchronize. Prints the uid of the profile.
+# pin_profile NAME REGISTRY_UID TYPE PACK VERSION [VALUES_FILE]: create and publish an add-on
+# profile NAME@1.0.0 that pins PACK at VERSION by name, with no pack uid, as the console does for a
+# registry that Palette does not synchronize, and with the values of VALUES_FILE, or none. When
+# the registry lists the pack, the pack uid goes too: Palette needs it for such a registry. Prints
+# the uid of the profile.
 pin_profile() {
-  local name=${1:-} registry=${2:-} kind=${3:-} pack=${4:-} version=${5:-} body uid
-  [ -n "$version" ] || die "usage: api.sh pin-profile NAME REGISTRY_UID TYPE PACK VERSION"
+  local name=${1:-} registry=${2:-} kind=${3:-} pack=${4:-} version=${5:-} values=${6:-} body uid pack_uid
+  [ -n "$version" ] || die "usage: api.sh pin-profile NAME REGISTRY_UID TYPE PACK VERSION [VALUES_FILE]"
   body=$(mktemp); trap 'rm -f "${body:-}"' RETURN
+  # the pack uid, when the registry lists the pack: a synchronized registry needs it
+  pack_uid=$(call GET "/v1/packs?filters=spec.name=$pack&limit=100&offset=0" \
+    | jq -r --arg r "$registry" --arg v "$version" \
+      '[.items[]? | select(.spec.registryUid == $r and .spec.version == $v) | .metadata.uid][0] // ""')
   jq -n --arg n "$name" --arg r "$registry" --arg t "$kind" --arg p "$pack" --arg v "$version" \
+    --arg u "$pack_uid" --rawfile values "${values:-/dev/null}" \
     '{metadata: {name: $n}, spec: {version: "1.0.0", template: {type: "add-on", cloudType: "all",
-      packs: [{name: $p, tag: $v, registryUid: $r, type: $t, layer: "addon", values: ""}]}}}' > "$body"
+      packs: [{name: $p, tag: $v, registryUid: $r, type: $t, layer: "addon", values: $values}
+        + (if $u == "" then {} else {uid: $u} end)]}}}' > "$body"
   uid=$(call POST /v1/clusterprofiles "$body" | jq -r '.uid') || return 2
   call PATCH "/v1/clusterprofiles/$uid/publish" > /dev/null || return 2
   echo "$uid"

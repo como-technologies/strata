@@ -263,6 +263,7 @@ $EDITOR examples/live/terraform/terraform.tfvars
 | `helm_registry_name`, `helm_chart`, `helm_chart_version` | optional; the default is `nginx` 25.1.5 from `Bitnami` |
 | `gcp_cloud_account_name`, `gcp_project` | for `cloud = "gcp"`: a GCP cloud account name, and a project it can use |
 | `gcp_region`, `gcp_zone`, `gcp_instance_type` | optional; the defaults are `us-east1`, `us-east1-b`, and `e2-standard-4` |
+| `extra_addon_profile_uids` | optional; more add-on profile versions for the clusters to run, by uid, such as the profiles that `api.sh pin-profile` makes. The default is none |
 
 The file is not tracked. It holds names only. The API key never goes in it.
 

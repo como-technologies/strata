@@ -142,7 +142,7 @@ again, with other bytes, syncs again, and records the pack again:
 | OCI, provider type `pack` | the manifest digest of the push | Palette gives the digest of the new push. A record from before reports `DRIFT`. |
 | OCI, provider type `helm` | the manifest digest of the push | Palette keeps the first digest. A record from before verifies. |
 | OCI, provider type `zarf` | none | none. A record reports `UNVERIFIED`. |
-| Spectro pack registry | no run shows one: see below | |
+| Spectro pack registry, not private | the digest of the push | Palette gives the digest of the new push, and its values. A record from before reports `DRIFT`. |
 
 A record of a pack from an OCI registry names the provider type of the
 registry, `registryProviderType`: Palette gives the three types one pack type,
@@ -157,11 +157,30 @@ The pack reference carries no digest, and the pack listing has none either. So
 a record of such a profile reports `UNVERIFIED`, `--allow-no-digest` accepts
 it, and `same-release` refuses it unless `--allow no-digest` is given.
 
-**A Spectro pack registry.** Palette accepts a registry on the pack registry
-server of Spectro Cloud, `spectro-registry` 4.0.2, with basic auth. Each sync
-reports `Completed` within a second, and Palette lists no pack of it, although
-the server serves its catalog, the tags of the pack, and the digest of each tag
-to the user that Palette reads as. So no run shows the digest of this kind.
+**A Spectro pack registry.** The registry of the run is the pack registry server
+of Spectro Cloud, `spectro-registry` 4.0.2, with basic auth. Palette reads a pack
+registry only when it is not private: a private one syncs as `Completed`, and
+Palette lists no pack of it.
+
+## What a cluster installs of a Helm pack
+
+A cluster installs a chart from a Helm repository, or from an OCI registry with
+the provider type `helm`, by its name and version, from what the registry
+serves at that time. The controller on the cluster does not use the digest, and
+it upgrades a Helm pack only when its version changes. A pack from an OCI
+registry with the provider type `pack`, and a pack from a Spectro pack registry,
+are upgraded when the digest changes.
+
+So when a chart version is pushed again with other bytes, a cluster that runs
+it keeps the first bytes, and a cluster that installs it later gets the new
+bytes. Palette keeps the first digest for the chart (see the table above), so
+the listing, the profile, the copy on each cluster, and a record of each show no
+change: `verify` reports `OK`. See
+[A chart pushed again, on a cluster](../development/live-runs.md#a-chart-pushed-again-on-a-cluster).
+
+For a Helm pack, the digest in a record says what Palette listed, and not the
+bytes that a cluster runs. A registry that refuses a push again of a version,
+such as ECR with immutable tags, makes the two the same.
 
 ## Tag names
 
@@ -618,9 +637,6 @@ live result, and `compare --repave` is how a reader asks Palette.
 These are open:
 
 - A Helm registry of type `helm` whose endpoint is `oci://`.
-- The digest of a pack in a Spectro pack registry: Palette lists no pack of the
-  one that the example serves. See
-  [The digest of each registry kind](#the-digest-of-each-registry-kind).
 - An OCI registry with an auth other than ECR and basic, and a registry service
   other than ECR and the Docker registry: ACR, GHCR, Harbor, and JFrog
   Artifactory are named on the public page, and no run uses one.

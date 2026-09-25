@@ -19,7 +19,7 @@
 #   OCI, provider type pack           manifest digest of the push     the digest of the new push
 #   OCI, provider type helm           manifest digest of the push     the first digest stays
 #   OCI, provider type zarf           none                            none
-#   Spectro pack registry             the run records whether Palette lists the pack at all
+#   Spectro pack registry             digest of the push              the digest of the new push
 #   Helm with credentials             none: not synchronized          none
 #
 # Needs tofu, the AWS profile of terraform.tfvars for the host, oras, helm, zarf, spectro, curl,
@@ -159,7 +159,8 @@ PACK_REG=$(tail -1 packs-registry.out)
 KINDS="charts:$(regf charts uid):helm:$CHART
 oci-pack:$(regf oci-pack uid):oci-basic:$PACK
 oci-helm:$(regf oci-helm uid):oci-basic:$CHART
-oci-zarf:$(regf oci-zarf uid):oci-basic:$ZARF"
+oci-zarf:$(regf oci-zarf uid):oci-basic:$ZARF
+packs:$PACK_REG:pack:$PACK"
 name_of() { case "$1" in packs) echo "strata-live-packs" ;; *) regf "$1" name ;; esac; }
 
 sync_and_record() { # LABEL
@@ -173,17 +174,8 @@ sync_and_record() { # LABEL
 }
 sync_and_record first
 
-# The Spectro pack registry: Palette syncs it, and the run records whether it lists the pack
-served() { # LABEL: the registry serves 1.0.0 to the user that Palette reads as, with the digest of the push
-  curl -sSf -u "$U:$KINDS_PASSWORD" "https://packs.$H/v1/$PACK/tags/list" \
-    | jq -e --arg d "$(grep -o 'digest: sha256:[0-9a-f]*' "push$1-packs.out" | tail -1 | cut -d' ' -f2)" \
-      '[.tags[] | select(.tag == "1.0.0") | .digest] == [$d]'
-}
-listed() { "$strata" packs "$PACK" --json | jq -e '[.registries[] | select(.registry == "strata-live-packs")] | length > 0'; }
-check sync-packs-first 0 "Palette reads the Spectro pack registry again" -- "$live/api.sh" sync pack "$PACK_REG"
-check packs-served-first 0 "the Spectro pack registry serves $PACK 1.0.0 to $U, with the digest of the push" -- served ""
-check packs-listed-first ? "#75: whether Palette lists $PACK from the Spectro pack registry after the sync" -- listed
-
+# the digest of each push of the Spectro pack registry, from the output of the spectro CLI
+spectro_digest() { grep -o 'digest: sha256:[0-9a-f]*' "$1" | tail -1 | cut -d' ' -f2; }
 check charts-digest 0 "#75: the Helm repository: the digest is the sha256 of the chart archive, bare hex" -- \
   test "$(upstream charts-first.json)" = "$H1"
 check oci-pack-digest 0 "#75: OCI pack: the digest is the manifest digest of the push" -- \
@@ -192,8 +184,10 @@ check oci-helm-digest 0 "#75: OCI helm: the digest is the manifest digest of the
   test "$(upstream oci-helm-first.json)" = "$M1_HELM"
 check oci-zarf-digest 0 "#75: OCI zarf: Palette gives no digest" -- \
   test "$(field oci-zarf-first.json hash.upstreamSource)" = none
+check packs-digest 0 "#75: the Spectro pack registry: the digest of the push" -- \
+  test "$(upstream packs-first.json)" = "$(spectro_digest push-packs.out)"
 check provider-types 0 "#75: each record of an OCI pack names the provider type of its registry, and no other names one" -- \
-  test "$(field charts-first.json registryProviderType)/$(field oci-pack-first.json registryProviderType)/$(field oci-helm-first.json registryProviderType)/$(field oci-zarf-first.json registryProviderType)" = "/pack/helm/zarf"
+  test "$(field charts-first.json registryProviderType)/$(field oci-pack-first.json registryProviderType)/$(field oci-helm-first.json registryProviderType)/$(field oci-zarf-first.json registryProviderType)/$(field packs-first.json registryProviderType)" = "/pack/helm/zarf/"
 
 # ---- 2. a Helm registry with credentials -------------------------------------------------------
 
@@ -227,9 +221,6 @@ check push2-packs 0 "push $PACK 1.0.0 again into the Spectro pack registry" -- p
 M2_PACK=$(cat push2-oci-pack.out)
 check push2-differs 0 "the two pushes of the OCI pack have two digests" -- test "$M1_PACK" != "$M2_PACK"
 sync_and_record second
-check sync-packs-second 0 "Palette reads the Spectro pack registry again" -- "$live/api.sh" sync pack "$PACK_REG"
-check packs-served-second 0 "the Spectro pack registry serves the new push under 1.0.0" -- served 2
-check packs-listed-second ? "#75: whether Palette lists $PACK from the Spectro pack registry now" -- listed
 
 check charts-keeps 0 "#75: the Helm repository keeps the first digest" -- \
   test "$(upstream charts-second.json)" = "$H1"
@@ -243,6 +234,9 @@ check oci-helm-verify 0 "#75: and the record from before verifies" -- "$strata" 
 check oci-zarf-none 0 "#75: OCI zarf still gives no digest" -- \
   test "$(field oci-zarf-second.json hash.upstreamSource)" = none
 check oci-zarf-verify 1 "#75 #71: and the record from before says UNVERIFIED" -- "$strata" verify oci-zarf-first.json
+check packs-follows 0 "#75: the Spectro pack registry follows the push: the digest of the new push" -- \
+  test "$(upstream packs-second.json)" = "$(spectro_digest push2-packs.out)"
+check packs-verify 1 "#75: and the record from before says DRIFT" -- "$strata" verify packs-first.json
 
 echo
 echo "$script: $(grep -c '^PASS' steps.log) passed, $failures failed; results in $run"

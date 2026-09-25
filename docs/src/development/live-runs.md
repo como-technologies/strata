@@ -518,8 +518,8 @@ states what it shows.
 | `charts-digest` | 0 | #75: the Helm repository: the sha256 of the chart archive, bare hex |
 | `oci-pack-digest`, `oci-helm-digest` | 0 | #75: OCI `pack` and `helm`: the manifest digest of the push |
 | `oci-zarf-digest` | 0 | #75: OCI `zarf`: no digest |
-| `provider-types` | 0 | #75: each record of an OCI pack names `pack`, `helm`, or `zarf`, and the Helm record names none |
-| `packs-served-first`, `packs-listed-first` | 0, ? | the Spectro pack registry serves `1.0.0` with the digest of the push to the user that Palette reads as, and Palette lists no pack of it (recorded 1) |
+| `provider-types` | 0 | #75: each record of an OCI pack names `pack`, `helm`, or `zarf`, and the Helm record and the Spectro pack record name none |
+| `packs-digest` | 0 | #75: the Spectro pack registry: the digest of the push |
 | `auth-listed` | ? | #75: Palette lists no chart of the Helm repository with credentials while no profile pins one (recorded 2) |
 | `auth-pin`, `auth-record` | 0 | a profile that pins the chart by name, and a record of it |
 | `auth-no-digest` | 0 | #75 #71: the pack reference carries no digest, and Palette made a pack uid |
@@ -530,7 +530,26 @@ states what it shows.
 | `oci-pack-follows`, `oci-pack-verify` | 0, 1 | #75: OCI `pack` gives the digest of the new push, and the record from before reports `DRIFT` |
 | `oci-helm-keeps`, `oci-helm-verify` | 0 | #75: OCI `helm` keeps the first digest, and the record from before verifies |
 | `oci-zarf-none`, `oci-zarf-verify` | 0, 1 | #75: OCI `zarf` still gives no digest, and the record from before reports `UNVERIFIED` |
-| `packs-served-second`, `packs-listed-second` | 0, ? | the Spectro pack registry serves the new push, and Palette still lists no pack of it (recorded 1) |
+| `packs-follows`, `packs-verify` | 0, 1 | #75: the Spectro pack registry gives the digest of the new push, and the record from before reports `DRIFT` |
+
+## A chart pushed again, on a cluster
+
+A run by hand, with the registry host of `registry-kinds.sh` and cluster A: no
+script holds it yet. Two charts, one in the Helm repository and one in the OCI
+registry with the provider type `helm`, each render one ConfigMap. Two profiles
+made with `api.sh pin-profile` pin them, and cluster A runs both through
+`extra_addon_profile_uids`. Then each chart is pushed again under `1.0.0`, with a
+template that adds `pushed: "again"`, and each registry is synced.
+
+| Step | What cluster A runs | What Palette and strata say |
+|---|---|---|
+| The profiles attached | the first bytes | the digest of the first push, in the listing, the profiles, and the copy on the cluster |
+| After the push again, for 10 minutes | the first bytes | the same digests; a record of each profile from before verifies |
+| The profiles taken off, and attached again | the second bytes | the same digests; the records from before still verify |
+
+The log of the controller on the cluster shows a `helm pull` of each chart, at
+each install, by `chartVersion` `1.0.0`. See
+[What a cluster installs of a Helm pack](../internals/palette.md#what-a-cluster-installs-of-a-helm-pack).
 
 ## A second cloud: GCP
 
@@ -586,5 +605,6 @@ What differs is outside strata:
   other upgrade engine.
 - [What Palette does](../internals/palette.md#what-no-run-covers) lists the
   behaviors that no script here establishes.
-- No script watches a pack of a Spectro pack registry: Palette lists no pack of
-  the one that `registry-kinds.sh` serves.
+- No script installs a Zarf package on a cluster: Palette gives a Zarf pack the
+  values of an app profile, `{{.spectro.system.appdeployment.tiername}}`, so it
+  needs an app deployment of Palette Dev Engine.

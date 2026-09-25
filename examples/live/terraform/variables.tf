@@ -310,3 +310,9 @@ variable "registry_kinds" {
   type        = bool
   default     = false
 }
+
+variable "extra_addon_profile_uids" {
+  description = "More add-on profile versions for the clusters to run, by uid: profiles that a script made through the API"
+  type        = list(string)
+  default     = []
+}
