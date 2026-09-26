@@ -21,6 +21,8 @@ program can use the same parts:
 | `Snapshot::content_digest` | The digest of what a version is. See [The content digest](../internals/hashes.md#the-content-digest). |
 | `Snapshot::pins` | Each pack that a version takes from a registry: its name, its version, and its digest as Palette lists it. [The pack-ref digest](../internals/palette.md#the-pack-ref-digest) says what that digest is for each kind of registry. |
 | `Snapshot::each_from_cluster` | A snapshot for each profile that a cluster applies, from one read of the cluster. |
+| `snapshot::cluster_tiers`, `snapshot::ClusterTier`, `api::Palette::cloud_config` | The tiers of a cluster record, each with its fields and its hash, from the cluster document and, for `shape`, the cloud config that `cloud_config` reads. `RawCluster::cloud_config` holds it. |
+| `diff::TierDiff`, `diff::RunningBehind` | Each tier of two cluster records compared, and each pack that a cluster runs at another version than its profile: `Diff::cluster_tiers` and `Diff::running_behind`. |
 | `Snapshot::macros`, `Snapshot::upstream_unknown` | The user macros that the content of a record reads, and the packs with no upstream digest. Neither needs a request, so both work on a record written before either existed. |
 | `candidate::check`, `ops::snapshot_from_loaded` | A candidate that a program builds, with no file: the rules of a [candidate file](../reference/candidate-file.md) hold for it, and it gives the snapshot that `snapshot --from-candidate` gives. |
 | `Error::class` | `Transient`, `Terminal`, or `Unknown`: what a caller does before it tries again. `Retry` uses the same rule. |

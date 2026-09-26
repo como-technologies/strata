@@ -1,0 +1,6 @@
+$ strata compare runs/payments.json runs/search.json --json | jq -c '.clusterTiers[] | {tier, same}'
+{"tier":"applied","same":true}
+{"tier":"policy","same":false}
+{"tier":"running","same":true}
+{"tier":"shape","same":false}
+{"tier":"labels","same":false}

@@ -544,6 +544,28 @@ impl Tenant {
         self.write(project, &path, &log);
     }
 
+    /// Change one field of the document of a cluster, or of its cloud config, at a JSON pointer:
+    /// what Palette reports changes, as a change on the cluster does, and its profiles do not.
+    pub fn cluster_field(&self, project: &str, uid: &str, pointer: &str, value: Value) {
+        let (path, pointer) = match pointer.strip_prefix("/cloudconfig") {
+            Some(rest) => (format!("v1/cloudconfigs/aws/{uid}c"), rest.to_string()),
+            None => (format!("v1/spectroclusters/{uid}"), pointer.to_string()),
+        };
+        let mut doc = self.read(project, &path);
+        // an existing field is replaced; a new key of an existing object is added
+        let (parent, key) = pointer.rsplit_once('/').unwrap_or(("", pointer.as_str()));
+        match doc.pointer_mut(&pointer) {
+            Some(slot) => *slot = value,
+            None => match doc.pointer_mut(parent).and_then(Value::as_object_mut) {
+                Some(object) => {
+                    object.insert(key.to_string(), value);
+                }
+                None => panic!("{path} has no object at {parent} for {key}"),
+            },
+        }
+        self.write(project, &path, &doc);
+    }
+
     /// Create a cluster that runs `profiles` in order, with its own copy of what each profile
     /// holds now, so a later edit of a profile does not reach the cluster. Run it again for the
     /// same cluster to apply the update that waits for it.
@@ -571,15 +593,74 @@ impl Tenant {
                 })
             })
             .collect();
+        // what Palette reports of a cluster beside its profiles: its own hashes of the spec it
+        // applied, the pack version that it reconciled, its policy, its labels, and its cloud
+        // config
+        let running: Vec<Value> = templates
+            .iter()
+            .flat_map(|t| {
+                let profile = t["uid"].clone();
+                t["packs"]
+                    .as_array()
+                    .cloned()
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(move |p| {
+                        let version = if p["version"].is_string() {
+                            p["version"].clone()
+                        } else {
+                            p["tag"].clone()
+                        };
+                        json!({"name": p["name"], "version": version, "profileUid": profile,
+                            "condition": {"type": "Ready", "status": "True"}})
+                    })
+            })
+            .collect();
+        let infra: Vec<&Value> = templates
+            .iter()
+            .filter(|t| t["type"] == "cluster" || t["type"] == "infra")
+            .collect();
+        let config_uid = format!("{uid}c");
         self.write(
             project,
             &format!("v1/spectroclusters/{uid}"),
             &json!({
                 "apiVersion": "v1", "kind": "SpectroCluster",
                 "metadata": {"name": name, "uid": uid,
-                    "annotations": {"projectUid": project, "scope": "project"}},
-                "spec": {"cloudType": "aws", "clusterProfileTemplates": templates},
-                "status": {"state": "Running"}
+                    "annotations": {"projectUid": project, "scope": "project"},
+                    "labels": {"managed-by": "opentofu"}},
+                "spec": {"cloudType": "aws", "clusterProfileTemplates": templates,
+                    "cloudConfigRef": {"kind": "aws", "uid": config_uid, "name": format!("{name}-aws-config")},
+                    "clusterConfig": {
+                        "timezone": "Etc/UTC",
+                        "lifecycleConfig": {"pause": false},
+                        "machineHealthConfig": {},
+                        "machineManagementConfig": {"osPatchConfig":
+                            {"patchOnBoot": false, "rebootIfRequired": false}},
+                        "clusterResources": {"namespaces": [], "rbacs": []},
+                    }},
+                "status": {"state": "Running",
+                    "spcApply": {"spcHash": fnv_hex(&json!(templates).to_string()),
+                        "spcInfraHash": fnv_hex(&json!(infra).to_string())},
+                    "packs": running,
+                    "fips": {"mode": "none"}}
+            }),
+        );
+        self.write(
+            project,
+            &format!("v1/cloudconfigs/aws/{config_uid}"),
+            &json!({
+                "metadata": {"uid": config_uid, "name": format!("{name}-aws-config")},
+                "spec": {
+                    "clusterConfig": {"region": "us-east-2", "sshKeyName": "platform",
+                        "vpcId": format!("vpc-{uid}")},
+                    "machinePoolConfig": [
+                        {"name": "cp-pool", "isControlPlane": true, "instanceType": "t3.xlarge",
+                            "size": 1, "azs": ["us-east-2a"], "subnetIds": {"us-east-2a": format!("subnet-{uid}")}},
+                        {"name": "worker-pool", "isControlPlane": false, "instanceType": "t3.xlarge",
+                            "size": 2, "azs": ["us-east-2a"], "subnetIds": {"us-east-2a": format!("subnet-{uid}")}},
+                    ]
+                }
             }),
         );
 
@@ -909,6 +990,17 @@ fn csi_entity_in_oci(entity: &Value) -> Value {
         None => json!([]),
     };
     out
+}
+
+/// A 64-bit FNV-1a hash as hex: a stand-in for the hashes Palette computes of a cluster, and the
+/// same on every machine and every Rust version.
+fn fnv_hex(text: &str) -> String {
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+    for b in text.bytes() {
+        h ^= u64::from(b);
+        h = h.wrapping_mul(0x0100_0000_01b3);
+    }
+    format!("{h:016x}")
 }
 
 #[cfg(test)]

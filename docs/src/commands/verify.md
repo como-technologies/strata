@@ -116,6 +116,14 @@ node impact. It changes no build, but it edits a published version. See
 For a cluster record, strata reads each profile that the cluster runs, one
 request for each. See [A version bump overwrites a version](../use-cases/overwritten.md).
 
+## The tiers of a cluster record
+
+`verify` of a cluster record reads the tiers that the record carries again, and
+the report names each tier that changed: see
+[More of the cluster than its release](snapshot.md#more-of-the-cluster-than-its-release).
+The verdict follows the release alone, so a changed tier does not make a record
+`DRIFT`. A record written before the tiers carries none, and verifies as before.
+
 ## Run it on a schedule
 
 `scripts/ci/verify-report.sh` runs `verify` over each record, and keeps one GitHub

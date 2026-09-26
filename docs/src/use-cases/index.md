@@ -87,6 +87,9 @@ cluster has. The two can differ.
 - [Clusters give variables different values](./cluster-values.md): two clusters
   on one release show `cluster values CHANGED`, or a person changes a value on
   one cluster.
+- [Two clusters on one release differ](./cluster-tiers.md): two clusters run one
+  release, and differ in their node pools, their policy, their labels, or the
+  pack version that each one reconciled.
 
 **4. The same release under another name.** These pages show why equal content
 can give different roots, and how strata says so.

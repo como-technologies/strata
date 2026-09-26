@@ -6,10 +6,11 @@ use super::{
     dash, edited_in_place_note, entry_error, list_count, list_scope, macros_changed_note,
     macros_changed_sentence, macros_note, overwritten_in_place_notes, pack_version, pair_detail,
     pair_word, palette_repave_lines, palette_repave_note, profiles_overwritten_sentence,
-    project_label, record_detail, record_label, registry_note, same_content_note, short, show,
-    subject, tag_rename, traits_suffix, unverified_sentence, updates_pending_notes,
-    upstream_unknown_note, values_changed_suffix, variable_lines, variables_comparable,
-    variables_unavailable_note, version_display, who_entry, who_heading,
+    project_label, record_detail, record_label, registry_note, running_behind_notes,
+    same_content_note, short, show, subject, tag_rename, tier_path, tier_states, traits_suffix,
+    unverified_sentence, updates_pending_notes, upstream_unknown_note, values_changed_suffix,
+    variable_lines, variables_comparable, variables_unavailable_note, version_display, who_entry,
+    who_heading,
 };
 use crate::color::Paint;
 use crate::diff::{
@@ -270,6 +271,9 @@ impl Renderer for TerminalRenderer {
         for note in updates_pending_notes(d) {
             out.push(format!("note       {}", p.byellow(&note)));
         }
+        for note in running_behind_notes(d) {
+            out.push(format!("note       {}", p.byellow(&note)));
+        }
         if let Some(note) = upstream_unknown_note(d) {
             out.push(format!("note       {}", p.byellow(&note)));
         }
@@ -321,6 +325,30 @@ impl Renderer for TerminalRenderer {
             out.push(format!("  cluster values {}", p.byellow("CHANGED")));
             for c in &cv.values {
                 out.push(format!("        {}", cluster_value_line(c, p)));
+            }
+        }
+        let states = tier_states(d);
+        if !states.is_empty() && states.iter().all(|(_, same)| *same) {
+            out.push(format!("  cluster tiers {}", p.dim("unchanged")));
+        } else if !states.is_empty() {
+            let words: Vec<String> = states
+                .iter()
+                .map(|(t, same)| {
+                    if *same {
+                        format!("{t} {}", p.dim("unchanged"))
+                    } else {
+                        format!("{t} {}", p.byellow("CHANGED"))
+                    }
+                })
+                .collect();
+            out.push(format!("  cluster tiers {}", words.join(", ")));
+            for t in d.cluster_tiers.iter().filter(|t| !t.same) {
+                for l in &t.diff {
+                    out.push(format!(
+                        "        {}",
+                        vline_at(&tier_path(&t.tier, &l.path), l, p)
+                    ));
+                }
             }
         }
         out.push(String::new());

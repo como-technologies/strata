@@ -327,6 +327,39 @@ instances kept running, and `tofu destroy` failed with `context deadline
 exceeded`. After an approval of the repave, the instances were gone in four
 minutes. The approval writes no audit entry.
 
+## Cluster tiers
+
+Beside the copies of its profiles, the document of a cluster,
+`GET /v1/spectroclusters/{uid}`, holds what Palette reports of the cluster
+itself. A cluster on AWS gives these fields:
+
+- `status.spcApply`: `spcHash` and `spcInfraHash`, two digests of 128 hex digits
+  that Palette computes of the spec it applied, with `actionType`,
+  `lastModifiedTime`, and `patchAppliedTime`. The document has no field
+  `crdDigest`.
+- `status.packs[]`: each pack that the cluster reconciled, with `name`,
+  `version`, `profileUid`, and a `condition` such as `InstallSuccess` or
+  `PackServicesReady`.
+- `spec.clusterConfig`: `machineManagementConfig.osPatchConfig`,
+  `lifecycleConfig`, `machineHealthConfig`, `timezone`, `clusterResources`,
+  `clusterRbac`, and the host and hybrid cluster config. `status.fips.mode` is
+  beside it.
+- `metadata.labels`: the tags that the cluster was created with, as a map.
+- `spec.cloudConfigRef`: the kind and uid of the cloud config, whose document,
+  `GET /v1/cloudconfigs/{kind}/{uid}`, holds `spec.machinePoolConfig[]` and
+  `spec.clusterConfig`.
+
+Two clusters from one definition give one `spcInfraHash`, and each its own
+`spcHash`. A change of the timezone and the labels of a cluster, through the
+API, changes its `spcHash`. The other tiers of the two clusters are the same:
+`status.packs`, `spec.clusterConfig`, the machine pools, and the labels. See
+[tiers.sh](../development/live-runs.md#tierssh).
+
+Strata records these as tiers: see
+[More of the cluster than its release](../commands/snapshot.md#more-of-the-cluster-than-its-release).
+It leaves out the times and the conditions, which change with no change of the
+cluster. Between two clusters, the `applied` tier compares `spcInfraHash` alone.
+
 ## Cluster copies
 
 Each cluster runs its own copy of the manifests of a profile. The copy has its

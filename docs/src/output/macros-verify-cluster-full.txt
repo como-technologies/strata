@@ -5,6 +5,7 @@ note       the content uses macro region: the root covers its name and not its v
 note       macro region has another value on each side: the clusters run other content, also where the roots are equal
 
   variables unchanged
+  cluster tiers unchanged
 
   [os   ] ubuntu-aws                 24.04              unchanged
   [k8s  ] kubernetes                 1.36.2             unchanged

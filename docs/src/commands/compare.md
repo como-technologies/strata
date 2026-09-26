@@ -111,6 +111,22 @@ answers for one cluster:
 {{#include ../output/repave-usage.txt}}
 ```
 
+## Compare two clusters by more than the release
+
+Two cluster records that carry tiers are compared on each tier that both carry,
+and on their labels. A `cluster tiers` line names the state of each, and a line
+for each field that differs, as `<tier>.<path>`:
+
+```text
+{{#include ../output/tiers-differ-lines.txt}}
+```
+
+A tier difference does not change `same`, and does not change the exit: the
+root says whether the release is the same. `--json` carries each tier as
+`clusterTiers`, and a pack whose reconciled version differs from its profile as
+`runningBehind`. See
+[More of the cluster than its release](snapshot.md#more-of-the-cluster-than-its-release).
+
 ## Compare two identical refs
 
 ```text
@@ -156,6 +172,7 @@ A `note` line follows `root` in these cases:
 | `pack <key> has no upstream digest: Palette gives none, so a change of the archive does not show` | A pack from a registry with `upstreamSource: none`, on either side. A line under the pack says it too. | [The content digest](../internals/hashes.md#the-content-digest) |
 | `the impact table says <level>, and Palette says <repave or no repave> for this cluster: the table does not describe its upgrade engine` | `--repave`, and the level and Palette's answer disagree. | [Ask Palette if the change repaves](#ask-palette-if-the-change-repaves) |
 | `cluster <c> is behind: Palette says an update of <profile> waits for it, since <time>` | A cluster side whose record says that an update waits. The copy is not the profile. | [Whether an update waits](./snapshot.md#whether-an-update-waits) |
+| `cluster <c> runs <pack> <version>, and its profile declares <version>` | A cluster side whose `running` tier holds another version of a pack than its profile. | [Two clusters on one release differ](../use-cases/cluster-tiers.md) |
 | `uid <uid> is <name>@<a> on one side and <name>@<b> on the other` | One uid under two versions. Strata prints one note for each such uid, also under `IDENTICAL`. `verify` leaves it out when its verdict already names the overwrite. | [A version bump overwrites a version](../use-cases/overwritten.md) |
 
 When a pack build has a new tag name and a manifest pack has a new uid, one note

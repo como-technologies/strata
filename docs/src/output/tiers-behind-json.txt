@@ -1,0 +1,2 @@
+$ strata compare cluster:payments aws-stack@1.1.1 --json | jq -c '.runningBehind'
+[{"side":"a","pack":"kubernetes","declared":"1.36.2","running":"1.36.1"}]

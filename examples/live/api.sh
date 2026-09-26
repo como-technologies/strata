@@ -51,6 +51,9 @@
 #       Make and publish an add-on profile NAME@1.0.0 that pins PACK at VERSION by name, with no
 #       pack uid, as the console does for a registry that Palette does not synchronize, and with
 #       the values of VALUES_FILE, or none. Prints its uid.
+#   api.sh patch PATH JSON
+#       PATCH one document of the API with the body JSON, such as
+#       /v1/spectroclusters/<uid>/clusterConfig/timezone '{"timezone": "America/Chicago"}'.
 #   api.sh probe-profile NAME REGISTRY_UID VERSION
 #       Ask Palette to create an add-on profile that pins one pack version, with the values the
 #       registry lists for it. When Palette creates it, delete it at once, print `accepted`, and
@@ -386,6 +389,16 @@ pin_profile() {
   echo "$uid"
 }
 
+# patch PATH JSON: PATCH one document of the API with the body JSON
+patch() {
+  local path=${1:-} json=${2:-} body
+  [ -n "$json" ] || die "usage: api.sh patch PATH JSON"
+  body=$(mktemp); trap 'rm -f "${body:-}"' RETURN
+  jq -e . <<<"$json" > "$body" || die "the body is not JSON: $json"
+  call PATCH "$path" "$body" > /dev/null || return 2
+  echo "patched $path"
+}
+
 # macro-set NAME VALUE: POST creates a project macro, PATCH changes one that exists
 macro_set() {
   local name=${1:-} value=${2:-} body
@@ -447,5 +460,6 @@ case "${1:-}" in
   macro-delete) shift; macro_delete "$@" ;;
   get-kubeconfig) shift; get_kubeconfig "$@" ;;
   get) shift; [ -n "${1:-}" ] || die "usage: api.sh get PATH"; call GET "$1" ;;
+  patch) shift; patch "$@" ;;
   *) sed -n '2,/^set -uo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; exit 2 ;;
 esac

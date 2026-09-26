@@ -1,0 +1,1 @@
+$ strata snapshot cluster:payments --shape -o runs/payments.json

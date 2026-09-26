@@ -532,6 +532,32 @@ states what it shows.
 | `oci-zarf-none`, `oci-zarf-verify` | 0, 1 | #75: OCI `zarf` still gives no digest, and the record from before reports `UNVERIFIED` |
 | `packs-follows`, `packs-verify` | 0, 1 | #75: the Spectro pack registry gives the digest of the new push, and the record from before reports `DRIFT` |
 
+## tiers.sh
+
+Read-write: it builds cluster B, changes its timezone and its labels through the
+API, and removes it. It needs the example at its baseline with cluster A.
+
+| Check | Expected exit | What it shows |
+|---|---|---|
+| `a-record`, `a-tiers` | 0 | #76: a record of cluster A with `--shape` carries `applied`, `policy`, `running`, and `shape`, and the labels |
+| `a-applied`, `a-running`, `a-shape` | 0 | #76: Palette's two hashes; one `running` entry for each pack of the record; two machine pools and the region, and no subnet id |
+| `a-behind` | 0 | #76: at the baseline, no pack of cluster A runs another version than its profile declares |
+| `b-record`, `same-release` | 0 | #76: a record of cluster B, from the same definition; the release is the same |
+| `same-applied`, `same-policy`, `same-running`, `same-shape`, `same-labels` | ? | #76: each tier of the two clusters: `policy`, `running`, `shape`, and the labels are the same (recorded 0); `applied` differs at `spcHash` (recorded 1) |
+| `b-timezone`, `b-labels` | 0 | cluster B gets the timezone `America/Chicago` and the label `team=search` |
+| `differ`, `differ-policy`, `differ-labels`, `differ-says` | 0 | #76: still one release; `policy` differs at `timezone`, and the labels at `team`; the report says `~ policy.timezone: "Etc/UTC" -> "America/Chicago"` |
+| `b-verify`, `b-verify-says` | 0 | #76: the record of B from before still verifies, and names `policy CHANGED` |
+| `undo-baseline` | 0 | the example is at its baseline |
+
+`spcHash` is its own for each cluster, so `compare` now reads `spcInfraHash`
+alone between two clusters. On the two records of the run, `compare` then says
+`cluster tiers unchanged`, and after the change names `policy.timezone` and
+`labels.team` alone. The `verify` of B also names `applied CHANGED`: the change
+of the timezone and the labels changed the `spcHash` of B.
+
+No run makes a cluster run another pack version than its profile declares; the
+book shows it on the stand-in.
+
 ## A chart pushed again, on a cluster
 
 A run by hand, with the registry host of `registry-kinds.sh` and cluster A: no

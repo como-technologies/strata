@@ -304,7 +304,34 @@ impl<A: PaletteApi> Palette<A> {
             notifications,
             notifications_error,
             resolved_values: None,
+            cloud_config: None,
         })
+    }
+
+    /// The cloud config of a cluster, `GET /v1/cloudconfigs/{cloudType}/{configUid}`, from the
+    /// `spec.cloudConfigRef` of the cluster document: its machine pools and its cloud part.
+    pub fn cloud_config(&self, cluster: &Value) -> Result<Value> {
+        let field = |p: &str| {
+            cluster
+                .pointer(p)
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+        };
+        let kind = match field("/spec/cloudConfigRef/kind") {
+            "" => field("/spec/cloudType"),
+            k => k,
+        };
+        let uid = field("/spec/cloudConfigRef/uid");
+        if kind.is_empty() || uid.is_empty() {
+            return Err(Error::Usage {
+                message: "the cluster document names no cloud config".to_string(),
+            });
+        }
+        self.api.get_json(&format!(
+            "/v1/cloudconfigs/{}/{}",
+            query_value(kind),
+            query_value(uid)
+        ))
     }
 
     /// The value Palette gives each macro for one cluster, `GET

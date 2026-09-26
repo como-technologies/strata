@@ -5660,3 +5660,209 @@ fn a_record_of_a_pack_from_an_oci_registry_names_its_provider_type() {
     let spectro = snapshot_pack(&listed, "pack:Public Repo/csi-aws-ebs@1.65.0").unwrap();
     assert_eq!(spectro.packs[0].registry_provider_type, None);
 }
+
+// ---- the tiers of a cluster record (#76) ---------------------------------------------------------
+
+/// cluster-a, with what Palette reports of a running cluster beside its profiles: its hashes of
+/// the applied spec, the pack version each pack reconciled, its policy, and its labels. One more
+/// reconciled pack belongs to a profile that the record does not cover.
+fn with_cluster_status(raw_root: &Path) {
+    let path = raw_root.join("cluster-a").join("cluster.json");
+    let mut doc = read(&path);
+    let template = doc["spec"]["clusterProfileTemplates"][0].clone();
+    let mut packs: Vec<Value> = template["packs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| {
+            serde_json::json!({"name": p["name"], "version": p["version"].as_str().or(p["tag"].as_str()),
+                "profileUid": template["uid"], "condition": {"type": "Ready", "status": "True"}})
+        })
+        .collect();
+    packs.push(
+        serde_json::json!({"name": "other", "version": "9.9.9", "profileUid": "not-covered"}),
+    );
+    doc["status"]["spcApply"] = serde_json::json!({"spcHash": "h1", "spcInfraHash": "i1",
+        "lastModifiedTime": "2026-09-25T00:00:00Z"});
+    doc["status"]["packs"] = Value::Array(packs);
+    doc["status"]["fips"] = serde_json::json!({"mode": "none"});
+    doc["spec"]["clusterConfig"] = serde_json::json!({"timezone": "Etc/UTC",
+        "lifecycleConfig": {"pause": false}, "machineHealthConfig": {}});
+    doc["spec"]["cloudConfigRef"] = serde_json::json!({"kind": "aws", "uid": "cc1"});
+    doc["metadata"]["labels"] = serde_json::json!({"env": "dev"});
+    fs::write(&path, serde_json::to_string(&doc).unwrap()).unwrap();
+}
+
+fn cloud_config(size: u64) -> Value {
+    serde_json::json!({"spec": {
+    "clusterConfig": {"region": "us-east-2", "vpcId": "vpc-mine"},
+    "machinePoolConfig": [
+        {"name": "worker-pool", "instanceType": "t3.xlarge", "size": size, "azs": ["us-east-2a"],
+         "subnetIds": {"us-east-2a": "subnet-mine"}},
+        {"name": "cp-pool", "isControlPlane": true, "instanceType": "t3.xlarge", "size": 1},
+    ]}})
+}
+
+#[test]
+fn a_cluster_record_carries_the_tiers_that_palette_gives_and_names_them() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    with_cluster_status(dir.path());
+    let api = serve_cluster(MemoryApi::new(), dir.path(), "cluster-a");
+    let snap = snapshot_cluster(&api, None).unwrap();
+    let c = snap.source.cluster.as_ref().unwrap();
+    // shape costs a request, so a record without --shape does not carry it
+    assert_eq!(
+        c.tiers.keys().collect::<Vec<_>>(),
+        ["applied", "policy", "running"]
+    );
+    assert_eq!(c.labels.get("env").map(String::as_str), Some("dev"));
+    assert_eq!(c.tiers["applied"].fields["spcHash"], "h1");
+    // running holds the covered profile alone, without the condition
+    let running = c.tiers["running"].fields.as_array().unwrap();
+    assert!(
+        running
+            .iter()
+            .all(|r| r["name"] != "other" && r.get("condition").is_none())
+    );
+    assert_eq!(running.len(), snap.packs.len());
+    assert_eq!(c.tiers["policy"].fields["timezone"], "Etc/UTC");
+
+    // --shape: the machine pools and the cloud part, without the ids of the cluster
+    let palette = Palette::new(
+        api.clone()
+            .with("/v1/cloudconfigs/aws/cc1", cloud_config(2)),
+    );
+    let mut raw = palette
+        .fetch_cluster(CLUSTER_UID, &Progress::silent())
+        .unwrap();
+    raw.cloud_config = Some(palette.cloud_config(&raw.cluster).unwrap());
+    let shaped = Snapshot::from_cluster(&raw, None, "cluster", "t0").unwrap();
+    let shape = &shaped.source.cluster.as_ref().unwrap().tiers["shape"].fields;
+    assert_eq!(shape["cloud"], serde_json::json!({"region": "us-east-2"}));
+    assert_eq!(shape["pools"][0]["name"], "cp-pool", "pools in name order");
+    assert!(shape["pools"][1].get("subnetIds").is_none());
+    // and the tiers are outside the root
+    assert_eq!(shaped.root, snap.root);
+}
+
+#[test]
+fn a_cluster_record_without_tiers_still_verifies() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    with_cluster_status(dir.path());
+    let api = serve_cluster(MemoryApi::new(), dir.path(), "cluster-a");
+    let mut doc = serde_json::to_value(snapshot_cluster(&api, None).unwrap()).unwrap();
+    // a record written before the tiers: no tiers, no labels
+    let cluster = doc["source"]["cluster"].as_object_mut().unwrap();
+    cluster.remove("tiers");
+    cluster.remove("labels");
+    let old: Snapshot = serde_json::from_value(doc).unwrap();
+    let v = ops::verify(&old, &Palette::new(api), "t1", &Progress::silent()).unwrap();
+    assert!(v.unchanged);
+    assert_eq!(v.status, VerifyStatus::Unchanged);
+    assert!(v.diff.cluster_tiers.is_empty(), "no tier to compare");
+}
+
+#[test]
+fn compare_names_the_tier_and_the_field_that_differ_and_a_pack_behind_its_profile() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    with_cluster_status(dir.path());
+    let api = serve_cluster(MemoryApi::new(), dir.path(), "cluster-a");
+    let palette = Palette::new(
+        api.clone()
+            .with("/v1/cloudconfigs/aws/cc1", cloud_config(2)),
+    );
+    let mut raw = palette
+        .fetch_cluster(CLUSTER_UID, &Progress::silent())
+        .unwrap();
+    raw.cloud_config = Some(palette.cloud_config(&raw.cluster).unwrap());
+    let a = Snapshot::from_cluster(&raw, None, "a", "t0").unwrap();
+
+    // the other cluster: a larger worker pool, another timezone, and one pack behind
+    raw.cloud_config = Some(cloud_config(3));
+    raw.cluster["spec"]["clusterConfig"]["timezone"] = Value::from("America/Chicago");
+    let first = raw.cluster["status"]["packs"][0]["name"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let declared = a
+        .packs
+        .iter()
+        .find(|p| p.name == first)
+        .unwrap()
+        .version
+        .clone();
+    raw.cluster["status"]["packs"][0]["version"] = Value::from("0.0.1");
+    let b = Snapshot::from_cluster(&raw, None, "b", "t0").unwrap();
+
+    let d = strata::diff::compute(&a, &b, "t1", None);
+    assert!(d.same, "the release is the same");
+    let tier = |name: &str| d.cluster_tiers.iter().find(|t| t.tier == name).unwrap();
+    assert!(tier("applied").same);
+    assert!(!tier("policy").same);
+    assert_eq!(tier("policy").diff[0].path, "timezone");
+    assert_eq!(tier("shape").diff[0].path, "pools[name=worker-pool].size");
+    assert!(!tier("running").same);
+    assert!(tier("labels").same);
+    assert_eq!(d.running_behind.len(), 1);
+    let behind = &d.running_behind[0];
+    assert_eq!(
+        (behind.side.as_str(), behind.pack.as_str()),
+        ("b", first.as_str())
+    );
+    assert_eq!(
+        (behind.declared.as_str(), behind.running.as_str()),
+        (declared.as_str(), "0.0.1")
+    );
+    let text = render::renderer(Format::Terminal, Paint::off(), false)
+        .render(&d, &a, &b, false)
+        .unwrap();
+    assert!(text.contains("policy CHANGED"), "{text}");
+    assert!(
+        text.contains("~ shape.pools[name=worker-pool].size: 2 -> 3"),
+        "{text}"
+    );
+    assert!(
+        text.contains(&format!(
+            "runs {first} 0.0.1, and its profile declares {declared}"
+        )),
+        "{text}"
+    );
+}
+
+#[test]
+fn between_two_clusters_the_applied_tier_compares_the_infra_hash_alone() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    with_cluster_status(dir.path());
+    let api = serve_cluster(MemoryApi::new(), dir.path(), "cluster-a");
+    let palette = Palette::new(api);
+    let mut raw = palette
+        .fetch_cluster(CLUSTER_UID, &Progress::silent())
+        .unwrap();
+    let a = Snapshot::from_cluster(&raw, None, "a", "t0").unwrap();
+    // another cluster from the same definition: Palette gives it its own spcHash
+    raw.cluster["metadata"]["uid"] = Value::from("another-cluster");
+    raw.cluster["status"]["spcApply"]["spcHash"] = Value::from("h2");
+    let b = Snapshot::from_cluster(&raw, None, "b", "t0").unwrap();
+    let d = strata::diff::compute(&a, &b, "t1", None);
+    let applied = d
+        .cluster_tiers
+        .iter()
+        .find(|t| t.tier == "applied")
+        .unwrap();
+    assert!(applied.same, "{:?}", applied.diff);
+    // the same cluster with another spcHash has changed
+    raw.cluster["metadata"]["uid"] = Value::from(CLUSTER_UID);
+    let again = Snapshot::from_cluster(&raw, None, "a", "t1").unwrap();
+    let d = strata::diff::compute(&a, &again, "t1", None);
+    let applied = d
+        .cluster_tiers
+        .iter()
+        .find(|t| t.tier == "applied")
+        .unwrap();
+    assert!(!applied.same);
+    assert_eq!(applied.diff[0].path, "spcHash");
+}

@@ -172,6 +172,9 @@ pub struct RawCluster {
     /// `GET /v1/spectroclusters/{uid}/packs/resolvedValues`: for each applied profile, the value
     /// Palette gives each macro. `None` unless asked for, with `snapshot --macros`.
     pub resolved_values: Option<Value>,
+    /// `GET /v1/cloudconfigs/{cloudType}/{configUid}`: the machine pools and the cloud part of
+    /// the cluster. `None` unless asked for, with `snapshot --shape`.
+    pub cloud_config: Option<Value>,
 }
 
 impl RawCluster {
@@ -198,11 +201,19 @@ impl RawCluster {
             } else {
                 None
             },
+            cloud_config: if dir.join(Self::CLOUD_CONFIG).is_file() {
+                Some(read_json_file(dir, Self::CLOUD_CONFIG)?)
+            } else {
+                None
+            },
         })
     }
 
     /// The file that holds the values Palette gives the macros, when they were read.
     pub const RESOLVED_VALUES: &'static str = "resolved-values.json";
+
+    /// The file that holds the cloud config of the cluster, when it was read.
+    pub const CLOUD_CONFIG: &'static str = "cloud-config.json";
 
     /// The file that holds the notifications of the cluster, when they were read.
     pub const NOTIFICATIONS: &'static str = "notifications.json";
@@ -222,6 +233,9 @@ impl RawCluster {
         }
         if let Some(r) = &self.resolved_values {
             files.push((Self::RESOLVED_VALUES, r));
+        }
+        if let Some(c) = &self.cloud_config {
+            files.push((Self::CLOUD_CONFIG, c));
         }
         write_json_files(dir, &files)
     }

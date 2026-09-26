@@ -54,7 +54,11 @@ A record of one profile version or cluster.
     `profileUid`, `profile`, `message`, and `since` for each change that waits.
     `macroValues`, only with `snapshot --macros`: each user macro the content
     uses, and `sha256:` of the value Palette gives it for this cluster, or
-    `unresolved`. None of these is part of the root.
+    `unresolved`. `labels`: the labels of the cluster. `tiers`: each tier that
+    the record carries, by name (`applied`, `running`, `policy`, and, with
+    `snapshot --shape`, `shape`), each with `hash` and `fields`: see
+    [More of the cluster than its release](../commands/snapshot.md#more-of-the-cluster-than-its-release).
+    None of these is part of the root.
     Each entry of `profiles[]` has `uid`, `name`, `version`, and `type`, in the
     order [The order of the profiles of a cluster](../internals/palette.md#the-order-of-the-profiles-of-a-cluster)
     gives. Each entry of `variables[]` has `profile`, `profileUid`, `name`,
@@ -140,6 +144,12 @@ A comparison of two sides, `a` and `b`.
 - `macros`, only when it is not empty: each user macro that either side uses.
 - `macrosChanged`, only when it is not empty: between two cluster records with
   `macroValues`, each macro whose value differs.
+- `clusterTiers`, only between two cluster records that carry tiers: for each
+  tier that both carry, and for `labels`, `tier`, `same`, and `diff[]` with the
+  fields that differ. A difference here does not change `same`.
+- `runningBehind`, only when it is not empty: for each cluster side with a
+  `running` tier, each pack whose reconciled version differs from its profile,
+  with `side` (`a` or `b`), `pack`, `declared`, and `running`.
 - `paletteRepave`, only with `compare --repave`: `clusterUid`, `required`
   (Palette's `isRepaveRequired`), `reasons[]` with `code`, `message`, `pack`, and
   `keys` (the config keys that differ), and `agrees`. `agrees` is `false` when

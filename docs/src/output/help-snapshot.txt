@@ -19,6 +19,8 @@ Options:
           Write the JSON on one line
       --macros
           For a cluster: record the digest of the value Palette gives each macro the content uses
+      --shape
+          For a cluster: record the shape tier, the machine pools and the cloud part, with one more request
   -q, --quiet
           No progress messages
   -h, --help

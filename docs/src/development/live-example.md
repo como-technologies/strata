@@ -18,6 +18,7 @@ show.
 | `merge-gate.sh` | `scripts/ci/merge-gate.sh` over records of the live profiles, in a git repository that the script builds (#57). It needs the profiles, and no cluster. |
 | `knurl.sh` | [The knurl adapter](../automation/knurl.md): each method of the port against the strata answer for the same real object. Read-only. It needs the profiles; the instance checks need the cluster. |
 | `registry-kinds.sh` | The digest of each registry kind, and a push again of one version into each (#75); a Helm registry with credentials, the case with no digest (#71). It needs no cluster. |
+| `tiers.sh` | The tiers of a cluster record, and `compare` of two cluster records beyond the release (#76). It builds cluster B for a while. |
 
 The example runs on AWS or GCP: the variable `cloud` in `terraform.tfvars`
 selects one. Strata makes no rule about which cloud runs the cluster. The
@@ -140,6 +141,7 @@ each.
 | `knurl.sh` | nothing; it only reads | the baseline |
 | `registry.sh` | the images of the example's own registries, and the profiles that pin them | the shared registries, the clusters, the release and add-on versions |
 | `registry-kinds.sh` | the registry host and a Palette registry over each kind, then pushes of `1.0.0` into each, and one profile of stage 2; it removes each at its end | the profiles, the clusters, the baseline |
+| `tiers.sh` | cluster B, then its timezone and its labels through the API; it removes B | the profiles, cluster A, the baseline |
 | `template.sh` | a template over the release and add-on versions; then the release version, in place | the pack versions; it ends with the example removed |
 | `cluster.sh` | the value cluster A gives one variable; then the cluster, deleted through the API | the profiles |
 | `order.sh` | the pack order of two published versions, and the profile order of cluster A | the packs, the values, the manifests; it leaves the versions edited |
@@ -313,6 +315,7 @@ just live-packs                                                                #
 just live-merge-gate                                                           # #57, needs just live-profiles
 just live-registry                                                             # #66, needs just live-profiles, oras, helm, and aws
 just live-registry-kinds                                                       # #75, needs just live-profiles, oras, helm, zarf, and spectro
+just live-tiers                                                                # #76, needs just live-up; builds and removes cluster B
 just live-template                                                             # #66, needs just live-profiles and no cluster; ends with live-down
 just live-cluster                                                              # #66, needs just live-up; ends with the cluster gone
 just live-order                                                                # #66, needs just live-up; leaves the versions edited, so live-down follows

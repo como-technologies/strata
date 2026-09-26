@@ -176,6 +176,10 @@ struct SnapshotArgs {
     /// For a cluster: record the digest of the value Palette gives each macro the content uses
     #[arg(long, conflicts_with_all = ["from_raw", "from_candidate"])]
     macros: bool,
+    /// For a cluster: record the shape tier, the machine pools and the cloud part, with one more
+    /// request
+    #[arg(long, conflicts_with_all = ["from_raw", "from_candidate"])]
+    shape: bool,
     /// No progress messages
     #[arg(short, long)]
     quiet: bool,
@@ -602,6 +606,12 @@ fn cmd_snapshot(a: &SnapshotArgs) -> Result<ExitCode> {
                         .to_string(),
                 });
             }
+            if a.shape && !matches!(reference, Ref::Cluster { .. }) {
+                return Err(Error::Usage {
+                    message: "--shape needs a cluster ref: a profile has no machine pools"
+                        .to_string(),
+                });
+            }
             let palette = connect(progress, None)?;
             let snap = match &reference {
                 Ref::Cluster { uid, profile } => {
@@ -614,6 +624,9 @@ fn cmd_snapshot(a: &SnapshotArgs) -> Result<ExitCode> {
                             .unwrap_or(uid)
                             .to_string();
                         raw.resolved_values = Some(palette.resolved_values(&uid)?);
+                    }
+                    if a.shape {
+                        raw.cloud_config = Some(palette.cloud_config(&raw.cluster)?);
                     }
                     if let Some(dir) = &a.raw_dir {
                         raw.save_dir(dir, &now)?;

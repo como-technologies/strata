@@ -18,5 +18,67 @@ $ jq .source.cluster runs/payments.json
       "value": ""
     }
   ],
-  "updatesPending": false
+  "updatesPending": false,
+  "labels": {
+    "managed-by": "opentofu"
+  },
+  "tiers": {
+    "applied": {
+      "hash": "611db1f6f4548fe3b9a90483f8a8cd9894bc617f17519bb4edea030b9eac8b50",
+      "fields": {
+        "spcHash": "fbc58a142284288d",
+        "spcInfraHash": "fbc58a142284288d"
+      }
+    },
+    "policy": {
+      "hash": "a99f6ce98e80567eaf6d31b13f47c666977ba0f0c40799b6c2271c012ef78235",
+      "fields": {
+        "fips": "none",
+        "lifecycle": {
+          "pause": false
+        },
+        "machineHealth": {},
+        "osPatch": {
+          "patchOnBoot": false,
+          "rebootIfRequired": false
+        },
+        "rbac": null,
+        "resources": {
+          "namespaces": [],
+          "rbacs": []
+        },
+        "timezone": "Etc/UTC"
+      }
+    },
+    "running": {
+      "hash": "de508fcb84636da8855a64386e05c59a0590eae148f3091479b25f5184dc37e9",
+      "fields": [
+        {
+          "name": "cert-manager",
+          "profileUid": "64e0000000000000000000c3",
+          "version": "1.21.1"
+        },
+        {
+          "name": "cni-cilium-oss",
+          "profileUid": "64e0000000000000000000c3",
+          "version": "1.20.1"
+        },
+        {
+          "name": "csi-aws-ebs",
+          "profileUid": "64e0000000000000000000c3",
+          "version": "1.65.0"
+        },
+        {
+          "name": "kubernetes",
+          "profileUid": "64e0000000000000000000c3",
+          "version": "1.36.2"
+        },
+        {
+          "name": "ubuntu-aws",
+          "profileUid": "64e0000000000000000000c3",
+          "version": "24.04"
+        }
+      ]
+    }
+  }
 }

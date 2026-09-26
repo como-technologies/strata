@@ -3,6 +3,13 @@ aws-stack@1.1.1 on cluster payments (uid 64f1000000000000000000e1)  ->  aws-stac
 root       088136c929bd -> 78a86f401545   CHANGED
 
   variables unchanged
+  cluster tiers applied CHANGED, policy unchanged, running CHANGED, labels unchanged
+        ~ applied.spcInfraHash: "fbc58a142284288d" -> "0f77c15e621abc62"
+        ~ running[name=cert-manager].profileUid: "64e0000000000000000000c3" -> "64e1000000000000000000c3"
+        ~ running[name=cni-cilium-oss].profileUid: "64e0000000000000000000c3" -> "64e1000000000000000000c3"
+        ~ running[name=csi-aws-ebs].profileUid: "64e0000000000000000000c3" -> "64e1000000000000000000c3"
+        ~ running[name=kubernetes].profileUid: "64e0000000000000000000c3" -> "64e1000000000000000000c3"
+        ~ running[name=ubuntu-aws].profileUid: "64e0000000000000000000c3" -> "64e1000000000000000000c3"
 
   [os   ] ubuntu-aws                 24.04              unchanged
   [k8s  ] kubernetes                 1.36.2             unchanged

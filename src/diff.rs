@@ -62,6 +62,14 @@ pub struct Diff {
     /// sides are clusters. A difference here does not change `same`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cluster_variables: Option<ClusterVariablesDiff>,
+    /// Between two cluster records that carry tiers: each tier that both carry, and the labels,
+    /// with what differs in each. A difference here does not change `same`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub cluster_tiers: Vec<TierDiff>,
+    /// For each side that records a cluster with its `running` tier: each pack whose version, as
+    /// the cluster reconciled it, differs from the version that its profile declares.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub running_behind: Vec<RunningBehind>,
     /// True when packs present on both sides appear in a different order
     pub order_changed: bool,
     /// One entry per pack key present on either side, sorted by layer then name
@@ -175,6 +183,105 @@ pub struct ClusterVariablesDiff {
     pub changed: bool,
     /// The values that differ.
     pub values: Vec<ClusterValueChange>,
+}
+
+/// One tier of two cluster records, compared.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct TierDiff {
+    /// `applied`, `running`, `policy`, `shape`, or `labels`. Between two clusters, `applied`
+    /// compares `spcInfraHash` alone: Palette's `spcHash` is its own for each cluster.
+    pub tier: String,
+    /// True when the hashes are equal.
+    pub same: bool,
+    /// The fields that differ, when the tier differs.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub diff: Vec<Leaf>,
+}
+
+/// A pack that a cluster runs at another version than its profile declares.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct RunningBehind {
+    /// `a` or `b`: the side whose cluster it is.
+    pub side: String,
+    /// The pack name.
+    pub pack: String,
+    /// The version that the profile declares.
+    pub declared: String,
+    /// The version that the cluster reconciled.
+    pub running: String,
+}
+
+/// The tiers that two cluster records both carry, and their labels, compared.
+fn tiers_diff(a: &Snapshot, b: &Snapshot) -> Vec<TierDiff> {
+    let (Some(x), Some(y)) = (&a.source.cluster, &b.source.cluster) else {
+        return Vec::new();
+    };
+    if x.tiers.is_empty() || y.tiers.is_empty() {
+        return Vec::new();
+    }
+    let mut out: Vec<TierDiff> = x
+        .tiers
+        .iter()
+        .filter_map(|(name, t)| {
+            let u = y.tiers.get(name)?;
+            // Palette's spcHash is its own for each cluster, and equal for no two: between two
+            // clusters, applied compares spcInfraHash alone
+            let (f, g) = if name == "applied" && x.uid != y.uid {
+                let infra = |v: &Value| json!({"spcInfraHash": v.get("spcInfraHash")});
+                (infra(&t.fields), infra(&u.fields))
+            } else {
+                (t.fields.clone(), u.fields.clone())
+            };
+            let same = f == g;
+            Some(TierDiff {
+                tier: name.clone(),
+                same,
+                diff: if same { Vec::new() } else { leaf_diff(&f, &g) },
+            })
+        })
+        .collect();
+    let labels = |m: &std::collections::BTreeMap<String, String>| {
+        serde_json::to_value(m).unwrap_or(Value::Null)
+    };
+    let (la, lb) = (labels(&x.labels), labels(&y.labels));
+    out.push(TierDiff {
+        tier: "labels".to_string(),
+        same: la == lb,
+        diff: leaf_diff(&la, &lb),
+    });
+    out
+}
+
+/// The packs of a cluster record whose reconciled version differs from the declared one.
+fn running_behind(side: &str, s: &Snapshot) -> Vec<RunningBehind> {
+    let Some(tier) = s
+        .source
+        .cluster
+        .as_ref()
+        .and_then(|c| c.tiers.get("running"))
+    else {
+        return Vec::new();
+    };
+    let running = tier.fields.as_array().cloned().unwrap_or_default();
+    s.packs
+        .iter()
+        .filter_map(|p| {
+            let r = running
+                .iter()
+                .find(|r| r.get("name").and_then(Value::as_str) == Some(p.name.as_str()))?;
+            let version = r.get("version").and_then(Value::as_str).unwrap_or_default();
+            (!version.is_empty() && !p.version.is_empty() && version != p.version).then(|| {
+                RunningBehind {
+                    side: side.to_string(),
+                    pack: p.name.clone(),
+                    declared: p.version.clone(),
+                    running: version.to_string(),
+                }
+            })
+        })
+        .collect()
 }
 
 /// One value that differs between two clusters.
@@ -1232,6 +1339,12 @@ pub fn compute(a: &Snapshot, b: &Snapshot, generated_at: &str, verify: Option<Ve
         cluster_variables: match (&a.source.cluster, &b.source.cluster) {
             (Some(x), Some(y)) => Some(cluster_values_diff(&x.variables, &y.variables)),
             _ => None,
+        },
+        cluster_tiers: tiers_diff(a, b),
+        running_behind: {
+            let mut v = running_behind("a", a);
+            v.extend(running_behind("b", b));
+            v
         },
         order_changed,
         packs,

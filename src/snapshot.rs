@@ -210,6 +210,152 @@ pub struct ClusterSource {
     /// again and compares.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub macro_values: Option<BTreeMap<String, String>>,
+    /// The labels of the cluster, as Palette gives them in `metadata.labels`. Outside the root.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub labels: BTreeMap<String, String>,
+    /// More of the cluster than its release, by tier: `applied`, `running`, `policy`, and, with
+    /// `snapshot --shape`, `shape`. Each tier has its own hash. A record names the tiers that it
+    /// carries by carrying them, so a record without one still verifies. Outside the root.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub tiers: BTreeMap<String, ClusterTier>,
+}
+
+/// One tier of a cluster record: the fields that Palette gives for it, and their hash.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ClusterTier {
+    /// sha256 of the canonical JSON of `fields`.
+    pub hash: String,
+    /// What the tier covers, as Palette gives it.
+    pub fields: Value,
+}
+
+impl ClusterTier {
+    fn of(fields: Value) -> ClusterTier {
+        ClusterTier {
+            hash: sha256_hex(&canonical_json(&fields)),
+            fields,
+        }
+    }
+}
+
+/// The fields of a machine pool that describe its shape: not the ids that Palette gives each
+/// cluster, such as its subnets and security groups.
+const POOL_FIELDS: &[&str] = &[
+    "name",
+    "isControlPlane",
+    "useControlPlaneAsWorker",
+    "instanceType",
+    "size",
+    "minSize",
+    "maxSize",
+    "azs",
+    "labels",
+    "taints",
+    "additionalLabels",
+    "additionalAnnotations",
+    "additionalTags",
+    "rootDeviceSize",
+    "capacityType",
+    "spotMarketOptions",
+    "nodeRepaveInterval",
+    "updateStrategy",
+    "skipK8sUpgrade",
+    "overrideKubeadmConfiguration",
+];
+
+/// The fields of the cloud part of a cloud config that a person chooses: not the network that
+/// Palette makes for each cluster.
+const CLOUD_FIELDS: &[&str] = &[
+    "region",
+    "project",
+    "sshKeyName",
+    "controlPlaneLoadBalancer",
+    "bastionDisabled",
+];
+
+fn pick(v: &Value, keys: &[&str]) -> Value {
+    Value::Object(
+        keys.iter()
+            .filter_map(|k| v.get(*k).map(|x| (k.to_string(), x.clone())))
+            .filter(|(_, x)| !x.is_null())
+            .collect(),
+    )
+}
+
+/// The tiers of a cluster record from the cluster document, and from its cloud config when it
+/// was read. `covered` limits `running` to the profiles that the record covers. A tier is carried
+/// only when Palette gives the part of the document that it reads.
+pub fn cluster_tiers(
+    cluster: &Value,
+    cloud_config: Option<&Value>,
+    covered: &[AppliedProfile],
+) -> BTreeMap<String, ClusterTier> {
+    let mut tiers = BTreeMap::new();
+    // Palette's own hashes of the spec that it applied to the cluster
+    if let Some(apply) = cluster.pointer("/status/spcApply") {
+        tiers.insert(
+            "applied".to_string(),
+            ClusterTier::of(json!({
+                "spcHash": s(apply, "/spcHash"),
+                "spcInfraHash": s(apply, "/spcInfraHash"),
+            })),
+        );
+    }
+    // the pack version that the cluster reconciled, for each pack of a covered profile
+    if cluster
+        .pointer("/status/packs")
+        .is_some_and(Value::is_array)
+    {
+        tiers.insert("running".to_string(), running_tier(cluster, covered));
+    }
+    if let Some(config) = cluster.pointer("/spec/clusterConfig") {
+        tiers.insert("policy".to_string(), policy_tier(cluster, config));
+    }
+    if let Some(cc) = cloud_config {
+        tiers.insert("shape".to_string(), shape_tier(cc));
+    }
+    tiers
+}
+
+fn running_tier(cluster: &Value, covered: &[AppliedProfile]) -> ClusterTier {
+    let mut running: Vec<Value> = arr(cluster, "/status/packs")
+        .iter()
+        .filter(|p| covered.iter().any(|c| c.uid == s(p, "/profileUid")))
+        .map(|p| {
+            json!({"name": s(p, "/name"), "version": s(p, "/version"), "profileUid": s(p, "/profileUid")})
+        })
+        .collect();
+    running.sort_by_key(|p| (s(p, "/profileUid"), s(p, "/name")));
+    ClusterTier::of(Value::Array(running))
+}
+
+fn policy_tier(cluster: &Value, config: &Value) -> ClusterTier {
+    let field = |k: &str| config.get(k).cloned().unwrap_or(Value::Null);
+    ClusterTier::of(json!({
+        "osPatch": config
+            .pointer("/machineManagementConfig/osPatchConfig")
+            .cloned()
+            .unwrap_or(Value::Null),
+        "lifecycle": field("lifecycleConfig"),
+        "machineHealth": field("machineHealthConfig"),
+        "timezone": s(config, "/timezone"),
+        "resources": field("clusterResources"),
+        "rbac": field("clusterRbac"),
+        "fips": s(cluster, "/status/fips/mode"),
+    }))
+}
+
+fn shape_tier(cc: &Value) -> ClusterTier {
+    let mut pools: Vec<Value> = arr(cc, "/spec/machinePoolConfig")
+        .iter()
+        .map(|p| pick(p, POOL_FIELDS))
+        .collect();
+    pools.sort_by_key(|p| s(p, "/name"));
+    ClusterTier::of(json!({
+        "cloud": pick(cc.pointer("/spec/clusterConfig").unwrap_or(&Value::Null), CLOUD_FIELDS),
+        "pools": pools,
+    }))
 }
 
 /// The digest of each macro in `names` that `resolved` gives for one of `profiles`:
@@ -962,6 +1108,19 @@ impl Snapshot {
                         .resolved_values
                         .as_ref()
                         .map(|r| macro_digests(r, &covered, &macros_of(&packs))),
+                    labels: raw
+                        .cluster
+                        .pointer("/metadata/labels")
+                        .and_then(Value::as_object)
+                        .map(|m| {
+                            m.iter()
+                                .map(|(k, v)| {
+                                    (k.clone(), v.as_str().unwrap_or_default().to_string())
+                                })
+                                .collect()
+                        })
+                        .unwrap_or_default(),
+                    tiers: cluster_tiers(&raw.cluster, raw.cloud_config.as_ref(), &covered),
                     profiles: covered,
                 }
             }),

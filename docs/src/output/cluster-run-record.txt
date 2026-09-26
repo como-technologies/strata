@@ -8,6 +8,7 @@ aws-stack@1.1.0 on cluster payments (uid 64f1000000000000000000e1)  ->  aws-stac
 root       8a8a64d3f95d -> 8a8a64d3f95d   IDENTICAL
 
   variables unchanged
+  cluster tiers unchanged
 
   [os   ] ubuntu-aws                 24.04              unchanged
   [k8s  ] kubernetes                 1.36.2             unchanged

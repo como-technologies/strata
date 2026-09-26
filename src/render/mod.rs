@@ -535,6 +535,41 @@ pub(crate) fn updates_pending_notes(d: &Diff) -> Vec<String> {
         .collect()
 }
 
+/// One note for each pack that a cluster side runs at another version than its profile
+/// declares: `cluster fred runs kubernetes 1.36.1, and its profile declares 1.36.2`.
+pub(crate) fn running_behind_notes(d: &Diff) -> Vec<String> {
+    d.running_behind
+        .iter()
+        .map(|r| {
+            let side = if r.side == "a" { &d.a } else { &d.b };
+            let name = side.cluster.as_ref().map_or("", |c| c.name.as_str());
+            format!(
+                "cluster {name} runs {} {}, and its profile declares {}",
+                r.pack, r.running, r.declared
+            )
+        })
+        .collect()
+}
+
+/// The path of a leaf inside a tier: `policy.timezone`, and `running[name=kubernetes].version`
+/// for a tier that is a list.
+pub(crate) fn tier_path(tier: &str, path: &str) -> String {
+    if path.starts_with('[') {
+        format!("{tier}{path}")
+    } else {
+        format!("{tier}.{path}")
+    }
+}
+
+/// Each tier compared between two cluster records, with a word for its state: `applied same`,
+/// `policy changed`. Empty when no tier was compared.
+pub(crate) fn tier_states(d: &Diff) -> Vec<(String, bool)> {
+    d.cluster_tiers
+        .iter()
+        .map(|t| (t.tier.clone(), t.same))
+        .collect()
+}
+
 pub(crate) fn edited_in_place_note(d: &Diff) -> Option<String> {
     d.edited_in_place.then(|| {
         let clusters = d.a.cluster.is_some() || d.b.cluster.is_some();

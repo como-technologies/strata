@@ -5,6 +5,7 @@ root       088136c929bd -> 088136c929bd   IDENTICAL
   variables unchanged
   cluster values CHANGED
         ~ aws-stack.platform_owner: "team-payments" -> "team-platform"
+  cluster tiers unchanged
 
   [os   ] ubuntu-aws                 24.04              unchanged
   [k8s  ] kubernetes                 1.36.2             unchanged

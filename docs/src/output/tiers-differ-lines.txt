@@ -1,0 +1,13 @@
+$ strata compare runs/payments.json runs/search.json
+...
+root       088136c929bd -> 088136c929bd   IDENTICAL
+...
+  variables unchanged
+  cluster tiers applied unchanged, policy CHANGED, running unchanged, shape CHANGED, labels CHANGED
+        ~ policy.timezone: "Etc/UTC" -> "America/Chicago"
+        ~ shape.pools[name=worker-pool].size: 2 -> 3
+        + shape.pools[name=worker-pool].taints[0].effect: "NoSchedule"
+        + shape.pools[name=worker-pool].taints[0].key: "dedicated"
+        + shape.pools[name=worker-pool].taints[0].value: "search"
+        + labels.team: "search"
+...

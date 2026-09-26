@@ -5,6 +5,8 @@ note       both sides are aws-stack@1.1.1 (uid 64e0000000000000000000c3): the ve
 note       cluster payments is behind: Palette says an update of aws-stack waits for it, since 2026-09-18T14:02:12.107Z
 
   variables unchanged
+  cluster tiers applied CHANGED, policy unchanged, running unchanged, labels unchanged
+        ~ applied.spcInfraHash: "fbc58a142284288d" -> "f830b56257538a13"
 
   [os   ] ubuntu-aws                 24.04              unchanged
   [k8s  ] kubernetes                 1.36.2             unchanged

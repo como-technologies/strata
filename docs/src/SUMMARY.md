@@ -30,6 +30,7 @@
 - [Find the profiles that carry a pack](./use-cases/find-a-pack.md)
 - [A cluster does not run its release](./use-cases/cluster-release.md)
 - [Clusters give variables different values](./use-cases/cluster-values.md)
+- [Two clusters on one release differ](./use-cases/cluster-tiers.md)
 - [One pack build under two tag names](./use-cases/tag-name.md)
 - [One manifest in two profiles](./use-cases/manifest-pack.md)
 - [A pack comes from another registry](./use-cases/registry-move.md)

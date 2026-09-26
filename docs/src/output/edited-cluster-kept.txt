@@ -4,6 +4,7 @@ root       088136c929bd -> 088136c929bd   IDENTICAL
 note       cluster payments is behind: Palette says an update of aws-stack waits for it, since 2026-09-18T14:02:12.107Z
 
   variables unchanged
+  cluster tiers unchanged
 
   [os   ] ubuntu-aws                 24.04              unchanged
   [k8s  ] kubernetes                 1.36.2             unchanged

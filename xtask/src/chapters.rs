@@ -5,6 +5,7 @@
 
 use crate::book::Runner;
 use crate::tenant::Edit;
+use serde_json::json;
 
 const DEV: &str = "64f20000000000000000a0d1";
 const PROD: &str = "64f20000000000000000a0f1";
@@ -90,6 +91,7 @@ pub fn names() -> Vec<&'static str> {
         "macros",
         "no-digest",
         "repave",
+        "cluster-tiers",
         "same-names",
         "packs",
         "retire",
@@ -1225,6 +1227,112 @@ fn use_cases(r: &mut Runner) {
         2,
         true,
         "strata compare aws-stack@1.1.1 aws-stack@1.1.6 --repave",
+    );
+
+    // More of a cluster than its release: the tiers that Palette reports of the cluster
+    r.chapter("cluster-tiers", DEV_ENV);
+    r.projects(&[("dev", DEV)]);
+    r.profile(DEV, A111, "1.1.1", "aws-stack@1.1.1", &[]);
+    r.cluster(DEV, PAYMENTS, "payments", &[A111]);
+    r.cluster(DEV, SEARCH, "search", &[A111]);
+    r.serve_here(); // state 1: two clusters on one release, nothing changed
+    r.step(
+        "tiers-record-payments",
+        0,
+        false,
+        "strata snapshot cluster:payments --shape -o runs/payments.json",
+    );
+    r.step(
+        "tiers-record-search",
+        0,
+        false,
+        "strata snapshot cluster:search --shape -o runs/search.json",
+    );
+    r.step(
+        "tiers-show",
+        0,
+        false,
+        "jq '.source.cluster | {labels, tiers: (.tiers | map_values(.hash[0:12]))}' runs/payments.json",
+    );
+    r.step(
+        "tiers-same",
+        0,
+        false,
+        "strata compare runs/payments.json runs/search.json",
+    );
+    r.excerpt(
+        "tiers-same-lines",
+        "tiers-same",
+        r"^(runs/|root |  variables|  cluster tiers)",
+    );
+    // search takes a larger worker pool with a taint, and another timezone and label
+    r.cluster_field(
+        DEV,
+        SEARCH,
+        "/cloudconfig/spec/machinePoolConfig/1/size",
+        json!(3),
+    );
+    r.cluster_field(
+        DEV,
+        SEARCH,
+        "/cloudconfig/spec/machinePoolConfig/1/taints",
+        json!([{"key": "dedicated", "value": "search", "effect": "NoSchedule"}]),
+    );
+    r.cluster_field(
+        DEV,
+        SEARCH,
+        "/spec/clusterConfig/timezone",
+        json!("America/Chicago"),
+    );
+    r.cluster_field(
+        DEV,
+        SEARCH,
+        "/metadata/labels",
+        json!({"managed-by": "opentofu", "team": "search"}),
+    );
+    // payments reconciled an older Kubernetes version than its profile declares
+    r.cluster_field(DEV, PAYMENTS, "/status/packs/1/version", json!("1.36.1"));
+    r.serve_here(); // state 2: search has another shape and policy, and payments is behind
+    r.step(
+        "tiers-record-search-again",
+        0,
+        false,
+        "strata snapshot cluster:search --shape -o runs/search.json",
+    );
+    r.step(
+        "tiers-differ",
+        0,
+        false,
+        "strata compare runs/payments.json runs/search.json",
+    );
+    r.excerpt(
+        "tiers-differ-lines",
+        "tiers-differ",
+        r"^(runs/|root |  variables|  cluster tiers|        [~+-] )",
+    );
+    r.step(
+        "tiers-differ-json",
+        0,
+        false,
+        "strata compare runs/payments.json runs/search.json --json | jq -c '.clusterTiers[] | {tier, same}'",
+    );
+    r.step(
+        "tiers-behind",
+        0,
+        false,
+        "strata compare cluster:payments aws-stack@1.1.1",
+    );
+    r.excerpt(
+        "tiers-behind-lines",
+        "tiers-behind",
+        r"^(aws-stack|root |note )",
+    );
+    r.step("tiers-verify", 0, false, "strata verify runs/payments.json");
+    r.step(
+        "tiers-behind-json",
+        0,
+        false,
+        "strata compare cluster:payments aws-stack@1.1.1 --json | jq -c '.runningBehind'",
     );
 
     r.chapter("same-names", &[]);

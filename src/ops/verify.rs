@@ -179,6 +179,10 @@ pub fn verify_with<A: PaletteApi>(
             if c.macro_values.is_some() {
                 raw.resolved_values = Some(palette.resolved_values(uid)?);
             }
+            // and one that holds the shape tier on its shape
+            if c.tiers.contains_key("shape") {
+                raw.cloud_config = Some(palette.cloud_config(&raw.cluster)?);
+            }
             Snapshot::from_cluster(
                 &raw,
                 c.profile.as_deref(),

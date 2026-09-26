@@ -198,6 +198,13 @@ no meaning: see
 [The order of the profiles of a cluster](./palette.md#the-order-of-the-profiles-of-a-cluster).
 So two clusters built from one definition have one merged root.
 
+The tiers of a cluster record are outside the root. Each tier has its own hash:
+the sha256 of the canonical JSON of its fields, in [The canonical form](#the-canonical-form).
+The `running` tier is in the order of profile uid and then pack name, and the
+`shape` tier holds its machine pools in the order of their names, so the order
+that Palette lists them in does not change a hash. See
+[More of the cluster than its release](../commands/snapshot.md#more-of-the-cluster-than-its-release).
+
 ## The digest of each registry kind
 
 `upstream` comes from the pack reference digest, or from the pack summary

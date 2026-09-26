@@ -289,6 +289,22 @@ impl Runner {
         self.tenant.repave_answer(project, cluster, required);
     }
 
+    /// Change one field of what Palette reports for a cluster, or its cloud config: see
+    /// [`Tenant::cluster_field`].
+    pub fn cluster_field(
+        &mut self,
+        project: &str,
+        uid: &str,
+        pointer: &str,
+        value: serde_json::Value,
+    ) {
+        if !self.building() {
+            return;
+        }
+        self.changed();
+        self.tenant.cluster_field(project, uid, pointer, value);
+    }
+
     /// Give a project macro a value, and let each cluster of the project resolve it again.
     pub fn set_macro(&mut self, project: &str, name: &str, value: &str) {
         if !self.building() {

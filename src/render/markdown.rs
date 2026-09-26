@@ -7,10 +7,10 @@ use super::{
     macros_changed_sentence, macros_note, overwritten_in_place_notes, pack_version, pair_detail,
     pair_word, palette_repave_lines, palette_repave_note, plain_flags,
     profiles_overwritten_sentence, project_label, record_detail, record_label, registry_note,
-    same_content_note, short, show, subject, traits_suffix, unverified_sentence,
-    updates_pending_notes, upstream_unknown_note, values_changed, values_changed_suffix,
-    variable_lines, variables_comparable, variables_unavailable_note, version_display, who_entry,
-    who_heading,
+    running_behind_notes, same_content_note, short, show, subject, tier_path, tier_states,
+    traits_suffix, unverified_sentence, updates_pending_notes, upstream_unknown_note,
+    values_changed, values_changed_suffix, variable_lines, variables_comparable,
+    variables_unavailable_note, version_display, who_entry, who_heading,
 };
 use crate::color::Paint;
 use crate::diff::{Diff, Leaf, Op, Status, Verify, VerifyStatus};
@@ -120,6 +120,9 @@ impl Renderer for MarkdownRenderer {
         for note in updates_pending_notes(d) {
             o.push_str(&format!("**Note:** {note}\n\n"));
         }
+        for note in running_behind_notes(d) {
+            o.push_str(&format!("**Note:** {note}\n\n"));
+        }
         if let Some(note) = upstream_unknown_note(d) {
             o.push_str(&format!("**Note:** {note}\n\n"));
         }
@@ -181,6 +184,26 @@ impl Renderer for MarkdownRenderer {
                 o.push_str(&variable_line(&v));
             }
             o.push_str("```\n</details>\n\n");
+        }
+        let states = tier_states(d);
+        if !states.is_empty() && states.iter().all(|(_, same)| *same) {
+            o.push_str("**Cluster tiers:** unchanged\n\n");
+        } else if !states.is_empty() {
+            let words: Vec<String> = states
+                .iter()
+                .map(|(t, same)| format!("{t} {}", if *same { "unchanged" } else { "changed" }))
+                .collect();
+            o.push_str(&format!("**Cluster tiers:** {}\n\n", words.join(", ")));
+            let changed: Vec<_> = d.cluster_tiers.iter().filter(|t| !t.same).collect();
+            if !changed.is_empty() {
+                o.push_str("<details><summary>cluster tiers that differ</summary>\n\n```diff\n");
+                for t in changed {
+                    for l in &t.diff {
+                        o.push_str(&leaf_at(&tier_path(&t.tier, &l.path), l));
+                    }
+                }
+                o.push_str("```\n</details>\n\n");
+            }
         }
         if let Some(cv) = d.cluster_variables.as_ref().filter(|c| c.changed) {
             o.push_str(&format!(

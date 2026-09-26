@@ -227,6 +227,10 @@ live-drift-report: build
     OUT=$session/drift-report/on examples/live/drift-report.sh on || exit 1
     echo "live-drift-report: both passed; results in $session"
 
+# The cluster tiers test: what a cluster record keeps beside the release, and compare of two cluster records (#76). Needs live-up; builds and removes cluster B.
+live-tiers: build
+    examples/live/tiers.sh
+
 # What clusters A and B still have in the cloud that terraform.tfvars names; 0 on every line after live-down
 live-inventory:
     examples/live/inventory.sh

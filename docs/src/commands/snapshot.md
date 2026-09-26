@@ -61,6 +61,26 @@ served. See [What changed between two pack versions](../use-cases/pack-versions.
 variable. The values are not part of the root. Strata writes no value for a
 sensitive variable. See [Clusters give variables different values](../use-cases/cluster-values.md).
 
+## More of the cluster than its release
+
+A cluster record also keeps what Palette reports of the cluster beside its
+profiles, in tiers. Each tier has its own hash, and none is part of the root:
+
+| Tier | What it holds | From |
+| --- | --- | --- |
+| `applied` | `spcHash` and `spcInfraHash`: the hashes that Palette computes of the spec it applied to the cluster. `spcHash` is its own for each cluster, so between two clusters `compare` reads `spcInfraHash` alone | the cluster document |
+| `running` | each pack that the cluster reconciled, with its version and profile uid | the cluster document, `status.packs` |
+| `policy` | the OS patch policy, the lifecycle, the machine health, the timezone, the cluster resources, the RBAC, and the FIPS mode | the cluster document, `spec.clusterConfig` |
+| `shape` | each machine pool, with its instance type, size, zones, labels, and taints, and the region | the cloud config: one more request, with `--shape` |
+
+The record also keeps the labels of the cluster, in `source.cluster.labels`.
+A tier is in the record only when Palette gives the part of the document that
+it reads, so a record names the tiers that it carries. The `shape` tier leaves
+out the ids that Palette gives each cluster, such as its subnets and its VPC.
+
+`compare` of two cluster records names each tier that differs, and each field in
+it. See [Two clusters on one release differ](../use-cases/cluster-tiers.md).
+
 ## Whether an update waits
 
 A cluster runs its own copy of each profile. When a person edits the profile in
