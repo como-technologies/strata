@@ -598,8 +598,60 @@ pub struct Pack {
     pub values_parse_error: Option<String>,
     /// Attached manifests sorted by name
     pub manifests: Vec<Manifest>,
+    /// The images that the values declare, `pack.content.images[].image`, sorted: a reference
+    /// with a tag, and no digest. Outside the root: the values are in it. A record written before
+    /// this field gets it from its values when it is read.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub images: Vec<String>,
+    /// The Helm charts that the values declare, `pack.content.charts[]`, sorted by name. Outside
+    /// the root, as `images`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub charts: Vec<PackChart>,
     /// The three sub-hashes and the node hash.
     pub hash: PackHash,
+}
+
+/// One Helm chart that the values of a pack declare.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct PackChart {
+    /// The chart name.
+    pub name: String,
+    /// The chart version.
+    pub version: String,
+    /// The repository of the chart.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub repo: String,
+}
+
+/// The images and the charts that parsed values declare, from `pack.content`: each sorted, and
+/// each image once.
+pub fn pack_content(values: &Value) -> (Vec<String>, Vec<PackChart>) {
+    let content = values.pointer("/pack/content").unwrap_or(&Value::Null);
+    let mut images: Vec<String> = arr(content, "/images")
+        .iter()
+        .filter_map(|i| {
+            i.get("image")
+                .and_then(Value::as_str)
+                .or_else(|| i.as_str())
+        })
+        .map(str::to_string)
+        .filter(|i| !i.is_empty())
+        .collect();
+    images.sort();
+    images.dedup();
+    let mut charts: Vec<PackChart> = arr(content, "/charts")
+        .iter()
+        .map(|c| PackChart {
+            name: s(c, "/name"),
+            version: s(c, "/version"),
+            repo: s(c, "/repo"),
+        })
+        .filter(|c| !c.name.is_empty())
+        .collect();
+    charts.sort();
+    charts.dedup();
+    (images, charts)
 }
 
 /// A manifest attached to a pack on the profile.
@@ -813,6 +865,7 @@ impl Pack {
         })));
         let node = sha256_hex(&format!("{identity}{upstream}{authored}"));
 
+        let (images, charts) = pack_content(&values_canon);
         Pack {
             key: format!("{layer}/{name}"),
             layer,
@@ -831,6 +884,8 @@ impl Pack {
             values_hash,
             values_parse_error,
             manifests,
+            images,
+            charts,
             hash: PackHash {
                 identity,
                 upstream,
@@ -1156,11 +1211,24 @@ impl Snapshot {
             }
             _ => return Err(Error::NotSnapshot(path.to_path_buf())),
         }
-        serde_json::from_value(v).map_err(|source| Error::SnapshotSchema {
-            path: path.to_path_buf(),
-            schema: SNAPSHOT_SCHEMA,
-            source,
-        })
+        let mut snap: Snapshot =
+            serde_json::from_value(v).map_err(|source| Error::SnapshotSchema {
+                path: path.to_path_buf(),
+                schema: SNAPSHOT_SCHEMA,
+                source,
+            })?;
+        snap.fill_content();
+        Ok(snap)
+    }
+
+    /// Give each pack the images and the charts of its values, when the record holds none: a
+    /// record written before those fields has the values, and so the lists.
+    pub fn fill_content(&mut self) {
+        for p in &mut self.packs {
+            if p.images.is_empty() && p.charts.is_empty() {
+                (p.images, p.charts) = pack_content(&p.values_canon);
+            }
+        }
     }
 
     /// Serialize, pretty-printed unless `compact`, with a trailing newline.

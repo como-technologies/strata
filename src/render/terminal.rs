@@ -1,16 +1,16 @@
 //! The terminal report: plain when piped, colored on a terminal.
 
 use super::{
-    Renderer, VarLine, applied_ref, chain_verdict, cluster_count, cluster_value, consumer_count,
-    consumer_counts, consumers_heading, consumers_sentence, count_of, counts_line, cross_kind_note,
-    dash, edited_in_place_note, entry_error, list_count, list_scope, macros_changed_note,
-    macros_changed_sentence, macros_note, overwritten_in_place_notes, pack_version, pair_detail,
-    pair_word, palette_repave_lines, palette_repave_note, profiles_overwritten_sentence,
-    project_label, record_detail, record_label, registry_note, running_behind_notes,
-    same_content_note, short, show, subject, tag_rename, tier_path, tier_states, traits_suffix,
-    unverified_sentence, updates_pending_notes, upstream_unknown_note, values_changed_suffix,
-    variable_lines, variables_comparable, variables_unavailable_note, version_display, who_entry,
-    who_heading,
+    Renderer, VarLine, applied_ref, artifact_lines, artifacts_summary, chain_verdict,
+    cluster_count, cluster_value, consumer_count, consumer_counts, consumers_heading,
+    consumers_sentence, count_of, counts_line, cross_kind_note, dash, edited_in_place_note,
+    entry_error, list_count, list_scope, macros_changed_note, macros_changed_sentence, macros_note,
+    overwritten_in_place_notes, pack_version, pair_detail, pair_word, palette_repave_lines,
+    palette_repave_note, profiles_overwritten_sentence, project_label, record_detail, record_label,
+    registry_note, running_behind_notes, same_content_note, short, show, subject, tag_rename,
+    tier_path, tier_states, traits_suffix, unverified_sentence, updates_pending_notes,
+    upstream_unknown_note, values_changed_suffix, variable_lines, variables_comparable,
+    variables_unavailable_note, version_display, who_entry, who_heading,
 };
 use crate::color::Paint;
 use crate::diff::{
@@ -166,6 +166,12 @@ fn flags(pd: &PackDiff, p: &Paint) -> String {
     if pd.authored {
         f.push(p.yellow("AUTHORED"));
     }
+    if pd.images {
+        f.push(p.yellow("IMAGES"));
+    }
+    if pd.charts {
+        f.push(p.yellow("CHARTS"));
+    }
     f.join(" ")
 }
 
@@ -215,6 +221,9 @@ fn packdetail(pd: &PackDiff, p: &Paint, out: &mut Vec<String>) {
             p.green(short(&b.upstream)),
             p.dim(&format!("({})", b.upstream_source))
         ));
+    }
+    for line in artifact_lines(pd) {
+        out.push(format!("      {line}"));
     }
     if pd.values.changed && pd.values.parseable && !pd.values.diff.is_empty() {
         out.push(format!(
@@ -297,6 +306,9 @@ impl Renderer for TerminalRenderer {
         }
         if let Some(note) = cross_kind_note(d) {
             out.push(format!("note       {}", p.byellow(&note)));
+        }
+        if let Some(line) = artifacts_summary(d) {
+            out.push(format!("images     {line}"));
         }
         if let Some((a, b)) = consumer_counts(d) {
             // the noun agrees with the count next to it: `1 -> 2 clusters`, `2 -> 1 cluster`

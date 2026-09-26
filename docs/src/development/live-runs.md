@@ -196,9 +196,11 @@ registries the tenant can see, including one pack that two registries hold.
 |---|---|---|
 | `list-packs` | 0 | #55: the profiles list the pack versions they pin |
 | `compare-versions`, `compare-json` | 1 | #55: two versions of one pack differ, and the document names the pack on both sides |
+| `compare-images`, `compare-images-says` | 0 | #77: the diff flags `IMAGES` and `CHARTS` beside `AUTHORED`, and names each image that moved: from `csi-aws-ebs` 1.63.1 to 1.65.0, eight images retagged and the chart `aws-ebs-csi-driver` at 2.65.0 |
 | `compare-same` | 0 | #55: a pack version against itself is identical |
 | `record`, `record-title` | 0 | #55: `snapshot` writes a record of a pack version, which names the pack and not a profile |
 | `verify-record` | 0 | #55: the record verifies against the registry it came from |
+| `record-images`, `old-record` | 0 | #77: the record carries the image list; a record without the list gets it from its values, and verifies |
 | `latest`, `latest-is-newest` | 0 | #55: `@latest` resolves to the newest version the registry offers |
 | `two-registries`, `two-registries-says` | 2, 0 | #55: a bare ref for a pack in two registries is an error that names both, and the ref that fixes it |
 | `other-registry`, `registries-differ` | 0, 1 | #55: the version reads from either registry, and the two hold different builds |

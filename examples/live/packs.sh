@@ -55,6 +55,10 @@ check compare-versions 1 "#55: pack:$reg/$pack@$old against @$new differs" -- \
   "$strata" compare "pack:$reg/$pack@$old" "pack:$reg/$pack@$new"
 check compare-json 1 '#55: the diff document names the pack on both sides' -- \
   "$strata" compare "pack:$reg/$pack@$old" "pack:$reg/$pack@$new" --json
+check compare-images 0 "#77: the diff flags IMAGES, and names each image that moved, by repository" -- \
+  jq -e '.packs[0] | .images and (.imageChanges | length > 0) and .authored' compare-json.out
+check compare-images-says 0 "#77: the report has an image line under the pack, and the count under root" -- \
+  bash -c "grep -qE '^      [~+-] image ' compare-versions.out && grep -qE '^images     [0-9]+ image' compare-versions.out"
 check compare-same 0 "#55: pack:$reg/$pack@$new against itself is identical" -- \
   "$strata" compare "pack:$reg/$pack@$new" "pack:$reg/$pack@$new"
 
@@ -65,6 +69,10 @@ check record-title 0 '#55: the record names the pack, not a profile' -- \
   grep -q "\"ref\": \"pack:$reg/$pack@$new\"" pack.json
 check verify-record 0 '#55: the record verifies against the registry it came from' -- \
   "$strata" verify pack.json
+check record-images 0 '#77: the record carries the image list of the values' -- \
+  jq -e '.packs[0].images | length > 0' pack.json
+check old-record 0 '#77: a record written before the image list: strata reads the list from its values' -- \
+  bash -c "jq 'del(.packs[].images, .packs[].charts)' pack.json > pack-old.json && \"$strata\" verify pack-old.json"
 
 echo "== the other forms, and the errors" | tee -a steps.log
 check latest 0 "#55: pack:$reg/$pack@latest resolves to a version" -- \

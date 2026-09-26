@@ -85,6 +85,12 @@ A record of one profile version or cluster.
     parse. `valuesParseError`, only then: why.
   - `manifests[]`, sorted by name: `name`, `uid`, `digest`, `content`,
     `contentHash`, and `contentParseError` when the content does not parse.
+  - `images`, only when the values declare some: each image of
+    `pack.content.images`, as a reference with a tag, sorted. `charts`, only
+    when the values declare some: `name`, `version`, and `repo` of each chart of
+    `pack.content.charts`. Both are outside the root: the values are in it. A
+    record written before these fields gets them from its values when strata
+    reads it.
   - `hash`: `identity`, `upstream`, `upstreamRaw`, `upstreamSource`,
     `authored`, and `node`. `upstreamSource` is the field that gave `UPSTREAM`:
     `packRef.digest`, `packSummary.digest`, or `none`.
@@ -114,7 +120,8 @@ A comparison of two sides, `a` and `b`.
   too. Absent when empty.
 - `summary`: `packsAdded`, `packsRemoved`, `packsChanged`, `packsUnchanged`,
   `identityChanges`, `upstreamChanges`, `authoredChanges`, `variablesChanged`,
-  and `maxImpact`.
+  `imagesChanged` and `chartsChanged` (each image and chart added, removed, or
+  moved, across the packs), and `maxImpact`.
 - `variables`: `changed`, the two hashes, `diff[]` with paths
   `<variable>.<field>`, and `byName` with `added[]`, `removed[]`, and
   `changed[]`. An added or removed variable has `name`, `required`,
@@ -137,6 +144,10 @@ A comparison of two sides, `a` and `b`.
   - `values`: `changed`, `parseable`, `changedCount`, `addedCount`,
     `removedCount`, and `diff[]`.
   - `manifests[]`: `op`, `name`, `hashA`, and `hashB`.
+  - `images` and `charts`, only when true: the `IMAGES` and `CHARTS` flags.
+    `imageChanges[]` and `chartChanges[]`, only when not empty: `op`, `name`
+    (the image repository, or the chart name), `old`, and `new` (the tag or the
+    version).
   - `upstreamUnknown`, only when true: a pack from a registry with no upstream
     digest on either side.
 - `upstreamUnknown`, only when it is not empty: the key of each such pack. An

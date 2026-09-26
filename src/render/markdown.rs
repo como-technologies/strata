@@ -1,16 +1,16 @@
 //! The pull request comment.
 
 use super::{
-    Renderer, VarLine, applied_ref, chain_verdict, cluster_count, cluster_value, consumer_count,
-    consumer_counts, consumers_heading, consumers_sentence, count_of, counts_line, cross_kind_note,
-    dash, edited_in_place_note, entry_error, list_count, list_scope, macros_changed_note,
-    macros_changed_sentence, macros_note, overwritten_in_place_notes, pack_version, pair_detail,
-    pair_word, palette_repave_lines, palette_repave_note, plain_flags,
-    profiles_overwritten_sentence, project_label, record_detail, record_label, registry_note,
-    running_behind_notes, same_content_note, short, show, subject, tier_path, tier_states,
-    traits_suffix, unverified_sentence, updates_pending_notes, upstream_unknown_note,
-    values_changed, values_changed_suffix, variable_lines, variables_comparable,
-    variables_unavailable_note, version_display, who_entry, who_heading,
+    Renderer, VarLine, applied_ref, artifact_lines, artifacts_summary, chain_verdict,
+    cluster_count, cluster_value, consumer_count, consumer_counts, consumers_heading,
+    consumers_sentence, count_of, counts_line, cross_kind_note, dash, edited_in_place_note,
+    entry_error, list_count, list_scope, macros_changed_note, macros_changed_sentence, macros_note,
+    overwritten_in_place_notes, pack_version, pair_detail, pair_word, palette_repave_lines,
+    palette_repave_note, plain_flags, profiles_overwritten_sentence, project_label, record_detail,
+    record_label, registry_note, running_behind_notes, same_content_note, short, show, subject,
+    tier_path, tier_states, traits_suffix, unverified_sentence, updates_pending_notes,
+    upstream_unknown_note, values_changed, values_changed_suffix, variable_lines,
+    variables_comparable, variables_unavailable_note, version_display, who_entry, who_heading,
 };
 use crate::color::Paint;
 use crate::diff::{Diff, Leaf, Op, Status, Verify, VerifyStatus};
@@ -185,6 +185,9 @@ impl Renderer for MarkdownRenderer {
             }
             o.push_str("```\n</details>\n\n");
         }
+        if let Some(line) = artifacts_summary(d) {
+            o.push_str(&format!("**Images:** {line}\n\n"));
+        }
         let states = tier_states(d);
         if !states.is_empty() && states.iter().all(|(_, same)| *same) {
             o.push_str("**Cluster tiers:** unchanged\n\n");
@@ -245,6 +248,14 @@ impl Renderer for MarkdownRenderer {
             }
             if pd.values.changed && !pd.values.parseable {
                 body.push_str("values changed but did not parse as YAML on one side; see `--full` for the text diff\n");
+            }
+            let artifacts = artifact_lines(pd);
+            if !artifacts.is_empty() {
+                body.push_str("```diff\n");
+                for line in &artifacts {
+                    body.push_str(&format!("{line}\n"));
+                }
+                body.push_str("```\n");
             }
             for m in &pd.manifests {
                 let word = match m.op {

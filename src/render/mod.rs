@@ -803,7 +803,58 @@ pub(crate) fn plain_flags(pd: &PackDiff) -> String {
     if pd.authored {
         f.push("AUTHORED");
     }
+    if pd.images {
+        f.push("IMAGES");
+    }
+    if pd.charts {
+        f.push("CHARTS");
+    }
     f.join(" ")
+}
+
+/// One line for each image or chart that moved: `~ image <repo>: <old> -> <new>`, `+ chart
+/// <name> <version>`.
+pub(crate) fn artifact_lines(pd: &PackDiff) -> Vec<String> {
+    let line = |kind: &str, c: &crate::diff::ArtifactChange| -> String {
+        let old = c.old.as_deref().unwrap_or_default();
+        let new = c.new.as_deref().unwrap_or_default();
+        let at = |v: &str| {
+            if kind == "image" {
+                format!(":{v}")
+            } else {
+                format!(" {v}")
+            }
+        };
+        match c.op {
+            crate::diff::Op::Changed => format!("~ {kind} {}: {old} -> {new}", c.name),
+            crate::diff::Op::Added => format!("+ {kind} {}{}", c.name, at(new)),
+            crate::diff::Op::Removed => format!("- {kind} {}{}", c.name, at(old)),
+        }
+    };
+    pd.image_changes
+        .iter()
+        .map(|c| line("image", c))
+        .chain(pd.chart_changes.iter().map(|c| line("chart", c)))
+        .collect()
+}
+
+/// The line of the images and the charts that changed across the packs: `4 images changed in 2
+/// packs`. None when none changed.
+pub(crate) fn artifacts_summary(d: &Diff) -> Option<String> {
+    let s = &d.summary;
+    if s.images_changed == 0 && s.charts_changed == 0 {
+        return None;
+    }
+    let packs = d.packs.iter().filter(|p| p.images || p.charts).count();
+    let n = |count: usize, one: &str, many: &str| {
+        format!("{count} {}", if count == 1 { one } else { many })
+    };
+    Some(format!(
+        "{}, {} changed in {}",
+        n(s.images_changed, "image", "images"),
+        n(s.charts_changed, "chart", "charts"),
+        n(packs, "pack", "packs")
+    ))
 }
 
 /// The version column: `a -> b` when the identity moved and the versions differ.

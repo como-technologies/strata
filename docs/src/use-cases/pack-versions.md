@@ -30,9 +30,18 @@ serves every step.
 
 `IDENTITY` says the layer points at another pack build, `UPSTREAM` that the
 content digest moved, and `AUTHORED` that the values the registry ships
-changed. The lines under the values name each changed key. Here they are the
-image tags of the pack, its list of images, and one configuration file. Exit
-`1`: the versions differ.
+changed. `IMAGES` says that the image list of the values changed: the `image`
+lines name each image that was added, removed, or moved to another tag, by its
+repository, and the `images` line under `root` counts them. The lines under the
+values name each changed key. Exit `1`: the versions differ.
+
+```text
+{{#include ../output/pack-compare-images.txt}}
+```
+
+The image list holds a tag, and not a digest. An image pushed again under the
+same tag does not show here: see
+[The change flags](../reference/impact.md#the-change-flags).
 
 The last line of the block is the one that decides what you do:
 `impact: node repave (Kubernetes version change)`. A change of the Kubernetes

@@ -10,6 +10,15 @@ pack. See [The hashes and the root](../internals/hashes.md).
 | `IDENTITY` | the type, tag, version, pack uid, or registry uid of the pack changes | The release points at another pack build. The name and the layer are the key of the pack, so a change to either gives an `ADDED` line and a `REMOVED` line. |
 | `UPSTREAM` | the digest on the pack reference changes | The content of the pack changed under the same version. A push again under that version does this, and a floating tag that the registry moved does it too. See [A pack version pushed again](../internals/palette.md#a-pack-version-pushed-again) and [Tag names](../internals/palette.md#tag-names). A pack whose `upstreamSource` is `none` never shows this flag. |
 | `AUTHORED` | the values, the attached manifests, or the params change | The configuration of the release changed. |
+| `IMAGES` | the image list that the values declare, `pack.content.images`, changes | An image was added, removed, or moved to another tag. It comes with `AUTHORED`: it says which part of the values moved, and a gate that reads `AUTHORED` still sees it. |
+| `CHARTS` | the chart list that the values declare, `pack.content.charts`, changes | A chart was added, removed, or moved to another version. It comes with `AUTHORED`, as `IMAGES` does. |
+
+**The image list holds a tag, and not a digest.** Each entry is a reference
+such as `registry.k8s.io/pause:3.10.2`. An image rebuilt and pushed again under
+the same tag does not change the list, so `IMAGES` does not show it, and no
+record shows it. The chart list holds a version, and no chart digest either.
+Palette gives no digest, signature, or bill of materials for the images of a
+pack version.
 
 Other pack lines:
 

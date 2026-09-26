@@ -44,6 +44,35 @@ The text report cuts a long value. `--full` and the JSON document keep each full
 value. [Report formats](../reference/formats.md#the-terminal-report) gives the
 length at which the report cuts.
 
+## The images and the charts of a pack
+
+The values of a pack declare the images that it pulls, `pack.content.images`,
+and an add-on pack the Helm charts, `pack.content.charts`. When one of those
+lists changes, the pack shows `IMAGES` or `CHARTS` beside `AUTHORED`, a line
+names each image or chart that moved, and an `images` line under `root` counts
+them across the packs:
+
+```text
+{{#include ../output/pack-compare-images.txt}}
+```
+
+Between two profile versions, `--json` counts them in `summary`, and flags each
+pack:
+
+```text
+{{#include ../output/compare-images-count.txt}}
+```
+
+Palette mirrors the images of a pack version under a path that holds the
+version, such as `…/packs/csi-aws-ebs/1.65.0/aws-ebs-csi-driver`. Strata reads a
+path segment that is the version of the pack as `<version>`, so one image keeps
+one repository across versions, and a version bump shows each image as
+retagged:
+`~ image …/csi-aws-ebs/<version>/aws-ebs-csi-driver: v1.63.1 -> v1.65.0`.
+
+The list holds a tag, and not a digest: an image pushed again under one tag
+does not show. See [The change flags](../reference/impact.md#the-change-flags).
+
 ## A version that replaces nodes
 
 ```text

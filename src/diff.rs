@@ -106,6 +106,12 @@ pub struct Legend {
     pub upstream: String,
     /// The AUTHORED flag.
     pub authored: String,
+    /// The IMAGES flag.
+    #[serde(default)]
+    pub images: String,
+    /// The CHARTS flag.
+    #[serde(default)]
+    pub charts: String,
     /// Each impact level.
     pub impact: BTreeMap<String, String>,
     /// Each pack status.
@@ -127,6 +133,8 @@ impl Legend {
             identity: "The pack reference changed: name, layer, type, tag, version, packUid or registryUid. The release points at a different pack build.".into(),
             upstream: "The digest on the pack reference changed: pack content moved under the hood, possibly under the same version. Which field fed it is hash.upstreamSource in the snapshot.".into(),
             authored: "Profile-level configuration changed: the pack's values YAML (compared canonically, so formatting does not count), its attached manifests, or its params.".into(),
+            images: "The image list that the values declare changed, pack.content.images: an image added, removed, or at another tag. A detail of AUTHORED. The list holds a tag and not a digest, so an image rebuilt under one tag does not show.".into(),
+            charts: "The chart list that the values declare changed, pack.content.charts: a chart added, removed, or at another version. A detail of AUTHORED.".into(),
             impact: m(&[
                 ("repave", "Nodes are replaced on a cluster of the kubeadm engine: OS image or Kubernetes version change. compare --repave asks Palette."),
                 ("may-repave", "Node or control plane configuration changed on the OS or Kubernetes layer; Palette may repave."),
@@ -170,6 +178,13 @@ pub struct Summary {
     pub authored_changes: usize,
     /// True when the variables hash differs.
     pub variables_changed: bool,
+    /// The images that changed across the packs on both sides: each one added, removed, or
+    /// retagged.
+    #[serde(default)]
+    pub images_changed: usize,
+    /// The charts that changed across the packs on both sides.
+    #[serde(default)]
+    pub charts_changed: usize,
     /// The most severe impact level across the packs that changed, and the packs that only one
     /// side has
     pub max_impact: ImpactLevel,
@@ -559,6 +574,122 @@ pub struct PackDiff {
     /// not show. A manifest pack has no archive, so it is never true for one.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub upstream_unknown: bool,
+    /// True when the image list that the values declare differs: a detail of `AUTHORED`.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub images: bool,
+    /// True when the chart list that the values declare differs: a detail of `AUTHORED`.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub charts: bool,
+    /// Each image added, removed, or retagged, by repository.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub image_changes: Vec<ArtifactChange>,
+    /// Each chart added, removed, or at another version, by name.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub chart_changes: Vec<ArtifactChange>,
+}
+
+/// One image or chart that the values of a pack declare, compared: `changed` is a new tag of
+/// one image repository, or a new version of one chart.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ArtifactChange {
+    /// What happened.
+    pub op: Op,
+    /// The image repository, or the chart name.
+    pub name: String,
+    /// The tag or the version in A.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub old: Option<String>,
+    /// The tag or the version in B.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub new: Option<String>,
+}
+
+/// An image reference as its repository and its tag: `repo:tag`, or `repo@sha256:...`.
+fn split_image(image: &str) -> (&str, &str) {
+    if let Some((repo, digest)) = image.split_once('@') {
+        return (repo, digest);
+    }
+    match image.rfind(':') {
+        Some(i) if i > image.rfind('/').unwrap_or(0) => (&image[..i], &image[i + 1..]),
+        _ => (image, ""),
+    }
+}
+
+/// Each (name, tag or version) that differs between two lists, by name.
+fn artifact_changes(a: &[(String, String)], b: &[(String, String)]) -> Vec<ArtifactChange> {
+    let names: std::collections::BTreeSet<&String> = a.iter().chain(b).map(|(n, _)| n).collect();
+    let mut out = Vec::new();
+    for name in names {
+        let x: Vec<&String> = a
+            .iter()
+            .filter(|(n, _)| n == name)
+            .map(|(_, v)| v)
+            .collect();
+        let y: Vec<&String> = b
+            .iter()
+            .filter(|(n, _)| n == name)
+            .map(|(_, v)| v)
+            .collect();
+        if x == y {
+            continue;
+        }
+        match (x.as_slice(), y.as_slice()) {
+            ([old], [new]) => out.push(ArtifactChange {
+                op: Op::Changed,
+                name: name.clone(),
+                old: Some((*old).clone()),
+                new: Some((*new).clone()),
+            }),
+            _ => {
+                for old in x.iter().filter(|v| !y.contains(v)) {
+                    out.push(ArtifactChange {
+                        op: Op::Removed,
+                        name: name.clone(),
+                        old: Some((*old).clone()),
+                        new: None,
+                    });
+                }
+                for new in y.iter().filter(|v| !x.contains(v)) {
+                    out.push(ArtifactChange {
+                        op: Op::Added,
+                        name: name.clone(),
+                        old: None,
+                        new: Some((*new).clone()),
+                    });
+                }
+            }
+        }
+    }
+    out
+}
+
+/// Each image as (repository, tag). A path segment of the repository that is the version of
+/// the pack reads as `<version>`: Palette mirrors the images of a pack version under a path that
+/// holds that version, so one image keeps one repository across versions.
+fn image_pairs(images: &[String], version: &str) -> Vec<(String, String)> {
+    images
+        .iter()
+        .map(|i| {
+            let (repo, tag) = split_image(i);
+            let repo = if version.is_empty() {
+                repo.to_string()
+            } else {
+                repo.split('/')
+                    .map(|seg| if seg == version { "<version>" } else { seg })
+                    .collect::<Vec<_>>()
+                    .join("/")
+            };
+            (repo, tag.to_string())
+        })
+        .collect()
+}
+
+fn chart_pairs(charts: &[crate::snapshot::PackChart]) -> Vec<(String, String)> {
+    charts
+        .iter()
+        .map(|c| (c.name.clone(), c.version.clone()))
+        .collect()
 }
 
 /// The values of one pack compared.
@@ -1157,6 +1288,10 @@ pub fn compute(a: &Snapshot, b: &Snapshot, generated_at: &str, verify: Option<Ve
                     values: ValuesDiff::default(),
                     manifests: Vec::new(),
                     upstream_unknown: y.upstream_unknown(),
+                    images: false,
+                    charts: false,
+                    image_changes: Vec::new(),
+                    chart_changes: Vec::new(),
                 }
             }
             (Some(x), None) => {
@@ -1182,6 +1317,10 @@ pub fn compute(a: &Snapshot, b: &Snapshot, generated_at: &str, verify: Option<Ve
                     values: ValuesDiff::default(),
                     manifests: Vec::new(),
                     upstream_unknown: x.upstream_unknown(),
+                    images: false,
+                    charts: false,
+                    image_changes: Vec::new(),
+                    chart_changes: Vec::new(),
                 }
             }
             (Some(x), Some(y)) => {
@@ -1231,6 +1370,14 @@ pub fn compute(a: &Snapshot, b: &Snapshot, generated_at: &str, verify: Option<Ve
                 if imp.level > summary.max_impact {
                     summary.max_impact = imp.level;
                 }
+                let image_changes = artifact_changes(
+                    &image_pairs(&x.images, &x.version),
+                    &image_pairs(&y.images, &y.version),
+                );
+                let chart_changes =
+                    artifact_changes(&chart_pairs(&x.charts), &chart_pairs(&y.charts));
+                summary.images_changed += image_changes.len();
+                summary.charts_changed += chart_changes.len();
                 PackDiff {
                     key: k.to_string(),
                     layer: x.layer.clone(),
@@ -1255,6 +1402,10 @@ pub fn compute(a: &Snapshot, b: &Snapshot, generated_at: &str, verify: Option<Ve
                     values: values_diff(x, y),
                     manifests: manifests_diff(x, y),
                     upstream_unknown: x.upstream_unknown() || y.upstream_unknown(),
+                    images: !image_changes.is_empty(),
+                    charts: !chart_changes.is_empty(),
+                    image_changes,
+                    chart_changes,
                 }
             }
             (None, None) => unreachable!("key came from one of the maps"),

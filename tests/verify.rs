@@ -5866,3 +5866,182 @@ fn between_two_clusters_the_applied_tier_compares_the_infra_hash_alone() {
     assert!(!applied.same);
     assert_eq!(applied.diff[0].path, "spcHash");
 }
+
+// ---- the images and the charts of a pack (#77) ---------------------------------------------------
+
+const CSI_IMAGES_63: &str = "pack:\n  content:\n    images:\n      - image: registry.k8s.io/sig-storage/csi-provisioner:v5.1.0\n      - image: public.ecr.aws/ebs-csi-driver/aws-ebs-csi-driver:v1.63.1\n      - image: registry.k8s.io/sig-storage/livenessprobe:v2.14.0\n    charts:\n      - repo: https://kubernetes-sigs.github.io/aws-ebs-csi-driver\n        name: aws-ebs-csi-driver\n        version: 2.63.1\ncharts:\n  aws-ebs-csi-driver:\n    storageClasses: []\n";
+const CSI_IMAGES_65: &str = "pack:\n  content:\n    images:\n      - image: public.ecr.aws/ebs-csi-driver/aws-ebs-csi-driver:v1.65.0\n      - image: registry.k8s.io/sig-storage/csi-provisioner:v5.1.0\n      - image: registry.k8s.io/sig-storage/csi-snapshotter:v8.2.0\n    charts:\n      - repo: https://kubernetes-sigs.github.io/aws-ebs-csi-driver\n        name: aws-ebs-csi-driver\n        version: 2.65.0\ncharts:\n  aws-ebs-csi-driver:\n    storageClasses: []\n";
+
+fn serve_image_versions() -> MemoryApi {
+    serve_summaries(
+        vec![
+            pack_summary("pk-63", "1.63.1", "reg-public", "sha256:aaa", CSI_IMAGES_63),
+            pack_summary("pk-65", "1.65.0", "reg-public", "sha256:bbb", CSI_IMAGES_65),
+        ],
+        &[("reg-public", public_entity())],
+    )
+}
+
+#[test]
+fn a_record_carries_the_images_and_the_charts_of_a_pack() {
+    let api = serve_image_versions();
+    let old = snapshot_pack(&api, "pack:csi-aws-ebs@1.63.1").unwrap();
+    let p = &old.packs[0];
+    assert_eq!(
+        p.images,
+        [
+            "public.ecr.aws/ebs-csi-driver/aws-ebs-csi-driver:v1.63.1",
+            "registry.k8s.io/sig-storage/csi-provisioner:v5.1.0",
+            "registry.k8s.io/sig-storage/livenessprobe:v2.14.0",
+        ],
+        "sorted"
+    );
+    assert_eq!(p.charts.len(), 1);
+    assert_eq!(
+        (p.charts[0].name.as_str(), p.charts[0].version.as_str()),
+        ("aws-ebs-csi-driver", "2.63.1")
+    );
+    // a pack whose values declare none carries none, and writes no field
+    let plain = snapshot_pack(
+        &serve_registry(vec![], &[("reg-public", public_entity())]),
+        "pack:csi-aws-ebs@1.65.0",
+    )
+    .unwrap();
+    assert!(plain.packs[0].images.is_empty());
+    assert!(
+        serde_json::to_value(&plain).unwrap()["packs"][0]
+            .get("images")
+            .is_none()
+    );
+}
+
+#[test]
+fn compare_of_two_pack_versions_names_the_images_and_the_charts_that_moved() {
+    let api = serve_image_versions();
+    let a = snapshot_pack(&api, "pack:csi-aws-ebs@1.63.1").unwrap();
+    let b = snapshot_pack(&api, "pack:csi-aws-ebs@1.65.0").unwrap();
+    let d = strata::diff::compute(&a, &b, "t1", None);
+    let pd = &d.packs[0];
+    assert!(
+        pd.authored && pd.images && pd.charts,
+        "IMAGES and CHARTS beside AUTHORED"
+    );
+    let moved: Vec<(String, &str, &str)> = pd
+        .image_changes
+        .iter()
+        .map(|c| {
+            (
+                format!("{:?}", c.op),
+                c.name.as_str(),
+                c.new.as_deref().or(c.old.as_deref()).unwrap(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        moved,
+        [
+            (
+                "Changed".to_string(),
+                "public.ecr.aws/ebs-csi-driver/aws-ebs-csi-driver",
+                "v1.65.0"
+            ),
+            (
+                "Added".to_string(),
+                "registry.k8s.io/sig-storage/csi-snapshotter",
+                "v8.2.0"
+            ),
+            (
+                "Removed".to_string(),
+                "registry.k8s.io/sig-storage/livenessprobe",
+                "v2.14.0"
+            ),
+        ]
+    );
+    assert_eq!(d.summary.images_changed, 3);
+    assert_eq!(d.summary.charts_changed, 1);
+    let text = render::renderer(Format::Terminal, Paint::off(), false)
+        .render(&d, &a, &b, false)
+        .unwrap();
+    assert!(text.contains("AUTHORED IMAGES CHARTS"), "{text}");
+    assert!(
+        text.contains(
+            "~ image public.ecr.aws/ebs-csi-driver/aws-ebs-csi-driver: v1.63.1 -> v1.65.0"
+        ),
+        "{text}"
+    );
+    assert!(
+        text.contains("+ image registry.k8s.io/sig-storage/csi-snapshotter:v8.2.0"),
+        "{text}"
+    );
+    assert!(
+        text.contains("~ chart aws-ebs-csi-driver: 2.63.1 -> 2.65.0"),
+        "{text}"
+    );
+    assert!(
+        text.contains("images     3 images, 1 chart changed in 1 pack"),
+        "{text}"
+    );
+}
+
+#[test]
+fn a_record_written_before_the_image_lists_gets_them_from_its_values_and_still_verifies() {
+    let api = serve_image_versions();
+    let fresh = snapshot_pack(&api, "pack:csi-aws-ebs@1.63.1").unwrap();
+    let mut doc = serde_json::to_value(&fresh).unwrap();
+    let pack = doc["packs"][0].as_object_mut().unwrap();
+    pack.remove("images");
+    pack.remove("charts");
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("old.json");
+    fs::write(&path, serde_json::to_string(&doc).unwrap()).unwrap();
+    let old = Snapshot::load(&path).unwrap();
+    assert_eq!(old.packs[0].images, fresh.packs[0].images);
+    assert_eq!(old.root, fresh.root);
+    let v = ops::verify(&old, &Palette::new(api), "t1", &Progress::silent()).unwrap();
+    assert!(v.unchanged);
+    assert!(!v.diff.packs[0].images);
+}
+
+#[test]
+fn an_image_under_a_path_that_holds_the_pack_version_keeps_one_repository() {
+    // Palette mirrors the images of a pack version under a path that holds the version
+    let values = |v: &str, tag: &str| {
+        format!(
+            "pack:\n  content:\n    images:\n      - image: us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/{v}/aws-ebs-csi-driver:{tag}\ncharts: {{}}\n"
+        )
+    };
+    let api = serve_summaries(
+        vec![
+            pack_summary(
+                "pk-63",
+                "1.63.1",
+                "reg-public",
+                "sha256:aaa",
+                &values("1.63.1", "v1.63.1"),
+            ),
+            pack_summary(
+                "pk-65",
+                "1.65.0",
+                "reg-public",
+                "sha256:bbb",
+                &values("1.65.0", "v1.65.0"),
+            ),
+        ],
+        &[("reg-public", public_entity())],
+    );
+    let a = snapshot_pack(&api, "pack:csi-aws-ebs@1.63.1").unwrap();
+    let b = snapshot_pack(&api, "pack:csi-aws-ebs@1.65.0").unwrap();
+    let d = strata::diff::compute(&a, &b, "t1", None);
+    let changes = &d.packs[0].image_changes;
+    assert_eq!(
+        changes.len(),
+        1,
+        "one image retagged, not one removed and one added"
+    );
+    assert_eq!(
+        changes[0].name,
+        "us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/<version>/aws-ebs-csi-driver"
+    );
+    assert_eq!(changes[0].old.as_deref(), Some("v1.63.1"));
+    assert_eq!(changes[0].new.as_deref(), Some("v1.65.0"));
+}

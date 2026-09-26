@@ -328,6 +328,12 @@ fn commands(r: &mut Runner) {
         "strata compare aws-stack@1.0.0 aws-stack@1.1.0",
     );
     r.step(
+        "compare-images-count",
+        1,
+        false,
+        "strata compare aws-stack@1.0.0 aws-stack@1.1.0 --json | jq -c '(.summary | {imagesChanged, chartsChanged}), [.packs[] | select(.images or .charts) | .name]'",
+    );
+    r.step(
         "compare-values",
         1,
         false,
@@ -1405,6 +1411,11 @@ fn use_cases(r: &mut Runner) {
         1,
         false,
         "strata compare 'pack:Public Repo/kubernetes@1.35.3' 'pack:Public Repo/kubernetes@1.36.2'",
+    );
+    r.excerpt(
+        "pack-compare-images",
+        "pack-compare",
+        r"^(pack |root |images |~ \[|      [~+-] (image|chart) )",
     );
     r.step(
         "pack-os",

@@ -1,6 +1,7 @@
 $ strata compare aws-stack@1.0.0 aws-stack@1.1.0
 aws-stack@1.0.0 (uid 64e0000000000000000000a1)  ->  aws-stack@1.1.0 (uid 64e0000000000000000000b2)
 root       aee66c68d829 -> 8a8a64d3f95d   CHANGED
+images     30 images, 1 chart changed in 3 packs
 consumers  0 -> 0 clusters
 
   variables unchanged
@@ -8,8 +9,16 @@ consumers  0 -> 0 clusters
 ~ [os   ] ubuntu-aws                 20.04 -> 24.04     IDENTITY UPSTREAM
       upstream digest  sha256:d7aee -> sha256:2df05   (packRef.digest)
       impact: node repave (OS image change)
-~ [k8s  ] kubernetes                 1.35.3 -> 1.36.2   IDENTITY UPSTREAM AUTHORED
+~ [k8s  ] kubernetes                 1.35.3 -> 1.36.2   IDENTITY UPSTREAM AUTHORED IMAGES
       upstream digest  sha256:ff3df -> sha256:c4f7f   (packRef.digest)
+      + image registry.k8s.io/pause:3.10.1
+      + image registry.k8s.io/pause:3.10.2
+      ~ image us-docker.pkg.dev/palette-images/k8s/coredns/coredns: v1.13.1 -> v1.14.2
+      ~ image us-docker.pkg.dev/palette-images/k8s/etcd: 3.6.6-0 -> 3.6.8-0
+      ~ image us-docker.pkg.dev/palette-images/k8s/kube-apiserver: v1.35.3 -> v1.36.2
+      ~ image us-docker.pkg.dev/palette-images/k8s/kube-controller-manager: v1.35.3 -> v1.36.2
+      ~ image us-docker.pkg.dev/palette-images/k8s/kube-proxy: v1.35.3 -> v1.36.2
+      ~ image us-docker.pkg.dev/palette-images/k8s/kube-scheduler: v1.35.3 -> v1.36.2
       values: 9 changed, 2 added, 0 removed
         ~ kubeadmconfig.dns.imageTag: "v1.13.1" -> "v1.14.2"
         ~ kubeadmconfig.etcd.local.imageTag: "3.6.6-0" -> "3.6.8-0"
@@ -23,8 +32,22 @@ consumers  0 -> 0 clusters
         ~ pack.content.images[5].image: "us-docker.pkg.dev/palette-images/k8s/kube-scheduler:v1.35.3" -> "us-docker.pkg.dev/palette-images/k8s/kube-scheduler:v1.36.2"
         + pack.content.images[9].image: "registry.k8s.io/pause:3.10.1"
       impact: node repave (Kubernetes version change)
-~ [cni  ] cni-cilium-oss             1.19.6 -> 1.20.1   IDENTITY UPSTREAM AUTHORED
+~ [cni  ] cni-cilium-oss             1.19.6 -> 1.20.1   IDENTITY UPSTREAM AUTHORED IMAGES
       upstream digest  sha256:3d866 -> sha256:917d9   (packRef.digest)
+      ~ image us-docker.pkg.dev/palette-images/packs/cilium/<version>/busybox: v1.37.0 -> v1.38.0
+      ~ image us-docker.pkg.dev/palette-images/packs/cilium/<version>/certgen: v0.4.6 -> v0.4.9
+      ~ image us-docker.pkg.dev/palette-images/packs/cilium/<version>/cilium: v1.19.6 -> v1.20.1
+      ~ image us-docker.pkg.dev/palette-images/packs/cilium/<version>/cilium-envoy: v1.36.9-1782267392-edeb3f2af56c37c407efa1f63f0b32f595399bbc -> v1.37.5-1786810558-766ccfb37260a43e9d228837aa84ce3faf9f64e7
+      ~ image us-docker.pkg.dev/palette-images/packs/cilium/<version>/clustermesh-apiserver: v1.19.6 -> v1.20.1
+      ~ image us-docker.pkg.dev/palette-images/packs/cilium/<version>/hubble-relay: v1.19.6 -> v1.20.1
+      ~ image us-docker.pkg.dev/palette-images/packs/cilium/<version>/operator: v1.19.6 -> v1.20.1
+      ~ image us-docker.pkg.dev/palette-images/packs/cilium/<version>/operator-aws: v1.19.6 -> v1.20.1
+      ~ image us-docker.pkg.dev/palette-images/packs/cilium/<version>/operator-azure: v1.19.6 -> v1.20.1
+      ~ image us-docker.pkg.dev/palette-images/packs/cilium/<version>/operator-generic: v1.19.6 -> v1.20.1
+      ~ image us-docker.pkg.dev/palette-images/packs/cilium/<version>/spire-agent: 1.9.6 -> 1.15.2
+      ~ image us-docker.pkg.dev/palette-images/packs/cilium/<version>/spire-server: 1.9.6 -> 1.15.2
+      ~ image us-docker.pkg.dev/palette-images/packs/cilium/<version>/startup-script: 1763560095-8f36c34 -> 1782916218-36ae25f
+      ~ image us-docker.pkg.dev/palette-images/packs/cilium/<version>/ztunnel: 1.28.0-distroless -> v1.0.0
       values: 46 changed, 48 added, 18 removed
         ~ charts.cilium.authentication.mutual.spire.install.agent.image.repository: "us-docker.pkg.dev/palette-images/packs/cilium/1.19.6/spire-agent" -> "us-docker.pkg.dev/palette-images/packs/cilium/1.20.1/spire-agent"
         ~ charts.cilium.authentication.mutual.spire.install.agent.image.tag: "1.9.6" -> "1.15.2"
@@ -139,8 +162,17 @@ consumers  0 -> 0 clusters
         ~ pack.content.images[8].image: "us-docker.pkg.dev/palette-images/packs/cilium/1.19.6/operator-aws:v1.19.6" -> "us-docker.pkg.dev/palette-images/packs/cilium/1.20.1/operator-aws:v1.20.1"
         ~ pack.content.images[9].image: "us-docker.pkg.dev/palette-images/packs/cilium/1.19.6/operator-azure:v1.19.6" -> "us-docker.pkg.dev/palette-images/packs/cilium/1.20.1/operator-azure:v1.20.1"
       impact: cluster-wide infra addon update
-~ [csi  ] csi-aws-ebs                1.63.1 -> 1.65.0   IDENTITY UPSTREAM AUTHORED
+~ [csi  ] csi-aws-ebs                1.63.1 -> 1.65.0   IDENTITY UPSTREAM AUTHORED IMAGES CHARTS
       upstream digest  sha256:4a1cb -> sha256:bd09e   (packRef.digest)
+      ~ image us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/<version>/aws-ebs-csi-driver: v1.63.1 -> v1.65.0
+      ~ image us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/<version>/external-attacher: v4.12.0-eksbuild.4 -> v4.12.0-eksbuild.6
+      ~ image us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/<version>/external-provisioner: v6.3.0-eksbuild.3 -> v6.3.0-eksbuild.5
+      ~ image us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/<version>/external-resizer: v2.2.1-eksbuild.2 -> v2.2.1-eksbuild.4
+      ~ image us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/<version>/external-snapshotter/csi-snapshotter: v8.6.0-eksbuild.4 -> v8.6.0-eksbuild.6
+      ~ image us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/<version>/livenessprobe: v2.19.0-eksbuild.4 -> v2.19.0-eksbuild.6
+      ~ image us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/<version>/node-driver-registrar: v2.17.0-eksbuild.4 -> v2.17.0-eksbuild.6
+      ~ image us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/<version>/volume-modifier-for-k8s: v0.9.5-eksbuild.4 -> v0.9.5-eksbuild.6
+      ~ chart aws-ebs-csi-driver: 2.63.1 -> 2.65.0
       values: 25 changed, 0 added, 0 removed
         ~ charts.aws-ebs-csi-driver.image.repository: "us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/1.63.1/aws-ebs-csi-driver" -> "us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/1.65.0/aws-ebs-csi-driver"
         ~ charts.aws-ebs-csi-driver.image.tag: "v1.63.1" -> "v1.65.0"
