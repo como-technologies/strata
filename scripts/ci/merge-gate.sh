@@ -2,7 +2,7 @@
 # Check what a merge request does to the records, against the target branch as it is now.
 #
 #   scripts/ci/merge-gate.sh <record or pattern>... [--base BRANCH] [--remote NAME]
-#                         [--no-verify] [--allow-rollback]
+#                         [--no-verify] [--allow-rollback] [--allow-no-digest]
 #
 # A branch that sat for a day compares against a base that moved. This script merges the target
 # branch into the checkout first, so every answer is about the merge result: what the records will
@@ -26,9 +26,11 @@
 #      the report gives the evidence: whether the target branch pinned that release before, and
 #      whether the branch wrote its record before or after the target branch moved.
 #   3. A record of the merge result does not verify: the profile or cluster it names changed in
-#      Palette, or is gone. A cluster built from it would not get what the record says. --no-verify,
-#      or no Palette key where strata looks for one (PALETTE_API_KEY, SPECTROCLOUD_APIKEY, or
-#      ~/.palette.env), leaves this check out, and the last line says so.
+#      Palette, or is gone. A cluster built from it would not get what the record says. A record
+#      that holds a pack with no upstream digest is unverified, and red too: a change of the
+#      archive of that pack does not show. --allow-no-digest accepts it, as verify does.
+#      --no-verify, or no Palette key where strata looks for one (PALETTE_API_KEY,
+#      SPECTROCLOUD_APIKEY, or ~/.palette.env), leaves this check out, and the last line says so.
 #
 # Exit 0 when the merge result is clear, 1 when the gate is red, and 2 when the script could not
 # run at all. A record that strata could not check is red, not 2: the gate fails closed.
@@ -45,18 +47,20 @@ base=""
 remote="${STRATA_REMOTE:-origin}"
 verify=1
 allow_rollback=""
+allow=()
 while [ $# -gt 0 ]; do
   case "$1" in
     --base) base=$2; shift 2 ;;
     --remote) remote=$2; shift 2 ;;
     --no-verify) verify=""; shift ;;
     --allow-rollback) allow_rollback=1; shift ;;
-    -h|--help) sed -n '2,37p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    --allow-no-digest) allow=(--allow-no-digest); shift ;;
+    -h|--help) sed -n '2,40p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     --*) die "unknown option $1" ;;
     *) patterns+=("$1"); shift ;;
   esac
 done
-[ ${#patterns[@]} -gt 0 ] || die "usage: merge-gate.sh <record or pattern>... [--base BRANCH] [--remote NAME] [--no-verify] [--allow-rollback]"
+[ ${#patterns[@]} -gt 0 ] || die "usage: merge-gate.sh <record or pattern>... [--base BRANCH] [--remote NAME] [--no-verify] [--allow-rollback] [--allow-no-digest]"
 
 [ -n "$base" ] || base="${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:-${GITHUB_BASE_REF:-}}"
 [ -n "$base" ] || die "pass --base: no CI variable names the target branch"
@@ -231,11 +235,22 @@ for f in "${files[@]}"; do
   fi
   if [ -n "$verify" ]; then
     code=0
-    "$strata" verify "$f" --quiet > "$work/verify.txt" 2>&1 || code=$?
+    "$strata" verify "$f" --quiet "${allow[@]+"${allow[@]}"}" > "$work/verify.txt" 2>&1 || code=$?
+    # exit 1 is drift or a pack with no upstream digest; the summary document says which
+    status=""
+    if [ "$code" = 1 ]; then
+      status=$("$strata" verify "$f" --quiet --summary --json "${allow[@]+"${allow[@]}"}" 2>/dev/null \
+        | jq -r '.records[0].status // ""') || true
+    fi
     case "$code" in
       0) ;;
       1) unverified+=("$f")
-         echo "DRIFTED: $f does not verify; a cluster built from it would not get what it says"
+         if [ "$status" = unverified ]; then
+           echo "UNVERIFIED: $f holds a pack with no upstream digest; a change of its archive does not show"
+           echo "  --allow-no-digest accepts it"
+         else
+           echo "DRIFTED: $f does not verify; a cluster built from it would not get what it says"
+         fi
          sed 's/^/  /' "$work/verify.txt" ;;
       *) unverified+=("$f")
          echo "ERROR: $f could not be checked"

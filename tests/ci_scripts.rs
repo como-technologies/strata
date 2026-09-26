@@ -1467,6 +1467,72 @@ fn merge_gate_says_when_it_does_not_verify_and_finds_the_key_where_strata_does()
     );
 }
 
+/// A `strata` for the gate: `verify` answers as for a record with a pack that has no upstream
+/// digest, unless `--allow-no-digest` accepts it; every other command is the real strata. Each
+/// call of verify is logged.
+const FAKE_UNVERIFIED_STRATA: &str = r#"#!/usr/bin/env bash
+if [ "$1" != verify ]; then exec "$REAL_STRATA" "$@"; fi
+echo "$*" >> "$FAKE_LOG"
+case " $* " in *" --allow-no-digest "*) echo "OK: unchanged"; exit 0 ;; esac
+case " $* " in
+  *" --summary "*) echo '{"records":[{"path":"releases/dev.json","status":"unverified"}]}' ;;
+  *) echo "UNVERIFIED: csi/csi-aws-ebs has no upstream digest" ;;
+esac
+exit 1
+"#;
+
+#[test]
+fn merge_gate_names_an_unverified_record_and_passes_allow_no_digest_on() {
+    let (base, branch, _) = gate_records();
+    let g = Gate::new(&base, &branch, &base);
+    let bin = tempfile::tempdir().unwrap();
+    let fake = bin.path().join("strata");
+    std::fs::write(&fake, FAKE_UNVERIFIED_STRATA).unwrap();
+    std::fs::set_permissions(&fake, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
+    let log = bin.path().join("verify.log");
+    let run = |extra: &[&str]| {
+        Command::new("bash")
+            .arg(script("ci/merge-gate.sh"))
+            .args(["releases/*.json", "--base", "main"])
+            .args(extra)
+            .current_dir(g.dir.path())
+            .env("HOME", g.dir.path())
+            .env("GIT_CONFIG_GLOBAL", "/dev/null")
+            .env("GIT_CONFIG_SYSTEM", "/dev/null")
+            .env("STRATA_BIN", &fake)
+            .env("REAL_STRATA", env!("CARGO_BIN_EXE_strata"))
+            .env("FAKE_LOG", &log)
+            .env("STRATA_QUIET", "1")
+            .env("PALETTE_API_KEY", "k")
+            .env_remove("GITHUB_BASE_REF")
+            .env_remove("CI_MERGE_REQUEST_TARGET_BRANCH_NAME")
+            .env_remove("STRATA_REMOTE")
+            .output()
+            .unwrap()
+    };
+
+    // red, and the report says why: a pack with no digest, not a drift
+    let o = run(&[]);
+    assert_eq!(o.status.code(), Some(1), "{}", text(&o.stderr));
+    let out = text(&o.stdout);
+    assert!(
+        out.contains("UNVERIFIED: releases/dev.json holds a pack with no upstream digest"),
+        "{out}"
+    );
+    assert!(out.contains("--allow-no-digest accepts it"), "{out}");
+    assert!(!out.contains("DRIFTED"), "{out}");
+
+    // the option reaches verify, and the gate is clear
+    std::fs::remove_file(&log).unwrap();
+    let o = run(&["--allow-no-digest"]);
+    assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
+    let calls = std::fs::read_to_string(&log).unwrap();
+    assert!(
+        calls.lines().all(|l| l.contains("--allow-no-digest")),
+        "{calls}"
+    );
+}
+
 // ---- verify-report.sh ------------------------------------------------------------------------
 
 /// A `strata` for verify-report.sh: `verify --summary ...` answers from summary.json and

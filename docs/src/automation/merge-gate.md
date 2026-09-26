@@ -20,7 +20,7 @@ build gets something that nobody reviewed.
 | --- | --- | --- |
 | Conflict | The branch does not merge the target branch. The report compares the two records, so you read the conflict as a release. | 1 |
 | Behind | The merge result pins an older version of the profile, or of a pack, than the target branch has, and no commit declares a rollback. | 1 |
-| Verify | A record of the merge result does not verify against Palette, or strata could not check it. | 1 |
+| Verify | A record of the merge result does not verify against Palette, holds a pack with no upstream digest, or strata could not check it. | 1 |
 
 ### A branch that replaces a newer pin
 
@@ -109,6 +109,7 @@ cluster.
 | `--remote NAME` | `STRATA_REMOTE`, or `origin` | The remote to fetch the target branch from. |
 | `--no-verify` | | Leave the verify check out. |
 | `--allow-rollback` | | Accept a backwards pin, as the `rollback` label does. |
+| `--allow-no-digest` | | Accept a pack with no upstream digest, as `verify --allow-no-digest` does. Without it, the gate names the record `UNVERIFIED`. |
 
 The script is in this repository, at `scripts/ci/merge-gate.sh`, and every
 release carries it beside the binary. It needs `strata` (or `STRATA_BIN`),
