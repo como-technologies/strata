@@ -745,6 +745,9 @@ impl Renderer for TerminalRenderer {
                 "\n{}\n",
                 cluster_count(clusters.len(), l.cluster.as_deref())
             ));
+            if let Some(line) = super::query_line(l) {
+                out.push_str(&format!("{}\n", p.dim(&line)));
+            }
             let rows: Vec<Vec<String>> = clusters
                 .iter()
                 .map(|c| {
@@ -759,6 +762,10 @@ impl Renderer for TerminalRenderer {
                             "project {}",
                             project_label(&c.project_uid, &c.project_name)
                         ));
+                    }
+                    // a query is a question about labels, so its rows show them
+                    if l.query.is_some() {
+                        row.push(super::labels_text(&c.labels));
                     }
                     if let Some(msg) = entry_error(c.error.as_ref()) {
                         row.push(format!("({msg})"));
@@ -816,6 +823,24 @@ impl Renderer for TerminalRenderer {
                 out.push_str(&table_line("  ", row, &widths, |i, cell| match i {
                     0 => p.bold(cell),
                     _ => p.dim(cell),
+                }));
+            }
+        }
+        if let Some(filters) = &l.filters {
+            out.push_str(&format!(
+                "\n{}\n",
+                count_of(filters.len(), "saved tag filter")
+            ));
+            let rows: Vec<Vec<String>> = filters
+                .iter()
+                .map(|f| vec![format!("filter:{}", f.name), f.uid.clone(), f.expression()])
+                .collect();
+            let widths = column_widths(&rows);
+            for row in &rows {
+                out.push_str(&table_line("  ", row, &widths, |i, cell| match i {
+                    0 => p.bold(cell),
+                    1 => p.dim(cell),
+                    _ => cell.to_string(),
                 }));
             }
         }

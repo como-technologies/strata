@@ -1,0 +1,7 @@
+$ strata list clusters --tag env=prod
+tenant scope
+
+2 clusters
+the clusters with env=prod, from the search of Palette, at tenant scope
+  cluster:64f1000000000000000000e3  ledger    Running  aws  project prod (uid 64f20000000000000000a0f1)  env=prod, managed-by=opentofu
+  cluster:64f1000000000000000000f1  payments  Running  aws  project prod (uid 64f20000000000000000a0f1)  env=prod, managed-by=opentofu

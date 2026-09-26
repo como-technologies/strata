@@ -59,6 +59,42 @@ pub trait Renderer {
     fn render_behind(&self, r: &crate::ops::BehindReport) -> Result<String>;
 }
 
+/// `env=prod, team`: the labels of a cluster, with a tag that has no value by its key alone.
+pub(crate) fn labels_text(labels: &std::collections::BTreeMap<String, String>) -> String {
+    labels
+        .iter()
+        .map(|(k, v)| {
+            if v == crate::ops::TAG_WITHOUT_VALUE {
+                k.clone()
+            } else {
+                format!("{k}={v}")
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+/// `the clusters with env=prod and the saved filter prod (region=us), from the search of
+/// Palette`, for a listing with a query.
+pub(crate) fn query_line(l: &Listing) -> Option<String> {
+    let q = l.query.as_ref()?;
+    let mut parts: Vec<String> = q.tags.clone();
+    if let Some(name) = &q.filter {
+        let expr = l
+            .query_filter
+            .as_ref()
+            .map(|f| format!(" ({})", f.expression()))
+            .unwrap_or_default();
+        parts.push(format!("the saved filter {name}{expr}"));
+    }
+    let how = match l.resolved {
+        Some(crate::ops::Resolved::Search) => "from the search of Palette, at tenant scope",
+        Some(crate::ops::Resolved::Listing) => "from the cluster listing, labels matched by strata",
+        None => "",
+    };
+    Some(format!("the clusters with {}, {how}", parts.join(" and ")))
+}
+
 /// `4 pins from 2 records: 1 behind`, with the floating pins, the pins not checked, and the
 /// versions that arrived when there are any.
 pub(crate) fn behind_heading(r: &crate::ops::BehindReport) -> String {

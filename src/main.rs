@@ -186,6 +186,14 @@ struct SnapshotArgs {
     /// request
     #[arg(long, conflicts_with_all = ["from_raw", "from_candidate"])]
     shape: bool,
+    /// For tag:KEY=VALUE or filter:NAME: write one record for each cluster into this directory,
+    /// as <cluster name>.json
+    #[arg(long, value_name = "DIR", conflicts_with_all = ["output", "raw_dir", "from_raw", "from_candidate"])]
+    dir: Option<PathBuf>,
+    /// With --dir: remove each cluster record of the directory whose cluster the query no
+    /// longer selects
+    #[arg(long, requires = "dir")]
+    prune: bool,
     /// No progress messages
     #[arg(short, long)]
     quiet: bool,
@@ -306,6 +314,13 @@ struct ListArgs {
     /// Also read each cluster for the profiles it applies
     #[arg(long)]
     applied: bool,
+    /// Keep the clusters with this label, KEY=VALUE or KEY; give it again for each label.
+    /// Palette searches every project the key can read
+    #[arg(long, value_name = "KEY=VALUE")]
+    tag: Vec<String>,
+    /// Keep the clusters that a saved tag filter selects, by name or uid
+    #[arg(long, value_name = "NAME")]
+    filter: Option<String>,
     /// Keep the clusters whose name or uid holds TEXT; sets --applied
     #[arg(long, value_name = "TEXT")]
     cluster: Option<String>,
@@ -319,6 +334,7 @@ enum KindArg {
     Profiles,
     Clusters,
     Projects,
+    Filters,
 }
 
 impl From<KindArg> for ListKind {
@@ -327,6 +343,7 @@ impl From<KindArg> for ListKind {
             KindArg::Profiles => ListKind::Profiles,
             KindArg::Clusters => ListKind::Clusters,
             KindArg::Projects => ListKind::Projects,
+            KindArg::Filters => ListKind::Filters,
         }
     }
 }
@@ -608,6 +625,73 @@ fn cmd_compare(a: &CompareArgs) -> Result<ExitCode> {
 fn cmd_snapshot(a: &SnapshotArgs) -> Result<ExitCode> {
     let progress = progress(a.quiet);
     let now = now_utc();
+    // a set of clusters is one record for each, in a directory
+    let set = a.r#ref.as_deref().map(Ref::parse);
+    match (&set, &a.dir) {
+        (Some(Ref::ClusterSet { tags, filter }), Some(dir)) => {
+            let query = ops::ClusterQuery {
+                tags: tags.clone(),
+                filter: filter.clone(),
+            };
+            let report = ops::snapshot_set(
+                &query,
+                dir,
+                a.prune,
+                |scope| connect(progress, scope),
+                &now,
+                &progress,
+            )?;
+            for r in &report.records {
+                match (&r.root, &r.error) {
+                    (Some(root), _) => println!(
+                        "wrote {}  cluster {} (uid {})  root {}",
+                        r.path.display(),
+                        r.cluster.name,
+                        r.cluster.uid,
+                        &root[..12.min(root.len())]
+                    ),
+                    (None, error) => println!(
+                        "could not record cluster {} (uid {}): {}",
+                        r.cluster.name,
+                        r.cluster.uid,
+                        error
+                            .as_ref()
+                            .and_then(|e| e.get("message"))
+                            .and_then(serde_json::Value::as_str)
+                            .unwrap_or("see the error")
+                    ),
+                }
+            }
+            for path in &report.removed {
+                println!("removed {}", path.display());
+            }
+            progress.note(&format!(
+                "{} of {} clusters recorded, {} removed; found by the {}",
+                report.records.iter().filter(|r| r.root.is_some()).count(),
+                report.records.len(),
+                report.removed.len(),
+                match report.resolved {
+                    ops::Resolved::Search => "search of Palette",
+                    ops::Resolved::Listing => "cluster listing",
+                }
+            ));
+            return Ok(ExitCode::from(report.exit_code()));
+        }
+        (Some(Ref::ClusterSet { .. }), None) => {
+            return Err(Error::Usage {
+                message: "a tag: or filter: ref names a set of clusters: give --dir DIR, and \
+                          strata writes one record for each"
+                    .to_string(),
+            });
+        }
+        (_, Some(_)) => {
+            return Err(Error::Usage {
+                message: "--dir takes a tag: or filter: ref, which names a set of clusters"
+                    .to_string(),
+            });
+        }
+        _ => {}
+    }
     let snap = match (&a.from_candidate, &a.from_raw) {
         (Some(file), _) => {
             ops::snapshot_from_candidate(file, || connect(progress, None), &now, &progress)?
@@ -681,6 +765,7 @@ fn cmd_snapshot(a: &SnapshotArgs) -> Result<ExitCode> {
                 Ref::ClusterGroup { uid } => {
                     ops::cluster_group_snapshot(&palette, uid, text, &now, &progress)?
                 }
+                Ref::ClusterSet { .. } => unreachable!("a set of clusters returned above"),
                 Ref::AppProfile { id, version } => ops::app_profile_snapshot(
                     &palette,
                     id,
@@ -783,6 +868,7 @@ fn cmd_candidate(a: &CandidateArgs) -> Result<ExitCode> {
     | Ref::EdgeHost { .. }
     | Ref::ClusterGroup { .. }
     | Ref::AppProfile { .. }
+    | Ref::ClusterSet { .. }
     | Ref::Pack { .. } = reference
     {
         return Err(Error::ProfileRefRequired {
@@ -942,6 +1028,10 @@ fn cmd_list(a: &ListArgs) -> Result<ExitCode> {
         pack: a.pack.clone(),
         applied: a.applied,
         cluster: a.cluster.clone(),
+        query: ops::ClusterQuery {
+            tags: a.tag.clone(),
+            filter: a.filter.clone(),
+        },
     };
     let l = ops::list(
         &options,

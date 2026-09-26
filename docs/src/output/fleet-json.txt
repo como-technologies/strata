@@ -1,0 +1,4 @@
+$ strata list clusters --filter production --json | jq -c '.resolved, (.clusters[] | {name, projectName, labels})'
+"search"
+{"name":"ledger","projectName":"prod","labels":{"env":"prod","managed-by":"opentofu"}}
+{"name":"payments","projectName":"prod","labels":{"env":"prod","managed-by":"opentofu"}}

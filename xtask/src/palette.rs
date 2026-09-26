@@ -53,6 +53,14 @@ fn answer(root: &Path, mut stream: TcpStream) -> std::io::Result<()> {
         return Ok(());
     };
     let (status, body) = match file_for(root, request.project.as_deref(), &request.target) {
+        Some(path)
+            if path.is_file()
+                && request
+                    .target
+                    .starts_with("/v1/dashboard/spectroclusters/search?") =>
+        {
+            (200, searched(&fs::read(path)?, &request.body))
+        }
         Some(path) if path.is_file() => (200, fs::read(path)?),
         _ => (
             404,
@@ -78,10 +86,54 @@ fn answer(root: &Path, mut stream: TcpStream) -> std::io::Result<()> {
 struct Request {
     target: String,
     project: Option<String>,
+    body: Vec<u8>,
 }
 
-/// The request line and the one header this server reads. Every other header is skipped, and a
-/// body is skipped too: strata sends only GET.
+/// The clusters of the search file that the body of a search selects, as Palette reads it: each
+/// group of conditions holds, and a condition on `tags` holds when a value `key:value` names a
+/// label of the cluster, or a value `key` names a label key.
+fn searched(file: &[u8], body: &[u8]) -> Vec<u8> {
+    let Ok(mut doc) = serde_json::from_slice::<serde_json::Value>(file) else {
+        return file.to_vec();
+    };
+    let query: serde_json::Value = serde_json::from_slice(body).unwrap_or_default();
+    let groups = query["filter"]["filterGroups"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    let holds = |labels: &serde_json::Value, item: &serde_json::Value| {
+        let c = &item["condition"]["string"];
+        let hit = c["match"]["values"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .any(|v| {
+                let v = v.as_str().unwrap_or_default();
+                match v.split_once(':') {
+                    Some((k, value)) => labels[k] == value,
+                    None => labels.get(v).is_some(),
+                }
+            });
+        hit != c["negation"].as_bool().unwrap_or(false)
+    };
+    if let Some(items) = doc["items"].as_array_mut() {
+        items.retain(|cluster| {
+            let labels = &cluster["metadata"]["labels"];
+            groups.iter().all(|g| {
+                let filters = g["filters"].as_array().cloned().unwrap_or_default();
+                if g["conjunction"] == "or" {
+                    filters.iter().any(|f| holds(labels, f))
+                } else {
+                    filters.iter().all(|f| holds(labels, f))
+                }
+            })
+        });
+    }
+    doc.to_string().into_bytes()
+}
+
+/// The request line, the headers this server reads, and the body: a search is a POST, and its
+/// body selects the clusters. Every other header is skipped.
 fn read_request(stream: &mut TcpStream) -> std::io::Result<Option<Request>> {
     let mut reader = BufReader::new(stream.try_clone()?);
     let mut line = String::new();
@@ -94,6 +146,7 @@ fn read_request(stream: &mut TcpStream) -> std::io::Result<Option<Request>> {
     let mut request = Request {
         target: target.to_string(),
         project: None,
+        body: Vec::new(),
     };
     let mut length = 0usize;
     loop {
@@ -112,6 +165,7 @@ fn read_request(stream: &mut TcpStream) -> std::io::Result<Option<Request>> {
     if length > 0 {
         let mut body = vec![0; length];
         reader.read_exact(&mut body)?;
+        request.body = body;
     }
     Ok(Some(request))
 }

@@ -21,6 +21,10 @@ Options:
           For a cluster: record the digest of the value Palette gives each macro the content uses
       --shape
           For a cluster: record the shape tier, the machine pools and the cloud part, with one more request
+      --dir <DIR>
+          For tag:KEY=VALUE or filter:NAME: write one record for each cluster into this directory, as <cluster name>.json
+      --prune
+          With --dir: remove each cluster record of the directory whose cluster the query no longer selects
   -q, --quiet
           No progress messages
   -h, --help

@@ -1,7 +1,7 @@
 # Palette API requests
 
-Strata reads. Most requests are `GET` requests. Four are `POST` requests, and
-none of them changes anything: three are searches that Palette takes as a
+Strata reads. Most requests are `GET` requests. Five are `POST` requests, and
+none of them changes anything: four are searches that Palette takes as a
 `POST`, and `compare --repave` asks Palette a question. Each request has the
 headers `ApiKey` and `Accept: application/json`. A request in a project has
 the header `ProjectUid` too. The
@@ -36,6 +36,19 @@ variables. The record says so in `source.variablesUnavailable`: see
 | `GET /v1/spectroclusters/{uid}/packs/resolvedValues` | The value that Palette gives each macro, for `snapshot --macros`, and `verify` of a record that holds macro digests. |
 | `GET /v1/cloudconfigs/{cloudType}/{configUid}` | The machine pools and the cloud part of the cluster, for `snapshot --shape`, and `verify` of a record that holds the `shape` tier. |
 | `POST /v1/spectroclusters/{uid}/validate/repave` | Whether a change of the profiles of the cluster replaces its nodes, for `compare --repave`. The request changes nothing. |
+
+## The fleet
+
+| Request | Gives |
+| --- | --- |
+| `GET /v1/dashboard/spectroclusters/search/schema` | The properties that the cluster search takes. Strata searches when it names `tags`. |
+| `POST /v1/dashboard/spectroclusters/search?limit=50` | The clusters that the filter of the body selects, every page, at tenant scope: each with its labels, its project, and its cloud. `list clusters --tag` and `--filter`, and a `tag:` or `filter:` ref, read it. The request changes nothing. |
+| `GET /v1/filters/metadata?filterType=tag` | The name and the uid of each saved tag filter of the tenant. |
+| `GET /v1/filters/tag/{uid}` | One saved tag filter: `spec.filterGroup`, its conjunction and its conditions. |
+
+The search takes no filter uid, so strata turns each condition of a saved filter
+into a condition of the search: the property `tags`, with the values
+`<key>:<value>`, or `<key>` for a label that must be there.
 
 ## An edge host, a cluster group, and an app profile
 

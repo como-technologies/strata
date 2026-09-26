@@ -253,7 +253,11 @@ is the path as a list: strings for keys, numbers for indexes, and
 - `projectUid` and `projectName`: the scope.
 - `pack`: the `--pack` text, when given.
 - `cluster`: the `--cluster` text, when given.
-- `profiles[]`, `clusters[]`, and `projects[]`: only the kinds that were listed.
+- `query`, with `--tag` or `--filter`: `tags[]` and `filter`, as given.
+  `resolved`: `search` when the search of Palette found the clusters, and
+  `listing` when strata matched the labels of the listing itself.
+  `queryFilter`, with `--filter`: the saved filter, as `filters[]` gives it.
+- `profiles[]`, `clusters[]`, `projects[]`, and `filters[]`: only the kinds that were listed.
   A kind that was listed and holds nothing is `[]`. Profiles come by name and
   then by version, clusters by name, and projects by name.
   - A profile: `ref`, `name`, `version`, `uid`, and `cloudType`. With `--packs`,
@@ -261,11 +265,16 @@ is the path as a list: strings for keys, numbers for indexes, and
     `version`, or `error`.
   - A cluster: `ref`, `name`, `uid`, `state`, `cloudType`, and `projectUid`.
     `projectName` joins them when strata could read the project listing.
+    `labels`: the labels of the cluster, as a map; a tag with no value has the
+    value `spectro__tag`.
     With `--applied`, also `profiles[]` with the `uid`, `name`, `version`, and
     `type` of each profile the cluster applies, or `error`, and
     `updatesPending` and `pendingUpdates[]` as a cluster record gives them.
     `updatesPending` is absent when strata could not read the notifications.
   - A project: `name` and `uid`.
+  - A saved tag filter: `name`, `uid`, `conjunction` (`and` or `or`), and
+    `conditions[]`, each with `key`, `values[]` (empty when the key alone must be
+    there), and `negation` when true.
 
 ## strata-packs/1
 

@@ -19,6 +19,7 @@ use crate::snapshot::{GroupMember, Snapshot, SubjectKind};
 
 mod behind;
 mod consumers;
+mod fleet;
 mod list;
 mod packs;
 mod repave;
@@ -27,6 +28,7 @@ mod verify;
 
 pub use behind::*;
 pub use consumers::*;
+pub use fleet::*;
 pub use list::*;
 pub use packs::*;
 pub use repave::*;
@@ -97,6 +99,13 @@ where
             let snap = if *pending { snap.mark_pending() } else { snap };
             Ok(snap.with_project(palette.project_uid()))
         }
+        Ref::ClusterSet { .. } => Err(Error::Usage {
+            message: format!(
+                "{reference} names a set of clusters, and this command reads one: \
+                 `strata snapshot {reference} --dir DIR` records each cluster, and \
+                 `strata list clusters` lists them"
+            ),
+        }),
         Ref::AppProfile { id, version } => {
             let palette = connect()?;
             Ok(app_profile_snapshot(

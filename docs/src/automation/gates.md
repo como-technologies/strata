@@ -74,7 +74,9 @@ version, and no edge host is bound to it. Do not add `--list-only` to the gate:
 it reads the consumer list of Palette alone, and that list is empty on an error
 of Palette too. Give the retire gate a key that reads every project of the tenant. A
 key of one project misses a cluster of another project that runs a tenant
-profile. See [strata consumers](../commands/consumers.md).
+profile. See [strata consumers](../commands/consumers.md). To see the reach of a key,
+`strata list clusters --tag <label>` searches every project that the key can
+read, and names the project of each cluster.
 
 On GitLab, put that line in the `script:` of `strata-retire-gate`. On GitHub the
 drop-in's job calls a reusable workflow, and such a job holds no steps of its

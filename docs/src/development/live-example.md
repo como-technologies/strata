@@ -22,6 +22,7 @@ show.
 | `edge-host.sh` | A record of an edge host, `consumers` of a profile bound to one, and what an edit in place does to an edge host (#78). It registers edge hosts with no device. |
 | `cluster-group.sh` | A record of a cluster group, and `compare` of the group with its virtual cluster (#78). It builds a virtual cluster in cluster A. |
 | `app-profile.sh` | A record of an app profile, and a plain update of it (#78). It needs no cluster. |
+| `fleet.sh` | `list clusters --tag` and `--filter`, `list filters`, and a record of each cluster of a set (#80). It labels cluster A through the API. |
 | `upstream.sh` | `strata behind` against the registries, and `upstream-report.sh` around a version that arrives in the example's own registry (#79). It needs no cluster. |
 
 The example runs on AWS or GCP: the variable `cloud` in `terraform.tfvars`
@@ -107,6 +108,7 @@ its end.
 | `edge-host.sh` | The edge host test (#78). |
 | `cluster-group.sh`, `terraform/cluster-group.tf` | The cluster group test (#78), and the group and the virtual cluster that it builds. Off unless `cluster_group` is set. |
 | `app-profile.sh` | The app profile test (#78). |
+| `fleet.sh` | The fleet test (#80). |
 | `upstream.sh` | The upstream test (#79). It opens and closes issues of this repository with the label `strata-live-behind`. |
 | `inventory.sh` | What clusters A and B still have in the cloud that `terraform.tfvars` names, to confirm a teardown. `just live-inventory` runs it. It reads the variables and not the outputs, so it works after `live-down`. |
 | `aws-inventory.sh` | What one cluster still has in AWS. `inventory.sh` runs it on AWS. |
@@ -166,6 +168,7 @@ each.
 | `edge-host.sh` | two edge hosts with no device, each bound to a version; a manifest of the add-on version and a value of the release version, each in place and put back; it deletes the hosts | the profiles, the clusters, the baseline |
 | `cluster-group.sh` | a cluster group on cluster A and a virtual cluster in it; a manifest of the add-on version, in place and put back; it removes the group | the profiles, cluster A, the baseline |
 | `app-profile.sh` | an app profile, a plain update of it, and its delete | the baseline |
+| `fleet.sh` | a label of cluster A and a saved tag filter, through the API, each put back | the profiles, cluster A, the baseline |
 | `upstream.sh` | three versions of the example's own pack, pushed and then removed; issues of this repository | the profiles, the baseline |
 
 **One definition for each kind.** Clusters A and B come from one resource, and

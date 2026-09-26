@@ -41,6 +41,32 @@ project that the key can see.
 cluster ref works only in the project of the cluster: set `PALETTE_PROJECT`
 before you use it. See [The same names in two projects](../use-cases/same-names.md).
 
+## Find the clusters of a label
+
+```text
+{{#include ../output/fleet-tag.txt}}
+```
+
+`--tag KEY=VALUE` keeps the clusters with that label, and `--tag KEY` the
+clusters that have the key. Give it again for each label: each must hold. A tag
+of the provider is a label: `env:prod` is `env=prod`. Palette searches every
+project the key can read, so the listing is at tenant scope, and each row names
+its project and ends with the labels of the cluster.
+
+`--filter NAME` keeps the clusters that a saved tag filter selects, by its name
+or uid. `strata list filters` names each saved tag filter of the tenant, and
+what it selects:
+
+```text
+{{#include ../output/fleet-filters.txt}}
+```
+
+Strata reads the search schema of the tenant first. When the search takes no
+`tags`, or Palette has no search, strata reads the cluster listing and matches
+the labels itself, with the same rules, and the heading says so. The search
+lists no virtual cluster. `strata snapshot filter:NAME --dir DIR` writes a record
+of each cluster: see [Find the fleet from Palette](../use-cases/fleet.md).
+
 ## Find the profiles a cluster runs
 
 `strata consumers <name>@<version>` names the clusters that use a profile
@@ -134,6 +160,10 @@ kind differently by scope:
 | --- | --- | --- | --- |
 | A project | the profiles of the project | the clusters of the project | each project the key can see: strata reads the projects at tenant scope in every scope |
 | Tenant scope | the profiles of the tenant only | the clusters of every project | each project that the key can see |
+
+`--tag` and `--filter` always search at tenant scope, and list clusters alone.
+`strata list filters` reads the saved tag filters, which belong to the tenant.
+Each listed cluster carries its labels in the JSON.
 
 Exit `0`, or `2` when strata cannot read a listing. `--json` writes
 [`strata-list/1`](../reference/documents.md#strata-list1).

@@ -6896,3 +6896,306 @@ fn a_floating_pin_is_behind_only_what_its_tag_cannot_reach_and_a_pin_that_cannot
     assert!(ops::is_floating("LTS__24.x") && ops::is_floating("1.30.x"));
     assert!(!ops::is_floating("1.30.6") && !ops::is_floating("LTS__24.04"));
 }
+
+// ---- the fleet --------------------------------------------------------------------------------
+
+const SEARCH: &str = "POST /v1/dashboard/spectroclusters/search?limit=50";
+
+/// A cluster row, as the search and the listing give one.
+fn fleet_row(uid: &str, name: &str, project: &str, labels: Value) -> Value {
+    serde_json::json!({"metadata": {"uid": uid, "name": name, "labels": labels,
+        "annotations": {"projectUid": project}},
+        "spec": {"cloudType": "aws"}, "status": {"state": "Running"}})
+}
+
+/// A tenant whose search takes tags: the search answers `found`, the listing holds `all`, and
+/// the saved filter `prod` selects env=prod.
+fn serve_fleet(api: MemoryApi, found: Vec<Value>, all: Vec<Value>) -> MemoryApi {
+    api.with(
+        "/v1/dashboard/spectroclusters/search/schema",
+        serde_json::json!({"schema": {"properties": [
+            {"name": "clusterName", "type": "string"}, {"name": "tags", "type": "string"}]}}),
+    )
+    .with(
+        SEARCH,
+        serde_json::json!({"items": found, "listmeta": {"continue": ""}}),
+    )
+    .with("/v1/dashboard/spectroclusters/meta", Value::Array(all))
+    .with(
+        "/v1/filters/metadata?filterType=tag",
+        serde_json::json!({"items": [{"metadata": {"name": "prod", "uid": "f1"}}]}),
+    )
+    .with(
+        "/v1/filters/tag/f1",
+        serde_json::json!({"metadata": {"name": "prod", "uid": "f1"},
+            "spec": {"filterGroup": {"conjunction": "and",
+                "filters": [{"key": "env", "values": ["prod"], "negation": false},
+                            {"key": "legacy", "values": [], "negation": true}]}}}),
+    )
+    .with(
+        "/v1/dashboard/projects/metadata",
+        serde_json::json!({"items": [{"metadata": {"name": "dev", "uid": "p1"}},
+            {"metadata": {"name": "prod", "uid": "p2"}}]}),
+    )
+}
+
+fn fleet_listing(api: &MemoryApi, query: ops::ClusterQuery) -> ops::Listing {
+    ops::list(
+        &ListOptions {
+            kinds: vec![ListKind::Clusters],
+            query,
+            ..ListOptions::default()
+        },
+        |_| Ok(Palette::new(api)),
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap()
+}
+
+#[test]
+fn list_clusters_with_a_tag_searches_palette_and_names_the_project_of_each() {
+    let payments = fleet_row(
+        "c-pay",
+        "payments",
+        "p2",
+        serde_json::json!({"env": "prod", "team": "pay"}),
+    );
+    let search = fleet_row(
+        "c-search",
+        "search",
+        "p1",
+        serde_json::json!({"env": "dev", "prod": "spectro__tag"}),
+    );
+    let api = serve_fleet(
+        MemoryApi::new(),
+        vec![payments.clone()],
+        vec![payments, search],
+    );
+    let l = fleet_listing(
+        &api,
+        ops::ClusterQuery {
+            tags: vec!["env=prod".into()],
+            filter: None,
+        },
+    );
+    assert_eq!(l.resolved, Some(ops::Resolved::Search));
+    assert_eq!(l.project_uid, "", "a query is at tenant scope");
+    let c = &l.clusters.as_ref().unwrap()[0];
+    assert_eq!(
+        (
+            c.name.as_str(),
+            c.project_uid.as_str(),
+            c.project_name.as_str()
+        ),
+        ("payments", "p2", "prod")
+    );
+    assert_eq!(c.labels["env"], "prod");
+    // the body is a tags condition that the search reads as key:value
+    let posted = api.posted();
+    let (path, body) = posted.last().unwrap();
+    assert_eq!(path, "/v1/dashboard/spectroclusters/search?limit=50");
+    let item = &body["filter"]["filterGroups"][0]["filters"][0];
+    assert_eq!(item["property"], "tags");
+    assert_eq!(item["condition"]["string"]["operator"], "eq");
+    assert_eq!(
+        item["condition"]["string"]["match"]["values"],
+        serde_json::json!(["env:prod"])
+    );
+
+    let text = render::renderer(Format::Terminal, Paint::off(), false)
+        .render_list(&l)
+        .unwrap();
+    assert!(text.starts_with("tenant scope\n"), "{text}");
+    assert!(
+        text.contains("the clusters with env=prod, from the search of Palette, at tenant scope"),
+        "{text}"
+    );
+    assert!(
+        text.contains("project prod (uid p2)") && text.contains("env=prod, team=pay"),
+        "{text}"
+    );
+}
+
+#[test]
+fn a_saved_tag_filter_is_translated_into_a_search_and_a_tenant_without_a_search_is_matched_by_strata()
+ {
+    let payments = fleet_row(
+        "c-pay",
+        "payments",
+        "p2",
+        serde_json::json!({"env": "prod"}),
+    );
+    let old = fleet_row(
+        "c-old",
+        "old",
+        "p2",
+        serde_json::json!({"env": "prod", "legacy": "spectro__tag"}),
+    );
+    let search = fleet_row(
+        "c-search",
+        "search",
+        "p1",
+        serde_json::json!({"env": "dev"}),
+    );
+    let api = serve_fleet(
+        MemoryApi::new(),
+        vec![payments.clone()],
+        vec![payments.clone(), old.clone(), search.clone()],
+    );
+    let l = fleet_listing(
+        &api,
+        ops::ClusterQuery {
+            tags: vec![],
+            filter: Some("prod".into()),
+        },
+    );
+    let posted = api.posted();
+    let filters = &posted.last().unwrap().1["filter"]["filterGroups"][0];
+    assert_eq!(filters["conjunction"], "and");
+    assert_eq!(
+        filters["filters"][1]["condition"]["string"]["match"]["values"],
+        serde_json::json!(["legacy"]),
+        "a key with no value: the label must be there"
+    );
+    assert_eq!(
+        filters["filters"][1]["condition"]["string"]["negation"],
+        true
+    );
+    assert_eq!(
+        l.query_filter.as_ref().unwrap().expression(),
+        "env=prod and not legacy"
+    );
+
+    // no search: strata matches the labels of the listing itself, with the same rules
+    let bare = MemoryApi::new()
+        .with(
+            "/v1/dashboard/spectroclusters/meta",
+            Value::Array(vec![payments, old, search]),
+        )
+        .with(
+            "/v1/filters/metadata?filterType=tag",
+            serde_json::json!({"items": [{"metadata": {"name": "prod", "uid": "f1"}}]}),
+        )
+        .with(
+            "/v1/filters/tag/f1",
+            serde_json::json!({"spec": {"filterGroup": {"conjunction": "and",
+                "filters": [{"key": "env", "values": ["prod"]},
+                            {"key": "legacy", "values": [], "negation": true}]}}}),
+        );
+    let l = fleet_listing(
+        &bare,
+        ops::ClusterQuery {
+            tags: vec![],
+            filter: Some("prod".into()),
+        },
+    );
+    assert_eq!(l.resolved, Some(ops::Resolved::Listing));
+    assert_eq!(
+        l.clusters
+            .unwrap()
+            .iter()
+            .map(|c| c.name.as_str())
+            .collect::<Vec<_>>(),
+        ["payments"],
+        "env=prod, and not legacy"
+    );
+    let err = ops::list(
+        &ListOptions {
+            kinds: vec![ListKind::Clusters],
+            query: ops::ClusterQuery {
+                tags: vec![],
+                filter: Some("nope".into()),
+            },
+            ..ListOptions::default()
+        },
+        |_| Ok(Palette::new(bare.clone())),
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap_err();
+    assert_eq!(err.kind(), "filter-not-found");
+
+    // list filters names each filter with what it selects
+    let l = ops::list(
+        &ListOptions {
+            kinds: vec![ListKind::Filters],
+            ..ListOptions::default()
+        },
+        |_| Ok(Palette::new(api.clone())),
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    let text = render::renderer(Format::Terminal, Paint::off(), false)
+        .render_list(&l)
+        .unwrap();
+    assert!(
+        text.contains("filter:prod  f1  env=prod and not legacy"),
+        "{text}"
+    );
+}
+
+#[test]
+fn snapshot_of_a_set_writes_a_record_for_each_cluster_and_prune_removes_the_ones_that_left() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let lab = fleet_row(
+        CLUSTER_UID,
+        "lab-cluster",
+        "",
+        serde_json::json!({"env": "prod"}),
+    );
+    let gone = fleet_row("c-gone", "gone", "", serde_json::json!({"env": "prod"}));
+    let mut doc = read(&dir.path().join("cluster-a").join("cluster.json"));
+    doc["metadata"]["labels"] = serde_json::json!({"env": "prod"});
+    let api = serve_fleet(
+        serve_cluster(MemoryApi::new(), dir.path(), "cluster-a"),
+        vec![lab, gone],
+        vec![],
+    )
+    .with(format!("/v1/spectroclusters/{CLUSTER_UID}"), doc);
+    let out = dir.path().join("fleet");
+    fs::create_dir_all(&out).unwrap();
+    // a record of a cluster that left the set, and a file that is not a record
+    let old = snapshot_cluster(
+        &serve_cluster(MemoryApi::new(), dir.path(), "cluster-a"),
+        None,
+    )
+    .unwrap();
+    fs::write(out.join("left.json"), old.to_json(false).unwrap()).unwrap();
+    fs::write(out.join("notes.json"), "{\"a\": 1}").unwrap();
+    let report = ops::snapshot_set(
+        &ops::ClusterQuery {
+            tags: vec!["env=prod".into()],
+            filter: None,
+        },
+        &out,
+        true,
+        |_| Ok(Palette::new(api.clone())),
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert_eq!(report.records.len(), 2);
+    let lab = &report.records[1];
+    assert_eq!(lab.path, out.join("lab-cluster.json"));
+    assert_eq!(lab.root.as_deref(), Some(old.root.as_str()));
+    let written = Snapshot::load(&lab.path).unwrap();
+    assert_eq!(
+        written.source.cluster.unwrap().labels["env"],
+        "prod",
+        "the record carries the labels"
+    );
+    let gone = &report.records[0];
+    assert!(
+        gone.error.is_some(),
+        "a cluster that cannot be read is an error of its row"
+    );
+    assert_eq!(report.exit_code(), 2);
+    assert_eq!(report.removed, [out.join("left.json")]);
+    assert!(
+        out.join("notes.json").exists(),
+        "a file that is not a record stays"
+    );
+}

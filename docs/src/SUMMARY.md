@@ -47,6 +47,7 @@
 - [An app profile is updated in place](./use-cases/app-profiles.md)
 - [A team pins each environment](./use-cases/fan-out.md)
 - [A publish fans out to what pins it](./use-cases/publish-fan-out.md)
+- [Find the fleet from Palette](./use-cases/fleet.md)
 
 # Automation
 

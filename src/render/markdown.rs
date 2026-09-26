@@ -569,6 +569,10 @@ impl Renderer for MarkdownRenderer {
                 "**{}**\n\n",
                 escape(&cluster_count(clusters.len(), l.cluster.as_deref()))
             ));
+            if let Some(line) = super::query_line(l) {
+                o.push_str(&format!("{}.\n\n", escape(&super::capitalized(&line))));
+            }
+            let labels = if l.query.is_some() { " labels |" } else { "" };
             let elsewhere = clusters.iter().any(|c| c.project_uid != l.project_uid);
             let with_applied = clusters
                 .iter()
@@ -580,7 +584,7 @@ impl Renderer for MarkdownRenderer {
                 ""
             };
             if !clusters.is_empty() {
-                let head = format!("| ref | name | state | cloud |{project}{applied}");
+                let head = format!("| ref | name | state | cloud |{project}{labels}{applied}");
                 let rule: String = head.matches('|').skip(1).map(|_| "---|").collect();
                 o.push_str(&format!("{head}\n|{rule}\n"));
             }
@@ -596,6 +600,12 @@ impl Renderer for MarkdownRenderer {
                     o.push_str(&format!(
                         " {} |",
                         escape(&project_label(&c.project_uid, &c.project_name))
+                    ));
+                }
+                if l.query.is_some() {
+                    o.push_str(&format!(
+                        " {} |",
+                        escape(dash(&super::labels_text(&c.labels)))
                     ));
                 }
                 if with_applied {
@@ -639,6 +649,24 @@ impl Renderer for MarkdownRenderer {
                     "| {} | `{}` |\n",
                     escape(dash(&pr.name)),
                     escape(&pr.uid)
+                ));
+            }
+            o.push('\n');
+        }
+        if let Some(filters) = &l.filters {
+            o.push_str(&format!(
+                "**{}**\n\n",
+                count_of(filters.len(), "saved tag filter")
+            ));
+            if !filters.is_empty() {
+                o.push_str("| ref | uid | selects |\n|---|---|---|\n");
+            }
+            for f in filters {
+                o.push_str(&format!(
+                    "| `filter:{}` | `{}` | {} |\n",
+                    escape(&f.name),
+                    escape(&f.uid),
+                    escape(&f.expression())
                 ));
             }
             o.push('\n');

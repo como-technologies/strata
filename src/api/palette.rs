@@ -17,6 +17,10 @@ const PROJECT_LISTING: &str = "/v1/dashboard/projects/metadata";
 const EDGE_HOST_SEARCH: &str = "/v1/dashboard/edgehosts/search?limit=50";
 const CLUSTER_GROUP_LISTING: &str = "/v1/clustergroups/hostCluster/metadata";
 const APP_PROFILE_LISTING: &str = "/v1/dashboard/appProfiles/metadata";
+/// The cluster search. Palette gives at most 50 on a page.
+const CLUSTER_SEARCH: &str = "/v1/dashboard/spectroclusters/search?limit=50";
+const CLUSTER_SEARCH_SCHEMA: &str = "/v1/dashboard/spectroclusters/search/schema";
+const TAG_FILTER_LISTING: &str = "/v1/filters/metadata?filterType=tag";
 
 /// `(name, uid)` of each entry of a listing: an array, or an object with `items`.
 fn named_entries(listing: &Value) -> Vec<(String, String)> {
@@ -476,13 +480,45 @@ impl<A: PaletteApi> Palette<A> {
     /// Each item names the profiles bound to the host in `spec.clusterProfileTemplates`, as a
     /// summary: uid, name, and version.
     pub fn edge_hosts(&self) -> Result<Vec<Value>> {
-        self.searched(EDGE_HOST_SEARCH)
+        self.searched(
+            EDGE_HOST_SEARCH,
+            &serde_json::json!({"filter": {}, "sort": []}),
+        )
     }
 
-    /// Every item of a search of the dashboard, a POST with no filter, every page: Palette gives
-    /// at most `limit` on a page, and `listmeta.continue` names the next one.
-    fn searched(&self, search: &str) -> Result<Vec<Value>> {
-        let body = serde_json::json!({"filter": {}, "sort": []});
+    /// The clusters that a search filter selects, `POST /v1/dashboard/spectroclusters/search`,
+    /// every page. `filter` is the `filter` of the body: groups of conditions on the properties
+    /// that `cluster_search_schema` names. At tenant scope it holds the clusters of each project
+    /// the key can read, each with its labels and its project. It holds no virtual cluster.
+    pub fn cluster_search(&self, filter: &Value) -> Result<Vec<Value>> {
+        self.searched(
+            CLUSTER_SEARCH,
+            &serde_json::json!({"filter": filter, "sort": [{"field": "clusterName", "order": "asc"}]}),
+        )
+    }
+
+    /// The properties that the cluster search takes, `GET
+    /// /v1/dashboard/spectroclusters/search/schema`: `schema.properties[]` with `name` and `type`.
+    pub fn cluster_search_schema(&self) -> Result<Value> {
+        self.api.get_json(CLUSTER_SEARCH_SCHEMA)
+    }
+
+    /// The saved tag filters, `GET /v1/filters/metadata?filterType=tag`: the uid and the name of
+    /// each. A tag filter belongs to the tenant.
+    pub fn tag_filters(&self) -> Result<Value> {
+        self.api.get_json(TAG_FILTER_LISTING)
+    }
+
+    /// One saved tag filter, `GET /v1/filters/tag/{uid}`: `spec.filterGroup` holds its
+    /// conjunction and its conditions.
+    pub fn tag_filter(&self, uid: &str) -> Result<Value> {
+        self.api
+            .get_json(&format!("/v1/filters/tag/{}", query_value(uid)))
+    }
+
+    /// Every item of a search of the dashboard, a POST of `body`, every page: Palette gives at
+    /// most `limit` on a page, and `listmeta.continue` names the next one.
+    fn searched(&self, search: &str, body: &Value) -> Result<Vec<Value>> {
         let mut items = Vec::new();
         let mut next = String::new();
         loop {
@@ -491,7 +527,7 @@ impl<A: PaletteApi> Palette<A> {
             } else {
                 format!("{search}&continue={}", query_value(&next))
             };
-            let page = self.api.post_json(&path, &body)?;
+            let page = self.api.post_json(&path, body)?;
             let got = page
                 .get("items")
                 .and_then(Value::as_array)
@@ -559,10 +595,13 @@ impl<A: PaletteApi> Palette<A> {
     /// /v1/dashboard/clustergroups/{uid}/virtualClusters`, every page: the clusters that run the
     /// profiles that the group pins.
     pub fn cluster_group_members(&self, uid: &str) -> Result<Vec<Value>> {
-        self.searched(&format!(
-            "/v1/dashboard/clustergroups/{}/virtualClusters?limit=50",
-            query_value(uid)
-        ))
+        self.searched(
+            &format!(
+                "/v1/dashboard/clustergroups/{}/virtualClusters?limit=50",
+                query_value(uid)
+            ),
+            &serde_json::json!({"filter": {}, "sort": []}),
+        )
     }
 
     /// The uid of the one cluster group in the scope that has the name `name`, from `GET

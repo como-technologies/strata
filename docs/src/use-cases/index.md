@@ -135,6 +135,9 @@ and a whole team.
   environment, and pull requests cross.
 - [A publish fans out to what pins it](./publish-fan-out.md): a pack or profile
   publish opens a bump pull request on everything that pins it.
+- [Find the fleet from Palette](./fleet.md): the scheduled `verify` covers a list
+  of clusters that somebody typed, and a cluster that nobody added is not
+  checked.
 
 ## The examples
 

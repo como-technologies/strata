@@ -282,6 +282,54 @@ impl Tenant {
         );
         let rows: Vec<Value> = every_cluster.iter().map(cluster_row).collect();
         self.write("tenant", "v1/dashboard/spectroclusters/meta", &json!(rows));
+        // the search of the tenant: every cluster, which the server filters by the body of a
+        // request, and the schema that says the search takes tags
+        let projects: Value =
+            std::fs::read_to_string(self.doc("tenant", "v1/dashboard/projects/metadata"))
+                .ok()
+                .and_then(|t| serde_json::from_str(&t).ok())
+                .unwrap_or_default();
+        let names: Map<String, Value> = projects["items"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .map(|p| {
+                (
+                    p["metadata"]["uid"]
+                        .as_str()
+                        .unwrap_or_default()
+                        .to_string(),
+                    p["metadata"]["name"].clone(),
+                )
+            })
+            .collect();
+        let found: Vec<Value> = every_cluster
+            .iter()
+            .map(|c| {
+                let project = c["metadata"]["annotations"]["projectUid"]
+                    .as_str()
+                    .unwrap_or_default();
+                search_row(
+                    c,
+                    names
+                        .get(project)
+                        .and_then(Value::as_str)
+                        .unwrap_or_default(),
+                )
+            })
+            .collect();
+        self.write(
+            "tenant",
+            "v1/dashboard/spectroclusters/search@limit=50",
+            &json!({"items": found, "listmeta": {"continue": ""}}),
+        );
+        self.write(
+            "tenant",
+            "v1/dashboard/spectroclusters/search/schema",
+            &json!({"schema": {"properties": [
+                {"name": "clusterName", "type": "string"}, {"name": "clusterState", "type": "string"},
+                {"name": "tags", "type": "string"}, {"name": "environment", "type": "string"}]}}),
+        );
     }
 
     /// The documents directly inside one directory of a project, in name order, so a listing does
@@ -731,6 +779,29 @@ impl Tenant {
             },
         }
         self.write(project, &path, &doc);
+        // a label is in the listing and the search too
+        self.listings();
+    }
+
+    /// A saved tag filter of the tenant, `name`, that selects the clusters with the label
+    /// `key=value`.
+    pub fn tag_filter(&self, name: &str, uid: &str, key: &str, value: &str) {
+        let path = "v1/filters/metadata@filterType=tag";
+        let mut items: Vec<Value> = std::fs::read_to_string(self.doc("tenant", path))
+            .ok()
+            .and_then(|t| serde_json::from_str::<Value>(&t).ok())
+            .and_then(|v| v["items"].as_array().cloned())
+            .unwrap_or_default();
+        items.retain(|i| i["metadata"]["uid"] != uid);
+        items.push(json!({"metadata": {"name": name, "uid": uid}, "spec": {"filterType": "tag"}}));
+        self.write("tenant", path, &json!({"items": items}));
+        self.write(
+            "tenant",
+            &format!("v1/filters/tag/{uid}"),
+            &json!({"metadata": {"name": name, "uid": uid},
+                "spec": {"filterGroup": {"conjunction": "and", "filters": [
+                    {"key": key, "values": [value], "operator": "eq", "negation": false}]}}}),
+        );
     }
 
     /// Create a cluster that runs `profiles` in order, with its own copy of what each profile
@@ -1114,8 +1185,22 @@ fn profile_row(doc: &Value) -> Value {
 fn cluster_row(doc: &Value) -> Value {
     json!({
         "metadata": {"name": doc["metadata"]["name"], "uid": doc["metadata"]["uid"],
-                     "annotations": doc["metadata"]["annotations"]},
+                     "annotations": doc["metadata"]["annotations"],
+                     "labels": doc["metadata"]["labels"]},
         "spec": {"cloudType": doc["spec"]["cloudType"]},
+        "status": {"state": doc["status"]["state"]}
+    })
+}
+
+/// A cluster as the search gives it: no spec, and a summary with the cloud and the project.
+fn search_row(doc: &Value, project_name: &str) -> Value {
+    json!({
+        "metadata": {"name": doc["metadata"]["name"], "uid": doc["metadata"]["uid"],
+                     "annotations": doc["metadata"]["annotations"],
+                     "labels": doc["metadata"]["labels"]},
+        "specSummary": {"cloudConfig": {"cloudType": doc["spec"]["cloudType"]},
+                        "projectMeta": {"name": project_name,
+                                        "uid": doc["metadata"]["annotations"]["projectUid"]}},
         "status": {"state": doc["status"]["state"]}
     })
 }

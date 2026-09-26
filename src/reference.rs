@@ -61,6 +61,14 @@ pub enum Ref {
         /// The version of the name.
         version: Option<String>,
     },
+    /// `tag:<key>=<value>`, several joined with `+`, or `filter:<name>`: the clusters whose labels
+    /// meet the query, each in its own project. `snapshot --dir` records each one.
+    ClusterSet {
+        /// Each label that must be there: `env=prod`, or `env`.
+        tags: Vec<String>,
+        /// A saved tag filter, by name or uid.
+        filter: Option<String>,
+    },
     /// `clustergroup:<uid>`: the profiles that a cluster group pins for its virtual clusters.
     ClusterGroup {
         /// Cluster group uid, or its name.
@@ -76,6 +84,12 @@ pub const CLUSTER_PREFIX: &str = "cluster:";
 
 /// The prefix of an edge host ref.
 pub const EDGE_HOST_PREFIX: &str = "edgehost:";
+
+/// The prefix of a ref of the clusters with some labels.
+pub const TAG_PREFIX: &str = "tag:";
+
+/// The prefix of a ref of the clusters that a saved tag filter selects.
+pub const FILTER_PREFIX: &str = "filter:";
 
 /// The prefix of an app profile ref.
 pub const APP_PROFILE_PREFIX: &str = "appprofile:";
@@ -144,6 +158,26 @@ impl Ref {
                     profile: profile.map(str::to_string),
                 };
             }
+        }
+        if let Some(rest) = text.strip_prefix(TAG_PREFIX)
+            && !rest.is_empty()
+        {
+            return Ref::ClusterSet {
+                tags: rest
+                    .split('+')
+                    .filter(|t| !t.is_empty())
+                    .map(str::to_string)
+                    .collect(),
+                filter: None,
+            };
+        }
+        if let Some(name) = text.strip_prefix(FILTER_PREFIX)
+            && !name.is_empty()
+        {
+            return Ref::ClusterSet {
+                tags: Vec::new(),
+                filter: Some(name.to_string()),
+            };
         }
         if let Some(rest) = text.strip_prefix(APP_PROFILE_PREFIX)
             && !rest.is_empty()
@@ -217,6 +251,10 @@ impl fmt::Display for Ref {
                 Ok(())
             }
             Ref::ClusterGroup { uid } => write!(f, "{CLUSTER_GROUP_PREFIX}{uid}"),
+            Ref::ClusterSet { tags, filter } => match filter {
+                Some(name) => write!(f, "{FILTER_PREFIX}{name}"),
+                None => write!(f, "{TAG_PREFIX}{}", tags.join("+")),
+            },
             Ref::AppProfile { id, version } => match version {
                 Some(v) => write!(f, "{APP_PROFILE_PREFIX}{id}@{v}"),
                 None => write!(f, "{APP_PROFILE_PREFIX}{id}"),
@@ -468,6 +506,34 @@ mod tests {
             Ref::parse_with("appprofile:", no_files),
             Ref::Uid("appprofile:".into()),
             "no uid, no app profile"
+        );
+    }
+
+    #[test]
+    fn cluster_set_forms() {
+        let no_files = |_: &Path| false;
+        let tags = Ref::parse_with("tag:env=prod+team=search", no_files);
+        assert_eq!(
+            tags,
+            Ref::ClusterSet {
+                tags: vec!["env=prod".into(), "team=search".into()],
+                filter: None,
+            }
+        );
+        assert_eq!(tags.to_string(), "tag:env=prod+team=search");
+        let filter = Ref::parse_with("filter:prod", no_files);
+        assert_eq!(
+            filter,
+            Ref::ClusterSet {
+                tags: vec![],
+                filter: Some("prod".into()),
+            }
+        );
+        assert_eq!(filter.to_string(), "filter:prod");
+        assert_eq!(
+            Ref::parse_with("tag:", no_files),
+            Ref::Uid("tag:".into()),
+            "no label, no set"
         );
     }
 

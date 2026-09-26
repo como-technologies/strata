@@ -165,6 +165,10 @@ live-merge-gate: build
 live-registry: build
     examples/live/registry.sh
 
+# The fleet test: list clusters --tag and --filter, and a record of each cluster of a set, with --prune (#80). Needs live-up; labels cluster A and makes a saved tag filter through the API, and puts both back.
+live-fleet: build
+    examples/live/fleet.sh
+
 # The upstream test: strata behind against the registries, and scripts/ci/upstream-report.sh around a version that arrives in the example's own registry (#79). Needs live-profiles; opens and closes issues of this repository with the label strata-live-behind.
 live-upstream: build
     examples/live/upstream.sh

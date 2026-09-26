@@ -200,6 +200,25 @@ The listing answers a JSON array at the top level, and not an object with
 `items` ([Palette API reference](https://docs.spectrocloud.com/api/v1/)). Strata
 reads both shapes.
 
+**The search.** `POST /v1/dashboard/spectroclusters/search` is the listing that
+Palette recommends. `GET .../search/schema` names the properties it takes,
+`tags` among them. It gives each cluster with its labels, and a summary with the
+cloud and the project by name and uid, and no `spec`. At tenant scope it searches
+every project the key can read. It pages on `listmeta.continue`, 50 to a page.
+
+**Tags are labels.** The provider writes `tags = ["env:prod"]` into
+`metadata.labels` as `env=prod`, and a tag with no colon, `prod`, as
+`prod=spectro__tag`. The search reads a value of `tags` as `<key>:<value>`, or
+as `<key>` for a label that must be there, with the operator `eq`. The listing
+and the cluster document carry the same labels.
+
+**Saved tag filters** belong to the tenant: `GET /v1/filters/metadata?filterType=tag`
+lists them, and `GET /v1/filters/tag/{uid}` gives the conditions of one. The
+search takes no filter uid, so strata turns the conditions into a search. The
+Spectro Cloud source gives the rest: a key with no value means the label is
+there, `negation` turns a condition over, and the search lists no virtual
+cluster unless its filter asks for the environment `nested`.
+
 A deleted cluster leaves this listing and keeps its document:
 `GET /v1/spectroclusters/<uid>` still answers `200`, with the state `Deleted`.
 So `cluster:<name>`, which strata resolves through the listing, does not go

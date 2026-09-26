@@ -567,6 +567,26 @@ of the timezone and the labels changed the `spcHash` of B.
 No run makes a cluster run another pack version than its profile declares; the
 book shows it on the stand-in.
 
+## fleet.sh
+
+Read-write: it gives cluster A the label `env=prod` through the API, makes a
+saved tag filter, and puts both back. It needs the example at its baseline with
+cluster A.
+
+| Check | Expected exit | What it shows |
+|---|---|---|
+| `listing`, `listing-labels` | 0 | #80: the cluster listing carries the labels of cluster A: the tags of the example |
+| `record`, `record-labels` | 0 | #80: a record of cluster A carries them |
+| `tag`, `tag-search` | 0 | #80: `list clusters --tag` finds cluster A through the search of Palette, at tenant scope, with the uid and the name of its project |
+| `label`, `prod`, `prod-row` | 0 | #80: with the label `env=prod`, `--tag env=prod` finds cluster A alone |
+| `none` | 0 | #80: a query that no cluster meets finds none |
+| `filter-create`, `filters`, `by-filter` | 0 | #80: `list filters` names a saved tag filter and what it selects, and `list clusters --filter` finds cluster A |
+| `set`, `set-files`, `set-record` | 0 | #80: `snapshot filter:<name> --dir --prune` writes one record, of cluster A, with the label, removes the record of a cluster that left the set, and leaves a file that is not a record |
+| `set-tag` | 0 | #80: `snapshot tag:env=prod --dir` does the same |
+| `set-verify` | 0 | #80: the record that the set wrote verifies |
+| `unlabel`, `set-again`, `set-removed` | 0 | #80: without the label, the next run removes the record of cluster A |
+| `filter-delete`, `baseline` | 0 | the filter is deleted, and the example is at its baseline |
+
 ## upstream.sh
 
 Read-write: it pushes three versions of the example's own pack into its own OCI

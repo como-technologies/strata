@@ -155,6 +155,25 @@ pub enum Error {
         /// The uids of the edge hosts with that name, in order.
         uids: Vec<String>,
     },
+    /// A saved tag filter that no filter of the tenant has as its name or uid.
+    #[error(
+        "no saved tag filter with the name or uid '{filter}'; filters: {}",
+        list_or_none(available)
+    )]
+    FilterNotFound {
+        /// The name or uid as given.
+        filter: String,
+        /// The names of the saved tag filters, in order.
+        available: Vec<String>,
+    },
+    /// A name that two or more saved tag filters have.
+    #[error("several saved tag filters are named '{name}': {}; use filter:<uid>", uids.join(", "))]
+    FilterNameAmbiguous {
+        /// The name as given.
+        name: String,
+        /// The uids of the filters with that name.
+        uids: Vec<String>,
+    },
     /// `clustergroup:<x>` is neither a cluster group uid nor the name of a cluster group in the
     /// scope.
     #[error(
@@ -403,6 +422,8 @@ impl Error {
             Error::EdgeHostNameAmbiguous { .. } => "edge-host-name-ambiguous",
             Error::ClusterGroupNotFound { .. } => "cluster-group-not-found",
             Error::AppProfileNotFound { .. } => "app-profile-not-found",
+            Error::FilterNotFound { .. } => "filter-not-found",
+            Error::FilterNameAmbiguous { .. } => "filter-name-ambiguous",
             Error::ClusterGroupNameAmbiguous { .. } => "cluster-group-name-ambiguous",
             Error::NotSnapshot(_) => "not-snapshot",
             Error::UnsupportedSchema { .. } => "unsupported-schema",
@@ -557,7 +578,8 @@ impl Error {
             }
             Error::ClusterNameAmbiguous { name, uids }
             | Error::EdgeHostNameAmbiguous { name, uids }
-            | Error::ClusterGroupNameAmbiguous { name, uids } => {
+            | Error::ClusterGroupNameAmbiguous { name, uids }
+            | Error::FilterNameAmbiguous { name, uids } => {
                 m.insert("name".into(), Value::from(name.as_str()));
                 m.insert("uids".into(), Value::from(uids.clone()));
             }
@@ -566,6 +588,10 @@ impl Error {
                 available,
             } => {
                 m.insert("edgeHost".into(), Value::from(edge_host.as_str()));
+                m.insert("available".into(), Value::from(available.clone()));
+            }
+            Error::FilterNotFound { filter, available } => {
+                m.insert("filter".into(), Value::from(filter.as_str()));
                 m.insert("available".into(), Value::from(available.clone()));
             }
             Error::AppProfileNotFound {
@@ -702,6 +728,14 @@ mod tests {
             Error::ClusterGroupNotFound {
                 cluster_group: "nope".into(),
                 available: vec!["group-1".into()],
+            },
+            Error::FilterNotFound {
+                filter: "prod".into(),
+                available: vec!["dev".into()],
+            },
+            Error::FilterNameAmbiguous {
+                name: "twin".into(),
+                uids: vec!["f7".into(), "f8".into()],
             },
             Error::AppProfileNotFound {
                 name: "shop".into(),

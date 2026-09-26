@@ -1,6 +1,6 @@
 //! `list`: the profiles, clusters, and projects in a scope.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -29,6 +29,8 @@ pub enum ListKind {
     Clusters,
     /// Projects, each a uid for `PALETTE_PROJECT_UID` or `--project`.
     Projects,
+    /// The saved tag filters of the tenant, each a `filter:<name>` ref.
+    Filters,
 }
 
 /// What `list` reads, and in which scope.
@@ -49,6 +51,9 @@ pub struct ListOptions {
     /// Keep only the clusters whose name or uid contains this text, ignoring case. Implies
     /// `applied`.
     pub cluster: Option<String>,
+    /// Keep only the clusters whose labels meet this query: a search of Palette at tenant scope,
+    /// in each project the key can read.
+    pub query: super::ClusterQuery,
 }
 
 impl ListOptions {
@@ -56,10 +61,11 @@ impl ListOptions {
         if !self.kinds.is_empty() {
             return self.kinds.contains(&kind);
         }
+        // a query of labels is a question about clusters, so it lists them alone
         match kind {
-            ListKind::Profiles => self.cluster.is_none(),
+            ListKind::Profiles => self.cluster.is_none() && self.query.is_empty(),
             ListKind::Clusters => self.pack.is_none(),
-            ListKind::Projects => false,
+            ListKind::Projects | ListKind::Filters => false,
         }
     }
 
@@ -134,6 +140,11 @@ pub struct ListedCluster {
     /// could not be read, and the reports fall back to the uid.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub project_name: String,
+    /// The labels of the cluster, as Palette lists them. A tag of the provider is a label:
+    /// `env:prod` is `env` with the value `prod`, and `prod` is `prod` with the value
+    /// `spectro__tag`.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub labels: BTreeMap<String, String>,
     /// With applied: the profile versions the cluster applies, in the order the cluster document
     /// lists them. That order is no install order.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -190,6 +201,18 @@ pub struct Listing {
     /// Every project the key can see, by name.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub projects: Option<Vec<ListedProject>>,
+    /// With `--tag` or `--filter`: the query of the clusters.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub query: Option<super::ClusterQuery>,
+    /// With a query: how strata found the clusters, `search` or `listing`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resolved: Option<super::Resolved>,
+    /// With `--filter`: the saved tag filter, with its conditions.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub query_filter: Option<super::SavedFilter>,
+    /// The saved tag filters of the tenant, by name.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub filters: Option<Vec<super::SavedFilter>>,
 }
 
 /// List what a ref can name: profile versions and clusters in one scope, and the projects the
@@ -209,7 +232,13 @@ where
     F: FnMut(Option<&str>) -> Result<Palette<A>>,
 {
     let home = connect(options.project.as_deref())?;
-    let project_uid = home.project_uid().unwrap_or("").to_string();
+    // a query of labels searches every project the key can read, so the listing is at tenant
+    // scope, and each cluster names its project
+    let project_uid = if options.query.is_empty() {
+        home.project_uid().unwrap_or("").to_string()
+    } else {
+        String::new()
+    };
 
     let profiles = if options.wants(ListKind::Profiles) {
         progress.note("listing profiles");
@@ -217,9 +246,19 @@ where
     } else {
         None
     };
+    let mut resolved = None;
+    let mut query_filter = None;
     let clusters = if options.wants(ListKind::Clusters) {
         progress.note("listing clusters");
-        let mut clusters = list_clusters(&home.cluster_listing()?);
+        let mut clusters = if options.query.is_empty() {
+            list_clusters(&home.cluster_listing()?)
+        } else {
+            let tenant = super::tenant_of(&mut connect)?;
+            let selection = super::select(&options.query, &tenant, progress)?;
+            resolved = Some(selection.resolved);
+            query_filter = selection.filter;
+            selection.clusters
+        };
         if let Some(text) = &options.cluster {
             let text = text.to_lowercase();
             clusters.retain(|c| {
@@ -237,6 +276,12 @@ where
             &home,
         );
         Some(clusters)
+    } else {
+        None
+    };
+    let filters = if options.wants(ListKind::Filters) {
+        progress.note("listing saved tag filters");
+        Some(super::saved_filters(&super::tenant_of(&mut connect)?)?)
     } else {
         None
     };
@@ -278,6 +323,10 @@ where
         profiles,
         clusters,
         projects,
+        query: Some(options.query.clone()).filter(|q| !q.is_empty()),
+        resolved,
+        query_filter,
+        filters,
     })
 }
 
@@ -392,9 +441,22 @@ pub(super) fn list_clusters(doc: &Value) -> Vec<ListedCluster> {
                 reference: format!("{}{uid}", crate::reference::CLUSTER_PREFIX),
                 name: text(it, "/metadata/name"),
                 state: text(it, "/status/state"),
-                cloud_type: text(it, "/spec/cloudType"),
+                // the listing gives the cloud in the spec, and the search in a summary, with the
+                // name of the project
+                cloud_type: Some(text(it, "/spec/cloudType"))
+                    .filter(|t| !t.is_empty())
+                    .unwrap_or_else(|| text(it, "/specSummary/cloudConfig/cloudType")),
                 project_uid: text(it, "/metadata/annotations/projectUid"),
-                project_name: String::new(),
+                project_name: text(it, "/specSummary/projectMeta/name"),
+                labels: it
+                    .pointer("/metadata/labels")
+                    .and_then(Value::as_object)
+                    .map(|o| {
+                        o.iter()
+                            .filter_map(|(k, v)| v.as_str().map(|v| (k.clone(), v.to_string())))
+                            .collect()
+                    })
+                    .unwrap_or_default(),
                 uid,
                 profiles: None,
                 error: None,

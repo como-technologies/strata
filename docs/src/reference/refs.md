@@ -18,6 +18,8 @@ A ref names the thing that a command reads.
 | `edgehost:<host>/<profile>` | one profile bound to the edge host | `edgehost:store-1/platform-addons` |
 | `clustergroup:<group>` | the profiles that a cluster group pins for its virtual clusters | `clustergroup:dev-group` |
 | `appprofile:<uid>` | the app profile with this uid | `appprofile:64f6000000000000000000a1` |
+| `tag:<key>=<value>` | the clusters with the label, each in its own project; `+` joins labels that must all hold | `tag:env=prod` |
+| `filter:<name>` | the clusters that a saved tag filter selects, by its name or uid | `filter:production` |
 | `appprofile:<name>@<version>` | the app profile with this name and version, or `@latest` | `appprofile:shop@1.0.0` |
 | a file | a snapshot file from `strata snapshot` | `releases/1.1.1/dev.json` |
 
@@ -61,6 +63,10 @@ A ref names the thing that a command reads.
 - **`<group>`.** A uid, or the name of one cluster group in the scope. A name
   that no group has is `cluster-group-not-found`, which lists the names. See
   [A cluster group pins a profile](../use-cases/cluster-groups.md).
+- **`tag:` and `filter:`.** A set of clusters, and not one object. Only
+  `snapshot --dir DIR` takes one: it writes a record of each cluster. Another
+  command refuses it with `usage`. See
+  [Find the fleet from Palette](../use-cases/fleet.md).
 - **`appprofile:`.** An app profile. Its tiers are the packs of the record. A
   name and version that no app profile has is `app-profile-not-found`, which
   lists the app profiles. See
@@ -85,7 +91,7 @@ Strata asks Palette nothing:
 | Command | uid, `name@version`, `name@latest` | `pack:` | `cluster:`, `edgehost:`, `clustergroup:`, `appprofile:` | file |
 | --- | --- | --- | --- | --- |
 | `compare` | yes | yes | yes | yes |
-| `snapshot` | yes | yes | yes | no: `--from-raw DIR` or `--from-candidate FILE` |
+| `snapshot` | yes | yes | yes, and `tag:` or `filter:` with `--dir` | no: `--from-raw DIR` or `--from-candidate FILE` |
 | `candidate` | yes | no | no | a profile record |
 | `same-release` | yes | yes | yes | yes |
 | `verify` | no | no | no | yes: a record of each kind |

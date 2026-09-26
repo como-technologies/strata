@@ -289,6 +289,15 @@ impl Runner {
         self.tenant.cluster(project, uid, name, profiles, values);
     }
 
+    /// A saved tag filter of the tenant: see [`Tenant::tag_filter`].
+    pub fn tag_filter(&mut self, name: &str, uid: &str, key: &str, value: &str) {
+        if !self.building() {
+            return;
+        }
+        self.changed();
+        self.tenant.tag_filter(name, uid, key, value);
+    }
+
     /// The registry before it published one version: see [`Tenant::hide_pack_version`].
     pub fn hide_pack_version(&mut self, project: &str, name: &str, version: &str) {
         if !self.building() {

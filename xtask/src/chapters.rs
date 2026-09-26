@@ -105,6 +105,7 @@ pub fn names() -> Vec<&'static str> {
         "cluster-groups",
         "app-profiles",
         "behind",
+        "fleet",
         "same-names",
         "packs",
         "retire",
@@ -1546,6 +1547,70 @@ fn use_cases(r: &mut Runner) {
         1,
         false,
         "scripts/ci/upstream-report.sh 'releases/*/dev.json' --dry-run --no-impact",
+    );
+
+    // The fleet from Palette: the clusters of a label, in two projects, and a record of each
+    r.chapter("fleet", &[]);
+    r.projects(&[("dev", DEV), ("prod", PROD)]);
+    r.profile(DEV, A111, "1.1.1", "aws-stack@1.1.1", &[]);
+    r.profile(PROD, A111_PROD, "1.1.1", "aws-stack@1.1.1", &[]);
+    r.cluster(DEV, PAYMENTS, "payments", &[A111]);
+    r.cluster(DEV, SEARCH, "search", &[A111]);
+    r.cluster(PROD, PAYMENTS_PROD, "payments", &[A111_PROD]);
+    r.cluster(PROD, LEDGER, "ledger", &[A111_PROD]);
+    for (project, uid, env) in [
+        (DEV, PAYMENTS, "dev"),
+        (DEV, SEARCH, "dev"),
+        (PROD, PAYMENTS_PROD, "prod"),
+        (PROD, LEDGER, "prod"),
+    ] {
+        r.cluster_field(
+            project,
+            uid,
+            "/metadata/labels",
+            json!({"env": env, "managed-by": "opentofu"}),
+        );
+    }
+    r.tag_filter("production", "64f7000000000000000000a1", "env", "prod");
+    r.serve_here(); // state 1: two clusters of each project, and the production ones labeled so
+    r.step("fleet-tag", 0, false, "strata list clusters --tag env=prod");
+    r.step(
+        "fleet-filters",
+        0,
+        false,
+        "strata list filters --project ''",
+    );
+    r.step(
+        "fleet-snapshot",
+        0,
+        true,
+        "strata snapshot filter:production --dir fleet/prod --prune",
+    );
+    r.step(
+        "fleet-json",
+        0,
+        false,
+        "strata list clusters --filter production --json | jq -c '.resolved, (.clusters[] | {name, projectName, labels})'",
+    );
+    // ledger leaves production: the automation that labels it drops the label
+    r.cluster_field(
+        PROD,
+        LEDGER,
+        "/metadata/labels",
+        json!({"env": "retired", "managed-by": "opentofu"}),
+    );
+    r.serve_here(); // state 2: ledger is no longer labeled env=prod
+    r.step(
+        "fleet-snapshot-again",
+        0,
+        true,
+        "strata snapshot filter:production --dir fleet/prod --prune",
+    );
+    r.step(
+        "fleet-verify",
+        0,
+        false,
+        "strata verify 'fleet/prod/*.json' --summary",
     );
 
     r.chapter("same-names", &[]);

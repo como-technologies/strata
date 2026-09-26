@@ -1,0 +1,496 @@
+//! The fleet: the clusters that a query of labels selects, from a search of Palette or a saved tag
+//! filter, and a record of each.
+
+use std::collections::{BTreeMap, BTreeSet};
+use std::fmt;
+use std::path::{Path, PathBuf};
+
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+
+use crate::api::{Palette, PaletteApi};
+use crate::error::{Error, Result};
+use crate::progress::Progress;
+use crate::reference::Ref;
+use crate::snapshot::Snapshot;
+
+use super::list::{ListedCluster, TENANT_SCOPE, list_clusters, name_projects_of};
+use super::text;
+
+/// The value that the provider gives the label of a tag with no value, such as `prod`.
+pub const TAG_WITHOUT_VALUE: &str = "spectro__tag";
+
+/// One condition on the labels of a cluster, as a saved tag filter holds it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct TagCondition {
+    /// The label key.
+    pub key: String,
+    /// The values the label may have; empty when the key alone must be there.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub values: Vec<String>,
+    /// True when the condition is the opposite: the label is not there, or has none of the
+    /// values.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub negation: bool,
+}
+
+impl TagCondition {
+    /// `env=prod` or `env`, as `--tag` and `tag:` take it.
+    pub fn parse(text: &str) -> TagCondition {
+        match text.split_once('=') {
+            Some((key, value)) => TagCondition {
+                key: key.to_string(),
+                values: vec![value.to_string()],
+                negation: false,
+            },
+            None => TagCondition {
+                key: text.to_string(),
+                values: Vec::new(),
+                negation: false,
+            },
+        }
+    }
+
+    /// True when the labels meet the condition, as Palette evaluates a tag filter.
+    pub fn matches(&self, labels: &BTreeMap<String, String>) -> bool {
+        let hit = match labels.get(&self.key) {
+            None => false,
+            Some(_) if self.values.is_empty() => true,
+            Some(value) => self.values.iter().any(|v| v == value),
+        };
+        hit != self.negation
+    }
+
+    /// The condition of the cluster search: the property `tags`, a string that the search reads
+    /// as `key:value`, or as `key` for a label that must be there.
+    fn search_item(&self) -> Value {
+        let values: Vec<String> = if self.values.is_empty() {
+            vec![self.key.clone()]
+        } else {
+            self.values
+                .iter()
+                .map(|v| format!("{}:{v}", self.key))
+                .collect()
+        };
+        serde_json::json!({
+            "property": "tags", "type": "string",
+            "condition": {"string": {"operator": "eq", "negation": self.negation,
+                "ignoreCase": false, "match": {"conjunction": "or", "values": values}}},
+        })
+    }
+}
+
+impl fmt::Display for TagCondition {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let not = if self.negation { "not " } else { "" };
+        // a tag with no value is the label with the value the provider gives it: the key alone
+        let values: Vec<String> = self
+            .values
+            .iter()
+            .filter(|v| v.as_str() != TAG_WITHOUT_VALUE)
+            .cloned()
+            .collect();
+        match values.as_slice() {
+            [] => write!(f, "{not}{}", self.key),
+            [one] => write!(f, "{not}{}={one}", self.key),
+            many => write!(f, "{not}{} in ({})", self.key, many.join(", ")),
+        }
+    }
+}
+
+/// A saved tag filter of Palette.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SavedFilter {
+    /// The filter name.
+    pub name: String,
+    /// Its uid.
+    pub uid: String,
+    /// `and` or `or`: how the conditions join.
+    pub conjunction: String,
+    /// Its conditions.
+    pub conditions: Vec<TagCondition>,
+}
+
+impl SavedFilter {
+    /// `env=prod and team in (a, b)`.
+    pub fn expression(&self) -> String {
+        self.conditions
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join(&format!(" {} ", self.conjunction))
+    }
+}
+
+/// What selects the clusters: labels, a saved tag filter, or both, which must all hold.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ClusterQuery {
+    /// Each label that must be there: `env=prod`, or `env`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tags: Vec<String>,
+    /// A saved tag filter, by name or uid.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub filter: Option<String>,
+}
+
+impl ClusterQuery {
+    /// True when the query selects nothing, so no search is due.
+    pub fn is_empty(&self) -> bool {
+        self.tags.is_empty() && self.filter.is_none()
+    }
+}
+
+/// How the clusters of a query were found.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum Resolved {
+    /// The cluster search of Palette, at tenant scope.
+    Search,
+    /// The cluster listing, with the labels matched by strata: Palette has no search, or its
+    /// search takes no tags.
+    Listing,
+}
+
+/// The clusters that a query selects, and how strata found them.
+#[derive(Debug, Clone)]
+pub struct Selection {
+    /// The clusters, by name.
+    pub clusters: Vec<ListedCluster>,
+    /// How strata found them.
+    pub resolved: Resolved,
+    /// The saved filter, when the query names one.
+    pub filter: Option<SavedFilter>,
+}
+
+/// Every saved tag filter of the tenant, with its conditions: one request for the list, and one
+/// for each filter.
+pub fn saved_filters<A: PaletteApi>(tenant: &Palette<A>) -> Result<Vec<SavedFilter>> {
+    let listing = tenant.tag_filters()?;
+    let entries: Vec<(String, String)> = listing
+        .get("items")
+        .and_then(Value::as_array)
+        .or_else(|| listing.as_array())
+        .into_iter()
+        .flatten()
+        .map(|it| {
+            let pick = |a: &str, b: &str| {
+                Some(text(it, a))
+                    .filter(|s| !s.is_empty())
+                    .unwrap_or_else(|| text(it, b))
+            };
+            (
+                pick("/metadata/name", "/name"),
+                pick("/metadata/uid", "/uid"),
+            )
+        })
+        .filter(|(_, uid)| !uid.is_empty())
+        .collect();
+    let mut filters = Vec::with_capacity(entries.len());
+    for (name, uid) in entries {
+        filters.push(filter_of(&tenant.tag_filter(&uid)?, &name, &uid));
+    }
+    filters.sort_by(|a, b| a.name.cmp(&b.name));
+    Ok(filters)
+}
+
+/// A saved tag filter from its document.
+fn filter_of(doc: &Value, name: &str, uid: &str) -> SavedFilter {
+    let group = doc
+        .pointer("/spec/filterGroup")
+        .cloned()
+        .unwrap_or(Value::Null);
+    let conditions = group
+        .get("filters")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .map(|f| TagCondition {
+            key: text(f, "/key"),
+            values: f
+                .get("values")
+                .and_then(Value::as_array)
+                .map(|vs| {
+                    vs.iter()
+                        .filter_map(|v| v.as_str().map(str::to_string))
+                        .collect()
+                })
+                .unwrap_or_default(),
+            negation: f.get("negation").and_then(Value::as_bool).unwrap_or(false),
+        })
+        .collect();
+    SavedFilter {
+        name: Some(text(doc, "/metadata/name"))
+            .filter(|n| !n.is_empty())
+            .unwrap_or_else(|| name.to_string()),
+        uid: uid.to_string(),
+        conjunction: Some(text(&group, "/conjunction"))
+            .filter(|c| !c.is_empty())
+            .unwrap_or_else(|| "and".to_string()),
+        conditions,
+    }
+}
+
+/// The saved filter of that name or uid.
+fn find_filter<A: PaletteApi>(tenant: &Palette<A>, wanted: &str) -> Result<SavedFilter> {
+    let filters = saved_filters(tenant)?;
+    let mut hits: Vec<&SavedFilter> = filters
+        .iter()
+        .filter(|f| f.name == wanted || f.uid == wanted)
+        .collect();
+    match hits.len() {
+        1 => Ok(hits.remove(0).clone()),
+        0 => Err(Error::FilterNotFound {
+            filter: wanted.to_string(),
+            available: filters.iter().map(|f| f.name.clone()).collect(),
+        }),
+        _ => Err(Error::FilterNameAmbiguous {
+            name: wanted.to_string(),
+            uids: hits.iter().map(|f| f.uid.clone()).collect(),
+        }),
+    }
+}
+
+/// The groups of the query: the labels of `--tag`, which must all hold, and the conditions of
+/// the saved filter, joined as the filter joins them.
+fn groups(query: &ClusterQuery, filter: Option<&SavedFilter>) -> Vec<(String, Vec<TagCondition>)> {
+    let mut out = Vec::new();
+    if !query.tags.is_empty() {
+        out.push((
+            "and".to_string(),
+            query.tags.iter().map(|t| TagCondition::parse(t)).collect(),
+        ));
+    }
+    if let Some(f) = filter {
+        out.push((f.conjunction.clone(), f.conditions.clone()));
+    }
+    out
+}
+
+/// True when the labels meet each group.
+fn meets(groups: &[(String, Vec<TagCondition>)], labels: &BTreeMap<String, String>) -> bool {
+    groups.iter().all(|(conjunction, conditions)| {
+        if conjunction == "or" {
+            conditions.iter().any(|c| c.matches(labels))
+        } else {
+            conditions.iter().all(|c| c.matches(labels))
+        }
+    })
+}
+
+/// The clusters that `query` selects. Strata reads the search schema of the tenant: when the
+/// search takes the property `tags`, the search of Palette selects the clusters, at tenant scope.
+/// Else strata reads the cluster listing and matches the labels itself. `tenant` reads at tenant
+/// scope: see [`tenant_of`].
+pub fn select<A: PaletteApi>(
+    query: &ClusterQuery,
+    tenant: &Palette<A>,
+    progress: &Progress,
+) -> Result<Selection> {
+    let filter = match &query.filter {
+        Some(wanted) => Some(find_filter(tenant, wanted)?),
+        None => None,
+    };
+    let groups = groups(query, filter.as_ref());
+    let takes_tags = match tenant.cluster_search_schema() {
+        Ok(schema) => schema
+            .pointer("/schema/properties")
+            .and_then(Value::as_array)
+            .is_some_and(|ps| {
+                ps.iter()
+                    .any(|p| text(p, "/name") == "tags" && text(p, "/type") == "string")
+            }),
+        Err(Error::Api {
+            status: 404 | 405, ..
+        }) => false,
+        Err(e) => return Err(e),
+    };
+    let (mut clusters, resolved) = if takes_tags {
+        progress.note("searching the clusters of the tenant");
+        let body = serde_json::json!({
+            "conjunction": "and",
+            "filterGroups": groups.iter().map(|(conjunction, conditions)| serde_json::json!({
+                "conjunction": conjunction,
+                "filters": conditions.iter().map(TagCondition::search_item).collect::<Vec<_>>(),
+            })).collect::<Vec<_>>(),
+        });
+        let found = tenant.cluster_search(&body)?;
+        (list_clusters(&Value::Array(found)), Resolved::Search)
+    } else {
+        progress.note("listing the clusters, and matching their labels");
+        let mut all = list_clusters(&tenant.cluster_listing()?);
+        all.retain(|c| meets(&groups, &c.labels));
+        (all, Resolved::Listing)
+    };
+    // the search gives each project by name too; the listing does not
+    name_projects_of(
+        &mut clusters,
+        |c| &c.project_uid,
+        |c| &mut c.project_name,
+        tenant,
+    );
+    Ok(Selection {
+        clusters,
+        resolved,
+        filter,
+    })
+}
+
+/// A tenant client, and the configured scope when the key cannot read the tenant.
+pub fn tenant_of<A, F>(connect: &mut F) -> Result<Palette<A>>
+where
+    A: PaletteApi,
+    F: FnMut(Option<&str>) -> Result<Palette<A>>,
+{
+    connect(Some(TENANT_SCOPE)).or_else(|_| connect(None))
+}
+
+/// One record that `snapshot_set` wrote, or could not write.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SetRecord {
+    /// The cluster.
+    pub cluster: ListedCluster,
+    /// The file.
+    pub path: PathBuf,
+    /// The root of the record, when strata wrote it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub root: Option<String>,
+    /// Why strata could not record the cluster, when it could not.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<Value>,
+}
+
+/// What `snapshot_set` did.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SetReport {
+    /// How strata found the clusters.
+    pub resolved: Resolved,
+    /// One entry for each cluster that the query selects.
+    pub records: Vec<SetRecord>,
+    /// With `prune`: each record of the directory whose cluster the query no longer selects,
+    /// removed.
+    pub removed: Vec<PathBuf>,
+}
+
+impl SetReport {
+    /// 2 when a cluster could not be recorded, else 0.
+    pub fn exit_code(&self) -> u8 {
+        if self.records.iter().any(|r| r.error.is_some()) {
+            2
+        } else {
+            0
+        }
+    }
+}
+
+/// The file of each cluster: `<name>.json`, or `<name>.<uid>.json` when two clusters of the set
+/// have one name.
+fn file_names(clusters: &[ListedCluster]) -> Vec<String> {
+    let mut count: BTreeMap<&str, usize> = BTreeMap::new();
+    for c in clusters {
+        *count.entry(c.name.as_str()).or_default() += 1;
+    }
+    clusters
+        .iter()
+        .map(|c| {
+            if count[c.name.as_str()] > 1 || c.name.is_empty() {
+                format!("{}.{}.json", c.name, c.uid)
+            } else {
+                format!("{}.json", c.name)
+            }
+        })
+        .collect()
+}
+
+/// Write a record of each cluster that `query` selects into `dir`, each read in its own project.
+/// With `prune`, remove each cluster record of `dir` that is not one of them: the set is the
+/// query, and a cluster that no longer meets it leaves the directory. A file that is not a
+/// cluster record stays.
+pub fn snapshot_set<A, F>(
+    query: &ClusterQuery,
+    dir: &Path,
+    prune: bool,
+    mut connect: F,
+    fetched_at: &str,
+    progress: &Progress,
+) -> Result<SetReport>
+where
+    A: PaletteApi,
+    F: FnMut(Option<&str>) -> Result<Palette<A>>,
+{
+    let tenant = tenant_of(&mut connect)?;
+    let selection = select(query, &tenant, progress)?;
+    std::fs::create_dir_all(dir).map_err(|source| Error::Io {
+        path: dir.to_path_buf(),
+        source,
+    })?;
+    let names = file_names(&selection.clusters);
+    let mut records = Vec::with_capacity(names.len());
+    for (cluster, name) in selection.clusters.into_iter().zip(names) {
+        let path = dir.join(name);
+        let reference = Ref::Cluster {
+            uid: cluster.uid.clone(),
+            profile: None,
+            pending: false,
+        };
+        let scope = Some(cluster.project_uid.clone()).filter(|p| !p.is_empty());
+        let snap = super::snapshot_for(
+            &reference,
+            || connect(scope.as_deref()),
+            fetched_at,
+            progress,
+        )
+        .and_then(|snap| {
+            super::write_file(&path, &snap.to_json(false)?)?;
+            Ok(snap)
+        });
+        match snap {
+            Ok(snap) => records.push(SetRecord {
+                cluster,
+                path,
+                root: Some(snap.root),
+                error: None,
+            }),
+            Err(e) => records.push(SetRecord {
+                cluster,
+                path,
+                root: None,
+                error: Some(e.to_json()),
+            }),
+        }
+    }
+    let mut removed = Vec::new();
+    if prune {
+        let written: BTreeSet<&Path> = records.iter().map(|r| r.path.as_path()).collect();
+        let entries = std::fs::read_dir(dir).map_err(|source| Error::Io {
+            path: dir.to_path_buf(),
+            source,
+        })?;
+        let mut stale: Vec<PathBuf> = entries
+            .flatten()
+            .map(|e| e.path())
+            .filter(|p| {
+                p.extension().is_some_and(|x| x == "json") && !written.contains(p.as_path())
+            })
+            .filter(|p| Snapshot::load(p).is_ok_and(|s| s.source.cluster.is_some()))
+            .collect();
+        stale.sort();
+        for path in stale {
+            std::fs::remove_file(&path).map_err(|source| Error::Io {
+                path: path.clone(),
+                source,
+            })?;
+            removed.push(path);
+        }
+    }
+    Ok(SetReport {
+        resolved: selection.resolved,
+        records,
+        removed,
+    })
+}

@@ -40,6 +40,8 @@ with a file that is not a `strata-behind/1` document. `snapshot` takes no `--jso
 | `edge-host-name-ambiguous` | Two or more edge hosts in the scope have this name. | `name`, `uids` |
 | `cluster-group-not-found` | No cluster group in the scope has this uid or name. | `clusterGroup`, `available` |
 | `cluster-group-name-ambiguous` | Two or more cluster groups in the scope have this name. | `name`, `uids` |
+| `filter-not-found` | No saved tag filter of the tenant has this name or uid. | `filter`, `available` |
+| `filter-name-ambiguous` | Two or more saved tag filters have this name. | `name`, `uids` |
 | `app-profile-not-found` | No app profile in the scope has this name and version. | `name`, `version`, `available` |
 | `not-snapshot` | The file is not a strata snapshot. | `path` |
 | `unsupported-schema` | The snapshot has a schema id that this strata does not read. | `path`, `found`, `supported` |

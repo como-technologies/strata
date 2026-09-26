@@ -41,6 +41,10 @@
 #       Register an edge host UID with no device, as for a device that is not paired yet, and
 #       bind the profiles to it. Nothing runs on it.
 #   api.sh edge-host-delete UID
+#   api.sh filter-create NAME KEY VALUE
+#       Make a saved tag filter NAME of the tenant that selects the label KEY=VALUE, and print its
+#       uid.
+#   api.sh filter-delete UID
 #   api.sh app-profile-create NAME
 #       Make an app profile NAME@1.0.0 with one manifest tier, and print its uid.
 #   api.sh app-profile-edit UID FROM TO
@@ -342,6 +346,25 @@ edge_host_delete() {
   echo "edge host $uid is deleted"
 }
 
+# filter_create NAME KEY VALUE: a saved tag filter NAME of the tenant that selects the clusters
+# with the label KEY=VALUE. Prints its uid.
+filter_create() {
+  local name=${1:-} key=${2:-} value=${3:-} body
+  [ -n "$name" ] && [ -n "$key" ] && [ -n "$value" ] || die "usage: api.sh filter-create NAME KEY VALUE"
+  body=$(mktemp); trap 'rm -f "${body:-}"' RETURN
+  jq -n --arg n "$name" --arg k "$key" --arg v "$value" '{metadata: {name: $n}, spec: {filterGroup:
+      {conjunction: "and", filters: [{key: $k, values: [$v], operator: "eq", negation: false}]}}}' > "$body"
+  PROJECT="" call POST /v1/filters/tag "$body" | jq -r '.uid'
+}
+
+# filter_delete UID
+filter_delete() {
+  local uid=${1:-}
+  [ -n "$uid" ] || die "usage: api.sh filter-delete UID"
+  PROJECT="" call DELETE "/v1/filters/tag/$uid" > /dev/null || return 2
+  echo "saved tag filter $uid is deleted"
+}
+
 # app_profile_create NAME: an app profile NAME@1.0.0 with one manifest tier, `config`, whose
 # manifest is a ConfigMap with `edited: "no"`. Prints its uid.
 app_profile_create() {
@@ -531,6 +554,8 @@ case "${1:-}" in
   delete-cluster) shift; delete_cluster "$@" ;;
   edge-host-create) shift; edge_host_create "$@" ;;
   app-profile-create) shift; app_profile_create "$@" ;;
+  filter-create) shift; filter_create "$@" ;;
+  filter-delete) shift; filter_delete "$@" ;;
   app-profile-edit) shift; app_profile_edit "$@" ;;
   app-profile-delete) shift; app_profile_delete "$@" ;;
   edge-host-delete) shift; edge_host_delete "$@" ;;

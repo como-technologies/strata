@@ -4,7 +4,7 @@ List the profile versions, clusters, and projects in the scope
 Usage: strata list [OPTIONS] [KINDS]...
 
 Arguments:
-  [KINDS]...  What to list; with none, profiles and clusters [possible values: profiles, clusters, projects]
+  [KINDS]...  What to list; with none, profiles and clusters [possible values: profiles, clusters, projects, filters]
 
 Options:
       --project <PROJECT>            List this project, by uid; '' is tenant scope
@@ -12,6 +12,8 @@ Options:
       --packs                        Also read each version for its packs and consumers
       --pack <TEXT>                  Keep the versions with a pack whose name holds TEXT; sets --packs
       --applied                      Also read each cluster for the profiles it applies
+      --tag <KEY=VALUE>              Keep the clusters with this label, KEY=VALUE or KEY; give it again for each label. Palette searches every project the key can read
+      --filter <NAME>                Keep the clusters that a saved tag filter selects, by name or uid
       --cluster <TEXT>               Keep the clusters whose name or uid holds TEXT; sets --applied
       --format <FORMAT>              The report format: terminal, markdown, or json [default: terminal]
       --json                         The same as --format json

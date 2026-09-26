@@ -201,6 +201,7 @@ where
         | Ref::EdgeHost { .. }
         | Ref::ClusterGroup { .. }
         | Ref::AppProfile { .. }
+        | Ref::ClusterSet { .. }
         | Ref::Pack { .. } => {
             return Err(refused());
         }
