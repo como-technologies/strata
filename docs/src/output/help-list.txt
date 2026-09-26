@@ -1,5 +1,5 @@
 $ strata list --help
-List the profile versions, clusters, and projects in the scope
+List the profile versions, clusters, projects, and saved tag filters in the scope
 
 Usage: strata list [OPTIONS] [KINDS]...
 

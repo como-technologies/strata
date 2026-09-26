@@ -9,7 +9,7 @@ error kinds do not. See [Versions and compatibility](../reference/compatibility.
 | Exit | Meaning |
 | --- | --- |
 | `0` | The same, unchanged, or not in use. |
-| `1` | Different, drifted, or in use. |
+| `1` | Different, drifted, unverified, behind, or in use. |
 | `2` | Strata could not answer. Treat it as a failed job, never as "no change". |
 
 ```bash
@@ -88,7 +88,7 @@ release and has everything.
 | --- | --- |
 | [`pr-comment.sh`](./pr-comments.md) | One comment on a pull request or a merge request, and a label from the impact. |
 | [`merge-gate.sh`](./merge-gate.md) | The check that the merge button waits for: the records of the merge result. |
-| [`verify-report.sh`](./drift-issues.md) | One issue per record that drifted or could not be checked. |
+| [`verify-report.sh`](./drift-issues.md) | One issue per record that drifted, is unverified, or could not be checked. |
 | [`upstream-report.sh`](./upstream-issues.md) | One issue per pack that a record pins behind a newer version of its registry. |
 | [`install-strata.sh`](./gitlab.md#install-strata-in-a-job) | One release, with the checksums checked. |
 

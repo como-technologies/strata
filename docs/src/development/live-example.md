@@ -15,6 +15,15 @@ show.
 | `drift-report.sh off`, `drift-report.sh on` | `scripts/ci/verify-report.sh` around an edit in place and a version bump (#25). |
 | `packs.sh` | `pack:` refs against the tenant's own registries (#55). Read-only, and it needs no cluster. |
 | `pack-states.sh` | Pack versions that Spectro Cloud deprecated, disabled, or deleted: what `packs` and `snapshot` report, and which profiles Palette refuses (#68). It needs no cluster. |
+| `registry.sh` | The example's own OCI pack registry: a push, a push again of one version with other bytes, and a new version, and what Palette does after each (#66). It needs the profiles, and no cluster. |
+| `template.sh` | The lock of a cluster template on the versions it links, and the order in which a cluster installs the packs of two add-on profiles (#66). It needs the profiles and no cluster, and it ends with the removal of the example. |
+| `cluster.sh` | A variable value that a cluster changes, and other answers that only a cluster gives (#66). It needs cluster A, and it ends with the cluster gone. |
+| `order.sh` | What a reorder of the packs of a published version is to Palette (#66). It needs cluster A, and it leaves the versions edited: run `just live-down` after it. |
+| `who.sh` | What `verify --who` reads from the audit log, for an edit through the API and for an update that a cluster accepts (#69). Stage 1 needs the profiles; stage 2 needs cluster A. |
+| `pending.sh` | When Palette says that an update waits for a cluster, and what a record of `cluster:<uid>@pending` holds (#70, #78). It needs cluster A. |
+| `macros.sh` | What a new value of a project macro does to a version, to the copy of a cluster, and to a record (#72). It needs cluster A. |
+| `macro-repave.sh` | Whether a new macro value in an infrastructure layer replaces the nodes of a cluster (#72). It needs cluster A, and it leaves a repave that waits for approval: run `just live-down` after it. |
+| `repave.sh` | `compare --repave`: the answer of Palette beside the level of the impact table (#73). It needs cluster A. |
 | `merge-gate.sh` | `scripts/ci/merge-gate.sh` over records of the live profiles, in a git repository that the script builds (#57). It needs the profiles, and no cluster. |
 | `knurl.sh` | [The knurl adapter](../automation/knurl.md): each method of the port against the strata answer for the same real object. Read-only. It needs the profiles; the instance checks need the cluster. |
 | `registry-kinds.sh` | The digest of each registry kind, and a push again of one version into each (#75); a Helm registry with credentials, the case with no digest (#71). It needs no cluster. |
@@ -76,7 +85,7 @@ its end.
 | File | Function |
 | --- | --- |
 | `terraform/` | The profiles and the clusters, and the variables that the scripts set. `main.tf` holds the profiles; `cloud-aws.tf` and `cloud-gcp.tf` hold the cloud account, the clusters, and the OS and CSI packs of each cloud. |
-| `tofu-install.sh` | Installs the pinned OpenTofu. `just tofu-install` runs it. |
+| `tofu-install.sh` | Installs the pinned OpenTofu. `just tofu-install` runs it, and `just tofu-uninstall` removes it. |
 | `tf.sh` | Runs `tofu` with the key and the Palette address that strata uses. |
 | `lib.sh` | What the scripts share: the checks and their summary, the applies, the wait for a cluster, and the baseline. |
 | `baseline.sh` | Checks that the example is at its baseline. Each script needs it before it starts and after it ends. |
@@ -322,8 +331,10 @@ is not tracked, because raw responses can hold variable values. The script exits
 
 ### 4. Edit, move, and rename
 
-The scripts write to the tenant, so run them one at a time. Each starts from the
-baseline and restores it, so they run in any order:
+The scripts write to the tenant, so run them one at a time. Most start from the
+baseline and restore it, so they run in any order. `template.sh`, `cluster.sh`,
+`order.sh`, and `macro-repave.sh` do not: each one says what it leaves, so run
+it last, and then `just live-down`.
 
 ```bash
 examples/live/in-place.sh off                                                  # #27, legacy provider behavior
@@ -339,6 +350,18 @@ just live-tiers                                                                #
 just live-template                                                             # #66, needs just live-profiles and no cluster; ends with live-down
 just live-cluster                                                              # #66, needs just live-up; ends with the cluster gone
 just live-order                                                                # #66, needs just live-up; leaves the versions edited, so live-down follows
+just live-pack-states                                                          # #68, needs no cluster
+just live-knurl                                                                # #66, read-only; the instance checks need just live-up
+just live-who                                                                  # #69, stage 2 needs just live-up
+just live-pending                                                              # #70, needs just live-up
+just live-macros                                                               # #72, needs just live-up
+just live-macro-repave                                                         # #72, needs just live-up; leaves a repave that waits, so live-down follows
+just live-repave                                                               # #73, needs just live-up
+just live-edge-host                                                            # #78, needs just live-up; registers edge hosts with no device
+just live-cluster-group                                                        # #78, needs just live-up; builds a virtual cluster in cluster A
+just live-app-profile                                                          # #78, needs no cluster
+just live-fleet                                                                # #80, needs just live-up
+just live-upstream                                                             # #79, needs just live-profiles
 ```
 
 `just live-session` runs `verify.sh`, `in-place.sh off`, `in-place.sh on`, and

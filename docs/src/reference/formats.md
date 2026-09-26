@@ -15,14 +15,18 @@ Every report goes to standard output. Progress notes go to standard error: see
 
 | Line | Content |
 | --- | --- |
-| first | The two sides and their uids. A cluster side reads `<name>@<version> on cluster <cluster>`, with the cluster uid. A pack side reads `pack <name>@<version>`, with the pack uid. |
+| first | The two sides and their uids. A cluster side reads `<name>@<version> on cluster <cluster>`, with the cluster uid. The update that waits for a cluster reads `<name>@<version> pending for cluster <cluster>`. An edge host side reads `<name>@<version> on edge host <host>`, and a cluster group side reads `<name>@<version> pinned by cluster group <group>`. A pack side reads `pack <name>@<version>`, with the pack uid. |
 | `root` | The two roots, and `IDENTICAL`, `SAME CONTENT`, or `CHANGED`. |
 | `note` | A cause of the result. [strata compare](../commands/compare.md#notes-in-the-report) lists the notes. |
+| `palette` | Only with `--repave`: the answer of Palette, `repave` or `no repave`, for the cluster side. See [strata compare](../commands/compare.md#ask-palette-if-the-change-repaves). |
+| `images` | The number of images and charts that changed, and the number of packs that carry them. Below a changed pack, one line for each changed image or chart. |
 | `consumers` | The number of clusters that used each side. When one side is a cluster, a candidate, or a pack, the line is a sentence about the profile side alone: see [strata compare](../commands/compare.md#compare-two-versions). Between two clusters, or two packs, there is no line. |
 | `variables` | `unchanged`, or `CHANGED` with one line for each added or removed variable, and one line for each changed field. Between two packs there is no line. |
 | `cluster values` | Only between two clusters with different variable values: one line for each value, as `<profile>.<variable>: "old" -> "new"`. A sensitive variable shows `(sensitive)`. |
-| a pack | The layer, the name, the version, and the flags. Below a changed pack: the upstream digest, the changed values, the manifest changes, and the impact. |
-| `DRIFT:` or `OK:` | Only after `verify`: the verdict. |
+| `cluster tiers` | Only between two cluster records: the state of each tier (`applied`, `policy`, `running`, `shape`, `labels`), and one line for each changed field. See [Two clusters on one release differ](../use-cases/cluster-tiers.md). |
+| a pack | The layer, the name, the version, and the flags. Below a changed pack: the upstream digest, the changed values, the manifest changes, and the impact. `upstream unknown` says that the pack has no upstream digest. |
+| `DRIFT:`, `UNVERIFIED:`, or `OK:` | Only after `verify`: the verdict. |
+| `who:` | Only after `verify --who` on a record that drifted: the writes in the audit log since the record, one line each. |
 
 The variable traits are `required`, `sensitive`, `hidden`, and `immutable`. A
 value in the `cluster values` block never changes `IDENTICAL`, because the
@@ -41,7 +45,7 @@ does change it.
 | --- | --- |
 | bold green | `IDENTICAL`, `SAME CONTENT`, `OK`, `ADDED`, and the same-content note |
 | bold red | `CHANGED`, `DRIFT`, `REMOVED`, `repave`, and `may-repave` |
-| bold yellow | the other notes, and `variables CHANGED` |
+| bold yellow | `UNVERIFIED`, the other notes, and `variables CHANGED` |
 | blue | `IDENTITY`, and a renamed tag |
 | magenta | `UPSTREAM` |
 | yellow | `AUTHORED`, `cluster-wide`, the `~` of a changed pack, and the pack-order note |
@@ -93,10 +97,13 @@ The JSON is never colored and never cut. `--compact` writes it on one line.
 ## The one-line reports
 
 `verify` with many files or with `--summary`, `same-release`, `consumers`,
-`list`, and `packs` print one line for each item. `verify` and `same-release`
-close with a summary line. `consumers`, `list`, and `packs` head each group
-with a count. Each command page shows the lines:
-[verify](../commands/verify.md), [same-release](../commands/same-release.md),
-[consumers](../commands/consumers.md), [list](../commands/list.md),
-[packs](../commands/packs.md). `--format markdown` writes the same lines as a
-table.
+`behind`, `list`, and `packs` print one line for each item. `verify`,
+`same-release`, and `behind` close with a summary line. `consumers`, `list`,
+and `packs` head each group with a count. `snapshot` of a `tag:` or `filter:`
+set prints one `wrote` or `removed` line for each file. Each command page shows
+the lines: [verify](../commands/verify.md),
+[same-release](../commands/same-release.md),
+[consumers](../commands/consumers.md), [behind](../commands/behind.md),
+[list](../commands/list.md), [packs](../commands/packs.md), and
+[snapshot](../commands/snapshot.md). `--format markdown` writes the same lines
+as a table.

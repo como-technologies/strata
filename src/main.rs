@@ -38,7 +38,7 @@ const COMMANDS: &[&str] = &[
 #[command(
     name = TOOL_NAME,
     version,
-    about = "Record, compare, and check Palette profile versions, clusters, and pack versions",
+    about = "Record, compare, and check Palette profile versions, the clusters and other objects that run them, and pack versions",
     override_usage = "strata <COMMAND>\n       strata <A> <B>"
 )]
 struct Cli {
@@ -74,7 +74,7 @@ enum Cmd {
     Compare(CompareArgs),
     /// List the clusters and the edge hosts that use a profile version
     Consumers(ConsumersArgs),
-    /// List the profile versions, clusters, and projects in the scope
+    /// List the profile versions, clusters, projects, and saved tag filters in the scope
     List(ListArgs),
     /// List the versions a registry offers for a pack
     Packs(PacksArgs),
@@ -87,7 +87,7 @@ enum Cmd {
         kind: SchemaKind,
     },
     /// Record a profile version, a cluster, an edge host, a cluster group, an app profile, or a
-    /// pack version in a snapshot file
+    /// pack version in a snapshot file, or each cluster of a tag: or filter: set in a directory
     Snapshot(SnapshotArgs),
     /// Make sure that each record agrees with Palette now
     Verify(VerifyArgs),
@@ -728,7 +728,7 @@ fn cmd_snapshot(a: &SnapshotArgs) -> Result<ExitCode> {
             if a.raw_dir.is_some() && flagged {
                 return Err(Error::Usage {
                     message: "--raw-dir takes a profile or a cluster: a record read back from \
-                              the directory would not say pending, edge host, cluster group, or \
+                              the directory does not say pending, edge host, cluster group, or \
                               app profile"
                         .to_string(),
                 });

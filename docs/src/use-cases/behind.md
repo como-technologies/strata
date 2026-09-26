@@ -1,4 +1,4 @@
-# The registry moves on
+# The registry has newer versions
 
 ## The problem
 
@@ -56,7 +56,6 @@ With last week's run, the report says what arrived since:
 ## Palette behavior
 
 The live run of `just live-upstream` pushes a new version into the example's own
-registry between two runs, and shows that the second run names it as arrived,
-that Palette lists it with the time it first listed it, and that the issue of
-the pack follows. See
+registry between two runs. The second run names the version as arrived. Palette
+lists it with the time it first listed it, and the issue of the pack follows. See
 [What a registry answers about a pack](../internals/palette/packs.md#what-a-registry-answers-about-a-pack).

@@ -1201,9 +1201,7 @@ fn merge_gate_stops_a_branch_that_would_replace_a_newer_pin() {
     );
     let out = text(&o.stdout);
     assert!(
-        out.contains(
-            "BEHIND: releases/dev.json would replace what main pinned with an older version"
-        ),
+        out.contains("BEHIND: releases/dev.json replaces what main pinned with an older version"),
         "{out}"
     );
     assert!(

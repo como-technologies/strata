@@ -6,7 +6,7 @@ set of functions: `gh` for GitHub, and the REST API v4 with `curl` for GitLab.
 | Script | On GitHub | On GitLab |
 | --- | --- | --- |
 | [`pr-comment.sh`](./pr-comments.md) | one comment on the pull request, and a label | one note on the merge request, and a label |
-| [`verify-report.sh`](./drift-issues.md) | one issue per record that drifted | the same, as GitLab issues |
+| [`verify-report.sh`](./drift-issues.md) | one issue per record that drifted, is unverified, or could not be checked | the same, as GitLab issues |
 | [`upstream-report.sh`](./upstream-issues.md) | one issue per pack that is behind | the same, as GitLab issues |
 | [`merge-gate.sh`](./merge-gate.md) | a required status check | a job that "Pipelines must succeed" waits for |
 
@@ -36,7 +36,7 @@ variables:
 | --- | --- | --- |
 | `strata-comment` | each merge request pipeline | Compares `STRATA_A` with `STRATA_B`, and keeps one note and the label. |
 | `strata-merge-gate` | each merge request pipeline | Checks the merge result. Make the merge button wait for it. |
-| `strata-verify` | a pipeline schedule | Checks `STRATA_RECORDS` against Palette and keeps one issue per record that drifted. |
+| `strata-verify` | a pipeline schedule | Checks `STRATA_RECORDS` against Palette and keeps one issue per record that drifted, is unverified, or could not be checked. |
 | `strata-upstream` | a pipeline schedule | Checks the pins of `STRATA_RECORDS` against the registries and keeps one issue per pack that is behind, with the label `STRATA_BEHIND_LABEL`. |
 | `strata-promote-gate` | a pipeline that carries `STRATA_PROMOTE` | Checks that the records of a promotion are one release. Manual. |
 | `strata-retire-gate` | a pipeline that carries `STRATA_RETIRE` | Checks that no cluster the key can read runs the version. Manual. |

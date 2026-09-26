@@ -41,7 +41,7 @@ group:
 ```
 
 Exit `0`: `tenant-a` runs the pin. The cluster side holds `platform-addons`
-alone, and not `team-a-apps`: when one side is a cluster group, and the other is
+alone, and not `team-a-apps`. When one side is a cluster group, and the other is
 a `cluster:` ref that selects no profile, the cluster side holds only the
 profiles that the group pins. In a script, compare the record with each member
 that it names:

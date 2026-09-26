@@ -224,7 +224,7 @@ while IFS= read -r record <&3; do
       title="strata verify: $subject cannot be verified ($path)"
       {
         echo "<!-- strata-verify: $path -->"
-        echo "\`strata verify $path\` cannot verify the record, checked $now: a pack has no upstream digest, so a change of its archive would not show. \`--allow-no-digest\` accepts it."
+        echo "\`strata verify $path\` cannot verify the record, checked $now: a pack has no upstream digest, so a change of its archive does not show. \`--allow-no-digest\` accepts it."
         echo
         cat "$work/report.md"
       } > "$body"

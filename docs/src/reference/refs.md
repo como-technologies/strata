@@ -18,9 +18,9 @@ A ref names the thing that a command reads.
 | `edgehost:<host>/<profile>` | one profile bound to the edge host | `edgehost:store-1/platform-addons` |
 | `clustergroup:<group>` | the profiles that a cluster group pins for its virtual clusters | `clustergroup:dev-group` |
 | `appprofile:<uid>` | the app profile with this uid | `appprofile:64f6000000000000000000a1` |
+| `appprofile:<name>@<version>` | the app profile with this name and version, or `@latest` | `appprofile:shop@1.0.0` |
 | `tag:<key>=<value>` | the clusters with the label, each in its own project; `+` joins labels that must all hold | `tag:env=prod` |
 | `filter:<name>` | the clusters that a saved tag filter selects, by its name or uid | `filter:production` |
-| `appprofile:<name>@<version>` | the app profile with this name and version, or `@latest` | `appprofile:shop@1.0.0` |
 | a file | a snapshot file from `strata snapshot` | `releases/1.1.1/dev.json` |
 
 `strata list` prints the refs of a scope.
@@ -61,11 +61,14 @@ A ref names the thing that a command reads.
   edge hosts have is `edge-host-name-ambiguous`. See
   [A profile runs on edge hosts](../use-cases/edge-hosts.md).
 - **`<group>`.** A uid, or the name of one cluster group in the scope. A name
-  that no group has is `cluster-group-not-found`, which lists the names. See
+  that no group has is `cluster-group-not-found`, which lists the names. A name
+  that two groups have is `cluster-group-name-ambiguous`. See
   [A cluster group pins a profile](../use-cases/cluster-groups.md).
 - **`tag:` and `filter:`.** A set of clusters, and not one object. Only
   `snapshot --dir DIR` takes one: it writes a record of each cluster. Another
-  command refuses it with `usage`. See
+  command refuses it with `usage`. A saved filter that no filter of the tenant
+  names is `filter-not-found`, which lists the filters. A name that two filters
+  have is `filter-name-ambiguous`, which lists their uids. See
   [Find the fleet from Palette](../use-cases/fleet.md).
 - **`appprofile:`.** An app profile. Its tiers are the packs of the record. A
   name and version that no app profile has is `app-profile-not-found`, which
@@ -75,8 +78,9 @@ A ref names the thing that a command reads.
   exists is a file. A file that is not a strata snapshot is `not-snapshot`.
   A ref that is shaped like a path is a file too, whether or not the file is
   there. A path holds a `/` or a `\`. A path starts with `.`, `..`, or `~`. A
-  path ends with `.json`, `.yaml`, or `.yml`. A `pack:`, `cluster:`, or
-  `edgehost:` ref can hold a `/`, and each one stays what its prefix names. A uid, a name,
+  path ends with `.json`, `.yaml`, or `.yml`. A `pack:`, `cluster:`,
+  `edgehost:`, `tag:`, or `filter:` ref can hold a `/`, and each one stays what
+  its prefix names. A uid, a name,
   and a `name@version` hold none of these shapes, so they reach Palette.
 
 A record that is missing or misspelled is the error `io`, which names the file.
@@ -88,15 +92,15 @@ Strata asks Palette nothing:
 
 ## Which commands take which refs
 
-| Command | uid, `name@version`, `name@latest` | `pack:` | `cluster:`, `edgehost:`, `clustergroup:`, `appprofile:` | file |
-| --- | --- | --- | --- | --- |
-| `compare` | yes | yes | yes | yes |
-| `snapshot` | yes | yes | yes, and `tag:` or `filter:` with `--dir` | no: `--from-raw DIR` or `--from-candidate FILE` |
-| `candidate` | yes | no | no | a profile record |
-| `same-release` | yes | yes | yes | yes |
-| `verify` | no | no | no | yes: a record of each kind |
-| `consumers` | yes | no | no | a profile record |
-| `behind` | no | no | no | yes: a record of each kind |
+| Command | uid, `name@version`, `name@latest` | `pack:` | `cluster:`, `edgehost:`, `clustergroup:`, `appprofile:` | `tag:`, `filter:` | file |
+| --- | --- | --- | --- | --- | --- |
+| `compare` | yes | yes | yes | no | yes |
+| `snapshot` | yes | yes | yes | with `--dir` | no: `--from-raw DIR` or `--from-candidate FILE` |
+| `candidate` | yes | no | no | no | a profile record |
+| `same-release` | yes | yes | yes | no | yes |
+| `verify` | no | no | no | no | yes: a record of each kind |
+| `consumers` | yes | no | no | no | a profile record |
+| `behind` | no | no | no | no | yes: a record of each kind |
 
 `snapshot --raw-dir` takes a profile or a cluster: a record read back from the
-directory would not say `@pending`, edge host, cluster group, or app profile.
+directory does not say `@pending`, edge host, cluster group, or app profile.

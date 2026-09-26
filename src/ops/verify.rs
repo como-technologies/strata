@@ -289,7 +289,7 @@ pub enum RecordStatus {
     Unchanged,
     /// The live profile differs from the record.
     Drifted,
-    /// Same content, and a pack has no upstream digest: a change of its archive would not show.
+    /// Same content, and a pack has no upstream digest: a change of its archive does not show.
     Unverified,
     /// The record could not be checked.
     Error,
@@ -528,7 +528,7 @@ where
             status: [
                 ("unchanged", "The live profile has the same root as the record."),
                 ("drifted", "The live profile differs from the record: the published version was edited in place, or the record is stale. The diff is attached."),
-                ("unverified", "The live profile has the same content as the record, and a pack has no upstream digest, so a change of its archive would not show. The diff names the packs. --allow-no-digest accepts them."),
+                ("unverified", "The live profile has the same content as the record, and a pack has no upstream digest, so a change of its archive does not show. The diff names the packs. --allow-no-digest accepts them."),
                 ("error", "The record could not be checked: the file is not a record, or Palette could not be reached. The error is attached."),
             ]
             .into_iter()

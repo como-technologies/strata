@@ -26,7 +26,7 @@
 #      the report gives the evidence: whether the target branch pinned that release before, and
 #      whether the branch wrote its record before or after the target branch moved.
 #   3. A record of the merge result does not verify: the profile or cluster it names changed in
-#      Palette, or is gone. A cluster built from it would not get what the record says. A record
+#      Palette, or is gone. A cluster built from it does not get what the record says. A record
 #      that holds a pack with no upstream digest is unverified, and red too: a change of the
 #      archive of that pack does not show. --allow-no-digest accepts it, as verify does.
 #      --no-verify, or no Palette key where strata looks for one (PALETTE_API_KEY,
@@ -224,7 +224,7 @@ for f in "${files[@]}"; do
         printf '%s\n' "$evidence"
       else
         behind+=("$f")
-        echo "BEHIND: $f would replace what $base pinned with an older version"
+        echo "BEHIND: $f replaces what $base pinned with an older version"
         printf '%s\n' "$back" | sed 's/^/  /'
         printf '%s\n' "$evidence"
         echo "  a rollback says so, in a commit of the branch:"
@@ -249,7 +249,7 @@ for f in "${files[@]}"; do
            echo "UNVERIFIED: $f holds a pack with no upstream digest; a change of its archive does not show"
            echo "  --allow-no-digest accepts it"
          else
-           echo "DRIFTED: $f does not verify; a cluster built from it would not get what it says"
+           echo "DRIFTED: $f does not verify; a cluster built from it does not get what it says"
          fi
          sed 's/^/  /' "$work/verify.txt" ;;
       *) unverified+=("$f")

@@ -40,7 +40,7 @@
 - [A pack has no digest](./use-cases/no-digest.md)
 - [Promote a release to another project](./use-cases/promote.md)
 - [Retire a version](./use-cases/retire.md)
-- [The registry moves on](./use-cases/behind.md)
+- [The registry has newer versions](./use-cases/behind.md)
 - [A published version is edited in place](./use-cases/edited-in-place.md)
 - [A version bump overwrites a version](./use-cases/overwritten.md)
 - [A macro value changes](./use-cases/macros.md)

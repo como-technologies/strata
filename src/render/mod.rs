@@ -874,7 +874,7 @@ pub(crate) fn counts_line(s: &VerifySummary) -> String {
 }
 
 /// Why a record is unverified: `pack csi/x has no upstream digest, so a change of its archive
-/// would not show; --allow-no-digest accepts it`.
+/// does not show; --allow-no-digest accepts it`.
 pub(crate) fn unverified_sentence(packs: &[String]) -> String {
     let (noun, verb) = if packs.len() == 1 {
         ("pack", "has")
@@ -882,7 +882,7 @@ pub(crate) fn unverified_sentence(packs: &[String]) -> String {
         ("packs", "have")
     };
     format!(
-        "{noun} {} {verb} no upstream digest, so a change of the archive would not show; \
+        "{noun} {} {verb} no upstream digest, so a change of the archive does not show; \
          --allow-no-digest accepts it",
         packs.join(", ")
     )

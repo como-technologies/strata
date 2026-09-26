@@ -12,7 +12,7 @@ edition = "2024"
 # became stable. The msrv job of .github/workflows/checks.yml builds with the version named here,
 # so this number stays true.
 rust-version = "1.88"
-description = "Record, compare, and check Spectro Cloud Palette profile versions, clusters, and pack versions"
+description = "Record, compare, and check Spectro Cloud Palette profile versions, the clusters and other objects that run them, and pack versions"
 license = "Apache-2.0"
 repository = "https://github.com/como-technologies/strata"
 readme = "README.md"

@@ -37,9 +37,9 @@ flowchart LR
 
 | Task | Command | Page |
 | --- | --- | --- |
-| Find a ref, a project, or the profiles with a pack | `strata list` | [list](./list.md) |
+| Find a ref, a project, the profiles with a pack, the clusters with a label, or the saved tag filters | `strata list` | [list](./list.md) |
 | Find the versions a registry offers for a pack | `strata packs` | [packs](./packs.md) |
-| Record a profile version, a cluster, or a pack version | `strata snapshot` | [snapshot](./snapshot.md) |
+| Record a profile version, a cluster, an edge host, a cluster group, an app profile, a pack version, or each cluster of a set | `strata snapshot` | [snapshot](./snapshot.md) |
 | Write a candidate file for a review | `strata candidate` | [candidate](./candidate.md) |
 | See what changed between two refs | `strata compare` | [compare](./compare.md) |
 | Make sure that records in several projects are one release | `strata same-release` | [same-release](./same-release.md) |
@@ -65,6 +65,8 @@ details.
 | The profiles bound to an edge host | `edgehost:store-1` |
 | The profiles that a cluster group pins | `clustergroup:dev-group` |
 | An app profile | `appprofile:shop@1.0.0` |
+| The clusters with a label, for `snapshot --dir` | `tag:env=prod` |
+| The clusters that a saved tag filter selects, for `snapshot --dir` | `filter:production` |
 | A snapshot file | `releases/1.1.1/dev.json` |
 
 ## Exit status
@@ -72,7 +74,7 @@ details.
 | Exit | `compare` | `same-release` | `verify` | `consumers` | `behind` |
 | --- | --- | --- | --- | --- | --- |
 | `0` | identical | each pair passes | each record unchanged | nothing the key can read uses it | no pin is behind |
-| `1` | different | a pair fails | a record drifted | a cluster or an edge host uses it | a pin is behind |
+| `1` | different | a pair fails | a record drifted, or is unverified | a cluster or an edge host uses it | a pin is behind |
 | `2` | error | error | strata cannot check a record | error | strata cannot check a pin |
 
 `list`, `packs`, `snapshot`, `candidate`, and `schema` exit `0`, or `2` on an

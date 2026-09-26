@@ -5194,7 +5194,7 @@ fn a_pack_with_no_digest_makes_verify_unverified_and_names_the_pack() {
         .verdict(ver, &recorded.source)
         .unwrap();
     assert!(
-        verdict.starts_with("UNVERIFIED: published version lab-profile@1.2.0 has the content recorded t0, but pack os/ubuntu-aws has no upstream digest, so a change of the archive would not show; --allow-no-digest accepts it"),
+        verdict.starts_with("UNVERIFIED: published version lab-profile@1.2.0 has the content recorded t0, but pack os/ubuntu-aws has no upstream digest, so a change of the archive does not show; --allow-no-digest accepts it"),
         "{verdict}"
     );
     let json = serde_json::to_value(&v.diff).unwrap();

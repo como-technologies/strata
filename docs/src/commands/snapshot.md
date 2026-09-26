@@ -270,7 +270,7 @@ directory first when they live outside the repository.
 
 - Exit `0`, or `2` on an error.
 - `--macros` and `--shape` need a `cluster:` ref. `--raw-dir` takes a profile or
-  a cluster: a record read back from the directory would not say `@pending`,
+  a cluster: a record read back from the directory does not say `@pending`,
   edge host, cluster group, or app profile.
 - Without `-o`, the snapshot goes to standard output.
 - `-o releases/1.1.0/dev.json` makes the directory that the path names, so a

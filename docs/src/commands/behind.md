@@ -75,8 +75,8 @@ A scheduled job that keeps one issue open for each pack that is behind is
   an edge host, a cluster group, an app profile, or a pack each gives the pins of
   its packs.
 - Strata reads each pack of each registry one time, in the project of the
-  first record that pins it: the paged listing of the versions, and the tags of
-  the pack in the registry.
+  first record that pins it. It reads the paged listing of the versions, and the
+  tags of the pack in the registry.
 - Behind is a decision, and not an error, so run `behind` apart from `verify`:
   the two fail for different reasons, and need different people.
 

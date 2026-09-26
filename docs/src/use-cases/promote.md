@@ -7,7 +7,7 @@ The projects `dev` and `prod` both have `aws-stack@1.1.0` and `aws-stack@1.1.1`.
 The name and the version are the same in both projects, and nothing in Palette
 makes the content the same.
 
-A promotion moves one release along the environments, so each project should
+A promotion moves one release along the environments, so each project must
 hold the content that dev approved. Here `1.1.0` reached prod that way. Somebody
 built prod's `1.1.1` by hand instead, and changed one value on the way.
 

@@ -6,4 +6,4 @@ note       pack csi/csi-aws-ebs has no upstream digest: Palette gives none, so a
   [csi  ] csi-aws-ebs                1.65.0             unchanged
       upstream unknown: no digest, so a change of the archive does not show
 ...
-UNVERIFIED: published version aws-stack@1.1.5 has the content recorded 2026-09-17T09:30:00Z, but pack csi/csi-aws-ebs has no upstream digest, so a change of the archive would not show; --allow-no-digest accepts it
+UNVERIFIED: published version aws-stack@1.1.5 has the content recorded 2026-09-17T09:30:00Z, but pack csi/csi-aws-ebs has no upstream digest, so a change of the archive does not show; --allow-no-digest accepts it

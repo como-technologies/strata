@@ -101,11 +101,12 @@ pub const CLUSTER_GROUP_PREFIX: &str = "clustergroup:";
 pub const PACK_PREFIX: &str = "pack:";
 
 impl Ref {
-    /// A path to an existing file is a snapshot; `cluster:<uid>[/<profile>][@pending]` with a
-    /// non-empty uid is a cluster; `edgehost:<uid>[/<profile>]` is an edge host;
-    /// `clustergroup:<uid>` is a cluster group; `appprofile:<uid>` or
-    /// `appprofile:<name>@<version>` is an app profile; `name@version` with both parts non-empty is a name and version; anything else
-    /// is a uid.
+    /// A path to an existing file is a snapshot; `pack:[<registry>/]<name>@<version>` is a pack
+    /// version; `cluster:<uid>[/<profile>][@pending]` with a non-empty uid is a cluster;
+    /// `edgehost:<uid>[/<profile>]` is an edge host; `clustergroup:<uid>` is a cluster group;
+    /// `appprofile:<uid>` or `appprofile:<name>@<version>` is an app profile; `tag:<key>=<value>`
+    /// and `filter:<name>` are a set of clusters; `name@version` with both parts non-empty is a
+    /// name and version; anything else is a uid.
     pub fn parse(text: &str) -> Ref {
         Self::parse_with(text, |p| p.is_file())
     }

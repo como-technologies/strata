@@ -353,7 +353,7 @@ pub fn same_release_with(
                 ),
                 (
                     "unknown-upstream",
-                    "The roots would pass, and a pack on either side has no upstream digest, so an equal root does not show an equal archive. --allow no-digest accepts it.",
+                    "The roots pass, and a pack on either side has no upstream digest, so an equal root does not show an equal archive. --allow no-digest accepts it.",
                 ),
             ]),
             policy: m(&[

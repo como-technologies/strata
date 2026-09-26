@@ -9,8 +9,8 @@ two contents at two times, as a cluster profile edited in place can.
 
 A tier has a type, a version, values, properties, and manifests. It has no
 digest. So a record of an app profile answers a weaker question than a record
-of a cluster profile: it says whether the tiers changed, and not whether the
-chart of a helm tier was pushed again under its version.
+of a cluster profile. It says whether the tiers changed. It does not say whether
+somebody pushed the chart of a helm tier again under its version.
 
 In this example, `dev` has the app profile `shop@1.0.0`, with the helm tier
 `web` and the manifest tier `config`.
@@ -68,7 +68,7 @@ changed.
 - Record each app profile version that you deploy, and verify the records on a
   schedule, with `--allow-no-digest` when you accept that a tier has no digest.
 - Treat a drift of an app profile as an unreviewed change: Palette has no
-  publish step that would stop it.
+  publish step to stop it.
 - Keep the record from before the update: `compare` of the old record and the
   app profile now names each param and each manifest that changed.
 

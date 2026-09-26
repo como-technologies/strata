@@ -6,8 +6,8 @@ registry, and closes the issue when each pin of the pack is current.
 
 It is the other half of [Drift issues](./drift-issues.md), and it is a separate
 job on purpose. Drift says that Palette changed under a record: it is an error.
-Behind says that the registry moved on: it is a decision. One job that reported
-both would fail for two reasons that need different people.
+Behind says that the registry has a newer version: it is a decision. One job
+that reports both fails for two reasons, and each reason needs another person.
 
 ## What the script does
 
@@ -20,9 +20,10 @@ first line, and the label `strata-behind`:
 
 - **Opened** on the first run that finds the pack behind. The issue says that
   this run is the first to find it behind.
-- **Updated** on each later run: the pinned versions, the newer versions with the
-  time Palette first listed each, the impact of the bump, the versions that
-  arrived since the last update, and each record that pins the pack.
+- **Updated** on each later run. The issue gives the pinned versions, and the
+  newer versions with the time Palette first listed each. It gives the impact of
+  the bump, the versions that arrived since the last update, and each record
+  that pins the pack.
 - **Closed**, with a comment, on the first run where each pin of the pack is
   current.
 
@@ -50,7 +51,7 @@ scripts/ci/upstream-report.sh 'releases/**/*.json'
 | `--label NAME` | The label of the issues. `strata-behind` by default. |
 | `--no-impact` | Do not compare each pin that is behind with the newest version. |
 | `--save FILE` | Keep the report of the run. |
-| `--dry-run` | Print each issue body and what would happen, and call no host. |
+| `--dry-run` | Print each issue body and the action for each issue, and call no host. |
 
 | Exit | Meaning |
 | --- | --- |
