@@ -108,6 +108,10 @@ impl Paint {
     pub fn byellow(&self, s: &str) -> String {
         self.c("1;33", s)
     }
+    /// Dim yellow: a detail of what yellow marks.
+    pub fn dyellow(&self, s: &str) -> String {
+        self.c("2;33", s)
+    }
 }
 
 #[cfg(test)]
@@ -120,6 +124,7 @@ mod tests {
         let on = Paint::resolve(ColorMode::Always);
         assert!(on.is_on());
         assert_eq!(on.red("x"), "\x1b[31mx\x1b[0m");
+        assert_eq!(on.dyellow("x"), "\x1b[2;33mx\x1b[0m");
         assert!(!Paint::resolve(ColorMode::Never).is_on());
     }
 }

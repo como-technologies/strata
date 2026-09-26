@@ -45,6 +45,7 @@ does change it.
 | blue | `IDENTITY`, and a renamed tag |
 | magenta | `UPSTREAM` |
 | yellow | `AUTHORED`, `cluster-wide`, the `~` of a changed pack, and the pack-order note |
+| dim yellow | `IMAGES` and `CHARTS`: details of `AUTHORED`, so `AUTHORED` reads as the flag |
 | cyan | `in-place`, and the `@@` line of a unified diff |
 | red | old values, and the `-` of a removed line |
 | green | new values, and the `+` of an added line |

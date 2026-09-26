@@ -166,11 +166,12 @@ fn flags(pd: &PackDiff, p: &Paint) -> String {
     if pd.authored {
         f.push(p.yellow("AUTHORED"));
     }
+    // details of AUTHORED: its color, dimmed, so AUTHORED reads as the flag
     if pd.images {
-        f.push(p.yellow("IMAGES"));
+        f.push(p.dyellow("IMAGES"));
     }
     if pd.charts {
-        f.push(p.yellow("CHARTS"));
+        f.push(p.dyellow("CHARTS"));
     }
     f.join(" ")
 }
