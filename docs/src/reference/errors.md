@@ -25,7 +25,8 @@ the kind.
 | `cluster-profile-not-found` | The cluster runs no profile with this name or uid. | `cluster`, `profile`, `applied` |
 | `profile-ref-required` | The command needs a profile, and got a cluster, an edge host, a cluster group, an app profile, a pack, or a record of one. | `reference` |
 | `record-not-a-source` | `snapshot` got a record. It writes one, and does not read one. | `path` |
-| `usage` | The command line cannot work as given, so strata sent no request. Examples: `snapshot` with no ref and no `--from-raw`, `snapshot --raw-dir` of a ref that is not a profile or a cluster, and `compare --repave` with an edge host or a cluster group. `snapshot` takes no `--json`, so this kind prints as a `strata:` line. | |
+| `usage` | The command line cannot work as given, so strata sent no request. Examples: `snapshot` with no ref and no `--from-raw`, `snapshot --raw-dir` of a ref that is not a profile or a cluster, and `compare --repave` with an edge host or a cluster group, and `behind --since`
+with a file that is not a `strata-behind/1` document. `snapshot` takes no `--json`, so this kind prints as a `strata:` line. | |
 | `candidate-invalid` | The candidate file has a problem. | `path` |
 | `pack-not-found` | The registry has no such pack version or tag. | `name`, `version`, `registry`, `tag` when given |
 | `pack-name-not-found` | No visible registry offers a pack of that name. | `name` |

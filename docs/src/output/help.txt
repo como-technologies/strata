@@ -5,6 +5,7 @@ Usage: strata <COMMAND>
        strata <A> <B>
 
 Commands:
+  behind        Report the pack versions that records pin, and the newer versions the registries offer
   candidate     Write a candidate file from a profile version or a record
   compare       Compare two profile versions, records, clusters, edge hosts, cluster groups, app profiles, or pack versions
   consumers     List the clusters and the edge hosts that use a profile version

@@ -6688,3 +6688,211 @@ fn an_app_profile_record_holds_each_tier_as_a_pack() {
         .unwrap();
     assert!(text.contains("      ~ param replicas: 2 -> 3\n"), "{text}");
 }
+
+// ---- behind -----------------------------------------------------------------------------------
+
+/// A version of csi-aws-ebs in the Public Repo with a state, or for other clouds.
+fn pack_summary_with(version: &str, state: Option<&str>, clouds: &[&str]) -> Value {
+    let mut s = pack_summary(
+        &format!("pk-{version}"),
+        version,
+        "reg-public",
+        "sha256:ccc",
+        CSI_65,
+    );
+    s["spec"]["cloudTypes"] = serde_json::json!(clouds);
+    s["metadata"]["creationTimestamp"] = serde_json::json!("2026-09-20T08:00:00.000Z");
+    if let Some(state) = state {
+        s["spec"]["annotations"] = serde_json::json!({ "system_state": state });
+    }
+    s
+}
+
+/// A registry with 1.63.1 and 1.65.0, and 1.64.0 deprecated, 1.66.0 disabled, and 1.67.0 for GCP
+/// alone.
+fn serve_behind() -> MemoryApi {
+    serve_registry(
+        vec![
+            pack_summary_with("1.64.0", Some("deprecated"), &["aws"]),
+            pack_summary_with("1.66.0", Some("disabled"), &["aws"]),
+            pack_summary_with("1.67.0", None, &["gcp"]),
+        ],
+        &[("reg-public", public_entity())],
+    )
+}
+
+fn behind_of(
+    api: &MemoryApi,
+    records: &[std::path::PathBuf],
+    options: &ops::BehindOptions,
+) -> ops::BehindReport {
+    ops::behind(
+        records,
+        options,
+        |_| Ok(Palette::new(api.clone())),
+        "2026-09-26T00:00:00Z",
+        &Progress::silent(),
+    )
+    .unwrap()
+}
+
+#[test]
+fn behind_names_the_newer_versions_of_each_pin_and_the_impact_of_the_bump() {
+    let dir = tempfile::tempdir().unwrap();
+    let api = serve_behind();
+    let write = |name: &str, snap: &Snapshot| {
+        let path = dir.path().join(name);
+        fs::write(&path, snap.to_json(false).unwrap()).unwrap();
+        path
+    };
+    let old = snapshot_pack(&api, "pack:csi-aws-ebs@1.63.1").unwrap();
+    let new = snapshot_pack(&api, "pack:csi-aws-ebs@1.65.0").unwrap();
+    let records = vec![
+        write("dev.json", &old),
+        write("prod.json", &old),
+        write("next.json", &new),
+    ];
+    let r = behind_of(
+        &api,
+        &records,
+        &ops::BehindOptions {
+            impact: true,
+            since: None,
+        },
+    );
+    assert_eq!(r.schema, "strata-behind/1");
+    assert_eq!(
+        (r.summary.pins, r.summary.behind, r.summary.errors),
+        (2, 1, 0)
+    );
+    assert_eq!(r.exit_code(), 1, "a pin is behind");
+    let pin = &r.pins[0];
+    assert_eq!(
+        (
+            pin.name.as_str(),
+            pin.version.as_str(),
+            pin.registry.as_str()
+        ),
+        ("csi-aws-ebs", "1.63.1", "Public Repo")
+    );
+    assert_eq!(pin.pinned_by.len(), 2, "one pin for the two records");
+    // newest first; a disabled version is not one to move to, and a version for GCP alone is not
+    // for this pin
+    assert_eq!(
+        pin.newer
+            .iter()
+            .map(|n| (n.version.as_str(), n.state.as_deref()))
+            .collect::<Vec<_>>(),
+        [("1.65.0", None), ("1.64.0", Some("deprecated"))]
+    );
+    // when Palette first listed a version, from the listing
+    assert_eq!(pin.newer[1].listed, "2026-09-20T08:00:00.000Z");
+    assert_eq!(
+        pin.newer[0].listed, "",
+        "the listing gives no time for 1.65.0"
+    );
+    let bump = pin.bump.as_ref().unwrap();
+    assert_eq!(bump.to, "1.65.0");
+    assert!(
+        bump.flags.contains(&"IDENTITY".to_string()),
+        "{:?}",
+        bump.flags
+    );
+    assert_eq!(bump.impact, strata::impact::ImpactLevel::ClusterWide);
+    let current = &r.pins[1];
+    assert_eq!(current.version, "1.65.0");
+    assert!(!current.behind && current.bump.is_none());
+
+    let text = render::renderer(Format::Terminal, Paint::off(), false)
+        .render_behind(&r)
+        .unwrap();
+    assert!(
+        text.starts_with("2 pins from 3 records: 1 behind\n"),
+        "{text}"
+    );
+    assert!(
+        text.contains("behind: 1.65.0, 1.64.0 (deprecated)")
+            && text.contains("      bump to 1.65.0: cluster-wide IDENTITY")
+            && text.contains("pinned by ")
+            && text.contains("current"),
+        "{text}"
+    );
+    let md = render::renderer(Format::Markdown, Paint::off(), false)
+        .render_behind(&r)
+        .unwrap();
+    assert!(
+        md.contains("| `csi-aws-ebs` | `1.63.1` | Public Repo | behind: 1.65.0"),
+        "{md}"
+    );
+
+    // --no-impact reads no pack version for the bump
+    let quick = behind_of(&api, &records, &ops::BehindOptions::default());
+    assert!(quick.pins[0].bump.is_none() && quick.pins[0].behind);
+
+    // the next run names what arrived since this one: here the previous run did not know 1.64.0
+    let mut previous = r.clone();
+    previous.pins[0].newer.retain(|n| n.version != "1.64.0");
+    let next = behind_of(
+        &api,
+        &records,
+        &ops::BehindOptions {
+            impact: false,
+            since: Some(previous),
+        },
+    );
+    assert_eq!(
+        next.pins[0].arrived.as_deref(),
+        Some(&["1.64.0".to_string()][..])
+    );
+    assert_eq!(next.pins[1].arrived.as_deref(), Some(&[][..]));
+    assert_eq!(next.summary.arrived, 1);
+    assert_eq!(next.since.as_deref(), Some("2026-09-26T00:00:00Z"));
+    let json = serde_json::to_value(&next).unwrap();
+    assert_eq!(json["pins"][0]["arrived"], serde_json::json!(["1.64.0"]));
+}
+
+#[test]
+fn a_floating_pin_is_behind_only_what_its_tag_cannot_reach_and_a_pin_that_cannot_be_read_is_an_error()
+ {
+    let dir = tempfile::tempdir().unwrap();
+    let api = serve_behind();
+    let mut floating = snapshot_pack(&api, "pack:csi-aws-ebs@1.63.1").unwrap();
+    floating.packs[0].tag = "1.x".into();
+    let mut narrow = snapshot_pack(&api, "pack:csi-aws-ebs@1.63.1").unwrap();
+    narrow.packs[0].tag = "1.63.x".into();
+    let mut lost = snapshot_pack(&api, "pack:csi-aws-ebs@1.63.1").unwrap();
+    lost.packs[0].registry_uid = "reg-gone".into();
+    let mut records = Vec::new();
+    for (name, snap) in [
+        ("floating.json", &floating),
+        ("narrow.json", &narrow),
+        ("lost.json", &lost),
+    ] {
+        let path = dir.path().join(name);
+        fs::write(&path, snap.to_json(false).unwrap()).unwrap();
+        records.push(path);
+    }
+    let r = behind_of(&api, &records, &ops::BehindOptions::default());
+    // 1.x names 1.65.0 now: the tag reaches each newer version for AWS, so it is not behind
+    let float = r.pins.iter().find(|p| p.tag == "1.x").unwrap();
+    assert!(
+        float.floating && !float.behind && float.newer.is_empty(),
+        "{float:?}"
+    );
+    assert_eq!(float.resolved.as_deref(), Some("1.65.0"));
+    // 1.63.x names 1.63.1, and cannot reach 1.64.0 or 1.65.0: it is behind them
+    let narrow = r.pins.iter().find(|p| p.tag == "1.63.x").unwrap();
+    assert!(narrow.floating && narrow.behind, "{narrow:?}");
+    assert_eq!(narrow.resolved.as_deref(), Some("1.63.1"));
+    assert_eq!(narrow.newer[0].version, "1.65.0");
+    let gone = r
+        .pins
+        .iter()
+        .find(|p| p.registry_uid == "reg-gone")
+        .unwrap();
+    assert!(gone.error.is_some());
+    assert_eq!((r.summary.floating, r.summary.errors), (2, 1));
+    assert_eq!(r.exit_code(), 2, "a pin that strata could not check");
+    assert!(ops::is_floating("LTS__24.x") && ops::is_floating("1.30.x"));
+    assert!(!ops::is_floating("1.30.6") && !ops::is_floating("LTS__24.04"));
+}

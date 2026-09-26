@@ -289,6 +289,15 @@ impl Runner {
         self.tenant.cluster(project, uid, name, profiles, values);
     }
 
+    /// The registry before it published one version: see [`Tenant::hide_pack_version`].
+    pub fn hide_pack_version(&mut self, project: &str, name: &str, version: &str) {
+        if !self.building() {
+            return;
+        }
+        self.changed();
+        self.tenant.hide_pack_version(project, name, version);
+    }
+
     /// An edge host with profiles bound to it: see [`Tenant::edge_host`].
     pub fn edge_host(&mut self, project: &str, uid: &str, name: &str, profiles: &[&str]) {
         if !self.building() {

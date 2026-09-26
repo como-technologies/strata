@@ -165,6 +165,10 @@ live-merge-gate: build
 live-registry: build
     examples/live/registry.sh
 
+# The upstream test: strata behind against the registries, and scripts/ci/upstream-report.sh around a version that arrives in the example's own registry (#79). Needs live-profiles; opens and closes issues of this repository with the label strata-live-behind.
+live-upstream: build
+    examples/live/upstream.sh
+
 # The registry kinds test: the digest of each registry kind, and a push again of one version into each (#75). Needs live-profiles; builds and removes its own registry host.
 live-registry-kinds: build
     examples/live/registry-kinds.sh

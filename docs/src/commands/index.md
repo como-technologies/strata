@@ -26,11 +26,13 @@ flowchart LR
   subgraph Check
     verify
     consumers
+    behind
   end
   list --> snapshot --> compare --> verify
   candidate --> snapshot
   snapshot --> same-release
   verify --> consumers
+  snapshot --> behind
 ```
 
 | Task | Command | Page |
@@ -43,6 +45,7 @@ flowchart LR
 | Make sure that records in several projects are one release | `strata same-release` | [same-release](./same-release.md) |
 | Make sure that Palette still has what you recorded | `strata verify` | [verify](./verify.md) |
 | Find the clusters that use a version | `strata consumers` | [consumers](./consumers.md) |
+| Find the pack versions that records pin behind a newer one | `strata behind` | [behind](./behind.md) |
 | Get the JSON Schema of a document | `strata schema` | [schema](./schema.md) |
 
 ## Refs
@@ -58,15 +61,19 @@ details.
 | All profiles that a cluster runs | `cluster:payments` |
 | One profile that a cluster runs | `cluster:payments/aws-stack` |
 | A pack version in a registry | `pack:csi-aws-ebs@1.65.0` |
+| The update that waits for a cluster | `cluster:payments@pending` |
+| The profiles bound to an edge host | `edgehost:store-1` |
+| The profiles that a cluster group pins | `clustergroup:dev-group` |
+| An app profile | `appprofile:shop@1.0.0` |
 | A snapshot file | `releases/1.1.1/dev.json` |
 
 ## Exit status
 
-| Exit | `compare` | `same-release` | `verify` | `consumers` |
-| --- | --- | --- | --- | --- |
-| `0` | identical | each pair passes | each record unchanged | no cluster the key can read uses it |
-| `1` | different | a pair fails | a record drifted | a cluster uses it |
-| `2` | error | error | strata cannot check a record | error |
+| Exit | `compare` | `same-release` | `verify` | `consumers` | `behind` |
+| --- | --- | --- | --- | --- | --- |
+| `0` | identical | each pair passes | each record unchanged | nothing the key can read uses it | no pin is behind |
+| `1` | different | a pair fails | a record drifted | a cluster or an edge host uses it | a pin is behind |
+| `2` | error | error | strata cannot check a record | error | strata cannot check a pin |
 
 `list`, `packs`, `snapshot`, `candidate`, and `schema` exit `0`, or `2` on an
 error.
@@ -74,8 +81,8 @@ Treat `2` as a failed job. It never means "no change".
 
 ## Output formats
 
-`compare`, `same-release`, `verify`, `consumers`, `list`, and `packs` take the
-same options:
+`compare`, `same-release`, `verify`, `consumers`, `behind`, `list`, and `packs`
+take the same options:
 
 | Option | Output |
 | --- | --- |

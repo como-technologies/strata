@@ -1081,6 +1081,23 @@ impl Tenant {
     }
 }
 
+impl Tenant {
+    /// Take one version of a pack out of the listing of the Public Repo, as before the registry
+    /// published it. `registries` puts it back.
+    pub fn hide_pack_version(&self, project: &str, name: &str, version: &str) {
+        let path = format!("v1/packs@filters=spec.name={name}&limit=100&offset=0");
+        let mut listing = self.read(project, &path);
+        if let Some(items) = listing["items"].as_array_mut() {
+            items.retain(|i| {
+                !(i["spec"]["version"] == version && i["spec"]["registryUid"] == PUBLIC_REPO)
+            });
+            let count = items.len();
+            listing["listmeta"]["count"] = json!(count);
+        }
+        self.write(project, &path, &listing);
+    }
+}
+
 fn read_json(path: &Path) -> Value {
     let text = std::fs::read_to_string(path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
     serde_json::from_str(&text).unwrap_or_else(|e| panic!("{}: {e}", path.display()))

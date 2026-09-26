@@ -5,8 +5,8 @@
 #                                [--target TARGET] [--bin-only]
 #
 # Downloads the binary for this machine, SHA256SUMS, and the CI scripts pr-comment.sh,
-# merge-gate.sh and verify-report.sh into DIR (default .strata), checks the checksums, and prints
-# the path of the binary. A job then sets STRATA_BIN to that path and runs DIR/<script>.
+# merge-gate.sh, verify-report.sh, and upstream-report.sh into DIR (default .strata), checks the
+# checksums, and prints the path of the binary. A job then sets STRATA_BIN to that path and runs DIR/<script>.
 #
 # --bin-only installs the binary alone, into a directory on your PATH. The installer checks the
 # checksums before it installs any file.
@@ -78,7 +78,7 @@ tag=$(jq -r '.tag_name // empty' "$work/release.json")
 
 # SHA256SUMS comes down either way: it is what every file is checked against. The bash on macOS is
 # 3.2, where "${empty[@]}" under set -u is an error, so an empty list expands through the + form.
-scripts=(pr-comment.sh merge-gate.sh verify-report.sh)
+scripts=(pr-comment.sh merge-gate.sh verify-report.sh upstream-report.sh)
 [ -z "$bin_only" ] || scripts=()
 want=("strata-$target" SHA256SUMS ${scripts[@]+"${scripts[@]}"})
 for name in "${want[@]}"; do

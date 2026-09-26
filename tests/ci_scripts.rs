@@ -10,10 +10,11 @@ use common::*;
 
 /// The scripts a release carries. The release workflow installs the published tag and runs the
 /// help of each one; this is the same check, before a tag exists.
-const SHIPPED: [&str; 4] = [
+const SHIPPED: [&str; 5] = [
     "pr-comment.sh",
     "merge-gate.sh",
     "verify-report.sh",
+    "upstream-report.sh",
     "install-strata.sh",
 ];
 
@@ -50,11 +51,12 @@ fn every_script_a_release_carries_prints_its_help_and_exits_0() {
 /// The files a team copies, and the reusable workflows they call. They name scripts, options and a
 /// release version, and nothing else reads them: a renamed option or a moved script breaks a
 /// drop-in silently.
-const DROP_INS: [&str; 5] = [
+const DROP_INS: [&str; 6] = [
     "examples/ci/github/strata.yml",
     "examples/ci/gitlab/strata.yml",
     ".github/workflows/comment.yml",
     ".github/workflows/verify.yml",
+    ".github/workflows/upstream.yml",
     ".github/workflows/merge-gate.yml",
 ];
 
@@ -832,6 +834,7 @@ fn release() -> tempfile::TempDir {
         ("3", "verify-report.sh", "#!/bin/sh\necho report\n"),
         ("4", "install-strata.sh", "#!/bin/sh\necho installer\n"),
         ("6", "merge-gate.sh", "#!/bin/sh\necho gate\n"),
+        ("7", "upstream-report.sh", "#!/bin/sh\necho upstream\n"),
     ];
     let mut sums = String::new();
     let mut listed = Vec::new();
@@ -911,6 +914,7 @@ fn install_strata_takes_the_binary_and_the_scripts_of_one_release_and_checks_the
         "pr-comment.sh",
         "merge-gate.sh",
         "verify-report.sh",
+        "upstream-report.sh",
         "SHA256SUMS",
     ] {
         assert!(d.join("here").join(name).exists(), "{name} is installed");
@@ -923,6 +927,7 @@ fn install_strata_takes_the_binary_and_the_scripts_of_one_release_and_checks_the
             "pr-comment.sh",
             "merge-gate.sh",
             "verify-report.sh",
+            "upstream-report.sh",
         ] {
             let mode = std::fs::metadata(d.join("here").join(name))
                 .unwrap()
@@ -970,6 +975,7 @@ fn install_strata_bin_only_installs_the_binary_and_nothing_beside_it() {
         "pr-comment.sh",
         "merge-gate.sh",
         "verify-report.sh",
+        "upstream-report.sh",
         "SHA256SUMS",
     ] {
         assert!(
@@ -2100,4 +2106,248 @@ fn live_applies_take_the_script_flag_and_the_baseline_restore_turns_it_off() {
             "hold_versions and apply take the flag with no -target, read serially, and apply_baseline turns it off: {calls}"
         );
     }
+}
+
+// ---- upstream-report.sh ----------------------------------------------------------------------
+
+/// A `strata` for upstream-report.sh: `behind ...` prints report.json and exits with report.exit,
+/// both under FAKE_VERIFY, and keeps the file that `--since` names as since-used.json; every call
+/// is logged.
+const FAKE_BEHIND_STRATA: &str = r#"#!/usr/bin/env bash
+echo "$*" >> "$FAKE_VERIFY/strata.log"
+[ "$1" = behind ] || exit 9
+prev=""
+for a in "$@"; do
+  [ "$prev" = "--since" ] && cp "$a" "$FAKE_VERIFY/since-used.json"
+  prev="$a"
+done
+cat "$FAKE_VERIFY/report.json"
+exit "$(cat "$FAKE_VERIFY/report.exit")"
+"#;
+
+struct Upstream {
+    dir: tempfile::TempDir,
+}
+
+impl Upstream {
+    fn new() -> Upstream {
+        let dir = tempfile::tempdir().unwrap();
+        let bin = dir.path().join("bin");
+        std::fs::create_dir(&bin).unwrap();
+        executable(&bin.join("strata"), FAKE_BEHIND_STRATA);
+        executable(&bin.join("gh"), FAKE_ISSUES_GH);
+        Upstream { dir }
+    }
+
+    fn put(&self, name: &str, body: &str) {
+        std::fs::write(self.dir.path().join(name), body).unwrap();
+    }
+
+    /// The report strata prints: csi-aws-ebs pinned at 1.63.1 with `newer`, and kubernetes
+    /// current.
+    fn report(&self, exit: i32, newer: &[&str], arrived: Option<&[&str]>) {
+        let mut csi = serde_json::json!({
+            "name": "csi-aws-ebs", "layer": "csi", "registry": "Public Repo",
+            "registryUid": "reg-public", "version": "1.63.1", "tag": "1.63.1",
+            "pinnedBy": [{"path": "releases/dev.json", "subject": "aws-stack@1.1.0"}],
+            "newer": newer.iter().map(|v| serde_json::json!({"version": v})).collect::<Vec<_>>(),
+            "behind": !newer.is_empty(),
+        });
+        if let Some(first) = newer.first() {
+            csi["bump"] = serde_json::json!({"to": first, "impact": "cluster-wide", "flags": ["IDENTITY", "AUTHORED"]});
+        }
+        if let Some(a) = arrived {
+            csi["arrived"] = serde_json::json!(a);
+        }
+        let k8s = serde_json::json!({
+            "name": "kubernetes", "layer": "k8s", "registry": "Public Repo",
+            "registryUid": "reg-public", "version": "1.36.2", "tag": "1.36.2",
+            "pinnedBy": [{"path": "releases/dev.json", "subject": "aws-stack@1.1.0"}],
+            "newer": [], "behind": false,
+        });
+        self.put(
+            "report.json",
+            &serde_json::json!({"schema": "strata-behind/1", "tool": {"name": "strata", "version": "0.11.0"},
+                "generatedAt": "2026-09-26T06:00:00Z", "records": ["releases/dev.json"],
+                "pins": [csi, k8s], "summary": {"pins": 2, "behind": 1, "floating": 0, "errors": 0, "arrived": 0}})
+            .to_string(),
+        );
+        self.put("report.exit", &exit.to_string());
+    }
+
+    fn run(&self, args: &[&str]) -> Output {
+        for f in ["gh.log", "strata.log", "since-used.json"] {
+            let _ = std::fs::remove_file(self.dir.path().join(f));
+        }
+        Command::new("bash")
+            .arg(script("ci/upstream-report.sh"))
+            .args(args)
+            .env(
+                "PATH",
+                format!(
+                    "{}:{}",
+                    self.dir.path().join("bin").display(),
+                    std::env::var("PATH").unwrap()
+                ),
+            )
+            .env("FAKE_VERIFY", self.dir.path())
+            .env_remove("STRATA_BIN")
+            .env_remove("GITHUB_REPOSITORY")
+            .output()
+            .unwrap()
+    }
+
+    fn log(&self, name: &str) -> Vec<String> {
+        std::fs::read_to_string(self.dir.path().join(name))
+            .unwrap_or_default()
+            .lines()
+            .map(str::to_string)
+            .collect()
+    }
+
+    fn file(&self, name: &str) -> String {
+        std::fs::read_to_string(self.dir.path().join(name)).unwrap_or_else(|_| panic!("no {name}"))
+    }
+}
+
+#[test]
+fn upstream_report_opens_one_issue_per_pack_behind_names_what_arrived_and_closes_it_when_current() {
+    let u = Upstream::new();
+    // first run: csi-aws-ebs is behind, kubernetes is current, and no issue is open
+    u.report(1, &["1.65.0"], None);
+    let o = u.run(&["releases/*.json", "--repo", "o/r"]);
+    assert_eq!(o.status.code(), Some(1), "{}", text(&o.stderr));
+    assert_eq!(
+        u.log("strata.log"),
+        ["behind --quiet --format json releases/*.json"],
+        "no issue holds a previous run yet"
+    );
+    let calls = u.log("gh.log");
+    assert_eq!(calls.len(), 4, "{calls:#?}");
+    assert!(calls[0].starts_with("issue list --repo o/r --label strata-behind --state open"));
+    assert!(
+        calls[2].starts_with("label create strata-behind --repo o/r"),
+        "{}",
+        calls[2]
+    );
+    assert!(
+        calls[3].starts_with(
+            "issue create --repo o/r --title strata behind: csi-aws-ebs 1.63.1 behind 1.65.0 in Public Repo"
+        ),
+        "{}",
+        calls[3]
+    );
+    let body = u.file("body-4.md");
+    let lines: Vec<&str> = body.lines().collect();
+    assert_eq!(lines[0], "<!-- strata-behind: csi-aws-ebs reg-public -->");
+    assert!(
+        lines[1].starts_with(
+            "<!-- strata-behind-state: {\"generatedAt\":\"2026-09-26T06:00:00Z\",\"pins\":[{"
+        ),
+        "{}",
+        lines[1]
+    );
+    assert!(
+        body.contains("| `1.63.1` | 1.65.0 | 1.65.0: cluster-wide IDENTITY AUTHORED | - | `releases/dev.json` (aws-stack@1.1.0) |"),
+        "{body}"
+    );
+    assert!(
+        body.contains("this run is the first to find it behind"),
+        "{body}"
+    );
+    assert!(
+        text(&o.stderr).contains("2 packs: 1 behind, 1 current, 0 could not be checked; opened #41 for csi-aws-ebs in Public Repo"),
+        "{}",
+        text(&o.stderr)
+    );
+
+    // second run: the issue holds the first run, which goes to --since; 1.66.0 arrived since
+    let issue = serde_json::json!([{"number": 41, "title": "t", "body": body}]);
+    u.put("issues.json", &issue.to_string());
+    u.report(1, &["1.66.0", "1.65.0"], Some(&["1.66.0"]));
+    let o = u.run(&["releases/*.json", "--repo", "o/r"]);
+    assert_eq!(o.status.code(), Some(1), "{}", text(&o.stderr));
+    let strata_call = &u.log("strata.log")[0];
+    assert!(strata_call.contains("--since "), "{strata_call}");
+    let previous: serde_json::Value = serde_json::from_str(&u.file("since-used.json")).unwrap();
+    assert_eq!(previous["schema"], "strata-behind/1");
+    assert_eq!(previous["generatedAt"], "2026-09-26T06:00:00Z");
+    assert_eq!(previous["pins"][0]["newer"][0]["version"], "1.65.0");
+    let calls = u.log("gh.log");
+    assert_eq!(calls.len(), 2, "{calls:#?}");
+    assert!(
+        calls[1].starts_with("issue edit 41 --repo o/r --title strata behind: csi-aws-ebs 1.63.1 behind 1.66.0 in Public Repo"),
+        "{}",
+        calls[1]
+    );
+    assert!(
+        u.file("body-2.md")
+            .contains("| 1.66.0, 1.65.0 | 1.66.0: cluster-wide IDENTITY AUTHORED | 1.66.0 |"),
+        "{}",
+        u.file("body-2.md")
+    );
+    assert!(
+        u.file("body-2.md")
+            .contains("**arrived** names the versions that arrived since")
+    );
+
+    // third run: the pin is current, so the issue closes
+    u.report(0, &[], None);
+    let o = u.run(&["releases/*.json", "--repo", "o/r"]);
+    assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
+    let calls = u.log("gh.log");
+    assert!(
+        calls[1].starts_with("issue close 41 --repo o/r --comment"),
+        "{calls:#?}"
+    );
+    assert!(u.file("comment-2.md").contains(
+        "Each pin of `csi-aws-ebs` in Public Repo is at the newest version it can move to"
+    ));
+}
+
+#[test]
+fn upstream_report_dry_run_prints_each_issue_and_calls_no_host() {
+    let u = Upstream::new();
+    u.report(1, &["1.65.0"], None);
+    let o = u.run(&["releases/*.json", "--dry-run", "--no-impact"]);
+    assert_eq!(o.status.code(), Some(1), "{}", text(&o.stderr));
+    assert!(u.log("gh.log").is_empty(), "no host call");
+    assert_eq!(
+        u.log("strata.log"),
+        ["behind --quiet --format json --no-impact releases/*.json"]
+    );
+    assert!(text(&o.stdout).starts_with("<!-- strata-behind: csi-aws-ebs reg-public -->"));
+    assert!(
+        text(&o.stderr).contains("would open or update the issue for csi-aws-ebs in Public Repo")
+    );
+    assert!(
+        text(&o.stderr)
+            .contains("would close the open issue for kubernetes in Public Repo, if any")
+    );
+}
+
+#[test]
+fn upstream_report_touches_no_issue_when_behind_checks_nothing() {
+    let u = Upstream::new();
+    u.put("report.json", "");
+    u.put("report.exit", "2");
+    let o = u.run(&["releases/*.json", "--repo", "o/r"]);
+    assert_eq!(o.status.code(), Some(2));
+    assert!(
+        text(&o.stderr).contains("strata behind checked nothing (exit 2); no issue was touched")
+    );
+    assert_eq!(u.log("gh.log").len(), 1, "only the list of open issues");
+}
+
+/// The scripts that open issues ship one by one, so each holds its own copy of the host
+/// functions. The copies must not drift apart.
+#[test]
+fn the_issue_scripts_hold_the_same_host_functions() {
+    let section = |name: &str| {
+        let s = repo_file(&format!("scripts/ci/{name}"));
+        let start = s.find("# ---- the hosts").unwrap();
+        let end = s.find("host() { local what").unwrap();
+        s[start..end].to_string()
+    };
+    assert_eq!(section("verify-report.sh"), section("upstream-report.sh"));
 }

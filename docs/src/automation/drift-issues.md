@@ -2,7 +2,8 @@
 
 `scripts/ci/verify-report.sh` runs `strata verify` over the records. It keeps one
 open issue on the code host for each record that drifted, that is unverified, or
-that strata could not check.
+that strata could not check. Its other half, the pins that a newer version of the
+registry replaces, is [Upstream issues](./upstream-issues.md).
 
 ```bash
 scripts/ci/verify-report.sh 'releases/**/*.json' 'runs/*.json'

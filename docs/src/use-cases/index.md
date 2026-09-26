@@ -112,6 +112,8 @@ can give different roots, and how strata says so.
 - [Promote a release to another project](./promote.md): dev and prod have the
   same version name, and nothing yet says they have the same content.
 - [Retire a version](./retire.md): you want to delete an old version.
+- [The registry moves on](./behind.md): every record verifies, and the registry
+  offers newer versions of the packs that they pin.
 
 **6. A version that changes after you record it.** These four are what a team
 should not do, and what to do when somebody already did. This is why a record

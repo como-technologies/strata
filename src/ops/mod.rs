@@ -17,6 +17,7 @@ use crate::progress::Progress;
 use crate::reference::Ref;
 use crate::snapshot::{GroupMember, Snapshot, SubjectKind};
 
+mod behind;
 mod consumers;
 mod list;
 mod packs;
@@ -24,6 +25,7 @@ mod repave;
 mod same_release;
 mod verify;
 
+pub use behind::*;
 pub use consumers::*;
 pub use list::*;
 pub use packs::*;

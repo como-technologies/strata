@@ -1,12 +1,12 @@
-# Strata on GitLab CI: the comment, the merge gate, the scheduled drift report, and the two gates
-# that run on demand.
+# Strata on GitLab CI: the comment, the merge gate, the scheduled drift report and upstream
+# report, and the two gates that run on demand.
 #
 # Include it from .gitlab-ci.yml and set the variables your project needs:
 #
 #   include:
 #     - local: .gitlab/strata.yml      # or a remote: URL, or a component
 #   variables:
-#     STRATA_VERSION: vX.Y.Z          # a release that carries the four scripts
+#     STRATA_VERSION: vX.Y.Z          # a release that carries the five scripts
 #     STRATA_A: releases/dev.json      # the record the target branch has
 #     STRATA_B: candidate.yaml         # what this merge request proposes
 #     STRATA_RECORDS: "releases/**/*.json"
@@ -15,7 +15,7 @@
 #   GITLAB_TOKEN      a project or group access token with the api scope. The job token cannot
 #                     write notes, labels or issues, so the jobs need this one.
 #   PALETTE_API_KEY   needed to read Palette: for a ref that is not a snapshot file, for the
-#                     verify in the merge gate, and for the drift report.
+#                     verify in the merge gate, and for the drift and upstream reports.
 #   STRATA_TOKEN      a token that can read the strata releases, while that repository is private.
 #
 # The jobs run on a merge request pipeline. Turn on "Pipelines must succeed" in the project's
@@ -27,6 +27,7 @@ variables:
   STRATA_LABEL: repave
   STRATA_THRESHOLD: repave
   STRATA_DRIFT_LABEL: strata-drift
+  STRATA_BEHIND_LABEL: strata-behind
   STRATA_ROLLBACK_LABEL: rollback
 
 # Installs the release binary and the scripts of one strata version, with the checksums checked.
@@ -85,6 +86,16 @@ strata-verify:
     - if: $CI_PIPELINE_SOURCE == "schedule"
   script:
     - .strata/verify-report.sh $STRATA_RECORDS --label "$STRATA_DRIFT_LABEL"
+
+# The same schedule: keep one issue open per pack that a record pins behind a newer version of its
+# registry. Behind is a decision and not an error, so it keeps its own issues and its own job.
+strata-upstream:
+  extends: .strata
+  stage: test
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+  script:
+    - .strata/upstream-report.sh $STRATA_RECORDS --label "$STRATA_BEHIND_LABEL"
 
 # The records of a promotion are one release, before a cluster moves. A manual job: run it from the
 # pipeline view, with STRATA_PROMOTE set to the records in promotion order.

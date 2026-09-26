@@ -381,6 +381,42 @@ impl Renderer for MarkdownRenderer {
         Ok(o)
     }
 
+    fn render_behind(&self, r: &crate::ops::BehindReport) -> Result<String> {
+        let mut o = format!("### behind: {}\n\n", escape(&super::behind_heading(r)));
+        if r.pins.is_empty() {
+            return Ok(o);
+        }
+        o.push_str(
+            "| pack | pinned | registry | status | bump | pinned by |\n|---|---|---|---|---|---|\n",
+        );
+        for pin in &r.pins {
+            let mut status = super::pin_status(pin);
+            if let Some(arrived) = pin.arrived.as_ref().filter(|a| !a.is_empty()) {
+                status.push_str(&format!("; arrived: {}", arrived.join(", ")));
+            }
+            if let Some(msg) = entry_error(pin.error.as_ref()) {
+                status.push_str(&format!(" ({msg})"));
+            }
+            let by: Vec<String> = pin
+                .pinned_by
+                .iter()
+                .map(|b| format!("`{}` ({})", escape(&b.path), escape(&b.subject)))
+                .collect();
+            o.push_str(&format!(
+                "| `{}` | `{}` | {} | {} | {} | {} |\n",
+                escape(&pin.name),
+                escape(&pin.version),
+                escape(dash(&pin.registry)),
+                escape(&status),
+                super::bump_line(pin)
+                    .map(|l| escape(&l))
+                    .unwrap_or_else(|| "-".to_string()),
+                by.join("<br>")
+            ));
+        }
+        Ok(o)
+    }
+
     fn render_consumers(&self, r: &ConsumersReport) -> Result<String> {
         let mut o = format!("### consumers: {}\n\n", consumers_heading(r));
         // The consumer list of a profile is empty on an error too, so the second reading says

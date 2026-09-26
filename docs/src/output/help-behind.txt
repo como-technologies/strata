@@ -1,0 +1,18 @@
+$ strata behind --help
+Report the pack versions that records pin, and the newer versions the registries offer
+
+Usage: strata behind [OPTIONS] <RECORDS>...
+
+Arguments:
+  <RECORDS>...  Record files; quote a pattern such as 'releases/**/*.json'
+
+Options:
+      --since <FILE>     The JSON of a previous run: each pin names the versions that arrived since
+      --no-impact        Do not compare each pin that is behind with the newest version, for the impact
+      --format <FORMAT>  The report format: terminal, markdown, or json [default: terminal]
+      --json             The same as --format json
+      --color [<COLOR>]  Color the report: auto, always, or never [default: auto]
+      --no-color         The same as --color=never
+      --compact          Write the JSON on one line
+  -q, --quiet            No progress messages
+  -h, --help             Print help

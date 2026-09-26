@@ -1,0 +1,2 @@
+$ strata behind releases/1.0.0/dev.json --no-impact --json > behind.json; jq -c '.pins[] | select(.name == "csi-aws-ebs") | {version, newer: [.newer[].version]}' behind.json
+{"version":"1.63.1","newer":["1.64.0"]}

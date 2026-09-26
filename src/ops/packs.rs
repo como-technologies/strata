@@ -84,6 +84,10 @@ pub struct PackBuild {
     /// `deleted`. Palette serves no disabled or deleted pack, and refuses a profile that pins one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub state: Option<String>,
+    /// When Palette first listed this version, `metadata.creationTimestamp` of the listing; empty
+    /// when the listing gives no time.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub listed: String,
 }
 
 /// What `packs` was asked for.
@@ -235,6 +239,7 @@ where
                 tags: for_version,
                 latest: false,
                 state: crate::candidate::pack_state(e),
+                listed: text(e, "/metadata/creationTimestamp"),
             });
         }
         versions.sort_by(|a, b| version::compare(&b.version, &a.version));

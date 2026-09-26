@@ -104,6 +104,7 @@ pub fn names() -> Vec<&'static str> {
         "edge-hosts",
         "cluster-groups",
         "app-profiles",
+        "behind",
         "same-names",
         "packs",
         "retire",
@@ -131,6 +132,7 @@ fn getting_started(r: &mut Runner) {
         "same-release",
         "verify",
         "consumers",
+        "behind",
         "schema",
     ] {
         r.step(
@@ -1501,6 +1503,49 @@ fn use_cases(r: &mut Runner) {
         1,
         false,
         "strata verify runs/shop.json --allow-no-digest",
+    );
+
+    // The pins that are behind the registry, and a version that arrives between two runs
+    r.chapter("behind", DEV_ENV);
+    r.projects(&[("dev", DEV)]);
+    r.registries(DEV);
+    r.profile(DEV, A100, "1.0.0", "aws-stack@1.0.0", &[]);
+    r.profile(DEV, A111, "1.1.1", "aws-stack@1.1.1", &[]);
+    r.hide_pack_version(DEV, "csi-aws-ebs", "1.65.0");
+    r.serve_here(); // state 1: the registry has not published csi-aws-ebs 1.65.0 yet
+    r.quiet("strata snapshot aws-stack@1.0.0 -o releases/1.0.0/dev.json");
+    r.step(
+        "behind-last-week",
+        0,
+        false,
+        "strata behind releases/1.0.0/dev.json --no-impact --json > behind.json; jq -c '.pins[] | select(.name == \"csi-aws-ebs\") | {version, newer: [.newer[].version]}' behind.json",
+    );
+    r.registries(DEV);
+    r.serve_here(); // state 2: the registry publishes csi-aws-ebs 1.65.0
+    r.quiet("strata snapshot aws-stack@1.1.1 -o releases/1.1.1/dev.json");
+    r.step("behind", 1, false, "strata behind 'releases/*/dev.json'");
+    r.step(
+        "behind-since",
+        1,
+        false,
+        "strata behind 'releases/*/dev.json' --since behind.json --no-impact",
+    );
+    r.excerpt(
+        "behind-since-lines",
+        "behind-since",
+        r"^(\$|\d+ pins|~ \[csi|      arrived)",
+    );
+    r.step(
+        "behind-json",
+        1,
+        false,
+        "strata behind releases/1.0.0/dev.json --json | jq -c '.pins[] | select(.behind) | {name, version, newest: .newer[0].version, bump: .bump.impact}'",
+    );
+    r.step(
+        "behind-report",
+        1,
+        false,
+        "scripts/ci/upstream-report.sh 'releases/*/dev.json' --dry-run --no-impact",
     );
 
     r.chapter("same-names", &[]);

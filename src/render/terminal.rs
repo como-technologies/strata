@@ -557,6 +557,69 @@ impl Renderer for TerminalRenderer {
         Ok(out)
     }
 
+    fn render_behind(&self, r: &crate::ops::BehindReport) -> Result<String> {
+        let p = &self.paint;
+        let mut out = format!("{}\n", super::behind_heading(r));
+        let name_w = r.pins.iter().map(|x| x.name.len()).max().unwrap_or(0);
+        let ver_w = r.pins.iter().map(|x| x.version.len()).max().unwrap_or(0);
+        let reg_w = r
+            .pins
+            .iter()
+            .map(|x| dash(&x.registry).len())
+            .max()
+            .unwrap_or(0);
+        for pin in &r.pins {
+            let status = super::pin_status(pin);
+            let status = if pin.error.is_some() {
+                p.byellow(&status)
+            } else if pin.behind {
+                p.yellow(&status)
+            } else {
+                p.dim(&status)
+            };
+            out.push_str(&format!(
+                "{} [{:<5}] {}  {}  {}  {status}\n",
+                if pin.behind { "~" } else { " " },
+                pin.layer,
+                p.bold(&format!("{:<name_w$}", pin.name)),
+                format_args!("{:<ver_w$}", pin.version),
+                format_args!("{:<reg_w$}", dash(&pin.registry)),
+            ));
+            if let Some(newest) = pin
+                .newer
+                .first()
+                .filter(|n| pin.behind && !n.listed.is_empty())
+            {
+                out.push_str(&format!(
+                    "      {}\n",
+                    p.dim(&format!(
+                        "{} listed since {}",
+                        newest.version, newest.listed
+                    ))
+                ));
+            }
+            if let Some(line) = super::bump_line(pin) {
+                out.push_str(&format!("      {line}\n"));
+            }
+            if let Some(arrived) = pin.arrived.as_ref().filter(|a| !a.is_empty()) {
+                out.push_str(&format!(
+                    "      {}\n",
+                    p.cyan(&format!("arrived: {}", arrived.join(", ")))
+                ));
+            }
+            if let Some(msg) = entry_error(pin.error.as_ref()) {
+                out.push_str(&format!("      {}\n", p.dim(&format!("({msg})"))));
+            }
+            for by in &pin.pinned_by {
+                out.push_str(&format!(
+                    "      {}\n",
+                    p.dim(&format!("pinned by {} ({})", by.path, by.subject))
+                ));
+            }
+        }
+        Ok(out)
+    }
+
     fn render_packs(&self, l: &PackListing) -> Result<String> {
         let p = &self.paint;
         let mut out = String::new();

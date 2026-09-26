@@ -258,6 +258,13 @@ one request gives every version, every tag, and no repeats. The paged listing
 `/v1/packs?filters=spec.name=<name>` holds the digest of each build, which this
 answer does not, and it repeats a version across pages.
 
+**When a version arrived.** The tags answer gives no time. The listing gives
+`metadata.creationTimestamp` for each version: the time Palette first listed it.
+For a pack pushed into an OCI registry, that time comes after the push.
+`strata behind` reports it as `listed`, and names the versions that arrived
+between two runs with `--since`: see
+[strata behind](../../commands/behind.md).
+
 The listing can name a registry that then answers 404 for the pack. It does so
 for a pack that Spectro Cloud disabled or deleted: see
 [Pack states](#pack-states).

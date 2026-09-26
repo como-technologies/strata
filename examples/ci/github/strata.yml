@@ -1,16 +1,16 @@
-# Strata on GitHub Actions: the comment, the merge gate, the scheduled drift report, and the two
-# gates that run on demand.
+# Strata on GitHub Actions: the comment, the merge gate, the scheduled drift report and upstream
+# report, and the two gates that run on demand.
 #
 # Copy this file to .github/workflows/strata.yml in your own repository and set the refs and the
-# records that your repository holds. It calls five reusable workflows of the strata repository.
-# A version bump is ten lines here: each job names the tag twice, once in `uses: ...@TAG` and once
+# records that your repository holds. It calls six reusable workflows of the strata repository.
+# A version bump is twelve lines here: each job names the tag twice, once in `uses: ...@TAG` and once
 # in `strata-version:`. Both must carry the same tag. `uses:` selects the workflow file, and
 # `strata-version:` is what each workflow checks this repository out at and downloads the binary
 # for, so a mismatch runs one release's workflow against another release's scripts.
 #
 # Secrets to set in the repository or the organization:
 #   PALETTE_API_KEY     needed to read Palette: for a ref that is not a snapshot file, for the
-#                       verify in the merge gate, and for the drift report.
+#                       verify in the merge gate, and for the drift and upstream reports.
 #   STRATA_READ_TOKEN   a token that can read the strata repository, while it is private.
 #
 # Make the gate the check that the merge button waits for: Settings, Branches, the rule for the
@@ -21,7 +21,8 @@ name: strata
 on:
   pull_request:
   schedule:
-    # the drift report, every morning; the runs of one repository must stand minutes apart
+    # the drift report and the upstream report, every morning; the runs of one repository must
+    # stand minutes apart
     - cron: "17 6 * * *"
   # the two gates below answer a question a person asks at a moment of their choosing, so they run
   # on demand and not on a pull request or a schedule
@@ -67,6 +68,18 @@ jobs:
   verify:
     if: github.event_name == 'schedule'
     uses: como-technologies/strata/.github/workflows/verify.yml@v0.11.0
+    with:
+      records: releases/**/*.json
+      strata-version: v0.11.0
+    secrets:
+      strata-token: ${{ secrets.STRATA_READ_TOKEN }}
+      palette-api-key: ${{ secrets.PALETTE_API_KEY }}
+
+  # one issue per pack that a record pins behind a newer version of its registry. Behind is a
+  # decision and not an error, so it keeps its own issues, apart from the drift report
+  upstream:
+    if: github.event_name == 'schedule'
+    uses: como-technologies/strata/.github/workflows/upstream.yml@v0.11.0
     with:
       records: releases/**/*.json
       strata-version: v0.11.0

@@ -1,0 +1,26 @@
+$ strata behind 'releases/*/dev.json' --since behind.json --no-impact
+9 pins from 2 records: 4 behind, 2 floating; 1 version arrived since 2026-09-17T09:30:00Z
+  [addon] cert-manager    1.21.1  Public Repo  current
+      pinned by releases/1.0.0/dev.json (aws-stack@1.0.0)
+      pinned by releases/1.1.1/dev.json (aws-stack@1.1.1)
+~ [cni  ] cni-cilium-oss  1.19.6  Public Repo  behind: 1.20.1, 1.20.0
+      1.20.1 listed since 2026-09-11T14:32:11.379Z
+      pinned by releases/1.0.0/dev.json (aws-stack@1.0.0)
+  [cni  ] cni-cilium-oss  1.20.1  Public Repo  current
+      pinned by releases/1.1.1/dev.json (aws-stack@1.1.1)
+~ [csi  ] csi-aws-ebs     1.63.1  Public Repo  behind: 1.65.0, 1.64.0
+      1.65.0 listed since 2026-09-11T14:32:12.028Z
+      arrived: 1.65.0
+      pinned by releases/1.0.0/dev.json (aws-stack@1.0.0)
+  [csi  ] csi-aws-ebs     1.65.0  Public Repo  current
+      pinned by releases/1.1.1/dev.json (aws-stack@1.1.1)
+~ [k8s  ] kubernetes      1.35.3  Public Repo  behind: 1.36.2, 1.35.6
+      1.36.2 listed since 2026-07-30T22:45:47.109Z
+      pinned by releases/1.0.0/dev.json (aws-stack@1.0.0)
+  [k8s  ] kubernetes      1.36.2  Public Repo  current
+      pinned by releases/1.1.1/dev.json (aws-stack@1.1.1)
+~ [os   ] ubuntu-aws      20.04   Public Repo  behind: 24.04, 22.04 (floating tag LTS__20.4.x, now 20.04)
+      24.04 listed since 2025-11-14T15:02:05.428Z
+      pinned by releases/1.0.0/dev.json (aws-stack@1.0.0)
+  [os   ] ubuntu-aws      24.04   Public Repo  current (floating tag LTS__24.x, now 24.04)
+      pinned by releases/1.1.1/dev.json (aws-stack@1.1.1)

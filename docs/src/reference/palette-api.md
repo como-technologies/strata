@@ -60,9 +60,9 @@ in [Edge hosts, cluster groups, and app profiles](../internals/palette/other-obj
 | Request | Read by | Gives |
 | --- | --- | --- |
 | `GET /v1/dashboard/projects/metadata` | `list projects`; the name in `PALETTE_PROJECT` or `--project-name`; the warning when `PALETTE_PROJECT_UID` and `PALETTE_PROJECT` name two projects; `list` and `consumers`, to name each project | Every project the key can see: name and uid. |
-| `GET /v1/registries/metadata` | `packs`, a `pack:` ref, `verify` on a pack record, and `snapshot --from-candidate` when a layer names its registry by name | The registries the key can see: name and uid. |
-| `GET /v1/packs?filters=spec.name=<name>&limit=100&offset=<n>` | `snapshot --from-candidate`, `packs`, a `pack:` ref, and `verify` on a pack record | Each version of the pack in each registry: the pack uid, the layer, the type, the default values, and the digest when the registry gives one. |
-| `GET /v1/packs/<name>/registries/<uid>` | `snapshot --from-candidate`, `packs`, a `pack:` ref, and `verify` on a pack record | The tags of the pack in one registry, with its values and its layer. |
+| `GET /v1/registries/metadata` | `packs`, `behind`, a `pack:` ref, `verify` on a pack record, and `snapshot --from-candidate` when a layer names its registry by name | The registries the key can see: name and uid. |
+| `GET /v1/packs?filters=spec.name=<name>&limit=100&offset=<n>` | `snapshot --from-candidate`, `packs`, `behind`, a `pack:` ref, and `verify` on a pack record | Each version of the pack in each registry: the pack uid, the layer, the type, the default values, the digest when the registry gives one, and when Palette first listed the version. |
+| `GET /v1/packs/<name>/registries/<uid>` | `snapshot --from-candidate`, `packs`, `behind`, a `pack:` ref, and `verify` on a pack record | The tags of the pack in one registry, with its values and its layer. |
 | `GET /v1/registries/oci/summary` | `snapshot --from-candidate`, a `pack:` ref, and `verify` on a pack record | The provider type of each OCI registry: `pack`, `helm`, or `zarf`. A record names no provider type when Palette does not answer. |
 | `GET /v1/audits?resourceKind=<kind>&resourceUid=<uid>&startTime=<time>&limit=100` | `verify --who` | The writes to the object since the record, every page. The kind is `clusterprofile`, `spectrocluster`, or `edgehost`. |
 

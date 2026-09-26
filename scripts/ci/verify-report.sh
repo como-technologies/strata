@@ -30,8 +30,9 @@
 # Every host call goes through `host`, so another code host is another set of the same functions.
 set -euo pipefail
 
-die() { echo "verify-report: $*" >&2; exit 2; }
-note() { echo "verify-report: $*" >&2; }
+script=verify-report
+die() { echo "$script: $*" >&2; exit 2; }
+note() { echo "$script: $*" >&2; }
 
 # quietly COMMAND...: run a host call and keep what it prints to itself, unless it fails
 quietly() {
@@ -50,7 +51,7 @@ github_open_issues() {
 github_repo_labels() { gh label list --repo "$repo" --limit 1000 --json name | jq -r '.[].name'; }
 github_create_label() {
   quietly gh label create "$1" --repo "$repo" --color d93f0b \
-    --description "strata: a record that drifted or could not be checked"
+    --description "$label_description"
 }
 # prints the new issue's number
 github_open_issue() {
@@ -70,7 +71,7 @@ gitlab_api() { # METHOD PATH [curl arguments...]
     -H "PRIVATE-TOKEN: ${GITLAB_TOKEN:-}" "$api/projects/$project$path" "$@")
   case "$status" in
     2*) cat "$body"; rm -f "$body" ;;
-    *) echo "verify-report: GitLab answered HTTP $status for $method $path: $(head -c 300 "$body")" >&2
+    *) echo "$script: GitLab answered HTTP $status for $method $path: $(head -c 300 "$body")" >&2
        rm -f "$body"; return 1 ;;
   esac
 }
@@ -82,7 +83,7 @@ gitlab_open_issues() {
 gitlab_repo_labels() { gitlab_api GET "/labels?per_page=100" | jq -r '.[].name'; }
 gitlab_create_label() {
   quietly gitlab_api POST "/labels" --data-urlencode "name=$1" --data-urlencode "color=#d93f0b" \
-    --data-urlencode "description=strata: a record that drifted or could not be checked"
+    --data-urlencode "description=$label_description"
 }
 gitlab_open_issue() {
   local answer number
@@ -107,6 +108,7 @@ host() { local what=$1; shift; "${host_kind}_$what" "$@"; }
 patterns=()
 repo="${GITHUB_REPOSITORY:-}"
 label="strata-drift"
+label_description="strata: a record that drifted or could not be checked"
 dry=""
 host_kind=""
 allow=()

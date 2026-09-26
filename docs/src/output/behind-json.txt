@@ -1,0 +1,5 @@
+$ strata behind releases/1.0.0/dev.json --json | jq -c '.pins[] | select(.behind) | {name, version, newest: .newer[0].version, bump: .bump.impact}'
+{"name":"cni-cilium-oss","version":"1.19.6","newest":"1.20.1","bump":"cluster-wide"}
+{"name":"csi-aws-ebs","version":"1.63.1","newest":"1.65.0","bump":"cluster-wide"}
+{"name":"kubernetes","version":"1.35.3","newest":"1.36.2","bump":"repave"}
+{"name":"ubuntu-aws","version":"20.04","newest":"24.04","bump":"repave"}

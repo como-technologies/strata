@@ -567,6 +567,31 @@ of the timezone and the labels changed the `spcHash` of B.
 No run makes a cluster run another pack version than its profile declares; the
 book shows it on the stand-in.
 
+## upstream.sh
+
+Read-write: it pushes three versions of the example's own pack into its own OCI
+registry, one of them between two runs, and opens and closes issues of this
+repository with the label `strata-live-behind`. It needs the profiles and the
+registry of the example, and no cluster. It empties the registry at its end.
+
+| Check | Expected exit | What it shows |
+|---|---|---|
+| `empty`, `no-issues` | 0 | the registry is empty, and no issue of the test is open |
+| `push-1.0.0`, `push-1.1.0`, `sync-1` | 0 | two versions of the pack, and Palette reads the registry again |
+| `record-own`, `record-csi`, `record-release` | 0 | records of the pack at 1.0.0, of `csi-aws-ebs` 1.63.1 of the Public Repo, and of the release version |
+| `behind-1`, `behind-schema` | 1, 0 | #79: `strata behind` exits 1, with `strata-behind/1` |
+| `behind-own` | 0 | #79: the pack at 1.0.0 is behind 1.1.0, with the impact of the bump |
+| `behind-csi` | 0 | #79: `csi-aws-ebs` 1.63.1 is behind the newer versions of the Public Repo, and the bump names `IDENTITY` |
+| `behind-release` | 0 | #79: each pin of the release version is checked |
+| `behind-says` | 0 | #79: the report line is `~ [addon] <pack> 1.0.0 <registry> behind: 1.1.0` |
+| `report-1`, `report-1-issues`, `report-1-first` | 1, 0, 0 | #79: `upstream-report.sh` opens one issue for each pack behind, and each says that this run is the first to find it behind |
+| `push-1.2.0`, `sync-3` | 0 | a third version arrives |
+| `behind-since`, `behind-arrived` | 1, 0 | #79: `--since` the first run names 1.2.0 as arrived, and nothing of `csi-aws-ebs` |
+| `behind-listed` | 0 | #79: Palette lists 1.2.0 with the time it first listed it, at or after the push |
+| `report-2`, `report-2-arrived` | 1, 0 | #79: the second run of the script names 1.2.0 as arrived in the issue, from the state that the issue kept |
+| `record-own-new`, `record-csi-new`, `report-3`, `report-3-closed` | 0 | #79: with each pin at the newest version, the script closes the issues |
+| `empty-end` | 0 | the registry is emptied again |
+
 ## edge-host.sh
 
 Read-write: it registers two edge hosts with no device, binds a profile to each,

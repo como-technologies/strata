@@ -90,6 +90,7 @@ Strata asks Palette nothing:
 | `same-release` | yes | yes | yes | yes |
 | `verify` | no | no | no | yes: a record of each kind |
 | `consumers` | yes | no | no | a profile record |
+| `behind` | no | no | no | yes: a record of each kind |
 
 `snapshot --raw-dir` takes a profile or a cluster: a record read back from the
 directory would not say `@pending`, edge host, cluster group, or app profile.

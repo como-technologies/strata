@@ -21,6 +21,7 @@ use strata::{TOOL_NAME, candidate, diff, ops};
 /// Every command, in the order that `strata --help` lists them. A first argument that is not one
 /// of these makes `strata <A> <B>` a compare.
 const COMMANDS: &[&str] = &[
+    "behind",
     "candidate",
     "compare",
     "consumers",
@@ -55,6 +56,7 @@ impl Cli {
             Cmd::Consumers(a) => a.out.format() == Format::Json,
             Cmd::List(a) => a.out.format() == Format::Json,
             Cmd::Packs(a) => a.out.format() == Format::Json,
+            Cmd::Behind(a) => a.out.format() == Format::Json,
             Cmd::Snapshot(_) | Cmd::Candidate(_) | Cmd::Schema { .. } => false,
         }
     }
@@ -63,6 +65,8 @@ impl Cli {
 #[derive(Subcommand)]
 // In alphabetical order, which is the order `strata --help` lists them in.
 enum Cmd {
+    /// Report the pack versions that records pin, and the newer versions the registries offer
+    Behind(BehindArgs),
     /// Write a candidate file from a profile version or a record
     Candidate(CandidateArgs),
     /// Compare two profile versions, records, clusters, edge hosts, cluster groups, app profiles,
@@ -239,6 +243,21 @@ struct SameReleaseArgs {
 }
 
 #[derive(Args)]
+struct BehindArgs {
+    /// Record files; quote a pattern such as 'releases/**/*.json'
+    #[arg(required = true)]
+    records: Vec<String>,
+    /// The JSON of a previous run: each pin names the versions that arrived since
+    #[arg(long, value_name = "FILE")]
+    since: Option<PathBuf>,
+    /// Do not compare each pin that is behind with the newest version, for the impact
+    #[arg(long)]
+    no_impact: bool,
+    #[command(flatten)]
+    out: OutputArgs,
+}
+
+#[derive(Args)]
 struct ConsumersArgs {
     /// A profile version, by ref or by record
     r#ref: String,
@@ -357,6 +376,7 @@ impl From<ColorArg> for ColorMode {
 
 #[derive(Clone, Copy, ValueEnum)]
 enum SchemaKind {
+    Behind,
     Snapshot,
     Diff,
     VerifySummary,
@@ -451,6 +471,7 @@ fn run(cli: Cli) -> Result<ExitCode> {
         Cmd::Verify(a) => cmd_verify(&a),
         Cmd::SameRelease(a) => cmd_same_release(&a),
         Cmd::Consumers(a) => cmd_consumers(&a),
+        Cmd::Behind(a) => cmd_behind(&a),
         Cmd::List(a) => cmd_list(&a),
         Cmd::Packs(a) => cmd_packs(&a),
         Cmd::Schema { kind } => cmd_schema(kind),
@@ -866,6 +887,52 @@ fn cmd_consumers(a: &ConsumersArgs) -> Result<ExitCode> {
     Ok(ExitCode::from(r.exit_code()))
 }
 
+fn cmd_behind(a: &BehindArgs) -> Result<ExitCode> {
+    let progress = a.out.progress();
+    let paths = expand_records(&a.records)?;
+    let since = match &a.since {
+        Some(path) => {
+            let text = std::fs::read_to_string(path).map_err(|source| Error::Io {
+                path: path.clone(),
+                source,
+            })?;
+            let not_one = || Error::Usage {
+                message: format!(
+                    "--since {} is not a {} document: give the JSON of a previous run",
+                    path.display(),
+                    ops::BEHIND_SCHEMA
+                ),
+            };
+            let doc: serde_json::Value = serde_json::from_str(&text).map_err(|_| not_one())?;
+            match doc.get("schema").and_then(serde_json::Value::as_str) {
+                Some(ops::BEHIND_SCHEMA) => {}
+                Some(found) => {
+                    return Err(Error::UnsupportedSchema {
+                        path: path.clone(),
+                        found: found.to_string(),
+                        supported: ops::BEHIND_SCHEMA,
+                    });
+                }
+                None => return Err(not_one()),
+            }
+            Some(serde_json::from_value(doc).map_err(|_| not_one())?)
+        }
+        None => None,
+    };
+    let r = ops::behind(
+        &paths,
+        &ops::BehindOptions {
+            impact: !a.no_impact,
+            since,
+        },
+        |scope| connect(progress, scope),
+        &now_utc(),
+        &progress,
+    )?;
+    print!("{}", a.out.renderer().render_behind(&r)?);
+    Ok(ExitCode::from(r.exit_code()))
+}
+
 fn cmd_list(a: &ListArgs) -> Result<ExitCode> {
     let progress = a.out.progress();
     let options = ListOptions {
@@ -911,6 +978,7 @@ fn cmd_schema(kind: SchemaKind) -> Result<ExitCode> {
         SchemaKind::VerifySummary => schemars::schema_for!(ops::VerifySummary),
         SchemaKind::Chain => schemars::schema_for!(ops::Chain),
         SchemaKind::Consumers => schemars::schema_for!(ops::ConsumersReport),
+        SchemaKind::Behind => schemars::schema_for!(ops::BehindReport),
         SchemaKind::List => schemars::schema_for!(ops::Listing),
         SchemaKind::Packs => schemars::schema_for!(ops::PackListing),
         SchemaKind::Candidate => schemars::schema_for!(strata::candidate::Candidate),

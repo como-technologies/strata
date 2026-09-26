@@ -54,6 +54,84 @@ pub trait Renderer {
 
     /// The versions a registry offers for a pack.
     fn render_packs(&self, l: &PackListing) -> Result<String>;
+
+    /// The pack versions that records pin, against the newer versions the registries offer.
+    fn render_behind(&self, r: &crate::ops::BehindReport) -> Result<String>;
+}
+
+/// `4 pins from 2 records: 1 behind`, with the floating pins, the pins not checked, and the
+/// versions that arrived when there are any.
+pub(crate) fn behind_heading(r: &crate::ops::BehindReport) -> String {
+    let s = &r.summary;
+    let mut line = format!(
+        "{} from {}: {} behind",
+        count_of(s.pins, "pin"),
+        count_of(r.records.len(), "record"),
+        s.behind
+    );
+    if s.floating > 0 {
+        line.push_str(&format!(", {} floating", s.floating));
+    }
+    if s.errors > 0 {
+        line.push_str(&format!(", {} not checked", s.errors));
+    }
+    if let Some(since) = &r.since {
+        line.push_str(&format!(
+            "; {} arrived since {since}",
+            count_of(s.arrived, "version")
+        ));
+    }
+    line
+}
+
+/// The text of an impact level, as the reports print it: `in-place`, `may-repave`.
+pub(crate) fn impact_word(level: crate::impact::ImpactLevel) -> String {
+    serde_json::to_value(level)
+        .ok()
+        .and_then(|v| v.as_str().map(str::to_string))
+        .unwrap_or_default()
+}
+
+/// What a pin is: `behind: 1.65.0, 1.64.0`, `current`, or `not checked`, with its floating tag and
+/// the version the tag names now, and the state of the pinned version when the registry gives one.
+pub(crate) fn pin_status(pin: &crate::ops::Pin) -> String {
+    let mut text = if pin.error.is_some() {
+        "not checked".to_string()
+    } else if pin.behind {
+        let newer: Vec<String> = pin
+            .newer
+            .iter()
+            .map(|n| match &n.state {
+                Some(state) => format!("{} ({state})", n.version),
+                None => n.version.clone(),
+            })
+            .collect();
+        format!("behind: {}", newer.join(", "))
+    } else {
+        "current".to_string()
+    };
+    if pin.floating {
+        let now = pin
+            .resolved
+            .as_deref()
+            .map(|v| format!(", now {v}"))
+            .unwrap_or_default();
+        text.push_str(&format!(" (floating tag {}{now})", pin.tag));
+    }
+    if let Some(state) = &pin.pinned_state {
+        text.push_str(&format!("; the pinned version is {state}"));
+    }
+    text
+}
+
+/// `bump to 1.65.0: in-place IDENTITY UPSTREAM AUTHORED`, for a pin with a bump.
+pub(crate) fn bump_line(pin: &crate::ops::Pin) -> Option<String> {
+    let b = pin.bump.as_ref()?;
+    let mut line = format!("bump to {}: {}", b.to, impact_word(b.impact));
+    if !b.flags.is_empty() {
+        line.push_str(&format!(" {}", b.flags.join(" ")));
+    }
+    Some(line)
 }
 
 /// `project lab (uid p1)`, `project p1` when the name is unknown, or `tenant scope`.

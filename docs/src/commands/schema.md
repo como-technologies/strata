@@ -13,6 +13,7 @@ strata schema diff > diff.schema.json
 | `verify-summary` | `strata-verify-summary/1`: `verify --json` for many files |
 | `chain` | `strata-chain/1`: `same-release --json` |
 | `consumers` | `strata-consumers/1`: `consumers --json` |
+| `behind` | `strata-behind/1`: `behind --json` |
 | `list` | `strata-list/1`: `list --json` |
 | `packs` | `strata-packs/1`: `packs --json` |
 | `candidate` | the candidate file |

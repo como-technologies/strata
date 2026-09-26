@@ -19,6 +19,7 @@
 - [same-release](./commands/same-release.md)
 - [verify](./commands/verify.md)
 - [consumers](./commands/consumers.md)
+- [behind](./commands/behind.md)
 - [schema](./commands/schema.md)
 
 # Use cases
@@ -39,6 +40,7 @@
 - [A pack has no digest](./use-cases/no-digest.md)
 - [Promote a release to another project](./use-cases/promote.md)
 - [Retire a version](./use-cases/retire.md)
+- [The registry moves on](./use-cases/behind.md)
 - [A published version is edited in place](./use-cases/edited-in-place.md)
 - [A version bump overwrites a version](./use-cases/overwritten.md)
 - [A macro value changes](./use-cases/macros.md)
@@ -52,6 +54,7 @@
 - [Pull request comments](./automation/pr-comments.md)
 - [The merge gate](./automation/merge-gate.md)
 - [Drift issues](./automation/drift-issues.md)
+- [Upstream issues](./automation/upstream-issues.md)
 - [The promotion gate and the retire gate](./automation/gates.md)
 - [GitLab CI](./automation/gitlab.md)
 - [The Rust library](./automation/library.md)

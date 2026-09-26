@@ -35,10 +35,10 @@ With no tenant, `just examples` builds real profiles offline. See the
 
 | Task | Commands |
 | --- | --- |
-| Find | `list` |
+| Find | `list`, `packs` |
 | Record | `snapshot`, `candidate` |
 | Compare | `compare`, `same-release` |
-| Check | `verify`, `consumers` |
+| Check | `verify`, `consumers`, `behind` |
 | Reference | `schema` |
 
 Run `strata --help` for the list, and `strata <command> --help` for the options.

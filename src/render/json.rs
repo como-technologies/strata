@@ -50,4 +50,8 @@ impl Renderer for JsonRenderer {
     fn render_packs(&self, l: &PackListing) -> Result<String> {
         self.document(l)
     }
+
+    fn render_behind(&self, r: &crate::ops::BehindReport) -> Result<String> {
+        self.document(r)
+    }
 }

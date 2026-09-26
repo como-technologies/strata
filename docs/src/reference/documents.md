@@ -16,6 +16,7 @@ document.
 | `strata-consumers/1` | `consumers --json` | `consumers` |
 | `strata-list/1` | `list --json` | `list` |
 | `strata-packs/1` | `packs --json` | `packs` |
+| `strata-behind/1` | `behind --json` | `behind` |
 
 ## strata-snapshot/1
 
@@ -276,7 +277,9 @@ is the path as a list: strings for keys, numbers for indexes, and
     the command listed. With `--cloud`, that is the newest version for that
     cloud, and not the newest the registry holds. `state` is `deprecated`,
     `disabled`, or `deleted` when the listing gives one, and strata leaves out
-    the field when it gives none.
+    the field when it gives none. `listed`: when Palette first listed the
+    version, from `metadata.creationTimestamp` of the listing; absent when the
+    listing gives no time.
   - `versionsOffered`: how many versions of the pack the registry holds, before
     `--latest` or `--cloud` cut the list.
   - `tagsUnavailable`: `true` when Palette lists the pack under the registry and
@@ -284,4 +287,27 @@ is the path as a list: strings for keys, numbers for indexes, and
     When it is `false`, strata leaves out the field.
   - `state`: the state that every version in the registry has, when they all
     have the same one. Strata leaves out the field otherwise.
+
+## strata-behind/1
+
+- `records[]`: the record files read, in the order given. `since`: with
+  `--since`, when the previous report was written.
+- `pins[]`: one entry for each pack, registry, pinned version, and tag, in the
+  order of the pack name:
+  - `name`, `layer`, `registry`, `registryUid`, `version`, and `tag`.
+  - `floating`, only when true: the tag is a floating tag. `resolved`: the
+    version that the tag names now.
+  - `pinnedState`: `deprecated`, `disabled`, or `deleted` from the registry, or
+    `absent` when the registry no longer lists the pinned version.
+  - `pinnedBy[]`: `path` and `subject` of each record that pins it.
+  - `newer[]`: the newer versions that a person can move to, newest first, each
+    with `version`, `state` when the registry gives one, and `listed`.
+  - `behind`: `true` when `newer` is not empty.
+  - `bump`, for a pin that is behind, unless `--no-impact`: `to`, the newest
+    version, `impact`, the impact level, and `flags[]`.
+  - `arrived[]`, with `--since`: the newer versions that the previous report
+    did not know. Absent when the previous report had no pin of the pack in
+    that registry.
+  - `error`, when strata could not check the pin.
+- `summary`: `pins`, `behind`, `floating`, `errors`, and `arrived`.
 
