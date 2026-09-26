@@ -120,11 +120,8 @@ fn verify_needs_a_uid_and_surfaces_api_errors() {
     common::make_fixtures(dir.path());
     let mut recorded = ops::snapshot_from_dir(&dir.path().join("a"), "a", "t0").unwrap();
     // a 404 is a version that is gone (a verdict); any other failure is an error
-    let palette = Palette::new(MemoryApi::new().failing(
-        format!("/v1/clusterprofiles/{UID_A}"),
-        500,
-        "boom",
-    ));
+    let palette =
+        Palette::new(MemoryApi::new().failing(format!("/v1/clusterprofiles/{UID_A}"), 500, "boom"));
     let err = ops::verify(&recorded, &palette, "t1", &Progress::silent()).unwrap_err();
     assert!(matches!(err, Error::Api { status: 500, .. }), "{err}");
     recorded.source.uid.clear();
