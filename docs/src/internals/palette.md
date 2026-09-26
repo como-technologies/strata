@@ -3,7 +3,10 @@
 Strata is built around the behavior of the Palette API. These pages state that
 behavior, and what strata does about each part of it. Spectro Cloud documents
 little of this, so each answer here comes from reading a real tenant: see
-[The live example](../development/live-example.md).
+[The live example](../development/live-example.md). Where a page gives the rule
+behind an answer from the Spectro Cloud source, it says so. A rule from the
+source that no run checks is in
+[What no run covers](palette/limits.md#what-the-source-of-palette-says).
 
 Read these pages when you want to know why strata reports something the way it
 does, or before you change how it reads a profile.

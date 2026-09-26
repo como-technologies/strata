@@ -26,8 +26,9 @@ itself. A cluster on AWS gives these fields:
 
 - `status.spcApply`: `spcHash` and `spcInfraHash`, two digests of 128 hex digits
   that Palette computes of the spec it applied, with `actionType`,
-  `lastModifiedTime`, and `patchAppliedTime`. The document has no field
-  `crdDigest`.
+  `lastModifiedTime`, and `patchAppliedTime`. The field `crdDigest` is
+  empty, and left out, for a cluster of a built-in cloud; only a custom cloud
+  type sets it.
 - `status.packs[]`: each pack that the cluster reconciled, with `name`,
   `version`, `profileUid`, and a `condition` such as `InstallSuccess` or
   `PackServicesReady`.
@@ -53,8 +54,9 @@ cluster. Between two clusters, the `applied` tier compares `spcInfraHash` alone.
 
 ## Cluster copies
 
-Each cluster runs its own copy of the manifests of a profile. The copy has its
-own uid, and `GET /v1/spectroclusters/<uid>/profiles/packs/manifests` serves it.
+Each cluster runs its own copy of the manifests of a profile. The copy keeps
+the uid of the profile, and each manifest of it is a document with a uid of its
+own. `GET /v1/spectroclusters/<uid>/profiles/packs/manifests` serves it.
 A `cluster:<uid>` ref records that copy. **So a cluster record shows what the
 cluster got, and not what its profile holds now.**
 
@@ -119,12 +121,16 @@ is `NotifyActionClusterProfileUpdate`, `action.isDone` is `false`, and
 | A manifest | `PackManifestUpdate` | `Manifest '<m>' is updated in the pack '<p>(<p>)'` |
 | Pack values | `PackValuesUpdate` | `<display name> <pack> <version> values are updated` |
 
-The notification is done (`isDone: true`) when:
+The update stops waiting when:
 
-- The cluster takes the change. A push of the content without
-  `resolveNotification` closes it too.
-- An edit gives the profile the content of the cluster's copy again. The
-  cluster does not update.
+- The cluster takes the change, and the notification is done
+  (`isDone: true`). A push of the content without `resolveNotification` closes
+  the events of values and manifests that the push takes; the notification is
+  done when no event is left. An event of a version, an added pack, or a
+  removed pack stays until the cluster takes it.
+- An edit gives the profile the content of the cluster's copy again. Palette
+  removes each event that the edit undoes, and the notification with the last
+  one. The cluster does not update.
 
 A new version number alone, in place, opens no notification: the copy holds
 the same content. A notification that is done stays in the list.
@@ -192,7 +198,9 @@ cluster summary, `GET /v1/dashboard/spectroclusters/{uid}`, gives
 it so. [The knurl adapter](../../automation/knurl.md) reads it there.
 
 The consumer list of a profile version, `status.inUseClusters`, is what Palette
-computes when it is asked, in the projects the key can read. So `consumers`
+computes when it is asked: in the project of the request, or in every project at
+tenant scope. It names virtual clusters, and no deleted cluster. When Palette
+cannot compute it, the list comes back empty, and says nothing of the error. So `consumers`
 reads each cluster the key can list as well, and names a cluster that applies
 the version and is not in the list.
 
@@ -203,7 +211,8 @@ reads both shapes.
 **The search.** `POST /v1/dashboard/spectroclusters/search` is the listing that
 Palette recommends. `GET .../search/schema` names the properties it takes,
 `tags` among them. It gives each cluster with its labels, and a summary with the
-cloud and the project by name and uid, and no `spec`. At tenant scope it searches
+cloud, the project by name and uid, and the profiles that the cluster runs, and
+no `spec`. At tenant scope it searches
 every project the key can read. It pages on `listmeta.continue`, 50 to a page.
 
 **Tags are labels.** The provider writes `tags = ["env:prod"]` into
@@ -216,8 +225,8 @@ and the cluster document carry the same labels.
 lists them, and `GET /v1/filters/tag/{uid}` gives the conditions of one. The
 search takes no filter uid, so strata turns the conditions into a search. The
 Spectro Cloud source gives the rest: a key with no value means the label is
-there, `negation` turns a condition over, and the search lists no virtual
-cluster unless its filter asks for the environment `nested`.
+there, `negation` turns a condition with values over, and the search lists no
+virtual cluster unless its filter asks for the environment `nested`.
 
 A deleted cluster leaves this listing and keeps its document:
 `GET /v1/spectroclusters/<uid>` still answers `200`, with the state `Deleted`.

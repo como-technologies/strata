@@ -8,13 +8,12 @@ The version keeps its uid and its number, stays published, and no new version
 appears. A pack can also be pushed again under one version, with
 `spectro pack push --force`
 ([Spectro CLI reference](https://docs.spectrocloud.com/registries-and-packs/spectro-cli-reference/))
-or `oras push`. A published profile that pins the version keeps the digest it
-was pinned with, in an OCI registry: see
-[A pack version pushed again](packs.md#a-pack-version-pushed-again). A Spectro pack
-registry is not covered: see [What no run covers](limits.md#what-no-run-covers).
+or `oras push`. A published profile that pins the version with the values of
+the pack follows such a push, with no person and no request: see
+[A pack version pushed again](packs.md#a-pack-version-pushed-again).
 
 This is why [`strata verify`](../../commands/verify.md) exists. A record of a
-version from before a person's edit, or from before a floating tag moved, exits
+version from before a person's edit, from before a push that the version followed, or from before a floating tag moved, exits
 `1` with `DRIFT`, and names the change. A record of a cluster's copy from before
 the cluster accepted an update does the same. `DRIFT` says that the object
 changed. The audit log of Palette says who changed it, and when: see
@@ -22,6 +21,12 @@ changed. The audit log of Palette says who changed it, and when: see
 
 An edit through the API keeps the uid of each manifest. The live example sends
 each uid back, and a cluster copy still names it.
+
+The variables are the exception. Palette refuses a change of the variable
+definitions of a version that a cluster uses: "you must create a new version of
+your cluster profile before you can modify the variables"
+([Modify cluster profile variables](https://docs.spectrocloud.com/profiles/cluster-profiles/create-cluster-profiles/define-profile-variables/modify-cluster-profile-variables/)).
+The packs, the values, and the manifests have no such rule.
 
 A reorder is an edit in place too. A `PUT` of a published version with the same
 packs, values, and manifests in the other order is accepted, stored in the new
@@ -39,20 +44,30 @@ the writes to one resource since a time, newest first, at most 100 on a page.
 is `clusterprofile` or `spectrocluster`. Each entry gives the time, the action
 (`create`, `update`, `delete`, `activity`, or `action`), and the actor: a user,
 with a name and a uid, or a Palette service, with a name. Some entries also
-give `contentMsg`, a summary of the change. An entry has a uid, and no request
-id. [`verify --who`](../../commands/verify.md#who-changed-it) reads this log.
+give `contentMsg`, a summary of the change. The API gives each entry a uid, and
+no request id. [`verify --who`](../../commands/verify.md#who-changed-it) reads
+this log. The log is also a page of the console, a CSV download, and a stream to
+an external store
+([Audit logs](https://docs.spectrocloud.com/audit-logs/),
+[the API](https://docs.spectrocloud.com/api/v1/v-1-audits-list/)).
 
 An edit in place through the API, a `PUT` of the version and then its publish,
 is one entry: an `update` by the user who owns the key, with a summary that
 names the manifest that changed.
 
-The log does not hold the content of the change. The record holds it.
+The API does not return the content of the change. A summary names what
+changed, such as the packs whose values changed, and not the values. The record
+holds the content.
 
 A floating tag that moves is logged too. When a profile pins a pack under
 `1.0.x` and the registry gets `1.0.2`, the sync that reads it gives the profile
 two entries: an `update` by the Palette service `system` with no summary, and
 one whose summary names the pack and both versions, such as `version is updated
 1.0.1 > 1.0.2`. No person is in either entry.
+
+A published version that follows a push again of a pack gets one entry: an
+`update` by the Palette service `system`, whose summary names the pack, its
+version, and its layer, such as `strata-live-pack 1.0.0 layer is updated`.
 
 A cluster that accepts an update through the API gives the cluster one entry:
 an `update` by the user who sent the `PUT`, with a summary that names the uid
@@ -74,11 +89,13 @@ The clone carries the content over exactly: the values, the manifests, and the
 variables of a flag-on bump equal those of a flag-off bump from the same
 configuration.
 
-A version is a semantic version. Palette normalizes a short form and a lowercase
-`v` prefix, `1.2` to `1.2.0` and `v1.2.3` to `1.2.3`, and refuses a malformed
-string. Palette checks the version when it is created and when it is changed,
-and the provider does not
+A version is a semantic version. The documentation says that Palette writes a
+short form and a lowercase `v` prefix as the full version, `1.2` as `1.2.0` and
+`v1.2.3` as `1.2.3`
 ([Version a cluster profile](https://docs.spectrocloud.com/profiles/cluster-profiles/modify-cluster-profiles/version-cluster-profile/)).
+The API does not: a version published through the provider as `1.2` is listed
+as `1.2`, and `v1.2.3` as `v1.2.3`. So two versions can name one number in two
+ways. A ref names the string that Palette lists.
 
 With the flag on, set `skip_destroy` on each profile **before** the first bump.
 A flag-on bump replaces the profile resource, and the provider deletes the
@@ -95,13 +112,18 @@ what that lock is:
 
 | Request | Answer |
 | --- | --- |
-| An edit in place of a version that a template links, through the API | Refused: `ClusterProfileUpdateValidationFailure`, "cluster profile is associated with 1 cluster templates (`<uid>`) and cannot be modified". The version verifies. |
+| An edit in place of a version that a template links, through the API: a `PUT` of the whole version | Refused: `ClusterProfileUpdateValidationFailure`, "cluster profile is associated with 1 cluster templates (`<uid>`) and cannot be modified". The version verifies. |
+| The same kind of edit through the route of one manifest: `PUT /v1/clusterprofiles/<uid>/packs/<pack>/manifests/<manifest uid>`, then the publish | Accepted. The linked version changes, and a record from before reports `DRIFT`. |
 | A cluster outside the template, built with a linked version | Refused: `ClusterCreateWithTemplateProfileForbidden`, "Cluster creation is not allowed as profile ... is already attached to one or more cluster templates". |
 | The same edit, after the template is removed | Accepted. A record from before reports `DRIFT`. |
 
-So the lock belongs to the template, not to the version. It holds while the
-template links the version, and it keeps every cluster outside the template
-away from that version. A cluster that runs a linked version is a cluster the
+So the lock belongs to the template, not to the version, and it covers one
+route. The `PUT` of the whole version checks it. In the Spectro Cloud source,
+the routes of one pack and of one manifest do not, and the live run edits a
+linked version through the route of one manifest. A linked
+version is not immutable, whatever the documentation says, and `verify` is
+what finds an edit through such a route. The lock holds against a new cluster:
+it keeps every cluster outside the template away from a linked version. A cluster that runs a linked version is a cluster the
 template applies.
 
 ## Macros
@@ -109,7 +131,7 @@ template applies.
 A macro is a name and a value, with no version, no history, and no digest
 ([Macros](https://docs.spectrocloud.com/clusters/cluster-management/macros/)).
 `GET /v1/projects/<uid>/macros` lists the macros of a project; `POST` adds one,
-`PATCH` changes one, and `DELETE` removes one.
+`PATCH` changes one, `PUT` replaces the whole set, and `DELETE` removes one.
 
 A profile whose manifest reads a user macro, `{{.spectro.macro.<name>}}`, has
 `status.hasUserMacros: true`. A profile that reads none has `false`.
@@ -136,7 +158,7 @@ its audit log say nothing. The digests of `snapshot --macros` are how strata
 sees it: see [Macros](../../commands/snapshot.md#macros).
 
 A create, a change, or a delete of a project macro writes no audit entry, at
-project or tenant scope. The audit log has no resource kind for a macro.
+project or tenant scope. No audit entry names a macro.
 
 The two paths of a new macro value, from the change to what it holds:
 

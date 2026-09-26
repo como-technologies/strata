@@ -6,6 +6,9 @@ Palette accepts an edit of a published profile version through the API. The
 version keeps its uid and its number, and no new version appears. The
 `immutable-clusterprofiles` flag of the Spectro Cloud provider stops the edit only
 in the provider, at plan time. The API accepts the edit with the flag on or off.
+Palette also changes a version by itself: a version that keeps the values of a
+pack follows a push again of that pack version
+([A pack version pushed again](../internals/palette/packs.md#a-pack-version-pushed-again)).
 So the version name `aws-stack@1.1.1` can mean two contents at two times.
 
 A cluster that runs the version keeps its own copy. A cluster that you create

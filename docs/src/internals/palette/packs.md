@@ -44,9 +44,10 @@ not the required one is refused at creation:
 with minimum compatible version '1.0.0'". A profile that holds both is
 accepted, and its record lists the two packs in the order authored.
 
-So a required dependency is met inside the profile. It does not reach the other
-profiles of a cluster, because a profile that lacks the required pack cannot
-exist. A record carries no constraint: the profile Palette accepted is the one
+So a required dependency between two add-on packs is met inside the profile. An
+add-on profile is not checked for a dependency on a pack of an infrastructure
+layer. Palette checks each dependency again over the packs of all the profiles
+when it creates a cluster. A record carries no constraint: the profile Palette accepted is the one
 that holds it.
 
 ## Pack schema and presets
@@ -96,14 +97,19 @@ OCI pack registry of the example's own, after Palette reads the registry again:
 | --- | --- |
 | The pack version Palette lists | The digest of the new push, under the same version and the same pack uid. |
 | A record of the pack from before | `verify` reports `DRIFT`: the digest moved. |
-| A published profile that pins the version | Keeps the digest it was pinned with. Its record verifies after the sync, and after the next push and sync too. |
+| A published profile that pins the version with the values of the pack | Follows the push, about 5 minutes after the sync: its pack reference carries the new digest and the new values. The audit log gives an `update` by the Palette service `system`, and no person. A record from before reports `DRIFT`. |
+| A published profile that pins the version with values of its own | Keeps the digest it was pinned with. Its record verifies. |
 
-So a profile pins one build. A registry that changes under the version does not
-move the profile. A record of the pack and a record of a profile answer two
-different questions, and `verify` on the pack record is what finds such a push.
+So Palette can change a published version with no person and no request: a
+push to the registry is enough, when the profile keeps the values of the pack.
+The version keeps its uid and its number. `verify` on the record of the profile
+is what finds it, and `--who` names the service. The Spectro Cloud source gives
+the rule: a profile follows a new push of a pinned version unless a person
+changed its values from those of the pack, and it always follows a change that
+touches only the schema, the presets, or the system annotations of the pack.
 
 A new version pushed beside the pinned one, `1.0.1` beside `1.0.0`, does not
-move a profile pinned to `1.0.0` either. A profile pinned under a floating tag
+move a profile pinned to `1.0.0`. A profile pinned under a floating tag
 is the other case: see [Tag names](#tag-names).
 
 An OCI Helm registry of the example's own answers the same push differently.
@@ -127,7 +133,7 @@ again, with other bytes, syncs again, and records the pack again:
 | Kind | The digest Palette gives | After a push again of the same version |
 | --- | --- | --- |
 | Helm registry, synchronized | the sha256 of the chart archive, as bare hex | Palette keeps the first digest and the first values. A record from before verifies. |
-| Helm registry with credentials, not synchronized | none | none. See below. |
+| Helm registry with synchronization off | none | none. See below. |
 | OCI, provider type `pack` | the manifest digest of the push | Palette gives the digest of the new push. A record from before reports `DRIFT`. |
 | OCI, provider type `helm` | the manifest digest of the push | Palette keeps the first digest. A record from before verifies. |
 | OCI, provider type `zarf` | none | none. A record reports `UNVERIFIED`. |
@@ -139,8 +145,11 @@ registry, `registryProviderType`: Palette gives the three types one pack type,
 `GET /v1/registries/oci/summary`, and a record of a profile from the
 annotations of the pack reference.
 
-**A Helm registry with credentials.** Palette does not synchronize such a
-registry, and lists no chart of it. A profile can pin a chart of it by name:
+**A Helm registry with synchronization off.** Synchronization is a choice made
+when the registry is added, and it cannot change after
+([Helm registries](https://docs.spectrocloud.com/registries-and-packs/registries/helm-charts/)).
+The run adds its registry with credentials and synchronization off. Palette then
+lists no chart of it. A profile can pin a chart of it by name:
 Palette then makes a pack uid, and lists the chart while the profile exists.
 The pack reference carries no digest, and the pack listing has none either. So
 a record of such a profile reports `UNVERIFIED`, `--allow-no-digest` accepts
@@ -172,8 +181,9 @@ sequenceDiagram
 
 A cluster installs a chart from a Helm repository, or from an OCI registry with
 the provider type `helm`, by its name and version, from what the registry
-serves at that time. The controller on the cluster does not use the digest, and
-it upgrades a Helm pack only when its version changes. A pack from an OCI
+serves at that time. The controller on the cluster does not use the digest. It
+upgrades a Helm pack when its version changes or its values change, and not
+when the chart bytes change under one version. A pack from an OCI
 registry with the provider type `pack`, and a pack from a Spectro pack registry,
 are upgraded when the digest changes.
 
