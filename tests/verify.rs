@@ -6353,6 +6353,187 @@ fn an_edge_host_record_holds_the_profiles_bound_to_it() {
     assert!(!v.unchanged);
 }
 
+/// The profile of cluster-a with the content of manifest `extra-rules` replaced by `content`, as
+/// `GET /v1/clusterprofiles/{uid}/packs/manifests` gives it.
+fn manifests_with_rules(raw_root: &Path, content: &str) -> Value {
+    let mut m = read(&raw_root.join("cluster-a").join("manifests.json"))["profiles"][0].clone();
+    for pack in m["spec"]["packs"].as_array_mut().unwrap() {
+        for man in pack["spec"]["manifests"]
+            .as_array_mut()
+            .into_iter()
+            .flatten()
+        {
+            if man["name"] == "extra-rules" {
+                man["content"] = Value::String(content.to_string());
+            }
+        }
+    }
+    m
+}
+
+/// A manifest as the route of a holder gives it: `spec.published.content`.
+fn own_copy(uid: &str, content: &str) -> Value {
+    serde_json::json!({"metadata": {"uid": uid, "name": "extra-rules"},
+                       "spec": {"published": {"content": content, "digest": ""}}})
+}
+
+#[test]
+fn an_edge_host_record_holds_its_own_copy_of_each_manifest() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let recorded_a = ops::snapshot_from_dir(&dir.path().join("a"), "a", "t0").unwrap();
+    let a = dir.path().join("cluster-a");
+    let rules = read(&a.join("manifests.json"))["profiles"][0]["spec"]["packs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .flat_map(|p| {
+            p["spec"]["manifests"]
+                .as_array()
+                .cloned()
+                .unwrap_or_default()
+        })
+        .find(|m| m["name"] == "extra-rules")
+        .unwrap()["content"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    // Palette names the copy of the host by a uid of its own, with no content
+    let mut templates = read(&a.join("cluster.json"))["spec"]["clusterProfileTemplates"].clone();
+    let puid = templates[0]["uid"].as_str().unwrap().to_string();
+    for pack in templates[0]["packs"].as_array_mut().unwrap() {
+        if pack["name"] == "prometheus-operator" {
+            pack["manifests"] = serde_json::json!([{"uid": "host-rules-1", "name": "extra-rules"}]);
+        }
+    }
+    let host = |copy: &str, profile: &str| {
+        serve_edge_host(MemoryApi::new(), dir.path())
+            .with(
+                "/v1/edgehosts/e1",
+                serde_json::json!({
+                    "metadata": {"uid": "e1", "name": "edge-1"},
+                    "spec": {"clusterProfileTemplates": templates.clone()},
+                }),
+            )
+            .with(
+                "/v1/edgehosts/e1/pack/manifests/host-rules-1",
+                own_copy("host-rules-1", copy),
+            )
+            .with(
+                format!("/v1/clusterprofiles/{puid}/packs/manifests"),
+                manifests_with_rules(dir.path(), profile),
+            )
+    };
+    let record = snapshot_edge_host(&host(&rules, &rules), "e1").unwrap();
+    assert_eq!(
+        record.root, recorded_a.root,
+        "the copy holds what the profile held"
+    );
+
+    // an edit of the manifest of the profile does not reach the copy of the host
+    let edited = rules.replace("for: 5m", "for: 10m");
+    assert_ne!(edited, rules);
+    let v = ops::verify(
+        &record,
+        &Palette::new(host(&rules, &edited)),
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert!(v.unchanged, "the host keeps its copy: {:?}", v.status);
+
+    // a change of the copy itself is a drift
+    let v = ops::verify(
+        &record,
+        &Palette::new(host(&edited, &rules)),
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert!(!v.unchanged);
+}
+
+#[test]
+fn a_cluster_group_record_holds_its_own_copy_of_each_manifest() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let recorded_a = ops::snapshot_from_dir(&dir.path().join("a"), "a", "t0").unwrap();
+    let a = dir.path().join("cluster-a");
+    let rules = read(&a.join("manifests.json"))["profiles"][0]["spec"]["packs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .flat_map(|p| {
+            p["spec"]["manifests"]
+                .as_array()
+                .cloned()
+                .unwrap_or_default()
+        })
+        .find(|m| m["name"] == "extra-rules")
+        .unwrap()["content"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let mut templates = read(&a.join("cluster.json"))["spec"]["clusterProfileTemplates"].clone();
+    let puid = templates[0]["uid"].as_str().unwrap().to_string();
+    for pack in templates[0]["packs"].as_array_mut().unwrap() {
+        if pack["name"] == "prometheus-operator" {
+            pack["manifests"] =
+                serde_json::json!([{"uid": "group-rules-1", "name": "extra-rules"}]);
+        }
+    }
+    // the profile of cluster-a, served as for an edge host, and the group that pins it
+    let group = |copy: &str, profile: &str| {
+        serve_edge_host(MemoryApi::new(), dir.path())
+            .with(
+                "/v1/clustergroups/g1",
+                serde_json::json!({
+                    "metadata": {"uid": "g1", "name": "group-1"},
+                    "spec": {"type": "hostCluster", "clusterProfileTemplates": templates.clone()},
+                }),
+            )
+            .with(
+                "POST /v1/dashboard/clustergroups/g1/virtualClusters?limit=50",
+                serde_json::json!({"items": [], "listmeta": {"continue": ""}}),
+            )
+            .with(
+                format!(
+                    "/v1/clusterprofiles/{puid}/packs/prometheus-operator/manifests/group-rules-1"
+                ),
+                own_copy("group-rules-1", copy),
+            )
+            .with(
+                format!("/v1/clusterprofiles/{puid}/packs/manifests"),
+                manifests_with_rules(dir.path(), profile),
+            )
+    };
+    let snap = |api: MemoryApi| {
+        ops::snapshot_for(
+            &Ref::parse("clustergroup:g1"),
+            || Ok(Palette::new(api.clone())),
+            "t0",
+            &Progress::silent(),
+        )
+    };
+    let record = snap(group(&rules, &rules)).unwrap();
+    assert_eq!(
+        record.root, recorded_a.root,
+        "the copy holds what the profile held"
+    );
+
+    let edited = rules.replace("for: 5m", "for: 10m");
+    let kept = snap(group(&rules, &edited)).unwrap();
+    assert_eq!(
+        kept.root, record.root,
+        "an edit of the profile does not reach the copy"
+    );
+    let changed = snap(group(&edited, &rules)).unwrap();
+    assert_ne!(
+        changed.root, record.root,
+        "a change of the copy is a change"
+    );
+}
+
 #[test]
 fn consumers_counts_an_edge_host_bound_to_the_profile() {
     let dir = tempfile::tempdir().unwrap();

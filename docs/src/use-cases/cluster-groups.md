@@ -54,11 +54,13 @@ done
 
 ## After an edit in place
 
-A person who edits a manifest of `platform-addons@1.0.0` in place changes what
-the group pins: the group holds each manifest by its uid, and not a copy. Each
-member keeps the copy that it got. So after the edit, `compare` of the group
-with a member names the manifest, and exits `1`. A record of the group from
-before the edit drifts.
+A person who edits a manifest of `platform-addons@1.0.0` in place does not
+change what the group pins. Palette gives the group its own copy of each
+manifest, under a uid of its own, and each member keeps the copy that it got.
+The group and its members still agree, and a record of the group verifies. The
+version drifts: a record of `platform-addons@1.0.0` from before the edit
+reports `DRIFT`, and `compare` of the group with the version names the
+manifest.
 
 ## What to do
 

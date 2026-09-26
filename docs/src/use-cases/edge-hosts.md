@@ -53,25 +53,33 @@ seed, and export what this one prints.
 {{#include ../output/edge-verify.txt}}
 ```
 
-The cluster keeps its copy of the manifest, and its record is `OK`. The edge
-host does not: Palette holds each manifest of an edge host by its uid alone,
-with no content, so the host gets the edited manifest, and its record drifted.
+Both records are `OK`. Palette gives an edge host its own copy of each manifest
+when it binds a profile, under a uid of its own, as a cluster has one. The edit
+does not reach the copy. Strata reads the copy of the host by that uid. The
+values of a pack are a copy too.
 
-The values of a pack are different. An edge host keeps its own copy of them, as
-a cluster does: an edit of a value in place does not reach the host.
+So the edge host now runs other content than the version that it names:
+
+```text
+{{#include ../output/edge-verify-profile.txt}}
+```
+
+Exit `1`. The note says that both sides name `platform-addons@1.0.0`: the
+version changed in place after Palette bound it to the host.
 
 ## What to do
 
 - Run `consumers` before you delete a version. Its exit counts the edge hosts.
 - Record each edge host that you care about, beside each cluster, and verify
-  the records on a schedule. A drifted edge host record after an edit in place
-  of a manifest is the edit that reached the host.
-- Treat an edit in place of a manifest as a change of each edge host that the
-  version is bound to, at once.
+  the records on a schedule. A drifted edge host record is a change of the copy
+  that the host holds.
+- Record the version too. After an edit in place, the version drifts and the
+  hosts keep their copies, so two edge hosts bound at two times can hold two
+  contents under one version name.
 
 ## Palette behavior
 
 The live run of `just live-edge-host` shows each rule on this page: the root of
-the record, the consumers, the manifest that the host gets, and the values that
-it keeps. See
+the record, the consumers, and the copy of each manifest and each value that the
+host keeps. See
 [Edge hosts, cluster groups, and app profiles](../internals/palette/other-objects.md#edge-hosts).

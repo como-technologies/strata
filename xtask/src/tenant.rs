@@ -566,10 +566,9 @@ impl Tenant {
     /// the profile is now. A live run gives the rules: the host keeps its copy of the values,
     /// and holds each manifest by uid alone, so strata reads the manifests of the profile.
     pub fn edge_host(&self, project: &str, uid: &str, name: &str, profiles: &[&str]) {
-        let templates: Vec<Value> = profiles
-            .iter()
-            .map(|p| template_of(&self.read(project, &format!("v1/clusterprofiles/{p}"))))
-            .collect();
+        let templates = self.holder_templates(project, uid, profiles, |_, copy| {
+            format!("v1/edgehosts/{uid}/pack/manifests/{copy}")
+        });
         self.write(
             project,
             &format!("v1/edgehosts/{uid}"),
@@ -613,10 +612,9 @@ impl Tenant {
         profiles: &[&str],
         members: &[&str],
     ) {
-        let templates: Vec<Value> = profiles
-            .iter()
-            .map(|p| template_of(&self.read(project, &format!("v1/clusterprofiles/{p}"))))
-            .collect();
+        let templates = self.holder_templates(project, uid, profiles, |pack, copy| {
+            format!("v1/clusterprofiles/{{profile}}/packs/{pack}/manifests/{copy}")
+        });
         self.write(
             project,
             &format!("v1/clustergroups/{uid}"),
@@ -949,6 +947,25 @@ impl Tenant {
             items,
         );
 
+        // a cluster that moved to other versions is no longer a consumer of the ones it left
+        for doc in self.documents_in(project, "v1/clusterprofiles") {
+            let Some(p) = doc["metadata"]["uid"].as_str() else {
+                continue;
+            };
+            let listed = doc["status"]["inUseClusterUids"]
+                .as_array()
+                .is_some_and(|u| u.contains(&json!(uid)));
+            if !listed || profiles.contains(&p) {
+                continue;
+            }
+            let mut doc = doc.clone();
+            for key in ["inUseClusterUids", "inUseClusters"] {
+                if let Some(rows) = doc["status"][key].as_array_mut() {
+                    rows.retain(|r| r != &json!(uid) && r["uid"] != json!(uid));
+                }
+            }
+            self.write(project, &format!("v1/clusterprofiles/{p}"), &doc);
+        }
         for p in profiles {
             let path = format!("v1/clusterprofiles/{p}");
             let mut doc = self.read(project, &path);
@@ -1263,6 +1280,56 @@ fn fnv_hex(text: &str) -> String {
 }
 
 /// The template of a profile on a cluster, from the profile document: the published profile.
+impl Tenant {
+    /// The templates of an object that holds profiles without being a cluster: an edge host or a
+    /// cluster group. Palette gives the holder its own copy of each manifest, under a uid of its
+    /// own, and the template names the copy by that uid, with no content. `route(pack, copy)` is
+    /// where the API serves a copy; `{profile}` in it becomes the uid of the profile.
+    fn holder_templates(
+        &self,
+        project: &str,
+        holder: &str,
+        profiles: &[&str],
+        route: impl Fn(&str, &str) -> String,
+    ) -> Vec<Value> {
+        let mut n = 0;
+        profiles
+            .iter()
+            .map(|p| {
+                let mut t = template_of(&self.read(project, &format!("v1/clusterprofiles/{p}")));
+                let contents = self.read(project, &format!("v1/clusterprofiles/{p}/packs/manifests"));
+                for pack in t["packs"].as_array_mut().into_iter().flatten() {
+                    let pname = pack["name"].as_str().unwrap_or_default().to_string();
+                    let source: Vec<Value> = contents["spec"]["packs"]
+                        .as_array()
+                        .into_iter()
+                        .flatten()
+                        .filter(|q| q["spec"]["name"] == pname.as_str())
+                        .flat_map(|q| q["spec"]["manifests"].as_array().cloned().unwrap_or_default())
+                        .collect();
+                    if source.is_empty() {
+                        continue;
+                    }
+                    let mut refs = Vec::new();
+                    for m in source {
+                        n += 1;
+                        let copy = format!("{}{n:04x}", &holder[..holder.len().min(20)]);
+                        self.write(
+                            project,
+                            &route(&pname, &copy).replace("{profile}", p),
+                            &json!({"metadata": {"uid": copy, "name": m["name"]},
+                                "spec": {"published": {"content": m["content"], "digest": m["digest"]}}}),
+                        );
+                        refs.push(json!({"uid": copy, "name": m["name"]}));
+                    }
+                    pack["manifests"] = json!(refs);
+                }
+                t
+            })
+            .collect()
+    }
+}
+
 fn template_of(d: &Value) -> Value {
     json!({
         "uid": d["metadata"]["uid"], "name": d["metadata"]["name"],

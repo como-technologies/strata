@@ -52,12 +52,15 @@ same.
 
 - **The values are a copy.** An edit in place of a value of the profile does not
   reach the edge host: the template of the host keeps the value from before.
-- **A manifest is not.** The template of the host names each manifest by its
-  uid, with no content. An edit in place keeps the uid of a manifest, so the
-  edge host gets the edited manifest, and a record of it drifts. A cluster keeps
-  its own copy of the manifest.
+- **Each manifest is a copy too.** Palette copies each manifest when it binds
+  the profile, under a uid of its own. The template of the host names the copy
+  by that uid, with no content, and
+  `GET /v1/edgehosts/<uid>/pack/manifests/<manifest uid>` gives its content.
+  An edit in place of the profile does not reach the copy, as it does not reach
+  the copy of a cluster. Strata reads each copy by its uid.
 - `POST /v1/dashboard/edgehosts/search` lists the edge hosts, with a summary of
-  each template: uid, name, and version. There is no `GET` listing.
+  each template: uid, name, and version. `GET /v1/edgehosts/metadata` lists
+  them with no profiles.
 - `status.inUseClusters` of a profile names clusters and never an edge host. So
   `consumers` searches the edge hosts.
 
@@ -69,10 +72,11 @@ to the host clusters of the group.
 
 - A virtual cluster that is created in the group runs the pinned profiles in its
   own `spec.clusterProfileTemplates`, with its own copy of each manifest.
-- The template of the group names each manifest by its uid, with no content, as
-  an edge host does. So after an edit in place of a manifest of a pinned
-  profile, a record of the group drifts, and the group and its member differ:
-  the member keeps its copy.
+- The template of the group names its own copy of each manifest by a uid of
+  its own, with no content, as an edge host does.
+  `GET /v1/clusterprofiles/<profile uid>/packs/<pack>/manifests/<manifest uid>`
+  gives the content of a copy. After an edit in place of a manifest of a pinned
+  profile, the group and its member keep their copies, and still agree.
 - `status.inUseClusters` of the pinned profile names the virtual cluster. The
   cluster listing, `GET /v1/dashboard/spectroclusters/meta`, does not list it.
   So `consumers` finds a virtual cluster through the consumer list of Palette,
@@ -81,7 +85,9 @@ to the host clusters of the group.
 - `POST /v1/dashboard/clustergroups/<uid>/virtualClusters` lists the virtual
   clusters of a group. `GET /v1/clustergroups/hostCluster/metadata` gives the
   name and the uid of each group.
-- Palette refuses a virtual cluster with a CPU limit under 3 cores.
+- The live run gives a virtual cluster a CPU limit of 3 cores. The API sets no
+  lower limit: it checks a virtual cluster against the upper limits of the
+  group alone.
 
 ## App profiles
 

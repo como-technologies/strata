@@ -85,13 +85,20 @@ if stage 2 "an edit in place of the add-on version"; then
   check edit 0 "edit the manifest of the add-on version in place through the API" -- \
     "$live/api.sh" edit "$AD" 'edited: "no"' 'edited: "yes"'
   sleep 20
-  check edit-host-verify 1 '#78: the edge host holds each manifest by its uid alone, with no content, so it gets the edit: verify of its record reports drift' -- \
+  check edit-host-verify 0 '#81: the edge host keeps its own copy of the manifest: verify of its record passes' -- \
     "$strata" verify host.json
+  check edit-host-vs-version 1 '#81: the version differs from the copy of the host: the edit is in the version alone' -- \
+    "$strata" compare "edgehost:$E" "$AD"
   check edit-host-record 0 'record the edge host after the edit' -- "$strata" snapshot "edgehost:$E" -o host-edited.json
   check edit-host-raw 0 'the template that Palette gives for the edge host, after the edit' -- \
     "$live/api.sh" get "/v1/edgehosts/$E"
   check edit-host-manifest-uid 0 '#78: the template of the host names the manifest by uid, and holds no content' -- \
     jq -e '[.spec.clusterProfileTemplates[].packs[].manifests[]] | length > 0 and all(.uid != "" and ((.content // "") == ""))' edit-host-raw.out
+  check edit-host-own-uid 0 '#81: that uid is a copy of its own, and not the uid of the manifest of the version' -- \
+    bash -c "comm -12 <(jq -r '.spec.clusterProfileTemplates[].packs[].manifests[]?.uid' edit-host-raw.out | sort) \
+      <(\"$live/api.sh\" get /v1/clusterprofiles/$AD/packs/manifests | jq -r '.spec.packs[].spec.manifests[]?.uid' | sort) | grep -q . && exit 1 || exit 0"
+  check edit-host-copy 0 '#81: the route of the copy gives the content from before the edit' -- \
+    bash -c "for u in \$(jq -r '.spec.clusterProfileTemplates[].packs[].manifests[]?.uid' edit-host-raw.out); do \"$live/api.sh\" get /v1/edgehosts/$E/pack/manifests/\$u; done | jq -rs 'map(.spec.published.content) | join(\"\")' | grep -q 'edited: \"no\"'"
   check edit-undo 0 'undo the edit' -- "$live/api.sh" edit "$AD" 'edited: "yes"' 'edited: "no"'
 fi
 

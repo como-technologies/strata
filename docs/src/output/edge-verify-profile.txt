@@ -1,0 +1,11 @@
+$ strata compare runs/store-1.json platform-addons@1.0.0
+platform-addons@1.0.0 on edge host store-1 (uid 64f4000000000000000000e1)  ->  platform-addons@1.0.0 (uid 64e2000000000000000000a1)
+root       f6312d5a2793 -> b49f91f9df85   CHANGED
+note       both sides are platform-addons@1.0.0 (uid 64e2000000000000000000a1): the version was edited in place, or changed on a cluster
+consumers  platform-addons@1.0.0 has no consumers
+
+  variables unchanged
+
+~ [addon] namespace-policy           1.0.0              AUTHORED
+      ~ manifest namespace-policy
+      impact: in-place addon upgrade

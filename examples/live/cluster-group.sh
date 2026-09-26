@@ -7,8 +7,8 @@
 #   1  a cluster group on cluster A that pins the add-on version, and one virtual cluster in it: a
 #      record of clustergroup:<uid> holds the pin and names the member; compare of the group with
 #      the member reads only the pinned profile of the member, and is IDENTICAL
-#   2  an edit in place of a manifest of the add-on version: the group holds the manifest by
-#      uid, so it follows the edit, and the member keeps its copy, so the two differ; then the
+#   2  an edit in place of a manifest of the add-on version: the group and the member each keep
+#      their own copy of the manifest, under a uid of its own, and the version differs; then the
 #      undo
 #   3  the group and the member removed: the baseline
 #
@@ -83,15 +83,20 @@ if stage 2 "an edit in place of the add-on version"; then
   check edit 0 "edit the manifest of the add-on version in place through the API" -- \
     "$live/api.sh" edit "$AD" 'edited: "no"' 'edited: "yes"'
   sleep 20
-  check edit-group-verify 1 '#78: the group holds each manifest by its uid alone, so it follows the edit: verify of its record reports drift' -- \
+  check edit-group-verify 0 '#81: the group keeps its own copy of the manifest: verify of its record passes' -- \
     "$strata" verify group.json
-  check edit-group-compare 1 '#78: the member keeps its copy of the manifest, so it no longer runs what the group pins' -- \
+  check edit-group-compare 0 '#81: the member keeps its copy too, so it still runs what the group pins' -- \
     "$strata" compare "clustergroup:$G" "cluster:$M"
-  check edit-group-compare-says 0 '#78: the compare names the manifest of the add-on pack' -- \
-    grep -q '^      ~ manifest ' edit-group-compare.out
+  check edit-group-vs-version 1 '#81: the version differs from the copy of the group: the edit is in the version alone' -- \
+    "$strata" compare "clustergroup:$G" "$AD"
+  check edit-group-vs-version-says 0 '#81: the compare names the manifest of the add-on pack' -- \
+    grep -q '^      ~ manifest ' edit-group-vs-version.out
   check edit-group-raw 0 'the group document after the edit' -- "$live/api.sh" get "/v1/clustergroups/$G"
   check edit-group-manifest-uid 0 '#78: the template of the group names the manifest by uid, and holds no content' -- \
     jq -e '[.spec.clusterProfileTemplates[].packs[].manifests[]] | length > 0 and all(.uid != "" and ((.content // "") == ""))' edit-group-raw.out
+  check edit-group-own-uid 0 '#81: that uid is a copy of its own, and not the uid of the manifest of the version' -- \
+    bash -c "comm -12 <(jq -r '.spec.clusterProfileTemplates[].packs[].manifests[]?.uid' edit-group-raw.out | sort) \
+      <(\"$live/api.sh\" get /v1/clusterprofiles/$AD/packs/manifests | jq -r '.spec.packs[].spec.manifests[]?.uid' | sort) | grep -q . && exit 1 || exit 0"
   check edit-undo 0 'undo the edit' -- "$live/api.sh" edit "$AD" 'edited: "yes"' 'edited: "no"'
 fi
 

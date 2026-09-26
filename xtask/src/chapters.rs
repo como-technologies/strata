@@ -1408,7 +1408,7 @@ fn use_cases(r: &mut Runner) {
         false,
         "strata compare platform-addons@1.0.0 runs/store-1.json",
     );
-    // an edit in place of the manifest: the edge host holds it by uid, and the cluster its copy
+    // an edit in place of the manifest: the edge host and the cluster each keep their own copy
     r.addons(
         DEV,
         ADDONS_DEV,
@@ -1417,7 +1417,13 @@ fn use_cases(r: &mut Runner) {
         "1.0.0",
     );
     r.serve_here(); // state 2: the manifest of platform-addons@1.0.0 is edited in place
-    r.step("edge-verify", 1, false, "strata verify 'runs/*.json'");
+    r.step("edge-verify", 0, false, "strata verify 'runs/*.json'");
+    r.step(
+        "edge-verify-profile",
+        1,
+        false,
+        "strata compare runs/store-1.json platform-addons@1.0.0",
+    );
 
     // A cluster group pins an add-on profile for its virtual clusters
     r.chapter("cluster-groups", DEV_ENV);

@@ -629,7 +629,9 @@ at its baseline. It needs no cluster of its own and costs nothing.
 | `consumers-list-only`, `consumers-list-only-host` | 1, 0 | #78: `--list-only` counts it too: the consumer list of Palette names no edge host |
 | `host-verify` | 0 | #78: `verify` of the record of the edge host |
 | `host-repave` | 2 | #78: `compare --repave` refuses an edge host |
-| `edit`, `edit-host-verify` | 0, 1 | #78: after an edit in place of the manifest of the add-on version, `verify` of the record of the edge host reports drift |
+| `edit`, `edit-host-verify` | 0, 0 | #81: after an edit in place of the manifest of the add-on version, `verify` of the record of the edge host passes: the host keeps its own copy |
+| `edit-host-vs-version` | 1 | #81: the version differs from the copy of the host |
+| `edit-host-own-uid`, `edit-host-copy` | 0 | #81: the copy has a uid of its own, and its route gives the content from before the edit |
 | `edit-host-raw`, `edit-host-manifest-uid` | 0 | #78: the template of the edge host names the manifest by its uid, with no content |
 | `release-register`, `release-host-record`, `release-edit`, `release-host-verify` | 0 | #78: a second host bound to the release version keeps its copy of the values after an edit in place of the reclaim policy: `verify` of its record is OK |
 | `release-host-raw`, `release-host-kept` | 0 | #78: the host holds `reclaimPolicy: Delete`, and the profile holds `Retain` |
@@ -657,13 +659,15 @@ baseline with cluster A.
 | `group-verify` | 0 | #78: `verify` of the record of the group |
 | `member-consumer`, `member-consumer-listed` | 1, 0 | #78: `consumers` of the add-on version names the virtual cluster, from the consumer list of Palette |
 | `member-not-in-listing` | 0 | #78: the cluster listing does not name the virtual cluster |
-| `edit`, `edit-group-verify` | 0, 1 | #78: after an edit in place of the manifest of the add-on version, `verify` of the record of the group reports drift |
-| `edit-group-compare`, `edit-group-compare-says` | 1, 0 | #78: the member keeps its copy, so `compare` of the group with it names the manifest |
+| `edit`, `edit-group-verify` | 0, 0 | #81: after an edit in place of the manifest of the add-on version, `verify` of the record of the group passes: the group keeps its own copy |
+| `edit-group-compare` | 0 | #81: the member keeps its copy too, so the group and the member still agree |
+| `edit-group-vs-version`, `edit-group-vs-version-says` | 1, 0 | #81: the version differs from the copy of the group, and the compare names the manifest |
+| `edit-group-own-uid` | 0 | #81: the copy has a uid of its own |
 | `edit-group-raw`, `edit-group-manifest-uid` | 0 | #78: the template of the group names the manifest by its uid, with no content |
 | `edit-undo`, `gone` | 0 | the edit is put back, and the group and the member are gone |
 
-The virtual cluster needs a CPU limit of at least 3 cores, and a memory limit
-that leaves 1 GiB beside the 3.2 GiB that the agents of Palette take in it.
+The virtual cluster runs with a CPU limit of 3 cores, and a memory limit that
+leaves 1 GiB beside the 3.2 GiB that the agents of Palette take in it.
 
 ## app-profile.sh
 

@@ -55,8 +55,10 @@ into a condition of the search: the property `tags`, with the values
 | Request | Gives |
 | --- | --- |
 | `GET /v1/edgehosts/{uid}` | `spec.clusterProfileTemplates`: the profiles bound to the edge host. |
+| `GET /v1/edgehosts/{uid}/pack/manifests/{manifestUid}` | `spec.published.content`: the copy of a manifest that the edge host holds, by the uid that its template names. |
 | `POST /v1/dashboard/edgehosts/search?limit=50` | Every edge host, every page, with a summary of its profiles: the uid of an edge host name, and the edge hosts that `consumers` counts. The body has no filter. |
 | `GET /v1/clustergroups/{uid}` | `spec.clusterProfileTemplates`: the profiles that the group pins for its virtual clusters. |
+| `GET /v1/clusterprofiles/{uid}/packs/{packName}/manifests/{manifestUid}` | `spec.published.content`: the copy of a manifest that a cluster group holds, by the uid that its template names. |
 | `GET /v1/clustergroups/hostCluster/metadata` | The name and the uid of each cluster group: the uid of a group name. |
 | `POST /v1/dashboard/clustergroups/{uid}/virtualClusters?limit=50` | The virtual clusters of the group, every page: `members[]` of the record. The body has no filter. |
 | `GET /v1/clusterprofiles/{uid}/packs/manifests` and `GET /v1/clusterprofiles/{uid}/variables` | For an edge host and a cluster group: the manifests and the variable definitions of each profile. |

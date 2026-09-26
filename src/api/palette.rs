@@ -547,8 +547,10 @@ impl<A: PaletteApi> Palette<A> {
     }
 
     /// The raw documents of an edge host, in the shape of a cluster: `GET /v1/edgehosts/{uid}`
-    /// gives the bound profiles in `spec.clusterProfileTemplates`, and the manifests and the
-    /// variables of each come from its profile. An edge host has no notifications. `host` is a
+    /// gives the bound profiles in `spec.clusterProfileTemplates`. The host holds its own copy of
+    /// each manifest, which `GET /v1/edgehosts/{uid}/pack/manifests/{manifestUid}` reads; the
+    /// variables and the rest of each pack come from its profile. An edge host has no
+    /// notifications. `host` is a
     /// uid, or, when no edge host has that uid, the name of one edge host in the scope.
     pub fn fetch_edge_host(&self, host: &str, progress: &Progress) -> Result<RawCluster> {
         progress.note(&format!("fetching edge host {host}"));
@@ -565,13 +567,14 @@ impl<A: PaletteApi> Palette<A> {
             }
             Err(e) => return Err(e),
         };
-        self.holder_raw(doc, progress)
+        self.holder_raw(doc, Holder::EdgeHost, progress)
     }
 
     /// The raw documents of a cluster group, in the shape of a cluster: `GET
     /// /v1/clustergroups/{uid}` gives the profiles that the group pins for its virtual clusters
-    /// in `spec.clusterProfileTemplates`, and the manifests and the variables of each come from
-    /// its profile. `group` is a uid, or, when no cluster group has that uid, the name of one
+    /// in `spec.clusterProfileTemplates`. The group holds its own copy of each manifest, which
+    /// `GET /v1/clusterprofiles/{uid}/packs/{pack}/manifests/{manifestUid}` reads by its uid; the
+    /// variables and the rest of each pack come from its profile. `group` is a uid, or, when no cluster group has that uid, the name of one
     /// cluster group in the scope.
     pub fn fetch_cluster_group(&self, group: &str, progress: &Progress) -> Result<RawCluster> {
         progress.note(&format!("fetching cluster group {group}"));
@@ -588,7 +591,7 @@ impl<A: PaletteApi> Palette<A> {
             }
             Err(e) => return Err(e),
         };
-        self.holder_raw(doc, progress)
+        self.holder_raw(doc, Holder::ClusterGroup, progress)
     }
 
     /// The virtual clusters of a cluster group, `POST
@@ -649,7 +652,7 @@ impl<A: PaletteApi> Palette<A> {
     /// is not a cluster: the manifests and the variables of each profile come from the profile.
     /// Such an object gives no values to the variables, so a record holds the definitions of each
     /// profile, as a profile record does. It has no notifications.
-    fn holder_raw(&self, doc: Value, progress: &Progress) -> Result<RawCluster> {
+    fn holder_raw(&self, doc: Value, holder: Holder, progress: &Progress) -> Result<RawCluster> {
         let templates: Vec<Value> = doc
             .pointer("/spec/clusterProfileTemplates")
             .and_then(Value::as_array)
@@ -667,8 +670,10 @@ impl<A: PaletteApi> Palette<A> {
             variables_unavailable |= unavailable;
             variables.push(serde_json::json!({"profileUid": puid, "variables": v["variables"]}));
         }
+        let mut manifests = self.profile_manifests(&templates)?;
+        self.own_manifests(&doc, &templates, holder, &mut manifests)?;
         Ok(RawCluster {
-            manifests: self.profile_manifests(&templates)?,
+            manifests,
             cluster: doc,
             variables: Value::Array(variables),
             variables_unavailable,
@@ -679,6 +684,88 @@ impl<A: PaletteApi> Palette<A> {
             resolved_values: None,
             cloud_config: None,
         })
+    }
+
+    /// Put the copies that a holder keeps of its manifests in place of the manifests of its
+    /// profiles. Palette gives an edge host and a cluster group a copy of each manifest under a
+    /// uid of its own, and the template of the holder names each copy by that uid, with no
+    /// content. An edit of the profile does not reach the copy.
+    fn own_manifests(
+        &self,
+        doc: &Value,
+        templates: &[Value],
+        holder: Holder,
+        manifests: &mut Value,
+    ) -> Result<()> {
+        let holder_uid = doc
+            .pointer("/metadata/uid")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        for (i, t) in templates.iter().enumerate() {
+            let puid = t.get("uid").and_then(Value::as_str).unwrap_or_default();
+            for pack in t
+                .get("packs")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+            {
+                let name = pack.get("name").and_then(Value::as_str).unwrap_or_default();
+                let refs = pack
+                    .get("manifests")
+                    .and_then(Value::as_array)
+                    .cloned()
+                    .unwrap_or_default();
+                // a copy with no uid cannot be read: the manifests of the profile stay
+                if refs.is_empty()
+                    || refs.iter().any(|m| {
+                        m.get("uid")
+                            .and_then(Value::as_str)
+                            .unwrap_or_default()
+                            .is_empty()
+                    })
+                {
+                    continue;
+                }
+                let mut own = Vec::with_capacity(refs.len());
+                for m in &refs {
+                    let muid = m.get("uid").and_then(Value::as_str).unwrap_or_default();
+                    let path = match holder {
+                        Holder::EdgeHost => format!(
+                            "/v1/edgehosts/{}/pack/manifests/{}",
+                            query_value(holder_uid),
+                            query_value(muid)
+                        ),
+                        Holder::ClusterGroup => format!(
+                            "/v1/clusterprofiles/{}/packs/{}/manifests/{}",
+                            query_value(puid),
+                            query_value(name),
+                            query_value(muid)
+                        ),
+                    };
+                    let got = self.api.get_json(&path)?;
+                    own.push(serde_json::json!({
+                        "name": got.pointer("/metadata/name").cloned()
+                            .or_else(|| m.get("name").cloned()).unwrap_or(Value::Null),
+                        "uid": muid,
+                        "content": got.pointer("/spec/published/content").cloned().unwrap_or(Value::Null),
+                        "digest": got.pointer("/spec/published/digest").cloned().unwrap_or(Value::Null),
+                    }));
+                }
+                let Some(packs) = manifests
+                    .pointer_mut(&format!("/profiles/{i}/spec/packs"))
+                    .and_then(Value::as_array_mut)
+                else {
+                    continue;
+                };
+                if let Some(p) = packs.iter_mut().find(|p| {
+                    p.pointer("/spec/name").and_then(Value::as_str) == Some(name)
+                        || p.pointer("/metadata/name").and_then(Value::as_str) == Some(name)
+                }) {
+                    p["spec"]["manifests"] = Value::Array(own);
+                }
+            }
+        }
+        Ok(())
     }
 
     /// The uid of the one edge host in the scope that has the name `name`.
@@ -882,4 +969,12 @@ mod tests {
             .unwrap_err();
         assert!(matches!(err, Error::Api { status: 500, .. }), "{err}");
     }
+}
+
+/// The object that holds its own copy of each manifest of its profiles, and the route that reads
+/// a copy by its uid.
+#[derive(Clone, Copy)]
+enum Holder {
+    EdgeHost,
+    ClusterGroup,
 }
