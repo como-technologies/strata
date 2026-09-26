@@ -18,7 +18,7 @@
 # What varies: the tag name the OS pack is pinned under, and which of the two versions cluster A
 # runs. What holds: the pack uid, every other pack, the values, the flag (off), and the baseline
 # the run starts from and returns to (lib.sh). The expectations are #19's decision
-# (docs/src/internals/palette.md, "Tag names"): the versions are the same content with no
+# (docs/src/internals/palette/packs.md, "Tag names"): the versions are the same content with no
 # node impact, Palette neither plans nor does a repave, and the in-place rename is DRIFT.
 #
 # Needs the live example at its baseline (baseline.sh), the strata release binary, jq, and an AWS

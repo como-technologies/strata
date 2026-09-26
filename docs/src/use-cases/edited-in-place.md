@@ -56,7 +56,7 @@ version was edited in place.
 
 The record has what the content was, and Palette has who wrote it. See
 [Who changed it](../commands/verify.md#who-changed-it), and what the log holds
-for each writer at [The audit log](../internals/palette.md#the-audit-log).
+for each writer at [The audit log](../internals/palette/profiles.md#the-audit-log).
 
 The same comparison, from the record to the live version:
 
@@ -170,5 +170,5 @@ reviewed.
 
 ## Palette behavior
 
-See [What Palette does: edits in place](../internals/palette.md#edits-in-place)
-and [cluster copies](../internals/palette.md#cluster-copies).
+See [What Palette does: edits in place](../internals/palette/profiles.md#edits-in-place)
+and [cluster copies](../internals/palette/clusters.md#cluster-copies).

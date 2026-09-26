@@ -58,7 +58,7 @@ Keep the file with the release: in a repository, for example. The root
 ```
 
 Exit `0`. `DRIFT` and exit `1` tell you that the published version changed after
-you recorded it. [What Palette does](./internals/palette.md#edits-in-place)
+you recorded it. [What Palette does](./internals/palette/profiles.md#edits-in-place)
 names who can change it. Run this check on a schedule:
 [A published version is edited in place](./use-cases/edited-in-place.md).
 

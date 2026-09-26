@@ -79,4 +79,4 @@ The same command as step 3 now fails, and names the manifest, not the line:
 
 ## Palette behavior
 
-See [What Palette does: manifest pack uids](../internals/palette.md#manifest-pack-uids).
+See [What Palette does: manifest pack uids](../internals/palette/packs.md#manifest-pack-uids).

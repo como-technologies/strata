@@ -13,7 +13,7 @@ from the OCI pack registry `Palette Registry`. The dev copy takes it from the
 pack registry `Public Repo`. Prod also holds `1.1.2`, which moved the pack and
 changed a CSI value on top of the move. The Public Repo values are the real
 ones. The uid of the OCI registry and the pack uid it gives are stand-ins: see
-[A pack that moves between registries](../internals/palette.md#a-pack-that-moves-between-registries).
+[A pack that moves between registries](../internals/palette/packs.md#a-pack-that-moves-between-registries).
 
 **Who runs this.** A person at a terminal, or the promotion gate, which runs
 `same-release` for a job: see [The promotion gate and the retire gate](../automation/gates.md).
@@ -96,4 +96,4 @@ so the pair fails and the reason names the value.
 
 A real move to an OCI registry changes the pack type from `spectro` to `oci`,
 and the registry uid, pack uid, and digest. See
-[What Palette does: a pack that moves between registries](../internals/palette.md#a-pack-that-moves-between-registries).
+[What Palette does: a pack that moves between registries](../internals/palette/packs.md#a-pack-that-moves-between-registries).

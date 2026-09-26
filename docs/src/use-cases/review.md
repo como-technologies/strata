@@ -127,7 +127,7 @@ its job is to report every difference. Use `same-release` for a gate, and
 
 A published profile version has the same root as its candidate, because Palette
 puts the registry digest on each pack reference. See
-[What Palette does](../internals/palette.md#the-pack-ref-digest).
+[What Palette does](../internals/palette/packs.md#the-pack-ref-digest).
 
 ## What to do
 

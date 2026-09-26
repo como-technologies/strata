@@ -22,7 +22,7 @@ One file prints the full report and a verdict line. Exit `0`.
 ```
 
 Exit `1`. The published version changed in place: same uid, same version, other
-content. [What Palette does](../internals/palette.md#edits-in-place) names who
+content. [What Palette does](../internals/palette/profiles.md#edits-in-place) names who
 can change it. See
 [A published version is edited in place](../use-cases/edited-in-place.md).
 
@@ -59,7 +59,7 @@ and `GET /v1/audits/{auditUid}` reads it again.
 - Palette keeps no audit log for a pack in a registry. `--who` reads nothing
   for a pack record.
 - What the log holds for each writer:
-  [The audit log](../internals/palette.md#the-audit-log).
+  [The audit log](../internals/palette/profiles.md#the-audit-log).
 
 ## Check many records
 
@@ -107,7 +107,7 @@ cluster gives a variable another value than the record holds.
 A record whose packs are in another order now is `DRIFT`, with `no packs
 changed, the packs in another order` in the summary line. The order is content:
 see
-[What Palette does](../internals/palette.md#the-order-of-the-profiles-of-a-cluster).
+[What Palette does](../internals/palette/clusters.md#the-order-of-the-profiles-of-a-cluster).
 
 A renamed tag in place is `DRIFT` too, with the result `SAME CONTENT` and no
 node impact. It changes no build, but it edits a published version. See

@@ -61,7 +61,7 @@ parameters, as named text. The adapter reads one parameter, `candidate`: a
 [candidate file](../reference/candidate-file.md), as JSON. It holds what the pins
 do not: the tag and the registry of each layer, the values, the manifests, and
 the variables. The pins give the order of the layers. That
-[order is content](../internals/palette.md#the-order-of-the-profiles-of-a-cluster),
+[order is content](../internals/palette/clusters.md#the-order-of-the-profiles-of-a-cluster),
 and knurl keeps it in the pin set.
 
 `strata_knurl::definition_of` writes that definition from a published version.
@@ -74,7 +74,7 @@ with no `candidate` parameter are each a terminal failure.
 ## What the adapter cannot answer
 
 - **Health, where Palette serves no cluster summary.**
-  [The cluster summary](../internals/palette.md#what-the-cluster-listing-answers)
+  [The cluster summary](../internals/palette/clusters.md#what-the-cluster-listing-answers)
   carries the health of a cluster, as one of two states with its conditions. The
   adapter maps the two states, and it names the first condition of an unhealthy
   cluster. Where Palette serves no summary, the adapter says `Unknown`. Any
@@ -87,16 +87,16 @@ with no `candidate` parameter are each a terminal failure.
   `Unknown`, and the read still succeeds.
 - **A leaf with no digest.** Where Palette lists no digest for a pack, the
   adapter refuses the leaf: nothing pins it by content.
-  [What no run covers](../internals/palette.md#what-no-run-covers) names the
+  [What no run covers](../internals/palette/limits.md#what-no-run-covers) names the
   registries that can list none.
 - **The order of the profiles of a cluster.**
-  [Palette lists them in an order that says nothing](../internals/palette.md#the-order-of-the-profiles-of-a-cluster).
+  [Palette lists them in an order that says nothing](../internals/palette/clusters.md#the-order-of-the-profiles-of-a-cluster).
   The adapter gives the copies by name.
 - **A root.** Palette holds no root unit. The adapter gives a terminal failure.
 - **Who uses a pack.** Palette names the clusters of a profile version alone,
   and a leaf or a root is a terminal failure. `pinned_by` does not trust that
   list alone: it reads each cluster the key can list as well, as
-  [`consumers`](../internals/palette.md#what-the-cluster-listing-answers) does.
+  [`consumers`](../internals/palette/clusters.md#what-the-cluster-listing-answers) does.
 - **Which of two archives, with no digest.** An address has no registry, and a
   tenant can have a pack version in two of them. The adapter reads each one.
   When the digests are equal, it is one leaf: a raise copies a pack by digest

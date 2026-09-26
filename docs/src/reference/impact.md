@@ -8,7 +8,7 @@ pack. See [The hashes and the root](../internals/hashes.md).
 | Flag | Changes when | Meaning for the release |
 | --- | --- | --- |
 | `IDENTITY` | the type, tag, version, pack uid, or registry uid of the pack changes | The release points at another pack build. The name and the layer are the key of the pack, so a change to either gives an `ADDED` line and a `REMOVED` line. |
-| `UPSTREAM` | the digest on the pack reference changes | The content of the pack changed under the same version. A push again under that version does this, and a floating tag that the registry moved does it too. See [A pack version pushed again](../internals/palette.md#a-pack-version-pushed-again) and [Tag names](../internals/palette.md#tag-names). A pack whose `upstreamSource` is `none` never shows this flag. |
+| `UPSTREAM` | the digest on the pack reference changes | The content of the pack changed under the same version. A push again under that version does this, and a floating tag that the registry moved does it too. See [A pack version pushed again](../internals/palette/packs.md#a-pack-version-pushed-again) and [Tag names](../internals/palette/packs.md#tag-names). A pack whose `upstreamSource` is `none` never shows this flag. |
 | `AUTHORED` | the values, the attached manifests, or the params change | The configuration of the release changed. |
 | `IMAGES` | the image list that the values declare, `pack.content.images`, changes | An image was added, removed, or moved to another tag. It comes with `AUTHORED`: it says which part of the values moved, and a gate that reads `AUTHORED` still sees it. |
 | `CHARTS` | the chart list that the values declare, `pack.content.charts`, changes | A chart was added, removed, or moved to another version. It comes with `AUTHORED`, as `IMAGES` does. |
@@ -42,7 +42,7 @@ only the `uri` repaves. The nodes of a managed cluster take a rolling upgrade
 for any override of a node pool. Palette keeps a fixed list of the fields that
 repave, for each engine, and no document gives it, so strata does not encode a
 second table. The live runs used two clouds, AWS and GCP, and one engine: see
-[What no run covers](../internals/palette.md#what-no-run-covers).
+[What no run covers](../internals/palette/limits.md#what-no-run-covers).
 
 For a cluster, ask Palette: `compare --repave` prints its answer beside
 the level, and says when the two disagree. See

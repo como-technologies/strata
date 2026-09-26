@@ -145,4 +145,4 @@ pack, compare the profile versions: [Review a change before you publish it](./re
 A registry answers `@latest` with the highest version it holds. `strata packs`
 lists the versions newest first, with the tags that point at each. Two
 registries can hold one pack name. See
-[What a registry answers about a pack](../internals/palette.md#what-a-registry-answers-about-a-pack).
+[What a registry answers about a pack](../internals/palette/packs.md#what-a-registry-answers-about-a-pack).

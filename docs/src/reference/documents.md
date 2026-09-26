@@ -60,7 +60,7 @@ A record of one profile version or cluster.
     [More of the cluster than its release](../commands/snapshot.md#more-of-the-cluster-than-its-release).
     None of these is part of the root.
     Each entry of `profiles[]` has `uid`, `name`, `version`, and `type`, in the
-    order [The order of the profiles of a cluster](../internals/palette.md#the-order-of-the-profiles-of-a-cluster)
+    order [The order of the profiles of a cluster](../internals/palette/clusters.md#the-order-of-the-profiles-of-a-cluster)
     gives. Each entry of `variables[]` has `profile`, `profileUid`, `name`,
     `value`, and `sensitive`. `verify` reads only the uids, so a rename does
     not stop it. `variables` is not part of the root. A sensitive variable has
@@ -76,7 +76,7 @@ A record of one profile version or cluster.
   - `registryProviderType`, only for a pack from an OCI registry: `pack`,
     `helm`, or `zarf`, the provider type of the registry, from the annotations of
     the pack reference. Palette follows a new digest in a different way for each:
-    see [The digest of each registry kind](../internals/palette.md#the-digest-of-each-registry-kind).
+    see [The digest of each registry kind](../internals/palette/packs.md#the-digest-of-each-registry-kind).
     It is outside the root.
   - `params`: the params of the pack on the profile, as a map.
   - `values`: the raw values YAML. `valuesCanon`: the values as JSON with

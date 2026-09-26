@@ -212,7 +212,7 @@ One more note comes after the pack lines, not after `root`. The line
 `note: pack order changed between the two profiles` says that the two sides
 list their packs in another order. The order is content, whether or not a pack
 changed:
-[What Palette does](../internals/palette.md#the-order-of-the-profiles-of-a-cluster).
+[What Palette does](../internals/palette/clusters.md#the-order-of-the-profiles-of-a-cluster).
 The markdown report writes the same line as a quotation.
 
 ## What to expect

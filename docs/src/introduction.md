@@ -115,7 +115,7 @@ builds.
 A release does not change after you publish it. It keeps its name, its version,
 and its content. To change a release, publish a new version. `strata verify`
 tells you when the content changed.
-[What Palette does](./internals/palette.md#edits-in-place) names who can change
+[What Palette does](./internals/palette/profiles.md#edits-in-place) names who can change
 it.
 
 Strata reads Palette and writes files. It publishes nothing. It works in the

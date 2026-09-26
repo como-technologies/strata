@@ -98,6 +98,6 @@ array: there the same object is at the top level, as `.clusterVariables`.
 
 A cluster holds its own value for each profile variable, and a person can change
 one on the cluster. No live run records such a change: see
-[What no run covers](../internals/palette.md#what-no-run-covers). What the runs
+[What no run covers](../internals/palette/limits.md#what-no-run-covers). What the runs
 do show is that a cluster keeps its own copy of a profile, at
-[Cluster copies](../internals/palette.md#cluster-copies).
+[Cluster copies](../internals/palette/clusters.md#cluster-copies).

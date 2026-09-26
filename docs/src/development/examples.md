@@ -34,7 +34,7 @@ Only the fetched pack data and the script are tracked. CI runs `just examples`.
   `V1ClusterProfile` shape around real packs, so `--from-raw` reads it as it
   reads an API response. The pack-ref digest is a copy of the registry digest.
   The live example showed that Palette puts the same value there: see
-  [What Palette does](../internals/palette.md#the-pack-ref-digest).
+  [What Palette does](../internals/palette/packs.md#the-pack-ref-digest).
 
 ## The profiles
 

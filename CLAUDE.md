@@ -25,7 +25,7 @@ These are hard rules. `docs/src/development/documentation.md` explains each one.
    and the fix. When it depends on a behavior of Palette, it links to the live
    run that shows that behavior.
 6. **State a live result as a fact**, with no run id and no date, in
-   `docs/src/internals/palette.md`
+   `docs/src/internals/palette/`
    and `docs/src/development/live-runs.md`.
 
 ## Before you finish

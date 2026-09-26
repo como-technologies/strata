@@ -54,7 +54,7 @@ scope:
 Each line under a cluster is one profile the cluster applies, with its uid and
 its type, in the order the cluster document lists them. That order is no install
 order: see
-[The order of the profiles of a cluster](../internals/palette.md#the-order-of-the-profiles-of-a-cluster). A cluster with an add-on profile
+[The order of the profiles of a cluster](../internals/palette/clusters.md#the-order-of-the-profiles-of-a-cluster). A cluster with an add-on profile
 shows each one: see
 [A cluster does not run its release](../use-cases/cluster-release.md).
 

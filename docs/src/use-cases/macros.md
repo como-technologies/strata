@@ -78,4 +78,4 @@ for it. It gives a cluster the new value at the next read of its agent, in a
 live run 11 minutes after the change. When the macro is in a field that
 repaves the cluster, Palette holds a repave for approval, and refuses other
 updates of the cluster until someone approves it. See
-[Macros](../internals/palette.md#macros).
+[Macros](../internals/palette/profiles.md#macros).

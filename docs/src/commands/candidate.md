@@ -63,7 +63,7 @@ follow them:
   `display_name` is `displayName` in the candidate file.
 - **Strata applies no pack preset.** The documents that strata builds for a
   candidate carry an empty `presets` list.
-  [What no run covers](../internals/palette.md#what-no-run-covers) names the
+  [What no run covers](../internals/palette/limits.md#what-no-run-covers) names the
   open question about the values that a preset option needs.
 - **A candidate pins a pack version, and not a tag.** A record of a profile
   pinned under a floating tag gives a candidate with that version and that tag.

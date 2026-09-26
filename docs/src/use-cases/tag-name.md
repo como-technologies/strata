@@ -87,4 +87,4 @@ somebody renamed the tag on purpose.
 
 ## Palette behavior
 
-See [What Palette does: tag names](../internals/palette.md#tag-names).
+See [What Palette does: tag names](../internals/palette/packs.md#tag-names).

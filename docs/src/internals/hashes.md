@@ -11,7 +11,7 @@ each pack, so a report can say which part of a pack changed:
 | Hash | Calculated from | Palette concept |
 | --- | --- | --- |
 | `identity` | the pack name, layer, type, tag, version, `packUid`, and `registryUid` | which pack build the layer references |
-| `upstream` | the `digest` on the pack reference of the profile | the digest that Palette lists for the pack version: see [The pack-ref digest](./palette.md#the-pack-ref-digest) |
+| `upstream` | the `digest` on the pack reference of the profile | the digest that Palette lists for the pack version: see [The pack-ref digest](./palette/packs.md#the-pack-ref-digest) |
 | `authored` | the canonical values, the content of each attached manifest, and the params | the configuration of the pack on the profile |
 
 The [change flags](../reference/impact.md) `IDENTITY`, `UPSTREAM`, and
@@ -93,7 +93,7 @@ manifest, so such a value shows its change too.
 
 | Not hashed | Why |
 | --- | --- |
-| The pack schema and the presets | Palette does not store them on a profile. They belong to the pack version in the registry. A preset that a profile applies goes into the values, which `authored` covers. See [What Palette does](./palette.md#pack-schema-and-presets). |
+| The pack schema and the presets | Palette does not store them on a profile. They belong to the pack version in the registry. A preset that a profile applies goes into the values, which `authored` covers. See [What Palette does](./palette/packs.md#pack-schema-and-presets). |
 | The values that a cluster gives its variables | They are the input of a run, not the release. Some are secrets. |
 | The consumers, the fetch time, and the project | They describe a moment, not the release. |
 | The uid of a manifest, and the digest Palette reports for it | Palette mints the uid for each copy. `authored` covers the name and the content hash of each manifest, sorted by name. |
@@ -107,7 +107,7 @@ manifest, so such a value shows its change too.
 
 The root answers "did this object change". A second question is "is this the
 same version", and the root cannot always answer it: see
-[Manifest pack uids](./palette.md#manifest-pack-uids). So two publishes of one definition can have two roots: when the definition holds
+[Manifest pack uids](./palette/packs.md#manifest-pack-uids). So two publishes of one definition can have two roots: when the definition holds
 a manifest pack, or when the second publish takes a pack from another registry.
 
 The content digest answers the second question:
@@ -139,7 +139,7 @@ not.
 | A pack whose registry lists no digest, as two archives | equal | equal |
 
 The last row is a gap, not a rule. Palette can list no digest for a pack: see
-[What no run covers](./palette.md#what-no-run-covers). Then `upstreamSource` is
+[What no run covers](./palette/limits.md#what-no-run-covers). Then `upstreamSource` is
 `none`, and neither digest covers the archive: two archives under that version
 have one root. The knurl adapter refuses such a leaf, because nothing pins it by
 content.
@@ -186,7 +186,7 @@ copy exactly as it hashes the profile:
 So a cluster that runs a recorded version has the root of that record. The
 cluster variables endpoint repeats the definition fields of the profile
 endpoint, so the copy of a profile with a variable has the variables hash of the
-profile: see [Cluster copies](./palette.md#cluster-copies). A cluster on a
+profile: see [Cluster copies](./palette/clusters.md#cluster-copies). A cluster on a
 version that pins other pack builds shows `IDENTITY`. An edit of the pack values
 on the cluster, and a version that differs in values alone, each show
 `AUTHORED`.
@@ -196,7 +196,7 @@ canonical order. The cluster or infra profile comes first, then the others by
 name. The packs of each profile keep their order. The variables are merged and
 sorted by name. Palette lists the profiles of a cluster in an order that carries
 no meaning: see
-[The order of the profiles of a cluster](./palette.md#the-order-of-the-profiles-of-a-cluster).
+[The order of the profiles of a cluster](./palette/clusters.md#the-order-of-the-profiles-of-a-cluster).
 So two clusters built from one definition have one merged root.
 
 The tiers of a cluster record are outside the root. Each tier has its own hash:
@@ -214,4 +214,4 @@ which: `packRef.digest`, `packSummary.digest`, or `none` when Palette gives
 neither. A pack from a registry with `none` has an unknown upstream: see
 [The content digest](#the-content-digest). Strata hashes the digest as Palette stores it, a Helm digest in bare hex
 included. See
-[What Palette does: the pack-ref digest](./palette.md#the-pack-ref-digest).
+[What Palette does: the pack-ref digest](./palette/packs.md#the-pack-ref-digest).

@@ -63,7 +63,7 @@ same state, the heading says it too. Palette serves no disabled or deleted
 pack, so it answers 404 for that registry. Strata then lists the versions from
 the listing with no tags, and the heading says the state and `no tags`. A
 profile cannot pin a disabled or a deleted version: see
-[Pack states](../internals/palette.md#pack-states). A 404 for a registry with
+[Pack states](../internals/palette/packs.md#pack-states). A 404 for a registry with
 no such state gives `no tags: the registry answered 404`. The other registries
 show as usual, and any other failure of that read stops the command. The live
 example [checks each state](../development/live-runs.md#pack-statessh).

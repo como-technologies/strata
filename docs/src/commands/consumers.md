@@ -61,7 +61,7 @@ version bump or a rename overwrote the version that the cluster runs. See
   `second reading: not done` with the reason.
 - A cluster that Palette is deleting stays in the list with the state
   `Deleting`, and the exit is `1`. After the deletion, the list drops it. See
-  [What the cluster listing answers](../internals/palette.md#what-the-cluster-listing-answers).
+  [What the cluster listing answers](../internals/palette/clusters.md#what-the-cluster-listing-answers).
 
 | Exit | Meaning |
 | --- | --- |

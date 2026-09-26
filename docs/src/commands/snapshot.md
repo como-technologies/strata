@@ -48,7 +48,7 @@ lists each field.
 A cluster that runs a recorded version has the root of that record: here
 `088136c929bd`, the root of `aws-stack@1.1.1`. `cluster:<cluster>` records every
 profile that the cluster runs, in the order that strata gives them: see
-[The order of the profiles of a cluster](../internals/palette.md#the-order-of-the-profiles-of-a-cluster).
+[The order of the profiles of a cluster](../internals/palette/clusters.md#the-order-of-the-profiles-of-a-cluster).
 `cluster:<cluster>/<profile>` records one. The record keeps the uid of the
 cluster, so `verify` finds a renamed cluster.
 
@@ -99,7 +99,7 @@ These fields are not part of the root: they are Palette's statement about the
 copy, and the copy is the same with or without them. `compare` and `list
 clusters --applied` say when a cluster is behind. What Palette says for each
 kind of change is in
-[Cluster copies](../internals/palette.md#cluster-copies).
+[Cluster copies](../internals/palette/clusters.md#cluster-copies).
 
 ## Macros
 
@@ -137,7 +137,7 @@ that has another value now:
 `compare` of two cluster records with the digests names each macro that
 differs, and exits `1`, also when the roots are equal. What Palette does with a
 running cluster when a macro changes is in
-[Macros](../internals/palette.md#macros).
+[Macros](../internals/palette/profiles.md#macros).
 
 ## Record without the network
 

@@ -101,4 +101,4 @@ tier. The verdict follows the release, so it is `OK`:
 
 The tiers come from `GET /v1/spectroclusters/{uid}`, and `shape` from
 `GET /v1/cloudconfigs/{cloudType}/{configUid}`. See
-[Cluster tiers](../internals/palette.md#cluster-tiers).
+[Cluster tiers](../internals/palette/clusters.md#cluster-tiers).

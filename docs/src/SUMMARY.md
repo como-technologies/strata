@@ -70,6 +70,10 @@
 
 - [The hashes and the root](./internals/hashes.md)
 - [What Palette does](./internals/palette.md)
+  - [Packs and registries](./internals/palette/packs.md)
+  - [Profiles](./internals/palette/profiles.md)
+  - [Clusters](./internals/palette/clusters.md)
+  - [What no run covers](./internals/palette/limits.md)
 
 # Development
 

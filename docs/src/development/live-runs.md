@@ -21,8 +21,8 @@ differs between the two runs. Cluster A exists before the edit; cluster B is
 created from the edited version, and deleted at the end.
 
 This is the source for
-[Cluster copies](../internals/palette.md#cluster-copies) and
-[Version bumps](../internals/palette.md#version-bumps).
+[Cluster copies](../internals/palette/clusters.md#cluster-copies) and
+[Version bumps](../internals/palette/profiles.md#version-bumps).
 
 | Check | Flag off | Flag on | What it shows |
 |---|---|---|---|
@@ -77,7 +77,7 @@ This is the source for
 Publishes a version that takes every pack from the pack registry, then bumps it
 with the CSI pack re-pinned to an OCI registry. It runs with the flag on, so the
 bump makes a new version and keeps the old one. The source for
-[A pack that moves between registries](../internals/palette.md#a-pack-that-moves-between-registries).
+[A pack that moves between registries](../internals/palette/packs.md#a-pack-that-moves-between-registries).
 
 | Check | Expected exit | What it shows |
 |---|---|---|
@@ -103,7 +103,7 @@ Publishes two versions that differ from the first only in the tag of the OS
 pack, one an exact tag and one a floating tag. It moves a cluster to one of them
 and back, and holds each state until a repave has time to show. It then renames
 a tag on a published version through the API. The source for
-[Tag names](../internals/palette.md#tag-names).
+[Tag names](../internals/palette/packs.md#tag-names).
 
 | Check | Expected exit | What it shows |
 |---|---|---|
@@ -510,7 +510,7 @@ Read-write in the registries of its own host alone, and it needs no cluster. It
 turns `registry_kinds` on: a host in AWS that serves a Helm repository, a Helm
 repository with credentials, an OCI registry with basic auth, and a Spectro
 pack registry, and a Palette registry over each. It removes each at its end.
-[The digest of each registry kind](../internals/palette.md#the-digest-of-each-registry-kind)
+[The digest of each registry kind](../internals/palette/packs.md#the-digest-of-each-registry-kind)
 states what it shows.
 
 | Check | Expected exit | What it shows |
@@ -577,7 +577,7 @@ template that adds `pushed: "again"`, and each registry is synced.
 
 The log of the controller on the cluster shows a `helm pull` of each chart, at
 each install, by `chartVersion` `1.0.0`. See
-[What a cluster installs of a Helm pack](../internals/palette.md#what-a-cluster-installs-of-a-helm-pack).
+[What a cluster installs of a Helm pack](../internals/palette/packs.md#what-a-cluster-installs-of-a-helm-pack).
 
 ## A second cloud: GCP
 
@@ -631,7 +631,7 @@ What differs is outside strata:
   `template.sh`, `cluster.sh`, `order.sh`, `who.sh`, `macros.sh`, and
   `macro-repave.sh` have run on AWS only. No live run uses an Edge cluster, the
   other upgrade engine.
-- [What Palette does](../internals/palette.md#what-no-run-covers) lists the
+- [What Palette does](../internals/palette/limits.md#what-no-run-covers) lists the
   behaviors that no script here establishes.
 - No script installs a Zarf package on a cluster: Palette gives a Zarf pack the
   values of an app profile, `{{.spectro.system.appdeployment.tiername}}`, so it

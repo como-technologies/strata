@@ -128,4 +128,4 @@ selection. `OK` and exit `0`.
 
 ## Palette behavior
 
-See [What Palette does: cluster copies](../internals/palette.md#cluster-copies).
+See [What Palette does: cluster copies](../internals/palette/clusters.md#cluster-copies).

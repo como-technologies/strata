@@ -48,13 +48,13 @@ library. It then writes no file.
 | `registry` or `registryUid` | yes, on the layer or at the top | The registry, by name or uid. Not both. The setting on the layer has priority over the one at the top. |
 | `values` or `valuesFile` | no | The values, inline or in a file. Not both. With neither, the layer gets the default values of the pack. |
 | `layer` | no | The layer. The default comes from the registry. |
-| `tag` | no | The tag. The default is the tag that equals the version, else the first tag of that version, else the version itself. An explicit tag must be a tag of that version in the registry, or the version itself. A floating tag, such as `1.0.x`, pins the build that the tag names now: see [Tag names](../internals/palette.md#tag-names). |
+| `tag` | no | The tag. The default is the tag that equals the version, else the first tag of that version, else the version itself. An explicit tag must be a tag of that version in the registry, or the version itself. A floating tag, such as `1.0.x`, pins the build that the tag names now: see [Tag names](../internals/palette/packs.md#tag-names). |
 | `params` | no | A map that Palette carries on a pack beside its values. Strata puts it in the authored hash, so a change to it is an `AUTHORED` change. |
 | `manifests[]` | no | Each with a `name`, and `content` inline or a `contentFile`. |
 
 > **Set `tag` to the tag that you publish.** Palette stores the tag that a
 > profile was authored with, and a registry can give one build several tags:
-> see [Tag names](../internals/palette.md#tag-names). The tag is part of
+> see [Tag names](../internals/palette/packs.md#tag-names). The tag is part of
 > `IDENTITY`, so another tag for the same build gives another root.
 > `same-release` passes such a pair as `SAME CONTENT`.
 
@@ -92,19 +92,19 @@ that the key cannot see goes out as given, so its packs are `pack-not-found`,
 and the error names the uid. A version that the listing gives as `disabled` or
 `deleted` is `pack-unavailable`: Palette does not serve it, and refuses a
 profile that pins it. See
-[Pack states](../internals/palette.md#pack-states).
+[Pack states](../internals/palette/packs.md#pack-states).
 
 The snapshot has `source.template` `candidate`, no uid, and no `consumers`.
 Strata takes the digest of each pack from the registry, as Palette does for a
 published profile: see
-[The pack-ref digest](../internals/palette.md#the-pack-ref-digest). So a
+[The pack-ref digest](../internals/palette/packs.md#the-pack-ref-digest). So a
 candidate with the published tags, values, and manifests has the published
 root. The live example checks that: see
 [What the live example verifies](../development/live-runs.md).
 
 Strata applies no pack preset. Whether a candidate must carry, in its values,
 the keys of the preset option that the values select is open: see
-[What no run covers](../internals/palette.md#what-no-run-covers).
+[What no run covers](../internals/palette/limits.md#what-no-run-covers).
 
 ## Write one from a published version
 

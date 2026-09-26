@@ -39,7 +39,7 @@ A ref names the thing that a command reads.
   uids. A name that no cluster has is `cluster-not-found`, which lists the
   names. A record lists the profiles of a cluster in one order, whatever order
   Palette gives them: see
-  [The order of the profiles of a cluster](../internals/palette.md#the-order-of-the-profiles-of-a-cluster).
+  [The order of the profiles of a cluster](../internals/palette/clusters.md#the-order-of-the-profiles-of-a-cluster).
 - **`<profile>`.** The name or the uid of a profile that the cluster runs. An
   unknown one is `cluster-profile-not-found`, which lists the profiles of the
   cluster.

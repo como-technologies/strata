@@ -145,4 +145,4 @@ drops the old one from the state. The provider checks `skip_destroy` at plan
 time and fails the plan; it cannot see the `lifecycle` block, so that one is
 yours to remember.
 
-See [What Palette does: version bumps](../internals/palette.md#version-bumps).
+See [What Palette does: version bumps](../internals/palette/profiles.md#version-bumps).
