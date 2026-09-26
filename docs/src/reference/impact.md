@@ -47,10 +47,10 @@ impact is a hint. It is not an answer from Palette.
 the live runs built: a kubeadm cluster on a cloud that Palette builds with the
 cluster API. The public pages give another rule for other clusters. On an Edge
 cluster, a change to the Kubernetes layer repaves nothing, and on the OS layer
-only the `uri` repaves. The nodes of a managed cluster take a rolling upgrade
-for any override of a node pool. Palette keeps a fixed list of the fields that
-repave, for each engine, and no document gives it, so strata does not encode a
-second table. The live runs used two clouds, AWS and GCP, and one engine: see
+only the `uri` repaves. Palette keeps a list of the fields that repave for the
+OS layer and the Kubernetes layer of each engine, and checks no other layer for
+a repave. No public page gives the lists, and they can change with each release
+of Palette, so strata does not copy them. The live runs used two clouds, AWS and GCP, and one engine: see
 [What no run covers](../internals/palette/limits.md#what-no-run-covers).
 
 For a cluster, ask Palette: `compare --repave` prints its answer beside
@@ -59,9 +59,9 @@ the level, and says when the two disagree. See
 
 | Level | Condition | Meaning |
 | --- | --- | --- |
-| `repave` | OS, Kubernetes, or kernel layer with `IDENTITY`, other than a renamed tag | On a cluster of the engine above, Palette replaces the nodes. |
-| `may-repave` | OS, Kubernetes, or kernel layer with `AUTHORED` | Node or control plane configuration changed. Palette can replace the nodes: it does for a key on its list, such as `kubeadmconfig.postKubeadmCommands`, and not for another. |
-| `cluster-wide` | CNI or CSI layer with `IDENTITY` or `AUTHORED` | Each node gets the change. A repave is possible. |
+| `repave` | OS, Kubernetes, or kernel layer with `IDENTITY`, other than a renamed tag, or OS layer with `AUTHORED` | On a cluster of the engine above, Palette replaces the nodes. It checks every value of the OS pack. |
+| `may-repave` | Kubernetes or kernel layer with `AUTHORED` | Node or control plane configuration changed. Palette can replace the nodes: it does for a key on its list, such as `kubeadmconfig.postKubeadmCommands`, and not for another. |
+| `cluster-wide` | CNI or CSI layer with `IDENTITY` or `AUTHORED` | Each node gets the change. Palette does not replace the nodes for it: its repave check reads no CNI or CSI layer. |
 | `in-place` | any other layer with `IDENTITY` or `AUTHORED` | Palette upgrades or configures the pack in place. |
 | `sync` | only `UPSTREAM`, on any layer | Palette applies the change at the next profile sync. |
 | `none` | no change, or only a tag renamed for the same build | The clusters run the same build. |
@@ -74,8 +74,8 @@ CNI or CSI layer, and `in-place` on any other layer.
 
 The list goes from the most severe level to the least severe. The JSON summary
 gives the most severe level of a comparison as `maxImpact`. A renamed tag
-together with a changed value on the OS layer is `may-repave`, as the changed
-value alone is.
+together with a changed value on the OS layer is `repave`, as the changed value
+alone is.
 
 A change of the pack order alone moves no flag and no level. Every pack stays
 `unchanged`, and `maxImpact` is `none`. The report adds the line `note: pack

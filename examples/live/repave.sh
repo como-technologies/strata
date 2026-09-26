@@ -12,6 +12,9 @@
 #      in-place
 #   5  a side that is not a cluster is a usage error, and the request changes nothing: cluster A
 #      keeps its instances
+#   6  a new value in the OS pack, and a changed value in the CSI pack, asked with tenant.sh and
+#      with no edit of the profile: the answer of Palette for each layer that the impact table
+#      calls may-repave and cluster-wide (#81)
 #
 # AWS and GCP run one upgrade engine, so every answer here agrees with the table. A disagreement
 # needs another engine, such as Edge, and no live run has one. Needs the live example at its baseline with
@@ -22,7 +25,7 @@
 set -uo pipefail
 script=repave
 from=${1:-1}
-case "$from" in 1|2|3|4|5) ;; *) sed -n '2,/^set -uo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; exit 2 ;; esac
+case "$from" in 1|2|3|4|5|6) ;; *) sed -n '2,/^set -uo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; exit 2 ;; esac
 . "$(cd "$(dirname "$0")" && pwd)/lib.sh"
 [ -x "$strata" ] || die "no strata binary at $strata"
 
@@ -110,6 +113,19 @@ if stage 5 "what the option refuses, and what it changes"; then
   after=$(instances)
   check same-nodes 0 "#73: the same machines after each question: nothing was repaved" -- test -n "$before" -a "$before" = "$after"
   check undo-baseline 0 "the example is at its baseline" -- "$live/baseline.sh"
+fi
+
+if stage 6 "a value of the OS pack, and a value of the CSI pack"; then
+  check release-record 0 "a record of $release" -- "$strata" snapshot "$R" -o release.json
+  os_pack=$(jq -r '[.packs[] | select(.layer == "os")][0].name' release.json)
+  csi_pack=$(jq -r '[.packs[] | select(.layer == "csi")][0].name' release.json)
+  os_first=$(jq -r '[.packs[] | select(.layer == "os")][0].values' release.json | head -1)
+  [ -n "$os_first" ] || die "the OS pack of $release has no values"
+  check os-value 1 "#81: a new key in the values of the OS pack: Palette says repave, for any value of the OS layer on this engine" -- \
+    "$live/tenant.sh" repave "$C" "$R" "$R" "$os_pack" "$os_first" "strataRepaveTest: \"true\"
+$os_first"
+  check csi-value 0 "#81: a changed value in the CSI pack: Palette says no repave, and checks no CSI layer for one" -- \
+    "$live/tenant.sh" repave "$C" "$R" "$R" "$csi_pack" "$(out csi_reclaim_delete)" "$(out csi_reclaim_delete | sed 's/Delete/Retain/')"
 fi
 
 echo

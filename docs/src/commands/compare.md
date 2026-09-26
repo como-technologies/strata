@@ -117,9 +117,9 @@ and `agrees`:
 ```
 
 `agrees` is `false` when the level says `repave` and Palette says no, or when the
-level says `in-place`, `sync`, or `none` and Palette says repave. A level of
-`may-repave` or `cluster-wide` says that a repave is possible, so it agrees with
-both answers. When the two disagree, the report adds a `note`. Here the
+level says `cluster-wide`, `in-place`, `sync`, or `none` and Palette says
+repave. A level of `may-repave` says that a repave is possible, so it agrees
+with both answers. When the two disagree, the report adds a `note`. Here the
 Kubernetes pack moves to another version, and Palette answers as it does for an
 Edge cluster, where that change repaves nothing:
 

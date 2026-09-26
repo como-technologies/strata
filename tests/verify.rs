@@ -1038,7 +1038,7 @@ fn two_profiles_that_pin_one_pack_build_under_different_tag_names_are_the_same_c
     assert!(!d.same_content);
     let os = d.packs.iter().find(|p| p.name == "ubuntu-aws").unwrap();
     assert!(os.tag_renamed && os.authored, "{os:?}");
-    assert_eq!(os.impact.level, ImpactLevel::MayRepave);
+    assert_eq!(os.impact.level, ImpactLevel::Repave);
     let c = ops::same_release(
         &[("a.json".into(), a.clone()), ("edited.json".into(), edited)],
         Policy::Exact,

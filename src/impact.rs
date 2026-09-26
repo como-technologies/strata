@@ -115,6 +115,13 @@ const RULES: &[Rule] = &[
         level: ImpactLevel::Repave,
         text: "node repave (kernel change)",
     },
+    // Palette checks every value of the OS pack on the engine of this table: any change repaves
+    Rule {
+        layers: Layers::Only(Layer::Os),
+        needs: Needs::Authored,
+        level: ImpactLevel::Repave,
+        text: "node repave (OS values change)",
+    },
     Rule {
         layers: Layers::NodeImage,
         needs: Needs::Authored,
@@ -208,6 +215,10 @@ mod tests {
         );
         assert_eq!(
             impact(Layer::Os, f(false, false, true)).level,
+            ImpactLevel::Repave
+        );
+        assert_eq!(
+            impact(Layer::K8s, f(false, false, true)).level,
             ImpactLevel::MayRepave
         );
         assert_eq!(

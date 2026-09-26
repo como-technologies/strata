@@ -770,7 +770,7 @@ pub struct PaletteRepave {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub reasons: Vec<PaletteRepaveReason>,
     /// True when the impact table and Palette say the same: both a repave, or both no repave. A
-    /// level of `may-repave` or `cluster-wide` agrees with either answer.
+    /// level of `may-repave` agrees with either answer.
     pub agrees: bool,
 }
 
@@ -830,7 +830,7 @@ impl PaletteRepave {
             .collect();
         let agrees = match level {
             ImpactLevel::Repave => required,
-            ImpactLevel::MayRepave | ImpactLevel::ClusterWide => true,
+            ImpactLevel::MayRepave => true,
             _ => !required,
         };
         PaletteRepave {
