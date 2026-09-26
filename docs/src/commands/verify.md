@@ -91,6 +91,7 @@ document shape.
 | `DRIFT: published version <v> now names <v2>: the version recorded <time> was overwritten in place` | The uid holds another version now. | `1` |
 | `DRIFT: cluster <c> runs <v>, but uid <uid> now names <version>: the version was overwritten in place` | A cluster record: its profile uid holds another version now. | `1` |
 | `DRIFT: cluster <c> runs <v>, but uid <uid> no longer exists` | A cluster record: its profile uid is gone. | `1` |
+| `DRIFT: published version <v> no longer exists: uid <uid> is gone from Palette since the record of <time>` | A record of a version that was deleted, such as by a retire. Each pack of the record is `REMOVED`. | `1` |
 | `OK: pack <name>@<version> in registry <r> is unchanged since <time>` | A pack record: the registry holds the recorded copy. | `0` |
 | `DRIFT: pack <name>@<version> in registry <r> differs from the copy recorded <time>` | A pack record: the registry holds other content now. | `1` |
 | `DRIFT: cluster <c> running <v> has the content recorded <time>, but macro <m> has another value now` | A cluster record with the digests of its macro values (`snapshot --macros`): Palette gives a macro another value now. The root is the same. | `1` |

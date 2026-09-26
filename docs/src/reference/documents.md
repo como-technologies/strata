@@ -184,6 +184,9 @@ A comparison of two sides, `a` and `b`.
     value moved. The status is `drifted`, also when the roots are equal.
   - `overwrittenBy`: for a profile record, the `name@version` that the uid names
     now. The status is `drifted`, also when the roots are equal.
+  - `gone`, only when true: for a record of a profile version or an app
+    profile, Palette no longer has its uid. The status is `drifted`, and each
+    pack of the record is `removed`.
   - `clusterValuesChanged`, only when it is not `0`: for a cluster record, the
     number of variable values that differ from the record.
   - `profilesOverwritten`: for a cluster record, each profile that the cluster

@@ -710,7 +710,9 @@ pub(crate) fn tier_states(d: &Diff) -> Vec<(String, bool)> {
 }
 
 pub(crate) fn edited_in_place_note(d: &Diff) -> Option<String> {
-    d.edited_in_place.then(|| {
+    // a version that Palette no longer has was deleted, and not edited
+    let gone = d.verify.as_ref().is_some_and(|v| v.gone);
+    (d.edited_in_place && !gone).then(|| {
         let clusters = d.a.cluster.is_some() || d.b.cluster.is_some();
         format!(
             "both sides are {}@{} (uid {}): the version was edited in place{}",

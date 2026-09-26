@@ -60,12 +60,11 @@ gates on the exit must set `pipefail`, or run the two commands apart.
 
 ## What to do
 
-- After you delete a version, its record no longer verifies. Palette answers
-  404, and strata reports the error rather than a verdict: `verify` of that one
-  record exits `2`, and `verify` over many records gives the record the label
-  `ERROR`, counts it in `errors`, and exits `2` as well. An error outranks a
-  drift, so one deleted version turns the whole run red. Keep the record for the
-  history, and move it out of the pattern that the scheduled check reads.
+- After you delete a version, its record reports `DRIFT`: the version no
+  longer exists, and each of its packs is `REMOVED`. `verify` exits `1`, and
+  the scheduled job opens an issue for the record. Keep the record for the
+  history, and move it out of the pattern that the scheduled check reads, in
+  the same change that records the delete.
 - `consumers` asks Palette at the time of the command. Run it immediately before
   the delete.
 - To run this as a job, see

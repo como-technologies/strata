@@ -148,6 +148,7 @@ pub fn verify_with<A: PaletteApi>(
             recorded_at: recorded.source.fetched_at.clone(),
             checked_at: checked_at.to_string(),
             overwritten_by: None,
+            gone: false,
             profiles_overwritten: Vec::new(),
             cluster_values_changed: 0,
             who: None,
@@ -172,6 +173,8 @@ pub fn verify_with<A: PaletteApi>(
         recorded.source.title(),
         recorded.source.fetched_at
     ));
+    // set when Palette no longer has the uid of a profile record
+    let mut gone = false;
     let live = match &recorded.source.cluster {
         Some(c) => {
             let mut raw = match c.kind {
@@ -201,12 +204,28 @@ pub fn verify_with<A: PaletteApi>(
             live.with_kind(c.kind)
         }
         None if recorded.source.kind == APP_KIND => {
-            let mut live =
-                Snapshot::from_raw(&palette.fetch_app_profile(uid, progress)?, uid, checked_at)?;
-            live.source.consumers = None;
-            live
+            match palette.fetch_app_profile(uid, progress) {
+                Ok(raw) => {
+                    let mut live = Snapshot::from_raw(&raw, uid, checked_at)?;
+                    live.source.consumers = None;
+                    live
+                }
+                Err(Error::Api { status: 404, .. }) => {
+                    gone = true;
+                    recorded.gone(checked_at)
+                }
+                Err(e) => return Err(e),
+            }
         }
-        None => Snapshot::from_raw(&palette.fetch_profile(uid, progress)?, uid, checked_at)?,
+        // a version that Palette no longer has is a drift, not an error: a retire deletes it
+        None => match palette.fetch_profile(uid, progress) {
+            Ok(raw) => Snapshot::from_raw(&raw, uid, checked_at)?,
+            Err(Error::Api { status: 404, .. }) => {
+                gone = true;
+                recorded.gone(checked_at)
+            }
+            Err(e) => return Err(e),
+        },
     }
     .with_project(palette.project_uid());
     let overwritten_by = (recorded.source.cluster.is_none()
@@ -219,7 +238,8 @@ pub fn verify_with<A: PaletteApi>(
         None => Vec::new(),
     };
     let macros_changed = crate::diff::macros_changed(recorded, &live);
-    let unchanged = recorded.root == live.root
+    let unchanged = !gone
+        && recorded.root == live.root
         && overwritten_by.is_none()
         && profiles_overwritten.is_empty()
         && macros_changed.is_empty();
@@ -233,6 +253,7 @@ pub fn verify_with<A: PaletteApi>(
         recorded_at: recorded.source.fetched_at.clone(),
         checked_at: checked_at.to_string(),
         overwritten_by,
+        gone,
         profiles_overwritten,
         cluster_values_changed: 0,
         who: None,

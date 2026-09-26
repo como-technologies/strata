@@ -1270,6 +1270,26 @@ impl Snapshot {
         })
     }
 
+    /// What Palette holds of a version that it no longer has: the source of the record, fetched
+    /// at `checked_at`, with no pack and no variable. `verify` compares a record with it when the
+    /// uid of the record is gone, so each pack of the record shows as removed.
+    pub fn gone(&self, checked_at: &str) -> Snapshot {
+        let mut source = self.source.clone();
+        source.fetched_at = checked_at.to_string();
+        source.consumers = None;
+        let variables_hash = sha256_hex(&canonical_json(&Value::Array(Vec::new())));
+        Snapshot {
+            schema: SNAPSHOT_SCHEMA.to_string(),
+            tool: Tool::current(),
+            source,
+            variables: Vec::new(),
+            content_digest: content_of(&variables_hash, &[]),
+            root: root_of(&variables_hash, &[]),
+            variables_hash,
+            packs: Vec::new(),
+        }
+    }
+
     /// Mark a record of a cluster as the profiles of the update that waits for it. Whether an
     /// update waits is a statement about the copy that the cluster runs, and not about these
     /// profiles, so the record does not carry it.

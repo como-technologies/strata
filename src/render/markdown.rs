@@ -311,6 +311,10 @@ impl Renderer for MarkdownRenderer {
                     profiles_overwritten_sentence(v, recorded).unwrap_or_default(),
                     values_changed_suffix(v.cluster_values_changed)
                 ),
+                _ if v.gone => format!(
+                    "\n**DRIFT**: {what} no longer exists: uid `{}` is gone from Palette since the record of {at}",
+                    v.uid
+                ),
                 Some(now) => format!(
                     "\n**DRIFT**: {what} now names {now}: the version recorded {at} was overwritten in place{}",
                     values_changed_suffix(v.cluster_values_changed)

@@ -58,6 +58,41 @@ fn verify_reports_unchanged_when_the_live_profile_matches_the_record() {
 }
 
 #[test]
+fn verify_reports_a_deleted_version_as_gone_and_not_as_an_error() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let recorded = ops::snapshot_from_dir(&dir.path().join("a"), "a", "t0").unwrap();
+    // Palette no longer has the uid: the version was deleted, as a retire does
+    let palette = Palette::new(MemoryApi::new());
+    let v = ops::verify(&recorded, &palette, "t1", &Progress::silent()).unwrap();
+    assert!(!v.unchanged);
+    let ver = v.diff.verify.as_ref().unwrap();
+    assert_eq!(ver.status, VerifyStatus::Drifted);
+    assert!(ver.gone);
+    assert!(
+        v.diff
+            .packs
+            .iter()
+            .all(|p| p.status == strata::diff::Status::Removed),
+        "each pack of the record is removed"
+    );
+    let r = render::renderer(Format::Terminal, Paint::off(), false);
+    let text = r.render(&v.diff, &recorded, &v.live, false).unwrap();
+    assert!(!text.contains("edited in place"), "{text}");
+    let verdict = r.verdict(ver, &recorded.source).unwrap();
+    assert!(
+        verdict.contains(&format!(
+            "no longer exists: uid {UID_A} is gone from Palette"
+        )),
+        "{verdict}"
+    );
+    assert_eq!(
+        serde_json::to_value(ver).unwrap()["gone"],
+        serde_json::json!(true)
+    );
+}
+
+#[test]
 fn verify_reports_drift_when_the_published_version_was_edited() {
     let dir = tempfile::tempdir().unwrap();
     common::make_fixtures(dir.path());
@@ -84,9 +119,14 @@ fn verify_needs_a_uid_and_surfaces_api_errors() {
     let dir = tempfile::tempdir().unwrap();
     common::make_fixtures(dir.path());
     let mut recorded = ops::snapshot_from_dir(&dir.path().join("a"), "a", "t0").unwrap();
-    let palette = Palette::new(MemoryApi::new());
+    // a 404 is a version that is gone (a verdict); any other failure is an error
+    let palette = Palette::new(MemoryApi::new().failing(
+        format!("/v1/clusterprofiles/{UID_A}"),
+        500,
+        "boom",
+    ));
     let err = ops::verify(&recorded, &palette, "t1", &Progress::silent()).unwrap_err();
-    assert!(matches!(err, Error::Api { status: 404, .. }), "{err}");
+    assert!(matches!(err, Error::Api { status: 500, .. }), "{err}");
     recorded.source.uid.clear();
     let err = ops::verify(&recorded, &palette, "t1", &Progress::silent()).unwrap_err();
     assert!(matches!(err, Error::NoUid));

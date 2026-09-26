@@ -895,6 +895,10 @@ pub struct Verify {
     /// match.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub overwritten_by: Option<String>,
+    /// For a record of a profile version or an app profile: Palette no longer has its uid. The
+    /// version was deleted, so `status` is drifted, and each pack of the record is removed.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub gone: bool,
     /// For a cluster record: each profile the cluster runs whose uid now names another version
     /// than the cluster's copy, or no longer exists. The cluster may run exactly what it ran, but
     /// the version it runs is gone from Palette, so `status` is drifted.
