@@ -26,13 +26,15 @@ show.
 | `repave.sh` | `compare --repave`: the answer of Palette beside the level of the impact table (#73). It needs cluster A. |
 | `merge-gate.sh` | `scripts/ci/merge-gate.sh` over records of the live profiles, in a git repository that the script builds (#57). It needs the profiles, and no cluster. |
 | `knurl.sh` | [The knurl adapter](../automation/knurl.md): each method of the port against the strata answer for the same real object. Read-only. It needs the profiles; the instance checks need the cluster. |
-| `registry-kinds.sh` | The digest of each registry kind, and a push again of one version into each (#75); a Helm registry with credentials, the case with no digest (#71). It needs no cluster. |
+| `registry-kinds.sh` | The digest of each registry kind, and a push again of one version into each (#75); a Helm registry with synchronization off, the case with no digest (#71). It needs no cluster. |
 | `tiers.sh` | The tiers of a cluster record, and `compare` of two cluster records beyond the release (#76). It builds cluster B for a while. |
 | `edge-host.sh` | A record of an edge host, `consumers` of a profile bound to one, and what an edit in place does to an edge host (#78). It registers edge hosts with no device. |
 | `cluster-group.sh` | A record of a cluster group, and `compare` of the group with its virtual cluster (#78). It builds a virtual cluster in cluster A. |
 | `app-profile.sh` | A record of an app profile, and a plain update of it (#78). It needs no cluster. |
 | `fleet.sh` | `list clusters --tag` and `--filter`, `list filters`, and a record of each cluster of a set (#80). It labels cluster A through the API. |
 | `upstream.sh` | `strata behind` against the registries, and `upstream-report.sh` around a version that arrives in the example's own registry (#79). It needs no cluster. |
+| `loop.sh` | [The everyday loop](../loop.md), end to end: a change, the gates, the publish, the nightly jobs, a value overridden on a cluster, an edit in place, an incident, and a retire, with the records in a git repository that it builds (#81). It needs cluster A, and undoes each change. |
+| `version-states.sh` | One state per version with no feature preview flag, a destroy that a cluster in use refuses, a version that is gone, and the version strings that Palette stores (#81). It builds its own profile in `terraform-version/`, and needs cluster A. |
 
 The example runs on AWS or GCP: the variable `cloud` in `terraform.tfvars`
 selects one. Strata makes no rule about which cloud runs the cluster. The
@@ -106,6 +108,7 @@ its end.
 | `registry-kinds.sh` | The registry kinds test (#75). |
 | `zarf/` | The Zarf package that `registry-kinds.sh` publishes. |
 | `terraform/registry-kinds.tf`, `terraform/registry-host.sh.tftpl` | The registry host of `registry-kinds.sh`: one EC2 instance that serves a Helm repository, one with credentials, an OCI registry with basic auth, and a Spectro pack registry, behind Caddy with a certificate for each `<service>.<IP>.sslip.io`; and a Palette registry over each. Off unless `registry_kinds` is set. |
+| `terraform-version/` | One version of an add-on profile in a state of its own, with no feature preview flag: `version-states.sh` applies it once for each version, each time in its own workspace. |
 | `template.sh` | The cluster template test (#66): the lock on a linked version, a cluster outside the template, and the install order of add-on packs. It ends with the removal of the example. |
 | `cluster.sh` | The cluster test (#66): a change of the value the cluster gives a variable, and a deletion through the API. It ends with the cluster gone. |
 | `order.sh` | The order test (#66): a reorder of the packs of two published versions, and of the profiles of the cluster, through the API. It leaves the versions edited; `live-down` follows it. |
@@ -362,6 +365,8 @@ just live-cluster-group                                                        #
 just live-app-profile                                                          # #78, needs no cluster
 just live-fleet                                                                # #80, needs just live-up
 just live-upstream                                                             # #79, needs just live-profiles
+just live-loop                                                                 # #81, needs just live-up
+just live-version-states                                                       # #81, needs just live-up
 ```
 
 `just live-session` runs `verify.sh`, `in-place.sh off`, `in-place.sh on`, and

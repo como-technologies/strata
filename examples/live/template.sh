@@ -74,6 +74,14 @@ check lock-edit 2 "#66: an edit in place of a version that a template links is r
 check lock-edit-says 0 "the refusal names the reason" -- \
   grep -q ClusterProfileUpdateValidationFailure lock-edit.err
 check lock-verify 0 "#66: the release version is unchanged" -- "$strata" verify release.json
+check addon-before 0 "a record of the linked add-on version" -- "$strata" snapshot "$AD" -o addon.json
+check lock-manifest-edit 0 "#81: an edit of a manifest of a linked version, through the route of the manifest, is accepted: the lock does not cover that route" -- \
+  "$live/api.sh" edit-manifest "$AD" 'edited: "no"' 'edited: "yes"'
+check lock-manifest-verify 1 "#81: the record of the linked add-on version reports DRIFT" -- "$strata" verify addon.json
+# put the manifest back, when the edit went through
+"$strata" verify addon.json > /dev/null 2>&1 \
+  || "$live/api.sh" edit-manifest "$AD" 'edited: "yes"' 'edited: "no"' >> steps.log 2>&1
+check lock-manifest-back 0 "the add-on version holds its content again" -- "$strata" verify addon.json
 
 # ---- 3. a cluster outside the template -----------------------------------------------------------
 

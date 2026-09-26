@@ -32,6 +32,9 @@ examples/live/terraform/*.tfstate
 examples/live/terraform/*.tfstate.*
 examples/live/terraform/.terraform.tfstate.lock.info
 examples/live/terraform/terraform.tfvars
+examples/live/terraform-version/.terraform/
+examples/live/terraform-version/.terraform.lock.hcl
+examples/live/terraform-version/terraform.tfstate.d/
 examples/live/runs/
 
 # examples: `just examples` builds these offline from the fetched pack data, which stays tracked

@@ -286,10 +286,15 @@ shows. It then asks Palette to read the registry again after each push.
 | `packs`, `packs-version` | 0 | #66: `packs` lists the one version |
 | `leaf`, `leaf-digest-is-push` | 0 | #66: a record of the pack carries the digest of the push |
 | `profile`, `profile-digest-is-push` | 0 | #66: a profile that pins the version carries that digest in its pack reference |
+| `pin-modified`, `profile-mod` | 0 | #81: a second profile pins the same version with values that differ from those of the pack |
 | `push-2`, `push-2-differs`, `sync-2` | 0 | the same version is pushed again with other bytes, and the two pushes have two digests |
 | `leaf-after`, `listing-follows` | 0 | #66: Palette lists the digest of the new push, under the same version |
 | `leaf-verify` | 1 | #66: the record of the pack from before the push reports `DRIFT` |
-| `profile-verify`, `profile-keeps-pin` | 0 | #66: the published profile that pins the version does not follow the push: its record verifies, and its pack reference keeps the digest of the first push |
+| `profile-follows` | 1 | #81: the published profile with the values of the pack follows the push: its record from before reports `DRIFT`. The script verifies it again until it does, for up to ten minutes; it took about five |
+| `profile-now`, `profile-now-digest` | 0 | #81: its pack reference now carries the digest of the second push |
+| `profile-mod-keeps` | 0 | #81: the profile with values of its own keeps the digest it pinned: its record verifies |
+| `profile-who`, `profile-who-system` | 1, 0 | #81: the audit log names the move: an `update` by the Palette service `system` |
+| `delete-modified` | 0 | the second profile is deleted |
 | `profile-after`, `push-3`, `sync-3` | 0 | 1.0.1 is pushed |
 | `packs-two`, `packs-two-order` | 0 | #66: `packs` lists 1.0.1 first, then 1.0.0 |
 | `profile-stays` | 0 | #66: the profile pinned to 1.0.0 does not move to 1.0.1 |
@@ -326,8 +331,11 @@ version that the cluster runs.
 | `release-before` | 0 | a record of the release version before the link |
 | `template`, `template-links` | 0 | #66: the template links the release version and the add-on version |
 | `release-doc`, `release-names-template` | 0 | #66: the version names the template that uses it, and no cluster |
-| `lock-edit`, `lock-edit-says` | 2, 0 | #66: an edit in place of a linked version is refused, and the refusal carries the code `ClusterProfileUpdateValidationFailure` |
+| `lock-edit`, `lock-edit-says` | 2, 0 | #66: an edit in place of a linked version, a `PUT` of the whole version, is refused, and the refusal carries the code `ClusterProfileUpdateValidationFailure` |
 | `lock-verify` | 0 | #66: the version is unchanged |
+| `addon-before`, `lock-manifest-edit` | 0 | #81: the linked add-on version, edited through the route of one manifest and then published, is accepted: the lock does not cover that route |
+| `lock-manifest-verify` | 1 | #81: the record of the linked add-on version from before reports `DRIFT` |
+| `lock-manifest-back` | 0 | the manifest is put back, and the record verifies |
 | `cluster-outside-template`, `refusal-says` | 1, 0 | #66: a cluster outside the template with a linked version is refused, `ClusterCreateWithTemplateProfileForbidden` |
 | `cluster-runs-release`, `cluster-doc`, `cluster-three-profiles` | 0 | with the template gone, the cluster runs the release version and two add-on profiles |
 | `lock-gone`, `lock-gone-verify` | 0, 1 | #66: the edit in place is accepted again, and the record from before reports `DRIFT`: the lock was the template's |
@@ -506,6 +514,8 @@ and puts each edit back. Cluster A takes no update.
 | `usage`, `usage-says` | 2, 0 | #73: two profile versions and no cluster are a usage error |
 | `no-update`, `same-nodes` | 0 | #73: the questions took no update, and cluster A kept each EC2 instance |
 | `undo-baseline` | 0 | the example is at its baseline |
+| `release-record`, `os-value` | 0, 1 | #81: a new key in the values of the OS pack: Palette says repave. It checks every value of the OS layer, so the table gives `repave` for an OS values change |
+| `csi-value` | 0 | #81: a changed value in the CSI pack: Palette says no repave. Its check reads no CNI or CSI layer, so `cluster-wide` means no repave |
 
 Each answer agrees with the impact table, on AWS and on GCP: the two clouds run
 the kubeadm engine alone. The edit in place also opens an update notification for cluster A, and
@@ -688,6 +698,62 @@ cluster, and costs nothing.
 
 No run updates the properties of a tier: the tier of the run is a manifest tier,
 which has none.
+
+## loop.sh
+
+The everyday loop, end to end: [The everyday loop](../loop.md) tells it. The
+records are in a git repository that the script builds, and every script of CI
+runs in it. It changes cluster A and the add-on version through the API, and
+undoes each change. It needs the example at its baseline with cluster A.
+
+| Check | Expected exit | What it shows |
+|---|---|---|
+| `record-release`, `record-addon`, `record-cluster`, `commit-main` | 0 | main records the release version, the add-on version, and cluster A |
+| `cluster-runs-release` | 0 | #81: cluster A runs the recorded release |
+| `candidate`, `candidate-record` | 0 | #81: the change: the next version as a candidate file, and as a record before Palette has it |
+| `comment`, `comment-says` | 0 | #81: `pr-comment.sh` writes the comment of the pull request, with the change and its impact |
+| `commit-branch`, `merge-gate` | 0 | #81: the merge gate is clear: the records after the merge verify |
+| `record-next`, `same-release`, `commit-publish` | 0 | #81: Palette holds the content that the reviewer read, by the root |
+| `nightly` | 0 | #81: `verify-report.sh` finds every record unchanged |
+| `fleet`, `fleet-has-a` | 0 | #81: the fleet of a label holds cluster A |
+| `upstream` | 1 | #81: `upstream-report.sh` finds pins that the registry has passed |
+| `override`, `override-record`, `override-not-behind` | 0 | #81: a value overridden on cluster A opens no notification: Palette says that no update waits |
+| `override-drift` | 1 | #81: the record of cluster A reports the drift |
+| `override-release` | 0 | #81: the records of the versions verify: the profiles did not change |
+| `override-undo`, `override-gone` | 0 | the override is undone, and the record of cluster A verifies again |
+| `edit` | 0 | #81: a person edits the add-on version in place, through the API |
+| `nightly-drift`, `nightly-names` | 1, 0 | #81: the nightly job opens an issue for the add-on record |
+| `who`, `who-says` | 1, 0 | #81: `--who` names a person who wrote the edit |
+| `cluster-kept`, `behind-record`, `behind` | 0 | #81: cluster A keeps its copy, and Palette says that an update waits for it |
+| `edit-undo`, `edit-gone` | 0 | the edit is undone, and the add-on record verifies again |
+| `incident-list`, `incident-list-has` | 0 | #81: `list --pack` finds the release among the versions that carry the CSI pack |
+| `incident-consumers`, `incident-compare` | 1, 0 | #81: cluster A runs the release, and exactly its content |
+| `retire` | 0 | #81: nothing runs the next version: the retire gate is open |
+| `baseline` | 0 | the example is at its baseline |
+
+## version-states.sh
+
+The other answer to a version bump that overwrites a version: each version in a
+state of its own, a workspace of `terraform-version/`, with no feature preview
+flag. It builds its own profile, attaches it to cluster A for a while, and
+removes it. It needs the example with cluster A.
+
+| Check | Expected exit | What it shows |
+|---|---|---|
+| `init`, `apply-1`, `record-1` | 0 | version 1.0.0 in its own state, and a record of it |
+| `apply-2`, `new-uid` | 0 | #81: version 1.0.1 in a second state has a uid of its own |
+| `old-verifies`, `both-listed` | 0 | #81: the record of 1.0.0 verifies, and Palette lists both versions: the bump did not touch 1.0.0 |
+| `plan-same` | 0 | #81: the state of 1.0.0 plans no change |
+| `plan-edit`, `plan-edit-in-place` | 2, 0 | #81: a change of the content of 1.0.0 at the same version plans an update in place of the published version |
+| `attach`, `in-use` | 0, 1 | cluster A runs 1.0.0 too |
+| `destroy-refused`, `destroy-refused-says` | 1, 0 | #81: a destroy of the state of 1.0.0 fails while a cluster uses the version, and the refusal says that it is in use |
+| `still-there` | 0 | #81: the version is still there, and its record verifies |
+| `detach`, `free` | 0 | cluster A lets 1.0.0 go |
+| `destroy-1`, `old-gone`, `old-gone-says` | 0, 1, 0 | #81: the destroy of the state removes the version, and `verify` of its record reports that the version no longer exists |
+| `destroy-2`, `none-left` | 0 | no version of the name is left |
+| `apply-short`, `stored-short`, `short-as-given`, `replan-short`, `destroy-short` | 0 | #81: Palette stores the version `1.2` as given, and not as `1.2.0`, and the provider plans no change after it |
+| `apply-prefixed`, `stored-prefixed`, `prefixed-as-given`, `destroy-prefixed` | 0 | #81: Palette stores the version `v1.2.3` as given, and not as `1.2.3` |
+| `baseline` | 0 | the example is at its baseline |
 
 ## A chart pushed again, on a cluster
 

@@ -169,6 +169,14 @@ live-registry: build
 live-fleet: build
     examples/live/fleet.sh
 
+# The everyday loop, end to end: a change, the gates, the publish, the nightly jobs, an override, an edit in place, an incident, and a retire, with the records in a git repository (#81). Needs live-up; undoes each change.
+live-loop: build
+    examples/live/loop.sh
+
+# One state per version: a bump as a new resource in a new state, with no feature_preview flag, and the destroy that a cluster in use refuses (#81). Needs live-up; leaves nothing behind.
+live-version-states: build
+    examples/live/version-states.sh
+
 # The upstream test: strata behind against the registries, and scripts/ci/upstream-report.sh around a version that arrives in the example's own registry (#79). Needs live-profiles; opens and closes issues of this repository with the label strata-live-behind.
 live-upstream: build
     examples/live/upstream.sh

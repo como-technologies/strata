@@ -3,6 +3,7 @@
 # or ~/.palette.env, in that order, and is never printed. For a self-hosted Palette, PALETTE_API
 # (the address strata uses, from the environment or ~/.palette.env) becomes the provider's
 # SPECTROCLOUD_HOST unless that is already set, so strata and OpenTofu talk to the same Palette.
+# TF_DIR runs another root module of examples/live, such as terraform-version/.
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 
@@ -35,4 +36,4 @@ case "${1:-}" in
   plan | apply | destroy) set -- "$1" -parallelism=1 "${@:2}" ;;
 esac
 
-exec tofu -chdir="$here/terraform" "$@"
+exec tofu -chdir="${TF_DIR:-$here/terraform}" "$@"

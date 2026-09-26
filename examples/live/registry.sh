@@ -9,8 +9,9 @@
 #   1  push 1.0.0 and sync: the digest Palette lists is the digest of the push, and a record of
 #      the pack carries it
 #   2  a profile pins the version: its pack reference carries that digest
-#   3  push 1.0.0 again with other bytes, and sync: the pack listing, the record of the pack, and
-#      the published profile, each against its record from before the push
+#   3  push 1.0.0 again with other bytes, and sync: the pack listing and the record of the pack;
+#      the published profile with the values of the pack follows the push some minutes later,
+#      and a profile with values of its own keeps its digest (#81)
 #   4  push 1.0.1 and sync: the profile pinned to 1.0.0 stays; and the floating tag, when the
 #      registry lists one, and who the audit log of Palette says moved the profile (#69)
 #   5  a chart in the example's own OCI Helm registry: the digest Palette lists for it, and what a
@@ -63,7 +64,7 @@ summary() {
     summary_table
   } > summary.md
 }
-trap summary EXIT
+trap '[ -z "${M:-}" ] || "$live/api.sh" delete "$M" > /dev/null 2>&1; summary' EXIT
 
 # ---- the pack, the push, the sync ----------------------------------------------------------------
 
@@ -143,6 +144,12 @@ P=$(out owned_profile_uid)
 check profile 0 "#66: a record of the profile that pins $PACK 1.0.0" -- "$strata" snapshot "$P" -o profile-1.json
 check profile-digest-is-push 0 "#66: its pack reference carries the digest of the push" -- \
   test "$(digest_of profile-1.json 'packs[0].hash.upstreamRaw')" = "$A"
+# a second profile pins the same version with values that differ from the defaults of the pack
+cp "$live/pack/$PACK/values.yaml" modified-values.yaml && printf 'strataModified: true\n' >> modified-values.yaml
+check pin-modified 0 "#81: a profile that pins $PACK 1.0.0 with values changed from the defaults, through the API" -- \
+  "$live/api.sh" pin-profile strata-live-pinned-modified "$REG" oci "$PACK" 1.0.0 modified-values.yaml
+M=$(cat pin-modified.out)
+check profile-mod 0 "#81: a record of that profile" -- "$strata" snapshot "$M" -o profile-mod-1.json
 
 # ---- 3. the same version again -------------------------------------------------------------------
 
@@ -158,10 +165,20 @@ check listing-follows 0 "#66: Palette lists the digest of the new push for the v
   test "$(digest_of leaf-2.json 'packs[0].hash.upstreamRaw')" = "$B"
 check leaf-verify 1 "#66: the record of the pack from before the push reports DRIFT" -- \
   "$strata" verify leaf-1.json
-check profile-verify 0 "#66: the published profile that pins the version does not follow the push: its record from before verifies" -- \
-  "$strata" verify profile-1.json
-check profile-keeps-pin 0 "#66: its pack reference still carries the digest of the first push" -- \
-  test "$(digest_of profile-1.json 'packs[0].hash.upstreamRaw')" = "$A"
+# Palette moves a published profile some minutes after the sync that reads the push, when it
+# moves it at all: wait_drift gives it ten minutes
+check profile-follows 1 "#81: the published profile with the default values follows the push: its record from before reports DRIFT" -- \
+  wait_drift profile-1.json
+check profile-now 0 "a record of that profile now" -- "$strata" snapshot "$P" -o profile-1b.json
+check profile-now-digest 0 "#81: its pack reference carries the digest of the second push" -- \
+  test "$(digest_of profile-1b.json 'packs[0].hash.upstreamRaw')" = "$B"
+check profile-mod-keeps 0 "#81: the profile with changed values keeps the digest it pinned: its record verifies" -- \
+  "$strata" verify profile-mod-1.json
+check profile-who 1 "#81: who moved the first profile: the audit log of Palette" -- \
+  "$strata" verify profile-1.json --who
+check profile-who-system 0 "#81: the log names the move: an update by the Palette service system" -- \
+  grep -Eq '^  [0-9TZ:.-]+  system \(service\)  update' profile-who.out
+check delete-modified 0 "delete the profile with changed values" -- "$live/api.sh" delete "$M"
 
 # ---- 4. a new version -----------------------------------------------------------------------------
 

@@ -8,6 +8,10 @@
 #       through the API, which Palette accepts whatever the Spectro Cloud provider's
 #       immutable-clusterprofiles flag says. Exit 2 when no place, or more than one, contains
 #       FROM.
+#   api.sh edit-manifest PROFILE_UID FROM TO
+#       The same change of one manifest, through the route of that manifest: PUT
+#       /v1/clusterprofiles/{uid}/packs/{pack}/manifests/{manifest uid}, then publish. Exit 2
+#       unless exactly one manifest holds FROM.
 #   api.sh reorder PROFILE_UID
 #       Reverse the order of the packs of a published profile version, in place: PUT the version
 #       with the same packs, values, and manifests in the other order, then publish it. Nothing
@@ -26,6 +30,13 @@
 #       the cluster's own copy, so the content lands in that copy. --keep-notification sends the
 #       same PUT without resolveNotification; in the recorded runs Palette changed the cluster's
 #       copy either way.
+#   api.sh override CLUSTER_UID FROM TO
+#       Replace the text FROM with TO in the values and manifests that a cluster runs, as a person
+#       who overrides a value on the cluster does: the PUT of the cluster's profiles, with the
+#       content of each profile and the one change, and without resolveNotification. The profile
+#       keeps what it holds. Exit 2 unless exactly one value or manifest holds FROM.
+#   api.sh attach CLUSTER_UID PROFILE_UID
+#       The same PUT with PROFILE_UID added, which puts that profile on the cluster.
 #   api.sh detach CLUSTER_UID PROFILE_UID
 #       The same PUT without PROFILE_UID, which takes that profile off the cluster.
 #   api.sh delete PROFILE_UID
@@ -194,6 +205,21 @@ edit() {
   echo "edited $uid in place: '$from' -> '$to'"
 }
 
+edit_manifest() {
+  local uid=${1:-} from=${2:-} to=${3:-} tmp hit pack muid name
+  [ -n "$uid" ] && [ -n "$from" ] || die "usage: api.sh edit-manifest PROFILE_UID FROM TO"
+  tmp=$(mktemp -d); trap 'rm -rf "${tmp:-}"' RETURN EXIT
+  fetch_published "$uid" "$tmp"
+  hit=$(jq -c --arg from "$from" '[to_entries[] | .key as $p | .value[] | select((.content // "") | contains($from))
+      | {pack: $p, uid, name, content}]' "$tmp/contents")
+  [ "$(jq length <<<"$hit")" = 1 ] || die "$(jq length <<<"$hit") manifests of $uid contain the text to replace; want exactly 1"
+  pack=$(jq -r '.[0].pack' <<<"$hit"); muid=$(jq -r '.[0].uid' <<<"$hit"); name=$(jq -r '.[0].name' <<<"$hit")
+  jq --arg from "$from" --arg to "$to" '.[0] | {name, content: (.content | split($from) | join($to))}' <<<"$hit" > "$tmp/manifest"
+  call PUT "/v1/clusterprofiles/$uid/packs/$pack/manifests/$muid" "$tmp/manifest" > /dev/null || exit 2
+  call PATCH "/v1/clusterprofiles/$uid/publish" > /dev/null || exit 2
+  echo "edited manifest $name of pack $pack in $uid through its own route: '$from' -> '$to'"
+}
+
 retag() {
   local uid=${1:-} pack=${2:-} from=${3:-} to=${4:-} tmp
   [ -n "$to" ] || die "usage: api.sh retag PROFILE_UID PACK FROM_TAG TO_TAG"
@@ -207,9 +233,10 @@ retag() {
   echo "retagged $pack in $uid in place: $from -> $to"
 }
 
-# profiles_body CLUSTER DIR [EXCLUDE_UID] -> DIR/body: the PUT body for the cluster's profiles
+# profiles_body CLUSTER DIR [EXCLUDE_UID] [EXTRA_UID] -> DIR/body: the PUT body for the cluster's
+# profiles, without EXCLUDE_UID and with EXTRA_UID
 profiles_body() {
-  local cluster=$1 dir=$2 exclude=${3:-} uid
+  local cluster=$1 dir=$2 exclude=${3:-} extra=${4:-} uid
   call GET "/v1/spectroclusters/$cluster" > "$dir/cluster" || exit 2
   call GET "/v1/spectroclusters/$cluster/profiles/packs/manifests" > "$dir/copies" || exit 2
   # the uid of the cluster's own copy of each manifest, by profile uid, pack name, manifest name
@@ -217,7 +244,7 @@ profiles_body() {
        | (.spec.manifests // [])[] | {key: "\($p)/\($k)/\(.name)", value: .uid}] | from_entries' \
     "$dir/copies" > "$dir/copy-uids"
   : > "$dir/profiles"
-  for uid in $(jq -r '.spec.clusterProfileTemplates[].uid' "$dir/cluster"); do
+  for uid in $(jq -r '.spec.clusterProfileTemplates[].uid' "$dir/cluster") $extra; do
     [ "$uid" = "$exclude" ] && continue
     call GET "/v1/clusterprofiles/$uid" > "$dir/profile" || exit 2
     call GET "/v1/clusterprofiles/$uid/packs/manifests" > "$dir/manifests" || exit 2
@@ -246,6 +273,31 @@ apply() {
   profiles_body "$cluster" "$tmp"
   call PUT "/v1/spectroclusters/$cluster/profiles$query" "$tmp/body" > /dev/null || exit 2
   echo "applied the current content of $(jq -r '[.profiles[].uid] | join(", ")' "$tmp/body") to cluster $cluster${query:+, resolving the notification}"
+}
+
+override() {
+  local cluster=${1:-} from=${2:-} to=${3:-} tmp matches
+  [ -n "$cluster" ] && [ -n "$from" ] || die "usage: api.sh override CLUSTER_UID FROM TO"
+  tmp=$(mktemp -d); trap 'rm -rf "${tmp:-}"' RETURN EXIT
+  profiles_body "$cluster" "$tmp"
+  matches=$(jq --arg from "$from" '[.profiles[].packValues[] | .values, (.manifests[].content // "")]
+      | map(select(contains($from))) | length' "$tmp/body")
+  [ "$matches" = 1 ] || die "$matches values and manifests of cluster $cluster contain the text to replace; want exactly 1"
+  jq --arg from "$from" --arg to "$to" '.profiles[].packValues[] |= (
+        .values |= (split($from) | join($to))
+        | .manifests |= map(.content = ((.content // "") | split($from) | join($to))))' \
+    "$tmp/body" > "$tmp/override"
+  call PUT "/v1/spectroclusters/$cluster/profiles" "$tmp/override" > /dev/null || exit 2
+  echo "overrode '$from' -> '$to' on cluster $cluster, in its own copy"
+}
+
+attach() {
+  local cluster=${1:-} profile=${2:-} tmp
+  [ -n "$profile" ] || die "usage: api.sh attach CLUSTER_UID PROFILE_UID"
+  tmp=$(mktemp -d); trap 'rm -rf "${tmp:-}"' RETURN EXIT
+  profiles_body "$cluster" "$tmp" "" "$profile"
+  call PUT "/v1/spectroclusters/$cluster/profiles?resolveNotification=true" "$tmp/body" > /dev/null || exit 2
+  echo "attached profile $profile to cluster $cluster"
 }
 
 detach() {
@@ -547,8 +599,11 @@ case "${1:-}" in
   reorder) shift; reorder "$@" ;;
   reorder-cluster) shift; reorder_cluster "$@" ;;
   retag) shift; retag "$@" ;;
+  edit-manifest) shift; edit_manifest "$@" ;;
   apply) shift; apply "$@" ;;
+  attach) shift; attach "$@" ;;
   detach) shift; detach "$@" ;;
+  override) shift; override "$@" ;;
   delete) shift; delete "$@" ;;
   delete-named) shift; delete_named "$@" ;;
   delete-cluster) shift; delete_cluster "$@" ;;
