@@ -10,8 +10,13 @@ program can use the same parts:
 | `api::Palette::validate_repave`, `ops::palette_repave`, `diff::PaletteRepave` | Palette's answer to whether a change of the profiles of a cluster replaces its nodes, for a cluster and a profile version, with its reasons and whether it agrees with the impact table. |
 | `api::Palette` | The client over a `PaletteApi`: the reads of a profile, a cluster, and a cluster summary. `audits`, `cluster_notifications`, and `resolved_values` read the audit log of a resource, the notifications of a cluster, and the value Palette gives each macro of a cluster. `api::Retry` tries a transient failure again. |
 | `config::Config` | Where Palette is, and the key. `Config::from_env` reads the environment and then `~/.palette.env`, as the command does. |
-| `reference::Ref` | What a ref means: a record file, `<name>@<version>`, a uid, `cluster:<name>`, or `pack:<name>@<version>`. |
+| `reference::Ref` | What a ref means: a record file, `<name>@<version>`, a uid, `cluster:<name>` with `@pending` or not, `edgehost:<name>`, `clustergroup:<name>`, `appprofile:<name>@<version>`, or `pack:<name>@<version>`. |
 | `ops::snapshot_for` | A record of what a ref names, through a `Palette` that a closure gives. The example in the crate documentation starts here. |
+| `ops::snapshot_pair` | The two sides of `compare`: when one side is a cluster group, the `cluster:` ref of the other side holds only the profiles that the group pins. |
+| `api::Palette::with_pending` | The documents of a cluster after it takes the update that waits: the profiles of `profileUpdates` in place of its templates. `Snapshot::mark_pending` marks the record. |
+| `api::Palette::fetch_edge_host`, `fetch_cluster_group`, `edge_hosts`, `cluster_group_members` | An edge host and a cluster group in the shape of a cluster, the edge hosts of the scope, and the virtual clusters of a group. `Snapshot::with_kind` and `snapshot::SubjectKind` say which object a record holds. `ops::cluster_group_snapshot` gives the record of a group with its members. |
+| `api::Palette::fetch_app_profile`, `resolve_app_profile`, `ops::app_profile_snapshot` | An app profile in the shape of a profile, with each tier as a pack in the layer `app`, and the record of it. `snapshot::APP_KIND` is its `source.type`. |
+| `ops::consumers_with`, `ops::ConsumersOptions` | `consumers`, with `list_only` to read the consumer list of Palette alone. Each `Consumer` has a `kind`, `cluster` or `edgehost`, and `ConsumersReport::edge_hosts_read` says how many edge hosts strata read. |
 | `snapshot::Snapshot` | A record. |
 | `diff::compute` | The comparison of two snapshots. |
 | `render::Renderer` | The terminal, markdown, and JSON output. |
@@ -24,6 +29,7 @@ program can use the same parts:
 | `snapshot::cluster_tiers`, `snapshot::ClusterTier`, `api::Palette::cloud_config` | The tiers of a cluster record, each with its fields and its hash, from the cluster document and, for `shape`, the cloud config that `cloud_config` reads. `RawCluster::cloud_config` holds it. |
 | `diff::TierDiff`, `diff::RunningBehind` | Each tier of two cluster records compared, and each pack that a cluster runs at another version than its profile: `Diff::cluster_tiers` and `Diff::running_behind`. |
 | `snapshot::pack_content`, `Pack::images`, `Pack::charts`, `diff::ArtifactChange` | The images and the charts that the values of a pack declare, and each one that moved between two sides: `PackDiff::image_changes` and `chart_changes`, counted in `Summary::images_changed` and `charts_changed`. `Snapshot::load` fills the lists of a record written before them. |
+| `diff::ParamChange` | Each param of a pack that differs between two sides: `PackDiff::param_changes`. For an app tier, a param is a property. |
 | `Snapshot::macros`, `Snapshot::upstream_unknown` | The user macros that the content of a record reads, and the packs with no upstream digest. Neither needs a request, so both work on a record written before either existed. |
 | `candidate::check`, `ops::snapshot_from_loaded` | A candidate that a program builds, with no file: the rules of a [candidate file](../reference/candidate-file.md) hold for it, and it gives the snapshot that `snapshot --from-candidate` gives. |
 | `Error::class` | `Transient`, `Terminal`, or `Unknown`: what a caller does before it tries again. `Retry` uses the same rule. |

@@ -1,16 +1,21 @@
 #!/usr/bin/env bash
-# The pending update test (#70): when Palette says that an update waits for cluster A, and what
-# a cluster record, `list clusters --applied`, and `compare` say about it.
+# The pending update test (#70, #78): when Palette says that an update waits for cluster A, what
+# a cluster record, `list clusters --applied`, and `compare` say about it, and what a record of
+# `cluster:<uid>@pending` holds.
 #
 #   examples/live/pending.sh [FROM_STAGE]
 #
-#   1  at the baseline: a record of cluster A says that no update waits
+#   1  at the baseline: a record of cluster A says that no update waits, and a record of
+#      cluster:<uid>@pending has the root of what the cluster runs; consumers --list-only gives
+#      the clusters that the walk gives
 #   2  an edit in place of a manifest of the add-on version: an update waits, and the record, the
-#      listing, and compare name it; the record of the release profile alone says none waits
+#      listing, and compare name it; the record of the release profile alone says none waits;
+#      compare of the cluster with cluster:<uid>@pending names the pack that the update changes
 #   3  the update pushed to cluster A without resolving its notification, and then accepted with
-#      it: none waits after either
-#   4  an edit in place of a value of the release version: an update waits; the undo of the edit
-#      closes it with no update of the cluster; then an apply of the baseline
+#      it: none waits after either, and the cluster runs the root of the pending record
+#   4  an edit in place of a value of the release version: an update waits, and compare with
+#      cluster:<uid>@pending names the value; the undo of the edit closes it with no update of the
+#      cluster; then an apply of the baseline
 #   5  a bump of the add-on version number alone, in place with the flag off: none waits; then
 #      the version number back
 #
@@ -68,6 +73,16 @@ if stage 1 "the baseline"; then
     test "$(pending base.json)" = false
   check base-profile-updates 0 '#70: profileUpdates lists each profile of the cluster also when none waits: it is no flag, so strata reads the notifications' -- \
     bash -c "\"$live/api.sh\" get /v1/spectroclusters/$C/profileUpdates | jq -e '.profiles | length > 0'"
+  check base-at-pending 0 '#78: record cluster:<uid>@pending' -- record base-pending "cluster:$C@pending"
+  check base-pending-same 0 '#78: with no update waiting, the pending record has the root of what the cluster runs' -- \
+    test "$(jq -r .root base-pending.json)" = "$(jq -r .root base.json)"
+  check base-pending-flag 0 '#78: the record says pending' -- jq -e '.source.cluster.pending == true' base-pending.json
+  check base-consumers 1 '#78: consumers of the add-on version reads the list and each cluster' -- \
+    "$strata" consumers "$AD" --json
+  check base-list-only 1 '#78: consumers --list-only reads the list that Palette computes alone' -- \
+    "$strata" consumers "$AD" --list-only --json
+  check base-list-only-same 0 '#78: the list gives the same clusters as the walk, and says that the walk was not done' -- \
+    bash -c "jq -e '.clustersRead.skipped == true' base-list-only.out && [ \"\$(jq -c '[.consumers[].uid] | sort' base-list-only.out)\" = \"\$(jq -c '[.consumers[].uid] | sort' base-consumers.out)\" ] && jq -e --arg c $C '[.consumers[].uid] | index(\$c)' base-list-only.out"
 fi
 
 if stage 2 "an edit of a manifest of the add-on version"; then
@@ -89,12 +104,24 @@ if stage 2 "an edit of a manifest of the add-on version"; then
     "$strata" compare "$AD" "cluster:$C/$addon"
   check addon-compare-says 0 '#70: compare says that cluster A is behind, and names the profile' -- \
     grep -q "^note       cluster .* is behind: Palette says an update of $addon waits for it, since " addon-compare.out
+  check addon-at-pending 0 '#78: record cluster:<uid>@pending' -- record addon-pending "cluster:$C@pending"
+  check addon-pending-root 0 '#78: the pending record has another root than the copy that runs' -- \
+    test "$(jq -r .root addon-pending.json)" != "$(jq -r .root addon.json)"
+  check addon-pending-compare 1 '#78: compare cluster:<uid> cluster:<uid>@pending says what the update changes' -- \
+    "$strata" compare "cluster:$C" "cluster:$C@pending"
+  check addon-pending-compare-says 0 '#78: it names the pack of the add-on as AUTHORED, and no pack of the release' -- \
+    bash -c "grep -Eq '^~ .* AUTHORED' addon-pending-compare.out && [ \$(grep -c '^~ ' addon-pending-compare.out) = 1 ]"
+  check addon-pending-verify 0 '#78: verify of the pending record, while the update still waits' -- \
+    "$strata" verify addon-pending.json
 fi
 
 if stage 3 "the update accepted on cluster A"; then
   check accept 0 '#70: push the update to cluster A through the API, without resolving its notification' -- \
     "$live/api.sh" apply "$C" --keep-notification
   check accept-none 0 '#70: Palette closes the notification all the same when the copy takes the change: none waits' -- settled false
+  check accept-record 0 'record cluster A' -- record accepted
+  check accept-as-pending 0 '#78: the cluster now runs what the pending record held: the same root' -- \
+    test "$(jq -r .root accepted.json)" = "$(jq -r .root addon-pending.json)"
   check accept-undo 0 "undo the edit of $addon" -- "$live/api.sh" edit "$AD" 'edited: "yes"' 'edited: "no"'
   check accept-undo-pending 0 '#70: the undo is an edit too: an update waits' -- settled true
   check accept-again 0 'accept it, resolving the notification' -- "$live/api.sh" apply "$C"
@@ -108,6 +135,10 @@ if stage 4 "an edit of a value of the release version, and its undo"; then
   check values-record 0 'record cluster A' -- record values
   check values-names 0 '#70: Palette names the pack whose values changed' -- \
     jq -e --arg u "$R" --arg csi "$(out csi_pack_name)" '.source.cluster.pendingUpdates | any(.profileUid == $u and (.message | test($csi + " .* values are updated")))' values.json
+  check values-pending-compare 1 '#78: compare cluster:<uid> cluster:<uid>@pending' -- \
+    "$strata" compare "cluster:$C" "cluster:$C@pending" --json
+  check values-pending-compare-says 0 '#78: the one pack that changes is the CSI pack, and the path is the reclaim policy' -- \
+    jq -e --arg csi "$(out csi_pack_name)" '[.packs[] | select(.status != "unchanged")] | length == 1 and .[0].name == $csi and (.[0].values | tostring | test("reclaimPolicy"))' values-pending-compare.out
   check values-undo 0 'put the value back through the API' -- \
     "$live/api.sh" edit "$R" "$(out csi_reclaim_delete | sed 's/Delete/Retain/')" "$(out csi_reclaim_delete)"
   check values-undo-none 0 '#70: the undo closes the update with no update of the cluster: none waits' -- settled false

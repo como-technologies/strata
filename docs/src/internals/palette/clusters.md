@@ -132,7 +132,9 @@ the same content. A notification that is done stays in the list.
 `GET /v1/spectroclusters/<uid>/profileUpdates` is no flag: it lists each profile
 of the cluster also when no update waits. So strata reads the notifications,
 and a cluster record says whether an update waits: see
-[Whether an update waits](../../commands/snapshot.md#whether-an-update-waits).
+[Whether an update waits](../../commands/snapshot.md#whether-an-update-waits). It is the content of the
+update: `cluster:<uid>@pending` reads it. See
+[The update that waits](other-objects.md#the-update-that-waits).
 
 ## The order of the profiles of a cluster
 

@@ -1,0 +1,3 @@
+$ jq -c '.packs[] | {key, type, tag, params, upstream: .hash.upstreamSource}' runs/shop.json
+{"key":"app/web","type":"helm","tag":"2.1.0","params":{"replicas":"2"},"upstream":"none"}
+{"key":"app/config","type":"manifest","tag":"1.0.0","params":{},"upstream":"none"}

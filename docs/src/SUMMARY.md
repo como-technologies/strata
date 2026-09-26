@@ -31,6 +31,8 @@
 - [A cluster does not run its release](./use-cases/cluster-release.md)
 - [Clusters give variables different values](./use-cases/cluster-values.md)
 - [Two clusters on one release differ](./use-cases/cluster-tiers.md)
+- [A profile runs on edge hosts](./use-cases/edge-hosts.md)
+- [A cluster group pins a profile](./use-cases/cluster-groups.md)
 - [One pack build under two tag names](./use-cases/tag-name.md)
 - [One manifest in two profiles](./use-cases/manifest-pack.md)
 - [A pack comes from another registry](./use-cases/registry-move.md)
@@ -40,6 +42,7 @@
 - [A published version is edited in place](./use-cases/edited-in-place.md)
 - [A version bump overwrites a version](./use-cases/overwritten.md)
 - [A macro value changes](./use-cases/macros.md)
+- [An app profile is updated in place](./use-cases/app-profiles.md)
 - [A team pins each environment](./use-cases/fan-out.md)
 - [A publish fans out to what pins it](./use-cases/publish-fan-out.md)
 
@@ -73,6 +76,7 @@
   - [Packs and registries](./internals/palette/packs.md)
   - [Profiles](./internals/palette/profiles.md)
   - [Clusters](./internals/palette/clusters.md)
+  - [Edge hosts, cluster groups, and app profiles](./internals/palette/other-objects.md)
   - [What no run covers](./internals/palette/limits.md)
 
 # Development

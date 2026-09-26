@@ -400,14 +400,21 @@ makes one change in place and puts it back, so it ends at the baseline.
 |---|---|---|
 | `base-record`, `base-none` | 0 | #70: at the baseline, a record of cluster A says `updatesPending: false` |
 | `base-profile-updates` | 0 | #70: `profileUpdates` lists each profile of the cluster also when no update waits: it is no flag |
+| `base-at-pending`, `base-pending-same`, `base-pending-flag` | 0 | #78: with no update waiting, a record of `cluster:<uid>@pending` has the root of the cluster, and says `pending: true` |
+| `base-consumers`, `base-list-only`, `base-list-only-same` | 1, 1, 0 | #78: `consumers --list-only` gives the clusters that the second reading gives, and says `skipped` |
 | `addon-edit`, `addon-pending`, `addon-record`, `addon-names` | 0 | #70: an edit in place of a manifest of the add-on version opens an update: the record says `updatesPending: true`, and `pendingUpdates` names the add-on and `Manifest ... is updated` |
 | `addon-root` | 0 | #70: the root of that record is the root at the baseline: the statement is outside the root |
 | `addon-release-only` | 0 | #70: a record of the release profile alone says that no update waits for it |
 | `addon-list`, `addon-list-says` | 0 | #70: `list clusters --applied` marks the add-on `behind: an update waits` |
 | `addon-compare`, `addon-compare-says` | 1, 0 | #70: `compare` of the add-on version with its copy on cluster A says `cluster ... is behind` |
+| `addon-at-pending`, `addon-pending-root` | 0 | #78: after the edit, the record of `@pending` has another root than the copy that runs |
+| `addon-pending-compare`, `addon-pending-compare-says` | 1, 0 | #78: `compare cluster:<uid> cluster:<uid>@pending` names the pack of the add-on `AUTHORED`, and no pack of the release |
+| `addon-pending-verify` | 0 | #78: `verify` of the pending record, while the update still waits |
 | `accept`, `accept-none` | 0 | #70: a push of the content without `resolveNotification` closes the update all the same |
+| `accept-record`, `accept-as-pending` | 0 | #78: the cluster then runs the root that the record of `@pending` held |
 | `accept-undo`, `accept-undo-pending`, `accept-again`, `accept-again-none` | 0 | #70: the undo is an edit too, and opens an update; the accept with `resolveNotification` closes it |
 | `values-edit`, `values-pending`, `values-record`, `values-names` | 0 | #70: an edit in place of a value of the release version opens an update, and Palette names the pack: `csi-aws-ebs ... values are updated` |
+| `values-pending-compare`, `values-pending-compare-says` | 1, 0 | #78: `compare` with `@pending` names one pack, the CSI pack, and the path of the reclaim policy |
 | `values-undo`, `values-undo-none` | 0 | #70: an edit that gives the profile the content of the copy again closes the update, with no update of the cluster |
 | `values-baseline-none` | 0 | #70: the apply of the baseline, which writes the same content, opens no update |
 | `bump-uid-kept`, `bump-record`, `bump-none` | 0 | #70: a new version number alone, in place with the flag off, keeps the uid and opens no update |
@@ -559,6 +566,79 @@ of the timezone and the labels changed the `spcHash` of B.
 
 No run makes a cluster run another pack version than its profile declares; the
 book shows it on the stand-in.
+
+## edge-host.sh
+
+Read-write: it registers two edge hosts with no device, binds a profile to each,
+edits a profile in place and back, and deletes the hosts. It needs the example
+at its baseline. It needs no cluster of its own and costs nothing.
+
+| Check | Expected exit | What it shows |
+|---|---|---|
+| `register` | 0 | an edge host registered with no device, and the add-on version bound to it |
+| `addon-record`, `host-record`, `host-flag` | 0 | #78: a record of `edgehost:<uid>` says `kind: edgeHost`, with the uid and the name of the host |
+| `host-root`, `host-compare` | 0 | #78: the record has the root of the add-on version: the same packs and variable definitions |
+| `host-by-name` | 0 | #78: `edgehost:<name>` finds the host through the search |
+| `host-unknown`, `host-unknown-says` | 2, 0 | #78: an edge host that is not there is `edge-host-not-found`, which lists the edge hosts |
+| `consumers`, `consumers-host` | 1, 0 | #78: `consumers` of the add-on version counts the edge host, with its kind, project, state, and version |
+| `consumers-list-only`, `consumers-list-only-host` | 1, 0 | #78: `--list-only` counts it too: the consumer list of Palette names no edge host |
+| `host-verify` | 0 | #78: `verify` of the record of the edge host |
+| `host-repave` | 2 | #78: `compare --repave` refuses an edge host |
+| `edit`, `edit-host-verify` | 0, 1 | #78: after an edit in place of the manifest of the add-on version, `verify` of the record of the edge host reports drift |
+| `edit-host-raw`, `edit-host-manifest-uid` | 0 | #78: the template of the edge host names the manifest by its uid, with no content |
+| `release-register`, `release-host-record`, `release-edit`, `release-host-verify` | 0 | #78: a second host bound to the release version keeps its copy of the values after an edit in place of the reclaim policy: `verify` of its record is OK |
+| `release-host-raw`, `release-host-kept` | 0 | #78: the host holds `reclaimPolicy: Delete`, and the profile holds `Retain` |
+| `release-undo`, `release-delete` | 0 | the edit is put back, and the second host deleted |
+| `delete`, `after`, `after-no-host` | 0, 1, 0 | #78: after the delete, `consumers` no longer counts the edge host |
+
+An edge host with no device is `unpaired`. No run pairs a device.
+
+## cluster-group.sh
+
+Read-write: it sets `cluster_group`, which builds a cluster group on cluster A
+that pins the add-on version, and a virtual cluster in it; it edits the add-on
+version in place and back, and removes the group. It needs the example at its
+baseline with cluster A.
+
+| Check | Expected exit | What it shows |
+|---|---|---|
+| `addon-record`, `group-record`, `group-kind` | 0 | #78: a record of `clustergroup:<uid>` says `kind: clusterGroup`, and holds the add-on version alone: the pin |
+| `group-members` | 0 | #78: the record names the virtual cluster as a member |
+| `group-root` | 0 | #78: the record has the root of the add-on version |
+| `group-by-name` | 0 | #78: `clustergroup:<name>` finds the group |
+| `member-record`, `member-runs-pin` | 0 | #78: the virtual cluster runs the add-on version that the group pins |
+| `group-compare`, `group-compare-record` | 0 | #78: `compare` of the group, or of its record, with the virtual cluster reads the pinned profile of the member: `IDENTICAL` |
+| `group-compare-no-values` | 0 | #78: a group gives no variable values, so the compare states no cluster value |
+| `group-verify` | 0 | #78: `verify` of the record of the group |
+| `member-consumer`, `member-consumer-listed` | 1, 0 | #78: `consumers` of the add-on version names the virtual cluster, from the consumer list of Palette |
+| `member-not-in-listing` | 0 | #78: the cluster listing does not name the virtual cluster |
+| `edit`, `edit-group-verify` | 0, 1 | #78: after an edit in place of the manifest of the add-on version, `verify` of the record of the group reports drift |
+| `edit-group-compare`, `edit-group-compare-says` | 1, 0 | #78: the member keeps its copy, so `compare` of the group with it names the manifest |
+| `edit-group-raw`, `edit-group-manifest-uid` | 0 | #78: the template of the group names the manifest by its uid, with no content |
+| `edit-undo`, `gone` | 0 | the edit is put back, and the group and the member are gone |
+
+The virtual cluster needs a CPU limit of at least 3 cores, and a memory limit
+that leaves 1 GiB beside the 3.2 GiB that the agents of Palette take in it.
+
+## app-profile.sh
+
+Read-write: it makes an app profile, updates it, and deletes it. It needs no
+cluster, and costs nothing.
+
+| Check | Expected exit | What it shows |
+|---|---|---|
+| `create` | 0 | an app profile with one manifest tier, made through the API |
+| `record`, `record-type` | 0 | #78: a record of `appprofile:<name>@<version>` is of type `app`, counts no consumer, and holds the tier as the pack `app/config` with its manifest |
+| `record-no-digest` | 0 | #78: a tier has no digest: `upstreamSource` is `none` |
+| `record-by-uid` | 0 | #78: `appprofile:<uid>` gives the same root |
+| `record-unknown` | 2 | #78: a name and version that no app profile has is `app-profile-not-found` |
+| `verify` | 0 | #78: `verify` of the record |
+| `edit`, `edit-same-version` | 0 | #78: a plain update of the manifest keeps the uid and the version, and makes no new version |
+| `edit-verify`, `edit-verify-says` | 1, 0 | #78: `verify` of the record reports drift, with the tier `AUTHORED` and the manifest named |
+| `delete` | 0 | the app profile is deleted |
+
+No run updates the properties of a tier: the tier of the run is a manifest tier,
+which has none.
 
 ## A chart pushed again, on a cluster
 

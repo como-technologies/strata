@@ -1,0 +1,5 @@
+$ strata snapshot cluster:payments/platform-addons -o runs/payments.json
+strata: looking up project dev
+strata: fetching cluster payments
+strata: cluster 'payments' is 64f1000000000000000000e1
+strata: wrote runs/payments.json (root f6312d5a2793)

@@ -3,14 +3,15 @@
 use super::{
     Renderer, VarLine, applied_ref, artifact_lines, artifacts_summary, chain_verdict,
     cluster_count, cluster_value, consumer_count, consumer_counts, consumers_heading,
-    consumers_sentence, count_of, counts_line, cross_kind_note, dash, edited_in_place_note,
-    entry_error, list_count, list_scope, macros_changed_note, macros_changed_sentence, macros_note,
-    overwritten_in_place_notes, pack_version, pair_detail, pair_word, palette_repave_lines,
-    palette_repave_note, profiles_overwritten_sentence, project_label, record_detail, record_label,
-    registry_note, running_behind_notes, same_content_note, short, show, subject, tag_rename,
-    tier_path, tier_states, traits_suffix, unverified_sentence, updates_pending_notes,
-    upstream_unknown_note, values_changed_suffix, variable_lines, variables_comparable,
-    variables_unavailable_note, version_display, who_entry, who_heading,
+    consumers_sentence, count_of, counts_line, cross_kind_note, dash, edge_hosts_line,
+    edited_in_place_note, entry_error, list_count, list_scope, macros_changed_note,
+    macros_changed_sentence, macros_note, overwritten_in_place_notes, pack_version, pair_detail,
+    pair_word, palette_repave_lines, palette_repave_note, profiles_overwritten_sentence,
+    project_label, record_detail, record_label, registry_note, running_behind_notes,
+    same_content_note, short, show, subject, tag_rename, tier_path, tier_states, traits_suffix,
+    unverified_sentence, updates_pending_notes, upstream_unknown_note, values_changed_suffix,
+    variable_lines, variables_comparable, variables_unavailable_note, version_display, who_entry,
+    who_heading,
 };
 use crate::color::Paint;
 use crate::diff::{
@@ -508,6 +509,9 @@ impl Renderer for TerminalRenderer {
                 project_label(&c.project_uid, &c.project_name),
                 state
             ));
+            if c.kind == crate::ops::EDGE_HOST_KIND {
+                out.push_str(&format!("  {}", p.cyan("edge host")));
+            }
             if !c.version.is_empty() && c.version != r.profile.version {
                 out.push_str(&format!(
                     "  {}",
@@ -537,6 +541,7 @@ impl Renderer for TerminalRenderer {
         // how far it got.
         let read = &r.clusters_read;
         let second = match read.error.as_ref().and_then(|e| e.get("message")) {
+            _ if read.skipped => "second reading: not done (--list-only)".to_string(),
             Some(msg) => format!(
                 "second reading: not done ({})",
                 msg.as_str().unwrap_or("error")
@@ -548,6 +553,7 @@ impl Renderer for TerminalRenderer {
             ),
         };
         out.push_str(&format!("  {}\n", p.dim(&second)));
+        out.push_str(&format!("  {}\n", p.dim(&edge_hosts_line(r))));
         Ok(out)
     }
 

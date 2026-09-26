@@ -185,9 +185,21 @@ live-order: build
 live-who: build
     examples/live/who.sh
 
-# The pending update test: when Palette says an update waits for cluster A, and what a record, the listing, and compare say (#70). Needs live-up; undoes each change.
+# The pending update test: when Palette says an update waits for cluster A, what a record, the listing, and compare say, and what cluster:<uid>@pending holds (#70, #78). Needs live-up; undoes each change.
 live-pending: build
     examples/live/pending.sh
+
+# The app profile test: a record of appprofile:<name>@<version>, and a plain update of it (#78). Needs no cluster; makes an app profile, and deletes it.
+live-app-profile: build
+    examples/live/app-profile.sh
+
+# The cluster group test: a record of clustergroup:<uid>, and compare of the group with its virtual cluster (#78). Needs live-up; makes a group and a virtual cluster in cluster A, and removes them.
+live-cluster-group: build
+    examples/live/cluster-group.sh
+
+# The edge host test: a record of edgehost:<uid>, and consumers of a profile bound to an edge host (#78). Needs live-up; registers an edge host with no device, and deletes it.
+live-edge-host: build
+    examples/live/edge-host.sh
 
 # The macro test: what a project macro does to a version, a cluster copy, and a record, when it changes (#72). Needs live-up; undoes each change.
 live-macros: build

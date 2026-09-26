@@ -1,0 +1,2 @@
+$ jq -c '.source.cluster | {kind, profiles: [.profiles[].name], members: [.members[].name]}' runs/dev-group.json
+{"kind":"clusterGroup","profiles":["platform-addons"],"members":["tenant-a","tenant-b"]}

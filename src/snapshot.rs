@@ -149,7 +149,8 @@ pub struct PackSource {
 }
 
 impl Source {
-    /// `name@version`, and `on cluster <name>` for a snapshot of a cluster.
+    /// `name@version`, and `on cluster <name>` for a snapshot of a cluster, or `pending for cluster
+    /// <name>` for the update that waits for it.
     pub fn title(&self) -> String {
         let profile = format!("{}@{}", self.name, self.version);
         if self.pack.is_some() {
@@ -157,7 +158,18 @@ impl Source {
         }
         match &self.cluster {
             None => profile,
+            Some(c) if self.name.is_empty() && !c.kind.is_cluster() => {
+                format!("{} {}", c.kind.noun(), c.name)
+            }
+            Some(c) if c.kind == SubjectKind::EdgeHost => {
+                format!("{profile} on edge host {}", c.name)
+            }
+            Some(c) if c.kind == SubjectKind::ClusterGroup => {
+                format!("{profile} pinned by cluster group {}", c.name)
+            }
+            Some(c) if self.name.is_empty() && c.pending => format!("cluster {} pending", c.name),
             Some(c) if self.name.is_empty() => format!("cluster {}", c.name),
+            Some(c) if c.pending => format!("{profile} pending for cluster {}", c.name),
             Some(c) => format!("{profile} on cluster {}", c.name),
         }
     }
@@ -170,6 +182,52 @@ impl Source {
             (None, None) => &self.uid,
         }
     }
+}
+
+/// The `source.kind` of a record of an app profile: its tiers are its packs.
+pub const APP_KIND: &str = "app";
+
+/// The kind of object that a cluster record was taken from. Each holds profiles in
+/// `spec.clusterProfileTemplates`.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum SubjectKind {
+    /// A cluster: the copies of the profiles that it runs.
+    #[default]
+    Cluster,
+    /// An edge host: the profiles bound to it.
+    EdgeHost,
+    /// A cluster group: the profiles that it pins for its virtual clusters.
+    ClusterGroup,
+}
+
+impl SubjectKind {
+    /// True for a cluster.
+    pub fn is_cluster(&self) -> bool {
+        *self == SubjectKind::Cluster
+    }
+
+    /// The noun that names the kind in a report.
+    pub fn noun(&self) -> &'static str {
+        match self {
+            SubjectKind::Cluster => "cluster",
+            SubjectKind::EdgeHost => "edge host",
+            SubjectKind::ClusterGroup => "cluster group",
+        }
+    }
+}
+
+/// A virtual cluster of a cluster group.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct GroupMember {
+    /// Cluster uid.
+    pub uid: String,
+    /// Cluster name.
+    pub name: String,
+    /// The project of the cluster; empty when Palette does not name it.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub project_uid: String,
 }
 
 /// The cluster a snapshot was taken from.
@@ -210,6 +268,19 @@ pub struct ClusterSource {
     /// again and compares.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub macro_values: Option<BTreeMap<String, String>>,
+    /// True for a record of `cluster:<uid>@pending`: the profiles that the cluster would run after
+    /// it accepts the update that waits, and not the copies that it runs now.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub pending: bool,
+    /// What the record was taken from: absent for a cluster, `edgeHost` for the profiles bound to
+    /// an edge host, and `clusterGroup` for the profiles that a cluster group pins for its
+    /// virtual clusters. `uid` and `name` are those of that object.
+    #[serde(default, skip_serializing_if = "SubjectKind::is_cluster")]
+    pub kind: SubjectKind,
+    /// For a cluster group: its virtual clusters, which run the profiles that it pins. Outside
+    /// the root.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub members: Vec<GroupMember>,
     /// The labels of the cluster, as Palette gives them in `metadata.labels`. Outside the root.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub labels: BTreeMap<String, String>,
@@ -1086,10 +1157,14 @@ impl Snapshot {
         let chosen: Vec<usize> = match profile {
             None => (0..templates.len()).collect(),
             Some(p) => {
+                // `a+b` selects several profiles, as compare does for a cluster group
+                let wanted: Vec<&str> = p.split('+').collect();
                 let chosen: Vec<usize> = applied
                     .iter()
                     .enumerate()
-                    .filter(|(_, a)| a.name == p || a.uid == p)
+                    .filter(|(_, a)| {
+                        wanted.contains(&a.name.as_str()) || wanted.contains(&a.uid.as_str())
+                    })
                     .map(|(i, _)| i)
                     .collect();
                 if chosen.is_empty() {
@@ -1176,6 +1251,9 @@ impl Snapshot {
                         })
                         .unwrap_or_default(),
                     tiers: cluster_tiers(&raw.cluster, raw.cloud_config.as_ref(), &covered),
+                    pending: false,
+                    kind: SubjectKind::Cluster,
+                    members: Vec::new(),
                     profiles: covered,
                 }
             }),
@@ -1190,6 +1268,32 @@ impl Snapshot {
             packs,
             root,
         })
+    }
+
+    /// Mark a record of a cluster as the profiles of the update that waits for it. Whether an
+    /// update waits is a statement about the copy that the cluster runs, and not about these
+    /// profiles, so the record does not carry it.
+    pub fn mark_pending(mut self) -> Snapshot {
+        if let Some(c) = self.source.cluster.as_mut() {
+            c.pending = true;
+            c.updates_pending = None;
+            c.updates_pending_error = None;
+            c.pending_updates.clear();
+        }
+        self
+    }
+
+    /// Mark a record of a cluster as a record of another kind of object that holds profiles. Such
+    /// an object gives no values to the variables, so the record holds no cluster values: a
+    /// definition with no value is not the value `""`.
+    pub fn with_kind(mut self, kind: SubjectKind) -> Snapshot {
+        if let Some(c) = self.source.cluster.as_mut() {
+            c.kind = kind;
+            if !kind.is_cluster() {
+                c.variables.clear();
+            }
+        }
+        self
     }
 
     /// Read a snapshot file, checking its schema id.

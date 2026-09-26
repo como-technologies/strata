@@ -175,6 +175,12 @@ variable "cluster" {
   default     = true
 }
 
+variable "cluster_group" {
+  description = "Create a cluster group on cluster A, with a virtual cluster in it. It runs in cluster A."
+  type        = bool
+  default     = false
+}
+
 variable "second_cluster" {
   description = "Create cluster B next to the cluster. Billable while it exists."
   type        = bool

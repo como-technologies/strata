@@ -1,0 +1,106 @@
+#!/usr/bin/env bash
+# The cluster group test (#78): a record of the profiles that a cluster group pins for its virtual
+# clusters, and compare of the group with a member.
+#
+#   examples/live/cluster-group.sh [FROM_STAGE]
+#
+#   1  a cluster group on cluster A that pins the add-on version, and one virtual cluster in it: a
+#      record of clustergroup:<uid> holds the pin and names the member; compare of the group with
+#      the member reads only the pinned profile of the member, and is IDENTICAL
+#   2  an edit in place of a manifest of the add-on version: the group holds the manifest by
+#      uid, so it follows the edit, and the member keeps its copy, so the two differ; then the
+#      undo
+#   3  the group and the member removed: the baseline
+#
+# Needs the live example at its baseline with cluster A (just live-up), the strata release binary,
+# jq, and the key as verify.sh needs it. The virtual cluster runs in cluster A, so it adds no
+# machine. Results go under runs/<UTC time>/cluster-group/, or OUT; FROM_STAGE resumes a run in
+# OUT. Exit 0 only when no check fails.
+set -uo pipefail
+script=cluster-group
+from=${1:-1}
+case "$from" in 1|2|3) ;; *) sed -n '2,/^set -uo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; exit 2 ;; esac
+. "$(cd "$(dirname "$0")" && pwd)/lib.sh"
+[ -x "$strata" ] || die "no strata binary at $strata"
+
+run=${OUT:-$live/runs/$(date -u +%Y%m%dT%H%M%SZ)/cluster-group}
+mkdir -p "$run" && cd "$run" || exit 2
+export STRATA_QUIET=1
+
+summary() {
+  {
+    echo "# cluster group test"
+    echo
+    echo "Run \`$(basename "$(dirname "$run")")\` with \`$("$strata" --version)\`, group \`${G:-}\`,"
+    echo "member \`${M:-}\`, add-on \`${AD:-}\`."
+    echo
+    summary_table
+  } > summary.md
+}
+trap summary EXIT
+
+stage() { [ "$from" -le "$1" ] && echo "== stage $1: $2" | tee -a steps.log; }
+
+load_outputs
+C=$(out cluster_uid) AD=$(out addon_profile_uid)
+[ -n "$C" ] || die "no cluster A; run just live-up"
+export PALETTE_PROJECT_UID=$(out project_uid)
+
+if stage 1 "a cluster group, and a virtual cluster in it"; then
+  [ "$from" -le 1 ] && require_baseline
+  apply -var cluster_group=true
+  G=$(out cluster_group_uid) GN=$(out cluster_group_name) M=$(out member_cluster_uid)
+  check addon-record 0 'record the add-on version' -- "$strata" snapshot "$AD" -o addon.json
+  check group-record 0 '#78: record clustergroup:<uid>' -- "$strata" snapshot "clustergroup:$G" -o group.json
+  check group-kind 0 '#78: the record says cluster group, and holds the add-on version alone: the pin' -- \
+    jq -e --arg a "$AD" '.source.cluster | .kind == "clusterGroup" and ([.profiles[].uid] == [$a])' group.json
+  check group-members 0 '#78: the record names the virtual cluster as a member' -- \
+    jq -e --arg m "$M" '[.source.cluster.members[].uid] | index($m)' group.json
+  check group-root 0 '#78: the record has the root of the add-on version' -- \
+    test "$(jq -r .root group.json)" = "$(jq -r .root addon.json)"
+  check group-by-name 0 '#78: clustergroup:<name> finds the group' -- \
+    bash -c "\"$strata\" snapshot clustergroup:$GN | jq -e --arg g $G '.source.cluster.uid == \$g'"
+  check member-record 0 'record the member, whole' -- "$strata" snapshot "cluster:$M" -o member.json
+  check member-runs-pin 0 '#78: the member runs the add-on version that the group pins' -- \
+    jq -e --arg a "$AD" '[.source.cluster.profiles[].uid] | index($a)' member.json
+  check group-compare 0 '#78: compare of the group with the member reads the pinned profile of the member: IDENTICAL' -- \
+    "$strata" compare "clustergroup:$G" "cluster:$M"
+  check group-compare-record 0 '#78: the same from the record of the group' -- \
+    "$strata" compare group.json "cluster:$M"
+  check group-compare-no-values 0 '#78: a group gives no variable values, so the compare states no cluster value' -- \
+    bash -c "! grep -q 'cluster values' group-compare.out"
+  check group-verify 0 '#78: verify of the record of the group' -- "$strata" verify group.json
+  check member-consumer 1 '#78: consumers of the add-on version' -- "$strata" consumers "$AD" --json
+  check member-consumer-listed 0 '#78: the consumer list of Palette names the virtual cluster' -- \
+    jq -e --arg m "$M" '.consumers[] | select(.uid == $m and (.unlisted | not))' member-consumer.out
+  check member-not-in-listing 0 '#78: the cluster listing does not name the virtual cluster' -- \
+    bash -c "\"$live/api.sh\" get /v1/dashboard/spectroclusters/meta | jq -e --arg m $M '[.. | objects | select(has(\"metadata\")) | .metadata.uid] | index(\$m) | not'"
+fi
+
+G=${G:-$(out cluster_group_uid)} M=${M:-$(out member_cluster_uid)}
+
+if stage 2 "an edit in place of the add-on version"; then
+  check edit 0 "edit the manifest of the add-on version in place through the API" -- \
+    "$live/api.sh" edit "$AD" 'edited: "no"' 'edited: "yes"'
+  sleep 20
+  check edit-group-verify 1 '#78: the group holds each manifest by its uid alone, so it follows the edit: verify of its record reports drift' -- \
+    "$strata" verify group.json
+  check edit-group-compare 1 '#78: the member keeps its copy of the manifest, so it no longer runs what the group pins' -- \
+    "$strata" compare "clustergroup:$G" "cluster:$M"
+  check edit-group-compare-says 0 '#78: the compare names the manifest of the add-on pack' -- \
+    grep -q '^      ~ manifest ' edit-group-compare.out
+  check edit-group-raw 0 'the group document after the edit' -- "$live/api.sh" get "/v1/clustergroups/$G"
+  check edit-group-manifest-uid 0 '#78: the template of the group names the manifest by uid, and holds no content' -- \
+    jq -e '[.spec.clusterProfileTemplates[].packs[].manifests[]] | length > 0 and all(.uid != "" and ((.content // "") == ""))' edit-group-raw.out
+  check edit-undo 0 'undo the edit' -- "$live/api.sh" edit "$AD" 'edited: "yes"' 'edited: "no"'
+fi
+
+if stage 3 "the baseline"; then
+  apply_baseline
+  check gone 0 'the group and the member are gone' -- \
+    test -z "$(out cluster_group_uid)$(out member_cluster_uid)"
+fi
+
+echo
+echo "$script: $(grep -c '^PASS' steps.log) passed, $failures failed; results in $run"
+[ "$failures" = 0 ]

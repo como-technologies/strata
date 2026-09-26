@@ -2,5 +2,7 @@ $ PALETTE_PROJECT=prod strata consumers aws-stack@1.1.1
 strata: looking up project prod
 strata: listing consumers of profile 64e1000000000000000000c3
 strata: reading each cluster for the profiles it applies
+strata: reading each edge host for the profiles bound to it
 aws-stack@1.1.1 (uid 64e1000000000000000000c3): no consumers
   second reading: 1 of 1 clusters read
+  edge hosts: 0 read

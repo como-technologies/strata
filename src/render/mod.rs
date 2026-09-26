@@ -217,6 +217,8 @@ pub(crate) fn consumers_sentence(d: &Diff) -> Option<String> {
     let count = consumer_count(consumers.count);
     let has = format!("{}@{} has {count}", profile.name, profile.version);
     match &other.cluster {
+        // the consumer list of Palette names clusters, and never an edge host
+        Some(c) if !c.kind.is_cluster() => Some(has),
         Some(c) if consumers.count > 0 => Some(format!(
             "{has}; {} is {}one of them",
             c.name,
@@ -227,6 +229,29 @@ pub(crate) fn consumers_sentence(d: &Diff) -> Option<String> {
             }
         )),
         _ => Some(has),
+    }
+}
+
+/// `edge hosts: 3 read`, or why they could not be read.
+pub(crate) fn edge_hosts_line(r: &ConsumersReport) -> String {
+    let read = &r.edge_hosts_read;
+    match read
+        .error
+        .as_ref()
+        .and_then(|e| e.get("message"))
+        .and_then(Value::as_str)
+    {
+        Some(msg) => format!("edge hosts: not read ({msg})"),
+        None => format!("edge hosts: {} read", read.read),
+    }
+}
+
+/// The text with its first letter in upper case.
+pub(crate) fn capitalized(text: &str) -> String {
+    let mut chars = text.chars();
+    match chars.next() {
+        Some(first) => first.to_uppercase().chain(chars).collect(),
+        None => String::new(),
     }
 }
 
@@ -812,8 +837,8 @@ pub(crate) fn plain_flags(pd: &PackDiff) -> String {
     f.join(" ")
 }
 
-/// One line for each image or chart that moved: `~ image <repo>: <old> -> <new>`, `+ chart
-/// <name> <version>`.
+/// One line for each image, chart, or param that moved: `~ image <repo>: <old> -> <new>`, `+
+/// chart <name> <version>`, `~ param <name>: <old> -> <new>`.
 pub(crate) fn artifact_lines(pd: &PackDiff) -> Vec<String> {
     let line = |kind: &str, c: &crate::diff::ArtifactChange| -> String {
         let old = c.old.as_deref().unwrap_or_default();
@@ -831,10 +856,26 @@ pub(crate) fn artifact_lines(pd: &PackDiff) -> Vec<String> {
             crate::diff::Op::Removed => format!("- {kind} {}{}", c.name, at(old)),
         }
     };
+    // a param value is JSON: a string reads as it is, and anything else as compact JSON
+    let value = |v: &Option<Value>| match v {
+        Some(Value::String(s)) => s.clone(),
+        Some(v) => v.to_string(),
+        None => String::new(),
+    };
+    let param = |c: &crate::diff::ParamChange| -> String {
+        match c.op {
+            crate::diff::Op::Changed => {
+                format!("~ param {}: {} -> {}", c.name, value(&c.old), value(&c.new))
+            }
+            crate::diff::Op::Added => format!("+ param {}: {}", c.name, value(&c.new)),
+            crate::diff::Op::Removed => format!("- param {}: {}", c.name, value(&c.old)),
+        }
+    };
     pd.image_changes
         .iter()
         .map(|c| line("image", c))
         .chain(pd.chart_changes.iter().map(|c| line("chart", c)))
+        .chain(pd.param_changes.iter().map(param))
         .collect()
 }
 

@@ -1,0 +1,8 @@
+$ strata compare platform-addons@1.0.0 runs/store-1.json
+platform-addons@1.0.0 (uid 64e2000000000000000000a1)  ->  platform-addons@1.0.0 on edge host store-1 (uid 64f4000000000000000000e1)
+root       f6312d5a2793 -> f6312d5a2793   IDENTICAL
+consumers  platform-addons@1.0.0 has 1 consumer
+
+  variables unchanged
+
+  [addon] namespace-policy           1.0.0              unchanged

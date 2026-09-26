@@ -19,6 +19,9 @@ show.
 | `knurl.sh` | [The knurl adapter](../automation/knurl.md): each method of the port against the strata answer for the same real object. Read-only. It needs the profiles; the instance checks need the cluster. |
 | `registry-kinds.sh` | The digest of each registry kind, and a push again of one version into each (#75); a Helm registry with credentials, the case with no digest (#71). It needs no cluster. |
 | `tiers.sh` | The tiers of a cluster record, and `compare` of two cluster records beyond the release (#76). It builds cluster B for a while. |
+| `edge-host.sh` | A record of an edge host, `consumers` of a profile bound to one, and what an edit in place does to an edge host (#78). It registers edge hosts with no device. |
+| `cluster-group.sh` | A record of a cluster group, and `compare` of the group with its virtual cluster (#78). It builds a virtual cluster in cluster A. |
+| `app-profile.sh` | A record of an app profile, and a plain update of it (#78). It needs no cluster. |
 
 The example runs on AWS or GCP: the variable `cloud` in `terraform.tfvars`
 selects one. Strata makes no rule about which cloud runs the cluster. The
@@ -49,6 +52,11 @@ add a file of the same shape. The scripts read the pack names from the outputs
 
 The pack versions are those of `examples/profiles/aws-stack@1.1.0.json`.
 
+`cluster-group.sh` sets `cluster_group`, which adds a cluster group
+`strata-live-group` on cluster A that pins the add-on version, and a virtual
+cluster `strata-live-member` in it. The virtual cluster runs in cluster A, so it
+adds no machine. The script removes both at its end.
+
 `in-place.sh` adds cluster `barney` (cluster B), with the same two profiles, for
 the length of its run. The two cluster names share no part, so no match by
 prefix or substring finds both. `registry-move.sh` adds the profile
@@ -77,7 +85,7 @@ its end.
 | `registry-move.sh` | The registry move test (#24). |
 | `tag-only.sh` | The tag name test (#19). |
 | `drift-report.sh` | The drift report test (#25). It opens and closes issues in this repository with the label `strata-live-drift`. |
-| `api.sh` | The writes outside OpenTofu: an edit in place, a push of a profile to a cluster, the delete of profile versions, the delete of a cluster, and a probe profile that it deletes at once. |
+| `api.sh` | The writes outside OpenTofu: an edit in place, a push of a profile to a cluster, the delete of profile versions, the delete of a cluster, a probe profile that it deletes at once, an edge host with no device, and an app profile. `api.sh post` sends a search that Palette takes as a `POST`. |
 | `packs.sh` | The pack ref test (#55). |
 | `pack-states.sh` | The pack state test (#68). |
 | `merge-gate.sh` | The merge gate test (#57). |
@@ -91,10 +99,13 @@ its end.
 | `cluster.sh` | The cluster test (#66): a change of the value the cluster gives a variable, and a deletion through the API. It ends with the cluster gone. |
 | `order.sh` | The order test (#66): a reorder of the packs of two published versions, and of the profiles of the cluster, through the API. It leaves the versions edited; `live-down` follows it. |
 | `who.sh` | The audit log test (#69): who made an edit through the API, and an update that a cluster accepted, as `verify --who` reads them. |
-| `pending.sh` | The pending update test (#70): when Palette says that an update waits for cluster A, and what a record, the listing, and `compare` say. |
+| `pending.sh` | The pending update test (#70, #78): when Palette says that an update waits for cluster A, what a record, the listing, and `compare` say, and what `cluster:<uid>@pending` holds; `consumers --list-only`. |
 | `macros.sh` | The macro test (#72): what a project macro does to a version, to the copy that cluster A runs, and to a record, when the macro gets another value. |
 | `macro-repave.sh` | The macro repave test (#72): a macro in a field that repaves cluster A, and what a change of its value alone does. It ends with a repave that waits for approval; `live-down` follows it. |
 | `repave.sh` | The repave test (#73): `compare --repave` asks Palette if a change repaves cluster A, and prints its answer beside the impact level. |
+| `edge-host.sh` | The edge host test (#78). |
+| `cluster-group.sh`, `terraform/cluster-group.tf` | The cluster group test (#78), and the group and the virtual cluster that it builds. Off unless `cluster_group` is set. |
+| `app-profile.sh` | The app profile test (#78). |
 | `inventory.sh` | What clusters A and B still have in the cloud that `terraform.tfvars` names, to confirm a teardown. `just live-inventory` runs it. It reads the variables and not the outputs, so it works after `live-down`. |
 | `aws-inventory.sh` | What one cluster still has in AWS. `inventory.sh` runs it on AWS. |
 | `gcp-inventory.sh` | What one cluster still has in a GCP project. `inventory.sh` runs it on GCP. |
@@ -150,6 +161,9 @@ each.
 | `macros.sh` | a project macro, and the manifest of the add-on version that reads it; the update that cluster A accepts; all put back | the clusters, the flag (off), the baseline |
 | `macro-repave.sh` | a project macro in the Kubernetes pack of the release version, and then its value alone; it leaves a repave that waits for approval | the flag (off); it ends with the removal of the example |
 | `repave.sh` | the Kubernetes pack of the release version, and a manifest of the add-on version, each in place and put back; no update is accepted | the clusters, the flag (off), the baseline |
+| `edge-host.sh` | two edge hosts with no device, each bound to a version; a manifest of the add-on version and a value of the release version, each in place and put back; it deletes the hosts | the profiles, the clusters, the baseline |
+| `cluster-group.sh` | a cluster group on cluster A and a virtual cluster in it; a manifest of the add-on version, in place and put back; it removes the group | the profiles, cluster A, the baseline |
+| `app-profile.sh` | an app profile, a plain update of it, and its delete | the baseline |
 
 **One definition for each kind.** Clusters A and B come from one resource, and
 differ only in their names. Each profile has the same lifecycle:

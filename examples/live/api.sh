@@ -37,6 +37,15 @@
 #   api.sh delete-cluster CLUSTER_UID
 #       Ask Palette to delete a cluster, by the API and not the provider: DELETE the cluster. The
 #       deletion runs after the request ends.
+#   api.sh edge-host-create UID PROFILE_UID...
+#       Register an edge host UID with no device, as for a device that is not paired yet, and
+#       bind the profiles to it. Nothing runs on it.
+#   api.sh edge-host-delete UID
+#   api.sh app-profile-create NAME
+#       Make an app profile NAME@1.0.0 with one manifest tier, and print its uid.
+#   api.sh app-profile-edit UID FROM TO
+#       Replace FROM with TO in the manifest of the app profile, by a plain update.
+#   api.sh app-profile-delete UID
 #   api.sh sync-oci REGISTRY_UID
 #       Ask Palette to read an OCI pack registry in ECR again, and wait until that sync ends.
 #       Prints the sync status. Exit 2 when the sync does not end in five minutes.
@@ -54,6 +63,9 @@
 #   api.sh patch PATH JSON
 #       PATCH one document of the API with the body JSON, such as
 #       /v1/spectroclusters/<uid>/clusterConfig/timezone '{"timezone": "America/Chicago"}'.
+#   api.sh post PATH JSON
+#       POST the body JSON to a search of the API, such as /v1/dashboard/edgehosts/search, and
+#       print the answer. A POST to another path can create something: use a search path only.
 #   api.sh probe-profile NAME REGISTRY_UID VERSION
 #       Ask Palette to create an add-on profile that pins one pack version, with the values the
 #       registry lists for it. When Palette creates it, delete it at once, print `accepted`, and
@@ -308,6 +320,64 @@ delete_cluster() {
   echo "the deletion of cluster $uid is requested"
 }
 
+# edge_host_create UID PROFILE_UID...: register an edge host with no device, and bind the
+# profiles to it
+edge_host_create() {
+  local uid=${1:-} body
+  [ -n "$uid" ] && [ $# -ge 2 ] || die "usage: api.sh edge-host-create UID PROFILE_UID..."
+  shift
+  body=$(mktemp); trap 'rm -f "${body:-}"' RETURN
+  jq -n --arg u "$uid" '{metadata: {uid: $u, name: $u}, spec: {archType: "amd64"}}' > "$body"
+  call POST /v1/edgehosts "$body" > /dev/null || return 2
+  jq -n '{profiles: [$ARGS.positional[] | {uid: .}]}' --args "$@" > "$body"
+  call PUT "/v1/edgehosts/$uid/profiles" "$body" > /dev/null || return 2
+  echo "edge host $uid is registered, with $# profiles"
+}
+
+# edge_host_delete UID
+edge_host_delete() {
+  local uid=${1:-}
+  [ -n "$uid" ] || die "usage: api.sh edge-host-delete UID"
+  call DELETE "/v1/edgehosts/$uid" > /dev/null || return 2
+  echo "edge host $uid is deleted"
+}
+
+# app_profile_create NAME: an app profile NAME@1.0.0 with one manifest tier, `config`, whose
+# manifest is a ConfigMap with `edited: "no"`. Prints its uid.
+app_profile_create() {
+  local name=${1:-} body
+  [ -n "$name" ] || die "usage: api.sh app-profile-create NAME"
+  body=$(mktemp); trap 'rm -f "${body:-}"' RETURN
+  jq -n --arg n "$name" '{metadata: {name: $n}, spec: {version: "1.0.0", template: {appTiers: [
+      {name: "config", type: "manifest", manifests: [{name: "config",
+        content: ("apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: " + $n + "\ndata:\n  edited: \"no\"\n")}]}]}}}' > "$body"
+  call POST /v1/appProfiles "$body" | jq -r '.uid'
+}
+
+# app_profile_edit UID FROM TO: replace FROM with TO in the manifest of the first tier that has
+# one, by a plain update of that manifest: an app profile has no publish step
+app_profile_edit() {
+  local uid=${1:-} from=${2:-} to=${3:-} tiers tier m content body
+  [ -n "$uid" ] && [ -n "$from" ] || die "usage: api.sh app-profile-edit UID FROM TO"
+  tiers=$(call GET "/v1/appProfiles/$uid/tiers") || return 2
+  tier=$(jq -r '[.spec.appTiers[] | select((.spec.manifests // []) | length > 0)][0].metadata.uid' <<<"$tiers")
+  m=$(jq -r --arg t "$tier" '.spec.appTiers[] | select(.metadata.uid == $t) | .spec.manifests[0].uid' <<<"$tiers")
+  content=$(call GET "/v1/appProfiles/$uid/tiers/$tier/manifests/$m" | jq -r '.spec.published.content') || return 2
+  grep -qF -- "$from" <<<"$content" || die "the manifest does not hold: $from"
+  body=$(mktemp); trap 'rm -f "${body:-}"' RETURN
+  jq -n --arg u "$m" --arg c "${content//"$from"/$to}" '{name: "config", uid: $u, content: $c}' > "$body"
+  call PUT "/v1/appProfiles/$uid/tiers/$tier/manifests/$m" "$body" > /dev/null || return 2
+  echo "edited the manifest of tier $tier of app profile $uid"
+}
+
+# app_profile_delete UID
+app_profile_delete() {
+  local uid=${1:-}
+  [ -n "$uid" ] || die "usage: api.sh app-profile-delete UID"
+  call DELETE "/v1/appProfiles/$uid" > /dev/null || return 2
+  echo "app profile $uid is deleted"
+}
+
 # sync_oci UID: sync_registry of an OCI registry on ECR
 sync_oci() {
   [ -n "${1:-}" ] || die "usage: api.sh sync-oci REGISTRY_UID"
@@ -399,6 +469,15 @@ patch() {
   echo "patched $path"
 }
 
+# post PATH JSON: print the answer. For a search that Palette takes as a POST.
+post() {
+  local path=${1:-} json=${2:-} body
+  [ -n "$json" ] || die "usage: api.sh post PATH JSON"
+  body=$(mktemp); trap 'rm -f "${body:-}"' RETURN
+  jq -e . <<<"$json" > "$body" || die "the body is not JSON: $json"
+  call POST "$path" "$body" || return 2
+}
+
 # macro-set NAME VALUE: POST creates a project macro, PATCH changes one that exists
 macro_set() {
   local name=${1:-} value=${2:-} body
@@ -450,6 +529,11 @@ case "${1:-}" in
   delete) shift; delete "$@" ;;
   delete-named) shift; delete_named "$@" ;;
   delete-cluster) shift; delete_cluster "$@" ;;
+  edge-host-create) shift; edge_host_create "$@" ;;
+  app-profile-create) shift; app_profile_create "$@" ;;
+  app-profile-edit) shift; app_profile_edit "$@" ;;
+  app-profile-delete) shift; app_profile_delete "$@" ;;
+  edge-host-delete) shift; edge_host_delete "$@" ;;
   sync-oci) shift; sync_oci "$@" ;;
   sync) shift; sync_registry "$@" ;;
   pack-registry-create) shift; pack_registry_create "$@" ;;
@@ -461,5 +545,6 @@ case "${1:-}" in
   get-kubeconfig) shift; get_kubeconfig "$@" ;;
   get) shift; [ -n "${1:-}" ] || die "usage: api.sh get PATH"; call GET "$1" ;;
   patch) shift; patch "$@" ;;
+  post) shift; post "$@" ;;
   *) sed -n '2,/^set -uo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; exit 2 ;;
 esac

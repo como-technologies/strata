@@ -81,7 +81,18 @@ The cluster is behind its profile until it takes the update. A record of the
 cluster says `updatesPending: true`: see
 [Whether an update waits](../commands/snapshot.md#whether-an-update-waits).
 
-Before anybody accepts the update, ask Palette if it replaces the nodes:
+Before anybody accepts the update, see what it changes. `cluster:payments@pending`
+is the cluster after it takes the update:
+
+```text
+{{#include ../output/edited-pending-record.txt}}
+{{#include ../output/edited-pending.txt}}
+```
+
+The update brings the edit, and nothing else. See
+[What a waiting update changes](../commands/snapshot.md#what-a-waiting-update-changes).
+
+Then ask Palette if it replaces the nodes:
 
 ```text
 {{#include ../output/edited-repave-lines.txt}}

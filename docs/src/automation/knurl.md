@@ -36,7 +36,7 @@ are in two namespaces, and they can have one name.
 | --- | --- | --- |
 | `observe_unit` | the record of a profile version, or of a pack version | the two digests, and each pack from a registry as a pin, in the order of the layers |
 | `observe_instance` | the cluster, one time, its summary, and its notifications | the state, the health from the summary, the two digests of each profile copy that the cluster holds, by name, and whether Palette says an update waits |
-| `pinned_by` | `consumers` | the clusters that use a profile version: those the profile lists, and those the second reading of `consumers` finds. Each one by name, or by uid where Palette gives no name |
+| `pinned_by` | `consumers` | the clusters and the edge hosts that use a profile version: those the profile lists, those the second reading of `consumers` finds, and each edge host bound to the version. Each one by name, or by uid where Palette gives no name. `observe_instance` reads a cluster, so it cannot observe an edge host that `pinned_by` names |
 | `identity_of` | a candidate | the content digest before the version is in Palette |
 | `verify`, from knurl | `observe_unit` again | unchanged, or what changed |
 

@@ -232,6 +232,24 @@ impl Runner {
         self.tenant.profile(project, uid, version, example, edits);
     }
 
+    /// [`Runner::addons`] under another profile name.
+    pub fn addons_named(
+        &mut self,
+        project: &str,
+        uid: &str,
+        name: &str,
+        pack: &str,
+        label: &str,
+        version: &str,
+    ) {
+        if !self.building() {
+            return;
+        }
+        self.changed();
+        self.tenant
+            .addons_named(project, uid, name, pack, label, version);
+    }
+
     /// Publish the add-on profile with one manifest pack.
     pub fn addons(&mut self, project: &str, uid: &str, pack: &str, label: &str, version: &str) {
         if !self.building() {
@@ -269,6 +287,41 @@ impl Runner {
         }
         self.changed();
         self.tenant.cluster(project, uid, name, profiles, values);
+    }
+
+    /// An edge host with profiles bound to it: see [`Tenant::edge_host`].
+    pub fn edge_host(&mut self, project: &str, uid: &str, name: &str, profiles: &[&str]) {
+        if !self.building() {
+            return;
+        }
+        self.changed();
+        self.tenant.edge_host(project, uid, name, profiles);
+    }
+
+    /// A cluster group and its virtual clusters: see [`Tenant::cluster_group`].
+    pub fn cluster_group(
+        &mut self,
+        project: &str,
+        uid: &str,
+        name: &str,
+        profiles: &[&str],
+        members: &[&str],
+    ) {
+        if !self.building() {
+            return;
+        }
+        self.changed();
+        self.tenant
+            .cluster_group(project, uid, name, profiles, members);
+    }
+
+    /// The app profile `shop`, or a plain update of it: see [`Tenant::app_profile`].
+    pub fn app_profile(&mut self, project: &str, uid: &str, version: &str, replicas: &str) {
+        if !self.building() {
+            return;
+        }
+        self.changed();
+        self.tenant.app_profile(project, uid, version, replicas);
     }
 
     /// Change the pack values on a cluster, and not on its profile.

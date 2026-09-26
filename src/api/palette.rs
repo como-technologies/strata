@@ -7,11 +7,16 @@ use super::{PaletteApi, RawCluster, RawProfile};
 use crate::error::{Error, Result};
 use crate::progress::Progress;
 use crate::reference::LATEST;
+use crate::snapshot::APP_KIND;
 use crate::version;
 
 const PROFILE_LISTING: &str = "/v1/dashboard/clusterprofiles/metadata";
 const CLUSTER_LISTING: &str = "/v1/dashboard/spectroclusters/meta";
 const PROJECT_LISTING: &str = "/v1/dashboard/projects/metadata";
+/// The edge host search. Palette gives at most 50 on a page.
+const EDGE_HOST_SEARCH: &str = "/v1/dashboard/edgehosts/search?limit=50";
+const CLUSTER_GROUP_LISTING: &str = "/v1/clustergroups/hostCluster/metadata";
+const APP_PROFILE_LISTING: &str = "/v1/dashboard/appProfiles/metadata";
 
 /// `(name, uid)` of each entry of a listing: an array, or an object with `items`.
 fn named_entries(listing: &Value) -> Vec<(String, String)> {
@@ -120,6 +125,122 @@ impl<A: PaletteApi> Palette<A> {
                 version: LATEST.to_string(),
                 tenant_scope: self.project_uid().is_none(),
             })
+    }
+
+    /// The uid of the app profile `name` at `version`, or at its highest version for
+    /// [`LATEST`], from `GET /v1/dashboard/appProfiles/metadata`.
+    pub fn resolve_app_profile(&self, name: &str, version: &str) -> Result<String> {
+        let listing = self.api.get_json(APP_PROFILE_LISTING)?;
+        let all: Vec<(String, String, String)> = listing
+            .get("appProfiles")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .map(|it| {
+                let text = |p: &str| {
+                    it.pointer(p)
+                        .and_then(Value::as_str)
+                        .unwrap_or_default()
+                        .to_string()
+                };
+                (
+                    text("/metadata/name"),
+                    text("/spec/version"),
+                    text("/metadata/uid"),
+                )
+            })
+            .collect();
+        let named = all.iter().filter(|(n, _, _)| n == name);
+        let found = if version == LATEST {
+            named.max_by(|(_, x, _), (_, y, _)| version::compare(x, y))
+        } else {
+            named.into_iter().find(|(_, v, _)| v == version)
+        };
+        match found {
+            Some((_, _, uid)) => Ok(uid.clone()),
+            None => {
+                let mut available: Vec<String> =
+                    all.iter().map(|(n, v, _)| format!("{n}@{v}")).collect();
+                available.sort();
+                Err(Error::AppProfileNotFound {
+                    name: name.to_string(),
+                    version: version.to_string(),
+                    available,
+                })
+            }
+        }
+    }
+
+    /// An app profile, in the shape of a profile, so that a record of it has packs and a root:
+    /// `GET /v1/appProfiles/{uid}` and `GET /v1/appProfiles/{uid}/tiers`. Each tier is a pack in
+    /// the layer `app`: its type, its version as the tag, its source tier as the pack uid, its
+    /// values, and its properties as the params. The content of each manifest of a tier comes from
+    /// `GET /v1/appProfiles/{uid}/tiers/{tierUid}/manifests/{manifestUid}`. A tier has no digest.
+    pub fn fetch_app_profile(&self, uid: &str, progress: &Progress) -> Result<RawProfile> {
+        progress.note(&format!("fetching app profile {uid}"));
+        let at = query_value(uid);
+        let doc = self.api.get_json(&format!("/v1/appProfiles/{at}"))?;
+        let tiers = self.api.get_json(&format!("/v1/appProfiles/{at}/tiers"))?;
+        let text = |v: &Value, p: &str| {
+            v.pointer(p)
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string()
+        };
+        let (mut packs, mut mpacks) = (Vec::new(), Vec::new());
+        for tier in tiers
+            .pointer("/spec/appTiers")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+        {
+            let name = text(tier, "/metadata/name");
+            let params: serde_json::Map<String, Value> = tier
+                .pointer("/spec/properties")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+                .map(|p| (text(p, "/name"), Value::from(text(p, "/value"))))
+                .collect();
+            packs.push(serde_json::json!({
+                "name": name, "layer": "app", "type": text(tier, "/spec/type"),
+                "tag": text(tier, "/spec/version"), "version": text(tier, "/spec/version"),
+                "packUid": text(tier, "/spec/sourceAppTierUid"),
+                "registryUid": text(tier, "/spec/registryUid"),
+                "values": text(tier, "/spec/values"), "params": params,
+            }));
+            let tier_uid = query_value(&text(tier, "/metadata/uid"));
+            let mut manifests = Vec::new();
+            for m in tier
+                .pointer("/spec/manifests")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+            {
+                let d = self.api.get_json(&format!(
+                    "/v1/appProfiles/{at}/tiers/{tier_uid}/manifests/{}",
+                    query_value(&text(m, "/uid"))
+                ))?;
+                manifests.push(serde_json::json!({
+                    "name": text(&d, "/metadata/name"), "uid": text(&d, "/metadata/uid"),
+                    "content": text(&d, "/spec/published/content"),
+                    "digest": text(&d, "/spec/published/digest"),
+                }));
+            }
+            mpacks.push(serde_json::json!({"spec": {"name": name, "manifests": manifests}}));
+        }
+        Ok(RawProfile {
+            profile: serde_json::json!({
+                "metadata": doc["metadata"],
+                "spec": {"version": doc["spec"]["version"],
+                    "published": {"type": APP_KIND, "cloudType": "all", "packs": packs}},
+            }),
+            manifests: serde_json::json!({"spec": {"packs": mpacks}}),
+            variables: serde_json::json!({ "variables": [] }),
+            variables_unavailable: false,
+            project_uid: self.project_uid().map(str::to_string),
+            fetched_at: None,
+        })
     }
 
     /// The profile listing, `GET /v1/dashboard/clusterprofiles/metadata`: `items[]` with each
@@ -233,9 +354,10 @@ impl<A: PaletteApi> Palette<A> {
     }
 
     /// The entries of the audit log of Palette for one resource, `GET /v1/audits`, that it logged
-    /// at `since` or after, every page. `kind` is `clusterprofile` or `spectrocluster`. Palette
-    /// lists them newest first, and at most 100 on a page; `listmeta.continue` names the next
-    /// page, and is empty on the last one. An empty `since` reads the full log of the resource.
+    /// at `since` or after, every page. `kind` is `clusterprofile`, `spectrocluster`, or
+    /// `edgehost`. Palette lists them newest first, and at most 100 on a page; `listmeta.continue`
+    /// names the next page, and is empty on the last one. An empty `since` reads the full log of
+    /// the resource.
     pub fn audits(&self, kind: &str, uid: &str, since: &str) -> Result<Vec<Value>> {
         let mut query = format!(
             "resourceKind={}&resourceUid={}",
@@ -306,6 +428,252 @@ impl<A: PaletteApi> Palette<A> {
             resolved_values: None,
             cloud_config: None,
         })
+    }
+
+    /// The raw documents of a cluster as they would be after the cluster accepts the update that
+    /// waits: `GET /v1/spectroclusters/{uid}/profileUpdates` gives `profiles[]`, each a profile
+    /// template in the shape of `spec.clusterProfileTemplates`, and they take the place of the
+    /// templates of the cluster. The manifests of each come from its profile, `GET
+    /// /v1/clusterprofiles/{uid}/packs/manifests`, since the cluster holds no copy of them yet.
+    pub fn with_pending(&self, mut raw: RawCluster) -> Result<RawCluster> {
+        let uid = raw
+            .cluster
+            .pointer("/metadata/uid")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string();
+        let updates = self.api.get_json(&format!(
+            "/v1/spectroclusters/{}/profileUpdates",
+            query_value(&uid)
+        ))?;
+        let profiles: Vec<Value> = updates
+            .get("profiles")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        raw.manifests = self.profile_manifests(&profiles)?;
+        raw.cluster["spec"]["clusterProfileTemplates"] = Value::Array(profiles);
+        Ok(raw)
+    }
+
+    /// The manifests of the profile of each template, `GET
+    /// /v1/clusterprofiles/{uid}/packs/manifests`, in the shape of the manifests of a cluster:
+    /// `{"profiles": [{metadata, spec}]}`.
+    fn profile_manifests(&self, templates: &[Value]) -> Result<Value> {
+        let mut manifests = Vec::with_capacity(templates.len());
+        for t in templates {
+            let puid = t.get("uid").and_then(Value::as_str).unwrap_or_default();
+            let d = self.api.get_json(&format!(
+                "/v1/clusterprofiles/{}/packs/manifests",
+                query_value(puid)
+            ))?;
+            manifests.push(serde_json::json!({"metadata": d["metadata"], "spec": d["spec"]}));
+        }
+        Ok(serde_json::json!({ "profiles": manifests }))
+    }
+
+    /// Every edge host the scope can list, `POST /v1/dashboard/edgehosts/search`, every page.
+    /// Each item names the profiles bound to the host in `spec.clusterProfileTemplates`, as a
+    /// summary: uid, name, and version.
+    pub fn edge_hosts(&self) -> Result<Vec<Value>> {
+        self.searched(EDGE_HOST_SEARCH)
+    }
+
+    /// Every item of a search of the dashboard, a POST with no filter, every page: Palette gives
+    /// at most `limit` on a page, and `listmeta.continue` names the next one.
+    fn searched(&self, search: &str) -> Result<Vec<Value>> {
+        let body = serde_json::json!({"filter": {}, "sort": []});
+        let mut items = Vec::new();
+        let mut next = String::new();
+        loop {
+            let path = if next.is_empty() {
+                search.to_string()
+            } else {
+                format!("{search}&continue={}", query_value(&next))
+            };
+            let page = self.api.post_json(&path, &body)?;
+            let got = page
+                .get("items")
+                .and_then(Value::as_array)
+                .cloned()
+                .unwrap_or_default();
+            let done = got.is_empty();
+            items.extend(got);
+            next = page
+                .pointer("/listmeta/continue")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string();
+            if next.is_empty() || done {
+                return Ok(items);
+            }
+        }
+    }
+
+    /// The raw documents of an edge host, in the shape of a cluster: `GET /v1/edgehosts/{uid}`
+    /// gives the bound profiles in `spec.clusterProfileTemplates`, and the manifests and the
+    /// variables of each come from its profile. An edge host has no notifications. `host` is a
+    /// uid, or, when no edge host has that uid, the name of one edge host in the scope.
+    pub fn fetch_edge_host(&self, host: &str, progress: &Progress) -> Result<RawCluster> {
+        progress.note(&format!("fetching edge host {host}"));
+        let get = |uid: &str| {
+            self.api
+                .get_json(&format!("/v1/edgehosts/{}", query_value(uid)))
+        };
+        let doc = match get(host) {
+            Ok(doc) => doc,
+            Err(Error::Api { status: 404, .. }) => {
+                let uid = self.edge_host_uid_named(host)?;
+                progress.note(&format!("edge host '{host}' is {uid}"));
+                get(&uid)?
+            }
+            Err(e) => return Err(e),
+        };
+        self.holder_raw(doc, progress)
+    }
+
+    /// The raw documents of a cluster group, in the shape of a cluster: `GET
+    /// /v1/clustergroups/{uid}` gives the profiles that the group pins for its virtual clusters
+    /// in `spec.clusterProfileTemplates`, and the manifests and the variables of each come from
+    /// its profile. `group` is a uid, or, when no cluster group has that uid, the name of one
+    /// cluster group in the scope.
+    pub fn fetch_cluster_group(&self, group: &str, progress: &Progress) -> Result<RawCluster> {
+        progress.note(&format!("fetching cluster group {group}"));
+        let get = |uid: &str| {
+            self.api
+                .get_json(&format!("/v1/clustergroups/{}", query_value(uid)))
+        };
+        let doc = match get(group) {
+            Ok(doc) => doc,
+            Err(Error::Api { status: 404, .. }) => {
+                let uid = self.cluster_group_uid_named(group)?;
+                progress.note(&format!("cluster group '{group}' is {uid}"));
+                get(&uid)?
+            }
+            Err(e) => return Err(e),
+        };
+        self.holder_raw(doc, progress)
+    }
+
+    /// The virtual clusters of a cluster group, `POST
+    /// /v1/dashboard/clustergroups/{uid}/virtualClusters`, every page: the clusters that run the
+    /// profiles that the group pins.
+    pub fn cluster_group_members(&self, uid: &str) -> Result<Vec<Value>> {
+        self.searched(&format!(
+            "/v1/dashboard/clustergroups/{}/virtualClusters?limit=50",
+            query_value(uid)
+        ))
+    }
+
+    /// The uid of the one cluster group in the scope that has the name `name`, from `GET
+    /// /v1/clustergroups/hostCluster/metadata`.
+    fn cluster_group_uid_named(&self, name: &str) -> Result<String> {
+        let listing = self.api.get_json(CLUSTER_GROUP_LISTING)?;
+        let groups: Vec<(String, String)> = listing
+            .get("items")
+            .and_then(Value::as_array)
+            .map(|items| {
+                items
+                    .iter()
+                    .map(|g| {
+                        let text = |k: &str| {
+                            g.get(k)
+                                .and_then(Value::as_str)
+                                .unwrap_or_default()
+                                .to_string()
+                        };
+                        (text("name"), text("uid"))
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        let mut uids: Vec<String> = groups
+            .iter()
+            .filter(|(n, _)| n == name)
+            .map(|(_, uid)| uid.clone())
+            .collect();
+        uids.sort();
+        match uids.len() {
+            1 => Ok(uids.remove(0)),
+            0 => Err(Error::ClusterGroupNotFound {
+                cluster_group: name.to_string(),
+                available: sorted_names(&groups),
+            }),
+            _ => Err(Error::ClusterGroupNameAmbiguous {
+                name: name.to_string(),
+                uids,
+            }),
+        }
+    }
+
+    /// The raw documents of an object that holds profiles in `spec.clusterProfileTemplates` and
+    /// is not a cluster: the manifests and the variables of each profile come from the profile.
+    /// Such an object gives no values to the variables, so a record holds the definitions of each
+    /// profile, as a profile record does. It has no notifications.
+    fn holder_raw(&self, doc: Value, progress: &Progress) -> Result<RawCluster> {
+        let templates: Vec<Value> = doc
+            .pointer("/spec/clusterProfileTemplates")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        let mut variables = Vec::with_capacity(templates.len());
+        let mut variables_unavailable = false;
+        for t in &templates {
+            let puid = t.get("uid").and_then(Value::as_str).unwrap_or_default();
+            let (v, unavailable) = self.variables_or(
+                &format!("/v1/clusterprofiles/{}/variables", query_value(puid)),
+                serde_json::json!({ "variables": [] }),
+                progress,
+            )?;
+            variables_unavailable |= unavailable;
+            variables.push(serde_json::json!({"profileUid": puid, "variables": v["variables"]}));
+        }
+        Ok(RawCluster {
+            manifests: self.profile_manifests(&templates)?,
+            cluster: doc,
+            variables: Value::Array(variables),
+            variables_unavailable,
+            project_uid: self.project_uid().map(str::to_string),
+            fetched_at: None,
+            notifications: None,
+            notifications_error: None,
+            resolved_values: None,
+            cloud_config: None,
+        })
+    }
+
+    /// The uid of the one edge host in the scope that has the name `name`.
+    fn edge_host_uid_named(&self, name: &str) -> Result<String> {
+        let hosts: Vec<(String, String)> = self
+            .edge_hosts()?
+            .iter()
+            .map(|h| {
+                let text = |p: &str| {
+                    h.pointer(p)
+                        .and_then(Value::as_str)
+                        .unwrap_or_default()
+                        .to_string()
+                };
+                (text("/metadata/name"), text("/metadata/uid"))
+            })
+            .collect();
+        let mut uids: Vec<String> = hosts
+            .iter()
+            .filter(|(n, _)| n == name)
+            .map(|(_, uid)| uid.clone())
+            .collect();
+        uids.sort();
+        match uids.len() {
+            1 => Ok(uids.remove(0)),
+            0 => Err(Error::EdgeHostNotFound {
+                edge_host: name.to_string(),
+                available: sorted_names(&hosts),
+            }),
+            _ => Err(Error::EdgeHostNameAmbiguous {
+                name: name.to_string(),
+                uids,
+            }),
+        }
     }
 
     /// The cloud config of a cluster, `GET /v1/cloudconfigs/{cloudType}/{configUid}`, from the

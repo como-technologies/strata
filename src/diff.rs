@@ -586,6 +586,53 @@ pub struct PackDiff {
     /// Each chart added, removed, or at another version, by name.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub chart_changes: Vec<ArtifactChange>,
+    /// Each param added, removed, or with another value, by name: a detail of `AUTHORED`. The
+    /// params of an app tier are its properties.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub param_changes: Vec<ParamChange>,
+}
+
+/// One param of a pack, compared.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ParamChange {
+    /// What happened.
+    pub op: Op,
+    /// The param name.
+    pub name: String,
+    /// The value in A.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub old: Option<Value>,
+    /// The value in B.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub new: Option<Value>,
+}
+
+/// The params that differ between two packs, by name.
+fn param_changes(a: &Value, b: &Value) -> Vec<ParamChange> {
+    let empty = serde_json::Map::new();
+    let x = a.as_object().unwrap_or(&empty);
+    let y = b.as_object().unwrap_or(&empty);
+    let names: std::collections::BTreeSet<&String> = x.keys().chain(y.keys()).collect();
+    names
+        .into_iter()
+        .filter_map(|name| {
+            let (old, new) = (x.get(name), y.get(name));
+            let op = match (old, new) {
+                (Some(o), Some(n)) if canonical_json(o) == canonical_json(n) => return None,
+                (Some(_), Some(_)) => Op::Changed,
+                (Some(_), None) => Op::Removed,
+                (None, Some(_)) => Op::Added,
+                (None, None) => return None,
+            };
+            Some(ParamChange {
+                op,
+                name: name.clone(),
+                old: old.cloned(),
+                new: new.cloned(),
+            })
+        })
+        .collect()
 }
 
 /// One image or chart that the values of a pack declare, compared: `changed` is a new tag of
@@ -1292,6 +1339,7 @@ pub fn compute(a: &Snapshot, b: &Snapshot, generated_at: &str, verify: Option<Ve
                     charts: false,
                     image_changes: Vec::new(),
                     chart_changes: Vec::new(),
+                    param_changes: Vec::new(),
                 }
             }
             (Some(x), None) => {
@@ -1321,6 +1369,7 @@ pub fn compute(a: &Snapshot, b: &Snapshot, generated_at: &str, verify: Option<Ve
                     charts: false,
                     image_changes: Vec::new(),
                     chart_changes: Vec::new(),
+                    param_changes: Vec::new(),
                 }
             }
             (Some(x), Some(y)) => {
@@ -1406,6 +1455,7 @@ pub fn compute(a: &Snapshot, b: &Snapshot, generated_at: &str, verify: Option<Ve
                     charts: !chart_changes.is_empty(),
                     image_changes,
                     chart_changes,
+                    param_changes: param_changes(&x.params, &y.params),
                 }
             }
             (None, None) => unreachable!("key came from one of the maps"),
@@ -1488,7 +1538,10 @@ pub fn compute(a: &Snapshot, b: &Snapshot, generated_at: &str, verify: Option<Ve
             },
         },
         cluster_variables: match (&a.source.cluster, &b.source.cluster) {
-            (Some(x), Some(y)) => Some(cluster_values_diff(&x.variables, &y.variables)),
+            // an edge host and a cluster group give no values, so only two clusters compare
+            (Some(x), Some(y)) if x.kind.is_cluster() && y.kind.is_cluster() => {
+                Some(cluster_values_diff(&x.variables, &y.variables))
+            }
             _ => None,
         },
         cluster_tiers: tiers_diff(a, b),

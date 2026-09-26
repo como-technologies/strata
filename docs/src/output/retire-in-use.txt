@@ -3,3 +3,4 @@ aws-stack@1.1.0 (uid 64e0000000000000000000b2): 2 consumers
   payments  64f1000000000000000000e1  project dev (uid 64f20000000000000000a0d1)  Running
   search    64f1000000000000000000e2  project dev (uid 64f20000000000000000a0d1)  Running
   second reading: 0 of 0 clusters read
+  edge hosts: 0 read

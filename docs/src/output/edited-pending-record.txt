@@ -1,0 +1,5 @@
+$ strata snapshot cluster:payments@pending -o review/payments-pending.json
+strata: looking up project dev
+strata: fetching cluster payments
+strata: cluster 'payments' is 64f1000000000000000000e1
+strata: wrote review/payments-pending.json (root 78a86f401545)

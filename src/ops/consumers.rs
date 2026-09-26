@@ -21,6 +21,16 @@ pub const CONSUMERS_SCHEMA: &str = "strata-consumers/1";
 /// The state a consumer shows when its cluster could not be read.
 pub const UNKNOWN_STATE: &str = "unknown";
 
+/// The kind of a consumer that is a cluster.
+pub const CLUSTER_KIND: &str = "cluster";
+
+/// The kind of a consumer that is an edge host.
+pub const EDGE_HOST_KIND: &str = "edgehost";
+
+fn cluster_kind() -> String {
+    CLUSTER_KIND.to_string()
+}
+
 /// The profile version whose consumers are listed.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
 pub struct ConsumedProfile {
@@ -32,11 +42,14 @@ pub struct ConsumedProfile {
     pub version: String,
 }
 
-/// One cluster that uses the profile version.
+/// One cluster, or one edge host, that uses the profile version.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct Consumer {
-    /// Cluster uid.
+    /// `cluster`, or `edgehost` for an edge host that the profile is bound to.
+    #[serde(default = "cluster_kind")]
+    pub kind: String,
+    /// Cluster uid, or edge host uid.
     pub uid: String,
     /// Cluster name; empty when neither the profile nor the cluster could name it.
     pub name: String,
@@ -77,6 +90,29 @@ pub struct ClustersRead {
     /// consumer list of the profile stands alone.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<Value>,
+    /// True when the second reading was not done, as `--list-only` asks. Then the consumer list
+    /// of the profile stands alone, and an empty list can be an error of Palette.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub skipped: bool,
+}
+
+/// The edge hosts that `consumers` read. The consumer list of a profile names clusters only, so
+/// strata reads each edge host the key can list for the profiles bound to it.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct EdgeHostsRead {
+    /// Edge hosts listed.
+    pub read: usize,
+    /// Why the edge hosts could not be listed, when they could not. Then no edge host counts.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<Value>,
+}
+
+/// What `consumers` reads.
+#[derive(Debug, Clone, Default)]
+pub struct ConsumersOptions {
+    /// Read the consumer list that Palette computes, and not each cluster of the fleet.
+    pub list_only: bool,
 }
 
 /// The document `consumers` writes: `strata-consumers/1`.
@@ -104,6 +140,9 @@ pub struct ConsumersReport {
     /// The second reading: the clusters read for the profiles they apply.
     #[serde(default)]
     pub clusters_read: ClustersRead,
+    /// The edge hosts read for the profiles bound to them.
+    #[serde(default)]
+    pub edge_hosts_read: EdgeHostsRead,
 }
 
 impl ConsumersReport {
@@ -119,9 +158,33 @@ impl ConsumersReport {
 /// are used; the list is always fetched live). Names and projects come from the profile's
 /// `status.inUseClusters`; each cluster is then read in its own project for its state, with one
 /// client per project from `connect`. A cluster that cannot be read is listed with state
-/// `unknown` and its error; it still counts.
+/// `unknown` and its error; it still counts. Then each cluster the key can list is read for the
+/// profiles it applies: see [`consumers_with`] to read the list alone.
 pub fn consumers<A, F>(
     reference: &Ref,
+    connect: F,
+    generated_at: &str,
+    progress: &Progress,
+) -> Result<ConsumersReport>
+where
+    A: PaletteApi,
+    F: FnMut(Option<&str>) -> Result<Palette<A>>,
+{
+    consumers_with(
+        reference,
+        &ConsumersOptions::default(),
+        connect,
+        generated_at,
+        progress,
+    )
+}
+
+/// [`consumers`] with options: `list_only` reads the consumer list that Palette computes, and
+/// no other cluster. It costs one request per consumer, where the second reading costs one per
+/// cluster of the fleet, but it does not find a consumer that the list omits.
+pub fn consumers_with<A, F>(
+    reference: &Ref,
+    options: &ConsumersOptions,
     mut connect: F,
     generated_at: &str,
     progress: &Progress,
@@ -134,12 +197,21 @@ where
         reference: reference.to_string(),
     };
     let (profile_scope, uid_hint) = match reference {
-        Ref::Cluster { .. } | Ref::Pack { .. } => return Err(refused()),
+        Ref::Cluster { .. }
+        | Ref::EdgeHost { .. }
+        | Ref::ClusterGroup { .. }
+        | Ref::AppProfile { .. }
+        | Ref::Pack { .. } => {
+            return Err(refused());
+        }
         Ref::Snapshot(path) => {
             let recorded = Snapshot::load(path)?;
             // a pack record is not a profile version either, and NoUid below would name `verify`,
             // a command that is not running
-            if recorded.source.cluster.is_some() || recorded.source.pack.is_some() {
+            if recorded.source.cluster.is_some()
+                || recorded.source.pack.is_some()
+                || recorded.source.kind == crate::snapshot::APP_KIND
+            {
                 return Err(refused());
             }
             if recorded.source.uid.is_empty() {
@@ -173,6 +245,7 @@ where
     for cluster in uids {
         let known = named.iter().find(|n| text(n, "/uid") == cluster);
         let mut c = Consumer {
+            kind: cluster_kind(),
             name: known.map(|n| text(n, "/name")).unwrap_or_default(),
             project_uid: known.map(|n| text(n, "/projectUid")).unwrap_or_default(),
             project_name: String::new(),
@@ -207,8 +280,30 @@ where
     // Palette computes the list above when it is asked, in the projects the key can read, and
     // gives an empty list on an error too. So each cluster the key can list is read for the
     // profiles it applies, and a cluster that applies the version joins the list (#66).
-    let clusters_read =
-        second_reading(&mut list, &uid, &home, &mut clients, &mut connect, progress);
+    // the second reading and the edge hosts are read at tenant scope, so a cluster or a host in
+    // any project the key can read is in them; a key that cannot read the tenant reads its own
+    // scope
+    let tenant = connect(Some(TENANT_SCOPE)).ok();
+    let wide = tenant.as_ref().unwrap_or(&home);
+    let clusters_read = if options.list_only {
+        ClustersRead {
+            skipped: true,
+            ..ClustersRead::default()
+        }
+    } else {
+        second_reading(
+            &mut list,
+            &uid,
+            wide,
+            &home,
+            &mut clients,
+            &mut connect,
+            progress,
+        )
+    };
+    // the consumer list names no edge host, and the search of the edge hosts is one request a
+    // page, so it is done also with --list-only
+    let edge_hosts_read = edge_hosts_bound(&mut list, &uid, wide, &home, progress);
     // a uid names no project to a reader, so give each row the project's name as well
     name_projects_of(
         &mut list,
@@ -235,16 +330,66 @@ where
         overwritten,
         consumers: list,
         clusters_read,
+        edge_hosts_read,
     })
 }
 
-/// The second reading of `consumers`. The listing is read at tenant scope, so a cluster in any
-/// project the key can read is in it; a key that cannot list at tenant scope lists its own scope.
-/// A cluster the consumer list named is not read again. A cluster that applies `uid` joins
-/// `list`, marked `unlisted`, with what its document and the listing say of it.
+/// Add each edge host that the profile `uid` is bound to. The search is read through `wide`, and
+/// through `home` when `wide` cannot read it. A Palette without the search has no edge hosts.
+fn edge_hosts_bound<A: PaletteApi>(
+    list: &mut Vec<Consumer>,
+    uid: &str,
+    wide: &Palette<A>,
+    home: &Palette<A>,
+    progress: &Progress,
+) -> EdgeHostsRead {
+    progress.note("reading each edge host for the profiles bound to it");
+    let hosts = wide.edge_hosts().or_else(|_| home.edge_hosts());
+    let hosts = match hosts {
+        Ok(hosts) => hosts,
+        Err(Error::Api { status: 404, .. }) => Vec::new(),
+        Err(e) => {
+            return EdgeHostsRead {
+                read: 0,
+                error: Some(e.to_json()),
+            };
+        }
+    };
+    for host in &hosts {
+        let bound = host
+            .pointer("/spec/clusterProfileTemplates")
+            .and_then(Value::as_array)
+            .and_then(|ts| ts.iter().find(|t| text(t, "/uid") == uid));
+        if let Some(bound) = bound {
+            list.push(Consumer {
+                kind: EDGE_HOST_KIND.to_string(),
+                uid: text(host, "/metadata/uid"),
+                name: text(host, "/metadata/name"),
+                project_uid: text(host, "/metadata/annotations/projectUid"),
+                project_name: String::new(),
+                state: Some(text(host, "/status/state"))
+                    .filter(|s| !s.is_empty())
+                    .unwrap_or_else(|| UNKNOWN_STATE.to_string()),
+                version: text(bound, "/version"),
+                error: None,
+                unlisted: false,
+            });
+        }
+    }
+    EdgeHostsRead {
+        read: hosts.len(),
+        error: None,
+    }
+}
+
+/// The second reading of `consumers`. The listing is read through `wide`, and through `home` when
+/// `wide` cannot list. A cluster the consumer list named is not read again. A cluster that
+/// applies `uid` joins `list`, marked `unlisted`, with what its document and the listing say of
+/// it.
 fn second_reading<A, F>(
     list: &mut Vec<Consumer>,
     uid: &str,
+    wide: &Palette<A>,
     home: &Palette<A>,
     clients: &mut HashMap<String, Palette<A>>,
     connect: &mut F,
@@ -255,9 +400,7 @@ where
     F: FnMut(Option<&str>) -> Result<Palette<A>>,
 {
     progress.note("reading each cluster for the profiles it applies");
-    let listing = connect(Some(TENANT_SCOPE))
-        .and_then(|tenant| tenant.cluster_listing())
-        .or_else(|_| home.cluster_listing());
+    let listing = wide.cluster_listing().or_else(|_| home.cluster_listing());
     let listing = match listing {
         Ok(listing) => listing,
         Err(e) => {
@@ -295,6 +438,7 @@ where
                 }
             };
             list.push(Consumer {
+                kind: cluster_kind(),
                 uid: listed.uid.clone(),
                 name: or_listed(text(&doc, "/metadata/name"), &listed.name),
                 project_uid: or_listed(

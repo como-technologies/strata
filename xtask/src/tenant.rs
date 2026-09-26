@@ -344,6 +344,19 @@ impl Tenant {
     /// Publish `platform-addons`, an add-on profile with one manifest pack. Palette gives the
     /// manifest pack of each profile a new pack uid, so two copies of one manifest differ.
     pub fn addons(&self, project: &str, uid: &str, pack: &str, label: &str, version: &str) {
+        self.addons_named(project, uid, "platform-addons", pack, label, version);
+    }
+
+    /// [`Tenant::addons`] under another profile name.
+    pub fn addons_named(
+        &self,
+        project: &str,
+        uid: &str,
+        name: &str,
+        pack: &str,
+        label: &str,
+        version: &str,
+    ) {
         let content = format!(
             "apiVersion: v1\nkind: Namespace\nmetadata:\n  name: payments\n  labels:\n    \
              pod-security.kubernetes.io/enforce: {label}"
@@ -353,7 +366,7 @@ impl Tenant {
             &format!("v1/clusterprofiles/{uid}"),
             &json!({
                 "apiVersion": "v1", "kind": "ClusterProfile",
-                "metadata": {"name": "platform-addons", "uid": uid},
+                "metadata": {"name": name, "uid": uid},
                 "spec": {"version": version, "published": {"cloudType": "all", "type": "add-on",
                     "packs": [{"name": "namespace-policy", "layer": "addon", "type": "manifest",
                         "tag": "1.0.0", "version": "1.0.0", "packUid": pack,
@@ -366,7 +379,7 @@ impl Tenant {
             project,
             &format!("v1/clusterprofiles/{uid}/packs/manifests"),
             &json!({
-                "metadata": {"name": "platform-addons", "uid": uid},
+                "metadata": {"name": name, "uid": uid},
                 "spec": {"packs": [{"metadata": {"name": "namespace-policy", "uid": pack},
                     "spec": {"name": "namespace-policy", "layer": "addon", "version": "1.0.0",
                         "manifests": [{"name": "namespace-policy", "content": content}]},
@@ -420,6 +433,7 @@ impl Tenant {
                 .find(|t| t["uid"] == json!(uid))
                 .and_then(|t| t["packs"].as_array().cloned())
                 .unwrap_or_default();
+            self.write_profile_updates(project, &cluster);
             let path = format!("v1/notifications/spectrocluster/{cluster}");
             let mut items = self.notifications(project, &cluster);
             if copy == packs {
@@ -477,6 +491,159 @@ impl Tenant {
             );
             self.write_notifications(project, &path, items);
         }
+    }
+
+    /// `GET /v1/spectroclusters/{uid}/profileUpdates`: each profile of the cluster as the profile
+    /// is now, in the shape of the cluster's templates. A live run gives the rule: Palette lists
+    /// each profile of the cluster also when no update waits.
+    fn write_profile_updates(&self, project: &str, cluster: &str) {
+        let profiles: Vec<Value> = self.read(project, &format!("v1/spectroclusters/{cluster}"))
+            ["spec"]["clusterProfileTemplates"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .map(|t| {
+                let uid = t["uid"].as_str().unwrap_or_default();
+                template_of(&self.read(project, &format!("v1/clusterprofiles/{uid}")))
+            })
+            .collect();
+        self.write(
+            project,
+            &format!("v1/spectroclusters/{cluster}/profileUpdates"),
+            &json!({ "profiles": profiles }),
+        );
+    }
+
+    /// An edge host `uid`, `name`, with `profiles` bound to it: its own copy of each profile as
+    /// the profile is now. A live run gives the rules: the host keeps its copy of the values,
+    /// and holds each manifest by uid alone, so strata reads the manifests of the profile.
+    pub fn edge_host(&self, project: &str, uid: &str, name: &str, profiles: &[&str]) {
+        let templates: Vec<Value> = profiles
+            .iter()
+            .map(|p| template_of(&self.read(project, &format!("v1/clusterprofiles/{p}"))))
+            .collect();
+        self.write(
+            project,
+            &format!("v1/edgehosts/{uid}"),
+            &json!({
+                "metadata": {"uid": uid, "name": name,
+                    "annotations": {"projectUid": project, "scope": "project"}},
+                "spec": {"clusterProfileTemplates": templates},
+                "status": {"state": "ready"},
+            }),
+        );
+        // the search gives a summary of each template: uid, name, and version
+        let items: Vec<Value> = self
+            .documents_in(project, "v1/edgehosts")
+            .iter()
+            .map(|h| {
+                let summary: Vec<Value> = h["spec"]["clusterProfileTemplates"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .map(|t| {
+                        json!({"uid": t["uid"], "name": t["name"],
+                        "version": t["profileVersion"], "type": t["type"]})
+                    })
+                    .collect();
+                json!({"metadata": h["metadata"], "spec": {"clusterProfileTemplates": summary},
+                    "status": h["status"]})
+            })
+            .collect();
+        let search = json!({"items": items, "listmeta": {"continue": ""}});
+        self.write(project, "v1/dashboard/edgehosts/search@limit=50", &search);
+        self.write("tenant", "v1/dashboard/edgehosts/search@limit=50", &search);
+    }
+
+    /// A cluster group `uid`, `name`, that pins `profiles` for its virtual clusters, with the
+    /// clusters `members` as those virtual clusters.
+    pub fn cluster_group(
+        &self,
+        project: &str,
+        uid: &str,
+        name: &str,
+        profiles: &[&str],
+        members: &[&str],
+    ) {
+        let templates: Vec<Value> = profiles
+            .iter()
+            .map(|p| template_of(&self.read(project, &format!("v1/clusterprofiles/{p}"))))
+            .collect();
+        self.write(
+            project,
+            &format!("v1/clustergroups/{uid}"),
+            &json!({
+                "metadata": {"uid": uid, "name": name},
+                "spec": {"type": "hostCluster", "clusterProfileTemplates": templates},
+            }),
+        );
+        self.write(
+            project,
+            "v1/clustergroups/hostCluster/metadata",
+            &json!({"items": [{"uid": uid, "name": name, "scope": "project"}]}),
+        );
+        let items: Vec<Value> = members
+            .iter()
+            .map(|m| {
+                let doc = self.read(project, &format!("v1/spectroclusters/{m}"));
+                json!({"metadata": {"uid": m, "name": doc["metadata"]["name"],
+                    "annotations": {"projectUid": project}}})
+            })
+            .collect();
+        self.write(
+            project,
+            &format!("v1/dashboard/clustergroups/{uid}/virtualClusters@limit=50"),
+            &json!({"items": items, "listmeta": {"continue": ""}}),
+        );
+    }
+
+    /// The app profile `shop@<version>`, `uid`: a helm tier `web` with the property `replicas`,
+    /// and a manifest tier `config`. A second call for the same uid is a plain update, as
+    /// Palette takes one: the uid and the version stay.
+    pub fn app_profile(&self, project: &str, uid: &str, version: &str, replicas: &str) {
+        self.write(
+            project,
+            "v1/dashboard/appProfiles/metadata",
+            &json!({"appProfiles": [{"metadata": {"name": "shop", "uid": uid},
+                "spec": {"version": version}}]}),
+        );
+        self.write(
+            project,
+            &format!("v1/appProfiles/{uid}"),
+            &json!({
+                "metadata": {"name": "shop", "uid": uid},
+                "spec": {"version": version,
+                    "versions": [{"uid": uid, "version": version}],
+                    "template": {"appTiers": [
+                        {"name": "web", "uid": format!("{uid}1"), "type": "helm",
+                            "version": "2.1.0"},
+                        {"name": "config", "uid": format!("{uid}2"), "type": "manifest",
+                            "version": "1.0.0"}]}},
+                "status": {"inUseApps": []},
+            }),
+        );
+        self.write(
+            project,
+            &format!("v1/appProfiles/{uid}/tiers"),
+            &json!({"spec": {"appTiers": [
+                {"metadata": {"name": "web", "uid": format!("{uid}1")},
+                 "spec": {"type": "helm", "version": "2.1.0", "registryUid": PUBLIC_REPO,
+                    "sourceAppTierUid": "64ed000000000000000000a1",
+                    "values": "replicaCount: 2\nimage:\n  tag: 2.1.0\n",
+                    "properties": [{"name": "replicas", "type": "number", "value": replicas}]}},
+                {"metadata": {"name": "config", "uid": format!("{uid}2")},
+                 "spec": {"type": "manifest", "version": "1.0.0",
+                    "manifests": [{"kind": "manifest", "name": "config",
+                        "uid": format!("{uid}3")}]}},
+            ]}}),
+        );
+        self.write(
+            project,
+            &format!("v1/appProfiles/{uid}/tiers/{uid}2/manifests/{uid}3"),
+            &json!({"metadata": {"name": "config", "uid": format!("{uid}3")},
+                "spec": {"published": {
+                    "content": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: shop\ndata:\n  mode: live\n"}}}),
+        );
     }
 
     /// The notifications of a cluster, newest first; none for a cluster that has no file yet.
@@ -581,18 +748,7 @@ impl Tenant {
             .iter()
             .map(|p| self.read(project, &format!("v1/clusterprofiles/{p}")))
             .collect();
-        let templates: Vec<Value> = docs
-            .iter()
-            .map(|d| {
-                json!({
-                    "uid": d["metadata"]["uid"], "name": d["metadata"]["name"],
-                    "profileVersion": d["spec"]["version"],
-                    "type": d["spec"]["published"]["type"],
-                    "cloudType": d["spec"]["published"]["cloudType"],
-                    "packs": d["spec"]["published"]["packs"],
-                })
-            })
-            .collect();
+        let templates: Vec<Value> = docs.iter().map(template_of).collect();
         // what Palette reports of a cluster beside its profiles: its own hashes of the spec it
         // applied, the pack version that it reconciled, its policy, its labels, and its cloud
         // config
@@ -710,6 +866,7 @@ impl Tenant {
         );
 
         self.resolve_macros(project, uid);
+        self.write_profile_updates(project, uid);
         // the cluster now holds what each profile holds, so no update waits for it
         let mut items = self.notifications(project, uid);
         for n in &mut items {
@@ -1001,6 +1158,17 @@ fn fnv_hex(text: &str) -> String {
         h = h.wrapping_mul(0x0100_0000_01b3);
     }
     format!("{h:016x}")
+}
+
+/// The template of a profile on a cluster, from the profile document: the published profile.
+fn template_of(d: &Value) -> Value {
+    json!({
+        "uid": d["metadata"]["uid"], "name": d["metadata"]["name"],
+        "profileVersion": d["spec"]["version"],
+        "type": d["spec"]["published"]["type"],
+        "cloudType": d["spec"]["published"]["cloudType"],
+        "packs": d["spec"]["published"]["packs"],
+    })
 }
 
 #[cfg(test)]

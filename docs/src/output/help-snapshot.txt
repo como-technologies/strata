@@ -1,5 +1,5 @@
 $ strata snapshot --help
-Record a profile version, a cluster, or a pack version in a snapshot file
+Record a profile version, a cluster, an edge host, a cluster group, an app profile, or a pack version in a snapshot file
 
 Usage: strata snapshot [OPTIONS] [REF]
 

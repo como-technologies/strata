@@ -19,7 +19,8 @@ document.
 
 ## strata-snapshot/1
 
-A record of one profile version or cluster.
+A record of one profile version, cluster, edge host, cluster group, app
+profile, or pack version.
 
 - `root`: the sha256 digest of the release. See
   [The hashes and the root](../internals/hashes.md).
@@ -32,12 +33,13 @@ A record of one profile version or cluster.
 - `source`: where the record comes from.
   - `ref`: the ref as typed, a name or a uid.
   - `uid`, `projectUid` (empty for tenant scope), `name`, `version`,
-    `cloudType`, `type`, and `tags`.
+    `cloudType`, `type`, and `tags`. `type` is `app` for an app profile.
   - `template`: `published`, `draft`, `applied` for a cluster, `candidate`, or
     `registry` for a pack record.
   - `consumers`, for a published or a draft version: `clusters[]`, the uids of
     the clusters that used the version, and `count`. A candidate, a cluster
-    record, and a pack record have no `consumers`, because no request asked.
+    record, a pack record, and an app profile record have no `consumers`. The
+    consumers of an app profile are app deployments, and not clusters.
   - `variablesUnavailable`, only when true: Palette did not serve the variables
     endpoint, so the root is the root of a version with no variables. See
     [When Palette does not serve the variables](../internals/hashes.md#when-palette-does-not-serve-the-variables).
@@ -58,6 +60,11 @@ A record of one profile version or cluster.
     the record carries, by name (`applied`, `running`, `policy`, and, with
     `snapshot --shape`, `shape`), each with `hash` and `fields`: see
     [More of the cluster than its release](../commands/snapshot.md#more-of-the-cluster-than-its-release).
+    `pending`, only when true: the record is of `cluster:<cluster>@pending`,
+    and holds no `updatesPending`. `kind`, only for an object that is not a
+    cluster: `edgeHost` or `clusterGroup`; `uid` and `name` are then those of
+    the edge host or the group. `members[]`, for a cluster group: `uid`, `name`,
+    and `projectUid` of each virtual cluster.
     None of these is part of the root.
     Each entry of `profiles[]` has `uid`, `name`, `version`, and `type`, in the
     order [The order of the profiles of a cluster](../internals/palette/clusters.md#the-order-of-the-profiles-of-a-cluster)
@@ -78,7 +85,8 @@ A record of one profile version or cluster.
     the pack reference. Palette follows a new digest in a different way for each:
     see [The digest of each registry kind](../internals/palette/packs.md#the-digest-of-each-registry-kind).
     It is outside the root.
-  - `params`: the params of the pack on the profile, as a map.
+  - `params`: the params of the pack on the profile, as a map. For an app tier,
+    its properties: each name and its value.
   - `values`: the raw values YAML. `valuesCanon`: the values as JSON with
     sorted keys, or `null` when the values do not parse. `valuesHash`: the
     sha256 of `valuesCanon`, or of the trimmed text when the values do not
@@ -148,6 +156,9 @@ A comparison of two sides, `a` and `b`.
     `imageChanges[]` and `chartChanges[]`, only when not empty: `op`, `name`
     (the image repository, or the chart name), `old`, and `new` (the tag or the
     version).
+  - `paramChanges[]`, only when not empty: `op`, `name`, `old`, and `new` of
+    each param that differs. `paramsChanged` is `true` then. For an app tier,
+    the params are its properties.
   - `upstreamUnknown`, only when true: a pack from a registry with no upstream
     digest on either side.
 - `upstreamUnknown`, only when it is not empty: the key of each such pack. An
@@ -224,14 +235,17 @@ is the path as a list: strings for keys, numbers for indexes, and
 - `profile`: `uid`, `name`, and `version`.
 - `count`: the number of consumers. Exit `0` when it is `0`.
 - `overwritten`: the number of consumers whose copy names another version.
-- `consumers[]`: `uid`, `name`, `projectUid`, `state`, `version`, and `error`
-  when strata cannot read the cluster. `projectName` joins them when strata
+- `consumers[]`: `kind`, `cluster` or `edgehost`, `uid`, `name`, `projectUid`,
+  `state`, `version`, and `error` when strata cannot read the cluster. `projectName` joins them when strata
   could read the project listing. The names and the projects come from
   `status.inUseClusters` of the profile. `unlisted`, only when true: the profile
   did not list the cluster, and the second reading found it.
 - `clustersRead`: the second reading. `read`: the cluster documents read.
   `unread`: the clusters the listing names that strata could not read. `error`:
   why strata could not read the cluster listing. Then `read` is `0`.
+  `skipped`, only when true: `--list-only` asked for no second reading.
+- `edgeHostsRead`: `read`, the edge hosts listed, and `error`, why strata could
+  not list them. Then no edge host counts.
 
 ## strata-list/1
 

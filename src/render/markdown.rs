@@ -1,16 +1,17 @@
 //! The pull request comment.
 
 use super::{
-    Renderer, VarLine, applied_ref, artifact_lines, artifacts_summary, chain_verdict,
+    Renderer, VarLine, applied_ref, artifact_lines, artifacts_summary, capitalized, chain_verdict,
     cluster_count, cluster_value, consumer_count, consumer_counts, consumers_heading,
-    consumers_sentence, count_of, counts_line, cross_kind_note, dash, edited_in_place_note,
-    entry_error, list_count, list_scope, macros_changed_note, macros_changed_sentence, macros_note,
-    overwritten_in_place_notes, pack_version, pair_detail, pair_word, palette_repave_lines,
-    palette_repave_note, plain_flags, profiles_overwritten_sentence, project_label, record_detail,
-    record_label, registry_note, running_behind_notes, same_content_note, short, show, subject,
-    tier_path, tier_states, traits_suffix, unverified_sentence, updates_pending_notes,
-    upstream_unknown_note, values_changed, values_changed_suffix, variable_lines,
-    variables_comparable, variables_unavailable_note, version_display, who_entry, who_heading,
+    consumers_sentence, count_of, counts_line, cross_kind_note, dash, edge_hosts_line,
+    edited_in_place_note, entry_error, list_count, list_scope, macros_changed_note,
+    macros_changed_sentence, macros_note, overwritten_in_place_notes, pack_version, pair_detail,
+    pair_word, palette_repave_lines, palette_repave_note, plain_flags,
+    profiles_overwritten_sentence, project_label, record_detail, record_label, registry_note,
+    running_behind_notes, same_content_note, short, show, subject, tier_path, tier_states,
+    traits_suffix, unverified_sentence, updates_pending_notes, upstream_unknown_note,
+    values_changed, values_changed_suffix, variable_lines, variables_comparable,
+    variables_unavailable_note, version_display, who_entry, who_heading,
 };
 use crate::color::Paint;
 use crate::diff::{Diff, Leaf, Op, Status, Verify, VerifyStatus};
@@ -386,6 +387,7 @@ impl Renderer for MarkdownRenderer {
         // how far it got.
         let read = &r.clusters_read;
         let second = match entry_error(read.error.as_ref()) {
+            _ if read.skipped => "Second reading: not done (`--list-only`).".to_string(),
             Some(msg) => format!("Second reading: not done ({}).", escape(msg)),
             None => format!(
                 "Second reading: {} of {} clusters read.",
@@ -393,8 +395,11 @@ impl Renderer for MarkdownRenderer {
                 read.read + read.unread
             ),
         };
+        let edge = format!("{}.", capitalized(&edge_hosts_line(r)));
         if r.consumers.is_empty() {
             o.push_str(&second);
+            o.push_str("\n\n");
+            o.push_str(&edge);
             o.push('\n');
             return Ok(o);
         }
@@ -414,6 +419,9 @@ impl Renderer for MarkdownRenderer {
             if c.unlisted {
                 runs.push_str(" (not in the consumer list of the profile)");
             }
+            if c.kind == crate::ops::EDGE_HOST_KIND {
+                runs.push_str(" (edge host)");
+            }
             o.push_str(&format!(
                 "| `{}` | `{}` | `{}` | {} | {runs} |\n",
                 escape(dash(&c.name)),
@@ -424,6 +432,8 @@ impl Renderer for MarkdownRenderer {
         }
         o.push('\n');
         o.push_str(&second);
+        o.push_str("\n\n");
+        o.push_str(&edge);
         o.push('\n');
         Ok(o)
     }

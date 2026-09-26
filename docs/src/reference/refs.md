@@ -12,6 +12,13 @@ A ref names the thing that a command reads.
 | `pack:<name>@latest` | the highest version of the pack in the registry | `pack:kubernetes@latest` |
 | `cluster:<cluster>` | each profile that the cluster runs | `cluster:payments` |
 | `cluster:<cluster>/<profile>` | one profile that the cluster runs, by its name or uid | `cluster:payments/aws-stack` |
+| `cluster:<cluster>/<profile>+<profile>` | some of the profiles that the cluster runs | `cluster:payments/aws-stack+platform-addons` |
+| `cluster:<cluster>@pending` | the profiles that the cluster runs after it takes the update that waits | `cluster:payments@pending` |
+| `edgehost:<host>` | each profile bound to an edge host | `edgehost:store-1` |
+| `edgehost:<host>/<profile>` | one profile bound to the edge host | `edgehost:store-1/platform-addons` |
+| `clustergroup:<group>` | the profiles that a cluster group pins for its virtual clusters | `clustergroup:dev-group` |
+| `appprofile:<uid>` | the app profile with this uid | `appprofile:64f6000000000000000000a1` |
+| `appprofile:<name>@<version>` | the app profile with this name and version, or `@latest` | `appprofile:shop@1.0.0` |
 | a file | a snapshot file from `strata snapshot` | `releases/1.1.1/dev.json` |
 
 `strata list` prints the refs of a scope.
@@ -42,13 +49,28 @@ A ref names the thing that a command reads.
   [The order of the profiles of a cluster](../internals/palette/clusters.md#the-order-of-the-profiles-of-a-cluster).
 - **`<profile>`.** The name or the uid of a profile that the cluster runs. An
   unknown one is `cluster-profile-not-found`, which lists the profiles of the
-  cluster.
+  cluster. `+` joins two or more: the record holds those profiles.
+- **`@pending`.** The profiles that Palette gives for the update that waits for
+  the cluster, and not the copies that the cluster runs. When no update waits,
+  they are the same. Put it last: `cluster:payments/aws-stack@pending`. See
+  [What a waiting update changes](../commands/snapshot.md#what-a-waiting-update-changes).
+- **`<host>`.** A uid, or the name of one edge host in the scope. A name that no
+  edge host has is `edge-host-not-found`, which lists the names. A name that two
+  edge hosts have is `edge-host-name-ambiguous`. See
+  [A profile runs on edge hosts](../use-cases/edge-hosts.md).
+- **`<group>`.** A uid, or the name of one cluster group in the scope. A name
+  that no group has is `cluster-group-not-found`, which lists the names. See
+  [A cluster group pins a profile](../use-cases/cluster-groups.md).
+- **`appprofile:`.** An app profile. Its tiers are the packs of the record. A
+  name and version that no app profile has is `app-profile-not-found`, which
+  lists the app profiles. See
+  [An app profile is updated in place](../use-cases/app-profiles.md).
 - **A file.** Strata checks for a file first: a ref that names a file that
   exists is a file. A file that is not a strata snapshot is `not-snapshot`.
   A ref that is shaped like a path is a file too, whether or not the file is
   there. A path holds a `/` or a `\`. A path starts with `.`, `..`, or `~`. A
-  path ends with `.json`, `.yaml`, or `.yml`. A `pack:` ref and a `cluster:`
-  ref can hold a `/`, and each one stays what its prefix names. A uid, a name,
+  path ends with `.json`, `.yaml`, or `.yml`. A `pack:`, `cluster:`, or
+  `edgehost:` ref can hold a `/`, and each one stays what its prefix names. A uid, a name,
   and a `name@version` hold none of these shapes, so they reach Palette.
 
 A record that is missing or misspelled is the error `io`, which names the file.
@@ -60,11 +82,14 @@ Strata asks Palette nothing:
 
 ## Which commands take which refs
 
-| Command | uid, `name@version`, `name@latest` | `pack:` | `cluster:` | file |
+| Command | uid, `name@version`, `name@latest` | `pack:` | `cluster:`, `edgehost:`, `clustergroup:`, `appprofile:` | file |
 | --- | --- | --- | --- | --- |
 | `compare` | yes | yes | yes | yes |
 | `snapshot` | yes | yes | yes | no: `--from-raw DIR` or `--from-candidate FILE` |
 | `candidate` | yes | no | no | a profile record |
 | `same-release` | yes | yes | yes | yes |
-| `verify` | no | no | no | yes: a profile, cluster, or pack record |
+| `verify` | no | no | no | yes: a record of each kind |
 | `consumers` | yes | no | no | a profile record |
+
+`snapshot --raw-dir` takes a profile or a cluster: a record read back from the
+directory would not say `@pending`, edge host, cluster group, or app profile.

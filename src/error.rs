@@ -136,7 +136,60 @@ pub enum Error {
         /// The uids of the clusters with that name, in order.
         uids: Vec<String>,
     },
-    /// A command that works on a profile was given a cluster, a pack, or a record of one.
+    /// `edgehost:<x>` is neither an edge host uid nor the name of an edge host in the scope.
+    #[error(
+        "no edge host with the uid or name '{edge_host}' in this scope; edge hosts: {}",
+        list_or_none(available)
+    )]
+    EdgeHostNotFound {
+        /// The uid or name as given.
+        edge_host: String,
+        /// The names of the edge hosts in the scope, in order.
+        available: Vec<String>,
+    },
+    /// `edgehost:<name>` matches more than one edge host in the scope.
+    #[error("several edge hosts in this scope are named '{name}': {}; use edgehost:<uid>", uids.join(", "))]
+    EdgeHostNameAmbiguous {
+        /// The name as given.
+        name: String,
+        /// The uids of the edge hosts with that name, in order.
+        uids: Vec<String>,
+    },
+    /// `clustergroup:<x>` is neither a cluster group uid nor the name of a cluster group in the
+    /// scope.
+    #[error(
+        "no cluster group with the uid or name '{cluster_group}' in this scope; cluster groups: {}",
+        list_or_none(available)
+    )]
+    ClusterGroupNotFound {
+        /// The uid or name as given.
+        cluster_group: String,
+        /// The names of the cluster groups in the scope, in order.
+        available: Vec<String>,
+    },
+    /// `clustergroup:<name>` matches more than one cluster group in the scope.
+    #[error("several cluster groups in this scope are named '{name}': {}; use clustergroup:<uid>", uids.join(", "))]
+    ClusterGroupNameAmbiguous {
+        /// The name as given.
+        name: String,
+        /// The uids of the cluster groups with that name, in order.
+        uids: Vec<String>,
+    },
+    /// `appprofile:<name>@<version>` matched no app profile in the scope.
+    #[error(
+        "no app profile named '{name}' with version '{version}' in this scope; app profiles: {}",
+        list_or_none(available)
+    )]
+    AppProfileNotFound {
+        /// The name as given.
+        name: String,
+        /// The version as given.
+        version: String,
+        /// Each app profile of the scope, as `name@version`, in order.
+        available: Vec<String>,
+    },
+    /// A command that works on a profile was given a cluster, an edge host, a cluster group, an
+    /// app profile, a pack, or a record of one.
     #[error(
         "'{reference}' is not a profile version; this command takes a profile uid, <name>@<version>, or a profile record"
     )]
@@ -346,6 +399,11 @@ impl Error {
             Error::ProjectNotFound { .. } => "project-not-found",
             Error::ClusterNotFound { .. } => "cluster-not-found",
             Error::ClusterNameAmbiguous { .. } => "cluster-name-ambiguous",
+            Error::EdgeHostNotFound { .. } => "edge-host-not-found",
+            Error::EdgeHostNameAmbiguous { .. } => "edge-host-name-ambiguous",
+            Error::ClusterGroupNotFound { .. } => "cluster-group-not-found",
+            Error::AppProfileNotFound { .. } => "app-profile-not-found",
+            Error::ClusterGroupNameAmbiguous { .. } => "cluster-group-name-ambiguous",
             Error::NotSnapshot(_) => "not-snapshot",
             Error::UnsupportedSchema { .. } => "unsupported-schema",
             Error::SnapshotSchema { .. } => "snapshot-schema",
@@ -497,9 +555,34 @@ impl Error {
                 m.insert("cluster".into(), Value::from(cluster.as_str()));
                 m.insert("available".into(), Value::from(available.clone()));
             }
-            Error::ClusterNameAmbiguous { name, uids } => {
+            Error::ClusterNameAmbiguous { name, uids }
+            | Error::EdgeHostNameAmbiguous { name, uids }
+            | Error::ClusterGroupNameAmbiguous { name, uids } => {
                 m.insert("name".into(), Value::from(name.as_str()));
                 m.insert("uids".into(), Value::from(uids.clone()));
+            }
+            Error::EdgeHostNotFound {
+                edge_host,
+                available,
+            } => {
+                m.insert("edgeHost".into(), Value::from(edge_host.as_str()));
+                m.insert("available".into(), Value::from(available.clone()));
+            }
+            Error::AppProfileNotFound {
+                name,
+                version,
+                available,
+            } => {
+                m.insert("name".into(), Value::from(name.as_str()));
+                m.insert("version".into(), Value::from(version.as_str()));
+                m.insert("available".into(), Value::from(available.clone()));
+            }
+            Error::ClusterGroupNotFound {
+                cluster_group,
+                available,
+            } => {
+                m.insert("clusterGroup".into(), Value::from(cluster_group.as_str()));
+                m.insert("available".into(), Value::from(available.clone()));
             }
             Error::NoUid | Error::Serialize(_) => {}
         }
@@ -607,6 +690,27 @@ mod tests {
             Error::ClusterNameAmbiguous {
                 name: "twin".into(),
                 uids: vec!["c7".into(), "c8".into()],
+            },
+            Error::EdgeHostNotFound {
+                edge_host: "nope".into(),
+                available: vec!["edge-1".into()],
+            },
+            Error::EdgeHostNameAmbiguous {
+                name: "twin".into(),
+                uids: vec!["e7".into(), "e8".into()],
+            },
+            Error::ClusterGroupNotFound {
+                cluster_group: "nope".into(),
+                available: vec!["group-1".into()],
+            },
+            Error::AppProfileNotFound {
+                name: "shop".into(),
+                version: "9.9.9".into(),
+                available: vec!["shop@1.0.0".into()],
+            },
+            Error::ClusterGroupNameAmbiguous {
+                name: "twin".into(),
+                uids: vec!["g7".into(), "g8".into()],
             },
             Error::UnsupportedSchema {
                 path: "newer.json".into(),

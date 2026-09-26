@@ -30,8 +30,8 @@ can change it. See
 
 `DRIFT` says that the object changed. It does not say who changed it, or when.
 `--who` reads that from the audit log of Palette: for a record that drifted,
-strata reads each write to the profile, or to the cluster of a cluster record,
-since the record was taken. Palette has who and when. The record has what the
+strata reads each write to the profile, to the cluster of a cluster record, or
+to the edge host of an edge host record, since the record was taken. Palette has who and when. The record has what the
 content was.
 
 ```text
@@ -123,6 +123,24 @@ the report names each tier that changed: see
 [More of the cluster than its release](snapshot.md#more-of-the-cluster-than-its-release).
 The verdict follows the release alone, so a changed tier does not make a record
 `DRIFT`. A record written before the tiers carries none, and verifies as before.
+
+## Each kind of record
+
+`verify` reads again what the record names, in the way that it was taken:
+
+| Record | Read again |
+| --- | --- |
+| a profile version | the profile uid |
+| a cluster | the cluster uid, and each profile that it runs |
+| `cluster:<cluster>@pending` | the update that waits for the cluster now. Once the cluster takes it, nothing waits, and the record verifies against the copies that the cluster runs. |
+| an edge host | the edge host uid, and the manifests and variables of each profile bound to it |
+| a cluster group | the group uid, and the manifests and variables of each profile that it pins |
+| an app profile | the app profile uid, and its tiers |
+| a pack version | the registry |
+
+A tier of an app profile has no digest, so `verify` of an app profile with a
+helm tier is `UNVERIFIED` unless `--allow-no-digest` accepts it. See
+[An app profile is updated in place](../use-cases/app-profiles.md).
 
 ## Run it on a schedule
 

@@ -185,3 +185,15 @@ output "kinds_registries" {
     { for k, r in spectrocloud_registry_oci.kinds : "oci-${k}" => { uid = r.id, name = r.name } },
   ) : {}
 }
+
+output "cluster_group_uid" {
+  value = try(spectrocloud_cluster_group.group[0].id, "")
+}
+
+output "cluster_group_name" {
+  value = try(spectrocloud_cluster_group.group[0].name, "")
+}
+
+output "member_cluster_uid" {
+  value = try(spectrocloud_virtual_cluster.member[0].id, "")
+}

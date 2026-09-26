@@ -120,8 +120,9 @@ the candidate and the version fails and names the edited value.
 ## What to expect
 
 - The ref is a profile uid, `<name>@<version>`, `<name>@latest`, or a profile
-  record. A cluster ref or a pack ref is an error: `profile-ref-required`. A
-  pack is one layer of a profile version, and a cluster holds a copy of one.
+  record. A cluster, edge host, cluster group, app profile, or pack ref is an
+  error: `profile-ref-required`. A pack is one layer of a profile version, a
+  cluster holds a copy of one, and an app profile has tiers and no packs.
 - `--files-dir` needs `-o`.
 - Exit `0`, or `2` on an error.
 

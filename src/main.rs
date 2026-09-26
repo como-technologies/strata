@@ -65,9 +65,10 @@ impl Cli {
 enum Cmd {
     /// Write a candidate file from a profile version or a record
     Candidate(CandidateArgs),
-    /// Compare two profile versions, records, clusters, or pack versions
+    /// Compare two profile versions, records, clusters, edge hosts, cluster groups, app profiles,
+    /// or pack versions
     Compare(CompareArgs),
-    /// List the clusters that use a profile version
+    /// List the clusters and the edge hosts that use a profile version
     Consumers(ConsumersArgs),
     /// List the profile versions, clusters, and projects in the scope
     List(ListArgs),
@@ -81,7 +82,8 @@ enum Cmd {
         #[arg(value_enum)]
         kind: SchemaKind,
     },
-    /// Record a profile version, a cluster, or a pack version in a snapshot file
+    /// Record a profile version, a cluster, an edge host, a cluster group, an app profile, or a
+    /// pack version in a snapshot file
     Snapshot(SnapshotArgs),
     /// Make sure that each record agrees with Palette now
     Verify(VerifyArgs),
@@ -240,6 +242,10 @@ struct SameReleaseArgs {
 struct ConsumersArgs {
     /// A profile version, by ref or by record
     r#ref: String,
+    /// Read the consumer list that Palette computes, and not each cluster of the fleet. Faster,
+    /// but it does not find a consumer that the list omits
+    #[arg(long)]
+    list_only: bool,
     #[command(flatten)]
     out: OutputArgs,
 }
@@ -550,13 +556,8 @@ fn exit_for(same: bool) -> ExitCode {
 fn cmd_compare(a: &CompareArgs) -> Result<ExitCode> {
     let progress = a.out.progress();
     let now = now_utc();
-    let sa = ops::snapshot_for(
+    let (sa, sb) = ops::snapshot_pair(
         &Ref::parse(&a.a),
-        || connect(progress, None),
-        &now,
-        &progress,
-    )?;
-    let sb = ops::snapshot_for(
         &Ref::parse(&a.b),
         || connect(progress, None),
         &now,
@@ -612,10 +613,32 @@ fn cmd_snapshot(a: &SnapshotArgs) -> Result<ExitCode> {
                         .to_string(),
                 });
             }
+            let flagged = matches!(
+                reference,
+                Ref::Cluster { pending: true, .. }
+                    | Ref::EdgeHost { .. }
+                    | Ref::ClusterGroup { .. }
+                    | Ref::AppProfile { .. }
+            );
+            if a.raw_dir.is_some() && flagged {
+                return Err(Error::Usage {
+                    message: "--raw-dir takes a profile or a cluster: a record read back from \
+                              the directory would not say pending, edge host, cluster group, or \
+                              app profile"
+                        .to_string(),
+                });
+            }
             let palette = connect(progress, None)?;
             let snap = match &reference {
-                Ref::Cluster { uid, profile } => {
+                Ref::Cluster {
+                    uid,
+                    profile,
+                    pending,
+                } => {
                     let mut raw = palette.fetch_cluster(uid, &progress)?;
+                    if *pending {
+                        raw = palette.with_pending(raw)?;
+                    }
                     if a.macros {
                         let uid = raw
                             .cluster
@@ -631,7 +654,24 @@ fn cmd_snapshot(a: &SnapshotArgs) -> Result<ExitCode> {
                     if let Some(dir) = &a.raw_dir {
                         raw.save_dir(dir, &now)?;
                     }
+                    let snap = Snapshot::from_cluster(&raw, profile.as_deref(), text, &now)?;
+                    if *pending { snap.mark_pending() } else { snap }
+                }
+                Ref::ClusterGroup { uid } => {
+                    ops::cluster_group_snapshot(&palette, uid, text, &now, &progress)?
+                }
+                Ref::AppProfile { id, version } => ops::app_profile_snapshot(
+                    &palette,
+                    id,
+                    version.as_deref(),
+                    text,
+                    &now,
+                    &progress,
+                )?,
+                Ref::EdgeHost { uid, profile } => {
+                    let raw = palette.fetch_edge_host(uid, &progress)?;
                     Snapshot::from_cluster(&raw, profile.as_deref(), text, &now)?
+                        .with_kind(strata::snapshot::SubjectKind::EdgeHost)
                 }
                 Ref::Pack {
                     registry,
@@ -718,7 +758,12 @@ fn expand_records(args: &[String]) -> Result<Vec<PathBuf>> {
 fn cmd_candidate(a: &CandidateArgs) -> Result<ExitCode> {
     let progress = progress(a.quiet);
     let reference = Ref::parse(&a.r#ref);
-    if let Ref::Cluster { .. } | Ref::Pack { .. } = reference {
+    if let Ref::Cluster { .. }
+    | Ref::EdgeHost { .. }
+    | Ref::ClusterGroup { .. }
+    | Ref::AppProfile { .. }
+    | Ref::Pack { .. } = reference
+    {
         return Err(Error::ProfileRefRequired {
             reference: a.r#ref.clone(),
         });
@@ -808,8 +853,11 @@ fn cmd_same_release(a: &SameReleaseArgs) -> Result<ExitCode> {
 
 fn cmd_consumers(a: &ConsumersArgs) -> Result<ExitCode> {
     let progress = a.out.progress();
-    let r = ops::consumers(
+    let r = ops::consumers_with(
         &Ref::parse(&a.r#ref),
+        &ops::ConsumersOptions {
+            list_only: a.list_only,
+        },
         |scope| connect(progress, scope),
         &now_utc(),
         &progress,

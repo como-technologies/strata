@@ -90,6 +90,10 @@ cluster has. The two can differ.
 - [Two clusters on one release differ](./cluster-tiers.md): two clusters run one
   release, and differ in their node pools, their policy, their labels, or the
   pack version that each one reconciled.
+- [A profile runs on edge hosts](./edge-hosts.md): a version is bound to edge
+  hosts, and a delete must count them, or an edit reached them.
+- [A cluster group pins a profile](./cluster-groups.md): a cluster group pins a
+  profile for its virtual clusters, and you must know that each one runs it.
 
 **4. The same release under another name.** These pages show why equal content
 can give different roots, and how strata says so.
@@ -109,7 +113,7 @@ can give different roots, and how strata says so.
   same version name, and nothing yet says they have the same content.
 - [Retire a version](./retire.md): you want to delete an old version.
 
-**6. A version that changes after you record it.** These three are what a team
+**6. A version that changes after you record it.** These four are what a team
 should not do, and what to do when somebody already did. This is why a record
 is worth keeping, and what `verify` is for.
 
@@ -119,6 +123,8 @@ is worth keeping, and what `verify` is for.
   disappeared from the list, and clusters still run it.
 - [A macro value changes](./macros.md): a profile reads a macro, and the value
   changed with no change to any record.
+- [An app profile is updated in place](./app-profiles.md): an app profile has no
+  publish step, and `verify` reports `DRIFT` on a version that nobody bumped.
 
 **7. Many profiles and many clusters.** The same questions, for a whole tenant
 and a whole team.

@@ -14,7 +14,7 @@ use crate::diff::{
 };
 use crate::error::{Error, Result};
 use crate::progress::Progress;
-use crate::snapshot::{Snapshot, Tool};
+use crate::snapshot::{APP_KIND, Snapshot, SubjectKind, Tool};
 
 /// The outcome of a verification.
 #[derive(Debug)]
@@ -174,7 +174,15 @@ pub fn verify_with<A: PaletteApi>(
     ));
     let live = match &recorded.source.cluster {
         Some(c) => {
-            let mut raw = palette.fetch_cluster(uid, progress)?;
+            let mut raw = match c.kind {
+                SubjectKind::EdgeHost => palette.fetch_edge_host(uid, progress)?,
+                SubjectKind::ClusterGroup => palette.fetch_cluster_group(uid, progress)?,
+                SubjectKind::Cluster => palette.fetch_cluster(uid, progress)?,
+            };
+            // a record of the update that waits is checked on what waits now
+            if c.pending {
+                raw = palette.with_pending(raw)?;
+            }
             // a record that holds the digests of the macro values is checked on them too
             if c.macro_values.is_some() {
                 raw.resolved_values = Some(palette.resolved_values(uid)?);
@@ -183,12 +191,20 @@ pub fn verify_with<A: PaletteApi>(
             if c.tiers.contains_key("shape") {
                 raw.cloud_config = Some(palette.cloud_config(&raw.cluster)?);
             }
-            Snapshot::from_cluster(
+            let live = Snapshot::from_cluster(
                 &raw,
                 c.profile.as_deref(),
                 &recorded.source.reference,
                 checked_at,
-            )?
+            )?;
+            let live = if c.pending { live.mark_pending() } else { live };
+            live.with_kind(c.kind)
+        }
+        None if recorded.source.kind == APP_KIND => {
+            let mut live =
+                Snapshot::from_raw(&palette.fetch_app_profile(uid, progress)?, uid, checked_at)?;
+            live.source.consumers = None;
+            live
         }
         None => Snapshot::from_raw(&palette.fetch_profile(uid, progress)?, uid, checked_at)?,
     }
@@ -229,7 +245,9 @@ pub fn verify_with<A: PaletteApi>(
         .as_ref()
         .map_or(0, |c| c.values.len());
     let who = if options.who && !unchanged {
-        let kind = match recorded.source.cluster {
+        // the kinds of the audit log, as Palette names them
+        let kind = match &recorded.source.cluster {
+            Some(c) if c.kind == SubjectKind::EdgeHost => "edgehost",
             Some(_) => "spectrocluster",
             None => "clusterprofile",
         };

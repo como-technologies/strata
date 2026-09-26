@@ -349,6 +349,7 @@ fn a_cluster_of_junk_snapshots_or_errors() {
             &Ref::Cluster {
                 uid: uid.to_string(),
                 profile: None,
+                pending: false,
             },
             || Ok(Palette::new(&api)),
             "t0",

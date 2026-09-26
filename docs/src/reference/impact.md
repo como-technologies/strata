@@ -29,6 +29,15 @@ Other pack lines:
 | `REMOVED` | The pack is only on the first side. |
 | `tag <a> -> <b>` | Only the tag name changed, for the same name, layer, type, version, pack uid, and registry uid. It replaces `IDENTITY`. |
 
+Under a pack that changed, a detail line names each image, chart, and param
+that moved:
+
+| Detail line | Meaning |
+| --- | --- |
+| `~ image <repository>: <old tag> -> <new tag>`, `+ image ...`, `- image ...` | An image of `pack.content.images` moved, was added, or was removed. |
+| `~ chart <name>: <old> -> <new>`, `+ chart ...`, `- chart ...` | A chart of `pack.content.charts` moved, was added, or was removed. |
+| `~ param <name>: <old> -> <new>`, `+ param ...`, `- param ...` | A param moved, was added, or was removed. It comes with `AUTHORED`. For an app tier, a param is a property of the tier. |
+
 ## The impact levels
 
 Strata calculates an impact for each changed pack, from its layer and flags. The

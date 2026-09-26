@@ -15,7 +15,7 @@ use crate::diff::{self, Diff};
 use crate::error::{Error, Result};
 use crate::progress::Progress;
 use crate::reference::Ref;
-use crate::snapshot::Snapshot;
+use crate::snapshot::{GroupMember, Snapshot, SubjectKind};
 
 mod consumers;
 mod list;
@@ -76,17 +76,164 @@ where
             )?
             .with_project(palette.project_uid()))
         }
-        Ref::Cluster { uid, profile } => {
+        Ref::Cluster {
+            uid,
+            profile,
+            pending,
+        } => {
             let palette = connect()?;
-            let raw = palette.fetch_cluster(uid, progress)?;
+            let mut raw = palette.fetch_cluster(uid, progress)?;
+            if *pending {
+                raw = palette.with_pending(raw)?;
+            }
+            let snap = Snapshot::from_cluster(
+                &raw,
+                profile.as_deref(),
+                &reference.to_string(),
+                fetched_at,
+            )?;
+            let snap = if *pending { snap.mark_pending() } else { snap };
+            Ok(snap.with_project(palette.project_uid()))
+        }
+        Ref::AppProfile { id, version } => {
+            let palette = connect()?;
+            Ok(app_profile_snapshot(
+                &palette,
+                id,
+                version.as_deref(),
+                &reference.to_string(),
+                fetched_at,
+                progress,
+            )?
+            .with_project(palette.project_uid()))
+        }
+        Ref::ClusterGroup { uid } => {
+            let palette = connect()?;
+            Ok(
+                cluster_group_snapshot(
+                    &palette,
+                    uid,
+                    &reference.to_string(),
+                    fetched_at,
+                    progress,
+                )?
+                .with_project(palette.project_uid()),
+            )
+        }
+        Ref::EdgeHost { uid, profile } => {
+            let palette = connect()?;
+            let raw = palette.fetch_edge_host(uid, progress)?;
             Ok(Snapshot::from_cluster(
                 &raw,
                 profile.as_deref(),
                 &reference.to_string(),
                 fetched_at,
             )?
+            .with_kind(SubjectKind::EdgeHost)
             .with_project(palette.project_uid()))
         }
+    }
+}
+
+/// A record of an app profile, by uid, or by name at `version`. Its consumers are app
+/// deployments, and not clusters, so the record counts none.
+pub fn app_profile_snapshot<A: PaletteApi>(
+    palette: &Palette<A>,
+    id: &str,
+    version: Option<&str>,
+    reference: &str,
+    fetched_at: &str,
+    progress: &Progress,
+) -> Result<Snapshot> {
+    let uid = match version {
+        Some(v) => palette.resolve_app_profile(id, v)?,
+        None => id.to_string(),
+    };
+    let mut snap = Snapshot::from_raw(
+        &palette.fetch_app_profile(&uid, progress)?,
+        reference,
+        fetched_at,
+    )?;
+    snap.source.consumers = None;
+    Ok(snap)
+}
+
+/// A record of a cluster group: the profiles that it pins, and its virtual clusters.
+pub fn cluster_group_snapshot<A: PaletteApi>(
+    palette: &Palette<A>,
+    group: &str,
+    reference: &str,
+    fetched_at: &str,
+    progress: &Progress,
+) -> Result<Snapshot> {
+    let raw = palette.fetch_cluster_group(group, progress)?;
+    let uid = text(&raw.cluster, "/metadata/uid");
+    let members = palette
+        .cluster_group_members(&uid)?
+        .iter()
+        .map(|m| GroupMember {
+            uid: text(m, "/metadata/uid"),
+            name: text(m, "/metadata/name"),
+            project_uid: text(m, "/metadata/annotations/projectUid"),
+        })
+        .collect();
+    let mut snap = Snapshot::from_cluster(&raw, None, reference, fetched_at)?
+        .with_kind(SubjectKind::ClusterGroup);
+    if let Some(c) = snap.source.cluster.as_mut() {
+        c.members = members;
+    }
+    Ok(snap)
+}
+
+/// The two sides of a comparison. When one side is a cluster group, and the other is a cluster ref
+/// that selects no profile, the cluster side holds only the profiles that the group pins: the
+/// question is whether the member runs the pin, and not what else it runs. So the other side is
+/// taken first.
+pub fn snapshot_pair<A, F>(
+    a: &Ref,
+    b: &Ref,
+    mut connect: F,
+    fetched_at: &str,
+    progress: &Progress,
+) -> Result<(Snapshot, Snapshot)>
+where
+    A: PaletteApi,
+    F: FnMut() -> Result<Palette<A>>,
+{
+    let open = |r: &Ref| matches!(r, Ref::Cluster { profile: None, .. });
+    if open(a) && !open(b) {
+        let sb = snapshot_for(b, &mut connect, fetched_at, progress)?;
+        let sa = snapshot_for(&narrowed(a, &sb), &mut connect, fetched_at, progress)?;
+        Ok((sa, sb))
+    } else {
+        let sa = snapshot_for(a, &mut connect, fetched_at, progress)?;
+        let sb = snapshot_for(&narrowed(b, &sa), &mut connect, fetched_at, progress)?;
+        Ok((sa, sb))
+    }
+}
+
+/// `cluster:<uid>` narrowed to the profiles that `other` pins, when `other` is a cluster group.
+fn narrowed(r: &Ref, other: &Snapshot) -> Ref {
+    match (r, other.source.cluster.as_ref()) {
+        (
+            Ref::Cluster {
+                uid,
+                profile: None,
+                pending,
+            },
+            Some(c),
+        ) if c.kind == SubjectKind::ClusterGroup && !c.profiles.is_empty() => Ref::Cluster {
+            uid: uid.clone(),
+            profile: Some(
+                c.profiles
+                    .iter()
+                    .map(|p| p.uid.as_str())
+                    .collect::<Vec<_>>()
+                    .join("+"),
+            ),
+            pending: *pending,
+        },
+        _ => r.clone(),
     }
 }
 

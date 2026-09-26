@@ -36,6 +36,15 @@ const PAYMENTS: &str = "64f1000000000000000000e1";
 const SEARCH: &str = "64f1000000000000000000e2";
 const LEDGER: &str = "64f1000000000000000000e3";
 const PAYMENTS_PROD: &str = "64f1000000000000000000f1";
+// the virtual clusters of a cluster group
+const TENANT_A: &str = "64f1000000000000000000e4";
+const TENANT_B: &str = "64f1000000000000000000e5";
+const TEAM_A_APPS: &str = "64e2000000000000000000b1";
+const DEV_GROUP: &str = "64f5000000000000000000a1";
+// edge hosts, and an app profile
+const STORE_1: &str = "64f4000000000000000000e1";
+const STORE_2: &str = "64f4000000000000000000e2";
+const SHOP: &str = "64f6000000000000000000a1";
 
 const RETAIN: &[Edit] = &[Edit::Reclaim("Retain")];
 const TAG_2404: &[Edit] = &[Edit::Tag {
@@ -92,6 +101,9 @@ pub fn names() -> Vec<&'static str> {
         "no-digest",
         "repave",
         "cluster-tiers",
+        "edge-hosts",
+        "cluster-groups",
+        "app-profiles",
         "same-names",
         "packs",
         "retire",
@@ -818,6 +830,19 @@ fn use_cases(r: &mut Runner) {
         false,
         "strata verify runs/payments.json",
     );
+    // what the update that waits would change on payments, before anybody accepts it (#78)
+    r.step(
+        "edited-pending-record",
+        0,
+        true,
+        "strata snapshot cluster:payments@pending -o review/payments-pending.json",
+    );
+    r.step(
+        "edited-pending",
+        1,
+        false,
+        "strata compare cluster:payments cluster:payments@pending",
+    );
     // the update waits: does accepting it repave? A change of the CSI values repaves nothing.
     r.repave_answer(DEV, PAYMENTS, false);
     r.step(
@@ -1341,6 +1366,143 @@ fn use_cases(r: &mut Runner) {
         "strata compare cluster:payments aws-stack@1.1.1 --json | jq -c '.runningBehind'",
     );
 
+    // Edge hosts: an add-on profile bound to two edge hosts and applied to one cluster
+    r.chapter("edge-hosts", DEV_ENV);
+    r.projects(&[("dev", DEV)]);
+    r.profile(DEV, A111, "1.1.1", "aws-stack@1.1.1", &[]);
+    r.addons(
+        DEV,
+        ADDONS_DEV,
+        "64e2000000000000000000d1",
+        "baseline",
+        "1.0.0",
+    );
+    r.cluster(DEV, PAYMENTS, "payments", &[A111, ADDONS_DEV]);
+    r.edge_host(DEV, STORE_1, "store-1", &[ADDONS_DEV]);
+    r.edge_host(DEV, STORE_2, "store-2", &[ADDONS_DEV]);
+    r.serve_here(); // state 1: one cluster and two edge hosts on platform-addons@1.0.0
+    r.step(
+        "edge-consumers",
+        1,
+        false,
+        "strata consumers platform-addons@1.0.0",
+    );
+    r.step(
+        "edge-record",
+        0,
+        true,
+        "strata snapshot edgehost:store-1 -o runs/store-1.json",
+    );
+    r.step(
+        "edge-record-cluster",
+        0,
+        true,
+        "strata snapshot cluster:payments/platform-addons -o runs/payments.json",
+    );
+    r.step(
+        "edge-compare",
+        0,
+        false,
+        "strata compare platform-addons@1.0.0 runs/store-1.json",
+    );
+    // an edit in place of the manifest: the edge host holds it by uid, and the cluster its copy
+    r.addons(
+        DEV,
+        ADDONS_DEV,
+        "64e2000000000000000000d1",
+        "restricted",
+        "1.0.0",
+    );
+    r.serve_here(); // state 2: the manifest of platform-addons@1.0.0 is edited in place
+    r.step("edge-verify", 1, false, "strata verify 'runs/*.json'");
+
+    // A cluster group pins an add-on profile for its virtual clusters
+    r.chapter("cluster-groups", DEV_ENV);
+    r.projects(&[("dev", DEV)]);
+    r.addons(
+        DEV,
+        ADDONS_DEV,
+        "64e2000000000000000000d1",
+        "baseline",
+        "1.0.0",
+    );
+    r.addons_named(
+        DEV,
+        TEAM_A_APPS,
+        "team-a-apps",
+        "64e2000000000000000000d3",
+        "restricted",
+        "1.0.0",
+    );
+    r.cluster(DEV, TENANT_A, "tenant-a", &[ADDONS_DEV, TEAM_A_APPS]);
+    r.cluster(DEV, TENANT_B, "tenant-b", &[ADDONS_DEV]);
+    r.cluster_group(
+        DEV,
+        DEV_GROUP,
+        "dev-group",
+        &[ADDONS_DEV],
+        &[TENANT_A, TENANT_B],
+    );
+    r.serve_here(); // state 1: the group pins platform-addons@1.0.0, and two members run it
+    r.step(
+        "group-record",
+        0,
+        true,
+        "strata snapshot clustergroup:dev-group -o runs/dev-group.json",
+    );
+    r.step(
+        "group-show",
+        0,
+        false,
+        "jq -c '.source.cluster | {kind, profiles: [.profiles[].name], members: [.members[].name]}' runs/dev-group.json",
+    );
+    r.step(
+        "group-compare",
+        0,
+        false,
+        "strata compare runs/dev-group.json cluster:tenant-a",
+    );
+
+    // An app profile, and a plain update of it
+    r.chapter("app-profiles", DEV_ENV);
+    r.projects(&[("dev", DEV)]);
+    r.app_profile(DEV, SHOP, "1.0.0", "2");
+    r.serve_here(); // state 1: shop@1.0.0
+    r.step(
+        "app-record",
+        0,
+        true,
+        "strata snapshot appprofile:shop@1.0.0 -o runs/shop.json",
+    );
+    r.step(
+        "app-show",
+        0,
+        false,
+        "jq -c '.packs[] | {key, type, tag, params, upstream: .hash.upstreamSource}' runs/shop.json",
+    );
+    // a tier has no digest, so verify cannot vouch for the chart of the helm tier
+    r.step(
+        "app-verify-unverified",
+        1,
+        false,
+        "strata verify runs/shop.json",
+    );
+    r.step(
+        "app-verify-ok",
+        0,
+        false,
+        "strata verify runs/shop.json --allow-no-digest",
+    );
+    // a plain update: the replicas of the web tier, with the same uid and version
+    r.app_profile(DEV, SHOP, "1.0.0", "3");
+    r.serve_here(); // state 2: the web tier of shop@1.0.0 has another replica count
+    r.step(
+        "app-verify",
+        1,
+        false,
+        "strata verify runs/shop.json --allow-no-digest",
+    );
+
     r.chapter("same-names", &[]);
     r.projects(&[("dev", DEV), ("prod", PROD)]);
     r.profile(DEV, A111, "1.1.1", "aws-stack@1.1.1", &[]);
@@ -1476,6 +1638,12 @@ fn use_cases(r: &mut Runner) {
         1,
         false,
         "strata consumers aws-stack@1.1.0",
+    );
+    r.step(
+        "consumers-list-only",
+        1,
+        false,
+        "strata consumers aws-stack@1.1.0 --list-only",
     );
     r.step("retire-free", 0, false, "strata consumers aws-stack@1.0.0");
     r.step(

@@ -1,0 +1,4 @@
+$ strata snapshot appprofile:shop@1.0.0 -o runs/shop.json
+strata: looking up project dev
+strata: fetching app profile 64f6000000000000000000a1
+strata: wrote runs/shop.json (root 4a5b305f0c3b)

@@ -6,7 +6,7 @@ use serde_json::{Value, json};
 use crate::api::{Palette, PaletteApi};
 use crate::diff::{ImpactLevel, PaletteRepave};
 use crate::error::{Error, Result};
-use crate::snapshot::{AppliedProfile, Snapshot};
+use crate::snapshot::{AppliedProfile, Snapshot, SubjectKind};
 
 /// A profile type that builds a cluster: its OS and Kubernetes layers.
 fn is_infra(kind: &str) -> bool {
@@ -80,6 +80,19 @@ pub fn palette_repave<A: PaletteApi>(
             });
         }
     };
+    if !cluster.kind.is_cluster() {
+        return Err(Error::Usage {
+            message: format!(
+                "--repave needs a cluster: Palette answers it for a cluster, and not for {} {}",
+                if cluster.kind == SubjectKind::EdgeHost {
+                    "an"
+                } else {
+                    "a"
+                },
+                cluster.kind.noun()
+            ),
+        });
+    }
     if target.source.pack.is_some() || target.source.uid.is_empty() {
         return Err(Error::Usage {
             message: "--repave needs the profile side to be a profile version that \

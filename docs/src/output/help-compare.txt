@@ -1,5 +1,5 @@
 $ strata compare --help
-Compare two profile versions, records, clusters, or pack versions
+Compare two profile versions, records, clusters, edge hosts, cluster groups, app profiles, or pack versions
 
 Usage: strata compare [OPTIONS] <A> <B>
 

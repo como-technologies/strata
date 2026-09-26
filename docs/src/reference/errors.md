@@ -23,9 +23,9 @@ the kind.
 | `not-json` | Palette answered with a body that is not JSON. | `path` |
 | `profile-not-found` | No profile version with this name and version in the scope. | `name`, `version`, `tenantScope` |
 | `cluster-profile-not-found` | The cluster runs no profile with this name or uid. | `cluster`, `profile`, `applied` |
-| `profile-ref-required` | The command needs a profile, and got a cluster or a pack. | `reference` |
+| `profile-ref-required` | The command needs a profile, and got a cluster, an edge host, a cluster group, an app profile, a pack, or a record of one. | `reference` |
 | `record-not-a-source` | `snapshot` got a record. It writes one, and does not read one. | `path` |
-| `usage` | The command line cannot work as given, so strata sent no request. `snapshot` with no ref and no `--from-raw` is the one case. `snapshot` takes no `--json`, so this kind prints as a `strata:` line. | |
+| `usage` | The command line cannot work as given, so strata sent no request. Examples: `snapshot` with no ref and no `--from-raw`, `snapshot --raw-dir` of a ref that is not a profile or a cluster, and `compare --repave` with an edge host or a cluster group. `snapshot` takes no `--json`, so this kind prints as a `strata:` line. | |
 | `candidate-invalid` | The candidate file has a problem. | `path` |
 | `pack-not-found` | The registry has no such pack version or tag. | `name`, `version`, `registry`, `tag` when given |
 | `pack-name-not-found` | No visible registry offers a pack of that name. | `name` |
@@ -35,6 +35,11 @@ the kind.
 | `project-not-found` | No visible project has this name. | `name`, `available` |
 | `cluster-not-found` | No cluster in the scope has this name. | `cluster`, `available` |
 | `cluster-name-ambiguous` | Two or more clusters in the scope have this name. | `name`, `uids` |
+| `edge-host-not-found` | No edge host in the scope has this uid or name. | `edgeHost`, `available` |
+| `edge-host-name-ambiguous` | Two or more edge hosts in the scope have this name. | `name`, `uids` |
+| `cluster-group-not-found` | No cluster group in the scope has this uid or name. | `clusterGroup`, `available` |
+| `cluster-group-name-ambiguous` | Two or more cluster groups in the scope have this name. | `name`, `uids` |
+| `app-profile-not-found` | No app profile in the scope has this name and version. | `name`, `version`, `available` |
 | `not-snapshot` | The file is not a strata snapshot. | `path` |
 | `unsupported-schema` | The snapshot has a schema id that this strata does not read. | `path`, `found`, `supported` |
 | `snapshot-schema` | The snapshot does not match its schema. | `path`, `schema` |

@@ -1,5 +1,5 @@
 $ strata consumers --help
-List the clusters that use a profile version
+List the clusters and the edge hosts that use a profile version
 
 Usage: strata consumers [OPTIONS] <REF>
 
@@ -7,6 +7,7 @@ Arguments:
   <REF>  A profile version, by ref or by record
 
 Options:
+      --list-only        Read the consumer list that Palette computes, and not each cluster of the fleet. Faster, but it does not find a consumer that the list omits
       --format <FORMAT>  The report format: terminal, markdown, or json [default: terminal]
       --json             The same as --format json
       --color [<COLOR>]  Color the report: auto, always, or never [default: auto]

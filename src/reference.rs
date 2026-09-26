@@ -33,26 +33,64 @@ pub enum Ref {
         /// Pack version, or [`LATEST`].
         version: String,
     },
-    /// `cluster:<uid>` or `cluster:<uid>/<profile>`: what a cluster runs. Without a profile,
-    /// every profile applied to the cluster, in canonical order: the cluster or infra profile
-    /// first, then the others by name. With one, only the profile of that name.
+    /// `cluster:<uid>` or `cluster:<uid>/<profile>`, either with `@pending`: what a cluster runs.
+    /// Without a profile, every profile applied to the cluster, in canonical order: the cluster or
+    /// infra profile first, then the others by name. With one, only the profile of that name.
     Cluster {
         /// Cluster uid.
         uid: String,
         /// The applied profile to select, by name.
         profile: Option<String>,
+        /// `@pending`: the profiles that the cluster would run after it accepts the update that
+        /// waits, and not the copies that it runs now.
+        pending: bool,
+    },
+    /// `edgehost:<uid>` or `edgehost:<uid>/<profile>`: the profiles bound to an edge host, as for
+    /// a cluster.
+    EdgeHost {
+        /// Edge host uid, or its name.
+        uid: String,
+        /// The bound profile to select, by name.
+        profile: Option<String>,
+    },
+    /// `appprofile:<uid>` or `appprofile:<name>@<version>`: an app profile, whose tiers are its
+    /// packs. The version [`LATEST`] picks the highest version of that name.
+    AppProfile {
+        /// App profile uid, or its name when `version` is set.
+        id: String,
+        /// The version of the name.
+        version: Option<String>,
+    },
+    /// `clustergroup:<uid>`: the profiles that a cluster group pins for its virtual clusters.
+    ClusterGroup {
+        /// Cluster group uid, or its name.
+        uid: String,
     },
 }
 
+/// The suffix of a cluster ref that names the update that waits for the cluster.
+pub const PENDING_SUFFIX: &str = "@pending";
+
 /// The prefix of a cluster ref.
 pub const CLUSTER_PREFIX: &str = "cluster:";
+
+/// The prefix of an edge host ref.
+pub const EDGE_HOST_PREFIX: &str = "edgehost:";
+
+/// The prefix of an app profile ref.
+pub const APP_PROFILE_PREFIX: &str = "appprofile:";
+
+/// The prefix of a cluster group ref.
+pub const CLUSTER_GROUP_PREFIX: &str = "clustergroup:";
 
 /// The prefix of a pack ref.
 pub const PACK_PREFIX: &str = "pack:";
 
 impl Ref {
-    /// A path to an existing file is a snapshot; `cluster:<uid>[/<profile>]` with a non-empty uid
-    /// is a cluster; `name@version` with both parts non-empty is a name and version; anything else
+    /// A path to an existing file is a snapshot; `cluster:<uid>[/<profile>][@pending]` with a
+    /// non-empty uid is a cluster; `edgehost:<uid>[/<profile>]` is an edge host;
+    /// `clustergroup:<uid>` is a cluster group; `appprofile:<uid>` or
+    /// `appprofile:<name>@<version>` is an app profile; `name@version` with both parts non-empty is a name and version; anything else
     /// is a uid.
     pub fn parse(text: &str) -> Ref {
         Self::parse_with(text, |p| p.is_file())
@@ -79,6 +117,10 @@ impl Ref {
             }
         }
         if let Some(rest) = text.strip_prefix(CLUSTER_PREFIX) {
+            let (rest, pending) = match rest.strip_suffix(PENDING_SUFFIX) {
+                Some(r) => (r, true),
+                None => (rest, false),
+            };
             let (uid, profile) = match rest.split_once('/') {
                 Some((uid, profile)) => (uid, Some(profile).filter(|p| !p.is_empty())),
                 None => (rest, None),
@@ -87,8 +129,46 @@ impl Ref {
                 return Ref::Cluster {
                     uid: uid.to_string(),
                     profile: profile.map(str::to_string),
+                    pending,
                 };
             }
+        }
+        if let Some(rest) = text.strip_prefix(EDGE_HOST_PREFIX) {
+            let (uid, profile) = match rest.split_once('/') {
+                Some((uid, profile)) => (uid, Some(profile).filter(|p| !p.is_empty())),
+                None => (rest, None),
+            };
+            if !uid.is_empty() {
+                return Ref::EdgeHost {
+                    uid: uid.to_string(),
+                    profile: profile.map(str::to_string),
+                };
+            }
+        }
+        if let Some(rest) = text.strip_prefix(APP_PROFILE_PREFIX)
+            && !rest.is_empty()
+            && !rest.contains('/')
+        {
+            return match rest.rsplit_once('@') {
+                Some((name, version)) if !name.is_empty() && !version.is_empty() => {
+                    Ref::AppProfile {
+                        id: name.to_string(),
+                        version: Some(version.to_string()),
+                    }
+                }
+                _ => Ref::AppProfile {
+                    id: rest.to_string(),
+                    version: None,
+                },
+            };
+        }
+        if let Some(uid) = text.strip_prefix(CLUSTER_GROUP_PREFIX)
+            && !uid.is_empty()
+            && !uid.contains('/')
+        {
+            return Ref::ClusterGroup {
+                uid: uid.to_string(),
+            };
         }
         // A ref that is shaped like a path is a file, whether or not the file is there: the loader
         // then says which file is missing, instead of Palette answering 404 for a uid it never had.
@@ -122,11 +202,29 @@ impl fmt::Display for Ref {
                 Some(r) => write!(f, "{PACK_PREFIX}{r}/{name}@{version}"),
                 None => write!(f, "{PACK_PREFIX}{name}@{version}"),
             },
-            Ref::Cluster { uid, profile: None } => write!(f, "{CLUSTER_PREFIX}{uid}"),
             Ref::Cluster {
                 uid,
-                profile: Some(p),
-            } => write!(f, "{CLUSTER_PREFIX}{uid}/{p}"),
+                profile,
+                pending,
+            } => {
+                write!(f, "{CLUSTER_PREFIX}{uid}")?;
+                if let Some(p) = profile {
+                    write!(f, "/{p}")?;
+                }
+                if *pending {
+                    write!(f, "{PENDING_SUFFIX}")?;
+                }
+                Ok(())
+            }
+            Ref::ClusterGroup { uid } => write!(f, "{CLUSTER_GROUP_PREFIX}{uid}"),
+            Ref::AppProfile { id, version } => match version {
+                Some(v) => write!(f, "{APP_PROFILE_PREFIX}{id}@{v}"),
+                None => write!(f, "{APP_PROFILE_PREFIX}{id}"),
+            },
+            Ref::EdgeHost { uid, profile } => match profile {
+                Some(p) => write!(f, "{EDGE_HOST_PREFIX}{uid}/{p}"),
+                None => write!(f, "{EDGE_HOST_PREFIX}{uid}"),
+            },
         }
     }
 }
@@ -186,7 +284,8 @@ mod tests {
             Ref::parse_with("cluster:payments/aws-stack", no_files),
             Ref::Cluster {
                 uid: "payments".into(),
-                profile: Some("aws-stack".into())
+                profile: Some("aws-stack".into()),
+                pending: false,
             }
         );
         assert_eq!(
@@ -266,7 +365,8 @@ mod tests {
             Ref::parse_with("cluster:c1", no_files),
             Ref::Cluster {
                 uid: "c1".into(),
-                profile: None
+                profile: None,
+                pending: false,
             }
         );
         let selected = Ref::parse_with("cluster:c1/aws-stack", no_files);
@@ -274,7 +374,8 @@ mod tests {
             selected,
             Ref::Cluster {
                 uid: "c1".into(),
-                profile: Some("aws-stack".into())
+                profile: Some("aws-stack".into()),
+                pending: false,
             }
         );
         assert_eq!(selected.to_string(), "cluster:c1/aws-stack");
@@ -286,6 +387,100 @@ mod tests {
             Ref::parse_with("cluster:", no_files),
             Ref::Uid("cluster:".into()),
             "no uid, no cluster"
+        );
+    }
+
+    #[test]
+    fn a_cluster_ref_with_pending_reads_the_update_that_waits() {
+        let no_files = |_: &Path| false;
+        let all = Ref::parse_with("cluster:c1@pending", no_files);
+        assert_eq!(
+            all,
+            Ref::Cluster {
+                uid: "c1".into(),
+                profile: None,
+                pending: true,
+            }
+        );
+        assert_eq!(all.to_string(), "cluster:c1@pending");
+        let one = Ref::parse_with("cluster:c1/aws-stack@pending", no_files);
+        assert_eq!(
+            one,
+            Ref::Cluster {
+                uid: "c1".into(),
+                profile: Some("aws-stack".into()),
+                pending: true,
+            }
+        );
+        assert_eq!(one.to_string(), "cluster:c1/aws-stack@pending");
+    }
+
+    #[test]
+    fn edge_host_forms() {
+        let no_files = |_: &Path| false;
+        let all = Ref::parse_with("edgehost:e1", no_files);
+        assert_eq!(
+            all,
+            Ref::EdgeHost {
+                uid: "e1".into(),
+                profile: None,
+            }
+        );
+        assert_eq!(all.to_string(), "edgehost:e1");
+        let one = Ref::parse_with("edgehost:e1/edge-stack", no_files);
+        assert_eq!(
+            one,
+            Ref::EdgeHost {
+                uid: "e1".into(),
+                profile: Some("edge-stack".into()),
+            }
+        );
+        assert_eq!(one.to_string(), "edgehost:e1/edge-stack");
+        assert_eq!(
+            Ref::parse_with("edgehost:", no_files),
+            Ref::Uid("edgehost:".into()),
+            "no uid, no edge host"
+        );
+    }
+
+    #[test]
+    fn app_profile_forms() {
+        let no_files = |_: &Path| false;
+        let by_uid = Ref::parse_with("appprofile:a1", no_files);
+        assert_eq!(
+            by_uid,
+            Ref::AppProfile {
+                id: "a1".into(),
+                version: None,
+            }
+        );
+        assert_eq!(by_uid.to_string(), "appprofile:a1");
+        let by_name = Ref::parse_with("appprofile:shop@1.0.0", no_files);
+        assert_eq!(
+            by_name,
+            Ref::AppProfile {
+                id: "shop".into(),
+                version: Some("1.0.0".into()),
+            }
+        );
+        assert_eq!(by_name.to_string(), "appprofile:shop@1.0.0");
+        assert_eq!(
+            Ref::parse_with("appprofile:", no_files),
+            Ref::Uid("appprofile:".into()),
+            "no uid, no app profile"
+        );
+    }
+
+    #[test]
+    fn cluster_group_forms() {
+        let no_files = |_: &Path| false;
+        let group = Ref::parse_with("clustergroup:g1", no_files);
+        assert_eq!(group, Ref::ClusterGroup { uid: "g1".into() });
+        assert_eq!(group.to_string(), "clustergroup:g1");
+        assert_eq!(
+            Ref::parse_with("clustergroup:", no_files),
+            Ref::Uid("clustergroup:".into()),
+            "no uid, no cluster group"
         );
     }
 }

@@ -101,6 +101,60 @@ clusters --applied` say when a cluster is behind. What Palette says for each
 kind of change is in
 [Cluster copies](../internals/palette/clusters.md#cluster-copies).
 
+## What a waiting update changes
+
+`cluster:<cluster>@pending` records the profiles that the cluster runs after it
+takes the update that waits, and not the copies that it runs now. Compare the
+two before anybody accepts the update:
+
+```text
+{{#include ../output/edited-pending-record.txt}}
+{{#include ../output/edited-pending.txt}}
+```
+
+Here the update brings one change: the reclaim policy of the CSI pack. The
+record says `pending: true`, and it holds no `updatesPending`: that is a
+statement about the copy that runs. When no update waits, the pending record
+has the root of the cluster.
+
+- Palette gives each profile of the cluster, and puts the profile as it is now
+  in place of each profile that a waiting notification names. So the pending
+  record covers the whole cluster, as a cluster record does.
+- The manifests of each profile come from the profile: the cluster holds no
+  copy of them yet.
+- A profile that the cluster does not run yet has no variable values on the
+  cluster, so the record holds none for it.
+- `verify` of a pending record reads the update that waits again. Once the
+  cluster takes the update, nothing waits, and the cluster runs the root of the
+  pending record: a live run shows it. See
+  [Cluster copies](../internals/palette/clusters.md#cluster-copies).
+
+## Edge hosts, cluster groups, and app profiles
+
+Three more objects of Palette hold profiles, and strata records each:
+
+```text
+{{#include ../output/edge-record.txt}}
+{{#include ../output/group-record.txt}}
+{{#include ../output/app-record.txt}}
+```
+
+- `edgehost:<host>` records the profiles bound to an edge host, as for a
+  cluster. The record says `kind: edgeHost`. See
+  [A profile runs on edge hosts](../use-cases/edge-hosts.md).
+- `clustergroup:<group>` records the profiles that a cluster group pins for its
+  virtual clusters, and names the virtual clusters in `members[]`. The record
+  says `kind: clusterGroup`. See
+  [A cluster group pins a profile](../use-cases/cluster-groups.md).
+- `appprofile:<name>@<version>` records an app profile: each tier is a pack in
+  the layer `app`, and the properties of a tier are its params. `source.type`
+  is `app`. A tier has no digest. See
+  [An app profile is updated in place](../use-cases/app-profiles.md).
+
+An edge host and a cluster group give no variable values, so their records hold
+the variable definitions of each profile, as a profile record does. So a record
+of an edge host has the root of the profile bound to it.
+
 ## Macros
 
 A macro is a name and a value that a tenant or a project defines. The values
@@ -192,6 +246,9 @@ directory first when they live outside the repository.
 ## What to expect
 
 - Exit `0`, or `2` on an error.
+- `--macros` and `--shape` need a `cluster:` ref. `--raw-dir` takes a profile or
+  a cluster: a record read back from the directory would not say `@pending`,
+  edge host, cluster group, or app profile.
 - Without `-o`, the snapshot goes to standard output.
 - `-o releases/1.1.0/dev.json` makes the directory that the path names, so a
   release directory needs no `mkdir` first.

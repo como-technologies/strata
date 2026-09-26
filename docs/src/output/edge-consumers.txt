@@ -1,0 +1,7 @@
+$ strata consumers platform-addons@1.0.0
+platform-addons@1.0.0 (uid 64e2000000000000000000a1): 3 consumers
+  payments  64f1000000000000000000e1  project dev (uid 64f20000000000000000a0d1)  Running
+  store-1   64f4000000000000000000e1  project dev (uid 64f20000000000000000a0d1)  ready  edge host
+  store-2   64f4000000000000000000e2  project dev (uid 64f20000000000000000a0d1)  ready  edge host
+  second reading: 0 of 0 clusters read
+  edge hosts: 2 read

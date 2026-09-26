@@ -1,0 +1,5 @@
+$ strata snapshot edgehost:store-1 -o runs/store-1.json
+strata: looking up project dev
+strata: fetching edge host store-1
+strata: edge host 'store-1' is 64f4000000000000000000e1
+strata: wrote runs/store-1.json (root f6312d5a2793)

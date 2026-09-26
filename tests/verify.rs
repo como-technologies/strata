@@ -1270,6 +1270,7 @@ fn cluster_ref(profile: Option<&str>) -> Ref {
     Ref::Cluster {
         uid: CLUSTER_UID.into(),
         profile: profile.map(str::to_string),
+        pending: false,
     }
 }
 
@@ -1916,7 +1917,7 @@ fn a_profile_without_consumers_exits_zero_and_fetches_no_cluster() {
         .unwrap();
     assert_eq!(
         text,
-        "lab-profile@1.2.0 (uid 64f0000000000000000000a1): no consumers\n  second reading: 0 of 0 clusters read\n"
+        "lab-profile@1.2.0 (uid 64f0000000000000000000a1): no consumers\n  second reading: 0 of 0 clusters read\n  edge hosts: 0 read\n"
     );
 }
 
@@ -1975,7 +1976,7 @@ fn the_second_reading_finds_a_consumer_the_profile_does_not_list() {
         "{text}"
     );
     assert!(
-        text.ends_with("  second reading: 1 of 1 clusters read\n"),
+        text.ends_with("  second reading: 1 of 1 clusters read\n  edge hosts: 0 read\n"),
         "{text}"
     );
     let md = render::renderer(Format::Markdown, Paint::off(), false)
@@ -1994,6 +1995,63 @@ fn the_second_reading_finds_a_consumer_the_profile_does_not_list() {
     .unwrap();
     assert_eq!(json["consumers"][0]["unlisted"], true);
     assert_eq!(json["clustersRead"]["read"], 1);
+}
+
+#[test]
+fn consumers_list_only_reads_the_list_of_palette_and_says_that_it_did_not_walk() {
+    // the fleet of the test above: one cluster applies the version, and the profile lists none
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let api = serve(MemoryApi::new(), dir.path(), "a", UID_A).with(
+        "/v1/dashboard/spectroclusters/meta",
+        serde_json::json!([{
+            "metadata": {"name": "gamma", "uid": "cluster-ccc", "annotations": {"projectUid": "p1"}},
+            "status": {"state": "Running"}
+        }]),
+    );
+    let r = ops::consumers_with(
+        &Ref::Uid(UID_A.into()),
+        &ops::ConsumersOptions { list_only: true },
+        |_| Ok(Palette::new(api.clone())),
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    // no cluster document is served, so a read of one would be an error: none was read
+    assert_eq!(r.count, 0, "the list of Palette alone");
+    assert!(r.clusters_read.skipped);
+    assert_eq!((r.clusters_read.read, r.clusters_read.unread), (0, 0));
+    let text = render::renderer(Format::Terminal, Paint::off(), false)
+        .render_consumers(&r)
+        .unwrap();
+    assert!(
+        text.ends_with("  second reading: not done (--list-only)\n  edge hosts: 0 read\n"),
+        "{text}"
+    );
+    let md = render::renderer(Format::Markdown, Paint::off(), false)
+        .render_consumers(&r)
+        .unwrap();
+    assert!(
+        md.contains("Second reading: not done (`--list-only`)."),
+        "{md}"
+    );
+    let json: Value = serde_json::from_str(
+        &render::renderer(Format::Json, Paint::off(), true)
+            .render_consumers(&r)
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(json["clustersRead"]["skipped"], true);
+    // the default still walks: the same fleet without the flag has no skip
+    let walked = ops::consumers(
+        &Ref::Uid(UID_A.into()),
+        |_| Ok(Palette::new(api.clone())),
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert!(!walked.clusters_read.skipped);
+    assert_eq!(walked.clusters_read.unread, 1, "the walk tried the cluster");
 }
 
 #[test]
@@ -3290,6 +3348,7 @@ fn cluster_named(name: &str) -> Ref {
     Ref::Cluster {
         uid: name.into(),
         profile: None,
+        pending: false,
     }
 }
 
@@ -6044,4 +6103,588 @@ fn an_image_under_a_path_that_holds_the_pack_version_keeps_one_repository() {
     );
     assert_eq!(changes[0].old.as_deref(), Some("v1.63.1"));
     assert_eq!(changes[0].new.as_deref(), Some("v1.65.0"));
+}
+
+/// The update that waits for cluster-b: the templates and the manifests of cluster-a, and the
+/// profile document of a.
+fn serve_pending(api: MemoryApi, raw_root: &Path) -> MemoryApi {
+    let a = raw_root.join("cluster-a");
+    let templates = read(&a.join("cluster.json"))["spec"]["clusterProfileTemplates"].clone();
+    let manifests = read(&a.join("manifests.json"))["profiles"].clone();
+    let mut api = api.with(
+        format!("/v1/spectroclusters/{CLUSTER_UID}/profileUpdates"),
+        serde_json::json!({ "profiles": templates }),
+    );
+    for (t, m) in templates
+        .as_array()
+        .unwrap()
+        .iter()
+        .zip(manifests.as_array().unwrap())
+    {
+        let uid = t["uid"].as_str().unwrap();
+        api = api.with(
+            format!("/v1/clusterprofiles/{uid}/packs/manifests"),
+            m.clone(),
+        );
+        api = api.with(
+            format!("/v1/clusterprofiles/{uid}"),
+            read(&raw_root.join("a").join("profile.json")),
+        );
+    }
+    api
+}
+
+fn pending_ref() -> Ref {
+    Ref::Cluster {
+        uid: CLUSTER_UID.into(),
+        profile: None,
+        pending: true,
+    }
+}
+
+#[test]
+fn a_pending_cluster_ref_records_the_release_that_the_waiting_update_brings() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let on_a = snapshot_cluster(
+        &serve_cluster(MemoryApi::new(), dir.path(), "cluster-a"),
+        None,
+    )
+    .unwrap();
+    let api = serve_pending(
+        serve_cluster(MemoryApi::new(), dir.path(), "cluster-b"),
+        dir.path(),
+    );
+    let now = snapshot_cluster(&api, None).unwrap();
+    let pending = ops::snapshot_for(
+        &pending_ref(),
+        || Ok(Palette::new(api.clone())),
+        "t0",
+        &Progress::silent(),
+    )
+    .unwrap();
+    // the packs of the release that the update brings; the cluster holds no variable values for
+    // a profile that it does not run yet, so the record has none
+    let d = ops::compare(&on_a, &pending, "t1");
+    assert_eq!(
+        d.summary.packs_changed, 0,
+        "the release that the update brings"
+    );
+    assert!(
+        pending
+            .source
+            .cluster
+            .as_ref()
+            .unwrap()
+            .variables
+            .is_empty()
+    );
+    assert_ne!(pending.root, now.root, "and not the release that runs now");
+    let c = pending.source.cluster.as_ref().unwrap();
+    assert!(c.pending);
+    assert_eq!(
+        (c.updates_pending, c.updates_pending_error.as_deref()),
+        (None, None),
+        "whether an update waits is a statement about the copy that runs"
+    );
+    assert!(
+        pending
+            .source
+            .title()
+            .ends_with("pending for cluster lab-cluster"),
+        "{}",
+        pending.source.title()
+    );
+    assert_eq!(
+        serde_json::to_value(&pending).unwrap()["source"]["cluster"]["pending"],
+        true
+    );
+    assert!(
+        serde_json::to_value(&now).unwrap()["source"]["cluster"]
+            .get("pending")
+            .is_none(),
+        "a record of what runs now writes no pending field"
+    );
+
+    // compare names what the update changes
+    let d = ops::compare(&now, &pending, "t1");
+    assert!(!d.same);
+
+    // verify reads the update again, and not what runs now
+    let v = ops::verify(
+        &pending,
+        &Palette::new(api.clone()),
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert!(v.unchanged, "{:?}", v.status);
+    // once the cluster takes the update, nothing waits
+    let taken = serve_cluster(MemoryApi::new(), dir.path(), "cluster-a").with(
+        format!("/v1/spectroclusters/{CLUSTER_UID}/profileUpdates"),
+        serde_json::json!({ "profiles": [] }),
+    );
+    let v = ops::verify(&pending, &Palette::new(taken), "t1", &Progress::silent()).unwrap();
+    assert!(!v.unchanged, "no update waits, so no profile is pending");
+}
+
+// ---- edge hosts -------------------------------------------------------------------------------
+
+const EDGE_HOST_SEARCH: &str = "POST /v1/dashboard/edgehosts/search?limit=50";
+
+/// An edge host `e1`, `edge-1`, bound to the profile of cluster-a, with the manifests, the
+/// variables, and the document of that profile, and the search that lists it.
+fn serve_edge_host(api: MemoryApi, raw_root: &Path) -> MemoryApi {
+    let a = raw_root.join("cluster-a");
+    let templates = read(&a.join("cluster.json"))["spec"]["clusterProfileTemplates"].clone();
+    let manifests = read(&a.join("manifests.json"))["profiles"].clone();
+    let host = serde_json::json!({
+        "metadata": {"uid": "e1", "name": "edge-1", "annotations": {"projectUid": "p1"}},
+        "spec": {"clusterProfileTemplates": templates},
+        "status": {"state": "ready"},
+    });
+    let summary: Vec<Value> = templates
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|t| serde_json::json!({"uid": t["uid"], "name": t["name"], "version": t["profileVersion"]}))
+        .collect();
+    let mut api = api.with("/v1/edgehosts/e1", host).with(
+        EDGE_HOST_SEARCH,
+        serde_json::json!({"items": [{
+            "metadata": {"uid": "e1", "name": "edge-1", "annotations": {"projectUid": "p1"}},
+            "spec": {"clusterProfileTemplates": summary},
+            "status": {"state": "ready"},
+        }], "listmeta": {"continue": ""}}),
+    );
+    for (t, m) in templates
+        .as_array()
+        .unwrap()
+        .iter()
+        .zip(manifests.as_array().unwrap())
+    {
+        let uid = t["uid"].as_str().unwrap();
+        api = api
+            .with(
+                format!("/v1/clusterprofiles/{uid}/packs/manifests"),
+                m.clone(),
+            )
+            .with(
+                format!("/v1/clusterprofiles/{uid}"),
+                read(&raw_root.join("a").join("profile.json")),
+            )
+            .with(
+                format!("/v1/clusterprofiles/{uid}/variables"),
+                read(&raw_root.join("a").join("variables.json")),
+            );
+    }
+    api
+}
+
+fn snapshot_edge_host(api: &MemoryApi, host: &str) -> strata::Result<Snapshot> {
+    ops::snapshot_for(
+        &Ref::parse(&format!("edgehost:{host}")),
+        || Ok(Palette::new(api.clone())),
+        "t0",
+        &Progress::silent(),
+    )
+}
+
+#[test]
+fn an_edge_host_record_holds_the_profiles_bound_to_it() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let recorded_a = ops::snapshot_from_dir(&dir.path().join("a"), "a", "t0").unwrap();
+    let api = serve_edge_host(MemoryApi::new(), dir.path());
+    let host = snapshot_edge_host(&api, "e1").unwrap();
+    assert_eq!(
+        host.root, recorded_a.root,
+        "the packs and the variable definitions of the bound profile"
+    );
+    let c = host.source.cluster.as_ref().unwrap();
+    assert_eq!(c.kind, strata::snapshot::SubjectKind::EdgeHost);
+    assert_eq!((c.uid.as_str(), c.name.as_str()), ("e1", "edge-1"));
+    assert_eq!(c.updates_pending, None, "an edge host has no notifications");
+    assert!(c.variables.is_empty(), "an edge host gives no values");
+    assert!(
+        host.source.title().ends_with("on edge host edge-1"),
+        "{}",
+        host.source.title()
+    );
+    assert_eq!(
+        serde_json::to_value(&host).unwrap()["source"]["cluster"]["kind"],
+        "edgeHost"
+    );
+
+    // by name, through the search
+    let by_name = snapshot_edge_host(&api, "edge-1").unwrap();
+    assert_eq!(by_name.root, host.root);
+    assert_eq!(by_name.source.cluster.unwrap().uid, "e1");
+    let err = snapshot_edge_host(&api, "edge-9").unwrap_err();
+    assert_eq!(err.kind(), "edge-host-not-found");
+
+    // verify reads the edge host again, and not a cluster of that uid
+    let v = ops::verify(&host, &Palette::new(api.clone()), "t1", &Progress::silent()).unwrap();
+    assert!(v.unchanged, "{:?}", v.status);
+    // the host is bound to another profile: its record drifts
+    let b =
+        read(&dir.path().join("cluster-b").join("cluster.json"))["spec"]["clusterProfileTemplates"]
+            .clone();
+    let b_manifests =
+        read(&dir.path().join("cluster-b").join("manifests.json"))["profiles"][0].clone();
+    let b_uid = b[0]["uid"].as_str().unwrap().to_string();
+    let rebound = serve_edge_host(MemoryApi::new(), dir.path())
+        .with(
+            "/v1/edgehosts/e1",
+            serde_json::json!({
+                "metadata": {"uid": "e1", "name": "edge-1"},
+                "spec": {"clusterProfileTemplates": b},
+            }),
+        )
+        .with(
+            format!("/v1/clusterprofiles/{b_uid}/packs/manifests"),
+            b_manifests,
+        )
+        .with(
+            format!("/v1/clusterprofiles/{b_uid}"),
+            read(&dir.path().join("b").join("profile.json")),
+        );
+    let v = ops::verify(&host, &Palette::new(rebound), "t1", &Progress::silent()).unwrap();
+    assert!(!v.unchanged);
+}
+
+#[test]
+fn consumers_counts_an_edge_host_bound_to_the_profile() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let api = serve_edge_host(serve(MemoryApi::new(), dir.path(), "a", UID_A), dir.path());
+    let r = ops::consumers(
+        &Ref::Uid(UID_A.into()),
+        |_| Ok(Palette::new(api.clone())),
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert_eq!(
+        (r.count, r.exit_code()),
+        (1, 1),
+        "an edge host uses the profile, so a delete step must not proceed"
+    );
+    let host = &r.consumers[0];
+    assert_eq!(
+        (
+            host.kind.as_str(),
+            host.uid.as_str(),
+            host.name.as_str(),
+            host.project_uid.as_str(),
+            host.state.as_str(),
+            host.version.as_str()
+        ),
+        ("edgehost", "e1", "edge-1", "p1", "ready", "1.2.0")
+    );
+    assert_eq!(r.edge_hosts_read.read, 1);
+    // --list-only reads the edge hosts too: the consumer list of Palette names no edge host
+    let listed = ops::consumers_with(
+        &Ref::Uid(UID_A.into()),
+        &ops::ConsumersOptions { list_only: true },
+        |_| Ok(Palette::new(api.clone())),
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert_eq!(listed.count, 1);
+
+    let text = render::renderer(Format::Terminal, Paint::off(), false)
+        .render_consumers(&r)
+        .unwrap();
+    assert!(
+        text.contains("edge-1  e1  project p1  ready  edge host"),
+        "{text}"
+    );
+    assert!(text.ends_with("  edge hosts: 1 read\n"), "{text}");
+    let md = render::renderer(Format::Markdown, Paint::off(), false)
+        .render_consumers(&r)
+        .unwrap();
+    assert!(
+        md.contains("(edge host)") && md.contains("Edge hosts: 1 read."),
+        "{md}"
+    );
+    let json: Value = serde_json::from_str(
+        &render::renderer(Format::Json, Paint::off(), true)
+            .render_consumers(&r)
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(json["consumers"][0]["kind"], "edgehost");
+    assert_eq!(json["edgeHostsRead"]["read"], 1);
+}
+
+// ---- cluster groups ---------------------------------------------------------------------------
+
+/// A cluster group `g1`, `group-1`, that pins the add-on profile of cluster-merged, with that
+/// cluster as its one virtual cluster, and the profile documents it needs.
+fn serve_cluster_group(api: MemoryApi, raw_root: &Path) -> MemoryApi {
+    let m = raw_root.join("cluster-merged");
+    let (_, addon) = merged_uids(raw_root);
+    let templates = read(&m.join("cluster.json"))["spec"]["clusterProfileTemplates"].clone();
+    let manifests = read(&m.join("manifests.json"))["profiles"].clone();
+    let (i, template) = templates
+        .as_array()
+        .unwrap()
+        .iter()
+        .enumerate()
+        .find(|(_, t)| t["uid"] == addon.as_str())
+        .unwrap();
+    serve_cluster(api, raw_root, "cluster-merged")
+        .with(
+            "/v1/clustergroups/g1",
+            serde_json::json!({
+                "metadata": {"uid": "g1", "name": "group-1"},
+                "spec": {"type": "hostCluster", "clusterProfileTemplates": [template]},
+            }),
+        )
+        .with(
+            "/v1/clustergroups/hostCluster/metadata",
+            serde_json::json!({"items": [{"uid": "g1", "name": "group-1", "scope": "project"}]}),
+        )
+        .with(
+            "POST /v1/dashboard/clustergroups/g1/virtualClusters?limit=50",
+            serde_json::json!({"items": [{"metadata": {"uid": CLUSTER_UID, "name": "lab-cluster",
+                "annotations": {"projectUid": "p1"}}}], "listmeta": {"continue": ""}}),
+        )
+        .with(
+            format!("/v1/clusterprofiles/{addon}/packs/manifests"),
+            manifests[i].clone(),
+        )
+        .with(
+            format!("/v1/clusterprofiles/{addon}/variables"),
+            read(&raw_root.join("addons").join("variables.json")),
+        )
+}
+
+#[test]
+fn a_cluster_group_record_holds_the_pin_and_compares_against_a_member() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let (infra, addon) = merged_uids(dir.path());
+    let api = serve_cluster_group(MemoryApi::new(), dir.path());
+    let connect = || Ok(Palette::new(api.clone()));
+    let group = ops::snapshot_for(
+        &Ref::parse("clustergroup:g1"),
+        connect,
+        "t0",
+        &Progress::silent(),
+    )
+    .unwrap();
+    let c = group.source.cluster.as_ref().unwrap();
+    assert_eq!(c.kind, strata::snapshot::SubjectKind::ClusterGroup);
+    assert_eq!(
+        c.profiles
+            .iter()
+            .map(|p| p.uid.as_str())
+            .collect::<Vec<_>>(),
+        [addon.as_str()],
+        "the pin"
+    );
+    assert_eq!(
+        c.members,
+        [strata::snapshot::GroupMember {
+            uid: CLUSTER_UID.into(),
+            name: "lab-cluster".into(),
+            project_uid: "p1".into(),
+        }]
+    );
+    assert!(
+        group
+            .source
+            .title()
+            .ends_with("pinned by cluster group group-1"),
+        "{}",
+        group.source.title()
+    );
+    let json = serde_json::to_value(&group).unwrap();
+    assert_eq!(json["source"]["cluster"]["kind"], "clusterGroup");
+    assert_eq!(
+        json["source"]["cluster"]["members"][0]["name"],
+        "lab-cluster"
+    );
+
+    // by name
+    let by_name = ops::snapshot_for(
+        &Ref::parse("clustergroup:group-1"),
+        connect,
+        "t0",
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert_eq!(by_name.root, group.root);
+    let err = ops::snapshot_for(
+        &Ref::parse("clustergroup:group-9"),
+        connect,
+        "t0",
+        &Progress::silent(),
+    )
+    .unwrap_err();
+    assert_eq!(err.kind(), "cluster-group-not-found");
+
+    // compare with the member: the cluster side holds only the pinned profile, in either order
+    let member = Ref::Cluster {
+        uid: CLUSTER_UID.into(),
+        profile: None,
+        pending: false,
+    };
+    let group_ref = Ref::parse("clustergroup:g1");
+    for (a, b) in [(&group_ref, &member), (&member, &group_ref)] {
+        let (sa, sb) = ops::snapshot_pair(a, b, connect, "t1", &Progress::silent()).unwrap();
+        assert_eq!(sa.root, sb.root, "the member runs the pin");
+        let side = if matches!(a, Ref::Cluster { .. }) {
+            &sa
+        } else {
+            &sb
+        };
+        let covered = &side.source.cluster.as_ref().unwrap().profiles;
+        assert_eq!(
+            covered.len(),
+            1,
+            "the infra profile {infra} is not in the question"
+        );
+        let d = ops::compare(&sa, &sb, "t1");
+        assert!(d.same);
+        assert!(
+            d.cluster_variables.as_ref().is_none_or(|v| !v.changed),
+            "a group gives no values, so it states no value that differs: {:?}",
+            d.cluster_variables
+        );
+    }
+    // a cluster ref that selects a profile is not narrowed
+    let (_, whole) = ops::snapshot_pair(
+        &group_ref,
+        &Ref::parse(&format!("cluster:{CLUSTER_UID}/{infra}")),
+        connect,
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert_eq!(whole.source.cluster.unwrap().profiles[0].uid, infra);
+
+    // verify reads the cluster group again
+    let v = ops::verify(
+        &group,
+        &Palette::new(api.clone()),
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert!(v.unchanged, "{:?}", v.status);
+}
+
+// ---- app profiles -----------------------------------------------------------------------------
+
+/// An app profile `shop@1.0.0`, `ap1`, with a helm tier and a manifest tier, the tier with the
+/// property `replicas` at `replicas`.
+fn serve_app_profile(api: MemoryApi, replicas: &str) -> MemoryApi {
+    api.with(
+        "/v1/dashboard/appProfiles/metadata",
+        serde_json::json!({"appProfiles": [
+            {"metadata": {"name": "shop", "uid": "ap1"}, "spec": {"version": "1.0.0"}},
+            {"metadata": {"name": "shop", "uid": "ap0"}, "spec": {"version": "0.9.0"}},
+        ]}),
+    )
+    .with(
+        "/v1/appProfiles/ap1",
+        serde_json::json!({"metadata": {"name": "shop", "uid": "ap1"},
+            "spec": {"version": "1.0.0", "template": {"appTiers": [
+                {"name": "web", "uid": "t1", "type": "helm", "version": "2.1.0"},
+                {"name": "db-config", "uid": "t2", "type": "manifest", "version": "1.0.0"}]}},
+            "status": {"inUseApps": [{"kind": "appdeployment", "uid": "d1", "name": "shop-dev"}]}}),
+    )
+    .with(
+        "/v1/appProfiles/ap1/tiers",
+        serde_json::json!({"spec": {"appTiers": [
+            {"metadata": {"name": "web", "uid": "t1"},
+             "spec": {"type": "helm", "version": "2.1.0", "registryUid": "r1",
+                "sourceAppTierUid": "s1", "values": "replicaCount: 2\n",
+                "properties": [{"name": "replicas", "type": "number", "value": replicas}]}},
+            {"metadata": {"name": "db-config", "uid": "t2"},
+             "spec": {"type": "manifest", "version": "1.0.0",
+                "manifests": [{"kind": "manifest", "name": "db", "uid": "m1"}]}},
+        ]}}),
+    )
+    .with(
+        "/v1/appProfiles/ap1/tiers/t2/manifests/m1",
+        serde_json::json!({"metadata": {"name": "db", "uid": "m1"},
+            "spec": {"published": {"content": "kind: ConfigMap\n", "digest": "abc"}}}),
+    )
+}
+
+#[test]
+fn an_app_profile_record_holds_each_tier_as_a_pack() {
+    let api = serve_app_profile(MemoryApi::new(), "2");
+    let take = |api: &MemoryApi, text: &str| {
+        ops::snapshot_for(
+            &Ref::parse(text),
+            || Ok(Palette::new(api.clone())),
+            "t0",
+            &Progress::silent(),
+        )
+    };
+    let app = take(&api, "appprofile:shop@1.0.0").unwrap();
+    assert_eq!(app.source.kind, "app");
+    assert_eq!(
+        (app.source.name.as_str(), app.source.version.as_str()),
+        ("shop", "1.0.0")
+    );
+    assert!(
+        app.source.consumers.is_none(),
+        "its consumers are app deployments"
+    );
+    assert_eq!(
+        app.packs
+            .iter()
+            .map(|p| (p.key.as_str(), p.kind.as_str(), p.tag.as_str()))
+            .collect::<Vec<_>>(),
+        [
+            ("app/web", "helm", "2.1.0"),
+            ("app/db-config", "manifest", "1.0.0")
+        ]
+    );
+    assert_eq!(app.packs[0].params, serde_json::json!({"replicas": "2"}));
+    assert_eq!(app.packs[1].manifests[0].content, "kind: ConfigMap\n");
+    assert!(app.packs[0].upstream_unknown(), "a tier has no digest");
+    // by uid, and the highest version by name
+    assert_eq!(take(&api, "appprofile:ap1").unwrap().root, app.root);
+    assert_eq!(take(&api, "appprofile:shop@latest").unwrap().root, app.root);
+    assert_eq!(
+        take(&api, "appprofile:shop@2.0.0").unwrap_err().kind(),
+        "app-profile-not-found"
+    );
+
+    // verify reads the app profile again
+    let v = ops::verify(&app, &Palette::new(api.clone()), "t1", &Progress::silent()).unwrap();
+    assert!(v.unchanged, "{:?}", v.status);
+    // a plain update of a property: the record drifts, and the tier is AUTHORED
+    let updated = serve_app_profile(MemoryApi::new(), "3");
+    let v = ops::verify(
+        &app,
+        &Palette::new(updated.clone()),
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert!(!v.unchanged);
+    let now = take(&updated, "appprofile:ap1").unwrap();
+    let d = ops::compare(&app, &now, "t1");
+    let web = d.packs.iter().find(|p| p.name == "web").unwrap();
+    assert!(
+        web.authored && web.params_changed && !web.identity,
+        "{web:?}"
+    );
+    assert_eq!(
+        serde_json::to_value(&web.param_changes).unwrap(),
+        serde_json::json!([{"op": "changed", "name": "replicas", "old": "2", "new": "3"}])
+    );
+    let text = render::renderer(Format::Terminal, Paint::off(), false)
+        .render(&d, &app, &now, false)
+        .unwrap();
+    assert!(text.contains("      ~ param replicas: 2 -> 3\n"), "{text}");
 }

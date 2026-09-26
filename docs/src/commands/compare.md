@@ -134,7 +134,8 @@ upgrade engine, and give the answer of the table each time. It costs two request
 changes nothing: the cluster keeps its instances.
 
 Two profile versions, or two clusters, are a usage error, because Palette
-answers for one cluster:
+answers for one cluster. So are an edge host and a cluster group: Palette
+answers for a cluster, and not for them:
 
 ```text
 {{#include ../output/repave-usage.txt}}
@@ -155,6 +156,32 @@ root says whether the release is the same. `--json` carries each tier as
 `clusterTiers`, and a pack whose reconciled version differs from its profile as
 `runningBehind`. See
 [More of the cluster than its release](snapshot.md#more-of-the-cluster-than-its-release).
+
+## Compare a cluster with the update that waits
+
+`cluster:<cluster>@pending` is the cluster after it takes the update that waits.
+Compare it with the cluster to see what the update changes before anybody
+accepts it:
+
+```text
+{{#include ../output/edited-pending.txt}}
+```
+
+See [What a waiting update changes](snapshot.md#what-a-waiting-update-changes).
+
+## Compare a cluster group with a member
+
+When one side is a cluster group and the other is a `cluster:` ref that selects
+no profile, the cluster side holds only the profiles that the group pins. The
+question is whether the member runs the pin, and not what else it runs:
+
+```text
+{{#include ../output/group-compare.txt}}
+```
+
+`tenant-a` runs one more profile of its own, and the comparison leaves it out.
+A `cluster:<cluster>/<profile>` ref is not narrowed. See
+[A cluster group pins a profile](../use-cases/cluster-groups.md).
 
 ## Compare two identical refs
 

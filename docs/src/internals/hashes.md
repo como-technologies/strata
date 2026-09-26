@@ -102,6 +102,7 @@ manifest, so such a value shows its change too.
 | The value of a macro | The content holds the macro name, `{{.spectro.macro.<name>}}`, and the root covers that text. Palette gives the value when it applies the profile, and a value can be a secret. `snapshot --macros` keeps the digest of each value on a cluster record, outside the root, and `verify` checks it. See [A macro value changes](../use-cases/macros.md). |
 | Whether an update waits for a cluster | It is what Palette says about the copy, not the copy. A cluster record keeps it as `updatesPending`. See [Whether an update waits](../commands/snapshot.md#whether-an-update-waits). |
 | Who changed a version, and when | The audit log of Palette holds that. `verify --who` reads it. See [Who changed it](../commands/verify.md#who-changed-it). |
+| The kind of a record, and the members of a cluster group | They say where the profiles are, and not what they are. See [Other objects that hold profiles](#other-objects-that-hold-profiles). |
 
 ## The content digest
 
@@ -205,6 +206,39 @@ The `running` tier is in the order of profile uid and then pack name, and the
 `shape` tier holds its machine pools in the order of their names, so the order
 that Palette lists them in does not change a hash. See
 [More of the cluster than its release](../commands/snapshot.md#more-of-the-cluster-than-its-release).
+
+## Other objects that hold profiles
+
+An edge host, a cluster group, and the update that waits for a cluster hold
+profiles in the shape of a cluster, and strata hashes them as it hashes a
+cluster, with two differences:
+
+- The manifests of each profile come from the profile, and not from a copy: an
+  edge host and a cluster group hold none, and the update that waits has none
+  yet.
+- An edge host and a cluster group give no variable values, so the variable
+  definitions come from the profile. So a record of an edge host has the root of
+  the profile bound to it. A profile of `@pending` that the cluster does not run
+  yet has no definitions on the cluster, so the record holds none for it.
+
+`kind`, `members[]`, and `pending` are outside the root.
+
+An app profile holds tiers. Strata hashes each tier as a pack in the layer
+`app`:
+
+| Pack field | From the tier |
+| --- | --- |
+| `name` | its name |
+| `type` | its type, such as `helm`, `manifest`, or `operator-instance` |
+| `tag` and `version` | its version |
+| `packUid` | its source tier, `sourceAppTierUid` |
+| `registryUid` | its registry |
+| `values` | its values |
+| `params` | its properties, each name and its value |
+| `manifests` | the content of each manifest of the tier |
+
+A tier has no digest, so `upstream` is the hash of nothing, and
+`upstreamSource` is `none`. An app profile has no variables.
 
 ## The digest of each registry kind
 
