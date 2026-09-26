@@ -121,7 +121,7 @@ beside the binary:
 
 ```bash
 # from a release of strata, into .strata/ of your checkout
-bash install-strata.sh --version v0.9.0 --dir .strata
+bash install-strata.sh --version v0.10.0 --dir .strata
 ```
 
 ```bash
