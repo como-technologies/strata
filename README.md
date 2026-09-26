@@ -4,15 +4,16 @@
 [![the book](https://github.com/como-technologies/strata/actions/workflows/ci.yml/badge.svg)](https://legendary-train-pzq9ojj.pages.github.io/)
 
 Record, compare, and check what Spectro Cloud Palette holds: cluster profile
-versions, the clusters that run them, and pack versions in a registry. A
-published profile version is what Palette builds a cluster from. Strata calls it
-a release.
+versions, the clusters, edge hosts, cluster groups, and app profiles that run
+them, and pack versions in a registry. A published profile version is what
+Palette builds a cluster from. Strata calls it a release.
 
-A cluster profile is a set of layers, kept in the order given: OS, Kubernetes,
-CNI, CSI, and add-ons. Strata calculates one digest for each version, the root.
-Equal roots mean one release. When the roots differ, strata names the layer, the
-value, and the impact on running clusters.
-[Introduction](docs/src/introduction.md) gives the rest of the model.
+Palette lets a person edit a published version in place, and it keeps no digest
+of what a version holds. Strata calculates one, the root, and keeps it in a
+record in your repository. Equal roots mean one release. When the roots differ,
+strata names the layer, the value, and the impact on running clusters. A record
+in Git, checked against Palette, is evidence that stays true when Palette
+changes. [The everyday loop](docs/src/loop.md) shows who runs what, and when.
 
 ## Quick start
 
@@ -65,6 +66,7 @@ just docs-serve   # build the book and open it at http://localhost:3000
 | Page | For |
 | --- | --- |
 | [Quick start](docs/src/quickstart.md) | the first commands |
+| [The everyday loop](docs/src/loop.md) | who runs what, and when, and what strata adds to Palette |
 | [Use cases](docs/src/use-cases/index.md) | a problem, the commands, the output, and the fix |
 | [Commands](docs/src/commands/index.md) | each command, its output, and its options |
 | [Automation](docs/src/automation/scripts.md) | scripts, pull request comments, drift issues, the library |

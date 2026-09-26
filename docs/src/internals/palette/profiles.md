@@ -102,6 +102,15 @@ A flag-on bump replaces the profile resource, and the provider deletes the
 replaced version with the `skip_destroy` value already in its state, not the new
 value (provider 0.30.1, `resourceClusterProfileDelete`). Without it, the bump asks Palette to delete the version that a cluster runs.
 
+Each version in a state of its own is the other way to keep a version, with no
+flag. A new version is a new resource with a uid of its own, and the state of
+the version before it plans no change. A change of the content in the state of
+an old version, at the same number, plans an update in place of the published
+version. A destroy of that state asks Palette to delete the version, and
+Palette refuses it while a cluster uses the version: the provider reports the
+refusal, and the version stays. See
+[A version bump overwrites a version](../../use-cases/overwritten.md#what-to-do).
+
 ## The lock of a cluster template
 
 A cluster template links profile versions and a maintenance policy, and applies

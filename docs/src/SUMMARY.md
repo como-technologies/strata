@@ -1,6 +1,8 @@
 # Summary
 
 [Introduction](./introduction.md)
+[The everyday loop](./loop.md)
+[Where each part belongs](./boundary.md)
 
 # Getting started
 

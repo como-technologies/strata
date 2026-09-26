@@ -9,6 +9,8 @@ options of one:
 
 ## The commands in a release cycle
 
+[The everyday loop](../loop.md) says who runs each command, and when.
+
 ```mermaid
 flowchart LR
   subgraph Find

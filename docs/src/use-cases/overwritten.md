@@ -101,7 +101,46 @@ again. See [The candidate file](../reference/candidate-file.md).
 
 ## What to do
 
-Set the flag in the provider block:
+Keep each version under its own uid. There are two ways to do it with the
+provider, and both keep the old version for the clusters that run it.
+
+### One state per version
+
+Give each version its own resource in its own state: a directory, a workspace,
+or a key of the backend for each version. A new version is then a new state and
+a new resource, and the state of the version before it is not touched. The
+provider needs no flag:
+
+```hcl
+# one root module, applied once for each version, each time in its own state
+resource "spectrocloud_cluster_profile" "aws_stack" {
+  name    = "aws-stack"
+  version = var.profile_version   # the state holds this version, and no other
+  # the packs of this version
+}
+```
+
+```bash
+tofu workspace select -or-create v1.2.0
+tofu apply -var profile_version=1.2.0
+```
+
+The bump leaves `1.1.1` under its uid, and its record verifies. Two things stay
+yours:
+
+- A change of the content in the state of an old version, at the same version
+  number, is an edit in place: the provider plans an update of the published
+  version. Only a new state for a new version prevents it. `verify` is what
+  finds it.
+- A destroy of the state of an old version deletes the version. Palette refuses
+  the delete while a cluster, a cluster template, or an edge host uses the
+  version, and the destroy fails. Run
+  [`consumers`](../commands/consumers.md) before it, as
+  [Retire a version](./retire.md) shows.
+
+### The flag of the provider
+
+Or keep one resource for all versions, and set the flag in the provider block:
 
 ```hcl
 provider "spectrocloud" {
@@ -111,7 +150,9 @@ provider "spectrocloud" {
 }
 ```
 
-With the flag, a bump makes a new uid, and the old version stays.
+With the flag, a bump makes a new uid, and the old version stays. The provider
+also refuses a change of the content without a bump, at plan time. The API does
+not: an edit through the API or the console still changes the version.
 
 **Follow along.** `just playground overwritten-3` is the same tenant after the
 same bump, with the flag on. Stop the second seed, and export what this one
@@ -138,11 +179,25 @@ resource "spectrocloud_cluster_profile" "aws_stack" {
 }
 ```
 
-`skip_destroy` stops the provider deleting the replaced version. Without it the
-provider deletes it, and Palette refuses the delete while a cluster runs it.
+`skip_destroy` stops the provider deleting the replaced version. Without it, the
+provider refuses the plan of a bump. Set it before the first bump: a bump
+deletes the old version with the value that the state held before the apply.
 `create_before_destroy` makes the provider publish the new version before it
 drops the old one from the state. The provider checks `skip_destroy` at plan
-time and fails the plan; it cannot see the `lifecycle` block, so that one is
-yours to remember.
+time. It cannot see the `lifecycle` block, so that one is yours to remember. The
+flag is a feature preview.
+
+### Which one
+
+| | One state per version | The flag |
+| --- | --- | --- |
+| A bump | a new state and a new resource | a new resource in the same state |
+| The old version | untouched, in its own state | kept by `skip_destroy`, and in no state |
+| A change of content with no bump | planned as an update in place | refused at plan time |
+| The removal of an old version | a destroy of its state, which Palette refuses while the version is in use | a delete outside the provider |
+| A release of the provider | any | one with the feature preview |
+
+Either way, run `verify` on a schedule. Neither answer stops an edit through
+the API.
 
 See [What Palette does: version bumps](../internals/palette/profiles.md#version-bumps).

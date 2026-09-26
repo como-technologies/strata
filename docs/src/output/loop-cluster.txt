@@ -1,0 +1,3 @@
+$ strata compare releases/1.1.0/dev.json cluster:payments | head -2
+aws-stack@1.1.0 (uid 64e0000000000000000000b2)  ->  aws-stack@1.1.0 on cluster payments (uid 64f1000000000000000000e1)
+root       8a8a64d3f95d -> 8a8a64d3f95d   IDENTICAL

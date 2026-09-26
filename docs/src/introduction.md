@@ -1,19 +1,37 @@
 # strata
 
-Strata records, compares, and checks what Spectro Cloud Palette holds: a
-cluster profile version, the copy that a cluster runs, and a pack version in a
-registry. A published profile version is what Palette builds a cluster from.
-Strata calls it a release.
+Spectro Cloud Palette lets a person edit a published profile version in place,
+and it keeps no digest of what a version holds. So the name of a release does
+not say what a cluster runs, and nothing tells you when the content under the
+name changes.
 
-A cluster profile is a set of layers, kept in the order given: OS, Kubernetes,
-CNI, CSI, and add-ons.
-An add-on profile is a profile of add-on layers alone, which a cluster runs
-beside its cluster profile; a cluster can run several of them.
-Each layer is a pack with a version, values, and the digest that Palette lists
-for it. Palette lets a
-person edit a published version in place. Two projects can hold one version
-name with different contents. Strata calculates one digest for each version,
-the **root**. Two versions with the same root are the same release.
+Strata gives each version one digest, the **root**. It keeps the root, and the
+content behind it, in a **record** in your repository. Then it checks Palette
+against the record at each step of the life of a release: in the pull request,
+at the merge, at the publish, each night, and before a version is deleted.
+
+- [The everyday loop](./loop.md) shows who runs what, and when, with one change
+  from the pull request to the retire.
+- [Where each part belongs](./boundary.md) says what Palette does already, what
+  strata adds, and why the check stays outside Palette.
+
+## The model
+
+A published profile version is what Palette builds a cluster from. Strata calls
+it a release.
+
+A cluster profile is a set of layers, kept in the order given. The layers come
+from the environment: on AWS they are an OS, Kubernetes, a CNI, a CSI, and
+add-ons, and other environments use fewer. An add-on profile is a profile of
+add-on layers alone, which a cluster runs beside its cluster profile; a cluster
+can run several of them. Each layer is a pack with a version, values, and the
+digest that Palette lists for it. Two versions with the same root are the same
+release, whatever their names, their uids, or the project that holds them.
+
+A cluster runs its own copy of each version that it applies. An edge host and a
+cluster group hold their own copies too, and an app profile is a version with
+no publish step. Strata records each of them, and each pack version in a
+registry.
 
 ```mermaid
 flowchart LR
@@ -21,42 +39,48 @@ flowchart LR
   record[("record<br/>JSON in git")]
   pack["pack version"]
   version["profile version"]
-  cluster["cluster"]
+  cluster["cluster, edge host,<br/>or cluster group"]
   candidate -- "your pipeline publishes" --> version
   pack -- "a profile pins it" --> version
-  version -- "a cluster runs a copy" --> cluster
+  version -- "each holds a copy" --> cluster
   candidate -. "snapshot --from-candidate" .-> record
   version -. "snapshot" .-> record
-  cluster -. "snapshot" .-> record
+  cluster -. "snapshot, or a set: tag: or filter:" .-> record
   pack -. "snapshot pack:" .-> record
   record -. "verify" .-> version
   record -. "verify" .-> cluster
-  record -. "verify" .-> pack
+  record -. "verify, behind" .-> pack
   record -. "compare" .-> cluster
 ```
 
-A solid arrow is somebody else. A profile version pins a pack version, a
-cluster runs a copy of a profile version, and your pipeline publishes the
-version. Strata publishes nothing.
+A solid arrow is somebody else. A profile version pins a pack version, each
+cluster, edge host, and cluster group holds a copy of a profile version, and
+your pipeline publishes the version. Strata publishes nothing.
 
 A dotted arrow is strata, which reads and writes files. It knows two files, and
 where you keep them is your choice: a **candidate**, the version as YAML before
-Palette has it, and a **record**, the hashes of a version that Palette holds.
-`snapshot` writes a record from any of the four. `verify` asks whether Palette,
-or the registry, still holds what a record says. `compare` reports what differs
-between two of them.
+Palette has it, and a **record**, the hashes of an object that Palette holds.
+`snapshot` writes a record of any of them, and one record for each cluster of a
+label or a saved tag filter. `verify` asks whether Palette, or the registry,
+still holds what a record says. `compare` reports what differs between two of
+them. `behind` names the pins that the registry has passed.
 
-The root joins the two. A candidate and the published version give the same
-root, so `same-release` proves that Palette holds the version that a reviewer
-approved, with no trust in a tag or a name.
+The root joins the two files. A candidate and the published version give the
+same root, so `same-release` proves that Palette holds the version that a
+reviewer approved, with no trust in a tag or a name.
 
 | Question | Command |
 | --- | --- |
 | What changed between two versions? | [`strata compare A B`](./commands/compare.md) |
 | Does Palette still have the version that I recorded? | [`strata verify record.json`](./commands/verify.md) |
+| Who changed it? | [`strata verify record.json --who`](./commands/verify.md#who-changed-it) |
 | Do dev and prod have the same release? | [`strata same-release dev.json prod.json`](./commands/same-release.md) |
 | Does this cluster run its release? | [`strata compare record.json cluster:NAME`](./use-cases/cluster-release.md) |
+| What does the update that waits for a cluster change? | [`strata compare cluster:NAME cluster:NAME@pending`](./commands/snapshot.md#what-a-waiting-update-changes) |
+| Does this change replace the nodes? | [`strata compare cluster:NAME B --repave`](./commands/compare.md#ask-palette-if-the-change-repaves) |
 | What changed between two pack versions? | [`strata compare pack:NAME@A pack:NAME@B`](./use-cases/pack-versions.md) |
+| Does the registry have newer versions of what we pin? | [`strata behind 'releases/*.json'`](./commands/behind.md) |
+| Which clusters are production? | [`strata snapshot filter:production --dir fleet`](./use-cases/fleet.md) |
 | Can I delete this version? | [`strata consumers NAME@VERSION`](./commands/consumers.md) |
 
 ## Where to start
@@ -64,7 +88,8 @@ approved, with no trust in a tag or a name.
 1. [Install](./install.md) strata.
 2. [Configure](./configure.md) the API key and the project.
 3. Do the [quick start](./quickstart.md).
-4. Find your problem in [Use cases](./use-cases/index.md).
+4. Read [The everyday loop](./loop.md), and put each step in your pipeline.
+5. Find your problem in [Use cases](./use-cases/index.md).
 
 ## The profile that the pages use
 

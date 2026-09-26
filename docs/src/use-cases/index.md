@@ -63,8 +63,9 @@ Each group answers a question that the group before it opens, so the pages read
 from the top teach what the tool does. Each line also names the problem that
 sends you to its page: read down the list to find yours.
 
-**1. Compare two versions.** The everyday loop: what changed, and what it does
-to a running cluster.
+**1. Compare two versions.** What changed, and what it does to a running
+cluster. [The everyday loop](../loop.md) puts each group below in the life of a
+release.
 
 - [What changed between two pack versions](./pack-versions.md): a bump moves a
   profile to a new pack version, and you must know what the pack changed.

@@ -1,0 +1,4 @@
+$ scripts/ci/pr-comment.sh releases/1.0.0/dev.json candidate.json --dry-run > comment.md
+pr-comment: max impact: repave; would add label repave
+$ grep '^\*\*Result' comment.md
+**Result:** CHANGED · max impact: `repave` · packs: 4 changed, 0 added, 0 removed, 1 unchanged · variables: unchanged

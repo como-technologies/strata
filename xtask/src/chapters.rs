@@ -17,6 +17,7 @@ const A111: &str = "64e0000000000000000000c3";
 // other profile and cluster uids
 const A111_PROD: &str = "64e1000000000000000000c3";
 const A110_PROD: &str = "64e1000000000000000000b2";
+const A100_PROD: &str = "64e1000000000000000000a1";
 const A112: &str = "64e0000000000000000000d4";
 const A113: &str = "64e0000000000000000000d5";
 const A120: &str = "64e0000000000000000000e5";
@@ -41,6 +42,8 @@ const TENANT_A: &str = "64f1000000000000000000e4";
 const TENANT_B: &str = "64f1000000000000000000e5";
 const TEAM_A_APPS: &str = "64e2000000000000000000b1";
 const DEV_GROUP: &str = "64f5000000000000000000a1";
+// the saved tag filter of the loop
+const PRODUCTION: &str = "64f7000000000000000000a2";
 // edge hosts, and an app profile
 const STORE_1: &str = "64f4000000000000000000e1";
 const STORE_2: &str = "64f4000000000000000000e2";
@@ -81,6 +84,7 @@ pub fn names() -> Vec<&'static str> {
     vec![
         "help",
         "quickstart",
+        "loop",
         "list",
         "snapshot",
         "candidate",
@@ -116,6 +120,7 @@ pub fn names() -> Vec<&'static str> {
 /// Run every chapter against `r`.
 pub fn run(r: &mut Runner) {
     getting_started(r);
+    the_loop(r);
     commands(r);
     use_cases(r);
     automation(r);
@@ -176,6 +181,158 @@ fn getting_started(r: &mut Runner) {
         false,
         "strata compare aws-stack@1.1.0 aws-stack@1.1.1",
     );
+}
+
+/// The labels that put a cluster of the loop in its environment, and in the fleet of its filter.
+fn label(r: &mut Runner, project: &str, uid: &str, env: &str) {
+    r.cluster_field(
+        project,
+        uid,
+        "/metadata/labels",
+        json!({"env": env, "managed-by": "opentofu"}),
+    );
+}
+
+/// The everyday loop: one change of one team, from the pull request to the retire of the
+/// version that it replaces. Each step shows the few lines that answer its question; the use
+/// case of the step shows the rest.
+fn the_loop(r: &mut Runner) {
+    r.chapter("loop", GIT);
+    r.projects(&[("dev", DEV), ("prod", PROD)]);
+    r.registries(DEV);
+    r.registries(PROD);
+    r.profile(DEV, A100, "1.0.0", "aws-stack@1.0.0", &[]);
+    r.profile(PROD, A100_PROD, "1.0.0", "aws-stack@1.0.0", &[]);
+    r.cluster(DEV, PAYMENTS, "payments", &[A100]);
+    r.cluster(PROD, PAYMENTS_PROD, "payments", &[A100_PROD]);
+    label(r, DEV, PAYMENTS, "dev");
+    label(r, PROD, PAYMENTS_PROD, "prod");
+    r.tag_filter("production", PRODUCTION, "env", "prod");
+    // the repository of the team: main holds the record of what each project runs
+    r.quiet("git init -q -b main . && git remote add origin .");
+    r.quiet("strata snapshot aws-stack@1.0.0 -o releases/1.0.0/dev.json &&\n  PALETTE_PROJECT=prod strata snapshot aws-stack@1.0.0 -o releases/1.0.0/prod.json &&\n  git add releases && git commit -qm \"dev and prod run aws-stack@1.0.0\"");
+    r.serve_here(); // state 1: dev and prod run 1.0.0, and main records it
+
+    // 1. a developer changes the profile in a pull request
+    r.quiet("git checkout -q -b aws-stack-1.1.0");
+    r.write_file("aws-stack.yaml", CANDIDATE_YAML);
+    r.quiet("strata snapshot --from-candidate aws-stack.yaml -o candidate.json &&\n  git add aws-stack.yaml && git commit -qm \"aws-stack 1.1.0: Kubernetes 1.36, Ubuntu 24.04\"");
+    r.step(
+        "loop-review",
+        0,
+        true,
+        "scripts/ci/pr-comment.sh releases/1.0.0/dev.json candidate.json --dry-run > comment.md",
+    );
+    r.step("loop-review", 0, false, "grep '^\\*\\*Result' comment.md");
+    // 2. the merge gate: the records after the merge button
+    r.step(
+        "loop-merge",
+        0,
+        true,
+        r#"scripts/ci/merge-gate.sh "releases/*/*.json" --base main"#,
+    );
+    r.quiet("git checkout -q main && git merge -q --no-ff --no-edit aws-stack-1.1.0");
+
+    // 3. the pipeline of the team publishes the version, and records it
+    r.profile(DEV, A110, "1.1.0", "aws-stack@1.1.0", &[]);
+    r.serve_here(); // state 2: the pipeline published 1.1.0 in dev
+    r.step(
+        "loop-publish",
+        0,
+        true,
+        "strata snapshot aws-stack@1.1.0 -o releases/1.1.0/dev.json",
+    );
+    r.step(
+        "loop-publish",
+        0,
+        false,
+        "strata same-release candidate.json releases/1.1.0/dev.json",
+    );
+    r.quiet("git add releases && git commit -qm \"record aws-stack@1.1.0 in dev\"");
+    // dev moves payments to the new version, and a record says what the cluster runs
+    r.cluster(DEV, PAYMENTS, "payments", &[A110]);
+    label(r, DEV, PAYMENTS, "dev");
+    r.step(
+        "loop-cluster",
+        0,
+        false,
+        "strata compare releases/1.1.0/dev.json cluster:payments | head -2",
+    );
+
+    // 4. the promotion to prod, on demand
+    r.profile(PROD, A110_PROD, "1.1.0", "aws-stack@1.1.0", &[]);
+    r.quiet("PALETTE_PROJECT=prod strata snapshot aws-stack@1.1.0 -o releases/1.1.0/prod.json");
+    r.step(
+        "loop-promote",
+        0,
+        false,
+        "strata same-release releases/1.1.0/dev.json releases/1.1.0/prod.json",
+    );
+    r.cluster(PROD, PAYMENTS_PROD, "payments", &[A110_PROD]);
+    label(r, PROD, PAYMENTS_PROD, "prod");
+    r.quiet("git add releases && git commit -qm \"promote aws-stack@1.1.0 to prod\"");
+    r.serve_here(); // state 3: both projects run 1.1.0, and main records it
+
+    // 5. the nightly jobs. The fleet first: the records of the clusters that Palette names prod.
+    r.step(
+        "loop-fleet",
+        0,
+        true,
+        "strata snapshot filter:production --dir fleet/prod --prune",
+    );
+    r.quiet("git add fleet && git commit -qm \"the fleet of prod\"");
+    // a person edits the published version in prod through the API, with no review
+    r.edit(PROD, A110_PROD, RETAIN);
+    r.serve_here(); // state 4: somebody edited aws-stack@1.1.0 in prod in place
+    r.step(
+        "loop-nightly",
+        1,
+        true,
+        "scripts/ci/verify-report.sh 'releases/**/*.json' 'fleet/**/*.json' --dry-run > issues.md",
+    );
+    r.step(
+        "loop-who-full",
+        1,
+        false,
+        "strata verify releases/1.1.0/prod.json --who",
+    );
+    r.excerpt(
+        "loop-who",
+        "loop-who-full",
+        r"^(aws-stack|DRIFT|who:|  \d{4}-)",
+    );
+    r.step(
+        "loop-upstream",
+        1,
+        true,
+        "scripts/ci/upstream-report.sh 'releases/**/*.json' --dry-run --no-impact > upstream.md",
+    );
+
+    // 6. an incident: a pack has a security problem, and a person asks who carries it
+    for project in ["dev", "prod"] {
+        r.step(
+            "loop-incident-full",
+            0,
+            false,
+            &format!("PALETTE_PROJECT={project} strata list --pack csi-aws-ebs"),
+        );
+    }
+    r.excerpt(
+        "loop-incident",
+        "loop-incident-full",
+        r"^(\$|project|\d+ profiles?|  aws-stack|    csi)",
+    );
+    for project in ["dev", "prod"] {
+        r.step(
+            "loop-consumers",
+            1,
+            false,
+            &format!("PALETTE_PROJECT={project} strata consumers aws-stack@1.1.0 --list-only"),
+        );
+    }
+
+    // 7. the retire of the version that nothing runs now
+    r.step("loop-retire", 0, false, "strata consumers aws-stack@1.0.0");
 }
 
 fn commands(r: &mut Runner) {
