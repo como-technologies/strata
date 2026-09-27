@@ -5840,6 +5840,26 @@ fn a_cluster_record_carries_the_tiers_that_palette_gives_and_names_them() {
     assert!(shape["pools"][1].get("subnetIds").is_none());
     // and the tiers are outside the root
     assert_eq!(shaped.root, snap.root);
+
+    // an EKS cluster: the image family and the launch template of a managed node group, and
+    // who reaches the managed control plane, are chosen, so the tier holds them; the size that
+    // Palette derives for an instance type is not
+    let eks = serde_json::json!({"spec": {
+        "clusterConfig": {"region": "us-east-2", "endpointAccess": {"public": true, "private": false},
+            "addons": [{"name": "vpc-cni", "version": "v1.19.0"}], "vpcId": "vpc-mine"},
+        "machinePoolConfig": [{"name": "worker-pool", "instanceType": "t3.xlarge", "size": 2,
+            "amiType": "AL2023_x86_64_STANDARD", "awsLaunchTemplate": {"ami": {"id": "ami-1"}},
+            "instanceConfig": {"cpuSet": 4, "memoryMiB": 16384}}]}});
+    let palette = Palette::new(api.clone().with("/v1/cloudconfigs/aws/cc1", eks));
+    raw.cloud_config = Some(palette.cloud_config(&raw.cluster).unwrap());
+    let shaped = Snapshot::from_cluster(&raw, None, "cluster", "t0").unwrap();
+    let shape = &shaped.source.cluster.as_ref().unwrap().tiers["shape"].fields;
+    assert_eq!(shape["pools"][0]["amiType"], "AL2023_x86_64_STANDARD");
+    assert_eq!(shape["pools"][0]["awsLaunchTemplate"]["ami"]["id"], "ami-1");
+    assert!(shape["pools"][0].get("instanceConfig").is_none());
+    assert_eq!(shape["cloud"]["endpointAccess"]["public"], true);
+    assert_eq!(shape["cloud"]["addons"][0]["name"], "vpc-cni");
+    assert!(shape["cloud"].get("vpcId").is_none());
 }
 
 #[test]

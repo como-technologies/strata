@@ -333,6 +333,9 @@ const POOL_FIELDS: &[&str] = &[
     "updateStrategy",
     "skipK8sUpgrade",
     "overrideKubeadmConfiguration",
+    // a managed node group of EKS: the image family and the launch template of its nodes
+    "amiType",
+    "awsLaunchTemplate",
 ];
 
 /// The fields of the cloud part of a cloud config that a person chooses: not the network that
@@ -343,6 +346,9 @@ const CLOUD_FIELDS: &[&str] = &[
     "sshKeyName",
     "controlPlaneLoadBalancer",
     "bastionDisabled",
+    // a managed control plane of EKS: who reaches its API server, and its managed add-ons
+    "endpointAccess",
+    "addons",
 ];
 
 fn pick(v: &Value, keys: &[&str]) -> Value {
