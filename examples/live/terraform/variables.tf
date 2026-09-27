@@ -4,12 +4,12 @@ variable "palette_project" {
 }
 
 variable "cloud" {
-  description = "The cloud of the clusters: aws or gcp. cloud-aws.tf and cloud-gcp.tf hold what changes with it"
+  description = "The cloud of the clusters: aws, gcp, or eks. cloud-aws.tf, cloud-gcp.tf, and cloud-eks.tf hold what changes with it"
   type        = string
   default     = "aws"
   validation {
-    condition     = contains(["aws", "gcp"], var.cloud)
-    error_message = "cloud is aws or gcp."
+    condition     = contains(["aws", "gcp", "eks"], var.cloud)
+    error_message = "cloud is aws, gcp, or eks."
   }
 }
 
@@ -97,8 +97,9 @@ variable "registry_name" {
 # The pack versions of examples/profiles/aws-stack@1.1.0.json, so the live run and the offline
 # examples describe the same stack. The OS pack of each cloud has 24.04.
 variable "os_version" {
-  type    = string
-  default = "24.04"
+  description = "The version of the OS pack; empty takes the version of the cloud's file"
+  type        = string
+  default     = ""
 }
 
 variable "k8s_version" {
@@ -108,8 +109,9 @@ variable "k8s_version" {
 }
 
 variable "cni_version" {
-  type    = string
-  default = "1.20.1"
+  description = "The version of the CNI pack; empty takes the version of the cloud's file"
+  type        = string
+  default     = ""
 }
 
 variable "csi_version" {
@@ -321,4 +323,41 @@ variable "extra_addon_profile_uids" {
   description = "More add-on profile versions for the clusters to run, by uid: profiles that a script made through the API"
   type        = list(string)
   default     = []
+}
+
+variable "eks_azs" {
+  description = "The availability zones of an EKS cluster; empty takes the zones a and b of the region"
+  type        = list(string)
+  default     = []
+}
+
+variable "eks_instance_type" {
+  description = "The instance type of the managed node group of an EKS cluster"
+  type        = string
+  default     = "t3.xlarge"
+}
+
+variable "eks_worker_count" {
+  description = "The nodes of the managed node group of an EKS cluster"
+  type        = number
+  default     = 2
+}
+
+variable "eks_k8s_bump" {
+  description = "With cloud eks: a Kubernetes version for the profile version 1.0.9, which is the release with that version alone"
+  type        = string
+  default     = ""
+}
+
+variable "palette_core_policies" {
+  description = "With cloud eks: the customer managed core policies of Palette in the AWS account, by name, for the role of the example's own cloud account"
+  type        = list(string)
+  default = [
+    "PaletteControllerPolicy",
+    "PaletteControlPlanePolicy",
+    "PaletteNodesPolicy",
+    "PaletteDeploymentPolicy",
+    "PaletteCAPATaggingPolicy",
+    "PaletteCloudFormationPolicy",
+  ]
 }

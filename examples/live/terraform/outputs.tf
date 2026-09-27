@@ -197,3 +197,7 @@ output "cluster_group_name" {
 output "member_cluster_uid" {
   value = try(spectrocloud_virtual_cluster.member[0].id, "")
 }
+
+output "k8s_bump_profile_uid" {
+  value = try(spectrocloud_cluster_profile.k8s_bump[0].id, "")
+}

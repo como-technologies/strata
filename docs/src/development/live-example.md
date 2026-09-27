@@ -36,12 +36,14 @@ show.
 | `loop.sh` | [The everyday loop](../loop.md), end to end: a change, the gates, the publish, the nightly jobs, a value overridden on a cluster, an edit in place, an incident, and a retire, with the records in a git repository that it builds (#81). It needs cluster A, and undoes each change. |
 | `version-states.sh` | One state per version with no feature preview flag, a destroy that a cluster in use refuses, a version that is gone, and the version strings that Palette stores (#81). It builds its own profile in `terraform-version/`, and needs cluster A. |
 
-The example runs on AWS or GCP: the variable `cloud` in `terraform.tfvars`
-selects one. Strata makes no rule about which cloud runs the cluster. The
-profiles and the checks are the same on each cloud. `terraform/cloud-aws.tf` and
-`terraform/cloud-gcp.tf` hold what changes: the cloud account, the cluster
-resource, and the names and versions of the OS and CSI packs. For a third cloud,
-add a file of the same shape. The scripts read the pack names from the outputs
+The example runs on AWS or GCP instances, or on EKS: the variable `cloud` in
+`terraform.tfvars` selects one. Strata makes no rule about which cloud runs the
+cluster. The profiles and the checks are the same on each cloud.
+`terraform/cloud-aws.tf`, `terraform/cloud-gcp.tf`, and `terraform/cloud-eks.tf`
+hold what changes: the cloud account, the cluster resource, and the names and
+versions of the infrastructure packs. For another cloud, add a file of the same
+shape. EKS is a managed engine, and has its own cloud account: see
+[An EKS cluster](#an-eks-cluster). The scripts read the pack names from the outputs
 `os_pack_name` and `csi_pack_name`, and hold none.
 
 ## What it builds
@@ -53,7 +55,7 @@ add a file of the same shape. The scripts read the pack names from the outputs
 | profile `strata-live-profile` 1.0.0 | Ubuntu 24.04, Kubernetes 1.36.2, Cilium 1.20.1, EBS CSI 1.65.0, default values. Cluster A runs it. |
 | profile `strata-live-profile` 1.0.1 | The same, with the EBS storage class `reclaimPolicy` `Retain` in place of `Delete`. No cluster runs it. |
 | profile `strata-live-addon` 1.0.0 | An add-on profile with one manifest, the ConfigMap `strata-live-config` in `default`, and one variable, `purpose`, with a default. Cluster A runs it after the release profile. |
-| cluster `fred` (cluster A) | One control plane node and two workers, `t3.xlarge`, one availability zone. |
+| cluster `fred` (cluster A) | One control plane node and two workers, `t3.xlarge`, one availability zone. With `cloud = "eks"`, an EKS cluster with one managed node group of two `t3.xlarge` nodes in two zones, on the cloud account of [An EKS cluster](#an-eks-cluster). |
 | profile `strata-live-registries` 1.0.0 | An add-on profile with one chart from a Helm registry (default `nginx` 25.1.5 from `Bitnami`), and one pack from the OCI pack registry that `terraform.tfvars` names. No cluster runs it. |
 | registry `strata-live-registry` | The example's own OCI pack registry: two ECR repositories, `strata-live/spectro-packs/archive/strata-live-pack` and `.../strata-live-dep`, in the AWS account that `aws_profile` names, a user that reads them, and a Palette registry over them. `registry.sh` pushes into it; nothing else does. |
 | profile `strata-live-owned` 1.0.0 | An add-on profile with the one pack of that registry. `registry.sh` makes it after the first push, and removes it at its end. |
@@ -86,7 +88,7 @@ its end.
 
 | File | Function |
 | --- | --- |
-| `terraform/` | The profiles and the clusters, and the variables that the scripts set. `main.tf` holds the profiles; `cloud-aws.tf` and `cloud-gcp.tf` hold the cloud account, the clusters, and the OS and CSI packs of each cloud. |
+| `terraform/` | The profiles and the clusters, and the variables that the scripts set. `main.tf` holds the profiles; `cloud-aws.tf`, `cloud-gcp.tf`, and `cloud-eks.tf` hold the cloud account, the clusters, and the infrastructure packs of each cloud. `iam/eks-controllers.json` is the EKS policy of Palette, for the role of `cloud-eks.tf`. |
 | `tofu-install.sh` | Installs the pinned OpenTofu. `just tofu-install` runs it, and `just tofu-uninstall` removes it. |
 | `tf.sh` | Runs `tofu` with the key and the Palette address that strata uses. |
 | `lib.sh` | What the scripts share: the checks and their summary, the applies, the wait for a cluster, and the baseline. |
@@ -218,6 +220,10 @@ back to false with the default variables (`apply_baseline`).
   one, the cloud controller exits, the node keeps the taint
   `node.cloudprovider.kubernetes.io/uninitialized`, no pod starts, and the
   cluster stays `Provisioning`.
+- For `cloud = "eks"`: the six core policies of Palette as customer managed
+  policies in the AWS account, by the names that `palette_core_policies` holds,
+  and an `aws_profile` that can create an IAM role and a policy. See
+  [An EKS cluster](#an-eks-cluster).
 - A Palette API key in `PALETTE_API_KEY` or `~/.palette.env`.
 - `tofu` 1.6 or later (`just tofu-install` installs 1.12.6), `jq`, `just`,
   `curl`, `helm`, `crane`, and a Rust toolchain.
@@ -251,6 +257,32 @@ back to false with the default variables (`apply_baseline`).
 
 For a self-hosted Palette, set `PALETTE_API` in the environment or in
 `~/.palette.env`. Strata reads it, and `tf.sh` and `tenant.sh` pass it on.
+
+## An EKS cluster
+
+With `cloud = "eks"`, cluster A is an EKS cluster: Amazon runs the control plane,
+and one managed node group of two nodes runs the workers. The release profile is
+an EKS profile: `amazon-linux-eks`, `kubernetes-eks`, `cni-aws-vpc-eks`, and
+`csi-aws-ebs`.
+
+EKS needs one more policy than a cluster on instances: the EKS policy of Palette
+([Additional IAM policies](https://docs.spectrocloud.com/clusters/public-cloud/aws/required-iam-policies/additional-iam-policies-specific-use-cases/)).
+The example does not add it to the role of `cloud_account_name`, which other
+work can use. It makes its own cloud account instead, in `cloud-eks.tf`:
+
+| Object | What it is |
+| --- | --- |
+| IAM role `strata-live-eks-cloud` | Trusts the AWS account of Palette, with the external id of the tenant, as the console asks for a cloud account with STS ([Add an AWS account](https://docs.spectrocloud.com/clusters/public-cloud/aws/add-aws-accounts/)). `GET /v1/clouds/aws/account/sts` gives both, and OpenTofu reads them through `api.sh`. |
+| The core policies | The six customer managed policies of `palette_core_policies`, which the account holds already, attached to the role by name. |
+| IAM policy `strata-live-PaletteControllersEKSPolicy` | The EKS policy of the public page, from `terraform/iam/eks-controllers.json`, attached to the role. |
+| cloud account `strata-live-eks` | A cloud account of the project, of type `sts`, over the role. Cluster A uses it. |
+
+`just live-up` makes each one, and `just live-down` removes each one. The
+external id is sensitive, and OpenTofu keeps it in the local state alone.
+
+For the questions of `eks.sh`, set `eks_k8s_bump` to a Kubernetes version of the
+EKS pack, such as `1.36`: the example then also makes the profile version 1.0.9,
+the release with that version alone.
 
 ## Steps
 
@@ -287,7 +319,7 @@ $EDITOR examples/live/terraform/terraform.tfvars
 | Variable | Value |
 | --- | --- |
 | `palette_project` | a project name |
-| `cloud` | optional; `aws` (the default) or `gcp`. Change it only after `just live-down` |
+| `cloud` | optional; `aws` (the default), `gcp`, or `eks`. Change it only after `just live-down` |
 | `cloud_account_name` | an AWS cloud account name |
 | `region`, `az` | the region and a zone |
 | `ssh_key_name` | a key pair |
@@ -297,6 +329,9 @@ $EDITOR examples/live/terraform/terraform.tfvars
 | `helm_registry_name`, `helm_chart`, `helm_chart_version` | optional; the default is `nginx` 25.1.5 from `Bitnami` |
 | `gcp_cloud_account_name`, `gcp_project` | for `cloud = "gcp"`: a GCP cloud account name, and a project it can use |
 | `gcp_region`, `gcp_zone`, `gcp_instance_type` | optional; the defaults are `us-east1`, `us-east1-b`, and `e2-standard-4` |
+| `eks_azs`, `eks_instance_type`, `eks_worker_count` | optional, for `cloud = "eks"`; the defaults are the zones `a` and `b` of `region`, `t3.xlarge`, and 2 |
+| `eks_k8s_bump` | optional, for `cloud = "eks"`: a Kubernetes version for the profile version 1.0.9, the release with that version alone, which `eks.sh` asks Palette about |
+| `palette_core_policies` | optional, for `cloud = "eks"`: the names of the core policies of Palette in the account |
 | `extra_addon_profile_uids` | optional; more add-on profile versions for the clusters to run, by uid, such as the profiles that `api.sh pin-profile` makes. The default is none |
 
 The file is not tracked. It holds names only. The API key never goes in it.

@@ -5,6 +5,10 @@
 locals {
   aws_cloud = {
     os_pack     = "ubuntu-aws"
+    os_version  = "24.04"
+    k8s_pack    = "kubernetes"
+    cni_pack    = "cni-cilium-oss"
+    cni_version = "1.20.1"
     k8s_version = "1.36.2"
     csi_pack    = "csi-aws-ebs"
     csi_version = "1.65.0"

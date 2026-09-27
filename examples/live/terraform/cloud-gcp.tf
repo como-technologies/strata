@@ -3,7 +3,11 @@
 
 locals {
   gcp_cloud = {
-    os_pack = "ubuntu-gcp"
+    os_pack     = "ubuntu-gcp"
+    os_version  = "24.04"
+    k8s_pack    = "kubernetes"
+    cni_pack    = "cni-cilium-oss"
+    cni_version = "1.20.1"
     # The newest Kubernetes version with a GCP image that Spectro Cloud shares: the image of
     # 1.36.2 answers 403 on compute.images.useReadOnly, and no machine starts.
     k8s_version = "1.35.6"

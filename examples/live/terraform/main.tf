@@ -6,16 +6,19 @@
 # cluster, edit the add-on profile in place, bump its version, and move a profile's CSI pack to an
 # OCI registry. docs/src/development/live-example.md lists the checks.
 #
-# The cloud is var.cloud. cloud-aws.tf and cloud-gcp.tf hold what changes with it: the cloud
-# account, the clusters, and the names of the OS and CSI packs. This file holds the rest.
+# The cloud is var.cloud. cloud-aws.tf, cloud-gcp.tf, and cloud-eks.tf hold what changes with
+# it: the cloud account, the clusters, and the names and versions of the infrastructure packs.
+# This file holds the rest.
 #
 # Billable while it exists: tear it down with `just live-down`.
 
 locals {
   # The packs and the text of the cloud that var.cloud names.
-  cloud        = { aws = local.aws_cloud, gcp = local.gcp_cloud }[var.cloud]
+  cloud        = { aws = local.aws_cloud, gcp = local.gcp_cloud, eks = local.eks_cloud }[var.cloud]
   csi_version  = var.csi_version != "" ? var.csi_version : local.cloud.csi_version
   k8s_version  = var.k8s_version != "" ? var.k8s_version : local.cloud.k8s_version
+  os_version   = var.os_version != "" ? var.os_version : local.cloud.os_version
+  cni_version  = var.cni_version != "" ? var.cni_version : local.cloud.cni_version
   profile_name = "${var.name_prefix}-profile"
   tags         = ["purpose:strata-live-example", "managed-by:opentofu"]
 
@@ -69,19 +72,19 @@ data "spectrocloud_registry" "packs" {
 
 data "spectrocloud_pack" "os" {
   name         = local.cloud.os_pack
-  version      = var.os_version
+  version      = local.os_version
   registry_uid = data.spectrocloud_registry.packs.id
 }
 
 data "spectrocloud_pack" "k8s" {
-  name         = "kubernetes"
+  name         = local.cloud.k8s_pack
   version      = local.k8s_version
   registry_uid = data.spectrocloud_registry.packs.id
 }
 
 data "spectrocloud_pack" "cni" {
-  name         = "cni-cilium-oss"
-  version      = var.cni_version
+  name         = local.cloud.cni_pack
+  version      = local.cni_version
   registry_uid = data.spectrocloud_registry.packs.id
 }
 
@@ -426,5 +429,6 @@ locals {
   cluster_uids = merge(
     { for k, c in spectrocloud_cluster_aws.cluster : k => c.id },
     { for k, c in spectrocloud_cluster_gcp.cluster : k => c.id },
+    { for k, c in spectrocloud_cluster_eks.cluster : k => c.id },
   )
 }
