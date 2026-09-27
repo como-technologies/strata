@@ -29,7 +29,8 @@ project that the key can see.
 {{#include ../output/list-prod.txt}}
 ```
 
-`--project <uid>` does the same with the uid.
+`--project-name <name>` lists another project by its name, and `--project
+<uid>` does the same with the uid. `--project ''` is tenant scope.
 
 ## List the clusters of every project
 
@@ -173,3 +174,7 @@ Exit `0`, or `2` when strata cannot read a listing. `--json` writes
 ```text
 {{#include ../output/help-list.txt}}
 ```
+
+`--format`, `--json`, `--compact`, `--color`, `--no-color`, and `-q`
+(`--quiet`) are the output options that each report command takes: see
+[Output formats](./index.md#output-formats).

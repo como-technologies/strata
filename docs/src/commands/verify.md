@@ -172,3 +172,7 @@ issue open for each record that drifted. See
 ```text
 {{#include ../output/help-verify.txt}}
 ```
+
+`--format`, `--json`, `--compact`, `--color`, `--no-color`, and `-q`
+(`--quiet`) are the output options that each report command takes: see
+[Output formats](./index.md#output-formats).

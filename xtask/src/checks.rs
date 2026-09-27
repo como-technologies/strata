@@ -14,6 +14,7 @@ pub fn check(repo: &Path) -> Vec<String> {
     bad.extend(release_tags(repo));
     bad.extend(links_resolve(repo));
     bad.extend(follow_along_first(repo));
+    bad.extend(command_flags(repo));
     bad
 }
 
@@ -157,6 +158,59 @@ fn follow_along_first(repo: &Path) -> Vec<String> {
                 "{name} asks for a command before its '**Follow along.**' line"
             )),
             Some(_) => {}
+        }
+    }
+    bad
+}
+
+/// A command page shows the `--help` of its command, which `just docs-examples` writes, so the
+/// options on the page are those of the binary. Its text also names each option of that help, so
+/// a new option gets a sentence and not only a line in the help block. `--help` needs none.
+fn command_flags(repo: &Path) -> Vec<String> {
+    let mut bad = Vec::new();
+    let flag = Regex::new(r"--[a-z][a-z0-9-]*").expect("the flag pattern");
+    for page in pages(&repo.join("docs/src/commands")) {
+        let Some(command) = page.file_stem().and_then(|s| s.to_str()) else {
+            continue;
+        };
+        if command == "index" {
+            continue;
+        }
+        let name = shown(repo, &page);
+        let text = std::fs::read_to_string(&page).unwrap_or_default();
+        let include = format!("{{{{#include ../output/help-{command}.txt}}}}");
+        if !text.contains(&include) {
+            bad.push(format!(
+                "{name} does not include the --help of `strata {command}`: {include}"
+            ));
+            continue;
+        }
+        let help =
+            std::fs::read_to_string(repo.join(format!("docs/src/output/help-{command}.txt")))
+                .unwrap_or_default();
+        // the text of the page, without the help block itself
+        let prose: String = text
+            .lines()
+            .filter(|l| !l.contains(&include))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let named = |f: &str| {
+            prose.match_indices(f).any(|(i, _)| {
+                !prose[i + f.len()..]
+                    .chars()
+                    .next()
+                    .is_some_and(|c| c.is_ascii_alphanumeric() || c == '-')
+            })
+        };
+        let mut flags: Vec<&str> = flag.find_iter(&help).map(|m| m.as_str()).collect();
+        flags.sort_unstable();
+        flags.dedup();
+        for f in flags {
+            if f != "--help" && !named(f) {
+                bad.push(format!(
+                    "{name} does not name {f}, an option of `strata {command} --help`"
+                ));
+            }
         }
     }
     bad

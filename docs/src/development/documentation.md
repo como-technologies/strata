@@ -48,6 +48,14 @@ cargo install mdbook mdbook-mermaid mdbook-gruvbox mdbook-lint
 | How strata calculates, and what Palette does | How it works |
 | How to build, test, release, and write | Development |
 
+## A command page
+
+A command page ends with the `--help` of its command, from
+`docs/src/output/help-<command>.txt`, so its options are those of the binary.
+Its text also names each option of that help, with what the option does or a
+link to the page that says. `just docs-check` fails on a command page that
+leaves the help out, or that has no sentence for an option.
+
 ## Serve a chapter, to try a command by hand
 
 ```bash

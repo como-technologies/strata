@@ -85,3 +85,7 @@ A scheduled job that keeps one issue open for each pack that is behind is
 ```text
 {{#include ../output/help-behind.txt}}
 ```
+
+`--format`, `--json`, `--compact`, `--color`, `--no-color`, and `-q`
+(`--quiet`) are the output options that each report command takes: see
+[Output formats](./index.md#output-formats).

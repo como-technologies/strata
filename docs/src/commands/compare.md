@@ -255,3 +255,7 @@ The markdown report writes the same line as a quotation.
 ```text
 {{#include ../output/help-compare.txt}}
 ```
+
+`--format`, `--json`, `--compact`, `--color`, `--no-color`, and `-q`
+(`--quiet`) are the output options that each report command takes: see
+[Output formats](./index.md#output-formats).

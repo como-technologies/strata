@@ -1,7 +1,9 @@
 # strata snapshot
 
-Record a profile version, a cluster, or a pack version in a snapshot file.
-`compare`, `same-release`, and `verify` read the file later.
+Record a profile version, a cluster, an edge host, a cluster group, an app
+profile, or a pack version in a snapshot file, or each cluster of a set in a
+directory. `compare`, `same-release`, `verify`, and `behind` read the file
+later.
 
 The examples use the project `dev`, which holds `aws-stack@1.1.0` and
 `aws-stack@1.1.1`. The cluster `payments` runs 1.1.1.
@@ -284,3 +286,7 @@ directory first when they live outside the repository.
 ```text
 {{#include ../output/help-snapshot.txt}}
 ```
+
+`-o` (`--output`) writes the record to a file, and without it the record goes
+to standard output. `--compact` writes it on one line, and `-q` (`--quiet`)
+drops the progress messages.

@@ -112,3 +112,7 @@ marks each edge host.
 ```text
 {{#include ../output/help-consumers.txt}}
 ```
+
+`--format`, `--json`, `--compact`, `--color`, `--no-color`, and `-q`
+(`--quiet`) are the output options that each report command takes: see
+[Output formats](./index.md#output-formats).

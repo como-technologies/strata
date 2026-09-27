@@ -134,3 +134,6 @@ and how to write a file by hand.
 ```text
 {{#include ../output/help-candidate.txt}}
 ```
+
+`-o` (`--output`) writes the candidate file, and without it the file goes to
+standard output. `-q` (`--quiet`) drops the progress messages.

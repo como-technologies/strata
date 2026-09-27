@@ -78,3 +78,7 @@ example [checks each state](../development/live-runs.md#pack-statessh).
 ```text
 {{#include ../output/help-packs.txt}}
 ```
+
+`--format`, `--json`, `--compact`, `--color`, `--no-color`, and `-q`
+(`--quiet`) are the output options that each report command takes: see
+[Output formats](./index.md#output-formats).

@@ -75,3 +75,7 @@ files. [Refs](../reference/refs.md) lists each form.
 ```text
 {{#include ../output/help-same-release.txt}}
 ```
+
+`--format`, `--json`, `--compact`, `--color`, `--no-color`, and `-q`
+(`--quiet`) are the output options that each report command takes: see
+[Output formats](./index.md#output-formats).
