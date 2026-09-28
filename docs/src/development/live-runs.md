@@ -779,8 +779,10 @@ the example with `cloud = "eks"` and cluster A. See
 The old node group is one that Palette no longer tracks. Its nodes keep
 running, and a delete of the cluster removes the new group alone: the EKS
 control plane cannot go while the old group exists, and the delete waits at
-`DeletingInfrastructure`. `eks-nodegroups.sh --delete` removes the groups, and
-`just live-down` runs it first on EKS.
+`DeletingInfrastructure`. A delete of the old group in AWS does not end the
+wait: its object in Palette keeps its finalizer. So step 4 runs only with
+`EKS_POOL_CHANGE=1`, and a cluster after it needs the recovery of
+[An EKS cluster](./live-example.md#an-eks-cluster).
 
 Provider 0.30.1 does not read `cloud_config.azs` of an EKS cluster back, and
 `azs` forces a new resource. So each plan after the create replaces the

@@ -34,7 +34,7 @@ show.
 | `fleet.sh` | `list clusters --tag` and `--filter`, `list filters`, and a record of each cluster of a set (#80). It labels cluster A through the API. |
 | `upstream.sh` | `strata behind` against the registries, and `upstream-report.sh` around a version that arrives in the example's own registry (#79). It needs no cluster. |
 | `loop.sh` | [The everyday loop](../loop.md), end to end: a change, the gates, the publish, the nightly jobs, a value overridden on a cluster, an edit in place, an incident, and a retire, with the records in a git repository that it builds (#81). It needs cluster A, and undoes each change. |
-| `eks-nodegroups.sh` | The EKS node groups of cluster A, from AWS; `--delete` deletes those of the example. `just live-down` runs it first on EKS: a node group that Palette no longer tracks holds the delete of the cluster. |
+| `eks-nodegroups.sh` | The EKS node groups of cluster A, from AWS; `--delete` deletes those of the example, a step of the recovery of [An EKS cluster](#an-eks-cluster). |
 | `eks.sh` | On an EKS cluster: the release and its packs, the shape tier of a managed node group, the repave answer of Palette for each layer and for a Kubernetes bump, and a change of the node group (#89). It needs `cloud = "eks"` and cluster A. |
 | `version-states.sh` | One state per version with no feature preview flag, a destroy that a cluster in use refuses, a version that is gone, and the version strings that Palette stores (#81). It builds its own profile in `terraform-version/`, and needs cluster A. |
 
@@ -281,6 +281,20 @@ work can use. It makes its own cloud account instead, in `cloud-eks.tf`:
 
 `just live-up` makes each one, and `just live-down` removes each one. The
 external id is sensitive, and OpenTofu keeps it in the local state alone.
+
+A change of the node pool of an EKS cluster, step 4 of `eks.sh` with
+`EKS_POOL_CHANGE=1`, leaves a node group that Palette no longer tracks, and the
+delete of the cluster then waits with no end. The recovery, after `just
+live-down` stops at the cluster:
+
+1. `examples/live/eks-nodegroups.sh --delete`.
+2. `aws eks delete-cluster --name <cluster name>`, and then the VPC of the
+   cluster, with its NAT gateways, elastic IPs, internet gateway, subnets, route
+   tables, and security groups: each carries the tag
+   `sigs.k8s.io/cluster-api-provider-aws/cluster/<cluster name>`.
+3. `examples/live/aws-inventory.sh <cluster name> <region>` reads 0 for each kind.
+4. `examples/live/api.sh delete-cluster <uid> --force`, and `just live-down`
+   again.
 
 For the questions of `eks.sh`, set `eks_k8s_bump` to a Kubernetes version of the
 EKS pack, such as `1.36`: the example then also makes the profile version 1.0.9,

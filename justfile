@@ -279,9 +279,6 @@ live-down:
     names=$(jq -r '.profile_names.value[]' <<<"$outputs")
     # Palette now and then refuses one read of a profile with OperationForbidden, and the next
     # read passes: a destroy that fails gets one more try before the diagnostics.
-    # On EKS, a change of the node pool leaves a node group that Palette no longer tracks, and the
-    # EKS control plane cannot go while it exists: delete the node groups first.
-    if grep -Eq '^cloud *= *"eks"' examples/live/terraform/terraform.tfvars; then examples/live/eks-nodegroups.sh --delete; fi
     examples/live/tf.sh destroy || examples/live/tf.sh destroy || { examples/live/diagnose.sh; exit 1; }
     examples/live/api.sh delete-named $names
 

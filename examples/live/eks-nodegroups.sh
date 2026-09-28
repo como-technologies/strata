@@ -8,7 +8,7 @@
 # old one, which Palette then no longer tracks: a delete of the cluster removes the new group
 # alone, and the EKS control plane cannot go while the old one exists. --delete deletes each node
 # group of the cluster that carries the tag purpose=strata-live-example, and waits until it is
-# gone. `just live-down` runs it with --delete before tofu destroy when cloud is eks.
+# gone: a step of the recovery of such a cluster, which does not end the wait of Palette alone.
 #
 # Needs the AWS CLI with the profile of aws_profile. Exit 0 when the cluster has no node group or
 # each one is listed or deleted; 2 when AWS cannot answer.

@@ -9,8 +9,10 @@
 #   2  the shape tier of cluster A: its managed node group
 #   3  what Palette answers to compare --repave, beside the level of the impact table: a
 #      Kubernetes version bump, and a change of the values of each infrastructure layer
-#   4  a change of the node pool: a new instance type, applied; the shape tier and the machines
-#      before and after; then the pool back
+#   4  with EKS_POOL_CHANGE=1 only: a change of the node pool, a new instance type, applied; the
+#      shape tier, the machines, and the node groups before and after; then the pool back. Palette
+#      then keeps a node group that it no longer tracks, and the delete of the cluster waits with
+#      no end: see "An EKS cluster" in live-example.md for the recovery
 #
 # Needs the live example with cloud = "eks" in terraform.tfvars and cluster A (just live-up), the
 # strata release binary, jq, and the key as verify.sh needs it. Step 4 applies twice. Results go
@@ -99,6 +101,15 @@ else
 fi
 
 echo "== 4. a change of the node pool" | tee -a steps.log
+if [ "${EKS_POOL_CHANGE:-}" != 1 ]; then
+  printf '%-4s  %-32s %s\n' SEEN pool-change "skipped: EKS_POOL_CHANGE=1 runs it, and leaves a delete that waits" | tee -a steps.log
+  printf '%s\t%s\n' pool-change "skipped without EKS_POOL_CHANGE=1" >> checks.tsv
+  check baseline 0 'the example is at its baseline' -- "$live/baseline.sh"
+  echo
+  echo "$script: $(grep -c '^PASS' steps.log) passed, $failures failed; results in $run"
+  [ "$failures" = 0 ]
+  exit
+fi
 before=$(instances "$C")
 check pool-change 0 '#89: the node group gets another instance type, through OpenTofu' -- \
   "$live/tf.sh" apply -input=false -auto-approve -no-color -var eks_instance_type=m5.xlarge
