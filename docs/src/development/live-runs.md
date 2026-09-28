@@ -770,9 +770,17 @@ the example with `cloud = "eks"` and cluster A. See
 | `instances` | 0 | #89: the live helper lists the nodes of the node group |
 | `value-k8s`, `value-csi` | 0 | #89: a new value in the `kubernetes-eks` pack or the CSI pack: Palette says no repave. The OS and CNI packs of EKS have no values |
 | `k8s-bump`, `k8s-bump-lines`, `k8s-bump-repave` | 1, 0, 0 | #89: a new Kubernetes version: Palette says repave, `PackUpgraded kubernetes-eks`, and the table agrees |
-| `pool-change`, `pool-machines` | 0, ? | #89: another instance type for the node group, through OpenTofu, is an update in place of the cluster. Open: Palette made a second EKS node group of the new type, and the first stayed `ACTIVE` with its nodes for an hour; a change back did not remove the second. The cluster stays `Running` |
+| `pool-change`, `pool-machines` | 0 | #89: another instance type for the node group, through OpenTofu, is an update in place of the cluster, and nodes of the new type run it. The cluster stays `Running` |
+| `nodegroups-change` | 0 | #89: EKS holds two node groups: Palette made one of the new type and kept the old one, with its nodes |
+| `nodegroups-back` | 0 | #89: the change back leaves both groups |
 | `shape-2`, `shape-differs`, `shape-differs-says` | 0 | #89: compare of the records before and after names the change of the shape tier, `shape.pools[name=worker-pool].instanceType`. A tier does not change the exit |
 | `pool-back`, `baseline` | 0 | the node group back, and the example at its baseline |
+
+The old node group is one that Palette no longer tracks. Its nodes keep
+running, and a delete of the cluster removes the new group alone: the EKS
+control plane cannot go while the old group exists, and the delete waits at
+`DeletingInfrastructure`. `eks-nodegroups.sh --delete` removes the groups, and
+`just live-down` runs it first on EKS.
 
 Provider 0.30.1 does not read `cloud_config.azs` of an EKS cluster back, and
 `azs` forces a new resource. So each plan after the create replaces the

@@ -110,14 +110,18 @@ for _ in $(seq 1 40); do
   [ -n "$after" ] && [ "$after" != "$before" ] && break
   sleep 30
 done
-check pool-machines ? '#89: open: do other machines run cluster A after the change? A run saw Palette add a node group of the new type and keep the old one' -- \
+check pool-machines 0 '#89: other machines run cluster A after the change: the nodes of the new type' -- \
   test "$before" != "$after"
+check nodegroups-change 0 '#89: EKS holds two node groups: Palette made one of the new type and kept the old one' -- \
+  bash -c "test \"\$(\"$live/eks-nodegroups.sh\" | wc -l)\" = 2"
 check shape-2 0 'record cluster A with its shape tier after the change' -- "$strata" snapshot "cluster:$C" --shape -o shape-2.json
 check shape-differs 0 '#89: compare of the two records names the change of the shape tier; a tier does not change the exit' -- \
   "$strata" compare shape-1.json shape-2.json
 check shape-differs-says 0 '#89: the shape tier is CHANGED' -- grep -q 'shape CHANGED' shape-differs.out
 check pool-back 0 'the node group back' -- "$live/tf.sh" apply -input=false -auto-approve -no-color
 wait_running "$C"
+check nodegroups-back 0 '#89: the change back leaves the two node groups: no group goes' -- \
+  bash -c "test \"\$(\"$live/eks-nodegroups.sh\" | wc -l)\" = 2"
 check baseline 0 'the example is at its baseline' -- "$live/baseline.sh"
 
 echo
