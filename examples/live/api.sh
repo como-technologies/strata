@@ -45,9 +45,10 @@
 #       Delete every version of each profile named exactly NAME, found in the profile listing:
 #       the versions skip_destroy kept out of the OpenTofu state. A name with no versions is not
 #       an error.
-#   api.sh delete-cluster CLUSTER_UID
+#   api.sh delete-cluster CLUSTER_UID [--force]
 #       Ask Palette to delete a cluster, by the API and not the provider: DELETE the cluster. The
-#       deletion runs after the request ends.
+#       deletion runs after the request ends. --force asks for forceDelete, which removes the
+#       records of a cluster stuck in Deleting and no cloud resource: empty the cloud first.
 #   api.sh edge-host-create UID PROFILE_UID...
 #       Register an edge host UID with no device, as for a device that is not paired yet, and
 #       bind the profiles to it. Nothing runs on it.
@@ -370,10 +371,15 @@ delete_named() {
 }
 
 delete_cluster() {
-  local uid=${1:-}
-  [ -n "$uid" ] || die "usage: api.sh delete-cluster CLUSTER_UID"
-  call DELETE "/v1/spectroclusters/$uid" > /dev/null || return 2
-  echo "the deletion of cluster $uid is requested"
+  local uid=${1:-} force=${2:-} query=""
+  [ -n "$uid" ] || die "usage: api.sh delete-cluster CLUSTER_UID [--force]"
+  case "$force" in
+    "") ;;
+    --force) query="?forceDelete=true" ;;
+    *) die "usage: api.sh delete-cluster CLUSTER_UID [--force]" ;;
+  esac
+  call DELETE "/v1/spectroclusters/$uid$query" > /dev/null || return 2
+  echo "the deletion of cluster $uid is requested${query:+, forced}"
 }
 
 # edge_host_create UID PROFILE_UID...: register an edge host with no device, and bind the
