@@ -34,6 +34,7 @@ show.
 | `fleet.sh` | `list clusters --tag` and `--filter`, `list filters`, and a record of each cluster of a set (#80). It labels cluster A through the API. |
 | `upstream.sh` | `strata behind` against the registries, and `upstream-report.sh` around a version that arrives in the example's own registry (#79). It needs no cluster. |
 | `loop.sh` | [The everyday loop](../loop.md), end to end: a change, the gates, the publish, the nightly jobs, a value overridden on a cluster, an edit in place, an incident, and a retire, with the records in a git repository that it builds (#81). It needs cluster A, and undoes each change. |
+| `eks.sh` | On an EKS cluster: the release and its packs, the shape tier of a managed node group, the repave answer of Palette for each layer and for a Kubernetes bump, and a change of the node group (#89). It needs `cloud = "eks"` and cluster A. |
 | `version-states.sh` | One state per version with no feature preview flag, a destroy that a cluster in use refuses, a version that is gone, and the version strings that Palette stores (#81). It builds its own profile in `terraform-version/`, and needs cluster A. |
 
 The example runs on AWS or GCP instances, or on EKS: the variable `cloud` in
@@ -402,6 +403,7 @@ just live-fleet                                                                #
 just live-upstream                                                             # #79, needs just live-profiles
 just live-loop                                                                 # #81, needs just live-up
 just live-version-states                                                       # #81, needs just live-up
+just live-eks                                                                  # #89, needs cloud = "eks" and just live-up
 ```
 
 `just live-session` runs `verify.sh`, `in-place.sh off`, `in-place.sh on`, and

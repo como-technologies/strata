@@ -50,7 +50,13 @@ cluster, a change to the Kubernetes layer repaves nothing, and on the OS layer
 only the `uri` repaves. Palette keeps a list of the fields that repave for the
 OS layer and the Kubernetes layer of each engine, and checks no other layer for
 a repave. No public page gives the lists, and they can change with each release
-of Palette, so strata does not copy them. The live runs used two clouds, AWS and GCP, and one engine: see
+of Palette, so strata does not copy them.
+
+The live runs also asked Palette about a managed engine, EKS. A new Kubernetes
+version repaves, as the table says. A change of the values of the
+`kubernetes-eks` pack or of the CSI pack repaves nothing: on EKS, `may-repave`
+for the Kubernetes layer means no repave for these values. The EKS packs of the
+OS and CNI layers have no values. See
 [What no run covers](../internals/palette/limits.md#what-no-run-covers).
 
 For a cluster, ask Palette: `compare --repave` prints its answer beside

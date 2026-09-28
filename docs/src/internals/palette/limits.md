@@ -7,10 +7,13 @@ The digest of each registry kind that a run shows is in
 Spectro pack registries of Spectro Cloud, every record of every run carries a
 pack-ref digest, and no check asserts it.
 
-The live runs used two clouds, AWS and GCP, and one upgrade engine: a kubeadm
-cluster that Palette builds with the cluster API. On each cloud Palette gives
-the same answers, and each repave answer agrees with the impact table (see
+The live runs used two engines. The first is a kubeadm cluster that Palette
+builds with the cluster API, on AWS and on GCP. On each cloud Palette gives the
+same answers, and each repave answer agrees with the impact table (see
 [A second cloud: GCP](../../development/live-runs.md#a-second-cloud-gcp)). The
+second is EKS, a managed engine: a Kubernetes version bump repaves, and a change
+of the values of the Kubernetes or CSI pack does not (see
+[eks.sh](../../development/live-runs.md#ekssh)). No run uses GKE or AKS. The
 public page gives another rule for Edge: a change to the Kubernetes layer
 repaves nothing, and on the OS layer only the `uri` repaves
 ([Upgrade behavior](https://docs.spectrocloud.com/clusters/edge/cluster-management/upgrade-behavior/)).

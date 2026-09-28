@@ -755,6 +755,29 @@ removes it. It needs the example with cluster A.
 | `apply-prefixed`, `stored-prefixed`, `prefixed-as-given`, `destroy-prefixed` | 0 | #81: Palette stores the version `v1.2.3` as given, and not as `1.2.3` |
 | `baseline` | 0 | the example is at its baseline |
 
+## eks.sh
+
+The claims that depend on the engine, on a managed engine: EKS (#89). It needs
+the example with `cloud = "eks"` and cluster A. See
+[An EKS cluster](./live-example.md#an-eks-cluster).
+
+| Check | Expected exit | What it shows |
+|---|---|---|
+| `release`, `release-cloud`, `release-layers` | 0 | #89: a record of the EKS release version, of cloud type `eks`, with an OS, a Kubernetes, a CNI, and a CSI layer |
+| `release-packs`, `release-digests` | 0 | #89: `amazon-linux-eks`, `kubernetes-eks`, `cni-aws-vpc-eks`, and `csi-aws-ebs`, each with a pack-ref digest |
+| `cluster`, `cluster-runs`, `verify-both`, `consumers` | 0, 0, 0, 1 | #89: a record of the EKS cluster runs the recorded release, both records verify, and `consumers` names the cluster |
+| `shape`, `shape-pool`, `shape-fields` | 0 | #89: the shape tier holds the managed node group, with its instance type, size, zones, AMI type, and update strategy |
+| `instances` | 0 | #89: the live helper lists the nodes of the node group |
+| `value-k8s`, `value-csi` | 0 | #89: a new value in the `kubernetes-eks` pack or the CSI pack: Palette says no repave. The OS and CNI packs of EKS have no values |
+| `k8s-bump`, `k8s-bump-lines`, `k8s-bump-repave` | 1, 0, 0 | #89: a new Kubernetes version: Palette says repave, `PackUpgraded kubernetes-eks`, and the table agrees |
+| `pool-change`, `pool-machines` | 0, ? | #89: another instance type for the node group, through OpenTofu, is an update in place of the cluster. Open: Palette made a second EKS node group of the new type, and the first stayed `ACTIVE` with its nodes for an hour; a change back did not remove the second. The cluster stays `Running` |
+| `shape-2`, `shape-differs`, `shape-differs-says` | 0 | #89: compare of the records before and after names the change of the shape tier, `shape.pools[name=worker-pool].instanceType`. A tier does not change the exit |
+| `pool-back`, `baseline` | 0 | the node group back, and the example at its baseline |
+
+Provider 0.30.1 does not read `cloud_config.azs` of an EKS cluster back, and
+`azs` forces a new resource. So each plan after the create replaces the
+cluster. `cloud-eks.tf` ignores the field.
+
 ## A chart pushed again, on a cluster
 
 A run by hand, with the registry host of `registry-kinds.sh` and cluster A: no

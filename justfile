@@ -173,6 +173,10 @@ live-fleet: build
 live-loop: build
     examples/live/loop.sh
 
+# The managed engine test on EKS: the release, the shape tier, and the repave answers of Palette, and a change of the node group (#89). Needs cloud = "eks" in terraform.tfvars and live-up.
+live-eks: build
+    examples/live/eks.sh
+
 # One state per version: a bump as a new resource in a new state, with no feature_preview flag, and the destroy that a cluster in use refuses (#81). Needs live-up; leaves nothing behind.
 live-version-states: build
     examples/live/version-states.sh

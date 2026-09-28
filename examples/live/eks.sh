@@ -53,9 +53,9 @@ check release 0 "record $NAME@1.0.0, an EKS profile" -- "$strata" snapshot "$R" 
 check release-cloud 0 '#89: the record is of cloud type eks' -- jq -e '.source.cloudType == "eks"' release.json
 check release-layers 0 '#89: its packs, in order: an OS, Kubernetes, a CNI, and a CSI layer' -- \
   jq -e '[.packs[].layer] == ["os", "k8s", "cni", "csi"]' release.json
-check release-packs ? '#89: the name, the version, and the upstream source of the digest of each pack' -- \
+check release-packs 0 '#89: the name, the version, and the upstream source of the digest of each pack' -- \
   jq -r '.packs[] | "\(.layer) \(.name) \(.version) \(.hash.upstreamSource)"' release.json
-check release-digests ? '#89: each pack has an upstream digest' -- \
+check release-digests 0 '#89: each pack has an upstream digest: packRef.digest' -- \
   jq -e '[.packs[] | .hash.upstreamSource] | all(. != "none")' release.json
 check cluster 0 'record cluster A' -- "$strata" snapshot "cluster:$C" -o cluster.json
 check cluster-runs 0 '#89: cluster A runs the recorded release: IDENTICAL' -- \
@@ -67,9 +67,10 @@ echo "== 2. the shape tier" | tee -a steps.log
 check shape 0 'record cluster A with its shape tier' -- "$strata" snapshot "cluster:$C" --shape -o shape-1.json
 check shape-pool 0 '#89: the shape tier holds the managed node group' -- \
   jq -e '.source.cluster.tiers.shape.fields.pools | map(.name) | index("worker-pool") != null' shape-1.json
-check shape-fields ? '#89: the fields of the node group in the shape tier' -- \
+check shape-fields 0 '#89: the fields of the node group in the shape tier' -- \
   jq -c '.source.cluster.tiers.shape.fields' shape-1.json
-check instances ? '#89: the machines of cluster A, as the live helper counts them' -- instances "$C"
+nodes=$(instances "$C")
+check instances 0 '#89: the live helper lists the machines of cluster A' -- test -n "$nodes"
 
 echo "== 3. the answer of Palette to a repave question" | tee -a steps.log
 for layer in os k8s cni csi; do
@@ -80,16 +81,18 @@ for layer in os k8s cni csi; do
     printf '%s\t%s\n' "value-$layer" "the $layer pack has no values" >> checks.tsv
     continue
   fi
-  check "value-$layer" ? "#89: a new key in the values of the $layer pack $pack: Palette answers (1 repave, 0 no repave)" -- \
+  check "value-$layer" 0 "#89: a new key in the values of the $layer pack $pack: Palette says no repave on EKS" -- \
     "$live/tenant.sh" repave "$C" "$R" "$R" "$pack" "$first" "strataRepaveTest: \"true\"
 $first"
 done
 bump=$(out k8s_bump_profile_uid)
 if [ -n "$bump" ]; then
-  check k8s-bump ? '#89: compare --repave of cluster A with the release at another Kubernetes version' -- \
+  check k8s-bump 1 '#89: compare --repave of cluster A with the release at another Kubernetes version' -- \
     "$strata" compare "cluster:$C/$NAME" "$bump" --repave
   check k8s-bump-lines 0 'the palette line and the impact of the Kubernetes pack' -- \
     grep -E '^(palette|~ \[k8s|      impact|note )' k8s-bump.out
+  check k8s-bump-repave 0 '#89: Palette says repave for a Kubernetes version bump on EKS, and the table agrees' -- \
+    bash -c "grep -q '^palette    repave: PackUpgraded kubernetes-eks' k8s-bump.out && ! grep -q 'the impact table says' k8s-bump.out"
 else
   printf '%-4s  %-32s %s\n' SEEN k8s-bump "no eks_k8s_bump: apply with -var eks_k8s_bump=<version> for this question" | tee -a steps.log
   printf '%s\t%s\n' k8s-bump "no eks_k8s_bump" >> checks.tsv
@@ -100,11 +103,17 @@ before=$(instances "$C")
 check pool-change 0 '#89: the node group gets another instance type, through OpenTofu' -- \
   "$live/tf.sh" apply -input=false -auto-approve -no-color -var eks_instance_type=m5.xlarge
 wait_running "$C"
-after=$(instances "$C")
-check pool-machines ? '#89: the machines after the change: new names mean a roll of the node group' -- \
+# the cluster stays Running while the node group rolls: new nodes join before the old ones leave
+after=""
+for _ in $(seq 1 40); do
+  after=$(instances "$C")
+  [ -n "$after" ] && [ "$after" != "$before" ] && break
+  sleep 30
+done
+check pool-machines ? '#89: open: do other machines run cluster A after the change? A run saw Palette add a node group of the new type and keep the old one' -- \
   test "$before" != "$after"
 check shape-2 0 'record cluster A with its shape tier after the change' -- "$strata" snapshot "cluster:$C" --shape -o shape-2.json
-check shape-differs 1 '#89: compare of the two records names the change of the shape tier' -- \
+check shape-differs 0 '#89: compare of the two records names the change of the shape tier; a tier does not change the exit' -- \
   "$strata" compare shape-1.json shape-2.json
 check shape-differs-says 0 '#89: the shape tier is CHANGED' -- grep -q 'shape CHANGED' shape-differs.out
 check pool-back 0 'the node group back' -- "$live/tf.sh" apply -input=false -auto-approve -no-color
