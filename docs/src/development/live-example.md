@@ -372,10 +372,16 @@ watch of cluster A until it is `Running` or a stuck state; the cluster stays,
 so `just live-down` follows.
 
 ```bash
+just live-down                                                # the profiles of one cloud at a time
 examples/live/tf.sh apply -var cluster=false -var cloud=gke   # the profiles of the engine
 just live-preflight-plan gke
 just live-down
 ```
+
+The profiles of each cloud share one name and one version, so an apply with
+another cloud before a destroy is refused with `ClusterProfileAlreadyExists`:
+OpenTofu creates the new profile before it destroys the old one. Run
+`just live-down` between two clouds.
 
 `PALETTE_RELEASE` names the Palette release for the ledger, when known: a
 tenant key cannot read it. The runs are recorded in

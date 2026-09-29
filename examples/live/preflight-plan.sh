@@ -18,9 +18,10 @@
 #      Running, or a stuck state. The ledger gets `passed` for each watch rule that passed. The
 #      cluster stays: run just live-down after
 #
-# Needs live-profiles with cloud = ENGINE in terraform.tfvars (or -var cloud=ENGINE), the strata
-# and strata-preflight binaries, jq, the key as verify.sh needs it, and the tool of the cloud (aws,
-# gcloud). PALETTE_RELEASE names the Palette release for the ledger, when known; a tenant key
+# Needs live-profiles with cloud = ENGINE in terraform.tfvars (or -var cloud=ENGINE; a switch of
+# the cloud needs `just live-down` first, or the apply is refused with ClusterProfileAlreadyExists),
+# the strata and strata-preflight binaries, jq, the key as verify.sh needs it, and the tool of the
+# cloud (aws, gcloud). PALETTE_RELEASE names the Palette release for the ledger, when known; a tenant key
 # cannot read it. Results go under runs/<UTC time>/preflight-plan/, or OUT. Exit 0 only when no
 # check fails.
 set -uo pipefail
