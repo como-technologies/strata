@@ -855,7 +855,7 @@ this table names the faults.
 | Engine | The faults made on purpose, by rule id |
 |---|---|
 | `gke` | `gke-pool-multiple-3`, `palette-validate` (a pool of 4), `gke-no-release-channel`, `gke-no-gpu`, `gke-autopilot`, `gcp-name-length`, `account-missing` |
-| `eks` | `eks-one-zone`, `eks-worker-needed`, `update-strategy-eks`, `api-endpoint-reach`, `account-missing`, `worker-cpu-floor` |
+| `eks` | `eks-one-zone`, `eks-worker-needed`, `update-strategy-eks`, `api-endpoint-reach`, `account-missing` |
 | `aws` | `worker-cpu-floor`, `palette-validate` (one worker of four cores), `api-endpoint-reach`, `account-missing` |
 | `gcp` | `worker-cpu-floor`, `palette-validate`, `gcp-name-length`, `account-missing` |
 
@@ -929,9 +929,16 @@ GCP project of the gke run, which are `warn` now.
 
 Over the four engines, the plan made 21 faults and the checks caught 20; the
 one not caught is the CPU floor on EKS, which the EKS validate route does not
-report. Of the 144 checks that ran on the clean entities, 137 passed; the seven
-failures were three wrong results of two IAM simulations, now fixed, and the
-two GCP project findings, twice, now warnings.
+report, so `worker-cpu-floor` no longer names `eks` and the plan no longer
+makes that fault there. Of the 144 checks that ran on the clean entities, 137
+passed; the seven failures were three wrong results of two IAM simulations and
+the two GCP project findings, twice. After the fixes, the plan ran again on gcp
+and on eks: every fault was caught, every rule of severity `fail` passed on
+the clean entities, and `strata preflight --promotion` exits `0` with the
+ledger of the six runs. The IAM simulation on eks warns that
+`eks:CreateCluster` is `implicitDeny` on each resource of the build, for the
+role that built the #89 clusters: the warning to read that the rule now says
+it is.
 
 ## A chart pushed again, on a cluster
 

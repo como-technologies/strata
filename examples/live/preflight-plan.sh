@@ -149,7 +149,8 @@ case "$engine" in
     fault update-strategy-eks '.spec.machinepoolconfig[0].poolConfig.updateStrategy = {type: "RollingUpdateScaleOut"}'
     fault api-endpoint-reach '.spec.cloudConfig.endpointAccess = {public: false, private: true, publicCIDRs: [], privateCIDRs: []}'
     fault account-missing '.spec.cloudAccountUid = "000000000000000000000000"'
-    fault worker-cpu-floor "$first_pool(1)"
+    # not worker-cpu-floor: the EKS validate route reports no CPU floor for a managed node group
+    # (runs 20260929T042910Z and 20260929T044751Z), so the rule does not name eks
     ;;
   aws)
     fault worker-cpu-floor "$worker_pools(1)"
