@@ -976,6 +976,24 @@ the campaign, which a non-interactive shell cannot give, the `cloud-cli-auth`
 row of the lab. Run by hand after, the inventory was 0 on every line, the GKE
 cluster counted.
 
+**eks, with a build.** The watch stopped at 1355 seconds, after 44 readings,
+on `pivot-webhook-timeout`: the events of the cluster named the timeout of
+`vspectrocluster.kb.io` during the pivot, the fault of #89 and #90, with the
+cluster `Provisioning` and no error in its status. The provider then ended its
+apply with exit 0 while the cluster was still `Provisioning`. On the cluster as
+Palette holds it, 46 checks ran and 42 passed; `delete-while-provisioning`
+failed, because the cluster was not `Running`, and said what a delete would do.
+The plan then deleted the cluster, and the delete waited, as the rule said:
+the first destroy ended at the deadline of the provider with the cluster
+`Deleting` and the EKS cluster, the VPC, and three NAT gateways still in AWS.
+The change of the instance type of the worker pool, `t3.xlarge` to
+`m5.xlarge`, was caught by `eks-type-change-orphan` and `pool-replace-fields`
+before any apply: the fault of #89, found in a millisecond. Two wrong results of
+strata came out of this run and are fixed: the validate route refuses the name
+of an existing cluster with `ResourceAlreadyExists`, so `palette-validate` and
+`worker-cpu-floor` now check an existing cluster under a suffixed name; and the
+plan now waits for `Running` before it deletes.
+
 ## A chart pushed again, on a cluster
 
 A run by hand, with the registry host of `registry-kinds.sh` and cluster A: no
