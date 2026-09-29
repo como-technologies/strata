@@ -535,7 +535,11 @@ stops at the first failure.
 
 ### 5. Remove it
 
-Keep the uids first. The outputs go with the state.
+Keep the uids first. The outputs go with the state, and after that
+`tf.sh output -raw` prints the warning "No outputs found" on standard output: a
+shell that exports it as `PALETTE_PROJECT_UID` sends that text as the project
+header, and every request answers a plain-text `400 Bad Request`. When the
+outputs are gone, take the project uid from `~/.palette.env`.
 
 ```bash
 C=$(examples/live/tf.sh output -raw cluster_uid)
