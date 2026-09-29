@@ -915,6 +915,20 @@ after these runs: `strata preflight --promotion` promotes a static rule only
 when a live run shows the fault (`status: seen`), such as `gke-pool-multiple-3`
 and `gke-no-release-channel` from #90.
 
+**gcp.** Four faults made on purpose, four caught. The GCP validate route
+applies the CPU floor as the AWS one does: one worker of four cores is
+`MachinePoolWithMinCpuRequired` in under a second. A name over 52 characters
+gives a derived network name over 63, which the static rule computes as Palette
+derives it (`<name>-network`, `<name>-network-<region>`). On the clean entity,
+29 checks ran and 27 passed; the two failures are the two findings about the
+GCP project of the gke run, which are `warn` now.
+
+Over the four engines, the plan made 21 faults and the checks caught 20; the
+one not caught is the CPU floor on EKS, which the EKS validate route does not
+report. Of the 144 checks that ran on the clean entities, 137 passed; the seven
+failures were three wrong results of two IAM simulations, now fixed, and the
+two GCP project findings, twice, now warnings.
+
 ## A chart pushed again, on a cluster
 
 A run by hand, with the registry host of `registry-kinds.sh` and cluster A: no
