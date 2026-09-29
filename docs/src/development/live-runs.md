@@ -977,9 +977,12 @@ row of the lab. Run by hand after, the inventory was 0 on every line, the GKE
 cluster counted.
 
 **eks, with a build.** The watch stopped at 1355 seconds, after 44 readings,
-on `pivot-webhook-timeout`: the events of the cluster named the timeout of
-`vspectrocluster.kb.io` during the pivot, the fault of #89 and #90, with the
-cluster `Provisioning` and no error in its status. The provider then ended its
+on `pivot-webhook-timeout`, as the rule was then: an event named a failed call
+of the webhook `mawscloudconfig.kb.io` while the controller set the owner of
+the cloud config, right after the pivot, with the cluster `Provisioning` and no
+error in its status. The message of the rule cut the event at 240 characters,
+before the cause, and the `world.json` of the watch held no reading, so whether
+the call timed out or was refused is not known; both are fixed below. The provider then ended its
 apply with exit 0 while the cluster was still `Provisioning`. On the cluster as
 Palette holds it, 46 checks ran and 42 passed; `delete-while-provisioning`
 failed, because the cluster was not `Running`, and said what a delete would do.
@@ -998,8 +1001,14 @@ gateways were still in AWS, with the cluster `Deleting` and
 `CloudInfrastructureCleanedUp: DeletingInfrastructure`. The recovery was the
 one of the book: `eks-nodegroups.sh --delete`, `aws-cleanup.sh fred us-east-2 --yes`,
 the inventory at 0, then a second plain delete, which the findings report of
-2026-09-26 on the pivot webhook gives as the step that ends the wait. The
-mechanism is the one of that report, on EKS this time. One hour of the recovery
+2026-09-26 on the pivot webhook gives as the step that ends the wait. It did
+not end it here: from then on each reconcile of the delete failed with "failed
+to delete additional resources: failed to get existing aws managed control
+plane: AWSManagedControlPlane fred-cp not found", every five minutes, with the
+cloud empty. The delete path reads a control plane object that is gone as an
+error, and not as done, so the delete cannot end. A force delete of the record
+ended it. The mechanism is the one of that report, on EKS this time, with this
+one more step that does not recover. One hour of the recovery
 went to a fault of the operator: `tofu output -raw` printed a warning beside
 the project uid, a shell exported both as `PALETTE_PROJECT_UID`, and every
 request with that header answered a plain-text `400 Bad Request`, which read
@@ -1007,6 +1016,58 @@ as Palette refusing the cluster. It was not: with the uid alone, the API
 answered as it does. `lib.sh` reads the outputs as JSON, with the warnings
 dropped, so the scripts of the lab do not meet it; a shell that copies a
 value by hand can.
+
+**aws, with a build.** The plan built cluster A through the provider, with the
+watch on it from the moment Palette listed it: 41 readings, `Running` after
+1278 seconds, and each watch rule passed (`agent-egress`,
+`csi-crash-after-running`, `node-egress-images`, `infrastructure-stalled`,
+`pivot-webhook-timeout`, `stale-worker-condition`). Before the build, the four
+faults made on purpose were caught: one worker of four cores by
+`worker-cpu-floor` and `palette-validate`, an internal control plane load
+balancer by `api-endpoint-reach` in a millisecond, and a cloud account uid that
+is not in the project by `account-missing`. On the clean entity and on the
+cluster as Palette holds it, 40 checks ran and 40 passed, with two notes:
+`bastion-cost`, and `variables-in-use` once the profile had a cluster. The
+change of the instance type of the worker pool, `t3.xlarge` to `m5.xlarge`, was
+caught by `pool-replace-fields` before any apply. The teardown ran after
+`Running`: one destroy, 14 resources, and the inventory of AWS at 0 on every
+line.
+
+**gcp, with a build.** The four faults were caught before the build, the
+derived network name of a long cluster name among them (`gcp-name-length`, in
+a millisecond). The watch stopped at 671 seconds, after 22 readings, on
+`pivot-webhook-timeout` as the rule was then: right after the pivot, a
+`ReconcileError` of the controller named a failed call of
+`mspectrocluster.kb.io` while it set the type of the control plane, and a
+`Log` event of the agent named a failed call of `vspectrocluster.kb.io` while
+it updated the cluster, eight seconds apart. Palette made the calls again: the
+wait of the plan saw `Running` 23 minutes after the watch started, with no
+other event of note, and the teardown ran after it: one destroy, 14 resources,
+and the inventory of GCP at 0 on every line. On the clean entity, 33 checks ran
+and 31 passed; on the cluster as Palette holds it, 34 ran and 32 passed. The
+two warnings are the two GCP project findings of the gke run. The change of the
+instance type of the worker pool, `e2-standard-4` to `e2-standard-8`, was
+caught by `pool-replace-fields` before any apply.
+
+**Three wrong results of strata came out of the gcp run, and are fixed.**
+`pivot-webhook-timeout` failed on one minute of failed webhook calls, which the
+build survived. The rule now fails on the failed move of the cluster, on the
+cloud config the controller cannot read, or on 10 minutes or more of failed
+calls while the cluster is not `Running`; the new warning `webhook-call-failed`
+names each failed call. Both show the start and the end of each event, because
+the end names the cause, a timeout or a connection refused, and the old message
+cut it. The `world.json` of a watch held the world before the first reading,
+with no conditions and no events, so the full events of the eks and the gcp
+watches are lost; it now holds the last reading. And the watch ended at the
+first failure of any rule; it now ends at the first counted failure alone, as
+the exit code counts them, and a failed probe or a warning is in the report
+while the watch reads on. The ledger gives the gcp run as `passed` for the
+narrowed rule, with its events in the fixture `watch-webhook-refused` that the
+tests of the rule replay, and as `caught` for the warning on gcp and on eks;
+the eks entry of the old rule is gone, because the cluster was deleted before
+the outcome was known. The findings report on the build runs,
+`palette-preflight-build-runs-findings-2026-09-29`, holds the timeline of the
+eks delete and the source of each finding.
 
 ## A chart pushed again, on a cluster
 

@@ -120,21 +120,36 @@ rules:
         clean: fixtures/gke/watch-running.json
 
   - id: pivot-webhook-timeout
-    title: The pivot webhook answers
+    title: The pivot moves the cluster, and its webhooks answer
     engines: [all]
     tier: watch
     severity: fail
     status: seen
     what: |
-      The webhook `vspectrocluster.kb.io` times out after 10 seconds. The pivot is partial, and a
-      delete later waits for 51 minutes or more.
+      During the pivot, the move of the cluster calls the webhook `vspectrocluster.kb.io` in the
+      new cluster, and the call times out after 10 seconds. The pivot is partial, and a delete
+      later waits for 51 minutes or more. The rule fails on an event that names the failed move,
+      or the cloud config the controller cannot read. It fails too when calls of the webhooks fail
+      for 10 minutes or more while the cluster is not `Running`. One minute of failed calls is
+      not this fault: on gcp, two webhooks refused the calls right after the pivot, Palette made
+      the calls again, and the cluster was `Running` 17 minutes later (`webhook-call-failed`
+      warns on that). The message shows the start and the end of each event, because the end
+      names the cause.
     check:
       kind: watch
       expr: |
-        [ (.events // [])[]
-          | select((.message // "") | test("failed calling webhook|failed to move spectroCluster|failed to get cloud config"))
-          | "event \(.reason) at \(.metadata.creationTimestamp): \(.message | .[:240])" ]
-        | unique | .[:3]
+        def cut: if length > 320 then .[:140] + " ... " + .[-160:] else . end;
+        def minute: (.[11:13] | tonumber) * 60 + (.[14:16] | tonumber);
+        (.cluster.status.state // "") as $s
+        | [ (.events // [])[]
+            | select((.message // "")
+              | test("failed calling webhook|failed to call webhook|failed to move spectroCluster|failed to get cloud config")) ] as $hits
+        | ([ $hits[] | select(.message | test("failed to move spectroCluster|failed to get cloud config")) ] | length > 0) as $move
+        | [ $hits[] | .metadata.creationTimestamp | select(. != null and length >= 16) | minute ] as $m
+        | (if ($m | length) > 1 then ((($m | max) - ($m | min)) + 1440) % 1440 else 0 end) as $span
+        | if $move or ($s != "Running" and $span >= 10)
+          then [ $hits[] | "event \(.reason) at \(.metadata.creationTimestamp): \(.message | cut)" ] | unique | .[:3]
+          else true end
     fix:
       owner: palette
       text: Order the pivot so the webhook is up first, and retry the call.
@@ -146,6 +161,42 @@ rules:
     tests:
       - fault: fixtures/eks/pivot-webhook.json
         clean: fixtures/eks/watch-running.json
+      - fault: fixtures/gcp/watch-webhook-persistent.json
+        clean: fixtures/gcp/watch-webhook-refused.json
+
+  - id: webhook-call-failed
+    title: The webhooks of Palette answer the calls after the pivot
+    engines: [all]
+    tier: watch
+    severity: warn
+    status: seen
+    what: |
+      After the pivot, the Palette controller in the new cluster and the agent call the webhooks
+      of Palette in that cluster: `mspectrocluster.kb.io`, `vspectrocluster.kb.io`, and the ones
+      of the cloud config. A call can fail before the webhook is up. Palette makes the call again:
+      on gcp, the calls of the two spectrocluster webhooks failed in one minute of the build, and
+      the cluster was `Running` 17 minutes later; on eks, the call of `mawscloudconfig.kb.io`
+      failed while the controller set the owner of the cloud config. When the calls fail for 10
+      minutes or more, or the move of the cluster fails, `pivot-webhook-timeout` fails. The
+      message shows the start and the end of each event, because the end names the cause: a
+      timeout, or a connection refused.
+    check:
+      kind: watch
+      expr: |
+        def cut: if length > 320 then .[:140] + " ... " + .[-160:] else . end;
+        [ (.events // [])[]
+          | select((.message // "") | test("failed calling webhook|failed to call webhook"))
+          | "event \(.reason) at \(.metadata.creationTimestamp): \(.message | cut)" ]
+        | unique | .[:3]
+    fix:
+      owner: palette
+      text: Start the webhook service before the controllers that call it, and make the call again.
+    evidence:
+      - kind: run
+        ref: "lab: the gcp and the eks builds"
+    tests:
+      - fault: fixtures/gcp/watch-webhook-refused.json
+        clean: fixtures/gcp/watch-running.json
 
   - id: stale-worker-condition
     title: WorkerNodeAdditionDone follows the workers

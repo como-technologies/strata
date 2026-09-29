@@ -1,0 +1,54 @@
+{
+  "_base": "watch-webhook-refused.json",
+  "_note": "a constructed reading: the calls of the webhooks still fail 12 minutes after the first failure, with the cluster Provisioning. No live run gave this reading; the events of 17:59 are the ones of the gcp build, and the one of 18:11 repeats the first.",
+  "_patch": {
+    "events": [
+      {
+        "reason": "ReconcileError",
+        "severity": "Warning",
+        "message": "failed to set controlPlane type annotation: failed to set control plane type annotation in spectrocluster object: Internal error occurred: failed calling webhook \"mspectrocluster.kb.io\": failed to call webhook: Post \"https://palette-webhook",
+        "involvedObject": {
+          "kind": "spectrocluster",
+          "name": "fred"
+        },
+        "relatedObject": {
+          "kind": "spectrocluster"
+        },
+        "metadata": {
+          "creationTimestamp": "2026-09-29T17:59:14.000Z"
+        }
+      },
+      {
+        "reason": "Log",
+        "severity": "Warning",
+        "message": "[cluster-management-agent-757567f6dc-lc2hg] Failed to update spectro cluster in palette. Internal error occurred: failed calling webhook \"vspectrocluster.kb.io\": failed to call webhook: Post \"https://palette-webhook-service.palette-syste",
+        "involvedObject": {
+          "kind": "spectrocluster",
+          "name": "fred"
+        },
+        "relatedObject": {
+          "kind": "spectrocluster"
+        },
+        "metadata": {
+          "creationTimestamp": "2026-09-29T17:59:22.272Z"
+        }
+      },
+      {
+        "reason": "ReconcileError",
+        "severity": "Warning",
+        "message": "failed to set controlPlane type annotation: failed to set control plane type annotation in spectrocluster object: Internal error occurred: failed calling webhook \"mspectrocluster.kb.io\": failed to call webhook: Post \"https://palette-webhook",
+        "involvedObject": {
+          "kind": "spectrocluster",
+          "name": "fred"
+        },
+        "relatedObject": {
+          "kind": "spectrocluster"
+        },
+        "metadata": {
+          "creationTimestamp": "2026-09-29T18:11:30.000Z"
+        }
+      }
+    ],
+    "elapsed": 1400
+  }
+}

@@ -53,7 +53,8 @@ strata preflight --watch "cluster:$uid" --every 30 --limit 3600
 
 The watch reads the cluster, its summary, and its events every 30 seconds. It
 ends at the first known stuck state with the event that shows it, or when the
-cluster is `Running` with each rule passed, or at the limit. The provider gives
+cluster is `Running` with each counted rule passed, or at the limit; a warning
+is in the report, and the watch reads on. The provider gives
 exit `0` at its create timeout while the cluster still builds
 ([Client tools](../internals/palette/limits.md#what-strata-preflight-does-not-check));
 the watch is the step that says `Running`.

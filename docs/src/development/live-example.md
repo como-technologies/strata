@@ -312,9 +312,12 @@ live-down` stops at the cluster:
 4. `examples/live/api.sh delete-cluster <uid> --force`, and `just live-down`
    again.
 
-A delete waits the same way after a build whose pivot webhook timed out
-(`pivot-webhook-timeout`), with no pool change: the preflight plan met it on
-eks, and the same four steps end it.
+A delete waits the same way after a delete of a cluster that is still
+`Provisioning` (`delete-while-provisioning`), with no pool change: the
+preflight plan met it on eks, and the same four steps end it. A second plain
+delete, which the findings report on the pivot webhook gives as the step that
+ends the wait, does not end it when the delete loops on a control plane object
+that is gone; step 4 does.
 
 For the questions of `eks.sh`, set `eks_k8s_bump` to a Kubernetes version of the
 EKS pack, such as `1.36`: the example then also makes the profile version 1.0.9,

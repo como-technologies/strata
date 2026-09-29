@@ -1,4 +1,4 @@
 $ strata preflight cluster.json --cloud aws --no-exec --strict --quiet | tail -n 3
 
-102 rules apply; 22 ran: 19 passed, 2 failed, 0 probe(s) failed, 1 warning(s), 2 note(s); 35 not checked, 38 skipped, 0 error(s); readiness 86%
+103 rules apply; 22 ran: 19 passed, 2 failed, 0 probe(s) failed, 1 warning(s), 2 note(s); 35 not checked, 39 skipped, 0 error(s); readiness 86%
 FAIL: 2 check(s) failed: worker-cpu-floor, palette-validate

@@ -131,10 +131,13 @@ assumes no topology.
 ## The watch
 
 `--watch cluster:UID` reads the cluster, its summary, and its events every
-`--every` seconds, and judges each watch rule. It ends at the first failure,
-with the event that shows the fault, or when the cluster is `Running` with each
-rule passed, or at `--limit`. A build that Palette cannot finish stops in
-minutes, not at the timeout of the client.
+`--every` seconds, and judges each watch rule. It ends at the first counted
+failure (a rule of severity `fail` at the preflight level, or any failed probe
+with `--strict`), with the event that shows the fault, or when the cluster is
+`Running` with each counted rule passed, or at `--limit`. A failed probe or a
+warning is in the report, and the watch reads on. With `--out`, `world.json`
+holds the last reading: the conditions and the events the rules saw. A build
+that Palette cannot finish stops in minutes, not at the timeout of the client.
 
 ## Confidence and promotion
 

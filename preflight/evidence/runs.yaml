@@ -303,7 +303,7 @@ runs:
       - {rule: node-egress-images, result: passed, note: "the clean build, watched to Running"}
       - {rule: eks-delete-waits, result: passed, note: "the clean build, watched to Running"}
       - {rule: infrastructure-stalled, result: passed, note: "the clean build, watched to Running"}
-      - {rule: pivot-webhook-timeout, result: caught, note: "the clean build was not clean: the events named the timeout of the webhook vspectrocluster.kb.io during the pivot, the fault of #89 and #90; the cluster then stayed Provisioning when the provider returned, and its delete waited"}
+      - {rule: webhook-call-failed, result: caught, note: "the clean build: at 1355 s the call of mawscloudconfig.kb.io failed while the controller set the owner of the cloud config, with the cluster Provisioning; the cluster was deleted before Running, so whether the pivot stayed partial is not known; the rule pivot-webhook-timeout of that time failed on any failed call, and is narrowed since"}
       - {rule: sts-account-not-assumable, result: passed, note: "the cluster as Palette holds it, after a clean build"}
       - {rule: account-missing, result: passed, note: "the cluster as Palette holds it, after a clean build"}
       - {rule: eks-core-policies, result: passed, note: "the cluster as Palette holds it, after a clean build"}
@@ -336,3 +336,111 @@ runs:
       - {rule: palette-validate, result: false-fail, note: "the cluster as Palette holds it: Palette refused the entity: ResourceAlreadyExists: 'Cluster' resource  with name 'fred' already exists"}
       - {rule: eks-type-change-orphan, result: caught, note: "the change of the worker pool of cluster 6abbcaafe8fde17044a4cc8f to m5.xlarge"}
       - {rule: pool-replace-fields, result: caught, note: "the change of the worker pool of cluster 6abbcaafe8fde17044a4cc8f to m5.xlarge"}
+  - run: 20260929T171058Z
+    engine: aws
+    release: ""
+    results:
+      - {rule: worker-cpu-floor, result: caught, note: "the fault was made: def resize($n): .poolConfig.size = $n | .poolConfig.minSize = $n | .poolConfig.maxSize = $n; (.spec.machinepoolconfig[] | select((.poolConfig.isControlPlane // false) | not)) |= resize(1)"}
+      - {rule: palette-validate, result: caught, note: "the fault was made: def resize($n): .poolConfig.size = $n | .poolConfig.minSize = $n | .poolConfig.maxSize = $n; (.spec.machinepoolconfig[] | select((.poolConfig.isControlPlane // false) | not)) |= resize(1)"}
+      - {rule: api-endpoint-reach, result: caught, note: "the fault was made: .spec.cloudConfig.controlPlaneLoadBalancer = \"internal\""}
+      - {rule: account-missing, result: caught, note: "the fault was made: .spec.cloudAccountUid = \"000000000000000000000000\""}
+      - {rule: sts-account-not-assumable, result: passed, note: "the clean entity"}
+      - {rule: account-missing, result: passed, note: "the clean entity"}
+      - {rule: capa-bootstrap-stack, result: passed, note: "the clean entity"}
+      - {rule: iam-ten-policies, result: passed, note: "the clean entity"}
+      - {rule: ebs-csi-node-policy, result: passed, note: "the clean entity"}
+      - {rule: iaas-pod-identity, result: passed, note: "the clean entity"}
+      - {rule: aws-region-not-enabled, result: passed, note: "the clean entity"}
+      - {rule: aws-quotas, result: passed, note: "the clean entity"}
+      - {rule: worker-cpu-floor, result: passed, note: "the clean entity"}
+      - {rule: aws-dynamic-cidr-overlap, result: passed, note: "the clean entity"}
+      - {rule: aws-local-zone-letter, result: passed, note: "the clean entity"}
+      - {rule: api-endpoint-reach, result: passed, note: "the clean entity"}
+      - {rule: proxy-no-proxy, result: passed, note: "the clean entity"}
+      - {rule: aws-ami, result: passed, note: "the clean entity"}
+      - {rule: pack-cloud-support, result: passed, note: "the clean entity"}
+      - {rule: profile-cloud-mismatch, result: passed, note: "the clean entity"}
+      - {rule: pack-state, result: passed, note: "the clean entity"}
+      - {rule: pack-dependency, result: passed, note: "the clean entity"}
+      - {rule: template-outside, result: passed, note: "the clean entity"}
+      - {rule: palette-validate, result: passed, note: "the clean entity"}
+      - {rule: leftovers-before-build, result: passed, note: "the clean entity"}
+      - {rule: lab-region, result: passed, note: "the clean entity"}
+      - {rule: agent-egress, result: passed, note: "the clean build, watched to Running"}
+      - {rule: node-egress-images, result: passed, note: "the clean build, watched to Running"}
+      - {rule: infrastructure-stalled, result: passed, note: "the clean build, watched to Running"}
+      - {rule: pivot-webhook-timeout, result: passed, note: "the clean build, watched to Running"}
+      - {rule: sts-account-not-assumable, result: passed, note: "the cluster as Palette holds it, after a clean build"}
+      - {rule: account-missing, result: passed, note: "the cluster as Palette holds it, after a clean build"}
+      - {rule: capa-bootstrap-stack, result: passed, note: "the cluster as Palette holds it, after a clean build"}
+      - {rule: iam-ten-policies, result: passed, note: "the cluster as Palette holds it, after a clean build"}
+      - {rule: ebs-csi-node-policy, result: passed, note: "the cluster as Palette holds it, after a clean build"}
+      - {rule: iaas-pod-identity, result: passed, note: "the cluster as Palette holds it, after a clean build"}
+      - {rule: aws-region-not-enabled, result: passed, note: "the cluster as Palette holds it, after a clean build"}
+      - {rule: aws-quotas, result: passed, note: "the cluster as Palette holds it, after a clean build"}
+      - {rule: worker-cpu-floor, result: passed, note: "the cluster as Palette holds it, after a clean build"}
+      - {rule: aws-dynamic-cidr-overlap, result: passed, note: "the cluster as Palette holds it, after a clean build"}
+      - {rule: aws-local-zone-letter, result: passed, note: "the cluster as Palette holds it, after a clean build"}
+      - {rule: api-endpoint-reach, result: passed, note: "the cluster as Palette holds it, after a clean build"}
+      - {rule: proxy-no-proxy, result: passed, note: "the cluster as Palette holds it, after a clean build"}
+      - {rule: aws-ami, result: passed, note: "the cluster as Palette holds it, after a clean build"}
+      - {rule: pack-cloud-support, result: passed, note: "the cluster as Palette holds it, after a clean build"}
+      - {rule: profile-cloud-mismatch, result: passed, note: "the cluster as Palette holds it, after a clean build"}
+      - {rule: pack-state, result: passed, note: "the cluster as Palette holds it, after a clean build"}
+      - {rule: pack-dependency, result: passed, note: "the cluster as Palette holds it, after a clean build"}
+      - {rule: template-outside, result: passed, note: "the cluster as Palette holds it, after a clean build"}
+      - {rule: delete-pending-repave, result: passed, note: "the cluster as Palette holds it, after a clean build"}
+      - {rule: delete-while-provisioning, result: passed, note: "the cluster as Palette holds it, after a clean build"}
+      - {rule: delete-blockers, result: passed, note: "the cluster as Palette holds it, after a clean build"}
+      - {rule: palette-validate, result: passed, note: "the cluster as Palette holds it, after a clean build"}
+      - {rule: pool-replace-fields, result: caught, note: "the change of the worker pool of cluster 6abbf1781444b47912014ade to m5.xlarge"}
+  - run: 20260929T175213Z
+    engine: gcp
+    release: ""
+    results:
+      - {rule: worker-cpu-floor, result: caught, note: "the fault was made: def resize($n): .poolConfig.size = $n | .poolConfig.minSize = $n | .poolConfig.maxSize = $n; (.spec.machinepoolconfig[] | select((.poolConfig.isControlPlane // false) | not)) |= resize(1)"}
+      - {rule: palette-validate, result: caught, note: "the fault was made: def resize($n): .poolConfig.size = $n | .poolConfig.minSize = $n | .poolConfig.maxSize = $n; (.spec.machinepoolconfig[] | select((.poolConfig.isControlPlane // false) | not)) |= resize(1)"}
+      - {rule: gcp-name-length, result: caught, note: "the fault was made: .metadata.name = \"a-cluster-name-that-is-longer-than-fifty-two-characters-x\""}
+      - {rule: account-missing, result: caught, note: "the fault was made: .spec.cloudAccountUid = \"000000000000000000000000\""}
+      - {rule: account-missing, result: passed, note: "the clean entity"}
+      - {rule: gcp-default-sa-no-role, result: passed, note: "the clean entity"}
+      - {rule: gcp-default-sa-missing, result: passed, note: "the clean entity"}
+      - {rule: gcp-quotas, result: passed, note: "the clean entity"}
+      - {rule: worker-cpu-floor, result: passed, note: "the clean entity"}
+      - {rule: gcp-dynamic-cidr-overlap, result: passed, note: "the clean entity"}
+      - {rule: api-endpoint-reach, result: passed, note: "the clean entity"}
+      - {rule: proxy-no-proxy, result: passed, note: "the clean entity"}
+      - {rule: gcp-name-length, result: passed, note: "the clean entity"}
+      - {rule: gcp-image-not-shared, result: passed, note: "the clean entity"}
+      - {rule: pack-cloud-support, result: passed, note: "the clean entity"}
+      - {rule: profile-cloud-mismatch, result: passed, note: "the clean entity"}
+      - {rule: pack-state, result: passed, note: "the clean entity"}
+      - {rule: pack-dependency, result: passed, note: "the clean entity"}
+      - {rule: template-outside, result: passed, note: "the clean entity"}
+      - {rule: palette-validate, result: passed, note: "the clean entity"}
+      - {rule: lab-region, result: passed, note: "the clean entity"}
+      - {rule: agent-egress, result: passed, note: "the clean build, watched to Running"}
+      - {rule: node-egress-images, result: passed, note: "the clean build, watched to Running"}
+      - {rule: status-not-cloud, result: passed, note: "the clean build, watched to Running"}
+      - {rule: infrastructure-stalled, result: passed, note: "the clean build, watched to Running"}
+      - {rule: pivot-webhook-timeout, result: passed, note: "the clean build, watched to Running: at 671 s the calls of mspectrocluster.kb.io and vspectrocluster.kb.io failed in one minute, and the cluster was Running 17 minutes later; the rule of that time failed on them, and is narrowed since to the failed move or 10 minutes of failed calls, which these events do not meet (the fixture watch-webhook-refused holds them)"}
+      - {rule: webhook-call-failed, result: caught, note: "the clean build: at 671 s, right after the pivot, the calls of mspectrocluster.kb.io and vspectrocluster.kb.io failed; Palette made the calls again and the cluster reached Running"}
+      - {rule: account-missing, result: passed, note: "the cluster as Palette holds it, after a clean build"}
+      - {rule: gcp-default-sa-no-role, result: passed, note: "the cluster as Palette holds it, after a clean build"}
+      - {rule: gcp-default-sa-missing, result: passed, note: "the cluster as Palette holds it, after a clean build"}
+      - {rule: gcp-quotas, result: passed, note: "the cluster as Palette holds it, after a clean build"}
+      - {rule: worker-cpu-floor, result: passed, note: "the cluster as Palette holds it, after a clean build"}
+      - {rule: gcp-dynamic-cidr-overlap, result: passed, note: "the cluster as Palette holds it, after a clean build"}
+      - {rule: api-endpoint-reach, result: passed, note: "the cluster as Palette holds it, after a clean build"}
+      - {rule: proxy-no-proxy, result: passed, note: "the cluster as Palette holds it, after a clean build"}
+      - {rule: gcp-name-length, result: passed, note: "the cluster as Palette holds it, after a clean build"}
+      - {rule: gcp-image-not-shared, result: passed, note: "the cluster as Palette holds it, after a clean build"}
+      - {rule: pack-cloud-support, result: passed, note: "the cluster as Palette holds it, after a clean build"}
+      - {rule: profile-cloud-mismatch, result: passed, note: "the cluster as Palette holds it, after a clean build"}
+      - {rule: pack-state, result: passed, note: "the cluster as Palette holds it, after a clean build"}
+      - {rule: pack-dependency, result: passed, note: "the cluster as Palette holds it, after a clean build"}
+      - {rule: template-outside, result: passed, note: "the cluster as Palette holds it, after a clean build"}
+      - {rule: delete-pending-repave, result: passed, note: "the cluster as Palette holds it, after a clean build"}
+      - {rule: delete-while-provisioning, result: passed, note: "the cluster as Palette holds it, after a clean build"}
+      - {rule: palette-validate, result: passed, note: "the cluster as Palette holds it, after a clean build"}
+      - {rule: pool-replace-fields, result: caught, note: "the change of the worker pool of cluster 6abbfb1272a2c588cbc798a2 to e2-standard-8"}

@@ -19,8 +19,8 @@ Quotas and limits
                 reproduce: curl -s -H "ApiKey: $PALETTE_API_KEY" -H "ProjectUid: $PALETTE_PROJECT_UID" "${PALETTE_API:-https://api.spectrocloud.com}/v1/clustergroups/<uid>" | jq .spec.clustersConfig.limitConfig
 
 Networking
-  PROBE PASS    aws-local-zone-letter        Each zone of dynamic placement ends in its own letter            1 ms  catch no runs clean 1/1 (5%)
-  PROBE PASS    api-endpoint-reach           The pilot can reach the API server of the cluster                1 ms  catch 1/1 (5%) clean 1/1 (5%)
+  PROBE PASS    aws-local-zone-letter        Each zone of dynamic placement ends in its own letter            1 ms  catch no runs clean 3/3 (37%)
+  PROBE PASS    api-endpoint-reach           The pilot can reach the API server of the cluster                1 ms  catch 2/2 (22%) clean 3/3 (37%)
   NOT CHECKED   registry-https               A registry name answers over HTTPS before Palette takes it       1 ms
                 no check in strata-preflight; the reproduce lines say what to run by hand
                 reproduce: curl -s -o /dev/null -w '%{http_code}\n' https://<registry host>/v2/
@@ -127,11 +127,11 @@ Section scorecard
   Images and registries          16   11     9         0 no runs    0    0    0           7     -
   Profiles and packs              8    5     6         0 no runs    0    0    0           2     -
   Lifecycle: update, repave, …   10    6     8         0 no runs    1    1    0           2  100%
-  The Palette platform           10    8     5         0 no runs    0    0    0           5     -
+  The Palette platform           11    9     6         0 no runs    0    0    0           5     -
   Client tools                    9    9     4         0 no runs    0    0    0           0     -
   Teardown and leftovers          6    6     3         0 no runs    1    1    0           3  100%
 
 The reproduce lines read $OUT/world.json and $OUT/entity.json: --out DIR writes both.
 
-102 rules apply; 4 ran: 4 passed, 0 failed, 0 probe(s) failed, 0 warning(s), 1 note(s); 25 not checked, 70 skipped, 0 error(s); readiness 100%
+103 rules apply; 4 ran: 4 passed, 0 failed, 0 probe(s) failed, 0 warning(s), 1 note(s); 25 not checked, 71 skipped, 0 error(s); readiness 100%
 OK: each counted check passed

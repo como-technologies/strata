@@ -2,23 +2,23 @@ $ strata preflight cluster.json --cloud aws --no-exec --quiet
 strata-preflight: aws cluster payments (cluster.json), Palette release not given, tiers static, palette, cloud
 
 Identity and permissions
-  PROBE PASS    account-missing              The cloud account of the entity exists, and is of the cloud…     1 ms  catch 1/1 (5%) clean 1/1 (5%)
-  NOT CHECKED   capa-bootstrap-stack         The CAPA CloudFormation stack is complete, and the credenti…     1 ms  catch no runs clean 1/1 (5%)
+  PROBE PASS    account-missing              The cloud account of the entity exists, and is of the cloud…     1 ms  catch 2/2 (22%) clean 3/3 (37%)
+  NOT CHECKED   capa-bootstrap-stack         The CAPA CloudFormation stack is complete, and the credenti…     1 ms  catch no runs clean 3/3 (37%)
                 aws not on this machine; run by hand: aws cloudformation describe-stacks --stack-name cluster-api-provider-aws-sigs-k8s-io --region us-east-2 --output json
                 reproduce: aws cloudformation describe-stacks --stack-name cluster-api-provider-aws-sigs-k8s-io --region us-east-2 --query 'Stacks[].[StackStatus,DriftInformation.StackDriftStatus]' --output table
                 reproduce: aws iam get-role --role-name controllers.cluster-api-provider-aws.sigs.k8s.io --query Role.Arn --output text
-  NOT CHECKED   iam-ten-policies             The nodes role stays under 10 managed policies                   1 ms  catch no runs clean 1/1 (5%)
+  NOT CHECKED   iam-ten-policies             The nodes role stays under 10 managed policies                   1 ms  catch no runs clean 3/3 (37%)
                 aws not on this machine; run by hand: aws iam list-attached-role-policies --role-name nodes.cluster-api-provider-aws.sigs.k8s.io --output json
                 reproduce: aws iam list-attached-role-policies --role-name nodes.cluster-api-provider-aws.sigs.k8s.io --query 'length(AttachedPolicies)'
                 reproduce: aws service-quotas get-service-quota --service-code iam --quota-code L-0DA4ABF3 --query Quota.Value
-  NOT CHECKED   ebs-csi-node-policy          The nodes role holds AmazonEBSCSIDriverPolicy                    1 ms  catch no runs clean 1/1 (5%)
+  NOT CHECKED   ebs-csi-node-policy          The nodes role holds AmazonEBSCSIDriverPolicy                    1 ms  catch no runs clean 3/3 (37%)
                 aws not on this machine; run by hand: aws iam list-attached-role-policies --role-name nodes.cluster-api-provider-aws.sigs.k8s.io --output json
                 reproduce: aws iam list-attached-role-policies --role-name nodes.cluster-api-provider-aws.sigs.k8s.io --query 'AttachedPolicies[].PolicyName' --output text
                 reproduce: kubectl -n kube-system logs -l app=ebs-csi-controller -c ebs-plugin --tail 20
-  PROBE PASS    iaas-pod-identity            The properties route accepts the cloud account for an AWS c…     1 ms  catch no runs clean 1/1 (5%)
+  PROBE PASS    iaas-pod-identity            The properties route accepts the cloud account for an AWS c…     1 ms  catch no runs clean 3/3 (37%)
 
 Cloud services and APIs
-  PROBE PASS    aws-region-not-enabled       The region of the cluster is enabled for the AWS account         1 ms  catch no runs clean 1/1 (5%)
+  PROBE PASS    aws-region-not-enabled       The region of the cluster is enabled for the AWS account         1 ms  catch no runs clean 3/3 (37%)
   NOT CHECKED   aws-s3-irsa-bucket           The IRSA bucket of an AWS cluster can be made                    1 ms
                 no check in strata-preflight; the reproduce lines say what to run by hand
                 reproduce: kubectl get awscluster -A -o jsonpath='{.items[*].spec.s3Bucket.name}'   # on the management cluster, during the build: the bucket CAPA asks for
@@ -26,7 +26,7 @@ Cloud services and APIs
                 reproduce: aws s3control get-public-access-block --account-id $(aws sts get-caller-identity --query Account --output text)
 
 Quotas and limits
-  NOT CHECKED   aws-quotas                   The vCPU quota of the region covers the pools                    1 ms  catch no runs clean 1/1 (5%)
+  NOT CHECKED   aws-quotas                   The vCPU quota of the region covers the pools                    1 ms  catch no runs clean 3/3 (37%)
                 aws not on this machine; run by hand: aws service-quotas get-service-quota --service-code ec2 --quota-code L-1216C47A --region us-east-2 --output json
                 reproduce: aws service-quotas get-service-quota --service-code ec2 --quota-code L-1216C47A --region us-east-2 --query Quota.Value   # on-demand standard vCPUs; L-34B43A08 is the spot vCPUs; L-0263D0A3 is the elastic IPs
                 reproduce: aws service-quotas get-service-quota --service-code vpc --quota-code L-F678F1CE --region us-east-2 --query Quota.Value   # VPCs for each region; L-A4707A72 internet gateways; L-FE5A380F NAT gateways for each zone
@@ -36,7 +36,7 @@ Quotas and limits
                 no check in strata-preflight; the reproduce lines say what to run by hand
                 reproduce: aws service-quotas get-service-quota --service-code vpc --quota-code L-E79EC296 --region us-east-2 --query Quota.Value
                 reproduce: aws ec2 describe-security-groups --region us-east-2 --filters Name=tag-key,Values=sigs.k8s.io/cluster-api-provider-aws/role --query 'SecurityGroups[].[GroupId,GroupName,length(IpPermissions),length(IpPermissionsEgress)]' --output table   # the groups CAPA made, during or after the build
-  PROBE FAIL    worker-cpu-floor             The workers have the CPU the packs need                          1 ms  catch 1/1 (5%) clean 1/1 (5%)
+  PROBE FAIL    worker-cpu-floor             The workers have the CPU the packs need                          1 ms  catch 2/2 (22%) clean 3/3 (37%)
                 pool worker-pool: A minimum allocation of '4.1' CPU cores is required across all worker nodes
                 reproduce: code=$(curl -s -o body.json -w '%{http_code}' -H "ApiKey: $PALETTE_API_KEY" -H "ProjectUid: $PALETTE_PROJECT_UID" -X POST -H 'Content-Type: application/json' --data @$OUT/entity.json "${PALETTE_API:-https://api.spectrocloud.com}/v1/spectroclusters/aws/validate")
                 reproduce: jq --arg code "$code" --slurpfile body body.json '.response = {ok: (($code | tonumber) < 300), status: ($code | tonumber), body: ($body[0] // null)} | .response as $r | if ($r.ok | not) then [] # a refusal of the whole entity is palette-validate'\''s else [ ($r.body.machinePools.results // [])[] | .name as $n | (.errors // [])[] | select((.message // "") | test("CPU|memory|cores"; "i")) | "pool \($n): \(.message)" ] end' $OUT/world.json
@@ -47,10 +47,10 @@ Quotas and limits
                 reproduce: curl -s -H "ApiKey: $PALETTE_API_KEY" -H "ProjectUid: $PALETTE_PROJECT_UID" "${PALETTE_API:-https://api.spectrocloud.com}/v1/clustergroups/<uid>" | jq .spec.clustersConfig.limitConfig
 
 Networking
-  PROBE PASS    aws-dynamic-cidr-overlap     The pod and service CIDRs stay outside the VPC of dynamic p…     1 ms  catch no runs clean 1/1 (5%)
-  PROBE PASS    aws-local-zone-letter        Each zone of dynamic placement ends in its own letter            1 ms  catch no runs clean 1/1 (5%)
-  PROBE PASS    api-endpoint-reach           The pilot can reach the API server of the cluster                1 ms  catch 1/1 (5%) clean 1/1 (5%)
-  PROBE PASS    proxy-no-proxy               NO_PROXY holds the CIDRs of the cluster                          1 ms  catch no runs clean 1/1 (5%)
+  PROBE PASS    aws-dynamic-cidr-overlap     The pod and service CIDRs stay outside the VPC of dynamic p…     1 ms  catch no runs clean 3/3 (37%)
+  PROBE PASS    aws-local-zone-letter        Each zone of dynamic placement ends in its own letter            1 ms  catch no runs clean 3/3 (37%)
+  PROBE PASS    api-endpoint-reach           The pilot can reach the API server of the cluster                1 ms  catch 2/2 (22%) clean 3/3 (37%)
+  PROBE PASS    proxy-no-proxy               NO_PROXY holds the CIDRs of the cluster                          1 ms  catch no runs clean 3/3 (37%)
   NOT CHECKED   registry-https               A registry name answers over HTTPS before Palette takes it       1 ms
                 no check in strata-preflight; the reproduce lines say what to run by hand
                 reproduce: curl -s -o /dev/null -w '%{http_code}\n' https://<registry host>/v2/
@@ -67,7 +67,7 @@ Compute and pools
 
 Kubernetes version and engine
   PROBE PASS    ccm-version                  The Kubernetes version is at or above the floor of the exte…     1 ms
-  PROBE PASS    profile-cloud-mismatch       Each profile is of the cloud type of the cluster, or of all      1 ms  catch no runs clean 1/1 (5%)
+  PROBE PASS    profile-cloud-mismatch       Each profile is of the cloud type of the cluster, or of all      1 ms  catch no runs clean 3/3 (37%)
   PROBE PASS    skip-k8s-upgrade             No pool skips the Kubernetes upgrade                             1 ms
 
 Storage and CSI
@@ -90,7 +90,7 @@ Images and registries
   WARN          floating-tag                 No profile pins a pack under a floating tag                      1 ms
                 profile aws-stack: pack ubuntu-aws is pinned under the floating tag LTS__24.x
                 reproduce: jq '[ .profiles[] | .source.name as $p | .packs[] | select((.tag // "") | test("\\.x$|^x$")) | "profile \($p): pack \(.name) is pinned under the floating tag \(.tag)" ]' $OUT/world.json
-  PROBE PASS    pack-dependency              Each pack of the profiles finds the packs it requires            1 ms  catch no runs clean 1/1 (5%)
+  PROBE PASS    pack-dependency              Each pack of the profiles finds the packs it requires            1 ms  catch no runs clean 3/3 (37%)
   NOT CHECKED   image-tag-not-digest         An image of a pack is named by a digest                          1 ms
                 a race: no check before the build finds it; the watch finds its effect
                 reproduce: crane digest <image>
@@ -122,7 +122,7 @@ Profiles and packs
   NOT CHECKED   template-lock-route          The lock of a cluster template covers each route of an edit      1 ms
                 a race: no check before the build finds it; the watch finds its effect
                 reproduce: strata verify <record.json> --who
-  PROBE PASS    template-outside             No profile of the entity is linked to a cluster template         1 ms  catch no runs clean 1/1 (5%)
+  PROBE PASS    template-outside             No profile of the entity is linked to a cluster template         1 ms  catch no runs clean 3/3 (37%)
   PROBE PASS    variables-in-use             The variable definitions of a version in use stay as they a…     1 ms
   PROBE PASS    version-string               Each profile version is MAJOR.MINOR.PATCH                        1 ms
   PROBE PASS    macro-flag-scope             The content of a profile reads no macro                          1 ms
@@ -138,7 +138,7 @@ Lifecycle: update, repave, delete
                 a race: no check before the build finds it; the watch finds its effect
 
 The Palette platform
-  PROBE FAIL    palette-validate             The validate route of Palette for the cloud type passes          1 ms  catch 1/1 (5%) clean 1/1 (5%)
+  PROBE FAIL    palette-validate             The validate route of Palette for the cloud type passes          1 ms  catch 2/2 (22%) clean 3/3 (37%)
                 pool worker-pool: MachinePoolResourcesInsufficient: A minimum allocation of '4.1' CPU cores is required across all worker nodes
                 reproduce: code=$(curl -s -o body.json -w '%{http_code}' -H "ApiKey: $PALETTE_API_KEY" -H "ProjectUid: $PALETTE_PROJECT_UID" -X POST -H 'Content-Type: application/json' --data @$OUT/entity.json "${PALETTE_API:-https://api.spectrocloud.com}/v1/spectroclusters/aws/validate")
                 reproduce: jq --arg code "$code" --slurpfile body body.json '.response = {ok: (($code | tonumber) < 300), status: ($code | tonumber), body: ($body[0] // null)} | .response as $r | if ($r.ok | not) then ["Palette refused the entity: \($r.body.code // $r.status): \($r.body.message // ($r.body | tostring))"] else [ ($r.body.profiles // [])[] | .uid as $u | (.packs.results // [])[] | .name as $n | (.errors // [])[] | "profile \($u), pack \($n): \(.code): \(.message)" ] + [ ($r.body.machinePools.results // [])[] | .name as $n | (.errors // [])[] | "pool \($n): \(.code): \(.message)" ] end' $OUT/world.json
@@ -183,7 +183,7 @@ Teardown and leftovers
   NOT CHECKED   teardown-order               The network of a run before is gone                              1 ms
                 aws not on this machine; run by hand: aws ec2 describe-vpcs --filters Name=tag-key,Values=sigs.k8s.io/cluster-api-provider-aws/cluster/payments --region us-east-2 --output json
                 reproduce: examples/live/aws-inventory.sh payments us-east-2   # 0 on every line, the vpcs line last
-  NOT CHECKED   leftovers-before-build       No instance of a run before is in the cloud                      1 ms  catch no runs clean 1/1 (5%)
+  NOT CHECKED   leftovers-before-build       No instance of a run before is in the cloud                      1 ms  catch no runs clean 2/2 (22%)
                 aws not on this machine; run by hand: aws ec2 describe-instances --filters Name=tag-key,Values=sigs.k8s.io/cluster-api-provider-aws/cluster/payments Name=instance-state-name,Values=pending,running,stopping,stopped,shutting-down --region us-east-2 --output json
                 reproduce: examples/live/aws-inventory.sh payments us-east-2   # 0 on every line before a build
   NOT CHECKED   macro-undeletable            No cluster reads a macro before its delete                       1 ms
@@ -209,11 +209,11 @@ Section scorecard
   Images and registries          16   11     9         0 no runs    6    5    1           7   83%
   Profiles and packs              8    5     6         0 no runs    3    3    0           2  100%
   Lifecycle: update, repave, …   10    6     8         0 no runs    1    1    0           2  100%
-  The Palette platform           10    8     5         0 no runs    1    0    1           5    0%
+  The Palette platform           11    9     6         0 no runs    1    0    1           5    0%
   Client tools                    9    9     4         0 no runs    0    0    0           3     -
   Teardown and leftovers          6    6     3         0 no runs    1    1    0           5  100%
 
 The reproduce lines read $OUT/world.json and $OUT/entity.json: --out DIR writes both.
 
-102 rules apply; 22 ran: 19 passed, 0 failed, 2 probe(s) failed, 1 warning(s), 2 note(s); 35 not checked, 38 skipped, 0 error(s); readiness 86%
+103 rules apply; 22 ran: 19 passed, 0 failed, 2 probe(s) failed, 1 warning(s), 2 note(s); 35 not checked, 39 skipped, 0 error(s); readiness 86%
 OK: each counted check passed; 2 probe(s) failed, not counted

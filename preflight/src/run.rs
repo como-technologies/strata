@@ -14,7 +14,7 @@ use crate::error::{Error, Result};
 use crate::jq::Jq;
 use crate::probe::{self, Backend, Outcome, Verdict};
 use crate::report::{self, Assembly, Options, Report, Subject};
-use crate::rule::{Catalog, Check, Level, Rule, Tier};
+use crate::rule::{Catalog, Check, Level, Rule, Severity, Tier};
 use crate::world::World;
 
 /// What a run keeps of the catalog.
@@ -223,7 +223,7 @@ pub struct WatchOptions {
     pub every: Duration,
     /// The longest watch. The watch ends with `ERROR` at the limit, not with a verdict.
     pub limit: Duration,
-    /// Stop at the first failure, or read on until the cluster is `Running` or the limit.
+    /// Stop at the first counted failure, or read on until the cluster is `Running` or the limit.
     pub stop_at_first: bool,
 }
 
@@ -262,6 +262,12 @@ pub fn reading<A: PaletteApi>(api: &A, uid: &str, elapsed: Duration) -> Result<V
     }))
 }
 
+/// A failed rule ends the watch when its failure counts: severity `fail` at the preflight level,
+/// or any failed probe with `--strict`. A warning or a note never ends it.
+fn counts(rule: &Rule, strict: bool) -> bool {
+    rule.severity == Severity::Fail && (rule.level == Level::Preflight || strict)
+}
+
 /// The inputs of a watch.
 pub struct WatchInputs<'a, A: PaletteApi> {
     /// The catalog, with any probes file.
@@ -285,8 +291,11 @@ pub struct WatchInputs<'a, A: PaletteApi> {
 }
 
 /// Watch a build: every `every`, read the cluster, and judge each watch rule. The watch ends at
-/// the first failure, when the cluster is `Running` with each rule passed, or at the limit.
-pub fn watch<A: PaletteApi>(inputs: WatchInputs<'_, A>) -> Result<Report> {
+/// the first counted failure (severity `fail` at the preflight level, or any failed probe with
+/// `--strict`), when the cluster is `Running` with each counted rule passed, or at the limit. A
+/// failed probe or a warning is in the report, and the watch reads on. The second value is the
+/// world with the last reading in it, for `--out world.json`.
+pub fn watch<A: PaletteApi>(inputs: WatchInputs<'_, A>) -> Result<(Report, Value)> {
     let WatchInputs {
         catalog,
         world,
@@ -316,6 +325,7 @@ pub fn watch<A: PaletteApi>(inputs: WatchInputs<'_, A>) -> Result<Report> {
     let mut last: BTreeMap<String, Outcome> = BTreeMap::new();
     let mut readings = 0u32;
     let final_state: String;
+    let mut last_reading: Value;
     loop {
         let elapsed = started.elapsed();
         let read = reading(api, &uid, elapsed)?;
@@ -333,11 +343,12 @@ pub fn watch<A: PaletteApi>(inputs: WatchInputs<'_, A>) -> Result<Report> {
         for rule in &rules {
             let mut o = probe::judge_watch(rule, &with, &jq);
             o.elapsed = elapsed;
-            if o.verdict == Verdict::Failed {
+            if o.verdict == Verdict::Failed && counts(rule, selection.strict) {
                 failed = true;
             }
             last.insert(rule.id.clone(), o);
         }
+        last_reading = with;
         progress.note(&format!(
             "watch: {state} after {}s, reading {readings}{}",
             elapsed.as_secs(),
@@ -389,7 +400,7 @@ pub fn watch<A: PaletteApi>(inputs: WatchInputs<'_, A>) -> Result<Report> {
         subject.source,
         started.elapsed().as_secs()
     );
-    Ok(report::assemble(
+    let report = report::assemble(
         Assembly {
             catalog,
             outcomes,
@@ -405,7 +416,8 @@ pub fn watch<A: PaletteApi>(inputs: WatchInputs<'_, A>) -> Result<Report> {
             out_dir: None,
         },
         &jq,
-    ))
+    );
+    Ok((report, last_reading))
 }
 
 /// The rules as `--rules` lists them: each rule that applies to the engine, when one is given.
@@ -675,7 +687,8 @@ rules:
     }
 
     #[test]
-    fn a_watch_stops_at_the_first_failure_with_the_evidence() {
+    fn a_watch_stops_at_the_first_counted_failure_with_the_evidence() {
+        // the rule is a probe: it counts, and ends the watch, with --strict
         let section = r#"
 section: platform
 title: The Palette platform
@@ -702,12 +715,15 @@ rules:
         let mut w = world(3);
         w.cluster_uid = Some("c1".into());
         let slept = std::cell::Cell::new(0);
-        let report = watch(WatchInputs {
+        let (report, _) = watch(WatchInputs {
             catalog: &c,
             world: &w,
             api: &api,
             ledger: &Ledger::default(),
-            selection: &Selection::default(),
+            selection: &Selection {
+                strict: true,
+                ..Selection::default()
+            },
             options: &WatchOptions::default(),
             now: "t",
             progress: &Progress::silent(),
@@ -759,7 +775,7 @@ rules:
         );
         let mut w = world(3);
         w.cluster_uid = Some("c1".into());
-        let report = watch(WatchInputs {
+        let (report, _) = watch(WatchInputs {
             catalog: &c,
             world: &w,
             api: &api,
@@ -773,5 +789,62 @@ rules:
         .unwrap();
         assert_eq!(report.checks[0].verdict, Verdict::Passed);
         assert_eq!(report.summary.exit_code, 0);
+    }
+
+    #[test]
+    fn a_failed_probe_does_not_end_the_watch_and_is_in_the_report() {
+        let section = r#"
+section: platform
+title: P
+rules:
+  - id: webhook-call-failed
+    title: t
+    engines: [all]
+    tier: watch
+    severity: warn
+    status: seen
+    what: w
+    check: {kind: watch, expr: '[.events[] | select(.message | test("failed calling webhook")) | .message]'}
+"#;
+        let mut c = Catalog::default();
+        c.push(
+            Catalog::parse_section(section, Path::new("p.yaml")).unwrap(),
+            Path::new("p.yaml"),
+        )
+        .unwrap();
+        let api = strata::api::MemoryApi::new()
+            .with(
+                "/v1/spectroclusters/c1",
+                json!({"metadata": {"uid": "c1"}, "status": {"state": "Running"}}),
+            )
+            .with(
+                "/v1/events/components/spectrocluster/c1?limit=50",
+                json!({"items": [{"reason": "Log", "message": "failed calling webhook \"vspectrocluster.kb.io\": connection refused", "metadata": {"creationTimestamp": "2026-09-29T17:59:22.272Z"}}]}),
+            );
+        let mut w = world(3);
+        w.cluster_uid = Some("c1".into());
+        let (report, reading) = watch(WatchInputs {
+            catalog: &c,
+            world: &w,
+            api: &api,
+            ledger: &Ledger::default(),
+            selection: &Selection::default(),
+            options: &WatchOptions::default(),
+            now: "t",
+            progress: &Progress::silent(),
+            sleep: &|_| {},
+        })
+        .unwrap();
+        // the warning is in the report, the exit is 0, and the watch ended at Running
+        assert_eq!(report.checks[0].verdict, Verdict::Failed);
+        assert_eq!(report.summary.exit_code, 0);
+        assert!(
+            report.subject.source.contains("Running after"),
+            "{}",
+            report.subject.source
+        );
+        // the reading the rules saw is the world of --out
+        assert_eq!(reading["cluster"]["status"]["state"], "Running");
+        assert_eq!(reading["events"].as_array().map(Vec::len), Some(1));
     }
 }

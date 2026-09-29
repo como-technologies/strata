@@ -390,6 +390,7 @@ fn run_cli(cli: Cli) -> Result<ExitCode> {
         ready: cli.ready.map(|p| p / 100.0),
     };
     let out_dir = cli.out.as_ref().map(|d| d.display().to_string());
+    let mut reading: Option<serde_json::Value> = None;
     let report = if cli.watch {
         let palette = palette.as_ref().ok_or_else(|| Error::Usage {
             message: "--watch needs Palette: drop --offline".to_string(),
@@ -408,6 +409,10 @@ fn run_cli(cli: Cli) -> Result<ExitCode> {
             now: &now,
             progress: &progress,
             sleep: &std::thread::sleep,
+        })
+        .map(|(report, world)| {
+            reading = Some(world);
+            report
         })?
     } else {
         let backend = LiveBackend {
@@ -426,7 +431,7 @@ fn run_cli(cli: Cli) -> Result<ExitCode> {
         })?
     };
     if let Some(dir) = &cli.out {
-        write_out(dir, &report, &world)?;
+        write_out(dir, &report, &world, reading.as_ref())?;
         progress.note(&format!(
             "wrote {}/report.md, report.json, report.html, world.json, entity.json",
             dir.display()
@@ -448,7 +453,14 @@ fn print_json(doc: &serde_json::Value, compact: bool) -> Result<()> {
     Ok(())
 }
 
-fn write_out(dir: &std::path::Path, report: &Report, world: &World) -> Result<()> {
+/// Write the reports and the world. With a watch, `reading` is the world with the last reading of
+/// the cluster in it, so `world.json` holds the conditions and the events the rules saw.
+fn write_out(
+    dir: &std::path::Path,
+    report: &Report,
+    world: &World,
+    reading: Option<&serde_json::Value>,
+) -> Result<()> {
     std::fs::create_dir_all(dir).map_err(|e| strata_preflight::error::Error::Io {
         path: dir.to_path_buf(),
         source: e,
@@ -470,7 +482,7 @@ fn write_out(dir: &std::path::Path, report: &Report, world: &World) -> Result<()
         "report.html",
         report::render(report, Format::Html, false, false),
     )?;
-    let mut world_value = world.to_value();
+    let mut world_value = reading.cloned().unwrap_or_else(|| world.to_value());
     strata_preflight::world::redact_for_output(&mut world_value);
     write(
         "world.json",

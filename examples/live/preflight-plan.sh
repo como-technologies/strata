@@ -231,7 +231,7 @@ if [ -n "$build" ]; then
   apply_exit=$?
   command grep -E '^(Plan|Apply complete|Error)' apply.txt | tee -a steps.log
   check apply 0 "the apply of cluster A on $engine through the provider ends with exit 0" -- test "$apply_exit" = 0
-  check watch-exit 0 "the watch of cluster $C ends with the cluster Running and each watch rule passed" -- test "$watch_exit" = 0
+  check watch-exit 0 "the watch of cluster $C ends with exit 0: no counted watch rule failed (a failed probe or a warning is in the report)" -- test "$watch_exit" = 0
   check watch-report 0 "the report of the watch: the readings, and each watch rule" -- \
     jq -r '.subject.source, (.checks[] | "\(.verdict)\t\(.id)\t\((.messages // []) | join("; ") | .[:160])")' watch.report.json
   while IFS=$'\t' read -r id verdict; do
