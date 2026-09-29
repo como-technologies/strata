@@ -1,0 +1,75 @@
+{
+  "_base": "clean.json",
+  "_patch": {
+    "before": {
+      "metadata": {
+        "name": "fred",
+        "labels": {}
+      },
+      "spec": {
+        "cloudAccountUid": "acc-gcp-1",
+        "cloudConfig": {
+          "project": "strata-lab",
+          "region": "us-east1",
+          "network": "",
+          "managedClusterConfig": {
+            "location": "us-east1",
+            "enableAutoPilot": false
+          },
+          "overrideClusterAPIConfig": "gcpManagedControlPlane:\n  spec:\n    releaseChannel: regular\n"
+        },
+        "machinepoolconfig": [
+          {
+            "cloudConfig": {
+              "instanceType": "e2-standard-4",
+              "azs": null,
+              "rootDeviceSize": 60
+            },
+            "poolConfig": {
+              "name": "worker-pool",
+              "size": 3,
+              "minSize": 3,
+              "maxSize": 3,
+              "isControlPlane": false,
+              "useControlPlaneAsWorker": false,
+              "labels": [
+                "worker"
+              ]
+            }
+          }
+        ],
+        "profiles": [
+          {
+            "uid": "prof-gke-1",
+            "packValues": [
+              {
+                "name": "cos-gke",
+                "tag": "1.0.0",
+                "type": "spectro"
+              },
+              {
+                "name": "kubernetes-gke",
+                "tag": "1.34",
+                "type": "spectro"
+              },
+              {
+                "name": "cni-vpc-native-gke",
+                "tag": "1.0.0",
+                "type": "spectro"
+              },
+              {
+                "name": "gke-csi-gcp-driver",
+                "tag": "1.0.0",
+                "type": "spectro"
+              }
+            ],
+            "variables": []
+          }
+        ],
+        "clusterConfig": {
+          "timezone": "Etc/UTC"
+        }
+      }
+    }
+  }
+}

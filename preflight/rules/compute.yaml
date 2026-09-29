@@ -1,0 +1,193 @@
+# The rules of one section. `docs/src/reference/preflight-rules.md` in the book states the format.
+section: compute
+title: Compute and pools
+about: |
+  The machine pools of the cluster: their size, their instance types, and what each engine needs
+  of them before Palette can build the pool.
+rules:
+  - id: gke-pool-multiple-3
+    title: A GKE worker pool size is a multiple of 3
+    engines: [gke]
+    tier: static
+    severity: fail
+    status: seen
+    what: |
+      Palette refuses a GKE worker pool whose size is not a multiple of 3, with `InvalidParam`
+      "Node pool size should be multiple of 3", at the create. Through the provider, that is after
+      a full apply. The rule holds for each worker pool, zonal or regional.
+    check:
+      kind: static
+      expr: |
+        [ .entity.spec.machinepoolconfig[]
+          | select((.poolConfig.isControlPlane // false) | not)
+          | select(((.poolConfig.size // 0) % 3) != 0)
+          | "pool \(.poolConfig.name) has size \(.poolConfig.size), not a multiple of 3" ]
+    fix:
+      owner: provider
+      text: Call the validate route of Palette at plan time, so the size is refused before the apply.
+    evidence:
+      - kind: run
+        ref: "#90"
+        note: "`InvalidParam` at create, after a full apply, with a pool of 4"
+      - kind: source
+        ref: hubble services/service/spectrocluster/internal/handler/converter/v1/clusters_v1_converter.go ToMachinePoolBasicConfig
+        note: the converter panics with InvalidParam for a managed GCP pool whose size is not a multiple of 3
+    tests:
+      - fault: fixtures/gke/pool-4.json
+        clean: fixtures/gke/clean.json
+
+  - id: eks-worker-needed
+    title: An EKS cluster needs one worker pool that is not Fargate
+    engines: [eks]
+    tier: static
+    severity: fail
+    status: source
+    what: |
+      The Palette agent cannot run on the EKS control plane. With no worker node, the cluster is
+      never `Running`. One node group with a size of 1 or more is needed.
+    check:
+      kind: static
+      expr: |
+        if ([ .entity.spec.machinepoolconfig[]
+              | select((.poolConfig.isControlPlane // false) | not)
+              | select((.poolConfig.size // 0) >= 1) ] | length) == 0
+        then ["no worker pool with a size of 1 or more; the Palette agent needs a node group"]
+        else [] end
+    fix:
+      owner: palette
+      text: Refuse an EKS create with no worker pool in the validate route.
+    evidence:
+      - kind: doc
+        ref: https://docs.spectrocloud.com/clusters/public-cloud/aws/eks/
+    tests:
+      - fault: fixtures/eks/no-worker.json
+        clean: fixtures/eks/clean.json
+
+  - id: gke-no-gpu
+    title: GKE node pools take no GPU machine type
+    engines: [gke]
+    tier: static
+    severity: fail
+    status: source
+    what: |
+      Palette does not support a GPU machine type (`a2-`, `a3-`, `g2-`) on a GKE node pool.
+    check:
+      kind: static
+      expr: |
+        [ .entity.spec.machinepoolconfig[]
+          | select((.cloudConfig.instanceType // "") | test("^(a2|a3|g2)-"))
+          | "pool \(.poolConfig.name) uses \(.cloudConfig.instanceType), a GPU machine type" ]
+    fix:
+      owner: palette
+      text: Refuse the type in the validate route.
+    evidence:
+      - kind: doc
+        ref: https://docs.spectrocloud.com/clusters/public-cloud/gcp/gke/
+    tests:
+      - fault: fixtures/gke/gpu-pool.json
+        clean: fixtures/gke/clean.json
+
+  - id: gke-autopilot
+    title: A GKE Autopilot cluster takes no node pool
+    engines: [gke]
+    tier: static
+    severity: fail
+    status: inferred
+    what: |
+      Autopilot runs its own nodes. A create with `enableAutoPilot` and a worker pool asks GKE for
+      what it refuses.
+    check:
+      kind: static
+      expr: |
+        if (.entity.spec.cloudConfig.managedClusterConfig.enableAutoPilot // false)
+           and ([ .entity.spec.machinepoolconfig[] | select((.poolConfig.isControlPlane // false) | not) ] | length) > 0
+        then ["enableAutoPilot is on, and the entity has a worker pool"]
+        else [] end
+    fix:
+      owner: palette
+      text: Refuse the pool in the validate route.
+    evidence:
+      - kind: doc
+        ref: https://cloud.google.com/kubernetes-engine/docs/concepts/autopilot-overview
+    tests:
+      - fault: fixtures/gke/autopilot-pool.json
+        clean: fixtures/gke/clean.json
+
+  - id: update-strategy-eks
+    title: update_strategy has no effect on EKS
+    engines: [eks]
+    tier: static
+    severity: warn
+    status: source
+    what: |
+      An EKS node group rolls as EKS decides. A pool `updateStrategy` in the entity changes
+      nothing, and a reader who expects it to is misled.
+    check:
+      kind: static
+      expr: |
+        [ .entity.spec.machinepoolconfig[]
+          | select((.poolConfig.updateStrategy.type // "") != "")
+          | "pool \(.poolConfig.name) sets updateStrategy \(.poolConfig.updateStrategy.type), which EKS does not read" ]
+    fix:
+      owner: provider
+      text: Read the field, or remove it from the EKS resource.
+    evidence:
+      - kind: report
+        ref: palette-eks-orphan-nodegroup-delete-stuck-findings-2026-09-28 B5
+    tests:
+      - fault: fixtures/eks/update-strategy.json
+        clean: fixtures/eks/clean.json
+
+  - id: bastion-cost
+    title: CAPA makes a bastion for each AWS cluster
+    engines: [aws]
+    tier: static
+    severity: note
+    status: seen
+    what: |
+      Without `bastionDisabled`, the cluster API provider makes one bastion instance for the
+      cluster, which costs money and is often not needed.
+    check:
+      kind: static
+      expr: |
+        if (.entity.spec.cloudConfig.bastionDisabled // false) then [] else ["bastionDisabled is not set: the build makes a bastion instance"] end
+    evidence:
+      - kind: run
+        ref: teardown lab
+    tests:
+      - fault: fixtures/aws/clean.json
+        clean: fixtures/aws/no-bastion.json
+
+  - id: instance-offering
+    title: The instance type is offered in each zone of the pool
+    engines: [aws, eks, gcp, gke]
+    tier: cloud
+    severity: fail
+    status: source
+    what: |
+      An instance type that a zone does not offer fails during the build: `Unsupported`,
+      `ZONE_RESOURCE_POOL_EXHAUSTED`, or a node group `CREATE_FAILED`. The instance catalog of
+      Palette is one static list for each region, and it does not ask the zone.
+    reproduce:
+      - "aws ec2 describe-instance-type-offerings --location-type availability-zone --filters Name=instance-type,Values={{ .entity.spec.machinepoolconfig[0].cloudConfig.instanceType }} --region {{ .entity.spec.cloudConfig.region }} --query 'InstanceTypeOfferings[].Location'"
+      - "gcloud compute machine-types describe {{ .entity.spec.machinepoolconfig[0].cloudConfig.instanceType }} --zone <zone> --project {{ .entity.spec.cloudConfig.project }}"
+    fix:
+      owner: palette
+      text: Check the offering in the validate route, with "unknown" when the permission is missing.
+    evidence:
+      - kind: source
+        ref: hubble services/service/machine/machine_service.go
+        note: the instance lookup is a catalog of CPU and memory for each region
+
+  - id: spot-capacity
+    title: Spot capacity is short
+    engines: [aws, eks]
+    tier: race
+    severity: warn
+    status: source
+    what: |
+      A pool of capacity type spot can find no capacity at the moment of the build. No check before
+      the build answers it; the watch sees the capacity events.
+    evidence:
+      - kind: doc
+        ref: https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/spot-interruptions.html

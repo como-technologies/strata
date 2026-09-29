@@ -1,0 +1,111 @@
+section: networking
+title: Networking
+about: |
+  The zones, the subnets, the CIDRs, the routes, and the endpoints that a build needs. The section
+  with the most rows and the least evidence: the lab runs go here first.
+rules:
+  - id: eks-one-zone
+    title: EKS needs subnets in two zones
+    engines: [eks]
+    tier: static
+    severity: fail
+    status: source
+    what: |
+      EKS needs subnets in two availability zones or more. Palette checks the count of the control
+      plane subnets, not the count of distinct zones, so a cluster with one zone passes each check
+      of Palette and fails during the build.
+    check:
+      kind: static
+      expr: |
+        def zones: [ (.cloudConfig.azs // [])[], (.cloudConfig.subnets // [])[].az ] | map(select(. != null and . != "")) | unique;
+        [ .entity.spec.machinepoolconfig[]
+          | select((.cloudConfig.azs // []) != [] or (.cloudConfig.subnets // []) != [])
+          | select((zones | length) < 2)
+          | "pool \(.poolConfig.name) names \(zones | length) zone(s) (\(zones | join(", "))); EKS needs 2 or more" ]
+    fix:
+      owner: palette
+      text: Check the count of distinct zones in the EKS validate route.
+    reproduce:
+      - "aws ec2 describe-subnets --region {{ .entity.spec.cloudConfig.region }} --filters Name=vpc-id,Values={{ .entity.spec.cloudConfig.vpcId }} --query 'Subnets[].AvailabilityZone' --output text | tr '\\t' '\\n' | sort -u"
+    evidence:
+      - kind: report
+        ref: palette-precreate-validation-gaps-findings-2026-09-28 F6
+      - kind: source
+        ref: hubble services/service/spectrocluster/internal/service/spectrocluster/internal/eks/spectrocluster_eks.go
+        note: no minimum count of zones for EKS
+    tests:
+      - fault: fixtures/eks/one-zone.json
+        clean: fixtures/eks/clean.json
+
+  - id: gcp-name-length
+    title: The names GCP derives from the cluster name fit
+    engines: [gcp, gke]
+    tier: static
+    severity: fail
+    status: inferred
+    what: |
+      GCP takes at most 63 characters for a network or a subnet name, which Palette derives from
+      the cluster name, and at most 40 for a GKE cluster name.
+    check:
+      kind: static
+      expr: |
+        (.entity.metadata.name // "") as $n
+        | [ (if .cloud == "gke" and ($n | length) > 40 then "cluster name \($n) has \($n | length) characters; GKE takes at most 40" else empty end),
+            (if ($n | length) > 52 then "cluster name \($n) has \($n | length) characters; the network and subnet names GCP derives from it can pass 63" else empty end) ]
+    fix:
+      owner: palette
+      text: Check the derived name lengths in the name route.
+    tests:
+      - fault: fixtures/gke/long-name.json
+        clean: fixtures/gke/clean.json
+
+  - id: api-endpoint-reach
+    title: The pilot can reach the API server of the cluster
+    engines: [aws, eks, gcp, gke]
+    tier: static
+    severity: fail
+    status: source
+    what: |
+      An internal load balancer, a private endpoint, or a firewall without port 6443 keeps the
+      Palette pilot from the cluster. The pivot then fails, and the build waits.
+    check:
+      kind: static
+      expr: |
+        .entity.spec.cloudConfig as $c
+        | [ (if ($c.controlPlaneLoadBalancer // "") == "internal" then "controlPlaneLoadBalancer is internal: the pilot needs a route to it, such as a private gateway" else empty end),
+            (if .cloud == "eks" and ($c.endpointAccess.private // false)
+                and (($c.endpointAccess | if has("public") then .public else true end) | not)
+             then "endpointAccess is private alone: the pilot needs a private gateway or a route to the VPC" else empty end) ]
+    fix:
+      owner: palette
+      text: Refuse a private endpoint with no private gateway at create.
+    evidence:
+      - kind: doc
+        ref: https://docs.spectrocloud.com/clusters/data-center/maas/architecture/
+        note: the pilot reaches each cluster through its API server
+    tests:
+      - fault: fixtures/eks/private-endpoint.json
+        clean: fixtures/eks/clean.json
+
+  - id: agent-egress
+    title: The cluster can reach Palette on 443
+    engines: [all]
+    tier: watch
+    severity: fail
+    status: source
+    what: |
+      A cluster whose nodes cannot reach Palette on 443 (and 4222 for NATS) runs, and its agent
+      never connects. The status stays behind the real state.
+    check:
+      kind: watch
+      expr: |
+        if (.cluster.status.state // "") == "Running"
+           and (.summary.status.health.state // "") == "Unknown"
+           and (.elapsed // 0) > 600
+        then ["the cluster is Running and its health is Unknown after \(.elapsed)s: the agent has not reported; check egress to Palette on 443 and 4222"]
+        else [] end
+    reproduce:
+      - "curl -sS -o /dev/null -w '%{http_code}\\n' https://api.spectrocloud.com/v1/version   # from a node of the cluster"
+    evidence:
+      - kind: doc
+        ref: https://docs.spectrocloud.com/architecture/networking-ports/

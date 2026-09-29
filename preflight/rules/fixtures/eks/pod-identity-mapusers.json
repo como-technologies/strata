@@ -1,0 +1,16 @@
+{
+  "_base": "clean.json",
+  "_patch": {
+    "account": {
+      "spec": {
+        "credentialType": "pod-identity",
+        "podIdentity": {
+          "roleArn": "arn:aws:iam::123456789012:role/pod"
+        }
+      }
+    }
+  },
+  "_delete": [
+    "/account/spec/sts"
+  ]
+}

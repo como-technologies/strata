@@ -1,0 +1,78 @@
+{
+  "_base": "clean.json",
+  "_note": "the record of the profile says cloud type gke",
+  "_patch": {
+    "profiles": [
+      {
+        "schema": "strata-snapshot/1",
+        "source": {
+          "uid": "prof-eks-1",
+          "name": "strata-live-profile",
+          "version": "1.0.0",
+          "cloudType": "gke",
+          "kind": "cluster-profile"
+        },
+        "packs": [
+          {
+            "key": "os/amazon-linux-eks",
+            "layer": "os",
+            "name": "amazon-linux-eks",
+            "version": "1.0.0",
+            "tag": "1.0.0",
+            "packUid": "pk-os-eks",
+            "registryUid": "5eecc89d0b150045ae661cef",
+            "valuesCanon": null
+          },
+          {
+            "key": "k8s/kubernetes-eks",
+            "layer": "k8s",
+            "name": "kubernetes-eks",
+            "version": "1.32",
+            "tag": "1.32",
+            "packUid": "pk-k8s-eks",
+            "registryUid": "5eecc89d0b150045ae661cef",
+            "valuesCanon": {
+              "iamAuthenticatorConfig": {
+                "mapUsers": [
+                  {
+                    "userarn": "arn:aws:iam::123456789012:user/ops",
+                    "username": "ops",
+                    "groups": [
+                      "system:masters"
+                    ]
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "key": "cni/cni-aws-vpc-eks",
+            "layer": "cni",
+            "name": "cni-aws-vpc-eks",
+            "version": "1.19.6",
+            "tag": "1.19.6",
+            "packUid": "pk-cni-eks",
+            "registryUid": "5eecc89d0b150045ae661cef",
+            "valuesCanon": null
+          },
+          {
+            "key": "csi/csi-aws-ebs",
+            "layer": "csi",
+            "name": "csi-aws-ebs",
+            "version": "1.44.0",
+            "tag": "1.44.0",
+            "packUid": "pk-csi-eks",
+            "registryUid": "5eecc89d0b150045ae661cef",
+            "valuesCanon": {
+              "storageClasses": [
+                {
+                  "name": "spectro-storage-class"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

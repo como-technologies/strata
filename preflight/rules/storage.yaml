@@ -1,0 +1,27 @@
+section: storage
+title: Storage and CSI
+about: |
+  The CSI layer, the storage class, the permissions the CSI needs, and what changes cannot apply.
+rules:
+  - id: eks-default-storageclass
+    title: An EKS profile has a CSI layer
+    engines: [eks]
+    tier: static
+    severity: fail
+    status: source
+    when: (.profiles | length) > 0
+    what: |
+      Palette deletes the `gp2` storage class of EKS, and the CSI pack gives the default class.
+      With no CSI layer, a PVC stays `Pending`.
+    check:
+      kind: static
+      expr: |
+        if ([ .profiles[] | .packs[] | select(.layer == "csi") ] | length) == 0
+        then ["no profile has a CSI layer; Palette deletes gp2, so a PVC stays Pending"]
+        else [] end
+    fix:
+      owner: palette
+      text: Refuse an EKS create with no CSI layer.
+    tests:
+      - fault: fixtures/eks/no-csi.json
+        clean: fixtures/eks/clean.json

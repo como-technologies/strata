@@ -1,0 +1,20 @@
+{
+  "_base": "clean.json",
+  "_note": "the one worker pool has size 0",
+  "_patch": {
+    "entity": {
+      "spec": {
+        "machinepoolconfig": [
+          {
+            "poolConfig": {
+              "name": "worker-pool",
+              "size": 0,
+              "minSize": 0,
+              "maxSize": 0
+            }
+          }
+        ]
+      }
+    }
+  }
+}

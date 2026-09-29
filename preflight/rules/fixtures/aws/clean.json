@@ -1,0 +1,217 @@
+{
+  "cloud": "aws",
+  "release": "4.10",
+  "source": "fixtures/aws/clean.json",
+  "entity": {
+    "metadata": {
+      "name": "fred",
+      "labels": {}
+    },
+    "spec": {
+      "cloudAccountUid": "acc-aws-1",
+      "cloudConfig": {
+        "region": "us-east-2",
+        "vpcId": "",
+        "sshKeyName": "iris-on-palette",
+        "controlPlaneLoadBalancer": "",
+        "bastionDisabled": false
+      },
+      "machinepoolconfig": [
+        {
+          "cloudConfig": {
+            "instanceType": "t3.xlarge",
+            "azs": [
+              "us-east-2a"
+            ],
+            "rootDeviceSize": 60
+          },
+          "poolConfig": {
+            "name": "cp-pool",
+            "size": 1,
+            "isControlPlane": true,
+            "useControlPlaneAsWorker": false
+          }
+        },
+        {
+          "cloudConfig": {
+            "instanceType": "t3.xlarge",
+            "azs": [
+              "us-east-2a"
+            ],
+            "rootDeviceSize": 60
+          },
+          "poolConfig": {
+            "name": "worker-pool",
+            "size": 2,
+            "isControlPlane": false,
+            "useControlPlaneAsWorker": false
+          }
+        }
+      ],
+      "profiles": [
+        {
+          "uid": "prof-aws-1",
+          "packValues": [
+            {
+              "name": "ubuntu-aws",
+              "tag": "24.04",
+              "type": "spectro"
+            },
+            {
+              "name": "kubernetes",
+              "tag": "1.32.4",
+              "type": "spectro"
+            },
+            {
+              "name": "cni-cilium-oss",
+              "tag": "1.19.6",
+              "type": "spectro"
+            },
+            {
+              "name": "csi-aws-ebs",
+              "tag": "1.44.0",
+              "type": "spectro"
+            }
+          ],
+          "variables": []
+        }
+      ],
+      "clusterConfig": {
+        "timezone": "Etc/UTC"
+      }
+    }
+  },
+  "before": null,
+  "profiles": [
+    {
+      "schema": "strata-snapshot/1",
+      "source": {
+        "uid": "prof-aws-1",
+        "name": "aws-stack",
+        "version": "1.1.1",
+        "cloudType": "aws",
+        "kind": "cluster-profile"
+      },
+      "packs": [
+        {
+          "key": "os/ubuntu-aws",
+          "layer": "os",
+          "name": "ubuntu-aws",
+          "version": "24.04",
+          "tag": "24.04",
+          "packUid": "pk-os-aws",
+          "registryUid": "5eecc89d0b150045ae661cef",
+          "valuesCanon": null
+        },
+        {
+          "key": "k8s/kubernetes",
+          "layer": "k8s",
+          "name": "kubernetes",
+          "version": "1.32.4",
+          "tag": "1.32.4",
+          "packUid": "pk-k8s-aws",
+          "registryUid": "5eecc89d0b150045ae661cef",
+          "valuesCanon": {
+            "kubeadmconfig": {
+              "clusterConfiguration": {
+                "networking": {
+                  "podSubnet": "192.168.0.0/16",
+                  "serviceSubnet": "10.96.0.0/12"
+                }
+              }
+            }
+          }
+        },
+        {
+          "key": "cni/cni-cilium-oss",
+          "layer": "cni",
+          "name": "cni-cilium-oss",
+          "version": "1.19.6",
+          "tag": "1.19.6",
+          "packUid": "pk-cni-aws",
+          "registryUid": "5eecc89d0b150045ae661cef",
+          "valuesCanon": null
+        },
+        {
+          "key": "csi/csi-aws-ebs",
+          "layer": "csi",
+          "name": "csi-aws-ebs",
+          "version": "1.44.0",
+          "tag": "1.44.0",
+          "packUid": "pk-csi-aws",
+          "registryUid": "5eecc89d0b150045ae661cef",
+          "valuesCanon": null
+        }
+      ]
+    }
+  ],
+  "packs": {
+    "pk-os-aws": {
+      "name": "ubuntu-aws",
+      "layer": "os",
+      "cloudTypes": [
+        "aws"
+      ]
+    },
+    "pk-k8s-aws": {
+      "name": "kubernetes",
+      "layer": "k8s",
+      "cloudTypes": [
+        "aws"
+      ]
+    },
+    "pk-cni-aws": {
+      "name": "cni-cilium-oss",
+      "layer": "cni",
+      "cloudTypes": [
+        "all"
+      ]
+    },
+    "pk-csi-aws": {
+      "name": "csi-aws-ebs",
+      "layer": "csi",
+      "cloudTypes": [
+        "aws",
+        "eks"
+      ]
+    }
+  },
+  "account": {
+    "metadata": {
+      "name": "como-aws",
+      "uid": "acc-aws-1"
+    },
+    "spec": {
+      "credentialType": "secret",
+      "partition": "aws",
+      "accessKey": "<redacted>",
+      "secretKey": "<redacted>",
+      "policyARNs": []
+    }
+  },
+  "clusterUid": null,
+  "_responses": {
+    "POST /v1/spectroclusters/aws/validate": {
+      "ok": true,
+      "status": 200,
+      "body": {
+        "machinePools": {
+          "results": []
+        },
+        "profiles": []
+      }
+    },
+    "GET /v1/cloudaccounts/aws/acc-aws-1": {
+      "ok": true,
+      "status": 200,
+      "body": {
+        "metadata": {
+          "name": "como-aws",
+          "uid": "acc-aws-1"
+        },
+        "kind": "aws"
+      }
+    }
+  },
+  "_exec": {}
+}

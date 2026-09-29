@@ -1,0 +1,39 @@
+section: quotas
+title: Quotas and limits
+about: |
+  The quotas of the cloud and the floors of Palette: what a build asks for, against what the
+  account can give.
+rules:
+  - id: worker-cpu-floor
+    title: The workers have the CPU the packs need
+    engines: [aws, eks, gcp, gke, azure, aks, maas, vsphere]
+    tier: palette
+    severity: fail
+    status: seen
+    what: |
+      The packs of the profiles need a minimum of CPU across the worker nodes: 4.1 cores with the
+      lab packs, 5.3 with a monitoring stack. Palette refuses the create with "A minimum allocation
+      of '4.1' CPU cores is required across all worker nodes". The validate route answers it in
+      seconds, with the machine pools that fall short.
+    check:
+      kind: palette
+      method: POST
+      path: /v1/spectroclusters/{{ .cloud }}/validate
+      expr: |
+        .response as $r
+        | if ($r.ok | not) then [] # a refusal of the whole entity is palette-validate's
+          else [ ($r.body.machinePools.results // [])[] | .name as $n | (.errors // [])[]
+                 | select((.message // "") | test("CPU|memory|cores"; "i"))
+                 | "pool \($n): \(.message)" ]
+          end
+    fix:
+      owner: provider
+      text: Call the validate route at plan time.
+    evidence:
+      - kind: run
+        ref: teardown lab
+      - kind: source
+        ref: hubble services/service/spectrocluster/internal/service/cloudconfig/internal/base/cloudconfig_base_service.go ValidateMachineResources
+    tests:
+      - fault: fixtures/eks/validate-cpu.json
+        clean: fixtures/eks/clean.json

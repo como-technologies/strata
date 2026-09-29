@@ -1,0 +1,86 @@
+{
+  "_base": "clean.json",
+  "_note": "a change that keeps the instance type",
+  "_patch": {
+    "before": {
+      "metadata": {
+        "name": "fred",
+        "labels": {
+          "purpose": "strata-live-example"
+        }
+      },
+      "spec": {
+        "cloudAccountUid": "acc-eks-1",
+        "cloudConfig": {
+          "region": "us-east-2",
+          "vpcId": "",
+          "sshKeyName": "iris-on-palette",
+          "endpointAccess": {
+            "public": true,
+            "private": false,
+            "publicCIDRs": [
+              "0.0.0.0/0"
+            ],
+            "privateCIDRs": []
+          }
+        },
+        "machinepoolconfig": [
+          {
+            "cloudConfig": {
+              "instanceType": "t3.xlarge",
+              "azs": [
+                "us-east-2a",
+                "us-east-2b"
+              ],
+              "rootDeviceSize": 60,
+              "amiType": "AL2023_x86_64_STANDARD"
+            },
+            "poolConfig": {
+              "name": "worker-pool",
+              "size": 2,
+              "minSize": 2,
+              "maxSize": 2,
+              "isControlPlane": false,
+              "useControlPlaneAsWorker": false,
+              "labels": [
+                "worker"
+              ],
+              "taints": []
+            }
+          }
+        ],
+        "profiles": [
+          {
+            "uid": "prof-eks-1",
+            "packValues": [
+              {
+                "name": "amazon-linux-eks",
+                "tag": "1.0.0",
+                "type": "spectro"
+              },
+              {
+                "name": "kubernetes-eks",
+                "tag": "1.32",
+                "type": "spectro"
+              },
+              {
+                "name": "cni-aws-vpc-eks",
+                "tag": "1.19.6",
+                "type": "spectro"
+              },
+              {
+                "name": "csi-aws-ebs",
+                "tag": "1.44.0",
+                "type": "spectro"
+              }
+            ],
+            "variables": []
+          }
+        ],
+        "clusterConfig": {
+          "timezone": "Etc/UTC"
+        }
+      }
+    }
+  }
+}

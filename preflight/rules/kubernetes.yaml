@@ -1,0 +1,95 @@
+section: kubernetes
+title: Kubernetes version and engine
+about: |
+  The Kubernetes version, the release channel, and what each engine does with a change of the
+  version or of the pack values.
+rules:
+  - id: gke-no-release-channel
+    title: A GKE cluster names a release channel
+    engines: [gke]
+    tier: static
+    severity: fail
+    status: seen
+    releases: "<4.11"
+    what: |
+      Palette release-4.10.0 sets no release channel on the GKE control plane, and GCP refuses a
+      cluster in no channel for a new customer. The status says "control plane nodes addition done";
+      GCP refuses `CreateCluster` every 3 seconds, and only the events name it. The cluster-level
+      passthrough `overrideClusterAPIConfig` with `gcpManagedControlPlane.spec.releaseChannel` sets
+      one. The fix on master (a080d5f6e) sets a default channel; the range of this rule ends at the
+      release that carries it.
+    check:
+      kind: static
+      expr: |
+        if ((.entity.spec.cloudConfig.overrideClusterAPIConfig // "") | test("releaseChannel"))
+        then []
+        else ["no release channel: set overrideClusterAPIConfig to gcpManagedControlPlane.spec.releaseChannel: regular (or rapid, stable)"] end
+    fix:
+      owner: palette
+      text: Backport a080d5f6e, 06665cadd, and 52dc97037 to the 4.10 line.
+    reproduce:
+      - "gcloud logging read 'protoPayload.methodName=\"google.container.v1.ClusterManager.CreateCluster\" severity>=WARNING' --project {{ .entity.spec.cloudConfig.project }} --freshness=1h --limit 3 --format='value(timestamp,protoPayload.status.message)'"
+    evidence:
+      - kind: run
+        ref: "#90"
+        note: 50 minutes with no error in the status; the override built the cluster in 18 minutes
+      - kind: report
+        ref: palette-gke-release-channel-findings-2026-09-28
+      - kind: source
+        ref: palette pkg/provider/gcp/gcp_managed.go getDesiredManagedControlPlane
+    tests:
+      - fault: fixtures/gke/no-channel.json
+        clean: fixtures/gke/clean.json
+
+  - id: profile-cloud-mismatch
+    title: Each profile is of the cloud type of the cluster, or of all
+    engines: [all]
+    tier: static
+    severity: fail
+    status: proposed
+    when: (.profiles | length) > 0
+    what: |
+      A profile of another cloud type carries packs that Palette cannot install on this cluster.
+      Palette refuses some at create, and lets others fail during the build.
+    check:
+      kind: static
+      expr: |
+        .cloud as $c
+        | [ .profiles[]
+            | select((.source.cloudType // "all") as $t | $t != "all" and $t != $c and ($t | ascii_downcase) != $c)
+            | "profile \(.source.name)@\(.source.version) is of cloud type \(.source.cloudType), and the cluster is \($c)" ]
+    fix:
+      owner: palette
+      text: Refuse a profile of another cloud type at create.
+    tests:
+      - fault: fixtures/eks/profile-of-gke.json
+        clean: fixtures/eks/clean.json
+
+  - id: pack-cloud-support
+    title: Each pack version supports the cloud type
+    engines: [all]
+    tier: static
+    severity: fail
+    status: seen
+    when: (.packs | length) > 0
+    what: |
+      A pack version that does not list the cloud type, such as `cni-cilium-oss` before 1.19.3 on
+      GCP, is refused at create.
+    check:
+      kind: static
+      expr: |
+        .cloud as $c | .packs as $packs
+        | [ .profiles[] | .source.name as $p | .packs[]
+            | select(.packUid != "" and ($packs[.packUid] != null))
+            | select(($packs[.packUid].cloudTypes // ["all"]) as $t | ($t | index("all")) == null and ($t | index($c)) == null)
+            | "pack \(.name)@\(.version) of profile \($p) supports \($packs[.packUid].cloudTypes | join(", ")), not \($c)" ]
+    fix:
+      owner: palette
+      text: Refuse the pack at profile create, not at cluster create.
+    evidence:
+      - kind: run
+        ref: teardown lab
+        note: cni-cilium-oss before 1.19.3 on GCP is refused
+    tests:
+      - fault: fixtures/gcp/pack-no-gcp.json
+        clean: fixtures/gcp/clean.json

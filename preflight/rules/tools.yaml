@@ -1,0 +1,38 @@
+section: tools
+title: Client tools
+about: |
+  Rules of the tool that makes the entity, such as the provider, and of the lab. They are out of
+  scope for strata-preflight, and they stay in the catalog so that each fault of the live runs has
+  a row.
+rules:
+  - id: provider-timeout-success
+    title: The provider gives exit 0 at its create timeout
+    engines: [all]
+    tier: tool
+    severity: fail
+    status: seen
+    what: |
+      At its create timeout the provider gives a warning and exit 0 ("Creation complete") while the
+      cluster still builds. Gate on `Running`, or run `strata-preflight --watch`.
+    fix:
+      owner: provider
+      text: An error, or an opt-in warning.
+    evidence:
+      - kind: run
+        ref: "#89, #90"
+
+  - id: provider-eks-azs
+    title: The provider reads cloud_config.azs back on EKS
+    engines: [eks]
+    tier: tool
+    severity: fail
+    status: seen
+    what: |
+      Provider 0.30.1 does not read `cloud_config.azs` back, and the field forces a new resource:
+      each apply replaces the cluster. Found after one apply of 55 minutes.
+    fix:
+      owner: provider
+      text: Read the field.
+    evidence:
+      - kind: report
+        ref: provider-eks-azs-replace-findings-2026-09-28

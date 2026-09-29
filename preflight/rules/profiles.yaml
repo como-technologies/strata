@@ -1,0 +1,26 @@
+section: profiles
+title: Profiles and packs
+about: |
+  The profiles of the entity: their order, their versions, their templates, and their variables.
+rules:
+  - id: version-string
+    title: Each profile version is MAJOR.MINOR.PATCH
+    engines: [all]
+    tier: static
+    severity: warn
+    status: seen
+    when: (.profiles | length) > 0
+    what: |
+      Palette keeps a version string as given (`1.2`, `v1.2.3`), where its documentation says it
+      normalizes it. Two spellings of one version are two versions.
+    check:
+      kind: static
+      expr: |
+        [ .profiles[] | select((.source.version // "") | test("^[0-9]+\\.[0-9]+\\.[0-9]+$") | not)
+          | "profile \(.source.name) has the version \(.source.version), not MAJOR.MINOR.PATCH" ]
+    evidence:
+      - kind: run
+        ref: "#81"
+    tests:
+      - fault: fixtures/eks/version-v.json
+        clean: fixtures/eks/clean.json

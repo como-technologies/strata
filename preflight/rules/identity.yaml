@@ -1,0 +1,128 @@
+section: identity
+title: Identity and permissions
+about: |
+  The cloud account of the cluster, the role or the key behind it, and the permissions the build
+  needs of it. Palette checks that a role can be assumed and that policies exist, not that the role
+  can build the cluster type.
+rules:
+  - id: sts-account-not-assumable
+    title: The STS cloud account can be assumed
+    engines: [aws, eks]
+    tier: palette
+    severity: fail
+    status: seen
+    when: .account.spec.credentialType == "sts"
+    what: |
+      Palette creates an STS cloud account over a role that does not exist, or that its trust
+      policy refuses. The cluster then fails with `AwsKeyPairsReadError` or an AssumeRole 403.
+      `POST /v1/clouds/aws/account/validate` answers in seconds, and a cluster create does not call
+      it.
+    check:
+      kind: palette
+      method: POST
+      path: /v1/clouds/aws/account/validate
+      body: .account.spec
+      expr: |
+        if .response.ok then [] else ["Palette cannot use the account \(.account.metadata.name // .entity.spec.cloudAccountUid): \(.response.body.code // .response.status): \(.response.body.message // "")"] end
+    fix:
+      owner: palette
+      text: Run the account check at cluster create.
+    evidence:
+      - kind: run
+        ref: teardown lab
+      - kind: source
+        ref: hubble services/service/cloud/internal/service/cloudservice/aws_service.go ValidateAccount
+    tests:
+      - fault: fixtures/eks/account-refused.json
+        clean: fixtures/eks/clean.json
+
+  - id: account-missing
+    title: The cloud account of the entity exists, and is of the cloud type
+    engines: [aws, eks, gcp, gke, azure, aks, maas, vsphere]
+    tier: palette
+    severity: fail
+    status: proposed
+    when: .entity.spec.cloudAccountUid != null
+    what: |
+      An entity that names a cloud account uid that is not in the project, or an account of another
+      cloud, is refused at create, or fails at the first call to the cloud.
+    check:
+      kind: palette
+      method: GET
+      path: /v1/cloudaccounts/{{ .cloud | if . == "eks" then "aws" elif . == "gke" then "gcp" elif . == "aks" then "azure" else . end }}/{{ .entity.spec.cloudAccountUid }}
+      expr: |
+        if .response.ok then []
+        else ["no cloud account \(.entity.spec.cloudAccountUid) of kind \(.cloud) in this project: \(.response.body.code // .response.status)"] end
+    tests:
+      - fault: fixtures/eks/account-missing.json
+        clean: fixtures/eks/clean.json
+
+  - id: eks-pod-identity-mapusers
+    title: A Pod Identity account maps a user into the EKS cluster
+    engines: [eks]
+    tier: static
+    severity: fail
+    status: source
+    when: .account.spec.credentialType == "pod-identity"
+    what: |
+      With a Pod Identity cloud account and no `iamAuthenticatorConfig.mapUsers` in the values of
+      the Kubernetes pack, nobody can reach the cluster, and its delete is stuck.
+    check:
+      kind: static
+      expr: |
+        [ .profiles[] | .packs[] | select(.layer == "k8s")
+          | select(((.valuesCanon.iamAuthenticatorConfig.mapUsers // []) | length) == 0)
+          | "pack \(.name)@\(.version) has no iamAuthenticatorConfig.mapUsers, and the account is Pod Identity" ]
+    fix:
+      owner: palette
+      text: Refuse the create.
+    evidence:
+      - kind: doc
+        ref: https://docs.spectrocloud.com/clusters/public-cloud/aws/eks/
+    tests:
+      - fault: fixtures/eks/pod-identity-no-mapusers.json
+        clean: fixtures/eks/pod-identity-mapusers.json
+
+  - id: eks-role-no-eks-policy
+    title: The role of the cloud account holds the EKS policy
+    engines: [eks]
+    tier: cloud
+    severity: fail
+    status: seen
+    when: .account.spec.credentialType == "sts"
+    what: |
+      An STS role without the EKS policy of Palette fails with `AccessDenied` on `eks:DescribeCluster`
+      at create, after a full apply. The EKS name check of Palette finds it by chance; a role that can
+      describe but not create passes it.
+    check:
+      kind: exec
+      needs: [aws]
+      argv:
+        - aws
+        - iam
+        - simulate-principal-policy
+        - --policy-source-arn
+        - "{{ .account.spec.sts.arn }}"
+        - --action-names
+        - eks:CreateCluster
+        - eks:CreateNodegroup
+        - eks:DescribeCluster
+        - iam:PassRole
+        - --output
+        - json
+      expr: |
+        if .exec.exit != 0 then ["aws iam simulate-principal-policy failed: \(.exec.stderr | .[:200])"]
+        else [ .exec.stdout.EvaluationResults[] | select(.EvalDecision != "allowed") | "\(.EvalActionName) is \(.EvalDecision) for the role" ] end
+    reproduce:
+      - "aws iam simulate-principal-policy --policy-source-arn {{ .account.spec.sts.arn }} --action-names eks:CreateCluster eks:CreateNodegroup iam:PassRole --query 'EvaluationResults[].[EvalActionName,EvalDecision]' --output table"
+    fix:
+      owner: palette
+      text: A permission check for each cloud type (SimulatePrincipalPolicy) in the validate route.
+    evidence:
+      - kind: run
+        ref: "#89"
+      - kind: report
+        ref: palette-precreate-validation-gaps-findings-2026-09-28 F4
+    tests:
+      - fault: fixtures/eks/role-denied.json
+        clean: fixtures/eks/role-allowed.json

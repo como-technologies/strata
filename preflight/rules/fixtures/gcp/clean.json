@@ -1,0 +1,223 @@
+{
+  "cloud": "gcp",
+  "release": "4.10",
+  "source": "fixtures/gcp/clean.json",
+  "entity": {
+    "metadata": {
+      "name": "fred",
+      "labels": {}
+    },
+    "spec": {
+      "cloudAccountUid": "acc-gcp-1",
+      "cloudConfig": {
+        "project": "strata-lab",
+        "region": "us-east1",
+        "network": ""
+      },
+      "machinepoolconfig": [
+        {
+          "cloudConfig": {
+            "instanceType": "e2-standard-4",
+            "azs": [
+              "us-east1-b"
+            ],
+            "rootDeviceSize": 60
+          },
+          "poolConfig": {
+            "name": "cp-pool",
+            "size": 1,
+            "isControlPlane": true,
+            "useControlPlaneAsWorker": false
+          }
+        },
+        {
+          "cloudConfig": {
+            "instanceType": "e2-standard-4",
+            "azs": [
+              "us-east1-b"
+            ],
+            "rootDeviceSize": 60
+          },
+          "poolConfig": {
+            "name": "worker-pool",
+            "size": 2,
+            "isControlPlane": false,
+            "useControlPlaneAsWorker": false
+          }
+        }
+      ],
+      "profiles": [
+        {
+          "uid": "prof-gcp-1",
+          "packValues": [
+            {
+              "name": "ubuntu-gcp",
+              "tag": "24.04",
+              "type": "spectro"
+            },
+            {
+              "name": "kubernetes",
+              "tag": "1.32.4",
+              "type": "spectro"
+            },
+            {
+              "name": "cni-cilium-oss",
+              "tag": "1.19.6",
+              "type": "spectro"
+            },
+            {
+              "name": "csi-gcp-driver",
+              "tag": "1.15.0",
+              "type": "spectro"
+            }
+          ],
+          "variables": []
+        }
+      ],
+      "clusterConfig": {
+        "timezone": "Etc/UTC"
+      }
+    }
+  },
+  "before": null,
+  "profiles": [
+    {
+      "schema": "strata-snapshot/1",
+      "source": {
+        "uid": "prof-gcp-1",
+        "name": "gcp-stack",
+        "version": "1.0.0",
+        "cloudType": "gcp",
+        "kind": "cluster-profile"
+      },
+      "packs": [
+        {
+          "key": "os/ubuntu-gcp",
+          "layer": "os",
+          "name": "ubuntu-gcp",
+          "version": "24.04",
+          "tag": "24.04",
+          "packUid": "pk-os-gcp",
+          "registryUid": "5eecc89d0b150045ae661cef",
+          "valuesCanon": null
+        },
+        {
+          "key": "k8s/kubernetes",
+          "layer": "k8s",
+          "name": "kubernetes",
+          "version": "1.32.4",
+          "tag": "1.32.4",
+          "packUid": "pk-k8s-gcp",
+          "registryUid": "5eecc89d0b150045ae661cef",
+          "valuesCanon": null
+        },
+        {
+          "key": "cni/cni-cilium-oss",
+          "layer": "cni",
+          "name": "cni-cilium-oss",
+          "version": "1.19.6",
+          "tag": "1.19.6",
+          "packUid": "pk-cni-gcp",
+          "registryUid": "5eecc89d0b150045ae661cef",
+          "valuesCanon": null
+        },
+        {
+          "key": "csi/csi-gcp-driver",
+          "layer": "csi",
+          "name": "csi-gcp-driver",
+          "version": "1.15.0",
+          "tag": "1.15.0",
+          "packUid": "pk-csi-gcp",
+          "registryUid": "5eecc89d0b150045ae661cef",
+          "valuesCanon": null
+        }
+      ]
+    }
+  ],
+  "packs": {
+    "pk-os-gcp": {
+      "name": "ubuntu-gcp",
+      "layer": "os",
+      "cloudTypes": [
+        "gcp"
+      ]
+    },
+    "pk-k8s-gcp": {
+      "name": "kubernetes",
+      "layer": "k8s",
+      "cloudTypes": [
+        "gcp"
+      ]
+    },
+    "pk-cni-gcp": {
+      "name": "cni-cilium-oss",
+      "layer": "cni",
+      "cloudTypes": [
+        "all"
+      ]
+    },
+    "pk-csi-gcp": {
+      "name": "csi-gcp-driver",
+      "layer": "csi",
+      "cloudTypes": [
+        "gcp"
+      ]
+    }
+  },
+  "account": {
+    "metadata": {
+      "name": "como-gcp",
+      "uid": "acc-gcp-1"
+    },
+    "spec": {
+      "jsonCredentials": "<redacted>"
+    }
+  },
+  "clusterUid": null,
+  "_responses": {
+    "POST /v1/spectroclusters/gcp/validate": {
+      "ok": true,
+      "status": 200,
+      "body": {
+        "machinePools": {
+          "results": []
+        },
+        "profiles": []
+      }
+    },
+    "GET /v1/cloudaccounts/gcp/acc-gcp-1": {
+      "ok": true,
+      "status": 200,
+      "body": {
+        "metadata": {
+          "name": "como-gcp",
+          "uid": "acc-gcp-1"
+        },
+        "kind": "gcp"
+      }
+    }
+  },
+  "_exec": {
+    "gcloud services list --enabled --project strata-lab --format json": {
+      "exit": 0,
+      "stdout": [
+        {
+          "config": {
+            "name": "compute.googleapis.com"
+          }
+        },
+        {
+          "config": {
+            "name": "cloudresourcemanager.googleapis.com"
+          }
+        },
+        {
+          "config": {
+            "name": "iam.googleapis.com"
+          }
+        }
+      ],
+      "stderr": ""
+    }
+  }
+}

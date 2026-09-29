@@ -1,0 +1,116 @@
+section: lifecycle
+title: "Lifecycle: update, repave, delete"
+about: |
+  What a change of a running cluster does, and what a delete needs. A rule on a change applies
+  with `cluster:UID CHANGE.json`.
+rules:
+  - id: eks-type-change-orphan
+    title: A change of the instance type of an EKS node group leaves the old group
+    engines: [eks]
+    tier: static
+    severity: warn
+    status: seen
+    when: .before != null
+    what: |
+      A change of the instance type makes a new node group and keeps the old one, untracked: 4
+      nodes where the config asks 2. The delete of the cluster then waits with no end.
+    check:
+      kind: static
+      expr: |
+        (.before.spec.machinepoolconfig // []) as $b
+        | [ .entity.spec.machinepoolconfig[] | .poolConfig.name as $n | .cloudConfig.instanceType as $t
+            | ($b[] | select(.poolConfig.name == $n)) as $old
+            | select($old.cloudConfig.instanceType != null and $old.cloudConfig.instanceType != $t)
+            | "pool \($n): \($old.cloudConfig.instanceType) to \($t) makes a new node group and leaves the old one" ]
+    fix:
+      owner: palette
+      text: Sweep the old machine pools.
+    evidence:
+      - kind: run
+        ref: "#89"
+      - kind: report
+        ref: palette-eks-orphan-nodegroup-delete-stuck-findings-2026-09-28
+    tests:
+      - fault: fixtures/eks/type-change.json
+        clean: fixtures/eks/type-same.json
+
+  - id: gke-type-change
+    title: A change of the machine type of a GKE node pool deletes the pool
+    engines: [gke]
+    tier: static
+    severity: fail
+    status: seen
+    when: .before != null
+    what: |
+      The new machine pool gets the GKE name of the old one, so the delete of the old one deletes
+      the GKE node pool, and nothing makes a new one. The cluster keeps no node, and its delete
+      stays `Deleting` until a force delete.
+    check:
+      kind: static
+      expr: |
+        (.before.spec.machinepoolconfig // []) as $b
+        | [ .entity.spec.machinepoolconfig[] | .poolConfig.name as $n | .cloudConfig.instanceType as $t
+            | ($b[] | select(.poolConfig.name == $n)) as $old
+            | select($old.cloudConfig.instanceType != null and $old.cloudConfig.instanceType != $t)
+            | "pool \($n): \($old.cloudConfig.instanceType) to \($t) deletes the GKE node pool and makes no new one" ]
+    fix:
+      owner: palette
+      text: Sweep by label, and roll no pool before the control plane is ready.
+    evidence:
+      - kind: run
+        ref: "#90"
+      - kind: report
+        ref: palette-gke-pool-change-delete-stuck-findings-2026-09-28
+    tests:
+      - fault: fixtures/gke/type-change.json
+        clean: fixtures/gke/type-same.json
+
+  - id: delete-pending-repave
+    title: No repave waits for approval before a delete
+    engines: [all]
+    tier: palette
+    severity: fail
+    status: seen
+    when: .clusterUid != null
+    what: |
+      A delete while a repave waits for approval stays in `Deleting`, and the instances stay.
+    check:
+      kind: palette
+      method: GET
+      path: /v1/spectroclusters/{{ .clusterUid }}
+      expr: |
+        if (.response.body.status.repave.state // "") == "Pending"
+        then ["a repave waits for approval on the cluster: approve or revert it before a delete"]
+        else [] end
+    fix:
+      owner: palette
+      text: Cancel the repave on delete.
+    evidence:
+      - kind: report
+        ref: palette-delete-pending-repave-findings-2026-09-25
+    tests:
+      - fault: fixtures/eks/repave-pending.json
+        clean: fixtures/eks/cluster-running.json
+
+  - id: delete-while-provisioning
+    title: The cluster is Running before a delete
+    engines: [all]
+    tier: palette
+    severity: fail
+    status: seen
+    when: .clusterUid != null
+    what: |
+      A cluster deleted while it provisions stays in `Deleting`.
+    check:
+      kind: palette
+      method: GET
+      path: /v1/spectroclusters/{{ .clusterUid }}
+      expr: |
+        (.response.body.status.state // "?") as $s
+        | if $s == "Running" or $s == "Deleted" then [] else ["the cluster is \($s), not Running: a delete now stays in Deleting"] end
+    fix:
+      owner: palette
+      text: Finish such a delete.
+    tests:
+      - fault: fixtures/eks/cluster-provisioning.json
+        clean: fixtures/eks/cluster-running.json

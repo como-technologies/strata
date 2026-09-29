@@ -1,0 +1,23 @@
+section: teardown
+title: Teardown and leftovers
+about: |
+  What a run before can leave in the cloud and in Palette, and what a force delete leaves behind.
+  The lab checks these in examples/live/preflight.sh; a company checks its own estate.
+rules:
+  - id: force-delete-leaves-cloud
+    title: A force delete removes the records of Palette alone
+    engines: [all]
+    tier: cloud
+    severity: warn
+    status: seen
+    what: |
+      A force delete removes the records of a cluster in Palette. The cloud keeps each instance,
+      volume, and load balancer, and bills for them. Empty the cloud first.
+    reproduce:
+      - "examples/live/aws-inventory.sh {{ .entity.metadata.name }} {{ .entity.spec.cloudConfig.region }}   # 0 on every line before a force delete"
+    fix:
+      owner: palette
+      text: Warn, or refuse a force delete while the cloud holds resources of the cluster.
+    evidence:
+      - kind: run
+        ref: teardown lab

@@ -1,0 +1,112 @@
+section: platform
+title: The Palette platform
+about: |
+  What Palette itself does with a build: the validate routes it has and does not call, the
+  states that hide an error, the webhook of the pivot, and the answers of its API.
+rules:
+  - id: palette-validate
+    title: The validate route of Palette for the cloud type passes
+    engines: [aws, eks, gcp, gke, azure, aks, maas, edge, vsphere]
+    tier: palette
+    severity: fail
+    status: seen
+    what: |
+      `POST /v1/spectroclusters/{cloudType}/validate` takes the body of the create and checks the
+      name, the credit, the profile packs and their variables, the machine resources against the
+      needs of the packs, and for GKE the pool size. Only the console calls it; the provider and
+      palette-cli do not, and the create path of the API runs the name and the limit checks alone.
+      A 4xx is one refusal, with its code; a 200 lists the errors of each pool and each profile.
+    check:
+      kind: palette
+      method: POST
+      path: /v1/spectroclusters/{{ .cloud | if . == "edge" then "edge-native" else . end }}/validate
+      expr: |
+        .response as $r
+        | if ($r.ok | not) then ["Palette refused the entity: \($r.body.code // $r.status): \($r.body.message // ($r.body | tostring))"]
+          else [ ($r.body.profiles // [])[] | .uid as $u | (.packs.results // [])[] | .name as $n | (.errors // [])[] | "profile \($u), pack \($n): \(.code): \(.message)" ]
+             + [ ($r.body.machinePools.results // [])[] | .name as $n | (.errors // [])[] | "pool \($n): \(.code): \(.message)" ]
+          end
+    fix:
+      owner: palette
+      text: Run the validate route at the start of each create, and add it to the SDK and the provider.
+    evidence:
+      - kind: report
+        ref: palette-precreate-validation-gaps-findings-2026-09-28 B3
+      - kind: source
+        ref: hubble services/service/spectrocluster/internal/service/spectrocluster/internal/base/spectrocluster_validate.go validateProfiles
+    tests:
+      - fault: fixtures/gke/validate-refused.json
+        clean: fixtures/gke/clean.json
+      - fault: fixtures/eks/validate-cpu.json
+
+  - id: status-not-cloud
+    title: The status shows an error when the cloud refuses the build
+    engines: [gke, gcp]
+    tier: watch
+    severity: fail
+    status: seen
+    what: |
+      GCP refuses the build, and the status of the cluster shows no error: `ReconcileManagedControlPlaneStatus`
+      of the GCP provider returns nothing, so `ControlPlaneNodeAdditionDone` is `True`. The
+      refusal is in the events alone, as `GCPManagedControlPlaneReconcile` with the message of GCP,
+      or `ReconcileError`.
+    check:
+      kind: watch
+      expr: |
+        [ .events[]
+          | select(.severity == "Warning" or .severity == "Error")
+          | select((.reason // "") | test("Reconcile"))
+          | select((.message // "") | test("InvalidArgument|PERMISSION_DENIED|has not been used in project|is disabled|QUOTA_EXCEEDED|NOT_FOUND|failed to (create|reconcile)"))
+          | "event \(.reason) at \(.metadata.creationTimestamp): \(.message | .[:240])" ]
+        | unique | .[:3]
+    fix:
+      owner: palette
+      text: Copy an error the provider gets from the cloud into a condition of the cluster.
+    evidence:
+      - kind: run
+        ref: "#90"
+        note: 193 GCPManagedControlPlaneReconcile events with the refusal of GCP, and no error in the status
+      - kind: source
+        ref: palette pkg/clusterdeployer/controlplane/controlplane_managed.go ReconcileManagedControlPlane
+
+  - id: pivot-webhook-timeout
+    title: The pivot webhook answers
+    engines: [all]
+    tier: watch
+    severity: fail
+    status: seen
+    what: |
+      The webhook `vspectrocluster.kb.io` times out after 10 seconds. The pivot is partial, and a
+      delete later waits for 51 minutes or more.
+    check:
+      kind: watch
+      expr: |
+        [ .events[]
+          | select((.message // "") | test("failed calling webhook|failed to move spectroCluster|failed to get cloud config"))
+          | "event \(.reason) at \(.metadata.creationTimestamp): \(.message | .[:240])" ]
+        | unique | .[:3]
+    fix:
+      owner: palette
+      text: Order the pivot so the webhook is up first, and retry the call.
+    evidence:
+      - kind: report
+        ref: palette-pivot-webhook-delete-stuck-findings-2026-09-26
+      - kind: run
+        ref: "#89, #90, lab"
+
+  - id: validate-routes-unused
+    title: Only the console calls the cluster validate routes
+    engines: [all]
+    tier: palette
+    severity: note
+    status: source
+    what: |
+      The provider, the SDK for cloud clusters, and palette-cli call no cluster validate route. The
+      create path of the API skips the checks of the packs and the machines. strata-preflight calls
+      the route for you (`palette-validate`); this row is the fact.
+    fix:
+      owner: palette
+      text: Call the routes at create, and add them to the SDK and the provider.
+    evidence:
+      - kind: report
+        ref: palette-precreate-validation-gaps-findings-2026-09-28 B3

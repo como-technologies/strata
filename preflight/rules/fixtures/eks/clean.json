@@ -1,0 +1,259 @@
+{
+  "cloud": "eks",
+  "release": "4.10",
+  "source": "fixtures/eks/clean.json",
+  "entity": {
+    "metadata": {
+      "name": "fred",
+      "labels": {
+        "purpose": "strata-live-example"
+      }
+    },
+    "spec": {
+      "cloudAccountUid": "acc-eks-1",
+      "cloudConfig": {
+        "region": "us-east-2",
+        "vpcId": "",
+        "sshKeyName": "iris-on-palette",
+        "endpointAccess": {
+          "public": true,
+          "private": false,
+          "publicCIDRs": [
+            "0.0.0.0/0"
+          ],
+          "privateCIDRs": []
+        }
+      },
+      "machinepoolconfig": [
+        {
+          "cloudConfig": {
+            "instanceType": "t3.xlarge",
+            "azs": [
+              "us-east-2a",
+              "us-east-2b"
+            ],
+            "rootDeviceSize": 60,
+            "amiType": "AL2023_x86_64_STANDARD"
+          },
+          "poolConfig": {
+            "name": "worker-pool",
+            "size": 2,
+            "minSize": 2,
+            "maxSize": 2,
+            "isControlPlane": false,
+            "useControlPlaneAsWorker": false,
+            "labels": [
+              "worker"
+            ],
+            "taints": []
+          }
+        }
+      ],
+      "profiles": [
+        {
+          "uid": "prof-eks-1",
+          "packValues": [
+            {
+              "name": "amazon-linux-eks",
+              "tag": "1.0.0",
+              "type": "spectro"
+            },
+            {
+              "name": "kubernetes-eks",
+              "tag": "1.32",
+              "type": "spectro"
+            },
+            {
+              "name": "cni-aws-vpc-eks",
+              "tag": "1.19.6",
+              "type": "spectro"
+            },
+            {
+              "name": "csi-aws-ebs",
+              "tag": "1.44.0",
+              "type": "spectro"
+            }
+          ],
+          "variables": []
+        }
+      ],
+      "clusterConfig": {
+        "timezone": "Etc/UTC"
+      }
+    }
+  },
+  "before": null,
+  "profiles": [
+    {
+      "schema": "strata-snapshot/1",
+      "source": {
+        "uid": "prof-eks-1",
+        "name": "strata-live-profile",
+        "version": "1.0.0",
+        "cloudType": "eks",
+        "kind": "cluster-profile"
+      },
+      "packs": [
+        {
+          "key": "os/amazon-linux-eks",
+          "layer": "os",
+          "name": "amazon-linux-eks",
+          "version": "1.0.0",
+          "tag": "1.0.0",
+          "packUid": "pk-os-eks",
+          "registryUid": "5eecc89d0b150045ae661cef",
+          "valuesCanon": null
+        },
+        {
+          "key": "k8s/kubernetes-eks",
+          "layer": "k8s",
+          "name": "kubernetes-eks",
+          "version": "1.32",
+          "tag": "1.32",
+          "packUid": "pk-k8s-eks",
+          "registryUid": "5eecc89d0b150045ae661cef",
+          "valuesCanon": {
+            "iamAuthenticatorConfig": {
+              "mapUsers": [
+                {
+                  "userarn": "arn:aws:iam::123456789012:user/ops",
+                  "username": "ops",
+                  "groups": [
+                    "system:masters"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "key": "cni/cni-aws-vpc-eks",
+          "layer": "cni",
+          "name": "cni-aws-vpc-eks",
+          "version": "1.19.6",
+          "tag": "1.19.6",
+          "packUid": "pk-cni-eks",
+          "registryUid": "5eecc89d0b150045ae661cef",
+          "valuesCanon": null
+        },
+        {
+          "key": "csi/csi-aws-ebs",
+          "layer": "csi",
+          "name": "csi-aws-ebs",
+          "version": "1.44.0",
+          "tag": "1.44.0",
+          "packUid": "pk-csi-eks",
+          "registryUid": "5eecc89d0b150045ae661cef",
+          "valuesCanon": {
+            "storageClasses": [
+              {
+                "name": "spectro-storage-class"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "packs": {
+    "pk-os-eks": {
+      "name": "amazon-linux-eks",
+      "layer": "os",
+      "cloudTypes": [
+        "eks"
+      ]
+    },
+    "pk-k8s-eks": {
+      "name": "kubernetes-eks",
+      "layer": "k8s",
+      "cloudTypes": [
+        "eks"
+      ]
+    },
+    "pk-cni-eks": {
+      "name": "cni-aws-vpc-eks",
+      "layer": "cni",
+      "cloudTypes": [
+        "eks"
+      ]
+    },
+    "pk-csi-eks": {
+      "name": "csi-aws-ebs",
+      "layer": "csi",
+      "cloudTypes": [
+        "aws",
+        "eks"
+      ]
+    }
+  },
+  "account": {
+    "metadata": {
+      "name": "strata-live-eks",
+      "uid": "acc-eks-1"
+    },
+    "spec": {
+      "credentialType": "sts",
+      "partition": "aws",
+      "sts": {
+        "arn": "arn:aws:iam::123456789012:role/strata-live-eks-cloud",
+        "externalId": "ext-1"
+      },
+      "policyARNs": []
+    }
+  },
+  "clusterUid": null,
+  "_responses": {
+    "POST /v1/spectroclusters/eks/validate": {
+      "ok": true,
+      "status": 200,
+      "body": {
+        "machinePools": {
+          "results": []
+        },
+        "profiles": []
+      }
+    },
+    "POST /v1/clouds/aws/account/validate": {
+      "ok": true,
+      "status": 204,
+      "body": null
+    },
+    "GET /v1/cloudaccounts/aws/acc-eks-1": {
+      "ok": true,
+      "status": 200,
+      "body": {
+        "metadata": {
+          "name": "strata-live-eks",
+          "uid": "acc-eks-1"
+        },
+        "kind": "aws"
+      }
+    }
+  },
+  "_exec": {
+    "aws iam simulate-principal-policy --policy-source-arn arn:aws:iam::123456789012:role/strata-live-eks-cloud --action-names eks:CreateCluster eks:CreateNodegroup eks:DescribeCluster iam:PassRole --output json": {
+      "exit": 0,
+      "stdout": {
+        "EvaluationResults": [
+          {
+            "EvalActionName": "eks:CreateCluster",
+            "EvalDecision": "allowed"
+          },
+          {
+            "EvalActionName": "eks:CreateNodegroup",
+            "EvalDecision": "allowed"
+          },
+          {
+            "EvalActionName": "eks:DescribeCluster",
+            "EvalDecision": "allowed"
+          },
+          {
+            "EvalActionName": "iam:PassRole",
+            "EvalDecision": "allowed"
+          }
+        ]
+      },
+      "stderr": ""
+    }
+  }
+}

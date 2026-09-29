@@ -1,0 +1,6 @@
+# The ledger of the runs of the lab: each run of the test plan of #91, the engine and the Palette
+# release it ran on, and what each check answered. `strata-preflight --promotion` reads it, and
+# the report of a run shows the counts of each rule from it. A run is one entry; nothing here is
+# an estimate. examples/live/preflight-plan.sh appends an entry at the end of each run.
+schema: strata-preflight-ledger/1
+runs: []

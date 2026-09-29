@@ -1,0 +1,27 @@
+section: images
+title: Images and registries
+about: |
+  The pack registries, the digests, the tags, and the images that the nodes pull.
+rules:
+  - id: floating-tag
+    title: No profile pins a pack under a floating tag
+    engines: [all]
+    tier: static
+    severity: warn
+    status: seen
+    when: (.profiles | length) > 0
+    what: |
+      A profile pinned to `1.0.x` moves when `1.0.2` arrives, with its pack uid, version, and
+      digest, with no person and no publish.
+    check:
+      kind: static
+      expr: |
+        [ .profiles[] | .source.name as $p | .packs[]
+          | select((.tag // "") | test("\\.x$|^x$"))
+          | "profile \($p): pack \(.name) is pinned under the floating tag \(.tag)" ]
+    evidence:
+      - kind: run
+        ref: "#66"
+    tests:
+      - fault: fixtures/eks/floating-tag.json
+        clean: fixtures/eks/clean.json

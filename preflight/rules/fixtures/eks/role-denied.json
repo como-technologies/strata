@@ -1,0 +1,31 @@
+{
+  "_base": "clean.json",
+  "_patch": {
+    "_exec": {
+      "aws iam simulate-principal-policy --policy-source-arn arn:aws:iam::123456789012:role/strata-live-eks-cloud --action-names eks:CreateCluster eks:CreateNodegroup eks:DescribeCluster iam:PassRole --output json": {
+        "exit": 0,
+        "stdout": {
+          "EvaluationResults": [
+            {
+              "EvalActionName": "eks:CreateCluster",
+              "EvalDecision": "implicitDeny"
+            },
+            {
+              "EvalActionName": "eks:CreateNodegroup",
+              "EvalDecision": "implicitDeny"
+            },
+            {
+              "EvalActionName": "eks:DescribeCluster",
+              "EvalDecision": "allowed"
+            },
+            {
+              "EvalActionName": "iam:PassRole",
+              "EvalDecision": "allowed"
+            }
+          ]
+        },
+        "stderr": ""
+      }
+    }
+  }
+}
