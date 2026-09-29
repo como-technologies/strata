@@ -1323,8 +1323,14 @@ fn the_entities_of_the_test_plan_are_the_shape_of_a_create_for_each_engine() {
     for engine in ["aws", "eks", "gcp", "gke"] {
         let text = std::fs::read_to_string(dir.join(format!("{engine}.json"))).unwrap();
         let doc: serde_json::Value = serde_json::from_str(&text).unwrap();
-        assert_eq!(doc["spec"]["cloudAccountUid"], "__ACCOUNT_UID__", "{engine}");
-        assert_eq!(doc["spec"]["profiles"][0]["uid"], "__PROFILE_UID__", "{engine}");
+        assert_eq!(
+            doc["spec"]["cloudAccountUid"], "__ACCOUNT_UID__",
+            "{engine}"
+        );
+        assert_eq!(
+            doc["spec"]["profiles"][0]["uid"], "__PROFILE_UID__",
+            "{engine}"
+        );
         let pools = doc["spec"]["machinepoolconfig"].as_array().unwrap();
         assert!(!pools.is_empty(), "{engine} has a pool");
         // preflight-plan.sh edits the first pool for the faults of size and type, and on gke and

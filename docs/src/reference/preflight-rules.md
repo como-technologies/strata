@@ -146,7 +146,7 @@ engine, the Palette release, and what each check answered.
 ```yaml
 schema: strata-preflight-ledger/1
 runs:
-  - run: 20260930T120000Z
+  - run: <the UTC time of the run directory>
     engine: gke
     release: "4.10"
     results:
