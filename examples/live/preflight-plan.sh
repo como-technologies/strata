@@ -17,7 +17,8 @@
 #   4  with --build only: the apply of cluster A through the provider, and strata preflight --watch
 #      on it from the moment Palette lists it, until it is Running or a stuck state. The ledger
 #      gets `passed` for each watch rule that passed
-#   5  with --build only: strata preflight on cluster:UID, the cluster as Palette holds it, which
+#   5  with --build only, once the cluster is Running (the provider can return before that): strata
+#      preflight on cluster:UID, the cluster as Palette holds it, which
 #      is the entity the provider sent; and on cluster:UID with a change of the instance type of
 #      the worker pool, which the rules on a change must fail. The ledger gets both
 #   6  with --build --down only: the destroy, the delete of the versions outside the state, and
@@ -239,6 +240,13 @@ if [ -n "$build" ]; then
       failed) record "$id" false-fail "the clean build: $(jq -r --arg id "$id" '[.checks[] | select(.id == $id) | (.messages // [])[]] | join("; ") | .[:160]' watch.report.json)" ;;
     esac
   done < <(jq -r '.checks[] | select(.severity == "fail" and (.verdict == "passed" or .verdict == "failed")) | "\(.id)\t\(.verdict)"' watch.report.json)
+
+  # The provider can end its apply with exit 0 while the cluster still provisions (the row
+  # provider-timeout-success, and the eks run 20260929T142534Z after a pivot webhook timeout): the
+  # checks of the cluster, and above all the delete, wait for Running. A delete of a cluster that
+  # provisions stays in Deleting (delete-while-provisioning), which that run showed.
+  echo "wait for cluster $C to be Running" | tee -a steps.log
+  wait_running "$C"
 
   # ---- 5. the cluster as Palette holds it, and a change of it ----------------------------------------------
   echo "== 5. cluster $C as Palette holds it, and a change of its worker pool" | tee -a steps.log

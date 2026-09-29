@@ -261,3 +261,78 @@ runs:
       - {rule: palette-validate, result: false-fail, note: "the cluster as Palette holds it: Palette refused the entity: InvalidParam: Invalid parameter 'SkipK8sUpgrade'; caused by: SkipK8sUpgrade is not supported for gke cloud type"}
       - {rule: gke-type-change, result: caught, note: "the change of the worker pool of cluster 6abbb086e8fdde7591c3d0a8 to e2-standard-8"}
       - {rule: pool-replace-fields, result: caught, note: "the change of the worker pool of cluster 6abbb086e8fdde7591c3d0a8 to e2-standard-8"}
+  - run: 20260929T142534Z
+    engine: eks
+    release: ""
+    results:
+      - {rule: eks-one-zone, result: caught, note: "the fault was made: .spec.machinepoolconfig[0].cloudConfig.azs = [\"us-east-2a\"]"}
+      - {rule: eks-worker-needed, result: caught, note: "the fault was made: def resize($n): .poolConfig.size = $n | .poolConfig.minSize = $n | .poolConfig.maxSize = $n; .spec.machinepoolconfig[0] |= resize(0)"}
+      - {rule: update-strategy-eks, result: caught, note: "the fault was made: .spec.machinepoolconfig[0].poolConfig.updateStrategy = {type: \"RollingUpdateScaleOut\"}"}
+      - {rule: api-endpoint-reach, result: caught, note: "the fault was made: .spec.cloudConfig.endpointAccess = {public: false, private: true, publicCIDRs: [], privateCIDRs: []}"}
+      - {rule: account-missing, result: caught, note: "the fault was made: .spec.cloudAccountUid = \"000000000000000000000000\""}
+      - {rule: sts-account-not-assumable, result: passed, note: "the clean entity"}
+      - {rule: account-missing, result: passed, note: "the clean entity"}
+      - {rule: eks-core-policies, result: passed, note: "the clean entity"}
+      - {rule: capa-bootstrap-stack, result: passed, note: "the clean entity"}
+      - {rule: iam-ten-policies, result: passed, note: "the clean entity"}
+      - {rule: aws-region-not-enabled, result: passed, note: "the clean entity"}
+      - {rule: eks-fargate-govcloud, result: passed, note: "the clean entity"}
+      - {rule: aws-quotas, result: passed, note: "the clean entity"}
+      - {rule: eks-quotas, result: passed, note: "the clean entity"}
+      - {rule: eks-one-zone, result: passed, note: "the clean entity"}
+      - {rule: eks-unsupported-zone, result: passed, note: "the clean entity"}
+      - {rule: eks-cidr-overlap, result: passed, note: "the clean entity"}
+      - {rule: api-endpoint-reach, result: passed, note: "the clean entity"}
+      - {rule: eks-public-cidrs, result: passed, note: "the clean entity"}
+      - {rule: proxy-no-proxy, result: passed, note: "the clean entity"}
+      - {rule: cilium-on-eks, result: passed, note: "the clean entity"}
+      - {rule: eks-worker-needed, result: passed, note: "the clean entity"}
+      - {rule: eks-ami-type, result: passed, note: "the clean entity"}
+      - {rule: eks-version-not-offered, result: passed, note: "the clean entity"}
+      - {rule: pack-cloud-support, result: passed, note: "the clean entity"}
+      - {rule: profile-cloud-mismatch, result: passed, note: "the clean entity"}
+      - {rule: eks-default-storageclass, result: passed, note: "the clean entity"}
+      - {rule: eks-csi-iam, result: passed, note: "the clean entity"}
+      - {rule: pack-state, result: passed, note: "the clean entity"}
+      - {rule: pack-dependency, result: passed, note: "the clean entity"}
+      - {rule: template-outside, result: passed, note: "the clean entity"}
+      - {rule: palette-validate, result: passed, note: "the clean entity"}
+      - {rule: leftovers-before-build, result: passed, note: "the clean entity"}
+      - {rule: lab-region, result: passed, note: "the clean entity"}
+      - {rule: agent-egress, result: passed, note: "the clean build, watched to Running"}
+      - {rule: node-egress-images, result: passed, note: "the clean build, watched to Running"}
+      - {rule: eks-delete-waits, result: passed, note: "the clean build, watched to Running"}
+      - {rule: infrastructure-stalled, result: passed, note: "the clean build, watched to Running"}
+      - {rule: pivot-webhook-timeout, result: caught, note: "the clean build was not clean: the events named the timeout of the webhook vspectrocluster.kb.io during the pivot, the fault of #89 and #90; the cluster then stayed Provisioning when the provider returned, and its delete waited"}
+      - {rule: sts-account-not-assumable, result: passed, note: "the cluster as Palette holds it, after a clean build"}
+      - {rule: account-missing, result: passed, note: "the cluster as Palette holds it, after a clean build"}
+      - {rule: eks-core-policies, result: passed, note: "the cluster as Palette holds it, after a clean build"}
+      - {rule: capa-bootstrap-stack, result: passed, note: "the cluster as Palette holds it, after a clean build"}
+      - {rule: iam-ten-policies, result: passed, note: "the cluster as Palette holds it, after a clean build"}
+      - {rule: aws-region-not-enabled, result: passed, note: "the cluster as Palette holds it, after a clean build"}
+      - {rule: eks-fargate-govcloud, result: passed, note: "the cluster as Palette holds it, after a clean build"}
+      - {rule: aws-quotas, result: passed, note: "the cluster as Palette holds it, after a clean build"}
+      - {rule: eks-quotas, result: passed, note: "the cluster as Palette holds it, after a clean build"}
+      - {rule: eks-one-zone, result: passed, note: "the cluster as Palette holds it, after a clean build"}
+      - {rule: eks-unsupported-zone, result: passed, note: "the cluster as Palette holds it, after a clean build"}
+      - {rule: eks-cidr-overlap, result: passed, note: "the cluster as Palette holds it, after a clean build"}
+      - {rule: api-endpoint-reach, result: passed, note: "the cluster as Palette holds it, after a clean build"}
+      - {rule: eks-public-cidrs, result: passed, note: "the cluster as Palette holds it, after a clean build"}
+      - {rule: proxy-no-proxy, result: passed, note: "the cluster as Palette holds it, after a clean build"}
+      - {rule: cilium-on-eks, result: passed, note: "the cluster as Palette holds it, after a clean build"}
+      - {rule: eks-worker-needed, result: passed, note: "the cluster as Palette holds it, after a clean build"}
+      - {rule: eks-ami-type, result: passed, note: "the cluster as Palette holds it, after a clean build"}
+      - {rule: eks-version-not-offered, result: passed, note: "the cluster as Palette holds it, after a clean build"}
+      - {rule: pack-cloud-support, result: passed, note: "the cluster as Palette holds it, after a clean build"}
+      - {rule: profile-cloud-mismatch, result: passed, note: "the cluster as Palette holds it, after a clean build"}
+      - {rule: eks-default-storageclass, result: passed, note: "the cluster as Palette holds it, after a clean build"}
+      - {rule: eks-csi-iam, result: passed, note: "the cluster as Palette holds it, after a clean build"}
+      - {rule: pack-state, result: passed, note: "the cluster as Palette holds it, after a clean build"}
+      - {rule: pack-dependency, result: passed, note: "the cluster as Palette holds it, after a clean build"}
+      - {rule: template-outside, result: passed, note: "the cluster as Palette holds it, after a clean build"}
+      - {rule: delete-pending-repave, result: passed, note: "the cluster as Palette holds it, after a clean build"}
+      - {rule: delete-while-provisioning, result: caught, note: "the cluster as Palette holds it was Provisioning when the provider returned; the plan then deleted it, and the delete waited, as the rule says"}
+      - {rule: delete-blockers, result: passed, note: "the cluster as Palette holds it, after a clean build"}
+      - {rule: palette-validate, result: false-fail, note: "the cluster as Palette holds it: Palette refused the entity: ResourceAlreadyExists: 'Cluster' resource  with name 'fred' already exists"}
+      - {rule: eks-type-change-orphan, result: caught, note: "the change of the worker pool of cluster 6abbcaafe8fde17044a4cc8f to m5.xlarge"}
+      - {rule: pool-replace-fields, result: caught, note: "the change of the worker pool of cluster 6abbcaafe8fde17044a4cc8f to m5.xlarge"}

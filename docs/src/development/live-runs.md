@@ -992,7 +992,15 @@ before any apply: the fault of #89, found in a millisecond. Two wrong results of
 strata came out of this run and are fixed: the validate route refuses the name
 of an existing cluster with `ResourceAlreadyExists`, so `palette-validate` and
 `worker-cpu-floor` now check an existing cluster under a suffixed name; and the
-plan now waits for `Running` before it deletes.
+plan now waits for `Running` before it deletes. The delete did not end: after
+75 minutes the EKS control plane, its node group, the VPC, and three NAT
+gateways were still in AWS, and Palette answered a plain-text `400 Bad Request`
+on every route of the cluster, the `DELETE` too, so the second plain delete that
+ended the case of the pivot report could not be sent. The recovery was the one
+of the book: `eks-nodegroups.sh --delete`, `aws-cleanup.sh fred us-east-2 --yes`,
+the inventory at 0, and a force delete of the record. The mechanism is the one
+of the findings report of 2026-09-26 on the pivot webhook, on EKS this time,
+and with an API that refuses the cluster.
 
 ## A chart pushed again, on a cluster
 

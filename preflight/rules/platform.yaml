@@ -267,6 +267,10 @@ rules:
       `GET /v1/dashboard/spectroclusters/meta` answers a JSON array at the top level, not an
       object with `items`. The kubeconfig route answers 500 while the cluster provisions. strata
       pages at 50 and 100 and reads both listing shapes; this row is the fact, with no check.
+      A cluster in `Deleting` after a partial pivot answered a plain-text `400 Bad Request` on every
+      route: the document, the events, the summary, and the `DELETE` itself, while the listing still
+      showed it (eks, run 20260929T142534Z). A second plain delete could not be sent, and the
+      recovery was the cleanup of the cloud by hand and a force delete.
     reproduce:
       - "curl -s -o /dev/null -w '%{http_code}\\n' -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" \"${PALETTE_API:-https://api.spectrocloud.com}/v1/events/components/spectrocluster/{{ .clusterUid // \"<cluster uid>\" }}?limit=101\"   # 500; 100 answers 200"
       - "curl -s -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" \"${PALETTE_API:-https://api.spectrocloud.com}/v1/dashboard/spectroclusters/meta\" | jq -r 'type'   # array"
