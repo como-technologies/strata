@@ -209,11 +209,11 @@ Section scorecard
   Images and registries          16   11     9         0 no runs    6    5    1           7   83%
   Profiles and packs              8    5     6         0 no runs    3    3    0           2  100%
   Lifecycle: update, repave, …   10    6     8         0 no runs    1    1    0           2  100%
-  The Palette platform            9    7     4         0 no runs    1    0    1           5    0%
+  The Palette platform           10    8     5         0 no runs    1    0    1           5    0%
   Client tools                    9    9     4         0 no runs    0    0    0           3     -
   Teardown and leftovers          6    6     3         0 no runs    1    1    0           5  100%
 
 The reproduce lines read $OUT/world.json and $OUT/entity.json: --out DIR writes both.
 
-101 rules apply; 22 ran: 19 passed, 0 failed, 2 probe(s) failed, 1 warning(s), 2 note(s); 35 not checked, 37 skipped, 0 error(s); readiness 86%
+102 rules apply; 22 ran: 19 passed, 0 failed, 2 probe(s) failed, 1 warning(s), 2 note(s); 35 not checked, 38 skipped, 0 error(s); readiness 86%
 OK: each counted check passed; 2 probe(s) failed, not counted
