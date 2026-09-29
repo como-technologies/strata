@@ -27,6 +27,7 @@ strata verify aws-stack.json                                    # exit 1 when so
 strata compare aws-stack.json cluster:payments                  # does the cluster run it?
 strata compare aws-stack@1.1.0 aws-stack@1.1.1                  # what changed, and the impact
 strata compare pack:csi-aws-ebs@1.63.1 pack:csi-aws-ebs@1.65.0  # two pack versions
+strata preflight cluster.json --cloud eks                       # can Palette build this cluster?
 ```
 
 With no tenant, `just examples` builds real profiles offline. See the
@@ -40,6 +41,7 @@ With no tenant, `just examples` builds real profiles offline. See the
 | Record | `snapshot`, `candidate` |
 | Compare | `compare`, `same-release` |
 | Check | `verify`, `consumers`, `behind` |
+| Before a build | `preflight` |
 | Reference | `schema` |
 
 Run `strata --help` for the list, and `strata <command> --help` for the options.
@@ -75,7 +77,7 @@ The source is in `docs/src/`.
 
 ## Requirements
 
-To use strata: the binary, a Palette API key, `jq`, and `gh`.
+To use strata: the two binaries, `strata` and `strata-preflight`, a Palette API key, `jq`, and `gh`.
 [Install](docs/src/install.md) lists each.
 
 To work on strata:

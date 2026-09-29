@@ -140,6 +140,11 @@ and a whole team.
   of clusters that somebody typed, and a cluster that nobody added is not
   checked.
 
+**8. Before the first build.** What stops a cluster build, found before the cloud time is spent.
+
+- [Stop a build that Palette cannot finish](./stop-a-build.md): a build fails
+  late with no message, or a customer asks how ready an estate is to start.
+
 ## The examples
 
 The pages use one team and one profile, `aws-stack`, with real pack data from the

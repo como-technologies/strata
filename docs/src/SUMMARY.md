@@ -22,6 +22,7 @@
 - [verify](./commands/verify.md)
 - [consumers](./commands/consumers.md)
 - [behind](./commands/behind.md)
+- [preflight](./commands/preflight.md)
 - [schema](./commands/schema.md)
 
 # Use cases
@@ -50,6 +51,7 @@
 - [A team pins each environment](./use-cases/fan-out.md)
 - [A publish fans out to what pins it](./use-cases/publish-fan-out.md)
 - [Find the fleet from Palette](./use-cases/fleet.md)
+- [Stop a build that Palette cannot finish](./use-cases/stop-a-build.md)
 
 # Automation
 
@@ -62,6 +64,7 @@
 - [GitLab CI](./automation/gitlab.md)
 - [The Rust library](./automation/library.md)
 - [The knurl adapter](./automation/knurl.md)
+- [Preflight in a pipeline](./automation/preflight.md)
 
 # Reference
 
@@ -74,15 +77,18 @@
 - [The candidate file](./reference/candidate-file.md)
 - [Palette API requests](./reference/palette-api.md)
 - [Versions and compatibility](./reference/compatibility.md)
+- [The rule format](./reference/preflight-rules.md)
 
 # How it works
 
 - [The hashes and the root](./internals/hashes.md)
+- [How preflight works](./internals/preflight.md)
 - [What Palette does](./internals/palette.md)
   - [Packs and registries](./internals/palette/packs.md)
   - [Profiles](./internals/palette/profiles.md)
   - [Clusters](./internals/palette/clusters.md)
   - [Edge hosts, cluster groups, and app profiles](./internals/palette/other-objects.md)
+  - [The validate routes](./internals/palette/validate-routes.md)
   - [What no run covers](./internals/palette/limits.md)
 
 # Development

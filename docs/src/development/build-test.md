@@ -1,9 +1,9 @@
 # Build and test
 
 ```bash
-just build             # target/release/strata
+just build             # target/release/strata and target/release/strata-preflight
 just lint              # cargo fmt --check, clippy with -D warnings, rustdoc with -D warnings
-just test              # the unit, library, binary, and script tests
+just test              # the unit, library, binary, and script tests, of both packages
 just library-example   # examples/library, a crate that uses strata as a library
 just examples          # examples/ from the tracked registry data
 just docs-check        # docs/src/output/ is the output of this build
@@ -30,6 +30,7 @@ The crate is edition 2024 and needs Rust 1.88 or later. `rust-version` in
 | `src/canon.rs`, `src/layer.rs`, `src/version.rs`, `src/reference.rs` | The canonical form, the layers, the version order, and what a ref means. |
 | `xtask/` | The development tools: the stand-in for the Palette API (`palette.rs`), the tenant of each chapter of the book (`tenant.rs`, `chapters.rs`), and the runner that writes `docs/src/output/` (`book.rs`). |
 | `adapter/` | The adapter for knurl, a package of its own: see [The knurl adapter](../automation/knurl.md). |
+| `preflight/` | `strata-preflight`, a package of its own in the workspace: the rule format (`rule.rs`), the catalog (`catalog.rs`, `rules/*.yaml`), the jq engine (`jq.rs`), the world (`world.rs`), the checks (`probe.rs`), the run and the watch (`run.rs`), the confidence and the ledger (`confidence.rs`, `evidence/runs.yaml`), the report (`report.rs`, `html.rs`), and the fixtures of its tests (`fixture.rs`, `rules/fixtures/`). See [How preflight works](../internals/preflight.md). |
 
 A new read of Palette goes in `api/palette.rs`. A new command gets a module in
 `ops/`. A new field of a record goes in `snapshot.rs`, outside the root unless it

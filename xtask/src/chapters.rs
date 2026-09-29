@@ -64,6 +64,24 @@ const MACRO_REGION: &[Edit] = &[Edit::Macro {
     name: "region",
 }];
 
+/// The body of an AWS create for the preflight chapter: the profile aws-stack@1.1.1 of dev, the
+/// cloud account platform-aws, and two pools of t3.xlarge in one zone.
+const PREFLIGHT_ENTITY: &str = r#"{
+  "metadata": { "name": "payments", "labels": { "env": "prod" } },
+  "spec": {
+    "cloudAccountUid": "64f3000000000000000000a1",
+    "cloudConfig": { "region": "us-east-2", "sshKeyName": "platform", "vpcId": "" },
+    "machinepoolconfig": [
+      { "cloudConfig": { "instanceType": "t3.xlarge", "azs": ["us-east-2a"], "rootDeviceSize": 60 },
+        "poolConfig": { "name": "cp-pool", "size": 1, "isControlPlane": true, "useControlPlaneAsWorker": false } },
+      { "cloudConfig": { "instanceType": "t3.xlarge", "azs": ["us-east-2a"], "rootDeviceSize": 60 },
+        "poolConfig": { "name": "worker-pool", "size": 1, "isControlPlane": false, "useControlPlaneAsWorker": false } }
+    ],
+    "profiles": [ { "uid": "64e0000000000000000000c3", "packValues": [], "variables": [] } ]
+  }
+}
+"#;
+
 /// The git settings that the merge-gate chapters need, so a commit is the same on every machine.
 const GIT: &[(&str, &str)] = &[
     ("PALETTE_PROJECT", "dev"),
@@ -114,6 +132,7 @@ pub fn names() -> Vec<&'static str> {
         "packs",
         "retire",
         "automation",
+        "preflight",
     ]
 }
 
@@ -140,6 +159,7 @@ fn getting_started(r: &mut Runner) {
         "consumers",
         "behind",
         "schema",
+        "preflight",
     ] {
         r.step(
             &format!("help-{c}"),
@@ -1963,5 +1983,82 @@ fn automation(r: &mut Runner) {
         2,
         true,
         "strata compare aws-stack@1.1.1 aws-stack@9.9.9 --quiet",
+    );
+
+    // preflight: can Palette build this cluster? The entity of an AWS create, with the profile
+    // aws-stack@1.1.1; the stand-in answers the validate route with the CPU floor of the packs,
+    // and holds the cloud account of the entity.
+    r.chapter("preflight", DEV_ENV);
+    r.projects(&[("dev", DEV), ("prod", PROD)]);
+    r.profile(DEV, A111, "1.1.1", "aws-stack@1.1.1", &[]);
+    r.write_file("cluster.json", PREFLIGHT_ENTITY);
+    r.answer(
+        DEV,
+        "v1/cloudaccounts/aws/64f3000000000000000000a1",
+        &json!({"kind": "aws", "metadata": {"name": "platform-aws", "uid": "64f3000000000000000000a1"},
+            "spec": {"credentialType": "secret", "partition": "aws", "policyARNs": []}, "status": {"state": "Active"}}),
+    );
+    r.answer(
+        DEV,
+        "v1/spectroclusters/aws/validate",
+        &json!({"machinePools": {"results": [{"name": "worker-pool", "displayName": "worker-pool",
+            "errors": [{"code": "MachinePoolResourcesInsufficient",
+                "message": "A minimum allocation of '4.1' CPU cores is required across all worker nodes"}]}]},
+            "profiles": []}),
+    );
+    r.step(
+        "preflight-static",
+        0,
+        false,
+        "strata preflight cluster.json --cloud aws --tier static --offline --quiet",
+    );
+    r.step(
+        "preflight-live",
+        0,
+        false,
+        "strata preflight cluster.json --cloud aws --quiet",
+    );
+    r.step(
+        "preflight-strict",
+        1,
+        false,
+        "strata preflight cluster.json --cloud aws --strict --quiet | tail -n 3",
+    );
+    r.step(
+        "preflight-json",
+        0,
+        false,
+        "strata preflight cluster.json --cloud aws --json --quiet \
+  | jq '.checks[] | select(.id == \"worker-cpu-floor\") | {id, tier, level, verdict, messages, reproduce}'",
+    );
+    r.step(
+        "preflight-json-summary",
+        0,
+        false,
+        "strata preflight cluster.json --cloud aws --json --quiet | jq '{summary, scorecard: [.sections[] | {title, ran, passed, failed, notChecked, readiness}]}'",
+    );
+    r.step(
+        "preflight-out",
+        0,
+        false,
+        "strata preflight cluster.json --cloud aws --quiet --out preflight > /dev/null; ls preflight",
+    );
+    r.step(
+        "preflight-rules",
+        0,
+        false,
+        "strata preflight --rules --cloud aws | head -n 12",
+    );
+    r.step(
+        "preflight-rules-json",
+        0,
+        false,
+        "strata preflight --rules --cloud aws --json | jq '.rules[] | select(.id == \"worker-cpu-floor\") | {id, tier, level, severity, status, engines, check: .check.kind}'",
+    );
+    r.step(
+        "preflight-promotion",
+        0,
+        false,
+        "strata preflight --promotion | tail -n 2",
     );
 }

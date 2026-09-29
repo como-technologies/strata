@@ -548,7 +548,7 @@ mod tests {
             when: None,
             check: Some(check),
             fix: None,
-            reproduce: vec![],
+            reproduce: Default::default(),
             evidence: vec![],
             promotion: None,
             tests: vec![],

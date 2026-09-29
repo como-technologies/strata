@@ -346,6 +346,41 @@ For the questions of `gke.sh`, set `gke_k8s_bump` to a Kubernetes version of the
 GKE pack, such as `1.35`: the example then also makes the profile version 1.0.9,
 the release with that version alone.
 
+## The preflight checks
+
+Two scripts run the three tiers of `strata preflight` around each build.
+
+**`preflight.sh`** checks the lab itself, before a recipe spends anything: the
+tools on the PATH, the key, the credentials of the cloud CLI, the APIs of the
+GCP project, the six core policies of an EKS run, the login of the OCI
+registry, and the leftovers of a run before, with the inventories. `just
+live-up` and `just live-profiles` run it first and stop at a failed check.
+`just live-preflight` runs it alone. These are checks of the lab, not of
+strata: the rows of the catalog with `engines: [lab]` name each one.
+
+**`preflight-plan.sh ENGINE`** is the test plan of #91 for one engine, with
+no cluster. It fills the entity of `examples/live/preflight/ENGINE.json` from
+the tenant, then runs two parts. In the first, one edit of the entity makes each
+fault the lab can make without a build, such as a GKE pool of 4, one zone on
+EKS, a GKE cluster with no release channel, or one worker of four cores, and
+`strata preflight --rule ID` must fail on it. In the second, the clean entity
+runs through every tier, and each rule of severity `fail` that ran must pass.
+The script appends the run to the ledger, `preflight/evidence/runs.yaml`, as
+`caught`, `missed`, `passed`, or `false-fail` for each rule, and
+`strata preflight --promotion` reads it. `--build` adds `just live-up` and the
+watch of cluster A until it is `Running` or a stuck state; the cluster stays,
+so `just live-down` follows.
+
+```bash
+examples/live/tf.sh apply -var cluster=false -var cloud=gke   # the profiles of the engine
+just live-preflight-plan gke
+just live-down
+```
+
+`PALETTE_RELEASE` names the Palette release for the ledger, when known: a
+tenant key cannot read it. The runs are recorded in
+[Live runs](./live-runs.md#preflight-plansh).
+
 ## Steps
 
 ### 1. Find the names in your tenant

@@ -123,21 +123,35 @@ tofu-uninstall:
 
 # When the apply fails, examples/live/diagnose.sh saves what holds each cluster.
 
+# Each recipe that builds runs the checks of the lab first, examples/live/preflight.sh: the tools,
+# the credentials of the cloud CLIs, the APIs of the GCP project, and the leftovers of a run
+# before. A failed check stops the recipe before it spends anything.
+
 # Build the live example: a cluster and the profile versions. Billable until live-down.
-live-up:
+live-up: build
     #!/usr/bin/env bash
     set -uo pipefail
+    examples/live/preflight.sh || exit 1
     examples/live/tf.sh init -input=false || exit 1
     examples/live/tf.sh apply && exit 0
     examples/live/diagnose.sh
     exit 1
 
 # Build the profiles of the live example and no cluster: seconds, and no cost
-live-profiles:
+live-profiles: build
     #!/usr/bin/env bash
     set -uo pipefail
+    examples/live/preflight.sh || exit 1
     examples/live/tf.sh init -input=false || exit 1
     examples/live/tf.sh apply -var cluster=false
+
+# The checks of the lab itself, with no build: the tools, the key, the cloud CLIs, the APIs, the leftovers (#91)
+live-preflight: build
+    examples/live/preflight.sh
+
+# The test plan of #91 for one engine: each fault on purpose fails, and a clean entity passes; the run goes to the ledger. Needs live-profiles with that cloud; --build adds live-up and the watch.
+live-preflight-plan engine *args: build
+    examples/live/preflight-plan.sh {{engine}} {{args}}
 
 # Serve the tenant of one chapter of the book on this machine: no key, no tenant, no cost
 playground chapter="list": build examples stand-in

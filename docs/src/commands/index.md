@@ -29,6 +29,7 @@ flowchart LR
     verify
     consumers
     behind
+    preflight
   end
   list --> snapshot --> compare --> verify
   candidate --> snapshot
@@ -48,6 +49,7 @@ flowchart LR
 | Make sure that Palette still has what you recorded | `strata verify` | [verify](./verify.md) |
 | Find the clusters that use a version | `strata consumers` | [consumers](./consumers.md) |
 | Find the pack versions that records pin behind a newer one | `strata behind` | [behind](./behind.md) |
+| Check that Palette can build a cluster, before the build | `strata preflight` | [preflight](./preflight.md) |
 | Get the JSON Schema of a document | `strata schema` | [schema](./schema.md) |
 
 ## Refs

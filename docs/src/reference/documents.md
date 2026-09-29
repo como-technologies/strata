@@ -17,6 +17,10 @@ document.
 | `strata-list/1` | `list --json` | `list` |
 | `strata-packs/1` | `packs --json` | `packs` |
 | `strata-behind/1` | `behind --json` | `behind` |
+| `strata-preflight/1` | `preflight --json` | `preflight --schema report` |
+| `strata-preflight-rules/1` | `preflight --rules --json` | `preflight --schema rules` (one section) |
+| `strata-preflight-ledger/1` | the ledger of runs | `preflight --schema ledger` |
+| `strata-preflight-promotion/1` | `preflight --promotion --json` | `preflight --schema promotion` |
 
 ## strata-snapshot/1
 
@@ -323,3 +327,32 @@ is the path as a list: strings for keys, numbers for indexes, and
   - `error`, when strata could not check the pin.
 - `summary`: `pins`, `behind`, `floating`, `errors`, and `arrived`.
 
+
+## strata-preflight/1
+
+The report of `strata preflight`: each rule that applies to the engine, and
+what it answered.
+
+- `subject`: `cloud`, `release` when given, `source` (a file, `cluster:<uid>`,
+  or both with a change), `name` of the cluster, and `clusterUid` for an
+  existing cluster.
+- `options`: `tiers` that ran, `strict`, and `ready` when given.
+- `checks[]`: one entry for each rule, in the order of the catalog.
+  - `id`, `title`, `section`, `tier`, `level`, `severity`, `status`.
+  - `verdict`: `passed`, `failed`, `not-checked`, `skipped`, or `error`.
+  - `messages[]`: one for each failure, or the reason for another verdict.
+  - `elapsedMs`, and `ran`, the request or the command the check ran.
+  - `reproduce[]`: the lines a person runs to see the same thing.
+  - `fix` with `owner` and `text`; `evidence[]` with `kind`, `ref`, `note`.
+  - `confidence`, when the ledger has runs of the rule on this engine: `catch`
+    and `clean`, each with `correct`, `total`, `rate`, and `lowerBound`; `bar`;
+    `meetsBar`; and `runs[]`.
+  - `countsAsFailure`: true when this entry makes the exit code `1`.
+- `sections[]`: the scorecard, one line for each section with a row for the
+  engine: `rows`, `seen`, `withCheck`, `preflight`, `weakestBound`, `ran`,
+  `passed`, `failed`, `notChecked`, `readiness`.
+- `summary`: the counts, `readiness`, `exitCode`, and one line, `verdict`.
+- `legend`: what each verdict, level, tier, and exit code means.
+
+[The rule format](./preflight-rules.md) states the section file, the ledger,
+and the fixtures.

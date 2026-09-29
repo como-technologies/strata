@@ -323,9 +323,9 @@ pub fn assemble(a: Assembly<'_>, jq: &Jq) -> Report {
             && rule.severity == Severity::Fail
             && (rule.level == Level::Preflight || a.options.strict);
         let mut reproduce: Vec<String> = Vec::new();
-        for line in &rule.reproduce {
+        for line in rule.reproduce.for_engine(&a.subject.cloud) {
             reproduce.push(
-                jq.render(&rule.id, line, a.world)
+                jq.render(&rule.id, &line, a.world)
                     .unwrap_or_else(|_| line.clone()),
             );
         }
@@ -386,7 +386,8 @@ fn auto_reproduce(
     out_dir: Option<&str>,
 ) -> Vec<String> {
     use crate::rule::Check;
-    let dir = out_dir.unwrap_or("<out dir>");
+    // with no --out, the two files are not on disk: $OUT names where --out would put them
+    let dir = out_dir.unwrap_or("$OUT");
     let mut lines = Vec::new();
     match &rule.check {
         Some(Check::Static { expr }) => {
@@ -406,10 +407,10 @@ fn auto_reproduce(
                 crate::rule::Method::Get => String::new(),
             };
             lines.push(format!(
-                "curl -s -o body.json -w '%{{http_code}}' -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\"{data} \"${{PALETTE_API:-https://api.spectrocloud.com}}{path}\""
+                "code=$(curl -s -o body.json -w '%{{http_code}}' -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\"{data} \"${{PALETTE_API:-https://api.spectrocloud.com}}{path}\")"
             ));
             lines.push(format!(
-                "jq --slurpfile body body.json '.response = {{ok: false, status: 400, body: $body[0]}} | {}' {dir}/world.json   # set ok and status from the code curl printed",
+                "jq --arg code \"$code\" --slurpfile body body.json '.response = {{ok: (($code | tonumber) < 300), status: ($code | tonumber), body: ($body[0] // null)}} | {}' {dir}/world.json",
                 one_line(expr)
             ));
         }
@@ -738,6 +739,15 @@ pub fn terminal(r: &Report, color: bool) -> String {
             pct(s.readiness)
         ));
     }
+    if r.checks
+        .iter()
+        .any(|c| c.reproduce.iter().any(|l| l.contains("$OUT/")))
+    {
+        out.push_str(&format!(
+            "\n{}\n",
+            paint(color, "2", "The reproduce lines read $OUT/world.json and $OUT/entity.json: --out DIR writes both.")
+        ));
+    }
     let s = &r.summary;
     out.push_str(&format!(
         "\n{} rules apply; {} ran: {} passed, {} failed, {} probe(s) failed, {} warning(s), {} note(s); {} not checked, {} skipped, {} error(s); readiness {}\n",
@@ -840,6 +850,12 @@ pub fn markdown(r: &Report) -> String {
             }
         }
         out.push_str("</details>\n");
+        if r.checks
+            .iter()
+            .any(|c| c.reproduce.iter().any(|l| l.contains("$OUT/")))
+        {
+            out.push_str("\nThe reproduce lines read `$OUT/world.json` and `$OUT/entity.json`: `--out DIR` writes both.\n");
+        }
     }
     out.push_str("\n### Section scorecard\n\n| section | rows | seen | with a check | preflight | weakest bound | ran | passed | failed | not checked | readiness |\n|---|---|---|---|---|---|---|---|---|---|---|\n");
     for sc in &r.sections {

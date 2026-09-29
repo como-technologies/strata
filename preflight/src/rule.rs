@@ -256,6 +256,44 @@ pub struct Evidence {
     pub note: String,
 }
 
+/// The reproduce lines of a rule: one list, or a list for each engine.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(untagged)]
+pub enum Reproduce {
+    /// The same lines for every engine.
+    Lines(Vec<String>),
+    /// A list for each engine, and `all` for an engine that has none of its own.
+    ByEngine(std::collections::BTreeMap<String, Vec<String>>),
+}
+
+impl Default for Reproduce {
+    fn default() -> Self {
+        Reproduce::Lines(Vec::new())
+    }
+}
+
+impl Reproduce {
+    /// True with no line at all.
+    pub fn is_empty(&self) -> bool {
+        match self {
+            Reproduce::Lines(l) => l.is_empty(),
+            Reproduce::ByEngine(m) => m.values().all(Vec::is_empty),
+        }
+    }
+
+    /// The lines for one engine.
+    pub fn for_engine(&self, engine: &str) -> Vec<String> {
+        match self {
+            Reproduce::Lines(l) => l.clone(),
+            Reproduce::ByEngine(m) => m
+                .get(engine)
+                .or_else(|| m.get("all"))
+                .cloned()
+                .unwrap_or_default(),
+        }
+    }
+}
+
 /// The runs that promoted a rule to a preflight check, and the bar they met.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct Promotion {
@@ -422,9 +460,10 @@ pub struct Rule {
     pub fix: Option<Fix>,
     /// Commands a person runs by hand to see the same thing: the `curl`, `jq`, `aws`, or
     /// `gcloud` line. The report prints them for each failed check and each `NOT CHECKED` row.
-    /// A template `{{ jq }}` over the world is filled in the report.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub reproduce: Vec<String>,
+    /// A template `{{ jq }}` over the world is filled in the report. A list holds the lines for
+    /// every engine; a map holds a list for each engine, and `all` for the rest.
+    #[serde(default, skip_serializing_if = "Reproduce::is_empty")]
+    pub reproduce: Reproduce,
     /// The runs, the source, the pages, and the reports that show the fault.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub evidence: Vec<Evidence>,
@@ -630,6 +669,16 @@ fn check_section(section: &Section, path: &Path) -> Result<()> {
             return Err(at(format!(
                 "releases '{range}' is not a range such as '>=4.10' or '>=4.9 <4.11'"
             )));
+        }
+        if let Reproduce::ByEngine(m) = &rule.reproduce {
+            for e in m.keys() {
+                if !ENGINES.contains(&e.as_str()) {
+                    return Err(at(format!(
+                        "reproduce names the engine '{e}', which is not one of {}",
+                        ENGINES.join(", ")
+                    )));
+                }
+            }
         }
         for t in &rule.tests {
             if t.fault.is_none() && t.clean.is_none() {

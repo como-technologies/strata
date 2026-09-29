@@ -62,8 +62,12 @@ impl Cli {
             Cmd::List(a) => a.out.format() == Format::Json,
             Cmd::Packs(a) => a.out.format() == Format::Json,
             Cmd::Behind(a) => a.out.format() == Format::Json,
-            Cmd::Preflight(a) => a.args.iter().any(|x| x == "--json" || x == "--format=json")
-                || a.args.windows(2).any(|w| w[0] == "--format" && w[1] == "json"),
+            Cmd::Preflight(a) => {
+                a.args.iter().any(|x| x == "--json" || x == "--format=json")
+                    || a.args
+                        .windows(2)
+                        .any(|w| w[0] == "--format" && w[1] == "json")
+            }
             Cmd::Snapshot(_) | Cmd::Candidate(_) | Cmd::Schema { .. } => false,
         }
     }

@@ -5,6 +5,7 @@
 | Tool | Function |
 | --- | --- |
 | `strata` | The command line. One static binary. |
+| `strata-preflight` | The preflight checks; `strata preflight` runs it from the same directory. One static binary, in every release from the one after v0.15.0. |
 | A Palette API key | Reads the profiles and clusters. |
 | `curl`, `jq` | Read the JSON documents in scripts and in this book, and fetch a release. |
 | `gh` | Downloads a release while this repository is private. Also posts pull request comments and drift issues. |
@@ -13,9 +14,9 @@
 
 ## Download a release
 
-Each release has one binary for each platform, the three CI scripts, the
-installer, a `SHA256SUMS` file over all of them, and a Sigstore signature for
-each file.
+Each release has two binaries for each platform, `strata` and
+`strata-preflight`, the CI scripts, the installer, a `SHA256SUMS` file over all
+of them, and a Sigstore signature for each file.
 
 | Target | Platform |
 | --- | --- |
@@ -40,7 +41,7 @@ gh release download --repo como-technologies/strata --pattern install-strata.sh 
 | --- | --- |
 | `--version v0.15.0` | Installs that release. The default is `STRATA_VERSION`, else `latest`, the newest release. |
 | `--repo OWNER/REPO` | The repository to read. The default is `STRATA_REPO`, else `como-technologies/strata`. |
-| `--bin-only` | Installs `strata` alone. The release after `v0.7.1` is the first one with this option. |
+| `--bin-only` | Installs the two binaries alone. The release after `v0.7.1` is the first one with this option. |
 | `--dir DIR` | Where to install. The default is `.strata`. |
 | `--target TARGET` | Overrides the target this machine detects. |
 

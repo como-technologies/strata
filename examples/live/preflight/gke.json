@@ -1,0 +1,21 @@
+{
+  "metadata": { "name": "__NAME__", "labels": { "purpose": "strata-preflight-plan" } },
+  "spec": {
+    "cloudAccountUid": "__ACCOUNT_UID__",
+    "cloudConfig": {
+      "project": "__PROJECT__",
+      "region": "__REGION__",
+      "network": "",
+      "managedClusterConfig": { "location": "__REGION__", "enableAutoPilot": false },
+      "overrideClusterAPIConfig": "gcpManagedControlPlane:\n  spec:\n    releaseChannel: regular\n"
+    },
+    "machinepoolconfig": [
+      {
+        "cloudConfig": { "instanceType": "e2-standard-4", "rootDeviceSize": 60 },
+        "poolConfig": { "name": "worker-pool", "size": 3, "minSize": 3, "maxSize": 3, "isControlPlane": false, "useControlPlaneAsWorker": false, "labels": ["worker"], "taints": [] }
+      }
+    ],
+    "profiles": [ { "uid": "__PROFILE_UID__", "packValues": [], "variables": [] } ],
+    "clusterConfig": { "timezone": "Etc/UTC" }
+  }
+}

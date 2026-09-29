@@ -31,6 +31,36 @@ These are open:
   Artifactory are named on the public page, and no run uses one.
 - The variables of a cluster template while the template applies.
 
+## What strata preflight does not check
+
+`strata preflight` calls no cloud API. A rule that only the cloud can answer
+runs the tool of the cloud (`aws`, `gcloud`) when it is on the machine, and is
+`NOT CHECKED` with the command when it is not. These rows are `NOT CHECKED` on
+every machine, because no check exists yet or the entity does not hold what the
+check needs; the report prints each one with its reproduce lines:
+
+- An instance type that a zone does not offer (`instance-offering`): the zone
+  of a pool is in the entity, and the check needs one call for each pair of
+  type and zone.
+- The quotas of the cloud (`aws-quotas`, `eks-quotas`, `gcp-quotas`,
+  `aws-sg-rules`): the usage is not in the entity.
+- The image Palette builds for an OS and Kubernetes version on GCP
+  (`gcp-image-not-shared`), and the AMI of an OS pack on AWS (`aws-ami`): the
+  name is not in the entity.
+- The routes that exist and that strata has no path for yet (`root-volume`,
+  `dedicated-hosts`): the row names them.
+- A race (`spot-capacity`, `profile-follows-push`, `edit-in-place`): no check
+  before the build finds it; the watch finds its effect.
+- A rule of the tool that makes the entity (`provider-timeout-success`,
+  `provider-eks-azs`): out of scope; the row stays so that the catalog is
+  complete.
+
+`strata preflight --rules --cloud <engine>` lists each rule with its tier and
+its check. A rule with a check whose tool is not on the machine is `NOT
+CHECKED` on that machine alone. The findings report
+`palette-precreate-validation-gaps-findings-2026-09-28` asks Palette to check
+the first three in its validate routes.
+
 ## What the source of Palette says
 
 The Spectro Cloud source settles these. No live run checks them, so strata

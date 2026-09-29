@@ -1,0 +1,19 @@
+{
+  "metadata": { "name": "__NAME__", "labels": { "purpose": "strata-preflight-plan" } },
+  "spec": {
+    "cloudAccountUid": "__ACCOUNT_UID__",
+    "cloudConfig": { "region": "__REGION__", "vpcId": "", "sshKeyName": "__SSH_KEY__", "controlPlaneLoadBalancer": "", "bastionDisabled": false },
+    "machinepoolconfig": [
+      {
+        "cloudConfig": { "instanceType": "t3.xlarge", "azs": ["__AZ__"], "rootDeviceSize": 60 },
+        "poolConfig": { "name": "cp-pool", "size": 1, "minSize": 1, "maxSize": 1, "isControlPlane": true, "useControlPlaneAsWorker": false, "labels": ["control-plane"], "taints": [] }
+      },
+      {
+        "cloudConfig": { "instanceType": "t3.xlarge", "azs": ["__AZ__"], "rootDeviceSize": 60 },
+        "poolConfig": { "name": "worker-pool", "size": 2, "minSize": 2, "maxSize": 2, "isControlPlane": false, "useControlPlaneAsWorker": false, "labels": ["worker"], "taints": [] }
+      }
+    ],
+    "profiles": [ { "uid": "__PROFILE_UID__", "packValues": [], "variables": [] } ],
+    "clusterConfig": { "timezone": "Etc/UTC" }
+  }
+}

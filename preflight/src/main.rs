@@ -22,6 +22,7 @@ use strata_preflight::{TOOL_NAME, catalog};
 #[command(
     name = TOOL_NAME,
     version,
+    disable_help_flag = true,
     about = "Check that Palette can build a cluster, before the build",
     override_usage = "strata-preflight <SOURCE> [CHANGE] [OPTIONS]\n       strata-preflight --watch cluster:UID [OPTIONS]\n       strata-preflight --rules [OPTIONS]\n       strata-preflight --promotion [OPTIONS]",
     after_help = "The book: https://legendary-train-pzq9ojj.pages.github.io/commands/preflight.html"
@@ -31,16 +32,13 @@ struct Cli {
     source: Option<String>,
     /// A change of the cluster, as a file: the pools or the profiles that change
     change: Option<PathBuf>,
-    /// The engine of a file: aws, eks, gcp, gke, azure, aks, maas, edge, or vsphere; a cluster
-    /// names its own
+    /// The engine of a file: aws, eks, gcp, gke, azure, aks, maas, edge, vsphere; a cluster names its own
     #[arg(long, value_name = "CLOUD")]
     cloud: Option<String>,
-    /// The Palette release, such as 4.10; a tenant key cannot read it, so a rule of one release
-    /// applies when none is given
+    /// The Palette release, such as 4.10; with none, a rule of one release applies
     #[arg(long, value_name = "RELEASE")]
     release: Option<String>,
-    /// Records of the profiles, as files or a pattern in quotes; with none, strata-preflight
-    /// records each profile from Palette
+    /// Records of the profiles, as files or a pattern in quotes; with none, read from Palette
     #[arg(long, value_name = "FILE")]
     records: Vec<String>,
     /// A file of custom probes, in the format of the rules; give it again for more
@@ -108,6 +106,9 @@ struct Cli {
     /// No progress messages
     #[arg(short, long)]
     quiet: bool,
+    /// Print help
+    #[arg(short, long, action = clap::ArgAction::HelpShort)]
+    help: Option<bool>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, ValueEnum)]

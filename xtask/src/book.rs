@@ -59,6 +59,8 @@ pub struct Runner {
     seeded: BTreeMap<(String, String, String), (String, String)>,
     stamp: Regex,
     commit: Regex,
+    /// The time a preflight check took, which differs on each run: one fixed count.
+    millis: Regex,
 }
 
 impl Runner {
@@ -126,6 +128,8 @@ impl Runner {
             seeded: BTreeMap::new(),
             stamp: Regex::new(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z").expect("a pattern"),
             commit: Regex::new(r"(?m) in [0-9a-f]{7,40}$").expect("a pattern"),
+            millis: Regex::new(r#"( {2,})\d+ ms\b|\| \d+ ms \||"elapsedMs": \d+"#)
+                .expect("a pattern"),
         })
     }
 
@@ -403,6 +407,15 @@ impl Runner {
         self.tenant.registries(project);
     }
 
+    /// Write the answer of one request of the tenant, for a route no other helper writes.
+    pub fn answer(&mut self, project: &str, path: &str, value: &serde_json::Value) {
+        if self.serving() {
+            return;
+        }
+        self.changed();
+        self.tenant.put(project, path, value);
+    }
+
     /// Write a file into the chapter's working directory, as a candidate file a page shows.
     pub fn write_file(&mut self, name: &str, text: &str) {
         if self.serving() {
@@ -462,6 +475,18 @@ impl Runner {
             ));
         }
         let text = self.stamp.replace_all(&text, "2026-09-17T09:30:00Z");
+        let text = self.millis.replace_all(&text, |c: &regex::Captures| {
+            let whole = c.get(0).map_or("", |m| m.as_str());
+            if whole.starts_with('|') {
+                "| 1 ms |".to_string()
+            } else if whole.starts_with('"') {
+                "\"elapsedMs\": 1".to_string()
+            } else {
+                // the same width as the field had, so the columns stay where they were
+                let width = whole.len() - " ms".len();
+                format!("{:>width$} ms", 1)
+            }
+        });
         let text = self
             .commit
             .replace_all(&text, " in 8c1d4f2")
