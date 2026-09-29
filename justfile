@@ -177,6 +177,10 @@ live-loop: build
 live-eks: build
     examples/live/eks.sh
 
+# The managed engine test on GKE: the release, the shape tier, and the repave answers of Palette; GKE_POOL_CHANGE=1 adds a change of the node pool (#90). Needs cloud = "gke" in terraform.tfvars and live-up.
+live-gke: build
+    examples/live/gke.sh
+
 # One state per version: a bump as a new resource in a new state, with no feature_preview flag, and the destroy that a cluster in use refuses (#81). Needs live-up; leaves nothing behind.
 live-version-states: build
     examples/live/version-states.sh

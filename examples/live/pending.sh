@@ -138,7 +138,7 @@ if stage 4 "an edit of a value of the release version, and its undo"; then
   check values-pending-compare 1 '#78: compare cluster:<uid> cluster:<uid>@pending' -- \
     "$strata" compare "cluster:$C" "cluster:$C@pending" --json
   check values-pending-compare-says 0 '#78: the one pack that changes is the CSI pack, and the path is the reclaim policy' -- \
-    jq -e --arg csi "$(out csi_pack_name)" '[.packs[] | select(.status != "unchanged")] | length == 1 and .[0].name == $csi and (.[0].values | tostring | test("reclaimPolicy"))' values-pending-compare.out
+    jq -e --arg csi "$(out csi_pack_name)" --arg key "$(out csi_next_key)" '[.packs[] | select(.status != "unchanged")] | length == 1 and .[0].name == $csi and (.[0].values | tostring | test($key))' values-pending-compare.out
   check values-undo 0 'put the value back through the API' -- \
     "$live/api.sh" edit "$R" "$(out csi_reclaim_delete | sed 's/Delete/Retain/')" "$(out csi_reclaim_delete)"
   check values-undo-none 0 '#70: the undo closes the update with no update of the cluster: none waits' -- settled false

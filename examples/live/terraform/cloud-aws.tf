@@ -17,7 +17,9 @@ locals {
     # The one line of the CSI values that version 1.0.1 changes, as the pack writes it, with its
     # indentation: the values also hold the comments "# reclaimPolicy: Delete" and
     # "#   reclaimPolicy: Retain", which an edit must not change.
-    csi_reclaim = "        reclaimPolicy: Delete"
+    csi_reclaim  = "        reclaimPolicy: Delete"
+    csi_next     = replace("        reclaimPolicy: Delete", "Delete", "Retain")
+    csi_next_key = "reclaimPolicy"
   }
 }
 

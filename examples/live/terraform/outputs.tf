@@ -199,5 +199,10 @@ output "member_cluster_uid" {
 }
 
 output "k8s_bump_profile_uid" {
-  value = try(spectrocloud_cluster_profile.k8s_bump[0].id, "")
+  value = try(spectrocloud_cluster_profile.k8s_bump[0].id, spectrocloud_cluster_profile.gke_k8s_bump[0].id, "")
+}
+
+output "csi_next_key" {
+  description = "The key of the CSI pack values that version 1.0.1 changes"
+  value       = local.cloud.csi_next_key
 }

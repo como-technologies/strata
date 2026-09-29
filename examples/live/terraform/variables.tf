@@ -4,12 +4,12 @@ variable "palette_project" {
 }
 
 variable "cloud" {
-  description = "The cloud of the clusters: aws, gcp, or eks. cloud-aws.tf, cloud-gcp.tf, and cloud-eks.tf hold what changes with it"
+  description = "The cloud of the clusters: aws, gcp, eks, or gke. The cloud-<cloud>.tf files hold what changes with it"
   type        = string
   default     = "aws"
   validation {
-    condition     = contains(["aws", "gcp", "eks"], var.cloud)
-    error_message = "cloud is aws, gcp, or eks."
+    condition     = contains(["aws", "gcp", "eks", "gke"], var.cloud)
+    error_message = "cloud is aws, gcp, eks, or gke."
   }
 }
 
@@ -360,4 +360,22 @@ variable "palette_core_policies" {
     "PaletteCAPATaggingPolicy",
     "PaletteCloudFormationPolicy",
   ]
+}
+
+variable "gke_instance_type" {
+  description = "The machine type of the node pool of a GKE cluster"
+  type        = string
+  default     = "e2-standard-4"
+}
+
+variable "gke_worker_count" {
+  description = "The nodes of the node pool of a GKE cluster: a multiple of 3, which Palette requires of each GKE worker pool"
+  type        = number
+  default     = 3
+}
+
+variable "gke_k8s_bump" {
+  description = "With cloud gke: a Kubernetes version for the profile version 1.0.9, which is the release with that version alone"
+  type        = string
+  default     = ""
 }

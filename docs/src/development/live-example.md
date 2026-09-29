@@ -36,16 +36,17 @@ show.
 | `loop.sh` | [The everyday loop](../loop.md), end to end: a change, the gates, the publish, the nightly jobs, a value overridden on a cluster, an edit in place, an incident, and a retire, with the records in a git repository that it builds (#81). It needs cluster A, and undoes each change. |
 | `eks-nodegroups.sh` | The EKS node groups of cluster A, from AWS; `--delete` deletes those of the example, a step of the recovery of [An EKS cluster](#an-eks-cluster). |
 | `eks.sh` | On an EKS cluster: the release and its packs, the shape tier of a managed node group, the repave answer of Palette for each layer and for a Kubernetes bump, and a change of the node group (#89). It needs `cloud = "eks"` and cluster A. |
+| `gke.sh` | On a GKE cluster: the release and its packs, the shape tier of a node pool, the repave answer of Palette for a Kubernetes bump, and, with `GKE_POOL_CHANGE=1`, a change of the node pool (#90). It needs `cloud = "gke"` and cluster A. |
 | `version-states.sh` | One state per version with no feature preview flag, a destroy that a cluster in use refuses, a version that is gone, and the version strings that Palette stores (#81). It builds its own profile in `terraform-version/`, and needs cluster A. |
 
-The example runs on AWS or GCP instances, or on EKS: the variable `cloud` in
+The example runs on AWS or GCP instances, or on EKS or GKE: the variable `cloud` in
 `terraform.tfvars` selects one. Strata makes no rule about which cloud runs the
 cluster. The profiles and the checks are the same on each cloud.
-`terraform/cloud-aws.tf`, `terraform/cloud-gcp.tf`, and `terraform/cloud-eks.tf`
-hold what changes: the cloud account, the cluster resource, and the names and
+`terraform/cloud-aws.tf`, `terraform/cloud-gcp.tf`, `terraform/cloud-eks.tf`, and
+`terraform/cloud-gke.tf` hold what changes: the cloud account, the cluster resource, and the names and
 versions of the infrastructure packs. For another cloud, add a file of the same
-shape. EKS is a managed engine, and has its own cloud account: see
-[An EKS cluster](#an-eks-cluster). The scripts read the pack names from the outputs
+shape. EKS and GKE are managed engines. EKS has its own cloud account: see
+[An EKS cluster](#an-eks-cluster) and [A GKE cluster](#a-gke-cluster). The scripts read the pack names from the outputs
 `os_pack_name` and `csi_pack_name`, and hold none.
 
 ## What it builds
@@ -55,9 +56,9 @@ shape. EKS is a managed engine, and has its own cloud account: see
 | Resource | What it is |
 | --- | --- |
 | profile `strata-live-profile` 1.0.0 | Ubuntu 24.04, Kubernetes 1.36.2, Cilium 1.20.1, EBS CSI 1.65.0, default values. Cluster A runs it. |
-| profile `strata-live-profile` 1.0.1 | The same, with the EBS storage class `reclaimPolicy` `Retain` in place of `Delete`. No cluster runs it. |
+| profile `strata-live-profile` 1.0.1 | The same, with the storage class `reclaimPolicy` `Retain` in place of `Delete` in the CSI pack. The GKE CSI pack has values of comments alone, so with `cloud = "gke"` 1.0.1 adds the key `strataNext` in its place. The output `csi_next_key` names the key. No cluster runs it. |
 | profile `strata-live-addon` 1.0.0 | An add-on profile with one manifest, the ConfigMap `strata-live-config` in `default`, and one variable, `purpose`, with a default. Cluster A runs it after the release profile. |
-| cluster `fred` (cluster A) | One control plane node and two workers, `t3.xlarge`, one availability zone. With `cloud = "eks"`, an EKS cluster with one managed node group of two `t3.xlarge` nodes in two zones, on the cloud account of [An EKS cluster](#an-eks-cluster). |
+| cluster `fred` (cluster A) | One control plane node and two workers, `t3.xlarge`, one availability zone. With `cloud = "gke"`, a GKE cluster with one node pool of three `e2-standard-4` nodes, on the GCP cloud account and project of `cloud = "gcp"`. With `cloud = "eks"`, an EKS cluster with one managed node group of two `t3.xlarge` nodes in two zones, on the cloud account of [An EKS cluster](#an-eks-cluster). |
 | profile `strata-live-registries` 1.0.0 | An add-on profile with one chart from a Helm registry (default `nginx` 25.1.5 from `Bitnami`), and one pack from the OCI pack registry that `terraform.tfvars` names. No cluster runs it. |
 | registry `strata-live-registry` | The example's own OCI pack registry: two ECR repositories, `strata-live/spectro-packs/archive/strata-live-pack` and `.../strata-live-dep`, in the AWS account that `aws_profile` names, a user that reads them, and a Palette registry over them. `registry.sh` pushes into it; nothing else does. |
 | profile `strata-live-owned` 1.0.0 | An add-on profile with the one pack of that registry. `registry.sh` makes it after the first push, and removes it at its end. |
@@ -222,6 +223,20 @@ back to false with the default variables (`apply_baseline`).
   one, the cloud controller exits, the node keeps the taint
   `node.cloudprovider.kubernetes.io/uninitialized`, no pod starts, and the
   cluster stays `Provisioning`.
+- For `cloud = "gke"`: the GCP cloud account and project of `cloud = "gcp"`,
+  with the Kubernetes Engine API on as well
+  (`gcloud services enable container.googleapis.com --project <project>`).
+  Without it, the cluster does not build, and its status shows no error. GCP
+  also refuses a new GKE cluster that is in no release channel, and Palette
+  sets no channel (its known issue PCP-7528). `cloud-gke.tf` sets the channel
+  `regular` with the workaround of Palette, a cluster-level CAPI override in
+  `override_cluster_api_config`. Without it, GCP refuses each `CreateCluster`
+  call, and the cluster stays `Provisioning` with its control plane shown as
+  done. In both cases the status of the cluster shows no error, and the events
+  of the cluster name it (`GET /v1/events/components/spectrocluster/<uid>`).
+  When the create takes longer than its timeout, the provider gives a warning
+  and ends the apply with success, so `just live-up` can end while the cluster
+  still builds: `gke.sh` waits for `Running`.
 - For `cloud = "eks"`: the six core policies of Palette as customer managed
   policies in the AWS account, by the names that `palette_core_policies` holds,
   and an `aws_profile` that can create an IAM role and a policy. See
@@ -300,6 +315,37 @@ For the questions of `eks.sh`, set `eks_k8s_bump` to a Kubernetes version of the
 EKS pack, such as `1.36`: the example then also makes the profile version 1.0.9,
 the release with that version alone.
 
+## A GKE cluster
+
+With `cloud = "gke"`, cluster A is a GKE cluster: Google runs the control plane,
+and one node pool of three nodes runs the workers. The release profile is a GKE
+profile: `cos-gke`, `kubernetes-gke`, `cni-vpc-native-gke`, and
+`gke-csi-gcp-driver`. The cluster uses the GCP cloud account and project of
+`cloud = "gcp"`, and needs no more access than the Kubernetes Engine API (see
+[Prerequisites](#prerequisites)).
+
+The four GKE packs have values of comments alone. So version 1.0.1 adds the key
+`strataNext` to the values of the CSI pack, in place of the edit of
+`reclaimPolicy` on the other clouds.
+
+A change of the node pool of a GKE cluster, step 4 of `gke.sh` with
+`GKE_POOL_CHANGE=1`, deletes the GKE node pool, and Palette makes no new one.
+Palette gives the new machine pool the GKE name of the old one, `worker-pool`.
+The delete of the old machine pool removes the GKE node pool, and the
+controllers that make the new pool ran on its nodes. The cluster keeps no node.
+The delete of the cluster then removes the GKE cluster, and stays `Deleting`
+with no end. The recovery, after `just live-down` stops at the cluster:
+
+1. `examples/live/gcp-inventory.sh <project> <cluster name> --gke` reads 0 for
+   each kind. If a GKE cluster is left,
+   `gcloud container clusters delete <cluster name> --region <region>` removes it.
+2. `examples/live/api.sh delete-cluster <uid> --force`, and `just live-down`
+   again.
+
+For the questions of `gke.sh`, set `gke_k8s_bump` to a Kubernetes version of the
+GKE pack, such as `1.35`: the example then also makes the profile version 1.0.9,
+the release with that version alone.
+
 ## Steps
 
 ### 1. Find the names in your tenant
@@ -335,7 +381,7 @@ $EDITOR examples/live/terraform/terraform.tfvars
 | Variable | Value |
 | --- | --- |
 | `palette_project` | a project name |
-| `cloud` | optional; `aws` (the default), `gcp`, or `eks`. Change it only after `just live-down` |
+| `cloud` | optional; `aws` (the default), `gcp`, `eks`, or `gke`. Change it only after `just live-down` |
 | `cloud_account_name` | an AWS cloud account name |
 | `region`, `az` | the region and a zone |
 | `ssh_key_name` | a key pair |
@@ -347,6 +393,8 @@ $EDITOR examples/live/terraform/terraform.tfvars
 | `gcp_region`, `gcp_zone`, `gcp_instance_type` | optional; the defaults are `us-east1`, `us-east1-b`, and `e2-standard-4` |
 | `eks_azs`, `eks_instance_type`, `eks_worker_count` | optional, for `cloud = "eks"`; the defaults are the zones `a` and `b` of `region`, `t3.xlarge`, and 2 |
 | `eks_k8s_bump` | optional, for `cloud = "eks"`: a Kubernetes version for the profile version 1.0.9, the release with that version alone, which `eks.sh` asks Palette about |
+| `gke_instance_type`, `gke_worker_count` | optional, for `cloud = "gke"`; the defaults are `e2-standard-4` and 3. Palette refuses a GKE worker pool whose size is not a multiple of 3 ("Node pool size should be multiple of 3") |
+| `gke_k8s_bump` | optional, for `cloud = "gke"`: a Kubernetes version for the profile version 1.0.9, which `gke.sh` asks Palette about |
 | `palette_core_policies` | optional, for `cloud = "eks"`: the names of the core policies of Palette in the account |
 | `extra_addon_profile_uids` | optional; more add-on profile versions for the clusters to run, by uid, such as the profiles that `api.sh pin-profile` makes. The default is none |
 
@@ -551,7 +599,7 @@ These rules come from the teardowns of this kind of cluster:
 | `snapshot-next` | 0 | record the newer version |
 | `compare-next-cluster` | 1 | #1: against a newer record, the cluster shows the change |
 | `compare-next-cluster-json` | 1 | #1: the same comparison as JSON |
-| `only-the-edited-value` | 0 | #1: the only change is `csi-aws-ebs` `reclaimPolicy` |
+| `only-the-edited-value` | 0 | #1: the only change is the key `csi_next_key` of the CSI pack |
 | `consumers-release` | 1 | #12: the release version has a consumer |
 | `consumers-release-json` | 1 | #12: the same listing as JSON |
 | `consumer-is-the-cluster` | 0 | #12: listed with its name, project, and state |

@@ -14,7 +14,7 @@
 
 locals {
   # The packs and the text of the cloud that var.cloud names.
-  cloud        = { aws = local.aws_cloud, gcp = local.gcp_cloud, eks = local.eks_cloud }[var.cloud]
+  cloud        = { aws = local.aws_cloud, gcp = local.gcp_cloud, eks = local.eks_cloud, gke = local.gke_cloud }[var.cloud]
   csi_version  = var.csi_version != "" ? var.csi_version : local.cloud.csi_version
   k8s_version  = var.k8s_version != "" ? var.k8s_version : local.cloud.k8s_version
   os_version   = var.os_version != "" ? var.os_version : local.cloud.os_version
@@ -27,7 +27,7 @@ locals {
     { name = p.name, tag = p.version, uid = p.id, values = p.values }
   ]
   # The one difference between the two versions.
-  next_csi_values = replace(data.spectrocloud_pack.csi.values, local.cloud.csi_reclaim, replace(local.cloud.csi_reclaim, "Delete", "Retain"))
+  next_csi_values = replace(data.spectrocloud_pack.csi.values, local.cloud.csi_reclaim, local.cloud.csi_next)
   next_packs = [
     for p in local.release_packs :
     p.name == data.spectrocloud_pack.csi.name ? merge(p, { values = local.next_csi_values }) : p
@@ -430,5 +430,6 @@ locals {
     { for k, c in spectrocloud_cluster_aws.cluster : k => c.id },
     { for k, c in spectrocloud_cluster_gcp.cluster : k => c.id },
     { for k, c in spectrocloud_cluster_eks.cluster : k => c.id },
+    { for k, c in spectrocloud_cluster_gke.cluster : k => c.id },
   )
 }

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# What the live example still has in its cloud, read-only: aws-inventory.sh or gcp-inventory.sh for
-# clusters A and B, in the cloud that terraform.tfvars names. It reads the variables and not the
-# outputs, so it works after `just live-down`. Exit 0 when nothing is left, 1 while anything is, 2
-# when the cloud cannot be asked.
+# What the live example still has in its cloud, read-only: aws-inventory.sh (aws, eks) or
+# gcp-inventory.sh (gcp, gke) for clusters A and B, in the cloud that terraform.tfvars names. It
+# reads the variables and not the outputs, so it works after `just live-down`. Exit 0 when nothing
+# is left, 1 while anything is, 2 when the cloud cannot be asked.
 #
 #   examples/live/inventory.sh
 set -uo pipefail
@@ -16,8 +16,9 @@ code=0
 for name in "$(get a)" "$(get b)"; do
   echo "== $cloud, cluster $name"
   case "$cloud" in
-    aws) "$here/aws-inventory.sh" "$name" "$(get region)" ;;
+    aws | eks) "$here/aws-inventory.sh" "$name" "$(get region)" ;;
     gcp) "$here/gcp-inventory.sh" "$(get project)" "$name" ;;
+    gke) "$here/gcp-inventory.sh" "$(get project)" "$name" --gke ;;
     *) echo "inventory: no inventory for the cloud '$cloud'" >&2; exit 2 ;;
   esac
   c=$?

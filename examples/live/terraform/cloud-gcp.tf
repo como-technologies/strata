@@ -17,7 +17,9 @@ locals {
     csi_previous_version = "1.25.2"
     # The one line of the CSI values that version 1.0.1 changes, as the pack writes it, with its
     # indentation.
-    csi_reclaim = "    reclaimPolicy: \"Delete\""
+    csi_reclaim  = "    reclaimPolicy: \"Delete\""
+    csi_next     = replace("    reclaimPolicy: \"Delete\"", "Delete", "Retain")
+    csi_next_key = "reclaimPolicy"
   }
 }
 

@@ -4,10 +4,11 @@
 #
 #   AWS_PROFILE=<profile> examples/live/aws-inventory.sh [CLUSTER_NAME] [REGION]
 #
-# Defaults: fred, cluster A, in us-east-2. Instances, NAT gateways, elastic IPs, volumes, security
-# groups, subnets, route tables, internet gateways, and the VPC carry the Cluster API tag
-# sigs.k8s.io/cluster-api-provider-aws/cluster/<name>; the classic load balancer is found by its
-# exact name, <name>-apiserver, and network interfaces, which are not all tagged, inside the VPC.
+# Defaults: fred, cluster A, in us-east-2. An EKS cluster of the name counts as well. Instances,
+# NAT gateways, elastic IPs, volumes, security groups, subnets, route tables, internet gateways,
+# and the VPC carry the Cluster API tag sigs.k8s.io/cluster-api-provider-aws/cluster/<name>; the
+# classic load balancer is found by its exact name, <name>-apiserver, and network interfaces, which
+# are not all tagged, inside the VPC.
 # A deletion removes the security groups, route tables, subnets, internet gateway, and VPC last,
 # minutes after the instances and the NAT gateway, so only 0 on every line means AWS is empty. Run
 # it after `just live-down`, and before any force delete: a force delete drops only Palette's
@@ -53,5 +54,7 @@ fi
 n=$(wc -w <<<"$vpcs")
 printf '%-22s %s\n' vpcs "$n"
 total=$((total + n))
+# an EKS cluster of the name (cloud = "eks"); 0 for a cluster on instances
+count "eks clusters" aws eks list-clusters --query "clusters[?@ == '$name']"
 
 [ "$total" -eq 0 ]

@@ -15,7 +15,9 @@ locals {
     # An older version of the CSI pack, for the pack refs of packs.sh.
     csi_previous_version = "1.63.1"
     # The one line of the CSI values that version 1.0.1 changes, as in cloud-aws.tf.
-    csi_reclaim = "        reclaimPolicy: Delete"
+    csi_reclaim  = "        reclaimPolicy: Delete"
+    csi_next     = replace("        reclaimPolicy: Delete", "Delete", "Retain")
+    csi_next_key = "reclaimPolicy"
   }
   # EKS needs two availability zones for its control plane.
   eks_azs = length(var.eks_azs) > 0 ? var.eks_azs : ["${var.region}a", "${var.region}b"]
@@ -144,7 +146,7 @@ resource "spectrocloud_cluster_eks" "cluster" {
 # The release version with another Kubernetes version and nothing else, for the repave question of
 # a version bump on EKS. Set var.eks_k8s_bump to the version.
 resource "spectrocloud_cluster_profile" "k8s_bump" {
-  count        = var.eks_k8s_bump != "" ? 1 : 0
+  count        = var.cloud == "eks" && var.eks_k8s_bump != "" ? 1 : 0
   name         = local.profile_name
   version      = "1.0.9"
   description  = "strata live example: the release with the Kubernetes pack at ${var.eks_k8s_bump}"
@@ -170,7 +172,7 @@ resource "spectrocloud_cluster_profile" "k8s_bump" {
 }
 
 data "spectrocloud_pack" "k8s_bump" {
-  count        = var.eks_k8s_bump != "" ? 1 : 0
+  count        = var.cloud == "eks" && var.eks_k8s_bump != "" ? 1 : 0
   name         = local.cloud.k8s_pack
   version      = var.eks_k8s_bump
   registry_uid = data.spectrocloud_registry.packs.id
