@@ -3,7 +3,7 @@
 //! confidence of each rule. A person opens it from the run directory, or a job attaches it.
 
 use crate::probe::Verdict;
-use crate::report::{CheckResult, Report};
+use crate::report::{CheckResult, Report, not_run_reasons, not_run_text, written_text};
 use crate::rule::{Level, Severity};
 
 fn esc(s: &str) -> String {
@@ -25,6 +25,7 @@ fn class_of(c: &CheckResult) -> &'static str {
         (Verdict::Failed, _, Level::Preflight) => "fail",
         (Verdict::Failed, _, Level::Probe) => "probe-fail",
         (Verdict::NotChecked, _, _) => "not-checked",
+        (Verdict::NotRun, _, _) => "skip",
         (Verdict::Skipped, _, _) => "skip",
         (Verdict::Error, _, _) => "error",
     }
@@ -105,6 +106,7 @@ pub fn page(r: &Report) -> String {
         (pct(s.readiness), "readiness"),
         (s.passed.to_string(), "passed"),
         ((s.failed + s.probe_failed).to_string(), "failed"),
+        (s.not_run.to_string(), "did not run"),
         (s.warned.to_string(), "warnings"),
         (s.not_checked.to_string(), "not checked"),
         (s.errors.to_string(), "errors"),
@@ -116,7 +118,7 @@ pub fn page(r: &Report) -> String {
     }
     h.push_str("</div>");
 
-    h.push_str("<h2>Section scorecard</h2><table><thead><tr><th>section</th><th>readiness</th><th class=\"num\">ran</th><th class=\"num\">passed</th><th class=\"num\">failed</th><th class=\"num\">not checked</th><th class=\"num hide-sm\">rows</th><th class=\"num hide-sm\">seen</th><th class=\"num hide-sm\">with a check</th><th class=\"num hide-sm\">preflight</th><th class=\"hide-sm\">weakest bound</th></tr></thead><tbody>");
+    h.push_str("<h2>Section scorecard</h2><table><thead><tr><th>section</th><th>readiness</th><th class=\"num\">ran</th><th class=\"num\">passed</th><th class=\"num\">failed</th><th class=\"num\">did not run</th><th class=\"num\">not checked</th><th class=\"num hide-sm\">rows</th><th class=\"num hide-sm\">seen</th><th class=\"num hide-sm\">with a check</th><th class=\"num hide-sm\">preflight</th><th class=\"hide-sm\">weakest bound</th></tr></thead><tbody>");
     let gate = r.options.ready.unwrap_or(0.8);
     for sc in &r.sections {
         let (width, class) = match sc.readiness {
@@ -124,81 +126,98 @@ pub fn page(r: &Report) -> String {
             None => (0.0, "none"),
         };
         h.push_str(&format!(
-            "<tr><td>{}</td><td><div class=\"bar\" title=\"{}\"><i class=\"{class}\" style=\"width:{width:.0}%\"></i><em style=\"left:{:.0}%\"></em></div> <span class=\"conf\">{}</span></td><td class=\"num\">{}</td><td class=\"num\">{}</td><td class=\"num\">{}</td><td class=\"num\">{}</td><td class=\"num hide-sm\">{}</td><td class=\"num hide-sm\">{}</td><td class=\"num hide-sm\">{}</td><td class=\"num hide-sm\">{}</td><td class=\"hide-sm\">{}</td></tr>",
+            "<tr><td>{}</td><td><div class=\"bar\" title=\"{}\"><i class=\"{class}\" style=\"width:{width:.0}%\"></i><em style=\"left:{:.0}%\"></em></div> <span class=\"conf\">{}</span></td><td class=\"num\">{}</td><td class=\"num\">{}</td><td class=\"num\">{}</td><td class=\"num\">{}</td><td class=\"num\">{}</td><td class=\"num hide-sm\">{}</td><td class=\"num hide-sm\">{}</td><td class=\"num hide-sm\">{}</td><td class=\"num hide-sm\">{}</td><td class=\"hide-sm\">{}</td></tr>",
             esc(&sc.title),
             pct(sc.readiness),
             gate * 100.0,
             pct(sc.readiness),
-            sc.ran, sc.passed, sc.failed, sc.not_checked, sc.rows, sc.seen, sc.with_check, sc.preflight,
+            sc.ran, sc.passed, sc.failed, sc.not_run, sc.not_checked, sc.rows, sc.seen, sc.with_check, sc.preflight,
             sc.weakest_bound.map_or("no runs".to_string(), |b| format!("{:.0}%", b * 100.0))
         ));
     }
     h.push_str("</tbody></table>");
-    h.push_str(&format!("<p class=\"legend\">The mark on each bar is the gate, {:.0}%. Readiness is the share of the checks that ran and passed; a row that is not checked is outside it, so read the two together.</p>", gate * 100.0));
+    h.push_str(&format!("<p class=\"legend\">The mark on each bar is the gate, {:.0}%. Readiness is the share of the checks that apply here and passed: a check that did not run counts against it, and a row with no check in strata-preflight is outside it, so read the two together.</p>", gate * 100.0));
+    if s.not_run > 0 {
+        h.push_str(&format!(
+            "<p class=\"legend\">{}</p>",
+            esc(&not_run_text(&s.not_run_reasons))
+        ));
+    }
+    h.push_str(&format!(
+        "<p class=\"legend\">{}</p>",
+        esc(&written_text(r.options.out_dir.as_deref()))
+    ));
 
     h.push_str("<h2>Results</h2>");
-    let mut section = "";
-    for c in r.checks.iter().filter(|c| c.verdict != Verdict::Skipped) {
-        if c.section != section {
-            if !section.is_empty() {
-                h.push_str("</tbody></table>");
-            }
-            section = &c.section;
-            let title = r
-                .sections
-                .iter()
-                .find(|x| x.section == c.section)
-                .map_or(c.section.as_str(), |x| x.title.as_str());
-            h.push_str(&format!("<h3>{}</h3><table><tbody>", esc(title)));
+    for sc in &r.sections {
+        let rows: Vec<&CheckResult> = r
+            .checks
+            .iter()
+            .filter(|c| c.section == sc.section)
+            .collect();
+        let visible: Vec<&CheckResult> = rows
+            .iter()
+            .copied()
+            .filter(|c| !matches!(c.verdict, Verdict::Skipped | Verdict::NotRun))
+            .collect();
+        if visible.is_empty() && sc.not_run == 0 {
+            continue;
         }
-        h.push_str(&format!("<tr class=\"{}\"><td style=\"white-space:nowrap\"><span class=\"label\">{}</span></td><td>", class_of(c), esc(&c.label())));
-        h.push_str(&format!(
-            "<code>{}</code> — {} <span class=\"conf\">· {} · {} ms</span>",
-            esc(&c.id),
-            esc(&c.title),
-            c.tier.name(),
-            c.elapsed_ms
-        ));
-        if c.verdict != Verdict::Passed {
-            for m in &c.messages {
-                h.push_str(&format!("<div class=\"msg\">{}</div>", esc(m)));
-            }
+        h.push_str(&format!("<h3>{}</h3><table><tbody>", esc(&sc.title)));
+        if sc.not_run > 0 {
+            h.push_str(&format!(
+                "<tr class=\"skip\"><td style=\"white-space:nowrap\"><span class=\"label\">NOT RUN</span></td><td>{}</td><td class=\"conf\"></td></tr>",
+                esc(&not_run_text(&not_run_reasons(rows.iter().copied())))
+            ));
         }
-        if matches!(
-            c.verdict,
-            Verdict::Failed | Verdict::NotChecked | Verdict::Error
-        ) {
-            if let Some(fix) = &c.fix
-                && !fix.text.is_empty()
-            {
-                h.push_str(&format!(
-                    "<div class=\"fix\">fix ({}): {}</div>",
-                    esc(&fix.owner),
-                    esc(&fix.text)
-                ));
+        for c in visible {
+            h.push_str(&format!("<tr class=\"{}\"><td style=\"white-space:nowrap\"><span class=\"label\">{}</span></td><td>", class_of(c), esc(&c.label())));
+            h.push_str(&format!(
+                "<code>{}</code> — {} <span class=\"conf\">· {} · {} ms</span>",
+                esc(&c.id),
+                esc(&c.title),
+                c.tier.name(),
+                c.elapsed_ms
+            ));
+            if c.verdict != Verdict::Passed {
+                for m in &c.messages {
+                    h.push_str(&format!("<div class=\"msg\">{}</div>", esc(m)));
+                }
             }
-            if !c.reproduce.is_empty() {
-                h.push_str(&format!(
-                    "<details><summary>reproduce by hand</summary><pre>{}</pre></details>",
-                    esc(&c.reproduce.join("\n"))
-                ));
+            if matches!(
+                c.verdict,
+                Verdict::Failed | Verdict::NotChecked | Verdict::Error
+            ) {
+                if let Some(fix) = &c.fix
+                    && !fix.text.is_empty()
+                {
+                    h.push_str(&format!(
+                        "<div class=\"fix\">fix ({}): {}</div>",
+                        esc(&fix.owner),
+                        esc(&fix.text)
+                    ));
+                }
+                if !c.reproduce.is_empty() {
+                    h.push_str(&format!(
+                        "<details><summary>reproduce by hand</summary><pre>{}</pre></details>",
+                        esc(&c.reproduce.join("\n"))
+                    ));
+                }
             }
+            h.push_str("</td><td class=\"conf\">");
+            match &c.confidence {
+                Some(k) => h.push_str(&format!(
+                    "catch {}<br>clean {}",
+                    esc(&k.catch.text()),
+                    esc(&k.clean.text())
+                )),
+                None => h.push_str("no runs"),
+            }
+            h.push_str("</td></tr>");
         }
-        h.push_str("</td><td class=\"conf\">");
-        match &c.confidence {
-            Some(k) => h.push_str(&format!(
-                "catch {}<br>clean {}",
-                esc(&k.catch.text()),
-                esc(&k.clean.text())
-            )),
-            None => h.push_str("no runs"),
-        }
-        h.push_str("</td></tr>");
-    }
-    if !section.is_empty() {
         h.push_str("</tbody></table>");
     }
-    h.push_str("<p class=\"legend\">PASS and FAIL are preflight checks: the runs prove them, and a FAIL is exit 1. PROBE PASS and PROBE FAIL are probes: the fault is known, the runs do not yet prove the check, and a failure does not change the exit code without <code>--strict</code>. NOT CHECKED rows say what to run by hand. Confidence is a count of runs: <code>14/14 (81%)</code> is 14 correct runs of 14, and 81% is the 95% lower bound of the rate.</p>");
+    h.push_str("<p class=\"legend\">PASS and FAIL are preflight checks: the runs prove them, and a FAIL is exit 1. PROBE PASS and PROBE FAIL are probes: the fault is known, the runs do not yet prove the check, and a failure does not change the exit code without <code>--strict</code>. NOT CHECKED rows say what to run by hand. NOT RUN is a check that applies here and did not run: a tier not asked for, no key, or <code>--no-exec</code>. Confidence is a count of runs: <code>14/14 (81%)</code> is 14 correct runs of 14, and 81% is the 95% lower bound of the rate.</p>");
     h.push_str("</main></body></html>\n");
     h
 }
@@ -248,6 +267,7 @@ mod tests {
                 tiers: vec![Tier::Static],
                 strict: false,
                 ready: None,
+                out_dir: None,
             },
             checks: vec![check],
             sections: vec![SectionScore {
@@ -261,6 +281,7 @@ mod tests {
                 ran: 1,
                 passed: 0,
                 failed: 1,
+                not_run: 0,
                 not_checked: 0,
                 readiness: Some(0.0),
             }],
@@ -272,6 +293,8 @@ mod tests {
                 probe_failed: 1,
                 warned: 0,
                 noted: 0,
+                not_run: 0,
+                not_run_reasons: Default::default(),
                 not_checked: 0,
                 skipped: 0,
                 errors: 0,

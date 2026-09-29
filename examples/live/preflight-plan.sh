@@ -63,6 +63,7 @@ release=${PALETTE_RELEASE:-}
 run_id=$(date -u +%Y%m%dT%H%M%SZ)
 run=${OUT:-$live/runs/$run_id/preflight-plan}
 mkdir -p "$run" && cd "$run" || exit 2
+echo "preflight-plan: run $run_id; the report of each step goes to $run"
 export STRATA_QUIET=1
 
 load_outputs
@@ -190,7 +191,7 @@ check custom-probes 0 "the custom probes of the lab ran beside the catalog: lab-
   jq -e '[.checks[] | select(.section == "lab")] | length == 2 and all(.[]; .verdict == "passed")' clean.report.json
 check clean-exit 0 "the clean entity of $engine: exit 0 (a failed probe does not count)" -- test "$clean_exit" = 0
 check clean-report 0 "the report of the clean entity, one line for each rule" -- \
-  jq -r '.checks[] | select(.verdict != "skipped") | "\(.verdict)\t\(.level)\t\(.severity)\t\(.id)\t\((.messages // []) | join("; ") | .[:120])"' clean.report.json
+  jq -r '.checks[] | select(.verdict != "skipped" and .verdict != "not-run") | "\(.verdict)\t\(.level)\t\(.severity)\t\(.id)\t\((.messages // []) | join("; ") | .[:120])"' clean.report.json
 check clean-no-error 0 "no check of the clean entity gave ERROR" -- jq -e '[.checks[] | select(.verdict == "error")] | length == 0' clean.report.json
 # each rule of severity fail that ran: passed, or false-fail
 while IFS=$'\t' read -r id verdict; do
@@ -253,7 +254,7 @@ if [ -n "$build" ]; then
   pf "cluster:$C" --out out-cluster > cluster.report.json 2> cluster.err
   check cluster-exit 0 "strata preflight cluster:$C, the entity the provider sent: exit 0" -- test "$?" = 0
   check cluster-report 0 "the report of the cluster as Palette holds it" -- \
-    jq -r '.checks[] | select(.verdict != "skipped") | "\(.verdict)\t\(.level)\t\(.severity)\t\(.id)\t\((.messages // []) | join("; ") | .[:120])"' cluster.report.json
+    jq -r '.checks[] | select(.verdict != "skipped" and .verdict != "not-run") | "\(.verdict)\t\(.level)\t\(.severity)\t\(.id)\t\((.messages // []) | join("; ") | .[:120])"' cluster.report.json
   check cluster-no-error 0 "no check of the cluster gave ERROR" -- jq -e '[.checks[] | select(.verdict == "error")] | length == 0' cluster.report.json
   while IFS=$'\t' read -r id verdict; do
     case "$verdict" in

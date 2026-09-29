@@ -8,10 +8,14 @@ $ strata preflight cluster.json --cloud aws --no-exec --json --quiet | jq '{summ
     "probeFailed": 2,
     "warned": 1,
     "noted": 2,
-    "notChecked": 35,
+    "notRun": 10,
+    "notRunReasons": {
+      "--no-exec: the command did not run": 10
+    },
+    "notChecked": 25,
     "skipped": 39,
     "errors": 0,
-    "readiness": 0.8636363636363636,
+    "readiness": 0.59375,
     "exitCode": 0,
     "verdict": "OK: each counted check passed; 2 probe(s) failed, not counted"
   },
@@ -21,8 +25,8 @@ $ strata preflight cluster.json --cloud aws --no-exec --json --quiet | jq '{summ
       "ran": 2,
       "passed": 2,
       "failed": 0,
-      "notChecked": 3,
-      "readiness": 1.0
+      "notChecked": 0,
+      "readiness": 0.4
     },
     {
       "title": "Cloud services and APIs",
@@ -37,7 +41,7 @@ $ strata preflight cluster.json --cloud aws --no-exec --json --quiet | jq '{summ
       "ran": 1,
       "passed": 0,
       "failed": 1,
-      "notChecked": 3,
+      "notChecked": 2,
       "readiness": 0.0
     },
     {
@@ -69,8 +73,8 @@ $ strata preflight cluster.json --cloud aws --no-exec --json --quiet | jq '{summ
       "ran": 0,
       "passed": 0,
       "failed": 0,
-      "notChecked": 1,
-      "readiness": null
+      "notChecked": 0,
+      "readiness": 0.0
     },
     {
       "title": "Images and registries",
@@ -109,16 +113,16 @@ $ strata preflight cluster.json --cloud aws --no-exec --json --quiet | jq '{summ
       "ran": 0,
       "passed": 0,
       "failed": 0,
-      "notChecked": 3,
-      "readiness": null
+      "notChecked": 0,
+      "readiness": 0.0
     },
     {
       "title": "Teardown and leftovers",
       "ran": 1,
       "passed": 1,
       "failed": 0,
-      "notChecked": 5,
-      "readiness": 1.0
+      "notChecked": 3,
+      "readiness": 0.3333333333333333
     }
   ]
 }

@@ -89,10 +89,19 @@ pub fn applicable<'a>(
                     )),
                 }
             } else if !selection.tiers.contains(&r.effective_tier()) {
-                Some(Outcome::not_run(
-                    Verdict::Skipped,
-                    format!("tier {} was not asked for", r.effective_tier().name()),
-                ))
+                if r.effective_tier() == Tier::Watch {
+                    // a watch rule is of the build, not of this run: it does not apply here
+                    Some(Outcome::not_run(
+                        Verdict::Skipped,
+                        "a watch rule runs with --watch cluster:UID, during the build",
+                    ))
+                } else {
+                    // the check applies and did not run: it counts against the readiness
+                    Some(Outcome::not_run(
+                        Verdict::NotRun,
+                        format!("tier {} was not asked for", r.effective_tier().name()),
+                    ))
+                }
             } else {
                 None
             };
@@ -163,6 +172,7 @@ pub fn run(inputs: RunInputs<'_>) -> Result<Report> {
                 tiers: inputs.selection.tiers.clone(),
                 strict: inputs.selection.strict,
                 ready: inputs.selection.ready,
+                out_dir: inputs.out_dir.map(str::to_string),
             },
             generated_at: inputs.now.to_string(),
             out_dir: inputs.out_dir.map(str::to_string),
@@ -288,6 +298,8 @@ pub struct WatchInputs<'a, A: PaletteApi> {
     pub progress: &'a Progress,
     /// Waits between two readings. A test passes one that does not wait.
     pub sleep: &'a dyn Fn(Duration),
+    /// The directory of `--out`, for the reproduce lines and the report.
+    pub out_dir: Option<&'a str>,
 }
 
 /// Watch a build: every `every`, read the cluster, and judge each watch rule. The watch ends at
@@ -306,6 +318,7 @@ pub fn watch<A: PaletteApi>(inputs: WatchInputs<'_, A>) -> Result<(Report, Value
         now,
         progress,
         sleep,
+        out_dir,
     } = inputs;
     let uid = world.cluster_uid.clone().ok_or_else(|| Error::Usage {
         message:
@@ -411,9 +424,10 @@ pub fn watch<A: PaletteApi>(inputs: WatchInputs<'_, A>) -> Result<(Report, Value
                 tiers: vec![Tier::Watch],
                 strict: selection.strict,
                 ready: None,
+                out_dir: out_dir.map(str::to_string),
             },
             generated_at: now.to_string(),
-            out_dir: None,
+            out_dir: out_dir.map(str::to_string),
         },
         &jq,
     );
@@ -624,7 +638,7 @@ rules:
     }
 
     #[test]
-    fn a_tier_not_asked_for_is_skipped_and_ids_select() {
+    fn a_tier_not_asked_for_is_not_run_and_ids_select() {
         let c = catalog();
         let (backend, _) = FixtureBackend::split(json!({}));
         let sel = Selection {
@@ -647,7 +661,7 @@ rules:
             .iter()
             .find(|c| c.id == "gke-pool-multiple-3")
             .unwrap();
-        assert_eq!(pool.verdict, Verdict::Skipped);
+        assert_eq!(pool.verdict, Verdict::NotRun);
         assert!(pool.messages[0].contains("tier static was not asked for"));
         let sel = Selection {
             ids: vec!["gke-api-off".into()],
@@ -728,6 +742,7 @@ rules:
             now: "t",
             progress: &Progress::silent(),
             sleep: &|_| slept.set(slept.get() + 1),
+            out_dir: None,
         })
         .unwrap();
         assert_eq!(report.checks[0].verdict, Verdict::Failed);
@@ -785,6 +800,7 @@ rules:
             now: "t",
             progress: &Progress::silent(),
             sleep: &|_| {},
+            out_dir: None,
         })
         .unwrap();
         assert_eq!(report.checks[0].verdict, Verdict::Passed);
@@ -833,6 +849,7 @@ rules:
             now: "t",
             progress: &Progress::silent(),
             sleep: &|_| {},
+            out_dir: None,
         })
         .unwrap();
         // the warning is in the report, the exit is 0, and the watch ended at Running

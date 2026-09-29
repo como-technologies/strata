@@ -1,7 +1,11 @@
 $ strata preflight cluster.json --cloud aws --tier static --offline --quiet
 strata-preflight: aws cluster payments (cluster.json), Palette release not given, tiers static
 
+Identity and permissions
+  NOT RUN       4 checks did not run: tier cloud was not asked for (2); tier palette was not asked for (2)
+
 Cloud services and APIs
+  NOT RUN       1 check did not run: tier palette was not asked for (1)
   NOT CHECKED   aws-s3-irsa-bucket           The IRSA bucket of an AWS cluster can be made                    1 ms
                 no check in strata-preflight; the reproduce lines say what to run by hand
                 reproduce: kubectl get awscluster -A -o jsonpath='{.items[*].spec.s3Bucket.name}'   # on the management cluster, during the build: the bucket CAPA asks for
@@ -9,6 +13,7 @@ Cloud services and APIs
                 reproduce: aws s3control get-public-access-block --account-id $(aws sts get-caller-identity --query Account --output text)
 
 Quotas and limits
+  NOT RUN       2 checks did not run: tier cloud was not asked for (1); tier palette was not asked for (1)
   NOT CHECKED   aws-sg-rules                 The rules of a security group stay under the quota               1 ms
                 no check in strata-preflight; the reproduce lines say what to run by hand
                 reproduce: aws service-quotas get-service-quota --service-code vpc --quota-code L-E79EC296 --region us-east-2 --query Quota.Value
@@ -38,7 +43,11 @@ Compute and pools
 Kubernetes version and engine
   PROBE PASS    skip-k8s-upgrade             No pool skips the Kubernetes upgrade                             1 ms
 
+Storage and CSI
+  NOT RUN       1 check did not run: tier cloud was not asked for (1)
+
 Images and registries
+  NOT RUN       1 check did not run: tier palette was not asked for (1)
   NOT CHECKED   private-pack-registry-empty  A private pack registry lists its packs                          1 ms
                 no check in strata-preflight; the reproduce lines say what to run by hand
                 reproduce: strata packs <pack> --registry <registry>
@@ -67,6 +76,7 @@ Images and registries
                 reproduce: curl -s -X POST -H "ApiKey: $PALETTE_API_KEY" "$PALETTE_HOST/v1/registries/oci/ecr/validate" -d @registry.json
 
 Profiles and packs
+  NOT RUN       2 checks did not run: tier palette was not asked for (2)
   NOT CHECKED   edit-in-place                A published profile version stays as published                   1 ms
                 a race: no check before the build finds it; the watch finds its effect
                 reproduce: strata verify <record.json> --who
@@ -85,6 +95,7 @@ Lifecycle: update, repave, delete
                 a race: no check before the build finds it; the watch finds its effect
 
 The Palette platform
+  NOT RUN       2 checks did not run: tier palette was not asked for (2)
   NOT CHECKED   validate-routes-unused       Only the console calls the cluster validate routes               1 ms
                 no check in strata-preflight; the reproduce lines say what to run by hand
   NOT CHECKED   conditions-not-cloud         The cloud inventory is the truth of a delete                     1 ms
@@ -100,7 +111,11 @@ The Palette platform
   NOT CHECKED   auto-cleanup-never           A delete that makes no progress moves to the cleanup path        1 ms
                 a race: no check before the build finds it; the watch finds its effect
 
+Client tools
+  NOT RUN       2 checks did not run: tier cloud was not asked for (2)
+
 Teardown and leftovers
+  NOT RUN       2 checks did not run: tier cloud was not asked for (2)
   NOT CHECKED   force-delete-leaves-cloud    A force delete removes the records of Palette alone              1 ms
                 no check in strata-preflight; the reproduce lines say what to run by hand
                 reproduce: examples/live/aws-inventory.sh payments us-east-2   # 0 on every line before a force delete
@@ -116,22 +131,22 @@ Teardown and leftovers
   PROBE PASS    name-prefix                  No pool name is a prefix of another                              1 ms
 
 Section scorecard
-  section                      rows seen check preflight weakest  ran pass fail not checked ready
-  Identity and permissions       11    3    11         0 no runs    0    0    0           0     -
-  Cloud services and APIs         2    0     1         0 no runs    0    0    0           1     -
-  Quotas and limits               4    2     2         0 no runs    0    0    0           2     -
-  Networking                     12    2    10         0 no runs    2    2    0           1  100%
-  Compute and pools               6    1     4         0 no runs    0    0    0           2     -
-  Kubernetes version and engi…    4    1     4         0 no runs    0    0    0           0     -
-  Storage and CSI                 4    2     4         0 no runs    0    0    0           0     -
-  Images and registries          16   11     9         0 no runs    0    0    0           7     -
-  Profiles and packs              8    5     6         0 no runs    0    0    0           2     -
-  Lifecycle: update, repave, …   10    6     8         0 no runs    1    1    0           2  100%
-  The Palette platform           11    9     6         0 no runs    0    0    0           5     -
-  Client tools                    9    9     4         0 no runs    0    0    0           0     -
-  Teardown and leftovers          6    6     3         0 no runs    1    1    0           3  100%
+  section                      rows seen check preflight weakest  ran pass fail not run not checked ready
+  Identity and permissions       11    3    11         0 no runs    0    0    0       4           0    0%
+  Cloud services and APIs         2    0     1         0 no runs    0    0    0       1           1    0%
+  Quotas and limits               4    2     2         0 no runs    0    0    0       2           2    0%
+  Networking                     12    2    10         0 no runs    2    2    0       0           1  100%
+  Compute and pools               6    1     4         0 no runs    0    0    0       0           2     -
+  Kubernetes version and engi…    4    1     4         0 no runs    0    0    0       0           0     -
+  Storage and CSI                 4    2     4         0 no runs    0    0    0       1           0    0%
+  Images and registries          16   11     9         0 no runs    0    0    0       1           7    0%
+  Profiles and packs              8    5     6         0 no runs    0    0    0       2           2    0%
+  Lifecycle: update, repave, …   10    6     8         0 no runs    1    1    0       0           2  100%
+  The Palette platform           11    9     6         0 no runs    0    0    0       2           5    0%
+  Client tools                    9    9     4         0 no runs    0    0    0       2           0    0%
+  Teardown and leftovers          6    6     3         0 no runs    1    1    0       2           3   33%
 
-The reproduce lines read $OUT/world.json and $OUT/entity.json: --out DIR writes both.
-
-103 rules apply; 4 ran: 4 passed, 0 failed, 0 probe(s) failed, 0 warning(s), 1 note(s); 25 not checked, 71 skipped, 0 error(s); readiness 100%
+103 rules apply; 4 ran: 4 passed, 0 failed, 0 probe(s) failed, 0 warning(s), 1 note(s); 17 did not run, 25 not checked, 54 do not apply, 0 error(s); readiness 19%: 4 of 21 checks passed
+17 checks did not run: tier cloud was not asked for (8); tier palette was not asked for (9)
+No file written; --out DIR writes report.html, report.md, report.json, world.json, and entity.json, and the reproduce lines read world.json and entity.json there ($OUT).
 OK: each counted check passed

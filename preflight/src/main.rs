@@ -409,6 +409,7 @@ fn run_cli(cli: Cli) -> Result<ExitCode> {
             now: &now,
             progress: &progress,
             sleep: &std::thread::sleep,
+            out_dir: out_dir.as_deref(),
         })
         .map(|(report, world)| {
             reading = Some(world);

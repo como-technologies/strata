@@ -2,19 +2,8 @@ $ strata preflight cluster.json --cloud aws --no-exec --quiet
 strata-preflight: aws cluster payments (cluster.json), Palette release not given, tiers static, palette, cloud
 
 Identity and permissions
+  NOT RUN       3 checks did not run: --no-exec: the command did not run (3)
   PROBE PASS    account-missing              The cloud account of the entity exists, and is of the cloud…     1 ms  catch 2/2 (22%) clean 3/3 (37%)
-  NOT CHECKED   capa-bootstrap-stack         The CAPA CloudFormation stack is complete, and the credenti…     1 ms  catch no runs clean 3/3 (37%)
-                aws not on this machine; run by hand: aws cloudformation describe-stacks --stack-name cluster-api-provider-aws-sigs-k8s-io --region us-east-2 --output json
-                reproduce: aws cloudformation describe-stacks --stack-name cluster-api-provider-aws-sigs-k8s-io --region us-east-2 --query 'Stacks[].[StackStatus,DriftInformation.StackDriftStatus]' --output table
-                reproduce: aws iam get-role --role-name controllers.cluster-api-provider-aws.sigs.k8s.io --query Role.Arn --output text
-  NOT CHECKED   iam-ten-policies             The nodes role stays under 10 managed policies                   1 ms  catch no runs clean 3/3 (37%)
-                aws not on this machine; run by hand: aws iam list-attached-role-policies --role-name nodes.cluster-api-provider-aws.sigs.k8s.io --output json
-                reproduce: aws iam list-attached-role-policies --role-name nodes.cluster-api-provider-aws.sigs.k8s.io --query 'length(AttachedPolicies)'
-                reproduce: aws service-quotas get-service-quota --service-code iam --quota-code L-0DA4ABF3 --query Quota.Value
-  NOT CHECKED   ebs-csi-node-policy          The nodes role holds AmazonEBSCSIDriverPolicy                    1 ms  catch no runs clean 3/3 (37%)
-                aws not on this machine; run by hand: aws iam list-attached-role-policies --role-name nodes.cluster-api-provider-aws.sigs.k8s.io --output json
-                reproduce: aws iam list-attached-role-policies --role-name nodes.cluster-api-provider-aws.sigs.k8s.io --query 'AttachedPolicies[].PolicyName' --output text
-                reproduce: kubectl -n kube-system logs -l app=ebs-csi-controller -c ebs-plugin --tail 20
   PROBE PASS    iaas-pod-identity            The properties route accepts the cloud account for an AWS c…     1 ms  catch no runs clean 3/3 (37%)
 
 Cloud services and APIs
@@ -26,12 +15,7 @@ Cloud services and APIs
                 reproduce: aws s3control get-public-access-block --account-id $(aws sts get-caller-identity --query Account --output text)
 
 Quotas and limits
-  NOT CHECKED   aws-quotas                   The vCPU quota of the region covers the pools                    1 ms  catch no runs clean 3/3 (37%)
-                aws not on this machine; run by hand: aws service-quotas get-service-quota --service-code ec2 --quota-code L-1216C47A --region us-east-2 --output json
-                reproduce: aws service-quotas get-service-quota --service-code ec2 --quota-code L-1216C47A --region us-east-2 --query Quota.Value   # on-demand standard vCPUs; L-34B43A08 is the spot vCPUs; L-0263D0A3 is the elastic IPs
-                reproduce: aws service-quotas get-service-quota --service-code vpc --quota-code L-F678F1CE --region us-east-2 --query Quota.Value   # VPCs for each region; L-A4707A72 internet gateways; L-FE5A380F NAT gateways for each zone
-                reproduce: aws service-quotas get-service-quota --service-code elasticloadbalancing --quota-code L-E9E9831D --region us-east-2 --query Quota.Value   # application load balancers; L-69A177A2 network load balancers
-                reproduce: aws ec2 describe-vpcs --region us-east-2 --query 'length(Vpcs)'; aws ec2 describe-addresses --region us-east-2 --query 'length(Addresses)'; aws ec2 describe-nat-gateways --region us-east-2 --query 'length(NatGateways)'   # the usage
+  NOT RUN       1 check did not run: --no-exec: the command did not run (1)
   NOT CHECKED   aws-sg-rules                 The rules of a security group stay under the quota               1 ms
                 no check in strata-preflight; the reproduce lines say what to run by hand
                 reproduce: aws service-quotas get-service-quota --service-code vpc --quota-code L-E79EC296 --region us-east-2 --query Quota.Value
@@ -71,11 +55,7 @@ Kubernetes version and engine
   PROBE PASS    skip-k8s-upgrade             No pool skips the Kubernetes upgrade                             1 ms
 
 Storage and CSI
-  NOT CHECKED   pvc-lb-leftover              No EBS volume of the cluster is left unattached                  1 ms
-                aws not on this machine; run by hand: aws ec2 describe-volumes --filters Name=tag-key,Values=kubernetes.io/cluster/payments --region us-east-2 --output json
-                reproduce: aws ec2 describe-volumes --filters Name=tag-key,Values=kubernetes.io/cluster/payments --region us-east-2 --query 'Volumes[].[VolumeId,State,Size]' --output table
-                reproduce: aws resourcegroupstaggingapi get-resources --tag-filters Key=kubernetes.io/cluster/payments --resource-type-filters elasticloadbalancing:loadbalancer ec2:volume --region us-east-2 --query 'ResourceTagMappingList[].ResourceARN' --output text
-                reproduce: aws elbv2 describe-load-balancers --region us-east-2 --query 'LoadBalancers[].[LoadBalancerName,LoadBalancerArn]' --output table
+  NOT RUN       1 check did not run: --no-exec: the command did not run (1)
 
 Images and registries
   PROBE PASS    helm-digest-frozen           The digest of a Helm chart in Palette names the bytes a clu…     1 ms
@@ -164,28 +144,13 @@ The Palette platform
                 a race: no check before the build finds it; the watch finds its effect
 
 Client tools
-  NOT CHECKED   crane-empty-password         crane holds a password for the registry                          1 ms
-                crane not on this machine; run by hand: crane digest registry.k8s.io/pause:3.10.1
-                reproduce: aws ecr get-login-password --region us-east-2   # must print a token; an empty output makes a login that reports a success with no password
-                reproduce: crane digest registry.k8s.io/pause:3.10.1
-  NOT CHECKED   cloud-cli-auth               The cloud CLI has live credentials                               1 ms
-                aws not on this machine; run by hand: aws sts get-caller-identity --output json
-                reproduce: aws sts get-caller-identity
-                reproduce: gcloud auth print-access-token > /dev/null && echo 'gcloud: logged in'
-  NOT CHECKED   tools-present                Each tool of the lab is on the PATH                              1 ms
-                sh not on this machine; run by hand: sh -c 'for t in tofu jq just helm crane oras zarf kubectl gcloud aws; do command -v $t >/dev/null || echo $t; done'
-                reproduce: for t in tofu jq just helm crane oras zarf kubectl gcloud aws; do command -v $t >/dev/null || echo "$t is missing"; done
+  NOT RUN       3 checks did not run: --no-exec: the command did not run (3)
 
 Teardown and leftovers
+  NOT RUN       2 checks did not run: --no-exec: the command did not run (2)
   NOT CHECKED   force-delete-leaves-cloud    A force delete removes the records of Palette alone              1 ms
                 no check in strata-preflight; the reproduce lines say what to run by hand
                 reproduce: examples/live/aws-inventory.sh payments us-east-2   # 0 on every line before a force delete
-  NOT CHECKED   teardown-order               The network of a run before is gone                              1 ms
-                aws not on this machine; run by hand: aws ec2 describe-vpcs --filters Name=tag-key,Values=sigs.k8s.io/cluster-api-provider-aws/cluster/payments --region us-east-2 --output json
-                reproduce: examples/live/aws-inventory.sh payments us-east-2   # 0 on every line, the vpcs line last
-  NOT CHECKED   leftovers-before-build       No instance of a run before is in the cloud                      1 ms  catch no runs clean 2/2 (22%)
-                aws not on this machine; run by hand: aws ec2 describe-instances --filters Name=tag-key,Values=sigs.k8s.io/cluster-api-provider-aws/cluster/payments Name=instance-state-name,Values=pending,running,stopping,stopped,shutting-down --region us-east-2 --output json
-                reproduce: examples/live/aws-inventory.sh payments us-east-2   # 0 on every line before a build
   NOT CHECKED   macro-undeletable            No cluster reads a macro before its delete                       1 ms
                 no check in strata-preflight; the reproduce lines say what to run by hand
                 reproduce: examples/live/api.sh get /v1/projects/$PALETTE_PROJECT_UID/macros | jq -r '.macros[].name'   # the macros of the project
@@ -198,22 +163,22 @@ Teardown and leftovers
   PROBE PASS    name-prefix                  No pool name is a prefix of another                              1 ms
 
 Section scorecard
-  section                      rows seen check preflight weakest  ran pass fail not checked ready
-  Identity and permissions       11    3    11         0 no runs    2    2    0           3  100%
-  Cloud services and APIs         2    0     1         0 no runs    1    1    0           1  100%
-  Quotas and limits               4    2     2         0 no runs    1    0    1           3    0%
-  Networking                     12    2    10         0 no runs    4    4    0           1  100%
-  Compute and pools               6    1     4         0 no runs    0    0    0           2     -
-  Kubernetes version and engi…    4    1     4         0 no runs    2    2    0           0  100%
-  Storage and CSI                 4    2     4         0 no runs    0    0    0           1     -
-  Images and registries          16   11     9         0 no runs    6    5    1           7   83%
-  Profiles and packs              8    5     6         0 no runs    3    3    0           2  100%
-  Lifecycle: update, repave, …   10    6     8         0 no runs    1    1    0           2  100%
-  The Palette platform           11    9     6         0 no runs    1    0    1           5    0%
-  Client tools                    9    9     4         0 no runs    0    0    0           3     -
-  Teardown and leftovers          6    6     3         0 no runs    1    1    0           5  100%
+  section                      rows seen check preflight weakest  ran pass fail not run not checked ready
+  Identity and permissions       11    3    11         0 no runs    2    2    0       3           0   40%
+  Cloud services and APIs         2    0     1         0 no runs    1    1    0       0           1  100%
+  Quotas and limits               4    2     2         0 no runs    1    0    1       1           2    0%
+  Networking                     12    2    10         0 no runs    4    4    0       0           1  100%
+  Compute and pools               6    1     4         0 no runs    0    0    0       0           2     -
+  Kubernetes version and engi…    4    1     4         0 no runs    2    2    0       0           0  100%
+  Storage and CSI                 4    2     4         0 no runs    0    0    0       1           0    0%
+  Images and registries          16   11     9         0 no runs    6    5    1       0           7   83%
+  Profiles and packs              8    5     6         0 no runs    3    3    0       0           2  100%
+  Lifecycle: update, repave, …   10    6     8         0 no runs    1    1    0       0           2  100%
+  The Palette platform           11    9     6         0 no runs    1    0    1       0           5    0%
+  Client tools                    9    9     4         0 no runs    0    0    0       3           0    0%
+  Teardown and leftovers          6    6     3         0 no runs    1    1    0       2           3   33%
 
-The reproduce lines read $OUT/world.json and $OUT/entity.json: --out DIR writes both.
-
-103 rules apply; 22 ran: 19 passed, 0 failed, 2 probe(s) failed, 1 warning(s), 2 note(s); 35 not checked, 39 skipped, 0 error(s); readiness 86%
+103 rules apply; 22 ran: 19 passed, 0 failed, 2 probe(s) failed, 1 warning(s), 2 note(s); 10 did not run, 25 not checked, 39 do not apply, 0 error(s); readiness 59%: 19 of 32 checks passed
+10 checks did not run: --no-exec: the command did not run (10)
+No file written; --out DIR writes report.html, report.md, report.json, world.json, and entity.json, and the reproduce lines read world.json and entity.json there ($OUT).
 OK: each counted check passed; 2 probe(s) failed, not counted

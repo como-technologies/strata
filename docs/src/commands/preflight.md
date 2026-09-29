@@ -65,10 +65,15 @@ provider or the API skips it, and finds the same fault after a full apply. See
 {{#include ../output/preflight-strict.txt}}
 ```
 
-`--ready 80` is a gate on the readiness: the share of the checks that ran and
-passed, over every section. Exit `1` when it is under the percentage. Read it
-with the count of `NOT CHECKED` rows: a readiness of 100% over three checks says
-little.
+`--ready 80` is a gate on the readiness: the checks that passed, over the
+checks that apply to the entity. A check that did not run counts against it: a
+tier that was not asked for (`--tier`, `--offline`), a Palette check with no
+key, or a command under `--no-exec`. So the static tier alone reads as a low
+readiness, and the report says how many checks did not run and why. Exit `1`
+when the readiness is under the percentage. A row with no check in
+strata-preflight (`NOT CHECKED`) is outside the count; the report prints that
+count beside it. The last lines of the report say where `--out` wrote the
+reports and the world, or that no file was written.
 
 ## The report as JSON
 

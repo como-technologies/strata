@@ -339,7 +339,9 @@ what it answered.
 - `options`: `tiers` that ran, `strict`, and `ready` when given.
 - `checks[]`: one entry for each rule, in the order of the catalog.
   - `id`, `title`, `section`, `tier`, `level`, `severity`, `status`.
-  - `verdict`: `passed`, `failed`, `not-checked`, `skipped`, or `error`.
+  - `verdict`: `passed`, `failed`, `not-checked`, `not-run`, `skipped`, or
+    `error`. `not-run` is a check that applies and did not run: a tier not asked
+    for, no key, or `--no-exec`; it counts against the readiness.
   - `messages[]`: one for each failure, or the reason for another verdict.
   - `elapsedMs`, and `ran`, the request or the command the check ran.
   - `reproduce[]`: the lines a person runs to see the same thing.
@@ -350,8 +352,10 @@ what it answered.
   - `countsAsFailure`: true when this entry makes the exit code `1`.
 - `sections[]`: the scorecard, one line for each section with a row for the
   engine: `rows`, `seen`, `withCheck`, `preflight`, `weakestBound`, `ran`,
-  `passed`, `failed`, `notChecked`, `readiness`.
-- `summary`: the counts, `readiness`, `exitCode`, and one line, `verdict`.
+  `passed`, `failed`, `notRun`, `notChecked`, `readiness`.
+- `summary`: the counts, `notRunReasons` (each reason with its count),
+  `readiness`, `exitCode`, and one line, `verdict`.
+- `options`: `tiers`, `strict`, `ready`, and `outDir` when `--out` was given.
 - `legend`: what each verdict, level, tier, and exit code means.
 
 [The rule format](./preflight-rules.md) states the section file, the ledger,

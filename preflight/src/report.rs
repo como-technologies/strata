@@ -55,6 +55,9 @@ pub struct Options {
     /// The readiness the run needs, as a share, when `--ready` was given.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ready: Option<f64>,
+    /// The directory `--out` wrote the reports and the world into, when it was given.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub out_dir: Option<String>,
 }
 
 /// One rule in the report.
@@ -141,9 +144,12 @@ pub struct SectionScore {
     pub passed: u32,
     /// The checks that failed, at any level and severity but `note`.
     pub failed: u32,
+    /// The checks that apply here and did not run: a tier not asked for, no key, or `--no-exec`.
+    pub not_run: u32,
     /// The rows strata-preflight could not check here.
     pub not_checked: u32,
-    /// `passed / ran`, or none when nothing ran.
+    /// `passed / (ran + not run)`, or none when no check applies. A check that did not run
+    /// counts against it: nothing shows that it passes.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub readiness: Option<f64>,
 }
@@ -166,13 +172,18 @@ pub struct Summary {
     pub warned: u32,
     /// Notes.
     pub noted: u32,
+    /// `NOT RUN`: the checks that apply here and did not run.
+    pub not_run: u32,
+    /// Why the checks did not run, with the count of each reason.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub not_run_reasons: BTreeMap<String, u32>,
     /// `NOT CHECKED`.
     pub not_checked: u32,
-    /// `SKIP`.
+    /// `SKIP`: the rules that do not apply to this run.
     pub skipped: u32,
     /// `ERROR`.
     pub errors: u32,
-    /// `passed / ran`, or none when nothing ran.
+    /// `passed / (ran + not run)`, or none when no check applies.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub readiness: Option<f64>,
     /// The exit code of the run.
@@ -212,6 +223,10 @@ impl Legend {
                 (
                     "not-checked",
                     "strata-preflight has no check it can run here; the reproduce lines say what to run by hand",
+                ),
+                (
+                    "not-run",
+                    "the check applies here and did not run: a tier not asked for, no key, or --no-exec; it counts against the readiness",
                 ),
                 ("skipped", "the rule does not apply to this run"),
                 ("error", "the check could not answer"),
@@ -462,6 +477,7 @@ pub fn scorecard(catalog: &Catalog, checks: &[CheckResult]) -> Vec<SectionScore>
             .collect();
         let passed = ran.iter().filter(|c| c.verdict == Verdict::Passed).count() as u32;
         let failed = ran.len() as u32 - passed;
+        let not_run = rows.iter().filter(|c| c.verdict == Verdict::NotRun).count() as u32;
         let weakest = rows
             .iter()
             .filter(|c| c.level == Level::Preflight)
@@ -483,14 +499,51 @@ pub fn scorecard(catalog: &Catalog, checks: &[CheckResult]) -> Vec<SectionScore>
             ran: ran.len() as u32,
             passed,
             failed,
+            not_run,
             not_checked: rows
                 .iter()
                 .filter(|c| c.verdict == Verdict::NotChecked)
                 .count() as u32,
-            readiness: (!ran.is_empty()).then(|| f64::from(passed) / ran.len() as f64),
+            readiness: readiness_of(passed, ran.len() as u32 + not_run),
         });
     }
     out
+}
+
+/// The readiness: the checks that passed over the checks that apply, or none when none applies.
+fn readiness_of(passed: u32, apply: u32) -> Option<f64> {
+    (apply > 0).then(|| f64::from(passed) / f64::from(apply))
+}
+
+/// Why the checks did not run, with the count of each reason.
+pub(crate) fn not_run_reasons<'a>(
+    checks: impl Iterator<Item = &'a CheckResult>,
+) -> BTreeMap<String, u32> {
+    let mut out = BTreeMap::new();
+    for c in checks.filter(|c| c.verdict == Verdict::NotRun) {
+        let why = c.messages.first().cloned().unwrap_or_default();
+        *out.entry(why).or_insert(0) += 1;
+    }
+    out
+}
+
+/// `N check(s) did not run: reason (count); reason (count)`.
+pub(crate) fn not_run_text(reasons: &BTreeMap<String, u32>) -> String {
+    let n: u32 = reasons.values().sum();
+    let why: Vec<String> = reasons.iter().map(|(r, c)| format!("{r} ({c})")).collect();
+    format!(
+        "{n} check{} did not run: {}",
+        if n == 1 { "" } else { "s" },
+        why.join("; ")
+    )
+}
+
+/// What `--out` wrote, or what it would write.
+pub(crate) fn written_text(out_dir: Option<&str>) -> String {
+    match out_dir {
+        Some(dir) => format!("Written to {dir}: report.html, report.md, report.json, world.json, entity.json."),
+        None => "No file written; --out DIR writes report.html, report.md, report.json, world.json, and entity.json, and the reproduce lines read world.json and entity.json there ($OUT).".to_string(),
+    }
 }
 
 fn summarize(checks: &[CheckResult], sections: &[SectionScore], options: &Options) -> Summary {
@@ -507,9 +560,11 @@ fn summarize(checks: &[CheckResult], sections: &[SectionScore], options: &Option
     let warned = count(&|c| c.verdict == Verdict::Failed && c.severity == Severity::Warn);
     let noted = count(&|c| c.verdict == Verdict::Failed && c.severity == Severity::Note);
     let not_checked = count(&|c| c.verdict == Verdict::NotChecked);
+    let not_run = count(&|c| c.verdict == Verdict::NotRun);
+    let not_run_reasons = not_run_reasons(checks.iter());
     let skipped = count(&|c| c.verdict == Verdict::Skipped);
     let errors = count(&|c| c.verdict == Verdict::Error);
-    let readiness = (ran > 0).then(|| f64::from(passed) / f64::from(ran));
+    let readiness = readiness_of(passed, ran + not_run);
     let under_ready = match (options.ready, readiness) {
         (Some(want), Some(have)) => have < want,
         (Some(_), None) => true,
@@ -565,6 +620,8 @@ fn summarize(checks: &[CheckResult], sections: &[SectionScore], options: &Option
         probe_failed,
         warned,
         noted,
+        not_run,
+        not_run_reasons,
         not_checked,
         skipped,
         errors,
@@ -623,6 +680,7 @@ fn label_color(c: &CheckResult) -> &'static str {
         (Verdict::Failed, _, Level::Preflight) => "31",
         (Verdict::Failed, _, Level::Probe) => "35",
         (Verdict::NotChecked, _, _) => "33",
+        (Verdict::NotRun, _, _) => "2",
         (Verdict::Skipped, _, _) => "2",
         (Verdict::Error, _, _) => "31",
     }
@@ -650,66 +708,77 @@ pub fn terminal(r: &Report, color: bool) -> String {
         tiers.join(", "),
         if r.options.strict { ", strict" } else { "" }
     ));
-    let mut section = "";
-    for c in &r.checks {
-        if c.verdict == Verdict::Skipped {
+    for sc in &r.sections {
+        let rows: Vec<&CheckResult> = r
+            .checks
+            .iter()
+            .filter(|c| c.section == sc.section)
+            .collect();
+        let visible: Vec<&CheckResult> = rows
+            .iter()
+            .copied()
+            .filter(|c| !matches!(c.verdict, Verdict::Skipped | Verdict::NotRun))
+            .collect();
+        if visible.is_empty() && sc.not_run == 0 {
             continue;
         }
-        if c.section != section {
-            section = &c.section;
-            let title = r
-                .sections
-                .iter()
-                .find(|s| s.section == c.section)
-                .map_or(c.section.as_str(), |s| s.title.as_str());
-            out.push_str(&format!("\n{}\n", paint(color, "1", title)));
+        out.push_str(&format!("\n{}\n", paint(color, "1", &sc.title)));
+        if sc.not_run > 0 {
+            // one line for the checks of the section that did not run, not one line each
+            out.push_str(&format!(
+                "  {}  {}\n",
+                paint(color, "2", &format!("{:<12}", "NOT RUN")),
+                not_run_text(&not_run_reasons(rows.iter().copied()))
+            ));
         }
-        let label = format!("{:<12}", c.label());
-        let conf = c
-            .confidence
-            .as_ref()
-            .map(|k| format!("  catch {} clean {}", k.catch.text(), k.clean.text()))
-            .unwrap_or_default();
-        out.push_str(&format!(
-            "  {}  {:<28} {:<60} {:>5} ms{conf}\n",
-            paint(color, label_color(c), &label),
-            c.id,
-            truncate(&c.title, 60),
-            c.elapsed_ms
-        ));
-        if c.verdict != Verdict::Passed {
-            for m in &c.messages {
-                out.push_str(&format!("{:<16}{m}\n", ""));
+        for c in visible {
+            let label = format!("{:<12}", c.label());
+            let conf = c
+                .confidence
+                .as_ref()
+                .map(|k| format!("  catch {} clean {}", k.catch.text(), k.clean.text()))
+                .unwrap_or_default();
+            out.push_str(&format!(
+                "  {}  {:<28} {:<60} {:>5} ms{conf}\n",
+                paint(color, label_color(c), &label),
+                c.id,
+                truncate(&c.title, 60),
+                c.elapsed_ms
+            ));
+            if c.verdict != Verdict::Passed {
+                for m in &c.messages {
+                    out.push_str(&format!("{:<16}{m}\n", ""));
+                }
             }
-        }
-        if matches!(
-            c.verdict,
-            Verdict::Failed | Verdict::NotChecked | Verdict::Error
-        ) {
-            for line in &c.reproduce {
-                out.push_str(&format!(
-                    "{:<16}{} {line}\n",
-                    "",
-                    paint(color, "2", "reproduce:")
-                ));
-            }
-            if c.verdict == Verdict::Failed
-                && let Some(fix) = &c.fix
-                && !fix.text.is_empty()
-            {
-                out.push_str(&format!(
-                    "{:<16}{} {} ({})\n",
-                    "",
-                    paint(color, "2", "fix:"),
-                    fix.text,
-                    fix.owner
-                ));
+            if matches!(
+                c.verdict,
+                Verdict::Failed | Verdict::NotChecked | Verdict::Error
+            ) {
+                for line in &c.reproduce {
+                    out.push_str(&format!(
+                        "{:<16}{} {line}\n",
+                        "",
+                        paint(color, "2", "reproduce:")
+                    ));
+                }
+                if c.verdict == Verdict::Failed
+                    && let Some(fix) = &c.fix
+                    && !fix.text.is_empty()
+                {
+                    out.push_str(&format!(
+                        "{:<16}{} {} ({})\n",
+                        "",
+                        paint(color, "2", "fix:"),
+                        fix.text,
+                        fix.owner
+                    ));
+                }
             }
         }
     }
     out.push_str(&format!("\n{}\n", paint(color, "1", "Section scorecard")));
     out.push_str(&format!(
-        "  {:<28} {:>4} {:>4} {:>5} {:>9} {:>7} {:>4} {:>4} {:>4} {:>11} {:>5}\n",
+        "  {:<28} {:>4} {:>4} {:>5} {:>9} {:>7} {:>4} {:>4} {:>4} {:>7} {:>11} {:>5}\n",
         "section",
         "rows",
         "seen",
@@ -719,12 +788,13 @@ pub fn terminal(r: &Report, color: bool) -> String {
         "ran",
         "pass",
         "fail",
+        "not run",
         "not checked",
         "ready"
     ));
     for s in &r.sections {
         out.push_str(&format!(
-            "  {:<28} {:>4} {:>4} {:>5} {:>9} {:>7} {:>4} {:>4} {:>4} {:>11} {:>5}\n",
+            "  {:<28} {:>4} {:>4} {:>5} {:>9} {:>7} {:>4} {:>4} {:>4} {:>7} {:>11} {:>5}\n",
             truncate(&s.title, 28),
             s.rows,
             s.seen,
@@ -735,23 +805,25 @@ pub fn terminal(r: &Report, color: bool) -> String {
             s.ran,
             s.passed,
             s.failed,
+            s.not_run,
             s.not_checked,
             pct(s.readiness)
         ));
     }
-    if r.checks
-        .iter()
-        .any(|c| c.reproduce.iter().any(|l| l.contains("$OUT/")))
-    {
-        out.push_str(&format!(
-            "\n{}\n",
-            paint(color, "2", "The reproduce lines read $OUT/world.json and $OUT/entity.json: --out DIR writes both.")
-        ));
-    }
     let s = &r.summary;
     out.push_str(&format!(
-        "\n{} rules apply; {} ran: {} passed, {} failed, {} probe(s) failed, {} warning(s), {} note(s); {} not checked, {} skipped, {} error(s); readiness {}\n",
-        s.rules, s.ran, s.passed, s.failed, s.probe_failed, s.warned, s.noted, s.not_checked, s.skipped, s.errors, pct(s.readiness)
+        "\n{} rules apply; {} ran: {} passed, {} failed, {} probe(s) failed, {} warning(s), {} note(s); {} did not run, {} not checked, {} do not apply, {} error(s); readiness {}: {} of {} checks passed\n",
+        s.rules, s.ran, s.passed, s.failed, s.probe_failed, s.warned, s.noted, s.not_run, s.not_checked, s.skipped, s.errors, pct(s.readiness), s.passed, s.ran + s.not_run
+    ));
+    if s.not_run > 0 {
+        out.push_str(&format!(
+            "{}\n",
+            paint(color, "2", &not_run_text(&s.not_run_reasons))
+        ));
+    }
+    out.push_str(&format!(
+        "{}\n",
+        paint(color, "2", &written_text(r.options.out_dir.as_deref()))
     ));
     let code = if s.exit_code == 0 { "32" } else { "31" };
     out.push_str(&format!("{}\n", paint(color, code, &s.verdict)));
@@ -781,18 +853,22 @@ pub fn markdown(r: &Report) -> String {
         }
     ));
     out.push_str(&format!(
-        "**{}** — source `{}`, Palette {}, tiers {}{}. {} ran: {} passed, {} failed, {} probe(s) failed, {} not checked; readiness **{}**.\n\n",
+        "**{}** — source `{}`, Palette {}, tiers {}{}. {} ran: {} passed, {} failed, {} probe(s) failed; {} did not run, {} not checked; readiness **{}** ({} of {} checks passed).\n\n",
         s.verdict,
         r.subject.source,
         r.subject.release.as_deref().unwrap_or("release not given"),
         r.options.tiers.iter().map(|t| t.name()).collect::<Vec<_>>().join(", "),
         if r.options.strict { ", strict" } else { "" },
-        s.ran, s.passed, s.failed, s.probe_failed, s.not_checked, pct(s.readiness)
+        s.ran, s.passed, s.failed, s.probe_failed, s.not_run, s.not_checked, pct(s.readiness), s.passed, s.ran + s.not_run
     ));
     out.push_str(
         "| result | rule | tier | what | time | confidence |\n|---|---|---|---|---|---|\n",
     );
-    for c in r.checks.iter().filter(|c| c.verdict != Verdict::Skipped) {
+    for c in r
+        .checks
+        .iter()
+        .filter(|c| !matches!(c.verdict, Verdict::Skipped | Verdict::NotRun))
+    {
         let what = if c.verdict == Verdict::Passed {
             c.title.clone()
         } else {
@@ -850,17 +926,18 @@ pub fn markdown(r: &Report) -> String {
             }
         }
         out.push_str("</details>\n");
-        if r.checks
-            .iter()
-            .any(|c| c.reproduce.iter().any(|l| l.contains("$OUT/")))
-        {
-            out.push_str("\nThe reproduce lines read `$OUT/world.json` and `$OUT/entity.json`: `--out DIR` writes both.\n");
-        }
     }
-    out.push_str("\n### Section scorecard\n\n| section | rows | seen | with a check | preflight | weakest bound | ran | passed | failed | not checked | readiness |\n|---|---|---|---|---|---|---|---|---|---|---|\n");
+    if s.not_run > 0 {
+        out.push_str(&format!("\n{}\n", not_run_text(&s.not_run_reasons)));
+    }
+    out.push_str(&format!(
+        "\n{}\n",
+        written_text(r.options.out_dir.as_deref())
+    ));
+    out.push_str("\n### Section scorecard\n\n| section | rows | seen | with a check | preflight | weakest bound | ran | passed | failed | did not run | not checked | readiness |\n|---|---|---|---|---|---|---|---|---|---|---|---|\n");
     for sc in &r.sections {
         out.push_str(&format!(
-            "| {} | {} | {} ({}) | {} | {} | {} | {} | {} | {} | {} | {} |\n",
+            "| {} | {} | {} ({}) | {} | {} | {} | {} | {} | {} | {} | {} | {} |\n",
             sc.title,
             sc.rows,
             sc.seen,
@@ -872,6 +949,7 @@ pub fn markdown(r: &Report) -> String {
             sc.ran,
             sc.passed,
             sc.failed,
+            sc.not_run,
             sc.not_checked,
             pct(sc.readiness)
         ));
@@ -924,7 +1002,79 @@ mod tests {
             tiers: vec![Tier::Static],
             strict: false,
             ready: None,
+            out_dir: None,
         }
+    }
+
+    /// One section that holds every check, for the tests of the summary.
+    fn sections(checks: &[CheckResult]) -> Vec<SectionScore> {
+        vec![SectionScore {
+            section: "compute".into(),
+            title: "Compute".into(),
+            rows: checks.len() as u32,
+            seen: 0,
+            with_check: 0,
+            preflight: 0,
+            weakest_bound: None,
+            ran: checks
+                .iter()
+                .filter(|c| matches!(c.verdict, Verdict::Passed | Verdict::Failed))
+                .count() as u32,
+            passed: checks
+                .iter()
+                .filter(|c| c.verdict == Verdict::Passed)
+                .count() as u32,
+            failed: checks
+                .iter()
+                .filter(|c| c.verdict == Verdict::Failed)
+                .count() as u32,
+            not_run: checks
+                .iter()
+                .filter(|c| c.verdict == Verdict::NotRun)
+                .count() as u32,
+            not_checked: 0,
+            readiness: None,
+        }]
+    }
+
+    #[test]
+    fn a_check_that_did_not_run_lowers_the_readiness_and_a_rule_that_does_not_apply_does_not() {
+        let mut not_run = check("b", Verdict::NotRun, Level::Probe, Severity::Fail, false);
+        not_run.messages = vec!["tier palette was not asked for".into()];
+        let checks = vec![
+            check("a", Verdict::Passed, Level::Probe, Severity::Fail, false),
+            not_run,
+            check("c", Verdict::Skipped, Level::Probe, Severity::Fail, false),
+            check(
+                "d",
+                Verdict::NotChecked,
+                Level::Probe,
+                Severity::Fail,
+                false,
+            ),
+        ];
+        let s = summarize(&checks, &sections(&checks), &options());
+        assert_eq!((s.ran, s.not_run, s.skipped, s.not_checked), (1, 1, 1, 1));
+        assert_eq!(
+            s.readiness,
+            Some(0.5),
+            "one of two checks that apply passed"
+        );
+        assert_eq!(
+            s.not_run_reasons.get("tier palette was not asked for"),
+            Some(&1)
+        );
+        let none = vec![check(
+            "c",
+            Verdict::Skipped,
+            Level::Probe,
+            Severity::Fail,
+            false,
+        )];
+        assert_eq!(
+            summarize(&none, &sections(&none), &options()).readiness,
+            None
+        );
     }
 
     #[test]
@@ -982,31 +1132,6 @@ mod tests {
 
     #[test]
     fn the_exit_code_follows_the_counted_failures_then_the_errors() {
-        let sections = |checks: &[CheckResult]| {
-            vec![SectionScore {
-                section: "compute".into(),
-                title: "Compute".into(),
-                rows: checks.len() as u32,
-                seen: 0,
-                with_check: 0,
-                preflight: 0,
-                weakest_bound: None,
-                ran: checks
-                    .iter()
-                    .filter(|c| matches!(c.verdict, Verdict::Passed | Verdict::Failed))
-                    .count() as u32,
-                passed: checks
-                    .iter()
-                    .filter(|c| c.verdict == Verdict::Passed)
-                    .count() as u32,
-                failed: checks
-                    .iter()
-                    .filter(|c| c.verdict == Verdict::Failed)
-                    .count() as u32,
-                not_checked: 0,
-                readiness: None,
-            }]
-        };
         let probe_fail = vec![
             check(
                 "a",

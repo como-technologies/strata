@@ -137,8 +137,8 @@ accuracy of a section is the lowest bound of its rules.
 | with a check | the rows with a check in code |
 | preflight | the rows promoted to preflight checks |
 | weakest bound | the lowest 95% lower bound of a promoted rule, or `no runs` |
-| ran, passed, failed, not checked | the checks of this run |
-| readiness | `passed / ran`, or none when nothing ran |
+| ran, passed, failed, not run, not checked | the checks of this run |
+| readiness | `passed / (ran + not run)`, or none when no check applies |
 
 No number measures what the catalog does not hold. A low count of `seen` is the
 sign of gaps: networking has the most rows and the least evidence, so the lab
@@ -146,13 +146,17 @@ runs go there first.
 
 ## Readiness, and the 80% gate
 
-Readiness is the share of the checks that ran and passed, over the rules of
-severity `fail` and `warn`; a note is outside it. It is a view for a person and
-a gate for a job: `--ready 80` is exit `1` under 80%. It says how ready an
-estate is to start a first build, and where the work is first. It does not say
-that a build will pass: a row that is `NOT CHECKED` is outside the count, and
-the report prints that count beside the readiness so nobody reads 100% of three
-checks as ready.
+Readiness is the checks that passed over the checks that apply to the entity,
+for the rules of severity `fail` and `warn`; a note is outside it. A check that
+applies and did not run counts against it (`NOT RUN`: a tier not asked for, no
+key, or `--no-exec`), because nothing shows that it passes: the static tier
+alone over an aws entity is 4 of 75, not 100% of 4. A rule that does not apply
+to the entity (`SKIP`: another release, a `when` that is not true, a watch rule
+outside a watch) is outside the count. It is a view for a person and a gate for
+a job: `--ready 80` is exit `1` under 80%. It says how ready an estate is to
+start a first build, and where the work is first. It does not say that a build
+will pass: a row that is `NOT CHECKED` (no check in strata-preflight) is
+outside the count, and the report prints that count beside the readiness.
 
 ## The decisions
 

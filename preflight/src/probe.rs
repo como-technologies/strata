@@ -51,13 +51,17 @@ pub trait Backend {
     fn exec(&self, argv: &[String], timeout: Duration) -> Result<ExecOutput>;
     /// True when a Palette check can run: a key is there.
     fn has_palette(&self) -> bool;
+    /// True when no command may run (`--no-exec`): each exec check is then `NOT RUN`.
+    fn exec_off(&self) -> bool {
+        false
+    }
 }
 
 /// The backend of a run: Palette over HTTP, and the commands of this machine.
 pub struct LiveBackend<'a, A: PaletteApi> {
     /// The Palette client, or none when no key is there.
     pub palette: Option<&'a A>,
-    /// Run no command. Every exec check is then `NOT CHECKED`.
+    /// Run no command. Every exec check is then `NOT RUN`.
     pub no_exec: bool,
 }
 
@@ -105,6 +109,10 @@ impl<A: PaletteApi> Backend for LiveBackend<'_, A> {
 
     fn has_palette(&self) -> bool {
         self.palette.is_some()
+    }
+
+    fn exec_off(&self) -> bool {
+        self.no_exec
     }
 }
 
@@ -192,8 +200,12 @@ pub enum Verdict {
     /// The rule has no check strata-preflight can run here: a cloud rule with no tool, a race, or
     /// a row with no check. The reproduce lines say what to run by hand.
     NotChecked,
-    /// The rule does not apply to this run: another engine, another release, a tier that was not
-    /// asked for, or a Palette check with no key.
+    /// The rule has a check that applies here, and the check did not run: the tier was not asked
+    /// for (`--tier`, `--offline`), there was no key, or `--no-exec`. It counts against the
+    /// readiness, because nothing shows that it passes.
+    NotRun,
+    /// The rule does not apply to this run: another release, a `when` that is not true, a rule of
+    /// the tool that makes the entity, or a watch rule outside a watch.
     Skipped,
     /// The check could not answer: Palette did not answer, the command did not start, or the
     /// program failed. The exit code is `2`.
@@ -207,6 +219,7 @@ impl Verdict {
             Verdict::Passed => "PASS",
             Verdict::Failed => "FAIL",
             Verdict::NotChecked => "NOT CHECKED",
+            Verdict::NotRun => "NOT RUN",
             Verdict::Skipped => "SKIP",
             Verdict::Error => "ERROR",
         }
@@ -266,7 +279,7 @@ pub fn run_check(rule: &Rule, world: &Value, backend: &dyn Backend, jq: &Jq) -> 
         } => {
             if !backend.has_palette() {
                 return Outcome::not_run(
-                    Verdict::Skipped,
+                    Verdict::NotRun,
                     "no key: set PALETTE_API_KEY to run the Palette checks",
                 );
             }
@@ -304,6 +317,9 @@ pub fn run_check(rule: &Rule, world: &Value, backend: &dyn Backend, jq: &Jq) -> 
             timeout,
             expr,
         } => {
+            if backend.exec_off() {
+                return Outcome::not_run(Verdict::NotRun, "--no-exec: the command did not run");
+            }
             let missing: Vec<&str> = needs
                 .iter()
                 .map(String::as_str)
@@ -650,7 +666,7 @@ mod tests {
     }
 
     #[test]
-    fn a_palette_check_with_no_key_is_skipped() {
+    fn a_palette_check_with_no_key_is_not_run() {
         let jq = Jq::new();
         let (b, w) = fixture(json!({"cloud": "gke", "_palette": false}));
         let r = rule(Check::Palette {
@@ -659,7 +675,7 @@ mod tests {
             body: None,
             expr: "true".into(),
         });
-        assert_eq!(run_check(&r, &w, &b, &jq).verdict, Verdict::Skipped);
+        assert_eq!(run_check(&r, &w, &b, &jq).verdict, Verdict::NotRun);
     }
 
     #[test]
