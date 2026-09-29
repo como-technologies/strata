@@ -25,6 +25,11 @@ rules:
       kind: palette
       method: POST
       path: /v1/spectroclusters/{{ .cloud | if . == "edge" then "edge-native" else . end }}/validate
+      # for an existing cluster the route would refuse its own name with ResourceAlreadyExists,
+      # so the body of the check carries the name with a suffix; nothing else changes
+      body: |
+        . as $w | .entity
+        | if $w.clusterUid != null then .metadata.name = ((.metadata.name // "cluster") + "-preflight") else . end
       expr: |
         .response as $r
         | if ($r.ok | not) then ["Palette refused the entity: \($r.body.code // $r.status): \($r.body.message // ($r.body | tostring))"]
