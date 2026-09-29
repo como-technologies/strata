@@ -30,7 +30,9 @@ The checks, in order:
    errors go in `machinePools.results[].errors[]`: one worker of four cores
    with the packs of the live example is `MachinePoolWithMinCpuRequired`,
    "A minimum allocation of '4.1' CPU cores is required across all worker
-   nodes. Current allocation : '4' CPU cores", in under 4 seconds. When a
+   nodes. Current allocation : '4' CPU cores", in under 4 seconds. The EKS
+   route answers `200` with no error for the same pool: the floor does not
+   apply to a managed node group there, or the route does not check it. When a
    profile has an error, this step does not run, and `machinePools.results`
    is empty.
 6. For AWS with a VPC: the pod and service CIDRs of the Kubernetes pack against

@@ -884,6 +884,20 @@ and that role has built clusters. The rule now leaves `iam:PassRole` to a
 reproduce line with the three CAPA role ARNs. The run is in the ledger as the
 first wrong result of a check.
 
+**eks.** Six faults made on purpose, five caught: one zone, no worker pool, an
+`updateStrategy` that EKS does not read, a private endpoint alone, and a cloud
+account uid that is not in the project. The sixth, one worker of four cores,
+was not caught: `POST /v1/spectroclusters/eks/validate` answers `200` with no
+error for it, where the AWS route answers `MachinePoolWithMinCpuRequired` for
+the same pool. No run shows whether an EKS create with one worker of four
+cores fails later, so the CPU floor on EKS is a reading and not a fact. On the
+clean entity, 44 checks ran and 42 passed. The two wrong results were the two
+rules that simulate the IAM policy of the role of the cloud account:
+`aws iam simulate-principal-policy` with no `--resource-arns` evaluates each
+action against the resource `*`, and a statement that names a resource, as the
+EKS policy of Palette does for `eks:*`, does not match it. The role built the
+EKS clusters of #89. Both rules now pass the resource ARNs of the build.
+
 ## A chart pushed again, on a cluster
 
 A run by hand, with the registry host of `registry-kinds.sh` and cluster A: no
