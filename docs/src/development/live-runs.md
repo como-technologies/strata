@@ -970,7 +970,11 @@ worker pool, `e2-standard-4` to `e2-standard-8`, was caught by
 `gke-type-change` and `pool-replace-fields` before any apply: the fault of
 #90, found in a millisecond. The destroy of the cluster ended with
 `context deadline exceeded` at the deadline of the provider, and a second
-destroy completed, as `provider-delete-timeout` says.
+destroy completed, as `provider-delete-timeout` says. The inventory step of the
+run could not ask GCP: `gcloud` demanded a reauthentication in the middle of
+the campaign, which a non-interactive shell cannot give, the `cloud-cli-auth`
+row of the lab. Run by hand after, the inventory was 0 on every line, the GKE
+cluster counted.
 
 ## A chart pushed again, on a cluster
 
