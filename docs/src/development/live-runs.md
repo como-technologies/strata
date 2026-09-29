@@ -788,6 +788,46 @@ Provider 0.30.1 does not read `cloud_config.azs` of an EKS cluster back, and
 `azs` forces a new resource. So each plan after the create replaces the
 cluster. `cloud-eks.tf` ignores the field.
 
+## gke.sh
+
+`gke.sh` asks the claims that depend on the engine on a GKE cluster (#90).
+Google runs the control plane, and one node pool of three `e2-standard-4` nodes
+runs the workers. It needs `cloud = "gke"`, cluster A, and `gke_k8s_bump` for
+the version bump: see [A GKE cluster](./live-example.md#a-gke-cluster).
+`verify.sh`, the read-only suite, passes each of its checks on GKE.
+
+| Check | Expected exit | What it shows |
+| --- | --- | --- |
+| `release`, `release-cloud`, `release-layers` | 0 | #90: a record of the GKE release version, of cloud type `gke`, with an OS, a Kubernetes, a CNI, and a CSI layer: `cos-gke`, `kubernetes-gke`, `cni-vpc-native-gke`, and `gke-csi-gcp-driver` |
+| `release-packs`, `release-digests` | 0 | #90: each GKE pack has an upstream digest, `packRef.digest` |
+| `cluster`, `cluster-runs`, `verify-both` | 0 | #90: a record of cluster A verifies, and `compare` of it with the release is `IDENTICAL` |
+| `consumers` | 1 | #90: `consumers` of the release names cluster A |
+| `shape`, `shape-pool`, `shape-fields` | 0 | #90: the shape tier holds the node pool, with its machine type, size, disk, labels, and update strategy. A GKE pool has no zones |
+| `shape-control-plane` | 0 | #90: the shape tier holds the managed cluster settings and the cluster API override, with the release channel |
+| `value-os`, `value-k8s`, `value-cni`, `value-csi` | seen | Each of the four GKE packs has values of comments alone, so no change of values has a Palette answer on GKE |
+| `k8s-bump`, `k8s-bump-lines`, `k8s-bump-repave` | 1, 0, 0 | #90: for `kubernetes-gke` 1.34 to 1.35, Palette says repave, `PackUpgraded kubernetes-gke`, and the level of the impact table is `repave`: they agree |
+
+With `GKE_POOL_CHANGE=1`, step 4 changes the machine type of the node pool
+through OpenTofu, from `e2-standard-4` to `e2-standard-8`:
+
+| Check | Expected exit | What it shows |
+| --- | --- | --- |
+| `nodepools-before`, `pool-change` | 0 | the GKE node pool before the change, and the apply of the change |
+| `nodepools-gone` | 0 | #90: within 5 minutes of the change, GKE has no node pool |
+| `shape-2`, `shape-differs`, `shape-differs-says` | 0 | #90: `compare` of the two records names `~ shape.pools[name=worker-pool].instanceType: "e2-standard-4" -> "e2-standard-8"`, and the shape tier is `CHANGED`; the root stays `IDENTICAL` |
+| `nodepools-none-made` | 0 | #90: 10 minutes later, GKE still has no node pool: nothing makes the new one |
+
+Palette makes a new machine pool for the new machine type, and gives it the
+GKE node pool name of the old one, `worker-pool`. The delete of the old machine
+pool deletes the GKE node pool. The controllers that make the new pool ran on
+its nodes, so the cluster keeps no node. The delete of the cluster then removes
+the GKE cluster, and stays `Deleting`: the machine pool of GKE that has no
+machine pool of the cluster API keeps its finalizer, so the cluster of the
+cluster API is never deleted. The EKS change of [eks.sh](#ekssh) is of the same
+kind. A change of the node pool is not a change of a layer, so the impact table
+gives it no level, and `compare` shows it in the shape tier alone. The recovery
+is in [A GKE cluster](./live-example.md#a-gke-cluster).
+
 ## A chart pushed again, on a cluster
 
 A run by hand, with the registry host of `registry-kinds.sh` and cluster A: no

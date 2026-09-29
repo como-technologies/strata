@@ -41,6 +41,14 @@ itself. A cluster on AWS gives these fields:
   `GET /v1/cloudconfigs/{kind}/{uid}`, holds `spec.machinePoolConfig[]` and
   `spec.clusterConfig`.
 
+On a managed engine, the `spec.clusterConfig` of the cloud config also holds
+the control plane that the cloud runs. On EKS it holds `endpointAccess` and
+`addons`. On GKE it holds `managedClusterConfig`, with the `location`, and
+`overrideClusterAPIConfig`, the cluster API override of the cluster, such as
+its release channel. A GKE machine pool has no zones: its `azs` is null. See
+[eks.sh](../../development/live-runs.md#ekssh) and
+[gke.sh](../../development/live-runs.md#gkesh).
+
 Two clusters from one definition give one `spcInfraHash`, and each its own
 `spcHash`. A change of the timezone and the labels of a cluster, through the
 API, changes its `spcHash`. The other tiers of the two clusters are the same:

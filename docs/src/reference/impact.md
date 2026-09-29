@@ -56,7 +56,12 @@ The live runs also asked Palette about a managed engine, EKS. A new Kubernetes
 version repaves, as the table says. A change of the values of the
 `kubernetes-eks` pack or of the CSI pack repaves nothing: on EKS, `may-repave`
 for the Kubernetes layer means no repave for these values. The EKS packs of the
-OS and CNI layers have no values. See
+OS and CNI layers have no values.
+
+The live runs also asked Palette about GKE, a managed engine. A new Kubernetes
+version repaves, as the table says. The four GKE packs have values of comments
+alone, so the runs ask Palette about no change of values on GKE. A change of
+the node pool is not a change of a layer, and the table gives it no level. See
 [What no run covers](../internals/palette/limits.md#what-no-run-covers).
 
 For a cluster, ask Palette: `compare --repave` prints its answer beside
