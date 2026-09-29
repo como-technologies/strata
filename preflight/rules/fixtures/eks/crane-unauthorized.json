@@ -1,0 +1,13 @@
+{
+  "_base": "oci-image-clean.json",
+  "_note": "crane auth login stored an empty password and reported a success: the registry answers 401",
+  "_patch": {
+    "_exec": {
+      "crane digest 123456789012.dkr.ecr.us-east-2.amazonaws.com/strata-live/nginx:1.27.0": {
+        "exit": 1,
+        "stdout": "",
+        "stderr": "Error: fetching manifest 123456789012.dkr.ecr.us-east-2.amazonaws.com/strata-live/nginx:1.27.0: GET https://123456789012.dkr.ecr.us-east-2.amazonaws.com/v2/strata-live/nginx/manifests/1.27.0: unexpected status code 401 Unauthorized: Not Authorized"
+      }
+    }
+  }
+}

@@ -36,6 +36,40 @@ rules:
       - fault: fixtures/gke/pool-4.json
         clean: fixtures/gke/clean.json
 
+  - id: instance-offering
+    title: The instance type is offered in each zone of the pool
+    engines: [aws, eks, gcp, gke]
+    tier: cloud
+    severity: fail
+    status: source
+    what: |
+      An instance type that a zone does not offer fails during the build: `Unsupported`,
+      `ZONE_RESOURCE_POOL_EXHAUSTED`, or a node group `CREATE_FAILED`. The instance catalog of
+      Palette is one static list for each region, and it does not ask the zone.
+    reproduce:
+      - "aws ec2 describe-instance-type-offerings --location-type availability-zone --filters Name=instance-type,Values={{ .entity.spec.machinepoolconfig[0].cloudConfig.instanceType }} --region {{ .entity.spec.cloudConfig.region }} --query 'InstanceTypeOfferings[].Location'"
+      - "gcloud compute machine-types describe {{ .entity.spec.machinepoolconfig[0].cloudConfig.instanceType }} --zone <zone> --project {{ .entity.spec.cloudConfig.project }}"
+    fix:
+      owner: palette
+      text: Check the offering in the validate route, with "unknown" when the permission is missing.
+    evidence:
+      - kind: source
+        ref: hubble services/service/machine/machine_service.go
+        note: the instance lookup is a catalog of CPU and memory for each region
+
+  - id: spot-capacity
+    title: Spot capacity is short
+    engines: [aws, eks]
+    tier: race
+    severity: warn
+    status: source
+    what: |
+      A pool of capacity type spot can find no capacity at the moment of the build. No check before
+      the build answers it; the watch sees the capacity events.
+    evidence:
+      - kind: doc
+        ref: https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/spot-interruptions.html
+
   - id: eks-worker-needed
     title: An EKS cluster needs one worker pool that is not Fargate
     engines: [eks]
@@ -62,6 +96,352 @@ rules:
     tests:
       - fault: fixtures/eks/no-worker.json
         clean: fixtures/eks/clean.json
+
+  - id: eks-ami-type
+    title: The AMI type of an EKS pool is an AL2023 type
+    engines: [eks]
+    tier: static
+    severity: fail
+    status: source
+    what: |
+      Palette refuses an AL2 AMI type (`AL2_x86_64`, `AL2_x86_64_GPU`) for a node pool with
+      `UnsupportedAmiType`. It refuses any value outside `AL2023_x86_64_STANDARD`,
+      `AL2023_x86_64_NEURON`, and `AL2023_x86_64_NVIDIA` as invalid. An empty type is
+      `AL2023_x86_64_STANDARD`. AL2023 enforces IMDSv2 with a hop limit of 1. A pod outside host
+      networking then cannot reach IMDS, and the EBS CSI driver fails. The account default hop
+      limit must be 2. The provider copies the account default into the node group, and the
+      reproduce line reads it.
+    check:
+      kind: static
+      expr: |
+        [ .entity.spec.machinepoolconfig[]
+          | (.cloudConfig.amiType // "") as $t
+          | select($t != "")
+          | if ($t | startswith("AL2_"))
+            then "pool \(.poolConfig.name) uses amiType \($t): AL2 is refused for a new node pool (UnsupportedAmiType); use AL2023_x86_64_STANDARD"
+            elif (["AL2023_x86_64_STANDARD", "AL2023_x86_64_NEURON", "AL2023_x86_64_NVIDIA"] | index($t)) == null
+            then "pool \(.poolConfig.name) uses amiType \($t), not one of AL2023_x86_64_STANDARD, AL2023_x86_64_NEURON, AL2023_x86_64_NVIDIA"
+            else empty end ]
+    reproduce:
+      - "aws ec2 get-instance-metadata-defaults --region {{ .entity.spec.cloudConfig.region }} --query AccountLevel --output json   # HttpPutResponseHopLimit must be 2 when HttpTokens is required"
+    fix:
+      owner: palette
+      text: Read the account IMDS defaults in the validate route, and warn when the hop limit is 1.
+    evidence:
+      - kind: source
+        ref: hubble services/service/spectrocluster/internal/handler/converter/v1/clusters_v1_converter.go ToEksMachinePoolConfigs
+        note: panics with UnsupportedAmiType when the type is not in domain.AmiTypes()
+      - kind: source
+        ref: hubble domain/cloudmetaami.go AmiTypes
+        note: the three AL2023 types; AL2 stays only for clusters that exist
+      - kind: doc
+        ref: https://docs.spectrocloud.com/clusters/public-cloud/aws/eks/
+        note: the EC2 instance hop limit must be 2 for IMDSv2 with AL2023
+      - kind: source
+        ref: palette pkg/provider/aws/aws_managed.go getInstanceMetadataOptionsFromDefaults
+    tests:
+      - fault: fixtures/eks/ami-al2.json
+        clean: fixtures/eks/clean.json
+
+  - id: eks-launch-template
+    title: The AMI of a custom launch template exists in the region
+    engines: [eks]
+    tier: cloud
+    severity: fail
+    status: source
+    when: |
+      [ .entity.spec.machinepoolconfig[] | .cloudConfig.awsLaunchTemplate.ami.id // "" | select(. != "") ] | length > 0
+    what: |
+      A pool with `awsLaunchTemplate` makes CAPA write an EC2 launch template for the node group,
+      and Palette sets `enableAwsLaunchTemplate`. An AMI id that is not in the region, or not
+      `available`, fails the node group after the control plane is up. EC2 answers
+      `InvalidAMIID.NotFound`, and the node group is `CREATE_FAILED`. Palette copies the template
+      and checks no field of it. With no AMI id,
+      CAPA looks the EKS optimized AMI up in SSM, which works. The check asks EC2 for each AMI id of
+      the pools in one call. The launch template versions exist during the build alone; the
+      reproduce line reads them.
+    check:
+      kind: exec
+      needs: [aws]
+      argv:
+        - aws
+        - ec2
+        - describe-images
+        - --region
+        - "{{ .entity.spec.cloudConfig.region }}"
+        - --filters
+        - 'Name=image-id,Values={{ [ .entity.spec.machinepoolconfig[] | .cloudConfig.awsLaunchTemplate.ami.id // "" | select(. != "") ] | unique | join(",") }}'
+        - --output
+        - json
+      expr: |
+        .entity.spec.cloudConfig.region as $r
+        | ([ .entity.spec.machinepoolconfig[] | { pool: .poolConfig.name, ami: (.cloudConfig.awsLaunchTemplate.ami.id // "") } | select(.ami != "") ]) as $want
+        | if .exec.exit != 0 then ["aws ec2 describe-images failed: \(.exec.stderr | .[:200])"]
+          else (.exec.stdout.Images // []) as $have
+          | [ $want[] | .ami as $a | .pool as $p
+              | ([ $have[] | select(.ImageId == $a) ] | .[0]) as $img
+              | if $img == null then "pool \($p): AMI \($a) is not in \($r)"
+                elif ($img.State // "") != "available" then "pool \($p): AMI \($a) is \($img.State), not available"
+                else empty end ]
+          end
+    reproduce:
+      - "aws ec2 describe-images --region {{ .entity.spec.cloudConfig.region }} --image-ids {{ [ .entity.spec.machinepoolconfig[] | .cloudConfig.awsLaunchTemplate.ami.id // \"\" | select(. != \"\") ] | unique | join(\" \") }} --query 'Images[].[ImageId,State,Name]' --output table"
+      - "aws ec2 describe-launch-template-versions --region {{ .entity.spec.cloudConfig.region }} --launch-template-name <name of the node group> --versions '$Latest' --output json   # during the build; CAPA names the template after the node group"
+    fix:
+      owner: palette
+      text: Describe the AMI of the launch template in the validate route.
+    evidence:
+      - kind: source
+        ref: hubble services/service/spectrocluster/internal/handler/converter/v1/clusters_v1_converter.go ToEksMachinePoolConfigParam
+        note: "`if e.CloudConfig.AwsLaunchTemplate != nil { EnableAwsLaunchTemplate = true }`; ToAwsLaunchTemplate copies the fields and checks none"
+      - kind: doc
+        ref: https://cluster-api-aws.sigs.k8s.io/topics/eks/pod-networking
+    tests:
+      - fault: fixtures/eks/launch-template-ami-missing.json
+        clean: fixtures/eks/launch-template-clean.json
+
+  - id: eks-fargate-private
+    title: The subnets of a Fargate profile are private
+    engines: [eks]
+    tier: cloud
+    severity: fail
+    status: inferred
+    when: |
+      [ (.entity.spec.fargateProfiles // [])[] | (.subnetIds // [])[] ] | length > 0
+    what: |
+      A Fargate pod gets no public IP, so EKS accepts only private subnets for a profile. EKS
+      refuses a subnet with a route to an internet gateway, and the profile fails. With no subnet ids,
+      CAPA takes the private subnets of the cluster. The check reads the route tables the named
+      subnets are associated with, and flags a route to an `igw-`. A subnet with no association
+      uses the main route table, and this filter does not return it. This is a reading of the
+      documentation, not a run.
+    check:
+      kind: exec
+      needs: [aws]
+      argv:
+        - aws
+        - ec2
+        - describe-route-tables
+        - --region
+        - "{{ .entity.spec.cloudConfig.region }}"
+        - --filters
+        - 'Name=association.subnet-id,Values={{ [ (.entity.spec.fargateProfiles // [])[] | (.subnetIds // [])[] ] | unique | join(",") }}'
+        - --output
+        - json
+      expr: |
+        if .exec.exit != 0 then ["aws ec2 describe-route-tables failed: \(.exec.stderr | .[:200])"]
+        else [ (.exec.stdout.RouteTables // [])[]
+               | ([ (.Associations // [])[] | .SubnetId // empty ]) as $subnets
+               | (.Routes // [])[]
+               | select((.GatewayId // "") | startswith("igw-"))
+               | "subnet(s) \($subnets | join(", ")) route \(.DestinationCidrBlock // "?") to \(.GatewayId): a Fargate profile needs private subnets" ]
+             | unique
+        end
+    reproduce:
+      - "aws ec2 describe-route-tables --region {{ .entity.spec.cloudConfig.region }} --filters Name=association.subnet-id,Values={{ [ (.entity.spec.fargateProfiles // [])[] | (.subnetIds // [])[] ] | unique | join(\",\") }} --query 'RouteTables[].[Associations[].SubnetId,Routes[].GatewayId]' --output json"
+      - "aws ec2 describe-subnets --region {{ .entity.spec.cloudConfig.region }} --subnet-ids {{ [ (.entity.spec.fargateProfiles // [])[] | (.subnetIds // [])[] ] | unique | join(\" \") }} --query 'Subnets[].[SubnetId,MapPublicIpOnLaunch]' --output table"
+    fix:
+      owner: palette
+      text: Read the route tables of the subnets of a Fargate profile in the validate route.
+    evidence:
+      - kind: doc
+        ref: https://docs.spectrocloud.com/clusters/public-cloud/aws/eks/
+        note: "only private subnets (with no direct route to an Internet Gateway) are accepted for this parameter"
+      - kind: doc
+        ref: https://docs.aws.amazon.com/eks/latest/userguide/fargate-profile.html
+    tests:
+      - fault: fixtures/eks/fargate-public.json
+        clean: fixtures/eks/fargate-private.json
+
+  - id: aws-ami
+    title: The image of the OS pack is in the region
+    engines: [aws]
+    tier: cloud
+    severity: fail
+    status: source
+    when: |
+      def ann(l): ([ .profiles[] | .packs[] | select(.layer == l) | .packUid ] | .[0]) as $u | if $u == null then {} else (([ ((.packs[$u] // {}).packValues // [])[] | select(.packUid == $u) | .annotations // {} ] | .[0]) // {}) end;
+      (ann("os") | has("os_version") and has("os_spectro_version")) and (ann("k8s") | has("k8s_version") and has("k8s_spectro_version"))
+    what: |
+      At create, Palette builds an image name from four annotations of the OS and Kubernetes packs:
+      `os_version-os_spectro_version-k8s_version-k8s_spectro_version`, such as `u-2404-0-k-1324-0`.
+      It asks EC2 for an image of that name in the region, and writes the id into the cluster. When
+      the region has no such image, the image condition of the cluster fails after 5 tries, and the
+      build waits. The check asks EC2 for the same name. It runs when the world has the pack
+      annotations, which needs a key; a bring-your-own-image pack names its AMI in `imageId` instead.
+    check:
+      kind: exec
+      needs: [aws]
+      argv:
+        - aws
+        - ec2
+        - describe-images
+        - --region
+        - "{{ .entity.spec.cloudConfig.region }}"
+        - --filters
+        - 'Name=name,Values={{ def ann(l): ([ .profiles[] | .packs[] | select(.layer == l) | .packUid ] | .[0]) as $u | if $u == null then {} else (([ ((.packs[$u] // {}).packValues // [])[] | select(.packUid == $u) | .annotations // {} ] | .[0]) // {}) end; ann("os") as $o | ann("k8s") as $k | "\($o.os_version)-\($o.os_spectro_version)-\($k.k8s_version)-\($k.k8s_spectro_version)" }}'
+        - --output
+        - json
+      expr: |
+        def ann(l): ([ .profiles[] | .packs[] | select(.layer == l) | .packUid ] | .[0]) as $u | if $u == null then {} else (([ ((.packs[$u] // {}).packValues // [])[] | select(.packUid == $u) | .annotations // {} ] | .[0]) // {}) end;
+        ann("os") as $o | ann("k8s") as $k
+        | "\($o.os_version)-\($o.os_spectro_version)-\($k.k8s_version)-\($k.k8s_spectro_version)" as $name
+        | if .exec.exit != 0 then ["aws ec2 describe-images failed: \(.exec.stderr | .[:200])"]
+          elif ((.exec.stdout.Images // []) | length) == 0 then ["no image named \($name) in \(.entity.spec.cloudConfig.region): the image condition of the cluster fails, and the build waits"]
+          else [] end
+    reproduce:
+      - "aws ec2 describe-images --region {{ .entity.spec.cloudConfig.region }} --filters Name=name,Values=<os_version>-<os_spectro_version>-<k8s_version>-<k8s_spectro_version> --query 'Images[].[ImageId,OwnerId,Name,State]' --output table   # the four values are annotations of the OS and Kubernetes packs"
+    fix:
+      owner: palette
+      text: Move the image lookup from after the create into the validate route.
+    evidence:
+      - kind: source
+        ref: hubble services/service/spectrocluster/internal/service/spectrocluster/internal/aws/spectrocluster_aws_image.go resolveAwsImage
+        note: builds the name with GetImageName, calls GetAwsImage in the region, and sets the image condition to Failure after the retries
+      - kind: source
+        ref: palette pkg/provider/aws/aws_image.go getAWSAmi
+        note: reads the image id from the pack ref annotation, or from the pack annotations imageId and imageOwner
+    tests:
+      - fault: fixtures/aws/image-missing.json
+        clean: fixtures/aws/image-clean.json
+
+  - id: gcp-image-not-shared
+    title: Spectro Cloud shares the image of the OS and Kubernetes pair
+    engines: [gcp]
+    tier: cloud
+    severity: fail
+    status: seen
+    when: |
+      def ann(l): ([ .profiles[] | .packs[] | select(.layer == l) | .packUid ] | .[0]) as $u | if $u == null then {} else (([ ((.packs[$u] // {}).packValues // [])[] | select(.packUid == $u) | .annotations // {} ] | .[0]) // {}) end;
+      (ann("os") | has("os_version") and has("os_spectro_version")) and (ann("k8s") | has("k8s_version") and has("k8s_spectro_version"))
+    what: |
+      A GCP cluster takes its node image from the image project of Spectro Cloud
+      (`spectro-image-build` on the SaaS instance). There is one image for each pair of OS and
+      Kubernetes versions, named from the pack annotations as on AWS (`u-2404-0-k-1356-0`). Palette builds the
+      image URL and checks nothing. When the image is not shared with the project, each machine
+      fails with `Required 'compute.images.useReadOnly' permission`, and the cluster stays
+      `Provisioning` with no instance. The check describes the image with the account of the
+      operator; a 403 or a 404 is the fault. It runs when the world has the pack annotations.
+    check:
+      kind: exec
+      needs: [gcloud]
+      argv:
+        - gcloud
+        - compute
+        - images
+        - describe
+        - '{{ def ann(l): ([ .profiles[] | .packs[] | select(.layer == l) | .packUid ] | .[0]) as $u | if $u == null then {} else (([ ((.packs[$u] // {}).packValues // [])[] | select(.packUid == $u) | .annotations // {} ] | .[0]) // {}) end; ann("os") as $o | ann("k8s") as $k | "\($o.os_version)-\($o.os_spectro_version)-\($k.k8s_version)-\($k.k8s_spectro_version)" }}'
+        - --project
+        - spectro-image-build
+        - --format
+        - json
+      expr: |
+        def ann(l): ([ .profiles[] | .packs[] | select(.layer == l) | .packUid ] | .[0]) as $u | if $u == null then {} else (([ ((.packs[$u] // {}).packValues // [])[] | select(.packUid == $u) | .annotations // {} ] | .[0]) // {}) end;
+        ann("os") as $o | ann("k8s") as $k
+        | "\($o.os_version)-\($o.os_spectro_version)-\($k.k8s_version)-\($k.k8s_spectro_version)" as $name
+        | if .exec.exit != 0 then ["gcloud cannot describe image \($name) in project spectro-image-build: \(.exec.stderr | .[:240])"]
+          else [] end
+    reproduce:
+      - "gcloud compute images describe <os_version>-<os_spectro_version>-<k8s_version>-<k8s_spectro_version> --project spectro-image-build   # the four values are annotations of the OS and Kubernetes packs; a 403 with compute.images.useReadOnly means the image is not shared"
+      - "gcloud logging read 'protoPayload.status.message:\"compute.images.useReadOnly\"' --project {{ .entity.spec.cloudConfig.project }} --limit 5 --freshness 1h"
+    fix:
+      owner: palette
+      text: Describe the image at create, before the URL goes into the cluster.
+    evidence:
+      - kind: run
+        ref: "#74"
+        note: the image of Kubernetes 1.36.2 is not shared, and the cluster stays Provisioning with no instance
+      - kind: source
+        ref: hubble services/service/cloud/internal/service/cloudservice/gcp_service.go GetGcpImageUrl
+        note: formats the URL from the image project and the name, and calls no GCP API
+    tests:
+      - fault: fixtures/gcp/image-not-shared.json
+        clean: fixtures/gcp/image-shared-clean.json
+
+  - id: root-volume
+    title: The root volume of a pool is as large as the snapshot of the AMI
+    engines: [aws]
+    tier: palette
+    severity: fail
+    status: inferred
+    when: |
+      def ann(l): ([ .profiles[] | .packs[] | select(.layer == l) | .packUid ] | .[0]) as $u | if $u == null then {} else (([ ((.packs[$u] // {}).packValues // [])[] | select(.packUid == $u) | .annotations // {} ] | .[0]) // {}) end;
+      (ann("os") | has("imageId")) and .entity.spec.cloudAccountUid != null
+    what: |
+      EC2 refuses a root volume smaller than the snapshot of the AMI (`InvalidBlockDeviceMapping`),
+      and the machine is never made. Palette has `GET /v1/clouds/aws/imageIds/{imageId}/volumeSize`,
+      which reads the root block device of the AMI, and the create does not call it. Before the
+      create, the AMI id is known for a bring-your-own-image OS pack alone, in its `imageId`
+      annotation. For a Spectro image, Palette finds the id at create. The check runs for the first case, and
+      compares `rootDeviceSize` of each pool with the size. This is a reading of the source, not a run.
+    check:
+      kind: palette
+      method: GET
+      path: '/v1/clouds/aws/imageIds/{{ def ann(l): ([ .profiles[] | .packs[] | select(.layer == l) | .packUid ] | .[0]) as $u | if $u == null then {} else (([ ((.packs[$u] // {}).packValues // [])[] | select(.packUid == $u) | .annotations // {} ] | .[0]) // {}) end; ann("os").imageId }}/volumeSize?region={{ .entity.spec.cloudConfig.region }}&cloudAccountUid={{ .entity.spec.cloudAccountUid }}'
+      expr: |
+        def ann(l): ([ .profiles[] | .packs[] | select(.layer == l) | .packUid ] | .[0]) as $u | if $u == null then {} else (([ ((.packs[$u] // {}).packValues // [])[] | select(.packUid == $u) | .annotations // {} ] | .[0]) // {}) end;
+        (ann("os").imageId) as $ami
+        | if (.response.ok | not) then ["Palette cannot read the volume size of \($ami): \(.response.body.code // .response.status): \(.response.body.message // "")"]
+          else (.response.body.sizeGB // 0) as $snap
+          | [ .entity.spec.machinepoolconfig[]
+              | select((.cloudConfig.rootDeviceSize // 0) > 0 and (.cloudConfig.rootDeviceSize // 0) < $snap)
+              | "pool \(.poolConfig.name) has rootDeviceSize \(.cloudConfig.rootDeviceSize) GB, and the snapshot of \($ami) is \($snap) GB" ]
+          end
+    reproduce:
+      - "aws ec2 describe-images --region {{ .entity.spec.cloudConfig.region }} --image-ids <ami> --query 'Images[].BlockDeviceMappings[].Ebs.VolumeSize' --output text   # the snapshot size; rootDeviceSize of each pool must be as large"
+      - "curl -s -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" \"${PALETTE_API:-https://api.spectrocloud.com}/v1/clouds/aws/imageIds/<ami>/volumeSize?region={{ .entity.spec.cloudConfig.region }}&cloudAccountUid={{ .entity.spec.cloudAccountUid }}\""
+    fix:
+      owner: palette
+      text: Compare rootDeviceSize with the volume size of the image in the validate route.
+    evidence:
+      - kind: source
+        ref: hubble services/service/cloud/internal/service/cloudservice/aws_service.go GetVolumeSize
+        note: reads the root block device of the image; no cluster path calls it
+    tests:
+      - fault: fixtures/aws/byoi-volume-small.json
+        clean: fixtures/aws/byoi-volume-clean.json
+
+  - id: dedicated-hosts
+    title: The host resource group has capacity for the pool
+    engines: [aws]
+    tier: palette
+    severity: fail
+    status: source
+    when: |
+      ([ .entity.spec.machinepoolconfig[] | select((.cloudConfig.hostResourceGroupArn // "") != "") ] | length) > 0 and .entity.spec.cloudAccountUid != null
+    what: |
+      A pool of capacity type `host-resource-group` places its instances on the dedicated hosts of
+      the group. When the hosts have less free capacity for the instance type than the pool size,
+      EC2 refuses the instances (`InsufficientHostCapacity`), and the pool never fills. Palette has
+      `POST /v1/clouds/aws/regions/{region}/resourceGroups/validateCapacity`, which sums the free
+      capacity of the hosts of the group for the type, and the create does not call it. The check
+      asks it for the first pool with a host resource group; a second pool needs its own call.
+    check:
+      kind: palette
+      method: POST
+      path: '/v1/clouds/aws/regions/{{ .entity.spec.cloudConfig.region }}/resourceGroups/validateCapacity?hrgArn={{ [ .entity.spec.machinepoolconfig[] | select((.cloudConfig.hostResourceGroupArn // "") != "") ] | .[0].cloudConfig.hostResourceGroupArn }}'
+      body: |
+        ([ .entity.spec.machinepoolconfig[] | select((.cloudConfig.hostResourceGroupArn // "") != "") ] | .[0]) as $p
+        | { cloudAccountUid: .entity.spec.cloudAccountUid, instanceType: $p.cloudConfig.instanceType, replicaCount: ($p.poolConfig.size // 0) }
+      expr: |
+        ([ .entity.spec.machinepoolconfig[] | select((.cloudConfig.hostResourceGroupArn // "") != "") ] | .[0]) as $p
+        | if (.response.ok | not) then ["Palette cannot check the capacity of \($p.cloudConfig.hostResourceGroupArn): \(.response.body.code // .response.status): \(.response.body.message // "")"]
+          elif ((.response.body.isValid // false) | not)
+          then ["pool \($p.poolConfig.name): the group \($p.cloudConfig.hostResourceGroupArn) has \(.response.body.availableCapacity // 0) free \($p.cloudConfig.instanceType) slot(s), and the pool asks for \($p.poolConfig.size): \(.response.body.message // "")"]
+          else [] end
+    reproduce:
+      - "aws resource-groups list-group-resources --region {{ .entity.spec.cloudConfig.region }} --group {{ [ .entity.spec.machinepoolconfig[] | select((.cloudConfig.hostResourceGroupArn // \"\") != \"\") ] | .[0].cloudConfig.hostResourceGroupArn }} --query 'Resources[].Identifier.ResourceArn' --output text"
+      - "aws ec2 describe-hosts --region {{ .entity.spec.cloudConfig.region }} --host-ids <host ids of the group> --query 'Hosts[].AvailableCapacity.AvailableInstanceCapacity' --output json"
+    fix:
+      owner: palette
+      text: Call the capacity route for each host resource group pool at create.
+    evidence:
+      - kind: source
+        ref: hubble services/service/cloud/internal/service/cloudservice/aws_service.go ValidateAwsHrgCapacity
+        note: sums AvailableInstanceCapacity of the hosts for the type, and answers isValid when it covers replicaCount
+    tests:
+      - fault: fixtures/aws/hrg-no-capacity.json
+        clean: fixtures/aws/hrg-clean.json
 
   - id: gke-no-gpu
     title: GKE node pools take no GPU machine type
@@ -157,37 +537,3 @@ rules:
     tests:
       - fault: fixtures/aws/clean.json
         clean: fixtures/aws/no-bastion.json
-
-  - id: instance-offering
-    title: The instance type is offered in each zone of the pool
-    engines: [aws, eks, gcp, gke]
-    tier: cloud
-    severity: fail
-    status: source
-    what: |
-      An instance type that a zone does not offer fails during the build: `Unsupported`,
-      `ZONE_RESOURCE_POOL_EXHAUSTED`, or a node group `CREATE_FAILED`. The instance catalog of
-      Palette is one static list for each region, and it does not ask the zone.
-    reproduce:
-      - "aws ec2 describe-instance-type-offerings --location-type availability-zone --filters Name=instance-type,Values={{ .entity.spec.machinepoolconfig[0].cloudConfig.instanceType }} --region {{ .entity.spec.cloudConfig.region }} --query 'InstanceTypeOfferings[].Location'"
-      - "gcloud compute machine-types describe {{ .entity.spec.machinepoolconfig[0].cloudConfig.instanceType }} --zone <zone> --project {{ .entity.spec.cloudConfig.project }}"
-    fix:
-      owner: palette
-      text: Check the offering in the validate route, with "unknown" when the permission is missing.
-    evidence:
-      - kind: source
-        ref: hubble services/service/machine/machine_service.go
-        note: the instance lookup is a catalog of CPU and memory for each region
-
-  - id: spot-capacity
-    title: Spot capacity is short
-    engines: [aws, eks]
-    tier: race
-    severity: warn
-    status: source
-    what: |
-      A pool of capacity type spot can find no capacity at the moment of the build. No check before
-      the build answers it; the watch sees the capacity events.
-    evidence:
-      - kind: doc
-        ref: https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/spot-interruptions.html

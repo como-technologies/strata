@@ -20,7 +20,7 @@ pub enum Error {
     },
     /// Palette answered with a non-2xx status. A 401 or a 403 is almost always the key, so the
     /// message names where a key comes from; the body alone names nothing the reader can set.
-    #[error("GET {path} failed with HTTP {status}: {body}{}", if *status == 401 || *status == 403 {
+    #[error("GET {path} failed with HTTP {status}: {}{}", first_part(body), if *status == 401 || *status == 403 {
         "; check PALETTE_API_KEY, SPECTROCLOUD_APIKEY, or ~/.palette.env: the key can be wrong, expired, or for another tenant"
     } else {
         ""
@@ -30,7 +30,8 @@ pub enum Error {
         path: String,
         /// HTTP status code.
         status: u16,
-        /// The first part of the response body, one line.
+        /// The response body, on one line. The message shows its first part; a caller that reads
+        /// the answer of a validate route parses the whole of it.
         body: String,
         /// The `Retry-After` header in whole seconds, when Palette sent one.
         retry_after: Option<u64>,
@@ -340,6 +341,15 @@ pub enum Error {
     /// A document could not be serialized.
     #[error("serializing: {0}")]
     Serialize(#[from] serde_json::Error),
+}
+
+/// The first 300 characters of a body, for a message. The field keeps the whole body.
+fn first_part(body: &str) -> String {
+    if body.chars().count() <= 300 {
+        body.to_string()
+    } else {
+        format!("{}…", body.chars().take(300).collect::<String>())
+    }
 }
 
 /// `a, b, c`, or `none` for an empty list.

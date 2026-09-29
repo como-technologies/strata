@@ -1,0 +1,29 @@
+{
+  "_base": "clean.json",
+  "_note": "the OS and Kubernetes packs carry the image annotations, and EC2 has the image u-2404-0-k-1324-0 in the region",
+  "_patch": {
+    "packs": {
+      "pk-os-aws": {
+        "packValues": [
+          { "packUid": "pk-os-aws", "annotations": { "osName": "ubuntu", "os_version": "u-2404", "os_spectro_version": "0", "imageOwner": "123456789012" } }
+        ]
+      },
+      "pk-k8s-aws": {
+        "packValues": [
+          { "packUid": "pk-k8s-aws", "annotations": { "k8s_version": "k-1324", "k8s_spectro_version": "0" } }
+        ]
+      }
+    },
+    "_exec": {
+      "aws ec2 describe-images --region us-east-2 --filters Name=name,Values=u-2404-0-k-1324-0 --output json": {
+        "exit": 0,
+        "stdout": {
+          "Images": [
+            { "ImageId": "ami-0fedcba9876543210", "Name": "u-2404-0-k-1324-0", "OwnerId": "123456789012", "State": "available" }
+          ]
+        },
+        "stderr": ""
+      }
+    }
+  }
+}

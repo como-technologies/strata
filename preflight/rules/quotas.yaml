@@ -4,6 +4,197 @@ about: |
   The quotas of the cloud and the floors of Palette: what a build asks for, against what the
   account can give.
 rules:
+  - id: aws-quotas
+    title: The vCPU quota of the region covers the pools
+    engines: [aws, eks]
+    tier: cloud
+    severity: fail
+    status: source
+    what: |
+      A build asks EC2 for the vCPUs of each pool, one VPC, one internet gateway, and a load
+      balancer. Each zone adds an elastic IP and a NAT gateway. A quota that is short fails during
+      the build with `VcpuLimitExceeded`, `VpcLimitExceeded`, `AddressLimitExceeded`, or
+      `NatGatewayLimitExceeded`. Palette reads no quota. The check reads one quota, the on-demand
+      standard vCPUs (`L-1216C47A`), and compares its value with the vCPUs the on-demand pools ask
+      for. It counts 4 vCPUs for an `xlarge` type, 4 for each multiple (`2xlarge` is 8), and 2 for a
+      smaller size. The vCPU count of a type is not in the entity. The check does not read the
+      usage, so a pass is not a proof. The other quotas are in the reproduce lines.
+    check:
+      kind: exec
+      needs: [aws]
+      argv:
+        - aws
+        - service-quotas
+        - get-service-quota
+        - --service-code
+        - ec2
+        - --quota-code
+        - L-1216C47A
+        - --region
+        - "{{ .entity.spec.cloudConfig.region }}"
+        - --output
+        - json
+      expr: |
+        def vcpus: (split(".") | .[1] // "") as $s
+          | if $s == "xlarge" then 4
+            elif ($s | test("^[0-9]+xlarge$")) then ($s | rtrimstr("xlarge") | tonumber) * 4
+            else 2 end;
+        .entity.spec.cloudConfig.region as $r
+        | ([ .entity.spec.machinepoolconfig[]
+             | select((.cloudConfig.capacityType // "on-demand") != "spot")
+             | select((.poolConfig.size // 0) > 0)
+             | { name: .poolConfig.name, size: .poolConfig.size, type: (.cloudConfig.instanceType // ""), v: ((.cloudConfig.instanceType // "") | vcpus) } ]) as $pools
+        | ([ $pools[] | .size * .v ] | add // 0) as $need
+        | if .exec.exit != 0 then ["aws service-quotas get-service-quota failed: \(.exec.stderr | .[:200])"]
+          else (.exec.stdout.Quota.Value // 0) as $q
+          | if $q < $need
+            then ["the on-demand vCPU quota L-1216C47A in \($r) is \($q), and the pools ask for \($need) vCPUs: \([ $pools[] | "\(.size) x \(.type)" ] | join(", "))"]
+            else [] end
+          end
+    reproduce:
+      - "aws service-quotas get-service-quota --service-code ec2 --quota-code L-1216C47A --region {{ .entity.spec.cloudConfig.region }} --query Quota.Value   # on-demand standard vCPUs; L-34B43A08 is the spot vCPUs; L-0263D0A3 is the elastic IPs"
+      - "aws service-quotas get-service-quota --service-code vpc --quota-code L-F678F1CE --region {{ .entity.spec.cloudConfig.region }} --query Quota.Value   # VPCs for each region; L-A4707A72 internet gateways; L-FE5A380F NAT gateways for each zone"
+      - "aws service-quotas get-service-quota --service-code elasticloadbalancing --quota-code L-E9E9831D --region {{ .entity.spec.cloudConfig.region }} --query Quota.Value   # application load balancers; L-69A177A2 network load balancers"
+      - "aws ec2 describe-vpcs --region {{ .entity.spec.cloudConfig.region }} --query 'length(Vpcs)'; aws ec2 describe-addresses --region {{ .entity.spec.cloudConfig.region }} --query 'length(Addresses)'; aws ec2 describe-nat-gateways --region {{ .entity.spec.cloudConfig.region }} --query 'length(NatGateways)'   # the usage"
+    fix:
+      owner: palette
+      text: A preflight route that reads the quotas and the usage, and reports "unknown" without the permission.
+    evidence:
+      - kind: doc
+        ref: https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-resource-limits.html
+      - kind: doc
+        ref: https://docs.aws.amazon.com/vpc/latest/userguide/amazon-vpc-limits.html
+    tests:
+      - fault: fixtures/aws/vcpu-quota-low.json
+        clean: fixtures/aws/vcpu-quota-clean.json
+
+  - id: eks-quotas
+    title: The EKS quotas cover the cluster and its node groups
+    engines: [eks]
+    tier: cloud
+    severity: fail
+    status: source
+    what: |
+      EKS limits the clusters in a region (`L-1194D53C`, 100 by default). It limits the managed node
+      groups of a cluster (`L-6D54EA21`, 30), and the nodes of a node group (`L-BD136A63`, 450). A
+      build over a limit fails with `ResourceLimitExceeded`. The check reads the nodes for each node group
+      and compares the value with the size and the maximum size of each worker pool. The clusters in
+      the region need the usage too; that line is in the reproduce lines.
+    check:
+      kind: exec
+      needs: [aws]
+      argv:
+        - aws
+        - service-quotas
+        - get-service-quota
+        - --service-code
+        - eks
+        - --quota-code
+        - L-BD136A63
+        - --region
+        - "{{ .entity.spec.cloudConfig.region }}"
+        - --output
+        - json
+      expr: |
+        .entity.spec.cloudConfig.region as $r
+        | if .exec.exit != 0 then ["aws service-quotas get-service-quota failed: \(.exec.stderr | .[:200])"]
+          else (.exec.stdout.Quota.Value // 0) as $q
+          | [ .entity.spec.machinepoolconfig[]
+              | select((.poolConfig.isControlPlane // false) | not)
+              | (if (.poolConfig.maxSize // 0) > (.poolConfig.size // 0) then .poolConfig.maxSize else (.poolConfig.size // 0) end) as $n
+              | select($n > $q)
+              | "pool \(.poolConfig.name) asks for \($n) nodes, and the quota L-BD136A63 (nodes for each managed node group) in \($r) is \($q)" ]
+          end
+    reproduce:
+      - "aws service-quotas get-service-quota --service-code eks --quota-code L-1194D53C --region {{ .entity.spec.cloudConfig.region }} --query Quota.Value; aws eks list-clusters --region {{ .entity.spec.cloudConfig.region }} --query 'length(clusters)'   # clusters for each region, and the usage"
+      - "aws service-quotas get-service-quota --service-code eks --quota-code L-6D54EA21 --region {{ .entity.spec.cloudConfig.region }} --query Quota.Value   # managed node groups for each cluster; the entity has {{ [ .entity.spec.machinepoolconfig[] | select((.poolConfig.isControlPlane // false) | not) ] | length }} worker pool(s)"
+      - "aws service-quotas get-service-quota --service-code eks --quota-code L-BD136A63 --region {{ .entity.spec.cloudConfig.region }} --query Quota.Value   # nodes for each managed node group"
+    fix:
+      owner: palette
+      text: A preflight route that reads the quotas and the usage, and reports "unknown" without the permission.
+    evidence:
+      - kind: doc
+        ref: https://docs.aws.amazon.com/eks/latest/userguide/service-quotas.html
+    tests:
+      - fault: fixtures/eks/node-quota-low.json
+        clean: fixtures/eks/node-quota-clean.json
+
+  - id: aws-sg-rules
+    title: The rules of a security group stay under the quota
+    engines: [aws]
+    tier: cloud
+    severity: warn
+    status: inferred
+    what: |
+      CAPA writes the rules of the node security group, and the CNI and the load balancers add more.
+      The quota `L-E79EC296` (inbound or outbound rules for each security group, 60 by default) can
+      run out during the build or later, with `RulesPerSecurityGroupLimitExceeded`. No security group
+      exists before the build, so a check needs the groups of a cluster that runs: the reproduce lines
+      read them. This is a reading of the source, not a run.
+    reproduce:
+      - "aws service-quotas get-service-quota --service-code vpc --quota-code L-E79EC296 --region {{ .entity.spec.cloudConfig.region }} --query Quota.Value"
+      - "aws ec2 describe-security-groups --region {{ .entity.spec.cloudConfig.region }} --filters Name=tag-key,Values=sigs.k8s.io/cluster-api-provider-aws/role --query 'SecurityGroups[].[GroupId,GroupName,length(IpPermissions),length(IpPermissionsEgress)]' --output table   # the groups CAPA made, during or after the build"
+    fix:
+      owner: palette
+      text: Report the quota and the count of rules in a preflight route, with "unknown" without the permission.
+    evidence:
+      - kind: doc
+        ref: https://docs.aws.amazon.com/vpc/latest/userguide/amazon-vpc-limits.html#vpc-limits-security-groups
+
+  - id: gcp-quotas
+    title: The CPU quota of the region covers the pools
+    engines: [gcp, gke]
+    tier: cloud
+    severity: fail
+    status: source
+    what: |
+      A build asks the region for CPUs, in-use addresses, disk, and instance groups, and the project
+      for networks, firewalls, and routers. A quota that is short fails with `QUOTA_EXCEEDED`, in an
+      event for GKE and in the machine status for GCP. Palette reads no quota. The check reads the
+      quotas of the region and compares the free `CPUS` (limit minus usage) with the CPUs the pools
+      ask for. It reads the count from the end of the machine type (`e2-standard-4` is 4) and counts 2
+      for a type with no number (`e2-medium`). A family with its own metric (`N2_CPUS`, `C3_CPUS`) has
+      its own limit, in the same output; the check does not read it.
+    check:
+      kind: exec
+      needs: [gcloud]
+      argv:
+        - gcloud
+        - compute
+        - regions
+        - describe
+        - "{{ .entity.spec.cloudConfig.region }}"
+        - --project
+        - "{{ .entity.spec.cloudConfig.project }}"
+        - --format
+        - json
+      expr: |
+        def cpus: if test("-[0-9]+$") then (split("-") | .[-1] | tonumber) else 2 end;
+        .entity.spec.cloudConfig.region as $r
+        | ([ .entity.spec.machinepoolconfig[]
+             | select((.poolConfig.size // 0) > 0)
+             | { size: .poolConfig.size, type: (.cloudConfig.instanceType // ""), c: ((.cloudConfig.instanceType // "") | cpus) } ]) as $pools
+        | ([ $pools[] | .size * .c ] | add // 0) as $need
+        | if .exec.exit != 0 then ["gcloud compute regions describe failed: \(.exec.stderr | .[:200])"]
+          else ([ (.exec.stdout.quotas // [])[] | select(.metric == "CPUS") ] | .[0]) as $q
+          | if $q == null then ["no CPUS quota in the output of gcloud compute regions describe \($r)"]
+            elif ($q.limit - $q.usage) < $need
+            then ["CPUS in \($r): limit \($q.limit), usage \($q.usage), free \($q.limit - $q.usage); the pools ask for \($need) CPUs: \([ $pools[] | "\(.size) x \(.type)" ] | join(", "))"]
+            else [] end
+          end
+    reproduce:
+      - "gcloud compute regions describe {{ .entity.spec.cloudConfig.region }} --project {{ .entity.spec.cloudConfig.project }} --format='table(quotas.metric,quotas.limit,quotas.usage)' | grep -E 'CPUS|IN_USE_ADDRESSES|SSD_TOTAL_GB|INSTANCE_GROUPS'"
+      - "gcloud compute project-info describe --project {{ .entity.spec.cloudConfig.project }} --format='table(quotas.metric,quotas.limit,quotas.usage)' | grep -E 'NETWORKS|FIREWALLS|ROUTERS'"
+    fix:
+      owner: palette
+      text: Read the region and project quotas in the GCP property route.
+    evidence:
+      - kind: doc
+        ref: https://cloud.google.com/compute/resource-usage
+    tests:
+      - fault: fixtures/gke/cpu-quota-low.json
+        clean: fixtures/gke/cpu-quota-clean.json
+
   - id: worker-cpu-floor
     title: The workers have the CPU the packs need
     engines: [aws, eks, gcp, gke, azure, aks, maas, vsphere]
@@ -37,3 +228,26 @@ rules:
     tests:
       - fault: fixtures/eks/validate-cpu.json
         clean: fixtures/eks/clean.json
+
+  - id: vcluster-min
+    title: A virtual cluster has 3 cores or more
+    engines: [all]
+    tier: static
+    severity: fail
+    status: seen
+    what: |
+      Scope: cluster groups and the virtual clusters in them. Palette refuses a CPU limit under 3
+      cores, and a memory limit under 3 GiB, in the limit config of a cluster group. A virtual
+      cluster asks its size with `instanceType.maxCPU` of its pool. A virtual cluster is not a cloud
+      type of strata-preflight, so there is no check here; the reproduce lines read the two sizes.
+    reproduce:
+      - "jq '.spec.machinepoolconfig[].cloudConfig.instanceType' virtual-cluster.json   # maxCPU must be 3 or more"
+      - "curl -s -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" \"${PALETTE_API:-https://api.spectrocloud.com}/v1/clustergroups/<uid>\" | jq .spec.clustersConfig.limitConfig"
+    fix:
+      owner: none
+    evidence:
+      - kind: run
+        ref: teardown lab
+      - kind: source
+        ref: hubble svcclient/converter/v1/cluster_converter.go ValidateResourceLimit
+        note: "`ShouldBeEqOrGreaterThan(\"cpu limit (cores)\", 3, cpu)`, and the memory limit between 3 and 100000 GiB"

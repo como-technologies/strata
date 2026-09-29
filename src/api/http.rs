@@ -62,14 +62,12 @@ impl HttpApi {
                 message: format!("reading the response body: {e}"),
             })?;
         if !(200..300).contains(&status) {
+            // the whole body, on one line: a caller that reads the answer of a validate route
+            // needs the JSON of the refusal, and the message of the error shows the first part
             return Err(Error::Api {
                 path: path.to_string(),
                 status,
-                body: body
-                    .chars()
-                    .take(300)
-                    .collect::<String>()
-                    .replace('\n', " "),
+                body: body.replace(['\n', '\r'], " "),
                 retry_after,
             });
         }

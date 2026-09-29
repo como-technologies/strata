@@ -124,14 +124,18 @@ fault() {
     *) label=not-made ;;
   esac
   record "$id" "$label" "the fault was made: $edit"
-  check "fault-$id" 0 "$id fails on its fault, in $(jq -r --arg id "$id" '.checks[] | select(.id == $id) | .elapsedMs' "fault-$id.report.json" 2> /dev/null) ms: $(jq -r --arg id "$id" '[.checks[] | select(.id == $id) | .messages[]] | join("; ") | .[:160]' "fault-$id.report.json" 2> /dev/null)" -- \
+  check "fault-$id" 0 "$id fails on its fault, in $(jq -r --arg id "$id" '.checks[] | select(.id == $id) | .elapsedMs' "fault-$id.report.json" 2> /dev/null) ms: $(jq -r --arg id "$id" '[.checks[] | select(.id == $id) | (.messages // [])[]] | join("; ") | .[:160]' "fault-$id.report.json" 2> /dev/null)" -- \
     test "$label" = caught
 }
-size_of_first_pool='.spec.machinepoolconfig[0].poolConfig.size'
+# resize: set the size, the minimum, and the maximum of a pool together; Palette refuses a size
+# under the minimum with ShouldBeEqOrGreaterThanParamValues, which is not the fault of the row
+resize='def resize($n): .poolConfig.size = $n | .poolConfig.minSize = $n | .poolConfig.maxSize = $n;'
+first_pool="$resize .spec.machinepoolconfig[0] |= resize"
+worker_pools="$resize (.spec.machinepoolconfig[] | select((.poolConfig.isControlPlane // false) | not)) |= resize"
 case "$engine" in
   gke)
-    fault gke-pool-multiple-3 "$size_of_first_pool = 4 | .spec.machinepoolconfig[0].poolConfig.minSize = 4 | .spec.machinepoolconfig[0].poolConfig.maxSize = 4"
-    fault palette-validate "$size_of_first_pool = 4 | .spec.machinepoolconfig[0].poolConfig.minSize = 4 | .spec.machinepoolconfig[0].poolConfig.maxSize = 4"
+    fault gke-pool-multiple-3 "$first_pool(4)"
+    fault palette-validate "$first_pool(4)"
     fault gke-no-release-channel '.spec.cloudConfig.overrideClusterAPIConfig = ""'
     fault gke-no-gpu '.spec.machinepoolconfig[0].cloudConfig.instanceType = "a2-highgpu-1g"'
     fault gke-autopilot '.spec.cloudConfig.managedClusterConfig.enableAutoPilot = true'
@@ -140,21 +144,21 @@ case "$engine" in
     ;;
   eks)
     fault eks-one-zone ".spec.machinepoolconfig[0].cloudConfig.azs = [\"$az\"]"
-    fault eks-worker-needed "$size_of_first_pool = 0 | .spec.machinepoolconfig[0].poolConfig.minSize = 0 | .spec.machinepoolconfig[0].poolConfig.maxSize = 0"
+    fault eks-worker-needed "$first_pool(0)"
     fault update-strategy-eks '.spec.machinepoolconfig[0].poolConfig.updateStrategy = {type: "RollingUpdateScaleOut"}'
     fault api-endpoint-reach '.spec.cloudConfig.endpointAccess = {public: false, private: true, publicCIDRs: [], privateCIDRs: []}'
     fault account-missing '.spec.cloudAccountUid = "000000000000000000000000"'
-    fault worker-cpu-floor "$size_of_first_pool = 1 | .spec.machinepoolconfig[0].poolConfig.minSize = 1 | .spec.machinepoolconfig[0].poolConfig.maxSize = 1"
+    fault worker-cpu-floor "$first_pool(1)"
     ;;
   aws)
-    fault worker-cpu-floor '(.spec.machinepoolconfig[] | select(.poolConfig.isControlPlane | not) | .poolConfig.size) = 1'
-    fault palette-validate '(.spec.machinepoolconfig[] | select(.poolConfig.isControlPlane | not) | .poolConfig.size) = 1'
+    fault worker-cpu-floor "$worker_pools(1)"
+    fault palette-validate "$worker_pools(1)"
     fault api-endpoint-reach '.spec.cloudConfig.controlPlaneLoadBalancer = "internal"'
     fault account-missing '.spec.cloudAccountUid = "000000000000000000000000"'
     ;;
   gcp)
-    fault worker-cpu-floor '(.spec.machinepoolconfig[] | select(.poolConfig.isControlPlane | not) | .poolConfig.size) = 1'
-    fault palette-validate '(.spec.machinepoolconfig[] | select(.poolConfig.isControlPlane | not) | .poolConfig.size) = 1'
+    fault worker-cpu-floor "$worker_pools(1)"
+    fault palette-validate "$worker_pools(1)"
     fault gcp-name-length '.metadata.name = "a-cluster-name-that-is-longer-than-fifty-two-characters-x"'
     fault account-missing '.spec.cloudAccountUid = "000000000000000000000000"'
     ;;
@@ -166,13 +170,13 @@ pf clean.json --out out-clean > clean.report.json 2> clean.err
 clean_exit=$?
 check clean-exit 0 "the clean entity of $engine: exit 0 (a failed probe does not count)" -- test "$clean_exit" = 0
 check clean-report 0 "the report of the clean entity, one line for each rule" -- \
-  jq -r '.checks[] | select(.verdict != "skipped") | "\(.verdict)\t\(.level)\t\(.severity)\t\(.id)\t\(.messages | join("; ") | .[:120])"' clean.report.json
+  jq -r '.checks[] | select(.verdict != "skipped") | "\(.verdict)\t\(.level)\t\(.severity)\t\(.id)\t\((.messages // []) | join("; ") | .[:120])"' clean.report.json
 check clean-no-error 0 "no check of the clean entity gave ERROR" -- jq -e '[.checks[] | select(.verdict == "error")] | length == 0' clean.report.json
 # each rule of severity fail that ran: passed, or false-fail
 while IFS=$'\t' read -r id verdict; do
   case "$verdict" in
     passed) record "$id" passed "the clean entity" ;;
-    failed) record "$id" false-fail "the clean entity: $(jq -r --arg id "$id" '[.checks[] | select(.id == $id) | .messages[]] | join("; ") | .[:160]' clean.report.json)" ;;
+    failed) record "$id" false-fail "the clean entity: $(jq -r --arg id "$id" '[.checks[] | select(.id == $id) | (.messages // [])[]] | join("; ") | .[:160]' clean.report.json)" ;;
   esac
 done < <(jq -r '.checks[] | select(.severity == "fail" and (.verdict == "passed" or .verdict == "failed")) | "\(.id)\t\(.verdict)"' clean.report.json)
 check clean-fail-rules 0 "each rule of severity fail that ran on the clean entity passed" -- \
@@ -191,11 +195,11 @@ if [ -n "$build" ]; then
   pf "cluster:$C" --watch --every 30 --limit 5400 > watch.report.json 2> watch.err
   watch_exit=$?
   check watch-exit 0 "the watch of cluster $C ends with the cluster Running and each watch rule passed" -- test "$watch_exit" = 0
-  check watch-report 0 "the report of the watch" -- jq -r '.subject.source, (.checks[] | "\(.verdict)\t\(.id)\t\(.messages | join("; ") | .[:160])")' watch.report.json
+  check watch-report 0 "the report of the watch" -- jq -r '.subject.source, (.checks[] | "\(.verdict)\t\(.id)\t\((.messages // []) | join("; ") | .[:160])")' watch.report.json
   while IFS=$'\t' read -r id verdict; do
     case "$verdict" in
       passed) record "$id" passed "the clean build, watched to Running" ;;
-      failed) record "$id" false-fail "the clean build: $(jq -r --arg id "$id" '[.checks[] | select(.id == $id) | .messages[]] | join("; ") | .[:160]' watch.report.json)" ;;
+      failed) record "$id" false-fail "the clean build: $(jq -r --arg id "$id" '[.checks[] | select(.id == $id) | (.messages // [])[]] | join("; ") | .[:160]' watch.report.json)" ;;
     esac
   done < <(jq -r '.checks[] | select(.severity == "fail" and (.verdict == "passed" or .verdict == "failed")) | "\(.id)\t\(.verdict)"' watch.report.json)
   echo "the cluster $C stays: run just live-down" | tee -a steps.log

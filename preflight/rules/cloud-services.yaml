@@ -85,3 +85,100 @@ rules:
     tests:
       - fault: fixtures/gke/apis-off.json
         clean: fixtures/gke/clean.json
+
+  - id: aws-region-not-enabled
+    title: The region of the cluster is enabled for the AWS account
+    engines: [aws, eks]
+    tier: palette
+    severity: fail
+    status: source
+    when: .entity.spec.cloudAccountUid != null
+    what: |
+      An opt-in region (`af-south-1`, `ap-east-1`, `eu-south-1`, `me-south-1`, and others) that the
+      account has not enabled refuses each call with `AuthFailure` or `OptInRequired`. Palette lists
+      the regions of an account with one `DescribeRegions` dry run for each region of the partition.
+      The list holds the regions that answer. A region of the entity that is not in the list is not
+      enabled. The cluster create does not compare the two.
+    check:
+      kind: palette
+      method: GET
+      path: /v1/clouds/aws/regions?cloudAccountUid={{ .entity.spec.cloudAccountUid }}
+      expr: |
+        .entity.spec.cloudConfig.region as $r
+        | if (.response.ok | not) then ["Palette cannot list the regions of account \(.entity.spec.cloudAccountUid): \(.response.body.code // .response.status)"]
+          else ([ (.response.body.regions // [])[] | .name ]) as $on
+          | if ($on | index($r)) == null
+            then ["region \($r) is not enabled for the account; Palette lists \($on | length) enabled region(s): \($on | join(", "))"]
+            else [] end
+          end
+    reproduce:
+      - "aws account get-region-opt-status --region-name {{ .entity.spec.cloudConfig.region }}"
+      - "aws ec2 describe-regions --all-regions --query \"Regions[?RegionName=='{{ .entity.spec.cloudConfig.region }}'].OptInStatus\" --output text"
+    fix:
+      owner: palette
+      text: Compare the region of the entity with the enabled regions in the AWS validate route.
+    evidence:
+      - kind: source
+        ref: hubble services/service/cloud/internal/service/cloudservice/aws_service.go getEnabledRegions
+        note: one DescribeRegions dry run for each region of the partition; the list holds the regions that answer
+    tests:
+      - fault: fixtures/eks/region-not-enabled.json
+        clean: fixtures/eks/regions-clean.json
+
+  - id: aws-s3-irsa-bucket
+    title: The IRSA bucket of an AWS cluster can be made
+    engines: [aws]
+    tier: palette
+    severity: fail
+    status: source
+    what: |
+      An AWS cluster with IRSA needs an S3 bucket for its OIDC documents. The bootstrap stack of
+      Palette turns `S3Buckets` on with an empty name prefix. When the account cannot make the bucket
+      (a service control policy, a Block Public Access setting, or a name in use), CAPA fails the
+      cluster. Palette has `POST /v1/clouds/aws/s3/validate`, and the create does not call it. That
+      route lists the objects of a bucket with the credentials in its body, and makes no bucket.
+      strata-preflight holds no credentials, so there is no check here.
+    reproduce:
+      - "kubectl get awscluster -A -o jsonpath='{.items[*].spec.s3Bucket.name}'   # on the management cluster, during the build: the bucket CAPA asks for"
+      - "aws s3api head-bucket --bucket <spec.s3Bucket.name> --region {{ .entity.spec.cloudConfig.region }}   # 404 before the build is right; 403 means another account holds the name"
+      - "aws s3control get-public-access-block --account-id $(aws sts get-caller-identity --query Account --output text)"
+    fix:
+      owner: palette
+      text: Try the bucket in the validate route, or call the S3 validate route at create.
+    evidence:
+      - kind: source
+        ref: hubble services/service/cloud/internal/service/cloudservice/aws_service.go ValidateAwsS3Bucket
+        note: lists the objects of the bucket; no cluster path calls it
+      - kind: source
+        ref: palette pkg/provider/aws/aws_presetup.go
+        note: "`template.Spec.S3Buckets.Enable = true` with an empty name prefix, for IRSA on an IaaS cluster"
+
+  - id: eks-fargate-govcloud
+    title: An EKS cluster in GovCloud has no Fargate profile
+    engines: [eks]
+    tier: static
+    severity: fail
+    status: source
+    when: .account != null
+    what: |
+      AWS offers no EKS on Fargate in GovCloud. For an account of partition `aws-us-gov`, Palette
+      makes the bootstrap stack with Fargate off, so the stack has no pod execution role for
+      Fargate. A Fargate profile in the entity then fails at create. Palette accepts the entity.
+    check:
+      kind: static
+      expr: |
+        if (.account.spec.partition // "aws") == "aws-us-gov" and ((.entity.spec.fargateProfiles // []) | length) > 0
+        then [ .entity.spec.fargateProfiles[] | "Fargate profile \(.name) with an account of partition aws-us-gov: GovCloud has no EKS on Fargate" ]
+        else [] end
+    fix:
+      owner: palette
+      text: Refuse a Fargate profile for an account of partition aws-us-gov in the validate route.
+    evidence:
+      - kind: source
+        ref: palette pkg/provider/aws/aws_presetup.go
+        note: "`disableEksFargate := account.GetPartition().IsGovCloud()`, then `template.Spec.EKS.Fargate.Disable = disableEksFargate`"
+      - kind: doc
+        ref: https://docs.aws.amazon.com/govcloud-us/latest/UserGuide/govcloud-fargate.html
+    tests:
+      - fault: fixtures/eks/fargate-govcloud.json
+        clean: fixtures/eks/clean.json

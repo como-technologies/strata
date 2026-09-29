@@ -101,10 +101,12 @@ fi
 
 # ---- the login of the OCI registry ----------------------------------------------------------------------
 # The registry of the example is an ECR repository that live-up makes; before the first apply there
-# is none, and the check does not apply.
+# is none, and the check does not apply. A build needs no login; verify.sh and registry.sh do, so
+# the check records the state (SEEN) and stops nothing. The exit code is in steps.log: 0 is a
+# login that reads the repository, 1 is none, or one older than 12 hours.
 if outputs=$("$live/tf.sh" output -json 2> /dev/null) && [ -n "$(jq -r '.owned_chart_repository.value // empty' <<<"$outputs")" ]; then
   repo=$(jq -r '.owned_chart_repository.value' <<<"$outputs")
-  check ecr-token 0 "ecr-token, crane-empty-password: crane reads the ECR repository of the example (a login lasts 12 hours)" -- \
+  check ecr-token '?' "ecr-token, crane-empty-password: crane reads the ECR repository of the example; 0 is a login of the last 12 hours, which verify.sh needs and a build does not" -- \
     crane ls "$repo"
 fi
 

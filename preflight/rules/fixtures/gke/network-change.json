@@ -1,0 +1,13 @@
+{
+  "_base": "type-same.json",
+  "_note": "a change of the network of a built GKE cluster, from the default to a named one",
+  "_patch": {
+    "entity": {
+      "spec": {
+        "cloudConfig": {
+          "network": "strata-net"
+        }
+      }
+    }
+  }
+}

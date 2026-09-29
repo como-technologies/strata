@@ -1,0 +1,17 @@
+{
+  "_base": "clean.json",
+  "_note": "the clean world, with the answer of the AWS CLI: the credentials are live",
+  "_patch": {
+    "_exec": {
+      "aws sts get-caller-identity --output json": {
+        "exit": 0,
+        "stdout": {
+          "UserId": "AROAEXAMPLE:ops",
+          "Account": "123456789012",
+          "Arn": "arn:aws:sts::123456789012:assumed-role/spectro-admin/ops"
+        },
+        "stderr": ""
+      }
+    }
+  }
+}

@@ -1,0 +1,72 @@
+{
+  "_base": "addon-profile.json",
+  "_note": "the entity names two add-on profiles beside the cluster profile",
+  "_patch": {
+    "entity": {
+      "spec": {
+        "profiles": [
+          {
+            "uid": "prof-eks-3",
+            "packValues": [
+              {
+                "name": "hello-universe",
+                "tag": "1.2.0",
+                "type": "manifest"
+              }
+            ],
+            "variables": []
+          }
+        ]
+      }
+    },
+    "profiles": [
+      {
+        "schema": "strata-snapshot/1",
+        "source": {
+          "uid": "prof-eks-3",
+          "name": "strata-live-addon-2",
+          "version": "1.0.0",
+          "cloudType": "all",
+          "type": "add-on",
+          "template": "published"
+        },
+        "packs": [
+          {
+            "key": "addon/hello-universe",
+            "layer": "addon",
+            "name": "hello-universe",
+            "type": "manifest",
+            "tag": "1.2.0",
+            "version": "1.2.0",
+            "packUid": "",
+            "registryUid": "",
+            "refDigest": "",
+            "registryDigest": "",
+            "params": {},
+            "values": "",
+            "valuesCanon": null,
+            "valuesHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "manifests": [
+              {
+                "name": "hello-universe",
+                "uid": "mf-hello-1",
+                "digest": "",
+                "content": "apiVersion: v1\nkind: Namespace\nmetadata:\n  name: hello-universe\n",
+                "contentHash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+              }
+            ],
+            "hash": {
+              "identity": "1111111111111111111111111111111111111111111111111111111111111171",
+              "upstream": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "upstreamRaw": "",
+              "upstreamSource": "none",
+              "authored": "3333333333333333333333333333333333333333333333333333333333333391",
+              "node": "44444444444444444444444444444444444444444444444444444444444444a1"
+            }
+          }
+        ],
+        "variables": []
+      }
+    ]
+  }
+}

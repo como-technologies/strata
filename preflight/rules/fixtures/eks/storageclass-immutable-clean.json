@@ -1,0 +1,36 @@
+{
+  "_base": "type-same.json",
+  "_note": "a change that keeps the storageClasses block of the CSI values",
+  "_patch": {
+    "before": {
+      "spec": {
+        "profiles": [
+          {
+            "uid": "prof-eks-1",
+            "packValues": [
+              { "name": "amazon-linux-eks", "tag": "1.0.0", "type": "spectro" },
+              { "name": "kubernetes-eks", "tag": "1.32", "type": "spectro" },
+              { "name": "cni-aws-vpc-eks", "tag": "1.19.6", "type": "spectro" },
+              { "name": "csi-aws-ebs", "tag": "1.44.0", "type": "spectro", "values": "storageClasses:\n  - name: spectro-storage-class\n    isDefault: true\n    volumeBindingMode: WaitForFirstConsumer\n    reclaimPolicy: Delete\n    parameters:\n      type: gp3\nnode:\n  tolerateAllTaints: true\n" }
+            ]
+          }
+        ]
+      }
+    },
+    "entity": {
+      "spec": {
+        "profiles": [
+          {
+            "uid": "prof-eks-1",
+            "packValues": [
+              { "name": "amazon-linux-eks", "tag": "1.0.0", "type": "spectro" },
+              { "name": "kubernetes-eks", "tag": "1.32", "type": "spectro" },
+              { "name": "cni-aws-vpc-eks", "tag": "1.19.6", "type": "spectro" },
+              { "name": "csi-aws-ebs", "tag": "1.44.0", "type": "spectro", "values": "storageClasses:\n  - name: spectro-storage-class\n    isDefault: true\n    volumeBindingMode: WaitForFirstConsumer\n    reclaimPolicy: Delete\n    parameters:\n      type: gp3\nnode:\n  tolerateAllTaints: false\n" }
+            ]
+          }
+        ]
+      }
+    }
+  }
+}

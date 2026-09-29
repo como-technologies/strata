@@ -1,0 +1,180 @@
+{
+  "_base": "clean.json",
+  "_note": "static placement: a VPC, one public and one private subnet in two zones, and the answers of AWS and Palette for them",
+  "_patch": {
+    "entity": {
+      "spec": {
+        "cloudConfig": {
+          "vpcId": "vpc-0a1b2c3d4e5f60718"
+        },
+        "machinepoolconfig": [
+          {
+            "cloudConfig": {
+              "subnets": [
+                {
+                  "az": "us-east-2a",
+                  "id": "subnet-0aaa"
+                },
+                {
+                  "az": "us-east-2b",
+                  "id": "subnet-0bbb"
+                }
+              ]
+            },
+            "poolConfig": {
+              "name": "worker-pool"
+            }
+          }
+        ]
+      }
+    },
+    "_responses": {
+      "POST /v1/clouds/eks/properties/validate": {
+        "ok": true,
+        "status": 204,
+        "body": null
+      }
+    },
+    "_exec": {
+      "aws ec2 describe-subnets --region us-east-2 --filters Name=subnet-id,Values=subnet-0aaa,subnet-0bbb --output json": {
+        "exit": 0,
+        "stdout": {
+          "Subnets": [
+            {
+              "SubnetId": "subnet-0aaa",
+              "VpcId": "vpc-0a1b2c3d4e5f60718",
+              "AvailabilityZone": "us-east-2a",
+              "AvailabilityZoneId": "use2-az1",
+              "CidrBlock": "10.10.0.0/24",
+              "AvailableIpAddressCount": 240,
+              "MapPublicIpOnLaunch": true,
+              "Tags": [
+                {
+                  "Key": "Name",
+                  "Value": "lab-public-a"
+                },
+                {
+                  "Key": "kubernetes.io/role/elb",
+                  "Value": "1"
+                }
+              ]
+            },
+            {
+              "SubnetId": "subnet-0bbb",
+              "VpcId": "vpc-0a1b2c3d4e5f60718",
+              "AvailabilityZone": "us-east-2b",
+              "AvailabilityZoneId": "use2-az2",
+              "CidrBlock": "10.10.1.0/24",
+              "AvailableIpAddressCount": 240,
+              "MapPublicIpOnLaunch": false,
+              "Tags": [
+                {
+                  "Key": "Name",
+                  "Value": "lab-private-b"
+                },
+                {
+                  "Key": "kubernetes.io/role/internal-elb",
+                  "Value": "1"
+                }
+              ]
+            }
+          ]
+        },
+        "stderr": ""
+      },
+      "aws ec2 describe-route-tables --region us-east-2 --filters Name=vpc-id,Values=vpc-0a1b2c3d4e5f60718 --output json": {
+        "exit": 0,
+        "stdout": {
+          "RouteTables": [
+            {
+              "RouteTableId": "rtb-0main",
+              "VpcId": "vpc-0a1b2c3d4e5f60718",
+              "Associations": [
+                {
+                  "Main": true,
+                  "RouteTableId": "rtb-0main"
+                }
+              ],
+              "Routes": [
+                {
+                  "DestinationCidrBlock": "10.10.0.0/16",
+                  "GatewayId": "local",
+                  "State": "active"
+                }
+              ]
+            },
+            {
+              "RouteTableId": "rtb-0public",
+              "VpcId": "vpc-0a1b2c3d4e5f60718",
+              "Associations": [
+                {
+                  "Main": false,
+                  "RouteTableId": "rtb-0public",
+                  "SubnetId": "subnet-0aaa"
+                }
+              ],
+              "Routes": [
+                {
+                  "DestinationCidrBlock": "10.10.0.0/16",
+                  "GatewayId": "local",
+                  "State": "active"
+                },
+                {
+                  "DestinationCidrBlock": "0.0.0.0/0",
+                  "GatewayId": "igw-0abc",
+                  "State": "active"
+                }
+              ]
+            },
+            {
+              "RouteTableId": "rtb-0private",
+              "VpcId": "vpc-0a1b2c3d4e5f60718",
+              "Associations": [
+                {
+                  "Main": false,
+                  "RouteTableId": "rtb-0private",
+                  "SubnetId": "subnet-0bbb"
+                }
+              ],
+              "Routes": [
+                {
+                  "DestinationCidrBlock": "10.10.0.0/16",
+                  "GatewayId": "local",
+                  "State": "active"
+                },
+                {
+                  "DestinationCidrBlock": "0.0.0.0/0",
+                  "NatGatewayId": "nat-0abc",
+                  "State": "active"
+                }
+              ]
+            }
+          ]
+        },
+        "stderr": ""
+      },
+      "aws ec2 describe-availability-zones --region us-east-2 --filters Name=zone-name,Values=us-east-2a,us-east-2b --output json": {
+        "exit": 0,
+        "stdout": {
+          "AvailabilityZones": [
+            {
+              "ZoneName": "us-east-2a",
+              "ZoneId": "use2-az1",
+              "State": "available",
+              "ZoneType": "availability-zone",
+              "RegionName": "us-east-2"
+            },
+            {
+              "ZoneName": "us-east-2b",
+              "ZoneId": "use2-az2",
+              "State": "available",
+              "ZoneType": "availability-zone",
+              "RegionName": "us-east-2"
+            }
+          ]
+        },
+        "stderr": ""
+      }
+    }
+  }
+}

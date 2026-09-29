@@ -1,0 +1,27 @@
+{
+  "_base": "clean.json",
+  "_note": "the worker pool places its 2 instances in a host resource group with 4 free slots",
+  "_patch": {
+    "entity": {
+      "spec": {
+        "machinepoolconfig": [
+          {
+            "poolConfig": { "name": "worker-pool" },
+            "cloudConfig": {
+              "capacityType": "host-resource-group",
+              "hostResourceGroupArn": "arn:aws:resource-groups:us-east-2:123456789012:group/strata-hosts",
+              "licenseConfigurationArns": ["arn:aws:license-manager:us-east-2:123456789012:license-configuration:lic-0123456789abcdef0123456789abcdef"]
+            }
+          }
+        ]
+      }
+    },
+    "_responses": {
+      "POST /v1/clouds/aws/regions/us-east-2/resourceGroups/validateCapacity?hrgArn=arn:aws:resource-groups:us-east-2:123456789012:group/strata-hosts": {
+        "ok": true,
+        "status": 200,
+        "body": { "isValid": true, "availableCapacity": 4, "requiredCapacity": 2, "message": "Available capacity: 4, Required: 2" }
+      }
+    }
+  }
+}

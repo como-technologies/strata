@@ -1,0 +1,20 @@
+{
+  "_base": "addon-profile.json",
+  "_note": "the pack version of the add-on profile is disabled in its registry",
+  "_patch": {
+    "packs": {
+      "pk-proxy-1": {
+        "packValues": [
+          {
+            "packUid": "pk-proxy-1",
+            "annotations": {
+              "system_state": "disabled",
+              "system_disabledTimestamp": "2026-09-01T00:00:00Z"
+            },
+            "dependencies": []
+          }
+        ]
+      }
+    }
+  }
+}

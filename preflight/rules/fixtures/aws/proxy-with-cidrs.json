@@ -1,0 +1,83 @@
+{
+  "_base": "proxy-no-cidrs.json",
+  "_note": "the same proxy, and NO_PROXY holds the pod CIDR, the service CIDR, and the VPC CIDR",
+  "_patch": {
+    "profiles": [
+      {
+        "schema": "strata-snapshot/1",
+        "source": {
+          "uid": "prof-aws-1",
+          "name": "aws-stack",
+          "version": "1.1.1",
+          "cloudType": "aws",
+          "kind": "cluster-profile"
+        },
+        "packs": [
+          {
+            "key": "os/ubuntu-aws",
+            "layer": "os",
+            "name": "ubuntu-aws",
+            "version": "24.04",
+            "tag": "24.04",
+            "packUid": "pk-os-aws",
+            "registryUid": "5eecc89d0b150045ae661cef",
+            "values": "kubeadmconfig:\n  preKubeadmCommands:\n    - export HTTP_PROXY=http://proxy.example.com:3128\n    - export HTTPS_PROXY=http://proxy.example.com:3128\n    - export NO_PROXY=127.0.0.1,localhost,169.254.169.254,.svc,.cluster.local,192.168.0.0/16,10.96.0.0/12,10.0.0.0/16\n",
+            "valuesCanon": {
+              "kubeadmconfig": {
+                "preKubeadmCommands": [
+                  "export HTTP_PROXY=http://proxy.example.com:3128",
+                  "export HTTPS_PROXY=http://proxy.example.com:3128",
+                  "export NO_PROXY=127.0.0.1,localhost,169.254.169.254,.svc,.cluster.local,192.168.0.0/16,10.96.0.0/12,10.0.0.0/16"
+                ]
+              }
+            }
+          },
+          {
+            "key": "k8s/kubernetes",
+            "layer": "k8s",
+            "name": "kubernetes",
+            "version": "1.32.4",
+            "tag": "1.32.4",
+            "packUid": "pk-k8s-aws",
+            "registryUid": "5eecc89d0b150045ae661cef",
+            "values": "pack:\n  podCIDR: \"192.168.0.0/16\"\n  serviceClusterIpRange: \"10.96.0.0/12\"\nkubeadmconfig:\n  clusterConfiguration:\n    networking:\n      podSubnet: \"192.168.0.0/16\"\n      serviceSubnet: \"10.96.0.0/12\"\n",
+            "valuesCanon": {
+              "pack": {
+                "podCIDR": "192.168.0.0/16",
+                "serviceClusterIpRange": "10.96.0.0/12"
+              },
+              "kubeadmconfig": {
+                "clusterConfiguration": {
+                  "networking": {
+                    "podSubnet": "192.168.0.0/16",
+                    "serviceSubnet": "10.96.0.0/12"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "key": "cni/cni-cilium-oss",
+            "layer": "cni",
+            "name": "cni-cilium-oss",
+            "version": "1.19.6",
+            "tag": "1.19.6",
+            "packUid": "pk-cni-aws",
+            "registryUid": "5eecc89d0b150045ae661cef",
+            "valuesCanon": null
+          },
+          {
+            "key": "csi/csi-aws-ebs",
+            "layer": "csi",
+            "name": "csi-aws-ebs",
+            "version": "1.44.0",
+            "tag": "1.44.0",
+            "packUid": "pk-csi-aws",
+            "registryUid": "5eecc89d0b150045ae661cef",
+            "valuesCanon": null
+          }
+        ]
+      }
+    ]
+  }
+}

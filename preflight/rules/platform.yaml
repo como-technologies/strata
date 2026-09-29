@@ -94,6 +94,43 @@ rules:
       - kind: run
         ref: "#89, #90, lab"
 
+  - id: stale-worker-condition
+    title: WorkerNodeAdditionDone follows the workers
+    engines: [aws]
+    tier: watch
+    severity: warn
+    status: seen
+    what: |
+      `WorkerNodeAdditionDone` stays `False`, "provision worker nodes", while the machines of the
+      pool are `Running` and the nodes are `Ready`. The cluster then stays `Provisioning`, and a
+      restart of the Palette controller in the cluster does not help. Palette does not check the
+      workers again. The delete of such a cluster runs as usual. The watch reads the conditions
+      and not the machines: it fails when the cluster is `Running` with the condition `False`,
+      and when the condition is `False` after 30 minutes of `Provisioning`; the reproduce lines
+      read the machines.
+    check:
+      kind: watch
+      expr: |
+        (.cluster.status.state // "") as $s
+        | [ (.cluster.status.conditions // [])[] | select(.type == "WorkerNodeAdditionDone" and .status == "False") ] as $c
+        | if ($c | length) == 0 then []
+          elif $s == "Running" then ["WorkerNodeAdditionDone is False (\($c[0].reason // ""): \($c[0].message // "")) and the cluster is Running: the condition is stale"]
+          elif $s == "Provisioning" and .elapsed > 1800 then ["WorkerNodeAdditionDone is False (\($c[0].reason // ""): \($c[0].message // "")) after \(.elapsed) s of Provisioning: read the machines of the pool; with the machines Running and the nodes Ready, the condition is stale, and Palette does not check the workers again"]
+          else [] end
+    reproduce:
+      - "curl -s -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" \"${PALETTE_API:-https://api.spectrocloud.com}/v1/spectroclusters/{{ .clusterUid }}\" | jq -r '.status.state as $s | .status.conditions[] | select(.type == \"WorkerNodeAdditionDone\") | \"state=\\($s) \\(.status) \\(.reason) \\(.message)\"'"
+      - "curl -s -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" \"${PALETTE_API:-https://api.spectrocloud.com}/v1/cloudconfigs/aws/<cloudConfigUid>/machinePools/worker-pool/machines\" | jq -r '.items[] | \"\\(.metadata.name) \\(.status.instanceState // .status.state)\"'   # the machines of the pool"
+    fix:
+      owner: palette
+      text: Check the workers again when the machines are Running and the nodes are Ready.
+    evidence:
+      - kind: run
+        ref: teardown lab
+        note: "the book, live-example.md: a cluster stays Provisioning with `not done: WorkerNodeAdditionDone: provision worker nodes`, its machines Running and its nodes Ready"
+    tests:
+      - fault: fixtures/aws/stale-worker.json
+        clean: fixtures/aws/watch-running.json
+
   - id: validate-routes-unused
     title: Only the console calls the cluster validate routes
     engines: [all]
@@ -110,3 +147,131 @@ rules:
     evidence:
       - kind: report
         ref: palette-precreate-validation-gaps-findings-2026-09-28 B3
+
+  - id: conditions-not-cloud
+    title: The cloud inventory is the truth of a delete
+    engines: [aws]
+    tier: static
+    severity: note
+    status: seen
+    what: |
+      The conditions of a delete run ahead of the cloud. `DeProvisionDone` flips while instances
+      run, and Palette logs the event "Cluster <name> has been deleted" before the state changes;
+      the state stays `Deleting` for several minutes after that event. Judge a delete by the
+      cloud inventory, not by a condition or by the time: 0 on every line of the inventory means
+      the cloud is empty. No check reads this before a build; the reproduce line is the inventory.
+    reproduce:
+      - "examples/live/aws-inventory.sh {{ .entity.metadata.name }} {{ .entity.spec.cloudConfig.region }}   # 0 on every line: the cloud is empty"
+    evidence:
+      - kind: run
+        ref: teardown lab
+        note: "the book, live-example.md: the event `Cluster <name> has been deleted` comes before the state changes"
+
+  - id: consumers-empty-on-error
+    title: An empty consumer list is not proof
+    engines: [all]
+    tier: palette
+    severity: note
+    status: seen
+    when: (.entity.spec.profiles // []) | length > 0
+    what: |
+      `status.inUseClusters` of a profile is what Palette computes when it is asked. When Palette
+      cannot compute it, the list comes back empty, and says nothing of the error. So an empty
+      list does not prove that no cluster runs the profile. `strata consumers` reads each cluster
+      the key can list as well, and names a cluster that applies the version and is not in the
+      list. The check reads the first profile of the entity.
+    check:
+      kind: palette
+      method: GET
+      path: /v1/clusterprofiles/{{ .entity.spec.profiles[0].uid }}
+      expr: |
+        .entity.spec.profiles[0].uid as $u
+        | if (.response.ok | not) then ["cannot read profile \($u): \(.response.body.code // .response.status)"]
+          elif ((.response.body.status.inUseClusters // []) | length) == 0
+          then ["profile \($u): status.inUseClusters is empty; Palette gives an empty list on an error too, so it does not prove that no cluster runs the profile; strata consumers reads each cluster the key can list as well"]
+          else [] end
+    reproduce:
+      - "strata consumers {{ .entity.spec.profiles[0].uid }}   # each cluster that runs the version, from the list and from the clusters"
+    evidence:
+      - kind: run
+        ref: "#12"
+        note: "the book, clusters.md: when Palette cannot compute the list, it comes back empty and says nothing of the error"
+      - kind: source
+        ref: strata src/ops/consumers.rs consumers
+    tests:
+      - fault: fixtures/eks/consumers-empty.json
+        clean: fixtures/eks/consumers-listed.json
+
+  - id: api-quirks
+    title: The client keeps to the limits of the API
+    engines: [all]
+    tier: static
+    severity: note
+    status: seen
+    what: |
+      The API of Palette has limits that a client must know. A page size over 50 for the
+      clusters, or over 100 for the events, answers 500. The cluster listing
+      `GET /v1/dashboard/spectroclusters/meta` answers a JSON array at the top level, not an
+      object with `items`. The kubeconfig route answers 500 while the cluster provisions. strata
+      pages at 50 and 100 and reads both listing shapes; this row is the fact, with no check.
+    reproduce:
+      - "curl -s -o /dev/null -w '%{http_code}\\n' -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" \"${PALETTE_API:-https://api.spectrocloud.com}/v1/events/components/spectrocluster/{{ .clusterUid }}?limit=101\"   # 500; 100 answers 200"
+      - "curl -s -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" \"${PALETTE_API:-https://api.spectrocloud.com}/v1/dashboard/spectroclusters/meta\" | jq -r 'type'   # array"
+    evidence:
+      - kind: source
+        ref: strata src/api/palette.rs CLUSTER_SEARCH, audits, cluster_notifications
+        note: Palette gives at most 50 clusters and 100 audit entries on a page
+      - kind: run
+        ref: teardown lab
+        note: "the book, clusters.md: the listing answers a JSON array at the top level"
+
+  - id: transient-errors
+    title: A transient error of the API is retried once
+    engines: [all]
+    tier: watch
+    severity: note
+    status: seen
+    what: |
+      Palette refuses one read of a profile with `OperationForbidden` and no cause now and then,
+      under the parallel refresh of the provider, and the next read passes. A delete can answer
+      500 for a while. During a gateway outage Palette answers a plain-text 404, and a client can
+      take it for a finished delete: a 404 of Palette is JSON with the code `ResourceNotFound`.
+      Retry a 5xx, a 429, and an `OperationForbidden` read once; treat a 404 that is not JSON as
+      an error, not as an answer. strata retries a 5xx, a 429, and a transport error; the live
+      scripts run the provider with `-parallelism=1` and run an `OperationForbidden` apply again.
+      The watch has no check for it: the errors are answers to the client, not events.
+    reproduce:
+      - "curl -s -o /dev/null -w '%{http_code} %{content_type}\\n' -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" \"${PALETTE_API:-https://api.spectrocloud.com}/v1/spectroclusters/{{ .clusterUid }}\"   # a 404 must be application/json with code ResourceNotFound"
+    evidence:
+      - kind: run
+        ref: teardown lab
+        note: "examples/live/tf.sh and lib.sh: OperationForbidden under the parallel refresh; live-example.md: the plain-text 404 of the gateway"
+      - kind: source
+        ref: strata src/api/retry.rs Retry
+        note: retries a 5xx, a 429, and a transport error, with a backoff from 1 s
+
+  - id: auto-cleanup-never
+    title: A delete that makes no progress moves to the cleanup path
+    engines: [all]
+    tier: race
+    severity: fail
+    status: source
+    what: |
+      Hubble gives a delete to the pilot only while `DeProvisionDone` is absent. After that, the
+      agent in the cluster runs the delete. Palette moves a delete to the cleanup cluster only
+      when it cannot reach the target cluster for `ForcePivotWaitDuration`, 10 minutes. A
+      deleting cluster with a live agent that makes no progress stays where it is; no step of the
+      source moves it. In one run a second delete request moved it, by a path that is not in the
+      source. No check before a build finds it; the watch sees the state.
+    fix:
+      owner: palette
+      text: Move a delete that makes no progress for a limit to the cleanup path.
+    evidence:
+      - kind: source
+        ref: palette controllers/spectrocluster_reconcile.go ForcePivotWaitDuration
+        note: the cleanup cluster waits 10 minutes for the target cluster, then makes the objects again from hubble
+      - kind: source
+        ref: hubble services/service/spectrocluster/internal/service/spectrocluster/spectrocluster_acquire.go
+        note: a delete goes to the pilot only while DeProvisionDone is absent
+      - kind: report
+        ref: palette-pivot-webhook-delete-stuck-findings-2026-09-26 B2

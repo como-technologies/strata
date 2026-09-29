@@ -1,0 +1,54 @@
+{
+  "_base": "identity-clean.json",
+  "_note": "the default compute service account has no role on the project",
+  "_patch": {
+    "_exec": {
+      "gcloud projects get-iam-policy strata-lab --format json": {
+        "exit": 0,
+        "stdout": {
+          "bindings": [
+            {
+              "role": "roles/compute.admin",
+              "members": [
+                "serviceAccount:palette@strata-lab.iam.gserviceaccount.com"
+              ]
+            },
+            {
+              "role": "roles/container.admin",
+              "members": [
+                "serviceAccount:palette@strata-lab.iam.gserviceaccount.com"
+              ]
+            },
+            {
+              "role": "roles/iam.serviceAccountTokenCreator",
+              "members": [
+                "serviceAccount:palette@strata-lab.iam.gserviceaccount.com"
+              ]
+            },
+            {
+              "role": "roles/iam.serviceAccountUser",
+              "members": [
+                "serviceAccount:palette@strata-lab.iam.gserviceaccount.com"
+              ]
+            },
+            {
+              "role": "roles/owner",
+              "members": [
+                "user:ops@example.com"
+              ]
+            },
+            {
+              "role": "roles/storage.objectViewer",
+              "members": [
+                "serviceAccount:palette@strata-lab.iam.gserviceaccount.com"
+              ]
+            }
+          ],
+          "etag": "BwYq1x2y3z4=",
+          "version": 1
+        },
+        "stderr": ""
+      }
+    }
+  }
+}

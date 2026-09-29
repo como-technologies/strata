@@ -1,0 +1,14 @@
+{
+  "_base": "type-same.json",
+  "_note": "a change of a running GKE cluster that Palette does not repave",
+  "_patch": {
+    "clusterUid": "7bcb858bec85d411d42ee515",
+    "_responses": {
+      "POST /v1/spectroclusters/7bcb858bec85d411d42ee515/validate/repave": {
+        "ok": true,
+        "status": 200,
+        "body": { "isRepaveRequired": false, "reasons": [] }
+      }
+    }
+  }
+}

@@ -1,0 +1,109 @@
+{
+  "_base": "full-records.json",
+  "_note": "the full-records world with one add-on profile: a spectro pack from the public pack registry, with a digest and one image",
+  "_patch": {
+    "entity": {
+      "spec": {
+        "profiles": [
+          {
+            "uid": "prof-eks-2",
+            "packValues": [
+              {
+                "name": "spectro-proxy",
+                "tag": "1.5.0",
+                "type": "spectro"
+              }
+            ],
+            "variables": []
+          }
+        ]
+      }
+    },
+    "profiles": [
+      {
+        "schema": "strata-snapshot/1",
+        "source": {
+          "uid": "prof-eks-2",
+          "name": "strata-live-addon",
+          "version": "1.0.0",
+          "cloudType": "all",
+          "type": "add-on",
+          "template": "published"
+        },
+        "packs": [
+          {
+            "key": "addon/spectro-proxy",
+            "layer": "addon",
+            "name": "spectro-proxy",
+            "type": "spectro",
+            "tag": "1.5.0",
+            "version": "1.5.0",
+            "packUid": "pk-proxy-1",
+            "registryUid": "5eecc89d0b150045ae661cef",
+            "refDigest": "sha256:0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b01",
+            "registryDigest": "sha256:0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b01",
+            "params": {},
+            "values": "pack:\n  content:\n    images:\n      - image: gcr.io/spectro-images-public/release/frp:v0.51.3\nfrpc:\n  loglevel: info\n",
+            "valuesCanon": {
+              "pack": {
+                "content": {
+                  "images": [
+                    {
+                      "image": "gcr.io/spectro-images-public/release/frp:v0.51.3"
+                    }
+                  ]
+                }
+              },
+              "frpc": {
+                "loglevel": "info"
+              }
+            },
+            "valuesHash": "7777777777777777777777777777777777777777777777777777777777777777",
+            "manifests": [],
+            "images": [
+              "gcr.io/spectro-images-public/release/frp:v0.51.3"
+            ],
+            "hash": {
+              "identity": "1111111111111111111111111111111111111111111111111111111111111121",
+              "upstream": "2222222222222222222222222222222222222222222222222222222222222231",
+              "upstreamRaw": "sha256:0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b01",
+              "upstreamSource": "packRef.digest",
+              "authored": "3333333333333333333333333333333333333333333333333333333333333341",
+              "node": "4444444444444444444444444444444444444444444444444444444444444451"
+            }
+          }
+        ],
+        "variables": []
+      }
+    ],
+    "packs": {
+      "pk-proxy-1": {
+        "name": "spectro-proxy",
+        "layer": "addon",
+        "addonType": "system app",
+        "cloudTypes": [
+          "all"
+        ],
+        "registryUid": "5eecc89d0b150045ae661cef",
+        "tags": [
+          {
+            "tag": "1.5.0",
+            "version": "1.5.0",
+            "packUid": "pk-proxy-1",
+            "parentTags": [
+              "1.5.x",
+              "1.x"
+            ]
+          }
+        ],
+        "packValues": [
+          {
+            "packUid": "pk-proxy-1",
+            "annotations": {},
+            "dependencies": []
+          }
+        ]
+      }
+    }
+  }
+}

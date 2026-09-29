@@ -1,0 +1,66 @@
+{
+  "_base": "clean.json",
+  "_note": "the clean world, with one add-on profile whose pack declares an image in ECR, and a crane that reads its digest",
+  "_patch": {
+    "entity": {
+      "spec": {
+        "profiles": [
+          {
+            "uid": "prof-eks-addon",
+            "packValues": [
+              {
+                "name": "strata-live-pack",
+                "tag": "1.1.0",
+                "type": "oci"
+              }
+            ],
+            "variables": []
+          }
+        ]
+      }
+    },
+    "profiles": [
+      {
+        "schema": "strata-snapshot/1",
+        "source": {
+          "uid": "prof-eks-addon",
+          "name": "strata-live-addon",
+          "version": "1.1.0",
+          "cloudType": "all",
+          "kind": "cluster-profile"
+        },
+        "packs": [
+          {
+            "key": "addon/strata-live-pack",
+            "layer": "addon",
+            "name": "strata-live-pack",
+            "version": "1.1.0",
+            "tag": "1.1.0",
+            "packUid": "pk-addon-live",
+            "registryUid": "reg-ecr-live",
+            "valuesCanon": null,
+            "images": [
+              "123456789012.dkr.ecr.us-east-2.amazonaws.com/strata-live/nginx:1.27.0"
+            ]
+          }
+        ]
+      }
+    ],
+    "packs": {
+      "pk-addon-live": {
+        "name": "strata-live-pack",
+        "layer": "addon",
+        "cloudTypes": [
+          "all"
+        ]
+      }
+    },
+    "_exec": {
+      "crane digest 123456789012.dkr.ecr.us-east-2.amazonaws.com/strata-live/nginx:1.27.0": {
+        "exit": 0,
+        "stdout": "sha256:6f3c4e2a9b1d8e7f0a5c3b2d1e9f8a7b6c5d4e3f2a1b0c9d8e7f6a5b4c3d2e1f",
+        "stderr": ""
+      }
+    }
+  }
+}

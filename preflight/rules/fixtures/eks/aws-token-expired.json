@@ -1,0 +1,13 @@
+{
+  "_base": "cloud-cli-auth-clean.json",
+  "_note": "the SSO session of the AWS profile expired",
+  "_patch": {
+    "_exec": {
+      "aws sts get-caller-identity --output json": {
+        "exit": 255,
+        "stdout": "",
+        "stderr": "An error occurred (ExpiredToken) when calling the GetCallerIdentity operation: The security token included in the request is expired"
+      }
+    }
+  }
+}

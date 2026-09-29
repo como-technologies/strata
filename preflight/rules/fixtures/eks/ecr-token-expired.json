@@ -1,0 +1,13 @@
+{
+  "_base": "oci-image-clean.json",
+  "_note": "the ECR login of crane is older than 12 hours: the registry answers 403",
+  "_patch": {
+    "_exec": {
+      "crane digest 123456789012.dkr.ecr.us-east-2.amazonaws.com/strata-live/nginx:1.27.0": {
+        "exit": 1,
+        "stdout": "",
+        "stderr": "Error: fetching manifest 123456789012.dkr.ecr.us-east-2.amazonaws.com/strata-live/nginx:1.27.0: GET https://123456789012.dkr.ecr.us-east-2.amazonaws.com/v2/strata-live/nginx/manifests/1.27.0: unexpected status code 403 Forbidden: {\"errors\":[{\"code\":\"DENIED\",\"message\":\"Your authorization token has expired. Reauthenticate and try again.\"}]}"
+      }
+    }
+  }
+}

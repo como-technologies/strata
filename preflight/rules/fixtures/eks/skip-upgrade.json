@@ -1,0 +1,13 @@
+{
+  "_base": "clean.json",
+  "_note": "the worker pool skips the Kubernetes upgrade",
+  "_patch": {
+    "entity": {
+      "spec": {
+        "machinepoolconfig": [
+          { "poolConfig": { "name": "worker-pool", "skipK8sUpgrade": "enabled" } }
+        ]
+      }
+    }
+  }
+}

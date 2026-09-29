@@ -1,0 +1,21 @@
+{
+  "_base": "identity-clean.json",
+  "_note": "the default compute service account is deleted",
+  "_patch": {
+    "_exec": {
+      "gcloud iam service-accounts list --project strata-lab --format json": {
+        "exit": 0,
+        "stdout": [
+          {
+            "disabled": false,
+            "displayName": "palette",
+            "email": "palette@strata-lab.iam.gserviceaccount.com",
+            "name": "projects/strata-lab/serviceAccounts/palette@strata-lab.iam.gserviceaccount.com",
+            "projectId": "strata-lab"
+          }
+        ],
+        "stderr": ""
+      }
+    }
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "_base": "clean.json",
+  "_note": "the validate route names a pack whose required dependency is in no profile",
+  "_patch": {
+    "_responses": {
+      "POST /v1/spectroclusters/eks/validate": {
+        "ok": true,
+        "status": 200,
+        "body": {
+          "machinePools": {
+            "results": []
+          },
+          "profiles": [
+            {
+              "uid": "prof-eks-1",
+              "packs": {
+                "results": [
+                  {
+                    "name": "strata-live-pack",
+                    "displayName": "strata-live-pack",
+                    "errors": [
+                      {
+                        "code": "DependencyPackWithMinVersionRequired",
+                        "message": "Pack 'strata-live-dep' is required with minimum compatible version '1.0.0'"
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}

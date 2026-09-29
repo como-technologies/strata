@@ -1,0 +1,75 @@
+{
+  "_base": "clean.json",
+  "_note": "the clean world of the identity rules: one service account holds the five roles, and the default compute service account exists with compute.admin",
+  "_patch": {
+    "_exec": {
+      "gcloud projects get-iam-policy strata-lab --format json": {
+        "exit": 0,
+        "stdout": {
+          "bindings": [
+            {
+              "role": "roles/compute.admin",
+              "members": [
+                "serviceAccount:palette@strata-lab.iam.gserviceaccount.com",
+                "serviceAccount:123456789012-compute@developer.gserviceaccount.com"
+              ]
+            },
+            {
+              "role": "roles/container.admin",
+              "members": [
+                "serviceAccount:palette@strata-lab.iam.gserviceaccount.com"
+              ]
+            },
+            {
+              "role": "roles/iam.serviceAccountTokenCreator",
+              "members": [
+                "serviceAccount:palette@strata-lab.iam.gserviceaccount.com"
+              ]
+            },
+            {
+              "role": "roles/iam.serviceAccountUser",
+              "members": [
+                "serviceAccount:palette@strata-lab.iam.gserviceaccount.com"
+              ]
+            },
+            {
+              "role": "roles/owner",
+              "members": [
+                "user:ops@example.com"
+              ]
+            },
+            {
+              "role": "roles/storage.objectViewer",
+              "members": [
+                "serviceAccount:palette@strata-lab.iam.gserviceaccount.com"
+              ]
+            }
+          ],
+          "etag": "BwYq1x2y3z4=",
+          "version": 1
+        },
+        "stderr": ""
+      },
+      "gcloud iam service-accounts list --project strata-lab --format json": {
+        "exit": 0,
+        "stdout": [
+          {
+            "disabled": false,
+            "displayName": "Compute Engine default service account",
+            "email": "123456789012-compute@developer.gserviceaccount.com",
+            "name": "projects/strata-lab/serviceAccounts/123456789012-compute@developer.gserviceaccount.com",
+            "projectId": "strata-lab"
+          },
+          {
+            "disabled": false,
+            "displayName": "palette",
+            "email": "palette@strata-lab.iam.gserviceaccount.com",
+            "name": "projects/strata-lab/serviceAccounts/palette@strata-lab.iam.gserviceaccount.com",
+            "projectId": "strata-lab"
+          }
+        ],
+        "stderr": ""
+      }
+    }
+  }
+}

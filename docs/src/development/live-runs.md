@@ -841,7 +841,7 @@ one row of the catalog with `engines: [lab]`.
 | `cloud-cli-auth` | 0 | `aws sts get-caller-identity`, or `gcloud auth print-access-token` |
 | `gcp-apis-off`, `gke-api-off` | 0 | the Compute, Cloud Resource Manager, IAM, and Kubernetes Engine APIs are on (#90) |
 | `eks-core-policies` | 0 | the six core policies of Palette are in the AWS account (#89) |
-| `ecr-token` | 0 | `crane` reads the ECR repository of the example |
+| `ecr-token` | ? | `crane` reads the ECR repository of the example: `0` is a login of the last 12 hours, which `verify.sh` needs and a build does not |
 | `leftovers-a`, `leftovers-b` | 0 | the inventory of each cluster name is 0 on every line |
 
 ## preflight-plan.sh

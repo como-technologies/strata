@@ -1,0 +1,13 @@
+{
+  "_base": "clean.json",
+  "_note": "the clean world, with the answer of the tool check: no name printed, every tool is on the PATH",
+  "_patch": {
+    "_exec": {
+      "sh -c for t in tofu jq just helm crane oras zarf kubectl gcloud aws; do command -v $t >/dev/null || echo $t; done": {
+        "exit": 0,
+        "stdout": "",
+        "stderr": ""
+      }
+    }
+  }
+}

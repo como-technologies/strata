@@ -1,0 +1,15 @@
+{
+  "_base": "clean.json",
+  "_note": "the clean world, with the answer of EC2: no VPC carries the Cluster API tag of the name",
+  "_patch": {
+    "_exec": {
+      "aws ec2 describe-vpcs --filters Name=tag-key,Values=sigs.k8s.io/cluster-api-provider-aws/cluster/fred --region us-east-2 --output json": {
+        "exit": 0,
+        "stdout": {
+          "Vpcs": []
+        },
+        "stderr": ""
+      }
+    }
+  }
+}

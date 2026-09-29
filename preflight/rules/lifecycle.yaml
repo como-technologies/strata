@@ -34,6 +34,49 @@ rules:
       - fault: fixtures/eks/type-change.json
         clean: fixtures/eks/type-same.json
 
+  - id: eks-delete-waits
+    title: The delete of an EKS cluster reaches Deleted
+    engines: [eks]
+    tier: watch
+    severity: fail
+    status: seen
+    what: |
+      With an orphan node group, the delete waits with no end. `CloudInfrastructureCleanedUp`
+      stays `False` with the reason `DeletingInfrastructure`, and the event "Deleting control
+      plane nodes" repeats every 5 minutes. The EKS control plane waits for every node group of
+      the cluster, and Palette deletes the one it tracks alone. A delete of the orphan in AWS
+      alone does not end the wait: its object keeps its finalizer in the pilot. The recovery is by
+      hand: delete the node groups, the EKS cluster, and the VPC in AWS, then force delete.
+    check:
+      kind: watch
+      expr: |
+        (.cluster.status.state // "") as $s
+        | ([ (.cluster.status.conditions // [])[]
+             | select(.type == "CloudInfrastructureCleanedUp" and .status == "False" and (.reason // "") == "DeletingInfrastructure") ] | length > 0) as $waits
+        | ([ (.events // [])[] | select((.message // "") | test("Deleting control plane nodes")) ] | length) as $n
+        | if $s == "Deleting" and $waits and .elapsed > 1800
+          then ["the delete waits at CloudInfrastructureCleanedUp=False, DeletingInfrastructure, for \(.elapsed) s, with \($n) 'Deleting control plane nodes' events: an orphan node group can hold the EKS control plane. Run examples/live/eks-nodegroups.sh; --delete removes the node groups of the example. Then delete the EKS cluster and its VPC in AWS, and force delete the cluster in Palette"]
+          else [] end
+    reproduce:
+      - "examples/live/eks-nodegroups.sh            # one line for each node group of the cluster; two for one pool is an orphan"
+      - "examples/live/eks-nodegroups.sh --delete   # deletes the node groups of the example, and waits until they are gone"
+      - "aws eks describe-cluster --region {{ .entity.spec.cloudConfig.region }} --name {{ .entity.metadata.name }} --query cluster.status   # ACTIVE while the delete waits"
+    fix:
+      owner: palette
+      text: Delete each AWSManagedMachinePool that no MachinePool references, in the delete path, before the control plane.
+    evidence:
+      - kind: run
+        ref: "#89"
+        note: the state stayed DeletingInfrastructure for more than 2 hours, with the event every 5 minutes
+      - kind: report
+        ref: palette-eks-orphan-nodegroup-delete-stuck-findings-2026-09-28 F4
+      - kind: source
+        ref: palette pkg/provider/aws/aws_managed_common.go DeleteAdditionalResources
+        note: the delete reads the one machine pool that the MachinePool references
+    tests:
+      - fault: fixtures/eks/delete-waits.json
+        clean: fixtures/eks/watch-running.json
+
   - id: gke-type-change
     title: A change of the machine type of a GKE node pool deletes the pool
     engines: [gke]
@@ -65,6 +108,173 @@ rules:
       - fault: fixtures/gke/type-change.json
         clean: fixtures/gke/type-same.json
 
+  - id: gke-pool-roll
+    title: A GKE node pool change keeps one node pool for each pool
+    engines: [gke]
+    tier: watch
+    severity: fail
+    status: seen
+    what: |
+      On a `Running` cluster, a change of the machine type deletes the GKE node pool first. The
+      new `GCPManagedMachinePool` object takes the GKE name of the old one, so CAPG deletes the
+      one node pool and makes no new one. The controllers of Palette and CAPG ran on that pool,
+      so they stop, and Palette shows no event after the delete of the pool. Before the control
+      plane is ready, CAPG stops with "machinePoolList length (1) != managedMachinePoolList
+      length (2)" every 5 minutes. The watch reads that event; the node pools themselves are
+      visible from GCP alone, so the reproduce line lists them.
+    check:
+      kind: watch
+      expr: |
+        [ (.events // [])[]
+          | select((.message // "") | test("machinePoolList length|managedMachinePoolList|GCPManagedMachinePool"))
+          | "event \(.reason) at \(.metadata.creationTimestamp): \(.message | .[:240])" ]
+        | unique | .[:3]
+    reproduce:
+      - "gcloud container node-pools list --cluster {{ .entity.metadata.name }} --region {{ .entity.spec.cloudConfig.region }} --project {{ .entity.spec.cloudConfig.project }} --format 'table(name,config.machineType,status)'   # one node pool for each pool of the entity"
+      - "gcloud container operations list --project {{ .entity.spec.cloudConfig.project }} --filter 'targetLink~{{ .entity.metadata.name }}' --format 'table(operationType,status,startTime)'   # a DELETE_NODE_POOL with no CREATE_NODE_POOL after it"
+    fix:
+      owner: palette
+      text: Give a replacement node pool its own GKE name, and delete the old pool after the new one is ready.
+    evidence:
+      - kind: run
+        ref: "#90"
+        note: GKE DELETE_NODE_POOL worker-pool at 23:15, no CREATE_NODE_POOL after it, and no Palette event until the delete
+      - kind: report
+        ref: palette-gke-pool-change-delete-stuck-findings-2026-09-28 F2
+      - kind: source
+        ref: palette pkg/provider/gcp/gcp_managed.go gcpManagedMachinePoolImmutableFieldsChanged
+    tests:
+      - fault: fixtures/gke/pool-roll-mismatch.json
+        clean: fixtures/gke/watch-running.json
+
+  - id: sweep-one-slot
+    title: One pool replacement at a time
+    engines: [eks, gke]
+    tier: static
+    severity: warn
+    status: source
+    when: .before != null
+    what: |
+      Palette keeps the name of the old machine pool of a pool in one annotation,
+      `spectrocloud.com/old-managed-machine-pool`. A sweep at the end of the worker reconcile
+      deletes that machine pool. A second replacement before the sweep writes over the name, and
+      no code tracks the first old machine pool. On EKS (#89) the sweep did not run while the new
+      pool was not ready. The check sees the change in hand alone: it warns when one change
+      replaces two or more pools at once. Apply one pool change at a time, and wait until the
+      cloud shows one node group or node pool for each pool before the next change.
+    check:
+      kind: static
+      expr: |
+        ["instanceType", "rootDeviceSize", "amiType", "awsLaunchTemplate", "capacityType"] as $fields
+        | (.before.spec.machinepoolconfig // []) as $b
+        | [ .entity.spec.machinepoolconfig[] | .poolConfig.name as $n | .cloudConfig as $c
+            | ($b[] | select(.poolConfig.name == $n)) as $old
+            | [ $fields[] | select(($old.cloudConfig[.] // null) != ($c[.] // null)) ] as $f
+            | select(($f | length) > 0)
+            | "\($n) (\($f | join(", ")))" ] as $changed
+        | if ($changed | length) >= 2
+          then ["\($changed | length) pools change a field that replaces the pool in one change: \($changed | join("; ")). Palette tracks one old machine pool for each pool, and a second replacement before the sweep loses the first old pool; change one pool at a time"]
+          else [] end
+    fix:
+      owner: palette
+      text: Sweep the old machine pools by label, not by one annotation.
+    evidence:
+      - kind: source
+        ref: palette controllers/worker_managed.go ReconcileManagedWorker
+        note: the annotation holds one name (:494-499); the sweep at :184-208 runs after the readiness checks of each pool
+      - kind: report
+        ref: palette-eks-orphan-nodegroup-delete-stuck-findings-2026-09-28 F3
+    tests:
+      - fault: fixtures/eks/two-pools-change.json
+        clean: fixtures/eks/type-change.json
+
+  - id: pool-replace-fields
+    title: A pool change keeps the machines of the pool
+    engines: [eks, gke, aws, gcp]
+    tier: static
+    severity: warn
+    status: source
+    when: .before != null
+    what: |
+      Some fields of a pool replace its machines. EKS: `instanceType`, `rootDeviceSize`,
+      `amiType`, `awsLaunchTemplate`, `capacityType` make a new node group. GKE: `instanceType`
+      and `rootDeviceSize` make a new `GCPManagedMachinePool`; the disk type, the local SSDs, the
+      max pods, and the pod range do the same through the override. AWS and GCP kubeadm:
+      `instanceType`, `rootDeviceSize`, and `azs` make a new machine template, and the machines
+      roll. `POST /v1/spectroclusters/{uid}/validate/repave` answers for the packs, not for the
+      pools.
+    check:
+      kind: static
+      expr: |
+        .cloud as $cloud
+        | (if $cloud == "eks" then ["instanceType", "rootDeviceSize", "amiType", "awsLaunchTemplate", "capacityType"]
+           elif $cloud == "gke" then ["instanceType", "rootDeviceSize"]
+           else ["instanceType", "rootDeviceSize", "azs"] end) as $fields
+        | (if $cloud == "eks" then "makes a new node group"
+           elif $cloud == "gke" then "makes a new GCPManagedMachinePool"
+           else "makes a new machine template, and the machines roll" end) as $effect
+        | (.before.spec.machinepoolconfig // []) as $b
+        | [ .entity.spec.machinepoolconfig[] | .poolConfig.name as $n | .cloudConfig as $c
+            | ($b[] | select(.poolConfig.name == $n)) as $old
+            | [ $fields[] | select(($old.cloudConfig[.] // null) != ($c[.] // null)) ] as $f
+            | select(($f | length) > 0)
+            | "pool \($n): \($f | join(", ")) changed; on \($cloud) that \($effect)" ]
+    evidence:
+      - kind: source
+        ref: palette pkg/provider/aws/aws_managed.go shouldDoMMPRollingUpgrade
+        note: DiskSize, InstanceType, SubnetIDs, RemoteAccess, CapacityType, RoleName, AWSLaunchTemplate
+      - kind: source
+        ref: palette pkg/provider/gcp/gcp_managed.go gcpManagedMachinePoolImmutableFieldsChanged
+      - kind: source
+        ref: palette pkg/provider/aws/aws_common.go shouldUpgradeMachineTemplate
+        note: InstanceType, SSHKeyName, RootVolume.Size, AMI.ID, SpotMarketOptions.MaxPrice, AdditionalSecurityGroups, Tenancy
+    tests:
+      - fault: fixtures/eks/disk-change.json
+        clean: fixtures/eks/type-same.json
+      - fault: fixtures/gke/type-change.json
+        clean: fixtures/gke/type-same.json
+
+  - id: fixed-fields
+    title: The fixed fields of the cloud config stay as created
+    engines: [aws, eks, gke]
+    tier: static
+    severity: fail
+    status: inferred
+    when: .before != null
+    what: |
+      A change of these fields of `cloudConfig` after the create does not reach the cluster. AWS:
+      `region`, `vpcId`, `bastionDisabled`. EKS: `region`, `vpcId`, `encryptionConfig`. GKE:
+      `project`, `region`, `network`, `managedClusterConfig`. The source of hubble stores a new
+      `region`, `vpcId`, and `bastionDisabled` in the cloud config (`UpdateClusterConfig`), and
+      copies `encryptionConfig` only when `isEnabled` is true: a disable is dropped. Whether the
+      controller applies a stored change to a built cluster is not confirmed, so the status is
+      inferred.
+    check:
+      kind: static
+      expr: |
+        (if .cloud == "aws" then ["region", "vpcId", "bastionDisabled"]
+         elif .cloud == "eks" then ["region", "vpcId", "encryptionConfig"]
+         else ["project", "region", "network", "managedClusterConfig"] end) as $fields
+        | (.before.spec.cloudConfig // {}) as $b | (.entity.spec.cloudConfig // {}) as $a
+        | [ $fields[] | select(($b[.] // null) != ($a[.] // null))
+            | "cloudConfig.\(.) changed from \(($b[.] // null) | tojson) to \(($a[.] // null) | tojson): Palette does not apply it to a built cluster" ]
+    fix:
+      owner: palette
+      text: Refuse a change of a fixed field with an error.
+    evidence:
+      - kind: source
+        ref: hubble services/service/spectrocluster/internal/service/cloudconfig/internal/aws/cloudconfig_aws_service.go UpdateClusterConfig
+      - kind: source
+        ref: hubble services/service/spectrocluster/internal/service/cloudconfig/internal/eks/cloudconfig_eks_service.go UpdateClusterConfig
+        note: encryptionConfig is copied only when the new isEnabled is true
+      - kind: source
+        ref: hubble services/service/spectrocluster/internal/service/cloudconfig/internal/gcp/cloudconfig_gcp_service.go UpdateClusterConfig
+    tests:
+      - fault: fixtures/eks/vpc-change.json
+        clean: fixtures/eks/type-same.json
+      - fault: fixtures/gke/network-change.json
+        clean: fixtures/gke/type-same.json
+
   - id: delete-pending-repave
     title: No repave waits for approval before a delete
     engines: [all]
@@ -92,6 +302,81 @@ rules:
       - fault: fixtures/eks/repave-pending.json
         clean: fixtures/eks/cluster-running.json
 
+  - id: macro-repave
+    title: No macro in a field that repaves
+    engines: [all]
+    tier: static
+    severity: warn
+    status: seen
+    what: |
+      A Kubernetes or OS pack whose values read a macro, `{{.spectro.macro.<name>}}`, repaves
+      when the macro gets a new value: on a kubeadm engine the repave check of Palette reads every
+      value of these two layers. Palette records the repave as system-initiated, in the state
+      `Pending`, and the cluster takes no update until a person approves it. The record names the
+      pack and the key, not the macro. `status.hasUserMacros` of `GET /v1/clusterprofiles/{uid}`
+      is true for a profile that reads a user macro on any layer, and
+      `POST /v1/spectroclusters/{uid}/validate/repave` cannot see a macro change. The rule is for
+      the kubeadm engines; on EKS and GKE a values change of these layers does not repave.
+    check:
+      kind: static
+      expr: |
+        def macro: test("\\{\\{\\s*\\.spectro\\.macro\\.");
+        ([ .profiles[]? | .packs[]? | select(.layer == "os" or .layer == "k8s") | .name ]) as $infra
+        | [ .profiles[]? | .packs[]? | select(.layer == "os" or .layer == "k8s")
+            | select(((.values // "") | macro) or ((.valuesCanon // null) | tostring | macro))
+            | "pack \(.name)@\(.version) (\(.layer) layer) reads a macro in its values: a new macro value repaves, and the repave waits for approval" ]
+          + [ .entity.spec.profiles[]? | .packValues[]? | .name as $n
+              | select(any($infra[]; . == $n))
+              | select((.values // "") | macro)
+              | "pack \($n) of the entity reads a macro in its values: a new macro value repaves, and the repave waits for approval" ]
+    fix:
+      owner: palette
+      text: Name the macro in the repave record, and let validate/repave see a macro change.
+    evidence:
+      - kind: report
+        ref: palette-macro-findings-2026-09-25 F3
+      - kind: run
+        ref: "#72"
+        note: macro-repave.sh, a macro in kubeadmconfig.postKubeadmCommands of the Kubernetes pack
+    tests:
+      - fault: fixtures/aws/macro-in-k8s.json
+        clean: fixtures/aws/clean.json
+
+  - id: macro-silent
+    title: A macro value reaches the cluster with a notification
+    engines: [all]
+    tier: static
+    severity: note
+    status: seen
+    what: |
+      A new macro value reaches each cluster that reads it at the next poll of its agent: 11 and
+      13 minutes after the change in two runs. Palette opens no notification and writes no audit
+      entry for a macro write. This rule notes each pack of the records and of the entity that
+      reads a macro. `strata snapshot --macros` records the digest of each value.
+    check:
+      kind: static
+      expr: |
+        def macro: test("\\{\\{\\s*\\.spectro\\.macro\\.");
+        def names: [ matches("\\.spectro\\.macro\\.[A-Za-z0-9_.-]+"; "g")[] | .[0].string | ltrimstr(".spectro.macro.") ] | unique | join(", ");
+        [ .profiles[]? | .packs[]? | . as $p | ($p | tostring) as $t
+          | select($t | macro)
+          | "pack \($p.name)@\($p.version) reads the macro(s) \($t | names): a new value reaches the cluster in 11 to 13 minutes, with no notification and no audit entry" ]
+        + [ .entity.spec.profiles[]? | .packValues[]? | . as $v | ($v | tostring) as $t
+            | select($t | macro)
+            | "pack \($v.name) of the entity reads the macro(s) \($t | names): a new value reaches the cluster in 11 to 13 minutes, with no notification and no audit entry" ]
+    fix:
+      owner: palette
+      text: Audit each macro write, and open a notification for each cluster the value reaches.
+    evidence:
+      - kind: report
+        ref: palette-macro-findings-2026-09-25 F1, F2
+      - kind: run
+        ref: "#72"
+        note: macros.sh, the value inside the cluster 11 minutes after the change
+    tests:
+      - fault: fixtures/aws/macro-in-k8s.json
+        clean: fixtures/aws/clean.json
+
   - id: delete-while-provisioning
     title: The cluster is Running before a delete
     engines: [all]
@@ -114,3 +399,117 @@ rules:
     tests:
       - fault: fixtures/eks/cluster-provisioning.json
         clean: fixtures/eks/cluster-running.json
+
+  - id: pause-agent-upgrades
+    title: Agent upgrades are not paused before a delete
+    engines: [all]
+    tier: palette
+    severity: warn
+    status: inferred
+    when: .clusterUid != null
+    what: |
+      The Pause Agent Upgrades setting of a cluster is the annotation
+      `spectroComponentsUpgradeForbidden=true` on the cluster document. `POST
+      /v1/spectroclusters/{uid}/upgrade/settings` with `spectroComponents: lock` sets it, and
+      `unlock` removes it. The teardown notes of the lab say a cluster with the setting on can
+      stay in `Deleting`, and a resume with a second delete moves it. The source of hubble stores
+      and reads the annotation, and shows no delete path that tests it, so the status is inferred.
+      `spec.clusterConfig.lifecycleConfig.pause` is another setting, the pause of the cluster, not
+      this one.
+    check:
+      kind: palette
+      method: GET
+      path: /v1/spectroclusters/{{ .clusterUid }}
+      expr: |
+        if (.response.ok | not) then ["cannot read the cluster \(.clusterUid): \(.response.body.code // .response.status)"]
+        elif ((.response.body.metadata.annotations // {}).spectroComponentsUpgradeForbidden // "") == "true"
+        then ["Pause Agent Upgrades is on (annotation spectroComponentsUpgradeForbidden=true): such a cluster can stay in Deleting; resume the upgrades (POST /v1/spectroclusters/\(.clusterUid)/upgrade/settings with spectroComponents unlock) before a delete"]
+        else [] end
+    reproduce:
+      - "curl -s -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" \"${PALETTE_API:-https://api.spectrocloud.com}/v1/spectroclusters/{{ .clusterUid }}\" | jq -r '.metadata.annotations.spectroComponentsUpgradeForbidden // \"not set\"'"
+      - "curl -s -X POST -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" -H 'Content-Type: application/json' -d '{\"spectroComponents\":\"unlock\"}' \"${PALETTE_API:-https://api.spectrocloud.com}/v1/spectroclusters/{{ .clusterUid }}/upgrade/settings\"   # resume"
+    evidence:
+      - kind: doc
+        ref: https://docs.spectrocloud.com/clusters/cluster-management/platform-settings/pause-platform-upgrades/
+      - kind: source
+        ref: hubble domain/doc.go AnnotationSpectroComponentsUpgradeForbidden
+        note: spectrocluster_repo.go writes the annotation "true" for lock, and removes it for unlock
+      - kind: run
+        ref: teardown lab
+        note: "the book, live-example.md: a cluster with Pause Agent Upgrades on can stay in Deleting; disable that option and delete again"
+    tests:
+      - fault: fixtures/eks/pause-on.json
+        clean: fixtures/eks/cluster-running.json
+
+  - id: delete-blockers
+    title: Nothing of the cluster holds its delete
+    engines: [aws, eks]
+    tier: palette
+    severity: fail
+    status: source
+    when: .clusterUid != null
+    what: |
+      A delete waits on what the cluster still holds. Palette shows the virtual clusters of a host
+      cluster and the app deployments in `status.virtual` of the cluster document. AWS holds the
+      rest: the ENIs of the VPC CNI in the state `available`, the security groups of the load
+      balancers, and the Pod Identity associations. The check reads the cluster document; the AWS
+      half is a reproduce line, since a Palette-made VPC has no id in the entity.
+    check:
+      kind: palette
+      method: GET
+      path: /v1/spectroclusters/{{ .clusterUid }}
+      expr: |
+        if (.response.ok | not) then ["cannot read the cluster \(.clusterUid): \(.response.body.code // .response.status)"]
+        else .response.body.status as $s
+          | [ ($s.virtual.virtualClusters // [])[] | "virtual cluster \(.name // .uid) runs on this host cluster: delete it first, or the delete waits" ]
+          + [ ($s.virtual.appDeployments // [])[] | "app deployment \(.name // .uid) is on the cluster: delete it first" ]
+        end
+    reproduce:
+      - "aws ec2 describe-network-interfaces --region {{ .entity.spec.cloudConfig.region }} --filters Name=vpc-id,Values={{ .entity.spec.cloudConfig.vpcId }} Name=status,Values=available --query 'NetworkInterfaces[].[NetworkInterfaceId,Description]' --output table   # an available ENI of the VPC CNI holds the subnet delete"
+      - "aws ec2 describe-security-groups --region {{ .entity.spec.cloudConfig.region }} --filters Name=vpc-id,Values={{ .entity.spec.cloudConfig.vpcId }} Name=tag-key,Values=kubernetes.io/cluster/{{ .entity.metadata.name }} --query 'SecurityGroups[].[GroupId,GroupName]' --output table   # the security groups of the load balancers"
+      - "aws eks list-pod-identity-associations --region {{ .entity.spec.cloudConfig.region }} --cluster-name {{ .entity.metadata.name }} --output table"
+    evidence:
+      - kind: source
+        ref: hapi models/v1_virtual.go V1Virtual
+        note: appDeployments, clusterGroup, hostCluster, virtualClusters
+      - kind: doc
+        ref: https://docs.spectrocloud.com/clusters/cluster-management/remove-clusters/
+        note: the AWS list of lingering resources names the elastic network interfaces and the load balancers
+    tests:
+      - fault: fixtures/eks/delete-blockers.json
+        clean: fixtures/eks/cluster-running.json
+
+  - id: override-silent
+    title: A value overridden on a cluster opens a notification
+    engines: [all]
+    tier: race
+    severity: warn
+    status: seen
+    what: |
+      A pack value overridden on the copy of a cluster opens no notification: Palette says that
+      no update waits. The records of the profile versions still verify, since the profiles did
+      not change. The record of the cluster reports the drift, and `strata compare` of the
+      version against the cluster names the value. No check before a change finds it.
+    reproduce:
+      - "strata compare <name>@<version> cluster:{{ .clusterUid }}   # exit 1 names the overridden value"
+      - "strata verify <cluster record>                              # DRIFT on the cluster record; OK on the version"
+    evidence:
+      - kind: run
+        ref: "#81"
+        note: "the checks override, override-record, override-not-behind, and override-drift"
+
+  - id: push-without-resolve
+    title: A push closes the update it makes
+    engines: [all]
+    tier: race
+    severity: note
+    status: seen
+    what: |
+      A `PUT` of the content of a profile without `resolveNotification` still closes the events
+      of values and manifests that the push takes, and the copy of the cluster takes the edit
+      within 3 minutes. An event of a version, an added pack, or a removed pack stays until the
+      cluster takes it.
+    evidence:
+      - kind: run
+        ref: "#70"
+        note: "the checks accept and accept-none: a push without resolveNotification closes the update all the same"

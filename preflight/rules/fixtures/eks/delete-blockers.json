@@ -1,0 +1,30 @@
+{
+  "_base": "cluster-running.json",
+  "_note": "a host cluster with one virtual cluster on it",
+  "_patch": {
+    "_responses": {
+      "GET /v1/spectroclusters/6aba747adb74c300c31dd404": {
+        "ok": true,
+        "status": 200,
+        "body": {
+          "metadata": {
+            "uid": "6aba747adb74c300c31dd404"
+          },
+          "status": {
+            "state": "Running",
+            "virtual": {
+              "virtualClusters": [
+                {
+                  "kind": "spectrocluster",
+                  "name": "tenant-a",
+                  "uid": "6abb0000000000000000a001"
+                }
+              ],
+              "appDeployments": []
+            }
+          }
+        }
+      }
+    }
+  }
+}

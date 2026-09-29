@@ -1,0 +1,50 @@
+{
+  "_base": "clean.json",
+  "_note": "the pool names us-east-1e, which is use1-az3 in this account: EKS takes no cluster there",
+  "_patch": {
+    "entity": {
+      "spec": {
+        "cloudConfig": {
+          "region": "us-east-1"
+        },
+        "machinepoolconfig": [
+          {
+            "cloudConfig": {
+              "azs": [
+                "us-east-1a",
+                "us-east-1e"
+              ]
+            },
+            "poolConfig": {
+              "name": "worker-pool"
+            }
+          }
+        ]
+      }
+    },
+    "_exec": {
+      "aws ec2 describe-availability-zones --region us-east-1 --filters Name=zone-name,Values=us-east-1a,us-east-1e --output json": {
+        "exit": 0,
+        "stdout": {
+          "AvailabilityZones": [
+            {
+              "ZoneName": "us-east-1a",
+              "ZoneId": "use1-az6",
+              "State": "available",
+              "ZoneType": "availability-zone",
+              "RegionName": "us-east-1"
+            },
+            {
+              "ZoneName": "us-east-1e",
+              "ZoneId": "use1-az3",
+              "State": "available",
+              "ZoneType": "availability-zone",
+              "RegionName": "us-east-1"
+            }
+          ]
+        },
+        "stderr": ""
+      }
+    }
+  }
+}

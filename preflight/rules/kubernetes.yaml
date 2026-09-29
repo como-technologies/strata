@@ -41,29 +41,222 @@ rules:
       - fault: fixtures/gke/no-channel.json
         clean: fixtures/gke/clean.json
 
-  - id: profile-cloud-mismatch
-    title: Each profile is of the cloud type of the cluster, or of all
-    engines: [all]
-    tier: static
+  - id: gke-version-not-offered
+    title: GKE offers the Kubernetes version of the pack in the release channel
+    engines: [gke]
+    tier: cloud
     severity: fail
-    status: proposed
-    when: (.profiles | length) > 0
+    status: source
+    when: ([ (.profiles // [])[] | .packs[] | select(.layer == "k8s") ] | length) > 0
     what: |
-      A profile of another cloud type carries packs that Palette cannot install on this cluster.
-      Palette refuses some at create, and lets others fail during the build.
+      Palette takes the major.minor of the `kubernetes-gke` pack and asks GKE for the newest valid
+      version with that prefix. It looks in the release channel of the cluster first, then in
+      `validMasterVersions`. When no version matches, the build fails with "no compatible GKE
+      version present". A version from the fallback is outside the channel, and GKE refuses it. A
+      pack version with a patch (three parts) goes to GKE as it is, and GKE must offer that exact
+      version. The channel is `regular`, or the one that `overrideClusterAPIConfig` names.
+    check:
+      kind: exec
+      needs: [gcloud]
+      argv:
+        - gcloud
+        - container
+        - get-server-config
+        - --location
+        - "{{ .entity.spec.cloudConfig.managedClusterConfig.location // .entity.spec.cloudConfig.region }}"
+        - --project
+        - "{{ .entity.spec.cloudConfig.project }}"
+        - --format
+        - json
+      expr: |
+        def k8s: [ (.profiles // [])[] | .packs[] | select(.layer == "k8s") | .version ] | .[0];
+        def channel: (.entity.spec.cloudConfig.overrideClusterAPIConfig // "")
+          | if test("releaseChannel:\\s*rapid"; "i") then "RAPID"
+            elif test("releaseChannel:\\s*stable"; "i") then "STABLE"
+            elif test("releaseChannel:\\s*extended"; "i") then "EXTENDED"
+            else "REGULAR" end;
+        def offers($want; $exact): [ .[] | select(if $exact then (. == $want or startswith($want + "-")) else startswith($want + ".") end) ];
+        def minors: [ .[] | split(".") | .[:2] | join(".") ] | unique;
+        if .exec.exit != 0 then ["gcloud container get-server-config failed: \(.exec.stderr | .[:200])"]
+        else
+          k8s as $v
+          | if $v == null then [] else
+            ($v | split(".")) as $parts
+            | (($parts | length) >= 3) as $exact
+            | (if $exact then $v else ($parts[:2] | join(".")) end) as $want
+            | channel as $ch
+            | ([ (.exec.stdout.channels // [])[] | select(.channel == $ch) | (.validVersions // [])[] ]) as $in_channel
+            | (.exec.stdout.validMasterVersions // []) as $master
+            | (.entity.spec.cloudConfig.managedClusterConfig.location // .entity.spec.cloudConfig.region) as $loc
+            | if (($in_channel | offers($want; $exact)) | length) > 0 then []
+              elif (($master | offers($want; $exact)) | length) > 0
+              then ["channel \($ch) in \($loc) offers no Kubernetes \($want); Palette falls back to validMasterVersions, and GKE refuses a version outside the channel; channel \($ch) offers \($in_channel | minors | join(", "))"]
+              else ["GKE in \($loc) offers no Kubernetes \($want) in channel \($ch) and none in validMasterVersions: the build fails with 'no compatible GKE version present'; channel \($ch) offers \($in_channel | minors | join(", "))"]
+              end
+            end
+        end
+    reproduce:
+      - "gcloud container get-server-config --location {{ .entity.spec.cloudConfig.managedClusterConfig.location // .entity.spec.cloudConfig.region }} --project {{ .entity.spec.cloudConfig.project }} --format json | jq '.channels[] | {channel, validVersions}'"
+    fix:
+      owner: palette
+      text: Call getServerConfig in the GKE validate route, and refuse a version the channel does not offer.
+    evidence:
+      - kind: source
+        ref: palette pkg/provider/gcp/gcp_managed.go getLatestGKEVersion, latestVersionInChannel, effectiveGKEReleaseChannel
+        note: a prefix match on major.minor in the channel, then in validMasterVersions; ErrNoCompatibleGKEVersion when none
+    tests:
+      - fault: fixtures/gke/version-not-offered.json
+        clean: fixtures/gke/gke-version-not-offered-clean.json
+
+  - id: eks-version-not-offered
+    title: EKS offers the Kubernetes version of the pack in the region
+    engines: [eks]
+    tier: cloud
+    severity: fail
+    status: source
+    when: ([ (.profiles // [])[] | .packs[] | select(.layer == "k8s") ] | length) > 0
+    what: |
+      The `kubernetes-eks` pack names a major.minor, and EKS must offer it in the region. A
+      version that EKS does not offer fails the create with `unsupported Kubernetes version`, after
+      Palette has made the VPC and the roles. Palette does not ask EKS before the create.
+      `aws eks describe-cluster-versions` lists what the region offers, with the support status of
+      each version; the command needs AWS CLI 2.22 or later.
+    check:
+      kind: exec
+      needs: [aws]
+      argv:
+        - aws
+        - eks
+        - describe-cluster-versions
+        - --region
+        - "{{ .entity.spec.cloudConfig.region }}"
+        - --output
+        - json
+      expr: |
+        def k8s: [ (.profiles // [])[] | .packs[] | select(.layer == "k8s") | .version ] | .[0];
+        if .exec.exit != 0 then ["aws eks describe-cluster-versions failed (the command needs AWS CLI 2.22 or later): \(.exec.stderr | .[:200])"]
+        else
+          k8s as $v
+          | if $v == null then [] else
+            ($v | split(".") | .[:2] | join(".")) as $want
+            | ([ (.exec.stdout.clusterVersions // [])[] | .clusterVersion ]) as $offered
+            | .entity.spec.cloudConfig.region as $r
+            | if ($offered | index($want)) != null then []
+              else ["EKS in \($r) offers no Kubernetes \($want): the create fails with 'unsupported Kubernetes version'; it offers \($offered | join(", "))"] end
+            end
+        end
+    reproduce:
+      - "aws eks describe-cluster-versions --region {{ .entity.spec.cloudConfig.region }} --query 'clusterVersions[].[clusterVersion,status]' --output table"
+    fix:
+      owner: palette
+      text: Check the version against eks:DescribeClusterVersions in the EKS validate route.
+    evidence:
+      - kind: doc
+        ref: https://docs.aws.amazon.com/eks/latest/APIReference/API_DescribeClusterVersions.html
+      - kind: source
+        ref: palette pkg/provider/aws/aws_managed.go getDesiredManagedControlPlane
+        note: the version of the pack goes to the AWSManagedControlPlane as it is
+    tests:
+      - fault: fixtures/eks/version-not-offered.json
+        clean: fixtures/eks/eks-version-not-offered-clean.json
+
+  - id: eks-addon-version
+    title: EKS has a default version of each addon for the Kubernetes version
+    engines: [eks]
+    tier: cloud
+    severity: fail
+    status: source
+    when: |
+      (((.account.spec.credentialType // "") == "pod-identity") or (((.entity.spec.cloudConfig.addons // []) | length) > 0))
+      and (([ (.profiles // [])[] | .packs[] | select(.layer == "k8s") ] | length) > 0)
+    what: |
+      With a Pod Identity cloud account, Palette asks EKS for the default version of the
+      `eks-pod-identity-agent` addon for the Kubernetes version, and fails the build with "no
+      default version found for addon" when EKS lists none. An addon in `cloudConfig.addons` names
+      its own version, and EKS must offer that version for the Kubernetes version. This check runs
+      one command: for the pod identity agent when the account is Pod Identity, else for the first
+      addon of the entity. Run the reproduce line for each other addon.
+    check:
+      kind: exec
+      needs: [aws]
+      argv:
+        - aws
+        - eks
+        - describe-addon-versions
+        - --kubernetes-version
+        - "{{ [ (.profiles // [])[] | .packs[] | select(.layer == \"k8s\") | .version ] | .[0] | split(\".\") | .[:2] | join(\".\") }}"
+        - --addon-name
+        - "{{ if (.account.spec.credentialType // \"\") == \"pod-identity\" then \"eks-pod-identity-agent\" else (.entity.spec.cloudConfig.addons[0].name // \"?\") end }}"
+        - --region
+        - "{{ .entity.spec.cloudConfig.region }}"
+        - --output
+        - json
+      expr: |
+        def pod_identity: (.account.spec.credentialType // "") == "pod-identity";
+        def addon: if pod_identity then "eks-pod-identity-agent" else (.entity.spec.cloudConfig.addons[0].name // "?") end;
+        def k8s: [ (.profiles // [])[] | .packs[] | select(.layer == "k8s") | .version ] | .[0] | split(".") | .[:2] | join(".");
+        if .exec.exit != 0 then ["aws eks describe-addon-versions failed: \(.exec.stderr | .[:200])"]
+        else
+          addon as $a | k8s as $k | .entity.spec.cloudConfig.region as $r
+          | ([ (.exec.stdout.addons // [])[] | select(.addonName == $a) | (.addonVersions // [])[] ]) as $versions
+          | (if pod_identity then "" else (.entity.spec.cloudConfig.addons[0].version // "") end) as $want
+          | if ($versions | length) == 0 then ["EKS in \($r) offers no version of addon \($a) for Kubernetes \($k)"]
+            elif pod_identity and ([ $versions[] | (.compatibilities // [])[] | select(.defaultVersion == true) ] | length) == 0
+            then ["addon \($a) has no default version for Kubernetes \($k) in \($r): Palette fails the Pod Identity build with 'no default version found for addon'; offered: \([ $versions[] | .addonVersion ] | join(", "))"]
+            elif $want != "" and ([ $versions[] | select(.addonVersion == $want) ] | length) == 0
+            then ["addon \($a) version \($want) is not offered for Kubernetes \($k) in \($r); offered: \([ $versions[] | .addonVersion ] | join(", "))"]
+            else [] end
+        end
+    reproduce:
+      - "aws eks describe-addon-versions --kubernetes-version {{ [ (.profiles // [])[] | .packs[] | select(.layer == \"k8s\") | .version ] | .[0] | split(\".\") | .[:2] | join(\".\") }} --addon-name <addon> --region {{ .entity.spec.cloudConfig.region }} --query 'addons[].addonVersions[].[addonVersion,compatibilities[0].defaultVersion]' --output table"
+    fix:
+      owner: palette
+      text: Ask eks:DescribeAddonVersions in the EKS validate route, for each addon and for the pod identity agent.
+    evidence:
+      - kind: source
+        ref: palette pkg/provider/aws/aws_managed.go getDefaultEKSAddonVersion
+        note: called for eks-pod-identity-agent when the account is Pod Identity; picks the version whose compatibility says defaultVersion
+    tests:
+      - fault: fixtures/eks/addon-no-default.json
+        clean: fixtures/eks/eks-addon-version-clean.json
+
+  - id: ccm-version
+    title: The Kubernetes version is at or above the floor of the external cloud controller
+    engines: [aws, gcp]
+    tier: static
+    severity: warn
+    status: inferred
+    when: ([ (.profiles // [])[] | .packs[] | select(.layer == "k8s") ] | length) > 0
+    what: |
+      Palette runs the external cloud controller manager from Kubernetes 1.27 on AWS and from 1.29
+      on GCP. Under the floor, the provider keeps the in-tree cloud provider and installs no
+      controller. A pack under the floor whose values set `cloud-provider: external` leaves each
+      node with the taint `node.cloudprovider.kubernetes.io/uninitialized`, and no pod schedules.
+      The floors are in the source; the taint is a reading, not a run.
     check:
       kind: static
       expr: |
         .cloud as $c
-        | [ .profiles[]
-            | select((.source.cloudType // "all") as $t | $t != "all" and $t != $c and ($t | ascii_downcase) != $c)
-            | "profile \(.source.name)@\(.source.version) is of cloud type \(.source.cloudType), and the cluster is \($c)" ]
+        | (if $c == "aws" then "1.27" elif $c == "gcp" then "1.29" else null end) as $fs
+        | if $fs == null then [] else
+          ($fs | split(".") | map(tonumber)) as $floor
+          | [ (.profiles // [])[] | .packs[] | select(.layer == "k8s")
+              | .version as $v
+              | ($v | split(".") | .[:2] | map(try tonumber catch 0)) as $p
+              | select(($p | length) == 2)
+              | select(($p[0] < $floor[0]) or ($p[0] == $floor[0] and $p[1] < $floor[1]))
+              | "pack \(.name)@\($v) on \($c) is under Kubernetes \($fs), the floor of the external cloud controller: Palette installs none, and a values `cloud-provider: external` leaves the nodes uninitialized" ]
+          end
     fix:
       owner: palette
-      text: Refuse a profile of another cloud type at create.
+      text: Refuse a cloud-provider setting that does not match the version in the validate route.
+    evidence:
+      - kind: source
+        ref: palette pkg/provider/aws/consts.go MinK8sVersionForCCMAWS, pkg/provider/gcp/consts.go MinK8sVersionForCCMGCP
+        note: v1.27.0 and v1.29.0; aws_kubeadm.go sets cloud-provider external at or above the floor, aws_pivot.go installs the CCM
     tests:
-      - fault: fixtures/eks/profile-of-gke.json
-        clean: fixtures/eks/clean.json
+      - fault: fixtures/aws/k8s-1-26.json
+        clean: fixtures/aws/clean.json
 
   - id: pack-cloud-support
     title: Each pack version supports the cloud type
@@ -93,3 +286,173 @@ rules:
     tests:
       - fault: fixtures/gcp/pack-no-gcp.json
         clean: fixtures/gcp/clean.json
+
+  - id: profile-cloud-mismatch
+    title: Each profile is of the cloud type of the cluster, or of all
+    engines: [all]
+    tier: static
+    severity: fail
+    status: proposed
+    when: (.profiles | length) > 0
+    what: |
+      A profile of another cloud type carries packs that Palette cannot install on this cluster.
+      Palette refuses some at create, and lets others fail during the build.
+    check:
+      kind: static
+      expr: |
+        .cloud as $c
+        | [ .profiles[]
+            | select((.source.cloudType // "all") as $t | $t != "all" and $t != $c and ($t | ascii_downcase) != $c)
+            | "profile \(.source.name)@\(.source.version) is of cloud type \(.source.cloudType), and the cluster is \($c)" ]
+    fix:
+      owner: palette
+      text: Refuse a profile of another cloud type at create.
+    tests:
+      - fault: fixtures/eks/profile-of-gke.json
+        clean: fixtures/eks/clean.json
+
+  - id: engine-repave-rules
+    title: The repave answer of Palette is the truth on edge, EKS, and GKE
+    engines: [edge, eks, gke]
+    tier: palette
+    severity: note
+    status: seen
+    when: .clusterUid != null and .before != null
+    what: |
+      The impact table of strata is of the kubeadm engine. Edge repaves on the OS `uri` alone; a
+      managed engine (EKS, GKE) rolls the node groups as the cloud decides. On these engines, ask
+      Palette: `POST /v1/spectroclusters/{uid}/validate/repave` with the profiles of the change
+      answers `isRepaveRequired` and the reasons (`PackUpgraded`, `PackValuesUpdated`,
+      `PackAdded`, `PackRemoved`). This rule reports that answer; the table does not apply.
+    check:
+      kind: palette
+      method: POST
+      path: /v1/spectroclusters/{{ .clusterUid }}/validate/repave
+      body: "{profiles: .entity.spec.profiles}"
+      expr: |
+        def reasons: [ (.response.body.reasons // [])[] | "\(.code // "?"): \(.message // "") [\(.pack.target.name // .pack.current.name // "?")]" ] | join("; ");
+        .cloud as $c
+        | if (.response.ok | not) then ["Palette refused validate/repave: \(.response.body.code // .response.status): \(.response.body.message // "")"]
+          elif (.response.body.isRepaveRequired // false)
+          then ["Palette repaves the \($c) cluster for this change, and its answer is the truth on \($c), not the impact table of strata: \(reasons)"]
+          else [] end
+    reproduce:
+      - "curl -s -X POST -H \"ApiKey: $PALETTE_API_KEY\" -H 'Content-Type: application/json' \"$PALETTE_HOST/v1/spectroclusters/{{ .clusterUid }}/validate/repave\" -d @<(jq '{profiles: .spec.profiles}' entity.json) | jq '{isRepaveRequired, reasons: [.reasons[] | {code, message}]}'"
+    fix:
+      owner: strata
+      text: Scope the impact table to the kubeadm engine, and print the answer of Palette on the others.
+    evidence:
+      - kind: run
+        ref: "#73"
+      - kind: source
+        ref: hubble domain/spectroclusterrepave.go ClusterRepaveReasonCode
+        note: PackValuesUpdated, PackRemoved, PackAdded, PackUpgraded
+    tests:
+      - fault: fixtures/eks/repave-k8s-bump.json
+        clean: fixtures/eks/repave-none.json
+
+  - id: eks-repave-answers
+    title: The change of the EKS cluster repaves no node group
+    engines: [eks]
+    tier: palette
+    severity: warn
+    status: seen
+    when: .clusterUid != null and .before != null
+    what: |
+      On EKS, a bump of the `kubernetes-eks` tag repaves: EKS rolls each node group. A change of
+      the `kubernetes-eks` values or of the CSI values does not. `validate/repave` gives the answer
+      before the change is applied. This rule warns when Palette says the change repaves, and when
+      the Kubernetes tag changes and Palette says it does not, which contradicts run #89.
+    check:
+      kind: palette
+      method: POST
+      path: /v1/spectroclusters/{{ .clusterUid }}/validate/repave
+      body: "{profiles: .entity.spec.profiles}"
+      expr: |
+        def k8s_tag(e): [ e | (.spec.profiles // [])[] | (.packValues // [])[] | select((.name // "") | test("^kubernetes")) | .tag ] | .[0];
+        def reasons: [ (.response.body.reasons // [])[] | "\(.code // "?"): \(.message // "") [\(.pack.target.name // .pack.current.name // "?")]" ] | join("; ");
+        if (.response.ok | not) then ["Palette refused validate/repave: \(.response.body.code // .response.status): \(.response.body.message // "")"]
+        else
+          (.response.body.isRepaveRequired // false) as $r
+          | k8s_tag(.before) as $b | k8s_tag(.entity) as $a
+          | [ if $r then "Palette repaves the EKS cluster for this change; EKS rolls each node group: \(reasons)" else empty end ]
+            + [ if ($b != null and $a != null and $b != $a and ($r | not))
+                then "the kubernetes-eks tag changes \($b) to \($a), and Palette says no repave; run #89 saw a repave for a Kubernetes bump"
+                else empty end ]
+        end
+    reproduce:
+      - "curl -s -X POST -H \"ApiKey: $PALETTE_API_KEY\" -H 'Content-Type: application/json' \"$PALETTE_HOST/v1/spectroclusters/{{ .clusterUid }}/validate/repave\" -d @<(jq '{profiles: .spec.profiles}' entity.json) | jq '{isRepaveRequired, reasons: [.reasons[] | {code, message}]}'"
+    evidence:
+      - kind: run
+        ref: "#89"
+        note: a Kubernetes bump repaved; a change of the kubernetes-eks values and of the CSI values did not
+    tests:
+      - fault: fixtures/eks/repave-k8s-bump.json
+        clean: fixtures/eks/repave-none.json
+
+  - id: gke-repave-answers
+    title: The change of the GKE cluster repaves no node pool
+    engines: [gke]
+    tier: palette
+    severity: warn
+    status: seen
+    when: .clusterUid != null and .before != null
+    what: |
+      On GKE, a bump of the `kubernetes-gke` tag repaves. The four GKE packs (`cos-gke`,
+      `kubernetes-gke`, `cni-vpc-native-gke`, `gke-csi-gcp-driver`) have values of comments alone,
+      so an edit of their values changes no root of strata and repaves nothing. `validate/repave`
+      gives the answer before the change is applied. This rule warns when Palette says the change
+      repaves, and when the Kubernetes tag changes and Palette says it does not, which contradicts
+      run #90.
+    check:
+      kind: palette
+      method: POST
+      path: /v1/spectroclusters/{{ .clusterUid }}/validate/repave
+      body: "{profiles: .entity.spec.profiles}"
+      expr: |
+        def k8s_tag(e): [ e | (.spec.profiles // [])[] | (.packValues // [])[] | select((.name // "") | test("^kubernetes")) | .tag ] | .[0];
+        def reasons: [ (.response.body.reasons // [])[] | "\(.code // "?"): \(.message // "") [\(.pack.target.name // .pack.current.name // "?")]" ] | join("; ");
+        if (.response.ok | not) then ["Palette refused validate/repave: \(.response.body.code // .response.status): \(.response.body.message // "")"]
+        else
+          (.response.body.isRepaveRequired // false) as $r
+          | k8s_tag(.before) as $b | k8s_tag(.entity) as $a
+          | [ if $r then "Palette repaves the GKE cluster for this change; GKE rolls each node pool: \(reasons)" else empty end ]
+            + [ if ($b != null and $a != null and $b != $a and ($r | not))
+                then "the kubernetes-gke tag changes \($b) to \($a), and Palette says no repave; run #90 saw a repave for a Kubernetes bump"
+                else empty end ]
+        end
+    reproduce:
+      - "curl -s -X POST -H \"ApiKey: $PALETTE_API_KEY\" -H 'Content-Type: application/json' \"$PALETTE_HOST/v1/spectroclusters/{{ .clusterUid }}/validate/repave\" -d @<(jq '{profiles: .spec.profiles}' entity.json) | jq '{isRepaveRequired, reasons: [.reasons[] | {code, message}]}'"
+    evidence:
+      - kind: run
+        ref: "#90"
+        note: a Kubernetes bump repaved; the values of the four GKE packs are comments alone
+    tests:
+      - fault: fixtures/gke/repave-k8s-bump.json
+        clean: fixtures/gke/repave-none.json
+
+  - id: skip-k8s-upgrade
+    title: No pool skips the Kubernetes upgrade
+    engines: [all]
+    tier: static
+    severity: note
+    status: source
+    what: |
+      A pool with `skipK8sUpgrade: enabled` keeps its Kubernetes version when the cluster
+      upgrades. The `repave` level of strata says the whole cluster rolls; for that pool it does
+      not. The scope is each machine pool of the entity, on every engine.
+    check:
+      kind: static
+      expr: |
+        [ .entity.spec.machinepoolconfig[]
+          | select((.poolConfig.skipK8sUpgrade // "") as $s | $s == "enabled" or $s == true)
+          | "pool \(.poolConfig.name) sets skipK8sUpgrade \(.poolConfig.skipK8sUpgrade): a Kubernetes bump does not roll this pool, so the repave level of strata does not hold for it" ]
+    evidence:
+      - kind: run
+        ref: "#73"
+      - kind: source
+        ref: hapi models/v1_machine_pool_config_entity.go SkipK8sUpgrade
+        note: an enum of enabled and disabled on each pool config
+    tests:
+      - fault: fixtures/eks/skip-upgrade.json
+        clean: fixtures/eks/clean.json

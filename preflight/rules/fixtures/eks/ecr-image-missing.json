@@ -1,0 +1,18 @@
+{
+  "_base": "oci-pack.json",
+  "_note": "the validate route refuses the entity: the image of the OCI pack is not in the ECR registry",
+  "_patch": {
+    "_responses": {
+      "POST /v1/spectroclusters/eks/validate": {
+        "ok": false,
+        "status": 400,
+        "body": {
+          "code": "AwsEcrValidate",
+          "message": "image 'strata-live/hello:1.1.0' not found in ECR registry 'strata-live-ecr' in region 'us-east-2'",
+          "details": {},
+          "ref": "strata-live-pack"
+        }
+      }
+    }
+  }
+}

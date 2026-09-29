@@ -1,0 +1,13 @@
+{
+  "_base": "identity-clean.json",
+  "_note": "the credentials cannot describe the stack",
+  "_patch": {
+    "_exec": {
+      "aws cloudformation describe-stacks --stack-name cluster-api-provider-aws-sigs-k8s-io --region us-east-2 --output json": {
+        "exit": 254,
+        "stdout": "",
+        "stderr": "An error occurred (AccessDenied) when calling the DescribeStacks operation: User: arn:aws:iam::123456789012:user/ops is not authorized to perform: cloudformation:DescribeStacks on resource: arn:aws:cloudformation:us-east-2:123456789012:stack/cluster-api-provider-aws-sigs-k8s-io/*"
+      }
+    }
+  }
+}

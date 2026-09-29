@@ -1,0 +1,27 @@
+{
+  "_base": "full-records.json",
+  "_note": "a cluster runs the profile version",
+  "_patch": {
+    "_responses": {
+      "GET /v1/clusterprofiles/prof-eks-1": {
+        "ok": true,
+        "status": 200,
+        "body": {
+          "status": {
+            "inUseClusters": [
+              {
+                "kind": "spectrocluster",
+                "name": "payments",
+                "uid": "6aba747adb74c300c31dd404",
+                "projectUid": "proj-1"
+              }
+            ],
+            "inUseClusterUids": [
+              "6aba747adb74c300c31dd404"
+            ]
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "_base": "regions-clean.json",
+  "_note": "the entity is in af-south-1, an opt-in region the account has not enabled",
+  "_patch": {
+    "entity": {
+      "spec": {
+        "cloudConfig": { "region": "af-south-1" },
+        "machinepoolconfig": [
+          { "poolConfig": { "name": "worker-pool" }, "cloudConfig": { "azs": ["af-south-1a", "af-south-1b"] } }
+        ]
+      }
+    }
+  }
+}

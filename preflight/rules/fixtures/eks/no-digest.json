@@ -1,0 +1,47 @@
+{
+  "_base": "addon-profile.json",
+  "_note": "the add-on profile pins a Zarf package of an OCI registry: Palette gives it no digest",
+  "_patch": {
+    "profiles": [
+      {
+        "source": {
+          "uid": "prof-eks-2"
+        },
+        "packs": [
+          {
+            "key": "addon/strata-live-zarf",
+            "layer": "addon",
+            "name": "strata-live-zarf",
+            "type": "oci",
+            "tag": "1.0.0",
+            "version": "1.0.0",
+            "packUid": "pk-zarf-1",
+            "registryUid": "68d5a1b2c3d4e5f60718293b",
+            "refDigest": "",
+            "registryDigest": "",
+            "registryProviderType": "zarf",
+            "params": {},
+            "values": "zarf:\n  deploy:\n    package: oci://oci.example.test/strata-live-zarf:1.0.0\n",
+            "valuesCanon": {
+              "zarf": {
+                "deploy": {
+                  "package": "oci://oci.example.test/strata-live-zarf:1.0.0"
+                }
+              }
+            },
+            "valuesHash": "9999999999999999999999999999999999999999999999999999999999999999",
+            "manifests": [],
+            "hash": {
+              "identity": "1111111111111111111111111111111111111111111111111111111111111141",
+              "upstream": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "upstreamRaw": "",
+              "upstreamSource": "none",
+              "authored": "3333333333333333333333333333333333333333333333333333333333333361",
+              "node": "4444444444444444444444444444444444444444444444444444444444444471"
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

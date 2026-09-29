@@ -79,10 +79,16 @@ impl<A: PaletteApi> Backend for LiveBackend<'_, A> {
             }),
             // a 4xx is what a validate route answers when the entity is wrong: it is the result
             Err(strata::Error::Api { status, body, .. }) if (400..500).contains(&status) => {
+                // a body that is not JSON, such as a plain-text 404 of the gateway, is an object
+                // with the text as its message, so a program reads `.body.message` either way
+                let body = serde_json::from_str(&body)
+                    .ok()
+                    .filter(Value::is_object)
+                    .unwrap_or_else(|| serde_json::json!({ "message": body }));
                 Ok(Response {
                     ok: false,
                     status,
-                    body: serde_json::from_str(&body).unwrap_or(Value::String(body)),
+                    body,
                 })
             }
             Err(e) => Err(e.into()),

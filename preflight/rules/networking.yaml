@@ -37,27 +37,565 @@ rules:
       - fault: fixtures/eks/one-zone.json
         clean: fixtures/eks/clean.json
 
-  - id: gcp-name-length
-    title: The names GCP derives from the cluster name fit
-    engines: [gcp, gke]
-    tier: static
+  - id: eks-unsupported-zone
+    title: Each zone of the pools takes an EKS cluster
+    engines: [eks]
+    tier: cloud
     severity: fail
     status: inferred
     what: |
-      GCP takes at most 63 characters for a network or a subnet name, which Palette derives from
-      the cluster name, and at most 40 for a GKE cluster name.
+      EKS takes no cluster subnet in the zones use1-az3 (us-east-1), usw1-az2 (us-west-1), and
+      cac1-az3 (ca-central-1), and none in a Local Zone or a Wavelength Zone. The build fails with
+      `UnsupportedAvailabilityZoneException`. The zone id behind a name such as us-east-1e differs
+      for each account, so the check asks EC2 for the ids of the zones the pools name. Palette does
+      not check the zone.
+    when: ([ .entity.spec.machinepoolconfig[]? | (.cloudConfig.azs // [])[], ((.cloudConfig.subnets // [])[] | .az // empty) ] | map(select(. != null and . != "")) | unique | length) > 0
+    check:
+      kind: exec
+      needs: [aws]
+      argv:
+        - aws
+        - ec2
+        - describe-availability-zones
+        - --region
+        - '{{ .entity.spec.cloudConfig.region }}'
+        - --filters
+        - 'Name=zone-name,Values={{ [ .entity.spec.machinepoolconfig[]? | (.cloudConfig.azs // [])[], ((.cloudConfig.subnets // [])[] | .az // empty) ] | map(select(. != null and . != "")) | unique | join(",") }}'
+        - --output
+        - json
+      expr: |
+        def zones: [ .entity.spec.machinepoolconfig[]? | (.cloudConfig.azs // [])[], ((.cloudConfig.subnets // [])[] | .az // empty) ] | map(select(. != null and . != "")) | unique;
+        .entity.spec.cloudConfig.region as $region | zones as $want
+        | if .exec.exit != 0 then ["aws ec2 describe-availability-zones failed: \(.exec.stderr | .[:200])"]
+          else (.exec.stdout.AvailabilityZones // []) as $z
+            | ["use1-az3", "usw1-az2", "cac1-az3"] as $refused
+            | [ ($want[] | select(. as $n | ($z | map(.ZoneName) | index($n)) == null) | "zone \(.) is not in region \($region) for this account"),
+                ($z[] | . as $zone | select(($refused | index($zone.ZoneId)) != null) | "zone \(.ZoneName) is \(.ZoneId): EKS takes no cluster subnet in it"),
+                ($z[] | select((.ZoneType // "availability-zone") != "availability-zone") | "zone \(.ZoneName) is a \(.ZoneType): EKS takes no cluster subnet in a Local Zone or a Wavelength Zone"),
+                ($z[] | select((.State // "available") != "available") | "zone \(.ZoneName) is \(.State), not available") ]
+          end
+    reproduce:
+      - "aws ec2 describe-availability-zones --region {{ .entity.spec.cloudConfig.region }} --query 'AvailabilityZones[].[ZoneName,ZoneId,ZoneType,State]' --output table"
+    fix:
+      owner: palette
+      text: Check the zone ids of the pools against the list of EKS in the validate route.
+    evidence:
+      - kind: doc
+        ref: https://docs.aws.amazon.com/eks/latest/userguide/network-reqs.html
+        note: the table of disallowed zone ids, and no Outposts or Wavelength subnet for the cluster
+    tests:
+      - fault: fixtures/eks/zone-use1-az3.json
+        clean: fixtures/eks/static-vpc-clean.json
+
+  - id: aws-dynamic-cidr-overlap
+    title: The pod and service CIDRs stay outside the VPC of dynamic placement
+    engines: [aws]
+    tier: static
+    severity: fail
+    status: source
+    what: |
+      For dynamic placement (no vpcId) Palette makes the VPC with 10.0.0.0/16. A pod CIDR or a
+      service CIDR of the Kubernetes pack inside it breaks the routes of the nodes. Palette checks
+      the CIDRs against the VPC for static placement alone: `validatePackValues` returns at once
+      when vpcId is empty. The check reads `pack.podCIDR` and `pack.serviceClusterIpRange`, or the
+      kubeadm `networking.podSubnet` and `serviceSubnet`, of the Kubernetes pack.
+    when: (.profiles | length) > 0
     check:
       kind: static
       expr: |
-        (.entity.metadata.name // "") as $n
-        | [ (if .cloud == "gke" and ($n | length) > 40 then "cluster name \($n) has \($n | length) characters; GKE takes at most 40" else empty end),
-            (if ($n | length) > 52 then "cluster name \($n) has \($n | length) characters; the network and subnet names GCP derives from it can pass 63" else empty end) ]
+        def is_cidr: type == "string" and test("^([0-9]{1,3}\\.){3}[0-9]{1,3}/[0-9]{1,2}$");
+        def ip($s): $s | split(".") | map(tonumber) | reduce .[] as $o (0; . * 256 + $o);
+        def net($cidr; $p): ip($cidr | split("/")[0]) as $n | reduce range(0; 32 - $p) as $i ($n; (. / 2) | floor);
+        def overlaps($a; $b): ([($a | split("/")[1] | tonumber), ($b | split("/")[1] | tonumber)] | min) as $p | net($a; $p) == net($b; $p);
+        def k8s_cidrs: [ .profiles[]? | .packs[]? | select(.layer == "k8s") | .name as $n | .valuesCanon as $v
+          | {name: $n, field: "pack.podCIDR", cidr: ($v.pack.podCIDR // $v.kubeadmconfig.clusterConfiguration.networking.podSubnet)},
+            {name: $n, field: "pack.serviceClusterIpRange", cidr: ($v.pack.serviceClusterIpRange // $v.kubeadmconfig.clusterConfiguration.networking.serviceSubnet)}
+          | select(.cidr | is_cidr) ];
+        if (.entity.spec.cloudConfig.vpcId // "") != "" then []
+        else [ k8s_cidrs[] | select(overlaps(.cidr; "10.0.0.0/16"))
+               | "pack \(.name) sets \(.field) \(.cidr), which overlaps the VPC CIDR 10.0.0.0/16 of dynamic placement; Palette skips this check when vpcId is empty" ] end
     fix:
       owner: palette
-      text: Check the derived name lengths in the name route.
+      text: Run the CIDR check against 10.0.0.0/16 for dynamic placement too.
+    evidence:
+      - kind: source
+        ref: hubble services/service/spectrocluster/internal/service/spectrocluster/internal/aws/spectrocluster_aws_validate.go validatePackValues
+        note: '"no validation for dynamic placement" when vpcId is empty; validateK8SCidr tests the VPC CIDR against pack.podCIDR and pack.serviceClusterIpRange'
+      - kind: source
+        ref: palette pkg/provider/aws/consts.go DefaultAwsVpcCidr
+        note: 10.0.0.0/16, used by aws_cluster.go for the VPC of dynamic placement
     tests:
-      - fault: fixtures/gke/long-name.json
-        clean: fixtures/gke/clean.json
+      - fault: fixtures/aws/pod-cidr-in-vpc.json
+        clean: fixtures/aws/clean.json
+
+  - id: aws-local-zone-letter
+    title: Each zone of dynamic placement ends in its own letter
+    engines: [aws]
+    tier: static
+    severity: fail
+    status: source
+    what: |
+      For dynamic placement Palette derives the two subnet CIDRs of each zone from the last letter
+      of the zone name (`getAwsAZSubnetCidr`): a gives 10.0.0.0/24 and 10.0.1.0/24, b gives
+      10.0.2.0/24 and 10.0.3.0/24. A Local Zone or a Wavelength Zone such as us-east-1-bos-1a ends
+      in the letter of a parent zone, so two zones get one CIDR pair, and the VPC create fails.
+    check:
+      kind: static
+      expr: |
+        if (.entity.spec.cloudConfig.vpcId // "") != "" then []
+        else ([ .entity.spec.machinepoolconfig[]? | (.cloudConfig.azs // [])[] ] | map(select(. != null and . != "")) | unique) as $zones
+          | [ $zones | group_by(.[-1:]) | .[] | select(length > 1)
+              | (.[0] | .[-1:] | explode[0] - 97) as $i
+              | "zones \(join(", ")) end in the letter \(.[0] | .[-1:]): Palette derives the subnet CIDRs 10.0.\($i * 2).0/24 and 10.0.\($i * 2 + 1).0/24 from that letter for each of them, and the second pair collides" ] end
+    fix:
+      owner: palette
+      text: Refuse two zones with one last letter, or derive the CIDR from the zone id.
+    evidence:
+      - kind: source
+        ref: palette pkg/provider/aws/aws_cluster.go getAwsAZSubnetCidr
+        note: the CIDR comes from the last character of the zone name alone
+    tests:
+      - fault: fixtures/aws/local-zone-letter.json
+        clean: fixtures/aws/clean.json
+
+  - id: eks-cidr-overlap
+    title: The EKS service CIDR stays outside the VPC
+    engines: [eks]
+    tier: static
+    severity: fail
+    status: source
+    what: |
+      EKS takes its service CIDR from the Kubernetes pack: Palette reads `pack.serviceClusterIpRange`
+      into the CAPI cluster network (`GetClusterNetwork`), and CAPA passes it to EKS. Palette has no
+      CIDR check for EKS. For dynamic placement the VPC is 10.0.0.0/16, and a service CIDR inside it
+      breaks the routes. For static placement the VPC CIDR needs `describe-vpcs`: see reproduce.
+      The catalog row names the key `serviceIpv4Cidr`; that is the field of EKS, not of the pack.
+    when: (.profiles | length) > 0
+    check:
+      kind: static
+      expr: |
+        def is_cidr: type == "string" and test("^([0-9]{1,3}\\.){3}[0-9]{1,3}/[0-9]{1,2}$");
+        def ip($s): $s | split(".") | map(tonumber) | reduce .[] as $o (0; . * 256 + $o);
+        def net($cidr; $p): ip($cidr | split("/")[0]) as $n | reduce range(0; 32 - $p) as $i ($n; (. / 2) | floor);
+        def overlaps($a; $b): ([($a | split("/")[1] | tonumber), ($b | split("/")[1] | tonumber)] | min) as $p | net($a; $p) == net($b; $p);
+        def k8s_cidrs: [ .profiles[]? | .packs[]? | select(.layer == "k8s") | .name as $n | .valuesCanon as $v
+          | {name: $n, field: "pack.podCIDR", cidr: ($v.pack.podCIDR // $v.kubeadmconfig.clusterConfiguration.networking.podSubnet)},
+            {name: $n, field: "pack.serviceClusterIpRange", cidr: ($v.pack.serviceClusterIpRange // $v.kubeadmconfig.clusterConfiguration.networking.serviceSubnet)}
+          | select(.cidr | is_cidr) ];
+        if (.entity.spec.cloudConfig.vpcId // "") != "" then []
+        else [ k8s_cidrs[] | select(overlaps(.cidr; "10.0.0.0/16"))
+               | "pack \(.name) sets \(.field) \(.cidr), which overlaps the VPC CIDR 10.0.0.0/16 of dynamic placement; Palette has no CIDR check for EKS" ] end
+    reproduce:
+      - "aws ec2 describe-vpcs --vpc-ids {{ .entity.spec.cloudConfig.vpcId }} --region {{ .entity.spec.cloudConfig.region }} --query 'Vpcs[].CidrBlockAssociationSet[].CidrBlock' --output text"
+    fix:
+      owner: palette
+      text: Add the CIDR check of the AWS validate route to the EKS one, for both placements.
+    evidence:
+      - kind: source
+        ref: palette pkg/provider/common/provider.go GetClusterNetwork
+        note: pack.podCIDR and pack.serviceClusterIpRange of the Kubernetes pack become the CAPI cluster network
+      - kind: source
+        ref: hubble services/service/spectrocluster/internal/service/spectrocluster/internal/eks/spectrocluster_eks.go
+        note: no CIDR check; the AWS one is in spectrocluster_aws_validate.go alone
+    tests:
+      - fault: fixtures/eks/service-cidr-in-vpc.json
+        clean: fixtures/eks/service-cidr-clean.json
+
+  - id: gcp-dynamic-cidr-overlap
+    title: The pod and service CIDRs stay outside the subnet of a dynamic network
+    engines: [gcp, gke]
+    tier: static
+    severity: fail
+    status: source
+    what: |
+      With no network in the entity, Palette makes a network `<cluster>-network` and one subnet
+      with 10.0.0.0/16 in the region, for GCP and GKE alike (`convertCloudCluster`,
+      `convertManagedCloudCluster`). A pod CIDR or a service CIDR of the Kubernetes pack inside it
+      breaks the routes. GKE gives the pods their own secondary ranges; the pack CIDRs apply to a
+      GCP IaaS cluster, and the check reads them where they are.
+    when: (.profiles | length) > 0
+    check:
+      kind: static
+      expr: |
+        def is_cidr: type == "string" and test("^([0-9]{1,3}\\.){3}[0-9]{1,3}/[0-9]{1,2}$");
+        def ip($s): $s | split(".") | map(tonumber) | reduce .[] as $o (0; . * 256 + $o);
+        def net($cidr; $p): ip($cidr | split("/")[0]) as $n | reduce range(0; 32 - $p) as $i ($n; (. / 2) | floor);
+        def overlaps($a; $b): ([($a | split("/")[1] | tonumber), ($b | split("/")[1] | tonumber)] | min) as $p | net($a; $p) == net($b; $p);
+        def k8s_cidrs: [ .profiles[]? | .packs[]? | select(.layer == "k8s") | .name as $n | .valuesCanon as $v
+          | {name: $n, field: "pack.podCIDR", cidr: ($v.pack.podCIDR // $v.kubeadmconfig.clusterConfiguration.networking.podSubnet)},
+            {name: $n, field: "pack.serviceClusterIpRange", cidr: ($v.pack.serviceClusterIpRange // $v.kubeadmconfig.clusterConfiguration.networking.serviceSubnet)}
+          | select(.cidr | is_cidr) ];
+        if (.entity.spec.cloudConfig.network // "") != "" then []
+        else [ k8s_cidrs[] | select(overlaps(.cidr; "10.0.0.0/16"))
+               | "pack \(.name) sets \(.field) \(.cidr), which overlaps the subnet CIDR 10.0.0.0/16 that Palette makes for a dynamic network" ] end
+    fix:
+      owner: palette
+      text: Check the pack CIDRs against 10.0.0.0/16 in the GCP validate route when the network is empty.
+    evidence:
+      - kind: source
+        ref: palette pkg/provider/gcp/gcp_cluster.go convertManagedCloudCluster, convertCloudCluster
+        note: subnetCidrRange 10.0.0.0/16 for the one subnet of a dynamic network
+    tests:
+      - fault: fixtures/gcp/pod-cidr-in-network.json
+        clean: fixtures/gcp/k8s-cidrs-clean.json
+
+  - id: gke-secondary-ranges
+    title: The subnet of a static GKE network carries secondary ranges
+    engines: [gke]
+    tier: cloud
+    severity: warn
+    status: inferred
+    what: |
+      A VPC-native GKE cluster takes its pod and service addresses from two secondary ranges of the
+      subnet. Palette sets none, so GKE makes its own in the subnet: they can run out, and in a
+      shared VPC subnet of another project GKE cannot make them. The check lists the subnets of the
+      static network in the region and reports the pool subnets with no secondary range.
+    when: .cloud == "gke" and (.entity.spec.cloudConfig.network // "") != ""
+    check:
+      kind: exec
+      needs: [gcloud]
+      argv:
+        - gcloud
+        - compute
+        - networks
+        - subnets
+        - list
+        - --network
+        - '{{ .entity.spec.cloudConfig.network }}'
+        - --regions
+        - '{{ .entity.spec.cloudConfig.region }}'
+        - --project
+        - '{{ .entity.spec.cloudConfig.project }}'
+        - --format
+        - json
+      expr: |
+        .entity.spec.cloudConfig as $c
+        | ([ .entity.spec.machinepoolconfig[]? | .cloudConfig.subnet // empty | select(. != "") ] | unique) as $named
+        | if .exec.exit != 0 then ["gcloud compute networks subnets list failed: \(.exec.stderr | .[:200])"]
+          else (.exec.stdout // []) as $subnets
+            | if ($subnets | length) == 0 then ["network \($c.network) has no subnet in region \($c.region) of project \($c.project)"]
+              else [ ($named[] | select(. as $n | ($subnets | map(.name) | index($n)) == null) | "subnet \(.) of a pool is not in network \($c.network) in region \($c.region)"),
+                     ($subnets[] | . as $s | select(($named | length) == 0 or ($named | index($s.name)) != null)
+                       | select(((.secondaryIpRanges // []) | length) == 0)
+                       | "subnet \(.name) (\(.ipCidrRange)) has no secondary range: GKE makes its own pod and service ranges in it, which can run out or overlap in a shared VPC; Palette sets none") ]
+              end
+          end
+    reproduce:
+      - "gcloud compute networks subnets describe <subnet> --region {{ .entity.spec.cloudConfig.region }} --project {{ .entity.spec.cloudConfig.project }} --format 'value(ipCidrRange,secondaryIpRanges)'"
+    fix:
+      owner: palette
+      text: Take the pod and service range names in the GKE cloud config, and check them in the GCP property route.
+    evidence:
+      - kind: doc
+        ref: https://cloud.google.com/kubernetes-engine/docs/concepts/alias-ips
+      - kind: source
+        ref: palette pkg/provider/gcp/gcp_managed.go
+        note: NodeNetwork.PodRangeName and PodRangeCidrBlock are compared, not set from the cloud config
+    tests:
+      - fault: fixtures/gke/no-secondary-ranges.json
+        clean: fixtures/gke/static-network-clean.json
+
+  - id: subnet-ips
+    title: Each pool subnet has free addresses for its nodes and their pods
+    engines: [aws, eks]
+    tier: cloud
+    severity: fail
+    status: inferred
+    what: |
+      Each node takes one address, and the VPC CNI takes one more for each pod, with a warm pool of
+      one ENI (up to 15 addresses on a t3.xlarge). EKS itself needs 6 free addresses in each cluster
+      subnet, and asks for 16. A subnet that runs out fails the node group with
+      `InsufficientFreeAddresses`. The check sums the nodes (maxSize) of the pools that use a
+      subnet, and asks 16 for each node with the VPC CNI (1 with another CNI) plus 16 for the
+      cluster. That is a floor, not the real need: the count of pods on each node decides it.
+    when: (.cloud == "aws" or .cloud == "eks") and (.entity.spec.cloudConfig.vpcId // "") != "" and ([ .entity.spec.machinepoolconfig[]? | (.cloudConfig.subnets // [])[] | .id // empty ] | length) > 0
+    check:
+      kind: exec
+      needs: [aws]
+      argv:
+        - aws
+        - ec2
+        - describe-subnets
+        - --region
+        - '{{ .entity.spec.cloudConfig.region }}'
+        - --filters
+        - 'Name=subnet-id,Values={{ [ .entity.spec.machinepoolconfig[]? | (.cloudConfig.subnets // [])[] | .id // empty ] | unique | join(",") }}'
+        - --output
+        - json
+      expr: |
+        def ids: [ .entity.spec.machinepoolconfig[]? | (.cloudConfig.subnets // [])[] | .id // empty ] | unique;
+        . as $w
+        | (if .cloud == "eks" or ([ .profiles[]? | .packs[]? | select(.layer == "cni") | .name ] | any(.[]; test("aws-vpc"))) then 16 else 1 end) as $per
+        | (if $per == 16 then "16 for each node with the VPC CNI" else "1 for each node" end) as $why
+        | if .exec.exit != 0 then ["aws ec2 describe-subnets failed: \(.exec.stderr | .[:200])"]
+          else (.exec.stdout.Subnets // []) as $s
+            | [ ids[] | . as $id
+                | ([ $w.entity.spec.machinepoolconfig[]? | select(([ (.cloudConfig.subnets // [])[] | .id ] | index($id)) != null) | (.poolConfig.maxSize // .poolConfig.size // 0) ] | add // 0) as $nodes
+                | ([ $s[] | select(.SubnetId == $id) ] | .[0]) as $sub
+                | select($sub != null)
+                | ($nodes * $per + 16) as $need
+                | select(($sub.AvailableIpAddressCount // 0) < $need)
+                | "subnet \($id) has \($sub.AvailableIpAddressCount // 0) free addresses, and the pools that use it ask for \($nodes) nodes: about \($need) are needed (\($why), 16 for the cluster)" ]
+          end
+    reproduce:
+      - "aws ec2 describe-subnets --region {{ .entity.spec.cloudConfig.region }} --filters Name=vpc-id,Values={{ .entity.spec.cloudConfig.vpcId }} --query 'Subnets[].[SubnetId,AvailabilityZone,CidrBlock,AvailableIpAddressCount]' --output table"
+    fix:
+      owner: palette
+      text: Compare the free addresses of each subnet with the pools in the EKS property route.
+    evidence:
+      - kind: doc
+        ref: https://docs.aws.amazon.com/eks/latest/userguide/network-reqs.html
+        note: six addresses for the cluster in each subnet, 16 recommended
+      - kind: doc
+        ref: https://docs.aws.amazon.com/eks/latest/best-practices/ip-opt.html
+        note: the VPC CNI keeps a warm pool of addresses on each node
+    tests:
+      - fault: fixtures/eks/subnet-full.json
+        clean: fixtures/eks/static-vpc-clean.json
+
+  - id: private-egress
+    title: Each private pool subnet has a route to the internet
+    engines: [aws, eks, gcp, gke]
+    tier: cloud
+    severity: fail
+    status: source
+    what: |
+      A node in a subnet whose route table has no 0.0.0.0/0 route to a NAT gateway, an internet
+      gateway, a transit gateway, or a NAT instance cannot reach Palette, EKS, or the registries: the
+      nodes do not join, the images do not pull, and on AWS the row reports instances that delete
+      every 30 minutes with no end. The private test of Palette (`isSubnetPrivate`) reads the
+      internet gateway route alone and checks no NAT route. The check runs for a static VPC on aws
+      and eks. For GCP and GKE the router with NAT needs `gcloud compute routers list` (see
+      reproduce), and the watch sees the nodes that never join.
+    when: (.cloud == "aws" or .cloud == "eks") and (.entity.spec.cloudConfig.vpcId // "") != "" and ([ .entity.spec.machinepoolconfig[]? | (.cloudConfig.subnets // [])[] | .id // empty ] | length) > 0
+    check:
+      kind: exec
+      needs: [aws]
+      argv:
+        - aws
+        - ec2
+        - describe-route-tables
+        - --region
+        - '{{ .entity.spec.cloudConfig.region }}'
+        - --filters
+        - 'Name=vpc-id,Values={{ .entity.spec.cloudConfig.vpcId }}'
+        - --output
+        - json
+      expr: |
+        def ids: [ .entity.spec.machinepoolconfig[]? | (.cloudConfig.subnets // [])[] | .id // empty ] | unique;
+        def egress: [ (.Routes // [])[] | select((.DestinationCidrBlock // "") == "0.0.0.0/0" and (.State // "active") == "active")
+                      | select(((.NatGatewayId // "") != "") or ((.GatewayId // "") | test("^(igw|vgw)-")) or ((.TransitGatewayId // "") != "") or ((.NetworkInterfaceId // "") != "") or ((.InstanceId // "") != "") or ((.CoreNetworkArn // "") != "")) ] | length > 0;
+        if .exec.exit != 0 then ["aws ec2 describe-route-tables failed: \(.exec.stderr | .[:200])"]
+        else (.exec.stdout.RouteTables // []) as $t
+          | ([ $t[] | select(any((.Associations // [])[]; .Main == true)) ] | .[0]) as $main
+          | [ ids[] | . as $id
+              | (([ $t[] | select(any((.Associations // [])[]; (.SubnetId // "") == $id)) ] | .[0]) // $main) as $rt
+              | select($rt == null or ($rt | egress | not))
+              | "subnet \($id) (route table \($rt.RouteTableId // "none")) has no 0.0.0.0/0 route to a NAT gateway, an internet gateway, a transit gateway, or a NAT instance: the nodes cannot join, and the images do not pull" ]
+        end
+    reproduce:
+      - "aws ec2 describe-route-tables --region {{ .entity.spec.cloudConfig.region }} --filters Name=vpc-id,Values={{ .entity.spec.cloudConfig.vpcId }} --query 'RouteTables[].[RouteTableId,Associations[].SubnetId,Routes[?DestinationCidrBlock==`0.0.0.0/0`].[GatewayId,NatGatewayId,TransitGatewayId]]' --output json"
+      - "gcloud compute routers list --project {{ .entity.spec.cloudConfig.project }} --regions {{ .entity.spec.cloudConfig.region }} --format 'table(name,network,nats[].name)'"
+    fix:
+      owner: palette
+      text: Check the default route of each pool subnet in the property routes, for AWS and GCP.
+    evidence:
+      - kind: source
+        ref: hubble services/service/cloud/internal/service/cloudservice/aws_service.go isSubnetPrivate, hasIgwPrefix
+        note: a subnet is private when its route table has no igw route; no test of a NAT route
+      - kind: doc
+        ref: https://docs.aws.amazon.com/eks/latest/userguide/private-clusters.html
+      - kind: doc
+        ref: https://docs.spectrocloud.com/clusters/public-cloud/aws/architecture/
+    tests:
+      - fault: fixtures/eks/no-default-route.json
+        clean: fixtures/eks/static-vpc-clean.json
+
+  - id: static-subnets
+    title: Each pool subnet exists, in the VPC and in the zone of the pool
+    engines: [aws, eks]
+    tier: cloud
+    severity: fail
+    status: source
+    what: |
+      A pool subnet that does not exist, is in another VPC, or is in another zone than the pool
+      says fails during the build. `ValidateAwsSubnets` of Palette lists the subnets of the VPC and
+      tests the public ones for MapPublicIpOnLaunch; a subnet id that is not in the VPC is never
+      seen, and passes.
+    when: (.cloud == "aws" or .cloud == "eks") and (.entity.spec.cloudConfig.vpcId // "") != "" and ([ .entity.spec.machinepoolconfig[]? | (.cloudConfig.subnets // [])[] | .id // empty ] | length) > 0
+    check:
+      kind: exec
+      needs: [aws]
+      argv:
+        - aws
+        - ec2
+        - describe-subnets
+        - --region
+        - '{{ .entity.spec.cloudConfig.region }}'
+        - --filters
+        - 'Name=subnet-id,Values={{ [ .entity.spec.machinepoolconfig[]? | (.cloudConfig.subnets // [])[] | .id // empty ] | unique | join(",") }}'
+        - --output
+        - json
+      expr: |
+        .entity.spec.cloudConfig.vpcId as $vpc | .entity.spec.cloudConfig.region as $region
+        | if .exec.exit != 0 then ["aws ec2 describe-subnets failed: \(.exec.stderr | .[:200])"]
+          else (.exec.stdout.Subnets // []) as $s
+            | [ .entity.spec.machinepoolconfig[]? | .poolConfig.name as $pool | (.cloudConfig.subnets // [])[] | . as $want
+                | ([ $s[] | select(.SubnetId == $want.id) ] | .[0]) as $have
+                | if $have == null then "subnet \($want.id) of pool \($pool) is not in region \($region) for this account"
+                  elif $have.VpcId != $vpc then "subnet \($want.id) of pool \($pool) is in VPC \($have.VpcId), not in \($vpc)"
+                  elif ($want.az // "") != "" and $have.AvailabilityZone != $want.az then "subnet \($want.id) of pool \($pool) is in zone \($have.AvailabilityZone), not in \($want.az)"
+                  else empty end ] | unique
+          end
+    reproduce:
+      - "aws ec2 describe-subnets --region {{ .entity.spec.cloudConfig.region }} --subnet-ids {{ [ .entity.spec.machinepoolconfig[]? | (.cloudConfig.subnets // [])[] | .id // empty ] | unique | join(\" \") }} --query 'Subnets[].[SubnetId,VpcId,AvailabilityZone]' --output table"
+    fix:
+      owner: palette
+      text: Refuse a pool subnet that the VPC listing does not hold, in the EKS property route.
+    evidence:
+      - kind: source
+        ref: hubble services/service/cloud/internal/service/cloudservice/aws_service.go ValidateAwsSubnets
+        note: the loop runs over the subnets of the VPC; a subnet of the request that is not among them is not tested
+    tests:
+      - fault: fixtures/eks/subnet-mismatch.json
+        clean: fixtures/eks/static-vpc-clean.json
+
+  - id: eks-public-subnet-mapping
+    title: Each public pool subnet maps a public address on launch
+    engines: [eks]
+    tier: palette
+    severity: fail
+    status: source
+    what: |
+      A public subnet (a route to an internet gateway) without MapPublicIpOnLaunch gives its nodes
+      no public address, and they cannot reach the API server. `POST /v1/clouds/eks/properties/validate`
+      finds it and answers `InvalidSubnetMapping`; the console calls it, and
+      `POST /v1/spectroclusters/eks/validate` does not. The route also checks the SSH key, and that
+      no EKS cluster of the name exists in the region.
+    when: .cloud == "eks" and (.entity.spec.cloudConfig.vpcId // "") != "" and ([ .entity.spec.machinepoolconfig[]? | (.cloudConfig.subnets // [])[] | .id // empty ] | length) > 0
+    check:
+      kind: palette
+      method: POST
+      path: /v1/clouds/eks/properties/validate
+      body: |
+        { cloudAccountUid: .entity.spec.cloudAccountUid,
+          name: .entity.metadata.name,
+          region: .entity.spec.cloudConfig.region,
+          sshKeyName: (.entity.spec.cloudConfig.sshKeyName // ""),
+          vpcId: .entity.spec.cloudConfig.vpcId,
+          subnets: ([ .entity.spec.machinepoolconfig[]? | (.cloudConfig.subnets // [])[] | .id // empty ] | unique) }
+      expr: |
+        if .response.ok then []
+        else ["Palette refuses the EKS properties of the cluster: \(.response.body.code // .response.status): \(.response.body.message // "")"] end
+    reproduce:
+      - "aws ec2 describe-subnets --region {{ .entity.spec.cloudConfig.region }} --filters Name=vpc-id,Values={{ .entity.spec.cloudConfig.vpcId }} --query 'Subnets[].[SubnetId,MapPublicIpOnLaunch]' --output table"
+    fix:
+      owner: palette
+      text: Call the EKS property route from the cluster validate route.
+    evidence:
+      - kind: source
+        ref: hubble services/service/cloud/internal/service/cloudservice/aws_service.go ValidateEksCloudProperties, ValidateAwsSubnets
+        note: a public subnet without MapPublicIpOnLaunch answers InvalidSubnetMapping
+    tests:
+      - fault: fixtures/eks/public-subnet-no-map.json
+        clean: fixtures/eks/static-vpc-clean.json
+
+  - id: lb-subnet-tags
+    title: Each pool subnet carries a load balancer role tag
+    engines: [aws, eks]
+    tier: cloud
+    severity: warn
+    status: source
+    what: |
+      A subnet without `kubernetes.io/role/elb` (public) or `kubernetes.io/role/internal-elb`
+      (private) is not found by the load balancer controller: a Service of type LoadBalancer stays
+      Pending. For EKS with a static VPC Palette adds the tags during the build
+      (`reconcileMCPSubnetTags`); the docs ask for them on the public subnets before the build. The
+      check reads the tags of the pool subnets as they are now.
+    when: (.cloud == "aws" or .cloud == "eks") and (.entity.spec.cloudConfig.vpcId // "") != "" and ([ .entity.spec.machinepoolconfig[]? | (.cloudConfig.subnets // [])[] | .id // empty ] | length) > 0
+    check:
+      kind: exec
+      needs: [aws]
+      argv:
+        - aws
+        - ec2
+        - describe-subnets
+        - --region
+        - '{{ .entity.spec.cloudConfig.region }}'
+        - --filters
+        - 'Name=subnet-id,Values={{ [ .entity.spec.machinepoolconfig[]? | (.cloudConfig.subnets // [])[] | .id // empty ] | unique | join(",") }}'
+        - --output
+        - json
+      expr: |
+        def ids: [ .entity.spec.machinepoolconfig[]? | (.cloudConfig.subnets // [])[] | .id // empty ] | unique;
+        ids as $ids
+        | if .exec.exit != 0 then ["aws ec2 describe-subnets failed: \(.exec.stderr | .[:200])"]
+          else [ (.exec.stdout.Subnets // [])[] | . as $s | select(($ids | index($s.SubnetId)) != null)
+                 | select(any((.Tags // [])[]; .Key == "kubernetes.io/role/elb" or .Key == "kubernetes.io/role/internal-elb") | not)
+                 | "subnet \(.SubnetId) carries no kubernetes.io/role/elb (public) or kubernetes.io/role/internal-elb (private) tag: a Service of type LoadBalancer stays Pending until the tag is there" ]
+          end
+    reproduce:
+      - "aws ec2 describe-tags --region {{ .entity.spec.cloudConfig.region }} --filters Name=resource-type,Values=subnet Name=key,Values=kubernetes.io/role/elb,kubernetes.io/role/internal-elb --output table"
+    fix:
+      owner: palette
+      text: Check the tags of the pool subnets in the property routes, and add them for AWS as for EKS.
+    evidence:
+      - kind: source
+        ref: palette pkg/provider/aws/aws_managed.go reconcileMCPSubnetTags
+        note: EKS with a static VPC gets the elb and internal-elb tags during the build
+      - kind: doc
+        ref: https://docs.spectrocloud.com/clusters/public-cloud/aws/architecture/
+        note: the tags for automatic network discovery
+      - kind: doc
+        ref: https://docs.aws.amazon.com/eks/latest/userguide/network-reqs.html
+    tests:
+      - fault: fixtures/eks/no-lb-tags.json
+        clean: fixtures/eks/static-vpc-clean.json
+
+  - id: sg-name-collision
+    title: No security group of the cluster is in the VPC before the build
+    engines: [aws]
+    tier: cloud
+    severity: fail
+    status: source
+    what: |
+      Palette makes the security groups `<cluster>-node`, `<cluster>-controlplane`,
+      `<cluster>-apiserver-lb`, `<cluster>-lb`, and `<cluster>-bastion` in the VPC. A group of one
+      of these names in the VPC already, such as one left by an earlier cluster of the name, fails
+      the create. The docs name `<cluster>-node` as the one to check.
+    when: (.entity.spec.cloudConfig.vpcId // "") != ""
+    check:
+      kind: exec
+      needs: [aws]
+      argv:
+        - aws
+        - ec2
+        - describe-security-groups
+        - --region
+        - '{{ .entity.spec.cloudConfig.region }}'
+        - --filters
+        - 'Name=vpc-id,Values={{ .entity.spec.cloudConfig.vpcId }}'
+        - 'Name=group-name,Values={{ .entity.metadata.name }}-node,{{ .entity.metadata.name }}-controlplane,{{ .entity.metadata.name }}-apiserver-lb,{{ .entity.metadata.name }}-lb,{{ .entity.metadata.name }}-bastion'
+        - --output
+        - json
+      expr: |
+        .entity.spec.cloudConfig.vpcId as $vpc
+        | if .exec.exit != 0 then ["aws ec2 describe-security-groups failed: \(.exec.stderr | .[:200])"]
+          else [ (.exec.stdout.SecurityGroups // [])[]
+                 | "security group \(.GroupName) (\(.GroupId)) is in VPC \($vpc) already: Palette makes a group of that name for the cluster, and the create of it fails" ]
+          end
+    reproduce:
+      - "aws ec2 describe-security-groups --region {{ .entity.spec.cloudConfig.region }} --filters Name=vpc-id,Values={{ .entity.spec.cloudConfig.vpcId }} Name=group-name,Values={{ .entity.metadata.name }}-node --query 'SecurityGroups[].[GroupName,GroupId]' --output table"
+    fix:
+      owner: palette
+      text: Check the group names in the AWS property route.
+    evidence:
+      - kind: doc
+        ref: https://docs.spectrocloud.com/clusters/public-cloud/aws/create-cluster/
+        note: the prerequisite on a security group named after the cluster with -node
+    tests:
+      - fault: fixtures/aws/sg-node-exists.json
+        clean: fixtures/aws/static-vpc-clean.json
 
   - id: api-endpoint-reach
     title: The pilot can reach the API server of the cluster
@@ -87,6 +625,40 @@ rules:
       - fault: fixtures/eks/private-endpoint.json
         clean: fixtures/eks/clean.json
 
+  - id: eks-public-cidrs
+    title: The public endpoint CIDRs hold the NAT addresses and the Palette addresses
+    engines: [eks]
+    tier: static
+    severity: fail
+    status: source
+    what: |
+      With `endpointAccess.publicCIDRs`, Palette builds with public access open, and sets the CIDRs
+      during the build only when private access is on too (`getDesiredManagedControlPlane`). After
+      the pivot the target cluster gets the list as configured. Then the list must hold the
+      addresses that Palette connects from, and with private access off also the NAT elastic IPs of
+      the node subnets, or the node groups fail. The addresses are not in the entity: the check
+      names the list and what it must hold.
+    check:
+      kind: static
+      expr: |
+        .entity.spec.cloudConfig.endpointAccess as $e
+        | ($e.publicCIDRs // []) as $c
+        | if ($c | length) == 0 or ($c | index("0.0.0.0/0")) != null then []
+          elif ($e.private // false) then ["endpointAccess.publicCIDRs is \($c | join(", ")): the list must hold the public addresses that Palette connects from; strata-preflight cannot read them from the entity"]
+          else ["endpointAccess.publicCIDRs is \($c | join(", ")) and endpointAccess.private is off: after the pivot the nodes reach the API server over the public endpoint, so the list must hold the NAT elastic IPs of the node subnets and the public addresses that Palette connects from; strata-preflight cannot read them from the entity"] end
+    reproduce:
+      - "aws ec2 describe-nat-gateways --region {{ .entity.spec.cloudConfig.region }} --filter Name=vpc-id,Values={{ .entity.spec.cloudConfig.vpcId }} --query 'NatGateways[].NatGatewayAddresses[].PublicIp' --output text"
+    fix:
+      owner: palette
+      text: Check the list against the NAT addresses of the VPC and the addresses of Palette in the validate route.
+    evidence:
+      - kind: source
+        ref: palette pkg/provider/aws/aws_managed.go getDesiredManagedControlPlane, configurePublicAccessCIDRs
+        note: the CIDRs apply in the pilot phase with private access alone, and in the target cluster as configured; Palette adds its own addresses from the configmap eks-public-access-cidrs in the pilot phase alone
+    tests:
+      - fault: fixtures/eks/public-cidrs.json
+        clean: fixtures/eks/clean.json
+
   - id: agent-egress
     title: The cluster can reach Palette on 443
     engines: [all]
@@ -109,3 +681,168 @@ rules:
     evidence:
       - kind: doc
         ref: https://docs.spectrocloud.com/architecture/networking-ports/
+
+  - id: proxy-no-proxy
+    title: NO_PROXY holds the CIDRs of the cluster
+    engines: [all]
+    tier: static
+    severity: fail
+    status: inferred
+    what: |
+      A proxy in the pack values with a NO_PROXY that lacks the pod CIDR, the service CIDR, and the
+      VPC CIDR sends the traffic of the cluster to the proxy: the nodes and the pods cannot reach
+      each other. The check reads the `values` of each pack for HTTP_PROXY, HTTPS_PROXY, or
+      httpProxy, then for a NO_PROXY entry that covers each CIDR of the Kubernetes pack, and
+      10.0.0.0/16 for dynamic placement on aws and eks. A proxy set in the environment of Palette
+      or of the PCG is not in the entity: for it Palette writes NO_PROXY with the service CIDR and
+      USER_NO_PROXY, not the pod CIDR (`aws_kubeadm.go`).
+    when: (.profiles | length) > 0
+    check:
+      kind: static
+      expr: |
+        def is_cidr: type == "string" and test("^([0-9]{1,3}\\.){3}[0-9]{1,3}/[0-9]{1,2}$");
+        def ip($s): $s | split(".") | map(tonumber) | reduce .[] as $o (0; . * 256 + $o);
+        def net($cidr; $p): ip($cidr | split("/")[0]) as $n | reduce range(0; 32 - $p) as $i ($n; (. / 2) | floor);
+        def overlaps($a; $b): ([($a | split("/")[1] | tonumber), ($b | split("/")[1] | tonumber)] | min) as $p | net($a; $p) == net($b; $p);
+        def k8s_cidrs: [ .profiles[]? | .packs[]? | select(.layer == "k8s") | .name as $n | .valuesCanon as $v
+          | {name: $n, field: "pack.podCIDR", cidr: ($v.pack.podCIDR // $v.kubeadmconfig.clusterConfiguration.networking.podSubnet)},
+            {name: $n, field: "pack.serviceClusterIpRange", cidr: ($v.pack.serviceClusterIpRange // $v.kubeadmconfig.clusterConfiguration.networking.serviceSubnet)}
+          | select(.cidr | is_cidr) ];
+        def covers($e; $c): ($e | split("/")[1] | tonumber) <= ($c | split("/")[1] | tonumber) and overlaps($e; $c);
+        ([ .profiles[]? | .packs[]? | .values // "" ] | join("\n")) as $all
+        | if ($all | test("HTTPS?_PROXY=|https?_proxy=|https?Proxy:")) | not then []
+          else ([ $all | split("\n")[] | select(test("no_?proxy"; "i")) | sub("^[ \\t-]+"; "") ] | join(",")) as $np
+            | ([ $np | split("[,= \"'\\t]+"; "g")[] | select(is_cidr) ]) as $entries
+            | (if (.cloud == "aws" or .cloud == "eks") and (.entity.spec.cloudConfig.vpcId // "") == ""
+               then [{who: "dynamic placement", field: "VPC CIDR", cidr: "10.0.0.0/16"}] else [] end) as $vpc
+            | if $np == "" then ["the pack values set a proxy and no NO_PROXY: the pod CIDR, the service CIDR, the VPC CIDR, and the metadata address 169.254.169.254 must be in it"]
+              else [ ((k8s_cidrs | map(.who = "pack \(.name)")) + $vpc)[] | . as $c
+                     | select(($entries | any(.[]; covers(.; $c.cidr))) | not)
+                     | "the pack values set a proxy, and NO_PROXY (\($np | .[:160])) has no entry that covers the \($c.field) \($c.cidr) of \($c.who)" ] end
+          end
+    fix:
+      owner: palette
+      text: Add the pod CIDR to the NO_PROXY that Palette writes, and check a NO_PROXY of the pack values at create.
+    evidence:
+      - kind: source
+        ref: palette pkg/provider/aws/aws_kubeadm.go
+        note: NO_PROXY for containerd is 127.0.0.1, localhost, the service CIDR blocks, and USER_NO_PROXY; the pod CIDR is not in it
+      - kind: doc
+        ref: https://docs.spectrocloud.com/clusters/cluster-management/cluster-proxy/
+    tests:
+      - fault: fixtures/aws/proxy-no-cidrs.json
+        clean: fixtures/aws/proxy-with-cidrs.json
+
+  - id: cilium-on-eks
+    title: A Cilium pack on EKS gives the pods addresses and routes the Services
+    engines: [eks]
+    tier: static
+    severity: fail
+    status: source
+    what: |
+      For a CNI pack whose name holds `cilium`, Palette turns the VPC CNI and kube-proxy off on EKS,
+      unless the pack values set `charts.cilium.disableVPCCNI: false` or
+      `charts.cilium.disableKubeProxy: false`. Cilium then must give the pods their addresses
+      (`charts.cilium.eni.enabled: true` or `charts.cilium.ipam.mode: eni`) and route the Services
+      (`charts.cilium.kubeProxyReplacement: true`, with `k8sServiceHost` and `k8sServicePort`).
+      Without them the nodes have no CNI and no service proxy, and the cluster never runs.
+    when: (.profiles | length) > 0
+    check:
+      kind: static
+      expr: |
+        [ .profiles[]? | .packs[]? | select(.layer == "cni") | select(.name | ascii_downcase | test("cilium"))
+          | .name as $n | (.valuesCanon.charts.cilium // {}) as $raw | (if ($raw | type) == "object" then $raw else {} end) as $c
+          | (if ($c | if has("disableVPCCNI") then .disableVPCCNI else true end)
+                and (($c.eni.enabled // false) | not) and (($c.ipam.mode // "") != "eni")
+             then "pack \($n) turns the VPC CNI off on EKS (charts.cilium.disableVPCCNI is not false), and its values set neither charts.cilium.eni.enabled: true nor charts.cilium.ipam.mode: eni: the pods get no address" else empty end),
+            (if ($c | if has("disableKubeProxy") then .disableKubeProxy else true end)
+                and ((($c.kubeProxyReplacement // false) | tostring) | test("^(true|strict)$") | not)
+             then "pack \($n) turns kube-proxy off on EKS (charts.cilium.disableKubeProxy is not false), and its values do not set charts.cilium.kubeProxyReplacement: true with k8sServiceHost and k8sServicePort: the Services do not route" else empty end) ]
+    fix:
+      owner: palette
+      text: Refuse a Cilium pack on EKS whose values set neither ENI mode nor kube-proxy replacement, in the validate route.
+    evidence:
+      - kind: source
+        ref: palette pkg/provider/aws/aws_managed.go ShouldDisableDefaultCNI, ShouldDisableKubeProxy
+        note: both default to true for a Cilium pack; charts.cilium.disableVPCCNI and charts.cilium.disableKubeProxy set to false keep them on
+      - kind: source
+        ref: palette pkg/provider/common/common.go IsCiliumCNIPack
+        note: a CNI pack whose lowercase name holds cilium
+      - kind: doc
+        ref: https://docs.cilium.io/en/stable/network/concepts/ipam/eni/
+      - kind: doc
+        ref: https://docs.cilium.io/en/stable/network/kubernetes/kubeproxy-free/
+    tests:
+      - fault: fixtures/eks/cilium-no-eni.json
+        clean: fixtures/eks/cilium-eni.json
+
+  - id: gcp-name-length
+    title: The names GCP derives from the cluster name fit
+    engines: [gcp, gke]
+    tier: static
+    severity: fail
+    status: source
+    what: |
+      GCP takes at most 63 characters for a network or a subnet name, and at most 40 for a GKE
+      cluster name. For a dynamic network Palette derives `<cluster>-network` and
+      `<cluster>-network-<region>` from the cluster name (`getNetworkName`, `getSubnetName`).
+    check:
+      kind: static
+      expr: |
+        (.entity.metadata.name // "") as $n | (.entity.spec.cloudConfig.region // "") as $r
+        | "\($n)-network" as $net | "\($net)-\($r)" as $sub
+        | ((.entity.spec.cloudConfig.network // "") == "") as $dynamic
+        | [ (if .cloud == "gke" and ($n | length) > 40 then "cluster name \($n) has \($n | length) characters; GKE takes at most 40" else empty end),
+            (if $dynamic and ($net | length) > 63 then "the derived network name \($net) has \($net | length) characters; GCP takes at most 63" else empty end),
+            (if $dynamic and ($sub | length) > 63 then "the derived subnet name \($sub) has \($sub | length) characters; GCP takes at most 63" else empty end) ]
+    fix:
+      owner: palette
+      text: Check the derived name lengths in the name route.
+    evidence:
+      - kind: source
+        ref: palette pkg/provider/gcp/gcp_cluster.go getNetworkName, getSubnetName
+      - kind: doc
+        ref: https://cloud.google.com/compute/docs/naming-resources
+    tests:
+      - fault: fixtures/gke/long-name.json
+        clean: fixtures/gke/clean.json
+
+  - id: registry-https
+    title: A registry name answers over HTTPS before Palette takes it
+    engines: [lab]
+    tier: watch
+    severity: fail
+    status: seen
+    what: |
+      Palette checks a registry at its create: the name must answer over HTTPS. A registry host
+      that the lab starts gets its certificates after the instance is up, and a create before that
+      fails. The lab waits for each name to answer over HTTPS first. strata-preflight has no watch
+      for it: the wait is a step of the tool that makes the registry.
+    reproduce:
+      - "curl -s -o /dev/null -w '%{http_code}\\n' https://<registry host>/v2/"
+    fix:
+      owner: lab
+      text: Wait for each registry name to answer over HTTPS before the registry resource.
+    evidence:
+      - kind: run
+        ref: lab examples/live/terraform/registry-kinds.tf kinds_ready
+        note: a loop of up to 90 tries on https://<name>/v2/ before each spectrocloud_registry resource
+
+  - id: igw-detach
+    title: The destroy removes each mapped address before the internet gateway detaches
+    engines: [lab]
+    tier: tool
+    severity: fail
+    status: seen
+    what: |
+      AWS refuses to detach an internet gateway while an address of the VPC is mapped
+      (`DependencyViolation`). A destroy that removes the gateway before the instance with the
+      public address fails on the detach. The lab makes the instance depend on the gateway, so the
+      destroy removes the instance first.
+    fix:
+      owner: lab
+      text: "`depends_on` from the instance to the gateway, so the destroy runs in the reverse order."
+    evidence:
+      - kind: run
+        ref: lab examples/live/terraform/registry-kinds.tf aws_instance.kinds
+        note: depends_on the gateway, with the reason in the comment

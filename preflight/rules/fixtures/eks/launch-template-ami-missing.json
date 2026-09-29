@@ -1,0 +1,13 @@
+{
+  "_base": "launch-template-clean.json",
+  "_note": "EC2 has no image with the id of the launch template in the region",
+  "_patch": {
+    "_exec": {
+      "aws ec2 describe-images --region us-east-2 --filters Name=image-id,Values=ami-0123456789abcdef0 --output json": {
+        "exit": 0,
+        "stdout": { "Images": [] },
+        "stderr": ""
+      }
+    }
+  }
+}

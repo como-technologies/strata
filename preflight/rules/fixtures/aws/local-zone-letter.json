@@ -1,0 +1,36 @@
+{
+  "_base": "clean.json",
+  "_note": "the worker pool names us-east-1a and the Local Zone us-east-1-bos-1a: both end in a",
+  "_patch": {
+    "entity": {
+      "spec": {
+        "cloudConfig": {
+          "region": "us-east-1"
+        },
+        "machinepoolconfig": [
+          {
+            "cloudConfig": {
+              "azs": [
+                "us-east-1a"
+              ]
+            },
+            "poolConfig": {
+              "name": "cp-pool"
+            }
+          },
+          {
+            "cloudConfig": {
+              "azs": [
+                "us-east-1a",
+                "us-east-1-bos-1a"
+              ]
+            },
+            "poolConfig": {
+              "name": "worker-pool"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

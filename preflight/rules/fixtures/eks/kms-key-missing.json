@@ -1,0 +1,13 @@
+{
+  "_base": "kms-clean.json",
+  "_note": "the KMS key of encryptionConfig.provider does not exist in the region",
+  "_patch": {
+    "_exec": {
+      "aws kms describe-key --key-id arn:aws:kms:us-east-2:123456789012:key/1234abcd-12ab-34cd-56ef-1234567890ab --region us-east-2 --output json": {
+        "exit": 254,
+        "stdout": "",
+        "stderr": "An error occurred (NotFoundException) when calling the DescribeKey operation: Key 'arn:aws:kms:us-east-2:123456789012:key/1234abcd-12ab-34cd-56ef-1234567890ab' does not exist"
+      }
+    }
+  }
+}

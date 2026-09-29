@@ -1,0 +1,13 @@
+{
+  "_base": "type-same.json",
+  "_note": "a change of the VPC of a built cluster, from a Palette-made VPC to a given one",
+  "_patch": {
+    "entity": {
+      "spec": {
+        "cloudConfig": {
+          "vpcId": "vpc-0123456789abcdef0"
+        }
+      }
+    }
+  }
+}
