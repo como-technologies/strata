@@ -11,9 +11,12 @@ default: build
 
 # ---- build and test -------------------------------------------------------------------------
 
-# Build the release binary at target/release/strata
+# strata-preflight is a package of its own in preflight/; `strata preflight` runs its binary from
+# the same directory. The two build together, and a release ships both.
+
+# Build the release binaries at target/release/strata and target/release/strata-preflight
 build:
-    cargo build --release
+    cargo build --release -p strata -p strata-preflight
 
 # Linux targets are static musl builds in the containers of cross. The other targets build
 # natively with cargo.
@@ -23,19 +26,20 @@ build-target target:
     #!/usr/bin/env bash
     set -euo pipefail
     case "{{target}}" in
-      *linux*) cross build --release --target "{{target}}" ;;
-      *) cargo build --release --target "{{target}}" ;;
+      *linux*) cross build --release --target "{{target}}" -p strata -p strata-preflight ;;
+      *) cargo build --release --target "{{target}}" -p strata -p strata-preflight ;;
     esac
 
-# Run the unit, library, binary, and script tests. No network.
+# Run the unit, library, binary, and script tests of strata and of strata-preflight. No network.
 test: stand-in
     cargo test
+    cargo test -p strata-preflight
 
 # Test the format, the clippy lints, and the rustdoc
 lint:
     cargo fmt --check
     cargo clippy --workspace --all-targets -- -D warnings
-    RUSTDOCFLAGS="-D warnings" cargo doc --no-deps
+    RUSTDOCFLAGS="-D warnings" cargo doc --no-deps -p strata -p strata-preflight
 
 # Build and run examples/library, a separate crate that uses strata as a library
 library-example:

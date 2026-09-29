@@ -89,6 +89,8 @@ jobs:
       - uses: actions/upload-artifact@v7
         with:
           name: checks-strata-x86_64-unknown-linux-musl
-          path: target/x86_64-unknown-linux-musl/release/strata
+          path: |
+            target/x86_64-unknown-linux-musl/release/strata
+            target/x86_64-unknown-linux-musl/release/strata-preflight
           if-no-files-found: error
 

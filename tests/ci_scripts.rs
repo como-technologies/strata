@@ -835,6 +835,11 @@ fn release() -> tempfile::TempDir {
         ("4", "install-strata.sh", "#!/bin/sh\necho installer\n"),
         ("6", "merge-gate.sh", "#!/bin/sh\necho gate\n"),
         ("7", "upstream-report.sh", "#!/bin/sh\necho upstream\n"),
+        (
+            "8",
+            "strata-preflight-x86_64-unknown-linux-musl",
+            "#!/bin/sh\necho strata-preflight 9.9.9\n",
+        ),
     ];
     let mut sums = String::new();
     let mut listed = Vec::new();
@@ -911,6 +916,7 @@ fn install_strata_takes_the_binary_and_the_scripts_of_one_release_and_checks_the
     );
     for name in [
         "strata",
+        "strata-preflight",
         "pr-comment.sh",
         "merge-gate.sh",
         "verify-report.sh",
@@ -970,6 +976,10 @@ fn install_strata_bin_only_installs_the_binary_and_nothing_beside_it() {
     assert!(
         d.join("here").join("strata").exists(),
         "strata is installed"
+    );
+    assert!(
+        d.join("here").join("strata-preflight").exists(),
+        "strata-preflight is installed beside it, so `strata preflight` runs"
     );
     for name in [
         "pr-comment.sh",

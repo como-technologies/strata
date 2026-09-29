@@ -73,6 +73,11 @@ impl HttpApi {
                 retry_after,
             });
         }
+        // a 204 No Content, which the validate routes of the clouds answer, is an answer with no
+        // body: null, and not a body that is not JSON
+        if body.trim().is_empty() {
+            return Ok(Value::Null);
+        }
         serde_json::from_str(&body).map_err(|source| Error::NotJson {
             path: path.to_string(),
             source,
@@ -107,6 +112,53 @@ fn retry_after_seconds(header: Option<&str>) -> Option<u64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// One answer from a server on this machine, so the reading of a body needs no network.
+    fn serve_once(status_line: &str, body: &str) -> String {
+        use std::io::{Read, Write};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        let answer = format!(
+            "HTTP/1.1 {status_line}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        );
+        std::thread::spawn(move || {
+            let (mut s, _) = listener.accept().unwrap();
+            let mut buf = [0u8; 4096];
+            let _ = s.read(&mut buf);
+            s.write_all(answer.as_bytes()).unwrap();
+        });
+        format!("http://{addr}")
+    }
+
+    #[test]
+    fn a_204_with_no_body_is_null_and_not_a_body_that_is_not_json() {
+        let url = serve_once("204 No Content", "");
+        let api = HttpApi::new(Config::new(url, "k"));
+        let v = api
+            .post_json("/v1/clouds/aws/account/validate", &serde_json::json!({}))
+            .unwrap();
+        assert_eq!(v, Value::Null);
+    }
+
+    #[test]
+    fn a_4xx_carries_its_status_and_body() {
+        let url = serve_once(
+            "400 Bad Request",
+            r#"{"code":"InvalidParam","message":"Node pool size should be multiple of 3"}"#,
+        );
+        let api = HttpApi::new(Config::new(url, "k"));
+        let err = api
+            .post_json("/v1/spectroclusters/gke/validate", &serde_json::json!({}))
+            .unwrap_err();
+        match err {
+            Error::Api { status, body, .. } => {
+                assert_eq!(status, 400);
+                assert!(body.contains("InvalidParam"), "{body}");
+            }
+            other => panic!("{other}"),
+        }
+    }
 
     #[test]
     fn retry_after_header_parses_whole_seconds_only() {
