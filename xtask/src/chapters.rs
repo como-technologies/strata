@@ -1998,6 +1998,15 @@ fn automation(r: &mut Runner) {
         &json!({"kind": "aws", "metadata": {"name": "platform-aws", "uid": "64f3000000000000000000a1"},
             "spec": {"credentialType": "secret", "partition": "aws", "policyARNs": []}, "status": {"state": "Active"}}),
     );
+    // the property route of AWS answers 204 with no body; the stand-in serves 200 with an empty
+    // object, which a rule reads the same way (`ok`); the regions of the account, with the query
+    // in the file name as the stand-in maps it
+    r.answer(DEV, "v1/clouds/aws/properties/validate", &json!({}));
+    r.answer(
+        DEV,
+        "v1/clouds/aws/regions@cloudAccountUid=64f3000000000000000000a1",
+        &json!({"regions": [{"name": "us-east-2", "zones": [{"name": "us-east-2a"}, {"name": "us-east-2b"}, {"name": "us-east-2c"}]}]}),
+    );
     r.answer(
         DEV,
         "v1/spectroclusters/aws/validate",
@@ -2016,32 +2025,32 @@ fn automation(r: &mut Runner) {
         "preflight-live",
         0,
         false,
-        "strata preflight cluster.json --cloud aws --quiet",
+        "strata preflight cluster.json --cloud aws --no-exec --quiet",
     );
     r.step(
         "preflight-strict",
         1,
         false,
-        "strata preflight cluster.json --cloud aws --strict --quiet | tail -n 3",
+        "strata preflight cluster.json --cloud aws --no-exec --strict --quiet | tail -n 3",
     );
     r.step(
         "preflight-json",
         0,
         false,
-        "strata preflight cluster.json --cloud aws --json --quiet \
+        "strata preflight cluster.json --cloud aws --no-exec --json --quiet \
   | jq '.checks[] | select(.id == \"worker-cpu-floor\") | {id, tier, level, verdict, messages, reproduce}'",
     );
     r.step(
         "preflight-json-summary",
         0,
         false,
-        "strata preflight cluster.json --cloud aws --json --quiet | jq '{summary, scorecard: [.sections[] | {title, ran, passed, failed, notChecked, readiness}]}'",
+        "strata preflight cluster.json --cloud aws --no-exec --json --quiet | jq '{summary, scorecard: [.sections[] | {title, ran, passed, failed, notChecked, readiness}]}'",
     );
     r.step(
         "preflight-out",
         0,
         false,
-        "strata preflight cluster.json --cloud aws --quiet --out preflight > /dev/null; ls preflight",
+        "strata preflight cluster.json --cloud aws --no-exec --quiet --out preflight > /dev/null; ls preflight",
     );
     r.step(
         "preflight-rules",

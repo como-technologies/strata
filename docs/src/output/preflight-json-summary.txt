@@ -1,43 +1,43 @@
-$ strata preflight cluster.json --cloud aws --json --quiet | jq '{summary, scorecard: [.sections[] | {title, ran, passed, failed, notChecked, readiness}]}'
+$ strata preflight cluster.json --cloud aws --no-exec --json --quiet | jq '{summary, scorecard: [.sections[] | {title, ran, passed, failed, notChecked, readiness}]}'
 {
   "summary": {
     "rules": 101,
-    "ran": 32,
+    "ran": 22,
     "passed": 19,
     "failed": 0,
-    "probeFailed": 9,
-    "warned": 4,
+    "probeFailed": 2,
+    "warned": 1,
     "noted": 2,
-    "notChecked": 25,
+    "notChecked": 35,
     "skipped": 37,
     "errors": 0,
-    "readiness": 0.59375,
+    "readiness": 0.8636363636363636,
     "exitCode": 0,
-    "verdict": "OK: each counted check passed; 9 probe(s) failed, not counted"
+    "verdict": "OK: each counted check passed; 2 probe(s) failed, not counted"
   },
   "scorecard": [
     {
       "title": "Identity and permissions",
-      "ran": 5,
-      "passed": 1,
-      "failed": 4,
-      "notChecked": 0,
-      "readiness": 0.2
+      "ran": 2,
+      "passed": 2,
+      "failed": 0,
+      "notChecked": 3,
+      "readiness": 1.0
     },
     {
       "title": "Cloud services and APIs",
       "ran": 1,
-      "passed": 0,
-      "failed": 1,
+      "passed": 1,
+      "failed": 0,
       "notChecked": 1,
-      "readiness": 0.0
+      "readiness": 1.0
     },
     {
       "title": "Quotas and limits",
-      "ran": 2,
+      "ran": 1,
       "passed": 0,
-      "failed": 2,
-      "notChecked": 2,
+      "failed": 1,
+      "notChecked": 3,
       "readiness": 0.0
     },
     {
@@ -66,11 +66,11 @@ $ strata preflight cluster.json --cloud aws --json --quiet | jq '{summary, score
     },
     {
       "title": "Storage and CSI",
-      "ran": 1,
+      "ran": 0,
       "passed": 0,
-      "failed": 1,
-      "notChecked": 0,
-      "readiness": 0.0
+      "failed": 0,
+      "notChecked": 1,
+      "readiness": null
     },
     {
       "title": "Images and registries",
@@ -106,19 +106,19 @@ $ strata preflight cluster.json --cloud aws --json --quiet | jq '{summary, score
     },
     {
       "title": "Client tools",
-      "ran": 3,
-      "passed": 2,
-      "failed": 1,
-      "notChecked": 0,
-      "readiness": 0.6666666666666666
+      "ran": 0,
+      "passed": 0,
+      "failed": 0,
+      "notChecked": 3,
+      "readiness": null
     },
     {
       "title": "Teardown and leftovers",
-      "ran": 3,
+      "ran": 1,
       "passed": 1,
-      "failed": 2,
-      "notChecked": 3,
-      "readiness": 0.3333333333333333
+      "failed": 0,
+      "notChecked": 5,
+      "readiness": 1.0
     }
   ]
 }

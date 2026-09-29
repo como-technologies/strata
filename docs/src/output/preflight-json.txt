@@ -1,4 +1,4 @@
-$ strata preflight cluster.json --cloud aws --json --quiet | jq '.checks[] | select(.id == "worker-cpu-floor") | {id, tier, level, verdict, messages, reproduce}'
+$ strata preflight cluster.json --cloud aws --no-exec --json --quiet | jq '.checks[] | select(.id == "worker-cpu-floor") | {id, tier, level, verdict, messages, reproduce}'
 {
   "id": "worker-cpu-floor",
   "tier": "palette",

@@ -384,21 +384,21 @@ fn judge(rule: &Rule, expr: &str, world: &Value, jq: &Jq, started: Instant) -> O
             Value::Bool(false) => failures.push("the check is false".to_string()),
             Value::Array(items) => {
                 for item in items {
-                    failures.push(match item {
+                    failures.push(one_line(match item {
                         Value::String(s) => s,
                         other => other.to_string(),
-                    });
+                    }));
                 }
             }
             Value::Object(o) => {
                 let pass = o.get("pass").and_then(Value::as_bool).unwrap_or(false);
                 if !pass {
-                    failures.push(
+                    failures.push(one_line(
                         o.get("message")
                             .and_then(Value::as_str)
                             .map(str::to_string)
                             .unwrap_or_else(|| "the check is false".to_string()),
-                    );
+                    ));
                 }
             }
             Value::Null => {}
@@ -417,6 +417,20 @@ fn judge(rule: &Rule, expr: &str, world: &Value, jq: &Jq, started: Instant) -> O
         Outcome::new(Verdict::Passed, vec![], started)
     } else {
         Outcome::new(Verdict::Failed, failures, started)
+    }
+}
+
+/// A message on one line: the report prints each message under its rule, and a line break inside
+/// one, such as the output of a tool, would leave the column.
+fn one_line(s: String) -> String {
+    if s.contains(['\n', '\r']) {
+        s.split(['\n', '\r'])
+            .map(str::trim)
+            .filter(|p| !p.is_empty())
+            .collect::<Vec<_>>()
+            .join(" ")
+    } else {
+        s
     }
 }
 
@@ -707,6 +721,21 @@ mod tests {
         assert_eq!(slow.exit, -1);
         assert!(slow.stderr.starts_with("stopped after"), "{}", slow.stderr);
         assert!(run_command(&["no-such-tool-xyz".into()], Duration::from_secs(1)).is_err());
+    }
+
+    #[test]
+    fn a_message_with_a_line_break_prints_on_one_line() {
+        let jq = Jq::new();
+        let (b, w) = fixture(json!({"e": "aws failed: \nNoCredentials\n"}));
+        let out = run_check(
+            &rule(Check::Static {
+                expr: r#"["tool said: \(.e)"]"#.into(),
+            }),
+            &w,
+            &b,
+            &jq,
+        );
+        assert_eq!(out.messages, vec!["tool said: aws failed: NoCredentials"]);
     }
 
     #[test]

@@ -1,46 +1,24 @@
-$ strata preflight cluster.json --cloud aws --quiet
+$ strata preflight cluster.json --cloud aws --no-exec --quiet
 strata-preflight: aws cluster payments (cluster.json), Palette release not given, tiers static, palette, cloud
 
 Identity and permissions
   PROBE PASS    account-missing              The cloud account of the entity exists, and is of the cloud…     1 ms  catch 1/1 (5%) clean 1/1 (5%)
-  PROBE FAIL    capa-bootstrap-stack         The CAPA CloudFormation stack is complete, and the credenti…     1 ms  catch no runs clean 1/1 (5%)
-                aws cloudformation describe-stacks failed: 
-aws: [ERROR]: An error occurred (NoCredentials): Unable to locate credentials. You can configure credentials by running "aws login".
+  NOT CHECKED   capa-bootstrap-stack         The CAPA CloudFormation stack is complete, and the credenti…     1 ms  catch no runs clean 1/1 (5%)
+                aws not on this machine; run by hand: aws cloudformation describe-stacks --stack-name cluster-api-provider-aws-sigs-k8s-io --region us-east-2 --output json
                 reproduce: aws cloudformation describe-stacks --stack-name cluster-api-provider-aws-sigs-k8s-io --region us-east-2 --query 'Stacks[].[StackStatus,DriftInformation.StackDriftStatus]' --output table
                 reproduce: aws iam get-role --role-name controllers.cluster-api-provider-aws.sigs.k8s.io --query Role.Arn --output text
-                reproduce: aws cloudformation describe-stacks --stack-name cluster-api-provider-aws-sigs-k8s-io --region us-east-2 --output json
-                reproduce: jq --argjson out "$(<the output>)" '.exec = {exit: 0, stdout: $out, stderr: ""} | .entity.spec.cloudConfig.region as $r | if .exec.exit != 0 then (.exec.stderr // "") as $e | if ($e | test("does not exist")) then [] elif ($e | test("AccessDenied|not authorized")) then ["the credentials cannot describe stack cluster-api-provider-aws-sigs-k8s-io in \($r): Palette reads AccessDenied as no stack, and its create of the stack then fails"] else ["aws cloudformation describe-stacks failed: \($e | .[:200])"] end else [ (.exec.stdout.Stacks // [])[] | select((.StackStatus // "") | test("^(CREATE|UPDATE)_COMPLETE$") | not) | "stack \(.StackName) is \(.StackStatus) in \($r): Palette updates a stack in CREATE_COMPLETE or UPDATE_COMPLETE alone, and the create of a new one fails on the name" ] end' $OUT/world.json
-                fix: Describe the stack and the three CAPA roles in the cluster validate route. (palette)
-  PROBE FAIL    iam-ten-policies             The nodes role stays under 10 managed policies                   1 ms  catch no runs clean 1/1 (5%)
-                aws iam list-attached-role-policies failed: 
-aws: [ERROR]: An error occurred (NoCredentials): Unable to locate credentials. You can configure credentials by running "aws login".
+  NOT CHECKED   iam-ten-policies             The nodes role stays under 10 managed policies                   1 ms  catch no runs clean 1/1 (5%)
+                aws not on this machine; run by hand: aws iam list-attached-role-policies --role-name nodes.cluster-api-provider-aws.sigs.k8s.io --output json
                 reproduce: aws iam list-attached-role-policies --role-name nodes.cluster-api-provider-aws.sigs.k8s.io --query 'length(AttachedPolicies)'
                 reproduce: aws service-quotas get-service-quota --service-code iam --quota-code L-0DA4ABF3 --query Quota.Value
-                reproduce: aws iam list-attached-role-policies --role-name nodes.cluster-api-provider-aws.sigs.k8s.io --output json
-                reproduce: jq --argjson out "$(<the output>)" '.exec = {exit: 0, stdout: $out, stderr: ""} | (.account.spec.policyARNs // []) as $plan | if .exec.exit != 0 then if (.exec.stderr | test("NoSuchEntity")) then [] else ["aws iam list-attached-role-policies failed: \(.exec.stderr | .[:200])"] end else ([ (.exec.stdout.AttachedPolicies // [])[] | .PolicyArn ]) as $have | ([ $plan[] | select(. as $a | ($have | index($a)) == null) ] | length) as $more | if (($have | length) + $more) > 10 then ["the nodes role has \($have | length) managed policies, and the cloud account adds \($more) more: \(($have | length) + $more) is over the IAM quota of 10 for a role"] else [] end end' $OUT/world.json
-                fix: Count the policies in the validate route. (palette)
-  PROBE FAIL    ebs-csi-node-policy          The nodes role holds AmazonEBSCSIDriverPolicy                    1 ms  catch no runs clean 1/1 (5%)
-                aws iam list-attached-role-policies failed: 
-aws: [ERROR]: An error occurred (NoCredentials): Unable to locate credentials. You can configure credentials by running "aws login".
+  NOT CHECKED   ebs-csi-node-policy          The nodes role holds AmazonEBSCSIDriverPolicy                    1 ms  catch no runs clean 1/1 (5%)
+                aws not on this machine; run by hand: aws iam list-attached-role-policies --role-name nodes.cluster-api-provider-aws.sigs.k8s.io --output json
                 reproduce: aws iam list-attached-role-policies --role-name nodes.cluster-api-provider-aws.sigs.k8s.io --query 'AttachedPolicies[].PolicyName' --output text
                 reproduce: kubectl -n kube-system logs -l app=ebs-csi-controller -c ebs-plugin --tail 20
-                reproduce: aws iam list-attached-role-policies --role-name nodes.cluster-api-provider-aws.sigs.k8s.io --output json
-                reproduce: jq --argjson out "$(<the output>)" '.exec = {exit: 0, stdout: $out, stderr: ""} | def ebs: "AmazonEBSCSIDriverPolicy"; (.account.spec.policyARNs // []) as $plan | ([ $plan[] | select(endswith("/" + ebs)) ] | length > 0) as $planned | if .exec.exit != 0 then if (.exec.stderr | test("NoSuchEntity")) then (if $planned then [] else ["no nodes role yet, and the policyARNs of the cloud account do not name \(ebs): ebs-csi-controller then crash-loops with UnauthorizedOperation, and Palette says Running"] end) else ["aws iam list-attached-role-policies failed: \(.exec.stderr | .[:200])"] end else ([ (.exec.stdout.AttachedPolicies // [])[] | .PolicyArn | select(endswith("/" + ebs)) ] | length > 0) as $on | if $on or $planned then [] else ["\(ebs) is not on the nodes role, and the policyARNs of the cloud account do not name it: ebs-csi-controller crash-loops with UnauthorizedOperation on ec2:DescribeAvailabilityZones, and Palette says Running"] end end' $OUT/world.json
-                fix: Fail the build on the attach error, and check the policy in the validate route when the profile has the EBS CSI pack. (palette)
-  PROBE FAIL    iaas-pod-identity            The properties route accepts the cloud account for an AWS c…     1 ms  catch no runs clean 1/1 (5%)
-                Palette refuses the account for an AWS cluster: ResourceNotFound: no file for /v1/clouds/aws/properties/validate
-                reproduce: code=$(curl -s -o body.json -w '%{http_code}' -H "ApiKey: $PALETTE_API_KEY" -H "ProjectUid: $PALETTE_PROJECT_UID" -X POST -H 'Content-Type: application/json' --data @$OUT/entity.json "${PALETTE_API:-https://api.spectrocloud.com}/v1/clouds/aws/properties/validate")
-                reproduce: jq --arg code "$code" --slurpfile body body.json '.response = {ok: (($code | tonumber) < 300), status: ($code | tonumber), body: ($body[0] // null)} | if .response.ok then [] else ["Palette refuses the account for an AWS cluster: \(.response.body.code // .response.status): \(.response.body.message // "")"] end' $OUT/world.json
-                fix: The check exists in the properties route; strata-preflight calls it. (none)
+  PROBE PASS    iaas-pod-identity            The properties route accepts the cloud account for an AWS c…     1 ms  catch no runs clean 1/1 (5%)
 
 Cloud services and APIs
-  PROBE FAIL    aws-region-not-enabled       The region of the cluster is enabled for the AWS account         1 ms  catch no runs clean 1/1 (5%)
-                Palette cannot list the regions of account 64f3000000000000000000a1: ResourceNotFound
-                reproduce: aws account get-region-opt-status --region-name us-east-2
-                reproduce: aws ec2 describe-regions --all-regions --query "Regions[?RegionName=='us-east-2'].OptInStatus" --output text
-                reproduce: code=$(curl -s -o body.json -w '%{http_code}' -H "ApiKey: $PALETTE_API_KEY" -H "ProjectUid: $PALETTE_PROJECT_UID" "${PALETTE_API:-https://api.spectrocloud.com}/v1/clouds/aws/regions?cloudAccountUid=64f3000000000000000000a1")
-                reproduce: jq --arg code "$code" --slurpfile body body.json '.response = {ok: (($code | tonumber) < 300), status: ($code | tonumber), body: ($body[0] // null)} | .entity.spec.cloudConfig.region as $r | if (.response.ok | not) then ["Palette cannot list the regions of account \(.entity.spec.cloudAccountUid): \(.response.body.code // .response.status)"] else ([ (.response.body.regions // [])[] | .name ]) as $on | if ($on | index($r)) == null then ["region \($r) is not enabled for the account; Palette lists \($on | length) enabled region(s): \($on | join(", "))"] else [] end end' $OUT/world.json
-                fix: Compare the region of the entity with the enabled regions in the AWS validate route. (palette)
+  PROBE PASS    aws-region-not-enabled       The region of the cluster is enabled for the AWS account         1 ms  catch no runs clean 1/1 (5%)
   NOT CHECKED   aws-s3-irsa-bucket           The IRSA bucket of an AWS cluster can be made                    1 ms
                 no check in strata-preflight; the reproduce lines say what to run by hand
                 reproduce: kubectl get awscluster -A -o jsonpath='{.items[*].spec.s3Bucket.name}'   # on the management cluster, during the build: the bucket CAPA asks for
@@ -48,16 +26,12 @@ Cloud services and APIs
                 reproduce: aws s3control get-public-access-block --account-id $(aws sts get-caller-identity --query Account --output text)
 
 Quotas and limits
-  PROBE FAIL    aws-quotas                   The vCPU quota of the region covers the pools                    1 ms  catch no runs clean 1/1 (5%)
-                aws service-quotas get-service-quota failed: 
-aws: [ERROR]: An error occurred (NoCredentials): Unable to locate credentials. You can configure credentials by running "aws login".
+  NOT CHECKED   aws-quotas                   The vCPU quota of the region covers the pools                    1 ms  catch no runs clean 1/1 (5%)
+                aws not on this machine; run by hand: aws service-quotas get-service-quota --service-code ec2 --quota-code L-1216C47A --region us-east-2 --output json
                 reproduce: aws service-quotas get-service-quota --service-code ec2 --quota-code L-1216C47A --region us-east-2 --query Quota.Value   # on-demand standard vCPUs; L-34B43A08 is the spot vCPUs; L-0263D0A3 is the elastic IPs
                 reproduce: aws service-quotas get-service-quota --service-code vpc --quota-code L-F678F1CE --region us-east-2 --query Quota.Value   # VPCs for each region; L-A4707A72 internet gateways; L-FE5A380F NAT gateways for each zone
                 reproduce: aws service-quotas get-service-quota --service-code elasticloadbalancing --quota-code L-E9E9831D --region us-east-2 --query Quota.Value   # application load balancers; L-69A177A2 network load balancers
                 reproduce: aws ec2 describe-vpcs --region us-east-2 --query 'length(Vpcs)'; aws ec2 describe-addresses --region us-east-2 --query 'length(Addresses)'; aws ec2 describe-nat-gateways --region us-east-2 --query 'length(NatGateways)'   # the usage
-                reproduce: aws service-quotas get-service-quota --service-code ec2 --quota-code L-1216C47A --region us-east-2 --output json
-                reproduce: jq --argjson out "$(<the output>)" '.exec = {exit: 0, stdout: $out, stderr: ""} | def vcpus: (split(".") | .[1] // "") as $s | if $s == "xlarge" then 4 elif ($s | test("^[0-9]+xlarge$")) then ($s | rtrimstr("xlarge") | tonumber) * 4 else 2 end; .entity.spec.cloudConfig.region as $r | ([ .entity.spec.machinepoolconfig[] | select((.cloudConfig.capacityType // "on-demand") != "spot") | select((.poolConfig.size // 0) > 0) | { name: .poolConfig.name, size: .poolConfig.size, type: (.cloudConfig.instanceType // ""), v: ((.cloudConfig.instanceType // "") | vcpus) } ]) as $pools | ([ $pools[] | .size * .v ] | add // 0) as $need | if .exec.exit != 0 then ["aws service-quotas get-service-quota failed: \(.exec.stderr | .[:200])"] else (.exec.stdout.Quota.Value // 0) as $q | if $q < $need then ["the on-demand vCPU quota L-1216C47A in \($r) is \($q), and the pools ask for \($need) vCPUs: \([ $pools[] | "\(.size) x \(.type)" ] | join(", "))"] else [] end end' $OUT/world.json
-                fix: A preflight route that reads the quotas and the usage, and reports "unknown" without the permission. (palette)
   NOT CHECKED   aws-sg-rules                 The rules of a security group stay under the quota               1 ms
                 no check in strata-preflight; the reproduce lines say what to run by hand
                 reproduce: aws service-quotas get-service-quota --service-code vpc --quota-code L-E79EC296 --region us-east-2 --query Quota.Value
@@ -97,14 +71,11 @@ Kubernetes version and engine
   PROBE PASS    skip-k8s-upgrade             No pool skips the Kubernetes upgrade                             1 ms
 
 Storage and CSI
-  WARN          pvc-lb-leftover              No EBS volume of the cluster is left unattached                  1 ms
-                aws ec2 describe-volumes failed: 
-aws: [ERROR]: An error occurred (NoCredentials): Unable to locate credentials. You can configure credentials by running "aws login".
+  NOT CHECKED   pvc-lb-leftover              No EBS volume of the cluster is left unattached                  1 ms
+                aws not on this machine; run by hand: aws ec2 describe-volumes --filters Name=tag-key,Values=kubernetes.io/cluster/payments --region us-east-2 --output json
                 reproduce: aws ec2 describe-volumes --filters Name=tag-key,Values=kubernetes.io/cluster/payments --region us-east-2 --query 'Volumes[].[VolumeId,State,Size]' --output table
                 reproduce: aws resourcegroupstaggingapi get-resources --tag-filters Key=kubernetes.io/cluster/payments --resource-type-filters elasticloadbalancing:loadbalancer ec2:volume --region us-east-2 --query 'ResourceTagMappingList[].ResourceARN' --output text
                 reproduce: aws elbv2 describe-load-balancers --region us-east-2 --query 'LoadBalancers[].[LoadBalancerName,LoadBalancerArn]' --output table
-                reproduce: aws ec2 describe-volumes --filters Name=tag-key,Values=kubernetes.io/cluster/payments --region us-east-2 --output json
-                reproduce: jq --argjson out "$(<the output>)" '.exec = {exit: 0, stdout: $out, stderr: ""} | .entity.metadata.name as $n | if .exec.exit != 0 then ["aws ec2 describe-volumes failed: \(.exec.stderr | .[:200])"] else ([ (.exec.stdout.Volumes // [])[] | select((.State // "") == "available") ]) as $free | if ($free | length) == 0 then [] else ["\($free | length) EBS volume(s) with the tag kubernetes.io/cluster/\($n) are available and attached to no node: the in-cluster cleanup did not run, and each costs money until deleted: \([ $free[] | "\(.VolumeId) (\(.Size // "?") GiB)" ] | join(", "))"] end end' $OUT/world.json
 
 Images and registries
   PROBE PASS    helm-digest-frozen           The digest of a Helm chart in Palette names the bytes a clu…     1 ms
@@ -193,34 +164,28 @@ The Palette platform
                 a race: no check before the build finds it; the watch finds its effect
 
 Client tools
-  PROBE PASS    crane-empty-password         crane holds a password for the registry                          1 ms
-  WARN          cloud-cli-auth               The cloud CLI has live credentials                               1 ms
-                aws sts get-caller-identity failed: 
-aws: [ERROR]: An error occurred (NoCredentials): Unable to locate credentials. You can configure credentials by running "aws login".; the AWS CLI has no live credentials, log in again
+  NOT CHECKED   crane-empty-password         crane holds a password for the registry                          1 ms
+                crane not on this machine; run by hand: crane digest registry.k8s.io/pause:3.10.1
+                reproduce: aws ecr get-login-password --region us-east-2   # must print a token; an empty output makes a login that reports a success with no password
+                reproduce: crane digest registry.k8s.io/pause:3.10.1
+  NOT CHECKED   cloud-cli-auth               The cloud CLI has live credentials                               1 ms
+                aws not on this machine; run by hand: aws sts get-caller-identity --output json
                 reproduce: aws sts get-caller-identity
                 reproduce: gcloud auth print-access-token > /dev/null && echo 'gcloud: logged in'
-                reproduce: aws sts get-caller-identity --output json
-                reproduce: jq --argjson out "$(<the output>)" '.exec = {exit: 0, stdout: $out, stderr: ""} | if .exec.exit != 0 then ["aws sts get-caller-identity failed: \(.exec.stderr | tostring | .[:200]); the AWS CLI has no live credentials, log in again"] elif (.exec.stdout.Account // "") == "" then ["aws sts get-caller-identity gave no Account: \(.exec.stdout | tostring | .[:200])"] else [] end' $OUT/world.json
-                fix: Check the credentials of each cloud CLI at the start of a run. (lab)
-  PROBE PASS    tools-present                Each tool of the lab is on the PATH                              1 ms
+  NOT CHECKED   tools-present                Each tool of the lab is on the PATH                              1 ms
+                sh not on this machine; run by hand: sh -c 'for t in tofu jq just helm crane oras zarf kubectl gcloud aws; do command -v $t >/dev/null || echo $t; done'
+                reproduce: for t in tofu jq just helm crane oras zarf kubectl gcloud aws; do command -v $t >/dev/null || echo "$t is missing"; done
 
 Teardown and leftovers
   NOT CHECKED   force-delete-leaves-cloud    A force delete removes the records of Palette alone              1 ms
                 no check in strata-preflight; the reproduce lines say what to run by hand
                 reproduce: examples/live/aws-inventory.sh payments us-east-2   # 0 on every line before a force delete
-  WARN          teardown-order               The network of a run before is gone                              1 ms
-                aws ec2 describe-vpcs failed: 
-aws: [ERROR]: An error occurred (NoCredentials): Unable to locate credentials. You can configure credentials by running "aws login".
+  NOT CHECKED   teardown-order               The network of a run before is gone                              1 ms
+                aws not on this machine; run by hand: aws ec2 describe-vpcs --filters Name=tag-key,Values=sigs.k8s.io/cluster-api-provider-aws/cluster/payments --region us-east-2 --output json
                 reproduce: examples/live/aws-inventory.sh payments us-east-2   # 0 on every line, the vpcs line last
-                reproduce: aws ec2 describe-vpcs --filters Name=tag-key,Values=sigs.k8s.io/cluster-api-provider-aws/cluster/payments --region us-east-2 --output json
-                reproduce: jq --argjson out "$(<the output>)" '.exec = {exit: 0, stdout: $out, stderr: ""} | (.entity.metadata.name // "?") as $n | (.entity.spec.cloudConfig.region // "?") as $r | if .exec.exit != 0 then ["aws ec2 describe-vpcs failed: \(.exec.stderr | tostring | .[:200])"] else [ (.exec.stdout.Vpcs // [])[] | "VPC \(.VpcId) of a cluster named \($n) is still in \($r); the network goes last, so the teardown before is not finished. Wait until the inventory is 0 on every line" ] end' $OUT/world.json
-  PROBE FAIL    leftovers-before-build       No instance of a run before is in the cloud                      1 ms  catch no runs clean 1/1 (5%)
-                aws ec2 describe-instances failed: 
-aws: [ERROR]: An error occurred (NoCredentials): Unable to locate credentials. You can configure credentials by running "aws login".
+  NOT CHECKED   leftovers-before-build       No instance of a run before is in the cloud                      1 ms  catch no runs clean 1/1 (5%)
+                aws not on this machine; run by hand: aws ec2 describe-instances --filters Name=tag-key,Values=sigs.k8s.io/cluster-api-provider-aws/cluster/payments Name=instance-state-name,Values=pending,running,stopping,stopped,shutting-down --region us-east-2 --output json
                 reproduce: examples/live/aws-inventory.sh payments us-east-2   # 0 on every line before a build
-                reproduce: aws ec2 describe-instances --filters Name=tag-key,Values=sigs.k8s.io/cluster-api-provider-aws/cluster/payments Name=instance-state-name,Values=pending,running,stopping,stopped,shutting-down --region us-east-2 --output json
-                reproduce: jq --argjson out "$(<the output>)" '.exec = {exit: 0, stdout: $out, stderr: ""} | if .exec.exit != 0 then ["aws ec2 describe-instances failed: \(.exec.stderr | tostring | .[:200])"] else ([ (.exec.stdout.Reservations // [])[] | (.Instances // [])[] ]) as $i | if ($i | length) == 0 then [] else ["\($i | length) instance(s) of a cluster named \(.entity.metadata.name // "?") are still in \(.entity.spec.cloudConfig.region // "?"): \($i | map(.InstanceId) | join(", ")); a run before left them, and the build must find 0"] end end' $OUT/world.json
-                fix: Run the inventory before each build, and stop while a line is not 0. (lab)
   NOT CHECKED   macro-undeletable            No cluster reads a macro before its delete                       1 ms
                 no check in strata-preflight; the reproduce lines say what to run by hand
                 reproduce: examples/live/api.sh get /v1/projects/$PALETTE_PROJECT_UID/macros | jq -r '.macros[].name'   # the macros of the project
@@ -234,21 +199,21 @@ aws: [ERROR]: An error occurred (NoCredentials): Unable to locate credentials. Y
 
 Section scorecard
   section                      rows seen check preflight weakest  ran pass fail not checked ready
-  Identity and permissions       11    3    11         0 no runs    5    1    4           0   20%
-  Cloud services and APIs         2    0     1         0 no runs    1    0    1           1    0%
-  Quotas and limits               4    2     2         0 no runs    2    0    2           2    0%
+  Identity and permissions       11    3    11         0 no runs    2    2    0           3  100%
+  Cloud services and APIs         2    0     1         0 no runs    1    1    0           1  100%
+  Quotas and limits               4    2     2         0 no runs    1    0    1           3    0%
   Networking                     12    2    10         0 no runs    4    4    0           1  100%
   Compute and pools               6    1     4         0 no runs    0    0    0           2     -
   Kubernetes version and engi…    4    1     4         0 no runs    2    2    0           0  100%
-  Storage and CSI                 4    2     4         0 no runs    1    0    1           0    0%
+  Storage and CSI                 4    2     4         0 no runs    0    0    0           1     -
   Images and registries          16   11     9         0 no runs    6    5    1           7   83%
   Profiles and packs              8    5     6         0 no runs    3    3    0           2  100%
   Lifecycle: update, repave, …   10    6     8         0 no runs    1    1    0           2  100%
   The Palette platform            9    7     4         0 no runs    1    0    1           5    0%
-  Client tools                    9    9     4         0 no runs    3    2    1           0   67%
-  Teardown and leftovers          6    6     3         0 no runs    3    1    2           3   33%
+  Client tools                    9    9     4         0 no runs    0    0    0           3     -
+  Teardown and leftovers          6    6     3         0 no runs    1    1    0           5  100%
 
 The reproduce lines read $OUT/world.json and $OUT/entity.json: --out DIR writes both.
 
-101 rules apply; 32 ran: 19 passed, 0 failed, 9 probe(s) failed, 4 warning(s), 2 note(s); 25 not checked, 37 skipped, 0 error(s); readiness 59%
-OK: each counted check passed; 9 probe(s) failed, not counted
+101 rules apply; 22 ran: 19 passed, 0 failed, 2 probe(s) failed, 1 warning(s), 2 note(s); 35 not checked, 37 skipped, 0 error(s); readiness 86%
+OK: each counted check passed; 2 probe(s) failed, not counted
