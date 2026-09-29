@@ -164,3 +164,5 @@ runs no command of a cloud tool. `--every` and `--limit` set the watch.
 `--schema` prints the JSON Schema of the report, the rules, the ledger, or the
 promotion report. `--format`, `--json`, `--compact`, `--no-color`, and
 `--quiet` are as for the other commands, with `html` as one more format.
+`--version` prints the version of `strata-preflight`, which a release keeps
+equal to the version of `strata`.
