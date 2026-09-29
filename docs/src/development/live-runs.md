@@ -828,6 +828,44 @@ kind. A change of the node pool is not a change of a layer, so the impact table
 gives it no level, and `compare` shows it in the shape tier alone. The recovery
 is in [A GKE cluster](./live-example.md#a-gke-cluster).
 
+## preflight.sh
+
+The checks of the lab itself, before a recipe builds: see
+[The preflight checks](./live-example.md#the-preflight-checks). Each check is
+one row of the catalog with `engines: [lab]`.
+
+| Check | Expected | What it shows |
+|---|---|---|
+| `tools-present` | 0 | each tool of the lab is on the PATH |
+| `palette-key`, `palette-preflight` | 0 | the key reads the tenant, and `strata preflight` lists the rules of the cloud |
+| `cloud-cli-auth` | 0 | `aws sts get-caller-identity`, or `gcloud auth print-access-token` |
+| `gcp-apis-off`, `gke-api-off` | 0 | the Compute, Cloud Resource Manager, IAM, and Kubernetes Engine APIs are on (#90) |
+| `eks-core-policies` | 0 | the six core policies of Palette are in the AWS account (#89) |
+| `ecr-token` | 0 | `crane` reads the ECR repository of the example |
+| `leftovers-a`, `leftovers-b` | 0 | the inventory of each cluster name is 0 on every line |
+
+## preflight-plan.sh
+
+The test plan of #91 for one engine, with no cluster: each fault the lab can make
+fails when it must, and the clean entity passes. Each run appends to the ledger,
+`preflight/evidence/runs.yaml`, and `strata preflight --promotion` reads it. The
+checks of each run, and what each one shows, are in `summary.md` of the run;
+this table names the faults.
+
+| Engine | The faults made on purpose, by rule id |
+|---|---|
+| `gke` | `gke-pool-multiple-3`, `palette-validate` (a pool of 4), `gke-no-release-channel`, `gke-no-gpu`, `gke-autopilot`, `gcp-name-length`, `account-missing` |
+| `eks` | `eks-one-zone`, `eks-worker-needed`, `update-strategy-eks`, `api-endpoint-reach`, `account-missing`, `worker-cpu-floor` |
+| `aws` | `worker-cpu-floor`, `palette-validate` (one worker of four cores), `api-endpoint-reach`, `account-missing` |
+| `gcp` | `worker-cpu-floor`, `palette-validate`, `gcp-name-length`, `account-missing` |
+
+The runs of the plan, and what each one showed, are in the section
+[What the preflight runs show](#what-the-preflight-runs-show) below.
+
+## What the preflight runs show
+
+No run yet.
+
 ## A chart pushed again, on a cluster
 
 A run by hand, with the registry host of `registry-kinds.sh` and cluster A: no

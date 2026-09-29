@@ -28,7 +28,13 @@ script=preflight-plan
 . "$(cd "$(dirname "$0")" && pwd)/lib.sh"
 [ -x "$strata" ] || die "no strata binary at $strata; run just build"
 engine=${1:-}
-case "$engine" in aws|eks|gcp|gke) ;; -h|--help|"") sed -n '2,/^set -uo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; exit "${1:+0}2" ;; *) die "no plan for the engine '$engine'" ;; esac
+usage() { sed -n '2,/^set -uo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; }
+case "$engine" in
+  aws|eks|gcp|gke) ;;
+  -h|--help) usage; exit 0 ;;
+  "") usage >&2; exit 2 ;;
+  *) die "no plan for the engine '$engine'" ;;
+esac
 shift
 build=""
 [ "${1:-}" = "--build" ] && build=1

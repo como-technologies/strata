@@ -1265,3 +1265,72 @@ fn tenant_sh_repave_asks_palette_whether_a_move_to_another_profile_version_repav
         text(&o.stderr)
     );
 }
+
+// ---- preflight.sh and preflight-plan.sh ------------------------------------------------------------
+
+fn preflight_script(name: &str, args: &[&str]) -> Output {
+    // a strata binary that is newer than the sources, so lib.sh does not stop the script
+    let dir = tempfile::tempdir().unwrap();
+    let bin = dir.path().join("strata");
+    executable(&bin, "#!/usr/bin/env bash\necho strata 0.0.0\n");
+    Command::new("bash")
+        .arg(live_script(name))
+        .args(args)
+        .env("STRATA_BIN", &bin)
+        .env("OUT", dir.path().join("out"))
+        .output()
+        .unwrap()
+}
+
+#[test]
+fn preflight_scripts_print_their_usage_and_refuse_an_engine_they_have_no_plan_for() {
+    let o = preflight_script("preflight.sh", &["--help"]);
+    assert!(o.status.success(), "{}{}", text(&o.stdout), text(&o.stderr));
+    assert!(
+        text(&o.stdout).contains("The checks of the lab itself"),
+        "{}",
+        text(&o.stdout)
+    );
+    let o = preflight_script("preflight.sh", &["--cloud", "mars"]);
+    assert_eq!(o.status.code(), Some(2));
+    assert!(
+        text(&o.stderr).contains("no lab for the cloud 'mars'"),
+        "{}",
+        text(&o.stderr)
+    );
+
+    let o = preflight_script("preflight-plan.sh", &["--help"]);
+    assert!(o.status.success(), "{}{}", text(&o.stdout), text(&o.stderr));
+    assert!(
+        text(&o.stdout).contains("The test plan of #91"),
+        "{}",
+        text(&o.stdout)
+    );
+    let o = preflight_script("preflight-plan.sh", &["mars"]);
+    assert_eq!(o.status.code(), Some(2));
+    assert!(
+        text(&o.stderr).contains("no plan for the engine 'mars'"),
+        "{}",
+        text(&o.stderr)
+    );
+    let o = preflight_script("preflight-plan.sh", &[]);
+    assert_eq!(o.status.code(), Some(2), "no engine is usage, exit 2");
+}
+
+#[test]
+fn the_entities_of_the_test_plan_are_the_shape_of_a_create_for_each_engine() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/live/preflight");
+    for engine in ["aws", "eks", "gcp", "gke"] {
+        let text = std::fs::read_to_string(dir.join(format!("{engine}.json"))).unwrap();
+        let doc: serde_json::Value = serde_json::from_str(&text).unwrap();
+        assert_eq!(doc["spec"]["cloudAccountUid"], "__ACCOUNT_UID__", "{engine}");
+        assert_eq!(doc["spec"]["profiles"][0]["uid"], "__PROFILE_UID__", "{engine}");
+        let pools = doc["spec"]["machinepoolconfig"].as_array().unwrap();
+        assert!(!pools.is_empty(), "{engine} has a pool");
+        // preflight-plan.sh edits the first pool for the faults of size and type, and on gke and
+        // eks that pool is the one worker pool
+        if engine == "gke" || engine == "eks" {
+            assert_eq!(pools[0]["poolConfig"]["isControlPlane"], false, "{engine}");
+        }
+    }
+}
