@@ -37,7 +37,7 @@ rules:
           end
     reproduce:
       - "kubectl -n kube-system get pods -l app.kubernetes.io/name=aws-ebs-csi-driver -o wide"
-      - "curl -s -H \"ApiKey: $PALETTE_API_KEY\" \"$PALETTE_HOST/v1/spectroclusters/{{ .clusterUid }}\" | jq '.status.packs[] | select(.name | test(\"csi\")) | {name, condition}'"
+      - "curl -s -H \"ApiKey: $PALETTE_API_KEY\" \"$PALETTE_HOST/v1/spectroclusters/{{ .clusterUid // \"<cluster uid>\" }}\" | jq '.status.packs[] | select(.name | test(\"csi\")) | {name, condition}'"
     fix:
       owner: palette
       text: Do not report Healthy while a pod of a pack crash-loops.
@@ -84,11 +84,11 @@ rules:
     when: ([ (.profiles // [])[] | .packs[] | select(.layer == "k8s" or .layer == "csi") ] | length) > 0
     what: |
       The EBS CSI controller needs `AmazonEBSCSIDriverPolicy`. The Palette docs give two ways, both
-      in the values of the `kubernetes-eks` pack: `managedControlPlane.irsaRoles` with the policy
-      and a service account annotation on the CSI pack, or `managedMachinePool.roleAdditionalPolicies`
-      on the node role. With an AL2023 node (IMDSv2, hop limit 1) the CSI pods cannot use the node
-      role by chance. Without one of the two, a PVC stays `Pending`. The #91 row puts the values in
-      the CSI pack; the docs put them in the Kubernetes pack, so this check reads both layers.
+      in the values of the `kubernetes-eks` pack. One is `managedControlPlane.irsaRoles` with the
+      policy and a service account annotation on the CSI pack. The other is
+      `managedMachinePool.roleAdditionalPolicies` on the node role. With an AL2023 node (IMDSv2, hop limit 1) a CSI pod cannot reach the node
+      role through IMDS. Without one of the two, a PVC stays `Pending`. The #91 row puts the values
+      in the CSI pack; the docs put them in the Kubernetes pack, so this check reads both layers.
     check:
       kind: static
       expr: |
@@ -172,10 +172,12 @@ rules:
     when: .before != null
     what: |
       Once on, the secrets encryption of an EKS cluster cannot go off, and its key cannot change.
-      Palette accepts the change: the cloud config update keeps the old config when the new one is
-      off, and the provider logs "disabling EKS encryption is not allowed" or "changing EKS
-      encryption is not allowed" and does nothing. The entity then says one thing and the cluster
-      another. To turn encryption on for a cluster that had none is allowed.
+      Palette accepts the change. The cloud config update keeps the old config when the new one is
+      off. The provider logs "disabling EKS encryption is not allowed" or "changing EKS encryption
+      is not allowed", and does nothing. The entity then says one thing and the cluster
+      another. To turn encryption on for a cluster that had none is allowed. `fixed-fields` names
+      `encryptionConfig` among the fixed fields of the cloud config; this rule reads the change in
+      detail.
     check:
       kind: static
       expr: |
@@ -236,7 +238,7 @@ rules:
     what: |
       Kubernetes refuses an update of a field of a StorageClass (`parameters`, `reclaimPolicy`,
       `volumeBindingMode`, `provisioner`). A change of the `storageClasses` block in the CSI pack
-      values applies the class again, and the API server refuses it; Palette shows the pack as
+      values applies the class again, and the API server refuses it. Palette shows the pack as
       installed with the old class. This check compares the `storageClasses` block of the CSI
       values of `before` and of the entity, as text: `before` holds the entity, not the records,
       so `valuesCanon` is not there. A new class, or a removed block, is not a change of a field.

@@ -9,7 +9,11 @@ rules:
     title: A GKE worker pool size is a multiple of 3
     engines: [gke]
     tier: static
+    level: preflight
     severity: fail
+    promotion:
+      bar: 0.8
+      runs: ["20260929T043631Z"]
     status: seen
     what: |
       Palette refuses a GKE worker pool whose size is not a multiple of 3, with `InvalidParam`
@@ -29,6 +33,9 @@ rules:
       - kind: run
         ref: "#90"
         note: "`InvalidParam` at create, after a full apply, with a pool of 4"
+      - kind: run
+        ref: "20260929T043631Z"
+        note: the plan made the fault and the check found it; the clean entity passed
       - kind: source
         ref: hubble services/service/spectrocluster/internal/handler/converter/v1/clusters_v1_converter.go ToMachinePoolBasicConfig
         note: the converter panics with InvalidParam for a managed GCP pool whose size is not a multiple of 3
@@ -47,15 +54,21 @@ rules:
       `ZONE_RESOURCE_POOL_EXHAUSTED`, or a node group `CREATE_FAILED`. The instance catalog of
       Palette is one static list for each region, and it does not ask the zone.
     reproduce:
-      - "aws ec2 describe-instance-type-offerings --location-type availability-zone --filters Name=instance-type,Values={{ .entity.spec.machinepoolconfig[0].cloudConfig.instanceType }} --region {{ .entity.spec.cloudConfig.region }} --query 'InstanceTypeOfferings[].Location'"
-      - "gcloud compute machine-types describe {{ .entity.spec.machinepoolconfig[0].cloudConfig.instanceType }} --zone <zone> --project {{ .entity.spec.cloudConfig.project }}"
+      aws:
+        - "aws ec2 describe-instance-type-offerings --location-type availability-zone --filters Name=instance-type,Values={{ .entity.spec.machinepoolconfig[0].cloudConfig.instanceType }} --region {{ .entity.spec.cloudConfig.region }} --query 'InstanceTypeOfferings[].Location' --output text   # each zone of the pools must be in the list"
+      eks:
+        - "aws ec2 describe-instance-type-offerings --location-type availability-zone --filters Name=instance-type,Values={{ .entity.spec.machinepoolconfig[0].cloudConfig.instanceType }} --region {{ .entity.spec.cloudConfig.region }} --query 'InstanceTypeOfferings[].Location' --output text   # each zone of the pools must be in the list"
+      gcp:
+        - "gcloud compute machine-types describe {{ .entity.spec.machinepoolconfig[0].cloudConfig.instanceType }} --zone {{ .entity.spec.machinepoolconfig[0].cloudConfig.azs[0] // \"<zone>\" }} --project {{ .entity.spec.cloudConfig.project }} --format 'value(name,zone)'"
+      gke:
+        - "gcloud compute machine-types list --filter 'name={{ .entity.spec.machinepoolconfig[0].cloudConfig.instanceType }}' --project {{ .entity.spec.cloudConfig.project }} --format 'value(zone)' | grep {{ .entity.spec.cloudConfig.region }}   # each zone of the region that offers the type"
     fix:
       owner: palette
       text: Check the offering in the validate route, with "unknown" when the permission is missing.
     evidence:
       - kind: source
-        ref: hubble services/service/machine/machine_service.go
-        note: the instance lookup is a catalog of CPU and memory for each region
+        ref: hubble domain/cloudmeta.go InstanceType, InstanceTypes
+        note: the catalog holds the CPU, the memory, and the price of each type for a region, and no zone
 
   - id: spot-capacity
     title: Spot capacity is short

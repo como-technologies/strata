@@ -203,7 +203,8 @@ rules:
       `DependencyPackNotSupported`. The constraint is not in the world. `GET /v1/packs/{uid}` gives
       `packValues[].dependencies`, which lists the packs of the template parameters, not the
       constraints. So the check asks the validate route and reads the dependency errors of each
-      pack.
+      pack. `palette-validate` calls the same route and reports every error of it; this rule
+      names the dependency errors alone.
     check:
       kind: palette
       method: POST
@@ -246,6 +247,8 @@ rules:
       such as `AwsEcrValidate`, `ResourceNotFound`, or `EcrImagesValidationIncomplete`. The check
       runs the validate route and reads such a refusal. It applies to a world with a pack of type
       `oci`. A cloud check with `crane digest` on each image of the records is in `reproduce`.
+      `palette-validate` calls the same route and reports every refusal; this rule names a refusal
+      over an image alone.
     check:
       kind: palette
       method: POST

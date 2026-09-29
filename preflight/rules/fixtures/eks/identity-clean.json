@@ -10,7 +10,7 @@
       }
     },
     "_exec": {
-      "aws iam simulate-principal-policy --policy-source-arn arn:aws:iam::123456789012:role/strata-live-eks-cloud --action-names ec2:CreateSecurityGroup ec2:AuthorizeSecurityGroupIngress iam:PassRole ec2:DescribeKeyPairs ec2:DescribeImages ec2:RunInstances elasticloadbalancing:CreateLoadBalancer ec2:CreateVpc ec2:CreateSubnet ec2:CreateInternetGateway ec2:CreateRouteTable ec2:CreateNatGateway ec2:AllocateAddress eks:CreateCluster eks:CreateNodegroup eks:DescribeCluster eks:DescribeNodegroup iam:GetRole iam:ListAttachedRolePolicies cloudformation:DescribeStacks --output json": {
+      "aws iam simulate-principal-policy --policy-source-arn arn:aws:iam::123456789012:role/strata-live-eks-cloud --action-names ec2:CreateSecurityGroup ec2:AuthorizeSecurityGroupIngress ec2:DescribeKeyPairs ec2:DescribeImages ec2:RunInstances elasticloadbalancing:CreateLoadBalancer ec2:CreateVpc ec2:CreateSubnet ec2:CreateInternetGateway ec2:CreateRouteTable ec2:CreateNatGateway ec2:AllocateAddress cloudformation:DescribeStacks --output json": {
         "exit": 0,
         "stdout": {
           "EvaluationResults": [
@@ -21,11 +21,6 @@
             },
             {
               "EvalActionName": "ec2:AuthorizeSecurityGroupIngress",
-              "EvalResourceName": "*",
-              "EvalDecision": "allowed"
-            },
-            {
-              "EvalActionName": "iam:PassRole",
               "EvalResourceName": "*",
               "EvalDecision": "allowed"
             },
@@ -76,36 +71,6 @@
             },
             {
               "EvalActionName": "ec2:AllocateAddress",
-              "EvalResourceName": "*",
-              "EvalDecision": "allowed"
-            },
-            {
-              "EvalActionName": "eks:CreateCluster",
-              "EvalResourceName": "*",
-              "EvalDecision": "allowed"
-            },
-            {
-              "EvalActionName": "eks:CreateNodegroup",
-              "EvalResourceName": "*",
-              "EvalDecision": "allowed"
-            },
-            {
-              "EvalActionName": "eks:DescribeCluster",
-              "EvalResourceName": "*",
-              "EvalDecision": "allowed"
-            },
-            {
-              "EvalActionName": "eks:DescribeNodegroup",
-              "EvalResourceName": "*",
-              "EvalDecision": "allowed"
-            },
-            {
-              "EvalActionName": "iam:GetRole",
-              "EvalResourceName": "*",
-              "EvalDecision": "allowed"
-            },
-            {
-              "EvalActionName": "iam:ListAttachedRolePolicies",
               "EvalResourceName": "*",
               "EvalDecision": "allowed"
             },

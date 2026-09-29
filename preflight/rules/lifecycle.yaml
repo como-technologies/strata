@@ -111,26 +111,52 @@ rules:
   - id: gke-pool-roll
     title: A GKE node pool change keeps one node pool for each pool
     engines: [gke]
-    tier: watch
+    tier: cloud
     severity: fail
     status: seen
+    when: .clusterUid != null
     what: |
       On a `Running` cluster, a change of the machine type deletes the GKE node pool first. The
       new `GCPManagedMachinePool` object takes the GKE name of the old one, so CAPG deletes the
       one node pool and makes no new one. The controllers of Palette and CAPG ran on that pool,
-      so they stop, and Palette shows no event after the delete of the pool. Before the control
-      plane is ready, CAPG stops with "machinePoolList length (1) != managedMachinePoolList
-      length (2)" every 5 minutes. The watch reads that event; the node pools themselves are
-      visible from GCP alone, so the reproduce line lists them.
+      so they stop, and Palette shows no event after the delete of the pool. The node pools are
+      visible from GCP alone, so the check lists them for the cluster of the name. GKE must hold
+      one node pool for each worker pool of the entity, and none in `STOPPING` or `ERROR`. The
+      rule applies to a cluster that exists (`cluster:UID`). Before the control plane is ready,
+      CAPG stops with "machinePoolList length (1) != managedMachinePoolList length (2)" every 5
+      minutes; `status-not-cloud` reads that event.
     check:
-      kind: watch
+      kind: exec
+      needs: [gcloud]
+      argv:
+        - gcloud
+        - container
+        - node-pools
+        - list
+        - --cluster
+        - '{{ .entity.metadata.name }}'
+        - --location
+        - '{{ .entity.spec.cloudConfig.managedClusterConfig.location // .entity.spec.cloudConfig.region }}'
+        - --project
+        - '{{ .entity.spec.cloudConfig.project }}'
+        - --format
+        - json
       expr: |
-        [ (.events // [])[]
-          | select((.message // "") | test("machinePoolList length|managedMachinePoolList|GCPManagedMachinePool"))
-          | "event \(.reason) at \(.metadata.creationTimestamp): \(.message | .[:240])" ]
-        | unique | .[:3]
+        (.entity.metadata.name // "?") as $n
+        | (.entity.spec.cloudConfig.managedClusterConfig.location // .entity.spec.cloudConfig.region) as $loc
+        | ([ .entity.spec.machinepoolconfig[]? | select((.poolConfig.isControlPlane // false) | not) | .poolConfig.name ]) as $pools
+        | if .exec.exit != 0 then ["gcloud container node-pools list failed for cluster \($n) in \($loc): \(.exec.stderr | tostring | .[:200])"]
+          else (.exec.stdout // []) as $np
+            | [ if ($np | length) < ($pools | length)
+                then "GKE holds \($np | length) node pool(s) for cluster \($n), and the entity has \($pools | length) worker pool(s) (\($pools | join(", "))): a pool change deleted a node pool and made no new one, so the cluster keeps no node"
+                elif ($np | length) > ($pools | length)
+                then "GKE holds \($np | length) node pool(s) for cluster \($n) (\([ $np[] | .name ] | join(", "))), and the entity has \($pools | length) worker pool(s): an old node pool is still there"
+                else empty end ]
+              + [ $np[] | select((.status // "") | test("^(STOPPING|ERROR)$"))
+                  | "node pool \(.name) (\(.config.machineType // "?")) is \(.status)\(if (.statusMessage // "") != "" then ": \(.statusMessage | .[:160])" else "" end)" ]
+          end
     reproduce:
-      - "gcloud container node-pools list --cluster {{ .entity.metadata.name }} --region {{ .entity.spec.cloudConfig.region }} --project {{ .entity.spec.cloudConfig.project }} --format 'table(name,config.machineType,status)'   # one node pool for each pool of the entity"
+      - "gcloud container node-pools list --cluster {{ .entity.metadata.name }} --location {{ .entity.spec.cloudConfig.managedClusterConfig.location // .entity.spec.cloudConfig.region }} --project {{ .entity.spec.cloudConfig.project }} --format 'table(name,config.machineType,status)'   # one node pool for each pool of the entity"
       - "gcloud container operations list --project {{ .entity.spec.cloudConfig.project }} --filter 'targetLink~{{ .entity.metadata.name }}' --format 'table(operationType,status,startTime)'   # a DELETE_NODE_POOL with no CREATE_NODE_POOL after it"
     fix:
       owner: palette
@@ -144,8 +170,8 @@ rules:
       - kind: source
         ref: palette pkg/provider/gcp/gcp_managed.go gcpManagedMachinePoolImmutableFieldsChanged
     tests:
-      - fault: fixtures/gke/pool-roll-mismatch.json
-        clean: fixtures/gke/watch-running.json
+      - fault: fixtures/gke/pool-roll-deleted.json
+        clean: fixtures/gke/pool-roll-clean.json
 
   - id: sweep-one-slot
     title: One pool replacement at a time
@@ -180,8 +206,8 @@ rules:
       text: Sweep the old machine pools by label, not by one annotation.
     evidence:
       - kind: source
-        ref: palette controllers/worker_managed.go ReconcileManagedWorker
-        note: the annotation holds one name (:494-499); the sweep at :184-208 runs after the readiness checks of each pool
+        ref: palette pkg/clusterdeployer/worker/worker_managed.go ReconcileManagedWorker
+        note: the annotation spectrocloud.com/old-managed-machine-pool holds one name; the sweep runs after the readiness checks of each pool
       - kind: report
         ref: palette-eks-orphan-nodegroup-delete-stuck-findings-2026-09-28 F3
     tests:
@@ -242,13 +268,14 @@ rules:
     status: inferred
     when: .before != null
     what: |
-      A change of these fields of `cloudConfig` after the create does not reach the cluster. AWS:
-      `region`, `vpcId`, `bastionDisabled`. EKS: `region`, `vpcId`, `encryptionConfig`. GKE:
-      `project`, `region`, `network`, `managedClusterConfig`. The source of hubble stores a new
-      `region`, `vpcId`, and `bastionDisabled` in the cloud config (`UpdateClusterConfig`), and
-      copies `encryptionConfig` only when `isEnabled` is true: a disable is dropped. Whether the
-      controller applies a stored change to a built cluster is not confirmed, so the status is
-      inferred.
+      These fields of `cloudConfig` are fixed at the create. AWS: `region`, `vpcId`,
+      `bastionDisabled`. EKS: `region`, `vpcId`, `encryptionConfig`. GKE: `project`, `region`,
+      `network`, `managedClusterConfig`. The source of hubble stores a new `region`, `vpcId`, and
+      `bastionDisabled` in the cloud config (`UpdateClusterConfig`), and copies `encryptionConfig`
+      only when `isEnabled` is true: a disable is dropped. No source shows that the controller
+      applies a stored change to a built cluster, and a VPC or a region cannot move under running
+      instances. No run shows what the cluster does with the stored value, so the status is
+      inferred. `eks-encryption-fixed` reads the encryption change of EKS in detail.
     check:
       kind: static
       expr: |
@@ -257,7 +284,7 @@ rules:
          else ["project", "region", "network", "managedClusterConfig"] end) as $fields
         | (.before.spec.cloudConfig // {}) as $b | (.entity.spec.cloudConfig // {}) as $a
         | [ $fields[] | select(($b[.] // null) != ($a[.] // null))
-            | "cloudConfig.\(.) changed from \(($b[.] // null) | tojson) to \(($a[.] // null) | tojson): Palette does not apply it to a built cluster" ]
+            | "cloudConfig.\(.) changed from \(($b[.] // null) | tojson) to \(($a[.] // null) | tojson): Palette stores the change, and no source shows that a built cluster takes it" ]
     fix:
       owner: palette
       text: Refuse a change of a fixed field with an error.
@@ -308,15 +335,17 @@ rules:
     tier: static
     severity: warn
     status: seen
+    when: .cloud as $c | (["eks", "gke", "aks"] | index($c)) == null
     what: |
       A Kubernetes or OS pack whose values read a macro, `{{.spectro.macro.<name>}}`, repaves
-      when the macro gets a new value: on a kubeadm engine the repave check of Palette reads every
+      when the macro gets a new value. On a kubeadm engine the repave check of Palette reads every
       value of these two layers. Palette records the repave as system-initiated, in the state
       `Pending`, and the cluster takes no update until a person approves it. The record names the
       pack and the key, not the macro. `status.hasUserMacros` of `GET /v1/clusterprofiles/{uid}`
       is true for a profile that reads a user macro on any layer, and
       `POST /v1/spectroclusters/{uid}/validate/repave` cannot see a macro change. The rule is for
-      the kubeadm engines; on EKS and GKE a values change of these layers does not repave.
+      the kubeadm engines, and skips EKS, GKE, and AKS: there a values change of these layers does
+      not repave.
     check:
       kind: static
       expr: |
@@ -491,7 +520,7 @@ rules:
       not change. The record of the cluster reports the drift, and `strata compare` of the
       version against the cluster names the value. No check before a change finds it.
     reproduce:
-      - "strata compare <name>@<version> cluster:{{ .clusterUid }}   # exit 1 names the overridden value"
+      - "strata compare <name>@<version> cluster:{{ .clusterUid // \"<cluster uid>\" }}   # exit 1 names the overridden value"
       - "strata verify <cluster record>                              # DRIFT on the cluster record; OK on the version"
     evidence:
       - kind: run
@@ -506,8 +535,8 @@ rules:
     status: seen
     what: |
       A `PUT` of the content of a profile without `resolveNotification` still closes the events
-      of values and manifests that the push takes, and the copy of the cluster takes the edit
-      within 3 minutes. An event of a version, an added pack, or a removed pack stays until the
+      of values and manifests that the push takes. The copy of the cluster takes the edit within
+      3 minutes. An event of a version, an added pack, or a removed pack stays until the
       cluster takes it.
     evidence:
       - kind: run

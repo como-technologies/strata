@@ -11,8 +11,7 @@
           "version": "1.0.0",
           "cloudType": "eks",
           "type": "cluster",
-          "template": "published",
-          "kind": "cluster-profile"
+          "template": "published"
         },
         "packs": [
           {

@@ -81,7 +81,7 @@
         "name": "strata-live-profile",
         "version": "1.0.0",
         "cloudType": "gke",
-        "kind": "cluster-profile"
+        "type": "cluster"
       },
       "packs": [
         {

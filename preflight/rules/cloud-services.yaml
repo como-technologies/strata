@@ -51,11 +51,15 @@ rules:
     title: The Compute, Cloud Resource Manager, and IAM APIs are on in the GCP project
     engines: [gcp, gke]
     tier: cloud
-    severity: fail
+    severity: warn
     status: source
     what: |
-      A build calls the Compute API, the Cloud Resource Manager API, and the IAM API. One that is
-      off fails with `SERVICE_DISABLED`.
+      The documentation asks for the Compute API, the Cloud Resource Manager API, and the IAM API.
+      A call to one that is off fails with `SERVICE_DISABLED`. A GKE build needs the Kubernetes
+      Engine API (`gke-api-off`) and the Compute API. The GCP property route of Palette calls
+      Cloud Resource Manager, and a GCP IaaS create calls that route; a GKE create does not. The
+      #90 GKE clusters were built in a project with Cloud Resource Manager off, so a missing API
+      here is a warning to read, not a proof.
     check:
       kind: exec
       needs: [gcloud]
@@ -82,6 +86,9 @@ rules:
     evidence:
       - kind: doc
         ref: https://docs.spectrocloud.com/clusters/public-cloud/gcp/add-gcp-accounts/
+      - kind: run
+        ref: preflight-plan gke 20260929T043631Z
+        note: cloudresourcemanager.googleapis.com was off in the project that built the #90 GKE clusters
     tests:
       - fault: fixtures/gke/apis-off.json
         clean: fixtures/gke/clean.json

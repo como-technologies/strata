@@ -27,7 +27,7 @@
           "name": "strata-live-addon",
           "version": "1.1.0",
           "cloudType": "all",
-          "kind": "cluster-profile"
+          "type": "cluster"
         },
         "packs": [
           {

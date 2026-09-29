@@ -1,0 +1,13 @@
+{
+  "_base": "pool-roll-clean.json",
+  "_note": "the end state of #90: the pool change deleted the GKE node pool, and no new one was made",
+  "_patch": {
+    "_exec": {
+      "gcloud container node-pools list --cluster fred --location us-east1 --project strata-lab --format json": {
+        "exit": 0,
+        "stdout": [],
+        "stderr": ""
+      }
+    }
+  }
+}

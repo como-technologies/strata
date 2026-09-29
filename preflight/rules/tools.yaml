@@ -48,8 +48,20 @@ rules:
       The provider sends one plain delete and waits for its own deadline. A pipeline sees an error
       with no reason it can read. Read the state of the cluster after the error.
     reproduce:
-      - "strata-preflight --watch cluster:{{ .clusterUid }}   # the conditions and the events of the delete"
-      - "examples/live/aws-inventory.sh {{ .entity.metadata.name }} {{ .entity.spec.cloudConfig.region }}   # what the cloud still holds"
+      aws:
+        - "strata-preflight --watch cluster:{{ .clusterUid // \"<cluster uid>\" }}   # the conditions and the events of the delete"
+        - "examples/live/aws-inventory.sh {{ .entity.metadata.name }} {{ .entity.spec.cloudConfig.region }}   # what the cloud still holds"
+      eks:
+        - "strata-preflight --watch cluster:{{ .clusterUid // \"<cluster uid>\" }}   # the conditions and the events of the delete"
+        - "examples/live/aws-inventory.sh {{ .entity.metadata.name }} {{ .entity.spec.cloudConfig.region }}   # what the cloud still holds"
+      gcp:
+        - "strata-preflight --watch cluster:{{ .clusterUid // \"<cluster uid>\" }}   # the conditions and the events of the delete"
+        - "examples/live/gcp-inventory.sh {{ .entity.spec.cloudConfig.project }} {{ .entity.metadata.name }}   # what the cloud still holds"
+      gke:
+        - "strata-preflight --watch cluster:{{ .clusterUid // \"<cluster uid>\" }}   # the conditions and the events of the delete"
+        - "examples/live/gcp-inventory.sh {{ .entity.spec.cloudConfig.project }} {{ .entity.metadata.name }} --gke   # what the cloud still holds"
+      all:
+        - "strata-preflight --watch cluster:{{ .clusterUid // \"<cluster uid>\" }}   # the conditions and the events of the delete"
     fix:
       owner: none
     evidence:
@@ -246,7 +258,7 @@ rules:
 
   - id: strata-binary-stale
     title: The strata binary is newer than its sources
-    engines: [lab]
+    engines: [all, lab]
     tier: tool
     severity: warn
     status: seen

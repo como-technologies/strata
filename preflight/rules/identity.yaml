@@ -9,13 +9,22 @@ rules:
     title: The role of the cloud account holds the EKS policy
     engines: [eks]
     tier: cloud
-    severity: fail
+    severity: warn
     status: seen
     when: .account.spec.credentialType == "sts"
     what: |
       An STS role without the EKS policy of Palette fails with `AccessDenied` on `eks:DescribeCluster`
       at create, after a full apply. The EKS name check of Palette finds it by chance; a role that can
       describe but not create passes it. `POST /v1/clouds/eks/properties/validate` is that name check.
+      The check simulates the EKS and IAM actions of the build against the resources the build
+      names. Those are the cluster ARN and a node group ARN of the cluster name, and the three CAPA
+      roles. The EKS policy of Palette scopes `eks:CreateCluster` and `eks:DescribeCluster` to
+      `arn:*:eks:*:*:cluster/*`. So a simulation with no `--resource-arns` answers `implicitDeny`
+      for a role that builds clusters. An action counts as allowed when one listed resource allows
+      it. The simulator has no request context. So an `implicitDeny` on an action that a condition
+      key allows is a warning to read, not a proof. The role that built the #89 clusters gets
+      `implicitDeny` on `eks:CreateCluster` against every resource. `role-partial-permissions`
+      simulates the resource-less EC2 actions of the same policies.
     check:
       kind: exec
       needs: [aws]
@@ -24,25 +33,44 @@ rules:
         - iam
         - simulate-principal-policy
         - --policy-source-arn
-        - "{{ .account.spec.sts.arn }}"
+        - '{{ .account.spec.sts.arn }}'
         - --action-names
         - eks:CreateCluster
         - eks:CreateNodegroup
         - eks:DescribeCluster
+        - eks:DescribeNodegroup
         - iam:PassRole
+        - iam:GetRole
+        - iam:ListAttachedRolePolicies
+        - --resource-arns
+        - 'arn:{{ .account.spec.sts.arn | split(":") | .[1] }}:eks:{{ .entity.spec.cloudConfig.region }}:{{ .account.spec.sts.arn | split(":") | .[4] }}:cluster/{{ .entity.metadata.name }}'
+        - 'arn:{{ .account.spec.sts.arn | split(":") | .[1] }}:eks:{{ .entity.spec.cloudConfig.region }}:{{ .account.spec.sts.arn | split(":") | .[4] }}:nodegroup/{{ .entity.metadata.name }}/{{ [ .entity.spec.machinepoolconfig[] | select((.poolConfig.isControlPlane // false) | not) | .poolConfig.name ] | .[0] // "worker-pool" }}/00000000-0000-0000-0000-000000000000'
+        - 'arn:{{ .account.spec.sts.arn | split(":") | .[1] }}:iam::{{ .account.spec.sts.arn | split(":") | .[4] }}:role/{{ .account.spec.namePrefix // "" }}control-plane.cluster-api-provider-aws.sigs.k8s.io'
+        - 'arn:{{ .account.spec.sts.arn | split(":") | .[1] }}:iam::{{ .account.spec.sts.arn | split(":") | .[4] }}:role/{{ .account.spec.namePrefix // "" }}nodes.cluster-api-provider-aws.sigs.k8s.io'
+        - 'arn:{{ .account.spec.sts.arn | split(":") | .[1] }}:iam::{{ .account.spec.sts.arn | split(":") | .[4] }}:role/{{ .account.spec.namePrefix // "" }}controllers.cluster-api-provider-aws.sigs.k8s.io'
         - --output
         - json
       expr: |
-        if .exec.exit != 0 then ["aws iam simulate-principal-policy failed: \(.exec.stderr | .[:200])"]
-        else [ .exec.stdout.EvaluationResults[] | select(.EvalDecision != "allowed") | "\(.EvalActionName) is \(.EvalDecision) for the role" ] end
+        def allowed: .EvalDecision == "allowed" or any((.ResourceSpecificResults // [])[]; .EvalResourceDecision == "allowed");
+        def per_resource: [ (.ResourceSpecificResults // [])[] | "\(.EvalResourceName | split(":") | .[5:] | join(":")) \(.EvalResourceDecision)" ] | join(", ");
+        if .exec.exit != 0 then ["aws iam simulate-principal-policy failed: \(.exec.stderr | tostring | .[:200])"]
+        else [ (.exec.stdout.EvaluationResults // [])[] | select(allowed | not)
+               | "\(.EvalActionName) is \(.EvalDecision) for the role on each resource of the build (\(per_resource)); the simulator has no request context, so read this as a warning: the role of #89 builds clusters and gets implicitDeny on eks:CreateCluster" ] end
     reproduce:
-      - "aws iam simulate-principal-policy --policy-source-arn {{ .account.spec.sts.arn }} --action-names eks:CreateCluster eks:CreateNodegroup iam:PassRole --query 'EvaluationResults[].[EvalActionName,EvalDecision]' --output table"
+      - "aws iam simulate-principal-policy --policy-source-arn {{ .account.spec.sts.arn }} --action-names eks:CreateCluster eks:CreateNodegroup eks:DescribeCluster iam:PassRole --resource-arns arn:{{ .account.spec.sts.arn | split(\":\") | .[1] }}:eks:{{ .entity.spec.cloudConfig.region }}:{{ .account.spec.sts.arn | split(\":\") | .[4] }}:cluster/{{ .entity.metadata.name }} arn:{{ .account.spec.sts.arn | split(\":\") | .[1] }}:iam::{{ .account.spec.sts.arn | split(\":\") | .[4] }}:role/{{ .account.spec.namePrefix // \"\" }}nodes.cluster-api-provider-aws.sigs.k8s.io --query 'EvaluationResults[].[EvalActionName,EvalDecision,ResourceSpecificResults[].EvalResourceDecision]' --output json"
+      - "aws iam list-attached-role-policies --role-name {{ (.account.spec.sts.arn // \"\") | split(\"/\") | .[-1] }} --query 'AttachedPolicies[].PolicyName' --output text   # the EKS policy of Palette must be among them"
     fix:
       owner: palette
       text: A permission check for each cloud type (SimulatePrincipalPolicy) in the validate route.
     evidence:
       - kind: run
         ref: "#89"
+      - kind: run
+        ref: preflight-plan eks 20260929T042910Z
+        note: the simulation with no --resource-arns gave implicitDeny for eks:CreateNodegroup and eks:DescribeCluster on the role that built the #89 clusters; with the cluster, node group, and CAPA role ARNs they are allowed, and eks:CreateCluster stays implicitDeny
+      - kind: source
+        ref: strata examples/live/terraform/iam/eks-controllers.json
+        note: eks:CreateCluster, eks:DescribeCluster, and eks:ListClusters on arn:*:eks:*:*:cluster/* and arn:*:eks:*:*:nodegroup/*/*/*
       - kind: report
         ref: palette-precreate-validation-gaps-findings-2026-09-28 F4
       - kind: doc
@@ -55,17 +83,23 @@ rules:
     title: The role of the cloud account can call each action of the build
     engines: [aws, eks]
     tier: cloud
-    severity: fail
+    severity: warn
     status: source
     when: .account.spec.credentialType == "sts"
     what: |
       Palette checks that the role can be assumed and that its policy ARNs exist. It does not check
       that the role can build the cluster type. A role that can call `DescribeCluster` and not
       `CreateCluster`, `CreateNodegroup`, or `iam:PassRole` passes each Palette check and fails
-      during the build. The check simulates 20 actions of the documented policies and counts the ones
-      this build calls: a static network (`vpcId` set) drops the VPC actions, EKS drops the instance
-      actions, and a manual CloudFormation stack drops `cloudformation:DescribeStacks`. A `secret`
-      account has no ARN in the world, and the rule skips it.
+      during the build. The check simulates the 13 EC2, load balancer, and CloudFormation actions
+      of the documented policies. The policies grant them on the resource `*`. The check counts the
+      ones this build calls: a static network (`vpcId` set) drops the VPC actions, EKS drops the
+      instance actions, and a manual CloudFormation stack drops `cloudformation:DescribeStacks`.
+      The EKS and IAM actions are scoped to a cluster, a node group, or a role. A simulation with no
+      `--resource-arns` answers `implicitDeny` for them on a role that builds clusters.
+      `eks-role-no-eks-policy` simulates them against the ARNs of the build. The second reproduce
+      line simulates `iam:PassRole` against the three CAPA roles. The simulator has no request
+      context. So an `implicitDeny` on an action that a condition key allows is a warning to read,
+      not a proof. A `secret` account has no ARN in the world, and the rule skips it.
     check:
       kind: exec
       needs: [aws]
@@ -74,11 +108,10 @@ rules:
         - iam
         - simulate-principal-policy
         - --policy-source-arn
-        - "{{ .account.spec.sts.arn }}"
+        - '{{ .account.spec.sts.arn }}'
         - --action-names
         - ec2:CreateSecurityGroup
         - ec2:AuthorizeSecurityGroupIngress
-        - iam:PassRole
         - ec2:DescribeKeyPairs
         - ec2:DescribeImages
         - ec2:RunInstances
@@ -89,39 +122,36 @@ rules:
         - ec2:CreateRouteTable
         - ec2:CreateNatGateway
         - ec2:AllocateAddress
-        - eks:CreateCluster
-        - eks:CreateNodegroup
-        - eks:DescribeCluster
-        - eks:DescribeNodegroup
-        - iam:GetRole
-        - iam:ListAttachedRolePolicies
         - cloudformation:DescribeStacks
         - --output
         - json
       expr: |
-        def always: ["ec2:CreateSecurityGroup", "ec2:AuthorizeSecurityGroupIngress", "iam:PassRole"];
+        def always: ["ec2:CreateSecurityGroup", "ec2:AuthorizeSecurityGroupIngress"];
         def aws_only: ["ec2:DescribeImages", "ec2:RunInstances", "elasticloadbalancing:CreateLoadBalancer"];
-        def eks_only: ["eks:CreateCluster", "eks:CreateNodegroup", "eks:DescribeCluster", "eks:DescribeNodegroup", "iam:GetRole", "iam:ListAttachedRolePolicies"];
         def dynamic: ["ec2:CreateVpc", "ec2:CreateSubnet", "ec2:CreateInternetGateway", "ec2:CreateRouteTable", "ec2:CreateNatGateway", "ec2:AllocateAddress"];
         def manual: [ (.profiles // [])[] | .packs[] | select(.layer == "k8s") | (.valuesCanon.manageCloudFormationStackManually.enabled // false) ] | any;
         ( always
-          + (if .cloud == "eks" then eks_only else aws_only end)
+          + (if .cloud == "eks" then [] else aws_only end)
           + (if (.entity.spec.cloudConfig.vpcId // "") == "" then dynamic else [] end)
           + (if (.entity.spec.cloudConfig.sshKeyName // "") != "" then ["ec2:DescribeKeyPairs"] else [] end)
           + (if manual then [] else ["cloudformation:DescribeStacks"] end) ) as $need
-        | if .exec.exit != 0 then ["aws iam simulate-principal-policy failed: \(.exec.stderr | .[:200])"]
-          else [ .exec.stdout.EvaluationResults[]
+        | if .exec.exit != 0 then ["aws iam simulate-principal-policy failed: \(.exec.stderr | tostring | .[:200])"]
+          else [ (.exec.stdout.EvaluationResults // [])[]
                  | select(.EvalDecision != "allowed")
                  | select(.EvalActionName as $a | ($need | index($a)) != null)
-                 | "\(.EvalActionName) is \(.EvalDecision) for the role, and this build calls it" ] end
+                 | "\(.EvalActionName) is \(.EvalDecision) for the role on the resource *, and this build calls it; the simulator has no request context, so read this as a warning" ] end
     reproduce:
-      - "aws iam simulate-principal-policy --policy-source-arn {{ .account.spec.sts.arn }} --action-names ec2:RunInstances ec2:CreateVpc ec2:CreateSecurityGroup iam:PassRole eks:CreateCluster eks:CreateNodegroup --query 'EvaluationResults[].[EvalActionName,EvalDecision]' --output table"
+      - "aws iam simulate-principal-policy --policy-source-arn {{ .account.spec.sts.arn }} --action-names ec2:RunInstances ec2:CreateVpc ec2:CreateSecurityGroup ec2:CreateNatGateway cloudformation:DescribeStacks --query 'EvaluationResults[].[EvalActionName,EvalDecision]' --output table"
+      - "aws iam simulate-principal-policy --policy-source-arn {{ .account.spec.sts.arn }} --action-names iam:PassRole --resource-arns arn:aws:iam::{{ .account.spec.sts.arn | split(\":\") | .[4] }}:role/{{ .account.spec.namePrefix // \"\" }}control-plane.cluster-api-provider-aws.sigs.k8s.io arn:aws:iam::{{ .account.spec.sts.arn | split(\":\") | .[4] }}:role/{{ .account.spec.namePrefix // \"\" }}nodes.cluster-api-provider-aws.sigs.k8s.io arn:aws:iam::{{ .account.spec.sts.arn | split(\":\") | .[4] }}:role/{{ .account.spec.namePrefix // \"\" }}controllers.cluster-api-provider-aws.sigs.k8s.io --query 'EvaluationResults[].[EvalActionName,EvalResourceName,EvalDecision]' --output table"
     fix:
       owner: palette
-      text: A permission check for each cloud type (SimulatePrincipalPolicy) in the validate route, with the actions of the documented policies.
+      text: A permission check for each cloud type (SimulatePrincipalPolicy) in the validate route, with the actions of the documented policies and the resources of the build.
     evidence:
       - kind: report
         ref: palette-precreate-validation-gaps-findings-2026-09-28 B5
+      - kind: run
+        ref: preflight-plan aws 20260929T041905Z, eks 20260929T042910Z
+        note: with no --resource-arns, iam:PassRole and the EKS actions gave implicitDeny on roles that build clusters; the EC2, load balancer, and CloudFormation actions gave allowed
       - kind: source
         ref: hubble services/service/cloud/internal/service/cloudservice/aws_service.go ValidateAwsAccount, ValidateArns
         note: the account validate assumes the role and calls DescribeRegions; ValidateArns calls GetPolicy on each policy ARN
@@ -157,7 +187,8 @@ rules:
       - kind: run
         ref: teardown lab
       - kind: source
-        ref: hubble services/service/cloud/internal/service/cloudservice/aws_service.go ValidateAccount
+        ref: hubble services/service/cloud/internal/service/cloudservice/aws_service.go ValidateAwsAccount
+        note: assumes the role with the external id, then calls DescribeRegions
     tests:
       - fault: fixtures/eks/account-refused.json
         clean: fixtures/eks/clean.json
@@ -170,8 +201,8 @@ rules:
     status: proposed
     when: .entity.spec.cloudAccountUid != null
     what: |
-      An entity that names a cloud account uid that is not in the project, or an account of another
-      cloud, is refused at create, or fails at the first call to the cloud.
+      An entity can name a cloud account uid that is not in the project, or an account of another
+      cloud. Palette refuses it at create, or the build fails at the first call to the cloud.
     check:
       kind: palette
       method: GET
@@ -320,7 +351,7 @@ rules:
     when: '[ .profiles[] | .packs[] | select(.layer == "k8s") | (.valuesCanon.manageCloudFormationStackManually.enabled // false) ] | any'
     what: |
       With `manageCloudFormationStackManually.enabled: true` in the Kubernetes pack values, Palette
-      makes no CloudFormation stack and expects the CAPA roles and instance profiles to exist:
+      makes no CloudFormation stack. It expects the CAPA roles and instance profiles to exist:
       `control-plane.`, `controllers.`, and `nodes.cluster-api-provider-aws.sigs.k8s.io`, with the
       `namePrefix` of the account in front. A missing role or instance profile fails the instance
       launch. Palette has this probe (`validateBootstrapStackHealth`) for a stack it manages, and
@@ -614,17 +645,19 @@ rules:
     title: A service account of the project holds the five roles of Palette
     engines: [gcp, gke]
     tier: cloud
-    severity: fail
+    severity: warn
     status: source
     what: |
-      The GCP cloud account needs `roles/compute.admin`, `roles/container.admin`,
+      The documentation gives the GCP cloud account `roles/compute.admin`, `roles/container.admin`,
       `roles/iam.serviceAccountTokenCreator`, `roles/iam.serviceAccountUser`, and
       `roles/storage.objectViewer` on the project. Palette checks that the key parses and that
-      `projects.list` is not empty. A missing role gives a 403 during the build. The world holds no
-      email of the service account, because the key is redacted. So the check reads the IAM policy
-      of the project, and looks for one service account with the five roles. `roles/owner` counts
-      for all five. A role granted on the folder or the organization does not show in the project
-      policy.
+      `projects.list` is not empty. A missing permission gives a 403 during the build. The world
+      holds no email of the service account, because the key is redacted. So the check reads the
+      IAM policy of the project, and looks for one service account with the five roles.
+      `roles/owner` counts for all five. The check reads the project-level policy alone: a role
+      granted on the folder or the organization does not show in it. A documented role that is
+      missing there is a warning to read, not a proof. The account that built the #90 GKE clusters
+      and the #74 GCP clusters lacked `roles/storage.objectViewer` at the project level.
     check:
       kind: exec
       needs: [gcloud]
@@ -664,6 +697,9 @@ rules:
         note: the key parses, and projects.list is not empty; no permission is tested
       - kind: report
         ref: palette-precreate-validation-gaps-findings-2026-09-28 B5
+      - kind: run
+        ref: preflight-plan gke 20260929T043631Z
+        note: the check named a missing roles/storage.objectViewer on the account that built the #90 and #74 clusters
     tests:
       - fault: fixtures/gcp/account-roles-missing.json
         clean: fixtures/gcp/identity-clean.json
@@ -773,9 +809,9 @@ rules:
       public address. `gcp.resourceLocations` refuses the region. `compute.restrictLoadBalancerCreationForTypes`
       refuses the load balancer of the API server. `compute.requireOsLogin` changes the login of the
       nodes. The effective policy comes from the organization or the folder, so the list of the
-      project does not show it. gcloud describes one constraint for each call, and strata-preflight
-      runs one command for a rule. So this rule has no check; the reproduce line describes each of
-      the five.
+      project does not show it. The `gcloud` command describes one constraint for each call, and
+      strata-preflight runs one command for a rule. So this rule has no check. The reproduce line
+      describes each of the five.
     reproduce:
       - "for c in compute.trustedImageProjects compute.vmExternalIpAccess gcp.resourceLocations compute.restrictLoadBalancerCreationForTypes compute.requireOsLogin; do gcloud org-policies describe $c --project {{ .entity.spec.cloudConfig.project }} --effective; done"
       - "gcloud resource-manager org-policies describe compute.trustedImageProjects --project {{ .entity.spec.cloudConfig.project }} --effective"

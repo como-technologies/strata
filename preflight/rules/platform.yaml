@@ -11,11 +11,16 @@ rules:
     severity: fail
     status: seen
     what: |
-      `POST /v1/spectroclusters/{cloudType}/validate` takes the body of the create and checks the
-      name, the credit, the profile packs and their variables, the machine resources against the
-      needs of the packs, and for GKE the pool size. Only the console calls it; the provider and
-      palette-cli do not, and the create path of the API runs the name and the limit checks alone.
-      A 4xx is one refusal, with its code; a 200 lists the errors of each pool and each profile.
+      `POST /v1/spectroclusters/{cloudType}/validate` takes the body of the create. It checks the
+      name, the credit, the profile packs and their variables, and the machine resources against
+      the needs of the packs. For GKE it checks the pool size. Only the console calls it; the
+      provider and palette-cli do not, and the create path of the API runs the name and the limit
+      checks alone. A 4xx is one refusal, with its code; a 200 lists the errors of each pool and
+      each profile. On EKS the route reports no CPU floor for a managed node group. One `t3.xlarge`
+      worker got `200` with no error; the aws route answers `MachinePoolWithMinCpuRequired` for the
+      same pool. No run shows whether the EKS create fails later. `worker-cpu-floor`, `pack-dependency`,
+      and `ecr-oci-images` call the same route and read one class of its errors each; this rule
+      reads them all.
     check:
       kind: palette
       method: POST
@@ -49,14 +54,15 @@ rules:
       GCP refuses the build, and the status of the cluster shows no error: `ReconcileManagedControlPlaneStatus`
       of the GCP provider returns nothing, so `ControlPlaneNodeAdditionDone` is `True`. The
       refusal is in the events alone, as `GCPManagedControlPlaneReconcile` with the message of GCP,
-      or `ReconcileError`.
+      or `ReconcileError`. A stop of CAPG after a pool change, "machinePoolList length (1) !=
+      managedMachinePoolList length (2)", comes in the same event and shows in no condition.
     check:
       kind: watch
       expr: |
-        [ .events[]
+        [ (.events // [])[]
           | select(.severity == "Warning" or .severity == "Error")
           | select((.reason // "") | test("Reconcile"))
-          | select((.message // "") | test("InvalidArgument|PERMISSION_DENIED|has not been used in project|is disabled|QUOTA_EXCEEDED|NOT_FOUND|failed to (create|reconcile)"))
+          | select((.message // "") | test("InvalidArgument|PERMISSION_DENIED|has not been used in project|is disabled|QUOTA_EXCEEDED|NOT_FOUND|failed to (create|reconcile)|machinePoolList length"))
           | "event \(.reason) at \(.metadata.creationTimestamp): \(.message | .[:240])" ]
         | unique | .[:3]
     fix:
@@ -65,9 +71,12 @@ rules:
     evidence:
       - kind: run
         ref: "#90"
-        note: 193 GCPManagedControlPlaneReconcile events with the refusal of GCP, and no error in the status
+        note: 193 GCPManagedControlPlaneReconcile events with the refusal of GCP, and no error in the status; after the pool change, the CAPG stop in the same event
       - kind: source
         ref: palette pkg/clusterdeployer/controlplane/controlplane_managed.go ReconcileManagedControlPlane
+    tests:
+      - fault: fixtures/gke/pool-roll-mismatch.json
+        clean: fixtures/gke/watch-running.json
 
   - id: pivot-webhook-timeout
     title: The pivot webhook answers
@@ -81,7 +90,7 @@ rules:
     check:
       kind: watch
       expr: |
-        [ .events[]
+        [ (.events // [])[]
           | select((.message // "") | test("failed calling webhook|failed to move spectroCluster|failed to get cloud config"))
           | "event \(.reason) at \(.metadata.creationTimestamp): \(.message | .[:240])" ]
         | unique | .[:3]
@@ -105,9 +114,9 @@ rules:
       pool are `Running` and the nodes are `Ready`. The cluster then stays `Provisioning`, and a
       restart of the Palette controller in the cluster does not help. Palette does not check the
       workers again. The delete of such a cluster runs as usual. The watch reads the conditions
-      and not the machines: it fails when the cluster is `Running` with the condition `False`,
-      and when the condition is `False` after 30 minutes of `Provisioning`; the reproduce lines
-      read the machines.
+      and not the machines. It fails when the cluster is `Running` with the condition `False`.
+      It fails too when the condition is `False` after 30 minutes of `Provisioning`. The
+      reproduce lines read the machines.
     check:
       kind: watch
       expr: |
@@ -118,7 +127,7 @@ rules:
           elif $s == "Provisioning" and .elapsed > 1800 then ["WorkerNodeAdditionDone is False (\($c[0].reason // ""): \($c[0].message // "")) after \(.elapsed) s of Provisioning: read the machines of the pool; with the machines Running and the nodes Ready, the condition is stale, and Palette does not check the workers again"]
           else [] end
     reproduce:
-      - "curl -s -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" \"${PALETTE_API:-https://api.spectrocloud.com}/v1/spectroclusters/{{ .clusterUid }}\" | jq -r '.status.state as $s | .status.conditions[] | select(.type == \"WorkerNodeAdditionDone\") | \"state=\\($s) \\(.status) \\(.reason) \\(.message)\"'"
+      - "curl -s -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" \"${PALETTE_API:-https://api.spectrocloud.com}/v1/spectroclusters/{{ .clusterUid // \"<cluster uid>\" }}\" | jq -r '.status.state as $s | .status.conditions[] | select(.type == \"WorkerNodeAdditionDone\") | \"state=\\($s) \\(.status) \\(.reason) \\(.message)\"'"
       - "curl -s -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" \"${PALETTE_API:-https://api.spectrocloud.com}/v1/cloudconfigs/aws/<cloudConfigUid>/machinePools/worker-pool/machines\" | jq -r '.items[] | \"\\(.metadata.name) \\(.status.instanceState // .status.state)\"'   # the machines of the pool"
     fix:
       owner: palette
@@ -215,7 +224,7 @@ rules:
       object with `items`. The kubeconfig route answers 500 while the cluster provisions. strata
       pages at 50 and 100 and reads both listing shapes; this row is the fact, with no check.
     reproduce:
-      - "curl -s -o /dev/null -w '%{http_code}\\n' -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" \"${PALETTE_API:-https://api.spectrocloud.com}/v1/events/components/spectrocluster/{{ .clusterUid }}?limit=101\"   # 500; 100 answers 200"
+      - "curl -s -o /dev/null -w '%{http_code}\\n' -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" \"${PALETTE_API:-https://api.spectrocloud.com}/v1/events/components/spectrocluster/{{ .clusterUid // \"<cluster uid>\" }}?limit=101\"   # 500; 100 answers 200"
       - "curl -s -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" \"${PALETTE_API:-https://api.spectrocloud.com}/v1/dashboard/spectroclusters/meta\" | jq -r 'type'   # array"
     evidence:
       - kind: source
@@ -236,12 +245,12 @@ rules:
       under the parallel refresh of the provider, and the next read passes. A delete can answer
       500 for a while. During a gateway outage Palette answers a plain-text 404, and a client can
       take it for a finished delete: a 404 of Palette is JSON with the code `ResourceNotFound`.
-      Retry a 5xx, a 429, and an `OperationForbidden` read once; treat a 404 that is not JSON as
-      an error, not as an answer. strata retries a 5xx, a 429, and a transport error; the live
-      scripts run the provider with `-parallelism=1` and run an `OperationForbidden` apply again.
+      Retry a 5xx, a 429, and an `OperationForbidden` read once. Treat a 404 that is not JSON as
+      an error, not as an answer. strata retries a 5xx, a 429, and a transport error. The live
+      scripts run the provider with `-parallelism=1`, and run an `OperationForbidden` apply again.
       The watch has no check for it: the errors are answers to the client, not events.
     reproduce:
-      - "curl -s -o /dev/null -w '%{http_code} %{content_type}\\n' -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" \"${PALETTE_API:-https://api.spectrocloud.com}/v1/spectroclusters/{{ .clusterUid }}\"   # a 404 must be application/json with code ResourceNotFound"
+      - "curl -s -o /dev/null -w '%{http_code} %{content_type}\\n' -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" \"${PALETTE_API:-https://api.spectrocloud.com}/v1/spectroclusters/{{ .clusterUid // \"<cluster uid>\" }}\"   # a 404 must be application/json with code ResourceNotFound"
     evidence:
       - kind: run
         ref: teardown lab

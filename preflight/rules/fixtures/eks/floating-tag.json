@@ -9,7 +9,7 @@
           "name": "strata-live-profile",
           "version": "1.0.0",
           "cloudType": "eks",
-          "kind": "cluster-profile"
+          "type": "cluster"
         },
         "packs": [
           {

@@ -12,7 +12,7 @@ rules:
     status: source
     what: |
       EKS needs subnets in two availability zones or more. Palette checks the count of the control
-      plane subnets, not the count of distinct zones, so a cluster with one zone passes each check
+      plane subnets, not the count of distinct zones. So a cluster with one zone passes each check
       of Palette and fails during the build.
     check:
       kind: static
@@ -136,8 +136,8 @@ rules:
     status: source
     what: |
       For dynamic placement Palette derives the two subnet CIDRs of each zone from the last letter
-      of the zone name (`getAwsAZSubnetCidr`): a gives 10.0.0.0/24 and 10.0.1.0/24, b gives
-      10.0.2.0/24 and 10.0.3.0/24. A Local Zone or a Wavelength Zone such as us-east-1-bos-1a ends
+      of the zone name (`getAwsAZSubnetCidr`). The letter a gives 10.0.0.0/24 and 10.0.1.0/24, and
+      b gives 10.0.2.0/24 and 10.0.3.0/24. A Local Zone or a Wavelength Zone such as us-east-1-bos-1a ends
       in the letter of a parent zone, so two zones get one CIDR pair, and the VPC create fails.
     check:
       kind: static
@@ -306,7 +306,7 @@ rules:
       one ENI (up to 15 addresses on a t3.xlarge). EKS itself needs 6 free addresses in each cluster
       subnet, and asks for 16. A subnet that runs out fails the node group with
       `InsufficientFreeAddresses`. The check sums the nodes (maxSize) of the pools that use a
-      subnet, and asks 16 for each node with the VPC CNI (1 with another CNI) plus 16 for the
+      subnet. It asks 16 for each node with the VPC CNI (1 with another CNI), plus 16 for the
       cluster. That is a floor, not the real need: the count of pods on each node decides it.
     when: (.cloud == "aws" or .cloud == "eks") and (.entity.spec.cloudConfig.vpcId // "") != "" and ([ .entity.spec.machinepoolconfig[]? | (.cloudConfig.subnets // [])[] | .id // empty ] | length) > 0
     check:
@@ -360,10 +360,10 @@ rules:
     severity: fail
     status: source
     what: |
-      A node in a subnet whose route table has no 0.0.0.0/0 route to a NAT gateway, an internet
-      gateway, a transit gateway, or a NAT instance cannot reach Palette, EKS, or the registries: the
-      nodes do not join, the images do not pull, and on AWS the row reports instances that delete
-      every 30 minutes with no end. The private test of Palette (`isSubnetPrivate`) reads the
+      A node needs a 0.0.0.0/0 route to a NAT gateway, an internet gateway, a transit gateway, or a
+      NAT instance. Without one it cannot reach Palette, EKS, or the registries: the nodes do not
+      join, and the images do not pull. On AWS the row reports instances that delete every 30
+      minutes with no end. The private test of Palette (`isSubnetPrivate`) reads the
       internet gateway route alone and checks no NAT route. The check runs for a static VPC on aws
       and eks. For GCP and GKE the router with NAT needs `gcloud compute routers list` (see
       reproduce), and the watch sees the nodes that never join.
@@ -394,8 +394,14 @@ rules:
               | "subnet \($id) (route table \($rt.RouteTableId // "none")) has no 0.0.0.0/0 route to a NAT gateway, an internet gateway, a transit gateway, or a NAT instance: the nodes cannot join, and the images do not pull" ]
         end
     reproduce:
-      - "aws ec2 describe-route-tables --region {{ .entity.spec.cloudConfig.region }} --filters Name=vpc-id,Values={{ .entity.spec.cloudConfig.vpcId }} --query 'RouteTables[].[RouteTableId,Associations[].SubnetId,Routes[?DestinationCidrBlock==`0.0.0.0/0`].[GatewayId,NatGatewayId,TransitGatewayId]]' --output json"
-      - "gcloud compute routers list --project {{ .entity.spec.cloudConfig.project }} --regions {{ .entity.spec.cloudConfig.region }} --format 'table(name,network,nats[].name)'"
+      aws:
+        - "aws ec2 describe-route-tables --region {{ .entity.spec.cloudConfig.region }} --filters Name=vpc-id,Values={{ .entity.spec.cloudConfig.vpcId }} --query 'RouteTables[].[RouteTableId,Associations[].SubnetId,Routes[?DestinationCidrBlock==`0.0.0.0/0`].[GatewayId,NatGatewayId,TransitGatewayId]]' --output json"
+      eks:
+        - "aws ec2 describe-route-tables --region {{ .entity.spec.cloudConfig.region }} --filters Name=vpc-id,Values={{ .entity.spec.cloudConfig.vpcId }} --query 'RouteTables[].[RouteTableId,Associations[].SubnetId,Routes[?DestinationCidrBlock==`0.0.0.0/0`].[GatewayId,NatGatewayId,TransitGatewayId]]' --output json"
+      gcp:
+        - "gcloud compute routers list --project {{ .entity.spec.cloudConfig.project }} --regions {{ .entity.spec.cloudConfig.region }} --format 'table(name,network,nats[].name)'   # a router with a NAT on the network of the cluster"
+      gke:
+        - "gcloud compute routers list --project {{ .entity.spec.cloudConfig.project }} --regions {{ .entity.spec.cloudConfig.region }} --format 'table(name,network,nats[].name)'   # a router with a NAT on the network of the cluster"
     fix:
       owner: palette
       text: Check the default route of each pool subnet in the property routes, for AWS and GCP.
@@ -689,13 +695,13 @@ rules:
     severity: fail
     status: inferred
     what: |
-      A proxy in the pack values with a NO_PROXY that lacks the pod CIDR, the service CIDR, and the
-      VPC CIDR sends the traffic of the cluster to the proxy: the nodes and the pods cannot reach
-      each other. The check reads the `values` of each pack for HTTP_PROXY, HTTPS_PROXY, or
-      httpProxy, then for a NO_PROXY entry that covers each CIDR of the Kubernetes pack, and
-      10.0.0.0/16 for dynamic placement on aws and eks. A proxy set in the environment of Palette
-      or of the PCG is not in the entity: for it Palette writes NO_PROXY with the service CIDR and
-      USER_NO_PROXY, not the pod CIDR (`aws_kubeadm.go`).
+      A proxy in the pack values needs a NO_PROXY with the pod CIDR, the service CIDR, and the VPC
+      CIDR. Without them the traffic of the cluster goes to the proxy, and the nodes and the pods
+      cannot reach each other. The check reads the `values` of each pack for HTTP_PROXY,
+      HTTPS_PROXY, or httpProxy. Then it looks for a NO_PROXY entry that covers each CIDR of the
+      Kubernetes pack, and 10.0.0.0/16 for dynamic placement on aws and eks. A proxy set in the
+      environment of Palette or of the PCG is not in the entity. For it Palette writes NO_PROXY
+      with the service CIDR and USER_NO_PROXY, not the pod CIDR (`aws_kubeadm.go`).
     when: (.profiles | length) > 0
     check:
       kind: static
@@ -809,7 +815,7 @@ rules:
 
   - id: registry-https
     title: A registry name answers over HTTPS before Palette takes it
-    engines: [lab]
+    engines: [all, lab]
     tier: watch
     severity: fail
     status: seen
@@ -830,7 +836,7 @@ rules:
 
   - id: igw-detach
     title: The destroy removes each mapped address before the internet gateway detaches
-    engines: [lab]
+    engines: [all, lab]
     tier: tool
     severity: fail
     status: seen

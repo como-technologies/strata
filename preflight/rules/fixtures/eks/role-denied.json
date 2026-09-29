@@ -2,30 +2,204 @@
   "_base": "clean.json",
   "_patch": {
     "_exec": {
-      "aws iam simulate-principal-policy --policy-source-arn arn:aws:iam::123456789012:role/strata-live-eks-cloud --action-names eks:CreateCluster eks:CreateNodegroup eks:DescribeCluster iam:PassRole --output json": {
+      "aws iam simulate-principal-policy --policy-source-arn arn:aws:iam::123456789012:role/strata-live-eks-cloud --action-names eks:CreateCluster eks:CreateNodegroup eks:DescribeCluster eks:DescribeNodegroup iam:PassRole iam:GetRole iam:ListAttachedRolePolicies --resource-arns arn:aws:eks:us-east-2:123456789012:cluster/fred arn:aws:eks:us-east-2:123456789012:nodegroup/fred/worker-pool/00000000-0000-0000-0000-000000000000 arn:aws:iam::123456789012:role/control-plane.cluster-api-provider-aws.sigs.k8s.io arn:aws:iam::123456789012:role/nodes.cluster-api-provider-aws.sigs.k8s.io arn:aws:iam::123456789012:role/controllers.cluster-api-provider-aws.sigs.k8s.io --output json": {
         "exit": 0,
         "stdout": {
           "EvaluationResults": [
             {
               "EvalActionName": "eks:CreateCluster",
-              "EvalDecision": "implicitDeny"
+              "EvalResourceName": "arn:aws:eks:us-east-2:123456789012:cluster/fred",
+              "EvalDecision": "implicitDeny",
+              "ResourceSpecificResults": [
+                {
+                  "EvalResourceName": "arn:aws:eks:us-east-2:123456789012:cluster/fred",
+                  "EvalResourceDecision": "implicitDeny"
+                },
+                {
+                  "EvalResourceName": "arn:aws:eks:us-east-2:123456789012:nodegroup/fred/worker-pool/00000000-0000-0000-0000-000000000000",
+                  "EvalResourceDecision": "implicitDeny"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:role/control-plane.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "implicitDeny"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:role/nodes.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "implicitDeny"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:role/controllers.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "implicitDeny"
+                }
+              ]
             },
             {
               "EvalActionName": "eks:CreateNodegroup",
-              "EvalDecision": "implicitDeny"
+              "EvalResourceName": "arn:aws:eks:us-east-2:123456789012:cluster/fred",
+              "EvalDecision": "implicitDeny",
+              "ResourceSpecificResults": [
+                {
+                  "EvalResourceName": "arn:aws:eks:us-east-2:123456789012:cluster/fred",
+                  "EvalResourceDecision": "implicitDeny"
+                },
+                {
+                  "EvalResourceName": "arn:aws:eks:us-east-2:123456789012:nodegroup/fred/worker-pool/00000000-0000-0000-0000-000000000000",
+                  "EvalResourceDecision": "implicitDeny"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:role/control-plane.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "implicitDeny"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:role/nodes.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "implicitDeny"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:role/controllers.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "implicitDeny"
+                }
+              ]
             },
             {
               "EvalActionName": "eks:DescribeCluster",
-              "EvalDecision": "allowed"
+              "EvalResourceName": "arn:aws:eks:us-east-2:123456789012:cluster/fred",
+              "EvalDecision": "allowed",
+              "ResourceSpecificResults": [
+                {
+                  "EvalResourceName": "arn:aws:eks:us-east-2:123456789012:cluster/fred",
+                  "EvalResourceDecision": "allowed"
+                },
+                {
+                  "EvalResourceName": "arn:aws:eks:us-east-2:123456789012:nodegroup/fred/worker-pool/00000000-0000-0000-0000-000000000000",
+                  "EvalResourceDecision": "implicitDeny"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:role/control-plane.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "implicitDeny"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:role/nodes.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "implicitDeny"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:role/controllers.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "implicitDeny"
+                }
+              ]
+            },
+            {
+              "EvalActionName": "eks:DescribeNodegroup",
+              "EvalResourceName": "arn:aws:eks:us-east-2:123456789012:nodegroup/fred/worker-pool/00000000-0000-0000-0000-000000000000",
+              "EvalDecision": "allowed",
+              "ResourceSpecificResults": [
+                {
+                  "EvalResourceName": "arn:aws:eks:us-east-2:123456789012:cluster/fred",
+                  "EvalResourceDecision": "implicitDeny"
+                },
+                {
+                  "EvalResourceName": "arn:aws:eks:us-east-2:123456789012:nodegroup/fred/worker-pool/00000000-0000-0000-0000-000000000000",
+                  "EvalResourceDecision": "allowed"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:role/control-plane.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "implicitDeny"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:role/nodes.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "implicitDeny"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:role/controllers.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "implicitDeny"
+                }
+              ]
             },
             {
               "EvalActionName": "iam:PassRole",
-              "EvalDecision": "allowed"
+              "EvalResourceName": "arn:aws:iam::123456789012:role/control-plane.cluster-api-provider-aws.sigs.k8s.io",
+              "EvalDecision": "allowed",
+              "ResourceSpecificResults": [
+                {
+                  "EvalResourceName": "arn:aws:eks:us-east-2:123456789012:cluster/fred",
+                  "EvalResourceDecision": "implicitDeny"
+                },
+                {
+                  "EvalResourceName": "arn:aws:eks:us-east-2:123456789012:nodegroup/fred/worker-pool/00000000-0000-0000-0000-000000000000",
+                  "EvalResourceDecision": "implicitDeny"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:role/control-plane.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "allowed"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:role/nodes.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "allowed"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:role/controllers.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "allowed"
+                }
+              ]
+            },
+            {
+              "EvalActionName": "iam:GetRole",
+              "EvalResourceName": "arn:aws:iam::123456789012:role/control-plane.cluster-api-provider-aws.sigs.k8s.io",
+              "EvalDecision": "allowed",
+              "ResourceSpecificResults": [
+                {
+                  "EvalResourceName": "arn:aws:eks:us-east-2:123456789012:cluster/fred",
+                  "EvalResourceDecision": "implicitDeny"
+                },
+                {
+                  "EvalResourceName": "arn:aws:eks:us-east-2:123456789012:nodegroup/fred/worker-pool/00000000-0000-0000-0000-000000000000",
+                  "EvalResourceDecision": "implicitDeny"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:role/control-plane.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "allowed"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:role/nodes.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "allowed"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:role/controllers.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "allowed"
+                }
+              ]
+            },
+            {
+              "EvalActionName": "iam:ListAttachedRolePolicies",
+              "EvalResourceName": "arn:aws:iam::123456789012:role/control-plane.cluster-api-provider-aws.sigs.k8s.io",
+              "EvalDecision": "allowed",
+              "ResourceSpecificResults": [
+                {
+                  "EvalResourceName": "arn:aws:eks:us-east-2:123456789012:cluster/fred",
+                  "EvalResourceDecision": "implicitDeny"
+                },
+                {
+                  "EvalResourceName": "arn:aws:eks:us-east-2:123456789012:nodegroup/fred/worker-pool/00000000-0000-0000-0000-000000000000",
+                  "EvalResourceDecision": "implicitDeny"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:role/control-plane.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "allowed"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:role/nodes.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "allowed"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:role/controllers.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "allowed"
+                }
+              ]
             }
           ]
         },
         "stderr": ""
       }
     }
-  }
+  },
+  "_note": "the role lacks the EKS policy: eks:CreateCluster and eks:CreateNodegroup are implicitDeny on every resource of the build"
 }

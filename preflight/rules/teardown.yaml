@@ -12,9 +12,19 @@ rules:
     status: seen
     what: |
       A force delete removes the records of a cluster in Palette. The cloud keeps each instance,
-      volume, and load balancer, and bills for them. Empty the cloud first.
+      volume, and load balancer, and bills for them. Empty the cloud first. The inventory scripts
+      of the lab read AWS and GCP; a company reads its own estate.
     reproduce:
-      - "examples/live/aws-inventory.sh {{ .entity.metadata.name }} {{ .entity.spec.cloudConfig.region }}   # 0 on every line before a force delete"
+      aws:
+        - "examples/live/aws-inventory.sh {{ .entity.metadata.name }} {{ .entity.spec.cloudConfig.region }}   # 0 on every line before a force delete"
+      eks:
+        - "examples/live/aws-inventory.sh {{ .entity.metadata.name }} {{ .entity.spec.cloudConfig.region }}   # 0 on every line before a force delete"
+      gcp:
+        - "examples/live/gcp-inventory.sh {{ .entity.spec.cloudConfig.project }} {{ .entity.metadata.name }}   # 0 on every line before a force delete"
+      gke:
+        - "examples/live/gcp-inventory.sh {{ .entity.spec.cloudConfig.project }} {{ .entity.metadata.name }} --gke   # 0 on every line before a force delete"
+      all:
+        - "examples/live/inventory.sh   # the lab: 0 on every line before a force delete; a company runs its own inventory of the cluster name"
     fix:
       owner: palette
       text: Warn, or refuse a force delete while the cloud holds resources of the cluster.
@@ -54,8 +64,11 @@ rules:
                  | "VPC \(.VpcId) of a cluster named \($n) is still in \($r); the network goes last, so the teardown before is not finished. Wait until the inventory is 0 on every line" ]
           end
     reproduce:
-      - "examples/live/aws-inventory.sh {{ .entity.metadata.name }} {{ .entity.spec.cloudConfig.region }}   # 0 on every line, the vpcs line last"
-      - "gcloud compute networks list --project {{ .entity.spec.cloudConfig.project }} --filter 'name ~ ^{{ .entity.metadata.name }}' --format json"
+      aws:
+        - "examples/live/aws-inventory.sh {{ .entity.metadata.name }} {{ .entity.spec.cloudConfig.region }}   # 0 on every line, the vpcs line last"
+      gcp:
+        - "gcloud compute networks list --project {{ .entity.spec.cloudConfig.project }} --filter 'name ~ ^{{ .entity.metadata.name }}' --format json   # the network goes last"
+        - "examples/live/gcp-inventory.sh {{ .entity.spec.cloudConfig.project }} {{ .entity.metadata.name }}   # 0 on every line, the network line last"
     fix:
       owner: none
     evidence:
@@ -77,12 +90,14 @@ rules:
     status: seen
     what: |
       The lab inventory counted instances, disks, and networks, and not the EKS or GKE cluster, its
-      nodes, or its node groups. It said 0 while a managed cluster still billed. #90 fixed it:
-      `aws-inventory.sh` counts the EKS cluster of the name, and `gcp-inventory.sh --gke` counts the
+      nodes, or its node groups. It said 0 while a managed cluster still billed. #90 fixed it.
+      `aws-inventory.sh` counts the EKS cluster of the name. `gcp-inventory.sh --gke` counts the
       GKE cluster and the `gke-<name>-` nodes, disks, and instance groups. A row of the lab.
     reproduce:
-      - "examples/live/aws-inventory.sh {{ .entity.metadata.name }} {{ .entity.spec.cloudConfig.region }}   # the 'eks clusters' line"
-      - "examples/live/gcp-inventory.sh {{ .entity.spec.cloudConfig.project }} {{ .entity.metadata.name }} --gke   # the 'gke clusters' and 'gke nodes' lines"
+      eks:
+        - "examples/live/aws-inventory.sh {{ .entity.metadata.name }} {{ .entity.spec.cloudConfig.region }}   # the 'eks clusters' line"
+      gke:
+        - "examples/live/gcp-inventory.sh {{ .entity.spec.cloudConfig.project }} {{ .entity.metadata.name }} --gke   # the 'gke clusters' and 'gke nodes' lines"
     fix:
       owner: lab
       text: Count the managed cluster and its node groups in each inventory.
@@ -127,9 +142,18 @@ rules:
                else ["\($i | length) instance(s) of a cluster named \(.entity.metadata.name // "?") are still in \(.entity.spec.cloudConfig.region // "?"): \($i | map(.InstanceId) | join(", ")); a run before left them, and the build must find 0"] end
         end
     reproduce:
-      - "examples/live/aws-inventory.sh {{ .entity.metadata.name }} {{ .entity.spec.cloudConfig.region }}   # 0 on every line before a build"
-      - "aws eks describe-cluster --name {{ .entity.metadata.name }} --region {{ .entity.spec.cloudConfig.region }} --query cluster.status   # ResourceNotFoundException means no cluster of the name"
-      - "gcloud compute instances list --project {{ .entity.spec.cloudConfig.project }} --filter 'name ~ ^{{ .entity.metadata.name }}' --format json"
+      aws:
+        - "examples/live/aws-inventory.sh {{ .entity.metadata.name }} {{ .entity.spec.cloudConfig.region }}   # 0 on every line before a build"
+      eks:
+        - "examples/live/aws-inventory.sh {{ .entity.metadata.name }} {{ .entity.spec.cloudConfig.region }}   # 0 on every line before a build"
+        - "aws eks describe-cluster --name {{ .entity.metadata.name }} --region {{ .entity.spec.cloudConfig.region }} --query cluster.status   # ResourceNotFoundException means no cluster of the name"
+      gcp:
+        - "gcloud compute instances list --project {{ .entity.spec.cloudConfig.project }} --filter 'name ~ ^{{ .entity.metadata.name }}' --format json"
+      gke:
+        - "gcloud compute instances list --project {{ .entity.spec.cloudConfig.project }} --filter 'name ~ ^gke-{{ .entity.metadata.name }}-' --format json"
+        - "gcloud container clusters list --project {{ .entity.spec.cloudConfig.project }} --filter 'name={{ .entity.metadata.name }}' --format 'value(name,status)'   # no line means no cluster of the name"
+      all:
+        - "examples/live/inventory.sh   # the lab: 0 on every line before a build; a company runs its own inventory of the cluster name"
     fix:
       owner: lab
       text: Run the inventory before each build, and stop while a line is not 0.
@@ -155,7 +179,7 @@ rules:
       `GET /v1/projects/{uid}/macros` here; the lab calls it through `api.sh`.
     reproduce:
       - "examples/live/api.sh get /v1/projects/$PALETTE_PROJECT_UID/macros | jq -r '.macros[].name'   # the macros of the project"
-      - "strata snapshot cluster:{{ .clusterUid }} --macros --json | jq '.macros'   # the macros the cluster reads"
+      - "strata snapshot cluster:{{ .clusterUid // \"<cluster uid>\" }} --macros --json | jq '.macros'   # the macros the cluster reads"
     fix:
       owner: none
     evidence:
@@ -175,9 +199,9 @@ rules:
       name stay. The world has no state to compare with, so strata-preflight lists nothing here.
       List the versions by name, and delete each one the state does not hold.
     reproduce:
-      - "strata list profiles --json | jq -r --arg n {{ .profiles[0].source.name }} '.profiles[] | select(.name == $n) | .version'   # every version of the name in Palette"
+      - "strata list profiles --json | jq -r --arg n {{ .profiles[0].source.name // \"<profile name>\" }} '.profiles[] | select(.name == $n) | .version'   # every version of the name in Palette"
       - "tofu state list | grep spectrocloud_cluster_profile   # the versions the state holds"
-      - "examples/live/api.sh delete-named {{ .profiles[0].source.name }}   # the fix of the lab: every version of the name"
+      - "examples/live/api.sh delete-named {{ .profiles[0].source.name // \"<profile name>\" }}   # the fix of the lab: every version of the name"
     fix:
       owner: lab
       text: Delete by name after the destroy; `just live-down` runs `api.sh delete-named`.

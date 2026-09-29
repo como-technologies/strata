@@ -205,7 +205,11 @@ rules:
       The packs of the profiles need a minimum of CPU across the worker nodes: 4.1 cores with the
       lab packs, 5.3 with a monitoring stack. Palette refuses the create with "A minimum allocation
       of '4.1' CPU cores is required across all worker nodes". The validate route answers it in
-      seconds, with the machine pools that fall short.
+      seconds, with the machine pools that fall short. On EKS the route reports no CPU floor for a
+      managed node group. One `t3.xlarge` worker got `200` with no error; the aws route answers
+      `MachinePoolWithMinCpuRequired` for the same pool. No run shows whether the EKS create fails
+      later, so on EKS a pass is not a proof. `palette-validate` calls the same route and reports
+      every error of it; this rule reads the CPU and memory errors of the pools alone.
     check:
       kind: palette
       method: POST
@@ -223,6 +227,9 @@ rules:
     evidence:
       - kind: run
         ref: teardown lab
+      - kind: run
+        ref: preflight-plan eks 20260929T042910Z
+        note: the EKS route answered 200 with no pool error for one t3.xlarge worker; the aws route answers MachinePoolWithMinCpuRequired for the same pool
       - kind: source
         ref: hubble services/service/spectrocluster/internal/service/cloudconfig/internal/base/cloudconfig_base_service.go ValidateMachineResources
     tests:

@@ -10,7 +10,7 @@
           "name": "gcp-stack",
           "version": "1.0.0",
           "cloudType": "gcp",
-          "kind": "cluster-profile"
+          "type": "cluster"
         },
         "packs": [
           {

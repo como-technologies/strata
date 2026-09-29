@@ -8,7 +8,11 @@ rules:
     title: A GKE cluster names a release channel
     engines: [gke]
     tier: static
+    level: preflight
     severity: fail
+    promotion:
+      bar: 0.8
+      runs: ["20260929T043631Z"]
     status: seen
     releases: "<4.11"
     what: |
@@ -33,6 +37,9 @@ rules:
       - kind: run
         ref: "#90"
         note: 50 minutes with no error in the status; the override built the cluster in 18 minutes
+      - kind: run
+        ref: "20260929T043631Z"
+        note: the plan made the fault and the check found it; the clean entity passed
       - kind: report
         ref: palette-gke-release-channel-findings-2026-09-28
       - kind: source
@@ -171,8 +178,8 @@ rules:
       and (([ (.profiles // [])[] | .packs[] | select(.layer == "k8s") ] | length) > 0)
     what: |
       With a Pod Identity cloud account, Palette asks EKS for the default version of the
-      `eks-pod-identity-agent` addon for the Kubernetes version, and fails the build with "no
-      default version found for addon" when EKS lists none. An addon in `cloudConfig.addons` names
+      `eks-pod-identity-agent` addon for the Kubernetes version. When EKS lists none, the build
+      fails with "no default version found for addon". An addon in `cloudConfig.addons` names
       its own version, and EKS must offer that version for the Kubernetes version. This check runs
       one command: for the pod identity agent when the account is Pod Identity, else for the first
       addon of the entity. Run the reproduce line for each other addon.
@@ -225,14 +232,15 @@ rules:
     engines: [aws, gcp]
     tier: static
     severity: warn
-    status: inferred
+    status: source
     when: ([ (.profiles // [])[] | .packs[] | select(.layer == "k8s") ] | length) > 0
     what: |
       Palette runs the external cloud controller manager from Kubernetes 1.27 on AWS and from 1.29
-      on GCP. Under the floor, the provider keeps the in-tree cloud provider and installs no
-      controller. A pack under the floor whose values set `cloud-provider: external` leaves each
-      node with the taint `node.cloudprovider.kubernetes.io/uninitialized`, and no pod schedules.
-      The floors are in the source; the taint is a reading, not a run.
+      on GCP: `MinK8sVersionForCCMAWS` is `v1.27.0` and `MinK8sVersionForCCMGCP` is `v1.29.0` in
+      the source. Under the floor, the provider keeps the in-tree cloud provider and installs no
+      controller. A pack under the floor whose values set `cloud-provider: external` then leaves
+      each node with the taint `node.cloudprovider.kubernetes.io/uninitialized`, and no pod
+      schedules. The floors are the source; the taint is a reading, and no run shows it.
     check:
       kind: static
       expr: |
@@ -273,7 +281,7 @@ rules:
       expr: |
         .cloud as $c | .packs as $packs
         | [ .profiles[] | .source.name as $p | .packs[]
-            | select(.packUid != "" and ($packs[.packUid] != null))
+            | select((.packUid // "") != "" and ($packs[.packUid] != null))
             | select(($packs[.packUid].cloudTypes // ["all"]) as $t | ($t | index("all")) == null and ($t | index($c)) == null)
             | "pack \(.name)@\(.version) of profile \($p) supports \($packs[.packUid].cloudTypes | join(", ")), not \($c)" ]
     fix:
