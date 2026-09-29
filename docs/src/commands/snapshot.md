@@ -73,7 +73,7 @@ profiles, in tiers. Each tier has its own hash, and none is part of the root:
 | `applied` | `spcHash` and `spcInfraHash`: the hashes that Palette computes of the spec it applied to the cluster. `spcHash` is its own for each cluster, so between two clusters `compare` reads `spcInfraHash` alone | the cluster document |
 | `running` | each pack that the cluster reconciled, with its version and profile uid | the cluster document, `status.packs` |
 | `policy` | the OS patch policy, the lifecycle, the machine health, the timezone, the cluster resources, the RBAC, and the FIPS mode | the cluster document, `spec.clusterConfig` |
-| `shape` | each machine pool, with its instance type, size, zones, labels, and taints, and the region | the cloud config: one more request, with `--shape` |
+| `shape` | each machine pool, with its instance type, size, zones, labels, and taints; the region and the project; and the settings of a managed control plane, on EKS and GKE | the cloud config: one more request, with `--shape` |
 
 The record also keeps the labels of the cluster, in `source.cluster.labels`.
 A tier is in the record only when Palette gives the part of the document that

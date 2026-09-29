@@ -5860,6 +5860,26 @@ fn a_cluster_record_carries_the_tiers_that_palette_gives_and_names_them() {
     assert_eq!(shape["cloud"]["endpointAccess"]["public"], true);
     assert_eq!(shape["cloud"]["addons"][0]["name"], "vpc-cni");
     assert!(shape["cloud"].get("vpcId").is_none());
+
+    // a GKE cluster: the managed cluster settings and the cluster API override, which sets the
+    // release channel, are chosen, so the tier holds them
+    raw.cloud_config = Some(serde_json::json!({"spec": {
+        "clusterConfig": {"project": "p1", "region": "us-east1",
+            "managedClusterConfig": {"location": "us-east1"},
+            "overrideClusterAPIConfig": "gcpManagedControlPlane:\n  spec:\n    releaseChannel: regular\n"},
+        "machinePoolConfig": [{"name": "worker-pool", "instanceType": "e2-standard-4", "size": 3}]}}));
+    let shaped = Snapshot::from_cluster(&raw, None, "cluster", "t0").unwrap();
+    let shape = &shaped.source.cluster.as_ref().unwrap().tiers["shape"].fields;
+    assert_eq!(
+        shape["cloud"]["managedClusterConfig"]["location"],
+        "us-east1"
+    );
+    assert!(
+        shape["cloud"]["overrideClusterAPIConfig"]
+            .as_str()
+            .unwrap()
+            .contains("releaseChannel: regular")
+    );
 }
 
 #[test]

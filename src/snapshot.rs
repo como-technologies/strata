@@ -349,6 +349,10 @@ const CLOUD_FIELDS: &[&str] = &[
     // a managed control plane of EKS: who reaches its API server, and its managed add-ons
     "endpointAccess",
     "addons",
+    // a managed control plane of GKE: its settings, and the cluster API override, such as its
+    // release channel
+    "managedClusterConfig",
+    "overrideClusterAPIConfig",
 ];
 
 fn pick(v: &Value, keys: &[&str]) -> Value {
