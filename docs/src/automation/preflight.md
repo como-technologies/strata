@@ -96,8 +96,9 @@ rules:
     check:
       kind: static
       expr: |
-        if (.entity.spec.cloudConfig.region | IN("us-east-2", "eu-west-1")) then []
-        else ["region \(.entity.spec.cloudConfig.region) is not in the landing zone"] end
+        .entity.spec.cloudConfig.region as $r
+        | if (["us-east-2", "eu-west-1"] | index($r)) != null then []
+          else ["region \($r) is not in the landing zone"] end
     tests:
       - fault: fixtures/other-region.json
         clean: fixtures/clean.json

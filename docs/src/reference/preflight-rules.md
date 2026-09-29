@@ -93,8 +93,10 @@ each message is one failure; or an object `{pass, message}`.
 | `watch` | `expr` | `cluster`, `summary`, `events`, `elapsed` (seconds), on each reading |
 
 jq is jaq 3, which runs the programs of jq 1.7 with a small number of
-differences. Note that `false // x` gives `x`: read a boolean with
-`if has("k") then .k else true end`.
+differences. Two to know: `false // x` gives `x`, so read a boolean with
+`if has("k") then .k else true end`; and `IN(...)` is not defined, so test a
+value against a list with `(["a", "b"] | index($v)) != null`. A program that
+does not compile makes the rule `ERROR`, and the message names it.
 
 ## The world document
 
