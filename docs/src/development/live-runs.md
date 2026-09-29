@@ -898,6 +898,23 @@ action against the resource `*`, and a statement that names a resource, as the
 EKS policy of Palette does for `eks:*`, does not match it. The role built the
 EKS clusters of #89. Both rules now pass the resource ARNs of the build.
 
+**gke.** Seven faults made on purpose, seven caught. `POST /v1/spectroclusters/gke/validate`
+refuses a pool of 4 with `InvalidParam`: "Invalid parameter 'Node pool size';
+caused by: Node pool size should be multiple of 3", in under 200 ms; through the
+provider, #90 saw the same refusal after a full apply. A cluster with no release
+channel, a GPU machine type, Autopilot with a pool, a name over 40 characters,
+and a cloud account uid that is not in the project are static failures or a
+404, in milliseconds. On the clean entity, 34 checks ran and 32 passed. The two
+failures say something about the GCP project of the lab, and not about the
+build: the service account holds no `roles/storage.objectViewer` at the project
+level, and the Cloud Resource Manager API is off, and the account built the
+GKE clusters of #90 and the GCP clusters of #74 all the same. So a documented
+role or API that a check does not find is a warning to read, and both rules
+are `warn`. The plan does not build, so a rule from the source stays a probe
+after these runs: `strata preflight --promotion` promotes a static rule only
+when a live run shows the fault (`status: seen`), such as `gke-pool-multiple-3`
+and `gke-no-release-channel` from #90.
+
 ## A chart pushed again, on a cluster
 
 A run by hand, with the registry host of `registry-kinds.sh` and cluster A: no

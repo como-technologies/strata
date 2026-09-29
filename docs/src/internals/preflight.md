@@ -86,7 +86,10 @@ miss of a fault, goes back to a probe, and the run is its evidence. A new
 Palette release that changes the behavior does the same.
 
 `strata preflight --promotion` compares the level of each rule with the ledger
-and says `promote` or `demote`. A level that disagrees with the ledger is exit
+and says `promote` or `demote`. It reads the first rule too: a rule whose
+status is `source` or `inferred` stays a probe whatever the runs of the plan
+count, because the plan makes the fault in the entity and does not build; a
+build that shows the fault makes the rule `seen`. A level that disagrees with the ledger is exit
 `1`, so a rule cannot claim a level that the runs do not give. The level is a
 field of the rule, changed by a person, with the run ids beside it.
 

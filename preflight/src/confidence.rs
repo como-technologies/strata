@@ -448,7 +448,11 @@ pub fn promotion(catalog: &Catalog, ledger: &Ledger) -> PromotionReport {
         } else {
             rule.engines.clone()
         };
+        // the first rule of a promotion: a live run shows the fault. A rule from the source or a
+        // reading stays a probe, whatever the plan runs count, until a build shows the fault
+        let seen = rule.status == crate::rule::Status::Seen;
         let earned = match rule.effective_tier() {
+            _ if !seen => Level::Probe,
             // a static rule is deterministic: one run that made the fault and one clean run prove it
             Tier::Static => {
                 let proven = !engines.is_empty()
@@ -567,6 +571,8 @@ runs:
     results:
       - {rule: gke-pool-multiple-3, result: passed}
       - {rule: gke-api-off, result: missed}
+      - {rule: gke-no-gpu, result: caught}
+      - {rule: gke-no-gpu, result: passed}
 "#;
 
     #[test]
@@ -632,6 +638,13 @@ rules:
     status: seen
     what: w
     check: {kind: exec, argv: [gcloud], expr: "true"}
+  - id: gke-no-gpu
+    title: t
+    engines: [gke]
+    tier: static
+    status: source
+    what: w
+    check: {kind: static, expr: "true"}
 "#;
         let mut catalog = Catalog::default();
         catalog
@@ -655,6 +668,12 @@ rules:
         let api = report.rules.iter().find(|r| r.id == "gke-api-off").unwrap();
         assert_eq!(api.earned, Level::Probe, "a miss, and no clean run");
         assert_eq!(api.advice, "");
+        let gpu = report.rules.iter().find(|r| r.id == "gke-no-gpu").unwrap();
+        assert_eq!(
+            gpu.earned,
+            Level::Probe,
+            "the runs count, and no live run shows the fault: status source"
+        );
         assert_eq!(report.disagreements, 1);
         assert_eq!(report.exit_code(), 1);
     }
