@@ -303,13 +303,18 @@ delete of the cluster then waits with no end. The recovery, after `just
 live-down` stops at the cluster:
 
 1. `examples/live/eks-nodegroups.sh --delete`.
-2. `aws eks delete-cluster --name <cluster name>`, and then the VPC of the
-   cluster, with its NAT gateways, elastic IPs, internet gateway, subnets, route
-   tables, and security groups: each carries the tag
-   `sigs.k8s.io/cluster-api-provider-aws/cluster/<cluster name>`.
+2. `examples/live/aws-cleanup.sh <cluster name> <region> --yes`: the EKS
+   cluster, and then the VPC of the cluster with its NAT gateways, elastic IPs,
+   internet gateway, subnets, route tables, and security groups, each found by
+   the tag `sigs.k8s.io/cluster-api-provider-aws/cluster/<cluster name>`.
+   Without `--yes` it lists what it would delete and deletes nothing.
 3. `examples/live/aws-inventory.sh <cluster name> <region>` reads 0 for each kind.
 4. `examples/live/api.sh delete-cluster <uid> --force`, and `just live-down`
    again.
+
+A delete waits the same way after a build whose pivot webhook timed out
+(`pivot-webhook-timeout`), with no pool change: the preflight plan met it on
+eks, and the same four steps end it.
 
 For the questions of `eks.sh`, set `eks_k8s_bump` to a Kubernetes version of the
 EKS pack, such as `1.36`: the example then also makes the profile version 1.0.9,

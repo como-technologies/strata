@@ -1340,3 +1340,40 @@ fn the_entities_of_the_test_plan_are_the_shape_of_a_create_for_each_engine() {
         }
     }
 }
+
+/// An `aws` that answers every query with nothing, and records each call.
+const FAKE_AWS_EMPTY: &str = r#"#!/usr/bin/env bash
+echo "$*" >> "$FAKE_AWS_LOG"
+exit 0
+"#;
+
+#[test]
+fn aws_cleanup_deletes_nothing_without_yes_and_names_what_it_would() {
+    let dir = tempfile::tempdir().unwrap();
+    let bin = dir.path().join("bin");
+    std::fs::create_dir(&bin).unwrap();
+    executable(&bin.join("aws"), FAKE_AWS_EMPTY);
+    let log = dir.path().join("aws.log");
+    let o = Command::new("bash")
+        .arg(live_script("aws-cleanup.sh"))
+        .args(["fred", "us-east-2"])
+        .env(
+            "PATH",
+            format!("{}:{}", bin.display(), std::env::var("PATH").unwrap()),
+        )
+        .env("FAKE_AWS_LOG", &log)
+        .output()
+        .unwrap();
+    assert!(o.status.success(), "{}{}", text(&o.stdout), text(&o.stderr));
+    let out = text(&o.stdout);
+    assert!(out.contains("nothing deleted; add --yes"), "{out}");
+    assert!(out.contains("eks cluster"), "{out}");
+    let calls = std::fs::read_to_string(&log).unwrap();
+    assert!(
+        !calls.contains("delete-")
+            && !calls.contains("release-address")
+            && !calls.contains("detach-"),
+        "no delete without --yes: {calls}"
+    );
+    assert!(calls.contains("describe-nat-gateways"), "{calls}");
+}
