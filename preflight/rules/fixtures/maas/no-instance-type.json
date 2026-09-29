@@ -1,0 +1,23 @@
+{
+  "_base": "clean.json",
+  "_note": "the worker pool has no instanceType and no zone",
+  "_patch": {
+    "entity": {
+      "spec": {
+        "machinepoolconfig": [
+          {
+            "cloudConfig": {
+              "azs": []
+            },
+            "poolConfig": {
+              "name": "worker-pool"
+            }
+          }
+        ]
+      }
+    }
+  },
+  "_delete": [
+    "/entity/spec/machinepoolconfig/1/cloudConfig/instanceType"
+  ]
+}

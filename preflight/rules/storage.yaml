@@ -315,3 +315,50 @@ rules:
     tests:
       - fault: fixtures/aws/volumes-leftover.json
         clean: fixtures/aws/pvc-lb-leftover-clean.json
+
+  - id: azure-storage-account
+    title: A custom Azure storage account has a valid name and exists in the resource group
+    engines: [azure]
+    tier: palette
+    severity: fail
+    status: source
+    when: (.entity.spec.cloudConfig.storageAccountName // "") != "" and .entity.spec.cloudAccountUid != null
+    what: |
+      Palette copies the node image into a storage account. With `storageAccountName` set, the docs
+      say to make the account before the cluster. When the account is not in the resource group,
+      Palette falls back to an account of its own hash name, with no error. The custom account,
+      which a PCG setup restricts to the vnet, is then never used. Azure takes 3 to 24 lower-case
+      letters and digits for the name, and 3 to 63 for a container. Palette checks neither.
+      `GET /v1/clouds/azure/resourceGroups/{rg}/storageAccounts` lists the accounts of the group.
+    check:
+      kind: palette
+      method: GET
+      path: /v1/clouds/azure/resourceGroups/{{ .entity.spec.cloudConfig.resourceGroup }}/storageAccounts?cloudAccountUid={{ .entity.spec.cloudAccountUid }}&subscriptionId={{ .entity.spec.cloudConfig.subscriptionId }}
+      expr: |
+        .entity.spec.cloudConfig as $c | ($c.storageAccountName // "") as $sa | ($c.containerName // "") as $ct
+        | [ ( if ($sa | test("^[a-z0-9]{3,24}$") | not) then "storageAccountName \($sa) is not 3 to 24 lower-case letters and digits: Azure refuses the name, and Palette checks none" else empty end ),
+            ( if $ct != "" and (($ct | test("^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$") | not) or ($ct | test("--"))) then "containerName \($ct) is not 3 to 63 lower-case letters, digits, and single dashes" else empty end ) ]
+          + ( if (.response.ok | not) then ["Palette cannot list the storage accounts of \($c.resourceGroup): \(.response.body.code // .response.status): \(.response.body.message // "")"]
+              else ([ (.response.body.accounts // [])[] | .name ]) as $names
+                | if ($names | index($sa)) != null then []
+                  else ["storage account \($sa) is not in resource group \($c.resourceGroup) (it has \($names | join(", "))): the docs say to make it before the cluster; Palette then falls back to an account of its own name with no error, and the custom account is never used"] end
+              end )
+    reproduce:
+      - "az storage account show --name {{ .entity.spec.cloudConfig.storageAccountName }} --resource-group {{ .entity.spec.cloudConfig.resourceGroup }} --subscription {{ .entity.spec.cloudConfig.subscriptionId }} --query '[name,location,kind,provisioningState]' --output tsv"
+    fix:
+      owner: palette
+      text: Fail the build when a named storage account is missing, instead of the fallback.
+    evidence:
+      - kind: source
+        ref: palette pkg/provider/azure/azure_sdk.go AzureCopyImage
+        note: checkIfStorageAccountPresent with the custom name, then toHashName, then createStorageAccount; no error for a missing custom account
+      - kind: doc
+        ref: https://docs.spectrocloud.com/clusters/public-cloud/azure/create-azure-cluster/
+        note: to use custom storage accounts or containers, you must create them before you create your cluster
+      - kind: doc
+        ref: https://learn.microsoft.com/en-us/azure/storage/common/storage-account-overview
+        note: a storage account name is 3 to 24 characters, lower-case letters and numbers
+    tests:
+      - fault: fixtures/azure/storage-account-missing.json
+        clean: fixtures/azure/storage-account-clean.json
+      - fault: fixtures/azure/storage-account-bad-name.json

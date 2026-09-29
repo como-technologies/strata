@@ -1,0 +1,55 @@
+{
+  "_base": "two-node-clean.json",
+  "_note": "a two-node cluster with the PXK-E pack; Palette wants K3s",
+  "_patch": {
+    "profiles": [
+      {
+        "source": {
+          "uid": "prof-edge-1"
+        },
+        "packs": [
+          {
+            "key": "os/edge-native-byoi",
+            "layer": "os",
+            "name": "edge-native-byoi",
+            "version": "1.0.0",
+            "tag": "1.0.0",
+            "packUid": "pk-os-edge",
+            "registryUid": "5eecc89d0b150045ae661cef",
+            "valuesCanon": null
+          },
+          {
+            "key": "k8s/edge-k8s",
+            "layer": "k8s",
+            "name": "edge-k8s",
+            "version": "1.32.4",
+            "tag": "1.32.4",
+            "packUid": "pk-k8s-edge",
+            "registryUid": "5eecc89d0b150045ae661cef",
+            "valuesCanon": null
+          },
+          {
+            "key": "cni/cni-calico",
+            "layer": "cni",
+            "name": "cni-calico",
+            "version": "3.29.3",
+            "tag": "3.29.3",
+            "packUid": "pk-cni-edge",
+            "registryUid": "5eecc89d0b150045ae661cef",
+            "valuesCanon": null
+          },
+          {
+            "key": "csi/csi-rook-ceph",
+            "layer": "csi",
+            "name": "csi-rook-ceph",
+            "version": "1.16.0",
+            "tag": "1.16.0",
+            "packUid": "pk-csi-edge",
+            "registryUid": "5eecc89d0b150045ae661cef",
+            "valuesCanon": null
+          }
+        ]
+      }
+    ]
+  }
+}

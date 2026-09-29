@@ -29,18 +29,10 @@ use strata::snapshot::Snapshot;
 
 use crate::error::{Error, Result};
 
-/// The engines a cluster can be built on, as Palette names the cloud type of a cluster.
+/// The engines a cluster can be built on, as Palette names the cloud type of a cluster. OpenStack
+/// is not one: Palette removed it in 2026, and hubble has no route for it.
 pub const CLOUDS: &[&str] = &[
-    "aws",
-    "eks",
-    "gcp",
-    "gke",
-    "azure",
-    "aks",
-    "maas",
-    "edge",
-    "vsphere",
-    "openstack",
+    "aws", "eks", "gcp", "gke", "azure", "aks", "maas", "edge", "vsphere",
 ];
 
 /// The fields of a flat machine pool of a cloud config that belong to `poolConfig` of the

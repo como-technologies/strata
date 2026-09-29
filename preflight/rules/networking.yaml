@@ -852,3 +852,603 @@ rules:
       - kind: run
         ref: lab examples/live/terraform/registry-kinds.tf aws_instance.kinds
         note: depends_on the gateway, with the reason in the comment
+
+  - id: azure-subnets-in-vnet
+    title: The subnets of a static Azure network are inside the vnet CIDR
+    engines: [azure, aks]
+    tier: static
+    severity: fail
+    status: source
+    when: (.entity.spec.cloudConfig.vnetName // "") != ""
+    what: |
+      With `vnetName` set, the converter needs `vnetCidrBlock`: "Parameter 'VNet CIDR Block' should
+      not be empty". It checks nothing else of the static network. Azure refuses a subnet outside
+      the address space of its vnet. The check reads the CIDR of the control plane subnet and of
+      the worker subnet, when given, against `vnetCidrBlock`. `azure-vnet-static` asks Azure, through
+      Palette, whether the vnet and the subnets exist.
+    check:
+      kind: static
+      expr: |
+        def ip2n: split(".") | map(tonumber) | reduce .[] as $o (0; . * 256 + $o);
+        def net: split("/") | { n: (.[0] | ip2n), p: (.[1] | tonumber) };
+        def inside($outer): (net) as $i | ($outer | net) as $o | ($i.p >= $o.p) and (($i.n / pow(2; 32 - $o.p) | floor) == ($o.n / pow(2; 32 - $o.p) | floor));
+        def is_cidr: test("^[0-9]{1,3}(\\.[0-9]{1,3}){3}/[0-9]{1,2}$");
+        .entity.spec.cloudConfig as $c | ($c.vnetCidrBlock // "") as $v
+        | if $v == "" then ["vnetName \($c.vnetName) is set and vnetCidrBlock is empty: the converter refuses the create with \"Parameter 'VNet CIDR Block' should not be empty\""]
+          elif ($v | is_cidr | not) then ["vnetCidrBlock \($v) is not a CIDR"]
+          else [ ({ name: "controlPlaneSubnet", s: $c.controlPlaneSubnet }, { name: "workerSubnet", s: $c.workerSubnet })
+                 | select(.s != null) | .name as $n | (.s.cidrBlock // "") as $cidr
+                 | select($cidr != "")
+                 | if ($cidr | is_cidr | not) then "\($n) cidrBlock \($cidr) is not a CIDR"
+                   elif ($cidr | inside($v) | not) then "\($n) \($cidr) is outside the vnet \($c.vnetName) \($v): Azure refuses a subnet outside the address space"
+                   else empty end ]
+          end
+    fix:
+      owner: palette
+      text: Check the subnet CIDRs against the vnet CIDR in the converter.
+    evidence:
+      - kind: source
+        ref: hubble svcclient/converter/v1/cloudconfig_converter.go ToAzureClusterConfig
+        note: "if str.IsNotEmpty(c.VnetName) { validator.ShouldNotBeEmpty(\"VNet CIDR Block\", c.VnetCidrBlock) }; the subnets are copied"
+      - kind: doc
+        ref: https://learn.microsoft.com/en-us/azure/virtual-network/virtual-networks-faq
+        note: a subnet address range must be inside the address space of the virtual network
+    tests:
+      - fault: fixtures/azure/subnet-outside-vnet.json
+        clean: fixtures/azure/static-vnet-clean.json
+      - fault: fixtures/azure/vnet-no-cidr.json
+
+  - id: azure-vnet-static
+    title: The vnet and the subnets of a static Azure network exist
+    engines: [azure, aks]
+    tier: palette
+    severity: fail
+    status: source
+    when: (.entity.spec.cloudConfig.vnetName // "") != "" and .entity.spec.cloudAccountUid != null
+    what: |
+      With `vnetName` set, the provider builds the id of each subnet under the vnet in
+      `vnetResourceGroup` (or the resource group of the cluster) and passes it to CAPZ. A vnet or a
+      subnet that does not exist fails the build with `NotFound`. Palette checks none of them.
+      `GET /v1/clouds/azure/regions/{region}/subscriptions/{sub}/networks` lists the vnets of the
+      group with their address spaces and subnets; the check looks for the vnet, each named subnet,
+      and the vnet CIDR in it.
+    check:
+      kind: palette
+      method: GET
+      path: /v1/clouds/azure/regions/{{ .entity.spec.cloudConfig.location }}/subscriptions/{{ .entity.spec.cloudConfig.subscriptionId }}/networks?cloudAccountUid={{ .entity.spec.cloudAccountUid }}&resourceGroup={{ .entity.spec.cloudConfig | if (.vnetResourceGroup // "") != "" then .vnetResourceGroup else .resourceGroup end }}
+      expr: |
+        .entity.spec.cloudConfig as $c | (if ($c.vnetResourceGroup // "") != "" then $c.vnetResourceGroup else $c.resourceGroup end) as $rg
+        | if (.response.ok | not) then ["Palette cannot list the virtual networks of \($rg): \(.response.body.code // .response.status): \(.response.body.message // "")"]
+          else ([ (.response.body.virtualNetworkList // [])[] | select((.name | ascii_downcase) == ($c.vnetName | ascii_downcase)) ] | first) as $vnet
+            | if $vnet == null then ["no virtual network \($c.vnetName) in resource group \($rg) of subscription \($c.subscriptionId): the build names its subnets by id under it, and Azure answers NotFound"]
+              else ([ ($vnet.subnets // [])[] | .name | ascii_downcase ]) as $subs
+                | [ ({ f: "controlPlaneSubnet", s: $c.controlPlaneSubnet }, { f: "workerSubnet", s: $c.workerSubnet })
+                    | select(.s != null and ((.s.name // "") != "")) | .f as $f | .s.name as $n
+                    | select(($subs | index($n | ascii_downcase)) == null)
+                    | "\($f) \($n) is not a subnet of \($c.vnetName) (it has \($subs | join(", "))): the build names the subnet by id, and Azure answers NotFound" ]
+                  + (if ($c.vnetCidrBlock // "") != "" and (($vnet.addressSpaces // []) | index($c.vnetCidrBlock)) == null then ["vnetCidrBlock \($c.vnetCidrBlock) is not an address space of \($c.vnetName) (\(($vnet.addressSpaces // []) | join(", ")))"] else [] end)
+              end
+          end
+    reproduce:
+      - "az network vnet show --resource-group {{ .entity.spec.cloudConfig | if (.vnetResourceGroup // \"\") != \"\" then .vnetResourceGroup else .resourceGroup end }} --name {{ .entity.spec.cloudConfig.vnetName }} --subscription {{ .entity.spec.cloudConfig.subscriptionId }} --query '{space: addressSpace.addressPrefixes, subnets: subnets[].[name,addressPrefix]}' --output json"
+    fix:
+      owner: palette
+      text: Read the vnet and the subnets in the validate route when vnetName is set.
+    evidence:
+      - kind: source
+        ref: palette pkg/provider/azure/azure_cluster.go getSubnetID
+        note: "/subscriptions/<sub>/resourceGroups/<vnetRG>/providers/Microsoft.Network/virtualNetworks/<vnet>/subnets/<name>, built from the config and never read back"
+      - kind: doc
+        ref: https://docs.spectrocloud.com/clusters/public-cloud/azure/create-azure-cluster/
+        note: static placement fields Network Resource Group, Virtual Network, CIDR Block, Control Plane Subnet, Worker Subnet
+    tests:
+      - fault: fixtures/azure/vnet-subnet-missing.json
+        clean: fixtures/azure/static-vnet-clean.json
+
+  - id: azure-private-api-server
+    title: A private API server load balancer has a static address, a DNS zone, and a PCG
+    engines: [azure, aks]
+    tier: static
+    severity: fail
+    status: source
+    what: |
+      An internal API server load balancer (`infraLBConfig.apiServerLB.type: Internal`) takes a
+      static address alone: the docs say dynamic allocation "is no longer supported". It needs a
+      private DNS zone, and it is available through a self-hosted PCG in Azure alone, because
+      Palette must reach the API server. The check reads the load balancer fields, and the PCG
+      annotation of the account when the world has one. For AKS, a private cluster with a custom
+      `privateDNSZone` needs the name `private.<region>.azmk8s.io`.
+    check:
+      kind: static
+      expr: |
+        .entity.spec.cloudConfig as $c | ($c.infraLBConfig.apiServerLB // {}) as $lb
+        | (if ($lb.type // "Public") == "Internal" then
+             [ ( if ($lb.ipAllocationMethod // "Dynamic") != "Static" then "apiServerLB.type is Internal with ipAllocationMethod \($lb.ipAllocationMethod // "Dynamic"): the docs allow Static alone, with a valid apiServerLBStaticIP" else empty end ),
+               ( if ($lb.ipAllocationMethod // "") == "Static" and ($lb.apiServerLBStaticIP // "") == "" then "apiServerLB.ipAllocationMethod is Static and apiServerLBStaticIP is empty" else empty end ),
+               ( if ($lb.privateDNSName // "") == "" then "apiServerLB.type is Internal and privateDNSName is empty: a private DNS zone is required for the private API server load balancer" else empty end ),
+               ( if .account != null and (.account.metadata.annotations.overlordUid // "") == "" then "apiServerLB.type is Internal and the cloud account names no PCG (annotation overlordUid): the private load balancer is available through a self-hosted PCG in Azure alone" else empty end ) ]
+           else [] end)
+        + (if .cloud == "aks" and ($c.apiServerAccessProfile.enablePrivateCluster // $c.enablePrivateCluster // false) then
+             (($c.apiServerAccessProfile.privateDNSZone // "") as $z
+              | if $z != "" and $z != "system" and $z != "none" and ($z | test("private\\.\($c.location)\\.azmk8s\\.io$") | not)
+                then ["apiServerAccessProfile.privateDNSZone \($z) is not named private.\($c.location).azmk8s.io: AKS needs that name for the API server zone"] else [] end)
+           else [] end)
+    fix:
+      owner: palette
+      text: Check the three fields and the PCG in the validate route when the load balancer is Internal.
+    evidence:
+      - kind: doc
+        ref: https://docs.spectrocloud.com/clusters/public-cloud/azure/create-azure-cluster/
+        note: only Static IP allocation is allowed; a private DNS zone is required; available only through a self-hosted PCG
+      - kind: doc
+        ref: https://docs.spectrocloud.com/clusters/public-cloud/azure/aks/
+        note: the private DNS zone of the API server must be named private.<cluster-region>.azmk8s.io
+      - kind: source
+        ref: hubble svcclient/converter/v1/cloudconfig_converter.go ToInfraLBConfig
+        note: defaults ipAllocationMethod to Dynamic and type to Public, and checks nothing
+    tests:
+      - fault: fixtures/azure/private-lb-dynamic.json
+        clean: fixtures/azure/private-lb-clean.json
+      - clean: fixtures/azure/clean.json
+
+  - id: maas-domain
+    title: The DNS domain of the cluster exists in MAAS
+    engines: [maas]
+    tier: palette
+    severity: fail
+    status: source
+    when: .entity.spec.cloudAccountUid != null
+    what: |
+      `cloudConfig.domain` is required. Palette passes it to CAPMAAS as the DNS domain of the
+      machines and registers the record of the cluster in it. Palette checks nothing about it.
+      `GET /v1/cloudaccounts/maas/{uid}/properties/domains` lists the domains of MAAS through the
+      PCG of the account; the check looks for the domain in the list. A refusal of the route names
+      a PCG that is missing or not active.
+    check:
+      kind: palette
+      method: GET
+      path: /v1/cloudaccounts/maas/{{ .entity.spec.cloudAccountUid }}/properties/domains
+      expr: |
+        .entity.spec.cloudConfig.domain as $d
+        | if (.response.ok | not) then ["Palette cannot list the domains of the MAAS account: \(.response.body.code // .response.status): \(.response.body.message // ""); the route needs the PCG of the account (annotation overlordUid) to be active"]
+          else ([ (.response.body.items // [])[] | .name ]) as $names
+            | if ($names | index($d)) != null then [] else ["domain \($d) is not a DNS domain of MAAS (it has \($names | join(", "))): Palette registers the cluster record in it, and CAPMAAS deploys the machines into it"] end
+          end
+    reproduce:
+      - "maas $PROFILE domains read | jq -r '.[] | [.name, .is_default] | @tsv'"
+    fix:
+      owner: palette
+      text: Read the domains of MAAS in the validate route.
+    evidence:
+      - kind: doc
+        ref: https://docs.spectrocloud.com/clusters/data-center/maas/architecture/
+        note: Palette registers a DNS record in MAAS for the deployed cluster
+      - kind: source
+        ref: palette pkg/provider/maas/maas_cluster.go convertCloudCluster
+        note: DNSDomain is config.Spec.ClusterConfig.Domain
+      - kind: source
+        ref: hubble services/service/spectrocluster/internal/service/overlord/overlord_properties_maas.go GetMaasDomainsByAccount
+        note: the route asks the PCG of the account, or the cloud service for a system gateway
+    tests:
+      - fault: fixtures/maas/domain-missing.json
+        clean: fixtures/maas/clean.json
+
+  - id: maas-zones
+    title: Each availability zone of a MAAS pool exists in MAAS
+    engines: [maas]
+    tier: palette
+    severity: fail
+    status: source
+    when: .entity.spec.cloudAccountUid != null
+    what: |
+      The zones of a pool are the MAAS zones CAPMAAS allocates machines from. A zone that is not in
+      MAAS matches no machine, and the pool never fills. The create refuses a pool with no zone
+      (`AvailabilityZoneRequired`); the validate route does not. `maas-pool-fields` reads the empty
+      case. `GET /v1/cloudaccounts/maas/{uid}/properties/azs` lists the zones through the PCG.
+    check:
+      kind: palette
+      method: GET
+      path: /v1/cloudaccounts/maas/{{ .entity.spec.cloudAccountUid }}/properties/azs
+      expr: |
+        if (.response.ok | not) then ["Palette cannot list the zones of the MAAS account: \(.response.body.code // .response.status): \(.response.body.message // ""); the route needs the PCG of the account to be active"]
+        else ([ (.response.body.items // [])[] | .name ]) as $zones
+          | [ .entity.spec.machinepoolconfig[] | .poolConfig.name as $p | (.cloudConfig.azs // [])[]
+              | select(. as $z | ($zones | index($z)) == null)
+              | "pool \($p) names zone \(.), which is not a MAAS zone (\($zones | join(", "))): CAPMAAS finds no machine in it" ]
+        end
+    reproduce:
+      - "maas $PROFILE zones read | jq -r '.[].name'"
+    fix:
+      owner: palette
+      text: Read the zones in the validate route.
+    evidence:
+      - kind: doc
+        ref: https://docs.spectrocloud.com/clusters/data-center/maas/create-manage-maas-clusters/
+        note: "Availability zones: the MAAS zones in which to deploy nodes"
+      - kind: source
+        ref: hubble services/service/spectrocluster/internal/service/cloudconfig/internal/maas/machinepool_maas.go CreateMachinePools
+        note: AvailabilityZoneRequired on the create path alone
+    tests:
+      - fault: fixtures/maas/zone-unknown.json
+        clean: fixtures/maas/clean.json
+
+  - id: maas-lxd-ipam
+    title: LXD VM pools and IP pools follow the MAAS rules
+    engines: [maas]
+    tier: static
+    severity: fail
+    status: source
+    what: |
+      Four rules of the MAAS create that the validate route does not run. `useLxdVm` is for a
+      control plane pool alone. `enableLxdVm` on the cluster and `useLxdVm` on a pool exclude each
+      other. An IP pool (`network.parentPoolUid`) is for an LXD VM control plane pool alone: "IPAM
+      Pool should be empty in machine pool". A network with `staticIp` needs a `parentPoolUid`. The
+      IP pool must also be restricted to a single cluster and free; the reproduce line reads it.
+    check:
+      kind: static
+      expr: |
+        .entity.spec.cloudConfig as $c
+        | [ .entity.spec.machinepoolconfig[] | .poolConfig.name as $p | (.poolConfig.isControlPlane // false) as $cp | (.cloudConfig.useLxdVm // false) as $lxd | (.cloudConfig.network // {}) as $n
+            | ( if $lxd and ($cp | not) then "pool \($p) sets useLxdVm and is not a control plane pool: Palette refuses it with \"Use LXD VM configuration is restricted to control plane pool\"" else empty end ),
+              ( if $lxd and ($c.enableLxdVm // false) then "pool \($p) sets useLxdVm and the cluster sets enableLxdVm: Palette refuses the pair (\"Use LXD configuration is not allowed for LXD hosted clusters\")" else empty end ),
+              ( if (($n.parentPoolUid // "") != "") and (($cp and $lxd) | not) then "pool \($p) names IP pool \($n.parentPoolUid) and is not an LXD VM control plane pool: Palette refuses it with \"IPAM Pool should be empty in machine pool\"" else empty end ),
+              ( if ($n.staticIp // false) and (($n.parentPoolUid // "") == "") then "pool \($p) sets network.staticIp with no parentPoolUid: the converter refuses it (\"ParentPoolUid should not be empty\")" else empty end ) ]
+    reproduce:
+      - "curl -s -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" \"${PALETTE_API:-https://api.spectrocloud.com}/v1/overlords/maas/{{ .account.metadata.annotations.overlordUid // \"<pcg uid>\" }}/pools\" | jq '.items[] | {uid: .metadata.uid, name: .metadata.name, single: .spec.restrictToSingleCluster, inUse: .status.inUse}'"
+    fix:
+      owner: palette
+      text: Run the LXD and IPAM checks in the validate route.
+    evidence:
+      - kind: source
+        ref: hubble services/service/spectrocluster/internal/service/cloudconfig/internal/maas/cloudconfig_maas.go validateUseLxdVmConfiguration, validateIpamNetworkConfig
+      - kind: source
+        ref: hubble services/service/spectrocluster/internal/handler/converter/v1/overlords_v1_converter.go ToMaasNetworkConfig
+        note: staticIp with an empty parentPoolUid is refused
+      - kind: doc
+        ref: https://docs.spectrocloud.com/clusters/data-center/maas/create-manage-maas-lxd-clusters/
+        note: the IP pool must have Restrict to a single cluster enabled
+    tests:
+      - fault: fixtures/maas/lxd-worker.json
+        clean: fixtures/maas/lxd-clean.json
+      - fault: fixtures/maas/ipam-on-worker.json
+        clean: fixtures/maas/clean.json
+
+  - id: edge-vip-multi-node
+    title: A multi-node edge cluster has a virtual IP for the API server
+    engines: [edge]
+    tier: static
+    severity: fail
+    status: source
+    what: |
+      The docs need one address for the virtual IP (VIP) of the cluster, and the hosts of a
+      cluster on one network. With one host, kube-vip is off and the host address serves. Hubble
+      does not check the count: a create with two hosts and no `controlPlaneEndpoint` passes, and
+      kube-vip has no address. The converter refuses an empty host when the type is `VIP` and the
+      endpoint object is there. The types are `VIP`, `External`, and `DDNS`; `IP` and an empty type
+      are read as `VIP`. The check counts the hosts of every pool.
+    check:
+      kind: static
+      expr: |
+        ([ .entity.spec.machinepoolconfig[] | (.cloudConfig.edgeHosts // []) | length ] | add // 0) as $hosts
+        | (.entity.spec.cloudConfig.controlPlaneEndpoint // {}) as $e | ($e.type // "") as $t | ($e.host // "") as $h
+        | (if $t == "" or $t == "IP" then "VIP" else $t end) as $type
+        | [ ( if (["VIP", "External", "DDNS"] | index($type)) == null then "controlPlaneEndpoint.type \($t) is not VIP, External, or DDNS" else empty end ),
+            ( if $type == "VIP" and $h == "" and $hosts > 1 then "\($hosts) hosts and no controlPlaneEndpoint.host: a multi-node cluster needs one virtual IP for the API server; hubble does not check it, and kube-vip gets no address" else empty end ),
+            ( if $type == "VIP" and $h != "" and ($h | test("^([0-9]{1,3}\\.){3}[0-9]{1,3}$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$"; "i") | not) then "controlPlaneEndpoint.host \($h) is not an IP or a host name" else empty end ),
+            ( if $type == "DDNS" and $h == "" and (($e.ddnsSearchDomain // "") == "") then "controlPlaneEndpoint.type is DDNS with no host and no ddnsSearchDomain" else empty end ) ]
+    fix:
+      owner: palette
+      text: Refuse a create with two hosts or more and no VIP in the edge-native validate route.
+    evidence:
+      - kind: doc
+        ref: https://docs.spectrocloud.com/clusters/edge/site-deployment/cluster-deployment/
+        note: one IP address is required for the VIP of the cluster; hosts of one cluster must be on the same network
+      - kind: doc
+        ref: https://docs.spectrocloud.com/clusters/edge/networking/kubevip/
+        note: kube-vip is disabled when the VIP is the address of the host, as in a single-node cluster
+      - kind: source
+        ref: hubble services/service/spectrocluster/internal/handler/converter/v1/clusters_v1_converter.go getControlPlaneEndPoint
+        note: an empty type or IP becomes VIP; the host is required for VIP alone; a nil endpoint passes with any host count
+    tests:
+      - fault: fixtures/edge/vip-no-host.json
+        clean: fixtures/edge/clean.json
+      - fault: fixtures/edge/vip-bad-type.json
+
+  - id: edge-overlay-cidr
+    title: The overlay network has a CIDR that holds the VIP
+    engines: [edge]
+    tier: static
+    severity: fail
+    status: source
+    when: .entity.spec.cloudConfig.overlayNetworkConfiguration.enable // false
+    what: |
+      With the overlay network on, Palette parses `overlayNetworkConfiguration.cidr` and checks
+      that `controlPlaneEndpoint.host` is inside it: `InvalidCidr` or `IPNotWithinCidrRange` at
+      create, not at validate. The first address of the range is the overlay VIP. The range cannot
+      change after the create. The hosts must share one layer-2 network that passes broadcasts.
+      Hubble has no default range; the console fills one in.
+    check:
+      kind: static
+      expr: |
+        def ip2n: split(".") | map(tonumber) | reduce .[] as $o (0; . * 256 + $o);
+        def net: split("/") | { n: (.[0] | ip2n), p: (.[1] | tonumber) };
+        def inside($outer): (net) as $i | ($outer | net) as $o | ($i.p >= $o.p) and (($i.n / pow(2; 32 - $o.p) | floor) == ($o.n / pow(2; 32 - $o.p) | floor));
+        def is_cidr: test("^[0-9]{1,3}(\\.[0-9]{1,3}){3}/[0-9]{1,2}$");
+        def is_ip: test("^([0-9]{1,3}\\.){3}[0-9]{1,3}$");
+        (.entity.spec.cloudConfig.overlayNetworkConfiguration.cidr // "") as $cidr | (.entity.spec.cloudConfig.controlPlaneEndpoint.host // "") as $h
+        | if ($cidr | is_cidr | not) then ["overlayNetworkConfiguration.cidr \($cidr) is not a CIDR: Palette refuses the create with InvalidCidr"]
+          elif $h == "" then ["the overlay network is on and controlPlaneEndpoint.host is empty: Palette checks the host against the CIDR and refuses an empty one; the first address of \($cidr) is the overlay VIP"]
+          elif ($h | is_ip | not) then ["controlPlaneEndpoint.host \($h) is not an IP, and the overlay check needs one inside \($cidr)"]
+          elif ("\($h)/32" | inside($cidr) | not) then ["controlPlaneEndpoint.host \($h) is outside the overlay CIDR \($cidr): Palette refuses the create with IPNotWithinCidrRange"]
+          else [] end
+    fix:
+      owner: palette
+      text: Run ValidateCidrConfig in the validate route.
+    evidence:
+      - kind: source
+        ref: hubble services/service/spectrocluster/internal/service/cloudconfig/internal/edgenative/machinepool_edgenative_validator.go ValidateCidrConfig
+        note: validateCIDR(ControlPlaneEndpoint.Host, Cidr) when Enable; InvalidCidr and IPNotWithinCidrRange
+      - kind: doc
+        ref: https://docs.spectrocloud.com/clusters/edge/networking/vxlan-overlay/
+        note: the first IP address in the overlay CIDR range is the overlay VIP; the range cannot change after the create
+    tests:
+      - fault: fixtures/edge/overlay-vip-outside.json
+        clean: fixtures/edge/overlay-clean.json
+      - fault: fixtures/edge/overlay-bad-cidr.json
+
+  - id: edge-host-nic
+    title: The NIC of an edge host exists, and a host with two NICs has a static IP or the overlay
+    engines: [edge]
+    tier: palette
+    severity: fail
+    status: source
+    what: |
+      A host entry can name its NIC (`nicName`, or `nic.nicName`). The create checks the name against
+      `spec.device.nics` of the host and refuses an unknown one ("Invalid nic name"); the validate
+      route does not. The docs say a host with more than one NIC needs a static IP or the overlay
+      network; DHCP is not supported there. The check reads the first host of the first pool with
+      `GET /v1/edgehosts/{uid}`. A check of every host needs one request for each; the reproduce
+      line loops.
+    check:
+      kind: palette
+      method: GET
+      path: /v1/edgehosts/{{ .entity.spec.machinepoolconfig[0].cloudConfig.edgeHosts[0].hostUid }}
+      expr: |
+        (.entity.spec.machinepoolconfig[0].cloudConfig.edgeHosts[0]) as $h | (.entity.spec.cloudConfig.overlayNetworkConfiguration.enable // false) as $overlay
+        | ($h.nic.nicName // $h.nicName // "") as $want | ($h.nic.ip // $h.staticIP // "") as $ip
+        | if (.response.ok | not) then ["Palette cannot read edge host \($h.hostUid): \(.response.body.code // .response.status): \(.response.body.message // "")"]
+          else (.response.body.spec.device.nics // []) as $nics | ([ $nics[] | .nicName ]) as $names
+            | [ ( if $want != "" and ($names | index($want)) == null then "host \($h.hostUid) names NIC \($want), and the device has \($names | join(", ")): Palette refuses the create with \"Invalid nic name\"" else empty end ),
+                ( if ($nics | length) > 1 and $ip == "" and ($overlay | not) then "host \($h.hostUid) has \($nics | length) NICs (\($names | join(", "))), no static IP, and no overlay network: the docs say DHCP is not supported on a host with more than one NIC" else empty end ) ]
+          end
+    reproduce:
+      - "for h in {{ [ .entity.spec.machinepoolconfig[] | (.cloudConfig.edgeHosts // [])[] | .hostUid ] | join(\" \") }}; do curl -s -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" \"${PALETTE_API:-https://api.spectrocloud.com}/v1/edgehosts/$h\" | jq -c '{uid: .metadata.uid, nics: [.spec.device.nics[] | {nicName, ip, isDefault}]}'; done"
+    fix:
+      owner: palette
+      text: Run the NIC check in the validate route, and refuse DHCP on a host with two NICs.
+    evidence:
+      - kind: source
+        ref: hubble services/service/spectrocluster/internal/service/cloudconfig/internal/edgenative/machinepool_edgenative_validator.go validateEdgeHostNic
+        note: IsValidNic against spec.device.nics of the host, on the create path
+      - kind: doc
+        ref: https://docs.spectrocloud.com/clusters/edge/site-deployment/cluster-deployment/
+        note: a host with more than one NIC must use static IP addresses or the network overlay; DHCP is not supported
+    tests:
+      - fault: fixtures/edge/nic-unknown.json
+        clean: fixtures/edge/nic-clean.json
+      - fault: fixtures/edge/multi-nic-dhcp.json
+        clean: fixtures/edge/clean.json
+
+  - id: edge-static-ip-nic
+    title: A static IP on an edge host comes with a gateway, a subnet, and DNS
+    engines: [edge]
+    tier: static
+    severity: warn
+    status: inferred
+    what: |
+      The console asks four fields for a static address: the IP, the default gateway, the subnet
+      mask, and a DNS server. Hubble copies `nic` and checks none of them. A host with an address
+      and no gateway cannot reach Palette, and the build waits for it. This is a reading of the
+      docs and the converter, not a run. The check reads each host with `nic.ip` or `staticIP`.
+    check:
+      kind: static
+      expr: |
+        [ .entity.spec.machinepoolconfig[] | .poolConfig.name as $p | (.cloudConfig.edgeHosts // [])[]
+          | select(((.nic.ip // .staticIP // "") != "")) | .hostUid as $u | (.nic // {}) as $n | (.nic.ip // .staticIP) as $ip
+          | [ (if ($n.gateway // "") == "" then "gateway" else empty end), (if ($n.subnet // "") == "" then "subnet" else empty end), (if (($n.dns // []) | length) == 0 then "dns" else empty end) ] as $missing
+          | select(($missing | length) > 0)
+          | "host \($u) of pool \($p) has the static IP \($ip) and no \($missing | join(", ")): the console asks for all four, and hubble checks none" ]
+    fix:
+      owner: palette
+      text: Check the four fields of a static NIC in the converter.
+    evidence:
+      - kind: doc
+        ref: https://docs.spectrocloud.com/clusters/edge/site-deployment/cluster-deployment/
+        note: static IP fields IP address, Default gateway, Subnet mask, DNS server
+      - kind: source
+        ref: hubble services/service/spectrocluster/internal/handler/converter/v1/clusters_v1_converter.go ToEdgeNativeNic
+        note: copies macAddr, ip, subnet, gateway, dns, nicName, and isDefault with no check
+    tests:
+      - fault: fixtures/edge/static-ip-no-gateway.json
+        clean: fixtures/edge/nic-clean.json
+
+  - id: vsphere-controlplane-endpoint
+    title: The control plane endpoint of a vSphere cluster has a valid type and a host
+    engines: [vsphere]
+    tier: static
+    severity: fail
+    status: source
+    what: |
+      The types are `VIP`, `External`, and `DDNS`; an empty type is `DDNS`, and there is no `IP`.
+      For `VIP` and `External` the converter needs a host ("Host endpoint should not be empty").
+      With DHCP and `DDNS`, Palette reads the search domain from the DNS mapping of the PCG. The
+      mapping is for the datacenter and the network. With none, the create fails with
+      `MissingDDnsMapping`. No route lists the mappings, so the reproduce line names the console
+      page. The docs say DHCP needs Dynamic DNS.
+    check:
+      kind: static
+      expr: |
+        (.entity.spec.cloudConfig.controlPlaneEndpoint // {}) as $e | ($e.type // "") as $t | ($e.host // "") as $h
+        | (if $t == "" then "DDNS" else $t end) as $type
+        | [ ( if (["VIP", "External", "DDNS"] | index($type)) == null then "controlPlaneEndpoint.type \($t) is not VIP, External, or DDNS (the vSphere enum has no IP)" else empty end ),
+            ( if $type != "DDNS" and $h == "" then "controlPlaneEndpoint.type is \($type) and host is empty: the converter refuses it (\"Host endpoint should not be empty\")" else empty end ),
+            ( if $type == "DDNS" and ($e.ddnsSearchDomain // "") != "" and (($e.ddnsSearchDomain // "") | test("^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)+$"; "i") | not) then "ddnsSearchDomain \($e.ddnsSearchDomain) is not a DNS name" else empty end ) ]
+    reproduce:
+      - "echo 'Palette console: Tenant Settings > Private Cloud Gateways > <pcg> > DNS: a mapping for datacenter {{ .entity.spec.cloudConfig.placement.datacenter }} and network {{ .entity.spec.cloudConfig.placement.network.networkName }}'   # needed for DHCP with DDNS"
+    fix:
+      owner: palette
+      text: Refuse a DHCP cluster with DDNS and no DNS mapping in the validate route.
+    evidence:
+      - kind: source
+        ref: hubble services/service/spectrocluster/internal/handler/converter/v1/clusters_v1_converter.go ToControlPlaneEndPoint
+        note: an empty type is DDNS; the host is required when the type is not DDNS; the enum is VIP, External, DDNS
+      - kind: source
+        ref: hubble services/service/spectrocluster/internal/service/spectrocluster/internal/vsphere/spectrocluster_vsphere.go createClusterOp
+        note: MissingDDnsMapping(datacenter, networkName) for a DHCP cluster with DDNS and no mapping on the PCG
+      - kind: doc
+        ref: https://docs.spectrocloud.com/clusters/data-center/vmware/architecture/
+        note: if you are using DHCP, Dynamic DNS is required
+    tests:
+      - fault: fixtures/vsphere/vip-no-host.json
+        clean: fixtures/vsphere/clean.json
+      - fault: fixtures/vsphere/endpoint-bad-type.json
+        clean: fixtures/vsphere/dhcp-clean.json
+
+  - id: vsphere-static-ip-pool
+    title: A static vSphere cluster names an IP pool on each placement
+    engines: [vsphere]
+    tier: static
+    severity: fail
+    status: source
+    what: |
+      With `staticIp` on the cluster, each placement network of a pool needs `parentPoolUid`, the
+      uid of an IP pool of the PCG; the converter refuses an empty one. With `staticIp` off, no
+      placement network can set `staticIp`; the converter refuses the pair. The docs say an IPAM
+      pool is required for static addresses. A pool with no placements takes the placement of the
+      cluster. `vsphere-ip-pool-capacity` reads the pool itself.
+    check:
+      kind: static
+      expr: |
+        (.entity.spec.cloudConfig.staticIp // false) as $static | (.entity.spec.cloudConfig.placement // {}) as $cp
+        | [ .entity.spec.machinepoolconfig[] | .poolConfig.name as $p | ((.cloudConfig.placements // []) | if length == 0 then [$cp] else . end)[] | (.network // $cp.network // {}) as $n
+            | ( if $static and (($n.parentPoolUid // "") == "") then "pool \($p), network \($n.networkName // "?"): staticIp is on and parentPoolUid is empty; the converter refuses it (\"ParentPoolUid should not be empty\")" else empty end ),
+              ( if ($static | not) and ($n.staticIp // false) then "pool \($p), network \($n.networkName // "?"): the cluster is DHCP (staticIp false) and the placement network sets staticIp true; the converter refuses the pair" else empty end ) ]
+    fix:
+      owner: none
+      text: The check exists in the converter; strata-preflight runs it before the request.
+    evidence:
+      - kind: source
+        ref: hubble services/service/spectrocluster/internal/handler/converter/v1/clusters_v1_converter.go ToVsphereNetworkConfig, checkStaticIpDataConsistency
+      - kind: doc
+        ref: https://docs.spectrocloud.com/clusters/data-center/vmware/create-manage-vmware-clusters/
+        note: an IPAM pool is required to assign static IP addresses to the nodes
+    tests:
+      - fault: fixtures/vsphere/static-no-pool.json
+        clean: fixtures/vsphere/clean.json
+      - fault: fixtures/vsphere/dhcp-static-placement.json
+        clean: fixtures/vsphere/dhcp-clean.json
+
+  - id: vsphere-ip-pool-capacity
+    title: The IP pool of the PCG has the addresses the cluster needs
+    engines: [vsphere]
+    tier: palette
+    severity: fail
+    status: source
+    when: (.entity.spec.cloudConfig.staticIp // false) and ((.account.metadata.annotations.overlordUid // "") != "")
+    what: |
+      Each node takes one address, a control plane pool reserves two more, and a worker pool one
+      more, for the rolling update. Palette counts the range from `start` to `end` less the allotted
+      addresses. It counts at the machine pool create, after the cluster document exists. The
+      failure is `IPPoolExhausted`, and the cluster stays at `IpAllocationDone`. A pool restricted to a single
+      cluster that another cluster holds is refused. `GET /v1/overlords/vsphere/{uid}/pools` lists
+      the pools of the PCG; the check reads the pool of the first placement and sums the pools
+      that use it.
+    check:
+      kind: palette
+      method: GET
+      path: /v1/overlords/vsphere/{{ .account.metadata.annotations.overlordUid }}/pools
+      expr: |
+        def ip2n: split(".") | map(tonumber) | reduce .[] as $o (0; . * 256 + $o);
+        .account.metadata.annotations.overlordUid as $ol | (.entity.spec.cloudConfig.placement // {}) as $cp
+        | ([ .entity.spec.machinepoolconfig[] | { pool: .poolConfig.name, size: (.poolConfig.size // 0), extra: (if (.poolConfig.isControlPlane // false) then 2 else 1 end),
+              uid: ((((.cloudConfig.placements // []) | first) // $cp).network.parentPoolUid // $cp.network.parentPoolUid // "") } ]) as $pools
+        | ([ $pools[] | .uid | select(. != "") ] | first) as $uid
+        | if $uid == null then []
+          elif (.response.ok | not) then ["Palette cannot list the IP pools of PCG \($ol): \(.response.body.code // .response.status): \(.response.body.message // "")"]
+          else ([ (.response.body.items // [])[] | select(.metadata.uid == $uid) ] | first) as $ip
+            | if $ip == null then ["no IP pool \($uid) on PCG \($ol): the placement names it as parentPoolUid"]
+              else ([ $pools[] | select(.uid == $uid) ]) as $mine
+                | ([ $mine[] | .size + .extra ] | add) as $need
+                | (($ip.spec.pool.end | ip2n) - ($ip.spec.pool.start | ip2n) + 1) as $total
+                | (($ip.status.allottedIps // []) | length) as $used
+                | ($total - $used) as $free
+                | [ ( if ($ip.spec.restrictToSingleCluster // false) and ($ip.status.inUse // false) then "IP pool \($ip.metadata.name // $uid) is restricted to a single cluster and in use by \(($ip.status.associatedClusters // []) | join(", ")): Palette refuses another cluster on it" else empty end ),
+                    ( if $need > $free then "IP pool \($ip.metadata.name // $uid) has \($free) free of \($total) addresses (\($used) allotted), and the pools \([ $mine[] | .pool ] | join(", ")) need \($need): one for each node, plus 2 for a control plane pool and 1 for a worker pool; Palette answers IPPoolExhausted, and the cluster stays at IpAllocationDone" else empty end ) ]
+              end
+          end
+    reproduce:
+      - "curl -s -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" \"${PALETTE_API:-https://api.spectrocloud.com}/v1/overlords/vsphere/{{ .account.metadata.annotations.overlordUid }}/pools\" | jq '.items[] | {uid: .metadata.uid, name: .metadata.name, start: .spec.pool.start, end: .spec.pool.end, allotted: (.status.allottedIps | length), single: .spec.restrictToSingleCluster, inUse: .status.inUse}'"
+    fix:
+      owner: palette
+      text: Run ValidateIpAvailability in the validate route.
+    evidence:
+      - kind: source
+        ref: hubble services/service/spectrocluster/internal/service/spectrocluster/internal/vsphere/spectrocluster_vsphere_ipam.go validateIsIpAvailable
+        note: free is the range less the allotted and the extra addresses; IPPoolExhausted
+      - kind: source
+        ref: hubble services/service/spectrocluster/internal/service/ipam/ipam_service.go GetIpCountPerPlacement
+        note: extra is 1, 2 for a control plane pool, 0 with RollingUpdateScaleIn
+      - kind: doc
+        ref: https://docs.spectrocloud.com/clusters/pcg/manage-pcg/create-manage-node-pool/
+        note: two more IPs for a control plane pool and one for a worker pool; with too few, the cluster is not deployed
+    tests:
+      - fault: fixtures/vsphere/ip-pool-exhausted.json
+        clean: fixtures/vsphere/clean.json
+      - fault: fixtures/vsphere/ip-pool-single-cluster.json
+
+  - id: ntp-servers
+    title: The NTP servers of the cluster are addresses, and a cluster that needs them has some
+    engines: [maas, edge, vsphere]
+    tier: static
+    severity: warn
+    status: source
+    what: |
+      The converter refuses an entry of `ntpServers` that is not an IPv4, IPv6, or DNS name. With
+      no server, a vSphere cluster drifts: the docs recommend NTP servers. A multi-node edge cluster
+      needs synchronized time; the cluster setting overwrites the per-host TUI and user-data
+      setting, and with none each host keeps its own. MAAS gives its machines the time of the
+      region controller, so an empty list is not a fault there. No check reaches the servers from
+      the site; the reproduce line asks one from this machine.
+    check:
+      kind: static
+      expr: |
+        def is_addr: test("^([0-9]{1,3}\\.){3}[0-9]{1,3}$") or test("^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)+$"; "i") or test("^[0-9a-f:]+$"; "i");
+        .cloud as $cloud
+        | ((.entity.spec.cloudConfig.ntpServers // []) | map(select(. != ""))) as $ntp
+        | ([ .entity.spec.machinepoolconfig[] | (.cloudConfig.edgeHosts // []) | length ] | add // 0) as $hosts
+        | [ ( $ntp[] | select(is_addr | not) | "ntpServers entry \(.) is not an address or a host name: the converter refuses the create" ),
+            ( if ($ntp | length) == 0 then
+                (if $cloud == "vsphere" then "no NTP server: the docs recommend NTP servers for a vSphere cluster, and without them the nodes drift"
+                 elif $cloud == "edge" and $hosts > 1 then "no NTP server on a multi-node edge cluster: the docs need synchronized time across the hosts, and each host keeps its own TUI or user-data setting"
+                 else empty end)
+              else empty end ) ]
+    reproduce:
+      - "for s in {{ (.entity.spec.cloudConfig.ntpServers // []) | join(\" \") }}; do dig +short $s; nc -zu -w 2 $s 123 && echo \"$s answers on udp/123\"; done   # from this machine, not from the site"
+    fix:
+      owner: palette
+      text: Warn in the validate route when a vSphere or a multi-node edge cluster names no NTP server.
+    evidence:
+      - kind: source
+        ref: hubble svcclient/converter/v1/cloudconfig_converter.go ToVsphereClusterConfig, ToMaasClusterConfig
+        note: validator.IsValidAddresses("NTP servers", ...)
+      - kind: doc
+        ref: https://docs.spectrocloud.com/clusters/data-center/vmware/create-manage-vmware-clusters/
+        note: we recommend specifying NTP servers; without them, time drift issues
+      - kind: doc
+        ref: https://docs.spectrocloud.com/clusters/edge/site-deployment/cluster-deployment/
+        note: NTP servers correctly configured in a multi-node cluster; all nodes must have their time synchronized
+    tests:
+      - fault: fixtures/vsphere/ntp-empty.json
+        clean: fixtures/vsphere/clean.json
+      - fault: fixtures/edge/ntp-bad.json
+        clean: fixtures/edge/clean.json

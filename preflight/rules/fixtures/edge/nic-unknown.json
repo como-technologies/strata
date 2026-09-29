@@ -1,0 +1,35 @@
+{
+  "_base": "nic-clean.json",
+  "_note": "the named NIC is not on the host",
+  "_patch": {
+    "entity": {
+      "spec": {
+        "machinepoolconfig": [
+          {
+            "cloudConfig": {
+              "edgeHosts": [
+                {
+                  "hostUid": "edge-host-cp-1",
+                  "hostName": "cp-1",
+                  "nicName": "eth9",
+                  "nic": {
+                    "nicName": "eth9",
+                    "ip": "10.10.100.11",
+                    "gateway": "10.10.100.1",
+                    "subnet": "255.255.255.0",
+                    "dns": [
+                      "10.10.100.1"
+                    ]
+                  }
+                }
+              ]
+            },
+            "poolConfig": {
+              "name": "control-plane-pool"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

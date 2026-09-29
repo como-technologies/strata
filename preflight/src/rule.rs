@@ -53,18 +53,7 @@ use crate::error::{Error, Result};
 
 /// The engines a rule can name. `all` stands for every engine.
 pub const ENGINES: &[&str] = &[
-    "all",
-    "aws",
-    "eks",
-    "gcp",
-    "gke",
-    "azure",
-    "aks",
-    "maas",
-    "edge",
-    "vsphere",
-    "openstack",
-    "lab",
+    "all", "aws", "eks", "gcp", "gke", "azure", "aks", "maas", "edge", "vsphere", "lab",
 ];
 
 /// Where a check can find the fault.

@@ -1,0 +1,24 @@
+{
+  "_base": "clean.json",
+  "_note": "a worker pool with a static IP pool; MAAS IPAM pools serve LXD control plane pools alone",
+  "_patch": {
+    "entity": {
+      "spec": {
+        "machinepoolconfig": [
+          {
+            "cloudConfig": {
+              "network": {
+                "networkName": "lab",
+                "staticIp": true,
+                "parentPoolUid": "pool-1"
+              }
+            },
+            "poolConfig": {
+              "name": "worker-pool"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "_base": "static-vnet-clean.json",
+  "_note": "vnetName is set and vnetCidrBlock is empty",
+  "_patch": {
+    "entity": {
+      "spec": {
+        "cloudConfig": {
+          "vnetCidrBlock": ""
+        }
+      }
+    }
+  }
+}

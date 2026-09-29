@@ -1,0 +1,23 @@
+{
+  "_base": "clean.json",
+  "_note": "the worker pool names a zone that is not in MAAS",
+  "_patch": {
+    "entity": {
+      "spec": {
+        "machinepoolconfig": [
+          {
+            "cloudConfig": {
+              "azs": [
+                "default",
+                "rack-9"
+              ]
+            },
+            "poolConfig": {
+              "name": "worker-pool"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

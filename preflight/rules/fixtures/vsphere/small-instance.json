@@ -1,0 +1,24 @@
+{
+  "_base": "clean.json",
+  "_note": "a worker with 512 MiB and a 10 GiB disk",
+  "_patch": {
+    "entity": {
+      "spec": {
+        "machinepoolconfig": [
+          {
+            "cloudConfig": {
+              "instanceType": {
+                "numCPUs": 2,
+                "memoryMiB": 512,
+                "diskGiB": 10
+              }
+            },
+            "poolConfig": {
+              "name": "worker-pool"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

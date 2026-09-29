@@ -1,0 +1,27 @@
+{
+  "_base": "static-vnet-clean.json",
+  "_note": "the vnet exists and has no subnet named worker-subnet",
+  "_responses": {
+    "GET /v1/clouds/azure/regions/eastus/subscriptions/11111111-2222-3333-4444-555555555555/networks?cloudAccountUid=acc-azure-1&resourceGroup=shared-net-rg": {
+      "ok": true,
+      "status": 200,
+      "body": {
+        "virtualNetworkList": [
+          {
+            "name": "shared-vnet",
+            "location": "eastus",
+            "addressSpaces": [
+              "10.20.0.0/16"
+            ],
+            "subnets": [
+              {
+                "name": "cp-subnet",
+                "cidrBlock": "10.20.1.0/24"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  }
+}

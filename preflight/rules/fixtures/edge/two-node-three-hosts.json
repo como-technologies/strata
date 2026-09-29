@@ -1,0 +1,36 @@
+{
+  "_base": "two-node-clean.json",
+  "_note": "a two-node cluster with three control plane hosts",
+  "_patch": {
+    "entity": {
+      "spec": {
+        "machinepoolconfig": [
+          {
+            "cloudConfig": {
+              "edgeHosts": [
+                {
+                  "hostUid": "edge-host-cp-1",
+                  "hostName": "cp-1",
+                  "twoNodeCandidatePriority": "primary"
+                },
+                {
+                  "hostUid": "edge-host-cp-2",
+                  "hostName": "cp-2",
+                  "twoNodeCandidatePriority": "secondary"
+                },
+                {
+                  "hostUid": "edge-host-cp-3",
+                  "hostName": "cp-3"
+                }
+              ]
+            },
+            "poolConfig": {
+              "name": "control-plane-pool",
+              "size": 3
+            }
+          }
+        ]
+      }
+    }
+  }
+}

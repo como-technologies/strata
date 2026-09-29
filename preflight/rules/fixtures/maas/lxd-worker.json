@@ -1,0 +1,20 @@
+{
+  "_base": "clean.json",
+  "_note": "useLxdVm on a worker pool",
+  "_patch": {
+    "entity": {
+      "spec": {
+        "machinepoolconfig": [
+          {
+            "cloudConfig": {
+              "useLxdVm": true
+            },
+            "poolConfig": {
+              "name": "worker-pool"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

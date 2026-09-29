@@ -1,0 +1,32 @@
+{
+  "_base": "clean.json",
+  "_note": "the four resource providers of a build are registered",
+  "_exec": {
+    "az provider list --subscription 11111111-2222-3333-4444-555555555555 --output json": {
+      "exit": 0,
+      "stdout": [
+        {
+          "namespace": "Microsoft.Compute",
+          "registrationState": "Registered"
+        },
+        {
+          "namespace": "Microsoft.Network",
+          "registrationState": "Registered"
+        },
+        {
+          "namespace": "Microsoft.Storage",
+          "registrationState": "Registered"
+        },
+        {
+          "namespace": "Microsoft.ContainerService",
+          "registrationState": "Registered"
+        },
+        {
+          "namespace": "Microsoft.Kusto",
+          "registrationState": "NotRegistered"
+        }
+      ],
+      "stderr": ""
+    }
+  }
+}

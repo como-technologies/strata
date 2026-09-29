@@ -47,7 +47,7 @@ rules:
 | --- | --- | --- |
 | `id` | kebab-case, unique | The id of the row of the catalog. The report and the ledger name a rule by it. |
 | `title` | one line | The good state, as a statement. |
-| `engines` | `aws`, `eks`, `gcp`, `gke`, `azure`, `aks`, `maas`, `edge`, `vsphere`, `openstack`, `lab`, `all` | The engines the rule applies to. |
+| `engines` | `aws`, `eks`, `gcp`, `gke`, `azure`, `aks`, `maas`, `edge`, `vsphere`, `lab`, `all` | The engines the rule applies to. Palette removed OpenStack in 2026, so it is not one. |
 | `tier` | `static`, `palette`, `cloud`, `watch`, `race`, `tool` | Where a check can find the fault. See [The tiers](#the-tiers). |
 | `level` | `probe` (default), `preflight` | How much to trust the check. See [Two levels](../internals/preflight.md#two-levels-probe-and-preflight-check). |
 | `severity` | `fail` (default), `warn`, `note` | `fail`: the build cannot finish, or the cluster breaks. `warn`: it finishes, and something is wrong or costs. `note`: a fact. |

@@ -1,0 +1,30 @@
+{
+  "_base": "byoi-clean.json",
+  "_note": "a generic-byoi OS pack with no osImageOverride",
+  "_patch": {
+    "profiles": [
+      {
+        "source": {
+          "uid": "prof-maas-1"
+        },
+        "packs": [
+          {
+            "key": "os/generic-byoi",
+            "layer": "os",
+            "name": "generic-byoi",
+            "version": "1.0.0",
+            "tag": "1.0.0",
+            "packUid": "pk-os-byoi",
+            "registryUid": "5eecc89d0b150045ae661cef",
+            "valuesCanon": {
+              "pack": {
+                "osName": "ubuntu",
+                "osVersion": "jammy"
+              }
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

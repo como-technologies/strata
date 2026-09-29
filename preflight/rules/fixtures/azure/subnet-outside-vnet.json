@@ -1,0 +1,15 @@
+{
+  "_base": "static-vnet-clean.json",
+  "_note": "the worker subnet is outside the vnet CIDR",
+  "_patch": {
+    "entity": {
+      "spec": {
+        "cloudConfig": {
+          "workerSubnet": {
+            "cidrBlock": "10.21.2.0/24"
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "_base": "clean.json",
+  "_note": "an endpoint type outside VIP, External, DDNS",
+  "_patch": {
+    "entity": {
+      "spec": {
+        "cloudConfig": {
+          "controlPlaneEndpoint": {
+            "host": "10.10.100.20",
+            "type": "LoadBalancer"
+          }
+        }
+      }
+    }
+  }
+}

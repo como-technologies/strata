@@ -1,0 +1,47 @@
+{
+  "_base": "clean.json",
+  "_note": "a single-cluster pool that another cluster holds",
+  "_responses": {
+    "GET /v1/overlords/vsphere/ol-vsphere-1/pools": {
+      "ok": true,
+      "status": 200,
+      "body": {
+        "items": [
+          {
+            "metadata": {
+              "name": "lab-pool",
+              "uid": "pool-1"
+            },
+            "spec": {
+              "pool": {
+                "start": "10.10.140.100",
+                "end": "10.10.140.119",
+                "prefix": 24,
+                "gateway": "10.10.140.1",
+                "subnet": "",
+                "nameserver": {
+                  "addresses": [
+                    "10.10.140.1"
+                  ],
+                  "search": []
+                }
+              },
+              "priavetGatewayUid": "ol-vsphere-1",
+              "restrictToSingleCluster": true
+            },
+            "status": {
+              "allottedIps": [
+                "10.10.140.100"
+              ],
+              "associatedClusters": [
+                "cl-other"
+              ],
+              "inUse": true,
+              "availableIps": []
+            }
+          }
+        ]
+      }
+    }
+  }
+}

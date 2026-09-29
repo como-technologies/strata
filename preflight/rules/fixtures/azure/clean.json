@@ -1,0 +1,289 @@
+{
+  "cloud": "azure",
+  "release": "4.10",
+  "source": "fixtures/azure/clean.json",
+  "entity": {
+    "metadata": {
+      "name": "fred",
+      "labels": {}
+    },
+    "spec": {
+      "cloudAccountUid": "acc-azure-1",
+      "cloudConfig": {
+        "subscriptionId": "11111111-2222-3333-4444-555555555555",
+        "location": "eastus",
+        "resourceGroup": "strata-lab-rg",
+        "sshKey": "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC7strata0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001 ops@lab",
+        "vnetName": "",
+        "vnetCidrBlock": "",
+        "vnetResourceGroup": "",
+        "storageAccountName": "",
+        "containerName": "",
+        "infraLBConfig": {
+          "apiServerLB": {
+            "type": "Public",
+            "ipAllocationMethod": "Dynamic"
+          }
+        }
+      },
+      "machinepoolconfig": [
+        {
+          "cloudConfig": {
+            "instanceType": "Standard_D4s_v3",
+            "azs": [
+              "1"
+            ],
+            "osDisk": {
+              "diskSizeGB": 60,
+              "managedDisk": {
+                "storageAccountType": "Premium_LRS"
+              },
+              "osType": "Linux"
+            }
+          },
+          "poolConfig": {
+            "name": "cp-pool",
+            "size": 1,
+            "isControlPlane": true,
+            "useControlPlaneAsWorker": false
+          }
+        },
+        {
+          "cloudConfig": {
+            "instanceType": "Standard_D4s_v3",
+            "azs": [
+              "1",
+              "2"
+            ],
+            "osDisk": {
+              "diskSizeGB": 60,
+              "managedDisk": {
+                "storageAccountType": "Premium_LRS"
+              },
+              "osType": "Linux"
+            }
+          },
+          "poolConfig": {
+            "name": "worker-pool",
+            "size": 2,
+            "isControlPlane": false,
+            "useControlPlaneAsWorker": false
+          }
+        }
+      ],
+      "profiles": [
+        {
+          "uid": "prof-azure-1",
+          "packValues": [
+            {
+              "name": "ubuntu-azure",
+              "tag": "22.04",
+              "type": "spectro"
+            },
+            {
+              "name": "kubernetes",
+              "tag": "1.32.3",
+              "type": "spectro"
+            },
+            {
+              "name": "cni-calico-azure",
+              "tag": "3.29.3",
+              "type": "spectro"
+            },
+            {
+              "name": "csi-azure",
+              "tag": "1.32.0",
+              "type": "spectro"
+            }
+          ],
+          "variables": []
+        }
+      ],
+      "clusterConfig": {
+        "timezone": "Etc/UTC"
+      }
+    }
+  },
+  "before": null,
+  "profiles": [
+    {
+      "schema": "strata-snapshot/1",
+      "source": {
+        "uid": "prof-azure-1",
+        "name": "azure-stack",
+        "version": "1.0.0",
+        "cloudType": "azure",
+        "type": "cluster"
+      },
+      "packs": [
+        {
+          "key": "os/ubuntu-azure",
+          "layer": "os",
+          "name": "ubuntu-azure",
+          "version": "22.04",
+          "tag": "22.04",
+          "packUid": "pk-os-azure",
+          "registryUid": "5eecc89d0b150045ae661cef",
+          "valuesCanon": null
+        },
+        {
+          "key": "k8s/kubernetes",
+          "layer": "k8s",
+          "name": "kubernetes",
+          "version": "1.32.3",
+          "tag": "1.32.3",
+          "packUid": "pk-k8s-azure",
+          "registryUid": "5eecc89d0b150045ae661cef",
+          "valuesCanon": null
+        },
+        {
+          "key": "cni/cni-calico-azure",
+          "layer": "cni",
+          "name": "cni-calico-azure",
+          "version": "3.29.3",
+          "tag": "3.29.3",
+          "packUid": "pk-cni-azure",
+          "registryUid": "5eecc89d0b150045ae661cef",
+          "valuesCanon": null
+        },
+        {
+          "key": "csi/csi-azure",
+          "layer": "csi",
+          "name": "csi-azure",
+          "version": "1.32.0",
+          "tag": "1.32.0",
+          "packUid": "pk-csi-azure",
+          "registryUid": "5eecc89d0b150045ae661cef",
+          "valuesCanon": null
+        }
+      ]
+    }
+  ],
+  "packs": {
+    "pk-os-azure": {
+      "name": "ubuntu-azure",
+      "layer": "os",
+      "cloudTypes": [
+        "azure"
+      ]
+    },
+    "pk-k8s-azure": {
+      "name": "kubernetes",
+      "layer": "k8s",
+      "cloudTypes": [
+        "azure"
+      ]
+    },
+    "pk-cni-azure": {
+      "name": "cni-calico-azure",
+      "layer": "cni",
+      "cloudTypes": [
+        "azure"
+      ]
+    },
+    "pk-csi-azure": {
+      "name": "csi-azure",
+      "layer": "csi",
+      "cloudTypes": [
+        "azure"
+      ]
+    }
+  },
+  "account": {
+    "metadata": {
+      "name": "como-azure",
+      "uid": "acc-azure-1",
+      "annotations": {},
+      "creationTimestamp": "2026-09-01T10:00:00.000Z"
+    },
+    "spec": {
+      "tenantId": "aaaaaaaa-0000-0000-0000-000000000001",
+      "clientId": "bbbbbbbb-0000-0000-0000-000000000002",
+      "clientSecret": "<redacted>",
+      "azureEnvironment": "AzurePublicCloud"
+    },
+    "status": {
+      "state": ""
+    }
+  },
+  "clusterUid": null,
+  "_responses": {
+    "POST /v1/spectroclusters/azure/validate": {
+      "ok": true,
+      "status": 200,
+      "body": {
+        "machinePools": {
+          "results": []
+        },
+        "profiles": []
+      }
+    },
+    "GET /v1/cloudaccounts/azure/acc-azure-1": {
+      "ok": true,
+      "status": 200,
+      "body": {
+        "metadata": {
+          "name": "como-azure",
+          "uid": "acc-azure-1"
+        },
+        "kind": "azure"
+      }
+    },
+    "GET /v1/clouds/azure/regions?cloudAccountUid=acc-azure-1&subscriptionId=11111111-2222-3333-4444-555555555555": {
+      "ok": true,
+      "status": 200,
+      "body": {
+        "regions": [
+          {
+            "name": "eastus",
+            "displayName": "East US",
+            "zones": [
+              {
+                "name": "1"
+              },
+              {
+                "name": "2"
+              },
+              {
+                "name": "3"
+              }
+            ]
+          },
+          {
+            "name": "westus2",
+            "displayName": "West US 2",
+            "zones": [
+              {
+                "name": "1"
+              },
+              {
+                "name": "2"
+              },
+              {
+                "name": "3"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "GET /v1/clouds/azure/regions/eastus/subscriptions/11111111-2222-3333-4444-555555555555/resourceGroups?cloudAccountUid=acc-azure-1": {
+      "ok": true,
+      "status": 200,
+      "body": {
+        "resourceGroupList": [
+          {
+            "name": "strata-lab-rg",
+            "location": "eastus",
+            "id": "/subscriptions/11111111-2222-3333-4444-555555555555/resourceGroups/strata-lab-rg"
+          },
+          {
+            "name": "shared-net-rg",
+            "location": "eastus",
+            "id": "/subscriptions/11111111-2222-3333-4444-555555555555/resourceGroups/shared-net-rg"
+          }
+        ]
+      }
+    }
+  }
+}

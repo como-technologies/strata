@@ -1,0 +1,11 @@
+{
+  "_base": "clean.json",
+  "_note": "a vCenter server with a scheme",
+  "_patch": {
+    "account": {
+      "spec": {
+        "vcenterServer": "https://vcenter.lab.example.com"
+      }
+    }
+  }
+}

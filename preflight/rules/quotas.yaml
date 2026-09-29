@@ -197,7 +197,7 @@ rules:
 
   - id: worker-cpu-floor
     title: The workers have the CPU the packs need
-    engines: [aws, eks, gcp, gke, azure, aks, maas, vsphere]
+    engines: [aws, gcp, gke, azure, aks, maas, vsphere]
     tier: palette
     severity: fail
     status: seen
@@ -258,3 +258,61 @@ rules:
       - kind: source
         ref: hubble svcclient/converter/v1/cluster_converter.go ValidateResourceLimit
         note: "`ShouldBeEqOrGreaterThan(\"cpu limit (cores)\", 3, cpu)`, and the memory limit between 3 and 100000 GiB"
+
+  - id: azure-vcpu-quota
+    title: The regional vCPU quota covers the pools
+    engines: [azure, aks]
+    tier: cloud
+    severity: fail
+    status: inferred
+    what: |
+      Azure refuses a virtual machine over the regional vCPU quota, or over the quota of the VM
+      family, with `OperationNotAllowed`. Palette checks no Azure quota; the docs leave the capacity
+      to the operator. The check sums the vCPUs of the pools and compares them with the free
+      `cores` of `az vm list-usage`. The world holds no vCPU count for a type, so the check reads
+      the number in the type name: `Standard_D4s_v3` is 4, `Standard_DS1_v2` is 1. That reading is
+      right for the common families and is not a catalog. On AKS the control plane pool has no
+      node. The family quota can be lower than the regional one; the reproduce line prints it.
+    check:
+      kind: exec
+      needs: [az]
+      argv:
+        - az
+        - vm
+        - list-usage
+        - --location
+        - "{{ .entity.spec.cloudConfig.location }}"
+        - --subscription
+        - "{{ .entity.spec.cloudConfig.subscriptionId }}"
+        - --output
+        - json
+      expr: |
+        def vcpus: sub("^(Standard_|Basic_)?[A-Za-z]+"; "") | sub("[^0-9].*$"; "") | if . == "" then 0 else tonumber end;
+        .cloud as $cloud | .entity.spec.cloudConfig.location as $loc
+        | ([ .entity.spec.machinepoolconfig[] | select(($cloud == "aks" and (.poolConfig.isControlPlane // false)) | not)
+             | ((.cloudConfig.instanceType // "") | vcpus) * (.poolConfig.size // 0) ] | add // 0) as $need
+        | if .exec.exit != 0 then ["az vm list-usage failed: \(.exec.stderr | .[:200])"]
+          else ([ (.exec.stdout // [])[] | select(.name.value == "cores") ] | first) as $cores
+            | if $cores == null then ["az vm list-usage gave no cores row for \($loc)"]
+              else (($cores.limit // 0) - ($cores.currentValue // 0)) as $free
+                | if $need > $free then ["the pools ask for \($need) vCPUs in \($loc) (from the type names), and the regional quota has \($free) free of \($cores.limit) (\($cores.currentValue) in use): Azure refuses the machines with OperationNotAllowed; the family quota of each type can be lower still"] else [] end
+              end
+          end
+    reproduce:
+      - "az vm list-usage --location {{ .entity.spec.cloudConfig.location }} --subscription {{ .entity.spec.cloudConfig.subscriptionId }} --query \"[?name.value=='cores' || contains(name.localizedValue, 'Family vCPUs')].[name.localizedValue,currentValue,limit]\" --output table"
+      - "az vm list-skus --location {{ .entity.spec.cloudConfig.location }} --size {{ .entity.spec.machinepoolconfig[0].cloudConfig.instanceType }} --query '[].[name,family,capabilities[?name==`vCPUs`].value|[0]]' --output table"
+    fix:
+      owner: palette
+      text: Read the usage of the region and the family in the validate route, with the vCPU count of the catalog.
+    evidence:
+      - kind: doc
+        ref: https://learn.microsoft.com/en-us/azure/quotas/per-vm-quota-requests
+      - kind: doc
+        ref: https://docs.spectrocloud.com/clusters/public-cloud/azure/create-azure-cluster/
+        note: ensure there is sufficient capacity in the preferred Azure region for vCPUs, VNets, and public IP addresses
+      - kind: source
+        ref: hubble services/service/spectrocluster/internal/service/spectrocluster/internal/azure/spectrocluster_azure.go ValidateCreateCluster
+        note: name, reserved tags, instance type lookup, and profiles; no quota
+    tests:
+      - fault: fixtures/azure/vcpu-quota-low.json
+        clean: fixtures/azure/vcpu-quota-clean.json
