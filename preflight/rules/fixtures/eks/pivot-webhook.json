@@ -1,0 +1,29 @@
+{
+  "_base": "watch-running.json",
+  "_note": "a watch reading during the pivot: the webhook vspectrocluster.kb.io times out, and the move fails",
+  "_patch": {
+    "cluster": {
+      "status": {
+        "state": "Provisioning"
+      }
+    },
+    "events": [
+      {
+        "reason": "ReconcileError",
+        "severity": "Warning",
+        "message": "failed to move spectroCluster: Internal error occurred: failed calling webhook \"vspectrocluster.kb.io\": failed to call webhook: Post \"https://palette-webhook.jet-system.svc:443/validate-cluster-spectrocloud-com-v1-spectrocluster?timeout=10s\": context deadline exceeded",
+        "involvedObject": {
+          "kind": "spectrocluster",
+          "name": "fred"
+        },
+        "relatedObject": {
+          "kind": "spectrocluster"
+        },
+        "metadata": {
+          "creationTimestamp": "2026-09-28T22:37:38.000Z"
+        }
+      }
+    ],
+    "elapsed": 1500
+  }
+}

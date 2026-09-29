@@ -687,6 +687,9 @@ rules:
     evidence:
       - kind: doc
         ref: https://docs.spectrocloud.com/architecture/networking-ports/
+    tests:
+      - fault: fixtures/eks/agent-silent.json
+        clean: fixtures/eks/watch-running.json
 
   - id: proxy-no-proxy
     title: NO_PROXY holds the CIDRs of the cluster

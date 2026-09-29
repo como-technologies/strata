@@ -1,0 +1,34 @@
+{
+  "_base": "watch-running.json",
+  "_note": "a watch reading 35 minutes into a build that waits at PreparingInfrastructure with no error in the status: the Kubernetes Engine API is off (#90)",
+  "_patch": {
+    "cluster": {
+      "status": {
+        "state": "Provisioning",
+        "conditions": [
+          {
+            "type": "ImageResolutionDone",
+            "status": "True",
+            "reason": "ImageResolved",
+            "message": "Image resolution is not required"
+          },
+          {
+            "type": "CloudInfrastructureReady",
+            "status": "False",
+            "reason": "PreparingInfrastructure",
+            "message": "preparing infrastructure",
+            "lastTransitionTime": "2026-09-28T21:11:50.888Z"
+          }
+        ]
+      }
+    },
+    "summary": {
+      "status": {
+        "health": {
+          "state": "Unknown"
+        }
+      }
+    },
+    "elapsed": 2100
+  }
+}
