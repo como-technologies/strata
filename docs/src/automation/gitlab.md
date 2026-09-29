@@ -26,7 +26,7 @@ include:
   - local: .gitlab/strata.yml
 
 variables:
-  STRATA_VERSION: v0.14.0
+  STRATA_VERSION: v0.15.0
   STRATA_A: releases/dev.json        # the record that main has
   STRATA_B: candidate.yaml           # what this merge request proposes
   STRATA_RECORDS: "releases/**/*.json"
@@ -66,7 +66,7 @@ no setting. `--repo group/subgroup/project` names a project from a terminal.
 `SHA256SUMS`, and prints the path of the binary:
 
 ```bash
-bash install-strata.sh --version v0.14.0 --dir .strata
+bash install-strata.sh --version v0.15.0 --dir .strata
 export STRATA_BIN=$PWD/.strata/strata
 .strata/merge-gate.sh "releases/*.json"
 ```
