@@ -26,6 +26,15 @@ of a create of an AWS cluster named `payments` with two pools of one `t3.xlarge`
 {{#include ../output/preflight-static.txt}}
 ```
 
+`--verbose` prints, after each check, what it ran, the answer, the time, and
+the verdict: the request to Palette with its HTTP status, the command with its
+exit code, or `jq over the world` for a static check. It is the live form of
+the reproduce lines. It wins over `STRATA_QUIET`; `--quiet` wins over both.
+
+```text
+{{#include ../output/preflight-verbose.txt}}
+```
+
 Each rule is one line: the result, the id, what the rule checks, and the time.
 A failed rule adds its messages, a `reproduce:` line that shows the same thing
 with `jq`, and the fix for good with its owner. `NOT CHECKED` is a rule that

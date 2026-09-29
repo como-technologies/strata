@@ -2022,6 +2022,12 @@ fn automation(r: &mut Runner) {
         "strata preflight cluster.json --cloud aws --tier static --offline --quiet",
     );
     r.step(
+        "preflight-verbose",
+        0,
+        false,
+        "strata preflight cluster.json --cloud aws --tier static --offline --verbose 2>&1 > /dev/null | sed -n '1,6p'",
+    );
+    r.step(
         "preflight-live",
         0,
         false,

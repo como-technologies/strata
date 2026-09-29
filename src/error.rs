@@ -20,12 +20,14 @@ pub enum Error {
     },
     /// Palette answered with a non-2xx status. A 401 or a 403 is almost always the key, so the
     /// message names where a key comes from; the body alone names nothing the reader can set.
-    #[error("GET {path} failed with HTTP {status}: {}{}", first_part(body), if *status == 401 || *status == 403 {
+    #[error("{method} {path} failed with HTTP {status}: {}{}", first_part(body), if *status == 401 || *status == 403 {
         "; check PALETTE_API_KEY, SPECTROCLOUD_APIKEY, or ~/.palette.env: the key can be wrong, expired, or for another tenant"
     } else {
         ""
     })]
     Api {
+        /// The request method: `GET`, `POST`, `PUT`, `PATCH`, or `DELETE`.
+        method: String,
         /// Request path.
         path: String,
         /// HTTP status code.
@@ -467,8 +469,12 @@ impl Error {
             // the message carries the whole of it, and no field adds to that
             Error::Usage { .. } => {}
             Error::Api {
-                path: p, status, ..
+                method,
+                path: p,
+                status,
+                ..
             } => {
+                m.insert("method".into(), Value::from(method.as_str()));
                 m.insert("path".into(), Value::from(p.as_str()));
                 m.insert("status".into(), Value::from(*status));
             }
@@ -646,6 +652,7 @@ mod tests {
                 alternate: "SPECTROCLOUD_APIKEY",
             },
             Error::Api {
+                method: "GET".into(),
                 path: "/v1/x".into(),
                 status: 503,
                 body: "busy".into(),

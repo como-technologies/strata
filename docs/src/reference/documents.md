@@ -343,7 +343,8 @@ what it answered.
     `error`. `not-run` is a check that applies and did not run: a tier not asked
     for, no key, or `--no-exec`; it counts against the readiness.
   - `messages[]`: one for each failure, or the reason for another verdict.
-  - `elapsedMs`, and `ran`, the request or the command the check ran.
+  - `elapsedMs`, and `ran`, the request or the command the check ran, with
+    `answer`, its HTTP status or exit code.
   - `reproduce[]`: the lines a person runs to see the same thing.
   - `fix` with `owner` and `text`; `evidence[]` with `kind`, `ref`, `note`.
   - `confidence`, when the ledger has runs of the rule on this engine: `catch`

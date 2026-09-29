@@ -134,6 +134,8 @@ pub struct RunInputs<'a> {
     pub out_dir: Option<&'a str>,
     /// Progress notes.
     pub progress: &'a Progress,
+    /// Print, after each check, what it ran, its answer, the time, and the verdict.
+    pub verbose: bool,
 }
 
 /// Run every applicable check, and assemble the report.
@@ -155,7 +157,11 @@ pub fn run(inputs: RunInputs<'_>) -> Result<Report> {
                 inputs
                     .progress
                     .note(&format!("{}: {}", rule.effective_tier().name(), rule.id));
-                probe::run_check(rule, &world_value, inputs.backend, &jq)
+                let outcome = probe::run_check(rule, &world_value, inputs.backend, &jq);
+                if inputs.verbose {
+                    inputs.progress.note(&verbose_line(rule, &outcome));
+                }
+                outcome
             }
         };
         outcomes.push((rule, outcome));
@@ -272,6 +278,29 @@ pub fn reading<A: PaletteApi>(api: &A, uid: &str, elapsed: Duration) -> Result<V
     }))
 }
 
+/// One line of `--verbose`: what the check ran, its answer, the time, and the verdict, with the
+/// first message when it did not pass.
+fn verbose_line(rule: &Rule, o: &Outcome) -> String {
+    let mut line = format!(
+        "{}: {}: {} -> {}{} ms, {}",
+        rule.effective_tier().name(),
+        rule.id,
+        o.ran.as_deref().unwrap_or("jq over the world"),
+        o.answer
+            .as_ref()
+            .map(|a| format!("{a}, "))
+            .unwrap_or_default(),
+        o.elapsed.as_millis(),
+        report::label_for(o.verdict, rule.level, rule.severity)
+    );
+    if o.verdict != Verdict::Passed
+        && let Some(m) = o.messages.first()
+    {
+        line.push_str(&format!(": {m}"));
+    }
+    line
+}
+
 /// A failed rule ends the watch when its failure counts: severity `fail` at the preflight level,
 /// or any failed probe with `--strict`. A warning or a note never ends it.
 fn counts(rule: &Rule, strict: bool) -> bool {
@@ -300,6 +329,8 @@ pub struct WatchInputs<'a, A: PaletteApi> {
     pub sleep: &'a dyn Fn(Duration),
     /// The directory of `--out`, for the reproduce lines and the report.
     pub out_dir: Option<&'a str>,
+    /// Print, at each reading, the verdict of each rule.
+    pub verbose: bool,
 }
 
 /// Watch a build: every `every`, read the cluster, and judge each watch rule. The watch ends at
@@ -319,6 +350,7 @@ pub fn watch<A: PaletteApi>(inputs: WatchInputs<'_, A>) -> Result<(Report, Value
         progress,
         sleep,
         out_dir,
+        verbose,
     } = inputs;
     let uid = world.cluster_uid.clone().ok_or_else(|| Error::Usage {
         message:
@@ -367,6 +399,13 @@ pub fn watch<A: PaletteApi>(inputs: WatchInputs<'_, A>) -> Result<(Report, Value
             elapsed.as_secs(),
             if failed { ", a rule failed" } else { "" }
         ));
+        if verbose {
+            for rule in &rules {
+                if let Some(o) = last.get(&rule.id) {
+                    progress.note(&verbose_line(rule, o));
+                }
+            }
+        }
         if failed && options.stop_at_first {
             final_state = state;
             break;
@@ -573,6 +612,7 @@ rules:
             now: "2026-09-30T00:00:00Z",
             out_dir: None,
             progress: &Progress::silent(),
+            verbose: false,
         })
         .unwrap();
         let by_id = |id: &str| report.checks.iter().find(|c| c.id == id).unwrap();
@@ -628,6 +668,7 @@ rules:
                 now: "t",
                 out_dir: None,
                 progress: &Progress::silent(),
+                verbose: false,
             })
             .unwrap()
         };
@@ -654,6 +695,7 @@ rules:
             now: "t",
             out_dir: None,
             progress: &Progress::silent(),
+            verbose: false,
         })
         .unwrap();
         let pool = report
@@ -676,6 +718,7 @@ rules:
             now: "t",
             out_dir: None,
             progress: &Progress::silent(),
+            verbose: false,
         })
         .unwrap();
         assert_eq!(report.checks.len(), 1);
@@ -741,6 +784,7 @@ rules:
             options: &WatchOptions::default(),
             now: "t",
             progress: &Progress::silent(),
+            verbose: false,
             sleep: &|_| slept.set(slept.get() + 1),
             out_dir: None,
         })
@@ -799,6 +843,7 @@ rules:
             options: &WatchOptions::default(),
             now: "t",
             progress: &Progress::silent(),
+            verbose: false,
             sleep: &|_| {},
             out_dir: None,
         })
@@ -848,6 +893,7 @@ rules:
             options: &WatchOptions::default(),
             now: "t",
             progress: &Progress::silent(),
+            verbose: false,
             sleep: &|_| {},
             out_dir: None,
         })

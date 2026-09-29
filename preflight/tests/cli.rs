@@ -121,6 +121,38 @@ fn a_custom_probes_file_runs_beside_the_catalog_and_strict_counts_it() {
 }
 
 #[test]
+fn verbose_names_what_each_check_ran_and_wins_over_the_quiet_variable() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(dir.path().join("cluster.json"), ENTITY).unwrap();
+    let o = Command::new(bin())
+        .args(["cluster.json", "--cloud", "aws", "--offline", "--verbose"])
+        .current_dir(dir.path())
+        .env("STRATA_QUIET", "1")
+        .env("NO_COLOR", "1")
+        .output()
+        .unwrap();
+    let err = String::from_utf8_lossy(&o.stderr);
+    assert!(
+        err.contains("static: name-prefix: jq over the world -> ")
+            && err.contains(" ms, PROBE PASS"),
+        "{err}"
+    );
+    // --quiet wins over --verbose
+    let (_, _, quiet) = run(
+        &[
+            "cluster.json",
+            "--cloud",
+            "aws",
+            "--offline",
+            "--verbose",
+            "--quiet",
+        ],
+        dir.path(),
+    );
+    assert!(quiet.is_empty(), "{quiet}");
+}
+
+#[test]
 fn a_probes_file_that_shadows_a_rule_of_the_catalog_is_refused() {
     let dir = tempfile::tempdir().unwrap();
     std::fs::write(

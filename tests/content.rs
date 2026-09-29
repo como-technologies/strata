@@ -192,6 +192,7 @@ fn a_merged_record_has_one_root_whatever_order_palette_lists_the_profiles() {
 #[test]
 fn an_error_has_a_failure_class() {
     let api = |status| Error::Api {
+        method: "GET".into(),
         status,
         path: "/v1/x".into(),
         body: String::new(),

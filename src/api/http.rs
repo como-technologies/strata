@@ -39,6 +39,7 @@ impl HttpApi {
     /// The JSON of a response, or the error it stands for: a status out of 2xx, a body that could
     /// not be read, or a body that is not JSON.
     fn read(
+        method: &str,
         path: &str,
         answer: std::result::Result<ureq::http::Response<ureq::Body>, ureq::Error>,
     ) -> Result<Value> {
@@ -65,6 +66,7 @@ impl HttpApi {
             // the whole body, on one line: a caller that reads the answer of a validate route
             // needs the JSON of the refusal, and the message of the error shows the first part
             return Err(Error::Api {
+                method: method.to_string(),
                 path: path.to_string(),
                 status,
                 body: body.replace(['\n', '\r'], " "),
@@ -86,7 +88,11 @@ impl HttpApi {
 impl PaletteApi for HttpApi {
     fn get_json(&self, path: &str) -> Result<Value> {
         let url = format!("{}{}", self.config.base_url, path);
-        Self::read(path, self.headers(self.agent.get(url.as_str())).call())
+        Self::read(
+            "GET",
+            path,
+            self.headers(self.agent.get(url.as_str())).call(),
+        )
     }
 
     fn post_json(&self, path: &str, body: &Value) -> Result<Value> {
@@ -94,7 +100,7 @@ impl PaletteApi for HttpApi {
         let req = self
             .headers(self.agent.post(url.as_str()))
             .header("Content-Type", "application/json");
-        Self::read(path, req.send(body.to_string()))
+        Self::read("POST", path, req.send(body.to_string()))
     }
 
     fn project_uid(&self) -> Option<&str> {

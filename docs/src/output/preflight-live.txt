@@ -22,6 +22,7 @@ Quotas and limits
                 reproduce: aws ec2 describe-security-groups --region us-east-2 --filters Name=tag-key,Values=sigs.k8s.io/cluster-api-provider-aws/role --query 'SecurityGroups[].[GroupId,GroupName,length(IpPermissions),length(IpPermissionsEgress)]' --output table   # the groups CAPA made, during or after the build
   PROBE FAIL    worker-cpu-floor             The workers have the CPU the packs need                          1 ms  catch 2/2 (22%) clean 3/3 (37%)
                 pool worker-pool: A minimum allocation of '4.1' CPU cores is required across all worker nodes
+                ran: POST /v1/spectroclusters/aws/validate -> HTTP 200
                 reproduce: code=$(curl -s -o body.json -w '%{http_code}' -H "ApiKey: $PALETTE_API_KEY" -H "ProjectUid: $PALETTE_PROJECT_UID" -X POST -H 'Content-Type: application/json' --data @$OUT/entity.json "${PALETTE_API:-https://api.spectrocloud.com}/v1/spectroclusters/aws/validate")
                 reproduce: jq --arg code "$code" --slurpfile body body.json '.response = {ok: (($code | tonumber) < 300), status: ($code | tonumber), body: ($body[0] // null)} | .response as $r | if ($r.ok | not) then [] # a refusal of the whole entity is palette-validate'\''s else [ ($r.body.machinePools.results // [])[] | .name as $n | (.errors // [])[] | select((.message // "") | test("CPU|memory|cores"; "i")) | "pool \($n): \(.message)" ] end' $OUT/world.json
                 fix: Call the validate route at plan time. (provider)
@@ -120,6 +121,7 @@ Lifecycle: update, repave, delete
 The Palette platform
   PROBE FAIL    palette-validate             The validate route of Palette for the cloud type passes          1 ms  catch 2/2 (22%) clean 3/3 (37%)
                 pool worker-pool: MachinePoolResourcesInsufficient: A minimum allocation of '4.1' CPU cores is required across all worker nodes
+                ran: POST /v1/spectroclusters/aws/validate -> HTTP 200
                 reproduce: code=$(curl -s -o body.json -w '%{http_code}' -H "ApiKey: $PALETTE_API_KEY" -H "ProjectUid: $PALETTE_PROJECT_UID" -X POST -H 'Content-Type: application/json' --data @$OUT/entity.json "${PALETTE_API:-https://api.spectrocloud.com}/v1/spectroclusters/aws/validate")
                 reproduce: jq --arg code "$code" --slurpfile body body.json '.response = {ok: (($code | tonumber) < 300), status: ($code | tonumber), body: ($body[0] // null)} | .response as $r | if ($r.ok | not) then ["Palette refused the entity: \($r.body.code // $r.status): \($r.body.message // ($r.body | tostring))"] else [ ($r.body.profiles // [])[] | .uid as $u | (.packs.results // [])[] | .name as $n | (.errors // [])[] | "profile \($u), pack \($n): \(.code): \(.message)" ] + [ ($r.body.machinePools.results // [])[] | .name as $n | (.errors // [])[] | "pool \($n): \(.code): \(.message)" ] end' $OUT/world.json
                 fix: Run the validate route at the start of each create, and add it to the SDK and the provider. (palette)
@@ -130,6 +132,7 @@ The Palette platform
                 reproduce: examples/live/aws-inventory.sh payments us-east-2   # 0 on every line: the cloud is empty
   NOTE          consumers-empty-on-error     An empty consumer list is not proof                              1 ms
                 profile 64e0000000000000000000c3: status.inUseClusters is empty; Palette gives an empty list on an error too, so it does not prove that no cluster runs the profile; strata consumers reads each cluster the key can list as well
+                ran: GET /v1/clusterprofiles/64e0000000000000000000c3 -> HTTP 200
                 reproduce: strata consumers 64e0000000000000000000c3   # each cluster that runs the version, from the list and from the clusters
                 reproduce: code=$(curl -s -o body.json -w '%{http_code}' -H "ApiKey: $PALETTE_API_KEY" -H "ProjectUid: $PALETTE_PROJECT_UID" "${PALETTE_API:-https://api.spectrocloud.com}/v1/clusterprofiles/64e0000000000000000000c3")
                 reproduce: jq --arg code "$code" --slurpfile body body.json '.response = {ok: (($code | tonumber) < 300), status: ($code | tonumber), body: ($body[0] // null)} | .entity.spec.profiles[0].uid as $u | if (.response.ok | not) then ["cannot read profile \($u): \(.response.body.code // .response.status)"] elif ((.response.body.status.inUseClusters // []) | length) == 0 then ["profile \($u): status.inUseClusters is empty; Palette gives an empty list on an error too, so it does not prove that no cluster runs the profile; strata consumers reads each cluster the key can list as well"] else [] end' $OUT/world.json

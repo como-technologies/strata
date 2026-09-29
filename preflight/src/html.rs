@@ -173,11 +173,15 @@ pub fn page(r: &Report) -> String {
         for c in visible {
             h.push_str(&format!("<tr class=\"{}\"><td style=\"white-space:nowrap\"><span class=\"label\">{}</span></td><td>", class_of(c), esc(&c.label())));
             h.push_str(&format!(
-                "<code>{}</code> — {} <span class=\"conf\">· {} · {} ms</span>",
+                "<code>{}</code> — {} <span class=\"conf\">· {} · {} ms{}</span>",
                 esc(&c.id),
                 esc(&c.title),
                 c.tier.name(),
-                c.elapsed_ms
+                c.elapsed_ms,
+                c.answer
+                    .as_ref()
+                    .map(|a| format!(" · {}", esc(a)))
+                    .unwrap_or_default()
             ));
             if c.verdict != Verdict::Passed {
                 for m in &c.messages {
@@ -243,6 +247,7 @@ mod tests {
             messages: vec!["pool worker has size 4".into()],
             elapsed_ms: 2,
             ran: None,
+            answer: None,
             reproduce: vec!["jq '.a' world.json".into()],
             fix: None,
             evidence: vec![],

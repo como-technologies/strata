@@ -237,6 +237,9 @@ pub struct Outcome {
     pub elapsed: Duration,
     /// The request or the command the check ran, for the report: what a person runs by hand.
     pub ran: Option<String>,
+    /// The answer of the call: `HTTP 200`, or `exit 0`. None for a static check, or when the
+    /// call gave no answer.
+    pub answer: Option<String>,
 }
 
 impl Outcome {
@@ -246,6 +249,7 @@ impl Outcome {
             messages,
             elapsed: started.elapsed(),
             ran: None,
+            answer: None,
         }
     }
 
@@ -256,6 +260,7 @@ impl Outcome {
             messages: vec![reason.into()],
             elapsed: Duration::ZERO,
             ran: None,
+            answer: None,
         }
     }
 }
@@ -302,6 +307,7 @@ pub fn run_check(rule: &Rule, world: &Value, backend: &dyn Backend, jq: &Jq) -> 
                     with["response"] = serde_json::to_value(&response).unwrap_or(Value::Null);
                     let mut out = judge(rule, expr, &with, jq, started);
                     out.ran = Some(ran);
+                    out.answer = Some(format!("HTTP {}", response.status));
                     out
                 }
                 Err(e) => {
@@ -352,6 +358,7 @@ pub fn run_check(rule: &Rule, world: &Value, backend: &dyn Backend, jq: &Jq) -> 
                     with["exec"] = serde_json::to_value(&output).unwrap_or(Value::Null);
                     let mut out = judge(rule, expr, &with, jq, started);
                     out.ran = Some(ran);
+                    out.answer = Some(format!("exit {}", output.exit));
                     out
                 }
                 Err(e) => {

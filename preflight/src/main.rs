@@ -106,6 +106,9 @@ struct Cli {
     /// No progress messages
     #[arg(short, long)]
     quiet: bool,
+    /// Print what each check ran: the request or the command, its answer, the time, and the verdict
+    #[arg(short, long)]
+    verbose: bool,
     /// Print help
     #[arg(short, long, action = clap::ArgAction::HelpShort)]
     help: Option<bool>,
@@ -303,7 +306,9 @@ fn client(config: Config, progress: Progress) -> Palette<Retry<HttpApi>> {
 }
 
 fn run_cli(cli: Cli) -> Result<ExitCode> {
-    let progress = Progress::new(cli.quiet || std::env::var_os("STRATA_QUIET").is_some());
+    // --verbose asks for the lines, so it wins over STRATA_QUIET; --quiet wins over both
+    let progress =
+        Progress::new(cli.quiet || (std::env::var_os("STRATA_QUIET").is_some() && !cli.verbose));
     if let Some(kind) = cli.schema {
         let schema = match kind {
             SchemaKind::Report => schemars::schema_for!(Report),
@@ -311,7 +316,7 @@ fn run_cli(cli: Cli) -> Result<ExitCode> {
             SchemaKind::Ledger => schemars::schema_for!(Ledger),
             SchemaKind::Promotion => schemars::schema_for!(confidence::PromotionReport),
         };
-        println!("{}", serde_json::to_string_pretty(&schema)?);
+        emit(&format!("{}\n", serde_json::to_string_pretty(&schema)?));
         return Ok(ExitCode::SUCCESS);
     }
     let catalog = catalog::with_probes(&cli.probes)?;
@@ -334,7 +339,7 @@ fn run_cli(cli: Cli) -> Result<ExitCode> {
             });
             print_json(&doc, cli.compact)?;
         } else {
-            print!("{}", run::rules_text(&catalog, &rules));
+            emit(&run::rules_text(&catalog, &rules));
         }
         return Ok(ExitCode::SUCCESS);
     }
@@ -344,7 +349,7 @@ fn run_cli(cli: Cli) -> Result<ExitCode> {
         if format_of(&cli) == Format::Json {
             print_json(&serde_json::to_value(&report)?, cli.compact)?;
         } else {
-            print!("{}", promotion_text(&report));
+            emit(&promotion_text(&report));
         }
         return Ok(ExitCode::from(report.exit_code()));
     }
@@ -410,6 +415,7 @@ fn run_cli(cli: Cli) -> Result<ExitCode> {
             progress: &progress,
             sleep: &std::thread::sleep,
             out_dir: out_dir.as_deref(),
+            verbose: cli.verbose,
         })
         .map(|(report, world)| {
             reading = Some(world);
@@ -429,6 +435,7 @@ fn run_cli(cli: Cli) -> Result<ExitCode> {
             now: &now,
             out_dir: out_dir.as_deref(),
             progress: &progress,
+            verbose: cli.verbose,
         })?
     };
     if let Some(dir) = &cli.out {
@@ -438,18 +445,27 @@ fn run_cli(cli: Cli) -> Result<ExitCode> {
             dir.display()
         ));
     }
-    print!(
-        "{}",
-        report::render(&report, format_of(&cli), cli.compact, color(&cli))
-    );
+    emit(&report::render(
+        &report,
+        format_of(&cli),
+        cli.compact,
+        color(&cli),
+    ));
     Ok(ExitCode::from(report.exit_code()))
+}
+
+/// Write to stdout. A reader that closes the pipe early (`| head`) is not an error of strata,
+/// so a failed write is not a panic.
+fn emit(text: &str) {
+    use std::io::Write;
+    let _ = std::io::stdout().write_all(text.as_bytes());
 }
 
 fn print_json(doc: &serde_json::Value, compact: bool) -> Result<()> {
     if compact {
-        println!("{}", serde_json::to_string(doc)?);
+        emit(&format!("{}\n", serde_json::to_string(doc)?));
     } else {
-        println!("{}", serde_json::to_string_pretty(doc)?);
+        emit(&format!("{}\n", serde_json::to_string_pretty(doc)?));
     }
     Ok(())
 }

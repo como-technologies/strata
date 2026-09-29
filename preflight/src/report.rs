@@ -88,6 +88,9 @@ pub struct CheckResult {
     /// The request or the command the check ran.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ran: Option<String>,
+    /// The answer of the call: `HTTP 200`, or `exit 0`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub answer: Option<String>,
     /// What a person runs by hand to see the same thing.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub reproduce: Vec<String>,
@@ -108,14 +111,20 @@ pub struct CheckResult {
 impl CheckResult {
     /// `PASS`, `FAIL`, `PROBE PASS`, `PROBE FAIL`, `WARN`, `NOTE`, `NOT CHECKED`, `SKIP`, `ERROR`.
     pub fn label(&self) -> String {
-        match (self.verdict, self.level, self.severity) {
-            (Verdict::Failed, _, Severity::Note) => "NOTE".to_string(),
-            (Verdict::Failed, _, Severity::Warn) => "WARN".to_string(),
-            (Verdict::Passed | Verdict::Failed, Level::Probe, _) => {
-                format!("PROBE {}", self.verdict.name())
-            }
-            _ => self.verdict.name().to_string(),
+        label_for(self.verdict, self.level, self.severity)
+    }
+}
+
+/// The word of a result: `PASS`, `FAIL`, `PROBE PASS`, `PROBE FAIL`, `WARN`, `NOTE`,
+/// `NOT CHECKED`, `NOT RUN`, `SKIP`, `ERROR`.
+pub fn label_for(verdict: Verdict, level: Level, severity: Severity) -> String {
+    match (verdict, level, severity) {
+        (Verdict::Failed, _, Severity::Note) => "NOTE".to_string(),
+        (Verdict::Failed, _, Severity::Warn) => "WARN".to_string(),
+        (Verdict::Passed | Verdict::Failed, Level::Probe, _) => {
+            format!("PROBE {}", verdict.name())
         }
+        _ => verdict.name().to_string(),
     }
 }
 
@@ -367,6 +376,7 @@ pub fn assemble(a: Assembly<'_>, jq: &Jq) -> Report {
             messages: outcome.messages.clone(),
             elapsed_ms: outcome.elapsed.as_millis() as u64,
             ran: outcome.ran.clone(),
+            answer: outcome.answer.clone(),
             reproduce,
             fix: rule.fix.clone(),
             evidence: rule.evidence.clone(),
@@ -749,6 +759,17 @@ pub fn terminal(r: &Report, color: bool) -> String {
                 for m in &c.messages {
                     out.push_str(&format!("{:<16}{m}\n", ""));
                 }
+                if let Some(ran) = &c.ran {
+                    out.push_str(&format!(
+                        "{:<16}{} {ran}{}\n",
+                        "",
+                        paint(color, "2", "ran:"),
+                        c.answer
+                            .as_ref()
+                            .map(|a| format!(" -> {a}"))
+                            .unwrap_or_default()
+                    ));
+                }
             }
             if matches!(
                 c.verdict,
@@ -989,6 +1010,7 @@ mod tests {
             },
             elapsed_ms: 1,
             ran: None,
+            answer: None,
             reproduce: vec![],
             fix: None,
             evidence: vec![],
@@ -1191,6 +1213,7 @@ mod tests {
             messages: vec!["pool worker has size 4".into()],
             elapsed: Duration::from_millis(3),
             ran: None,
+            answer: None,
         };
         let section = r#"
 section: compute

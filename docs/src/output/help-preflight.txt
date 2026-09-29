@@ -34,6 +34,7 @@ Options:
       --compact            Write the JSON on one line
       --no-color           No color
   -q, --quiet              No progress messages
+  -v, --verbose            Print what each check ran: the request or the command, its answer, the time, and the verdict
   -h, --help               Print help
   -V, --version            Print version
 
