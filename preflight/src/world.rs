@@ -484,6 +484,12 @@ fn split_pool(flat: &Value) -> Value {
             if v.is_null() {
                 continue;
             }
+            // Palette stores `skipK8sUpgrade: "disabled"` on every pool, and refuses the field in
+            // a create for an engine that does not support it (GKE: `InvalidParam`). A provider
+            // sends it when a person sets it, so the entity carries it when it is enabled alone.
+            if k == "skipK8sUpgrade" && v.as_str() != Some("enabled") {
+                continue;
+            }
             if POOL_CONFIG_FIELDS.contains(&k.as_str()) {
                 pool.insert(k.clone(), v.clone());
             } else if k == "subnetIds" {
@@ -603,6 +609,15 @@ mod tests {
         assert_eq!(e["cloudConfig"]["subnets"][0]["id"], "subnet-1");
         assert_eq!(e["cloudConfig"]["amiType"], "AL2023_x86_64_STANDARD");
         assert!(e["cloudConfig"].get("name").is_none());
+    }
+
+    #[test]
+    fn a_disabled_skip_k8s_upgrade_stays_out_of_the_entity() {
+        // Palette stores "disabled" on each pool, and the GKE validate route refuses the field
+        let off = split_pool(&json!({"name": "w", "size": 3, "skipK8sUpgrade": "disabled"}));
+        assert!(off["poolConfig"].get("skipK8sUpgrade").is_none());
+        let on = split_pool(&json!({"name": "w", "size": 3, "skipK8sUpgrade": "enabled"}));
+        assert_eq!(on["poolConfig"]["skipK8sUpgrade"], "enabled");
     }
 
     #[test]
