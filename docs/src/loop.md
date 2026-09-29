@@ -19,6 +19,7 @@ Palette, stays true when Palette changes.
 | The merge button | the merge gate | Do the records after the merge still hold? | `merge-gate.sh` | [The merge gate](./automation/merge-gate.md) |
 | The publish | the pipeline of the team | Does Palette hold what the reviewer approved? | `snapshot`, then `same-release` | [Review a change](./use-cases/review.md) |
 | A promotion | a person, on demand | Do the projects hold one release? | `same-release` | [Promote a release](./use-cases/promote.md) |
+| Before a build | the pipeline, and the person who writes the cluster | Can Palette build this cluster? | `preflight` on the pull request, before the build, and during it | [Stop a build that Palette cannot finish](./use-cases/stop-a-build.md) |
 | Each night | a scheduled job | Did Palette change under a record? | `verify-report.sh` | [Drift issues](./automation/drift-issues.md) |
 | Each night | a scheduled job | Which clusters are the fleet? | `snapshot filter:<name> --dir --prune` | [Find the fleet](./use-cases/fleet.md) |
 | Each night | a scheduled job | Does the registry have newer versions of what we pin? | `upstream-report.sh` | [Upstream issues](./automation/upstream-issues.md) |

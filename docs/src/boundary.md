@@ -82,6 +82,15 @@ A feature in the second row does not remove strata. It makes the question
 cheaper. A content digest in the API makes `verify` one request. The record
 stays the evidence, because the record does not change when Palette does.
 
+`strata preflight` follows the same rule. Palette has validate routes, and a
+create through the provider or the API calls few of them; no route checks what
+the build needs from the cloud. Strata calls the routes for you, reads the
+entity and the records, and runs the tool of the cloud on your machine. It
+calls no cloud API and keeps no credential. What only Palette can fix, such as a
+status that shows no error while the cloud refuses the build, is a row of the
+catalog with its fix and its owner, and a findings report asks Palette for it.
+See [How preflight works](./internals/preflight.md).
+
 ## A pipeline that publishes
 
 Strata publishes nothing. A pipeline that publishes has the other half of the
