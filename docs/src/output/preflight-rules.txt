@@ -1,0 +1,13 @@
+$ strata preflight --rules --cloud aws | head -n 12
+
+Identity and permissions
+  role-partial-permissions         cloud    probe      warn      source    aws,eks                The role of the cloud account can call each action of the build
+  sts-account-not-assumable        palette  probe      fail      seen      aws,eks                The STS cloud account can be assumed
+  account-missing                  palette  probe      fail      proposed  aws,eks,gcp,gke,azure,aks,maas,vsphere The cloud account of the entity exists, and is of the cloud type
+  capa-bootstrap-stack             cloud    probe      fail      source    aws,eks                The CAPA CloudFormation stack is complete, and the credentials can read it
+  capa-manual-stack                cloud    probe      fail      source    aws,eks                The CAPA instance profiles exist when the stack is managed by hand
+  global-policy-attach-silent      cloud    probe      fail      source    aws,eks                Each additional policy of the cloud account is on the nodes role
+  iam-ten-policies                 cloud    probe      fail      source    aws,eks                The nodes role stays under 10 managed policies
+  ebs-csi-node-policy              cloud    probe      fail      seen      aws                    The nodes role holds AmazonEBSCSIDriverPolicy
+  iaas-pod-identity                palette  probe      fail      source    aws                    The properties route accepts the cloud account for an AWS cluster
+  system-macros-hidden             palette  probe      note      seen      all                    The key can read the resolved pack values of the cluster

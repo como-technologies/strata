@@ -1,0 +1,6 @@
+$ strata preflight cluster.json --cloud aws --quiet --out preflight > /dev/null; ls preflight
+entity.json
+report.html
+report.json
+report.md
+world.json

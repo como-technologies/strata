@@ -1,0 +1,4 @@
+$ strata preflight cluster.json --cloud aws --strict --quiet | tail -n 3
+
+101 rules apply; 32 ran: 19 passed, 9 failed, 0 probe(s) failed, 4 warning(s), 2 note(s); 25 not checked, 37 skipped, 0 error(s); readiness 59%
+FAIL: 9 check(s) failed: capa-bootstrap-stack, iam-ten-policies, ebs-csi-node-policy, iaas-pod-identity, aws-region-not-enabled, aws-quotas, worker-cpu-floor, palette-validate, leftovers-before-build
