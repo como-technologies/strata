@@ -2,7 +2,7 @@
 # report, and the two gates that run on demand.
 #
 # Copy this file to .github/workflows/strata.yml in your own repository and set the refs and the
-# records that your repository holds. It calls six reusable workflows of the strata repository.
+# records that your repository holds. It calls seven reusable workflows of the strata repository.
 # A version bump is twelve lines here: each job names the tag twice, once in `uses: ...@TAG` and once
 # in `strata-version:`. Both must carry the same tag. `uses:` selects the workflow file, and
 # `strata-version:` is what each workflow checks this repository out at and downloads the binary
@@ -52,6 +52,21 @@ jobs:
     secrets:
       strata-token: ${{ secrets.STRATA_READ_TOKEN }}
       palette-api-key: ${{ secrets.PALETTE_API_KEY }}
+
+  # can Palette build the cluster this pull request changes? The static tier, with the records of
+  # this repository: no key, milliseconds. The live tier runs before the build, with the key, from
+  # the job that builds: see docs/src/automation/preflight.md
+  preflight:
+    if: github.event_name == 'pull_request'
+    uses: como-technologies/strata/.github/workflows/preflight.yml@v0.15.0
+    with:
+      source: clusters/payments.json  # the body of the create that this repository keeps
+      cloud: eks
+      tier: static
+      records: releases/**/*.json
+      strata-version: v0.15.0
+    secrets:
+      strata-token: ${{ secrets.STRATA_READ_TOKEN }}
 
   # the records of the merge result, against the default branch as it is now
   gate:

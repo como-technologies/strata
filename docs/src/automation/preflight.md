@@ -58,6 +58,27 @@ exit `0` at its create timeout while the cluster still builds
 ([Client tools](../internals/palette/limits.md#what-strata-preflight-does-not-check));
 the watch is the step that says `Running`.
 
+## On GitHub and GitLab
+
+`.github/workflows/preflight.yml` is a reusable workflow: the caller gives the
+source, the cloud, the tiers, the records, and the release of strata, and the
+job installs the two binaries, runs `strata preflight`, writes the markdown to
+the job summary, and keeps `preflight/` as an artifact. Its exit status is the
+status of strata.
+
+| Input | Meaning |
+| --- | --- |
+| `source` | The body of the create as a file in the checkout, or `cluster:UID`. |
+| `cloud`, `change`, `tier`, `records`, `probes`, `release`, `strict`, `ready` | The options of the command, by the same names. |
+| `palette-api`, `strata-version` | A self-hosted Palette, and the release of strata. |
+| secrets `palette-api-key`, `palette-project-uid` | For the palette tier and for `cluster:UID`. Without a key the job runs the static tier alone. |
+| secret `strata-token` | Reads this repository while it is private. |
+
+`examples/ci/github/strata.yml` holds a `preflight` job beside the other six,
+and `examples/ci/gitlab/strata.yml` a `strata-preflight` job: both run the
+static tier on each pull request, with the records of the repository. The job
+that builds runs the live tier with the key, and the watch after the create.
+
 ## Custom probes of a company
 
 A company adds the rules of its own landing zone in a file of the same format:
