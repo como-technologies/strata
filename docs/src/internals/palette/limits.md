@@ -61,6 +61,28 @@ CHECKED` on that machine alone. The findings report
 `palette-precreate-validation-gaps-findings-2026-09-28` asks Palette to check
 the first three in its validate routes.
 
+## What the catalog does not hold yet
+
+A read of the whole catalog against each section found these faults with no
+row. Each one is a candidate rule; none has a run or a row of #91 yet, so none
+is in the catalog.
+
+| Section | The fault | Where a check would look |
+| --- | --- | --- |
+| identity | A `secret` AWS account with rotated keys, or a disabled GCP key | `aws sts get-caller-identity` under the account; `gcloud iam service-accounts keys list` |
+| cloud services | The service-linked roles a first EKS create needs | `aws iam get-role --role-name AWSServiceRoleForAmazonEKS`, and the node group one |
+| quotas | The cluster limit of the tenant or the project that the create path enforces | no route gives it |
+| networking | The public addresses of Palette in the allowlist of a private endpoint; `enableDnsSupport` and `enableDnsHostnames` on a static VPC | `aws ec2 describe-vpc-attribute` |
+| compute | The SSH key pair on EKS with a dynamic VPC | `aws ec2 describe-key-pairs`; the property route runs with a `vpcId` alone |
+| kubernetes | An EKS version in extended support | the `status` of `aws eks describe-cluster-versions` |
+| storage | A `kmsKeyId` in the parameters of a StorageClass | `aws kms describe-key` |
+| images | The sync status of the registry of each pack, before a build | `GET /v1/registries/pack/{uid}/sync/status` |
+| profiles | A version with no published template | `status.isPublished` of the profile |
+| lifecycle | A pool renamed, which is a delete and a create; a `size` outside `minSize` and `maxSize` | a static diff of the change |
+| platform | The version of the agent against the release of Palette | no route gives the release to a tenant key |
+| tools | An AWS CLI older than 2.22, which `eks-version-not-offered` needs | `aws --version` |
+| teardown | The IRSA roles a delete leaves | `aws iam list-roles`, by tag |
+
 ## What the source of Palette says
 
 The Spectro Cloud source settles these. No live run checks them, so strata

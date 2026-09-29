@@ -896,7 +896,11 @@ rules that simulate the IAM policy of the role of the cloud account:
 `aws iam simulate-principal-policy` with no `--resource-arns` evaluates each
 action against the resource `*`, and a statement that names a resource, as the
 EKS policy of Palette does for `eks:*`, does not match it. The role built the
-EKS clusters of #89. Both rules now pass the resource ARNs of the build.
+EKS clusters of #89. Both rules are warnings now: one simulates the actions
+that name a resource, with the cluster, the node group, and the CAPA role ARNs
+of the build; the other simulates the actions on `*` alone, and gives the
+PassRole line with the CAPA roles as a command to run by hand. A simulation
+with no request context cannot prove a build, so neither is a `fail`.
 
 **gke.** Seven faults made on purpose, seven caught. `POST /v1/spectroclusters/gke/validate`
 refuses a pool of 4 with `InvalidParam`: "Invalid parameter 'Node pool size';
