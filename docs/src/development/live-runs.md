@@ -859,6 +859,15 @@ this table names the faults.
 | `aws` | `worker-cpu-floor`, `palette-validate` (one worker of four cores), `api-endpoint-reach`, `account-missing` |
 | `gcp` | `worker-cpu-floor`, `palette-validate`, `gcp-name-length`, `account-missing` |
 
+Part 3 of each run also runs the custom probes of the lab,
+`examples/live/preflight/lab-probes.yaml` (`lab-region`, `lab-name`), beside
+the catalog, with `--probes`: a custom probe on a real tenant. With `--build`,
+the run adds the build of cluster A through the provider with the watch on it
+from its first listing, `strata preflight cluster:UID` on the cluster as
+Palette holds it, and a change of the instance type of its worker pool, which
+`gke-type-change`, `eks-type-change-orphan`, or `pool-replace-fields` must fail;
+`--down` tears the example down and reads the inventory.
+
 The runs of the plan, and what each one showed, are in the section
 [What the preflight runs show](#what-the-preflight-runs-show) below.
 
