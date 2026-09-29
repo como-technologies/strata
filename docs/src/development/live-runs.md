@@ -864,7 +864,25 @@ The runs of the plan, and what each one showed, are in the section
 
 ## What the preflight runs show
 
-No run yet.
+The runs of `preflight-plan.sh` on the tenant of the live example, with the
+profiles of each engine and no cluster. Each run is an entry of the ledger.
+
+**aws.** Four faults made on purpose, four caught. `POST /v1/spectroclusters/aws/validate`
+refuses one worker of four cores with `MachinePoolWithMinCpuRequired`: "A
+minimum allocation of '4.1' CPU cores is required across all worker nodes.
+Current allocation : '4' CPU cores", in under 4 seconds; through the provider
+the same fault comes after a full apply. A cloud account uid that is not in the
+project is a 404 of `GET /v1/cloudaccounts/aws/{uid}`, and an internal control
+plane load balancer is a static failure. On the clean entity, 37 checks ran and
+36 passed; the exec rules ran against AWS with the profile of the lab
+(`aws-quotas`, `aws-ami`, `capa-bootstrap-stack`, `ebs-csi-node-policy`,
+`iam-ten-policies`, `aws-region-not-enabled`, `leftovers-before-build`). The one
+failure was a wrong result of `role-partial-permissions`:
+`aws iam simulate-principal-policy` with `iam:PassRole` and no resource ARN
+gives `implicitDeny` for a role whose policy allows it on the CAPA roles alone,
+and that role has built clusters. The rule now leaves `iam:PassRole` to a
+reproduce line with the three CAPA role ARNs. The run is in the ledger as the
+first wrong result of a check.
 
 ## A chart pushed again, on a cluster
 

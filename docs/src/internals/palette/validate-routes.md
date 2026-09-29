@@ -27,8 +27,12 @@ The checks, in order:
    profiles, the packs and their variables, the state of each pack, and the
    FIPS mode. The errors go in `profiles[].packs.results[].errors[]`.
 5. The machines: each pool against the CPU and memory the packs need. The
-   errors go in `machinePools.results[].errors[]`. When a profile has an
-   error, this step does not run, and `machinePools.results` is empty.
+   errors go in `machinePools.results[].errors[]`: one worker of four cores
+   with the packs of the live example is `MachinePoolWithMinCpuRequired`,
+   "A minimum allocation of '4.1' CPU cores is required across all worker
+   nodes. Current allocation : '4' CPU cores", in under 4 seconds. When a
+   profile has an error, this step does not run, and `machinePools.results`
+   is empty.
 6. For AWS with a VPC: the pod and service CIDRs of the Kubernetes pack against
    the CIDR of the VPC. With dynamic placement, no CIDR check runs.
 
