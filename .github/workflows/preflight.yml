@@ -14,7 +14,7 @@ on:
         required: true
         type: string
       cloud:
-        description: The engine of a file: aws, eks, gcp, gke, azure, aks, maas, edge, or vsphere. A cluster names its own
+        description: "The engine of a file: aws, eks, gcp, gke, azure, aks, maas, edge, or vsphere. A cluster names its own"
         default: ""
         type: string
       change:
@@ -22,7 +22,7 @@ on:
         default: ""
         type: string
       tier:
-        description: The tiers to run, as a list: static, palette, cloud. Empty runs all three; static needs no key
+        description: "The tiers to run, as a list: static, palette, cloud. Empty runs all three; static needs no key"
         default: ""
         type: string
       records:
