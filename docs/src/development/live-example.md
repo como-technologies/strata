@@ -367,9 +367,14 @@ EKS, a GKE cluster with no release channel, or one worker of four cores, and
 runs through every tier, and each rule of severity `fail` that ran must pass.
 The script appends the run to the ledger, `preflight/evidence/runs.yaml`, as
 `caught`, `missed`, `passed`, or `false-fail` for each rule, and
-`strata preflight --promotion` reads it. `--build` adds `just live-up` and the
-watch of cluster A until it is `Running` or a stuck state; the cluster stays,
-so `just live-down` follows.
+`strata preflight --promotion` reads it. `--build` adds the build of cluster A
+through the provider, with the watch on it from the moment Palette lists it,
+until it is `Running` or a stuck state; then `strata preflight cluster:UID` on
+the cluster as Palette holds it, which is the entity the provider sent, and on
+a change of the instance type of its worker pool, which the rules on a change
+must fail. `--build --down` tears the example down after, and reads the
+inventory of the cloud; without `--down` the cluster stays, and `just
+live-down` follows.
 
 ```bash
 just live-down                                                # the profiles of one cloud at a time

@@ -6,7 +6,7 @@
 # to the ledger of the runs, preflight/evidence/runs.yaml, which the confidence of each rule is
 # counted from.
 #
-#   examples/live/preflight-plan.sh ENGINE [--build]
+#   examples/live/preflight-plan.sh ENGINE [--build [--down]]
 #
 #   1  the clean entity of the engine, from examples/live/preflight/ENGINE.json and the tenant: the
 #      cloud account, the release profile, the region, and the zone of terraform.tfvars
@@ -14,9 +14,15 @@
 #      FAIL on it, in seconds. The ledger gets `caught`, or `missed`
 #   3  the clean entity: every tier, and each rule of severity fail that ran must PASS. The ledger
 #      gets `passed`, or `false-fail`
-#   4  with --build only: just live-up, then strata preflight --watch on cluster A until it is
-#      Running, or a stuck state. The ledger gets `passed` for each watch rule that passed. The
-#      cluster stays: run just live-down after
+#   4  with --build only: the apply of cluster A through the provider, and strata preflight --watch
+#      on it from the moment Palette lists it, until it is Running or a stuck state. The ledger
+#      gets `passed` for each watch rule that passed
+#   5  with --build only: strata preflight on cluster:UID, the cluster as Palette holds it, which
+#      is the entity the provider sent; and on cluster:UID with a change of the instance type of
+#      the worker pool, which the rules on a change must fail. The ledger gets both
+#   6  with --build --down only: the destroy, the delete of the versions outside the state, and
+#      the inventory of the cloud, which must be 0 on every line. Without --down the cluster
+#      stays: run just live-down after
 #
 # Needs live-profiles with cloud = ENGINE in terraform.tfvars (or -var cloud=ENGINE; a switch of
 # the cloud needs `just live-down` first, or the apply is refused with ClusterProfileAlreadyExists),
@@ -38,7 +44,15 @@ case "$engine" in
 esac
 shift
 build=""
-[ "${1:-}" = "--build" ] && build=1
+down=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --build) build=1; shift ;;
+    --down) down=1; shift ;;
+    *) die "unknown option $1" ;;
+  esac
+done
+[ -z "$down" ] || [ -n "$build" ] || die "--down goes with --build"
 
 tfvars=$live/terraform/terraform.tfvars
 var() { sed -n "s/^$1 *= *\"\(.*\)\"/\1/p" "$tfvars" | head -n 1; }
@@ -186,25 +200,93 @@ check clean-fail-rules 0 "each rule of severity fail that ran on the clean entit
 check clean-scorecard 0 "the section scorecard of the clean entity" -- \
   jq -r '.sections[] | "\(.title)\t rows \(.rows) ran \(.ran) passed \(.passed) failed \(.failed) not-checked \(.notChecked) readiness \(.readiness // "-")"' clean.report.json
 
-# ---- 4. the watch, with --build ---------------------------------------------------------------------------
+# ---- 4. the build, watched, with --build ------------------------------------------------------------------
+# The apply runs in the background, and the watch starts as soon as Palette lists the cluster: the
+# provider returns at its own end, and the watch is about the build itself.
 if [ -n "$build" ]; then
-  echo "== 4. the build, and the watch" | tee -a steps.log
-  echo "tofu apply -var cloud=$engine" | tee -a steps.log
-  "$live/tf.sh" apply -input=false -auto-approve -no-color -var "cloud=$engine" > apply.txt 2>&1 || die "tofu apply failed; see $PWD/apply.txt"
-  load_outputs
-  C=$(out cluster_uid)
-  [ -n "$C" ] || die "no cluster A after the apply"
-  pf "cluster:$C" --watch --every 30 --limit 5400 > watch.report.json 2> watch.err
+  echo "== 4. the build of cluster A on $engine, watched" | tee -a steps.log
+  cluster_name=$(var cluster_name); cluster_name=${cluster_name:-fred}
+  echo "tofu apply -var cloud=$engine (in the background)" | tee -a steps.log
+  "$live/tf.sh" apply -input=false -auto-approve -no-color -var "cloud=$engine" > apply.txt 2>&1 &
+  apply_pid=$!
+  C=""
+  for _ in $(seq 1 120); do
+    C=$("$strata" list clusters --json 2> /dev/null | jq -r --arg n "$cluster_name" '.clusters[] | select(.name == $n) | .uid' | head -n 1)
+    [ -n "$C" ] && break
+    kill -0 "$apply_pid" 2> /dev/null || break
+    sleep 10
+  done
+  if [ -z "$C" ]; then
+    wait "$apply_pid"
+    die "Palette lists no cluster named $cluster_name after 20 minutes; see $PWD/apply.txt"
+  fi
+  echo "Palette lists cluster $C; the watch starts while the apply runs" | tee -a steps.log
+  pf "cluster:$C" --watch --every 30 --limit 5400 --out out-watch > watch.report.json 2> watch.err
   watch_exit=$?
+  wait "$apply_pid"
+  apply_exit=$?
+  command grep -E '^(Plan|Apply complete|Error)' apply.txt | tee -a steps.log
+  check apply 0 "the apply of cluster A on $engine through the provider ends with exit 0" -- test "$apply_exit" = 0
   check watch-exit 0 "the watch of cluster $C ends with the cluster Running and each watch rule passed" -- test "$watch_exit" = 0
-  check watch-report 0 "the report of the watch" -- jq -r '.subject.source, (.checks[] | "\(.verdict)\t\(.id)\t\((.messages // []) | join("; ") | .[:160])")' watch.report.json
+  check watch-report 0 "the report of the watch: the readings, and each watch rule" -- \
+    jq -r '.subject.source, (.checks[] | "\(.verdict)\t\(.id)\t\((.messages // []) | join("; ") | .[:160])")' watch.report.json
   while IFS=$'\t' read -r id verdict; do
     case "$verdict" in
       passed) record "$id" passed "the clean build, watched to Running" ;;
       failed) record "$id" false-fail "the clean build: $(jq -r --arg id "$id" '[.checks[] | select(.id == $id) | (.messages // [])[]] | join("; ") | .[:160]' watch.report.json)" ;;
     esac
   done < <(jq -r '.checks[] | select(.severity == "fail" and (.verdict == "passed" or .verdict == "failed")) | "\(.id)\t\(.verdict)"' watch.report.json)
-  echo "the cluster $C stays: run just live-down" | tee -a steps.log
+
+  # ---- 5. the cluster as Palette holds it, and a change of it ----------------------------------------------
+  echo "== 5. cluster $C as Palette holds it, and a change of its worker pool" | tee -a steps.log
+  pf "cluster:$C" --out out-cluster > cluster.report.json 2> cluster.err
+  check cluster-exit 0 "strata preflight cluster:$C, the entity the provider sent: exit 0" -- test "$?" = 0
+  check cluster-report 0 "the report of the cluster as Palette holds it" -- \
+    jq -r '.checks[] | select(.verdict != "skipped") | "\(.verdict)\t\(.level)\t\(.severity)\t\(.id)\t\((.messages // []) | join("; ") | .[:120])"' cluster.report.json
+  check cluster-no-error 0 "no check of the cluster gave ERROR" -- jq -e '[.checks[] | select(.verdict == "error")] | length == 0' cluster.report.json
+  while IFS=$'\t' read -r id verdict; do
+    case "$verdict" in
+      passed) record "$id" passed "the cluster as Palette holds it, after a clean build" ;;
+      failed) record "$id" false-fail "the cluster as Palette holds it: $(jq -r --arg id "$id" '[.checks[] | select(.id == $id) | (.messages // [])[]] | join("; ") | .[:160]' cluster.report.json)" ;;
+    esac
+  done < <(jq -r '.checks[] | select(.severity == "fail" and (.verdict == "passed" or .verdict == "failed")) | "\(.id)\t\(.verdict)"' cluster.report.json)
+  # the change: another instance type for the worker pool, which replaces the pool on each
+  # engine, orphans a node group on EKS (#89), and deletes the node pool on GKE (#90)
+  case "$engine" in
+    gke) new_type=e2-standard-8; change_rules="gke-type-change pool-replace-fields" ;;
+    eks) new_type=m5.xlarge; change_rules="eks-type-change-orphan pool-replace-fields" ;;
+    gcp) new_type=e2-standard-8; change_rules="pool-replace-fields" ;;
+    aws) new_type=m5.xlarge; change_rules="pool-replace-fields" ;;
+  esac
+  jq -n --arg t "$new_type" '{spec: {machinepoolconfig: [{poolConfig: {name: "worker-pool"}, cloudConfig: {instanceType: $t}}]}}' > change.json
+  pf "cluster:$C" change.json --out out-change > change.report.json 2> change.err
+  for id in $change_rules; do
+    verdict=$(jq -r --arg id "$id" '.checks[] | select(.id == $id) | .verdict' change.report.json 2> /dev/null)
+    case "$verdict" in failed) label=caught ;; passed) label=missed ;; *) label=not-made ;; esac
+    record "$id" "$label" "the change of the worker pool of cluster $C to $new_type"
+    check "change-$id" 0 "$id fails on the change of the instance type to $new_type: $(jq -r --arg id "$id" '[.checks[] | select(.id == $id) | (.messages // [])[]] | join("; ") | .[:160]' change.report.json 2> /dev/null)" -- \
+      test "$label" = caught
+  done
+
+  # ---- 6. the teardown, with --down ----------------------------------------------------------------------------
+  if [ -n "$down" ]; then
+    echo "== 6. the teardown" | tee -a steps.log
+    names=$(out profile_names | jq -r '.[]' 2> /dev/null)
+    "$live/tf.sh" destroy -input=false -auto-approve -no-color > destroy.txt 2>&1 \
+      || "$live/tf.sh" destroy -input=false -auto-approve -no-color >> destroy.txt 2>&1
+    destroy_exit=$?
+    command grep -E '^(Destroy complete|Error)' destroy.txt | tee -a steps.log
+    check destroy 0 "tofu destroy of the example ends with exit 0" -- test "$destroy_exit" = 0
+    # shellcheck disable=SC2086
+    "$live/api.sh" delete-named $names > delete-named.txt 2>&1 || echo "delete-named: $(tail -n 1 delete-named.txt)" | tee -a steps.log
+    case "$engine" in
+      aws|eks) check inventory 0 "the inventory of AWS for $cluster_name is 0 on every line" -- "$live/aws-inventory.sh" "$cluster_name" "$region" ;;
+      gcp) check inventory 0 "the inventory of GCP for $cluster_name is 0 on every line" -- "$live/gcp-inventory.sh" "$project" "$cluster_name" ;;
+      gke) check inventory 0 "the inventory of GCP for $cluster_name is 0 on every line, the GKE cluster counted" -- "$live/gcp-inventory.sh" "$project" "$cluster_name" --gke ;;
+    esac
+  else
+    echo "the cluster $C stays: run just live-down" | tee -a steps.log
+  fi
 fi
 
 # ---- the ledger ------------------------------------------------------------------------------------------
