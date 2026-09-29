@@ -949,6 +949,12 @@ ledger of the six runs. The IAM simulation on eks warns that
 role that built the #89 clusters: the warning to read that the rule now says
 it is.
 
+**A custom probe on the tenant.** Each run since the build phase also runs the
+two custom probes of the lab, `lab-region` and `lab-name`, from
+`examples/live/preflight/lab-probes.yaml`, beside the catalog. Both ran on the
+clean entity of the gke run and passed: a file of a company runs the same way,
+with no change to strata.
+
 ## A chart pushed again, on a cluster
 
 A run by hand, with the registry host of `registry-kinds.sh` and cluster A: no
