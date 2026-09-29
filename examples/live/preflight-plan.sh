@@ -181,9 +181,12 @@ case "$engine" in
 esac
 
 # ---- 3. the clean entity -------------------------------------------------------------------------------
-echo "== 3. the clean entity, every tier" | tee -a steps.log
-pf clean.json --out out-clean > clean.report.json 2> clean.err
+# with the custom probes of the lab beside the catalog: a custom probe on a real tenant
+echo "== 3. the clean entity, every tier, with the custom probes of the lab" | tee -a steps.log
+pf clean.json --probes "$live/preflight/lab-probes.yaml" --out out-clean > clean.report.json 2> clean.err
 clean_exit=$?
+check custom-probes 0 "the custom probes of the lab ran beside the catalog: lab-region and lab-name passed" -- \
+  jq -e '[.checks[] | select(.section == "lab")] | length == 2 and all(.[]; .verdict == "passed")' clean.report.json
 check clean-exit 0 "the clean entity of $engine: exit 0 (a failed probe does not count)" -- test "$clean_exit" = 0
 check clean-report 0 "the report of the clean entity, one line for each rule" -- \
   jq -r '.checks[] | select(.verdict != "skipped") | "\(.verdict)\t\(.level)\t\(.severity)\t\(.id)\t\((.messages // []) | join("; ") | .[:120])"' clean.report.json
