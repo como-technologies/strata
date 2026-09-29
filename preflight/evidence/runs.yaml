@@ -198,3 +198,66 @@ runs:
       - {rule: template-outside, result: passed, note: "the clean entity"}
       - {rule: palette-validate, result: passed, note: "the clean entity"}
       - {rule: leftovers-before-build, result: passed, note: "the clean entity"}
+  - run: 20260929T123403Z
+    engine: gke
+    release: ""
+    results:
+      - {rule: gke-pool-multiple-3, result: caught, note: "the fault was made: def resize($n): .poolConfig.size = $n | .poolConfig.minSize = $n | .poolConfig.maxSize = $n; .spec.machinepoolconfig[0] |= resize(4)"}
+      - {rule: palette-validate, result: caught, note: "the fault was made: def resize($n): .poolConfig.size = $n | .poolConfig.minSize = $n | .poolConfig.maxSize = $n; .spec.machinepoolconfig[0] |= resize(4)"}
+      - {rule: gke-no-release-channel, result: caught, note: "the fault was made: .spec.cloudConfig.overrideClusterAPIConfig = \"\""}
+      - {rule: gke-no-gpu, result: caught, note: "the fault was made: .spec.machinepoolconfig[0].cloudConfig.instanceType = \"a2-highgpu-1g\""}
+      - {rule: gke-autopilot, result: caught, note: "the fault was made: .spec.cloudConfig.managedClusterConfig.enableAutoPilot = true"}
+      - {rule: gcp-name-length, result: caught, note: "the fault was made: .metadata.name = \"a-cluster-name-that-is-longer-than-forty-characters\""}
+      - {rule: account-missing, result: caught, note: "the fault was made: .spec.cloudAccountUid = \"000000000000000000000000\""}
+      - {rule: account-missing, result: passed, note: "the clean entity"}
+      - {rule: gcp-default-sa-no-role, result: passed, note: "the clean entity"}
+      - {rule: gcp-default-sa-missing, result: passed, note: "the clean entity"}
+      - {rule: gke-api-off, result: passed, note: "the clean entity"}
+      - {rule: gcp-quotas, result: passed, note: "the clean entity"}
+      - {rule: worker-cpu-floor, result: passed, note: "the clean entity"}
+      - {rule: gcp-dynamic-cidr-overlap, result: passed, note: "the clean entity"}
+      - {rule: api-endpoint-reach, result: passed, note: "the clean entity"}
+      - {rule: proxy-no-proxy, result: passed, note: "the clean entity"}
+      - {rule: gcp-name-length, result: passed, note: "the clean entity"}
+      - {rule: gke-pool-multiple-3, result: passed, note: "the clean entity"}
+      - {rule: gke-no-gpu, result: passed, note: "the clean entity"}
+      - {rule: gke-autopilot, result: passed, note: "the clean entity"}
+      - {rule: gke-no-release-channel, result: passed, note: "the clean entity"}
+      - {rule: gke-version-not-offered, result: passed, note: "the clean entity"}
+      - {rule: pack-cloud-support, result: passed, note: "the clean entity"}
+      - {rule: profile-cloud-mismatch, result: passed, note: "the clean entity"}
+      - {rule: pack-state, result: passed, note: "the clean entity"}
+      - {rule: pack-dependency, result: passed, note: "the clean entity"}
+      - {rule: template-outside, result: passed, note: "the clean entity"}
+      - {rule: palette-validate, result: passed, note: "the clean entity"}
+      - {rule: lab-region, result: passed, note: "the clean entity"}
+      - {rule: agent-egress, result: passed, note: "the clean build, watched to Running"}
+      - {rule: node-egress-images, result: passed, note: "the clean build, watched to Running"}
+      - {rule: status-not-cloud, result: passed, note: "the clean build, watched to Running"}
+      - {rule: pivot-webhook-timeout, result: passed, note: "the clean build, watched to Running"}
+      - {rule: account-missing, result: passed, note: "the cluster as Palette holds it, after a clean build"}
+      - {rule: gcp-default-sa-no-role, result: passed, note: "the cluster as Palette holds it, after a clean build"}
+      - {rule: gcp-default-sa-missing, result: passed, note: "the cluster as Palette holds it, after a clean build"}
+      - {rule: gke-api-off, result: passed, note: "the cluster as Palette holds it, after a clean build"}
+      - {rule: gcp-quotas, result: passed, note: "the cluster as Palette holds it, after a clean build"}
+      - {rule: worker-cpu-floor, result: passed, note: "the cluster as Palette holds it, after a clean build"}
+      - {rule: gcp-dynamic-cidr-overlap, result: passed, note: "the cluster as Palette holds it, after a clean build"}
+      - {rule: api-endpoint-reach, result: passed, note: "the cluster as Palette holds it, after a clean build"}
+      - {rule: proxy-no-proxy, result: passed, note: "the cluster as Palette holds it, after a clean build"}
+      - {rule: gcp-name-length, result: passed, note: "the cluster as Palette holds it, after a clean build"}
+      - {rule: gke-pool-multiple-3, result: passed, note: "the cluster as Palette holds it, after a clean build"}
+      - {rule: gke-no-gpu, result: passed, note: "the cluster as Palette holds it, after a clean build"}
+      - {rule: gke-autopilot, result: passed, note: "the cluster as Palette holds it, after a clean build"}
+      - {rule: gke-no-release-channel, result: passed, note: "the cluster as Palette holds it, after a clean build"}
+      - {rule: gke-version-not-offered, result: passed, note: "the cluster as Palette holds it, after a clean build"}
+      - {rule: pack-cloud-support, result: passed, note: "the cluster as Palette holds it, after a clean build"}
+      - {rule: profile-cloud-mismatch, result: passed, note: "the cluster as Palette holds it, after a clean build"}
+      - {rule: pack-state, result: passed, note: "the cluster as Palette holds it, after a clean build"}
+      - {rule: pack-dependency, result: passed, note: "the cluster as Palette holds it, after a clean build"}
+      - {rule: template-outside, result: passed, note: "the cluster as Palette holds it, after a clean build"}
+      - {rule: gke-pool-roll, result: passed, note: "the cluster as Palette holds it, after a clean build"}
+      - {rule: delete-pending-repave, result: passed, note: "the cluster as Palette holds it, after a clean build"}
+      - {rule: delete-while-provisioning, result: passed, note: "the cluster as Palette holds it, after a clean build"}
+      - {rule: palette-validate, result: false-fail, note: "the cluster as Palette holds it: Palette refused the entity: InvalidParam: Invalid parameter 'SkipK8sUpgrade'; caused by: SkipK8sUpgrade is not supported for gke cloud type"}
+      - {rule: gke-type-change, result: caught, note: "the change of the worker pool of cluster 6abbb086e8fdde7591c3d0a8 to e2-standard-8"}
+      - {rule: pool-replace-fields, result: caught, note: "the change of the worker pool of cluster 6abbb086e8fdde7591c3d0a8 to e2-standard-8"}

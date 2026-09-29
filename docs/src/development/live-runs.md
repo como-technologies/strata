@@ -955,6 +955,23 @@ two custom probes of the lab, `lab-region` and `lab-name`, from
 clean entity of the gke run and passed: a file of a company runs the same way,
 with no change to strata.
 
+**gke, with a build.** The plan built cluster A through the provider, with
+the watch on it from the moment Palette listed it: 39 readings, `Running`
+after 1190 seconds, and each watch rule passed (`agent-egress`,
+`node-egress-images`, `status-not-cloud`, `pivot-webhook-timeout`). On the
+cluster as Palette holds it, 38 checks ran and 34 passed. The three warnings
+are the two GCP project findings and `position-zero`: the provider put the
+add-on profile at position 0 of the cluster, as the order report says it does.
+The one failure was a wrong result of strata: the entity built from the cloud
+config carried `skipK8sUpgrade: "disabled"`, which Palette stores on each pool,
+and the GKE validate route refuses the field with `InvalidParam`; the entity
+now carries it when it is enabled alone. The change of the instance type of the
+worker pool, `e2-standard-4` to `e2-standard-8`, was caught by
+`gke-type-change` and `pool-replace-fields` before any apply: the fault of
+#90, found in a millisecond. The destroy of the cluster ended with
+`context deadline exceeded` at the deadline of the provider, and a second
+destroy completed, as `provider-delete-timeout` says.
+
 ## A chart pushed again, on a cluster
 
 A run by hand, with the registry host of `registry-kinds.sh` and cluster A: no
