@@ -992,15 +992,21 @@ before any apply: the fault of #89, found in a millisecond. Two wrong results of
 strata came out of this run and are fixed: the validate route refuses the name
 of an existing cluster with `ResourceAlreadyExists`, so `palette-validate` and
 `worker-cpu-floor` now check an existing cluster under a suffixed name; and the
-plan now waits for `Running` before it deletes. The delete did not end: after
+plan now waits for `Running` before it deletes. The delete did not end by itself: after
 75 minutes the EKS control plane, its node group, the VPC, and three NAT
-gateways were still in AWS, and Palette answered a plain-text `400 Bad Request`
-on every route of the cluster, the `DELETE` too, so the second plain delete that
-ended the case of the pivot report could not be sent. The recovery was the one
-of the book: `eks-nodegroups.sh --delete`, `aws-cleanup.sh fred us-east-2 --yes`,
-the inventory at 0, and a force delete of the record. The mechanism is the one
-of the findings report of 2026-09-26 on the pivot webhook, on EKS this time,
-and with an API that refuses the cluster.
+gateways were still in AWS, with the cluster `Deleting` and
+`CloudInfrastructureCleanedUp: DeletingInfrastructure`. The recovery was the
+one of the book: `eks-nodegroups.sh --delete`, `aws-cleanup.sh fred us-east-2 --yes`,
+the inventory at 0, then a second plain delete, which the findings report of
+2026-09-26 on the pivot webhook gives as the step that ends the wait. The
+mechanism is the one of that report, on EKS this time. One hour of the recovery
+went to a fault of the operator: `tofu output -raw` printed a warning beside
+the project uid, a shell exported both as `PALETTE_PROJECT_UID`, and every
+request with that header answered a plain-text `400 Bad Request`, which read
+as Palette refusing the cluster. It was not: with the uid alone, the API
+answered as it does. `lib.sh` reads the outputs as JSON, with the warnings
+dropped, so the scripts of the lab do not meet it; a shell that copies a
+value by hand can.
 
 ## A chart pushed again, on a cluster
 
