@@ -2,5 +2,5 @@ $ strata preflight cluster:64f1000000000000000000e1 change.json --tier static --
   WARN          floating-tag                 No profile pins a pack under a floating tag                      1 ms
                 profile aws-stack: pack ubuntu-aws is pinned under the floating tag LTS__24.x
 --
-  WARN          pool-replace-fields          A pool change keeps the machines of the pool                     1 ms  catch 1/1 (5%) clean no runs
+  WARN          pool-replace-fields          A pool change keeps the machines of the pool                     1 ms  catch 2/2 (22%) clean no runs
                 pool worker-pool: instanceType changed; on aws that makes a new machine template, and the machines roll
