@@ -7,8 +7,8 @@
 #
 #   1  the value the cluster gives the variable of the add-on profile changes: what the cluster
 #      variables endpoint, the record of the cluster's copy, and the audit log show
-#   2  the cluster is deleted through the API, not the provider: what the cluster listing and
-#      consumers show while it goes, and after it is gone
+#   2  the cluster is deleted through the API, not the provider: what the cluster listing,
+#      consumers, and verify of a record from before show while it goes, and after it is gone
 #   3  the OpenTofu state is brought in line with the tenant
 #
 # Needs tofu, jq, and curl with the Palette API key in PALETTE_API_KEY or ~/.palette.env. Results
@@ -120,6 +120,8 @@ check listing-before 0 "the cluster listing, before" -- listing
 check listing-has-cluster 0 "the listing holds the cluster" -- in_listing listing-before.out
 check consumers-before 1 "consumers, before: exit 1, the version has a consumer" -- "$strata" consumers "$AD" --json
 check consumers-has-cluster 0 "consumers lists the cluster under the add-on version" -- has_consumer consumers-before.out
+check record-before-delete 0 "a record of the cluster, before the deletion" -- \
+  "$strata" snapshot "cluster:$C/$AN" -o record-before-delete.json
 check delete 0 "#66: DELETE /v1/spectroclusters/<uid>" -- "$live/api.sh" delete-cluster "$C"
 # the listing while the cluster goes: the first read after the request that no longer says Running
 for _ in $(seq 1 12); do
@@ -137,6 +139,10 @@ check consumers-shows-deleting 0 "#66: consumers lists the cluster with the stat
 wait_gone | tee -a steps.log || die "cluster $C is not gone after forty minutes"
 check doc-after 0 "GET /v1/spectroclusters/<uid> still answers after the deletion" -- "$live/api.sh" get "/v1/spectroclusters/$C"
 check doc-after-deleted 0 "#66: the document reports the state Deleted" -- jq -e '.status.state == "Deleted"' doc-after.out
+check verify-deleted 1 "#139: verify of the record from before the deletion: DRIFT, exit 1" -- \
+  "$strata" verify record-before-delete.json
+check verify-deleted-says 0 "#139: the verdict says that the cluster no longer exists, with the time of the delete" -- \
+  command grep -E "^DRIFT: cluster .* no longer exists: deleted [0-9]{4}-" verify-deleted.out
 check listing-after 0 "the cluster listing, after" -- listing
 check listing-drops-cluster 0 "#66: the listing no longer holds the cluster" -- not_in_listing listing-after.out
 check consumers-after 0 "consumers, after: exit 0, the version has no consumer" -- "$strata" consumers "$AD" --json

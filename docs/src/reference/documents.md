@@ -188,9 +188,21 @@ A comparison of two sides, `a` and `b`.
     value moved. The status is `drifted`, also when the roots are equal.
   - `overwrittenBy`: for a profile record, the `name@version` that the uid names
     now. The status is `drifted`, also when the roots are equal.
-  - `gone`, only when true: for a record of a profile version or an app
-    profile, Palette no longer has its uid. The status is `drifted`, and each
-    pack of the record is `removed`.
+  - `renamedTo`: for a profile record, the `name@version` that the uid names
+    now, when the version is the same and the name is not. The version was
+    renamed. The status is `drifted`, also when the roots are equal.
+  - `gone`, only when true: Palette no longer has the object of the record. For
+    a profile version, an app profile, an edge host, or a cluster group, the uid
+    is gone. For a cluster, the uid is gone, or the document has the state
+    `Deleted` or `metadata.isDeleted`. The status is `drifted`, and each pack of
+    the record is `removed`.
+  - `deletedAt`: for a gone object whose document Palette keeps, the time of
+    the delete, from `metadata.deletionTimestamp`.
+  - `state`: for a record of a cluster, an edge host, or a cluster group, the
+    state of the object now, as Palette gives it: `status.state` of a cluster
+    (such as `Running`, `Deleting`, or `Error`) or of an edge host (`ready`,
+    `unpaired`, or `in-use`), and `active` or `inactive` from `status.isActive`
+    of a cluster group. It does not change `status`.
   - `clusterValuesChanged`, only when it is not `0`: for a cluster record, the
     number of variable values that differ from the record.
   - `profilesOverwritten`: for a cluster record, each profile that the cluster
@@ -230,6 +242,8 @@ is the path as a list: strings for keys, numbers for indexes, and
     unverified record adds the `diff`, which names the packs.
   - A cluster record with changed variable values adds `clusterVariables`,
     whatever its status.
+  - A record of a cluster, an edge host, or a cluster group adds `state`, as
+    in `verify.state`, whatever its status.
   - A failed record adds `error`. See [Errors](./errors.md).
 
 ## strata-chain/1

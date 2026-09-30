@@ -895,10 +895,25 @@ pub struct Verify {
     /// match.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub overwritten_by: Option<String>,
-    /// For a record of a profile version or an app profile: Palette no longer has its uid. The
-    /// version was deleted, so `status` is drifted, and each pack of the record is removed.
+    /// For a profile record whose uid now names the same version under another name: that
+    /// `name@version`. The version was renamed, so `status` is drifted even when the roots match.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub renamed_to: Option<String>,
+    /// Palette no longer has the object of the record: its uid is gone, or, for a cluster, the
+    /// document has the state `Deleted` or `metadata.isDeleted`. `status` is drifted, and each
+    /// pack of the record is removed.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub gone: bool,
+    /// For a gone object whose document Palette keeps: when it was deleted, from
+    /// `metadata.deletionTimestamp`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub deleted_at: Option<String>,
+    /// For a record of a cluster, an edge host, or a cluster group: the state of the object now,
+    /// as Palette gives it. `status.state` of a cluster (such as `Running`, `Deleting`, `Error`) or
+    /// of an edge host (`ready`, `unpaired`, `in-use`); `active` or `inactive` from
+    /// `status.isActive` of a cluster group. Absent when Palette gives none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub state: Option<String>,
     /// For a cluster record: each profile the cluster runs whose uid now names another version
     /// than the cluster's copy, or no longer exists. The cluster may run exactly what it ran, but
     /// the version it runs is gone from Palette, so `status` is drifted.

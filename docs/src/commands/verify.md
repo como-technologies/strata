@@ -91,7 +91,10 @@ document shape.
 | `DRIFT: published version <v> now names <v2>: the version recorded <time> was overwritten in place` | The uid holds another version now. | `1` |
 | `DRIFT: cluster <c> runs <v>, but uid <uid> now names <version>: the version was overwritten in place` | A cluster record: its profile uid holds another version now. | `1` |
 | `DRIFT: cluster <c> runs <v>, but uid <uid> no longer exists` | A cluster record: its profile uid is gone. | `1` |
+| `DRIFT: published version <v> was renamed to <name>@<v>` | The uid holds the same version under another name. | `1` |
 | `DRIFT: published version <v> no longer exists: uid <uid> is gone from Palette since the record of <time>` | A record of a version that was deleted, such as by a retire. Each pack of the record is `REMOVED`. | `1` |
+| `DRIFT: cluster <c> no longer exists: deleted <time>` | A cluster record: Palette deleted the cluster, and keeps its document with the state `Deleted`. Each pack of the record is `REMOVED`. | `1` |
+| `DRIFT: edge host <h> no longer exists: uid <uid> is gone from Palette since the record of <time>` | A record of an edge host that Palette no longer has. A cluster group, or a cluster whose document is gone, gets the same verdict. | `1` |
 | `OK: pack <name>@<version> in registry <r> is unchanged since <time>` | A pack record: the registry holds the recorded copy. | `0` |
 | `DRIFT: pack <name>@<version> in registry <r> differs from the copy recorded <time>` | A pack record: the registry holds other content now. | `1` |
 | `DRIFT: cluster <c> running <v> has the content recorded <time>, but macro <m> has another value now` | A cluster record with the digests of its macro values (`snapshot --macros`): Palette gives a macro another value now. The root is the same. | `1` |
@@ -104,6 +107,13 @@ pack has no archive, so it never makes a record `UNVERIFIED`. See
 
 Each verdict of a cluster record ends with `; N variable value changed` when the
 cluster gives a variable another value than the record holds.
+
+A verdict of a cluster, edge host, or cluster group record ends with the state
+of the object when the state is not `Running` for a cluster, `in-use` for an
+edge host, or active for a cluster group: `; the cluster is Deleting`, `; the
+edge host is ready`, or `; the cluster group is inactive`. The state does not
+change the verdict or the exit. With many records, the line ends with `; the
+state is <state>`.
 
 A record whose packs are in another order now is `DRIFT`, with `no packs
 changed, the packs in another order` in the summary line. The order is content:
@@ -146,6 +156,39 @@ With many records, the line of a pack record ends with the same note.
 Strata sends one request for each pack record, by the type of the pack, and two
 for a pack in an ECR registry: see
 [Other reads](../reference/palette-api.md#other-reads).
+
+## The object of the record
+
+A record names an object: a profile version, a cluster, an edge host, or a
+cluster group. `verify` says when that object changed its state, went, or took
+another name. Here the cluster `payments` goes. It still runs the recorded
+copy, so the record is `OK`, and the verdict names the state:
+
+```text
+{{#include ../output/verify-state.txt}}
+```
+
+Exit `0`. After the delete, Palette keeps the document of the cluster, with the
+state `Deleted` and the time of the delete. See
+[What Palette does](../internals/palette/clusters.md#a-deleted-cluster):
+
+```text
+{{#include ../output/verify-deleted.txt}}
+```
+
+Exit `1`. Each pack of the record is `REMOVED`. A person renames the profile
+`aws-stack` to `aws-stack-legacy`. The uid and the version stay:
+
+```text
+{{#include ../output/verify-renamed.txt}}
+```
+
+Exit `1`. A rename is not an overwrite: the uid names the same version. Over
+many records, each line says the same:
+
+```text
+{{#include ../output/verify-objects-bulk.txt}}
+```
 
 ## The tiers of a cluster record
 

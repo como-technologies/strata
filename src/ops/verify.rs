@@ -91,6 +91,70 @@ fn profiles_overwritten<A: PaletteApi>(
     Ok(out)
 }
 
+/// The text at `ptr` in `doc`, when it is there and not empty.
+fn text(doc: &Value, ptr: &str) -> Option<String> {
+    doc.pointer(ptr)
+        .and_then(Value::as_str)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+}
+
+/// The state of a cluster, an edge host, or a cluster group, from its document: `status.state`,
+/// or, for a cluster group, `active` or `inactive` from `status.isActive`.
+fn subject_state(kind: SubjectKind, doc: &Value) -> Option<String> {
+    match kind {
+        SubjectKind::ClusterGroup => doc
+            .pointer("/status/isActive")
+            .and_then(Value::as_bool)
+            .map(|a| if a { "active" } else { "inactive" }.to_string()),
+        _ => text(doc, "/status/state"),
+    }
+}
+
+/// True when Palette keeps the document of a deleted object: the state `Deleted`, or
+/// `metadata.isDeleted`. Palette deletes a cluster so, and keeps its spec.
+fn is_deleted(doc: &Value) -> bool {
+    doc.pointer("/status/state").and_then(Value::as_str) == Some("Deleted")
+        || doc
+            .pointer("/metadata/isDeleted")
+            .and_then(Value::as_bool)
+            .unwrap_or(false)
+}
+
+/// The live snapshot of the holder of a cluster record, from its document `doc`: with the update
+/// that waits, the macro values, and the shape, as the record holds them.
+fn live_holder<A: PaletteApi>(
+    recorded: &Snapshot,
+    c: &crate::snapshot::ClusterSource,
+    uid: &str,
+    doc: Value,
+    palette: &Palette<A>,
+    checked_at: &str,
+    progress: &Progress,
+) -> Result<Snapshot> {
+    let mut raw = palette.subject_raw(c.kind, doc, progress)?;
+    // a record of the update that waits is checked on what waits now
+    if c.pending {
+        raw = palette.with_pending(raw)?;
+    }
+    // a record that holds the digests of the macro values is checked on them too
+    if c.macro_values.is_some() {
+        raw.resolved_values = Some(palette.resolved_values(uid)?);
+    }
+    // and one that holds the shape tier on its shape
+    if c.tiers.contains_key("shape") {
+        raw.cloud_config = Some(palette.cloud_config(&raw.cluster)?);
+    }
+    let live = Snapshot::from_cluster(
+        &raw,
+        c.profile.as_deref(),
+        &recorded.source.reference,
+        checked_at,
+    )?;
+    let live = if c.pending { live.mark_pending() } else { live };
+    Ok(live.with_kind(c.kind))
+}
+
 /// Re-fetch what a snapshot was taken from and compare: the profile, or for a cluster snapshot
 /// the cluster, with the same profile selection.
 pub fn verify<A: PaletteApi>(
@@ -155,7 +219,10 @@ pub fn verify_with<A: PaletteApi>(
             recorded_at: recorded.source.fetched_at.clone(),
             checked_at: checked_at.to_string(),
             overwritten_by: None,
+            renamed_to: None,
             gone: false,
+            deleted_at: None,
+            state: None,
             profiles_overwritten: Vec::new(),
             cluster_values_changed: 0,
             who: None,
@@ -181,35 +248,26 @@ pub fn verify_with<A: PaletteApi>(
         recorded.source.title(),
         recorded.source.fetched_at
     ));
-    // set when Palette no longer has the uid of a profile record
+    // set when Palette no longer has the object of the record
     let mut gone = false;
+    let mut deleted_at = None;
+    let mut state = None;
     let live = match &recorded.source.cluster {
         Some(c) => {
-            let mut raw = match c.kind {
-                SubjectKind::EdgeHost => palette.fetch_edge_host(uid, progress)?,
-                SubjectKind::ClusterGroup => palette.fetch_cluster_group(uid, progress)?,
-                SubjectKind::Cluster => palette.fetch_cluster(uid, progress)?,
+            // the document by uid alone: a 404 is a gone object, and not a name to look up
+            let doc = match palette.subject_document(c.kind, uid, progress) {
+                Ok(doc) => doc,
+                Err(Error::Api { status: 404, .. }) => Value::Null,
+                Err(e) => return Err(e),
             };
-            // a record of the update that waits is checked on what waits now
-            if c.pending {
-                raw = palette.with_pending(raw)?;
+            state = subject_state(c.kind, &doc);
+            if doc.is_null() || is_deleted(&doc) {
+                gone = true;
+                deleted_at = text(&doc, "/metadata/deletionTimestamp");
+                recorded.gone(checked_at)
+            } else {
+                live_holder(recorded, c, uid, doc, palette, checked_at, progress)?
             }
-            // a record that holds the digests of the macro values is checked on them too
-            if c.macro_values.is_some() {
-                raw.resolved_values = Some(palette.resolved_values(uid)?);
-            }
-            // and one that holds the shape tier on its shape
-            if c.tiers.contains_key("shape") {
-                raw.cloud_config = Some(palette.cloud_config(&raw.cluster)?);
-            }
-            let live = Snapshot::from_cluster(
-                &raw,
-                c.profile.as_deref(),
-                &recorded.source.reference,
-                checked_at,
-            )?;
-            let live = if c.pending { live.mark_pending() } else { live };
-            live.with_kind(c.kind)
         }
         None if recorded.source.kind == APP_KIND => {
             match palette.fetch_app_profile(uid, progress) {
@@ -236,19 +294,27 @@ pub fn verify_with<A: PaletteApi>(
         },
     }
     .with_project(palette.project_uid());
-    let overwritten_by = (recorded.source.cluster.is_none()
+    // the uid of a profile record names another version now, or the same version under another
+    // name: a rename keeps the version, and a legacy version bump changes it
+    let now_names = (recorded.source.cluster.is_none()
         && !live.source.version.is_empty()
         && (&live.source.name, &live.source.version)
             != (&recorded.source.name, &recorded.source.version))
         .then(|| format!("{}@{}", live.source.name, live.source.version));
+    let (renamed_to, overwritten_by) = if live.source.version == recorded.source.version {
+        (now_names, None)
+    } else {
+        (None, now_names)
+    };
     let profiles_overwritten = match &live.source.cluster {
-        Some(c) => profiles_overwritten(&c.profiles, palette)?,
-        None => Vec::new(),
+        Some(c) if !gone => profiles_overwritten(&c.profiles, palette)?,
+        _ => Vec::new(),
     };
     let macros_changed = crate::diff::macros_changed(recorded, &live);
     let unchanged = !gone
         && recorded.root == live.root
         && overwritten_by.is_none()
+        && renamed_to.is_none()
         && profiles_overwritten.is_empty()
         && macros_changed.is_empty();
     let verify = Verify {
@@ -261,7 +327,10 @@ pub fn verify_with<A: PaletteApi>(
         recorded_at: recorded.source.fetched_at.clone(),
         checked_at: checked_at.to_string(),
         overwritten_by,
+        renamed_to,
         gone,
+        deleted_at,
+        state,
         profiles_overwritten,
         cluster_values_changed: 0,
         who: None,
@@ -404,6 +473,10 @@ pub struct VerifiedRecord {
     /// record, whatever the status.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cluster_variables: Option<crate::diff::ClusterVariablesDiff>,
+    /// For a record of a cluster, an edge host, or a cluster group: the state of the object now,
+    /// as in `verify.state`, whatever the status.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub state: Option<String>,
     /// The error object, for records that could not be checked.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<Value>,
@@ -429,6 +502,7 @@ impl VerifiedRecord {
             packs_changed: None,
             diff: None,
             cluster_variables: None,
+            state: None,
             error: Some(e.to_json()),
         }
     }
@@ -526,6 +600,7 @@ where
                     max_impact: (!v.unchanged).then_some(v.diff.summary.max_impact),
                     packs_changed: (!v.unchanged).then_some(v.diff.summary.packs_changed),
                     cluster_variables: v.diff.cluster_variables.clone().filter(|c| c.changed),
+                    state: v.diff.verify.as_ref().and_then(|x| x.state.clone()),
                     // an unverified record keeps its diff too: it names the packs
                     diff: (v.status != VerifyStatus::Unchanged).then_some(v.diff),
                     error: None,

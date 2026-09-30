@@ -7610,3 +7610,280 @@ fn snapshot_of_a_set_writes_a_record_for_each_cluster_and_prune_removes_the_ones
         "a file that is not a record stays"
     );
 }
+
+// ---- what happened to the object of a record --------------------------------------------------
+
+/// The cluster of fixture `cluster-a`, whose document says `state`, with `extra` merged into its
+/// metadata.
+fn cluster_in_state(dir: &Path, state: &str, extra: Value) -> MemoryApi {
+    let mut doc = read(&dir.join("cluster-a/cluster.json"));
+    doc["status"]["state"] = Value::from(state);
+    for (k, v) in extra.as_object().unwrap() {
+        doc["metadata"][k] = v.clone();
+    }
+    serve_cluster(MemoryApi::new(), dir, "cluster-a")
+        .with(format!("/v1/spectroclusters/{CLUSTER_UID}"), doc)
+}
+
+/// The verdict line of a verify, as the terminal prints it.
+fn verdict_of(v: &ops::Verification, recorded: &Snapshot) -> String {
+    render::renderer(Format::Terminal, Paint::off(), false)
+        .verdict(v.diff.verify.as_ref().unwrap(), &recorded.source)
+        .unwrap()
+}
+
+#[test]
+fn verify_reports_a_deleted_cluster_as_gone_with_the_time_of_the_delete() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let recorded = snapshot_cluster(
+        &serve_cluster(MemoryApi::new(), dir.path(), "cluster-a"),
+        None,
+    )
+    .unwrap();
+    // Palette keeps the document of a deleted cluster, with its spec and the state Deleted
+    let deleted = cluster_in_state(
+        dir.path(),
+        "Deleted",
+        serde_json::json!({"isDeleted": true, "deletionTimestamp": "2026-09-30T10:00:00Z"}),
+    );
+    let v = ops::verify(&recorded, &Palette::new(deleted), "t1", &Progress::silent()).unwrap();
+    assert!(!v.unchanged);
+    let ver = v.diff.verify.as_ref().unwrap();
+    assert_eq!(ver.status, VerifyStatus::Drifted);
+    assert!(ver.gone);
+    assert_eq!(ver.deleted_at.as_deref(), Some("2026-09-30T10:00:00Z"));
+    assert_eq!(ver.state.as_deref(), Some("Deleted"));
+    assert!(
+        v.diff
+            .packs
+            .iter()
+            .all(|p| p.status == strata::diff::Status::Removed),
+        "each pack of the record is removed"
+    );
+    assert_eq!(
+        verdict_of(&v, &recorded),
+        "DRIFT: cluster lab-cluster no longer exists: deleted 2026-09-30T10:00:00Z"
+    );
+    let doc = serde_json::to_value(ver).unwrap();
+    assert_eq!(
+        (&doc["gone"], &doc["deletedAt"], &doc["state"]),
+        (
+            &Value::from(true),
+            &Value::from("2026-09-30T10:00:00Z"),
+            &Value::from("Deleted")
+        )
+    );
+
+    // metadata.isDeleted alone marks it gone too
+    let marked = cluster_in_state(
+        dir.path(),
+        "Running",
+        serde_json::json!({"isDeleted": true}),
+    );
+    let v = ops::verify(&recorded, &Palette::new(marked), "t1", &Progress::silent()).unwrap();
+    assert!(v.diff.verify.as_ref().unwrap().gone);
+
+    // over several records, a gone cluster counts as drifted, and its line says so
+    let path = dir.path().join("lab.json");
+    fs::write(&path, recorded.to_json(true).unwrap()).unwrap();
+    let deleted = cluster_in_state(
+        dir.path(),
+        "Deleted",
+        serde_json::json!({"deletionTimestamp": "2026-09-30T10:00:00Z"}),
+    );
+    let s = ops::verify_many(
+        &[path],
+        None,
+        |_| Ok(Palette::new(deleted.clone())),
+        "t1",
+        &ops::VerifyOptions::default(),
+        &Progress::silent(),
+    );
+    assert_eq!((s.summary.drifted, s.exit_code()), (1, 1));
+    let text = render::renderer(Format::Terminal, Paint::off(), false)
+        .render_verify_summary(&s)
+        .unwrap();
+    assert!(
+        text.contains("cluster lab-cluster no longer exists: deleted 2026-09-30T10:00:00Z"),
+        "{text}"
+    );
+    assert!(!text.contains("the state is"), "{text}");
+}
+
+#[test]
+fn verify_ends_the_verdict_of_a_cluster_record_with_a_state_other_than_running() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let recorded = snapshot_cluster(
+        &serve_cluster(MemoryApi::new(), dir.path(), "cluster-a"),
+        None,
+    )
+    .unwrap();
+    let running = cluster_in_state(dir.path(), "Running", serde_json::json!({}));
+    let v = ops::verify(&recorded, &Palette::new(running), "t1", &Progress::silent()).unwrap();
+    assert!(v.unchanged);
+    assert_eq!(
+        v.diff.verify.as_ref().unwrap().state.as_deref(),
+        Some("Running")
+    );
+    assert_eq!(
+        verdict_of(&v, &recorded),
+        "OK: cluster lab-cluster running lab-profile@1.2.0 is unchanged since t0"
+    );
+
+    // the cluster goes: the copy is the same, and the verdict says the state
+    let deleting = cluster_in_state(dir.path(), "Deleting", serde_json::json!({}));
+    let v = ops::verify(
+        &recorded,
+        &Palette::new(deleting),
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert!(v.unchanged, "a state alone is not a drift");
+    assert_eq!(
+        verdict_of(&v, &recorded),
+        "OK: cluster lab-cluster running lab-profile@1.2.0 is unchanged since t0; the cluster is Deleting"
+    );
+    let md = render::renderer(Format::Markdown, Paint::off(), false)
+        .verdict(v.diff.verify.as_ref().unwrap(), &recorded.source)
+        .unwrap();
+    assert!(md.ends_with("; the cluster is Deleting"), "{md}");
+
+    // the state comes last, after the other parts of a drift
+    let mut moved_doc = read(&dir.path().join("cluster-b/cluster.json"));
+    moved_doc["status"]["state"] = Value::from("Error");
+    let moved = serve_cluster(MemoryApi::new(), dir.path(), "cluster-b")
+        .with(format!("/v1/spectroclusters/{CLUSTER_UID}"), moved_doc);
+    let v = ops::verify(&recorded, &Palette::new(moved), "t1", &Progress::silent()).unwrap();
+    assert!(!v.unchanged);
+    let line = verdict_of(&v, &recorded);
+    assert!(line.starts_with("DRIFT: "), "{line}");
+    assert!(line.ends_with("; the cluster is Error"), "{line}");
+
+    // over several records, the line of each record names the state
+    let path = dir.path().join("lab.json");
+    fs::write(&path, recorded.to_json(true).unwrap()).unwrap();
+    let deleting = cluster_in_state(dir.path(), "Deleting", serde_json::json!({}));
+    let s = ops::verify_many(
+        &[path],
+        None,
+        |_| Ok(Palette::new(deleting.clone())),
+        "t1",
+        &ops::VerifyOptions::default(),
+        &Progress::silent(),
+    );
+    assert_eq!(s.records[0].status, RecordStatus::Unchanged);
+    assert_eq!(s.records[0].state.as_deref(), Some("Deleting"));
+    let text = render::renderer(Format::Terminal, Paint::off(), false)
+        .render_verify_summary(&s)
+        .unwrap();
+    assert!(
+        text.contains("unchanged since t0; the state is Deleting"),
+        "{text}"
+    );
+}
+
+#[test]
+fn verify_reports_a_gone_edge_host_or_cluster_group_as_drift_and_not_as_an_error() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let host = snapshot_edge_host(&serve_edge_host(MemoryApi::new(), dir.path()), "e1").unwrap();
+    let group_api = serve_cluster_group(MemoryApi::new(), dir.path());
+    let group = ops::snapshot_for(
+        &Ref::parse("clustergroup:g1"),
+        || Ok(Palette::new(group_api.clone())),
+        "t0",
+        &Progress::silent(),
+    )
+    .unwrap();
+
+    // Palette answers 404 for each uid: the host and the group were deleted
+    for (recorded, line) in [
+        (
+            &host,
+            "DRIFT: edge host edge-1 no longer exists: uid e1 is gone from Palette since the record of t0",
+        ),
+        (
+            &group,
+            "DRIFT: cluster group group-1 no longer exists: uid g1 is gone from Palette since the record of t0",
+        ),
+    ] {
+        let v = ops::verify(
+            recorded,
+            &Palette::new(MemoryApi::new()),
+            "t1",
+            &Progress::silent(),
+        )
+        .unwrap();
+        let ver = v.diff.verify.as_ref().unwrap();
+        assert_eq!(ver.status, VerifyStatus::Drifted);
+        assert!(ver.gone && ver.deleted_at.is_none());
+        assert_eq!(verdict_of(&v, recorded), line);
+    }
+
+    // a host that is not in a cluster, and a group that is not active, say their state
+    let v = ops::verify(
+        &host,
+        &Palette::new(serve_edge_host(MemoryApi::new(), dir.path())),
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert!(v.unchanged);
+    let line = verdict_of(&v, &host);
+    assert!(line.ends_with("; the edge host is ready"), "{line}");
+    for (active, suffix) in [(true, ""), (false, "; the cluster group is inactive")] {
+        let api = serve_cluster_group(MemoryApi::new(), dir.path());
+        let mut doc = api.get_json("/v1/clustergroups/g1").unwrap();
+        doc["status"] = serde_json::json!({"isActive": active});
+        let api = api.with("/v1/clustergroups/g1", doc);
+        let v = ops::verify(&group, &Palette::new(api), "t1", &Progress::silent()).unwrap();
+        assert!(v.unchanged);
+        let line = verdict_of(&v, &group);
+        assert!(line.ends_with(&format!("since t0{suffix}")), "{line}");
+    }
+}
+
+#[test]
+fn verify_reports_a_renamed_version_as_renamed_and_not_as_overwritten() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let recorded = ops::snapshot_from_dir(&dir.path().join("a"), "a", "t0").unwrap();
+    // PATCH /v1/clusterprofiles/{uid}/metadata renames the profile: the uid and the version stay
+    let mut doc = read(&dir.path().join("a/profile.json"));
+    doc["metadata"]["name"] = Value::from("lab-profile-renamed");
+    let api = serve(MemoryApi::new(), dir.path(), "a", UID_A)
+        .with(format!("/v1/clusterprofiles/{UID_A}"), doc);
+    let v = ops::verify(&recorded, &Palette::new(api), "t1", &Progress::silent()).unwrap();
+    assert!(!v.unchanged);
+    let ver = v.diff.verify.as_ref().unwrap();
+    assert_eq!(ver.status, VerifyStatus::Drifted);
+    assert_eq!(ver.renamed_to.as_deref(), Some("lab-profile-renamed@1.2.0"));
+    assert!(ver.overwritten_by.is_none());
+    let line = verdict_of(&v, &recorded);
+    assert_eq!(
+        line,
+        "DRIFT: published version lab-profile@1.2.0 was renamed to lab-profile-renamed@1.2.0"
+    );
+    assert_eq!(
+        serde_json::to_value(ver).unwrap()["renamedTo"],
+        Value::from("lab-profile-renamed@1.2.0")
+    );
+
+    // a legacy version bump still overwrites the version in place
+    let mut doc = read(&dir.path().join("a/profile.json"));
+    doc["spec"]["version"] = Value::from("1.3.0");
+    let api = serve(MemoryApi::new(), dir.path(), "a", UID_A)
+        .with(format!("/v1/clusterprofiles/{UID_A}"), doc);
+    let v = ops::verify(&recorded, &Palette::new(api), "t1", &Progress::silent()).unwrap();
+    let ver = v.diff.verify.as_ref().unwrap();
+    assert_eq!(ver.overwritten_by.as_deref(), Some("lab-profile@1.3.0"));
+    assert!(ver.renamed_to.is_none());
+    assert!(
+        verdict_of(&v, &recorded).contains("was overwritten in place"),
+        "{}",
+        verdict_of(&v, &recorded)
+    );
+}

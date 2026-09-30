@@ -4,14 +4,14 @@ use super::{
     Renderer, VarLine, applied_ref, artifact_lines, artifacts_summary, chain_verdict,
     cluster_count, cluster_value, consumer_count, consumer_counts, consumers_heading,
     consumers_sentence, count_of, counts_line, cross_kind_note, dash, edge_hosts_line,
-    edited_in_place_note, entry_error, list_count, list_scope, macros_changed_note,
+    edited_in_place_note, entry_error, gone_sentence, list_count, list_scope, macros_changed_note,
     macros_changed_sentence, macros_note, overwritten_in_place_notes, pack_version, pair_detail,
     pair_word, palette_repave_lines, palette_repave_note, profiles_overwritten_sentence,
     project_label, record_detail, record_label, registry_note, registry_sync_suffix,
-    running_behind_notes, same_content_note, short, show, subject, tag_rename, tier_path,
-    tier_states, traits_suffix, unverified_sentence, updates_pending_notes, upstream_unknown_note,
-    values_changed_suffix, variable_lines, variables_comparable, variables_unavailable_note,
-    version_display, who_entry, who_heading,
+    running_behind_notes, same_content_note, short, show, state_suffix, subject, tag_rename,
+    tier_path, tier_states, traits_suffix, unverified_sentence, updates_pending_notes,
+    upstream_unknown_note, values_changed_suffix, variable_lines, variables_comparable,
+    variables_unavailable_note, version_display, who_entry, who_heading,
 };
 use crate::color::Paint;
 use crate::diff::{
@@ -405,9 +405,14 @@ impl Renderer for TerminalRenderer {
                     values_changed_suffix(v.cluster_values_changed)
                 ),
                 _ if v.gone => format!(
-                    "{}: {what} no longer exists: uid {} is gone from Palette since the record of {at}",
+                    "{}: {}",
                     p.bred("DRIFT"),
-                    v.uid
+                    gone_sentence(v, recorded, str::to_string)
+                ),
+                _ if v.renamed_to.is_some() => format!(
+                    "{}: {what} was renamed to {}",
+                    p.bred("DRIFT"),
+                    v.renamed_to.as_deref().unwrap_or_default()
                 ),
                 Some(now) => format!(
                     "{}: {what} now names {now}: the version recorded {at} was overwritten in place{}",
@@ -429,6 +434,7 @@ impl Renderer for TerminalRenderer {
         })
         .map(|mut line| {
             line.push_str(&registry_sync_suffix(v.registry_sync.as_ref()));
+            line.push_str(&state_suffix(v, recorded));
             if let Some(heading) = who_heading(v) {
                 line.push('\n');
                 line.push_str(&heading);

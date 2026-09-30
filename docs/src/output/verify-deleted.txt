@@ -1,0 +1,3 @@
+$ strata verify runs/payments.json
+...
+DRIFT: cluster payments no longer exists: deleted 2026-09-17T09:30:00Z

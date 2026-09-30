@@ -25,7 +25,7 @@ variables. The record says so in `source.variablesUnavailable`: see
 
 | Request | Gives |
 | --- | --- |
-| `GET /v1/spectroclusters/{uid}` | `spec.clusterProfileTemplates`: one applied profile each, with its packs. The state, in `status.state`. |
+| `GET /v1/spectroclusters/{uid}` | `spec.clusterProfileTemplates`: one applied profile each, with its packs. The state, in `status.state`. `verify` reads `status.state`, `metadata.isDeleted`, and `metadata.deletionTimestamp`: Palette keeps the document of a deleted cluster. |
 | `GET /v1/spectroclusters/{uid}/profiles/packs/manifests` | The registry digests and manifest contents, one entry for each applied profile. |
 | `GET /v1/spectroclusters/{uid}/variables` | The variable definitions and values, one entry for each applied profile. |
 | `GET /v1/dashboard/spectroclusters/meta` | The listing: `list clusters`, the uid of a cluster name, and the second reading of `consumers`. A cluster name goes out first as `GET /v1/spectroclusters/<name>`; strata reads the listing after that HTTP 404. |
@@ -54,10 +54,10 @@ into a condition of the search: the property `tags`, with the values
 
 | Request | Gives |
 | --- | --- |
-| `GET /v1/edgehosts/{uid}` | `spec.clusterProfileTemplates`: the profiles bound to the edge host. |
+| `GET /v1/edgehosts/{uid}` | `spec.clusterProfileTemplates`: the profiles bound to the edge host. `verify` reads the state in `status.state`, and takes a 404 as a host that is gone. |
 | `GET /v1/edgehosts/{uid}/pack/manifests/{manifestUid}` | `spec.published.content`: the copy of a manifest that the edge host holds, by the uid that its template names. |
 | `POST /v1/dashboard/edgehosts/search?limit=50` | Every edge host, every page, with a summary of its profiles: the uid of an edge host name, and the edge hosts that `consumers` counts. The body has no filter. |
-| `GET /v1/clustergroups/{uid}` | `spec.clusterProfileTemplates`: the profiles that the group pins for its virtual clusters. |
+| `GET /v1/clustergroups/{uid}` | `spec.clusterProfileTemplates`: the profiles that the group pins for its virtual clusters. `verify` reads `status.isActive`, and takes a 404 as a group that is gone. |
 | `GET /v1/clusterprofiles/{uid}/packs/{packName}/manifests/{manifestUid}` | `spec.published.content`: the copy of a manifest that a cluster group holds, by the uid that its template names. |
 | `GET /v1/clustergroups/hostCluster/metadata` | The name and the uid of each cluster group: the uid of a group name. |
 | `POST /v1/dashboard/clustergroups/{uid}/virtualClusters?limit=50` | The virtual clusters of the group, every page: `members[]` of the record. The body has no filter. |

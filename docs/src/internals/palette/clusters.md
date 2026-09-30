@@ -236,6 +236,8 @@ Spectro Cloud source gives the rest: a key with no value means the label is
 there, `negation` turns a condition with values over, and the search lists no
 virtual cluster unless its filter asks for the environment `nested`.
 
+## A deleted cluster
+
 A deleted cluster leaves this listing and keeps its document:
 `GET /v1/spectroclusters/<uid>` still answers `200`, with the state `Deleted`.
 So `cluster:<name>`, which strata resolves through the listing, does not go
@@ -247,6 +249,17 @@ listing keeps it with the state `Deleting`, and `consumers` lists it with that
 state and exits `1`. After, the listing drops it, the document reports
 `Deleted`, and `consumers` lists nothing and exits `0`. An apply of the Spectro
 Cloud provider then holds no cluster in the OpenTofu state.
+
+The Spectro Cloud source gives the rest of the document. The delete sets
+`metadata.isDeleted` to `true`, the time in `metadata.deletionTimestamp`, and
+the annotation `deleted`, and keeps the spec. So `verify` of a record of the
+cluster says `DRIFT: cluster <c> no longer exists: deleted <time>`, and not
+`OK`. The states of a cluster are `Pending`, `Provisioning`, `Running`,
+`Deleting`, `Deleted`, `Error`, `Importing`, `Adopting`, `Unknown`, `Paired`,
+and `Pairing`. `verify` ends its verdict with each state that is not
+`Running`. An edge host has the state `ready`, `unpaired`, or `in-use`, and a
+cluster group has `status.isActive`. A 404 for the uid of an edge host or a
+cluster group means that Palette no longer has it.
 
 ## A cluster on GCP
 
