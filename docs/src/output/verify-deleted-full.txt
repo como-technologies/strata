@@ -1,0 +1,19 @@
+$ strata verify runs/payments.json
+aws-stack@1.1.1 on cluster payments (uid 64f1000000000000000000e1)  ->  aws-stack@1.1.1 on cluster payments (uid 64f1000000000000000000e1)
+root       088136c929bd -> 487f5e18aa69   CHANGED
+
+  variables CHANGED
+        - variable platform_owner (required)
+  cluster tiers unchanged
+
+- [os   ] ubuntu-aws                 24.04              REMOVED
+      impact: node repave (os pack removed)
+- [k8s  ] kubernetes                 1.36.2             REMOVED
+      impact: node repave (k8s pack removed)
+- [cni  ] cni-cilium-oss             1.20.1             REMOVED
+      impact: cluster-wide infra addon removed
+- [csi  ] csi-aws-ebs                1.65.0             REMOVED
+      impact: cluster-wide infra addon removed
+- [addon] cert-manager               1.21.1             REMOVED
+      impact: addon removed in place
+DRIFT: cluster payments no longer exists: deleted 2026-09-17T09:30:00Z

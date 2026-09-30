@@ -142,8 +142,52 @@ pub fn run(r: &mut Runner) {
     getting_started(r);
     the_loop(r);
     commands(r);
+    verify_objects(r);
     use_cases(r);
     automation(r);
+}
+
+/// What `verify` says when the object of a record changed its state, went, or took another name.
+fn verify_objects(r: &mut Runner) {
+    r.chapter("verify-objects", DEV_ENV);
+    r.projects(&[("dev", DEV)]);
+    r.profile(DEV, A111, "1.1.1", "aws-stack@1.1.1", &[]);
+    r.cluster(DEV, PAYMENTS, "payments", &[A111]);
+    r.quiet("strata snapshot aws-stack@1.1.1 -o releases/1.1.1/dev.json");
+    r.quiet("strata snapshot cluster:payments -o runs/payments.json");
+    // the cluster goes: it runs the same copy, and the verdict says the state
+    r.cluster_field(DEV, PAYMENTS, "/status/state", json!("Deleting"));
+    r.step(
+        "verify-state-full",
+        0,
+        false,
+        "strata verify runs/payments.json",
+    );
+    r.excerpt("verify-state", "verify-state-full", r"^OK:");
+    // Palette deletes the cluster, and keeps its document
+    r.delete_cluster(DEV, PAYMENTS, "2026-09-17T11:05:00Z");
+    r.step(
+        "verify-deleted-full",
+        1,
+        false,
+        "strata verify runs/payments.json",
+    );
+    r.excerpt("verify-deleted", "verify-deleted-full", r"^DRIFT:");
+    // a rename keeps the uid and the version of the profile
+    r.edit(DEV, A111, &[Edit::Name("aws-stack-legacy")]);
+    r.step(
+        "verify-renamed-full",
+        1,
+        false,
+        "strata verify releases/1.1.1/dev.json",
+    );
+    r.excerpt("verify-renamed", "verify-renamed-full", r"^DRIFT:");
+    r.step(
+        "verify-objects-bulk",
+        1,
+        false,
+        "strata verify releases/1.1.1/dev.json runs/payments.json",
+    );
 }
 
 fn getting_started(r: &mut Runner) {

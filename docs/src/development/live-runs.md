@@ -359,9 +359,11 @@ line. It ends with the cluster gone and the profiles in place.
 | `audits-after`, `audit-records-change` | 0 | #66: the audit log has a new entry for the cluster |
 | `audit-says` | 0 | #66: that entry names who updated the cluster variables on the cluster |
 | `listing-before`, `listing-has-cluster`, `consumers-before`, `consumers-has-cluster` | 0, 0, 1, 0 | the listing holds the cluster, and `consumers` lists it under the add-on version, with exit 1: the version has a consumer |
+| `record-before-delete` | 0 | a record of the cluster's copy of the add-on profile, before the deletion |
 | `delete` | 0 | #66: `DELETE /v1/spectroclusters/<uid>` |
 | `listing-deleting`, `consumers-deleting`, `consumers-shows-deleting` | 0, 1, 0 | #66: while the cluster goes, the listing keeps it with the state `Deleting`, and `consumers` lists it with that state |
 | `doc-after`, `doc-after-deleted` | 0 | #66: the cluster document still answers, with the state `Deleted` |
+| `verify-deleted`, `verify-deleted-says` | 1, 0 | #139: `verify` of the record from before the deletion says `DRIFT: cluster <c> no longer exists: deleted <time>`, and exits 1. No run has passed this check yet. |
 | `listing-after`, `listing-drops-cluster` | 0 | #66: the listing no longer holds the cluster |
 | `consumers-after`, `consumers-drops-cluster` | 0 | #66: `consumers` no longer lists it, and exits 0: the version has no consumer |
 | `state-has-no-cluster` | 0 | an apply with `cluster=false` sees the deletion, and the OpenTofu state holds no cluster |

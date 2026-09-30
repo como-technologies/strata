@@ -373,6 +373,15 @@ impl Runner {
         self.tenant.repave_answer(project, cluster, required);
     }
 
+    /// Delete a cluster at the time `at`: see [`Tenant::delete_cluster`].
+    pub fn delete_cluster(&mut self, project: &str, uid: &str, at: &str) {
+        if !self.building() {
+            return;
+        }
+        self.changed();
+        self.tenant.delete_cluster(project, uid, at);
+    }
+
     /// Change one field of what Palette reports for a cluster, or its cloud config: see
     /// [`Tenant::cluster_field`].
     pub fn cluster_field(

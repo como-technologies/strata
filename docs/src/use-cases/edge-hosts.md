@@ -53,10 +53,11 @@ seed, and export what this one prints.
 {{#include ../output/edge-verify.txt}}
 ```
 
-Both records are `OK`. Palette gives an edge host its own copy of each manifest
-when it binds a profile, under a uid of its own, as a cluster has one. The edit
-does not reach the copy. Strata reads the copy of the host by that uid. The
-values of a pack are a copy too.
+Both records are `OK`. The line of the host ends with its state, `ready`:
+strata names the state of a host that is not `in-use`. Palette gives an edge
+host its own copy of each manifest when it binds a profile, under a uid of its
+own, as a cluster has one. The edit does not reach the copy. Strata reads the
+copy of the host by that uid. The values of a pack are a copy too.
 
 So the edge host now runs other content than the version that it names:
 

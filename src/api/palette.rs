@@ -7,7 +7,7 @@ use super::{PaletteApi, RawCluster, RawProfile};
 use crate::error::{Error, Result};
 use crate::progress::Progress;
 use crate::reference::LATEST;
-use crate::snapshot::APP_KIND;
+use crate::snapshot::{APP_KIND, SubjectKind};
 use crate::version;
 
 const PROFILE_LISTING: &str = "/v1/dashboard/clusterprofiles/metadata";
@@ -400,6 +400,53 @@ impl<A: PaletteApi> Palette<A> {
             }
             Err(e) => return Err(e),
         };
+        self.cluster_raw(&uid, cluster, progress)
+    }
+
+    /// The document of the cluster, edge host, or cluster group with the uid `uid`, and no
+    /// other: `GET /v1/spectroclusters/{uid}`, `GET /v1/edgehosts/{uid}`, or `GET
+    /// /v1/clustergroups/{uid}`. A 404 is an error, and no name is tried. Palette keeps the
+    /// document of a deleted cluster, with the state `Deleted`.
+    pub fn subject_document(
+        &self,
+        kind: SubjectKind,
+        uid: &str,
+        progress: &Progress,
+    ) -> Result<Value> {
+        progress.note(&format!("fetching {} {uid}", kind.noun()));
+        let base = match kind {
+            SubjectKind::Cluster => "/v1/spectroclusters",
+            SubjectKind::EdgeHost => "/v1/edgehosts",
+            SubjectKind::ClusterGroup => "/v1/clustergroups",
+        };
+        self.api.get_json(&format!("{base}/{}", query_value(uid)))
+    }
+
+    /// The raw documents of a cluster, an edge host, or a cluster group, from the document that
+    /// [`Palette::subject_document`] gives: the rest of what [`Palette::fetch_cluster`],
+    /// [`Palette::fetch_edge_host`], or [`Palette::fetch_cluster_group`] read.
+    pub fn subject_raw(
+        &self,
+        kind: SubjectKind,
+        doc: Value,
+        progress: &Progress,
+    ) -> Result<RawCluster> {
+        match kind {
+            SubjectKind::Cluster => {
+                let uid = doc
+                    .pointer("/metadata/uid")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .to_string();
+                self.cluster_raw(&uid, doc, progress)
+            }
+            SubjectKind::EdgeHost => self.holder_raw(doc, Holder::EdgeHost, progress),
+            SubjectKind::ClusterGroup => self.holder_raw(doc, Holder::ClusterGroup, progress),
+        }
+    }
+
+    /// The rest of the raw documents of the cluster `uid`, whose document is `cluster`.
+    fn cluster_raw(&self, uid: &str, cluster: Value, progress: &Progress) -> Result<RawCluster> {
         let manifests = self.api.get_json(&format!(
             "/v1/spectroclusters/{uid}/profiles/packs/manifests"
         ))?;
@@ -410,7 +457,7 @@ impl<A: PaletteApi> Palette<A> {
         )?;
         // the updates that wait for the cluster are a statement of Palette beside the copy, not
         // part of it: a failed read is recorded, and the record is still taken
-        let (notifications, notifications_error) = match self.cluster_notifications(&uid) {
+        let (notifications, notifications_error) = match self.cluster_notifications(uid) {
             Ok(items) => (Some(Value::Array(items)), None),
             Err(Error::Api { status, body, .. }) => {
                 progress.note(&format!(

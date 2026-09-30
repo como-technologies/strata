@@ -497,12 +497,14 @@ pub(crate) fn profiles_overwritten_sentence(v: &Verify, recorded: &Source) -> Op
     )
 }
 
+/// The verify part of the diff of a record that did not stay unchanged.
+fn record_verify(r: &crate::ops::VerifiedRecord) -> Option<&Verify> {
+    r.diff.as_ref().and_then(|d| d.verify.as_ref())
+}
+
 /// The sentence after a record's status.
 fn overwritten_by(r: &crate::ops::VerifiedRecord) -> Option<&str> {
-    r.diff
-        .as_ref()
-        .and_then(|d| d.verify.as_ref())
-        .and_then(|v| v.overwritten_by.as_deref())
+    record_verify(r).and_then(|v| v.overwritten_by.as_deref())
 }
 
 /// `uid u is name@1.2.0 on one side and name@1.3.0 on the other: the version was overwritten in
@@ -511,7 +513,7 @@ fn overwritten_by(r: &crate::ops::VerifiedRecord) -> Option<&str> {
 pub(crate) fn overwritten_in_place_notes(d: &Diff) -> Vec<String> {
     if d.verify
         .as_ref()
-        .is_some_and(|v| v.overwritten_by.is_some())
+        .is_some_and(|v| v.overwritten_by.is_some() || v.renamed_to.is_some())
     {
         return Vec::new();
     }
@@ -792,7 +794,19 @@ fn record_macros_changed(r: &crate::ops::VerifiedRecord) -> Vec<String> {
         .unwrap_or_default()
 }
 
+/// The sentence after a record's status, and the state of its object when it is not the state
+/// of one that runs: `; the state is Deleting`.
 pub(crate) fn record_detail(r: &crate::ops::VerifiedRecord) -> String {
+    let gone = record_verify(r).is_some_and(|v| v.gone);
+    match r.state.as_deref() {
+        Some(state) if !gone && !normal_state(state) => {
+            format!("{}; the state is {state}", record_sentence(r))
+        }
+        _ => record_sentence(r),
+    }
+}
+
+fn record_sentence(r: &crate::ops::VerifiedRecord) -> String {
     use crate::ops::RecordStatus;
     let sync = registry_sync_suffix(
         r.diff
@@ -816,6 +830,14 @@ pub(crate) fn record_detail(r: &crate::ops::VerifiedRecord) -> String {
                     .unwrap_or_default()
             )
         ),
+        RecordStatus::Drifted if record_verify(r).is_some_and(|v| v.gone) => {
+            let (v, d) = (record_verify(r).unwrap(), r.diff.as_ref().unwrap());
+            format!(
+                "{}{}",
+                gone_sentence(v, &d.a, str::to_string),
+                who_suffix(r)
+            )
+        }
         RecordStatus::Drifted if record_profiles_overwritten(r).is_some() => format!(
             "{}{}{}",
             record_profiles_overwritten(r).unwrap_or_default(),
@@ -829,6 +851,15 @@ pub(crate) fn record_detail(r: &crate::ops::VerifiedRecord) -> String {
             values_changed_suffix(record_values_changed(r)),
             who_suffix(r)
         ),
+        RecordStatus::Drifted if record_verify(r).is_some_and(|v| v.renamed_to.is_some()) => {
+            format!(
+                "was renamed to {}{}",
+                record_verify(r)
+                    .and_then(|v| v.renamed_to.as_deref())
+                    .unwrap_or_default(),
+                who_suffix(r)
+            )
+        }
         RecordStatus::Drifted if overwritten_by(r).is_some() => format!(
             "now names {}: the version recorded {} was overwritten in place{}{}",
             overwritten_by(r).unwrap_or_default(),
@@ -1087,6 +1118,46 @@ pub(crate) fn values_changed(n: usize) -> String {
         "{n} variable {} changed",
         if n == 1 { "value" } else { "values" }
     )
+}
+
+/// The state that a cluster, an edge host, or a cluster group has when it runs what it holds.
+fn normal_state(state: &str) -> bool {
+    matches!(state, "Running" | "in-use" | "active")
+}
+
+/// `; the cluster is Deleting`: the state of the object of a record, when it is not the state of
+/// one that runs what it holds, and the object is not gone. Nothing for a profile record.
+pub(crate) fn state_suffix(v: &Verify, recorded: &Source) -> String {
+    match (&recorded.cluster, &v.state) {
+        (Some(c), Some(state)) if !v.gone && !normal_state(state) => {
+            format!("; the {} is {state}", c.kind.noun())
+        }
+        _ => String::new(),
+    }
+}
+
+/// What a verdict names when the object of a record is gone: the cluster, the edge host, or the
+/// cluster group itself, and not the profile it ran; or the published version.
+fn gone_subject(recorded: &Source) -> String {
+    match &recorded.cluster {
+        Some(c) => format!("{} {}", c.kind.noun(), c.name),
+        None => subject(recorded),
+    }
+}
+
+/// `cluster c no longer exists: deleted <time>` when Palette keeps the document of the deleted
+/// object, else `... no longer exists: uid u is gone from Palette since the record of <time>`.
+/// `code` puts the uid in the form of the report.
+pub(crate) fn gone_sentence(v: &Verify, recorded: &Source, code: fn(&str) -> String) -> String {
+    let what = gone_subject(recorded);
+    match &v.deleted_at {
+        Some(at) => format!("{what} no longer exists: deleted {at}"),
+        None => format!(
+            "{what} no longer exists: uid {} is gone from Palette since the record of {}",
+            code(&v.uid),
+            recorded.fetched_at
+        ),
+    }
 }
 
 /// `; 1 variable value changed`, or nothing when none did.

@@ -35,6 +35,9 @@ pub enum Edit {
     OciCsi,
     /// Give the version another number, which a bump without the immutability flag does.
     Version(&'static str),
+    /// Give the profile another name, as `PATCH /v1/clusterprofiles/{uid}/metadata` does: the
+    /// uid and the version stay.
+    Name(&'static str),
     /// Add one command to `kubeadmconfig.postKubeadmCommands` of the Kubernetes pack: a key that
     /// Palette repaves on.
     KubeadmCommand(&'static str),
@@ -116,6 +119,7 @@ impl Edit {
                 }
             }
             Edit::Version(version) => doc["spec"]["version"] = json!(version),
+            Edit::Name(name) => doc["metadata"]["name"] = json!(name),
             Edit::KubeadmCommand(command) => {
                 for pack in packs_mut(doc) {
                     if pack["name"] == "kubernetes"
@@ -270,7 +274,12 @@ impl Tenant {
         scopes.sort();
         for project in &scopes {
             let profiles = self.documents_in(project, "v1/clusterprofiles");
-            let clusters = self.documents_in(project, "v1/spectroclusters");
+            // a deleted cluster leaves the listing and the search, and keeps its document
+            let clusters: Vec<Value> = self
+                .documents_in(project, "v1/spectroclusters")
+                .into_iter()
+                .filter(|d| d["status"]["state"] != "Deleted")
+                .collect();
             every_cluster.extend(clusters.iter().cloned());
             let items: Vec<Value> = profiles.iter().map(profile_row).collect();
             self.write(
@@ -782,6 +791,21 @@ impl Tenant {
             }),
         );
         self.write(project, &path, &log);
+    }
+
+    /// Delete a cluster as Palette does: the document stays, with the state `Deleted`,
+    /// `metadata.isDeleted`, the time in `metadata.deletionTimestamp`, and the annotation
+    /// `deleted`. The listing and the search drop it.
+    pub fn delete_cluster(&self, project: &str, uid: &str, at: &str) {
+        let path = format!("v1/spectroclusters/{uid}");
+        let mut doc = self.read(project, &path);
+        doc["status"]["state"] = json!("Deleted");
+        doc["metadata"]["isDeleted"] = json!(true);
+        doc["metadata"]["deletionTimestamp"] = json!(at);
+        doc["metadata"]["lastModifiedTimestamp"] = json!(at);
+        doc["metadata"]["annotations"]["deleted"] = json!("true");
+        self.write(project, &path, &doc);
+        self.listings();
     }
 
     /// Change one field of the document of a cluster, or of its cloud config, at a JSON pointer:
