@@ -382,7 +382,20 @@ the cluster as Palette holds it, which is the entity the provider sent, and on
 a change of the instance type of its worker pool, which the rules on a change
 must fail. `--build --down` tears the example down after, and reads the
 inventory of the cloud; without `--down` the cluster stays, and `just
-live-down` follows.
+live-down` follows. The watch of the build streams to the terminal.
+
+**`watch.sh`** is the watch a person sees. `just live-watch --build --down`
+makes cluster B beside cluster A, and from the moment Palette lists it runs
+`strata preflight cluster:UID --watch --verbose` on the terminal: one line for
+each rule at each reading, every 30 seconds, until the cluster is `Running` or
+a stuck state; then it removes cluster B. Cluster A stays as it is. Without
+`--build` it waits, by name, for a build started elsewhere. The report of the
+watch goes to `runs/<UTC time>/watch/out/`.
+
+```bash
+just live-profiles                # or just live-up; the profiles must be there
+just live-watch --build --down    # cluster B, watched, then removed: about 25 minutes
+```
 
 ```bash
 just live-down                                                # the profiles of one cloud at a time

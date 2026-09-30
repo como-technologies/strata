@@ -149,6 +149,10 @@ live-profiles: build
 live-preflight: build
     examples/live/preflight.sh
 
+# Watch a build on the terminal: strata preflight --watch --verbose on a cluster from the moment Palette lists it, one line for each rule at each reading (#91). --build makes cluster B beside A, --down removes it after; needs live-profiles or live-up.
+live-watch *args: build
+    examples/live/watch.sh {{args}}
+
 # The test plan of #91 for one engine: each fault on purpose fails, and a clean entity passes; the run goes to the ledger. Needs live-profiles with that cloud; --build adds the build of cluster A, watched, and the checks of the cluster; --build --down tears it down after.
 live-preflight-plan engine *args: build
     examples/live/preflight-plan.sh {{engine}} {{args}}

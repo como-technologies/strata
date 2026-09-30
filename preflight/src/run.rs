@@ -301,6 +301,23 @@ fn verbose_line(rule: &Rule, o: &Outcome) -> String {
     line
 }
 
+/// One line of `--verbose` at a reading of the watch: the rule and its verdict, with the first
+/// message when it did not pass. The time of a watch rule is the time of the reading, which the
+/// line above it names, so no time here.
+fn watch_line(rule: &Rule, o: &Outcome) -> String {
+    let mut line = format!(
+        "watch: {}: {}",
+        rule.id,
+        report::label_for(o.verdict, rule.level, rule.severity)
+    );
+    if o.verdict != Verdict::Passed
+        && let Some(m) = o.messages.first()
+    {
+        line.push_str(&format!(": {m}"));
+    }
+    line
+}
+
 /// A failed rule ends the watch when its failure counts: severity `fail` at the preflight level,
 /// or any failed probe with `--strict`. A warning or a note never ends it.
 fn counts(rule: &Rule, strict: bool) -> bool {
@@ -402,7 +419,7 @@ pub fn watch<A: PaletteApi>(inputs: WatchInputs<'_, A>) -> Result<(Report, Value
         if verbose {
             for rule in &rules {
                 if let Some(o) = last.get(&rule.id) {
-                    progress.note(&verbose_line(rule, o));
+                    progress.note(&watch_line(rule, o));
                 }
             }
         }
