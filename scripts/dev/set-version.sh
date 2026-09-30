@@ -90,8 +90,8 @@ for f in "${files[@]}"; do
   fi
 done
 
-# Cargo.lock carries the version of this crate; cargo writes it
-cargo update --offline --package strata --precise "$new" >/dev/null 2>&1 \
+# Cargo.lock carries the version of each crate of the workspace; cargo writes it
+cargo update --offline --workspace >/dev/null 2>&1 \
   || cargo check --quiet >/dev/null 2>&1 || true
 
 git add -- "${files[@]}" Cargo.lock

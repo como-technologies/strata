@@ -122,6 +122,27 @@ fn the_readme_version_badge_is_the_version_in_cargo_toml() {
     );
 }
 
+/// A release ships `strata` and `strata-preflight` together, and the book says that
+/// `strata-preflight --version` is the version of `strata`. The preflight crate has its own
+/// manifest, so it can drift: `just version` rewrites it only while it names the same version.
+#[test]
+fn the_preflight_crate_has_the_version_of_strata() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let version_of = |manifest: &str| {
+        read(&root.join(manifest))
+            .lines()
+            .find_map(|l| l.strip_prefix("version = \"").map(str::to_owned))
+            .and_then(|l| l.strip_suffix('"').map(str::to_owned))
+            .unwrap_or_else(|| panic!("{manifest} has a version line"))
+    };
+    let strata = version_of("Cargo.toml");
+    let preflight = version_of("preflight/Cargo.toml");
+    assert_eq!(
+        preflight, strata,
+        "preflight/Cargo.toml is {preflight} and Cargo.toml is {strata}: a release keeps them equal"
+    );
+}
+
 #[test]
 fn every_page_the_navigation_names_exists() {
     let summary = read(&docs().join("SUMMARY.md"));
