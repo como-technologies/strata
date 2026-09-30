@@ -90,8 +90,10 @@ struct Request {
 }
 
 /// The clusters of the search file that the body of a search selects, as Palette reads it: each
-/// group of conditions holds, and a condition on `tags` holds when a value `key:value` names a
-/// label of the cluster, or a value `key` names a label key.
+/// group of conditions holds. A condition on `tags` holds when a value `key:value` names a label
+/// of the cluster, or a value `key` names a label key; on `clusterProfiles` when a value is the
+/// uid of a profile of the cluster; on `environment` when a value is its cloud type. The search
+/// leaves out each virtual cluster, of the cloud type `nested`, unless a condition asks for it.
 fn searched(file: &[u8], body: &[u8]) -> Vec<u8> {
     let Ok(mut doc) = serde_json::from_slice::<serde_json::Value>(file) else {
         return file.to_vec();
@@ -101,32 +103,51 @@ fn searched(file: &[u8], body: &[u8]) -> Vec<u8> {
         .as_array()
         .cloned()
         .unwrap_or_default();
-    let holds = |labels: &serde_json::Value, item: &serde_json::Value| {
+    let holds = |cluster: &serde_json::Value, item: &serde_json::Value| {
         let c = &item["condition"]["string"];
+        let labels = &cluster["metadata"]["labels"];
+        let summary = &cluster["specSummary"];
         let hit = c["match"]["values"]
             .as_array()
             .into_iter()
             .flatten()
             .any(|v| {
                 let v = v.as_str().unwrap_or_default();
-                match v.split_once(':') {
-                    Some((k, value)) => labels[k] == value,
-                    None => labels.get(v).is_some(),
+                match item["property"].as_str().unwrap_or_default() {
+                    "clusterProfiles" => summary["clusterProfileTemplates"]
+                        .as_array()
+                        .into_iter()
+                        .flatten()
+                        .any(|t| t["uid"] == v),
+                    "environment" => summary["cloudConfig"]["cloudType"] == v,
+                    _ => match v.split_once(':') {
+                        Some((k, value)) => labels[k] == value,
+                        None => labels.get(v).is_some(),
+                    },
                 }
             });
         hit != c["negation"].as_bool().unwrap_or(false)
     };
+    let asks_nested = groups.iter().any(|g| {
+        g["filters"].as_array().into_iter().flatten().any(|f| {
+            f["property"] == "environment"
+                && f["condition"]["string"]["match"]["values"]
+                    .as_array()
+                    .is_some_and(|vs| vs.iter().any(|v| v == "nested"))
+        })
+    });
     if let Some(items) = doc["items"].as_array_mut() {
         items.retain(|cluster| {
-            let labels = &cluster["metadata"]["labels"];
-            groups.iter().all(|g| {
-                let filters = g["filters"].as_array().cloned().unwrap_or_default();
-                if g["conjunction"] == "or" {
-                    filters.iter().any(|f| holds(labels, f))
-                } else {
-                    filters.iter().all(|f| holds(labels, f))
-                }
-            })
+            let nested = cluster["specSummary"]["cloudConfig"]["cloudType"] == "nested";
+            (asks_nested || !nested)
+                && groups.iter().all(|g| {
+                    let filters = g["filters"].as_array().cloned().unwrap_or_default();
+                    if g["conjunction"] == "or" {
+                        filters.iter().any(|f| holds(cluster, f))
+                    } else {
+                        filters.iter().all(|f| holds(cluster, f))
+                    }
+                })
         });
     }
     doc.to_string().into_bytes()

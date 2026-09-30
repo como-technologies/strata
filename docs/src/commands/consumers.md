@@ -90,11 +90,34 @@ The consumer list of the app profile stands alone: strata does no second
 reading, and reads no edge host. The two last lines say why. See
 [An app profile is updated in place](../use-cases/app-profiles.md#4-find-the-app-deployments-before-a-delete).
 
+## A cluster that the list does not name
+
+The consumer list of Palette can leave out a cluster that runs the version.
+Here the virtual cluster `tenant-b` runs `platform-addons@1.0.0`, and the list
+names `tenant-a` alone:
+
+```text
+{{#include ../output/group-consumers.txt}}
+```
+
+Exit `1`. The second reading asks the cluster search of Palette for the
+clusters that run the version. It sends two searches: one with
+`clusterProfiles` equal to the uid of the profile, and one that also has the
+environment `nested`. The search leaves out each virtual cluster unless a
+condition asks for it. Strata then reads each cluster that the search names and
+the list does not, for its state and the version that its copy names. The
+cluster listing names no virtual cluster, so a reading of the listing cannot
+find `tenant-b`. See
+[What the cluster listing answers](../internals/palette/clusters.md#what-the-cluster-listing-answers).
+
 ## The list of Palette alone
 
 `--list-only` reads the consumer list that Palette computes, and no other
-cluster. It costs one request for each consumer, where the second reading costs
-one for each cluster of the fleet:
+cluster. It costs one request for each consumer. The second reading costs one
+request for each 50 clusters that the search names, and one for each cluster
+that the list does not name. When the search of Palette takes no
+`clusterProfiles`, the second reading costs one request for each cluster of the
+fleet:
 
 ```text
 {{#include ../output/consumers-list-only.txt}}
@@ -129,11 +152,18 @@ version bump or a rename overwrote the version that the cluster runs. See
 - A cluster that strata cannot read shows `unknown` and the error. Strata counts
   it as a consumer, so the exit status is `1`.
 - Palette computes `status.inUseClusters` when it is asked, in the projects the
-  key can read. So strata reads each
-  cluster the key can list as well, for the profiles it applies. A cluster that
+  key can read. So strata does a second reading, at tenant scope, and at the
+  scope of the key when it cannot read the tenant. It asks the cluster search
+  for the clusters that run the version, the virtual clusters too, and reads
+  each cluster that the search names and the list does not. A cluster that
   applies the version and is not in the list joins the answer, marked
-  `not in the consumer list of the profile`. The last line says how far that
-  second reading got: `second reading: 3 of 3 clusters read`, or
+  `not in the consumer list of the profile`.
+- When the search of Palette takes no `clusterProfiles`, or Palette has no
+  search, strata reads each cluster of the cluster listing for the profiles it
+  applies. The listing names no virtual cluster.
+- The last line says how far the second reading got:
+  `second reading: the cluster search finds 1 other cluster, 1 read` from the
+  search, `second reading: 3 of 3 clusters read` from the listing, or
   `second reading: not done` with the reason.
 - Strata then searches the edge hosts, at tenant scope, and at the scope of
   the key when it cannot read the tenant. An edge host that the version is
@@ -158,7 +188,7 @@ version bump or a rename overwrote the version that the cluster runs. See
 
 | Exit | Meaning |
 | --- | --- |
-| `0` | Nothing uses the version: the profile lists no cluster and no cluster template, no cluster the key can list applies it, and no edge host is bound to it. For an app profile: the app profile lists no app deployment. |
+| `0` | Nothing uses the version: the profile lists no cluster and no cluster template, the second reading finds no cluster that applies it, and no edge host is bound to it. For an app profile: the app profile lists no app deployment. |
 | `1` | A cluster, an edge host, a cluster template, or an app deployment uses the version. |
 | `2` | Strata could not answer. |
 

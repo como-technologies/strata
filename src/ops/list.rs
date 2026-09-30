@@ -446,7 +446,9 @@ pub(super) fn list_clusters(doc: &Value) -> Vec<ListedCluster> {
                 cloud_type: Some(text(it, "/spec/cloudType"))
                     .filter(|t| !t.is_empty())
                     .unwrap_or_else(|| text(it, "/specSummary/cloudConfig/cloudType")),
-                project_uid: text(it, "/metadata/annotations/projectUid"),
+                project_uid: Some(text(it, "/metadata/annotations/projectUid"))
+                    .filter(|p| !p.is_empty())
+                    .unwrap_or_else(|| text(it, "/specSummary/projectMeta/uid")),
                 project_name: text(it, "/specSummary/projectMeta/name"),
                 labels: it
                     .pointer("/metadata/labels")

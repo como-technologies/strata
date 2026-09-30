@@ -28,7 +28,7 @@ variables. The record says so in `source.variablesUnavailable`: see
 | `GET /v1/spectroclusters/{uid}` | `spec.clusterProfileTemplates`: one applied profile each, with its packs. The state, in `status.state`. `verify` reads `status.state`, `metadata.isDeleted`, and `metadata.deletionTimestamp`: Palette keeps the document of a deleted cluster. |
 | `GET /v1/spectroclusters/{uid}/profiles/packs/manifests` | The registry digests and manifest contents, one entry for each applied profile. |
 | `GET /v1/spectroclusters/{uid}/variables` | The variable definitions and values, one entry for each applied profile. |
-| `GET /v1/dashboard/spectroclusters/meta` | The listing: `list clusters`, the uid of a cluster name, and the second reading of `consumers`. A cluster name goes out first as `GET /v1/spectroclusters/<name>`; strata reads the listing after that HTTP 404. |
+| `GET /v1/dashboard/spectroclusters/meta` | The listing: `list clusters`, the uid of a cluster name, and the second reading of `consumers` when the search takes no `clusterProfiles`. A cluster name goes out first as `GET /v1/spectroclusters/<name>`; strata reads the listing after that HTTP 404. |
 | `GET /v1/dashboard/spectroclusters/{uid}` | The summary: the health of the cluster, in `status.health.state`. The cluster document does not carry it. No command reads this request. [The knurl adapter](../automation/knurl.md) reads it for each cluster. |
 | `GET /v1/notifications/spectrocluster/{uid}` | Whether an update waits for the cluster, every page. A cluster record and `list clusters --applied` read it. |
 | `GET /v1/spectroclusters/{uid}/profileUpdates` | `profiles[]`: each profile of the cluster as the update that waits gives it, in the shape of `spec.clusterProfileTemplates`. `cluster:<cluster>@pending` reads it. |
@@ -41,8 +41,8 @@ variables. The record says so in `source.variablesUnavailable`: see
 
 | Request | Gives |
 | --- | --- |
-| `GET /v1/dashboard/spectroclusters/search/schema` | The properties that the cluster search takes. Strata searches when it names `tags`. |
-| `POST /v1/dashboard/spectroclusters/search?limit=50` | The clusters that the filter of the body selects, every page, at tenant scope: each with its labels, its project, and its cloud. `list clusters --tag` and `--filter`, and a `tag:` or `filter:` ref, read it. The request changes nothing. |
+| `GET /v1/dashboard/spectroclusters/search/schema` | The properties that the cluster search takes. `list` searches when it names `tags`, and the second reading of `consumers` when it names `clusterProfiles`. |
+| `POST /v1/dashboard/spectroclusters/search?limit=50` | The clusters that the filter of the body selects, every page, at tenant scope: each with its labels, its project, its cloud, and its profiles. `list clusters --tag` and `--filter`, and a `tag:` or `filter:` ref, read it. The second reading of `consumers` reads it twice: with `clusterProfiles eq <profile uid>`, and with `environment eq nested` too, for the virtual clusters. The request changes nothing. |
 | `GET /v1/filters/metadata?filterType=tag` | The name and the uid of each saved tag filter of the tenant. |
 | `GET /v1/filters/tag/{uid}` | One saved tag filter: `spec.filterGroup`, its conjunction and its conditions. |
 

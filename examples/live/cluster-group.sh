@@ -75,6 +75,25 @@ if stage 1 "a cluster group, and a virtual cluster in it"; then
     jq -e --arg m "$M" '.consumers[] | select(.uid == $m and (.unlisted | not))' member-consumer.out
   check member-not-in-listing 0 '#78: the cluster listing does not name the virtual cluster' -- \
     bash -c "\"$live/api.sh\" get /v1/dashboard/spectroclusters/meta | jq -e --arg m $M '[.. | objects | select(has(\"metadata\")) | .metadata.uid] | index(\$m) | not'"
+  # the search with the add-on uid, as the second reading of consumers sends it (#149)
+  condition='{property: $p, type: "string", condition: {string: {operator: "eq", negation: false,
+    ignoreCase: false, match: {conjunction: "or", values: [$v]}}}}'
+  jq -nc --arg p clusterProfiles --arg v "$AD" "{filter: {conjunction: \"and\", filterGroups:
+    [{conjunction: \"and\", filters: [$condition]}]}, sort: []}" > search-profile.json
+  jq -c --arg p environment --arg v nested ".filter.filterGroups[0].filters += [$condition]" \
+    search-profile.json > search-nested.json
+  check search-profile 0 '#149: the cluster search with clusterProfiles eq the add-on uid' -- \
+    "$live/api.sh" post '/v1/dashboard/spectroclusters/search?limit=50' "$(cat search-profile.json)"
+  check search-profile-runs 0 '#149: each cluster it answers runs the add-on version, and the virtual cluster is not one' -- \
+    jq -e --arg a "$AD" --arg m "$M" '(.items | length > 0)
+      and all(.items[]; [.specSummary.clusterProfileTemplates[].uid] | index($a))
+      and ([.items[].metadata.uid] | index($m) | not)' search-profile.out
+  check search-nested 0 '#149: the same search with environment eq nested' -- \
+    "$live/api.sh" post '/v1/dashboard/spectroclusters/search?limit=50' "$(cat search-nested.json)"
+  check search-nested-member 0 '#149: it answers the virtual cluster of the group' -- \
+    jq -e --arg m "$M" '[.items[].metadata.uid] | index($m)' search-nested.out
+  check member-consumer-search 0 '#149: consumers read the second reading from the search' -- \
+    jq -e '.clustersRead.resolved == "search"' member-consumer.out
 fi
 
 G=${G:-$(out cluster_group_uid)} M=${M:-$(out member_cluster_uid)}

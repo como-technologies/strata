@@ -2034,6 +2034,185 @@ fn the_second_reading_finds_a_consumer_the_profile_does_not_list() {
     assert_eq!(json["clustersRead"]["read"], 1);
 }
 
+const CLUSTER_SEARCH: &str = "/v1/dashboard/spectroclusters/search?limit=50";
+
+/// The body of a cluster search for the clusters that run `uid`, and with `nested` for the
+/// virtual clusters that run it, as the second reading of `consumers` sends it.
+fn profile_search(uid: &str, nested: bool) -> Value {
+    let condition = |property: &str, value: &str| {
+        serde_json::json!({
+            "property": property, "type": "string",
+            "condition": {"string": {"operator": "eq", "negation": false, "ignoreCase": false,
+                "match": {"conjunction": "or", "values": [value]}}},
+        })
+    };
+    let mut filters = vec![condition("clusterProfiles", uid)];
+    if nested {
+        filters.push(condition("environment", "nested"));
+    }
+    serde_json::json!({
+        "filter": {"conjunction": "and",
+                   "filterGroups": [{"conjunction": "and", "filters": filters}]},
+        "sort": [{"field": "clusterName", "order": "asc"}],
+    })
+}
+
+/// A cluster as the search gives it: a summary, with the project in `specSummary`.
+fn search_item(uid: &str, name: &str, project: &str, cloud: &str) -> Value {
+    serde_json::json!({
+        "metadata": {"uid": uid, "name": name},
+        "specSummary": {"cloudConfig": {"cloudType": cloud},
+                        "projectMeta": {"uid": project, "name": "lab"}},
+        "status": {"state": "Running"},
+    })
+}
+
+#[test]
+fn the_second_reading_asks_the_cluster_search_and_finds_a_virtual_cluster() {
+    // the consumer list is empty; the search names one cluster, and with environment nested one
+    // virtual cluster, both with the profile
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let runs = |uid: &str, name: &str| {
+        let mut doc = cluster_doc(uid, name, "p1", "Running");
+        doc["spec"] = serde_json::json!({"clusterProfileTemplates": [
+            {"uid": UID_A, "name": "lab-profile", "profileVersion": "1.2.0", "type": "cluster"}
+        ]});
+        doc
+    };
+    let api = serve(MemoryApi::new(), dir.path(), "a", UID_A)
+        .with(
+            "/v1/dashboard/spectroclusters/search/schema",
+            serde_json::json!({"schema": {"properties": [
+                {"name": "clusterProfiles", "type": "string"},
+                {"name": "environment", "type": "string"}]}}),
+        )
+        .with_post(
+            CLUSTER_SEARCH,
+            &profile_search(UID_A, false),
+            serde_json::json!({"items": [search_item("cluster-ccc", "gamma", "p1", "aws")],
+                               "listmeta": {"continue": ""}}),
+        )
+        .with_post(
+            CLUSTER_SEARCH,
+            &profile_search(UID_A, true),
+            serde_json::json!({"items": [search_item("cluster-vvv", "vc-1", "p1", "nested")],
+                               "listmeta": {"continue": ""}}),
+        )
+        .with(
+            "/v1/spectroclusters/cluster-ccc",
+            runs("cluster-ccc", "gamma"),
+        )
+        .with(
+            "/v1/spectroclusters/cluster-vvv",
+            runs("cluster-vvv", "vc-1"),
+        );
+    let r = ops::consumers(
+        &Ref::Uid(UID_A.into()),
+        |_| Ok(Palette::new(&api)),
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert_eq!((r.count, r.exit_code()), (2, 1));
+    let found: Vec<(&str, &str, bool)> = r
+        .consumers
+        .iter()
+        .map(|c| (c.uid.as_str(), c.project_uid.as_str(), c.unlisted))
+        .collect();
+    assert_eq!(
+        found,
+        [("cluster-ccc", "p1", true), ("cluster-vvv", "p1", true)]
+    );
+    assert_eq!(r.clusters_read.resolved, Some(ops::Resolved::Search));
+    assert_eq!((r.clusters_read.read, r.clusters_read.unread), (2, 0));
+    // two searches and two cluster documents, and no listing
+    let searches = api
+        .posted()
+        .into_iter()
+        .filter(|(path, _)| path == CLUSTER_SEARCH)
+        .count();
+    assert_eq!(searches, 2);
+    assert_eq!(api.calls("/v1/spectroclusters/cluster-ccc"), 1);
+    assert_eq!(api.calls("/v1/spectroclusters/cluster-vvv"), 1);
+    assert_eq!(api.calls("/v1/dashboard/spectroclusters/meta"), 0);
+
+    let text = render::renderer(Format::Terminal, Paint::off(), false)
+        .render_consumers(&r)
+        .unwrap();
+    assert_eq!(
+        text.matches("not in the consumer list of the profile")
+            .count(),
+        2,
+        "{text}"
+    );
+    assert!(
+        text.contains("  second reading: the cluster search finds 2 other clusters, 2 read\n"),
+        "{text}"
+    );
+    let json: Value = serde_json::from_str(
+        &render::renderer(Format::Json, Paint::off(), true)
+            .render_consumers(&r)
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(json["clustersRead"]["resolved"], "search");
+}
+
+#[test]
+fn the_second_reading_reads_the_listing_when_the_search_takes_no_profile() {
+    // the search schema names no clusterProfiles: strata reads the listing and each cluster, as
+    // before the search
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let mut applies = cluster_doc("cluster-ccc", "gamma", "p1", "Running");
+    applies["spec"] = serde_json::json!({"clusterProfileTemplates": [
+        {"uid": UID_A, "name": "lab-profile", "profileVersion": "1.2.0", "type": "cluster"}
+    ]});
+    let api = serve(MemoryApi::new(), dir.path(), "a", UID_A)
+        .with(
+            "/v1/dashboard/spectroclusters/search/schema",
+            serde_json::json!({"schema": {"properties": [{"name": "tags", "type": "string"}]}}),
+        )
+        .with(
+            "/v1/dashboard/spectroclusters/meta",
+            serde_json::json!([
+                {"metadata": {"name": "gamma", "uid": "cluster-ccc",
+                              "annotations": {"projectUid": "p1"}},
+                 "status": {"state": "Running"}},
+                {"metadata": {"name": "delta", "uid": "cluster-ddd",
+                              "annotations": {"projectUid": "p1"}},
+                 "status": {"state": "Running"}},
+            ]),
+        )
+        .with("/v1/spectroclusters/cluster-ccc", applies)
+        .with(
+            "/v1/spectroclusters/cluster-ddd",
+            cluster_doc("cluster-ddd", "delta", "p1", "Running"),
+        );
+    let r = ops::consumers(
+        &Ref::Uid(UID_A.into()),
+        |_| Ok(Palette::new(&api)),
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert_eq!((r.count, r.exit_code()), (1, 1));
+    assert_eq!(r.consumers[0].uid, "cluster-ccc");
+    assert_eq!(r.clusters_read.resolved, Some(ops::Resolved::Listing));
+    assert_eq!((r.clusters_read.read, r.clusters_read.unread), (2, 0));
+    assert!(api.posted().iter().all(|(path, _)| path != CLUSTER_SEARCH));
+    assert!(api.calls("/v1/dashboard/spectroclusters/meta") >= 1);
+    assert_eq!(api.calls("/v1/spectroclusters/cluster-ddd"), 1);
+    let text = render::renderer(Format::Terminal, Paint::off(), false)
+        .render_consumers(&r)
+        .unwrap();
+    assert!(
+        text.contains("  second reading: 2 of 2 clusters read\n"),
+        "{text}"
+    );
+}
+
 #[test]
 fn consumers_list_only_reads_the_list_of_palette_and_says_that_it_did_not_walk() {
     // the fleet of the test above: one cluster applies the version, and the profile lists none
