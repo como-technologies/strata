@@ -23,7 +23,8 @@ Quotas and limits
   PROBE FAIL    worker-cpu-floor             The workers have the CPU the packs need                          1 ms  catch 4/4 (47%) clean 6/6 (61%)
                 pool worker-pool: A minimum allocation of '4.1' CPU cores is required across all worker nodes
                 ran: POST /v1/spectroclusters/aws/validate -> HTTP 200
-                reproduce: code=$(curl -s -o body.json -w '%{http_code}' -H "ApiKey: $PALETTE_API_KEY" -H "ProjectUid: $PALETTE_PROJECT_UID" -X POST -H 'Content-Type: application/json' --data @$OUT/entity.json "${PALETTE_API:-https://api.spectrocloud.com}/v1/spectroclusters/aws/validate")
+                reproduce: jq '. as $w | .entity | if $w.clusterUid != null then .metadata.name = ((.metadata.name // "cluster") + "-preflight") else . end' $OUT/world.json > request.json
+                reproduce: code=$(curl -s -o body.json -w '%{http_code}' -H "ApiKey: $PALETTE_API_KEY" -H "ProjectUid: $PALETTE_PROJECT_UID" -X POST -H 'Content-Type: application/json' --data @request.json "${PALETTE_API:-https://api.spectrocloud.com}/v1/spectroclusters/aws/validate")
                 reproduce: jq --arg code "$code" --slurpfile body body.json '.response = {ok: (($code | tonumber) < 300), status: ($code | tonumber), body: ($body[0] // null)} | .response as $r | if ($r.ok | not) then [] # a refusal of the whole entity is palette-validate'\''s else [ ($r.body.machinePools.results // [])[] | .name as $n | (.errors // [])[] | select((.message // "") | test("CPU|memory|cores"; "i")) | "pool \($n): \(.message)" ] end' $OUT/world.json
                 fix: Call the validate route at plan time. (provider)
   NOT CHECKED   vcluster-min                 A virtual cluster has 3 cores or more                            1 ms
@@ -122,7 +123,8 @@ The Palette platform
   PROBE FAIL    palette-validate             The validate route of Palette for the cloud type passes          1 ms  catch 4/4 (47%) clean 6/6 (61%)
                 pool worker-pool: MachinePoolResourcesInsufficient: A minimum allocation of '4.1' CPU cores is required across all worker nodes
                 ran: POST /v1/spectroclusters/aws/validate -> HTTP 200
-                reproduce: code=$(curl -s -o body.json -w '%{http_code}' -H "ApiKey: $PALETTE_API_KEY" -H "ProjectUid: $PALETTE_PROJECT_UID" -X POST -H 'Content-Type: application/json' --data @$OUT/entity.json "${PALETTE_API:-https://api.spectrocloud.com}/v1/spectroclusters/aws/validate")
+                reproduce: jq '. as $w | .entity | if $w.clusterUid != null then .metadata.name = ((.metadata.name // "cluster") + "-preflight") else . end' $OUT/world.json > request.json
+                reproduce: code=$(curl -s -o body.json -w '%{http_code}' -H "ApiKey: $PALETTE_API_KEY" -H "ProjectUid: $PALETTE_PROJECT_UID" -X POST -H 'Content-Type: application/json' --data @request.json "${PALETTE_API:-https://api.spectrocloud.com}/v1/spectroclusters/aws/validate")
                 reproduce: jq --arg code "$code" --slurpfile body body.json '.response = {ok: (($code | tonumber) < 300), status: ($code | tonumber), body: ($body[0] // null)} | .response as $r | if ($r.ok | not) then ["Palette refused the entity: \($r.body.code // $r.status): \($r.body.message // ($r.body | tostring))"] else [ ($r.body.profiles // [])[] | .uid as $u | (.packs.results // [])[] | .name as $n | (.errors // [])[] | "profile \($u), pack \($n): \(.code): \(.message)" ] + [ ($r.body.machinePools.results // [])[] | .name as $n | (.errors // [])[] | "pool \($n): \(.code): \(.message)" ] end' $OUT/world.json
                 fix: Run the validate route at the start of each create, and add it to the SDK and the provider. (palette)
   NOT CHECKED   validate-routes-unused       Only the console calls the cluster validate routes               1 ms

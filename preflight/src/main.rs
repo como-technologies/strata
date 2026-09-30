@@ -242,74 +242,18 @@ fn expand(patterns: &[String]) -> Result<Vec<PathBuf>> {
     Ok(out)
 }
 
-/// A pattern over the file system, with `*`, `?`, and `**`, by the same rules strata uses.
+/// A pattern over the file system, expanded by the same crate as strata, so `releases/**/*.json`
+/// names the records at every depth, the ones directly under `releases/` too.
 fn glob_paths(pattern: &str) -> Result<Vec<PathBuf>> {
-    // one directory at a time: split the pattern at the first part with a wildcard
-    let path = std::path::Path::new(pattern);
-    let mut fixed = PathBuf::new();
-    let mut rest: Vec<String> = Vec::new();
-    let mut wild = false;
-    for part in path.components() {
-        let s = part.as_os_str().to_string_lossy().to_string();
-        if wild || s.contains(['*', '?', '[']) {
-            wild = true;
-            rest.push(s);
-        } else {
-            fixed.push(&s);
-        }
-    }
-    let root = if fixed.as_os_str().is_empty() {
-        PathBuf::from(".")
-    } else {
-        fixed
-    };
-    let mut out = Vec::new();
-    walk(&root, &rest, &mut out);
+    let mut out: Vec<PathBuf> = glob::glob(pattern)
+        .map_err(|e| Error::Usage {
+            message: format!("--records '{pattern}' is not a valid pattern: {}", e.msg),
+        })?
+        .filter_map(std::result::Result::ok)
+        .filter(|p| p.is_file())
+        .collect();
     out.sort();
     Ok(out)
-}
-
-fn walk(dir: &std::path::Path, parts: &[String], out: &mut Vec<PathBuf>) {
-    let Some((first, tail)) = parts.split_first() else {
-        if dir.is_file() {
-            out.push(dir.to_path_buf());
-        }
-        return;
-    };
-    let Ok(entries) = std::fs::read_dir(dir) else {
-        return;
-    };
-    let mut names: Vec<PathBuf> = entries.flatten().map(|e| e.path()).collect();
-    names.sort();
-    for p in names {
-        let name = p
-            .file_name()
-            .map(|n| n.to_string_lossy().to_string())
-            .unwrap_or_default();
-        if first == "**" {
-            if p.is_dir() {
-                walk(&p, parts, out);
-            }
-            walk(&p, tail, out);
-        } else if wildcard_match(first, &name) {
-            walk(&p, tail, out);
-        }
-    }
-}
-
-fn wildcard_match(pattern: &str, text: &str) -> bool {
-    let p: Vec<char> = pattern.chars().collect();
-    let t: Vec<char> = text.chars().collect();
-    fn go(p: &[char], t: &[char]) -> bool {
-        match (p.first(), t.first()) {
-            (None, None) => true,
-            (Some('*'), _) => go(&p[1..], t) || (!t.is_empty() && go(p, &t[1..])),
-            (Some('?'), Some(_)) => go(&p[1..], &t[1..]),
-            (Some(a), Some(b)) if a == b => go(&p[1..], &t[1..]),
-            _ => false,
-        }
-    }
-    go(&p, &t)
 }
 
 fn connect(progress: Progress) -> Result<Palette<Retry<HttpApi>>> {
@@ -601,9 +545,40 @@ mod tests {
     }
 
     #[test]
-    fn wildcards() {
-        assert!(wildcard_match("*.json", "a.json"));
-        assert!(!wildcard_match("*.json", "a.yaml"));
-        assert!(wildcard_match("rel-?.json", "rel-1.json"));
+    fn a_records_pattern_matches_at_every_depth_and_a_plain_path_stays() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path().to_path_buf();
+        for f in [
+            "releases/x.json",
+            "releases/aws/a.json",
+            "releases/aws/2026/b.json",
+        ] {
+            let path = dir.join(f);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(&path, "{}").unwrap();
+        }
+        let pattern = dir.join("releases/**/*.json").display().to_string();
+        let found = expand(&[pattern]).unwrap();
+        let names: Vec<String> = found
+            .iter()
+            .map(|p| p.strip_prefix(&dir).unwrap().display().to_string())
+            .collect();
+        assert_eq!(
+            names,
+            vec![
+                "releases/aws/2026/b.json",
+                "releases/aws/a.json",
+                "releases/x.json"
+            ],
+            "`**` matches zero directories as well as many"
+        );
+        let plain = dir.join("releases/x.json").display().to_string();
+        assert_eq!(
+            expand(std::slice::from_ref(&plain)).unwrap(),
+            vec![PathBuf::from(plain)]
+        );
+        let none = dir.join("releases/**/*.yaml").display().to_string();
+        let err = expand(&[none]).unwrap_err().to_string();
+        assert!(err.contains("matched no file"), "{err}");
     }
 }

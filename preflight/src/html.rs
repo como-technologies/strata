@@ -173,7 +173,9 @@ pub fn page(r: &Report) -> String {
         if sc.not_run > 0 {
             h.push_str(&format!(
                 "<tr class=\"skip\"><td style=\"white-space:nowrap\"><span class=\"label\">NOT RUN</span></td><td>{}</td><td class=\"conf\"></td></tr>",
-                esc(&not_run_text(&not_run_reasons(rows.iter().copied())))
+                esc(&not_run_text(&not_run_reasons(
+                    rows.iter().copied().filter(|c| c.severity != Severity::Note)
+                )))
             ));
         }
         for c in visible {

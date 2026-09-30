@@ -338,17 +338,22 @@ pub struct Assembly<'a> {
     pub options: Options,
     /// The time.
     pub generated_at: String,
-    /// The directory the report goes to, for the reproduce lines that name its files.
-    pub out_dir: Option<String>,
+}
+
+/// A failure that counts: a failed rule of severity `fail` at the preflight level, or any failed
+/// probe of that severity with `--strict`. It is exit `1`, and it ends a watch. A warning or a
+/// note never counts.
+pub fn counts_as_failure(rule: &Rule, verdict: Verdict, strict: bool) -> bool {
+    verdict == Verdict::Failed
+        && rule.severity == Severity::Fail
+        && (rule.level == Level::Preflight || strict)
 }
 
 /// Build the report from the outcomes.
 pub fn assemble(a: Assembly<'_>, jq: &Jq) -> Report {
     let mut checks = Vec::with_capacity(a.outcomes.len());
     for (rule, outcome) in &a.outcomes {
-        let counts_as_failure = outcome.verdict == Verdict::Failed
-            && rule.severity == Severity::Fail
-            && (rule.level == Level::Preflight || a.options.strict);
+        let counts_as_failure = counts_as_failure(rule, outcome.verdict, a.options.strict);
         let mut reproduce: Vec<String> = Vec::new();
         for line in rule.reproduce.for_engine(&a.subject.cloud) {
             reproduce.push(
@@ -364,7 +369,7 @@ pub fn assemble(a: Assembly<'_>, jq: &Jq) -> Report {
                 rule,
                 outcome,
                 &a.subject,
-                a.out_dir.as_deref(),
+                a.options.out_dir.as_deref(),
             ));
         }
         checks.push(CheckResult {
@@ -421,18 +426,28 @@ fn auto_reproduce(
         Some(Check::Static { expr }) => {
             lines.push(format!("jq '{}' {dir}/world.json", one_line(expr)));
         }
-        Some(Check::Palette { method, expr, .. }) => {
+        Some(Check::Palette {
+            method, expr, body, ..
+        }) => {
             let path = outcome
                 .ran
                 .as_deref()
                 .and_then(|r| r.split_once(' '))
                 .map(|(_, p)| p.to_string())
                 .unwrap_or_default();
-            let data = match method {
-                crate::rule::Method::Post => format!(
+            let data = match (method, body) {
+                // a rule with its own body program sends what the program gives, not the entity
+                (crate::rule::Method::Post, Some(program)) => {
+                    lines.push(format!(
+                        "jq '{}' {dir}/world.json > request.json",
+                        one_line(program)
+                    ));
+                    " -X POST -H 'Content-Type: application/json' --data @request.json".to_string()
+                }
+                (crate::rule::Method::Post, None) => format!(
                     " -X POST -H 'Content-Type: application/json' --data @{dir}/entity.json"
                 ),
-                crate::rule::Method::Get => String::new(),
+                (crate::rule::Method::Get, _) => String::new(),
             };
             lines.push(format!(
                 "code=$(curl -s -o body.json -w '%{{http_code}}' -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\"{data} \"${{PALETTE_API:-https://api.spectrocloud.com}}{path}\")"
@@ -490,7 +505,10 @@ pub fn scorecard(catalog: &Catalog, checks: &[CheckResult]) -> Vec<SectionScore>
             .collect();
         let passed = ran.iter().filter(|c| c.verdict == Verdict::Passed).count() as u32;
         let failed = ran.len() as u32 - passed;
-        let not_run = rows.iter().filter(|c| c.verdict == Verdict::NotRun).count() as u32;
+        let not_run = rows
+            .iter()
+            .filter(|c| c.verdict == Verdict::NotRun && c.severity != Severity::Note)
+            .count() as u32;
         let with_runs = rows
             .iter()
             .filter(|c| c.confidence.as_ref().is_some_and(Confidence::has_runs))
@@ -577,8 +595,9 @@ fn summarize(checks: &[CheckResult], sections: &[SectionScore], options: &Option
     let warned = count(&|c| c.verdict == Verdict::Failed && c.severity == Severity::Warn);
     let noted = count(&|c| c.verdict == Verdict::Failed && c.severity == Severity::Note);
     let not_checked = count(&|c| c.verdict == Verdict::NotChecked);
-    let not_run = count(&|c| c.verdict == Verdict::NotRun);
-    let not_run_reasons = not_run_reasons(checks.iter());
+    // a note is outside the readiness whether it ran or not, as `ran` leaves it out
+    let not_run = count(&|c| c.verdict == Verdict::NotRun && c.severity != Severity::Note);
+    let not_run_reasons = not_run_reasons(checks.iter().filter(|c| c.severity != Severity::Note));
     let skipped = count(&|c| c.verdict == Verdict::Skipped);
     let errors = count(&|c| c.verdict == Verdict::Error);
     let readiness = readiness_of(passed, ran + not_run);
@@ -752,7 +771,11 @@ pub fn terminal(r: &Report, color: bool) -> String {
             out.push_str(&format!(
                 "  {}  {}\n",
                 paint(color, "2", &format!("{:<12}", "NOT RUN")),
-                not_run_text(&not_run_reasons(rows.iter().copied()))
+                not_run_text(&not_run_reasons(
+                    rows.iter()
+                        .copied()
+                        .filter(|c| c.severity != Severity::Note)
+                ))
             ));
         }
         for c in visible {
@@ -1132,6 +1155,85 @@ mod tests {
     }
 
     #[test]
+    fn a_note_that_did_not_run_is_outside_the_readiness_as_a_note_that_ran_is() {
+        let mut note = check("n", Verdict::NotRun, Level::Probe, Severity::Note, false);
+        note.messages = vec!["tier palette was not asked for".into()];
+        let checks = vec![
+            check("a", Verdict::Passed, Level::Probe, Severity::Fail, false),
+            note,
+        ];
+        let s = summarize(&checks, &sections(&checks), &options());
+        assert_eq!((s.ran, s.not_run), (1, 0));
+        assert_eq!(s.readiness, Some(1.0), "the note does not count against it");
+        assert!(s.not_run_reasons.is_empty());
+    }
+
+    #[test]
+    fn the_reproduce_line_of_a_post_sends_the_body_the_check_sent() {
+        let section = r#"
+section: identity
+title: I
+rules:
+  - id: sts-account-not-assumable
+    title: t
+    engines: [aws]
+    tier: palette
+    status: seen
+    what: w
+    check: {kind: palette, method: POST, path: "/v1/clouds/aws/account/validate", body: ".account.spec", expr: "true"}
+  - id: palette-validate
+    title: t
+    engines: [aws]
+    tier: palette
+    status: seen
+    what: w
+    check: {kind: palette, method: POST, path: "/v1/spectroclusters/aws/validate", expr: "true"}
+"#;
+        let mut c = crate::rule::Catalog::default();
+        c.push(
+            crate::rule::Catalog::parse_section(section, std::path::Path::new("i.yaml")).unwrap(),
+            std::path::Path::new("i.yaml"),
+        )
+        .unwrap();
+        let subject = Subject {
+            cloud: "aws".into(),
+            release: None,
+            source: "c.json".into(),
+            name: "fred".into(),
+            cluster_uid: None,
+        };
+        let outcome = |path: &str| Outcome {
+            verdict: Verdict::Failed,
+            messages: vec![],
+            elapsed: Duration::from_millis(1),
+            ran: Some(format!("POST {path}")),
+            answer: None,
+        };
+        let with_body = c.rule("sts-account-not-assumable").unwrap();
+        let lines = auto_reproduce(
+            with_body,
+            &outcome("/v1/clouds/aws/account/validate"),
+            &subject,
+            Some("out"),
+        );
+        assert_eq!(lines[0], "jq '.account.spec' out/world.json > request.json");
+        assert!(lines[1].contains("--data @request.json"), "{}", lines[1]);
+        assert!(
+            lines[1].contains("/v1/clouds/aws/account/validate"),
+            "{}",
+            lines[1]
+        );
+        let entity = c.rule("palette-validate").unwrap();
+        let lines = auto_reproduce(
+            entity,
+            &outcome("/v1/spectroclusters/aws/validate"),
+            &subject,
+            Some("out"),
+        );
+        assert!(lines[0].contains("--data @out/entity.json"), "{}", lines[0]);
+    }
+
+    #[test]
     fn labels_say_the_level_and_the_severity() {
         assert_eq!(
             check("a", Verdict::Passed, Level::Probe, Severity::Fail, false).label(),
@@ -1291,9 +1393,11 @@ rules:
                     name: "fred".into(),
                     cluster_uid: None,
                 },
-                options: options(),
+                options: Options {
+                    out_dir: Some("runs/x".into()),
+                    ..options()
+                },
                 generated_at: "2026-09-30T00:00:00Z".into(),
-                out_dir: Some("runs/x".into()),
             },
             &Jq::new(),
         );

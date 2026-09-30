@@ -14,7 +14,7 @@ use crate::error::{Error, Result};
 use crate::jq::Jq;
 use crate::probe::{self, Backend, Outcome, Verdict};
 use crate::report::{self, Assembly, Options, Report, Subject, paint};
-use crate::rule::{Catalog, Check, Level, Rule, Severity, Tier};
+use crate::rule::{Catalog, Check, Level, Rule, Tier};
 use crate::world::World;
 
 /// What a run keeps of the catalog.
@@ -185,7 +185,6 @@ pub fn run(inputs: RunInputs<'_>) -> Result<Report> {
                 out_dir: inputs.out_dir.map(str::to_string),
             },
             generated_at: inputs.now.to_string(),
-            out_dir: inputs.out_dir.map(str::to_string),
         },
         &jq,
     ))
@@ -447,12 +446,6 @@ fn label(rule: &Rule, o: &Outcome, color: bool) -> String {
     )
 }
 
-/// A failed rule ends the watch when its failure counts: severity `fail` at the preflight level,
-/// or any failed probe with `--strict`. A warning or a note never ends it.
-fn counts(rule: &Rule, strict: bool) -> bool {
-    rule.severity == Severity::Fail && (rule.level == Level::Preflight || strict)
-}
-
 /// The inputs of a watch.
 pub struct WatchInputs<'a, A: PaletteApi> {
     /// The catalog, with any probes file.
@@ -561,7 +554,8 @@ pub fn watch<A: PaletteApi>(inputs: WatchInputs<'_, A>) -> Result<(Report, Value
         for rule in &rules {
             let mut o = probe::judge_watch(rule, &with, &jq);
             o.elapsed = elapsed;
-            if o.verdict == Verdict::Failed && counts(rule, selection.strict) {
+            // a failed rule ends the watch when its failure counts, as the exit code counts it
+            if report::counts_as_failure(rule, o.verdict, selection.strict) {
                 failed = true;
             }
             last.insert(rule.id.clone(), o);
@@ -589,7 +583,8 @@ pub fn watch<A: PaletteApi>(inputs: WatchInputs<'_, A>) -> Result<(Report, Value
             final_state = state;
             break;
         }
-        if state == "Running" && !failed {
+        // a cluster that runs ends the watch: a failure it read on past is in the report
+        if state == "Running" {
             final_state = state;
             break;
         }
@@ -645,7 +640,6 @@ pub fn watch<A: PaletteApi>(inputs: WatchInputs<'_, A>) -> Result<(Report, Value
                 out_dir: out_dir.map(str::to_string),
             },
             generated_at: now.to_string(),
-            out_dir: out_dir.map(str::to_string),
         },
         &jq,
     );
@@ -1035,6 +1029,64 @@ rules:
         .unwrap();
         assert_eq!(report.checks[0].verdict, Verdict::Passed);
         assert_eq!(report.summary.exit_code, 0);
+    }
+
+    #[test]
+    fn a_watch_that_reads_on_past_a_counted_failure_ends_when_the_cluster_runs() {
+        let section = r#"
+section: platform
+title: P
+rules:
+  - id: agent-egress
+    title: t
+    engines: [all]
+    tier: watch
+    status: source
+    what: w
+    check: {kind: watch, expr: "false"}
+"#;
+        let mut c = Catalog::default();
+        c.push(
+            Catalog::parse_section(section, Path::new("p.yaml")).unwrap(),
+            Path::new("p.yaml"),
+        )
+        .unwrap();
+        let api = strata::api::MemoryApi::new().with(
+            "/v1/spectroclusters/c1",
+            json!({"metadata": {"uid": "c1"}, "status": {"state": "Running"}}),
+        );
+        let mut w = world(3);
+        w.cluster_uid = Some("c1".into());
+        let readings = std::cell::Cell::new(0);
+        let (report, _) = watch(WatchInputs {
+            catalog: &c,
+            world: &w,
+            api: &api,
+            ledger: &Ledger::default(),
+            selection: &Selection {
+                strict: true,
+                ..Selection::default()
+            },
+            options: &WatchOptions {
+                stop_at_first: false,
+                ..WatchOptions::default()
+            },
+            now: "t",
+            progress: &Progress::silent(),
+            verbose: false,
+            color: false,
+            sleep: &|_| readings.set(readings.get() + 1),
+            out_dir: None,
+        })
+        .unwrap();
+        assert_eq!(report.checks[0].verdict, Verdict::Failed);
+        assert!(report.checks[0].counts_as_failure);
+        assert_eq!(report.summary.exit_code, 1);
+        assert_eq!(
+            readings.get(),
+            0,
+            "the first reading saw Running, and the watch ended there"
+        );
     }
 
     #[test]

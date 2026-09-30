@@ -76,7 +76,7 @@ Images and registries
                 reproduce: curl -s -X POST -H "ApiKey: $PALETTE_API_KEY" "$PALETTE_HOST/v1/registries/oci/ecr/validate" -d @registry.json
 
 Profiles and packs
-  NOT RUN       2 checks did not run: tier palette was not asked for (2)
+  NOT RUN       1 check did not run: tier palette was not asked for (1)
   NOT CHECKED   edit-in-place                A published profile version stays as published                   1 ms
                 a race: no check before the build finds it; the watch finds its effect
                 reproduce: strata verify <record.json> --who
@@ -95,7 +95,7 @@ Lifecycle: update, repave, delete
                 a race: no check before the build finds it; the watch finds its effect
 
 The Palette platform
-  NOT RUN       2 checks did not run: tier palette was not asked for (2)
+  NOT RUN       1 check did not run: tier palette was not asked for (1)
   NOT CHECKED   validate-routes-unused       Only the console calls the cluster validate routes               1 ms
                 no check in strata-preflight; the reproduce lines say what to run by hand
   NOT CHECKED   conditions-not-cloud         The cloud inventory is the truth of a delete                     1 ms
@@ -140,14 +140,14 @@ Section scorecard
   Kubernetes version and engi…    4    1     4         0    2     61%    0    0    0       0           0     -
   Storage and CSI                 4    2     4         0    0 no runs    0    0    0       1           0    0%
   Images and registries          16   11     9         0    3     22%    0    0    0       1           7    0%
-  Profiles and packs              8    5     6         0    1     61%    0    0    0       2           2    0%
+  Profiles and packs              8    5     6         0    1     61%    0    0    0       1           2    0%
   Lifecycle: update, repave, …   10    6     8         0    4     22%    1    1    0       0           2  100%
-  The Palette platform           11    9     6         0    3     22%    0    0    0       2           5    0%
+  The Palette platform           11    9     6         0    3     22%    0    0    0       1           5    0%
   Client tools                    9    9     4         0    0 no runs    0    0    0       2           0    0%
   Teardown and leftovers          6    6     3         0    1     47%    1    1    0       2           3   33%
 runs: the rules of the section with a run in the ledger on this engine; weakest: the lowest 95% lower bound among them, and no runs when none has one; preflight: the rules promoted to preflight checks, whose failure is exit 1. A rule is promoted at a bound of 80%, which is 14 correct runs of 14 on the engine; every other rule is a probe. Promoted here: 0 of 72 checks.
 
-103 rules apply; 4 ran: 4 passed, 0 failed, 0 probe(s) failed, 0 warning(s), 1 note(s); 17 did not run, 25 not checked, 54 do not apply, 0 error(s); readiness 19%: 4 of 21 checks passed
-17 checks did not run: tier cloud was not asked for (8); tier palette was not asked for (9)
+103 rules apply; 4 ran: 4 passed, 0 failed, 0 probe(s) failed, 0 warning(s), 1 note(s); 15 did not run, 25 not checked, 54 do not apply, 0 error(s); readiness 21%: 4 of 19 checks passed
+15 checks did not run: tier cloud was not asked for (8); tier palette was not asked for (7)
 No file written; --out DIR writes report.html, report.md, report.json, world.json, and entity.json, and the reproduce lines read world.json and entity.json there ($OUT).
 OK: each counted check passed

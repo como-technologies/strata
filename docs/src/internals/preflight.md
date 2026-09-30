@@ -151,7 +151,7 @@ Readiness is the checks that passed over the checks that apply to the entity,
 for the rules of severity `fail` and `warn`; a note is outside it. A check that
 applies and did not run counts against it (`NOT RUN`: a tier not asked for, no
 key, or `--no-exec`), because nothing shows that it passes: the static tier
-alone over an aws entity is 4 of 75, not 100% of 4. A rule that does not apply
+alone over an aws entity is 4 of 19, not 100% of 4. A rule that does not apply
 to the entity (`SKIP`: another release, a `when` that is not true, a watch rule
 outside a watch) is outside the count. It is a view for a person and a gate for
 a job: `--ready 80` is exit `1` under 80%. It says how ready an estate is to

@@ -278,7 +278,7 @@ impl World {
                         self.packs.insert(pack.pack_uid.clone(), doc);
                     }
                     // a pack the key cannot read is not a pack; a rule that needs it says so
-                    Err(strata::Error::Api { status, .. }) if (400..500).contains(&status) => {}
+                    Err(strata::Error::Api { status, .. }) if unreadable(status) => {}
                     Err(e) => return Err(e.into()),
                 }
             }
@@ -298,13 +298,21 @@ impl World {
                     redact(&mut doc);
                     self.account = Some(doc);
                 }
-                // an account that is not there is what a rule reports; the world says null
-                Err(strata::Error::Api { status: 404, .. }) => {}
+                // an account that is not there, or that the key cannot read, is what a rule
+                // reports; the world says null
+                Err(strata::Error::Api { status, .. }) if unreadable(status) => {}
                 Err(e) => return Err(e.into()),
             }
         }
         Ok(self)
     }
+}
+
+/// A 4xx on a read of the world that means the object is not there for this key: a 404, or a
+/// 403 of a project key on an object of the tenant. The world holds `null`, and a rule says so.
+/// A 401 is the key itself, and a 429 the rate: the run stops with the error that names it.
+fn unreadable(status: u16) -> bool {
+    (400..500).contains(&status) && !matches!(status, 401 | 429)
 }
 
 /// The cloud account kind of a cloud: a managed engine uses the account of its cloud.
@@ -699,6 +707,33 @@ mod tests {
         );
         redact_for_output(&mut account);
         assert_eq!(account["spec"]["sts"]["externalId"], "<redacted>");
+    }
+
+    #[test]
+    fn an_account_the_key_cannot_read_is_null_and_a_bad_key_is_an_error() {
+        let base = || World {
+            cloud: "aws".into(),
+            source: "c.json".into(),
+            entity: json!({"metadata": {"name": "fred"}, "spec": {"cloudAccountUid": "acc1"}}),
+            ..World::default()
+        };
+        for status in [403u16, 404] {
+            let api =
+                strata::api::MemoryApi::new().failing("/v1/cloudaccounts/aws/acc1", status, "{}");
+            let w = base()
+                .with_palette(&Palette::new(&api), "t", &Progress::silent())
+                .unwrap();
+            assert!(w.account.is_none(), "{status}: the world says null");
+        }
+        for status in [401u16, 429] {
+            let api =
+                strata::api::MemoryApi::new().failing("/v1/cloudaccounts/aws/acc1", status, "{}");
+            let err = base()
+                .with_palette(&Palette::new(&api), "t", &Progress::silent())
+                .unwrap_err()
+                .to_string();
+            assert!(err.contains(&format!("HTTP {status}")), "{status}: {err}");
+        }
     }
 
     #[test]

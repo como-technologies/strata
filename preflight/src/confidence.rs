@@ -452,7 +452,12 @@ pub fn promotion(catalog: &Catalog, ledger: &Ledger) -> PromotionReport {
                 .into_iter()
                 .collect()
         } else {
-            rule.engines.clone()
+            // the clouds alone: `lab` marks a check of the lab, and no run records it
+            rule.engines
+                .iter()
+                .filter(|e| crate::world::CLOUDS.contains(&e.as_str()))
+                .cloned()
+                .collect()
         };
         // the first rule of a promotion: a live run shows the fault. A rule from the source or a
         // reading stays a probe, whatever the plan runs count, until a build shows the fault
@@ -622,6 +627,47 @@ runs:
     fn a_ledger_of_another_schema_is_refused() {
         let err = Ledger::parse("schema: other/1\nruns: []\n", Path::new("l.yaml")).unwrap_err();
         assert!(err.to_string().contains("schema is 'other/1'"), "{err}");
+    }
+
+    #[test]
+    fn a_promotion_counts_the_clouds_a_rule_names_and_not_the_lab() {
+        let section = r#"
+section: tools
+title: T
+rules:
+  - id: cloud-cli-auth
+    title: t
+    engines: [aws, lab]
+    tier: cloud
+    status: seen
+    what: w
+    check: {kind: exec, argv: [aws], expr: "true"}
+"#;
+        let mut catalog = Catalog::default();
+        catalog
+            .push(
+                Catalog::parse_section(section, Path::new("t.yaml")).unwrap(),
+                Path::new("t.yaml"),
+            )
+            .unwrap();
+        let mut runs = String::from("schema: strata-preflight-ledger/1\nruns:\n");
+        for i in 0..14 {
+            runs.push_str(&format!(
+                "  - run: r{i}\n    engine: aws\n    release: \"\"\n    results:\n      - {{rule: cloud-cli-auth, result: caught, note: f}}\n      - {{rule: cloud-cli-auth, result: passed, note: c}}\n"
+            ));
+        }
+        let report = promotion(&catalog, &ledger(&runs));
+        let rule = report
+            .rules
+            .iter()
+            .find(|r| r.id == "cloud-cli-auth")
+            .unwrap();
+        assert_eq!(
+            rule.earned,
+            Level::Preflight,
+            "14 correct runs of each kind on aws, and no run of the lab is needed"
+        );
+        assert_eq!(rule.advice, "promote");
     }
 
     #[test]

@@ -112,8 +112,10 @@ jobs:
           [ "$STRICT" != "true" ] || args+=(--strict)
           # with no key, the static tier alone, and nothing read from Palette
           [ -n "$PALETTE_API_KEY" ] || args+=(--offline)
-          # each record pattern is one argument, which strata expands
-          for r in $RECORDS; do args+=(--records "$r"); done
+          # each record pattern is one argument, which strata expands; the shell must not expand
+          # it first, because bash reads `**` as `*` and drops the files it does not match
+          read -ra records <<< "$RECORDS"
+          for r in "${records[@]}"; do args+=(--records "$r"); done
           set +e
           .strata/bin/strata preflight "${args[@]}" --out preflight --format markdown --quiet > preflight.md
           code=$?

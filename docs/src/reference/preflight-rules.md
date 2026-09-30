@@ -47,7 +47,7 @@ rules:
 | --- | --- | --- |
 | `id` | kebab-case, unique | The id of the row of the catalog. The report and the ledger name a rule by it. |
 | `title` | one line | The good state, as a statement. |
-| `engines` | `aws`, `eks`, `gcp`, `gke`, `azure`, `aks`, `maas`, `edge`, `vsphere`, `lab`, `all` | The engines the rule applies to. Palette removed OpenStack in 2026, so it is not one. |
+| `engines` | `aws`, `eks`, `gcp`, `gke`, `azure`, `aks`, `maas`, `edge`, `vsphere`, `lab`, `all` | The engines the rule applies to. `lab` marks a check of the lab; a promotion counts the clouds alone, because no run of the plan records `lab`. Palette removed OpenStack in 2026, so it is not one. |
 | `tier` | `static`, `palette`, `cloud`, `watch`, `race`, `tool` | Where a check can find the fault. See [The tiers](#the-tiers). |
 | `level` | `probe` (default), `preflight` | How much to trust the check. See [Two levels](../internals/preflight.md#two-levels-probe-and-preflight-check). |
 | `severity` | `fail` (default), `warn`, `note` | `fail`: the build cannot finish, or the cluster breaks. `warn`: it finishes, and something is wrong or costs. `note`: a fact. |
@@ -96,7 +96,9 @@ jq is jaq 3, which runs the programs of jq 1.7 with a small number of
 differences. Two to know: `false // x` gives `x`, so read a boolean with
 `if has("k") then .k else true end`; and `IN(...)` is not defined, so test a
 value against a list with `(["a", "b"] | index($v)) != null`. A program that
-does not compile makes the rule `ERROR`, and the message names it.
+does not compile makes the rule `ERROR`, and the message names it. So does a
+program that gives no output, or `null`: a path that is not in the world is a
+wrong program, not a pass.
 
 ## The world document
 

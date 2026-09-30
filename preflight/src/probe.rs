@@ -65,6 +65,12 @@ pub struct LiveBackend<'a, A: PaletteApi> {
     pub no_exec: bool,
 }
 
+/// A 4xx that is the answer of a check: the route read the request and refused what it says. A
+/// 401 or a 403 is the key, and a 429 is the rate: the check did not run, and the error names it.
+pub fn is_answer(status: u16) -> bool {
+    (400..500).contains(&status) && !matches!(status, 401 | 403 | 429)
+}
+
 impl<A: PaletteApi> Backend for LiveBackend<'_, A> {
     fn palette(&self, method: Method, path: &str, body: Option<&Value>) -> Result<Response> {
         let api = self.palette.ok_or_else(|| Error::Usage {
@@ -82,7 +88,7 @@ impl<A: PaletteApi> Backend for LiveBackend<'_, A> {
                 body,
             }),
             // a 4xx is what a validate route answers when the entity is wrong: it is the result
-            Err(strata::Error::Api { status, body, .. }) if (400..500).contains(&status) => {
+            Err(strata::Error::Api { status, body, .. }) if is_answer(status) => {
                 // a body that is not JSON, such as a plain-text 404 of the gateway, is an object
                 // with the text as its message, so a program reads `.body.message` either way
                 let body = serde_json::from_str(&body)
@@ -424,7 +430,7 @@ fn judge(rule: &Rule, expr: &str, world: &Value, jq: &Jq, started: Instant) -> O
                     ));
                 }
             }
-            Value::Null => {}
+            // null is a path that is not in the world, not a pass: a wrong program says so
             other => {
                 return Outcome::new(
                     Verdict::Error,
@@ -649,6 +655,23 @@ mod tests {
     }
 
     #[test]
+    fn a_program_that_gives_null_is_an_error_and_not_a_pass() {
+        let jq = Jq::new();
+        let (b, w) = fixture(json!({"cloud": "gke", "entity": {"spec": {"items": []}}}));
+        let typo = rule(Check::Static {
+            expr: ".entity.spec.itmes | length == 0".into(),
+        });
+        let out = run_check(&typo, &w, &b, &jq);
+        assert_eq!(out.verdict, Verdict::Passed, "length of null is 0 in jq");
+        let path = rule(Check::Static {
+            expr: ".entity.spec.itmes".into(),
+        });
+        let out = run_check(&path, &w, &b, &jq);
+        assert_eq!(out.verdict, Verdict::Error);
+        assert!(out.messages[0].contains("gave null"), "{:?}", out.messages);
+    }
+
+    #[test]
     fn a_palette_check_reads_a_4xx_as_an_answer() {
         let jq = Jq::new();
         let (b, w) = fixture(json!({"cloud": "gke", "entity": {"spec": {}},
@@ -670,6 +693,31 @@ mod tests {
             out.ran.as_deref(),
             Some("POST /v1/spectroclusters/gke/validate")
         );
+    }
+
+    #[test]
+    fn a_401_a_403_and_a_429_are_errors_of_the_check_and_a_404_is_its_answer() {
+        for status in [401u16, 403, 429] {
+            let api = strata::api::MemoryApi::new().failing("/v1/x", status, "{}");
+            let b = LiveBackend {
+                palette: Some(&api),
+                no_exec: false,
+            };
+            let err = b
+                .palette(Method::Get, "/v1/x", None)
+                .unwrap_err()
+                .to_string();
+            assert!(err.contains(&format!("HTTP {status}")), "{status}: {err}");
+        }
+        let api = strata::api::MemoryApi::new().failing("/v1/x", 404, r#"{"code": "NotFound"}"#);
+        let b = LiveBackend {
+            palette: Some(&api),
+            no_exec: false,
+        };
+        let r = b.palette(Method::Get, "/v1/x", None).unwrap();
+        assert!(!r.ok);
+        assert_eq!(r.status, 404);
+        assert_eq!(r.body["code"], "NotFound");
     }
 
     #[test]

@@ -74,8 +74,9 @@ impl HttpApi {
             });
         }
         // a 204 No Content, which the validate routes of the clouds answer, is an answer with no
-        // body: null, and not a body that is not JSON
-        if body.trim().is_empty() {
+        // body: null, and not a body that is not JSON. A 200 with no body stays the error it
+        // was: a proxy or an outage page, not an answer of Palette
+        if status == 204 {
             return Ok(Value::Null);
         }
         serde_json::from_str(&body).map_err(|source| Error::NotJson {
@@ -143,6 +144,14 @@ mod tests {
             .post_json("/v1/clouds/aws/account/validate", &serde_json::json!({}))
             .unwrap();
         assert_eq!(v, Value::Null);
+    }
+
+    #[test]
+    fn a_200_with_no_body_is_not_an_answer() {
+        let url = serve_once("200 OK", "");
+        let api = HttpApi::new(Config::new(url, "k"));
+        let err = api.get_json("/v1/spectroclusters").unwrap_err().to_string();
+        assert!(err.contains("/v1/spectroclusters"), "{err}");
     }
 
     #[test]
