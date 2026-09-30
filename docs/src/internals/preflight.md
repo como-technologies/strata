@@ -136,7 +136,8 @@ accuracy of a section is the lowest bound of its rules.
 | seen | the rows that a live run shows |
 | with a check | the rows with a check in code |
 | preflight | the rows promoted to preflight checks |
-| weakest bound | the lowest 95% lower bound of a promoted rule, or `no runs` |
+| runs | the rows with a run in the ledger on this engine |
+| weakest bound | the lowest 95% lower bound among the rows with runs, or `no runs` when none has one |
 | ran, passed, failed, not run, not checked | the checks of this run |
 | readiness | `passed / (ran + not run)`, or none when no check applies |
 

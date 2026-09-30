@@ -144,7 +144,10 @@ pub struct SectionScore {
     pub with_check: u32,
     /// The rows promoted to preflight checks.
     pub preflight: u32,
-    /// The lowest 95% lower bound of a promoted rule of the section, or none.
+    /// The rows with a run in the ledger on this engine, of either kind.
+    pub with_runs: u32,
+    /// The lowest 95% lower bound among the rows of the section with runs on this engine, or
+    /// none when no row has a run.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub weakest_bound: Option<f64>,
     /// The checks that ran: passed or failed.
@@ -488,9 +491,12 @@ pub fn scorecard(catalog: &Catalog, checks: &[CheckResult]) -> Vec<SectionScore>
         let passed = ran.iter().filter(|c| c.verdict == Verdict::Passed).count() as u32;
         let failed = ran.len() as u32 - passed;
         let not_run = rows.iter().filter(|c| c.verdict == Verdict::NotRun).count() as u32;
+        let with_runs = rows
+            .iter()
+            .filter(|c| c.confidence.as_ref().is_some_and(Confidence::has_runs))
+            .count() as u32;
         let weakest = rows
             .iter()
-            .filter(|c| c.level == Level::Preflight)
             .filter_map(|c| c.confidence.as_ref().and_then(Confidence::weakest_bound))
             .fold(None, |acc: Option<f64>, b| {
                 Some(acc.map_or(b, |a| a.min(b)))
@@ -505,6 +511,7 @@ pub fn scorecard(catalog: &Catalog, checks: &[CheckResult]) -> Vec<SectionScore>
                 .filter(|c| catalog.rule(&c.id).is_some_and(|r| r.check.is_some()))
                 .count() as u32,
             preflight: rows.iter().filter(|c| c.level == Level::Preflight).count() as u32,
+            with_runs,
             weakest_bound: weakest,
             ran: ran.len() as u32,
             passed,
@@ -806,12 +813,13 @@ pub fn terminal(r: &Report, color: bool) -> String {
     }
     out.push_str(&format!("\n{}\n", paint(color, "1", "Section scorecard")));
     out.push_str(&format!(
-        "  {:<28} {:>4} {:>4} {:>5} {:>9} {:>7} {:>4} {:>4} {:>4} {:>7} {:>11} {:>5}\n",
+        "  {:<28} {:>4} {:>4} {:>5} {:>9} {:>4} {:>7} {:>4} {:>4} {:>4} {:>7} {:>11} {:>5}\n",
         "section",
         "rows",
         "seen",
         "check",
         "preflight",
+        "runs",
         "weakest",
         "ran",
         "pass",
@@ -822,12 +830,13 @@ pub fn terminal(r: &Report, color: bool) -> String {
     ));
     for s in &r.sections {
         out.push_str(&format!(
-            "  {:<28} {:>4} {:>4} {:>5} {:>9} {:>7} {:>4} {:>4} {:>4} {:>7} {:>11} {:>5}\n",
+            "  {:<28} {:>4} {:>4} {:>5} {:>9} {:>4} {:>7} {:>4} {:>4} {:>4} {:>7} {:>11} {:>5}\n",
             truncate(&s.title, 28),
             s.rows,
             s.seen,
             s.with_check,
             s.preflight,
+            s.with_runs,
             s.weakest_bound
                 .map_or("no runs".to_string(), |b| format!("{:.0}%", b * 100.0)),
             s.ran,
@@ -838,6 +847,10 @@ pub fn terminal(r: &Report, color: bool) -> String {
             pct(s.readiness)
         ));
     }
+    out.push_str(&format!(
+        "{}\n",
+        paint(color, "2", &scorecard_legend(&r.sections))
+    ));
     let s = &r.summary;
     out.push_str(&format!(
         "\n{} rules apply; {} ran: {} passed, {} failed, {} probe(s) failed, {} warning(s), {} note(s); {} did not run, {} not checked, {} do not apply, {} error(s); readiness {}: {} of {} checks passed\n",
@@ -962,16 +975,17 @@ pub fn markdown(r: &Report) -> String {
         "\n{}\n",
         written_text(r.options.out_dir.as_deref())
     ));
-    out.push_str("\n### Section scorecard\n\n| section | rows | seen | with a check | preflight | weakest bound | ran | passed | failed | did not run | not checked | readiness |\n|---|---|---|---|---|---|---|---|---|---|---|---|\n");
+    out.push_str("\n### Section scorecard\n\n| section | rows | seen | with a check | preflight | with runs | weakest bound | ran | passed | failed | did not run | not checked | readiness |\n|---|---|---|---|---|---|---|---|---|---|---|---|---|\n");
     for sc in &r.sections {
         out.push_str(&format!(
-            "| {} | {} | {} ({}) | {} | {} | {} | {} | {} | {} | {} | {} | {} |\n",
+            "| {} | {} | {} ({}) | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} |\n",
             sc.title,
             sc.rows,
             sc.seen,
             pct((sc.rows > 0).then(|| f64::from(sc.seen) / f64::from(sc.rows))),
             sc.with_check,
             sc.preflight,
+            sc.with_runs,
             sc.weakest_bound
                 .map_or("no runs".to_string(), |b| format!("{:.0}%", b * 100.0)),
             sc.ran,
@@ -982,7 +996,17 @@ pub fn markdown(r: &Report) -> String {
             pct(sc.readiness)
         ));
     }
+    out.push_str(&format!("\n{}\n", scorecard_legend(&r.sections)));
     out
+}
+
+/// What the evidence columns of the scorecard mean, with the count of promoted rules here.
+pub(crate) fn scorecard_legend(sections: &[SectionScore]) -> String {
+    let promoted: u32 = sections.iter().map(|s| s.preflight).sum();
+    let checks: u32 = sections.iter().map(|s| s.with_check).sum();
+    format!(
+        "runs: the rules of the section with a run in the ledger on this engine; weakest: the lowest 95% lower bound among them, and no runs when none has one; preflight: the rules promoted to preflight checks, whose failure is exit 1. A rule is promoted at a bound of 80%, which is 14 correct runs of 14 on the engine; every other rule is a probe. Promoted here: {promoted} of {checks} checks."
+    )
 }
 
 fn md_escape(s: &str) -> String {
@@ -1044,6 +1068,7 @@ mod tests {
             seen: 0,
             with_check: 0,
             preflight: 0,
+            with_runs: 0,
             weakest_bound: None,
             ran: checks
                 .iter()

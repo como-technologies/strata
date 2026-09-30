@@ -263,8 +263,14 @@ impl Confidence {
     pub fn weakest_bound(&self) -> Option<f64> {
         match (self.catch.lower_bound, self.clean.lower_bound) {
             (Some(a), Some(b)) => Some(a.min(b)),
-            _ => None,
+            (Some(a), None) | (None, Some(a)) => Some(a),
+            (None, None) => None,
         }
+    }
+
+    /// True when the ledger holds a run of the rule on this engine, of either kind.
+    pub fn has_runs(&self) -> bool {
+        self.catch.total + self.clean.total > 0
     }
 }
 

@@ -166,20 +166,21 @@ Teardown and leftovers
   PROBE PASS    name-prefix                  No pool name is a prefix of another                              1 ms
 
 Section scorecard
-  section                      rows seen check preflight weakest  ran pass fail not run not checked ready
-  Identity and permissions       11    3    11         0 no runs    2    2    0       3           0   40%
-  Cloud services and APIs         2    0     1         0 no runs    1    1    0       0           1  100%
-  Quotas and limits               4    2     2         0 no runs    1    0    1       1           2    0%
-  Networking                     12    2    10         0 no runs    4    4    0       0           1  100%
-  Compute and pools               6    1     4         0 no runs    0    0    0       0           2     -
-  Kubernetes version and engi…    4    1     4         0 no runs    2    2    0       0           0  100%
-  Storage and CSI                 4    2     4         0 no runs    0    0    0       1           0    0%
-  Images and registries          16   11     9         0 no runs    6    5    1       0           7   83%
-  Profiles and packs              8    5     6         0 no runs    3    3    0       0           2  100%
-  Lifecycle: update, repave, …   10    6     8         0 no runs    1    1    0       0           2  100%
-  The Palette platform           11    9     6         0 no runs    1    0    1       0           5    0%
-  Client tools                    9    9     4         0 no runs    0    0    0       3           0    0%
-  Teardown and leftovers          6    6     3         0 no runs    1    1    0       2           3   33%
+  section                      rows seen check preflight runs weakest  ran pass fail not run not checked ready
+  Identity and permissions       11    3    11         0    7      0%    2    2    0       3           0   40%
+  Cloud services and APIs         2    0     1         0    1     37%    1    1    0       0           1  100%
+  Quotas and limits               4    2     2         0    2     22%    1    0    1       1           2    0%
+  Networking                     12    2    10         0    5      5%    4    4    0       0           1  100%
+  Compute and pools               6    1     4         0    1     37%    0    0    0       0           2     -
+  Kubernetes version and engi…    4    1     4         0    2     37%    2    2    0       0           0  100%
+  Storage and CSI                 4    2     4         0    0 no runs    0    0    0       1           0    0%
+  Images and registries          16   11     9         0    3      5%    6    5    1       0           7   83%
+  Profiles and packs              8    5     6         0    1     37%    3    3    0       0           2  100%
+  Lifecycle: update, repave, …   10    6     8         0    4      5%    1    1    0       0           2  100%
+  The Palette platform           11    9     6         0    3      5%    1    0    1       0           5    0%
+  Client tools                    9    9     4         0    0 no runs    0    0    0       3           0    0%
+  Teardown and leftovers          6    6     3         0    1     22%    1    1    0       2           3   33%
+runs: the rules of the section with a run in the ledger on this engine; weakest: the lowest 95% lower bound among them, and no runs when none has one; preflight: the rules promoted to preflight checks, whose failure is exit 1. A rule is promoted at a bound of 80%, which is 14 correct runs of 14 on the engine; every other rule is a probe. Promoted here: 0 of 72 checks.
 
 103 rules apply; 22 ran: 19 passed, 0 failed, 2 probe(s) failed, 1 warning(s), 2 note(s); 10 did not run, 25 not checked, 39 do not apply, 0 error(s); readiness 59%: 19 of 32 checks passed
 10 checks did not run: --no-exec: the command did not run (10)

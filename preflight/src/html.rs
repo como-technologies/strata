@@ -3,7 +3,9 @@
 //! confidence of each rule. A person opens it from the run directory, or a job attaches it.
 
 use crate::probe::Verdict;
-use crate::report::{CheckResult, Report, not_run_reasons, not_run_text, written_text};
+use crate::report::{
+    CheckResult, Report, not_run_reasons, not_run_text, scorecard_legend, written_text,
+};
 use crate::rule::{Level, Severity};
 
 fn esc(s: &str) -> String {
@@ -118,7 +120,7 @@ pub fn page(r: &Report) -> String {
     }
     h.push_str("</div>");
 
-    h.push_str("<h2>Section scorecard</h2><table><thead><tr><th>section</th><th>readiness</th><th class=\"num\">ran</th><th class=\"num\">passed</th><th class=\"num\">failed</th><th class=\"num\">did not run</th><th class=\"num\">not checked</th><th class=\"num hide-sm\">rows</th><th class=\"num hide-sm\">seen</th><th class=\"num hide-sm\">with a check</th><th class=\"num hide-sm\">preflight</th><th class=\"hide-sm\">weakest bound</th></tr></thead><tbody>");
+    h.push_str("<h2>Section scorecard</h2><table><thead><tr><th>section</th><th>readiness</th><th class=\"num\">ran</th><th class=\"num\">passed</th><th class=\"num\">failed</th><th class=\"num\">did not run</th><th class=\"num\">not checked</th><th class=\"num hide-sm\">rows</th><th class=\"num hide-sm\">seen</th><th class=\"num hide-sm\">with a check</th><th class=\"num hide-sm\">preflight</th><th class=\"num hide-sm\">with runs</th><th class=\"hide-sm\">weakest bound</th></tr></thead><tbody>");
     let gate = r.options.ready.unwrap_or(0.8);
     for sc in &r.sections {
         let (width, class) = match sc.readiness {
@@ -126,17 +128,21 @@ pub fn page(r: &Report) -> String {
             None => (0.0, "none"),
         };
         h.push_str(&format!(
-            "<tr><td>{}</td><td><div class=\"bar\" title=\"{}\"><i class=\"{class}\" style=\"width:{width:.0}%\"></i><em style=\"left:{:.0}%\"></em></div> <span class=\"conf\">{}</span></td><td class=\"num\">{}</td><td class=\"num\">{}</td><td class=\"num\">{}</td><td class=\"num\">{}</td><td class=\"num\">{}</td><td class=\"num hide-sm\">{}</td><td class=\"num hide-sm\">{}</td><td class=\"num hide-sm\">{}</td><td class=\"num hide-sm\">{}</td><td class=\"hide-sm\">{}</td></tr>",
+            "<tr><td>{}</td><td><div class=\"bar\" title=\"{}\"><i class=\"{class}\" style=\"width:{width:.0}%\"></i><em style=\"left:{:.0}%\"></em></div> <span class=\"conf\">{}</span></td><td class=\"num\">{}</td><td class=\"num\">{}</td><td class=\"num\">{}</td><td class=\"num\">{}</td><td class=\"num\">{}</td><td class=\"num hide-sm\">{}</td><td class=\"num hide-sm\">{}</td><td class=\"num hide-sm\">{}</td><td class=\"num hide-sm\">{}</td><td class=\"num hide-sm\">{}</td><td class=\"hide-sm\">{}</td></tr>",
             esc(&sc.title),
             pct(sc.readiness),
             gate * 100.0,
             pct(sc.readiness),
-            sc.ran, sc.passed, sc.failed, sc.not_run, sc.not_checked, sc.rows, sc.seen, sc.with_check, sc.preflight,
+            sc.ran, sc.passed, sc.failed, sc.not_run, sc.not_checked, sc.rows, sc.seen, sc.with_check, sc.preflight, sc.with_runs,
             sc.weakest_bound.map_or("no runs".to_string(), |b| format!("{:.0}%", b * 100.0))
         ));
     }
     h.push_str("</tbody></table>");
     h.push_str(&format!("<p class=\"legend\">The mark on each bar is the gate, {:.0}%. Readiness is the share of the checks that apply here and passed: a check that did not run counts against it, and a row with no check in strata-preflight is outside it, so read the two together.</p>", gate * 100.0));
+    h.push_str(&format!(
+        "<p class=\"legend\">{}</p>",
+        esc(&scorecard_legend(&r.sections))
+    ));
     if s.not_run > 0 {
         h.push_str(&format!(
             "<p class=\"legend\">{}</p>",
@@ -282,6 +288,7 @@ mod tests {
                 seen: 1,
                 with_check: 1,
                 preflight: 0,
+                with_runs: 0,
                 weakest_bound: None,
                 ran: 1,
                 passed: 0,

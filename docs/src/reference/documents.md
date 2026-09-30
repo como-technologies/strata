@@ -352,7 +352,7 @@ what it answered.
     `meetsBar`; and `runs[]`.
   - `countsAsFailure`: true when this entry makes the exit code `1`.
 - `sections[]`: the scorecard, one line for each section with a row for the
-  engine: `rows`, `seen`, `withCheck`, `preflight`, `weakestBound`, `ran`,
+  engine: `rows`, `seen`, `withCheck`, `preflight`, `withRuns`, `weakestBound`, `ran`,
   `passed`, `failed`, `notRun`, `notChecked`, `readiness`.
 - `summary`: the counts, `notRunReasons` (each reason with its count),
   `readiness`, `exitCode`, and one line, `verdict`.
