@@ -63,6 +63,13 @@ under the uid.
 The cluster runs exactly what it ran: `IDENTICAL`. But the version that it runs
 is gone from Palette, so the record reports `DRIFT`, and `verify` exits `1`.
 
+The bump is a write to the profile, and not to the cluster. `--who` reads the
+log of the profile too, and the line names it:
+
+```text
+{{#include ../output/overwritten-cluster-who.txt}}
+```
+
 ## 5. The consumers of the new version
 
 ```text

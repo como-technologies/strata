@@ -10,4 +10,4 @@ consumers  1 -> 1 cluster
   [cni  ] cni-cilium-oss             1.20.1             unchanged
   [csi  ] csi-aws-ebs                1.65.0             unchanged
   [addon] cert-manager               1.21.1             unchanged
-DRIFT: published version aws-stack@1.1.1 was renamed to aws-stack-legacy@1.1.1
+DRIFT: published version aws-stack@1.1.1 was renamed to aws-stack-legacy@1.1.1; Palette last changed it 2026-09-18T14:02:11.482Z

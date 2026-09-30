@@ -62,6 +62,11 @@ fn answer(root: &Path, mut stream: TcpStream) -> std::io::Result<()> {
             (200, searched(&fs::read(path)?, &request.body))
         }
         Some(path) if path.is_file() => (200, fs::read(path)?),
+        // Palette answers an empty log for an object with no entry, and not 404
+        Some(_) if request.target.starts_with("/v1/audits?") => (
+            200,
+            br#"{"items":[],"listmeta":{"continue":"","limit":100}}"#.to_vec(),
+        ),
         _ => (
             404,
             serde_json::json!({

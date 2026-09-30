@@ -775,15 +775,37 @@ pub(crate) fn who_heading(v: &Verify) -> Option<String> {
     })
 }
 
-/// One write: `2026-09-18T14:02:11.482Z  John Doe (user)  update`, and `: <summary>` when
-/// Palette gives one.
-pub(crate) fn who_entry(e: &crate::diff::AuditEntry) -> String {
+/// One write: `2026-09-18T14:02:11.482Z  John Doe (user)  update`, then the kind and the name of
+/// the object when the write touched another object than `uid`, the object of the record, then
+/// `: <summary>` and `; note: <userMsg>` when Palette gives them.
+pub(crate) fn who_entry(e: &crate::diff::AuditEntry, uid: &str) -> String {
     let mut line = format!("{}  {} ({})  {}", e.time, e.actor, e.actor_type, e.action);
+    if let Some(r) = e.resource.as_ref().filter(|r| r.uid != uid) {
+        line.push(' ');
+        line.push_str(&r.kind);
+        line.push(' ');
+        line.push_str(if r.name.is_empty() { &r.uid } else { &r.name });
+    }
     if !e.summary.is_empty() {
         line.push_str(": ");
         line.push_str(&e.summary);
     }
+    if !e.user_msg.is_empty() {
+        line.push_str("; note: ");
+        line.push_str(&e.user_msg);
+    }
     line
+}
+
+/// `; Palette last changed it <time>`: the end of a `DRIFT` verdict, from `verify.lastModified`.
+/// Nothing for another verdict, or when Palette gives no time.
+pub(crate) fn last_modified_suffix(v: &Verify) -> String {
+    match &v.last_modified {
+        Some(at) if v.status == crate::diff::VerifyStatus::Drifted => {
+            format!("; Palette last changed it {at}")
+        }
+        _ => String::new(),
+    }
 }
 
 /// What the summary line of a drifted record adds with `--who`: the last write, or that the log

@@ -188,6 +188,10 @@ if stage 4 "undo the edit and bump the add-on version"; then
     "$strata" verify a3.json --json
   check a3-names-overwritten-profile "$off0_on1" "#30: the verify names the add-on profile, only without the flag" -- \
     jq -e --arg u "$AD1" '[.verify.profilesOverwritten[]?.uid] == [$u]' verify-a3-after-bump.out
+  check verify-a3-who "$off1_on0" "#140: verify --who of the same record, which reads the log of the overwritten profile too" -- \
+    "$strata" verify a3.json --who --json
+  check a3-who-names-profile "$off0_on1" "#140: a write in verify.who names the add-on profile as its object, only without the flag" -- \
+    jq -e --arg u "$AD1" '[.verify.who[]? | select(.resource.kind == "clusterprofile" and .resource.uid == $u)] | length > 0' verify-a3-who.out
   check consumers-old 1 "#27: both clusters are still consumers of the first add-on uid" -- "$strata" consumers "$AD1" --json
   check consumers-old-overwritten "$off0_on1" "#28: consumers of the first add-on uid marks both clusters as running a version it no longer names, only without the flag" -- \
     jq -e '.overwritten == 2 and ([.consumers[].version] | unique) == ["1.0.0"]' consumers-old.out

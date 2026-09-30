@@ -28,11 +28,11 @@ can change it. See
 
 ## Who changed it
 
-`DRIFT` says that the object changed. It does not say who changed it, or when.
+`DRIFT` says that the object changed. It does not say who changed it.
 `--who` reads that from the audit log of Palette: for a record that drifted,
-strata reads each write to the profile, to the cluster of a cluster record, or
-to the edge host of an edge host record, since the record was taken. Palette has who and when. The record has what the
-content was.
+strata reads each write to the object of the record since the record was taken.
+The object is the profile, the app profile, the cluster, the edge host, or the
+cluster group. Palette has who and when. The record has what the content was.
 
 ```text
 {{#include ../output/edited-verify-who.txt}}
@@ -41,8 +41,19 @@ content was.
 Each line gives the time, the actor, the actor type, and the action, oldest
 first. The actor is the name of a person (`user`), or the name of a Palette
 service (`service`), such as `system`. When Palette logs a summary of the
-change, the line ends with it. When the log holds no write since the record,
+change, the line ends with it. When a person added a note to the entry, the
+line ends with `; note: <note>`. When the log holds no write since the record,
 the line is `who: no audit entry since the record`.
+
+For a cluster record, the write that overwrote a version that the cluster runs
+is an entry of the profile, and not of the cluster. So strata also reads the log
+of each profile in `profilesOverwritten`. A line of a write to an object other
+than the object of the record names the kind and the name of that object after
+the action:
+
+```text
+{{#include ../output/overwritten-cluster-who.txt}}
+```
 
 ```text
 {{#include ../output/edited-verify-who-json.txt}}
@@ -50,8 +61,10 @@ the line is `who: no audit entry since the record`.
 
 `--json` puts the same entries in `verify.who`. Each entry has `time`, `actor`,
 `actorType`, `actorUid` for a person, `action`, `summary` when Palette gives
-one, and `auditUid`. `auditUid` names the entry, and
-`GET /v1/audits/{auditUid}` reads it again. An entry carries no request id.
+one, `userMsg` when the entry has a note, `resource` (the `kind`, the `name`,
+and the `uid` of the object of the write), and `auditUid`. `auditUid` names the
+entry, and `GET /v1/audits/{auditUid}` reads it again. An entry carries no
+request id.
 
 - Strata reads the log only for a record that drifted. An unchanged record
   costs no request.
@@ -60,6 +73,21 @@ one, and `auditUid`. `auditUid` names the entry, and
   for a pack record.
 - What the log holds for each writer:
   [The audit log](../internals/palette/profiles.md#the-audit-log).
+
+## When it changed
+
+Each document that `verify` reads gives the time of its last change,
+`metadata.lastModifiedTimestamp`. So a `DRIFT` verdict ends with
+`; Palette last changed it <time>`, with no more requests:
+
+```text
+{{#include ../output/edited-verify-verdict.txt}}
+```
+
+`--json` gives the time in `verify.lastModified`, for each record, whatever
+its status. With many records, each entry of `records` gives it in
+`lastModified`. The time is of the last change of the document. `--who` names
+the writes.
 
 ## Check many records
 

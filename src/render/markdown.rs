@@ -4,9 +4,9 @@ use super::{
     Renderer, VarLine, applied_ref, artifact_lines, artifacts_summary, capitalized, chain_verdict,
     cluster_count, cluster_value, consumer_count, consumer_counts, consumers_heading,
     consumers_sentence, count_of, counts_line, cross_kind_note, dash, edge_hosts_line,
-    edited_in_place_note, entry_error, gone_sentence, list_count, list_scope, macros_changed_note,
-    macros_changed_sentence, macros_note, overwritten_in_place_notes, pack_version, pair_detail,
-    pair_word, palette_repave_lines, palette_repave_note, plain_flags,
+    edited_in_place_note, entry_error, gone_sentence, last_modified_suffix, list_count, list_scope,
+    macros_changed_note, macros_changed_sentence, macros_note, overwritten_in_place_notes,
+    pack_version, pair_detail, pair_word, palette_repave_lines, palette_repave_note, plain_flags,
     profiles_overwritten_sentence, project_label, record_detail, record_label, registry_note,
     registry_sync_suffix, running_behind_notes, same_content_note, second_reading_counts, short,
     show, state_suffix, subject, tier_path, tier_states, traits_suffix, unverified_sentence,
@@ -338,12 +338,13 @@ impl Renderer for MarkdownRenderer {
         .map(|mut line| {
             line.push_str(&registry_sync_suffix(v.registry_sync.as_ref()));
             line.push_str(&state_suffix(v, recorded));
+            line.push_str(&last_modified_suffix(v));
             if let Some(heading) = who_heading(v) {
                 line.push_str("\n\n");
                 line.push_str(&heading);
                 line.push('\n');
                 for e in v.who.iter().flatten() {
-                    line.push_str(&format!("\n- {}", escape(&who_entry(e))));
+                    line.push_str(&format!("\n- {}", escape(&who_entry(e, &v.uid))));
                 }
             }
             line

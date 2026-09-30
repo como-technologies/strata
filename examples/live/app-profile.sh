@@ -6,7 +6,7 @@
 #   1  an app profile with one manifest tier: a record of appprofile:<name>@<version> holds the
 #      tier as a pack, with no digest; verify of it is OK
 #   2  a plain update of the manifest: the uid and the version stay, and verify of the record
-#      reports drift, with the tier AUTHORED
+#      reports drift, with the tier AUTHORED; --who reads the log of the kind appprofile (#140)
 #   3  the app profile deleted
 #
 # Needs the strata release binary, jq, and the key as verify.sh needs it. It needs no cluster, and
@@ -68,6 +68,11 @@ if stage 2 "a plain update of the manifest"; then
   check edit-verify 1 '#78: verify of the record reports drift' -- "$strata" verify app.json
   check edit-verify-says 0 '#78: the tier is AUTHORED, and the manifest is named' -- \
     bash -c "grep -Eq '^~ \\[app +\\] config .*AUTHORED' edit-verify.out && grep -q 'manifest config' edit-verify.out"
+  check edit-who 1 '#140: verify --who reads the audit log of the app profile' -- "$strata" verify app.json --who --json
+  check edit-who-appprofile 0 '#140: Palette logs the update under the kind appprofile: the entries name the app profile' -- \
+    jq -e --arg u "$U" '.verify.who | length > 0 and all(.resource.kind == "appprofile" and .resource.uid == $u)' edit-who.out
+  check edit-last-modified 0 '#140: the document of the app profile gives the time of the update, after the record' -- \
+    jq -e --arg at "$(jq -r .source.fetchedAt app.json)" '.verify.lastModified >= $at' edit-who.out
 fi
 
 if stage 3 "the app profile deleted"; then

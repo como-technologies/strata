@@ -6,6 +6,11 @@ $ strata verify releases/1.1.1/dev.json --who --json | jq '.verify.who'
     "actorType": "user",
     "actorUid": "64fb00000000000000000001",
     "action": "update",
+    "resource": {
+      "kind": "clusterprofile",
+      "name": "aws-stack",
+      "uid": "64e0000000000000000000c3"
+    },
     "auditUid": "64fa00000000000000000001"
   }
 ]
