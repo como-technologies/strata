@@ -197,6 +197,12 @@ A comparison of two sides, `a` and `b`.
     runs whose uid names another version now, or no longer exists: `uid`,
     `name`, `clusterVersion`, and `profileVersion` (empty for a uid that is
     gone). The status is `drifted`.
+  - `registrySync`: for a pack record, the last sync of the registry in
+    Palette: `lastSyncedTime` (empty when no sync completed), `status`
+    (`Completed`, `InProgress`, or `Failed`), and `message` when Palette gives
+    one. The verdict states the copy of the registry in Palette, and this field
+    tells how old that copy is. It is absent when the registry does not sync,
+    or when Palette does not answer.
   - `who`, only with `--who` and for a drifted profile or cluster record: each
     write to the profile, or to the cluster, that the audit log of Palette
     holds since `recordedAt`, oldest first: `time`, `actor`, `actorType`

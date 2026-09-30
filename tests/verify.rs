@@ -4643,6 +4643,80 @@ fn verify_rechecks_a_pack_version_against_its_registry() {
     );
 }
 
+/// Verify a record of csi-aws-ebs@1.65.0 in the Public Repo, whose registry answers `sync` for
+/// its sync status: the verdict line, and the diff as `--json` writes it.
+fn verify_pack_with_sync(sync: Option<Value>) -> (String, Value) {
+    let api = serve_registry(vec![], &[("reg-public", public_entity())]);
+    let recorded = snapshot_pack(&api, "pack:csi-aws-ebs@1.65.0").unwrap();
+    let api = match sync {
+        Some(s) => api.with("/v1/registries/pack/reg-public/sync/status", s),
+        None => api,
+    };
+    let v = ops::verify(&recorded, &Palette::new(api), "t1", &Progress::silent()).unwrap();
+    assert!(v.unchanged);
+    let verdict = render::renderer(Format::Terminal, Paint::off(), false)
+        .verdict(v.diff.verify.as_ref().unwrap(), &recorded.source)
+        .unwrap();
+    (verdict, serde_json::to_value(&v.diff).unwrap())
+}
+
+#[test]
+fn verify_of_a_pack_record_ends_the_verdict_with_the_last_sync_of_the_registry() {
+    let (verdict, json) = verify_pack_with_sync(Some(serde_json::json!({
+        "isSyncSupported": true, "lastRunTime": "2026-09-30T00:10:00.000Z",
+        "lastSyncedTime": "2026-09-30T00:00:11.000Z", "status": "Completed",
+    })));
+    assert_eq!(
+        verdict,
+        "OK: pack csi-aws-ebs@1.65.0 in registry Public Repo is unchanged since t0; \
+         Palette synced the registry 2026-09-30T00:00:11.000Z"
+    );
+    assert_eq!(
+        json["verify"]["registrySync"],
+        serde_json::json!({"lastSyncedTime": "2026-09-30T00:00:11.000Z", "status": "Completed"})
+    );
+}
+
+#[test]
+fn verify_of_a_pack_record_names_a_failed_sync_of_the_registry_with_its_message() {
+    let (verdict, json) = verify_pack_with_sync(Some(serde_json::json!({
+        "isSyncSupported": true, "lastSyncedTime": "2025-10-16T08:00:00.000Z",
+        "status": "Failed", "message": "invalid helm registry http status 404",
+    })));
+    assert!(
+        verdict.ends_with(
+            "is unchanged since t0; the last sync of the registry failed: \
+             invalid helm registry http status 404"
+        ),
+        "{verdict}"
+    );
+    assert_eq!(json["verify"]["registrySync"]["status"], "Failed");
+    assert_eq!(
+        json["verify"]["registrySync"]["message"],
+        "invalid helm registry http status 404"
+    );
+    assert_eq!(
+        json["verify"]["registrySync"]["lastSyncedTime"],
+        "2025-10-16T08:00:00.000Z"
+    );
+}
+
+#[test]
+fn verify_of_a_pack_record_gives_no_sync_note_for_a_registry_that_does_not_sync() {
+    let plain = "OK: pack csi-aws-ebs@1.65.0 in registry Public Repo is unchanged since t0";
+    // the registry does not sync
+    let (verdict, json) = verify_pack_with_sync(Some(serde_json::json!({
+        "isSyncSupported": false, "lastSyncedTime": "2026-09-30T00:00:11.000Z",
+        "status": "Completed",
+    })));
+    assert_eq!(verdict, plain);
+    assert!(json["verify"].get("registrySync").is_none(), "{json}");
+    // Palette does not serve the route: a 404, no note and no error
+    let (verdict, json) = verify_pack_with_sync(None);
+    assert_eq!(verdict, plain);
+    assert!(json["verify"].get("registrySync").is_none(), "{json}");
+}
+
 #[test]
 fn verify_reports_drift_and_names_the_order_when_only_the_order_of_the_packs_changed() {
     let dir = tempfile::tempdir().unwrap();

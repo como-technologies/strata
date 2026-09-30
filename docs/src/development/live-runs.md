@@ -200,6 +200,7 @@ registries the tenant can see, including one pack that two registries hold.
 | `compare-same` | 0 | #55: a pack version against itself is identical |
 | `record`, `record-title` | 0 | #55: `snapshot` writes a record of a pack version, which names the pack and not a profile |
 | `verify-record` | 0 | #55: the record verifies against the registry it came from |
+| `verify-sync`, `verify-sync-json` | 0 | #141: the verdict ends with the last sync of the registry, and `--json` gives `verify.registrySync` |
 | `record-images`, `old-record` | 0 | #77: the record carries the image list; a record without the list gets it from its values, and verifies |
 | `latest`, `latest-is-newest` | 0 | #55: `@latest` resolves to the newest version the registry offers |
 | `two-registries`, `two-registries-says` | 2, 0 | #55: a bare ref for a pack in two registries is an error that names both, and the ref that fixes it |

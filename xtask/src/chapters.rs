@@ -1894,6 +1894,12 @@ fn use_cases(r: &mut Runner) {
     );
     r.step("pack-verify", 0, false, "strata verify kubernetes.json");
     r.step(
+        "pack-verify-json",
+        0,
+        false,
+        "strata verify kubernetes.json --json | jq '.verify'",
+    );
+    r.step(
         "packs-list",
         0,
         false,

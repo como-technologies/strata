@@ -7,11 +7,11 @@ use super::{
     edited_in_place_note, entry_error, list_count, list_scope, macros_changed_note,
     macros_changed_sentence, macros_note, overwritten_in_place_notes, pack_version, pair_detail,
     pair_word, palette_repave_lines, palette_repave_note, profiles_overwritten_sentence,
-    project_label, record_detail, record_label, registry_note, running_behind_notes,
-    same_content_note, short, show, subject, tag_rename, tier_path, tier_states, traits_suffix,
-    unverified_sentence, updates_pending_notes, upstream_unknown_note, values_changed_suffix,
-    variable_lines, variables_comparable, variables_unavailable_note, version_display, who_entry,
-    who_heading,
+    project_label, record_detail, record_label, registry_note, registry_sync_suffix,
+    running_behind_notes, same_content_note, short, show, subject, tag_rename, tier_path,
+    tier_states, traits_suffix, unverified_sentence, updates_pending_notes, upstream_unknown_note,
+    values_changed_suffix, variable_lines, variables_comparable, variables_unavailable_note,
+    version_display, who_entry, who_heading,
 };
 use crate::color::Paint;
 use crate::diff::{
@@ -428,6 +428,7 @@ impl Renderer for TerminalRenderer {
             },
         })
         .map(|mut line| {
+            line.push_str(&registry_sync_suffix(v.registry_sync.as_ref()));
             if let Some(heading) = who_heading(v) {
                 line.push('\n');
                 line.push_str(&heading);

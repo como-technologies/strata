@@ -31,6 +31,12 @@ it needs.**
   [A pack version pushed again](#a-pack-version-pushed-again).
 - Palette takes the digest from its own copy of the registry, which a sync
   refreshes. `@latest` is the newest version of that copy.
+- Palette gives the last sync of each registry:
+  `GET /v1/registries/pack/{uid}/sync/status`, the same route under `helm`,
+  and under `oci/{uid}/basic` or `oci/{uid}/ecr`. The answer has
+  `isSyncSupported`, `lastSyncedTime`, `status` (`Completed`, `InProgress`, or
+  `Failed`), and `message`. `verify` of a pack record reads it: see
+  [The sync of the registry of a pack record](../../commands/verify.md#the-sync-of-the-registry-of-a-pack-record).
 
 ## A pack that requires another pack
 
