@@ -1,0 +1,2 @@
+$ strata consumers runs/shop.json --json | jq -c '.consumers[]'
+{"kind":"app","uid":"64f7000000000000000000a1","name":"shop-dev","projectUid":"64f20000000000000000a0d1","projectName":"dev","state":"Deployed","version":"1.0.0"}

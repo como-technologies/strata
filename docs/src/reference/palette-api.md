@@ -62,7 +62,8 @@ into a condition of the search: the property `tags`, with the values
 | `GET /v1/clustergroups/hostCluster/metadata` | The name and the uid of each cluster group: the uid of a group name. |
 | `POST /v1/dashboard/clustergroups/{uid}/virtualClusters?limit=50` | The virtual clusters of the group, every page: `members[]` of the record. The body has no filter. |
 | `GET /v1/clusterprofiles/{uid}/packs/manifests` and `GET /v1/clusterprofiles/{uid}/variables` | For an edge host and a cluster group: the manifests and the variable definitions of each profile. |
-| `GET /v1/appProfiles/{uid}` | The metadata and the version of an app profile. |
+| `GET /v1/appProfiles/{uid}` | The metadata and the version of an app profile, and `status.inUseApps`: the app deployments that `consumers` lists. |
+| `GET /v1/appDeployments/{uid}` | One app deployment, for `consumers` of an app profile: its state, and the version its copy names. |
 | `GET /v1/appProfiles/{uid}/tiers` | Each tier in full: its type, version, source tier, registry, values, properties, and manifests. |
 | `GET /v1/appProfiles/{uid}/tiers/{tierUid}/manifests/{manifestUid}` | The content of one manifest of a tier. |
 | `GET /v1/dashboard/appProfiles/metadata` | The name, the version, and the uid of each app profile: the uid of `<name>@<version>`. |
@@ -90,8 +91,10 @@ profile version. `list clusters --applied`, and `list --cluster`, read
 that the profile lists, in its own project. Then it reads the cluster listing at
 tenant scope, and `GET /v1/spectroclusters/{uid}` for each cluster the profile
 did not name: [consumers](../commands/consumers.md) says why, and
-`--list-only` stops it. Then it searches the edge hosts. `verify` on a cluster
-record reads each profile that the cluster runs.
+`--list-only` stops it. Then it searches the edge hosts. For an app profile,
+`consumers` reads `GET /v1/appDeployments/{uid}` for each app deployment that
+the app profile lists, in its own project, and nothing more. `verify` on a
+cluster record reads each profile that the cluster runs.
 
 Palette serves `/v1/packs` 100 entries at a time. Strata raises `offset` by the
 entries it got, until a page is short or `offset` reaches `listmeta.count`.

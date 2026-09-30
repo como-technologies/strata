@@ -1,4 +1,5 @@
-//! `consumers`: the clusters, edge hosts, and cluster templates that use a profile version.
+//! `consumers`: the clusters, edge hosts, and cluster templates that use a profile version, and
+//! the app deployments of an app profile.
 
 use std::collections::HashMap;
 
@@ -30,6 +31,18 @@ pub const EDGE_HOST_KIND: &str = "edgehost";
 /// The kind of a consumer that is a cluster template.
 pub const TEMPLATE_KIND: &str = "template";
 
+/// The kind of a consumer that is an app deployment of an app profile.
+pub const APP_DEPLOYMENT_KIND: &str = "app";
+
+/// Why an app profile has no second reading: Palette lists app deployments by name, cluster, and
+/// tag, and not by profile.
+pub const APP_NO_SECOND_READING: &str =
+    "an app profile: the app deployment listing filters no profile";
+
+/// Why an app profile has no edge hosts: Palette binds a cluster profile to an edge host, and
+/// never an app profile.
+pub const APP_NO_EDGE_HOSTS: &str = "an app profile: no edge host binds one";
+
 fn cluster_kind() -> String {
     CLUSTER_KIND.to_string()
 }
@@ -43,17 +56,20 @@ pub struct ConsumedProfile {
     pub name: String,
     /// Profile version.
     pub version: String,
+    /// `app` for an app profile; absent for a cluster profile.
+    #[serde(rename = "type", default, skip_serializing_if = "String::is_empty")]
+    pub kind: String,
 }
 
-/// One cluster, edge host, or cluster template that uses the profile version.
+/// One cluster, edge host, cluster template, or app deployment that uses the profile version.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct Consumer {
-    /// `cluster`, `edgehost` for an edge host that the profile is bound to, or `template` for a
-    /// cluster template that links the version.
+    /// `cluster`, `edgehost` for an edge host that the profile is bound to, `template` for a
+    /// cluster template that links the version, or `app` for an app deployment of an app profile.
     #[serde(default = "cluster_kind")]
     pub kind: String,
-    /// Cluster uid, edge host uid, or cluster template uid.
+    /// Cluster uid, edge host uid, cluster template uid, or app deployment uid.
     pub uid: String,
     /// Cluster name; empty when neither the profile nor the cluster could name it.
     pub name: String,
@@ -67,8 +83,9 @@ pub struct Consumer {
     /// Empty for a cluster template: a template has no state.
     pub state: String,
     /// The version the cluster's own copy of the profile names, from the cluster document; empty
-    /// when the cluster could not be read, and for a cluster template, which keeps no copy. It differs from `profile.version` when the version the
-    /// cluster runs was overwritten in place, by a legacy version bump or a rename.
+    /// when the cluster could not be read, and for a cluster template, which keeps no copy. For an
+    /// app deployment, `spec.profile.metadata.version` of the deployment. It differs from
+    /// `profile.version` when the version the cluster runs was overwritten in place, by a legacy version bump or a rename.
     #[serde(default)]
     pub version: String,
     /// Why the cluster could not be read, when it could not.
@@ -95,10 +112,14 @@ pub struct ClustersRead {
     /// consumer list of the profile stands alone.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<Value>,
-    /// True when the second reading was not done, as `--list-only` asks. Then the consumer list
-    /// of the profile stands alone, and an empty list can be an error of Palette.
+    /// True when the second reading was not done, as `--list-only` asks, or for an app profile.
+    /// Then the consumer list of the profile stands alone, and an empty list can be an error of
+    /// Palette.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub skipped: bool,
+    /// Why the second reading was not done, when `--list-only` did not ask: for an app profile.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub reason: String,
 }
 
 /// The edge hosts that `consumers` read. The consumer list of a profile names clusters only, so
@@ -111,6 +132,12 @@ pub struct EdgeHostsRead {
     /// Why the edge hosts could not be listed, when they could not. Then no edge host counts.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<Value>,
+    /// True when strata did not search the edge hosts: for an app profile.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub skipped: bool,
+    /// Why strata did not search the edge hosts, when it did not.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub reason: String,
 }
 
 /// What `consumers` reads.
@@ -189,6 +216,8 @@ where
 /// [`consumers`] with options: `list_only` reads the consumer list that Palette computes, and
 /// no other cluster. It costs one request per consumer, where the second reading costs one per
 /// cluster of the fleet, but it does not find a consumer that the list omits.
+///
+/// An app profile, by ref or by record, gives its app deployments: see [`app_consumers`].
 pub fn consumers_with<A, F>(
     reference: &Ref,
     options: &ConsumersOptions,
@@ -207,25 +236,41 @@ where
         Ref::Cluster { .. }
         | Ref::EdgeHost { .. }
         | Ref::ClusterGroup { .. }
-        | Ref::AppProfile { .. }
         | Ref::ClusterSet { .. }
         | Ref::Pack { .. } => {
             return Err(refused());
+        }
+        Ref::AppProfile { id, version } => {
+            return app_consumers(
+                None,
+                id,
+                version.as_deref(),
+                connect,
+                generated_at,
+                progress,
+            );
         }
         Ref::Snapshot(path) => {
             let recorded = Snapshot::load(path)?;
             // a pack record is not a profile version either, and NoUid below would name `verify`,
             // a command that is not running
-            if recorded.source.cluster.is_some()
-                || recorded.source.pack.is_some()
-                || recorded.source.kind == crate::snapshot::APP_KIND
-            {
+            if recorded.source.cluster.is_some() || recorded.source.pack.is_some() {
                 return Err(refused());
             }
             if recorded.source.uid.is_empty() {
                 return Err(Error::NoUid);
             }
             let scope = Some(recorded.source.project_uid.clone()).filter(|p| !p.is_empty());
+            if recorded.source.kind == crate::snapshot::APP_KIND {
+                return app_consumers(
+                    scope.as_deref(),
+                    &recorded.source.uid,
+                    None,
+                    connect,
+                    generated_at,
+                    progress,
+                );
+            }
             (scope, Some(recorded.source.uid))
         }
         Ref::Uid(uid) => (None, Some(uid.clone())),
@@ -336,6 +381,7 @@ where
             uid: text(&doc, "/metadata/uid"),
             name: text(&doc, "/metadata/name"),
             version,
+            kind: String::new(),
         },
         count: list.len(),
         overwritten,
@@ -372,6 +418,110 @@ fn linked_templates(list: &mut Vec<Consumer>, doc: &Value) {
     }
 }
 
+/// The app deployments that use an app profile version: `status.inUseApps` of
+/// `GET /v1/appProfiles/{uid}`, each read with `GET /v1/appDeployments/{uid}` in its own project
+/// for its state and the version its copy names. Palette refuses the delete of an app profile
+/// while a deployment uses it, as it does for a cluster profile. `id` is a uid, or a name when
+/// `version` is given. The dashboard route of the app deployments filters no profile, and an app
+/// profile binds to no edge host, so the report has no second reading and no edge hosts.
+pub fn app_consumers<A, F>(
+    scope: Option<&str>,
+    id: &str,
+    version: Option<&str>,
+    mut connect: F,
+    generated_at: &str,
+    progress: &Progress,
+) -> Result<ConsumersReport>
+where
+    A: PaletteApi,
+    F: FnMut(Option<&str>) -> Result<Palette<A>>,
+{
+    let mut clients: HashMap<String, Palette<A>> = HashMap::new();
+    let home = connect(scope)?;
+    let uid = match version {
+        Some(v) => home.resolve_app_profile(id, v)?,
+        None => id.to_string(),
+    };
+    progress.note(&format!("listing the app deployments of app profile {uid}"));
+    let doc = home.app_profile_document(&uid)?;
+    let version = text(&doc, "/spec/version");
+
+    let mut list: Vec<Consumer> = Vec::new();
+    for app in doc
+        .pointer("/status/inUseApps")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+    {
+        let app_uid = text(app, "/uid");
+        if app_uid.is_empty() || list.iter().any(|c| c.uid == app_uid) {
+            continue;
+        }
+        let mut c = Consumer {
+            kind: APP_DEPLOYMENT_KIND.to_string(),
+            name: text(app, "/name"),
+            project_uid: text(app, "/projectUid"),
+            project_name: String::new(),
+            state: UNKNOWN_STATE.to_string(),
+            version: String::new(),
+            error: None,
+            unlisted: false,
+            uid: app_uid,
+        };
+        let doc = client_for(&mut clients, &home, &c.project_uid, &mut connect)
+            .and_then(|p| p.app_deployment_document(&c.uid));
+        match doc {
+            Ok(d) => {
+                let or_keep = |current: String, found: String| {
+                    if found.is_empty() { current } else { found }
+                };
+                c.name = or_keep(c.name, text(&d, "/metadata/name"));
+                c.project_uid =
+                    or_keep(c.project_uid, text(&d, "/metadata/annotations/projectUid"));
+                c.state = or_keep(c.state, text(&d, "/status/state"));
+                c.version = text(&d, "/spec/profile/metadata/version");
+            }
+            Err(e) => c.error = Some(e.to_json()),
+        }
+        list.push(c);
+    }
+    name_projects_of(
+        &mut list,
+        |c| &c.project_uid,
+        |c| &mut c.project_name,
+        &home,
+    );
+
+    let overwritten = list
+        .iter()
+        .filter(|c| !c.version.is_empty() && c.version != version)
+        .count();
+    Ok(ConsumersReport {
+        schema: CONSUMERS_SCHEMA.to_string(),
+        tool: Tool::current(),
+        generated_at: generated_at.to_string(),
+        profile: ConsumedProfile {
+            uid: text(&doc, "/metadata/uid"),
+            name: text(&doc, "/metadata/name"),
+            version,
+            kind: crate::snapshot::APP_KIND.to_string(),
+        },
+        count: list.len(),
+        overwritten,
+        consumers: list,
+        clusters_read: ClustersRead {
+            skipped: true,
+            reason: APP_NO_SECOND_READING.to_string(),
+            ..ClustersRead::default()
+        },
+        edge_hosts_read: EdgeHostsRead {
+            skipped: true,
+            reason: APP_NO_EDGE_HOSTS.to_string(),
+            ..EdgeHostsRead::default()
+        },
+    })
+}
+
 /// Add each edge host that the profile `uid` is bound to. The search is read through `wide`, and
 /// through `home` when `wide` cannot read it. A Palette without the search has no edge hosts.
 fn edge_hosts_bound<A: PaletteApi>(
@@ -388,8 +538,8 @@ fn edge_hosts_bound<A: PaletteApi>(
         Err(Error::Api { status: 404, .. }) => Vec::new(),
         Err(e) => {
             return EdgeHostsRead {
-                read: 0,
                 error: Some(e.to_json()),
+                ..EdgeHostsRead::default()
             };
         }
     };
@@ -416,7 +566,7 @@ fn edge_hosts_bound<A: PaletteApi>(
     }
     EdgeHostsRead {
         read: hosts.len(),
-        error: None,
+        ..EdgeHostsRead::default()
     }
 }
 

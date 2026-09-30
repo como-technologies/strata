@@ -357,6 +357,21 @@ impl<A: PaletteApi> Palette<A> {
         self.api.get_json(&format!("/v1/spectroclusters/{uid}"))
     }
 
+    /// The app profile document alone, `GET /v1/appProfiles/{uid}`: metadata, version, and the
+    /// app deployments that use it in `status.inUseApps`.
+    pub fn app_profile_document(&self, uid: &str) -> Result<Value> {
+        self.api
+            .get_json(&format!("/v1/appProfiles/{}", query_value(uid)))
+    }
+
+    /// One app deployment, `GET /v1/appDeployments/{uid}`: its name, its project in the
+    /// `projectUid` annotation, the app profile version its copy names in
+    /// `spec.profile.metadata.version`, and its state in `status.state`.
+    pub fn app_deployment_document(&self, uid: &str) -> Result<Value> {
+        self.api
+            .get_json(&format!("/v1/appDeployments/{}", query_value(uid)))
+    }
+
     /// The entries of the audit log of Palette for one resource, `GET /v1/audits`, that it logged
     /// at `since` or after, every page. `kind` is `clusterprofile`, `spectrocluster`, or
     /// `edgehost`. Palette lists them newest first, and at most 100 on a page; `listmeta.continue`

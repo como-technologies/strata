@@ -355,6 +355,15 @@ impl Runner {
         self.tenant.app_profile(project, uid, version, replicas);
     }
 
+    /// An app deployment of an app profile: see [`Tenant::app_deployment`].
+    pub fn app_deployment(&mut self, project: &str, uid: &str, name: &str, profile: &str) {
+        if !self.building() {
+            return;
+        }
+        self.changed();
+        self.tenant.app_deployment(project, uid, name, profile);
+    }
+
     /// Change the pack values on a cluster, and not on its profile.
     pub fn on_cluster_reclaim(&mut self, project: &str, uid: &str, policy: &str) {
         if !self.building() {

@@ -260,22 +260,28 @@ is the path as a list: strings for keys, numbers for indexes, and
 
 ## strata-consumers/1
 
-- `profile`: `uid`, `name`, and `version`.
+- `profile`: `uid`, `name`, and `version`. `type`, only for an app profile:
+  `app`.
 - `count`: the number of consumers. Exit `0` when it is `0`.
 - `overwritten`: the number of consumers whose copy names another version.
-- `consumers[]`: `kind`, `cluster`, `edgehost`, or `template`, `uid`, `name`,
-  `projectUid`, `state`, `version`, and `error` when strata cannot read the
-  cluster. `projectName` joins them when strata could read the project listing.
-  The names and the projects come from `status.inUseClusters` of the profile,
-  and from `status.inUseClusterTemplates` for a cluster template. A cluster
-  template has an empty `state` and an empty `version`. `unlisted`, only when true: the profile
-  did not list the cluster, and the second reading found it.
+- `consumers[]`: `kind`, `cluster`, `edgehost`, `template`, or `app` for an app
+  deployment, `uid`, `name`, `projectUid`, `state`, `version`, and `error` when
+  strata cannot read the cluster or the app deployment. `projectName` joins
+  them when strata could read the project listing. The names and the projects
+  come from `status.inUseClusters` of the profile, from
+  `status.inUseClusterTemplates` for a cluster template, and from
+  `status.inUseApps` of an app profile. A cluster template has an empty `state`
+  and an empty `version`. `unlisted`, only when true: the profile did not list
+  the cluster, and the second reading found it.
 - `clustersRead`: the second reading. `read`: the cluster documents read.
   `unread`: the clusters the listing names that strata could not read. `error`:
   why strata could not read the cluster listing. Then `read` is `0`.
-  `skipped`, only when true: `--list-only` asked for no second reading.
+  `skipped`, only when true: `--list-only` asked for no second reading, or the
+  profile is an app profile. `reason`, only for an app profile: why strata did
+  no second reading.
 - `edgeHostsRead`: `read`, the edge hosts listed, and `error`, why strata could
-  not list them. Then no edge host counts.
+  not list them. Then no edge host counts. `skipped` and `reason`, only for an
+  app profile: strata reads no edge host, and why.
 
 ## strata-list/1
 

@@ -49,6 +49,7 @@ const PRODUCTION: &str = "64f7000000000000000000a2";
 const STORE_1: &str = "64f4000000000000000000e1";
 const STORE_2: &str = "64f4000000000000000000e2";
 const SHOP: &str = "64f6000000000000000000a1";
+const SHOP_DEV: &str = "64f7000000000000000000a1";
 
 const RETAIN: &[Edit] = &[Edit::Reclaim("Retain")];
 const TAG_2404: &[Edit] = &[Edit::Tag {
@@ -1724,6 +1725,13 @@ fn use_cases(r: &mut Runner) {
         false,
         "strata verify runs/shop.json --allow-no-digest",
     );
+    // no app deployment uses the app profile yet
+    r.step(
+        "app-consumers-free",
+        0,
+        false,
+        "strata consumers appprofile:shop@1.0.0",
+    );
     // a plain update: the replicas of the web tier, with the same uid and version
     r.app_profile(DEV, SHOP, "1.0.0", "3");
     r.serve_here(); // state 2: the web tier of shop@1.0.0 has another replica count
@@ -1732,6 +1740,21 @@ fn use_cases(r: &mut Runner) {
         1,
         false,
         "strata verify runs/shop.json --allow-no-digest",
+    );
+    // a team deploys the app profile, so Palette refuses its delete
+    r.app_deployment(DEV, SHOP_DEV, "shop-dev", SHOP);
+    r.serve_here(); // state 3: the app deployment shop-dev uses shop@1.0.0
+    r.step(
+        "app-consumers",
+        1,
+        false,
+        "strata consumers appprofile:shop@1.0.0",
+    );
+    r.step(
+        "app-consumers-json",
+        1,
+        false,
+        "strata consumers runs/shop.json --json | jq -c '.consumers[]'",
     );
 
     // The pins that are behind the registry, and a version that arrives between two runs

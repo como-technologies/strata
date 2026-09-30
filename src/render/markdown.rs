@@ -433,6 +433,9 @@ impl Renderer for MarkdownRenderer {
         // how far it got.
         let read = &r.clusters_read;
         let second = match entry_error(read.error.as_ref()) {
+            _ if read.skipped && !read.reason.is_empty() => {
+                format!("Second reading: not done ({}).", escape(&read.reason))
+            }
             _ if read.skipped => "Second reading: not done (`--list-only`).".to_string(),
             Some(msg) => format!("Second reading: not done ({}).", escape(msg)),
             None => format!(
@@ -449,7 +452,14 @@ impl Renderer for MarkdownRenderer {
             o.push('\n');
             return Ok(o);
         }
-        o.push_str("| cluster | uid | project | state | runs |\n|---|---|---|---|---|\n");
+        let subject = if r.profile.kind == crate::snapshot::APP_KIND {
+            "app deployment"
+        } else {
+            "cluster"
+        };
+        o.push_str(&format!(
+            "| {subject} | uid | project | state | runs |\n|---|---|---|---|---|\n"
+        ));
         for c in &r.consumers {
             // an empty version means two things: the cluster named none, or strata could not read
             // the cluster at all. `-` states the first for both, so the error decides the cell.
@@ -470,6 +480,8 @@ impl Renderer for MarkdownRenderer {
             }
             if c.kind == crate::ops::EDGE_HOST_KIND {
                 runs.push_str(" (edge host)");
+            } else if c.kind == crate::ops::APP_DEPLOYMENT_KIND {
+                runs.push_str(" (app deployment)");
             }
             o.push_str(&format!(
                 "| `{}` | `{}` | `{}` | {} | {runs} |\n",

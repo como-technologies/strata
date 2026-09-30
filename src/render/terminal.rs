@@ -526,9 +526,10 @@ impl Renderer for TerminalRenderer {
             }
             if c.kind == crate::ops::EDGE_HOST_KIND {
                 out.push_str(&format!("  {}", p.cyan("edge host")));
-            }
-            if c.kind == crate::ops::TEMPLATE_KIND {
+            } else if c.kind == crate::ops::TEMPLATE_KIND {
                 out.push_str(&format!("  {}", p.cyan("cluster template")));
+            } else if c.kind == crate::ops::APP_DEPLOYMENT_KIND {
+                out.push_str(&format!("  {}", p.cyan("app deployment")));
             }
             if !c.version.is_empty() && c.version != r.profile.version {
                 out.push_str(&format!(
@@ -559,6 +560,9 @@ impl Renderer for TerminalRenderer {
         // how far it got.
         let read = &r.clusters_read;
         let second = match read.error.as_ref().and_then(|e| e.get("message")) {
+            _ if read.skipped && !read.reason.is_empty() => {
+                format!("second reading: not done ({})", read.reason)
+            }
             _ if read.skipped => "second reading: not done (--list-only)".to_string(),
             Some(msg) => format!(
                 "second reading: not done ({})",

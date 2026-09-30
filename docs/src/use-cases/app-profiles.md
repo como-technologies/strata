@@ -21,7 +21,8 @@ of an application.
 
 **Follow along.** `just playground app-profiles-1` serves this tenant on this
 machine, with no key and no cost. A person updates the app profile in step 3,
-so this page has two seeds. Each section names the one it needs.
+and a team deploys it in step 4, so this page has three seeds. Each section
+names the one it needs.
 
 ## 1. Record the app profile
 
@@ -64,6 +65,31 @@ Exit `1`: `DRIFT`. Both sides are `shop@1.0.0` with one uid, so the note says
 the version was edited in place. The `param` line names the property that
 changed.
 
+## 4. Find the app deployments before a delete
+
+Palette refuses the delete of an app profile while an app deployment uses it.
+Before the team deploys `shop@1.0.0`, no deployment uses it:
+
+```text
+{{#include ../output/app-consumers-free.txt}}
+```
+
+Exit `0`: a delete can go on.
+
+**Follow along.** `just playground app-profiles-3` is the same tenant after a
+team deploys `shop@1.0.0` as `shop-dev`.
+
+```text
+{{#include ../output/app-consumers.txt}}
+```
+
+Exit `1`: Palette refuses the delete. Remove the app deployment first, or move
+it to another version. The record from step 1 gives the same answer as the ref:
+
+```text
+{{#include ../output/app-consumers-json.txt}}
+```
+
 ## What to do
 
 - Record each app profile version that you deploy, and verify the records on a
@@ -73,11 +99,14 @@ changed.
   once.
 - Keep the record from before the update: `compare` of the old record and the
   app profile now names each param and each manifest that changed.
+- Before you delete an app profile version, run `strata consumers` on it, and
+  delete only on exit `0`.
 
 ## Palette behavior
 
 The live run of `just live-app-profile` updates the manifest of a tier. It shows
 that a plain update keeps the uid and the version, and that the record drifts
 with the tier `AUTHORED`. A property is part of the same tier, and the root
-covers it as it covers the manifest. See
+covers it as it covers the manifest. The source of Palette gives the app
+deployments of an app profile, and the check that refuses its delete. See
 [Edge hosts, cluster groups, and app profiles](../internals/palette/other-objects.md#app-profiles).

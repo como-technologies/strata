@@ -349,6 +349,9 @@ pub(crate) fn consumers_sentence(d: &Diff) -> Option<String> {
 /// `edge hosts: 3 read`, or why they could not be read.
 pub(crate) fn edge_hosts_line(r: &ConsumersReport) -> String {
     let read = &r.edge_hosts_read;
+    if read.skipped {
+        return format!("edge hosts: not read ({})", read.reason);
+    }
     match read
         .error
         .as_ref()

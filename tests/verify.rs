@@ -7100,6 +7100,138 @@ fn an_app_profile_record_holds_each_tier_as_a_pack() {
     assert!(text.contains("      ~ param replicas: 2 -> 3\n"), "{text}");
 }
 
+/// The consumers of an app profile are its app deployments: `status.inUseApps`, each read with
+/// `GET /v1/appDeployments/{uid}` for its state and the version its copy names.
+#[test]
+fn consumers_of_an_app_profile_are_its_app_deployments() {
+    let api = serve_app_profile(MemoryApi::new(), "2").with(
+        "/v1/appDeployments/d1",
+        serde_json::json!({
+            "metadata": {"name": "shop-dev", "uid": "d1", "annotations": {"projectUid": "p1"}},
+            "spec": {"profile": {"metadata": {"name": "shop", "uid": "ap1", "version": "1.0.0"}}},
+            "status": {"state": "Deployed"},
+        }),
+    );
+    let consumers = |api: &MemoryApi, r: &Ref| {
+        // by reference, so that `calls` counts each request of each client
+        ops::consumers(r, |_| Ok(Palette::new(api)), "t1", &Progress::silent()).unwrap()
+    };
+
+    let r = consumers(&api, &Ref::parse("appprofile:shop@1.0.0"));
+    assert_eq!(r.exit_code(), 1, "a deployment uses the version");
+    assert_eq!(
+        (r.profile.uid.as_str(), r.profile.kind.as_str()),
+        ("ap1", "app")
+    );
+    assert_eq!(r.count, 1);
+    assert_eq!(r.overwritten, 0);
+    let json = serde_json::to_value(&r).unwrap();
+    assert_eq!(
+        json["consumers"][0],
+        serde_json::json!({"kind": "app", "uid": "d1", "name": "shop-dev", "projectUid": "p1",
+            "state": "Deployed", "version": "1.0.0"})
+    );
+    assert_eq!(api.calls("/v1/appProfiles/ap1"), 1);
+    assert_eq!(api.calls("/v1/appDeployments/d1"), 1);
+    assert_eq!(
+        api.calls("/v1/dashboard/spectroclusters/meta"),
+        0,
+        "no second reading: the listing of the app deployments filters no profile"
+    );
+    assert!(r.clusters_read.skipped && r.edge_hosts_read.skipped);
+    assert_eq!(json["clustersRead"]["reason"], ops::APP_NO_SECOND_READING);
+    assert_eq!(json["edgeHostsRead"]["reason"], ops::APP_NO_EDGE_HOSTS);
+
+    let text = render::renderer(Format::Terminal, Paint::off(), false)
+        .render_consumers(&r)
+        .unwrap();
+    assert!(
+        text.starts_with("shop@1.0.0 (uid ap1): 1 consumer\n"),
+        "{text}"
+    );
+    assert!(
+        text.contains("  shop-dev  d1  project p1  Deployed  app deployment\n"),
+        "{text}"
+    );
+    assert!(
+        text.contains(&format!(
+            "second reading: not done ({})",
+            ops::APP_NO_SECOND_READING
+        )),
+        "{text}"
+    );
+    let md = render::renderer(Format::Markdown, Paint::off(), false)
+        .render_consumers(&r)
+        .unwrap();
+    assert!(
+        md.contains("| `shop-dev` | `d1` | `p1` | Deployed | `1.0.0` (app deployment) |"),
+        "{md}"
+    );
+
+    // by uid and by the highest version, the same answer
+    for text in ["appprofile:ap1", "appprofile:shop@latest"] {
+        let by = consumers(&api, &Ref::parse(text));
+        assert_eq!(serde_json::to_value(&by).unwrap(), json, "{text}");
+    }
+
+    // a record of the app profile gives the same answer as its ref
+    let dir = tempfile::tempdir().unwrap();
+    let record = ops::snapshot_for(
+        &Ref::parse("appprofile:shop@1.0.0"),
+        || Ok(Palette::new(api.clone())),
+        "t0",
+        &Progress::silent(),
+    )
+    .unwrap();
+    let path = dir.path().join("shop.json");
+    std::fs::write(&path, record.to_json(false).unwrap()).unwrap();
+    let from_record = consumers(&api, &Ref::Snapshot(path));
+    assert_eq!(serde_json::to_value(&from_record).unwrap(), json);
+
+    // a deployment that Palette updated to another version of the profile runs a copy that names
+    // it, and one that cannot be read still counts
+    let moved = api
+        .clone()
+        .with(
+            "/v1/appDeployments/d1",
+            serde_json::json!({"metadata": {"name": "shop-dev", "uid": "d1"},
+                "spec": {"profile": {"metadata": {"version": "0.9.0"}}},
+                "status": {"state": "Updating"}}),
+        )
+        .failing("/v1/appDeployments/d2", 403, "no access");
+    let mut doc: Value = moved.get_json("/v1/appProfiles/ap1").unwrap();
+    doc["status"]["inUseApps"].as_array_mut().unwrap().push(
+        serde_json::json!({"kind": "appdeployment", "uid": "d2", "name": "shop-qa",
+            "projectUid": "p2"}),
+    );
+    let moved = moved.with("/v1/appProfiles/ap1", doc);
+    let r = consumers(&moved, &Ref::parse("appprofile:ap1"));
+    assert_eq!((r.count, r.overwritten, r.exit_code()), (2, 1, 1));
+    assert_eq!(
+        (
+            r.consumers[0].state.as_str(),
+            r.consumers[0].version.as_str()
+        ),
+        ("Updating", "0.9.0")
+    );
+    assert_eq!(r.consumers[1].state, ops::UNKNOWN_STATE);
+    assert!(r.consumers[1].error.is_some());
+
+    // no deployment: no consumers, exit 0
+    let mut doc: Value = api.get_json("/v1/appProfiles/ap1").unwrap();
+    doc["status"]["inUseApps"] = serde_json::json!([]);
+    let free = api.clone().with("/v1/appProfiles/ap1", doc);
+    let r = consumers(&free, &Ref::parse("appprofile:shop@1.0.0"));
+    assert_eq!((r.count, r.exit_code()), (0, 0));
+    let text = render::renderer(Format::Terminal, Paint::off(), false)
+        .render_consumers(&r)
+        .unwrap();
+    assert!(
+        text.starts_with("shop@1.0.0 (uid ap1): no consumers\n"),
+        "{text}"
+    );
+}
+
 // ---- behind -----------------------------------------------------------------------------------
 
 /// A version of csi-aws-ebs in the Public Repo with a state, or for other clouds.
