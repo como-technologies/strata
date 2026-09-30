@@ -226,8 +226,10 @@ if [ -n "$build" ]; then
     die "Palette lists no cluster named $cluster_name after 20 minutes; see $PWD/apply.txt"
   fi
   echo "Palette lists cluster $C; the watch starts while the apply runs" | tee -a steps.log
-  # the watch streams to the terminal, one line for each rule at each reading, and to watch.err
-  "$strata" preflight "cluster:$C" --cloud "$engine" "${release_arg[@]}" --json --no-color --verbose \
+  # the watch streams to the terminal, one line for each rule at each reading, and to watch.err;
+  # the tee is a pipe, so the color is asked for when the terminal is there
+  plan_color=never; [ -t 2 ] && plan_color=always
+  "$strata" preflight "cluster:$C" --cloud "$engine" "${release_arg[@]}" --json --verbose --color "$plan_color" \
     --watch --every 30 --limit 5400 --out out-watch > watch.report.json 2> >(tee watch.err >&2)
   watch_exit=$?
   wait "$apply_pid"

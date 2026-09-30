@@ -137,6 +137,27 @@ fn verbose_names_what_each_check_ran_and_wins_over_the_quiet_variable() {
             && err.contains(" ms, PROBE PASS"),
         "{err}"
     );
+    // --color always paints a pipe; auto does not
+    let painted = Command::new(bin())
+        .args([
+            "cluster.json",
+            "--cloud",
+            "aws",
+            "--offline",
+            "--verbose",
+            "--color",
+            "always",
+        ])
+        .current_dir(dir.path())
+        .env("STRATA_QUIET", "1")
+        .output()
+        .unwrap();
+    assert!(
+        String::from_utf8_lossy(&painted.stderr).contains("\x1b[32mPROBE PASS\x1b[0m"),
+        "{}",
+        String::from_utf8_lossy(&painted.stderr)
+    );
+    assert!(!err.contains("\x1b["), "auto colors no pipe: {err}");
     // --quiet wins over --verbose
     let (_, _, quiet) = run(
         &[

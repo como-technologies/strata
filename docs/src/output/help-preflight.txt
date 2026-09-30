@@ -33,6 +33,7 @@ Options:
       --json               The same as --format json
       --compact            Write the JSON on one line
       --no-color           No color
+      --color <WHEN>       When to color the report and the progress lines: auto (a terminal, and NO_COLOR not set), always, or never [default: auto] [possible values: auto, always, never]
   -q, --quiet              No progress messages
   -v, --verbose            Print what each check ran: the request or the command, its answer, the time, and the verdict
   -h, --help               Print help

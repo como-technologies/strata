@@ -156,7 +156,9 @@ that Palette cannot finish stops in minutes, not at the timeout of the client.
 what they gave, each condition that changed, each new event, and one line for
 each rule; and before the first reading, the program of each rule. On a
 terminal the lines carry the colors of the report; `--no-color` or `NO_COLOR`
-turns them off, and a stream to a file has none. To see a
+turns them off, and a stream to a file has none. `--color always` keeps them
+through a pipe, for a `tee` to a log and a terminal; `--color never` is
+`--no-color`. To see a
 watch on a real build, `just live-watch --build --down` in the live example
 ([The preflight checks](../development/live-example.md#the-preflight-checks)).
 
@@ -186,7 +188,7 @@ for a run with no key; with none, strata records each profile from Palette.
 selects rules by id. `--offline` reads nothing from Palette, and `--no-exec`
 runs no command of a cloud tool. `--every` and `--limit` set the watch.
 `--schema` prints the JSON Schema of the report, the rules, the ledger, or the
-promotion report. `--format`, `--json`, `--compact`, `--no-color`, and
+promotion report. `--format`, `--json`, `--compact`, `--no-color`, `--color`, and
 `--quiet` are as for the other commands, with `html` as one more format.
 `--version` prints the version of `strata-preflight`, which a release keeps
 equal to the version of `strata`.

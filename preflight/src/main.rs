@@ -103,6 +103,9 @@ struct Cli {
     /// No color
     #[arg(long)]
     no_color: bool,
+    /// When to color the report and the progress lines: auto (a terminal, and NO_COLOR not set), always, or never
+    #[arg(long, value_enum, default_value = "auto", value_name = "WHEN")]
+    color: ColorArg,
     /// No progress messages
     #[arg(short, long)]
     quiet: bool,
@@ -166,17 +169,33 @@ fn format_of(cli: &Cli) -> Format {
     }
 }
 
+/// When to color: `--color always` colors a pipe too (a `tee` to a log and a terminal), `never`
+/// and `--no-color` never do, and `auto` colors a terminal unless `NO_COLOR` is set.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum)]
+enum ColorArg {
+    Auto,
+    Always,
+    Never,
+}
+
+fn wants_color(cli: &Cli, stream_is_terminal: bool) -> bool {
+    match cli.color {
+        ColorArg::Never => false,
+        ColorArg::Always => !cli.no_color,
+        ColorArg::Auto => {
+            !cli.no_color && std::env::var_os("NO_COLOR").is_none() && stream_is_terminal
+        }
+    }
+}
+
+/// Color for the report, which goes to stdout.
 fn color(cli: &Cli) -> bool {
-    !cli.no_color
-        && std::env::var_os("NO_COLOR").is_none()
-        && std::io::IsTerminal::is_terminal(&std::io::stdout())
+    wants_color(cli, std::io::IsTerminal::is_terminal(&std::io::stdout()))
 }
 
 /// Color for the progress lines, which go to stderr.
 fn color_err(cli: &Cli) -> bool {
-    !cli.no_color
-        && std::env::var_os("NO_COLOR").is_none()
-        && std::io::IsTerminal::is_terminal(&std::io::stderr())
+    wants_color(cli, std::io::IsTerminal::is_terminal(&std::io::stderr()))
 }
 
 fn tiers_of(cli: &Cli) -> Result<Vec<Tier>> {
