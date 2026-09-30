@@ -1,0 +1,11 @@
+$ strata verify kubernetes.json --json | jq '.verify'
+{
+  "status": "unchanged",
+  "uid": "6a6bd41b16c3cbf9999ad3be",
+  "recordedAt": "2026-09-17T09:30:00Z",
+  "checkedAt": "2026-09-17T09:30:00Z",
+  "registrySync": {
+    "lastSyncedTime": "2026-09-17T09:00:00.000Z",
+    "status": "Completed"
+  }
+}

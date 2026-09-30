@@ -794,7 +794,13 @@ fn record_macros_changed(r: &crate::ops::VerifiedRecord) -> Vec<String> {
 
 pub(crate) fn record_detail(r: &crate::ops::VerifiedRecord) -> String {
     use crate::ops::RecordStatus;
-    match r.status {
+    let sync = registry_sync_suffix(
+        r.diff
+            .as_ref()
+            .and_then(|d| d.verify.as_ref())
+            .and_then(|v| v.registry_sync.as_ref()),
+    );
+    let detail = match r.status {
         RecordStatus::Unchanged => format!(
             "unchanged since {}{}",
             r.recorded_at,
@@ -855,7 +861,8 @@ pub(crate) fn record_detail(r: &crate::ops::VerifiedRecord) -> String {
             .and_then(Value::as_str)
             .unwrap_or("could not be checked")
             .to_string(),
-    }
+    };
+    detail + &sync
 }
 
 /// `3 records: 2 unchanged, 1 drifted, 0 errors`, and `1 record` for one.
@@ -1054,6 +1061,24 @@ pub(crate) fn variable_lines(g: &VariablesByName) -> Vec<VarLine<'_>> {
     }
     lines.sort_by_key(|(name, _)| *name);
     lines.into_iter().map(|(_, l)| l).collect()
+}
+
+/// For a pack record, the end of the verdict: when Palette last synced the registry, or that its
+/// last sync failed. Palette holds a copy of each registry, and the verdict states that copy.
+/// Nothing when Palette gives no sync.
+pub(crate) fn registry_sync_suffix(sync: Option<&crate::diff::RegistrySync>) -> String {
+    match sync {
+        Some(s) if s.status == "Failed" && s.message.is_empty() => {
+            "; the last sync of the registry failed".to_string()
+        }
+        Some(s) if s.status == "Failed" => {
+            format!("; the last sync of the registry failed: {}", s.message)
+        }
+        Some(s) if !s.last_synced_time.is_empty() => {
+            format!("; Palette synced the registry {}", s.last_synced_time)
+        }
+        _ => String::new(),
+    }
 }
 
 /// `1 variable value changed`, `2 variable values changed`.

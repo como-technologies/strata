@@ -69,6 +69,10 @@ check record-title 0 '#55: the record names the pack, not a profile' -- \
   grep -q "\"ref\": \"pack:$reg/$pack@$new\"" pack.json
 check verify-record 0 '#55: the record verifies against the registry it came from' -- \
   "$strata" verify pack.json
+check verify-sync 0 '#141: the verdict ends with the last sync of the registry, or the failure of that sync' -- \
+  grep -qE '; (Palette synced the registry |the last sync of the registry failed)' verify-record.out
+check verify-sync-json 0 '#141: --json gives verify.registrySync with lastSyncedTime and status' -- \
+  bash -c "\"$strata\" verify pack.json --json | jq -e '.verify.registrySync | .status and has(\"lastSyncedTime\")'"
 check record-images 0 '#77: the record carries the image list of the values' -- \
   jq -e '.packs[0].images | length > 0' pack.json
 check old-record 0 '#77: a record written before the image list: strata reads the list from its values' -- \

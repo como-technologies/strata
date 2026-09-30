@@ -117,6 +117,36 @@ node impact. It changes no build, but it edits a published version. See
 For a cluster record, strata reads each profile that the cluster runs, one
 request for each. See [A version bump overwrites a version](../use-cases/overwritten.md).
 
+## The sync of the registry of a pack record
+
+Palette keeps a copy of each registry. A sync job reads the registry and
+refreshes the copy. `verify` of a pack record compares the record with that
+copy, and not with what the registry serves now. So the verdict of a pack
+record ends with the last sync of the registry:
+
+```text
+{{#include ../output/pack-verify.txt}}
+```
+
+- `; Palette synced the registry <time>`: the time when the last sync
+  completed.
+- `; the last sync of the registry failed: <message>`: the last sync failed,
+  and the message is from Palette. The copy can be old, so `OK` says only that
+  the copy did not change.
+- No note: the registry does not sync, or Palette does not give the sync status.
+
+With many records, the line of a pack record ends with the same note.
+
+```text
+{{#include ../output/pack-verify-json.txt}}
+```
+
+`--json` puts the same in `verify.registrySync`: `lastSyncedTime`, `status`
+(`Completed`, `InProgress`, or `Failed`), and `message` when Palette gives one.
+Strata sends one request for each pack record, by the type of the pack, and two
+for a pack in an ECR registry: see
+[Other reads](../reference/palette-api.md#other-reads).
+
 ## The tiers of a cluster record
 
 `verify` of a cluster record reads the tiers that the record carries again, and
@@ -137,7 +167,7 @@ The verdict follows the release alone, so a changed tier does not make a record
 | an edge host | the edge host uid, and the manifests and variables of each profile bound to it |
 | a cluster group | the group uid, and the manifests and variables of each profile that it pins |
 | an app profile | the app profile uid, and its tiers |
-| a pack version | the registry |
+| a pack version | the registry, and the sync status of the registry |
 
 A tier of an app profile has no digest, so `verify` of an app profile with a
 helm tier is `UNVERIFIED` unless `--allow-no-digest` accepts it. See

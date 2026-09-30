@@ -137,6 +137,13 @@ pub fn verify_with<A: PaletteApi>(
             progress,
         )?
         .with_project(palette.project_uid());
+        // the verdict states the copy of the registry in Palette, so it says how old that copy is
+        let pack_type = live
+            .packs
+            .first()
+            .map(|k| k.kind.as_str())
+            .unwrap_or_default();
+        let registry_sync = crate::candidate::registry_sync(palette, &p.registry_uid, pack_type)?;
         let unchanged = recorded.root == live.root;
         let verify = Verify {
             status: if unchanged {
@@ -154,6 +161,7 @@ pub fn verify_with<A: PaletteApi>(
             who: None,
             upstream_unknown: Vec::new(),
             macros_changed: Vec::new(),
+            registry_sync,
         };
         let mut diff = diff::compute(recorded, &live, checked_at, Some(verify));
         let status = settle(unchanged, &mut diff, options);
@@ -259,6 +267,7 @@ pub fn verify_with<A: PaletteApi>(
         who: None,
         upstream_unknown: Vec::new(),
         macros_changed: macros_changed.clone(),
+        registry_sync: None,
     };
     let mut diff = diff::compute(recorded, &live, checked_at, Some(verify));
     let values_changed = diff

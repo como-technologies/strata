@@ -920,6 +920,26 @@ pub struct Verify {
     /// another one now. The status is `drifted`, also when the roots are equal.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub macros_changed: Vec<String>,
+    /// For a pack record: the last sync of the registry, as Palette gives it. Palette holds a copy
+    /// of each registry, and the verdict states that copy. Absent when the registry does not sync,
+    /// or when Palette does not answer.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub registry_sync: Option<RegistrySync>,
+}
+
+/// The last sync of a registry: `status.sync` of the registry in Palette, `v1RegistrySyncStatus`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct RegistrySync {
+    /// When the last sync that completed ended, as Palette gives it. Empty when Palette gives no
+    /// time.
+    pub last_synced_time: String,
+    /// The state of the last sync: `Completed`, `InProgress`, or `Failed`, as Palette gives it.
+    pub status: String,
+    /// What Palette says about the last sync, such as the cause of a failure. Empty when it says
+    /// nothing.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub message: String,
 }
 
 /// One write to a profile or a cluster, as the audit log of Palette holds it.

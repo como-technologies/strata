@@ -124,6 +124,13 @@ Exit `0`: the registry still serves that content under that version. `DRIFT`
 and exit `1` say the pack version changed after you recorded it, which a
 published build must never do.
 
+The verdict ends with the time of the last sync of the registry. Palette keeps
+a copy of the registry, and `verify` reads that copy. When the verdict ends
+with `the last sync of the registry failed: <message>`, the copy can be old:
+fix the registry or its credentials in Palette, and verify again after the next
+sync. See
+[The sync of the registry of a pack record](../commands/verify.md#the-sync-of-the-registry-of-a-pack-record).
+
 ## What a pack record does not carry
 
 A pack has no profile variables, so the reports say nothing about variables when
