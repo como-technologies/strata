@@ -209,8 +209,8 @@ The consumer list of a profile version, `status.inUseClusters`, is what Palette
 computes when it is asked: in the project of the request, or in every project at
 tenant scope. It names virtual clusters, and no deleted cluster. When Palette
 cannot compute it, the list comes back empty, with no error in the answer. So
-`consumers` reads each cluster the key can list as well, and names a cluster
-that applies the version and is not in the list.
+`consumers` asks the cluster search as well, and names a cluster that applies
+the version and is not in the list.
 
 The listing answers a JSON array at the top level, and not an object with
 `items` ([Palette API reference](https://docs.spectrocloud.com/api/v1/)). Strata
@@ -235,6 +235,16 @@ search takes no filter uid, so strata turns the conditions into a search. The
 Spectro Cloud source gives the rest: a key with no value means the label is
 there, `negation` turns a condition with values over, and the search lists no
 virtual cluster unless its filter asks for the environment `nested`.
+
+**The search by profile.** The Spectro Cloud source gives the property
+`clusterProfiles`, a string. Palette matches its value against the uid of each
+profile that the cluster runs. So a search with `clusterProfiles eq <uid>` gives
+the clusters that run the version, and the same search with `environment eq
+nested` gives the virtual clusters that run it. Each item names its profiles in
+`specSummary.clusterProfileTemplates`, with the uid, the name, and the type, and
+not the version string. The checks `search-profile-runs` and
+`search-nested-member` of `cluster-group.sh` test it on a live tenant: see
+[cluster-group.sh](../../development/live-runs.md#cluster-groupsh).
 
 ## A deleted cluster
 

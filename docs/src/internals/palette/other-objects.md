@@ -79,9 +79,11 @@ to the host clusters of the group.
   profile, the group and its member keep their copies, and still agree.
 - `status.inUseClusters` of the pinned profile names the virtual cluster. The
   cluster listing, `GET /v1/dashboard/spectroclusters/meta`, does not list it.
-  So `consumers` finds a virtual cluster through the consumer list of Palette,
-  and its second reading cannot find one that the list omits. `list clusters`
-  does not show a virtual cluster.
+  So `consumers` finds a virtual cluster through the consumer list of Palette.
+  Its second reading asks the cluster search with the environment `nested`,
+  so it finds a virtual cluster that the list omits too: see
+  [The search by profile](clusters.md#what-the-cluster-listing-answers).
+  `list clusters` does not show a virtual cluster.
 - `POST /v1/dashboard/clustergroups/<uid>/virtualClusters` lists the virtual
   clusters of a group. `GET /v1/clustergroups/hostCluster/metadata` gives the
   name and the uid of each group.

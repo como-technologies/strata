@@ -1694,6 +1694,15 @@ fn use_cases(r: &mut Runner) {
         false,
         "strata compare runs/dev-group.json cluster:tenant-a",
     );
+    // tenant-b is a virtual cluster, and the consumer list of the profile does not name it
+    r.cluster_field(DEV, TENANT_B, "/spec/cloudType", json!("nested"));
+    r.drop_consumer(DEV, ADDONS_DEV, TENANT_B);
+    r.step(
+        "group-consumers",
+        1,
+        false,
+        "strata consumers platform-addons@1.0.0",
+    );
 
     // An app profile, and a plain update of it
     r.chapter("app-profiles", DEV_ENV);

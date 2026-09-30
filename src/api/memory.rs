@@ -9,6 +9,7 @@ use super::PaletteApi;
 use crate::error::{Error, Result};
 
 /// Canned responses keyed by path. Paths not registered answer 404. A POST answers from the key
+/// `POST <path> <body>` when [`MemoryApi::with_post`] registered that body, else from the key
 /// `POST <path>`, and the body it was sent is kept for [`MemoryApi::posted`].
 #[derive(Debug, Default, Clone)]
 pub struct MemoryApi {
@@ -43,6 +44,13 @@ impl MemoryApi {
     /// Answer `path` with `value`.
     pub fn with(mut self, path: impl Into<String>, value: Value) -> Self {
         self.ok.insert(path.into(), value);
+        self
+    }
+
+    /// Answer a POST of `body` to `path` with `value`: two searches to one path can then get two
+    /// answers.
+    pub fn with_post(mut self, path: &str, body: &Value, value: Value) -> Self {
+        self.ok.insert(format!("POST {path} {body}"), value);
         self
     }
 
@@ -134,6 +142,10 @@ impl PaletteApi for MemoryApi {
         self.posted
             .borrow_mut()
             .push((path.to_string(), body.clone()));
+        let keyed = format!("POST {path} {body}");
+        if self.ok.contains_key(&keyed) {
+            return self.get_json(&keyed);
+        }
         self.get_json(&format!("POST {path}"))
     }
 

@@ -346,6 +346,25 @@ pub(crate) fn consumers_sentence(d: &Diff) -> Option<String> {
     }
 }
 
+/// What the second reading read, after `second reading: `: `3 of 3 clusters read` from the
+/// listing, or, from the cluster search, `the cluster search finds 2 other clusters, 2 read`.
+/// Only the clusters that the consumer list did not name are read.
+pub(crate) fn second_reading_counts(read: &crate::ops::ClustersRead) -> String {
+    let n = read.read + read.unread;
+    match read.resolved {
+        Some(crate::ops::Resolved::Search) if n == 0 => {
+            "the cluster search finds no other cluster".to_string()
+        }
+        Some(crate::ops::Resolved::Search) => format!(
+            "the cluster search finds {} other {}, {} read",
+            n,
+            if n == 1 { "cluster" } else { "clusters" },
+            read.read
+        ),
+        _ => format!("{} of {n} clusters read", read.read),
+    }
+}
+
 /// `edge hosts: 3 read`, or why they could not be read.
 pub(crate) fn edge_hosts_line(r: &ConsumersReport) -> String {
     let read = &r.edge_hosts_read;

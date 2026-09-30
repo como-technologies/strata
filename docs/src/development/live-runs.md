@@ -674,6 +674,9 @@ baseline with cluster A.
 | `group-verify` | 0 | #78: `verify` of the record of the group |
 | `member-consumer`, `member-consumer-listed` | 1, 0 | #78: `consumers` of the add-on version names the virtual cluster, from the consumer list of Palette |
 | `member-not-in-listing` | 0 | #78: the cluster listing does not name the virtual cluster |
+| `search-profile`, `search-profile-runs` | 0 | #149: the cluster search with `clusterProfiles eq <add-on uid>` answers the clusters that run the add-on version, and no other, and not the virtual cluster. No run has passed this check yet. |
+| `search-nested`, `search-nested-member` | 0 | #149: the same search with `environment eq nested` answers the virtual cluster of the group. No run has passed this check yet. |
+| `member-consumer-search` | 0 | #149: `consumers` does its second reading through the search. No run has passed this check yet. |
 | `edit`, `edit-group-verify` | 0, 0 | #81: after an edit in place of the manifest of the add-on version, `verify` of the record of the group passes: the group keeps its own copy |
 | `edit-group-compare` | 0 | #81: the member keeps its copy too, so the group and the member still agree |
 | `edit-group-vs-version`, `edit-group-vs-version-says` | 1, 0 | #81: the version differs from the copy of the group, and the compare names the manifest |

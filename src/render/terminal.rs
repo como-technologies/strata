@@ -8,10 +8,10 @@ use super::{
     macros_changed_sentence, macros_note, overwritten_in_place_notes, pack_version, pair_detail,
     pair_word, palette_repave_lines, palette_repave_note, profiles_overwritten_sentence,
     project_label, record_detail, record_label, registry_note, registry_sync_suffix,
-    running_behind_notes, same_content_note, short, show, state_suffix, subject, tag_rename,
-    tier_path, tier_states, traits_suffix, unverified_sentence, updates_pending_notes,
-    upstream_unknown_note, values_changed_suffix, variable_lines, variables_comparable,
-    variables_unavailable_note, version_display, who_entry, who_heading,
+    running_behind_notes, same_content_note, second_reading_counts, short, show, state_suffix,
+    subject, tag_rename, tier_path, tier_states, traits_suffix, unverified_sentence,
+    updates_pending_notes, upstream_unknown_note, values_changed_suffix, variable_lines,
+    variables_comparable, variables_unavailable_note, version_display, who_entry, who_heading,
 };
 use crate::color::Paint;
 use crate::diff::{
@@ -568,11 +568,7 @@ impl Renderer for TerminalRenderer {
                 "second reading: not done ({})",
                 msg.as_str().unwrap_or("error")
             ),
-            None => format!(
-                "second reading: {} of {} clusters read",
-                read.read,
-                read.read + read.unread
-            ),
+            None => format!("second reading: {}", second_reading_counts(read)),
         };
         out.push_str(&format!("  {}\n", p.dim(&second)));
         out.push_str(&format!("  {}\n", p.dim(&edge_hosts_line(r))));

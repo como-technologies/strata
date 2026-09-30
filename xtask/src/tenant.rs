@@ -287,7 +287,11 @@ impl Tenant {
                 "v1/dashboard/clusterprofiles/metadata",
                 &json!({"items": items}),
             );
-            let rows: Vec<Value> = clusters.iter().map(cluster_row).collect();
+            let rows: Vec<Value> = clusters
+                .iter()
+                .filter(|c| !nested(c))
+                .map(cluster_row)
+                .collect();
             self.write(project, "v1/dashboard/spectroclusters/meta", &json!(rows));
         }
         self.write(
@@ -295,7 +299,12 @@ impl Tenant {
             "v1/dashboard/clusterprofiles/metadata",
             &json!({"items": []}),
         );
-        let rows: Vec<Value> = every_cluster.iter().map(cluster_row).collect();
+        // the listing leaves out each virtual cluster; the search holds it, when a condition asks
+        let rows: Vec<Value> = every_cluster
+            .iter()
+            .filter(|c| !nested(c))
+            .map(cluster_row)
+            .collect();
         self.write("tenant", "v1/dashboard/spectroclusters/meta", &json!(rows));
         // the search of the tenant: every cluster, which the server filters by the body of a
         // request, and the schema that says the search takes tags
@@ -343,7 +352,8 @@ impl Tenant {
             "v1/dashboard/spectroclusters/search/schema",
             &json!({"schema": {"properties": [
                 {"name": "clusterName", "type": "string"}, {"name": "clusterState", "type": "string"},
-                {"name": "tags", "type": "string"}, {"name": "environment", "type": "string"}]}}),
+                {"name": "tags", "type": "string"}, {"name": "environment", "type": "string"},
+                {"name": "clusterProfiles", "type": "string"}]}}),
         );
     }
 
@@ -833,6 +843,19 @@ impl Tenant {
         self.listings();
     }
 
+    /// Take the cluster `cluster` out of the consumer list of the profile `profile`, as Palette
+    /// does when it cannot compute the list: the cluster still runs the profile.
+    pub fn drop_consumer(&self, project: &str, profile: &str, cluster: &str) {
+        let path = format!("v1/clusterprofiles/{profile}");
+        let mut doc = self.read(project, &path);
+        for key in ["inUseClusterUids", "inUseClusters"] {
+            if let Some(rows) = doc["status"][key].as_array_mut() {
+                rows.retain(|r| r != &json!(cluster) && r["uid"] != json!(cluster));
+            }
+        }
+        self.write(project, &path, &doc);
+    }
+
     /// Change one field of the document of a cluster, or of its cloud config, at a JSON pointer:
     /// what Palette reports changes, as a change on the cluster does, and its profiles do not.
     pub fn cluster_field(&self, project: &str, uid: &str, pointer: &str, value: Value) {
@@ -1298,13 +1321,26 @@ fn cluster_row(doc: &Value) -> Value {
     })
 }
 
-/// A cluster as the search gives it: no spec, and a summary with the cloud and the project.
+/// True for a virtual cluster: the cloud type `nested`.
+fn nested(cluster: &Value) -> bool {
+    cluster["spec"]["cloudType"] == "nested"
+}
+
+/// A cluster as the search gives it: no spec, and a summary with the cloud, the project, and the
+/// uid, name, and type of each profile.
 fn search_row(doc: &Value, project_name: &str) -> Value {
+    let profiles: Vec<Value> = doc["spec"]["clusterProfileTemplates"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .map(|t| json!({"uid": t["uid"], "name": t["name"], "type": t["type"]}))
+        .collect();
     json!({
         "metadata": {"name": doc["metadata"]["name"], "uid": doc["metadata"]["uid"],
                      "annotations": doc["metadata"]["annotations"],
                      "labels": doc["metadata"]["labels"]},
         "specSummary": {"cloudConfig": {"cloudType": doc["spec"]["cloudType"]},
+                        "clusterProfileTemplates": profiles,
                         "projectMeta": {"name": project_name,
                                         "uid": doc["metadata"]["annotations"]["projectUid"]}},
         "status": {"state": doc["status"]["state"]}

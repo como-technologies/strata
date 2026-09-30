@@ -407,6 +407,15 @@ impl Runner {
         self.tenant.cluster_field(project, uid, pointer, value);
     }
 
+    /// Take a cluster out of the consumer list of a profile: see [`Tenant::drop_consumer`].
+    pub fn drop_consumer(&mut self, project: &str, profile: &str, cluster: &str) {
+        if !self.building() {
+            return;
+        }
+        self.changed();
+        self.tenant.drop_consumer(project, profile, cluster);
+    }
+
     /// Give a project macro a value, and let each cluster of the project resolve it again.
     pub fn set_macro(&mut self, project: &str, name: &str, value: &str) {
         if !self.building() {

@@ -13,7 +13,8 @@ use crate::progress::Progress;
 use crate::reference::Ref;
 use crate::snapshot::{Snapshot, Tool};
 
-use super::list::{TENANT_SCOPE, list_clusters, name_projects_of};
+use super::fleet::Resolved;
+use super::list::{ListedCluster, TENANT_SCOPE, list_clusters, name_projects_of};
 use super::{client_for, consumer_uids, text};
 
 /// Schema id of the document `consumers` writes.
@@ -97,19 +98,28 @@ pub struct Consumer {
     pub unlisted: bool,
 }
 
-/// The second reading of `consumers`: the clusters the key can list, each read for the profiles
-/// it applies. Palette computes the consumer list of a profile when it is asked, in the projects
-/// the key can read, and gives an empty list on an error too. The second reading finds a consumer
-/// that the list omits.
+/// The second reading of `consumers`: the clusters that run the version, from the cluster search
+/// of Palette, or each cluster the key can list, each read for the profiles it applies. Palette
+/// computes the consumer list of a profile when it is asked, in the projects the key can read,
+/// and gives an empty list on an error too. The second reading finds a consumer that the list
+/// omits.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ClustersRead {
-    /// Cluster documents read: each cluster the listing names and the consumer list did not.
+    /// How strata found the clusters to read: `search`, the cluster search with the profile uid,
+    /// which holds the virtual clusters too; or `listing`, each cluster of the cluster listing,
+    /// when the search of Palette takes no `clusterProfiles`. Absent when the second reading was
+    /// not done.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resolved: Option<Resolved>,
+    /// Cluster documents read: each cluster that the search or the listing names and the consumer
+    /// list did not.
     pub read: usize,
-    /// Clusters the listing names that could not be read. Each one can be a consumer.
+    /// Clusters that the search or the listing names that could not be read. Each one can be a
+    /// consumer.
     pub unread: usize,
-    /// Why the cluster listing could not be read, when it could not. Then `read` is 0, and the
-    /// consumer list of the profile stands alone.
+    /// Why the search or the listing could not be read, when it could not. Then `read` is 0, and
+    /// the consumer list of the profile stands alone.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<Value>,
     /// True when the second reading was not done, as `--list-only` asks, or for an app profile.
@@ -215,7 +225,9 @@ where
 
 /// [`consumers`] with options: `list_only` reads the consumer list that Palette computes, and
 /// no other cluster. It costs one request per consumer, where the second reading costs one per
-/// cluster of the fleet, but it does not find a consumer that the list omits.
+/// 50 clusters that the cluster search names and one per cluster that the list omits (one per
+/// cluster of the fleet when the search takes no profile), but it does not find a consumer that
+/// the list omits.
 ///
 /// An app profile, by ref or by record, gives its app deployments: see [`app_consumers`].
 pub fn consumers_with<A, F>(
@@ -331,8 +343,9 @@ where
         list.push(c);
     }
     // Palette computes the list above when it is asked, in the projects the key can read, and
-    // gives an empty list on an error too. So each cluster the key can list is read for the
-    // profiles it applies, and a cluster that applies the version joins the list (#66).
+    // gives an empty list on an error too. So the cluster search names the clusters that run the
+    // version (#149), or each cluster the key can list is read for the profiles it applies, and a
+    // cluster that applies the version joins the list (#66).
     // the second reading and the edge hosts are read at tenant scope, so a cluster or a host in
     // any project the key can read is in them; a key that cannot read the tenant reads its own
     // scope
@@ -570,10 +583,61 @@ fn edge_hosts_bound<A: PaletteApi>(
     }
 }
 
-/// The second reading of `consumers`. The listing is read through `wide`, and through `home` when
-/// `wide` cannot list. A cluster the consumer list named is not read again. A cluster that
-/// applies `uid` joins `list`, marked `unlisted`, with what its document and the listing say of
-/// it.
+/// A condition of the cluster search: the string property `property` equals `value`.
+fn search_condition(property: &str, value: &str) -> Value {
+    serde_json::json!({
+        "property": property, "type": "string",
+        "condition": {"string": {"operator": "eq", "negation": false, "ignoreCase": false,
+            "match": {"conjunction": "or", "values": [value]}}},
+    })
+}
+
+/// The clusters that run the profile `uid`, from the cluster search of `palette`: one search with
+/// `clusterProfiles eq <uid>`, and one with `environment eq nested` too, since the search leaves
+/// out each virtual cluster unless a condition asks for it. None when the search of Palette takes
+/// no `clusterProfiles`: its schema does not name the property, or Palette has no search.
+fn searched_consumers<A: PaletteApi>(
+    palette: &Palette<A>,
+    uid: &str,
+) -> Result<Option<Vec<ListedCluster>>> {
+    let takes_profiles = match palette.cluster_search_schema() {
+        Ok(schema) => schema
+            .pointer("/schema/properties")
+            .and_then(Value::as_array)
+            .is_some_and(|ps| {
+                ps.iter()
+                    .any(|p| text(p, "/name") == "clusterProfiles" && text(p, "/type") == "string")
+            }),
+        Err(Error::Api {
+            status: 404 | 405, ..
+        }) => false,
+        Err(e) => return Err(e),
+    };
+    if !takes_profiles {
+        return Ok(None);
+    }
+    let mut found = Vec::new();
+    for nested in [false, true] {
+        let mut filters = vec![search_condition("clusterProfiles", uid)];
+        if nested {
+            filters.push(search_condition("environment", "nested"));
+        }
+        let body = serde_json::json!({
+            "conjunction": "and",
+            "filterGroups": [{"conjunction": "and", "filters": filters}],
+        });
+        found.extend(palette.cluster_search(&body)?);
+    }
+    let mut clusters = list_clusters(&Value::Array(found));
+    clusters.dedup_by(|a, b| a.uid == b.uid);
+    Ok(Some(clusters))
+}
+
+/// The second reading of `consumers`. Strata asks the cluster search for the clusters that run
+/// `uid`, and reads the cluster listing when the search takes no profile. The search or the
+/// listing is read through `wide`, and through `home` when `wide` cannot read it. A cluster the
+/// consumer list named is not read again. A cluster that applies `uid` joins `list`, marked
+/// `unlisted`, with what its document and the search or the listing say of it.
 fn second_reading<A, F>(
     list: &mut Vec<Consumer>,
     uid: &str,
@@ -587,19 +651,32 @@ where
     A: PaletteApi,
     F: FnMut(Option<&str>) -> Result<Palette<A>>,
 {
-    progress.note("reading each cluster for the profiles it applies");
-    let listing = wide.cluster_listing().or_else(|_| home.cluster_listing());
-    let listing = match listing {
-        Ok(listing) => listing,
+    progress.note("searching the clusters that run the version");
+    let searched = searched_consumers(wide, uid).or_else(|_| searched_consumers(home, uid));
+    let (candidates, resolved) = match searched {
+        Ok(Some(found)) => (Ok(found), Resolved::Search),
+        Ok(None) => {
+            progress.note("reading each cluster for the profiles it applies");
+            let listing = wide.cluster_listing().or_else(|_| home.cluster_listing());
+            (listing.map(|l| list_clusters(&l)), Resolved::Listing)
+        }
+        Err(e) => (Err(e), Resolved::Search),
+    };
+    let candidates = match candidates {
+        Ok(candidates) => candidates,
         Err(e) => {
             return ClustersRead {
+                resolved: Some(resolved),
                 error: Some(e.to_json()),
                 ..ClustersRead::default()
             };
         }
     };
-    let mut clusters_read = ClustersRead::default();
-    for listed in list_clusters(&listing) {
+    let mut clusters_read = ClustersRead {
+        resolved: Some(resolved),
+        ..ClustersRead::default()
+    };
+    for listed in candidates {
         if list.iter().any(|c| c.uid == listed.uid) {
             continue;
         }
