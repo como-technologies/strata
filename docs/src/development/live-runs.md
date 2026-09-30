@@ -871,6 +871,21 @@ Palette holds it, and a change of the instance type of its worker pool, which
 The runs of the plan, and what each one showed, are in the section
 [What the preflight runs show](#what-the-preflight-runs-show) below.
 
+## watch.sh
+
+`just live-watch --build --down` on aws: cluster B built beside cluster A,
+with the watch on it from the moment Palette listed it, on the terminal. 43
+readings, `Running` after 1335 seconds, each watch rule passed at the end. At
+662 seconds `webhook-call-failed` warned: a `Reconciler error` of the
+controller in the new cluster, "failed to set controlPlane type annotation",
+the call of `mspectrocluster.kb.io` refused right after the pivot, as on gcp;
+the warning held for 20 readings while the event stayed in the 50 newest, and
+the build went on to `Running`, so the watch did not stop. The removal of
+cluster B did not run: the script was edited during the run, and bash reads a
+script as it runs, so the process resumed in the changed file and ended. The
+script is one function since, which bash parses before it runs, and the
+cluster was removed by hand with `tofu apply -var second_cluster=false`.
+
 ## What the preflight runs show
 
 The runs of `preflight-plan.sh` on the tenant of the live example, with the

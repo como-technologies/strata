@@ -175,7 +175,9 @@ rules:
       of Palette in that cluster: `mspectrocluster.kb.io`, `vspectrocluster.kb.io`, and the ones
       of the cloud config. A call can fail before the webhook is up. Palette makes the call again:
       on gcp, the calls of the two spectrocluster webhooks failed in one minute of the build, and
-      the cluster was `Running` 17 minutes later; on eks, the call of `mawscloudconfig.kb.io`
+      the cluster was `Running` 17 minutes later; on aws, the call of `mspectrocluster.kb.io`
+      failed at 11 minutes while the controller set the type of the control plane, and the
+      cluster was `Running` 11 minutes after that; on eks, the call of `mawscloudconfig.kb.io`
       failed while the controller set the owner of the cloud config. When the calls fail for 10
       minutes or more, or the move of the cluster fails, `pivot-webhook-timeout` fails. The
       message shows the start and the end of each event, because the end names the cause: a
