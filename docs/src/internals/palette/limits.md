@@ -58,8 +58,8 @@ check needs; the report prints each one with its reproduce lines:
 `strata preflight --rules --cloud <engine>` lists each rule with its tier and
 its check. A rule with a check whose tool is not on the machine is `NOT
 CHECKED` on that machine alone. The findings report
-`palette-precreate-validation-gaps-findings-2026-09-28` asks Palette to check
-the first three in its validate routes.
+`palette-precreate-validation-gaps-findings-2026-09-28` proposes the first
+three to Spectro Cloud as validate routes.
 
 ## What the catalog does not hold yet
 

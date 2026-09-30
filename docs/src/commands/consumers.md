@@ -52,9 +52,9 @@ one for each cluster of the fleet:
 {{#include ../output/consumers-list-only.txt}}
 ```
 
-It does not find a consumer that the list omits, and the list is empty on an
-error of Palette too. So a gate before a delete runs without it. The edge hosts
-are read with it too: the list of Palette names none.
+A consumer that the list does not name is then not found, and the list is
+empty when the read fails. So a gate before a delete runs without `--list-only`.
+The edge hosts are read with it too: the consumer list names clusters alone.
 
 ## A cluster that runs an overwritten version
 

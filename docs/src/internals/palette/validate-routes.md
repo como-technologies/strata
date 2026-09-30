@@ -1,9 +1,10 @@
 # The validate routes
 
-Palette has routes that check a cluster before a create, and a create calls few
-of them. This page states what each route checks, from the source of Palette
-(hubble on master), and who calls it. `strata preflight` calls each one that
-takes the body of a create.
+Palette has routes that check a cluster before a create. The console calls them
+in its create wizard, and a create through the API goes to the create route.
+This page states what each route checks, from the source of Palette (hubble on
+master), and who calls it. `strata preflight` calls each one that takes the
+body of a create.
 
 ## POST /v1/spectroclusters/{cloudType}/validate
 
@@ -73,12 +74,12 @@ of a cloud account calls it. A cluster create does not.
 
 ## What no route checks
 
-No route simulates a policy or tests a permission: hubble has no call to
-`SimulatePrincipalPolicy` or `testIamPermissions`. No route checks that a cloud
-API is on, that an instance type is offered in a zone, a quota, the count of
-zones of EKS, or the release channel of GKE. `strata preflight` runs the tool of
-the cloud for some of these, and prints `NOT CHECKED` with the command for the
-rest: see
+The routes check the entity and the cloud account. A policy, a permission, a
+cloud API that is off, an instance type in a zone, a quota, the count of zones
+of EKS, and the release channel of GKE are checks of the cloud, and no route
+runs them: hubble has no call to `SimulatePrincipalPolicy` or
+`testIamPermissions`. `strata preflight` runs the tool of the cloud for some of
+these, and prints `NOT CHECKED` with the command for the rest: see
 [What strata preflight does not check](limits.md#what-strata-preflight-does-not-check).
 
 ## Where these answers come from
@@ -90,5 +91,6 @@ The source of hubble on master:
 (the zones and the CIDRs of AWS), and
 `services/service/cloud/internal/service/cloudservice/{aws,gcp}_service.go`
 (the property and account routes). The findings report
-`palette-precreate-validation-gaps-findings-2026-09-28` collects the gaps and
-the fixes it asks Palette for.
+`palette-precreate-validation-gaps-findings-2026-09-28` lists each check that
+no route runs, and proposes the ones that fit a validate route to Spectro
+Cloud.

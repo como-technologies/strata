@@ -89,7 +89,7 @@ it:
 
 | Step | What Palette does |
 | --- | --- |
-| Edit a published version in place | The API accepts it. With the flag, the provider refuses the same edit at plan time; without it, the provider plans an update in place. |
+| Edit a published version in place | The API takes it. With the flag, the provider refuses the same edit at plan time; without it, the provider plans an update in place. |
 | A cluster that ran before the edit | Keeps its old copy. `verify` passes on its record, and the record of the version compares `IDENTICAL` with it. |
 | The record of the version from before the edit | `verify` reports `DRIFT`. |
 | A cluster created after the edit | Runs the edited content. A comparison of the two clusters shows the change, and notes that both sides are the same version. |
@@ -208,9 +208,9 @@ it so. [The knurl adapter](../../automation/knurl.md) reads it there.
 The consumer list of a profile version, `status.inUseClusters`, is what Palette
 computes when it is asked: in the project of the request, or in every project at
 tenant scope. It names virtual clusters, and no deleted cluster. When Palette
-cannot compute it, the list comes back empty, and says nothing of the error. So `consumers`
-reads each cluster the key can list as well, and names a cluster that applies
-the version and is not in the list.
+cannot compute it, the list comes back empty, with no error in the answer. So
+`consumers` reads each cluster the key can list as well, and names a cluster
+that applies the version and is not in the list.
 
 The listing answers a JSON array at the top level, and not an object with
 `items` ([Palette API reference](https://docs.spectrocloud.com/api/v1/)). Strata
@@ -254,8 +254,8 @@ A GCP cluster takes its node image from the project `spectro-image-build` of
 Spectro Cloud, one image for each pair of OS and Kubernetes versions, such as
 `u-2404-0-k-1356-0` for Ubuntu 24.04 and Kubernetes 1.35.6. Spectro Cloud shares
 some of these images and not others: the image of Kubernetes 1.36.2 is not
-shared, although that Kubernetes pack lists `gcp`. Palette accepts such a
-profile and such a cluster. The cluster then stays `Provisioning`, and each
+shared, and that Kubernetes pack lists `gcp`. Palette takes such a profile and
+such a cluster. The cluster then stays `Provisioning`, and each
 attempt to make a machine fails with
 `Required 'compute.images.useReadOnly' permission`.
 

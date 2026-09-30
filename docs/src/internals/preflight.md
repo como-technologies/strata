@@ -54,7 +54,7 @@ Each rule has a tier: where a check can find the fault.
 Strata calls no cloud API itself. A cloud rule runs `aws` or `gcloud` when the
 tool is on the machine, so the credentials stay where the person keeps them.
 When the tool is not there, the rule is `NOT CHECKED`, with the command to run
-by hand: the gap is named, never hidden.
+by hand: the report names the check that did not run.
 
 ## Two levels: probe and preflight check
 
@@ -141,9 +141,9 @@ accuracy of a section is the lowest bound of its rules.
 | ran, passed, failed, not run, not checked | the checks of this run |
 | readiness | `passed / (ran + not run)`, or none when no check applies |
 
-No number measures what the catalog does not hold. A low count of `seen` is the
-sign of gaps: networking has the most rows and the least evidence, so the lab
-runs go there first.
+No number measures what the catalog does not hold. A low count of `seen` shows
+where the runs are few: networking has the most rows and the least evidence, so
+the lab runs go there first.
 
 ## Readiness, and the 80% gate
 
@@ -171,5 +171,5 @@ outside the count, and the report prints that count beside the readiness.
 | P6 | Confidence is a count of runs with a one-sided lower bound, per engine and release. | A percentage a person estimates. | The bound falls fast with one miss, so a promoted rule is one that the runs earned. A level that the ledger does not support fails `--promotion`. |
 | P7 | The level is a field of the rule, and a check keeps it honest. | The level derived from the ledger at run time. | A person promotes with the run ids beside it, and the check refuses a level the runs do not give; a company promotes its own probes on its own runs. |
 | P8 | `strata-preflight` is a package of its own, and `strata preflight` runs its binary. | A module of the strata crate. | The strata crate stays free of the jq engine. Another repository depends on the package by its git address. A release ships both binaries in one directory. |
-| P9 | The catalog keeps every row of #91, with a check or without. | Rules for the checks that run. | A row with no check is `NOT CHECKED` with its reproduce lines: the gap is in the report, not in a comment. |
+| P9 | The catalog keeps every row of #91, with a check or without. | Rules for the checks that run. | A row with no check is `NOT CHECKED` with its reproduce lines: the row is in the report, not in a comment. |
 | P10 | The `cluster:UID` form turns the cluster into the body of a create. | Rules that read the cluster document. | One shape for a file and a cluster; a change file merges over it, pool by pool. |

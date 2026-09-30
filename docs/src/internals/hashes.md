@@ -139,7 +139,8 @@ not.
 | The same packs in another order | different | different |
 | A pack whose registry lists no digest, as two archives | equal | equal |
 
-The last row is a gap, not a rule. Palette can list no digest for a pack: see
+The last row is a limit of the registry, not a rule: some registry kinds give
+no digest for a pack. See
 [What no run covers](./palette/limits.md#what-no-run-covers). Then `upstreamSource` is
 `none`, and neither digest covers the archive: two archives under that version
 have one root. The knurl adapter refuses such a leaf, because nothing pins it by

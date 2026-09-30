@@ -100,7 +100,7 @@ OCI pack registry of the example's own, after Palette reads the registry again:
 | A published profile that pins the version with the values of the pack | Follows the push, about 5 minutes after the sync: its pack reference carries the new digest and the new values. The audit log gives an `update` by the Palette service `system`, and no person. A record from before reports `DRIFT`. |
 | A published profile that pins the version with values of its own | Keeps the digest it was pinned with. Its record verifies. |
 
-So Palette can change a published version with no person and no request: a
+So a published version follows the registry, with no request from a person: a
 push to the registry is enough, when the profile keeps the values of the pack.
 The version keeps its uid and its number. `verify` on the record of the profile
 is what finds it, and `--who` names the service. The Spectro Cloud source gives
@@ -225,9 +225,9 @@ A floating tag moves a published profile. In an OCI pack registry of the
 example's own, Palette lists `1.0.x` and `1.x` beside the version `1.0.1`. A
 profile pins the pack under `1.0.x`. Then `1.0.2` is pushed, and the tag names
 it. Within ten minutes of the sync, the published profile moves: `verify` on a
-record of the profile from before reports `DRIFT` with `IDENTITY UPSTREAM`. No
-person acted, and no publish happened. A profile pinned to the exact version
-`1.0.0` does not move when `1.0.1` arrives.
+record of the profile from before reports `DRIFT` with `IDENTITY UPSTREAM`. The
+move follows the tag, with no request from a person and no publish. A profile
+pinned to the exact version `1.0.0` does not move when `1.0.1` arrives.
 
 ## Manifest pack uids
 

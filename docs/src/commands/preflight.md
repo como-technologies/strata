@@ -3,7 +3,7 @@
 Check that Palette can build a cluster, before the build. The input is the body
 of the create, `POST /v1/spectroclusters/{cloudType}`, or a cluster as Palette
 holds it now. Strata runs each rule of a catalog against it and reports what
-will stop the build, in seconds, with the command that shows the same thing by
+stops the build, in seconds, with the command that shows the same thing by
 hand.
 
 `strata preflight` runs the `strata-preflight` binary beside it. A release
@@ -56,8 +56,9 @@ and the pack of each layer, and calls the validate routes of Palette:
 ```
 
 `POST /v1/spectroclusters/aws/validate` answered that the workers have too few
-cores for the packs. Only the console calls this route; a create through the
-provider or the API skips it, and finds the same fault after a full apply. See
+cores for the packs. The console calls this route in its create wizard. A
+create through the provider or the API goes to the create route, so the same
+fault shows after a full apply. See
 [The validate routes](../internals/palette/validate-routes.md).
 
 ## Exit codes, and `--strict`
@@ -151,7 +152,7 @@ with `--strict`), with the event that shows the fault, or when the cluster is
 `Running` with each counted rule passed, or at `--limit`. A failed probe or a
 warning is in the report, and the watch reads on. With `--out`, `world.json`
 holds the last reading: the conditions and the events the rules saw. A build
-that Palette cannot finish stops in minutes, not at the timeout of the client.
+that cannot finish stops in minutes, not at the timeout of the client.
 `--verbose` prints, at each reading, the three requests the reading made and
 what they gave, each condition that changed, each new event, and one line for
 each rule; and before the first reading, the program of each rule. On a

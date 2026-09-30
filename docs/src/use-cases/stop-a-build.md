@@ -5,16 +5,21 @@ stand up, inspect it, check a change, remove it.
 
 ## The problem
 
-A cluster build in Palette fails late, and often with no message. The live runs
-of this repository show a GKE cluster that waits 50 minutes with "control plane
-nodes addition done" while GCP refuses every create, an EKS role without the EKS
-policy that fails after a full apply, a pool of 4 that Palette refuses at the
-end, and a CSI pod that crash-loops while Palette says `Running`. Each one cost
-30 minutes or more of cloud time before a person saw it.
+A cluster build depends on the cloud account, its quotas, its network, and the
+packs of the profile. A fault in one of them shows after the build starts, in
+the cloud, and the build runs until then. The live runs of this repository show
+a GKE cluster that waits 50 minutes with "control plane nodes addition done"
+while GCP refuses each create, an EKS role without the EKS policy that stops
+the build after a full apply, a pool too small for the packs that the create
+refuses after a full apply, and a CSI pod that restarts while the cluster is
+`Running`. Each one cost 30 minutes or more of cloud time before a person saw
+it.
 
-Palette has validate routes that find some of these in seconds, and a create
-through the provider or the API calls few of them. Others, such as an API that
-is off or a role that lacks a permission, no route checks at all.
+Palette has validate routes that find some of these in seconds, and the console
+calls them in its create wizard. A create through the provider or the API goes
+to the create route, so a pipeline gets the answer of the routes when a step
+calls them. A fault of the cloud, such as an API that is off or a role without
+a permission, is outside the routes, and the tool of the cloud shows it.
 
 **Who runs this.** The person who writes the cluster, before the first apply.
 The pipeline, on each pull request and before each build. The engineer who

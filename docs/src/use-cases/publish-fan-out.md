@@ -50,9 +50,9 @@ below is one command.
 
 ## Why a record, when the registry has a digest
 
-A published version is immutable by rule, and Palette does not enforce the
-rule: the API accepts an edit to a published profile version, under the same
-uid and the same version. See
+A published version is immutable by the rule of the team. The API takes an
+update of a published profile version, under the same uid and the same version,
+so the gate checks the rule. See
 [A published version is edited in place](./edited-in-place.md) and the live run
 in [What Palette does](../internals/palette.md).
 
@@ -171,7 +171,7 @@ profiles.
 
 Record each cluster after its apply, and the scheduled verify covers the
 clusters as well as the profiles. A cluster that drifts from its own record,
-and a version that Palette changed under the cluster, are different findings:
+and a version that changed under the cluster, are different findings:
 see [A cluster does not run its release](./cluster-release.md) and
 [A published version is edited in place](./edited-in-place.md).
 

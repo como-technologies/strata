@@ -7,9 +7,9 @@ version that one layer of a profile pins. The merge publishes a new profile
 version, and the version before it still pins the old pack.
 
 Before the review, you want to know what the pack itself changed: the images it
-runs, the values it ships, and whether the change replaces nodes. The Palette UI
-shows the values of two versions next to each other. It writes no record, so
-nothing of that view is left when you close the page.
+runs, the values it ships, and whether the change replaces nodes. The Palette
+console shows the values of two versions next to each other. A record keeps
+that comparison after you close the page.
 
 A pack version is a ref: `pack:<name>@<version>`. Strata reads it from the
 registry and hashes it as it hashes that pack inside a profile.

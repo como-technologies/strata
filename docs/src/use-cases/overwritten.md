@@ -151,8 +151,8 @@ provider "spectrocloud" {
 ```
 
 With the flag, a bump makes a new uid, and the old version stays. The provider
-also refuses a change of the content without a bump, at plan time. The API does
-not: an edit through the API or the console still changes the version.
+also refuses a change of the content without a bump, at plan time. An edit
+through the API or the console is outside the plan, and changes the version.
 
 **Follow along.** `just playground overwritten-3` is the same tenant after the
 same bump, with the flag on. Stop the second seed, and export what this one
@@ -197,7 +197,7 @@ flag is a feature preview.
 | The removal of an old version | a destroy of its state, which Palette refuses while the version is in use | a delete outside the provider |
 | A release of the provider | any | one with the feature preview |
 
-Either way, run `verify` on a schedule. Neither answer stops an edit through
-the API.
+Either way, run `verify` on a schedule. Neither answer covers an edit through
+the API or the console, and `verify` finds it.
 
 See [What Palette does: version bumps](../internals/palette/profiles.md#version-bumps).

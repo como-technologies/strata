@@ -121,13 +121,14 @@ must not do, and what to do when somebody already did. This is why a record
 is worth keeping, and what `verify` is for.
 
 - [A published version is edited in place](./edited-in-place.md): `verify`
-  reports `DRIFT` on a version that nobody bumped.
+  reports `DRIFT` on a version whose number did not change.
 - [A version bump overwrites a version](./overwritten.md): a version
   disappeared from the list, and clusters still run it.
 - [A macro value changes](./macros.md): a profile reads a macro, and the value
   changed with no change to any record.
 - [An app profile is updated in place](./app-profiles.md): an app profile has no
-  publish step, and `verify` reports `DRIFT` on a version that nobody bumped.
+  publish step, and `verify` reports `DRIFT` on a version whose number did not
+  change.
 
 **7. Many profiles and many clusters.** The same questions, for a whole tenant
 and a whole team.

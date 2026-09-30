@@ -226,14 +226,15 @@ back to false with the default variables (`apply_baseline`).
 - For `cloud = "gke"`: the GCP cloud account and project of `cloud = "gcp"`,
   with the Kubernetes Engine API on as well
   (`gcloud services enable container.googleapis.com --project <project>`).
-  Without it, the cluster does not build, and its status shows no error. GCP
-  also refuses a new GKE cluster that is in no release channel, and Palette
-  sets no channel (its known issue PCP-7528). `cloud-gke.tf` sets the channel
-  `regular` with the workaround of Palette, a cluster-level CAPI override in
+  Without it, the cluster does not build. GCP also refuses a new GKE cluster
+  that is in no release channel. Palette sets no channel by default (known
+  issue PCP-7528), and gives a cluster-level CAPI override for it:
+  `cloud-gke.tf` sets the channel `regular` through
   `override_cluster_api_config`. Without it, GCP refuses each `CreateCluster`
   call, and the cluster stays `Provisioning` with its control plane shown as
-  done. In both cases the status of the cluster shows no error, and the events
-  of the cluster name it (`GET /v1/events/components/spectrocluster/<uid>`).
+  done. In both cases the events of the cluster name the refusal
+  (`GET /v1/events/components/spectrocluster/<uid>`), and the status of the
+  cluster stays `Provisioning` with no error field.
   When the create takes longer than its timeout, the provider gives a warning
   and ends the apply with success, so `just live-up` can end while the cluster
   still builds: `gke.sh` waits for `Running`.
@@ -269,8 +270,8 @@ back to false with the default variables (`apply_baseline`).
 - On AWS, the AWS managed policy `AmazonEBSCSIDriverPolicy` on the worker node role
   `nodes.cluster-api-provider-aws.sigs.k8s.io`. Without it, the EBS CSI
   controller fails on each cluster with `UnauthorizedOperation` on
-  `ec2:DescribeAvailabilityZones`. No strata check needs volumes, and Palette
-  still reports such a cluster `Running`.
+  `ec2:DescribeAvailabilityZones`. No strata check needs volumes, and such a
+  cluster reaches `Running` all the same.
 
 For a self-hosted Palette, set `PALETTE_API` in the environment or in
 `~/.palette.env`. Strata reads it, and `tf.sh` and `tenant.sh` pass it on.
@@ -298,9 +299,9 @@ work can use. It makes its own cloud account instead, in `cloud-eks.tf`:
 external id is sensitive, and OpenTofu keeps it in the local state alone.
 
 A change of the node pool of an EKS cluster, step 4 of `eks.sh` with
-`EKS_POOL_CHANGE=1`, leaves a node group that Palette no longer tracks, and the
-delete of the cluster then waits with no end. The recovery, after `just
-live-down` stops at the cluster:
+`EKS_POOL_CHANGE=1`, leaves a node group outside the machine pools of Palette,
+and the delete of the cluster then does not end by itself. The recovery, after
+`just live-down` stops at the cluster:
 
 1. `examples/live/eks-nodegroups.sh --delete`.
 2. `examples/live/aws-cleanup.sh <cluster name> <region> --yes`: the EKS
@@ -316,8 +317,8 @@ A delete waits the same way after a delete of a cluster that is still
 `Provisioning` (`delete-while-provisioning`), with no pool change: the
 preflight plan met it on eks, and the same four steps end it. A second plain
 delete, which the findings report on the pivot webhook gives as the step that
-ends the wait, does not end it when the delete loops on a control plane object
-that is gone; step 4 does.
+ends the wait, does not end it when the delete reads a control plane object
+that is gone as an error; step 4 does.
 
 For the questions of `eks.sh`, set `eks_k8s_bump` to a Kubernetes version of the
 EKS pack, such as `1.36`: the example then also makes the profile version 1.0.9,
@@ -341,8 +342,9 @@ A change of the node pool of a GKE cluster, step 4 of `gke.sh` with
 Palette gives the new machine pool the GKE name of the old one, `worker-pool`.
 The delete of the old machine pool removes the GKE node pool, and the
 controllers that make the new pool ran on its nodes. The cluster keeps no node.
-The delete of the cluster then removes the GKE cluster, and stays `Deleting`
-with no end. The recovery, after `just live-down` stops at the cluster:
+The delete of the cluster then removes the GKE cluster, and stays `Deleting`,
+so the recovery below ends it. The recovery, after `just live-down` stops at
+the cluster:
 
 1. `examples/live/gcp-inventory.sh <project> <cluster name> --gke` reads 0 for
    each kind. If a GKE cluster is left,
@@ -546,9 +548,8 @@ just live-eks                                                                  #
 stops at the first failure.
 
 - `in-place.sh` creates cluster `barney`: about 20 minutes. It deletes it at the
-  end: 10 to 30 minutes. It waits for `Running` before the delete, because
-  Palette does not complete the deletion of a cluster that is still
-  provisioning.
+  end: 10 to 30 minutes. It waits for `Running` before the delete, because a
+  delete of a cluster that is still provisioning stays in `Deleting`.
 - `registry-move.sh` runs no cluster, and takes a few minutes.
 - Each script writes `summary.md` and each output under its run directory. To
   continue an interrupted `in-place.sh`:
@@ -612,9 +613,9 @@ in Palette, which exists from the start of the creation.
 | A script stops with "not at its baseline" | An earlier run did not finish, or a person changed the example. `baseline-before.txt` names each difference. `just live-down && just live-up` builds it again. |
 | `registry-digest-oci` fails with "crane digest ... failed" or HTTP 401 | No login to the OCI registry, or an expired one. An AWS registry login lasts 12 hours. A login also stores an empty credential, and reports a success, when the token request before it failed: run `aws ecr get-login-password` alone first, and use a profile that has `ecr:GetAuthorizationToken`. |
 | `ebs-csi-controller` pods in `CrashLoopBackOff`, with `UnauthorizedOperation` on `ec2:DescribeAvailabilityZones` | The worker node role does not have `AmazonEBSCSIDriverPolicy`. See Prerequisites. |
-| A GCP cluster stays `Provisioning` with no instance, and the events say `Required 'compute.images.useReadOnly' permission for 'projects/spectro-image-build/global/images/<image>'` | Spectro Cloud shares no GCP image for that pair of OS and Kubernetes versions. The Kubernetes pack still lists `gcp`. Use a version whose image `gcloud compute images describe <image> --project spectro-image-build` reads; `cloud-gcp.tf` sets one. |
+| A GCP cluster stays `Provisioning` with no instance, and the events say `Required 'compute.images.useReadOnly' permission for 'projects/spectro-image-build/global/images/<image>'` | No GCP image is shared for that pair of OS and Kubernetes versions. Use a version whose image `gcloud compute images describe <image> --project spectro-image-build` reads; `cloud-gcp.tf` sets one. |
 | A GCP cluster stays `Provisioning` with its control plane instance running; `cloud-controller-manager` is in `CrashLoopBackOff`, and every other pod is `Pending` | The Compute Engine default service account has no role on the project. See Prerequisites. The cluster continues when it gets one. |
-| A cluster stays `Provisioning` with `not done: WorkerNodeAdditionDone: provision worker nodes`, although its machines are `Running` and its nodes `Ready` | Palette did not check the workers again. A restart of the Palette controller in the cluster does not help. The deletion of such a cluster runs normally: delete it, and send its diagnostics to Palette support. |
+| A cluster stays `Provisioning` with `not done: WorkerNodeAdditionDone: provision worker nodes`, although its machines are `Running` and its nodes `Ready` | The condition of the workers was not read again. A restart of the Palette controller in the cluster does not change it. The deletion of such a cluster runs as usual: delete it, and send its diagnostics to Spectro Cloud support. |
 
 ## When a teardown is slow or stuck
 
@@ -624,7 +625,7 @@ These rules come from the teardowns of this kind of cluster:
   `AWS_PROFILE` or `gcloud` for the inventory), or `tenant.sh diagnose <uid> <dir>` for
   one cluster. When the cluster is gone, the evidence is gone.
 - **Do not delete a cluster that is still provisioning**, unless its machines are
-  `Running` and its nodes `Ready`. Palette then does not complete the deletion,
+  `Running` and its nodes `Ready`. A delete before that stays in `Deleting`,
   and each cloud resource stays.
 - **A deletion continues in Palette after OpenTofu stops.** Check with
   `tenant.sh cluster`, and do not start again. While the state is not `Running`
@@ -646,7 +647,7 @@ These rules come from the teardowns of this kind of cluster:
   removes the records of Palette and nothing in the cloud. An earlier force leaves
   resources that cost money with nothing to track them. Palette refuses a forced
   delete for about 15 minutes after the deletion starts, and can answer 500
-  before it accepts one. A forced delete in that gap does no harm once the
+  before it accepts one. A forced delete in that window does no harm once the
   inventory is empty, and it saves a few minutes at most. Use the Palette
   console, or the API:
 

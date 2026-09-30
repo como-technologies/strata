@@ -34,7 +34,7 @@ This is the source for
 | `plan-no-change` | 0 | 0 | the provider plans no change once `skip_destroy` is held for the flag |
 | `plan-edit` | 2 | 1 | #27: the provider's plan for an edit in place: an update without the flag, a refusal with it |
 | `plan-edit-says` | 0 | 0 | the plan says which |
-| `api-edit` | 0 | 0 | #27: the API accepts an edit in place, whatever the flag |
+| `api-edit` | 0 | 0 | #27: the API takes an edit in place, with the flag on or off |
 | `a2`, `a2-addon`, `b2-addon`, `a2-updates` | 0 | 0 | record each cluster's add-on selection after the edit, and what waits for cluster A |
 | `addon2` | 0 | 0 | record the edited add-on version |
 | `edit-kept-manifest-uid` | 0 | 0 | the edit kept the manifest's uid, so cluster copies still name it |
@@ -822,9 +822,9 @@ GKE node pool name of the old one, `worker-pool`. The delete of the old machine
 pool deletes the GKE node pool. The controllers that make the new pool ran on
 its nodes, so the cluster keeps no node. The delete of the cluster then removes
 the GKE cluster, and stays `Deleting`: the machine pool of GKE that has no
-machine pool of the cluster API keeps its finalizer, so the cluster of the
-cluster API is never deleted. The EKS change of [eks.sh](#ekssh) is of the same
-kind. A change of the node pool is not a change of a layer, so the impact table
+machine pool of the cluster API keeps its finalizer, so the delete of the
+cluster does not end by itself. The EKS change of [eks.sh](#ekssh) is of the
+same kind. A change of the node pool is not a change of a layer, so the impact table
 gives it no level, and `compare` shows it in the shape tier alone. The recovery
 is in [A GKE cluster](./live-example.md#a-gke-cluster).
 
@@ -1035,10 +1035,11 @@ the inventory at 0, then a second plain delete, which the findings report of
 not end it here: from then on each reconcile of the delete failed with "failed
 to delete additional resources: failed to get existing aws managed control
 plane: AWSManagedControlPlane fred-cp not found", every five minutes, with the
-cloud empty. The delete path reads a control plane object that is gone as an
-error, and not as done, so the delete cannot end. A force delete of the record
-ended it. The mechanism is the one of that report, on EKS this time, with this
-one more step that does not recover. One hour of the recovery
+cloud empty. In this run the delete path read a control plane object that was
+gone as an error, and not as done, and the delete did not end. A force delete
+of the record ended it. The mechanism is the one of that report, on EKS this
+time, with this one more step, which a second plain delete did not end. One
+hour of the recovery
 went to a fault of the operator: `tofu output -raw` printed a warning beside
 the project uid, a shell exported both as `PALETTE_PROJECT_UID`, and every
 request with that header answered a plain-text `400 Bad Request`, which read
@@ -1148,8 +1149,8 @@ What differs is outside strata:
   cloud. The CSI values write the reclaim line as `reclaimPolicy: "Delete"`,
   and not `reclaimPolicy: Delete`: the edit of each script comes from the output
   `csi_reclaim_delete`.
-- **The Kubernetes version.** Spectro Cloud shares no GCP image for Kubernetes
-  1.36.2 with Ubuntu 24.04, although the Kubernetes pack lists `gcp`. GCP answers
+- **The Kubernetes version.** The Kubernetes pack lists `gcp`, and no GCP image
+  is shared for Kubernetes 1.36.2 with Ubuntu 24.04: GCP answers
   `Required 'compute.images.useReadOnly' permission` for the image in the project
   `spectro-image-build`, and no machine starts. The image of 1.35.6 is shared.
 - **The service account of the nodes.** The nodes run as the Compute Engine

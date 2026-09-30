@@ -17,8 +17,9 @@ pack. See [The hashes and the root](../internals/hashes.md).
 such as `registry.k8s.io/pause:3.10.2`. An image rebuilt and pushed again under
 the same tag does not change the list, so `IMAGES` does not show it, and no
 record shows it. The chart list holds a version, and no chart digest either.
-Palette gives no digest, signature, or bill of materials for the images of a
-pack version.
+The API lists the images and the charts of a pack version, and no digest,
+signature, or bill of materials for them, so the list is what a record can
+hold.
 
 Other pack lines:
 
@@ -49,8 +50,8 @@ cluster API. The public pages give another rule for other clusters. On an Edge
 cluster, a change to the Kubernetes layer repaves nothing, and on the OS layer
 only the `uri` repaves. Palette keeps a list of the fields that repave for the
 OS layer and the Kubernetes layer of each engine, and checks no other layer for
-a repave. No public page gives the lists, and they can change with each release
-of Palette, so strata does not copy them.
+a repave. The lists belong to Palette and can change with each release, so
+strata does not copy them.
 
 The live runs also asked Palette about a managed engine, EKS. A new Kubernetes
 version repaves, as the table says. A change of the values of the

@@ -3,9 +3,10 @@
 ## The problem
 
 An app profile describes an application in tiers: a Helm chart, a manifest, a
-database operator. Palette versions it, but a plain update changes it: there is
-no publish step, and the uid and the version stay. So `shop@1.0.0` can mean
-two contents at two times, as a cluster profile edited in place can.
+database operator. Palette versions it, and an app profile has no publish step:
+an update changes the version, and the uid and the version number stay. So
+`shop@1.0.0` can mean two contents at two times, as a cluster profile edited in
+place can.
 
 A tier has a type, a version, values, properties, and manifests. It has no
 digest. So a record of an app profile answers a weaker question than a record
@@ -67,8 +68,9 @@ changed.
 
 - Record each app profile version that you deploy, and verify the records on a
   schedule, with `--allow-no-digest` when you accept that a tier has no digest.
-- Treat a drift of an app profile as an unreviewed change: Palette has no
-  publish step to stop it.
+- Treat a drift of an app profile as a change from outside the review of the
+  team: an app profile has no publish step, so an update reaches the version at
+  once.
 - Keep the record from before the update: `compare` of the old record and the
   app profile now names each param and each manifest that changed.
 

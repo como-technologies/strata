@@ -4,8 +4,8 @@
 
 Each Palette project holds its own copy of a profile version, with its own uid.
 The projects `dev` and `prod` both have `aws-stack@1.1.0` and `aws-stack@1.1.1`.
-The name and the version are the same in both projects, and nothing in Palette
-makes the content the same.
+The name and the version are the same in both projects, and each project holds
+its own content under them.
 
 A promotion moves one release along the environments, so each project must
 hold the content that dev approved. Here `1.1.0` reached prod that way. Somebody
@@ -78,7 +78,7 @@ cluster runs. Check before you delete:
 `no consumers` and exit `0`: nothing runs prod's copy, so the delete is safe,
 and the promotion can take the number `1.1.1`.
 
-Exit `1` lists each cluster that runs the copy. Palette will not delete it, so
+Exit `1` lists each cluster that runs the copy. Palette refuses the delete, so
 the order changes: promote the approved content under the next free number,
 move those clusters to it, and delete the old copy last. See
 [Retire a version](./retire.md).

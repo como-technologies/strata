@@ -93,9 +93,9 @@ profiles, `no`, or `-` when Palette did not say.
 
 `--applied` reads each cluster and its notifications, two requests for each.
 Read the uid when you
-need the identity. A person can edit a published version in place, and then one
-`<name>@<version>` means two contents. A bump can overwrite a uid, and then one
-uid names two versions. A cluster that strata cannot read
+need the identity. A published version can be updated after its publish, and
+then one `<name>@<version>` means two contents at two times. A legacy version
+bump can overwrite a uid, and then one uid names two versions. A cluster that strata cannot read
 stays in the list with its error.
 
 ## Ask about one cluster
