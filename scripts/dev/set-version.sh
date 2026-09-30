@@ -91,8 +91,10 @@ for f in "${files[@]}"; do
 done
 
 # Cargo.lock carries the version of each crate of the workspace; cargo writes it
-cargo update --offline --workspace >/dev/null 2>&1 \
-  || cargo check --quiet >/dev/null 2>&1 || true
+if ! cargo update --offline --workspace >/dev/null 2>&1; then
+  echo "set-version: cargo cannot update Cargo.lock; nothing is committed. See: cargo update --offline --workspace" >&2
+  exit 1
+fi
 
 git add -- "${files[@]}" Cargo.lock
 git commit -q -m "chore: release $new"

@@ -25,7 +25,7 @@ path = "src/main.rs"
 [dependencies]
 # The Palette client, the records of profiles, and the error type come from strata. This crate
 # adds the rules and the checks; strata never depends on it.
-strata = { path = "..", version = "0.15" }
+strata = { path = ".." }
 chrono = "0.4"
 # The record patterns, by the same rules as strata: `**` matches zero or more directories.
 glob = "0.3"
