@@ -1,0 +1,67 @@
+{
+  "_base": "clean.json",
+  "_note": "a watch reading after a pool change: CAPG counts two managed machine pools for one pool",
+  "_patch": {
+    "clusterUid": "6abb111111111111111111b1",
+    "cluster": {
+      "metadata": {
+        "uid": "6abb111111111111111111b1",
+        "name": "fred"
+      },
+      "spec": {
+        "cloudType": "gke"
+      },
+      "status": {
+        "state": "Provisioning",
+        "conditions": [
+          {
+            "type": "CloudInfrastructureReady",
+            "status": "True",
+            "reason": "InfrastructureReady",
+            "message": "cloud infrastructure is ready"
+          },
+          {
+            "type": "ControlPlaneNodeAdditionDone",
+            "status": "True",
+            "reason": "ControlPlaneReady",
+            "message": "control plane nodes addition done"
+          },
+          {
+            "type": "WorkerNodeAdditionDone",
+            "status": "False",
+            "reason": "CreateTriggered",
+            "message": "worker nodes are creating"
+          }
+        ],
+        "repave": {}
+      }
+    },
+    "summary": {
+      "status": {
+        "state": "Provisioning",
+        "health": {
+          "state": "UnHealthy"
+        }
+      }
+    },
+    "events": [
+      {
+        "reason": "GCPManagedControlPlaneReconcile",
+        "message": "Reconcile error - machinePoolList length (1) != managedMachinePoolList length (2)",
+        "severity": "Warning",
+        "metadata": {
+          "creationTimestamp": "2026-09-28T00:05:12.000Z"
+        }
+      },
+      {
+        "reason": "GCPManagedControlPlaneReconcile",
+        "message": "Reconcile error - machinePoolList length (1) != managedMachinePoolList length (2)",
+        "severity": "Warning",
+        "metadata": {
+          "creationTimestamp": "2026-09-28T00:00:12.000Z"
+        }
+      }
+    ],
+    "elapsed": 900
+  }
+}

@@ -1,0 +1,1114 @@
+# The rules of one section. `docs/src/reference/preflight-rules.md` in the book states the format.
+section: compute
+title: Compute and pools
+about: |
+  The machine pools of the cluster: their size, their instance types, and what each engine needs
+  of them before Palette can build the pool.
+rules:
+  - id: gke-pool-multiple-3
+    title: A GKE worker pool size is a multiple of 3
+    engines: [gke]
+    tier: static
+    level: preflight
+    severity: fail
+    promotion:
+      bar: 0.8
+      runs: ["20260929T043631Z"]
+    status: seen
+    what: |
+      Palette refuses a GKE worker pool whose size is not a multiple of 3, with `InvalidParam`
+      "Node pool size should be multiple of 3", at the create. Through the provider, that is after
+      a full apply. The rule holds for each worker pool, zonal or regional.
+    check:
+      kind: static
+      expr: |
+        [ .entity.spec.machinepoolconfig[]
+          | select((.poolConfig.isControlPlane // false) | not)
+          | select(((.poolConfig.size // 0) % 3) != 0)
+          | "pool \(.poolConfig.name) has size \(.poolConfig.size), not a multiple of 3" ]
+    fix:
+      owner: provider
+      text: Call the validate route of Palette at plan time, so the size is refused before the apply.
+    evidence:
+      - kind: run
+        ref: "#90"
+        note: "`InvalidParam` at create, after a full apply, with a pool of 4"
+      - kind: run
+        ref: "20260929T043631Z"
+        note: the plan made the fault and the check found it; the clean entity passed
+      - kind: source
+        ref: hubble services/service/spectrocluster/internal/handler/converter/v1/clusters_v1_converter.go ToMachinePoolBasicConfig
+        note: the converter panics with InvalidParam for a managed GCP pool whose size is not a multiple of 3
+    tests:
+      - fault: fixtures/gke/pool-4.json
+        clean: fixtures/gke/clean.json
+
+  - id: instance-offering
+    title: The instance type is offered in each zone of the pool
+    engines: [aws, eks, gcp, gke]
+    tier: cloud
+    severity: fail
+    status: source
+    what: |
+      An instance type that a zone does not offer fails during the build: `Unsupported`,
+      `ZONE_RESOURCE_POOL_EXHAUSTED`, or a node group `CREATE_FAILED`. The instance catalog of
+      Palette is one static list for each region, and it does not ask the zone.
+    reproduce:
+      aws:
+        - "aws ec2 describe-instance-type-offerings --location-type availability-zone --filters Name=instance-type,Values={{ .entity.spec.machinepoolconfig[0].cloudConfig.instanceType }} --region {{ .entity.spec.cloudConfig.region }} --query 'InstanceTypeOfferings[].Location' --output text   # each zone of the pools must be in the list"
+      eks:
+        - "aws ec2 describe-instance-type-offerings --location-type availability-zone --filters Name=instance-type,Values={{ .entity.spec.machinepoolconfig[0].cloudConfig.instanceType }} --region {{ .entity.spec.cloudConfig.region }} --query 'InstanceTypeOfferings[].Location' --output text   # each zone of the pools must be in the list"
+      gcp:
+        - "gcloud compute machine-types describe {{ .entity.spec.machinepoolconfig[0].cloudConfig.instanceType }} --zone {{ .entity.spec.machinepoolconfig[0].cloudConfig.azs[0] // \"<zone>\" }} --project {{ .entity.spec.cloudConfig.project }} --format 'value(name,zone)'"
+      gke:
+        - "gcloud compute machine-types list --filter 'name={{ .entity.spec.machinepoolconfig[0].cloudConfig.instanceType }}' --project {{ .entity.spec.cloudConfig.project }} --format 'value(zone)' | grep {{ .entity.spec.cloudConfig.region }}   # each zone of the region that offers the type"
+    fix:
+      owner: palette
+      text: Check the offering in the validate route, with "unknown" when the permission is missing.
+    evidence:
+      - kind: source
+        ref: hubble domain/cloudmeta.go InstanceType, InstanceTypes
+        note: the catalog holds the CPU, the memory, and the price of each type for a region, and no zone
+
+  - id: spot-capacity
+    title: Spot capacity is short
+    engines: [aws, eks]
+    tier: race
+    severity: warn
+    status: source
+    what: |
+      A pool of capacity type spot can find no capacity at the moment of the build. No check before
+      the build answers it; the watch sees the capacity events.
+    evidence:
+      - kind: doc
+        ref: https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/spot-interruptions.html
+
+  - id: eks-worker-needed
+    title: An EKS cluster needs one worker pool that is not Fargate
+    engines: [eks]
+    tier: static
+    severity: fail
+    status: source
+    what: |
+      The Palette agent cannot run on the EKS control plane. With no worker node, the cluster is
+      never `Running`. One node group with a size of 1 or more is needed.
+    check:
+      kind: static
+      expr: |
+        if ([ .entity.spec.machinepoolconfig[]
+              | select((.poolConfig.isControlPlane // false) | not)
+              | select((.poolConfig.size // 0) >= 1) ] | length) == 0
+        then ["no worker pool with a size of 1 or more; the Palette agent needs a node group"]
+        else [] end
+    fix:
+      owner: palette
+      text: Refuse an EKS create with no worker pool in the validate route.
+    evidence:
+      - kind: doc
+        ref: https://docs.spectrocloud.com/clusters/public-cloud/aws/eks/
+    tests:
+      - fault: fixtures/eks/no-worker.json
+        clean: fixtures/eks/clean.json
+
+  - id: eks-ami-type
+    title: The AMI type of an EKS pool is an AL2023 type
+    engines: [eks]
+    tier: static
+    severity: fail
+    status: source
+    what: |
+      Palette refuses an AL2 AMI type (`AL2_x86_64`, `AL2_x86_64_GPU`) for a node pool with
+      `UnsupportedAmiType`. It refuses any value outside `AL2023_x86_64_STANDARD`,
+      `AL2023_x86_64_NEURON`, and `AL2023_x86_64_NVIDIA` as invalid. An empty type is
+      `AL2023_x86_64_STANDARD`. AL2023 enforces IMDSv2 with a hop limit of 1. A pod outside host
+      networking then cannot reach IMDS, and the EBS CSI driver fails. The account default hop
+      limit must be 2. The provider copies the account default into the node group, and the
+      reproduce line reads it.
+    check:
+      kind: static
+      expr: |
+        [ .entity.spec.machinepoolconfig[]
+          | (.cloudConfig.amiType // "") as $t
+          | select($t != "")
+          | if ($t | startswith("AL2_"))
+            then "pool \(.poolConfig.name) uses amiType \($t): AL2 is refused for a new node pool (UnsupportedAmiType); use AL2023_x86_64_STANDARD"
+            elif (["AL2023_x86_64_STANDARD", "AL2023_x86_64_NEURON", "AL2023_x86_64_NVIDIA"] | index($t)) == null
+            then "pool \(.poolConfig.name) uses amiType \($t), not one of AL2023_x86_64_STANDARD, AL2023_x86_64_NEURON, AL2023_x86_64_NVIDIA"
+            else empty end ]
+    reproduce:
+      - "aws ec2 get-instance-metadata-defaults --region {{ .entity.spec.cloudConfig.region }} --query AccountLevel --output json   # HttpPutResponseHopLimit must be 2 when HttpTokens is required"
+    fix:
+      owner: palette
+      text: Read the account IMDS defaults in the validate route, and warn when the hop limit is 1.
+    evidence:
+      - kind: source
+        ref: hubble services/service/spectrocluster/internal/handler/converter/v1/clusters_v1_converter.go ToEksMachinePoolConfigs
+        note: panics with UnsupportedAmiType when the type is not in domain.AmiTypes()
+      - kind: source
+        ref: hubble domain/cloudmetaami.go AmiTypes
+        note: the three AL2023 types; AL2 stays only for clusters that exist
+      - kind: doc
+        ref: https://docs.spectrocloud.com/clusters/public-cloud/aws/eks/
+        note: the EC2 instance hop limit must be 2 for IMDSv2 with AL2023
+      - kind: source
+        ref: palette pkg/provider/aws/aws_managed.go getInstanceMetadataOptionsFromDefaults
+    tests:
+      - fault: fixtures/eks/ami-al2.json
+        clean: fixtures/eks/clean.json
+
+  - id: eks-launch-template
+    title: The AMI of a custom launch template exists in the region
+    engines: [eks]
+    tier: cloud
+    severity: fail
+    status: source
+    when: |
+      [ .entity.spec.machinepoolconfig[] | .cloudConfig.awsLaunchTemplate.ami.id // "" | select(. != "") ] | length > 0
+    what: |
+      A pool with `awsLaunchTemplate` makes CAPA write an EC2 launch template for the node group,
+      and Palette sets `enableAwsLaunchTemplate`. An AMI id that is not in the region, or not
+      `available`, fails the node group after the control plane is up. EC2 answers
+      `InvalidAMIID.NotFound`, and the node group is `CREATE_FAILED`. Palette copies the template
+      and checks no field of it. With no AMI id,
+      CAPA looks the EKS optimized AMI up in SSM, which works. The check asks EC2 for each AMI id of
+      the pools in one call. The launch template versions exist during the build alone; the
+      reproduce line reads them.
+    check:
+      kind: exec
+      needs: [aws]
+      argv:
+        - aws
+        - ec2
+        - describe-images
+        - --region
+        - "{{ .entity.spec.cloudConfig.region }}"
+        - --filters
+        - 'Name=image-id,Values={{ [ .entity.spec.machinepoolconfig[] | .cloudConfig.awsLaunchTemplate.ami.id // "" | select(. != "") ] | unique | join(",") }}'
+        - --output
+        - json
+      expr: |
+        .entity.spec.cloudConfig.region as $r
+        | ([ .entity.spec.machinepoolconfig[] | { pool: .poolConfig.name, ami: (.cloudConfig.awsLaunchTemplate.ami.id // "") } | select(.ami != "") ]) as $want
+        | if .exec.exit != 0 then ["aws ec2 describe-images failed: \(.exec.stderr | .[:200])"]
+          else (.exec.stdout.Images // []) as $have
+          | [ $want[] | .ami as $a | .pool as $p
+              | ([ $have[] | select(.ImageId == $a) ] | .[0]) as $img
+              | if $img == null then "pool \($p): AMI \($a) is not in \($r)"
+                elif ($img.State // "") != "available" then "pool \($p): AMI \($a) is \($img.State), not available"
+                else empty end ]
+          end
+    reproduce:
+      - "aws ec2 describe-images --region {{ .entity.spec.cloudConfig.region }} --image-ids {{ [ .entity.spec.machinepoolconfig[] | .cloudConfig.awsLaunchTemplate.ami.id // \"\" | select(. != \"\") ] | unique | join(\" \") }} --query 'Images[].[ImageId,State,Name]' --output table"
+      - "aws ec2 describe-launch-template-versions --region {{ .entity.spec.cloudConfig.region }} --launch-template-name <name of the node group> --versions '$Latest' --output json   # during the build; CAPA names the template after the node group"
+    fix:
+      owner: palette
+      text: Describe the AMI of the launch template in the validate route.
+    evidence:
+      - kind: source
+        ref: hubble services/service/spectrocluster/internal/handler/converter/v1/clusters_v1_converter.go ToEksMachinePoolConfigParam
+        note: "`if e.CloudConfig.AwsLaunchTemplate != nil { EnableAwsLaunchTemplate = true }`; ToAwsLaunchTemplate copies the fields and checks none"
+      - kind: doc
+        ref: https://cluster-api-aws.sigs.k8s.io/topics/eks/pod-networking
+    tests:
+      - fault: fixtures/eks/launch-template-ami-missing.json
+        clean: fixtures/eks/launch-template-clean.json
+
+  - id: eks-fargate-private
+    title: The subnets of a Fargate profile are private
+    engines: [eks]
+    tier: cloud
+    severity: fail
+    status: inferred
+    when: |
+      [ (.entity.spec.fargateProfiles // [])[] | (.subnetIds // [])[] ] | length > 0
+    what: |
+      A Fargate pod gets no public IP, so EKS accepts only private subnets for a profile. EKS
+      refuses a subnet with a route to an internet gateway, and the profile fails. With no subnet ids,
+      CAPA takes the private subnets of the cluster. The check reads the route tables the named
+      subnets are associated with, and flags a route to an `igw-`. A subnet with no association
+      uses the main route table, and this filter does not return it. This is a reading of the
+      documentation, not a run.
+    check:
+      kind: exec
+      needs: [aws]
+      argv:
+        - aws
+        - ec2
+        - describe-route-tables
+        - --region
+        - "{{ .entity.spec.cloudConfig.region }}"
+        - --filters
+        - 'Name=association.subnet-id,Values={{ [ (.entity.spec.fargateProfiles // [])[] | (.subnetIds // [])[] ] | unique | join(",") }}'
+        - --output
+        - json
+      expr: |
+        if .exec.exit != 0 then ["aws ec2 describe-route-tables failed: \(.exec.stderr | .[:200])"]
+        else [ (.exec.stdout.RouteTables // [])[]
+               | ([ (.Associations // [])[] | .SubnetId // empty ]) as $subnets
+               | (.Routes // [])[]
+               | select((.GatewayId // "") | startswith("igw-"))
+               | "subnet(s) \($subnets | join(", ")) route \(.DestinationCidrBlock // "?") to \(.GatewayId): a Fargate profile needs private subnets" ]
+             | unique
+        end
+    reproduce:
+      - "aws ec2 describe-route-tables --region {{ .entity.spec.cloudConfig.region }} --filters Name=association.subnet-id,Values={{ [ (.entity.spec.fargateProfiles // [])[] | (.subnetIds // [])[] ] | unique | join(\",\") }} --query 'RouteTables[].[Associations[].SubnetId,Routes[].GatewayId]' --output json"
+      - "aws ec2 describe-subnets --region {{ .entity.spec.cloudConfig.region }} --subnet-ids {{ [ (.entity.spec.fargateProfiles // [])[] | (.subnetIds // [])[] ] | unique | join(\" \") }} --query 'Subnets[].[SubnetId,MapPublicIpOnLaunch]' --output table"
+    fix:
+      owner: palette
+      text: Read the route tables of the subnets of a Fargate profile in the validate route.
+    evidence:
+      - kind: doc
+        ref: https://docs.spectrocloud.com/clusters/public-cloud/aws/eks/
+        note: "only private subnets (with no direct route to an Internet Gateway) are accepted for this parameter"
+      - kind: doc
+        ref: https://docs.aws.amazon.com/eks/latest/userguide/fargate-profile.html
+    tests:
+      - fault: fixtures/eks/fargate-public.json
+        clean: fixtures/eks/fargate-private.json
+
+  - id: aws-ami
+    title: The image of the OS pack is in the region
+    engines: [aws]
+    tier: cloud
+    severity: fail
+    status: source
+    when: |
+      def ann(l): ([ .profiles[] | .packs[] | select(.layer == l) | .packUid ] | .[0]) as $u | if $u == null then {} else (([ ((.packs[$u] // {}).packValues // [])[] | select(.packUid == $u) | .annotations // {} ] | .[0]) // {}) end;
+      (ann("os") | has("os_version") and has("os_spectro_version")) and (ann("k8s") | has("k8s_version") and has("k8s_spectro_version"))
+    what: |
+      At create, Palette builds an image name from four annotations of the OS and Kubernetes packs:
+      `os_version-os_spectro_version-k8s_version-k8s_spectro_version`, such as `u-2404-0-k-1324-0`.
+      It asks EC2 for an image of that name in the region, and writes the id into the cluster. When
+      the region has no such image, the image condition of the cluster fails after 5 tries, and the
+      build waits. The check asks EC2 for the same name. It runs when the world has the pack
+      annotations, which needs a key; a bring-your-own-image pack names its AMI in `imageId` instead.
+    check:
+      kind: exec
+      needs: [aws]
+      argv:
+        - aws
+        - ec2
+        - describe-images
+        - --region
+        - "{{ .entity.spec.cloudConfig.region }}"
+        - --filters
+        - 'Name=name,Values={{ def ann(l): ([ .profiles[] | .packs[] | select(.layer == l) | .packUid ] | .[0]) as $u | if $u == null then {} else (([ ((.packs[$u] // {}).packValues // [])[] | select(.packUid == $u) | .annotations // {} ] | .[0]) // {}) end; ann("os") as $o | ann("k8s") as $k | "\($o.os_version)-\($o.os_spectro_version)-\($k.k8s_version)-\($k.k8s_spectro_version)" }}'
+        - --output
+        - json
+      expr: |
+        def ann(l): ([ .profiles[] | .packs[] | select(.layer == l) | .packUid ] | .[0]) as $u | if $u == null then {} else (([ ((.packs[$u] // {}).packValues // [])[] | select(.packUid == $u) | .annotations // {} ] | .[0]) // {}) end;
+        ann("os") as $o | ann("k8s") as $k
+        | "\($o.os_version)-\($o.os_spectro_version)-\($k.k8s_version)-\($k.k8s_spectro_version)" as $name
+        | if .exec.exit != 0 then ["aws ec2 describe-images failed: \(.exec.stderr | .[:200])"]
+          elif ((.exec.stdout.Images // []) | length) == 0 then ["no image named \($name) in \(.entity.spec.cloudConfig.region): the image condition of the cluster fails, and the build waits"]
+          else [] end
+    reproduce:
+      - "aws ec2 describe-images --region {{ .entity.spec.cloudConfig.region }} --filters Name=name,Values=<os_version>-<os_spectro_version>-<k8s_version>-<k8s_spectro_version> --query 'Images[].[ImageId,OwnerId,Name,State]' --output table   # the four values are annotations of the OS and Kubernetes packs"
+    fix:
+      owner: palette
+      text: Move the image lookup from after the create into the validate route.
+    evidence:
+      - kind: source
+        ref: hubble services/service/spectrocluster/internal/service/spectrocluster/internal/aws/spectrocluster_aws_image.go resolveAwsImage
+        note: builds the name with GetImageName, calls GetAwsImage in the region, and sets the image condition to Failure after the retries
+      - kind: source
+        ref: palette pkg/provider/aws/aws_image.go getAWSAmi
+        note: reads the image id from the pack ref annotation, or from the pack annotations imageId and imageOwner
+    tests:
+      - fault: fixtures/aws/image-missing.json
+        clean: fixtures/aws/image-clean.json
+
+  - id: gcp-image-not-shared
+    title: Spectro Cloud shares the image of the OS and Kubernetes pair
+    engines: [gcp]
+    tier: cloud
+    severity: fail
+    status: seen
+    when: |
+      def ann(l): ([ .profiles[] | .packs[] | select(.layer == l) | .packUid ] | .[0]) as $u | if $u == null then {} else (([ ((.packs[$u] // {}).packValues // [])[] | select(.packUid == $u) | .annotations // {} ] | .[0]) // {}) end;
+      (ann("os") | has("os_version") and has("os_spectro_version")) and (ann("k8s") | has("k8s_version") and has("k8s_spectro_version"))
+    what: |
+      A GCP cluster takes its node image from the image project of Spectro Cloud
+      (`spectro-image-build` on the SaaS instance). There is one image for each pair of OS and
+      Kubernetes versions, named from the pack annotations as on AWS (`u-2404-0-k-1356-0`). Palette builds the
+      image URL and checks nothing. When the image is not shared with the project, each machine
+      fails with `Required 'compute.images.useReadOnly' permission`, and the cluster stays
+      `Provisioning` with no instance. The check describes the image with the account of the
+      operator; a 403 or a 404 is the fault. It runs when the world has the pack annotations.
+    check:
+      kind: exec
+      needs: [gcloud]
+      argv:
+        - gcloud
+        - compute
+        - images
+        - describe
+        - '{{ def ann(l): ([ .profiles[] | .packs[] | select(.layer == l) | .packUid ] | .[0]) as $u | if $u == null then {} else (([ ((.packs[$u] // {}).packValues // [])[] | select(.packUid == $u) | .annotations // {} ] | .[0]) // {}) end; ann("os") as $o | ann("k8s") as $k | "\($o.os_version)-\($o.os_spectro_version)-\($k.k8s_version)-\($k.k8s_spectro_version)" }}'
+        - --project
+        - spectro-image-build
+        - --format
+        - json
+      expr: |
+        def ann(l): ([ .profiles[] | .packs[] | select(.layer == l) | .packUid ] | .[0]) as $u | if $u == null then {} else (([ ((.packs[$u] // {}).packValues // [])[] | select(.packUid == $u) | .annotations // {} ] | .[0]) // {}) end;
+        ann("os") as $o | ann("k8s") as $k
+        | "\($o.os_version)-\($o.os_spectro_version)-\($k.k8s_version)-\($k.k8s_spectro_version)" as $name
+        | if .exec.exit != 0 then ["gcloud cannot describe image \($name) in project spectro-image-build: \(.exec.stderr | .[:240])"]
+          else [] end
+    reproduce:
+      - "gcloud compute images describe <os_version>-<os_spectro_version>-<k8s_version>-<k8s_spectro_version> --project spectro-image-build   # the four values are annotations of the OS and Kubernetes packs; a 403 with compute.images.useReadOnly means the image is not shared"
+      - "gcloud logging read 'protoPayload.status.message:\"compute.images.useReadOnly\"' --project {{ .entity.spec.cloudConfig.project }} --limit 5 --freshness 1h"
+    fix:
+      owner: palette
+      text: Describe the image at create, before the URL goes into the cluster.
+    evidence:
+      - kind: run
+        ref: "#74"
+        note: the image of Kubernetes 1.36.2 is not shared, and the cluster stays Provisioning with no instance
+      - kind: source
+        ref: hubble services/service/cloud/internal/service/cloudservice/gcp_service.go GetGcpImageUrl
+        note: formats the URL from the image project and the name, and calls no GCP API
+    tests:
+      - fault: fixtures/gcp/image-not-shared.json
+        clean: fixtures/gcp/image-shared-clean.json
+
+  - id: root-volume
+    title: The root volume of a pool is as large as the snapshot of the AMI
+    engines: [aws]
+    tier: palette
+    severity: fail
+    status: inferred
+    when: |
+      def ann(l): ([ .profiles[] | .packs[] | select(.layer == l) | .packUid ] | .[0]) as $u | if $u == null then {} else (([ ((.packs[$u] // {}).packValues // [])[] | select(.packUid == $u) | .annotations // {} ] | .[0]) // {}) end;
+      (ann("os") | has("imageId")) and .entity.spec.cloudAccountUid != null
+    what: |
+      EC2 refuses a root volume smaller than the snapshot of the AMI (`InvalidBlockDeviceMapping`),
+      and the machine is never made. Palette has `GET /v1/clouds/aws/imageIds/{imageId}/volumeSize`,
+      which reads the root block device of the AMI, and the create does not call it. Before the
+      create, the AMI id is known for a bring-your-own-image OS pack alone, in its `imageId`
+      annotation. For a Spectro image, Palette finds the id at create. The check runs for the first case, and
+      compares `rootDeviceSize` of each pool with the size. This is a reading of the source, not a run.
+    check:
+      kind: palette
+      method: GET
+      path: '/v1/clouds/aws/imageIds/{{ def ann(l): ([ .profiles[] | .packs[] | select(.layer == l) | .packUid ] | .[0]) as $u | if $u == null then {} else (([ ((.packs[$u] // {}).packValues // [])[] | select(.packUid == $u) | .annotations // {} ] | .[0]) // {}) end; ann("os").imageId }}/volumeSize?region={{ .entity.spec.cloudConfig.region }}&cloudAccountUid={{ .entity.spec.cloudAccountUid }}'
+      expr: |
+        def ann(l): ([ .profiles[] | .packs[] | select(.layer == l) | .packUid ] | .[0]) as $u | if $u == null then {} else (([ ((.packs[$u] // {}).packValues // [])[] | select(.packUid == $u) | .annotations // {} ] | .[0]) // {}) end;
+        (ann("os").imageId) as $ami
+        | if (.response.ok | not) then ["Palette cannot read the volume size of \($ami): \(.response.body.code // .response.status): \(.response.body.message // "")"]
+          else (.response.body.sizeGB // 0) as $snap
+          | [ .entity.spec.machinepoolconfig[]
+              | select((.cloudConfig.rootDeviceSize // 0) > 0 and (.cloudConfig.rootDeviceSize // 0) < $snap)
+              | "pool \(.poolConfig.name) has rootDeviceSize \(.cloudConfig.rootDeviceSize) GB, and the snapshot of \($ami) is \($snap) GB" ]
+          end
+    reproduce:
+      - "aws ec2 describe-images --region {{ .entity.spec.cloudConfig.region }} --image-ids <ami> --query 'Images[].BlockDeviceMappings[].Ebs.VolumeSize' --output text   # the snapshot size; rootDeviceSize of each pool must be as large"
+      - "curl -s -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" \"${PALETTE_API:-https://api.spectrocloud.com}/v1/clouds/aws/imageIds/<ami>/volumeSize?region={{ .entity.spec.cloudConfig.region }}&cloudAccountUid={{ .entity.spec.cloudAccountUid }}\""
+    fix:
+      owner: palette
+      text: Compare rootDeviceSize with the volume size of the image in the validate route.
+    evidence:
+      - kind: source
+        ref: hubble services/service/cloud/internal/service/cloudservice/aws_service.go GetVolumeSize
+        note: reads the root block device of the image; no cluster path calls it
+    tests:
+      - fault: fixtures/aws/byoi-volume-small.json
+        clean: fixtures/aws/byoi-volume-clean.json
+
+  - id: dedicated-hosts
+    title: The host resource group has capacity for the pool
+    engines: [aws]
+    tier: palette
+    severity: fail
+    status: source
+    when: |
+      ([ .entity.spec.machinepoolconfig[] | select((.cloudConfig.hostResourceGroupArn // "") != "") ] | length) > 0 and .entity.spec.cloudAccountUid != null
+    what: |
+      A pool of capacity type `host-resource-group` places its instances on the dedicated hosts of
+      the group. When the hosts have less free capacity for the instance type than the pool size,
+      EC2 refuses the instances (`InsufficientHostCapacity`), and the pool never fills. Palette has
+      `POST /v1/clouds/aws/regions/{region}/resourceGroups/validateCapacity`, which sums the free
+      capacity of the hosts of the group for the type, and the create does not call it. The check
+      asks it for the first pool with a host resource group; a second pool needs its own call.
+    check:
+      kind: palette
+      method: POST
+      path: '/v1/clouds/aws/regions/{{ .entity.spec.cloudConfig.region }}/resourceGroups/validateCapacity?hrgArn={{ [ .entity.spec.machinepoolconfig[] | select((.cloudConfig.hostResourceGroupArn // "") != "") ] | .[0].cloudConfig.hostResourceGroupArn }}'
+      body: |
+        ([ .entity.spec.machinepoolconfig[] | select((.cloudConfig.hostResourceGroupArn // "") != "") ] | .[0]) as $p
+        | { cloudAccountUid: .entity.spec.cloudAccountUid, instanceType: $p.cloudConfig.instanceType, replicaCount: ($p.poolConfig.size // 0) }
+      expr: |
+        ([ .entity.spec.machinepoolconfig[] | select((.cloudConfig.hostResourceGroupArn // "") != "") ] | .[0]) as $p
+        | if (.response.ok | not) then ["Palette cannot check the capacity of \($p.cloudConfig.hostResourceGroupArn): \(.response.body.code // .response.status): \(.response.body.message // "")"]
+          elif ((.response.body.isValid // false) | not)
+          then ["pool \($p.poolConfig.name): the group \($p.cloudConfig.hostResourceGroupArn) has \(.response.body.availableCapacity // 0) free \($p.cloudConfig.instanceType) slot(s), and the pool asks for \($p.poolConfig.size): \(.response.body.message // "")"]
+          else [] end
+    reproduce:
+      - "aws resource-groups list-group-resources --region {{ .entity.spec.cloudConfig.region }} --group {{ [ .entity.spec.machinepoolconfig[] | select((.cloudConfig.hostResourceGroupArn // \"\") != \"\") ] | .[0].cloudConfig.hostResourceGroupArn }} --query 'Resources[].Identifier.ResourceArn' --output text"
+      - "aws ec2 describe-hosts --region {{ .entity.spec.cloudConfig.region }} --host-ids <host ids of the group> --query 'Hosts[].AvailableCapacity.AvailableInstanceCapacity' --output json"
+    fix:
+      owner: palette
+      text: Call the capacity route for each host resource group pool at create.
+    evidence:
+      - kind: source
+        ref: hubble services/service/cloud/internal/service/cloudservice/aws_service.go ValidateAwsHrgCapacity
+        note: sums AvailableInstanceCapacity of the hosts for the type, and answers isValid when it covers replicaCount
+    tests:
+      - fault: fixtures/aws/hrg-no-capacity.json
+        clean: fixtures/aws/hrg-clean.json
+
+  - id: gke-no-gpu
+    title: GKE node pools take no GPU machine type
+    engines: [gke]
+    tier: static
+    severity: fail
+    status: source
+    what: |
+      Palette does not support a GPU machine type (`a2-`, `a3-`, `g2-`) on a GKE node pool.
+    check:
+      kind: static
+      expr: |
+        [ .entity.spec.machinepoolconfig[]
+          | select((.cloudConfig.instanceType // "") | test("^(a2|a3|g2)-"))
+          | "pool \(.poolConfig.name) uses \(.cloudConfig.instanceType), a GPU machine type" ]
+    fix:
+      owner: palette
+      text: Refuse the type in the validate route.
+    evidence:
+      - kind: doc
+        ref: https://docs.spectrocloud.com/clusters/public-cloud/gcp/gke/
+    tests:
+      - fault: fixtures/gke/gpu-pool.json
+        clean: fixtures/gke/clean.json
+
+  - id: gke-autopilot
+    title: A GKE Autopilot cluster takes no node pool
+    engines: [gke]
+    tier: static
+    severity: fail
+    status: inferred
+    what: |
+      Autopilot runs its own nodes. A create with `enableAutoPilot` and a worker pool asks GKE for
+      what it refuses.
+    check:
+      kind: static
+      expr: |
+        if (.entity.spec.cloudConfig.managedClusterConfig.enableAutoPilot // false)
+           and ([ .entity.spec.machinepoolconfig[] | select((.poolConfig.isControlPlane // false) | not) ] | length) > 0
+        then ["enableAutoPilot is on, and the entity has a worker pool"]
+        else [] end
+    fix:
+      owner: palette
+      text: Refuse the pool in the validate route.
+    evidence:
+      - kind: doc
+        ref: https://cloud.google.com/kubernetes-engine/docs/concepts/autopilot-overview
+    tests:
+      - fault: fixtures/gke/autopilot-pool.json
+        clean: fixtures/gke/clean.json
+
+  - id: update-strategy-eks
+    title: update_strategy has no effect on EKS
+    engines: [eks]
+    tier: static
+    severity: warn
+    status: source
+    what: |
+      An EKS node group rolls as EKS decides. A pool `updateStrategy` in the entity changes
+      nothing, and a reader who expects it to is misled.
+    check:
+      kind: static
+      expr: |
+        [ .entity.spec.machinepoolconfig[]
+          | select((.poolConfig.updateStrategy.type // "") != "")
+          | "pool \(.poolConfig.name) sets updateStrategy \(.poolConfig.updateStrategy.type), which EKS does not read" ]
+    fix:
+      owner: provider
+      text: Read the field, or remove it from the EKS resource.
+    evidence:
+      - kind: report
+        ref: palette-eks-orphan-nodegroup-delete-stuck-findings-2026-09-28 B5
+    tests:
+      - fault: fixtures/eks/update-strategy.json
+        clean: fixtures/eks/clean.json
+
+  - id: bastion-cost
+    title: CAPA makes a bastion for each AWS cluster
+    engines: [aws]
+    tier: static
+    severity: note
+    status: seen
+    what: |
+      Without `bastionDisabled`, the cluster API provider makes one bastion instance for the
+      cluster, which costs money and is often not needed.
+    check:
+      kind: static
+      expr: |
+        if (.entity.spec.cloudConfig.bastionDisabled // false) then [] else ["bastionDisabled is not set: the build makes a bastion instance"] end
+    evidence:
+      - kind: run
+        ref: teardown lab
+    tests:
+      - fault: fixtures/aws/clean.json
+        clean: fixtures/aws/no-bastion.json
+
+  - id: aks-system-pool
+    title: An AKS cluster has one Linux system node pool with no taint
+    engines: [aks]
+    tier: static
+    severity: fail
+    status: source
+    what: |
+      AKS needs one system node pool. The create fails with `AksMissingSystemPool` ("At least one
+      pool should be system node pool") when no pool has `managedPoolConfig.isSystemNodePool`; the
+      validate route does not run the check. The converter reads `managedPoolConfig`, not
+      `cloudConfig.isSystemNodePool`. A system pool is Linux (`AksInvalidSystemPoolOsType`), takes
+      no taint (`AksSystemPoolTaintsNotSupported`), and has one node or more.
+    check:
+      kind: static
+      expr: |
+        .entity.spec.machinepoolconfig as $pools
+        | ([ $pools[] | select(.managedPoolConfig.isSystemNodePool // false) ]) as $sys
+        | (if ($sys | length) == 0 then ["no pool has managedPoolConfig.isSystemNodePool true: the create fails with AksMissingSystemPool after the validate route passed; the converter reads managedPoolConfig, not cloudConfig.isSystemNodePool"] else [] end)
+          + [ $sys[] | .poolConfig.name as $p
+              | ( if ((.managedPoolConfig.osType // "Linux") != "Linux") or ((.managedPoolConfig.osSku // "") | test("windows"; "i")) then "system pool \($p) is \(.managedPoolConfig.osSku // .managedPoolConfig.osType): a system pool is Linux (AksInvalidSystemPoolOsType)" else empty end ),
+                ( if ((.poolConfig.taints // []) | length) > 0 then "system pool \($p) carries \(.poolConfig.taints | length) taint(s): AKS takes none on a system pool (AksSystemPoolTaintsNotSupported)" else empty end ),
+                ( if (.poolConfig.size // 0) < 1 then "system pool \($p) has size \(.poolConfig.size // 0): a system pool needs one node or more" else empty end ) ]
+    fix:
+      owner: palette
+      text: Run the system pool checks in the AKS validate route.
+    evidence:
+      - kind: source
+        ref: hubble services/service/spectrocluster/internal/service/cloudconfig/internal/azure/machinepool_azure.go ToAzureMachinePools
+        note: AksMissingSystemPool when no pool is a system pool; domain.ValidateAksMachinePools for the OS type and the taints
+      - kind: doc
+        ref: https://docs.spectrocloud.com/clusters/public-cloud/azure/aks/
+        note: at least one system node pool; a system pool must have at least one node; system node pools are always Linux
+    tests:
+      - fault: fixtures/aks/no-system-pool.json
+        clean: fixtures/aks/clean.json
+      - fault: fixtures/aks/system-pool-windows.json
+
+  - id: maas-resource-pool
+    title: The resource pool of each MAAS machine pool exists
+    engines: [maas]
+    tier: palette
+    severity: fail
+    status: source
+    when: .entity.spec.cloudAccountUid != null
+    what: |
+      CAPMAAS allocates the machines of a pool from the MAAS resource pool the pool names. A name
+      that is not in MAAS matches no machine, and the pool never fills; Palette checks nothing
+      about it. `GET /v1/cloudaccounts/maas/{uid}/properties/resourcePools` lists the pools of MAAS
+      through the PCG of the account.
+    check:
+      kind: palette
+      method: GET
+      path: /v1/cloudaccounts/maas/{{ .entity.spec.cloudAccountUid }}/properties/resourcePools
+      expr: |
+        if (.response.ok | not) then ["Palette cannot list the resource pools of the MAAS account: \(.response.body.code // .response.status): \(.response.body.message // ""); the route needs the PCG of the account to be active"]
+        else ([ (.response.body.items // [])[] | .name ]) as $pools
+          | [ .entity.spec.machinepoolconfig[] | .poolConfig.name as $p | (.cloudConfig.resourcePool // "") as $r
+              | select($r != "" and (($pools | index($r)) == null))
+              | "pool \($p) names resource pool \($r), which is not in MAAS (\($pools | join(", "))): CAPMAAS finds no machine to allocate" ]
+        end
+    reproduce:
+      - "maas $PROFILE resource-pools read | jq -r '.[].name'"
+    fix:
+      owner: palette
+      text: Read the resource pools in the validate route.
+    evidence:
+      - kind: doc
+        ref: https://docs.spectrocloud.com/clusters/data-center/maas/create-manage-maas-clusters/
+        note: "Resource pool: the MAAS resource pool from which to deploy nodes"
+      - kind: source
+        ref: palette pkg/provider/maas/maas_worker.go getMaasMachineSpec
+        note: ResourcePool, MinCPU, MinMemoryInMB, and Tags go to CAPMAAS
+    tests:
+      - fault: fixtures/maas/pool-missing.json
+        clean: fixtures/maas/clean.json
+
+  - id: maas-tags
+    title: Each tag of a MAAS machine pool is a tag of MAAS
+    engines: [maas]
+    tier: palette
+    severity: fail
+    status: source
+    when: .entity.spec.cloudAccountUid != null and ([ .entity.spec.machinepoolconfig[] | (.cloudConfig.tags // [])[] ] | length) > 0
+    what: |
+      Palette selects the machines that carry every tag of the pool. A tag that MAAS does not
+      define is on no machine, so the pool matches none and never fills. `GET /v1/cloudaccounts/maas/{uid}/properties/tags`
+      lists the tags through the PCG. A tag that exists can still be on too few machines;
+      `maas-machines-ready` says how to count them.
+    check:
+      kind: palette
+      method: GET
+      path: /v1/cloudaccounts/maas/{{ .entity.spec.cloudAccountUid }}/properties/tags
+      expr: |
+        if (.response.ok | not) then ["Palette cannot list the tags of the MAAS account: \(.response.body.code // .response.status): \(.response.body.message // ""); the route needs the PCG of the account to be active"]
+        else ([ (.response.body.items // [])[] | .name ]) as $tags
+          | [ .entity.spec.machinepoolconfig[] | .poolConfig.name as $p | (.cloudConfig.tags // [])[]
+              | select(. as $t | ($tags | index($t)) == null)
+              | "pool \($p) asks for tag \(.), which no MAAS tag defines (\($tags | join(", "))): a machine must carry every tag of the pool, so none matches" ]
+        end
+    reproduce:
+      - "maas $PROFILE tags read | jq -r '.[].name'"
+      - "maas $PROFILE tag machines {{ .entity.spec.machinepoolconfig[0].cloudConfig.tags[0] // \"<tag>\" }} | jq -r '.[] | [.hostname, .status_name, .pool.name] | @tsv'"
+    fix:
+      owner: palette
+      text: Read the tags in the validate route.
+    evidence:
+      - kind: doc
+        ref: https://docs.spectrocloud.com/clusters/data-center/maas/create-manage-maas-clusters/
+        note: with multiple tags, Palette only selects machines that have all of the specified tags
+    tests:
+      - fault: fixtures/maas/tag-missing.json
+        clean: fixtures/maas/clean.json
+
+  - id: maas-pool-fields
+    title: Each MAAS machine pool names a resource pool, an instance type, and a zone
+    engines: [maas]
+    tier: static
+    severity: fail
+    status: source
+    what: |
+      The converter dereferences `resourcePool` and the three fields of `instanceType` with no nil
+      check. A pool without them fails the create with a server error, not a 400. The create
+      refuses a pool with no availability zone (`AvailabilityZoneRequired`) after the cluster
+      document exists; the validate route does not. The check reads the three fields of each pool.
+    check:
+      kind: static
+      expr: |
+        [ .entity.spec.machinepoolconfig[] | .poolConfig.name as $p | .cloudConfig as $c
+          | ( if ($c.resourcePool // "") == "" then "pool \($p) names no resourcePool: the converter dereferences it, and the create fails" else empty end ),
+            ( if ($c.instanceType // null) == null then "pool \($p) has no instanceType: the converter dereferences minCPU, minMemInMB, and minDiskSizeInGB, and the create fails" else empty end ),
+            ( if (($c.azs // []) | length) == 0 then "pool \($p) names no availability zone: the create fails with AvailabilityZoneRequired after the validate route passed" else empty end ) ]
+    fix:
+      owner: palette
+      text: Check the three fields in the validate route, and guard the nil pointers in the converter.
+    evidence:
+      - kind: source
+        ref: hubble services/service/spectrocluster/internal/handler/converter/v1/clusters_v1_converter.go ToMaasMachinePoolConfigParam
+        note: "*e.CloudConfig.ResourcePool and e.CloudConfig.InstanceType.MinCPU with no nil guard"
+      - kind: source
+        ref: hubble services/service/spectrocluster/internal/service/cloudconfig/internal/maas/machinepool_maas.go CreateMachinePools
+        note: AvailabilityZoneRequired on the create path
+    tests:
+      - fault: fixtures/maas/no-instance-type.json
+        clean: fixtures/maas/clean.json
+
+  - id: maas-machines-ready
+    title: MAAS has enough Ready machines for each pool
+    engines: [maas]
+    tier: cloud
+    severity: fail
+    status: inferred
+    what: |
+      CAPMAAS allocates a machine in the `Ready` state from the resource pool, in one of the zones.
+      The machine carries every tag of the pool, and has `minCPU` cores and `minMemInMB` of memory
+      or more. With too few, the pool waits for a machine that never comes, and Palette says
+      `Provisioning`. The PCG docs say the same for the PCG: machines in the Ready state for the
+      zone and the pool. The MAAS CLI needs a login profile that the world does not carry. The MAAS
+      API signs each call with OAuth 1.0 and the key, which the world holds redacted. So this rule has no check;
+      the reproduce lines count with the CLI. The field names are those of the MAAS API; no run
+      confirms them.
+    reproduce:
+      - "maas $PROFILE machines read | jq --arg pool {{ .entity.spec.machinepoolconfig[0].cloudConfig.resourcePool }} '[ .[] | select(.status_name == \"Ready\" and .pool.name == $pool) | {hostname, zone: .zone.name, tag_names, cpu_count, memory} ]'   # count >= the pool size; zone in {{ (.entity.spec.machinepoolconfig[0].cloudConfig.azs // []) | join(\",\") }}; tag_names hold {{ (.entity.spec.machinepoolconfig[0].cloudConfig.tags // []) | join(\",\") }}; cpu_count >= {{ .entity.spec.machinepoolconfig[0].cloudConfig.instanceType.minCPU }}; memory (MB) >= {{ .entity.spec.machinepoolconfig[0].cloudConfig.instanceType.minMemInMB }}"
+      - "maas $PROFILE machines read | jq '[ .[] | .status_name ] | group_by(.) | map({state: .[0], n: length})'"
+    fix:
+      owner: palette
+      text: Count the Ready machines that match each pool in the validate route, through the PCG.
+    evidence:
+      - kind: doc
+        ref: https://docs.spectrocloud.com/clusters/pcg/deploy-pcg/maas/
+        note: one or more machines in the Ready state for the chosen availability zone and resource pool
+      - kind: doc
+        ref: https://docs.spectrocloud.com/clusters/data-center/maas/create-manage-maas-clusters/
+        note: Minimum CPU and Minimum Memory select machines from the resource pool with at least that amount
+      - kind: source
+        ref: palette pkg/provider/maas/maas_worker.go getMaasMachineSpec
+        note: ResourcePool, MinCPU, MinMemoryInMB, and Tags go to CAPMAAS; MinDiskSizeInGB is for LXD VMs alone
+
+  - id: edge-two-node
+    title: A two-node edge cluster has two control plane hosts, a primary, a secondary, and K3s
+    engines: [edge]
+    tier: static
+    severity: fail
+    status: source
+    what: |
+      With `isTwoNodeCluster`, the control plane pool holds two hosts and no more: "Two-node cluster
+      can only support two control-plane edge hosts". One host is the `primary` candidate and one the
+      `secondary`. The Kubernetes pack carries the k3s engine annotation (`TwoNodeClusterPackMissing`). A
+      priority on a worker host, or with the mode off, is refused. The validate route runs the
+      pack check alone; the create runs the rest. The docs also list Palette Optimized Canonical
+      for two-node clusters; hubble takes K3s alone, and this rule follows hubble.
+    check:
+      kind: static
+      expr: |
+        def k8s_names: [ .profiles[]? | .packs[] | select(.layer == "k8s") | .name ];
+        (.entity.spec.cloudConfig.isTwoNodeCluster // false) as $two
+        | ([ .entity.spec.machinepoolconfig[] | select(.poolConfig.isControlPlane // false) | (.cloudConfig.edgeHosts // [])[] ]) as $cp
+        | ([ .entity.spec.machinepoolconfig[] | .poolConfig.name as $p | select((.poolConfig.isControlPlane // false) | not) | (.cloudConfig.edgeHosts // [])[] | select((.twoNodeCandidatePriority // "") != "") | $p ] | unique) as $worker_prio
+        | ([ $cp[] | .twoNodeCandidatePriority // "" | select(. != "") ]) as $prio
+        | if $two then
+            [ ( if ($cp | length) != 2 then "isTwoNodeCluster with \($cp | length) control plane host(s): Palette refuses it with \"Two-node cluster can only support two control-plane edge hosts\"" else empty end ),
+              ( if (($prio | index("primary")) == null) or (($prio | index("secondary")) == null) then "the two-node candidate priorities are \($prio | join(", ") | if . == "" then "not set" else . end): Palette needs one primary and one secondary (InvalidTwoNodeCandidatesPriority)" else empty end ),
+              ( if ((.profiles // []) | length) > 0 and ((k8s_names | length) == 0 or (k8s_names | all(.[]; test("k3s")) | not)) then "the Kubernetes pack is \(k8s_names | join(", ")): Palette refuses a two-node cluster without the k3s engine (TwoNodeClusterPackMissing); the docs also list Palette Optimized Canonical, and hubble takes K3s alone" else empty end ),
+              ( $worker_prio[] | "worker pool \(.) sets twoNodeCandidatePriority: candidates are control plane hosts alone (InvalidTwoNodeCandidates)" ) ]
+          else
+            [ ( if ($prio | length) > 0 then "twoNodeCandidatePriority is set on \($prio | length) host(s) and isTwoNodeCluster is off: Palette refuses it with TwoNodeClusterNotEnabled" else empty end ) ]
+          end
+    fix:
+      owner: palette
+      text: Run the two-node count and priority checks in the validate route.
+    evidence:
+      - kind: source
+        ref: hubble services/service/spectrocluster/internal/service/cloudconfig/internal/edgenative/machinepool_edgenative_validator.go validateTwoNodeCluster, validateCandidatePriority
+      - kind: source
+        ref: hubble services/service/spectrocluster/internal/service/spectrocluster/internal/edgenative/spectrocluster_edgenative.go IsK3PackExists
+        note: the pack annotation spectrocloud.com/edge-native/k8s-engine must be k3s
+      - kind: doc
+        ref: https://docs.spectrocloud.com/clusters/edge/architecture/two-node/
+        note: exactly two nodes in the control plane; K3s and Palette Optimized Canonical Kubernetes
+    tests:
+      - fault: fixtures/edge/two-node-three-hosts.json
+        clean: fixtures/edge/two-node-clean.json
+      - fault: fixtures/edge/two-node-pxk.json
+        clean: fixtures/edge/clean.json
+      - fault: fixtures/edge/two-node-two-primary.json
+
+  - id: edge-host-in-use
+    title: Each edge host of the cluster is registered and free
+    engines: [edge]
+    tier: palette
+    severity: fail
+    status: source
+    what: |
+      An edge-native cluster has no cloud account; its machines are the registered hosts it names
+      by uid. A uid that is not in the project fails the create at `AssociateEdgeHostDevice`. A
+      host that is part of another cluster is refused with `EdgeHostDeviceAlreadyInUse`. The
+      validate route reads neither. `GET /v1/edgehosts/{uid}` gives `status.state` and
+      `status.inUseClusters`; the check reads the first host of the first pool. A check of every
+      host needs one request for each; the reproduce line loops.
+    check:
+      kind: palette
+      method: GET
+      path: /v1/edgehosts/{{ .entity.spec.machinepoolconfig[0].cloudConfig.edgeHosts[0].hostUid }}
+      expr: |
+        (.entity.spec.machinepoolconfig[0].cloudConfig.edgeHosts[0].hostUid) as $u
+        | if (.response.ok | not) then ["edge host \($u) is not registered in this project: \(.response.body.code // .response.status): \(.response.body.message // ""); the create fails at AssociateEdgeHostDevice"]
+          else (.response.body.status // {}) as $s | ([ ($s.inUseClusters // [])[] | .name // .uid ]) as $used
+            | if ($used | length) > 0 then ["edge host \($u) (\(.response.body.metadata.name // "")) is \($s.state // "?") and part of cluster(s) \($used | join(", ")): Palette refuses it with EdgeHostDeviceAlreadyInUse"] else [] end
+          end
+    reproduce:
+      - "for h in {{ [ .entity.spec.machinepoolconfig[] | (.cloudConfig.edgeHosts // [])[] | .hostUid ] | join(\" \") }}; do curl -s -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" \"${PALETTE_API:-https://api.spectrocloud.com}/v1/edgehosts/$h\" | jq -c '{uid: .metadata.uid, name: .metadata.name, state: .status.state, health: .status.health.state, inUse: [.status.inUseClusters[]?.name]}'; done"
+    fix:
+      owner: palette
+      text: Read each host in the validate route.
+    evidence:
+      - kind: source
+        ref: hubble services/service/spectrocluster/internal/service/edgehost/edgehost_service.go ValidateEdgeHostDevice
+        note: EdgeHostDeviceAlreadyInUse when the host has associated clusters other than this one
+      - kind: doc
+        ref: https://docs.spectrocloud.com/clusters/edge/site-deployment/edge-host-view/
+        note: In-Use means the host is part of an active cluster; in-use and unpaired hosts are not offered
+    tests:
+      - fault: fixtures/edge/host-in-use.json
+        clean: fixtures/edge/clean.json
+      - fault: fixtures/edge/host-missing.json
+
+  - id: edge-host-health
+    title: Each edge host of the cluster is ready and healthy
+    engines: [edge]
+    tier: palette
+    severity: warn
+    status: source
+    what: |
+      The console offers hosts in the `ready` state with a `healthy` report. Hubble accepts an
+      `unpaired` host and does not read the health at create: both checks are in the source and
+      commented out. The build then waits for an agent that does not report. Palette marks the
+      health stale after 5 minutes without a report. The check reads the first host of the first
+      pool; the reproduce line of `edge-host-in-use` loops over every host.
+    check:
+      kind: palette
+      method: GET
+      path: /v1/edgehosts/{{ .entity.spec.machinepoolconfig[0].cloudConfig.edgeHosts[0].hostUid }}
+      expr: |
+        (.entity.spec.machinepoolconfig[0].cloudConfig.edgeHosts[0].hostUid) as $u
+        | if (.response.ok | not) then ["Palette cannot read edge host \($u): \(.response.body.code // .response.status): \(.response.body.message // "")"]
+          else (.response.body.status // {}) as $s
+            | [ ( if ($s.state // "") != "ready" then "edge host \($u) is \($s.state // "in no state"), not ready: the console offers ready hosts alone; the API accepts an unpaired host, and the build then waits for its agent" else empty end ),
+                ( if (($s.health.state // "") | ascii_downcase) != "healthy" then "edge host \($u) health is \($s.health.state // "not reported")\(if ($s.health.message // "") != "" then ": \($s.health.message)" else "" end); Palette marks the health stale after 5 minutes without a report, and does not read it at create" else empty end ) ]
+          end
+    fix:
+      owner: palette
+      text: Turn the two commented checks of ValidateEdgeHostDevice back on, in the validate route.
+    evidence:
+      - kind: source
+        ref: hubble services/service/spectrocluster/internal/service/edgehost/edgehost_service.go ValidateEdgeHostDevice
+        note: "//if !device.IsEdgeHostHealthy() and //if device.Status.State != domain.EdgeHostReady are commented out"
+      - kind: doc
+        ref: https://docs.spectrocloud.com/clusters/edge/site-deployment/edge-host-view/
+        note: "Ready means the host is ready to be assigned; health is Healthy or Unhealthy"
+    tests:
+      - fault: fixtures/edge/host-unhealthy.json
+        clean: fixtures/edge/clean.json
+      - fault: fixtures/edge/host-unpaired.json
+
+  - id: edge-host-arch
+    title: The architecture of each edge host matches its pool
+    engines: [edge]
+    tier: palette
+    severity: fail
+    status: source
+    what: |
+      The create compares `spec.device.archType` of each host with
+      `poolConfig.machinePoolProperties.archType` of its pool and refuses a mismatch with
+      `EdgeHostDoesNotBelongToArchType`; an empty value on either side is `amd64`. The validate
+      route does not run it. The check reads the first host of the first pool.
+    check:
+      kind: palette
+      method: GET
+      path: /v1/edgehosts/{{ .entity.spec.machinepoolconfig[0].cloudConfig.edgeHosts[0].hostUid }}
+      expr: |
+        (.entity.spec.machinepoolconfig[0]) as $pool | ($pool.cloudConfig.edgeHosts[0].hostUid) as $u
+        | (($pool.poolConfig.machinePoolProperties.archType // "amd64") | ascii_downcase) as $want
+        | if (.response.ok | not) then ["Palette cannot read edge host \($u): \(.response.body.code // .response.status): \(.response.body.message // "")"]
+          else ((.response.body.spec.device.archType // "amd64") | ascii_downcase) as $have
+            | if $have != $want then ["edge host \($u) is \($have), and pool \($pool.poolConfig.name) is \($want): Palette refuses the create with EdgeHostDoesNotBelongToArchType; an empty architecture counts as amd64"] else [] end
+          end
+    reproduce:
+      - "for h in {{ [ .entity.spec.machinepoolconfig[] | (.cloudConfig.edgeHosts // [])[] | .hostUid ] | join(\" \") }}; do curl -s -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" \"${PALETTE_API:-https://api.spectrocloud.com}/v1/edgehosts/$h\" | jq -r '[.metadata.uid, .spec.device.archType] | @tsv'; done"
+    fix:
+      owner: palette
+      text: Run ValidateEdgeHostArchType in the validate route.
+    evidence:
+      - kind: source
+        ref: hubble services/service/spectrocluster/internal/service/edgehost/edgehost_validator.go UnMatchingArchTypeEdgeHosts
+        note: eh.GetArchType() != archType for each host of the pool; an empty value is amd64
+    tests:
+      - fault: fixtures/edge/host-arm64.json
+        clean: fixtures/edge/clean.json
+
+  - id: edge-host-resources
+    title: Each edge host has the cores, the memory, and the disk of the docs
+    engines: [edge]
+    tier: palette
+    severity: warn
+    status: source
+    what: |
+      The hardware page needs two cores, 8 GB of memory, and a 150 GB SSD as the main drive for an
+      appliance host. The architecture page says 100 GB. Palette reads none of them at create. The
+      docs give no floor for each Kubernetes distribution. The check reads `spec.device` of the
+      first host of the first pool: `cpu.cores`, `memory.sizeInMB`, and the largest `disks[].size`
+      (GB).
+    check:
+      kind: palette
+      method: GET
+      path: /v1/edgehosts/{{ .entity.spec.machinepoolconfig[0].cloudConfig.edgeHosts[0].hostUid }}
+      expr: |
+        (.entity.spec.machinepoolconfig[0].cloudConfig.edgeHosts[0].hostUid) as $u
+        | if (.response.ok | not) then ["Palette cannot read edge host \($u): \(.response.body.code // .response.status): \(.response.body.message // "")"]
+          else (.response.body.spec.device // {}) as $d | ($d.cpu.cores // 0) as $cores | ($d.memory.sizeInMB // 0) as $mem | ([ ($d.disks // [])[] | .size // 0 ] | sort | .[-1] // 0) as $disk
+            | [ ( if $cores < 2 then "edge host \($u) has \($cores) core(s); the docs need 2" else empty end ),
+                ( if $mem < 8192 then "edge host \($u) has \($mem) MB of memory; the docs need 8 GB" else empty end ),
+                ( if $disk < 150 then "edge host \($u) has a \($disk) GB main disk; the hardware page needs 150 GB on an SSD, and the architecture page says 100 GB" else empty end ) ]
+          end
+    reproduce:
+      - "for h in {{ [ .entity.spec.machinepoolconfig[] | (.cloudConfig.edgeHosts // [])[] | .hostUid ] | join(\" \") }}; do curl -s -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" \"${PALETTE_API:-https://api.spectrocloud.com}/v1/edgehosts/$h\" | jq -c '{uid: .metadata.uid, cores: .spec.device.cpu.cores, memMB: .spec.device.memory.sizeInMB, disksGB: [.spec.device.disks[].size]}'; done"
+    fix:
+      owner: palette
+      text: Compare the device with the floors of the docs in the validate route, and make the two pages agree.
+    evidence:
+      - kind: doc
+        ref: https://docs.spectrocloud.com/clusters/edge/hardware-requirements/
+        note: "minimum two cores; minimum 8 GB; main drive requires a minimum of 150 GB storage, an SSD"
+      - kind: doc
+        ref: https://docs.spectrocloud.com/clusters/edge/architecture/
+        note: a minimum of 100 GB storage
+      - kind: source
+        ref: hubble domain/edgehost.go
+        note: disk size is in GB
+    tests:
+      - fault: fixtures/edge/host-small.json
+        clean: fixtures/edge/clean.json
+
+  - id: edge-host-duplicate
+    title: No edge host is in two pools, and no host name is used two times
+    engines: [edge]
+    tier: static
+    severity: fail
+    status: source
+    what: |
+      The create refuses a host uid that is in two pools, or two times in one pool
+      (`EdgeHostDuplicateWithinEdgeNativeCluster`, `EdgeHostDuplicateWithinEdgeNativePool`), and
+      a host name used two times (`DuplicateHostName`). The validate route does not run these
+      checks.
+    check:
+      kind: static
+      expr: |
+        ([ .entity.spec.machinepoolconfig[] | .poolConfig.name as $p | (.cloudConfig.edgeHosts // [])[] | { uid: .hostUid, name: (.hostName // ""), pool: $p } ]) as $hosts
+        | ([ $hosts | group_by(.uid)[] | select(length > 1) | "host \(.[0].uid) is in pool(s) \([ .[] | .pool ] | join(", ")): Palette refuses a host in two pools or two times in one (EdgeHostDuplicateWithinEdgeNativeCluster)" ])
+          + ([ $hosts | map(select(.name != "")) | group_by(.name)[] | select(length > 1) | "host name \(.[0].name) is used by \(length) hosts: Palette refuses it with DuplicateHostName" ])
+    fix:
+      owner: palette
+      text: Run isMachinePoolEdgeHostDuplicated and validateHostNameDuplication in the validate route.
+    evidence:
+      - kind: source
+        ref: hubble services/service/spectrocluster/internal/service/cloudconfig/internal/edgenative/machinepool_edgenative_validator.go isMachinePoolEdgeHostDuplicated, validateHostNameDuplication
+    tests:
+      - fault: fixtures/edge/host-duplicate.json
+        clean: fixtures/edge/clean.json
+
+  - id: vsphere-placement-fields
+    title: A vSphere placement names its datacenter, folders, cluster, datastore, and network
+    engines: [vsphere]
+    tier: static
+    severity: fail
+    status: source
+    what: |
+      The docs mark the datacenter, the deployment folder, the image template folder, and the
+      network type as required. Each pool has a compute cluster, a resource pool, a datastore, and
+      a network. The converter checks none of them for emptiness. It copies the cluster placement
+      into a pool with none. An empty field fails in vCenter during the build. The
+      check reads the cluster placement and the effective placement of each pool.
+    check:
+      kind: static
+      expr: |
+        (.entity.spec.cloudConfig.placement // {}) as $cp
+        | ([ ("datacenter", "folder", "imageTemplateFolder") | . as $f | select(($cp[$f] // "") == "") | "placement.\($f) is empty: the docs mark it required, the converter checks none of them, and the build fails in vCenter" ])
+          + [ .entity.spec.machinepoolconfig[] | .poolConfig.name as $p | ((.cloudConfig.placements // []) | if length == 0 then [$cp] else . end)[] | . as $pl
+              | ("cluster", "datastore") | . as $f | select((($pl[$f] // $cp[$f]) // "") == "") | "pool \($p): placement \($f) is empty, and the cluster placement has none either" ]
+          + [ .entity.spec.machinepoolconfig[] | .poolConfig.name as $p | ((.cloudConfig.placements // []) | if length == 0 then [$cp] else . end)[]
+              | select((((.network.networkName // $cp.network.networkName) // "") == "")) | "pool \($p): placement network.networkName is empty" ]
+    fix:
+      owner: palette
+      text: Check the placement fields in the converter.
+    evidence:
+      - kind: doc
+        ref: https://docs.spectrocloud.com/clusters/data-center/vmware/create-manage-vmware-clusters/
+        note: Datacenter, Deployment Folder, Image Template Folder, and Network Type are required; each pool has Compute Cluster, Resource Pool, Datastore, Network
+      - kind: source
+        ref: hubble services/service/spectrocluster/internal/handler/converter/v1/clusters_v1_converter.go ToVspherePlacementConfig
+        note: each field falls back to the cluster placement, and none is checked for emptiness
+    tests:
+      - fault: fixtures/vsphere/no-datacenter.json
+        clean: fixtures/vsphere/clean.json
+
+  - id: vsphere-datacenter
+    title: The datacenter, the compute clusters, and the template folder exist in vCenter
+    engines: [vsphere]
+    tier: palette
+    severity: fail
+    status: source
+    when: .entity.spec.cloudAccountUid != null
+    what: |
+      `GET /v1/cloudaccounts/vsphere/{uid}/properties/datacenters` lists, through the PCG of the
+      account, each datacenter with its compute clusters and its VM folders. The check looks for
+      the placement datacenter, the compute cluster of each pool, and the image template folder.
+      The docs say to make that folder in advance, with the Spectro role. The deployment folder is made
+      by the build when it is missing (connected installs), so the check does not need it.
+    check:
+      kind: palette
+      method: GET
+      path: /v1/cloudaccounts/vsphere/{{ .entity.spec.cloudAccountUid }}/properties/datacenters
+      expr: |
+        (.entity.spec.cloudConfig.placement // {}) as $cp
+        | if (.response.ok | not) then ["Palette cannot list the datacenters of the vSphere account: \(.response.body.code // .response.status): \(.response.body.message // ""); the route goes through the PCG of the account"]
+          else ([ (.response.body.items // [])[] | select(.datacenter == $cp.datacenter) ] | first) as $dc
+            | if $dc == null then ["datacenter \($cp.datacenter) is not in vCenter (it has \([ (.response.body.items // [])[] | .datacenter ] | join(", ")))"]
+              else ([ .entity.spec.machinepoolconfig[] | .poolConfig.name as $p | ((.cloudConfig.placements // []) | if length == 0 then [$cp] else . end)[] | ((.cluster // $cp.cluster) // "") | select(. != "")
+                      | select(. as $c | (($dc.computeclusters // []) | index($c)) == null)
+                      | "compute cluster \(.) of pool \($p) is not in datacenter \($cp.datacenter) (\(($dc.computeclusters // []) | join(", ")))" ] | unique)
+                + (if ($cp.imageTemplateFolder // "") != "" and ((($dc.folders // []) | index($cp.imageTemplateFolder)) == null) then ["imageTemplateFolder \($cp.imageTemplateFolder) is not a VM folder of \($cp.datacenter) (\(($dc.folders // []) | join(", "))): the docs say to make it in advance with the Spectro role, and the PCG imports the OVA template into it"] else [] end)
+              end
+          end
+    reproduce:
+      - "GOVC_URL=https://{{ .account.spec.vcenterServer // \"<vcenter>\" }} GOVC_USERNAME={{ .account.spec.username // \"<user>\" }} GOVC_PASSWORD=<password> GOVC_INSECURE=1 govc ls /{{ .entity.spec.cloudConfig.placement.datacenter }}/host /{{ .entity.spec.cloudConfig.placement.datacenter }}/vm/{{ .entity.spec.cloudConfig.placement.imageTemplateFolder }}"
+    fix:
+      owner: palette
+      text: Read the datacenter and the folders in the validate route.
+    evidence:
+      - kind: source
+        ref: hubble services/service/spectrocluster/internal/service/overlord/overlord_properties_vsphere.go GetVsphereDatacentersByAccount
+        note: the PCG answers items[{datacenter, computeclusters, folders}]
+      - kind: doc
+        ref: https://docs.spectrocloud.com/clusters/data-center/vmware/permissions/
+        note: the spectro-templates folder must be manually created in advance; the target VM folder is created automatically for connected installs
+    tests:
+      - fault: fixtures/vsphere/datacenter-unknown.json
+        clean: fixtures/vsphere/clean.json
+      - fault: fixtures/vsphere/template-folder-missing.json
+
+  - id: vsphere-compute-resources
+    title: The datastore, the network, and the resource pool exist in the compute cluster
+    engines: [vsphere]
+    tier: palette
+    severity: fail
+    status: source
+    when: .entity.spec.cloudAccountUid != null
+    what: |
+      `GET /v1/cloudaccounts/vsphere/{uid}/properties/computecluster/resources` lists, through the
+      PCG, the datastores, the networks, and the resource pools of one compute cluster. A name
+      that is not there fails the build in vCenter. The check reads the placement of the first
+      pool; a second pool with another compute cluster needs its own call, and the reproduce line
+      shows it.
+    check:
+      kind: palette
+      method: GET
+      path: /v1/cloudaccounts/vsphere/{{ .entity.spec.cloudAccountUid }}/properties/computecluster/resources?datacenter={{ .entity.spec.cloudConfig.placement.datacenter }}&computecluster={{ (.entity.spec.cloudConfig.placement // {}) as $cp | (((.entity.spec.machinepoolconfig[0].cloudConfig.placements // []) | first) // {}) | (.cluster // $cp.cluster) }}
+      expr: |
+        (.entity.spec.cloudConfig.placement // {}) as $cp | ((((.entity.spec.machinepoolconfig[0].cloudConfig.placements // []) | first) // {})) as $pl
+        | { cluster: ($pl.cluster // $cp.cluster), datastore: ($pl.datastore // $cp.datastore // ""), network: ($pl.network.networkName // $cp.network.networkName // ""), rp: ($pl.resourcePool // $cp.resourcePool // "") } as $w
+        | if (.response.ok | not) then ["Palette cannot list the resources of compute cluster \($w.cluster): \(.response.body.code // .response.status): \(.response.body.message // ""); the route goes through the PCG of the account"]
+          else (.response.body.computecluster // {}) as $cc
+            | [ ( if $w.datastore != "" and (($cc.datastores // []) | index($w.datastore)) == null then "datastore \($w.datastore) is not in compute cluster \($w.cluster) (\(($cc.datastores // []) | join(", ")))" else empty end ),
+                ( if $w.network != "" and (($cc.networks // []) | index($w.network)) == null then "network \($w.network) is not in compute cluster \($w.cluster) (\(($cc.networks // []) | join(", ")))" else empty end ),
+                ( if $w.rp != "" and $w.rp != "Resources" and (($cc.resourcePools // []) | index($w.rp)) == null then "resource pool \($w.rp) is not in compute cluster \($w.cluster) (\(($cc.resourcePools // []) | join(", ")))" else empty end ) ]
+          end
+    reproduce:
+      - "curl -s -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" \"${PALETTE_API:-https://api.spectrocloud.com}/v1/cloudaccounts/vsphere/{{ .entity.spec.cloudAccountUid }}/properties/computecluster/resources?datacenter={{ .entity.spec.cloudConfig.placement.datacenter }}&computecluster=<compute cluster of the pool>\" | jq .computecluster"
+    fix:
+      owner: palette
+      text: Read the resources of each placement in the validate route.
+    evidence:
+      - kind: source
+        ref: hubble services/service/spectrocluster/internal/service/overlord/overlord_properties_vsphere.go
+        note: the PCG answers computecluster{datastores, networks, resourcePools} for a datacenter and a compute cluster
+      - kind: source
+        ref: palette-sdk-go api/models/v1_vsphere_compute_cluster.go
+    tests:
+      - fault: fixtures/vsphere/datastore-missing.json
+        clean: fixtures/vsphere/clean.json
+
+  - id: vsphere-instance-floor
+    title: Each vSphere pool has one CPU, 1024 MiB, and a 20 GiB disk or more
+    engines: [vsphere]
+    tier: static
+    severity: fail
+    status: source
+    what: |
+      The converter refuses `numCPUs` under 1, `memoryMiB` under 1024, and `diskGiB` under 20, and
+      dereferences a missing `instanceType`. The docs give no floor for a workload node. The
+      tutorials use 4 CPUs, 8 GiB, and 60 GiB. The PCG needs 4 CPUs, 4 GiB, and 60 GiB.
+      `worker-cpu-floor` reads the CPU the packs need across the workers.
+    check:
+      kind: static
+      expr: |
+        [ .entity.spec.machinepoolconfig[] | .poolConfig.name as $p | (.cloudConfig.instanceType // null) as $i
+          | if $i == null then "pool \($p) has no instanceType: the converter dereferences it, and the create fails"
+            else ( if ($i.numCPUs // 0) < 1 then "pool \($p) has \($i.numCPUs // 0) CPU(s); the converter needs 1 or more, and the tutorials use 4" else empty end ),
+                 ( if ($i.memoryMiB // 0) < 1024 then "pool \($p) has \($i.memoryMiB // 0) MiB; the converter needs 1024 or more, and the tutorials use 8192" else empty end ),
+                 ( if ($i.diskGiB // 0) < 20 then "pool \($p) has a \($i.diskGiB // 0) GiB disk; the converter needs 20 or more, and the tutorials use 60" else empty end ) end ]
+    fix:
+      owner: none
+      text: The check exists in the converter; strata-preflight runs it before the request.
+    evidence:
+      - kind: source
+        ref: hubble services/service/spectrocluster/internal/handler/converter/v1/clusters_v1_converter.go ToVsphereInstanceType
+        note: "\"equal or greater than 1\", \"equal or greater than 1024 MiB\", \"equal or greater than 20 GiB\""
+      - kind: doc
+        ref: https://docs.spectrocloud.com/tutorials/getting-started/palette/vmware/deploy-k8s-cluster/
+        note: CPU 4 cores, memory 8 GB, disk 60 GB
+    tests:
+      - fault: fixtures/vsphere/small-instance.json
+        clean: fixtures/vsphere/clean.json

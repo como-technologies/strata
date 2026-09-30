@@ -1,0 +1,16 @@
+{
+  "_base": "aad-clean.json",
+  "_note": "a managed AAD profile with no admin group",
+  "_patch": {
+    "entity": {
+      "spec": {
+        "cloudConfig": {
+          "aadProfile": {
+            "managed": true,
+            "adminGroupObjectIDs": []
+          }
+        }
+      }
+    }
+  }
+}

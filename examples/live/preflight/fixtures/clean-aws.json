@@ -1,0 +1,1 @@
+{"cloud": "aws", "entity": {"metadata": {"name": "fred"}, "spec": {"cloudConfig": {"region": "us-east-2"}}}}

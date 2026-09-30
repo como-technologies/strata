@@ -1,0 +1,16 @@
+{
+  "_base": "overlay-clean.json",
+  "_note": "an overlay CIDR that does not parse",
+  "_patch": {
+    "entity": {
+      "spec": {
+        "cloudConfig": {
+          "overlayNetworkConfiguration": {
+            "enable": true,
+            "cidr": "100.64.128.0"
+          }
+        }
+      }
+    }
+  }
+}

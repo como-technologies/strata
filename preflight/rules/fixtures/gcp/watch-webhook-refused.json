@@ -1,0 +1,52 @@
+{
+  "_base": "watch-running.json",
+  "_note": "a watch reading of the gcp build at 671 s: right after the pivot, the calls of mspectrocluster.kb.io and vspectrocluster.kb.io failed in one minute; Palette made the calls again and the cluster was Running 17 minutes later. The messages end where the report of the run cut them; Palette does not serve the events of a deleted cluster.",
+  "_patch": {
+    "cluster": {
+      "status": {
+        "state": "Provisioning"
+      }
+    },
+    "summary": {
+      "status": {
+        "state": "Provisioning",
+        "health": {
+          "state": "Unknown"
+        }
+      }
+    },
+    "events": [
+      {
+        "reason": "ReconcileError",
+        "severity": "Warning",
+        "message": "failed to set controlPlane type annotation: failed to set control plane type annotation in spectrocluster object: Internal error occurred: failed calling webhook \"mspectrocluster.kb.io\": failed to call webhook: Post \"https://palette-webhook",
+        "involvedObject": {
+          "kind": "spectrocluster",
+          "name": "fred"
+        },
+        "relatedObject": {
+          "kind": "spectrocluster"
+        },
+        "metadata": {
+          "creationTimestamp": "2026-09-29T17:59:14.000Z"
+        }
+      },
+      {
+        "reason": "Log",
+        "severity": "Warning",
+        "message": "[cluster-management-agent-757567f6dc-lc2hg] Failed to update spectro cluster in palette. Internal error occurred: failed calling webhook \"vspectrocluster.kb.io\": failed to call webhook: Post \"https://palette-webhook-service.palette-syste",
+        "involvedObject": {
+          "kind": "spectrocluster",
+          "name": "fred"
+        },
+        "relatedObject": {
+          "kind": "spectrocluster"
+        },
+        "metadata": {
+          "creationTimestamp": "2026-09-29T17:59:22.272Z"
+        }
+      }
+    ],
+    "elapsed": 671
+  }
+}

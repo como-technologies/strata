@@ -2,11 +2,11 @@
 
 ## The problem
 
-Palette accepts an edit of a published profile version through the API. The
-version keeps its uid and its number, and no new version appears. The
-`immutable-clusterprofiles` flag of the Spectro Cloud provider stops the edit only
-in the provider, at plan time. The API accepts the edit with the flag on or off.
-Palette also changes a version by itself: a version that keeps the values of a
+A published profile version can be updated through the API. The version keeps
+its uid and its number, and no new version appears. The
+`immutable-clusterprofiles` flag of the Spectro Cloud provider refuses such an
+edit at plan time, and an edit through the API or the console is outside the
+plan. A version also follows the registry: a version that keeps the values of a
 pack follows a push again of that pack version
 ([A pack version pushed again](../internals/palette/packs.md#a-pack-version-pushed-again)).
 So the version name `aws-stack@1.1.1` can mean two contents at two times.
@@ -113,9 +113,9 @@ pair is the diagnosis. Run both before you act:
 
 | `verify` of the release | `verify` of the cluster | What happened | What to do |
 | --- | --- | --- | --- |
-| `DRIFT` | `OK` | Palette changed, and the cluster has not taken the change | Fix Palette first. The cluster is safe until something updates it, and a new cluster gets the edit at once, as step 4 shows. |
-| `DRIFT` | `DRIFT` | the change reached the cluster too | The cluster runs content that nobody reviewed. Step 6 shows this. |
-| `OK` | `DRIFT` | the cluster differs from its record, and Palette does not | Somebody changed the cluster. See [A cluster does not run its release](./cluster-release.md). |
+| `DRIFT` | `OK` | the published version changed, and the cluster has not taken the change | Restore the version first. The cluster keeps its copy until something updates it, and a new cluster gets the edit at once, as step 4 shows. |
+| `DRIFT` | `DRIFT` | the change reached the cluster too | The cluster runs content from outside the review of the team. Step 6 shows this. |
+| `OK` | `DRIFT` | the cluster differs from its record, and the published version does not | Somebody changed the cluster. See [A cluster does not run its release](./cluster-release.md). |
 
 A changed cluster *value* is not in this table. `verify` exits `0` for it and
 adds `1 variable value changed` to the verdict: see
@@ -170,17 +170,17 @@ A person accepts the update on `payments`. Now its record drifts too:
 ```
 
 Exit `1`, and the same CSI value as step 2. Both verdicts now say `DRIFT`, which
-is the second row of the table above: the cluster runs content that nobody
-reviewed.
+is the second row of the table above: the cluster runs content from outside
+the review of the team.
 
 ## What to do
 
 - Do not repair the edited version in place: that is a second edit. Publish a
   new version with the change through review, and move the clusters to it.
-- Run `verify` over each record on a schedule. It is the only check that
-  catches an edit through the API.
-- The record holds the release that the reviewers approved. When Palette differs
-  from the record, Palette holds the error.
+- Run `verify` over each record on a schedule. It is the check that finds an
+  edit through the API.
+- The record holds the release that the reviewers approved. When the published
+  version differs from the record, the record holds the approved content.
 
 ## Palette behavior
 

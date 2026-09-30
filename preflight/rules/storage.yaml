@@ -1,0 +1,364 @@
+section: storage
+title: Storage and CSI
+about: |
+  The CSI layer, the storage class, the permissions the CSI needs, and what changes cannot apply.
+rules:
+  - id: csi-crash-after-running
+    title: The CSI pods run when Palette says Running and Healthy
+    engines: [aws, eks]
+    tier: watch
+    severity: warn
+    status: seen
+    what: |
+      A CSI pod crash-loops while Palette says the cluster is `Running` and its health is
+      `Healthy`. On EKS, `csi-attacher` did this on one build in three; the cause is not known.
+      A volume then attaches to no node. The pack condition of the cluster document names it:
+      `status.packs[].condition` of type `Healthy` with status `False`, or the reason
+      `InstallFailed`, `Degraded`, or `ProbeError`. A warning event with `CrashLoopBackOff` names
+      it too. This rule reads both, 5 minutes after the cluster is `Running`.
+    check:
+      kind: watch
+      expr: |
+        ((.cluster.status.state // "") == "Running") as $running
+        | ((.elapsed // 0) > 300) as $settled
+        | (.summary.status.health.state // "?") as $health
+        | if ($running and $settled) | not then []
+          else
+            [ (.cluster.status.packs // [])[]
+              | select((.name // "") | test("csi"; "i"))
+              | select(((.condition.status // "") == "False") or ((.condition.reason // "") | test("^(InstallFailed|Degraded|ProbeError)$")))
+              | "the cluster is Running and its health is \($health), and the CSI pack \(.name) is \(.condition.reason // .condition.status): \(.condition.message // "" | .[:200])" ]
+            + ([ (.events // [])[]
+                | select((.severity // "") == "Warning")
+                | select((.message // "") | test("CrashLoopBackOff|BackOff"))
+                | select(((.message // "") + (.involvedObject.name // "") + (.relatedObject.name // "")) | test("csi"; "i"))
+                | "event \(.reason) at \(.metadata.creationTimestamp): \(.message | .[:240])" ]
+               | unique | .[:3])
+          end
+    reproduce:
+      - "kubectl -n kube-system get pods -l app.kubernetes.io/name=aws-ebs-csi-driver -o wide"
+      - "curl -s -H \"ApiKey: $PALETTE_API_KEY\" \"$PALETTE_HOST/v1/spectroclusters/{{ .clusterUid // \"<cluster uid>\" }}\" | jq '.status.packs[] | select(.name | test(\"csi\")) | {name, condition}'"
+    fix:
+      owner: palette
+      text: Do not report Healthy while a pod of a pack crash-loops.
+    evidence:
+      - kind: run
+        ref: "#89"
+        note: csi-attacher in CrashLoopBackOff on one EKS build in three, with the cluster Running and Healthy
+      - kind: source
+        ref: palette pkg/provider/common/packstatus.go HealthyReason constants
+        note: the pack condition Healthy carries the reason InstallFailed, Degraded, ProbeError, WorkloadsReady, InstallSuccess
+    tests:
+      - fault: fixtures/eks/csi-crash.json
+        clean: fixtures/eks/csi-crash-after-running-clean.json
+
+  - id: eks-default-storageclass
+    title: An EKS profile has a CSI layer
+    engines: [eks]
+    tier: static
+    severity: fail
+    status: source
+    when: (.profiles | length) > 0
+    what: |
+      Palette deletes the `gp2` storage class of EKS, and the CSI pack gives the default class.
+      With no CSI layer, a PVC stays `Pending`.
+    check:
+      kind: static
+      expr: |
+        if ([ .profiles[] | .packs[] | select(.layer == "csi") ] | length) == 0
+        then ["no profile has a CSI layer; Palette deletes gp2, so a PVC stays Pending"]
+        else [] end
+    fix:
+      owner: palette
+      text: Refuse an EKS create with no CSI layer.
+    tests:
+      - fault: fixtures/eks/no-csi.json
+        clean: fixtures/eks/clean.json
+
+  - id: eks-csi-iam
+    title: The EBS CSI has IAM permissions on EKS
+    engines: [eks]
+    tier: static
+    severity: fail
+    status: source
+    when: ([ (.profiles // [])[] | .packs[] | select(.layer == "k8s" or .layer == "csi") ] | length) > 0
+    what: |
+      The EBS CSI controller needs `AmazonEBSCSIDriverPolicy`. The Palette docs give two ways, both
+      in the values of the `kubernetes-eks` pack. One is `managedControlPlane.irsaRoles` with the
+      policy and a service account annotation on the CSI pack. The other is
+      `managedMachinePool.roleAdditionalPolicies` on the node role. With an AL2023 node (IMDSv2, hop limit 1) a CSI pod cannot reach the node
+      role through IMDS. Without one of the two, a PVC stays `Pending`. The #91 row puts the values
+      in the CSI pack; the docs put them in the Kubernetes pack, so this check reads both layers.
+    check:
+      kind: static
+      expr: |
+        def text: ((.values // "") | tostring) + ((.valuesCanon // {}) | tostring);
+        if ([ (.profiles // [])[] | .packs[] | select(.layer == "k8s" or .layer == "csi")
+              | text | select(test("AmazonEBSCSIDriverPolicy|(irsaRoles|roleAdditionalPolicies)[\\s\\S]{0,400}arn:")) ] | length) == 0
+        then ["no pack of the profile grants the EBS CSI its IAM: set managedControlPlane.irsaRoles with AmazonEBSCSIDriverPolicy, or managedMachinePool.roleAdditionalPolicies, in the kubernetes-eks values; without it a PVC stays Pending"]
+        else [] end
+    fix:
+      owner: palette
+      text: Check the CSI IAM in the EKS validate route, and refuse a profile with none.
+    evidence:
+      - kind: doc
+        ref: https://docs.spectrocloud.com/clusters/public-cloud/aws/eks/
+        note: Configure IRSA for Amazon EBS CSI; irsaRoles and roleAdditionalPolicies in the Kubernetes layer
+      - kind: doc
+        ref: https://docs.spectrocloud.com/integrations/kubernetes-eks/
+    tests:
+      - fault: fixtures/eks/csi-no-iam.json
+        clean: fixtures/eks/eks-csi-iam-clean.json
+
+  - id: kms
+    title: The KMS key of the EKS secrets encryption is enabled and readable
+    engines: [aws, eks]
+    tier: cloud
+    severity: fail
+    status: source
+    when: (.entity.spec.cloudConfig.encryptionConfig.isEnabled // false) and ((.entity.spec.cloudConfig.encryptionConfig.provider // "") != "")
+    what: |
+      `encryptionConfig.provider` names the KMS key of the EKS secrets encryption. A key that is
+      not in the region, is disabled, or that the cluster role cannot use fails the create. The EKS
+      validate route of Palette calls `GET /v1/clouds/aws/regions/{region}/kmskeys/validate` when
+      encryption is on, so `palette-validate` covers the Palette side. This check reads the key with
+      the credentials of this machine: it must exist, and its state must be `Enabled`. The key
+      policy, which says who can use the key, needs `aws kms get-key-policy`; see reproduce. A KMS
+      key of an EBS volume is in the StorageClass parameters, not in the entity.
+    check:
+      kind: exec
+      needs: [aws]
+      argv:
+        - aws
+        - kms
+        - describe-key
+        - --key-id
+        - "{{ .entity.spec.cloudConfig.encryptionConfig.provider }}"
+        - --region
+        - "{{ .entity.spec.cloudConfig.region }}"
+        - --output
+        - json
+      expr: |
+        .entity.spec.cloudConfig.encryptionConfig.provider as $arn
+        | if .exec.exit != 0 then ["aws kms describe-key cannot read \($arn): \(.exec.stderr | .[:200])"]
+          else (.exec.stdout.KeyMetadata // {}) as $k
+            | [ if ($k.KeyState // "?") != "Enabled" then "KMS key \($k.KeyId // $arn) is \($k.KeyState // "?"), not Enabled" else empty end ]
+              + [ if ($k.KeyUsage // "ENCRYPT_DECRYPT") != "ENCRYPT_DECRYPT" then "KMS key \($k.KeyId // $arn) has KeyUsage \($k.KeyUsage), not ENCRYPT_DECRYPT" else empty end ]
+          end
+    reproduce:
+      - "aws kms describe-key --key-id {{ .entity.spec.cloudConfig.encryptionConfig.provider }} --region {{ .entity.spec.cloudConfig.region }} --query 'KeyMetadata.[KeyState,KeyUsage,KeyManager]' --output text"
+      - "aws kms get-key-policy --key-id {{ .entity.spec.cloudConfig.encryptionConfig.provider }} --policy-name default --region {{ .entity.spec.cloudConfig.region }} --output text"
+      - "curl -s -o /dev/null -w '%{http_code}\\n' -H \"ApiKey: $PALETTE_API_KEY\" \"$PALETTE_HOST/v1/clouds/aws/regions/{{ .entity.spec.cloudConfig.region }}/kmskeys/validate?cloudAccountUid={{ .entity.spec.cloudAccountUid }}&keyArn={{ .entity.spec.cloudConfig.encryptionConfig.provider }}\""
+    fix:
+      owner: palette
+      text: Check the key policy, not only the key, in the validate route.
+    evidence:
+      - kind: source
+        ref: hubble services/service/spectrocluster/internal/service/spectrocluster/internal/base/spectrocluster_validate.go
+        note: the EKS validate calls ValidateAwsKmsKey when encryptionConfig.isEnabled
+      - kind: source
+        ref: hapi cloud/spec/v1/cloud_clouds_v1.yaml V1AwsKmsKeyValidate
+        note: GET /v1/clouds/aws/regions/{region}/kmskeys/validate?cloudAccountUid=&keyArn= answers 204
+    tests:
+      - fault: fixtures/eks/kms-key-missing.json
+        clean: fixtures/eks/kms-clean.json
+
+  - id: eks-encryption-fixed
+    title: The secrets encryption of an EKS cluster does not change after create
+    engines: [eks]
+    tier: static
+    severity: fail
+    status: source
+    when: .before != null
+    what: |
+      Once on, the secrets encryption of an EKS cluster cannot go off, and its key cannot change.
+      Palette accepts the change. The cloud config update keeps the old config when the new one is
+      off. The provider logs "disabling EKS encryption is not allowed" or "changing EKS encryption
+      is not allowed", and does nothing. The entity then says one thing and the cluster
+      another. To turn encryption on for a cluster that had none is allowed. `fixed-fields` names
+      `encryptionConfig` among the fixed fields of the cloud config; this rule reads the change in
+      detail.
+    check:
+      kind: static
+      expr: |
+        def enc: (.spec.cloudConfig.encryptionConfig // {}) | {isEnabled: (.isEnabled // false), provider: (.provider // ""), resources: ((.resources // []) | sort)};
+        (.before | enc) as $b | (.entity | enc) as $a
+        | if $b == $a or ($b.isEnabled | not) then []
+          elif ($a.isEnabled | not) then ["the change turns secrets encryption off (key \($b.provider)): Palette keeps the old config, and the provider logs 'disabling EKS encryption is not allowed after it has been enabled'"]
+          elif $a.provider != $b.provider then ["the change moves secrets encryption from key \($b.provider) to \($a.provider): the provider logs 'changing EKS encryption is not allowed after it has been enabled' and keeps the old key"]
+          else [] end
+    fix:
+      owner: palette
+      text: Refuse the change in the cloud config update.
+    evidence:
+      - kind: source
+        ref: hubble services/service/spectrocluster/internal/service/cloudconfig/internal/eks/cloudconfig_eks_service.go UpdateClusterConfig
+        note: copies encryptionConfig only when the new one is enabled
+      - kind: source
+        ref: palette pkg/provider/aws/aws_managed.go shouldUpgradeMCP (EncryptionConfig)
+        note: logs and returns false on a removal or a change of the provider
+    tests:
+      - fault: fixtures/eks/encryption-disable.json
+        clean: fixtures/eks/eks-encryption-fixed-clean.json
+
+  - id: gke-csi-builtin
+    title: A GKE profile uses the GKE CSI pack alone
+    engines: [gke]
+    tier: static
+    severity: warn
+    status: inferred
+    when: ([ (.profiles // [])[] | .packs[] | select(.layer == "csi") ] | length) > 0
+    what: |
+      GKE runs its own Persistent Disk CSI driver. Palette does nothing for the CSI layer of a GKE
+      cluster: `ReconcileDefaultCSI` of the GCP provider returns at once. The `gke-csi-gcp-driver`
+      pack is the placeholder for that. Another CSI pack installs a second driver next to the
+      built-in one, or fails. This is a reading of the source, not a run.
+    check:
+      kind: static
+      expr: |
+        [ (.profiles // [])[] | .packs[] | select(.layer == "csi") | select(.name != "gke-csi-gcp-driver")
+          | "pack \(.name)@\(.version) is a CSI on GKE: GKE runs its own Persistent Disk CSI, and Palette does nothing for the CSI layer; use gke-csi-gcp-driver" ]
+    evidence:
+      - kind: source
+        ref: palette pkg/provider/gcp/gcp_managed.go ReconcileDefaultCSI
+        note: returns nil for GCP
+      - kind: doc
+        ref: https://docs.spectrocloud.com/integrations/gke-csi-gcp-driver/
+    tests:
+      - fault: fixtures/gke/second-csi.json
+        clean: fixtures/gke/clean.json
+
+  - id: storageclass-immutable
+    title: A change keeps the fields of each StorageClass
+    engines: [all]
+    tier: static
+    severity: warn
+    status: seen
+    when: .before != null
+    what: |
+      Kubernetes refuses an update of a field of a StorageClass (`parameters`, `reclaimPolicy`,
+      `volumeBindingMode`, `provisioner`). A change of the `storageClasses` block in the CSI pack
+      values applies the class again, and the API server refuses it. Palette shows the pack as
+      installed with the old class. This check compares the `storageClasses` block of the CSI
+      values of `before` and of the entity, as text: `before` holds the entity, not the records,
+      so `valuesCanon` is not there. A new class, or a removed block, is not a change of a field.
+    check:
+      kind: static
+      expr: |
+        def block: if . == null then null else
+          (split("\n")) as $l
+          | ([ range($l | length) | select($l[.] | test("^storageClasses:")) ] | .[0]) as $s
+          | if $s == null then null else
+              ([ range($s + 1; $l | length) | select($l[.] | test("^[A-Za-z_]")) ] | .[0]) as $e
+              | ($l[$s:(if $e == null then ($l | length) else $e end)] | join("\n"))
+            end end;
+        def csi(e): [ e | (.spec.profiles // [])[] | .uid as $u | (.packValues // [])[] | select((.name // "") | test("csi"; "i")) | {uid: $u, name: .name, values: (.values // null)} ];
+        csi(.before) as $b
+        | [ csi(.entity)[] | .name as $n | .uid as $u | .values as $after
+            | ($b[] | select(.uid == $u and .name == $n)) as $old
+            | ($old.values | block) as $ob | ($after | block) as $ab
+            | select($ob != null and $ab != null and $ob != $ab)
+            | "pack \($n) of profile \($u): the storageClasses block of the values changes; Kubernetes refuses an update of a StorageClass field, so the change cannot apply; add a new class, or delete and re-create the class" ]
+    reproduce:
+      - "kubectl get storageclass -o yaml | yq '.items[] | {name: .metadata.name, parameters, reclaimPolicy, volumeBindingMode}'"
+    evidence:
+      - kind: run
+        ref: teardown lab
+        note: a values edit of a StorageClass field left the class as it was
+      - kind: doc
+        ref: https://kubernetes.io/docs/concepts/storage/storage-classes/
+    tests:
+      - fault: fixtures/eks/storageclass-change.json
+        clean: fixtures/eks/storageclass-immutable-clean.json
+
+  - id: pvc-lb-leftover
+    title: No EBS volume of the cluster is left unattached
+    engines: [aws]
+    tier: cloud
+    severity: warn
+    status: inferred
+    what: |
+      The volumes of the PVCs and the load balancers of the Services carry the tag
+      `kubernetes.io/cluster/<name>`. The in-cluster cleanup deletes them on a cluster delete; when
+      it does not run, they stay and cost money. This check counts the volumes with the tag whose
+      state is `available` (attached to no node). The load balancers need a tag lookup; see
+      reproduce. Before a build, a hit names a leftover of an earlier cluster with the same name.
+    check:
+      kind: exec
+      needs: [aws]
+      argv:
+        - aws
+        - ec2
+        - describe-volumes
+        - --filters
+        - "Name=tag-key,Values=kubernetes.io/cluster/{{ .entity.metadata.name }}"
+        - --region
+        - "{{ .entity.spec.cloudConfig.region }}"
+        - --output
+        - json
+      expr: |
+        .entity.metadata.name as $n
+        | if .exec.exit != 0 then ["aws ec2 describe-volumes failed: \(.exec.stderr | .[:200])"]
+          else ([ (.exec.stdout.Volumes // [])[] | select((.State // "") == "available") ]) as $free
+            | if ($free | length) == 0 then []
+              else ["\($free | length) EBS volume(s) with the tag kubernetes.io/cluster/\($n) are available and attached to no node: the in-cluster cleanup did not run, and each costs money until deleted: \([ $free[] | "\(.VolumeId) (\(.Size // "?") GiB)" ] | join(", "))"]
+              end
+          end
+    reproduce:
+      - "aws ec2 describe-volumes --filters Name=tag-key,Values=kubernetes.io/cluster/{{ .entity.metadata.name }} --region {{ .entity.spec.cloudConfig.region }} --query 'Volumes[].[VolumeId,State,Size]' --output table"
+      - "aws resourcegroupstaggingapi get-resources --tag-filters Key=kubernetes.io/cluster/{{ .entity.metadata.name }} --resource-type-filters elasticloadbalancing:loadbalancer ec2:volume --region {{ .entity.spec.cloudConfig.region }} --query 'ResourceTagMappingList[].ResourceARN' --output text"
+      - "aws elbv2 describe-load-balancers --region {{ .entity.spec.cloudConfig.region }} --query 'LoadBalancers[].[LoadBalancerName,LoadBalancerArn]' --output table"
+    evidence:
+      - kind: doc
+        ref: https://docs.aws.amazon.com/eks/latest/userguide/delete-cluster.html
+        note: AWS says to delete the Services of type LoadBalancer and the PVCs before the cluster
+    tests:
+      - fault: fixtures/aws/volumes-leftover.json
+        clean: fixtures/aws/pvc-lb-leftover-clean.json
+
+  - id: azure-storage-account
+    title: A custom Azure storage account has a valid name and exists in the resource group
+    engines: [azure]
+    tier: palette
+    severity: fail
+    status: source
+    when: (.entity.spec.cloudConfig.storageAccountName // "") != "" and .entity.spec.cloudAccountUid != null
+    what: |
+      Palette copies the node image into a storage account. With `storageAccountName` set, the docs
+      say to make the account before the cluster. When the account is not in the resource group,
+      Palette falls back to an account of its own hash name, with no error. The custom account,
+      which a PCG setup restricts to the vnet, is then never used. Azure takes 3 to 24 lower-case
+      letters and digits for the name, and 3 to 63 for a container. Palette checks neither.
+      `GET /v1/clouds/azure/resourceGroups/{rg}/storageAccounts` lists the accounts of the group.
+    check:
+      kind: palette
+      method: GET
+      path: /v1/clouds/azure/resourceGroups/{{ .entity.spec.cloudConfig.resourceGroup }}/storageAccounts?cloudAccountUid={{ .entity.spec.cloudAccountUid }}&subscriptionId={{ .entity.spec.cloudConfig.subscriptionId }}
+      expr: |
+        .entity.spec.cloudConfig as $c | ($c.storageAccountName // "") as $sa | ($c.containerName // "") as $ct
+        | [ ( if ($sa | test("^[a-z0-9]{3,24}$") | not) then "storageAccountName \($sa) is not 3 to 24 lower-case letters and digits: Azure refuses the name, and Palette checks none" else empty end ),
+            ( if $ct != "" and (($ct | test("^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$") | not) or ($ct | test("--"))) then "containerName \($ct) is not 3 to 63 lower-case letters, digits, and single dashes" else empty end ) ]
+          + ( if (.response.ok | not) then ["Palette cannot list the storage accounts of \($c.resourceGroup): \(.response.body.code // .response.status): \(.response.body.message // "")"]
+              else ([ (.response.body.accounts // [])[] | .name ]) as $names
+                | if ($names | index($sa)) != null then []
+                  else ["storage account \($sa) is not in resource group \($c.resourceGroup) (it has \($names | join(", "))): the docs say to make it before the cluster; Palette then falls back to an account of its own name with no error, and the custom account is never used"] end
+              end )
+    reproduce:
+      - "az storage account show --name {{ .entity.spec.cloudConfig.storageAccountName }} --resource-group {{ .entity.spec.cloudConfig.resourceGroup }} --subscription {{ .entity.spec.cloudConfig.subscriptionId }} --query '[name,location,kind,provisioningState]' --output tsv"
+    fix:
+      owner: palette
+      text: Fail the build when a named storage account is missing, instead of the fallback.
+    evidence:
+      - kind: source
+        ref: palette pkg/provider/azure/azure_sdk.go AzureCopyImage
+        note: checkIfStorageAccountPresent with the custom name, then toHashName, then createStorageAccount; no error for a missing custom account
+      - kind: doc
+        ref: https://docs.spectrocloud.com/clusters/public-cloud/azure/create-azure-cluster/
+        note: to use custom storage accounts or containers, you must create them before you create your cluster
+      - kind: doc
+        ref: https://learn.microsoft.com/en-us/azure/storage/common/storage-account-overview
+        note: a storage account name is 3 to 24 characters, lower-case letters and numbers
+    tests:
+      - fault: fixtures/azure/storage-account-missing.json
+        clean: fixtures/azure/storage-account-clean.json
+      - fault: fixtures/azure/storage-account-bad-name.json

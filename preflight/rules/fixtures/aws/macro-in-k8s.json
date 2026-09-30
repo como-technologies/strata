@@ -1,0 +1,69 @@
+{
+  "_base": "clean.json",
+  "_note": "the Kubernetes pack of the record reads a project macro in kubeadmconfig.postKubeadmCommands",
+  "_patch": {
+    "profiles": [
+      {
+        "source": {
+          "uid": "prof-aws-1"
+        },
+        "packs": [
+          {
+            "key": "os/ubuntu-aws",
+            "layer": "os",
+            "name": "ubuntu-aws",
+            "version": "24.04",
+            "tag": "24.04",
+            "packUid": "pk-os-aws",
+            "registryUid": "5eecc89d0b150045ae661cef",
+            "valuesCanon": null
+          },
+          {
+            "key": "k8s/kubernetes",
+            "layer": "k8s",
+            "name": "kubernetes",
+            "version": "1.32.4",
+            "tag": "1.32.4",
+            "packUid": "pk-k8s-aws",
+            "registryUid": "5eecc89d0b150045ae661cef",
+            "values": "kubeadmconfig:\n  clusterConfiguration:\n    networking:\n      podSubnet: 192.168.0.0/16\n      serviceSubnet: 10.96.0.0/12\n  postKubeadmCommands:\n    - 'chmod 600 /var/lib/kubelet/config.yaml'\n    - 'echo {{.spectro.macro.strata_probe}}'\n",
+            "valuesCanon": {
+              "kubeadmconfig": {
+                "clusterConfiguration": {
+                  "networking": {
+                    "podSubnet": "192.168.0.0/16",
+                    "serviceSubnet": "10.96.0.0/12"
+                  }
+                },
+                "postKubeadmCommands": [
+                  "chmod 600 /var/lib/kubelet/config.yaml",
+                  "echo {{.spectro.macro.strata_probe}}"
+                ]
+              }
+            }
+          },
+          {
+            "key": "cni/cni-cilium-oss",
+            "layer": "cni",
+            "name": "cni-cilium-oss",
+            "version": "1.19.6",
+            "tag": "1.19.6",
+            "packUid": "pk-cni-aws",
+            "registryUid": "5eecc89d0b150045ae661cef",
+            "valuesCanon": null
+          },
+          {
+            "key": "csi/csi-aws-ebs",
+            "layer": "csi",
+            "name": "csi-aws-ebs",
+            "version": "1.44.0",
+            "tag": "1.44.0",
+            "packUid": "pk-csi-aws",
+            "registryUid": "5eecc89d0b150045ae661cef",
+            "valuesCanon": null
+          }
+        ]
+      }
+    ]
+  }
+}

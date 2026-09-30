@@ -1,0 +1,19 @@
+{
+  "_base": "type-same.json",
+  "_patch": {
+    "entity": {
+      "spec": {
+        "machinepoolconfig": [
+          {
+            "cloudConfig": {
+              "instanceType": "e2-standard-8"
+            },
+            "poolConfig": {
+              "name": "worker-pool"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

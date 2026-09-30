@@ -1,0 +1,79 @@
+{
+  "_base": "clean.json",
+  "_note": "a watch reading of a delete that waits: DeletingInfrastructure for 40 minutes, with the event every 5 minutes",
+  "_patch": {
+    "clusterUid": "6aba747adb74c300c31dd404",
+    "cluster": {
+      "metadata": {
+        "uid": "6aba747adb74c300c31dd404",
+        "name": "fred"
+      },
+      "spec": {
+        "cloudType": "eks"
+      },
+      "status": {
+        "state": "Deleting",
+        "conditions": [
+          {
+            "type": "DeProvisionDone",
+            "status": "False",
+            "reason": "ApplyingClusterSpec",
+            "message": "Deleting cloud resources",
+            "lastTransitionTime": "2026-09-28T02:11:40.000Z"
+          },
+          {
+            "type": "CloudInfrastructureCleanedUp",
+            "status": "False",
+            "reason": "DeletingInfrastructure",
+            "message": "Deleting control plane nodes",
+            "lastTransitionTime": "2026-09-28T02:12:07.000Z"
+          }
+        ],
+        "repave": {}
+      }
+    },
+    "summary": {
+      "status": {
+        "state": "Deleting",
+        "health": {
+          "state": "UnHealthy"
+        }
+      }
+    },
+    "events": [
+      {
+        "reason": "ClusterDeleting",
+        "message": "Deleting control plane nodes",
+        "severity": "Info",
+        "metadata": {
+          "creationTimestamp": "2026-09-28T02:47:10.000Z"
+        }
+      },
+      {
+        "reason": "ClusterDeleting",
+        "message": "Deleting control plane nodes",
+        "severity": "Info",
+        "metadata": {
+          "creationTimestamp": "2026-09-28T02:42:10.000Z"
+        }
+      },
+      {
+        "reason": "ClusterDeleting",
+        "message": "Deleting control plane nodes",
+        "severity": "Info",
+        "metadata": {
+          "creationTimestamp": "2026-09-28T02:37:10.000Z"
+        }
+      },
+      {
+        "reason": "SuccessfulDeleteEKSNodegroup",
+        "message": "Deleted EKS nodegroup worker-pool-vg0q",
+        "severity": "Info",
+        "metadata": {
+          "creationTimestamp": "2026-09-28T02:14:30.000Z"
+        }
+      }
+    ],
+    "elapsed": 2400
+  }
+}

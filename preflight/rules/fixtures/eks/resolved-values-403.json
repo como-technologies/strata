@@ -1,0 +1,16 @@
+{
+  "_base": "resolved-values.json",
+  "_note": "the key cannot read the resolved pack values",
+  "_patch": {
+    "_responses": {
+      "GET /v1/spectroclusters/6aba747adb74c300c31dd404/packs/resolvedValues": {
+        "ok": false,
+        "status": 403,
+        "body": {
+          "code": "Forbidden",
+          "message": "insufficient permissions to read the resolved values"
+        }
+      }
+    }
+  }
+}

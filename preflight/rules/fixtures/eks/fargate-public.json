@@ -1,0 +1,27 @@
+{
+  "_base": "fargate-private.json",
+  "_note": "the route table of the subnets routes 0.0.0.0/0 to an internet gateway: public subnets",
+  "_patch": {
+    "_exec": {
+      "aws ec2 describe-route-tables --region us-east-2 --filters Name=association.subnet-id,Values=subnet-0aaa1111bbbb2222c,subnet-0bbb2222cccc3333d --output json": {
+        "exit": 0,
+        "stdout": {
+          "RouteTables": [
+            {
+              "RouteTableId": "rtb-0public0000000001",
+              "Associations": [
+                { "SubnetId": "subnet-0aaa1111bbbb2222c", "RouteTableId": "rtb-0public0000000001" },
+                { "SubnetId": "subnet-0bbb2222cccc3333d", "RouteTableId": "rtb-0public0000000001" }
+              ],
+              "Routes": [
+                { "DestinationCidrBlock": "10.0.0.0/16", "GatewayId": "local", "State": "active" },
+                { "DestinationCidrBlock": "0.0.0.0/0", "GatewayId": "igw-0abc1234def567890", "State": "active" }
+              ]
+            }
+          ]
+        },
+        "stderr": ""
+      }
+    }
+  }
+}

@@ -1,0 +1,1 @@
+{"_base": "clean-aws.json", "_patch": {"entity": {"metadata": {"name": "fred-b"}}}}

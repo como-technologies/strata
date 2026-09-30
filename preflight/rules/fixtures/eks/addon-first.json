@@ -1,0 +1,14 @@
+{
+  "_base": "full-records.json",
+  "_note": "the profile at position 0 of the entity is an add-on profile",
+  "_patch": {
+    "profiles": [
+      {
+        "source": {
+          "uid": "prof-eks-1",
+          "type": "add-on"
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "_base": "clean.json",
+  "_patch": {
+    "entity": {
+      "spec": {
+        "machinepoolconfig": [
+          {
+            "cloudConfig": {
+              "instanceType": "a2-highgpu-1g"
+            },
+            "poolConfig": {
+              "name": "worker-pool"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

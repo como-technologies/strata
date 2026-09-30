@@ -1,0 +1,41 @@
+{
+  "_base": "repave-none.json",
+  "_note": "the kubernetes-eks tag goes 1.32 to 1.33, and Palette repaves",
+  "_patch": {
+    "entity": {
+      "spec": {
+        "profiles": [
+          {
+            "uid": "prof-eks-1",
+            "packValues": [
+              { "name": "amazon-linux-eks", "tag": "1.0.0", "type": "spectro" },
+              { "name": "kubernetes-eks", "tag": "1.33", "type": "spectro" },
+              { "name": "cni-aws-vpc-eks", "tag": "1.19.6", "type": "spectro" },
+              { "name": "csi-aws-ebs", "tag": "1.44.0", "type": "spectro" }
+            ]
+          }
+        ]
+      }
+    },
+    "_responses": {
+      "POST /v1/spectroclusters/6aba747adb74c300c31dd404/validate/repave": {
+        "ok": true,
+        "status": 200,
+        "body": {
+          "isRepaveRequired": true,
+          "reasons": [
+            {
+              "code": "PackUpgraded",
+              "message": "Pack kubernetes-eks is upgraded from 1.32 to 1.33",
+              "pack": {
+                "current": { "name": "kubernetes-eks", "tag": "1.32", "layer": "k8s" },
+                "target": { "name": "kubernetes-eks", "tag": "1.33", "layer": "k8s" },
+                "diffConfigKeys": []
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "_base": "type-same.json",
+  "_note": "a change of a running EKS cluster that Palette does not repave",
+  "_patch": {
+    "clusterUid": "6aba747adb74c300c31dd404",
+    "_responses": {
+      "POST /v1/spectroclusters/6aba747adb74c300c31dd404/validate/repave": {
+        "ok": true,
+        "status": 200,
+        "body": { "isRepaveRequired": false, "reasons": [] }
+      }
+    }
+  }
+}

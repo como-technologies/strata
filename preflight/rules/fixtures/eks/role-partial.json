@@ -1,0 +1,81 @@
+{
+  "_base": "identity-clean.json",
+  "_note": "the role can make a VPC and not its NAT gateway: ec2:CreateNatGateway is implicitDeny, and dynamic placement calls it; ec2:RunInstances is denied too, and EKS does not call it",
+  "_patch": {
+    "_exec": {
+      "aws iam simulate-principal-policy --policy-source-arn arn:aws:iam::123456789012:role/strata-live-eks-cloud --action-names ec2:CreateSecurityGroup ec2:AuthorizeSecurityGroupIngress ec2:DescribeKeyPairs ec2:DescribeImages ec2:RunInstances elasticloadbalancing:CreateLoadBalancer ec2:CreateVpc ec2:CreateSubnet ec2:CreateInternetGateway ec2:CreateRouteTable ec2:CreateNatGateway ec2:AllocateAddress cloudformation:DescribeStacks --output json": {
+        "exit": 0,
+        "stdout": {
+          "EvaluationResults": [
+            {
+              "EvalActionName": "ec2:CreateSecurityGroup",
+              "EvalResourceName": "*",
+              "EvalDecision": "allowed"
+            },
+            {
+              "EvalActionName": "ec2:AuthorizeSecurityGroupIngress",
+              "EvalResourceName": "*",
+              "EvalDecision": "allowed"
+            },
+            {
+              "EvalActionName": "ec2:DescribeKeyPairs",
+              "EvalResourceName": "*",
+              "EvalDecision": "allowed"
+            },
+            {
+              "EvalActionName": "ec2:DescribeImages",
+              "EvalResourceName": "*",
+              "EvalDecision": "allowed"
+            },
+            {
+              "EvalActionName": "ec2:RunInstances",
+              "EvalResourceName": "*",
+              "EvalDecision": "implicitDeny"
+            },
+            {
+              "EvalActionName": "elasticloadbalancing:CreateLoadBalancer",
+              "EvalResourceName": "*",
+              "EvalDecision": "allowed"
+            },
+            {
+              "EvalActionName": "ec2:CreateVpc",
+              "EvalResourceName": "*",
+              "EvalDecision": "allowed"
+            },
+            {
+              "EvalActionName": "ec2:CreateSubnet",
+              "EvalResourceName": "*",
+              "EvalDecision": "allowed"
+            },
+            {
+              "EvalActionName": "ec2:CreateInternetGateway",
+              "EvalResourceName": "*",
+              "EvalDecision": "allowed"
+            },
+            {
+              "EvalActionName": "ec2:CreateRouteTable",
+              "EvalResourceName": "*",
+              "EvalDecision": "allowed"
+            },
+            {
+              "EvalActionName": "ec2:CreateNatGateway",
+              "EvalResourceName": "*",
+              "EvalDecision": "implicitDeny"
+            },
+            {
+              "EvalActionName": "ec2:AllocateAddress",
+              "EvalResourceName": "*",
+              "EvalDecision": "allowed"
+            },
+            {
+              "EvalActionName": "cloudformation:DescribeStacks",
+              "EvalResourceName": "*",
+              "EvalDecision": "allowed"
+            }
+          ]
+        },
+        "stderr": ""
+      }
+    }
+  }
+}

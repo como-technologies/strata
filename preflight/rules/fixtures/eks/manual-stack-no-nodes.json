@@ -1,0 +1,29 @@
+{
+  "_base": "manual-stack.json",
+  "_note": "no nodes instance profile, and the controllers profile holds no role",
+  "_patch": {
+    "_exec": {
+      "aws iam list-instance-profiles --output json": {
+        "exit": 0,
+        "stdout": {
+          "InstanceProfiles": [
+            {
+              "InstanceProfileName": "control-plane.cluster-api-provider-aws.sigs.k8s.io",
+              "Roles": [
+                {
+                  "RoleName": "control-plane.cluster-api-provider-aws.sigs.k8s.io",
+                  "Arn": "arn:aws:iam::123456789012:role/control-plane.cluster-api-provider-aws.sigs.k8s.io"
+                }
+              ]
+            },
+            {
+              "InstanceProfileName": "controllers.cluster-api-provider-aws.sigs.k8s.io",
+              "Roles": []
+            }
+          ]
+        },
+        "stderr": ""
+      }
+    }
+  }
+}

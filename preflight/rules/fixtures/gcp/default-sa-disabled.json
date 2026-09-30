@@ -1,0 +1,28 @@
+{
+  "_base": "identity-clean.json",
+  "_note": "the default compute service account is disabled",
+  "_patch": {
+    "_exec": {
+      "gcloud iam service-accounts list --project strata-lab --format json": {
+        "exit": 0,
+        "stdout": [
+          {
+            "disabled": true,
+            "displayName": "Compute Engine default service account",
+            "email": "123456789012-compute@developer.gserviceaccount.com",
+            "name": "projects/strata-lab/serviceAccounts/123456789012-compute@developer.gserviceaccount.com",
+            "projectId": "strata-lab"
+          },
+          {
+            "disabled": false,
+            "displayName": "palette",
+            "email": "palette@strata-lab.iam.gserviceaccount.com",
+            "name": "projects/strata-lab/serviceAccounts/palette@strata-lab.iam.gserviceaccount.com",
+            "projectId": "strata-lab"
+          }
+        ],
+        "stderr": ""
+      }
+    }
+  }
+}

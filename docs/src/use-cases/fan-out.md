@@ -25,7 +25,7 @@ strata answers each one in a job.
 | Is this pull request still right? | before the merge button | `merge-gate.sh` | a red check, with the reason |
 | Did the environments get what the branch says? | every night | `verify-report.sh` | one issue per record that drifted |
 | Which clusters use this profile version? | when a version is retired | `strata consumers` | the list, with the count |
-| Did the environment get the release that was reviewed? | after each merge | the publish job: `snapshot`, then `same-release` | a failed job when Palette holds something else |
+| Did the environment get the release that was reviewed? | after each merge | the publish job: `snapshot`, then `same-release` | a failed job when the published version is not the reviewed one |
 
 **Who runs this.** Jobs, almost entirely. A developer writes a record in a pull
 request and reads a comment; the jobs below do the rest. Three of them are
@@ -102,8 +102,8 @@ Rollback: releases/dev.json to aws-stack@1.0.0
 The reason stays in the history, where the next person reads it. A team that
 works in the pull request uses the `rollback` label instead.
 
-The gate also catches what git cannot see: a record that Palette no longer
-matches, because the version it names was edited in place. See
+The gate also catches what git cannot see: a record that the published version
+no longer matches, because the version was edited in place. See
 [The merge gate](../automation/merge-gate.md), which has the output and the
 settings that hold the button on both hosts.
 
@@ -131,10 +131,10 @@ See [Promote a release to another project](./promote.md).
 
 ## Every night, verify
 
-Palette is not a store that only the team writes to. A version can be edited in
-place, a cluster can be changed by hand, and a profile can be deleted. The
-scheduled job checks each record against Palette, and keeps one issue open per
-record that drifted.
+The team is not the only writer of Palette. A person at the console can edit a
+version in place, change a cluster by hand, or delete a profile. The scheduled
+job checks each record against Palette, and keeps one issue open per record
+that drifted.
 
 The schedule covers the cluster records as well as the release records, so it
 gives both patterns. A cluster record comes from the job that applies the

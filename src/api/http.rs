@@ -39,6 +39,7 @@ impl HttpApi {
     /// The JSON of a response, or the error it stands for: a status out of 2xx, a body that could
     /// not be read, or a body that is not JSON.
     fn read(
+        method: &str,
         path: &str,
         answer: std::result::Result<ureq::http::Response<ureq::Body>, ureq::Error>,
     ) -> Result<Value> {
@@ -62,16 +63,21 @@ impl HttpApi {
                 message: format!("reading the response body: {e}"),
             })?;
         if !(200..300).contains(&status) {
+            // the whole body, on one line: a caller that reads the answer of a validate route
+            // needs the JSON of the refusal, and the message of the error shows the first part
             return Err(Error::Api {
+                method: method.to_string(),
                 path: path.to_string(),
                 status,
-                body: body
-                    .chars()
-                    .take(300)
-                    .collect::<String>()
-                    .replace('\n', " "),
+                body: body.replace(['\n', '\r'], " "),
                 retry_after,
             });
+        }
+        // a 204 No Content, which the validate routes of the clouds answer, is an answer with no
+        // body: null, and not a body that is not JSON. A 200 with no body stays the error it
+        // was: a proxy or an outage page, not an answer of Palette
+        if status == 204 {
+            return Ok(Value::Null);
         }
         serde_json::from_str(&body).map_err(|source| Error::NotJson {
             path: path.to_string(),
@@ -83,7 +89,11 @@ impl HttpApi {
 impl PaletteApi for HttpApi {
     fn get_json(&self, path: &str) -> Result<Value> {
         let url = format!("{}{}", self.config.base_url, path);
-        Self::read(path, self.headers(self.agent.get(url.as_str())).call())
+        Self::read(
+            "GET",
+            path,
+            self.headers(self.agent.get(url.as_str())).call(),
+        )
     }
 
     fn post_json(&self, path: &str, body: &Value) -> Result<Value> {
@@ -91,7 +101,7 @@ impl PaletteApi for HttpApi {
         let req = self
             .headers(self.agent.post(url.as_str()))
             .header("Content-Type", "application/json");
-        Self::read(path, req.send(body.to_string()))
+        Self::read("POST", path, req.send(body.to_string()))
     }
 
     fn project_uid(&self) -> Option<&str> {
@@ -107,6 +117,61 @@ fn retry_after_seconds(header: Option<&str>) -> Option<u64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// One answer from a server on this machine, so the reading of a body needs no network.
+    fn serve_once(status_line: &str, body: &str) -> String {
+        use std::io::{Read, Write};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        let answer = format!(
+            "HTTP/1.1 {status_line}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        );
+        std::thread::spawn(move || {
+            let (mut s, _) = listener.accept().unwrap();
+            let mut buf = [0u8; 4096];
+            let _ = s.read(&mut buf);
+            s.write_all(answer.as_bytes()).unwrap();
+        });
+        format!("http://{addr}")
+    }
+
+    #[test]
+    fn a_204_with_no_body_is_null_and_not_a_body_that_is_not_json() {
+        let url = serve_once("204 No Content", "");
+        let api = HttpApi::new(Config::new(url, "k"));
+        let v = api
+            .post_json("/v1/clouds/aws/account/validate", &serde_json::json!({}))
+            .unwrap();
+        assert_eq!(v, Value::Null);
+    }
+
+    #[test]
+    fn a_200_with_no_body_is_not_an_answer() {
+        let url = serve_once("200 OK", "");
+        let api = HttpApi::new(Config::new(url, "k"));
+        let err = api.get_json("/v1/spectroclusters").unwrap_err().to_string();
+        assert!(err.contains("/v1/spectroclusters"), "{err}");
+    }
+
+    #[test]
+    fn a_4xx_carries_its_status_and_body() {
+        let url = serve_once(
+            "400 Bad Request",
+            r#"{"code":"InvalidParam","message":"Node pool size should be multiple of 3"}"#,
+        );
+        let api = HttpApi::new(Config::new(url, "k"));
+        let err = api
+            .post_json("/v1/spectroclusters/gke/validate", &serde_json::json!({}))
+            .unwrap_err();
+        match err {
+            Error::Api { status, body, .. } => {
+                assert_eq!(status, 400);
+                assert!(body.contains("InvalidParam"), "{body}");
+            }
+            other => panic!("{other}"),
+        }
+    }
 
     #[test]
     fn retry_after_header_parses_whole_seconds_only() {

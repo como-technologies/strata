@@ -1,0 +1,14 @@
+{
+  "_base": "clean.json",
+  "_note": "an account of partition aws-us-gov, and a Fargate profile in the entity",
+  "_patch": {
+    "account": { "spec": { "partition": "aws-us-gov" } },
+    "entity": {
+      "spec": {
+        "fargateProfiles": [
+          { "name": "fp-1", "subnetIds": [], "selectors": [ { "namespace": "default" } ] }
+        ]
+      }
+    }
+  }
+}

@@ -4,7 +4,7 @@
 
 A release pins each pack at one version. The registry keeps publishing newer
 ones. Every record verifies, because Palette still holds what each one pins, and
-nothing says that the pins are behind, or when a newer version arrived.
+a record does not say that its pins are behind, or when a newer version arrived.
 
 In this example, `dev` has two release records: `aws-stack@1.0.0`, which pins
 older packs, and `aws-stack@1.1.1`.

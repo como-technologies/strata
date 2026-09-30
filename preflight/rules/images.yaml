@@ -1,0 +1,574 @@
+section: images
+title: Images and registries
+about: |
+  The pack registries, the digests, the tags, and the images that the nodes pull.
+rules:
+  - id: helm-digest-frozen
+    title: The digest of a Helm chart in Palette names the bytes a cluster installs
+    engines: [all]
+    tier: static
+    severity: warn
+    status: seen
+    when: (.profiles | length) > 0
+    what: |
+      The sync of Palette keeps the first digest of a chart. This holds for a Helm registry and for
+      an OCI registry of the provider type `helm`: the sync compares the annotations alone. A push
+      again of the chart version changes what a new attach installs, and changes nothing that
+      Palette shows. A running cluster keeps the old bytes, and a new attach gets the new ones. This
+      rule names each such pack. The cloud check in `reproduce` compares the digest in the registry
+      with the digest in Palette.
+    check:
+      kind: static
+      expr: |
+        [ .profiles[] | .source.name as $p | .packs[]
+          | select(.type == "helm" or (.type == "oci" and (.registryProviderType // "") == "helm"))
+          | "profile \($p): pack \(.name)@\(.version) is a chart of a \(if .type == "helm" then "Helm" else "OCI Helm" end) registry; Palette keeps its first digest, and a push again of \(.version) changes what a new attach installs" ]
+    reproduce:
+      - "helm pull <chart> --version <version> --repo <url> && sha256sum <chart>-<version>.tgz"
+      - "crane digest <oci host>/<chart>:<version>"
+    fix:
+      owner: palette
+      text: Compare the digest in the skip check of the sync for Helm and OCI Helm charts. A registry with immutable tags closes it at the source.
+    evidence:
+      - kind: report
+        ref: palette-pack-digest-findings-2026-09-25 F1
+        note: one profile version with one digest gave two different installs, before and after a push again
+      - kind: report
+        ref: palette-pack-digest-findings-2026-09-25 F2
+      - kind: source
+        ref: hubble services/service/packsync/internal/service/packsync/pack_service.go skipPackUpdate
+        note: Helm, OCI Helm, and OCI Zarf compare the annotations alone; the other kinds compare the digest
+    tests:
+      - fault: fixtures/eks/helm-chart.json
+        clean: fixtures/eks/addon-profile.json
+
+  - id: no-digest-kinds
+    title: Each pack of the profiles carries a digest
+    engines: [all]
+    tier: static
+    severity: warn
+    status: seen
+    when: (.profiles | length) > 0
+    what: |
+      A Zarf package of an OCI registry, and a chart of a Helm registry with credentials, carry no
+      digest in Palette. The record of such a pack has `hash.upstreamSource: none`, and a change of
+      its bytes cannot show in a record or in `strata verify`. A manifest pack has no archive and is
+      not counted.
+    check:
+      kind: static
+      expr: |
+        [ .profiles[] | .source.name as $p | .packs[]
+          | select((.type // "spectro") != "manifest")
+          | select((.hash.upstreamSource // "") == "none")
+          | "profile \($p): pack \(.name)@\(.version) of type \(.type // "spectro")\(if (.registryProviderType // "") != "" then " (\(.registryProviderType) registry)" else "" end) has no digest in Palette; a change of its bytes cannot show" ]
+    reproduce:
+      - "strata snapshot 'pack:<registry>/<name>@<version>' | jq '.packs[].hash.upstreamSource'"
+    fix:
+      owner: palette
+      text: Give a digest to each pack kind. For a Zarf package, read the manifest digest of the registry; for a private Helm chart, read the chart archive.
+    evidence:
+      - kind: run
+        ref: "#71, #75"
+      - kind: report
+        ref: palette-pack-digest-findings-2026-09-25 F5
+      - kind: source
+        ref: hubble services/service/packsync/internal/service/registrysync/oci/ocizarfregistry_client.go
+        note: the digest comes from the tag listing of the registry, and the listing of a Docker registry gives none
+    tests:
+      - fault: fixtures/eks/no-digest.json
+        clean: fixtures/eks/addon-profile.json
+
+  - id: private-pack-registry-empty
+    title: A private pack registry lists its packs
+    engines: [all]
+    tier: palette
+    severity: warn
+    status: seen
+    what: |
+      A Spectro pack registry with `private: true` syncs as `Completed` in under a second, and
+      Palette lists no pack of it. The same registry with `private: false` lists its packs at the
+      next sync. Nothing in the status says that the sync read no pack. The world holds no registry
+      document, so strata-preflight has no check; `strata packs` shows an empty registry.
+    reproduce:
+      - "strata packs <pack> --registry <registry>"
+      - "curl -s -H \"ApiKey: $PALETTE_API_KEY\" \"$PALETTE_HOST/v1/registries/pack/summary\" | jq '.items[] | {name: .metadata.name, private: .spec.private, sync: .status.sync}'"
+    fix:
+      owner: palette
+      text: Sync a private pack registry, or say in the sync status that a private registry lists no pack.
+    evidence:
+      - kind: report
+        ref: palette-pack-digest-findings-2026-09-25 F6
+      - kind: source
+        ref: hubble services/service/packsync/internal/service/registrysync/pack/packregistrysync_service.go GetPacks
+        note: GetPacks and GetPack return no pack for a private registry
+
+  - id: profile-follows-push
+    title: A published profile keeps its content after a push to the registry
+    engines: [all]
+    tier: race
+    severity: warn
+    status: seen
+    what: |
+      A published profile can pin a pack version with the values of the pack. Such a profile
+      follows a push again of that version, about 5 minutes after the sync. Its pack reference then
+      carries the new digest and the new values, with no person and no request. The audit log names
+      the service `system`. A profile with values of its own keeps its digest. No check before the
+      build finds it; `strata verify` on a record from before reports `DRIFT`. One #66 comment says
+      the profile keeps its digest. #81 corrected that reading: its check compared a file with
+      itself.
+    reproduce:
+      - "strata verify <record.json> --who"
+    fix:
+      owner: palette
+      text: Keep a published version as published, or open a notification and an audit entry for the follow.
+    evidence:
+      - kind: run
+        ref: "#81"
+      - kind: source
+        ref: hubble services/service/packsync/internal/service/packsync/pack_service.go syncPack
+        note: an existing pack document is updated when the skip check fails, and the profiles that keep the values of the pack follow
+
+  - id: floating-tag
+    title: No profile pins a pack under a floating tag
+    engines: [all]
+    tier: static
+    severity: warn
+    status: seen
+    when: (.profiles | length) > 0
+    what: |
+      A profile pinned to `1.0.x` moves when `1.0.2` arrives, with its pack uid, version, and
+      digest, with no person and no publish.
+    check:
+      kind: static
+      expr: |
+        [ .profiles[] | .source.name as $p | .packs[]
+          | select((.tag // "") | test("\\.x$|^x$"))
+          | "profile \($p): pack \(.name) is pinned under the floating tag \(.tag)" ]
+    evidence:
+      - kind: run
+        ref: "#66"
+    tests:
+      - fault: fixtures/eks/floating-tag.json
+        clean: fixtures/eks/clean.json
+
+  - id: pack-state
+    title: No pack version of the profiles is disabled or deleted
+    engines: [all]
+    tier: static
+    severity: fail
+    status: seen
+    when: (.packs | length) > 0
+    what: |
+      Spectro Cloud retires a pack version with `system_state` in the annotations of the pack:
+      `deprecated`, `disabled`, or `deleted`. Palette refuses a profile that pins a disabled or a
+      deleted version with `ClusterProfileInvalidPackState`, and a deleted version refuses a new
+      cluster. A deprecated version builds, and this check does not name it; `strata packs` shows
+      the state of each version. The world reads the state from `GET /v1/packs/{uid}`; a pack the
+      key cannot read is not checked.
+    check:
+      kind: static
+      expr: |
+        .packs as $packs
+        | [ .profiles[] | .source.name as $p | .packs[]
+            | select((.packUid // "") != "" and $packs[.packUid] != null)
+            | .packUid as $u
+            | (($packs[$u].packValues // [])[] | select(.packUid == $u) | (.annotations.system_state // "")) as $s
+            | select($s == "disabled" or $s == "deleted")
+            | "pack \(.name)@\(.version) of profile \($p) is \($s) in its registry: Palette refuses the profile with ClusterProfileInvalidPackState" ]
+    reproduce:
+      - "strata packs <pack>"
+    evidence:
+      - kind: run
+        ref: "#68"
+        note: Palette refuses a profile that pins a disabled or a deleted version; a deprecated one records as usual
+      - kind: source
+        ref: hubble services/service/spectrocluster/internal/service/clusterprofile/clusterprofile_validate.go validatePackState
+      - kind: doc
+        ref: https://docs.spectrocloud.com/integrations/maintenance-policy/
+    tests:
+      - fault: fixtures/eks/pack-disabled.json
+        clean: fixtures/eks/addon-profile.json
+
+  - id: pack-dependency
+    title: Each pack of the profiles finds the packs it requires
+    engines: [all]
+    tier: palette
+    severity: fail
+    status: seen
+    what: |
+      A pack can require another pack at a least version, in `constraints.dependencies` of its
+      `pack.json`. Palette checks the constraint over the packs of all the profiles when it creates
+      a cluster. A missing or an old dependency is refused with `DependencyPackRequired`,
+      `DependencyPackWithMinVersionRequired`, `DependencyPackWithMaxVersionRequired`, or
+      `DependencyPackNotSupported`. The constraint is not in the world. `GET /v1/packs/{uid}` gives
+      `packValues[].dependencies`, which lists the packs of the template parameters, not the
+      constraints. So the check asks the validate route and reads the dependency errors of each
+      pack. `palette-validate` calls the same route and reports every error of it; this rule
+      names the dependency errors alone.
+    check:
+      kind: palette
+      method: POST
+      path: /v1/spectroclusters/{{ .cloud | if . == "edge" then "edge-native" else . end }}/validate
+      expr: |
+        .response as $r
+        | if ($r.ok | not) then
+            (if (($r.body.code // "") | test("^DependencyPack")) then ["Palette refused the entity: \($r.body.code): \($r.body.message // "")"] else [] end)
+          else
+            [ ($r.body.profiles // [])[] | .uid as $u | (.packs.results // [])[] | .name as $n | (.errors // [])[]
+              | select((.code // "") | test("^DependencyPack"))
+              | "profile \($u), pack \($n): \(.code): \(.message)" ]
+          end
+    fix:
+      owner: palette
+      text: Give the constraints of a pack in GET /v1/packs/{uid}, so a client can check them before the create.
+    evidence:
+      - kind: run
+        ref: strata live example
+        note: a profile with strata-live-pack 1.1.0 and without strata-live-dep is refused with "Pack 'strata-live-dep' is required with minimum compatible version '1.0.0'"
+      - kind: source
+        ref: hubble services/service/spectrocluster/internal/service/validator/pack_dependency_validator.go validatePackDependencies
+      - kind: doc
+        ref: https://docs.spectrocloud.com/registries-and-packs/pack-constraints/
+    tests:
+      - fault: fixtures/eks/dep-missing.json
+        clean: fixtures/eks/clean.json
+
+  - id: ecr-oci-images
+    title: Each image of an OCI pack is in its ECR registry
+    engines: [all]
+    tier: palette
+    severity: fail
+    status: source
+    when: ([ .profiles[] | .packs[] | select(.type == "oci") ] | length) > 0
+    what: |
+      For each pack of type `oci`, the validate route of Palette resolves the ECR registry of the
+      pack in the region of the cluster. It asks the registry for the image, by the pack name and
+      the version. A missing image or a missing registry refuses the whole entity with one code,
+      such as `AwsEcrValidate`, `ResourceNotFound`, or `EcrImagesValidationIncomplete`. The check
+      runs the validate route and reads such a refusal. It applies to a world with a pack of type
+      `oci`. A cloud check with `crane digest` on each image of the records is in `reproduce`.
+      `palette-validate` calls the same route and reports every refusal; this rule names a refusal
+      over an image alone.
+    check:
+      kind: palette
+      method: POST
+      path: /v1/spectroclusters/{{ .cloud | if . == "edge" then "edge-native" else . end }}/validate
+      expr: |
+        .response as $r
+        | if $r.ok then []
+          elif (("\($r.body.code // "") \($r.body.message // "")") | test("Ecr|OciRegistr|image|registry"; "i"))
+          then ["Palette refused the entity over an OCI pack image: \($r.body.code // $r.status): \($r.body.message // "")"]
+          else [] end
+    reproduce:
+      - "crane digest {{ [ .profiles[] | .packs[] | select(.type == \"oci\") | .images[]? ] | first // \"<image>\" }}"
+      - "aws ecr describe-images --repository-name <repository> --image-ids imageTag=<version> --region {{ .entity.spec.cloudConfig.region // \"<region>\" }}"
+    fix:
+      owner: palette
+      text: List each missing image with its pack in the validate response, as the pack errors are listed, not as one refusal.
+    evidence:
+      - kind: source
+        ref: hubble services/service/spectrocluster/internal/service/spectrocluster/internal/base/spectrocluster_validate.go validateOciRegistry
+        note: each pack of type oci gives an image (the pack name and the version) for its ECR registry, and ValidateEcrRegistriesImages asks the registry
+    tests:
+      - fault: fixtures/eks/ecr-image-missing.json
+        clean: fixtures/eks/oci-pack.json
+
+  - id: node-egress-images
+    title: The nodes pull the images of the packs
+    engines: [all]
+    tier: watch
+    severity: fail
+    status: source
+    what: |
+      A node that cannot reach an image source, over egress, a proxy, or a private registry, does
+      not start the pods of the packs. The kubelet reports `ErrImagePull`, then `ImagePullBackOff`,
+      and the cluster stays in the build. No check before the build asks the nodes; the watch reads
+      the pull events.
+    check:
+      kind: watch
+      expr: |
+        [ (.events // [])[]
+          | select((.message // "") | test("ImagePullBackOff|ErrImagePull|Failed to pull image|Back-off pulling image"))
+          | "event \(.reason) at \(.metadata.creationTimestamp): \(.message | .[:240])" ]
+        | unique | .[:3]
+    reproduce:
+      - "kubectl get events -A --field-selector reason=Failed -o json | jq '.items[] | select(.message | test(\"pull\")) | .message'"
+      - "crane digest <image>"
+    fix:
+      owner: operator
+      text: Open egress to each image source of the packs, or mirror the images into a registry the nodes reach.
+    evidence:
+      - kind: doc
+        ref: https://kubernetes.io/docs/concepts/containers/images/
+        note: the kubelet reports ImagePullBackOff after ErrImagePull
+    tests:
+      - fault: fixtures/eks/image-pull-backoff.json
+        clean: fixtures/eks/clean.json
+
+  - id: image-tag-not-digest
+    title: An image of a pack is named by a digest
+    engines: [all]
+    tier: race
+    severity: warn
+    status: seen
+    what: |
+      The images that a pack declares in `pack.content.images` carry a tag and no digest, and the
+      nodes pull by tag. An image rebuilt under one tag is not visible to Palette, to a record, or to
+      `strata verify`. Two clusters on one profile version can run different bytes. No check before
+      the build finds it; a registry with immutable tags closes it at the source.
+    reproduce:
+      - "crane digest <image>"
+      - "kubectl get pods -A -o jsonpath='{range .items[*].status.containerStatuses[*]}{.image}{\"\\t\"}{.imageID}{\"\\n\"}{end}'"
+    fix:
+      owner: palette
+      text: Record the digest of each image at the sync, and give it to the nodes.
+    evidence:
+      - kind: source
+        ref: strata src/snapshot.rs Pack.images
+        note: the images a pack declares are a reference with a tag, and no digest
+      - kind: report
+        ref: palette-pack-digest-findings-2026-09-25 F3
+        note: the controller installs by version and tag, not by digest
+
+  - id: zarf-password-log
+    title: The controller keeps the registry password out of its log
+    engines: [all]
+    tier: race
+    severity: warn
+    status: source
+    what: |
+      Before it downloads a Zarf package, the cluster controller logs the local path, the URL, and
+      the user name. It logs the password of the registry too, at the default level. Each reader
+      of the log, and each log store that collects it, gets the credential. The scope is a Zarf
+      pack from a registry with credentials. No check before the build finds it; the log of the
+      controller on the cluster shows it.
+    reproduce:
+      - "kubectl -n cluster-{{ .clusterUid // \"<cluster uid>\" }} logs deploy/palette-controller-manager | grep 'downloading zarf'"
+    fix:
+      owner: palette
+      text: Remove the password from the log line.
+    evidence:
+      - kind: source
+        ref: palette pkg/pack/pack.go
+        note: "the log line `downloading zarf localPath ..., password: ...` is there since d09668ad1, 2023-02-04"
+      - kind: report
+        ref: palette-pack-digest-findings-2026-09-25 F7
+
+  - id: zarf-cosign
+    title: The signature key of a Zarf package is checked
+    engines: [all]
+    tier: static
+    severity: warn
+    status: source
+    when: (.profiles | length) > 0
+    what: |
+      The controller passes `cosignPubKey` of the Zarf values to `zarf package deploy --sget` alone,
+      for a package it fetches with `sget`. For a package from an OCI registry, the key is not used,
+      and a signed package deploys with no check of its signature. The scope is a Zarf pack of an
+      OCI registry with a key in its values.
+    check:
+      kind: static
+      expr: |
+        [ .profiles[] | .source.name as $p | .packs[]
+          | select(.type == "oci" and (.registryProviderType // "") == "zarf")
+          | select((((.valuesCanon.zarf.deploy.cosignPubKey // "") | length) > 0) or (((.valuesCanon.zarf.init.cosignPubKey // "") | length) > 0))
+          | "profile \($p): pack \(.name)@\(.version) sets zarf cosignPubKey, and the controller does not check the signature of a package from an OCI registry" ]
+    fix:
+      owner: palette
+      text: Pass the key to the deploy of an OCI package, or refuse a key that the deploy cannot use.
+    evidence:
+      - kind: source
+        ref: palette pkg/atop/zarf_atop.go DeployPackage
+        note: the key goes to --sget alone; the checksum check is off when the value is empty
+      - kind: report
+        ref: palette-pack-digest-findings-2026-09-25 F5
+    tests:
+      - fault: fixtures/eks/zarf-cosign-key.json
+        clean: fixtures/eks/addon-profile.json
+
+  - id: helm-oci-endpoint
+    title: A Helm registry has an https endpoint
+    engines: [all]
+    tier: static
+    severity: warn
+    status: source
+    what: |
+      The sync of a Helm registry reads `<endpoint>/index.yaml`. An `oci://` endpoint serves no
+      index, so the registry lists nothing. The `oci://` scheme is read for the URL of one chart
+      inside an index, not for the endpoint. An OCI Helm registry is the other registry kind. The
+      world holds no registry document, so strata-preflight has no check; the scope is a Helm
+      registry.
+    reproduce:
+      - "strata packs <chart> --registry <registry>"
+      - "curl -s -H \"ApiKey: $PALETTE_API_KEY\" \"$PALETTE_HOST/v1/registries/helm/summary\" | jq '.items[] | {name: .metadata.name, endpoint: .spec.endpoint}'"
+    fix:
+      owner: palette
+      text: Refuse an oci:// endpoint at registry create, and name the OCI registry kind.
+    evidence:
+      - kind: source
+        ref: hubble services/service/packsync/internal/service/registrysync/helm/helmregistry_client.go
+        note: the index is read at <endpoint>/index.yaml; downloadHelmChartFromUrl reads oci:// for the URL of a chart alone
+
+  - id: registry-sync-delay
+    title: A new pack version shows in Palette after the sync
+    engines: [all]
+    tier: watch
+    severity: note
+    status: seen
+    what: |
+      The sync of a registry is asynchronous. A version pushed now shows in Palette after the next
+      sync. A profile that follows a push, or a floating tag, moves minutes after the sync: about 4
+      minutes in #66, about 5 minutes in #81. A build that pins a version pushed seconds before
+      does not find it. The watch of a cluster build sees no registry, so strata-preflight has no
+      check; `strata packs` shows when the version is listed.
+    reproduce:
+      - "strata packs <pack> --registry <registry> --latest"
+      - "curl -s -H \"ApiKey: $PALETTE_API_KEY\" \"$PALETTE_HOST/v1/registries/pack/<uid>/sync/status\""
+    fix:
+      owner: none
+      text: Wait for the sync status before a build that pins the new version.
+    evidence:
+      - kind: run
+        ref: "#66, #81"
+
+  - id: registry-new-key
+    title: A registry create with a new key is accepted
+    engines: [all]
+    tier: watch
+    severity: warn
+    status: seen
+    what: |
+      An ECR registry created in Palette seconds after its IAM key is made is refused. The key is
+      not yet valid in every region of AWS. A retry after a minute is accepted. The scope is an ECR
+      registry with a fresh key. The watch of a build sees no registry, so strata-preflight has no
+      check; the lab waits before the create.
+    reproduce:
+      - "aws sts get-caller-identity"
+      - "curl -s -X POST -H \"ApiKey: $PALETTE_API_KEY\" \"$PALETTE_HOST/v1/registries/oci/ecr/validate\" -d @registry.json"
+    fix:
+      owner: lab
+      text: Wait for the key to be valid, with a retry of the validate route, before the registry create.
+    evidence:
+      - kind: run
+        ref: teardown lab
+      - kind: doc
+        ref: https://docs.aws.amazon.com/IAM/latest/UserGuide/troubleshoot_general.html#troubleshoot_general_eventual-consistency
+
+  - id: ambiguous-pack-ref
+    title: One pack name and version comes from one registry
+    engines: [all]
+    tier: static
+    severity: warn
+    status: seen
+    when: (.profiles | length) > 0
+    what: |
+      Two registries can offer one pack version, and two products can share one name. A reference
+      by name and version alone then names two packs, and a retired version in one registry is
+      served by another. This check finds one name and version from two registry uids across the
+      profiles of the entity; a reference must name the registry. The record has no registry name,
+      so a name shared by two products is not found here.
+    check:
+      kind: static
+      expr: |
+        [ [ .profiles[] | .source.name as $p | .packs[]
+            | select((.registryUid // "") != "")
+            | {name, version, registryUid, profile: $p} ]
+          | group_by([.name, .version])[]
+          | select((map(.registryUid) | unique | length) > 1)
+          | "pack \(.[0].name)@\(.[0].version) comes from \(map(.registryUid) | unique | length) registries across the profiles \(map(.profile) | unique | join(", ")); a reference by name and version is ambiguous" ]
+    reproduce:
+      - "strata packs <pack>"
+    fix:
+      owner: none
+      text: Name the registry in each pack reference.
+    evidence:
+      - kind: run
+        ref: "#68"
+        note: nginx is disabled in Public Repo and in Palette Registry, and Bitnami serves it
+    tests:
+      - fault: fixtures/eks/two-registries.json
+        clean: fixtures/eks/addon-profile.json
+
+  - id: maas-os-image
+    title: The OS pack of a MAAS profile maps to a MAAS image
+    engines: [maas]
+    tier: static
+    severity: fail
+    status: source
+    when: (.profiles | length) > 0
+    what: |
+      Palette uploads its own image into MAAS. For `ubuntu-maas` it maps the pack version to a base
+      image, `ubuntu/bionic` for 18.04 through `ubuntu/noble` for 24.04, and refuses another
+      version with "unsupported image". The base image must be `Synced` in MAAS, or the upload
+      fails with "base image missing or not synced". The `generic-byoi` pack needs
+      `pack.osImageOverride`, `pack.osName`, and `pack.osVersion`. The upload needs egress from the
+      PCG to the image host; the reproduce lines read the boot resources of MAAS.
+    check:
+      kind: static
+      expr: |
+        def series: {"18.04": "bionic", "20.04": "focal", "22.04": "jammy", "24.04": "noble"};
+        [ .profiles[] | .source.name as $prof | .packs[] | select(.layer == "os")
+          | if (.name | startswith("ubuntu-maas")) then
+              ((.version // .tag // "") | split(".") | .[:2] | join(".")) as $v
+              | if (series | has($v)) then empty else "OS pack \(.name)@\(.version) of profile \($prof): Palette maps Ubuntu 18.04, 20.04, 22.04, and 24.04 to a MAAS base image, and refuses \($v) with \"unsupported image\"" end
+            elif .name == "generic-byoi" then
+              ((.valuesCanon.pack // {}) as $s | [ ("osImageOverride", "osName", "osVersion") | select(($s[.] // "") == "") ]) as $missing
+              | if ($missing | length) > 0 then "OS pack generic-byoi of profile \($prof) lacks pack.\($missing | join(", pack.")): Palette refuses it with \"generic-byoi pack requires osImageOverride, osName, osVersion\"" else empty end
+            else empty end ]
+    reproduce:
+      - "maas $PROFILE boot-resources read | jq -r '.[] | select(.name | startswith(\"ubuntu/\")) | [.name, .type, .architecture] | @tsv'   # the base image of the pack version must be Synced, such as ubuntu/jammy for 22.04"
+      - "curl -sI https://maasgoldenimage-console.s3.amazonaws.com/<os_version>-<os_spectro_version>-<k8s_version>-<k8s_spectro_version>.tar.gz | head -1   # from the PCG; the four values are annotations of the OS and Kubernetes packs"
+    fix:
+      owner: palette
+      text: Read the boot resources of MAAS in the validate route, through the PCG.
+    evidence:
+      - kind: source
+        ref: palette pkg/provider/maas/maas_image.go ubuntuBaseImage, ensureImage, readBYOSValues
+        note: u-1804 bionic, u-2004 focal, u-2204 jammy, u-2404 noble; hasSyncedBaseImage needs Type Synced; the BYOS values are pack.osImageOverride, pack.osName, pack.osVersion
+      - kind: doc
+        ref: https://docs.spectrocloud.com/integrations/generic-byoi/
+        note: osImageOverride, osName, and osVersion for MAAS; with no match and no URL, the provisioning fails
+      - kind: doc
+        ref: https://docs.spectrocloud.com/clusters/data-center/maas/create-manage-maas-clusters/
+        note: verify that the OS images of the cluster profiles are downloaded and available in MAAS
+    tests:
+      - fault: fixtures/maas/os-unsupported.json
+        clean: fixtures/maas/clean.json
+      - fault: fixtures/maas/byoi-no-override.json
+        clean: fixtures/maas/byoi-clean.json
+
+  - id: vsphere-ova-template
+    title: The OVA template of the OS and Kubernetes pair is in the image template folder
+    engines: [vsphere]
+    tier: cloud
+    severity: fail
+    status: source
+    what: |
+      Palette names the node template `r_<os_version>-<os_spectro_version>-<k8s_version>-<k8s_spectro_version>`,
+      such as `r_u-2204-0-k-1294-0`, in the image template folder (`spectro-templates` by default).
+      When it is not there, the PCG downloads the OVA from the image host of the Palette instance
+      and imports it as a template. So the PCG needs egress to `s3.amazonaws.com` on 443. The docs
+      name `vmwaregoldenimage-console.s3.amazonaws.com`; the hubble test config names
+      `vmwaregoldenimage.s3.amazonaws.com`; a system setting holds the host. Hubble only logs a
+      warning when the URL does not answer. No CLI on this machine reaches vCenter with the account
+      of the world, so the rule has no check; the reproduce lines use `govc` with the vCenter
+      credentials.
+    reproduce:
+      - "GOVC_URL=https://{{ .account.spec.vcenterServer // \"<vcenter>\" }} GOVC_USERNAME={{ .account.spec.username // \"<user>\" }} GOVC_PASSWORD=<password> GOVC_INSECURE=1 govc ls /{{ .entity.spec.cloudConfig.placement.datacenter }}/vm/{{ .entity.spec.cloudConfig.placement.imageTemplateFolder }}   # r_<os>-<k8s> must be listed, such as r_u-2204-0-k-1294-0"
+      - "curl -sI https://vmwaregoldenimage-console.s3.amazonaws.com/<os_version>-<os_spectro_version>-<k8s_version>-<k8s_spectro_version>.ova | head -1   # from the PCG; the four values are annotations of the OS and Kubernetes packs"
+    fix:
+      owner: palette
+      text: Check the template, or the URL of the OVA, in the validate route, and fail on a URL that does not answer.
+    evidence:
+      - kind: source
+        ref: palette pkg/provider/vsphere/govmomi_deploy_ova.go GovmomiDeployOVA
+        note: templateName r_<name>; the folder defaults to spectro-templates; the OVA streams from the URL through the PCG
+      - kind: source
+        ref: hubble services/service/spectrocluster/internal/service/spectrocluster/internal/vsphere/spectrocluster_vsphere_image.go resolveVsphereImage
+        note: <imagesHostEndpoint>/<name>.ova; a URL that does not exist logs a warning
+      - kind: doc
+        ref: https://docs.spectrocloud.com/clusters/data-center/vmware/create-manage-vmware-clusters/
+        note: the Kubernetes OVA in vSphere, an r_ prefix, converted to a template in the spectro-templates folder
+      - kind: doc
+        ref: https://docs.spectrocloud.com/architecture/palette-public-ips/
+        note: vmwaregoldenimage-console.s3.amazonaws.com on 443

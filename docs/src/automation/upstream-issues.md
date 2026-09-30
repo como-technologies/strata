@@ -5,7 +5,8 @@ issue open for each pack that a record pins behind a newer version of its
 registry, and closes the issue when each pin of the pack is current.
 
 It is the other half of [Drift issues](./drift-issues.md), and it is a separate
-job on purpose. Drift says that Palette changed under a record: it is an error.
+job on purpose. Drift says that a version changed under its record: it is an
+error.
 Behind says that the registry has a newer version: it is a decision. One job
 that reports both fails for two reasons, and each reason needs another person.
 

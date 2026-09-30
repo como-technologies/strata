@@ -1,0 +1,11 @@
+{
+  "_base": "clean.json",
+  "_note": "a fixture cannot say now, so a stamp in the future stands for an account made seconds ago; the check reads a negative age as under 2 minutes",
+  "_patch": {
+    "account": {
+      "metadata": {
+        "creationTimestamp": "2999-01-01T00:00:00.000Z"
+      }
+    }
+  }
+}

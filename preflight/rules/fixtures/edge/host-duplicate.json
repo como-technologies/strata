@@ -1,0 +1,29 @@
+{
+  "_base": "clean.json",
+  "_note": "cp-1 is in the control plane pool and in the worker pool",
+  "_patch": {
+    "entity": {
+      "spec": {
+        "machinepoolconfig": [
+          {
+            "cloudConfig": {
+              "edgeHosts": [
+                {
+                  "hostUid": "edge-host-w-1",
+                  "hostName": "w-1"
+                },
+                {
+                  "hostUid": "edge-host-cp-1",
+                  "hostName": "cp-1"
+                }
+              ]
+            },
+            "poolConfig": {
+              "name": "worker-pool"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

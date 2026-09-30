@@ -1,0 +1,32 @@
+{
+  "_base": "identity-clean.json",
+  "_note": "the account names the EBS CSI policy, and the nodes role does not hold it",
+  "_patch": {
+    "_exec": {
+      "aws iam list-attached-role-policies --role-name nodes.cluster-api-provider-aws.sigs.k8s.io --output json": {
+        "exit": 0,
+        "stdout": {
+          "AttachedPolicies": [
+            {
+              "PolicyName": "nodes.cluster-api-provider-aws.sigs.k8s.io",
+              "PolicyArn": "arn:aws:iam::123456789012:policy/nodes.cluster-api-provider-aws.sigs.k8s.io"
+            },
+            {
+              "PolicyName": "AmazonEKSWorkerNodePolicy",
+              "PolicyArn": "arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy"
+            },
+            {
+              "PolicyName": "AmazonEKS_CNI_Policy",
+              "PolicyArn": "arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy"
+            },
+            {
+              "PolicyName": "AmazonEC2ContainerRegistryReadOnly",
+              "PolicyArn": "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
+            }
+          ]
+        },
+        "stderr": ""
+      }
+    }
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "_base": "clean.json",
+  "_patch": {
+    "entity": {
+      "spec": {
+        "machinepoolconfig": [
+          {
+            "poolConfig": {
+              "name": "worker-pool",
+              "updateStrategy": {
+                "type": "RollingUpdateScaleOut"
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}

@@ -66,16 +66,17 @@ does.
   them in each report.
 - Keep macro values out of the fields that repave a cluster, such as
   `kubeadmconfig.postKubeadmCommands`. See the Palette behavior below.
-- Do not count on the `immutable-clusterprofiles` flag of the Spectro Cloud
-  provider here. It applies to `spectrocloud_cluster_profile` alone: it keeps a
-  published version the same, and not the value of a macro that the version
-  reads. `spectrocloud_macros` updates in place, with the flag on or off.
+- The `immutable-clusterprofiles` flag of the Spectro Cloud provider covers
+  `spectrocloud_cluster_profile` alone: it keeps a published version the same.
+  A macro is a resource of its own, `spectrocloud_macros`, and it updates in
+  place with the flag on or off. The digests of the cluster record cover it.
 
 ## Palette behavior
 
-Palette writes an edit of a macro to no audit log, and opens no notification
-for it. It gives a cluster the new value at the next read of its agent, in a
-live run 11 minutes after the change. When the macro is in a field that
-repaves the cluster, Palette holds a repave for approval, and refuses other
-updates of the cluster until someone approves it. See
+A macro is a value with no version and no audit entry, and a change of it
+opens no notification. Palette gives a cluster the new value at the next read
+of its agent, in a live run 11 minutes after the change. When the macro is in
+a field that repaves the cluster, Palette holds a repave for approval, and
+refuses an update of the cluster profiles until a person approves the repave.
+See
 [Macros](../internals/palette/profiles.md#macros).

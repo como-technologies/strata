@@ -1,0 +1,31 @@
+{
+  "_base": "teardown-order-clean.json",
+  "_note": "the instances of a run before are gone, and its VPC is still there: the teardown is not finished",
+  "_patch": {
+    "_exec": {
+      "aws ec2 describe-vpcs --filters Name=tag-key,Values=sigs.k8s.io/cluster-api-provider-aws/cluster/fred --region us-east-2 --output json": {
+        "exit": 0,
+        "stdout": {
+          "Vpcs": [
+            {
+              "VpcId": "vpc-0f1e2d3c4b5a69788",
+              "State": "available",
+              "CidrBlock": "10.0.0.0/16",
+              "Tags": [
+                {
+                  "Key": "sigs.k8s.io/cluster-api-provider-aws/cluster/fred",
+                  "Value": "owned"
+                },
+                {
+                  "Key": "Name",
+                  "Value": "fred-vpc"
+                }
+              ]
+            }
+          ]
+        },
+        "stderr": ""
+      }
+    }
+  }
+}

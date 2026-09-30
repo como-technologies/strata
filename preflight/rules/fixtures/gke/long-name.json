@@ -1,0 +1,10 @@
+{
+  "_base": "clean.json",
+  "_patch": {
+    "entity": {
+      "metadata": {
+        "name": "a-cluster-name-that-is-longer-than-forty-characters"
+      }
+    }
+  }
+}

@@ -6,9 +6,9 @@ in the repository keeps the approved content. From then on, each step compares
 Palette with that record. Each difference reaches a person as a comment, a
 gate that fails, or an issue.
 
-The record is the witness. Palette can change a published version in place, and
-Palette keeps no digest of the content. A record in Git, checked against
-Palette, stays true when Palette changes.
+The record holds the approved content. A published version in Palette can be
+updated after its publish, and its name stays. A record in Git, checked against
+Palette, shows each change after the approval.
 [Where each part belongs](./boundary.md) gives the reasons.
 
 ## Who runs what, and when
@@ -19,7 +19,8 @@ Palette, stays true when Palette changes.
 | The merge button | the merge gate | Do the records after the merge still hold? | `merge-gate.sh` | [The merge gate](./automation/merge-gate.md) |
 | The publish | the pipeline of the team | Does Palette hold what the reviewer approved? | `snapshot`, then `same-release` | [Review a change](./use-cases/review.md) |
 | A promotion | a person, on demand | Do the projects hold one release? | `same-release` | [Promote a release](./use-cases/promote.md) |
-| Each night | a scheduled job | Did Palette change under a record? | `verify-report.sh` | [Drift issues](./automation/drift-issues.md) |
+| Before a build | the pipeline, and the person who writes the cluster | Can Palette build this cluster? | `preflight` on the pull request, before the build, and during it | [Can Palette build this cluster?](./use-cases/stop-a-build.md) |
+| Each night | a scheduled job | Did a version change under its record? | `verify-report.sh` | [Drift issues](./automation/drift-issues.md) |
 | Each night | a scheduled job | Which clusters are the fleet? | `snapshot filter:<name> --dir --prune` | [Find the fleet](./use-cases/fleet.md) |
 | Each night | a scheduled job | Does the registry have newer versions of what we pin? | `upstream-report.sh` | [Upstream issues](./automation/upstream-issues.md) |
 | An incident | a person at a terminal | Who carries this pack, who runs it, what changed, and who changed it? | `list --pack`, `consumers`, `compare`, `verify --who` | [Find the profiles that carry a pack](./use-cases/find-a-pack.md) |
@@ -87,9 +88,9 @@ whether it is the version that the reviewer read:
 {{#include output/loop-publish.txt}}
 ```
 
-`IDENTICAL`: the root of the published version is the root of the candidate. No
-tag and no name is trusted. `dev` moves `payments` to the new version, and the
-cluster runs it:
+`IDENTICAL`: the root of the published version is the root of the candidate.
+The check is by content, not by a tag or a name. `dev` moves `payments` to the
+new version, and the cluster runs it:
 
 ```text
 {{#include output/loop-cluster.txt}}
@@ -117,7 +118,8 @@ directory:
 ```
 
 **Follow along.** `just playground loop-4` is the tenant after a person edits
-`aws-stack@1.1.0` in `prod` in place, through the API, with no review.
+`aws-stack@1.1.0` in `prod` in place, through the API, outside the review of
+the team.
 
 The scheduled verify finds the edit, and keeps one issue open for it:
 

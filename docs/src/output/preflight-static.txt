@@ -1,0 +1,153 @@
+$ strata preflight cluster.json --cloud aws --tier static --offline --quiet
+strata-preflight: aws cluster payments (cluster.json), Palette release not given, tiers static
+
+Identity and permissions
+  NOT RUN       4 checks did not run: tier cloud was not asked for (2); tier palette was not asked for (2)
+
+Cloud services and APIs
+  NOT RUN       1 check did not run: tier palette was not asked for (1)
+  NOT CHECKED   aws-s3-irsa-bucket           The IRSA bucket of an AWS cluster can be made                    1 ms
+                no check in strata-preflight; the reproduce lines say what to run by hand
+                reproduce: kubectl get awscluster -A -o jsonpath='{.items[*].spec.s3Bucket.name}'   # on the management cluster, during the build: the bucket CAPA asks for
+                reproduce: aws s3api head-bucket --bucket <spec.s3Bucket.name> --region us-east-2   # 404 before the build is right; 403 means another account holds the name
+                reproduce: aws s3control get-public-access-block --account-id $(aws sts get-caller-identity --query Account --output text)
+
+Quotas and limits
+  NOT RUN       2 checks did not run: tier cloud was not asked for (1); tier palette was not asked for (1)
+  NOT CHECKED   aws-sg-rules                 The rules of a security group stay under the quota               1 ms
+                no check in strata-preflight; the reproduce lines say what to run by hand
+                reproduce: aws service-quotas get-service-quota --service-code vpc --quota-code L-E79EC296 --region us-east-2 --query Quota.Value
+                reproduce: aws ec2 describe-security-groups --region us-east-2 --filters Name=tag-key,Values=sigs.k8s.io/cluster-api-provider-aws/role --query 'SecurityGroups[].[GroupId,GroupName,length(IpPermissions),length(IpPermissionsEgress)]' --output table   # the groups CAPA made, during or after the build
+  NOT CHECKED   vcluster-min                 A virtual cluster has 3 cores or more                            1 ms
+                no check in strata-preflight; the reproduce lines say what to run by hand
+                reproduce: jq '.spec.machinepoolconfig[].cloudConfig.instanceType' virtual-cluster.json   # maxCPU must be 3 or more
+                reproduce: curl -s -H "ApiKey: $PALETTE_API_KEY" -H "ProjectUid: $PALETTE_PROJECT_UID" "${PALETTE_API:-https://api.spectrocloud.com}/v1/clustergroups/<uid>" | jq .spec.clustersConfig.limitConfig
+
+Networking
+  PROBE PASS    aws-local-zone-letter        Each zone of dynamic placement ends in its own letter            1 ms  catch no runs clean 6/6 (61%)
+  PROBE PASS    api-endpoint-reach           The pilot can reach the API server of the cluster                1 ms  catch 4/4 (47%) clean 6/6 (61%)
+  NOT CHECKED   registry-https               A registry name answers over HTTPS before Palette takes it       1 ms
+                no check in strata-preflight; the reproduce lines say what to run by hand
+                reproduce: curl -s -o /dev/null -w '%{http_code}\n' https://<registry host>/v2/
+
+Compute and pools
+  NOT CHECKED   instance-offering            The instance type is offered in each zone of the pool            1 ms
+                no check in strata-preflight; the reproduce lines say what to run by hand
+                reproduce: aws ec2 describe-instance-type-offerings --location-type availability-zone --filters Name=instance-type,Values=t3.xlarge --region us-east-2 --query 'InstanceTypeOfferings[].Location' --output text   # each zone of the pools must be in the list
+  NOT CHECKED   spot-capacity                Spot capacity is short                                           1 ms
+                a race: no check before the build finds it; the watch finds its effect
+  NOTE          bastion-cost                 CAPA makes a bastion for each AWS cluster                        1 ms
+                bastionDisabled is not set: the build makes a bastion instance
+                reproduce: jq 'if (.entity.spec.cloudConfig.bastionDisabled // false) then [] else ["bastionDisabled is not set: the build makes a bastion instance"] end' $OUT/world.json
+
+Kubernetes version and engine
+  PROBE PASS    skip-k8s-upgrade             No pool skips the Kubernetes upgrade                             1 ms
+
+Storage and CSI
+  NOT RUN       1 check did not run: tier cloud was not asked for (1)
+
+Images and registries
+  NOT RUN       1 check did not run: tier palette was not asked for (1)
+  NOT CHECKED   private-pack-registry-empty  A private pack registry lists its packs                          1 ms
+                no check in strata-preflight; the reproduce lines say what to run by hand
+                reproduce: strata packs <pack> --registry <registry>
+                reproduce: curl -s -H "ApiKey: $PALETTE_API_KEY" "$PALETTE_HOST/v1/registries/pack/summary" | jq '.items[] | {name: .metadata.name, private: .spec.private, sync: .status.sync}'
+  NOT CHECKED   profile-follows-push         A published profile keeps its content after a push to the r…     1 ms
+                a race: no check before the build finds it; the watch finds its effect
+                reproduce: strata verify <record.json> --who
+  NOT CHECKED   image-tag-not-digest         An image of a pack is named by a digest                          1 ms
+                a race: no check before the build finds it; the watch finds its effect
+                reproduce: crane digest <image>
+                reproduce: kubectl get pods -A -o jsonpath='{range .items[*].status.containerStatuses[*]}{.image}{"\t"}{.imageID}{"\n"}{end}'
+  NOT CHECKED   zarf-password-log            The controller keeps the registry password out of its log        1 ms
+                a race: no check before the build finds it; the watch finds its effect
+                reproduce: kubectl -n cluster-<cluster uid> logs deploy/palette-controller-manager | grep 'downloading zarf'
+  NOT CHECKED   helm-oci-endpoint            A Helm registry has an https endpoint                            1 ms
+                no check in strata-preflight; the reproduce lines say what to run by hand
+                reproduce: strata packs <chart> --registry <registry>
+                reproduce: curl -s -H "ApiKey: $PALETTE_API_KEY" "$PALETTE_HOST/v1/registries/helm/summary" | jq '.items[] | {name: .metadata.name, endpoint: .spec.endpoint}'
+  NOT CHECKED   registry-sync-delay          A new pack version shows in Palette after the sync               1 ms
+                no check in strata-preflight; the reproduce lines say what to run by hand
+                reproduce: strata packs <pack> --registry <registry> --latest
+                reproduce: curl -s -H "ApiKey: $PALETTE_API_KEY" "$PALETTE_HOST/v1/registries/pack/<uid>/sync/status"
+  NOT CHECKED   registry-new-key             A registry create with a new key is accepted                     1 ms
+                no check in strata-preflight; the reproduce lines say what to run by hand
+                reproduce: aws sts get-caller-identity
+                reproduce: curl -s -X POST -H "ApiKey: $PALETTE_API_KEY" "$PALETTE_HOST/v1/registries/oci/ecr/validate" -d @registry.json
+
+Profiles and packs
+  NOT RUN       1 check did not run: tier palette was not asked for (1)
+  NOT CHECKED   edit-in-place                A published profile version stays as published                   1 ms
+                a race: no check before the build finds it; the watch finds its effect
+                reproduce: strata verify <record.json> --who
+  NOT CHECKED   template-lock-route          The lock of a cluster template covers each route of an edit      1 ms
+                a race: no check before the build finds it; the watch finds its effect
+                reproduce: strata verify <record.json> --who
+
+Lifecycle: update, repave, delete
+  PROBE PASS    macro-repave                 No macro in a field that repaves                                 1 ms
+  PROBE PASS    macro-silent                 A macro value reaches the cluster with a notification            1 ms
+  NOT CHECKED   override-silent              A value overridden on a cluster opens a notification             1 ms
+                a race: no check before the build finds it; the watch finds its effect
+                reproduce: strata compare <name>@<version> cluster:<cluster uid>   # exit 1 names the overridden value
+                reproduce: strata verify <cluster record>                              # DRIFT on the cluster record; OK on the version
+  NOT CHECKED   push-without-resolve         A push closes the update it makes                                1 ms
+                a race: no check before the build finds it; the watch finds its effect
+
+The Palette platform
+  NOT RUN       1 check did not run: tier palette was not asked for (1)
+  NOT CHECKED   validate-routes-unused       Only the console calls the cluster validate routes               1 ms
+                no check in strata-preflight; the reproduce lines say what to run by hand
+  NOT CHECKED   conditions-not-cloud         The cloud inventory is the truth of a delete                     1 ms
+                no check in strata-preflight; the reproduce lines say what to run by hand
+                reproduce: examples/live/aws-inventory.sh payments us-east-2   # 0 on every line: the cloud is empty
+  NOT CHECKED   api-quirks                   The client keeps to the limits of the API                        1 ms
+                no check in strata-preflight; the reproduce lines say what to run by hand
+                reproduce: curl -s -o /dev/null -w '%{http_code}\n' -H "ApiKey: $PALETTE_API_KEY" -H "ProjectUid: $PALETTE_PROJECT_UID" "${PALETTE_API:-https://api.spectrocloud.com}/v1/events/components/spectrocluster/<cluster uid>?limit=101"   # 500; 100 answers 200
+                reproduce: curl -s -H "ApiKey: $PALETTE_API_KEY" -H "ProjectUid: $PALETTE_PROJECT_UID" "${PALETTE_API:-https://api.spectrocloud.com}/v1/dashboard/spectroclusters/meta" | jq -r 'type'   # array
+  NOT CHECKED   transient-errors             A transient error of the API is retried once                     1 ms
+                no check in strata-preflight; the reproduce lines say what to run by hand
+                reproduce: curl -s -o /dev/null -w '%{http_code} %{content_type}\n' -H "ApiKey: $PALETTE_API_KEY" -H "ProjectUid: $PALETTE_PROJECT_UID" "${PALETTE_API:-https://api.spectrocloud.com}/v1/spectroclusters/<cluster uid>"   # a 404 must be application/json with code ResourceNotFound
+  NOT CHECKED   auto-cleanup-never           A delete that makes no progress moves to the cleanup path        1 ms
+                a race: no check before the build finds it; the watch finds its effect
+
+Client tools
+  NOT RUN       2 checks did not run: tier cloud was not asked for (2)
+
+Teardown and leftovers
+  NOT RUN       2 checks did not run: tier cloud was not asked for (2)
+  NOT CHECKED   force-delete-leaves-cloud    A force delete removes the records of Palette alone              1 ms
+                no check in strata-preflight; the reproduce lines say what to run by hand
+                reproduce: examples/live/aws-inventory.sh payments us-east-2   # 0 on every line before a force delete
+  NOT CHECKED   macro-undeletable            No cluster reads a macro before its delete                       1 ms
+                no check in strata-preflight; the reproduce lines say what to run by hand
+                reproduce: examples/live/api.sh get /v1/projects/$PALETTE_PROJECT_UID/macros | jq -r '.macros[].name'   # the macros of the project
+                reproduce: strata snapshot cluster:<cluster uid> --macros --json | jq '.macros'   # the macros the cluster reads
+  NOT CHECKED   versions-outside-state       Palette holds no version outside the state                       1 ms
+                no check in strata-preflight; the reproduce lines say what to run by hand
+                reproduce: strata list profiles --json | jq -r --arg n <profile name> '.profiles[] | select(.name == $n) | .version'   # every version of the name in Palette
+                reproduce: tofu state list | grep spectrocloud_cluster_profile   # the versions the state holds
+                reproduce: examples/live/api.sh delete-named <profile name>   # the fix of the lab: every version of the name
+  PROBE PASS    name-prefix                  No pool name is a prefix of another                              1 ms
+
+Section scorecard
+  section                      rows seen check preflight runs weakest  ran pass fail not run not checked ready
+  Identity and permissions       11    3    11         0    7      0%    0    0    0       4           0    0%
+  Cloud services and APIs         2    0     1         0    1     61%    0    0    0       1           1    0%
+  Quotas and limits               4    2     2         0    2     47%    0    0    0       2           2    0%
+  Networking                     12    2    10         0    5     22%    2    2    0       0           1  100%
+  Compute and pools               6    1     4         0    1     61%    0    0    0       0           2     -
+  Kubernetes version and engi…    4    1     4         0    2     61%    0    0    0       0           0     -
+  Storage and CSI                 4    2     4         0    0 no runs    0    0    0       1           0    0%
+  Images and registries          16   11     9         0    3     22%    0    0    0       1           7    0%
+  Profiles and packs              8    5     6         0    1     61%    0    0    0       1           2    0%
+  Lifecycle: update, repave, …   10    6     8         0    4     22%    1    1    0       0           2  100%
+  The Palette platform           11    9     6         0    3     22%    0    0    0       1           5    0%
+  Client tools                    9    9     4         0    0 no runs    0    0    0       2           0    0%
+  Teardown and leftovers          6    6     3         0    1     47%    1    1    0       2           3   33%
+runs: the rules of the section with a run in the ledger on this engine; weakest: the lowest 95% lower bound among them, and no runs when none has one; preflight: the rules promoted to preflight checks, whose failure is exit 1. A rule is promoted at a bound of 80%, which is 14 correct runs of 14 on the engine; every other rule is a probe. Promoted here: 0 of 72 checks.
+
+103 rules apply; 4 ran: 4 passed, 0 failed, 0 probe(s) failed, 0 warning(s), 1 note(s); 15 did not run, 25 not checked, 54 do not apply, 0 error(s); readiness 21%: 4 of 19 checks passed
+15 checks did not run: tier cloud was not asked for (8); tier palette was not asked for (7)
+No file written; --out DIR writes report.html, report.md, report.json, world.json, and entity.json, and the reproduce lines read world.json and entity.json there ($OUT).
+OK: each counted check passed

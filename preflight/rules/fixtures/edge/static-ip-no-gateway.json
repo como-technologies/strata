@@ -1,0 +1,31 @@
+{
+  "_base": "nic-clean.json",
+  "_note": "a static IP with no gateway and no DNS",
+  "_patch": {
+    "entity": {
+      "spec": {
+        "machinepoolconfig": [
+          {
+            "cloudConfig": {
+              "edgeHosts": [
+                {
+                  "hostUid": "edge-host-cp-1",
+                  "hostName": "cp-1",
+                  "nicName": "eno1",
+                  "nic": {
+                    "nicName": "eno1",
+                    "ip": "10.10.100.11",
+                    "subnet": "255.255.255.0"
+                  }
+                }
+              ]
+            },
+            "poolConfig": {
+              "name": "control-plane-pool"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

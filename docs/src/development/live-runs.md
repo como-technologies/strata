@@ -34,7 +34,7 @@ This is the source for
 | `plan-no-change` | 0 | 0 | the provider plans no change once `skip_destroy` is held for the flag |
 | `plan-edit` | 2 | 1 | #27: the provider's plan for an edit in place: an update without the flag, a refusal with it |
 | `plan-edit-says` | 0 | 0 | the plan says which |
-| `api-edit` | 0 | 0 | #27: the API accepts an edit in place, whatever the flag |
+| `api-edit` | 0 | 0 | #27: the API takes an edit in place, with the flag on or off |
 | `a2`, `a2-addon`, `b2-addon`, `a2-updates` | 0 | 0 | record each cluster's add-on selection after the edit, and what waits for cluster A |
 | `addon2` | 0 | 0 | record the edited add-on version |
 | `edit-kept-manifest-uid` | 0 | 0 | the edit kept the manifest's uid, so cluster copies still name it |
@@ -822,11 +822,283 @@ GKE node pool name of the old one, `worker-pool`. The delete of the old machine
 pool deletes the GKE node pool. The controllers that make the new pool ran on
 its nodes, so the cluster keeps no node. The delete of the cluster then removes
 the GKE cluster, and stays `Deleting`: the machine pool of GKE that has no
-machine pool of the cluster API keeps its finalizer, so the cluster of the
-cluster API is never deleted. The EKS change of [eks.sh](#ekssh) is of the same
-kind. A change of the node pool is not a change of a layer, so the impact table
+machine pool of the cluster API keeps its finalizer, so the delete of the
+cluster does not end by itself. The EKS change of [eks.sh](#ekssh) is of the
+same kind. A change of the node pool is not a change of a layer, so the impact table
 gives it no level, and `compare` shows it in the shape tier alone. The recovery
 is in [A GKE cluster](./live-example.md#a-gke-cluster).
+
+## preflight.sh
+
+The checks of the lab itself, before a recipe builds: see
+[The preflight checks](./live-example.md#the-preflight-checks). Each check is
+one row of the catalog with `engines: [lab]`.
+
+| Check | Expected | What it shows |
+|---|---|---|
+| `tools-present` | 0 | each tool of the lab is on the PATH |
+| `palette-key`, `palette-preflight` | 0 | the key reads the tenant, and `strata preflight` lists the rules of the cloud |
+| `cloud-cli-auth` | 0 | `aws sts get-caller-identity`, or `gcloud auth print-access-token` |
+| `gcp-apis-off`, `gke-api-off` | 0 | the Compute, Cloud Resource Manager, IAM, and Kubernetes Engine APIs are on (#90) |
+| `eks-core-policies` | 0 | the six core policies of Palette are in the AWS account (#89) |
+| `ecr-token` | ? | `crane` reads the ECR repository of the example: `0` is a login of the last 12 hours, which `verify.sh` needs and a build does not |
+| `leftovers-a`, `leftovers-b` | 0 | the inventory of each cluster name is 0 on every line |
+
+## preflight-plan.sh
+
+The test plan of #91 for one engine, with no cluster: each fault the lab can make
+fails when it must, and the clean entity passes. Each run appends to the ledger,
+`preflight/evidence/runs.yaml`, and `strata preflight --promotion` reads it. The
+checks of each run, and what each one shows, are in `summary.md` of the run;
+this table names the faults.
+
+| Engine | The faults made on purpose, by rule id |
+|---|---|
+| `gke` | `gke-pool-multiple-3`, `palette-validate` (a pool of 4), `gke-no-release-channel`, `gke-no-gpu`, `gke-autopilot`, `gcp-name-length`, `account-missing` |
+| `eks` | `eks-one-zone`, `eks-worker-needed`, `update-strategy-eks`, `api-endpoint-reach`, `account-missing` |
+| `aws` | `worker-cpu-floor`, `palette-validate` (one worker of four cores), `api-endpoint-reach`, `account-missing` |
+| `gcp` | `worker-cpu-floor`, `palette-validate`, `gcp-name-length`, `account-missing` |
+
+Part 3 of each run also runs the custom probes of the lab,
+`examples/live/preflight/lab-probes.yaml` (`lab-region`, `lab-name`), beside
+the catalog, with `--probes`: a custom probe on a real tenant. With `--build`,
+the run adds the build of cluster A through the provider with the watch on it
+from its first listing, `strata preflight cluster:UID` on the cluster as
+Palette holds it, and a change of the instance type of its worker pool, which
+`gke-type-change`, `eks-type-change-orphan`, or `pool-replace-fields` must fail;
+`--down` tears the example down and reads the inventory.
+
+The runs of the plan, and what each one showed, are in the section
+[What the preflight runs show](#what-the-preflight-runs-show) below.
+
+## watch.sh
+
+`just live-watch --build --down` on aws: cluster B built beside cluster A,
+with the watch on it from the moment Palette listed it, on the terminal. 43
+readings, `Running` after 1335 seconds, each watch rule passed at the end. At
+662 seconds `webhook-call-failed` warned: a `Reconciler error` of the
+controller in the new cluster, "failed to set controlPlane type annotation",
+the call of `mspectrocluster.kb.io` refused right after the pivot, as on gcp;
+the warning held for 20 readings while the event stayed in the 50 newest, and
+the build went on to `Running`, so the watch did not stop. The removal of
+cluster B did not run: the script was edited during the run, and bash reads a
+script as it runs, so the process resumed in the changed file and ended. The
+script is one function since, which bash parses before it runs, and the
+cluster was removed by hand with `tofu apply -var second_cluster=false`.
+
+## preflight-walkthrough.md
+
+The story of [Preflight: one cluster, end to end](./preflight-walkthrough.md), run
+once as written, on aws. The clean entity of the last plan run passed every
+tier in 31 seconds, exit 0; the copy with one worker of four cores failed
+`worker-cpu-floor` and `palette-validate` in 33 seconds, exit 1 under
+`--strict`. `POST /v1/spectroclusters/aws` with the same body answered the uid
+in 4 seconds. The watch started at once: 25 readings, `Running` after 764
+seconds, each watch rule passed, and no warning this time. On the cluster as
+Palette holds it, two notes, `bastion-cost` and `variables-in-use`; on the
+change of the worker instance type to `m5.xlarge`, `pool-replace-fields`
+warned that the machines roll. The delete was accepted at once; ten minutes
+later the events named the security groups and the VPC as deleted, and the
+inventory of AWS read 0 on all 12 lines.
+
+## What the preflight runs show
+
+The runs of `preflight-plan.sh` on the tenant of the live example, with the
+profiles of each engine and no cluster. Each run is an entry of the ledger.
+
+**aws.** Four faults made on purpose, four caught. `POST /v1/spectroclusters/aws/validate`
+refuses one worker of four cores with `MachinePoolWithMinCpuRequired`: "A
+minimum allocation of '4.1' CPU cores is required across all worker nodes.
+Current allocation : '4' CPU cores", in under 4 seconds; through the provider
+the same fault comes after a full apply. A cloud account uid that is not in the
+project is a 404 of `GET /v1/cloudaccounts/aws/{uid}`, and an internal control
+plane load balancer is a static failure. On the clean entity, 37 checks ran and
+36 passed; the exec rules ran against AWS with the profile of the lab
+(`aws-quotas`, `aws-ami`, `capa-bootstrap-stack`, `ebs-csi-node-policy`,
+`iam-ten-policies`, `aws-region-not-enabled`, `leftovers-before-build`). The one
+failure was a wrong result of `role-partial-permissions`:
+`aws iam simulate-principal-policy` with `iam:PassRole` and no resource ARN
+gives `implicitDeny` for a role whose policy allows it on the CAPA roles alone,
+and that role has built clusters. The rule now leaves `iam:PassRole` to a
+reproduce line with the three CAPA role ARNs. The run is in the ledger as the
+first wrong result of a check.
+
+**eks.** Six faults made on purpose, five caught: one zone, no worker pool, an
+`updateStrategy` that EKS does not read, a private endpoint alone, and a cloud
+account uid that is not in the project. The sixth, one worker of four cores,
+was not caught: `POST /v1/spectroclusters/eks/validate` answers `200` with no
+error for it, where the AWS route answers `MachinePoolWithMinCpuRequired` for
+the same pool. No run shows whether an EKS create with one worker of four
+cores fails later, so the CPU floor on EKS is a reading and not a fact. On the
+clean entity, 44 checks ran and 42 passed. The two wrong results were the two
+rules that simulate the IAM policy of the role of the cloud account:
+`aws iam simulate-principal-policy` with no `--resource-arns` evaluates each
+action against the resource `*`, and a statement that names a resource, as the
+EKS policy of Palette does for `eks:*`, does not match it. The role built the
+EKS clusters of #89. Both rules are warnings now: one simulates the actions
+that name a resource, with the cluster, the node group, and the CAPA role ARNs
+of the build; the other simulates the actions on `*` alone, and gives the
+PassRole line with the CAPA roles as a command to run by hand. A simulation
+with no request context cannot prove a build, so neither is a `fail`.
+
+**gke.** Seven faults made on purpose, seven caught. `POST /v1/spectroclusters/gke/validate`
+refuses a pool of 4 with `InvalidParam`: "Invalid parameter 'Node pool size';
+caused by: Node pool size should be multiple of 3", in under 200 ms; through the
+provider, #90 saw the same refusal after a full apply. A cluster with no release
+channel, a GPU machine type, Autopilot with a pool, a name over 40 characters,
+and a cloud account uid that is not in the project are static failures or a
+404, in milliseconds. On the clean entity, 34 checks ran and 32 passed. The two
+failures say something about the GCP project of the lab, and not about the
+build: the service account holds no `roles/storage.objectViewer` at the project
+level, and the Cloud Resource Manager API is off, and the account built the
+GKE clusters of #90 and the GCP clusters of #74 all the same. So a documented
+role or API that a check does not find is a warning to read, and both rules
+are `warn`. The plan does not build, so a rule from the source stays a probe
+after these runs: `strata preflight --promotion` promotes a static rule only
+when a live run shows the fault (`status: seen`), such as `gke-pool-multiple-3`
+and `gke-no-release-channel` from #90.
+
+**gcp.** Four faults made on purpose, four caught. The GCP validate route
+applies the CPU floor as the AWS one does: one worker of four cores is
+`MachinePoolWithMinCpuRequired` in under a second. A name over 52 characters
+gives a derived network name over 63, which the static rule computes as Palette
+derives it (`<name>-network`, `<name>-network-<region>`). On the clean entity,
+29 checks ran and 27 passed; the two failures are the two findings about the
+GCP project of the gke run, which are `warn` now.
+
+Over the four engines, the plan made 21 faults and the checks caught 20; the
+one not caught is the CPU floor on EKS, which the EKS validate route does not
+report, so `worker-cpu-floor` no longer names `eks` and the plan no longer
+makes that fault there. Of the 144 checks that ran on the clean entities, 137
+passed; the seven failures were three wrong results of two IAM simulations and
+the two GCP project findings, twice. After the fixes, the plan ran again on gcp
+and on eks: every fault was caught, every rule of severity `fail` passed on
+the clean entities, and `strata preflight --promotion` exits `0` with the
+ledger of the six runs. The IAM simulation on eks warns that
+`eks:CreateCluster` is `implicitDeny` on each resource of the build, for the
+role that built the #89 clusters: the warning to read that the rule now says
+it is.
+
+**A custom probe on the tenant.** Each run since the build phase also runs the
+two custom probes of the lab, `lab-region` and `lab-name`, from
+`examples/live/preflight/lab-probes.yaml`, beside the catalog. Both ran on the
+clean entity of the gke run and passed: a file of a company runs the same way,
+with no change to strata.
+
+**gke, with a build.** The plan built cluster A through the provider, with
+the watch on it from the moment Palette listed it: 39 readings, `Running`
+after 1190 seconds, and each watch rule passed (`agent-egress`,
+`node-egress-images`, `status-not-cloud`, `pivot-webhook-timeout`). On the
+cluster as Palette holds it, 38 checks ran and 34 passed. The three warnings
+are the two GCP project findings and `position-zero`: the provider put the
+add-on profile at position 0 of the cluster, as the order report says it does.
+The one failure was a wrong result of strata: the entity built from the cloud
+config carried `skipK8sUpgrade: "disabled"`, which Palette stores on each pool,
+and the GKE validate route refuses the field with `InvalidParam`; the entity
+now carries it when it is enabled alone. The change of the instance type of the
+worker pool, `e2-standard-4` to `e2-standard-8`, was caught by
+`gke-type-change` and `pool-replace-fields` before any apply: the fault of
+#90, found in a millisecond. The destroy of the cluster ended with
+`context deadline exceeded` at the deadline of the provider, and a second
+destroy completed, as `provider-delete-timeout` says. The inventory step of the
+run could not ask GCP: `gcloud` demanded a reauthentication in the middle of
+the campaign, which a non-interactive shell cannot give, the `cloud-cli-auth`
+row of the lab. Run by hand after, the inventory was 0 on every line, the GKE
+cluster counted.
+
+**eks, with a build.** The watch stopped at 1355 seconds, after 44 readings,
+on `pivot-webhook-timeout`, as the rule was then: an event named a failed call
+of the webhook `mawscloudconfig.kb.io` while the controller set the owner of
+the cloud config, right after the pivot, with the cluster `Provisioning` and no
+error in its status. The message of the rule cut the event at 240 characters,
+before the cause, and the `world.json` of the watch held no reading, so whether
+the call timed out or was refused is not known; both are fixed below. The provider then ended its
+apply with exit 0 while the cluster was still `Provisioning`. On the cluster as
+Palette holds it, 46 checks ran and 42 passed; `delete-while-provisioning`
+failed, because the cluster was not `Running`, and said what a delete would do.
+The plan then deleted the cluster, and the delete waited, as the rule said:
+the first destroy ended at the deadline of the provider with the cluster
+`Deleting` and the EKS cluster, the VPC, and three NAT gateways still in AWS.
+The change of the instance type of the worker pool, `t3.xlarge` to
+`m5.xlarge`, was caught by `eks-type-change-orphan` and `pool-replace-fields`
+before any apply: the fault of #89, found in a millisecond. Two wrong results of
+strata came out of this run and are fixed: the validate route refuses the name
+of an existing cluster with `ResourceAlreadyExists`, so `palette-validate` and
+`worker-cpu-floor` now check an existing cluster under a suffixed name; and the
+plan now waits for `Running` before it deletes. The delete did not end by itself: after
+75 minutes the EKS control plane, its node group, the VPC, and three NAT
+gateways were still in AWS, with the cluster `Deleting` and
+`CloudInfrastructureCleanedUp: DeletingInfrastructure`. The recovery was the
+one of the book: `eks-nodegroups.sh --delete`, `aws-cleanup.sh fred us-east-2 --yes`,
+the inventory at 0, then a second plain delete, which the findings report of
+2026-09-26 on the pivot webhook gives as the step that ends the wait. It did
+not end it here: from then on each reconcile of the delete failed with "failed
+to delete additional resources: failed to get existing aws managed control
+plane: AWSManagedControlPlane fred-cp not found", every five minutes, with the
+cloud empty. In this run the delete path read a control plane object that was
+gone as an error, and not as done, and the delete did not end. A force delete
+of the record ended it. The mechanism is the one of that report, on EKS this
+time, with this one more step, which a second plain delete did not end. One
+hour of the recovery
+went to a fault of the operator: `tofu output -raw` printed a warning beside
+the project uid, a shell exported both as `PALETTE_PROJECT_UID`, and every
+request with that header answered a plain-text `400 Bad Request`, which read
+as Palette refusing the cluster. It was not: with the uid alone, the API
+answered as it does. `lib.sh` reads the outputs as JSON, with the warnings
+dropped, so the scripts of the lab do not meet it; a shell that copies a
+value by hand can.
+
+**aws, with a build.** The plan built cluster A through the provider, with the
+watch on it from the moment Palette listed it: 41 readings, `Running` after
+1278 seconds, and each watch rule passed (`agent-egress`,
+`csi-crash-after-running`, `node-egress-images`, `infrastructure-stalled`,
+`pivot-webhook-timeout`, `stale-worker-condition`). Before the build, the four
+faults made on purpose were caught: one worker of four cores by
+`worker-cpu-floor` and `palette-validate`, an internal control plane load
+balancer by `api-endpoint-reach` in a millisecond, and a cloud account uid that
+is not in the project by `account-missing`. On the clean entity and on the
+cluster as Palette holds it, 40 checks ran and 40 passed, with two notes:
+`bastion-cost`, and `variables-in-use` once the profile had a cluster. The
+change of the instance type of the worker pool, `t3.xlarge` to `m5.xlarge`, was
+caught by `pool-replace-fields` before any apply. The teardown ran after
+`Running`: one destroy, 14 resources, and the inventory of AWS at 0 on every
+line.
+
+**gcp, with a build.** The four faults were caught before the build, the
+derived network name of a long cluster name among them (`gcp-name-length`, in
+a millisecond). The watch stopped at 671 seconds, after 22 readings, on
+`pivot-webhook-timeout` as the rule was then: right after the pivot, a
+`ReconcileError` of the controller named a failed call of
+`mspectrocluster.kb.io` while it set the type of the control plane, and a
+`Log` event of the agent named a failed call of `vspectrocluster.kb.io` while
+it updated the cluster, eight seconds apart. Palette made the calls again: the
+wait of the plan saw `Running` 23 minutes after the watch started, with no
+other event of note, and the teardown ran after it: one destroy, 14 resources,
+and the inventory of GCP at 0 on every line. On the clean entity, 33 checks ran
+and 31 passed; on the cluster as Palette holds it, 34 ran and 32 passed. The
+two warnings are the two GCP project findings of the gke run. The change of the
+instance type of the worker pool, `e2-standard-4` to `e2-standard-8`, was
+caught by `pool-replace-fields` before any apply.
+
+**Three wrong results of strata came out of the gcp run, and are fixed.**
+`pivot-webhook-timeout` failed on one minute of failed webhook calls, which the
+build survived. The rule now fails on the failed move of the cluster, on the
+cloud config the controller cannot read, or on 10 minutes or more of failed
+calls while the cluster is not `Running`; the new warning `webhook-call-failed`
+names each failed call. Both show the start and the end of each event, because
+the end names the cause, a timeout or a connection refused, and the old message
+cut it. The `world.json` of a watch held the world before the first reading,
+with no conditions and no events, so the full events of the eks and the gcp
+watches are lost; it now holds the last reading. And the watch ended at the
+first failure of any rule; it now ends at the first counted failure alone, as
+the exit code counts them, and a failed probe or a warning is in the report
+while the watch reads on. The ledger gives the gcp run as `passed` for the
+narrowed rule, with its events in the fixture `watch-webhook-refused` that the
+tests of the rule replay, and as `caught` for the warning on gcp and on eks;
+the eks entry of the old rule is gone, because the cluster was deleted before
+the outcome was known. The findings report on the build runs,
+`palette-preflight-build-runs-findings-2026-09-29`, holds the timeline of the
+eks delete and the source of each finding.
 
 ## A chart pushed again, on a cluster
 
@@ -877,8 +1149,8 @@ What differs is outside strata:
   cloud. The CSI values write the reclaim line as `reclaimPolicy: "Delete"`,
   and not `reclaimPolicy: Delete`: the edit of each script comes from the output
   `csi_reclaim_delete`.
-- **The Kubernetes version.** Spectro Cloud shares no GCP image for Kubernetes
-  1.36.2 with Ubuntu 24.04, although the Kubernetes pack lists `gcp`. GCP answers
+- **The Kubernetes version.** The Kubernetes pack lists `gcp`, and no GCP image
+  is shared for Kubernetes 1.36.2 with Ubuntu 24.04: GCP answers
   `Required 'compute.images.useReadOnly' permission` for the image in the project
   `spectro-image-build`, and no machine starts. The image of 1.35.6 is shared.
 - **The service account of the nodes.** The nodes run as the Compute Engine

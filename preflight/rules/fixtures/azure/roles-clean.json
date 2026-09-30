@@ -1,0 +1,18 @@
+{
+  "_base": "clean.json",
+  "_note": "the service principal holds a custom role on the subscription",
+  "_exec": {
+    "az role assignment list --assignee bbbbbbbb-0000-0000-0000-000000000002 --all --output json": {
+      "exit": 0,
+      "stdout": [
+        {
+          "roleDefinitionName": "Palette Dynamic Placement IaaS Cluster Deployer (rg/sub)",
+          "scope": "/subscriptions/11111111-2222-3333-4444-555555555555",
+          "principalId": "cccccccc-0000-0000-0000-000000000003",
+          "principalType": "ServicePrincipal"
+        }
+      ],
+      "stderr": ""
+    }
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "_base": "clean.json",
+  "_note": "the regional vCPU quota covers the 12 vCPUs of the pools",
+  "_exec": {
+    "az vm list-usage --location eastus --subscription 11111111-2222-3333-4444-555555555555 --output json": {
+      "exit": 0,
+      "stdout": [
+        {
+          "currentValue": 8,
+          "limit": 100,
+          "name": {
+            "localizedValue": "Total Regional vCPUs",
+            "value": "cores"
+          }
+        },
+        {
+          "currentValue": 0,
+          "limit": 100,
+          "name": {
+            "localizedValue": "Standard DSv3 Family vCPUs",
+            "value": "standardDSv3Family"
+          }
+        },
+        {
+          "currentValue": 3,
+          "limit": 2500,
+          "name": {
+            "localizedValue": "Virtual Machines",
+            "value": "virtualMachines"
+          }
+        }
+      ],
+      "stderr": ""
+    }
+  }
+}

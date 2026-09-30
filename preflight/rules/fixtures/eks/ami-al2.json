@@ -1,0 +1,13 @@
+{
+  "_base": "clean.json",
+  "_note": "the worker pool asks for the AL2 AMI type, which Palette refuses",
+  "_patch": {
+    "entity": {
+      "spec": {
+        "machinepoolconfig": [
+          { "poolConfig": { "name": "worker-pool" }, "cloudConfig": { "amiType": "AL2_x86_64" } }
+        ]
+      }
+    }
+  }
+}

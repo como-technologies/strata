@@ -1,0 +1,329 @@
+section: cloud-services
+title: Cloud services and APIs
+about: |
+  The APIs and the services of the cloud that a build calls. Palette does not check that one is
+  on before it starts.
+rules:
+  - id: gke-api-off
+    title: The Kubernetes Engine API is on in the GCP project
+    engines: [gke]
+    tier: cloud
+    severity: fail
+    status: seen
+    what: |
+      With the Kubernetes Engine API off, the cluster waits at `PreparingInfrastructure` for 30
+      minutes or more with no error in its status. One event names it: "Kubernetes Engine API has
+      not been used in project ... or it is disabled".
+    check:
+      kind: exec
+      needs: [gcloud]
+      argv:
+        - gcloud
+        - services
+        - list
+        - --enabled
+        - --project
+        - "{{ .entity.spec.cloudConfig.project }}"
+        - --filter
+        - config.name=container.googleapis.com
+        - --format
+        - json
+      expr: |
+        if .exec.exit != 0 then ["gcloud services list failed: \(.exec.stderr | .[:200])"]
+        elif ((.exec.stdout // []) | length) == 0 then ["container.googleapis.com is not enabled in project \(.entity.spec.cloudConfig.project)"]
+        else [] end
+    reproduce:
+      - "gcloud services list --enabled --project {{ .entity.spec.cloudConfig.project }} | grep -E 'container|compute'"
+      - "gcloud services enable container.googleapis.com --project {{ .entity.spec.cloudConfig.project }}"
+    fix:
+      owner: palette
+      text: The GKE create calls the GCP property route, and the route checks Service Usage.
+    evidence:
+      - kind: run
+        ref: "#90"
+      - kind: report
+        ref: palette-precreate-validation-gaps-findings-2026-09-28 F1
+    tests:
+      - fault: fixtures/gke/api-off.json
+        clean: fixtures/gke/clean.json
+
+  - id: gcp-apis-off
+    title: The Compute, Cloud Resource Manager, and IAM APIs are on in the GCP project
+    engines: [gcp, gke]
+    tier: cloud
+    severity: warn
+    status: source
+    what: |
+      The documentation asks for the Compute API, the Cloud Resource Manager API, and the IAM API.
+      A call to one that is off fails with `SERVICE_DISABLED`. A GKE build needs the Kubernetes
+      Engine API (`gke-api-off`) and the Compute API. The GCP property route of Palette calls
+      Cloud Resource Manager, and a GCP IaaS create calls that route; a GKE create does not. The
+      #90 GKE clusters were built in a project with Cloud Resource Manager off, so a missing API
+      here is a warning to read, not a proof.
+    check:
+      kind: exec
+      needs: [gcloud]
+      argv:
+        - gcloud
+        - services
+        - list
+        - --enabled
+        - --project
+        - "{{ .entity.spec.cloudConfig.project }}"
+        - --format
+        - json
+      expr: |
+        if .exec.exit != 0 then ["gcloud services list failed: \(.exec.stderr | .[:200])"]
+        else ([ (.exec.stdout // [])[] | .config.name ]) as $on
+          | [ "compute.googleapis.com", "cloudresourcemanager.googleapis.com", "iam.googleapis.com" ]
+          | map(select(. as $s | ($on | index($s)) == null) | "\(.) is not enabled in the project")
+        end
+    reproduce:
+      - "gcloud services list --enabled --project {{ .entity.spec.cloudConfig.project }} --format='value(config.name)' | grep -E 'compute|cloudresourcemanager|iam.googleapis'"
+    fix:
+      owner: palette
+      text: Check Service Usage in the GCP property route.
+    evidence:
+      - kind: doc
+        ref: https://docs.spectrocloud.com/clusters/public-cloud/gcp/add-gcp-accounts/
+      - kind: run
+        ref: preflight-plan gke 20260929T043631Z
+        note: cloudresourcemanager.googleapis.com was off in the project that built the #90 GKE clusters
+    tests:
+      - fault: fixtures/gke/apis-off.json
+        clean: fixtures/gke/clean.json
+
+  - id: aws-region-not-enabled
+    title: The region of the cluster is enabled for the AWS account
+    engines: [aws, eks]
+    tier: palette
+    severity: fail
+    status: source
+    when: .entity.spec.cloudAccountUid != null
+    what: |
+      An opt-in region (`af-south-1`, `ap-east-1`, `eu-south-1`, `me-south-1`, and others) that the
+      account has not enabled refuses each call with `AuthFailure` or `OptInRequired`. Palette lists
+      the regions of an account with one `DescribeRegions` dry run for each region of the partition.
+      The list holds the regions that answer. A region of the entity that is not in the list is not
+      enabled. The cluster create does not compare the two.
+    check:
+      kind: palette
+      method: GET
+      path: /v1/clouds/aws/regions?cloudAccountUid={{ .entity.spec.cloudAccountUid }}
+      expr: |
+        .entity.spec.cloudConfig.region as $r
+        | if (.response.ok | not) then ["Palette cannot list the regions of account \(.entity.spec.cloudAccountUid): \(.response.body.code // .response.status)"]
+          else ([ (.response.body.regions // [])[] | .name ]) as $on
+          | if ($on | index($r)) == null
+            then ["region \($r) is not enabled for the account; Palette lists \($on | length) enabled region(s): \($on | join(", "))"]
+            else [] end
+          end
+    reproduce:
+      - "aws account get-region-opt-status --region-name {{ .entity.spec.cloudConfig.region }}"
+      - "aws ec2 describe-regions --all-regions --query \"Regions[?RegionName=='{{ .entity.spec.cloudConfig.region }}'].OptInStatus\" --output text"
+    fix:
+      owner: palette
+      text: Compare the region of the entity with the enabled regions in the AWS validate route.
+    evidence:
+      - kind: source
+        ref: hubble services/service/cloud/internal/service/cloudservice/aws_service.go getEnabledRegions
+        note: one DescribeRegions dry run for each region of the partition; the list holds the regions that answer
+    tests:
+      - fault: fixtures/eks/region-not-enabled.json
+        clean: fixtures/eks/regions-clean.json
+
+  - id: aws-s3-irsa-bucket
+    title: The IRSA bucket of an AWS cluster can be made
+    engines: [aws]
+    tier: palette
+    severity: fail
+    status: source
+    what: |
+      An AWS cluster with IRSA needs an S3 bucket for its OIDC documents. The bootstrap stack of
+      Palette turns `S3Buckets` on with an empty name prefix. When the account cannot make the bucket
+      (a service control policy, a Block Public Access setting, or a name in use), CAPA fails the
+      cluster. Palette has `POST /v1/clouds/aws/s3/validate`, and the create does not call it. That
+      route lists the objects of a bucket with the credentials in its body, and makes no bucket.
+      strata-preflight holds no credentials, so there is no check here.
+    reproduce:
+      - "kubectl get awscluster -A -o jsonpath='{.items[*].spec.s3Bucket.name}'   # on the management cluster, during the build: the bucket CAPA asks for"
+      - "aws s3api head-bucket --bucket <spec.s3Bucket.name> --region {{ .entity.spec.cloudConfig.region }}   # 404 before the build is right; 403 means another account holds the name"
+      - "aws s3control get-public-access-block --account-id $(aws sts get-caller-identity --query Account --output text)"
+    fix:
+      owner: palette
+      text: Try the bucket in the validate route, or call the S3 validate route at create.
+    evidence:
+      - kind: source
+        ref: hubble services/service/cloud/internal/service/cloudservice/aws_service.go ValidateAwsS3Bucket
+        note: lists the objects of the bucket; no cluster path calls it
+      - kind: source
+        ref: palette pkg/provider/aws/aws_presetup.go
+        note: "`template.Spec.S3Buckets.Enable = true` with an empty name prefix, for IRSA on an IaaS cluster"
+
+  - id: eks-fargate-govcloud
+    title: An EKS cluster in GovCloud has no Fargate profile
+    engines: [eks]
+    tier: static
+    severity: fail
+    status: source
+    when: .account != null
+    what: |
+      AWS offers no EKS on Fargate in GovCloud. For an account of partition `aws-us-gov`, Palette
+      makes the bootstrap stack with Fargate off, so the stack has no pod execution role for
+      Fargate. A Fargate profile in the entity then fails at create. Palette accepts the entity.
+    check:
+      kind: static
+      expr: |
+        if (.account.spec.partition // "aws") == "aws-us-gov" and ((.entity.spec.fargateProfiles // []) | length) > 0
+        then [ .entity.spec.fargateProfiles[] | "Fargate profile \(.name) with an account of partition aws-us-gov: GovCloud has no EKS on Fargate" ]
+        else [] end
+    fix:
+      owner: palette
+      text: Refuse a Fargate profile for an account of partition aws-us-gov in the validate route.
+    evidence:
+      - kind: source
+        ref: palette pkg/provider/aws/aws_presetup.go
+        note: "`disableEksFargate := account.GetPartition().IsGovCloud()`, then `template.Spec.EKS.Fargate.Disable = disableEksFargate`"
+      - kind: doc
+        ref: https://docs.aws.amazon.com/govcloud-us/latest/UserGuide/govcloud-fargate.html
+    tests:
+      - fault: fixtures/eks/fargate-govcloud.json
+        clean: fixtures/eks/clean.json
+
+  - id: azure-location
+    title: The location is a region of the subscription
+    engines: [azure, aks]
+    tier: palette
+    severity: fail
+    status: source
+    when: .entity.spec.cloudAccountUid != null
+    what: |
+      The create checks `cloudConfig.location` against the regions of the cloud and refuses an
+      unknown one with `CloudRegionInvalid`. The validate route does not run that check. A region
+      the subscription cannot use, such as one that needs a request to Azure, fails at the first
+      ARM call. `GET /v1/clouds/azure/regions` lists the regions the account sees in the
+      subscription; the check looks for the location in it.
+    check:
+      kind: palette
+      method: GET
+      path: /v1/clouds/azure/regions?cloudAccountUid={{ .entity.spec.cloudAccountUid }}&subscriptionId={{ .entity.spec.cloudConfig.subscriptionId }}
+      expr: |
+        .entity.spec.cloudConfig.location as $l | .entity.spec.cloudConfig.subscriptionId as $sub
+        | if (.response.ok | not) then ["Palette cannot list the regions of subscription \($sub): \(.response.body.code // .response.status): \(.response.body.message // "")"]
+          else ([ (.response.body.regions // [])[] | .name ]) as $names
+            | if ($names | index($l)) != null then []
+              else ["location \($l) is not a region of subscription \($sub) for this account (\($names | length) regions listed): the create refuses it with CloudRegionInvalid after the validate route passed"] end
+          end
+    reproduce:
+      - "az account list-locations --subscription {{ .entity.spec.cloudConfig.subscriptionId }} --query \"[?name=='{{ .entity.spec.cloudConfig.location }}'].[name,displayName,metadata.regionType]\" --output table"
+    fix:
+      owner: palette
+      text: Run the region check in the validate route.
+    evidence:
+      - kind: source
+        ref: hubble services/service/spectrocluster/internal/service/spectrocluster/spectrocluster_service.go validateAzureOrAksClusterCreate
+        note: IsValidRegion(CloudTypeAzure, location) on the create path alone; CloudRegionInvalid
+      - kind: source
+        ref: hubble services/service/cloud/internal/gen/restapi/embedded_spec.go /v1/clouds/azure/regions
+        note: query cloudAccountUid and subscriptionId; the answer is regions[{name, displayName, zones}]
+    tests:
+      - fault: fixtures/azure/location-unknown.json
+        clean: fixtures/azure/clean.json
+
+  - id: azure-resource-group
+    title: The resource group of the cluster exists in the subscription
+    engines: [azure, aks]
+    tier: palette
+    severity: warn
+    status: source
+    when: .entity.spec.cloudAccountUid != null and (.entity.spec.cloudConfig.resourceGroup // "") != ""
+    what: |
+      Palette places the cluster in an existing resource group, and copies the node image into a
+      storage account in it. A group that does not exist fails the first ARM call of the build. The
+      converter and the validate route check nothing about it. `GET /v1/clouds/azure/regions/{region}/subscriptions/{sub}/resourceGroups`
+      lists the groups whose location is the region. So a group in another region is also
+      reported. That group works for a build, and the console does not offer it. The check reads
+      `resourceGroup` and, when set, `vnetResourceGroup`.
+    check:
+      kind: palette
+      method: GET
+      path: /v1/clouds/azure/regions/{{ .entity.spec.cloudConfig.location }}/subscriptions/{{ .entity.spec.cloudConfig.subscriptionId }}/resourceGroups?cloudAccountUid={{ .entity.spec.cloudAccountUid }}
+      expr: |
+        .entity.spec.cloudConfig as $c
+        | if (.response.ok | not) then ["Palette cannot list the resource groups of subscription \($c.subscriptionId): \(.response.body.code // .response.status): \(.response.body.message // "")"]
+          else ([ (.response.body.resourceGroupList // [])[] | .name | ascii_downcase ]) as $names
+            | [ ([$c.resourceGroup] + (if ($c.vnetResourceGroup // "") != "" then [$c.vnetResourceGroup] else [] end))[] | . as $rg
+                | select(($names | index($rg | ascii_downcase)) == null)
+                | "resource group \($rg) is not among the groups of subscription \($c.subscriptionId) in \($c.location): it does not exist, or its location is another region; the build puts the cluster and its storage account in it, and the console offers the groups of the location alone" ]
+          end
+    reproduce:
+      - "az group show --name {{ .entity.spec.cloudConfig.resourceGroup }} --subscription {{ .entity.spec.cloudConfig.subscriptionId }} --query '[name,location,properties.provisioningState]' --output tsv"
+    fix:
+      owner: palette
+      text: Read the resource group in the validate route.
+    evidence:
+      - kind: doc
+        ref: https://docs.spectrocloud.com/clusters/public-cloud/azure/architecture/
+        note: Azure cluster resources are placed within an existing Resource Group
+      - kind: source
+        ref: hubble services/service/cloud/internal/service/cloudservice/azure_service.go getResourceGroupListInternal
+        note: lists every group of the subscription and keeps the ones whose location is the region
+      - kind: source
+        ref: palette pkg/provider/azure/azure_sdk.go AzureCopyImage
+        note: the storage account of the image is made in cloudConfig.resourceGroup
+    tests:
+      - fault: fixtures/azure/rg-missing.json
+        clean: fixtures/azure/clean.json
+
+  - id: azure-resource-providers
+    title: The resource providers of the build are registered in the subscription
+    engines: [azure, aks]
+    tier: cloud
+    severity: fail
+    status: inferred
+    what: |
+      An ARM call to a provider the subscription has not registered fails with
+      `MissingSubscriptionRegistration`. A subscription that never made a virtual machine has
+      `Microsoft.Compute`, `Microsoft.Network`, and `Microsoft.Storage` in `NotRegistered`; AKS
+      adds `Microsoft.ContainerService`. The docs name `Microsoft.ContainerService` for a private DNS
+      zone in another subscription, and no other provider. No Palette code registers or reads a
+      provider. The list of four is a reading of what the build calls, not a run.
+    check:
+      kind: exec
+      needs: [az]
+      argv:
+        - az
+        - provider
+        - list
+        - --subscription
+        - "{{ .entity.spec.cloudConfig.subscriptionId }}"
+        - --output
+        - json
+      expr: |
+        .entity.spec.cloudConfig.subscriptionId as $sub
+        | (["Microsoft.Compute", "Microsoft.Network", "Microsoft.Storage"] + (if .cloud == "aks" then ["Microsoft.ContainerService"] else [] end)) as $need
+        | if .exec.exit != 0 then ["az provider list failed: \(.exec.stderr | .[:200])"]
+          else (.exec.stdout // []) as $p
+            | [ $need[] | . as $n | ([ $p[] | select(((.namespace // "") | ascii_downcase) == ($n | ascii_downcase)) ] | first) as $hit
+                | if $hit == null then "resource provider \($n) is not in the provider list of subscription \($sub)"
+                  elif ($hit.registrationState // "") != "Registered" then "resource provider \($n) is \($hit.registrationState) in subscription \($sub): the first ARM call to it fails with MissingSubscriptionRegistration"
+                  else empty end ]
+          end
+    reproduce:
+      - "az provider list --subscription {{ .entity.spec.cloudConfig.subscriptionId }} --query \"[?namespace=='Microsoft.Compute' || namespace=='Microsoft.Network' || namespace=='Microsoft.Storage' || namespace=='Microsoft.ContainerService'].[namespace,registrationState]\" --output table"
+      - "az provider register --namespace Microsoft.Compute --subscription {{ .entity.spec.cloudConfig.subscriptionId }}"
+    fix:
+      owner: palette
+      text: Read the registration state of the four providers in the Azure account validate.
+    evidence:
+      - kind: doc
+        ref: https://learn.microsoft.com/en-us/azure/azure-resource-manager/management/resource-providers-and-types
+      - kind: doc
+        ref: https://docs.spectrocloud.com/clusters/public-cloud/azure/aks/
+        note: both subscriptions must have the Microsoft.ContainerService resource provider registered, for a private DNS zone in another subscription
+      - kind: source
+        ref: palette pkg/provider/azure/azure_presetup.go SetUpCloud
+        note: returns nil; no provider is registered or read
+    tests:
+      - fault: fixtures/azure/provider-unregistered.json
+        clean: fixtures/azure/providers-clean.json

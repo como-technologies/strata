@@ -1,0 +1,11 @@
+{
+  "_base": "clean.json",
+  "_note": "the account carries a state that is not Active",
+  "_patch": {
+    "account": {
+      "status": {
+        "state": "Inactive"
+      }
+    }
+  }
+}

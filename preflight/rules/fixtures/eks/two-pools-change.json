@@ -1,0 +1,72 @@
+{
+  "_base": "type-same.json",
+  "_note": "one change replaces two pools at once: the instance type of worker-pool and of worker-b",
+  "_patch": {
+    "before": {
+      "spec": {
+        "machinepoolconfig": [
+          {
+            "cloudConfig": {
+              "instanceType": "t3.xlarge",
+              "azs": [
+                "us-east-2a",
+                "us-east-2b"
+              ],
+              "rootDeviceSize": 60,
+              "amiType": "AL2023_x86_64_STANDARD"
+            },
+            "poolConfig": {
+              "name": "worker-b",
+              "size": 2,
+              "minSize": 2,
+              "maxSize": 2,
+              "isControlPlane": false,
+              "useControlPlaneAsWorker": false,
+              "labels": [
+                "worker"
+              ],
+              "taints": []
+            }
+          }
+        ]
+      }
+    },
+    "entity": {
+      "spec": {
+        "machinepoolconfig": [
+          {
+            "cloudConfig": {
+              "instanceType": "m5.xlarge"
+            },
+            "poolConfig": {
+              "name": "worker-pool"
+            }
+          },
+          {
+            "cloudConfig": {
+              "instanceType": "m5.xlarge",
+              "azs": [
+                "us-east-2a",
+                "us-east-2b"
+              ],
+              "rootDeviceSize": 60,
+              "amiType": "AL2023_x86_64_STANDARD"
+            },
+            "poolConfig": {
+              "name": "worker-b",
+              "size": 2,
+              "minSize": 2,
+              "maxSize": 2,
+              "isControlPlane": false,
+              "useControlPlaneAsWorker": false,
+              "labels": [
+                "worker"
+              ],
+              "taints": []
+            }
+          }
+        ]
+      }
+    }
+  }
+}

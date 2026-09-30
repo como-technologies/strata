@@ -1,7 +1,9 @@
 [workspace]
-members = [".", "xtask"]
+members = [".", "xtask", "preflight"]
 # `cargo build` and `cargo test` at the root stay about strata alone. The development tooling in
-# xtask/ builds when a recipe asks for it, and it never reaches a release.
+# xtask/ builds when a recipe asks for it, and it never reaches a release. The preflight tool in
+# preflight/ is a package of its own, `strata-preflight`: the release carries it as a second
+# binary, `just build` builds it, and another repository can depend on it by name.
 default-members = ["."]
 
 [package]

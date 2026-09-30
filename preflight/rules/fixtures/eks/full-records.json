@@ -1,0 +1,247 @@
+{
+  "_base": "clean.json",
+  "_note": "the clean world with full pack records (type, digest, values, hash), the pack values of each pack uid, and the status of the profile",
+  "_patch": {
+    "profiles": [
+      {
+        "schema": "strata-snapshot/1",
+        "source": {
+          "uid": "prof-eks-1",
+          "name": "strata-live-profile",
+          "version": "1.0.0",
+          "cloudType": "eks",
+          "type": "cluster",
+          "template": "published"
+        },
+        "packs": [
+          {
+            "key": "os/amazon-linux-eks",
+            "layer": "os",
+            "name": "amazon-linux-eks",
+            "type": "spectro",
+            "tag": "1.0.0",
+            "version": "1.0.0",
+            "packUid": "pk-os-eks",
+            "registryUid": "5eecc89d0b150045ae661cef",
+            "refDigest": "sha256:0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a01",
+            "registryDigest": "sha256:0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a01",
+            "params": {},
+            "values": "",
+            "valuesCanon": null,
+            "valuesHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "manifests": [],
+            "hash": {
+              "identity": "1111111111111111111111111111111111111111111111111111111111111111",
+              "upstream": "2222222222222222222222222222222222222222222222222222222222222222",
+              "upstreamRaw": "sha256:0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a01",
+              "upstreamSource": "packRef.digest",
+              "authored": "3333333333333333333333333333333333333333333333333333333333333333",
+              "node": "4444444444444444444444444444444444444444444444444444444444444444"
+            }
+          },
+          {
+            "key": "k8s/kubernetes-eks",
+            "layer": "k8s",
+            "name": "kubernetes-eks",
+            "type": "spectro",
+            "tag": "1.32",
+            "version": "1.32",
+            "packUid": "pk-k8s-eks",
+            "registryUid": "5eecc89d0b150045ae661cef",
+            "refDigest": "sha256:0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a02",
+            "registryDigest": "sha256:0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a02",
+            "params": {},
+            "values": "iamAuthenticatorConfig:\n  mapUsers:\n    - userarn: arn:aws:iam::123456789012:user/ops\n      username: ops\n      groups:\n        - system:masters\n",
+            "valuesCanon": {
+              "iamAuthenticatorConfig": {
+                "mapUsers": [
+                  {
+                    "userarn": "arn:aws:iam::123456789012:user/ops",
+                    "username": "ops",
+                    "groups": [
+                      "system:masters"
+                    ]
+                  }
+                ]
+              }
+            },
+            "valuesHash": "5555555555555555555555555555555555555555555555555555555555555555",
+            "manifests": [],
+            "hash": {
+              "identity": "1111111111111111111111111111111111111111111111111111111111111112",
+              "upstream": "2222222222222222222222222222222222222222222222222222222222222223",
+              "upstreamRaw": "sha256:0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a02",
+              "upstreamSource": "packRef.digest",
+              "authored": "3333333333333333333333333333333333333333333333333333333333333334",
+              "node": "4444444444444444444444444444444444444444444444444444444444444445"
+            }
+          },
+          {
+            "key": "cni/cni-aws-vpc-eks",
+            "layer": "cni",
+            "name": "cni-aws-vpc-eks",
+            "type": "spectro",
+            "tag": "1.19.6",
+            "version": "1.19.6",
+            "packUid": "pk-cni-eks",
+            "registryUid": "5eecc89d0b150045ae661cef",
+            "refDigest": "sha256:0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a03",
+            "registryDigest": "sha256:0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a03",
+            "params": {},
+            "values": "",
+            "valuesCanon": null,
+            "valuesHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "manifests": [],
+            "hash": {
+              "identity": "1111111111111111111111111111111111111111111111111111111111111113",
+              "upstream": "2222222222222222222222222222222222222222222222222222222222222224",
+              "upstreamRaw": "sha256:0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a03",
+              "upstreamSource": "packRef.digest",
+              "authored": "3333333333333333333333333333333333333333333333333333333333333335",
+              "node": "4444444444444444444444444444444444444444444444444444444444444446"
+            }
+          },
+          {
+            "key": "csi/csi-aws-ebs",
+            "layer": "csi",
+            "name": "csi-aws-ebs",
+            "type": "spectro",
+            "tag": "1.44.0",
+            "version": "1.44.0",
+            "packUid": "pk-csi-eks",
+            "registryUid": "5eecc89d0b150045ae661cef",
+            "refDigest": "sha256:0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a04",
+            "registryDigest": "sha256:0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a04",
+            "params": {},
+            "values": "storageClasses:\n  - name: spectro-storage-class\n",
+            "valuesCanon": {
+              "storageClasses": [
+                {
+                  "name": "spectro-storage-class"
+                }
+              ]
+            },
+            "valuesHash": "6666666666666666666666666666666666666666666666666666666666666666",
+            "manifests": [],
+            "hash": {
+              "identity": "1111111111111111111111111111111111111111111111111111111111111114",
+              "upstream": "2222222222222222222222222222222222222222222222222222222222222225",
+              "upstreamRaw": "sha256:0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a04",
+              "upstreamSource": "packRef.digest",
+              "authored": "3333333333333333333333333333333333333333333333333333333333333336",
+              "node": "4444444444444444444444444444444444444444444444444444444444444447"
+            }
+          }
+        ],
+        "variables": []
+      }
+    ],
+    "packs": {
+      "pk-os-eks": {
+        "registryUid": "5eecc89d0b150045ae661cef",
+        "tags": [
+          {
+            "tag": "1.0.0",
+            "version": "1.0.0",
+            "packUid": "pk-os-eks",
+            "parentTags": [
+              "1.0.x",
+              "1.x"
+            ]
+          }
+        ],
+        "packValues": [
+          {
+            "packUid": "pk-os-eks",
+            "annotations": {},
+            "dependencies": []
+          }
+        ]
+      },
+      "pk-k8s-eks": {
+        "registryUid": "5eecc89d0b150045ae661cef",
+        "tags": [
+          {
+            "tag": "1.32",
+            "version": "1.32",
+            "packUid": "pk-k8s-eks",
+            "parentTags": [
+              "1.x"
+            ]
+          }
+        ],
+        "packValues": [
+          {
+            "packUid": "pk-k8s-eks",
+            "annotations": {},
+            "dependencies": []
+          }
+        ]
+      },
+      "pk-cni-eks": {
+        "registryUid": "5eecc89d0b150045ae661cef",
+        "tags": [
+          {
+            "tag": "1.19.6",
+            "version": "1.19.6",
+            "packUid": "pk-cni-eks",
+            "parentTags": [
+              "1.19.x",
+              "1.x"
+            ]
+          }
+        ],
+        "packValues": [
+          {
+            "packUid": "pk-cni-eks",
+            "annotations": {},
+            "dependencies": []
+          }
+        ]
+      },
+      "pk-csi-eks": {
+        "registryUid": "5eecc89d0b150045ae661cef",
+        "tags": [
+          {
+            "tag": "1.44.0",
+            "version": "1.44.0",
+            "packUid": "pk-csi-eks",
+            "parentTags": [
+              "1.44.x",
+              "1.x"
+            ]
+          }
+        ],
+        "packValues": [
+          {
+            "packUid": "pk-csi-eks",
+            "annotations": {},
+            "dependencies": []
+          }
+        ]
+      }
+    },
+    "_responses": {
+      "GET /v1/clusterprofiles/prof-eks-1": {
+        "ok": true,
+        "status": 200,
+        "body": {
+          "metadata": {
+            "name": "strata-live-profile",
+            "uid": "prof-eks-1"
+          },
+          "spec": {
+            "version": "1.0.0"
+          },
+          "status": {
+            "hasUserMacros": false,
+            "inUseClusters": [],
+            "inUseClusterUids": [],
+            "inUseClusterTemplates": [],
+            "isPublished": true
+          }
+        }
+      }
+    }
+  }
+}

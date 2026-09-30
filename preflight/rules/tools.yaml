@@ -1,0 +1,277 @@
+section: tools
+title: Client tools
+about: |
+  Rules of the tool that makes the entity, such as the provider, and of the lab. They are out of
+  scope for strata-preflight, and they stay in the catalog so that each fault of the live runs has
+  a row. A lab row with a check that a command on this machine can answer runs as a cloud check.
+rules:
+  - id: provider-timeout-success
+    title: The provider gives exit 0 at its create timeout
+    engines: [all]
+    tier: tool
+    severity: fail
+    status: seen
+    what: |
+      At its create timeout the provider gives a warning and exit 0 ("Creation complete") while the
+      cluster still builds. Gate on `Running`, or run `strata-preflight --watch`.
+    fix:
+      owner: provider
+      text: An error, or an opt-in warning.
+    evidence:
+      - kind: run
+        ref: "#89, #90"
+
+  - id: provider-eks-azs
+    title: The provider reads cloud_config.azs back on EKS
+    engines: [eks]
+    tier: tool
+    severity: fail
+    status: seen
+    what: |
+      Provider 0.30.1 does not read `cloud_config.azs` back, and the field forces a new resource:
+      each apply replaces the cluster. Found after one apply of 55 minutes.
+    fix:
+      owner: provider
+      text: Read the field.
+    evidence:
+      - kind: report
+        ref: provider-eks-azs-replace-findings-2026-09-28
+
+  - id: provider-delete-timeout
+    title: A destroy waits until the cluster is gone
+    engines: [all]
+    tier: tool
+    severity: warn
+    status: seen
+    what: |
+      `tofu destroy` ends with `context deadline exceeded` while Palette still deletes the cluster.
+      The provider sends one plain delete and waits for its own deadline. A pipeline sees an error
+      with no reason it can read. Read the state of the cluster after the error.
+    reproduce:
+      aws:
+        - "strata-preflight --watch cluster:{{ .clusterUid // \"<cluster uid>\" }}   # the conditions and the events of the delete"
+        - "examples/live/aws-inventory.sh {{ .entity.metadata.name }} {{ .entity.spec.cloudConfig.region }}   # what the cloud still holds"
+      eks:
+        - "strata-preflight --watch cluster:{{ .clusterUid // \"<cluster uid>\" }}   # the conditions and the events of the delete"
+        - "examples/live/aws-inventory.sh {{ .entity.metadata.name }} {{ .entity.spec.cloudConfig.region }}   # what the cloud still holds"
+      gcp:
+        - "strata-preflight --watch cluster:{{ .clusterUid // \"<cluster uid>\" }}   # the conditions and the events of the delete"
+        - "examples/live/gcp-inventory.sh {{ .entity.spec.cloudConfig.project }} {{ .entity.metadata.name }}   # what the cloud still holds"
+      gke:
+        - "strata-preflight --watch cluster:{{ .clusterUid // \"<cluster uid>\" }}   # the conditions and the events of the delete"
+        - "examples/live/gcp-inventory.sh {{ .entity.spec.cloudConfig.project }} {{ .entity.metadata.name }} --gke   # what the cloud still holds"
+      all:
+        - "strata-preflight --watch cluster:{{ .clusterUid // \"<cluster uid>\" }}   # the conditions and the events of the delete"
+    fix:
+      owner: none
+    evidence:
+      - kind: report
+        ref: palette-delete-pending-repave-findings-2026-09-25 B4
+        note: the destroy failed with `context deadline exceeded`; a second destroy sent the delete again and completed
+
+  - id: provider-skip-destroy
+    title: The state holds skip_destroy before a flag-on bump
+    engines: [all]
+    tier: tool
+    severity: fail
+    status: seen
+    what: |
+      With the `immutable-clusterprofiles` flag on, a version bump replaces the profile resource.
+      The provider deletes the replaced version with the `skip_destroy` value in its state, not the
+      new value. With `skip_destroy = false` in the state, the bump fails with
+      `DeletionResourceInUseError` while a cluster runs the version. Set `skip_destroy = true` and
+      apply it before the first bump. The scope is the provider and its state.
+    reproduce:
+      - "tofu state show 'spectrocloud_cluster_profile.<name>' | grep skip_destroy   # true before a bump"
+    fix:
+      owner: provider
+      text: Read `skip_destroy` from the plan, not from the state, at the delete of a replaced version.
+    evidence:
+      - kind: run
+        ref: "#47"
+      - kind: source
+        ref: examples/live/lib.sh hold_versions
+        note: the lab stores skip_destroy for its flag at the baseline, before any bump
+
+  - id: provider-version
+    title: The provider is 0.29.8 or later
+    engines: [all]
+    tier: tool
+    severity: fail
+    status: seen
+    what: |
+      Provider 0.29.7 refuses each plan with the `immutable-clusterprofiles` flag on. Pin 0.29.8 or
+      later.
+    reproduce:
+      - "tofu providers   # registry.opentofu.org/spectrocloud/spectrocloud must be 0.29.8 or later"
+    fix:
+      owner: operator
+      text: Pin the provider at 0.29.8 or later.
+    evidence:
+      - kind: run
+        ref: "#47"
+
+  - id: ecr-token
+    title: The registry login of crane is current
+    engines: [all, lab]
+    tier: cloud
+    severity: warn
+    status: seen
+    when: '[ .profiles[] | .packs[] | (.images // [])[] | select(test("\\.dkr\\.ecr\\.")) ] | length > 0'
+    what: |
+      An ECR login lasts 12 hours. After that, `crane digest` of an image in the registry answers
+      403, and each check that reads a digest fails. The check reads the digest of the first image in
+      ECR that the packs of the profiles declare. The nodes pull with their own credentials; this is
+      the login of this machine. A row of the lab; it runs wherever crane is on the PATH.
+    check:
+      kind: exec
+      needs: [crane]
+      argv:
+        - crane
+        - digest
+        - '{{ [ .profiles[] | .packs[] | (.images // [])[] | select(test("\\.dkr\\.ecr\\.")) ] | .[0] }}'
+      expr: |
+        def image: [ .profiles[] | .packs[] | (.images // [])[] | select(test("\\.dkr\\.ecr\\.")) ] | .[0];
+        if .exec.exit == 0 then []
+        else ["crane digest \(image) failed: \(.exec.stderr | tostring | .[:200]); an ECR login lasts 12 hours, log in again"] end
+    reproduce:
+      - "aws ecr get-login-password --region {{ .entity.spec.cloudConfig.region }} | crane auth login <account>.dkr.ecr.{{ .entity.spec.cloudConfig.region }}.amazonaws.com -u AWS --password-stdin"
+      - "crane digest {{ [ .profiles[] | .packs[] | (.images // [])[] | select(test(\"\\\\.dkr\\\\.ecr\\\\.\")) ] | .[0] }}"
+    fix:
+      owner: lab
+      text: Log in to the registry at the start of each run.
+    evidence:
+      - kind: source
+        ref: docs/src/development/live-example.md Troubleshooting, registry-digest-oci
+        note: an AWS registry login lasts 12 hours; crane digest then fails with 403
+    tests:
+      - fault: fixtures/eks/ecr-token-expired.json
+        clean: fixtures/eks/oci-image-clean.json
+
+  - id: crane-empty-password
+    title: crane holds a password for the registry
+    engines: [all, lab]
+    tier: cloud
+    severity: warn
+    status: seen
+    when: '[ .profiles[] | .packs[] | (.images // [])[] ] | length > 0'
+    what: |
+      `crane auth login` reports a success when it reads an empty password, for example when
+      `aws ecr get-login-password` before it failed. The login exit code proves nothing. The check
+      reads the digest of the first image that the packs of the profiles declare, and a 401 shows
+      the empty credential. A row of the lab; it runs wherever crane is on the PATH.
+    check:
+      kind: exec
+      needs: [crane]
+      argv:
+        - crane
+        - digest
+        - '{{ [ .profiles[] | .packs[] | (.images // [])[] ] | .[0] }}'
+      expr: |
+        def image: [ .profiles[] | .packs[] | (.images // [])[] ] | .[0];
+        if .exec.exit == 0 then []
+        else ["crane digest \(image) failed: \(.exec.stderr | tostring | .[:200]); the stored login is not valid, log in again with a password that is not empty"] end
+    reproduce:
+      - "aws ecr get-login-password --region {{ .entity.spec.cloudConfig.region }}   # must print a token; an empty output makes a login that reports a success with no password"
+      - "crane digest {{ [ .profiles[] | .packs[] | (.images // [])[] ] | .[0] }}"
+    fix:
+      owner: lab
+      text: Check the login with `crane digest`, not with the exit code of `crane auth login`.
+    evidence:
+      - kind: source
+        ref: docs/src/development/live-example.md Prerequisites, the OCI pack registry
+        note: crane auth login reports success even when it reads an empty password
+    tests:
+      - fault: fixtures/eks/crane-unauthorized.json
+        clean: fixtures/eks/oci-image-clean.json
+
+  - id: cloud-cli-auth
+    title: The cloud CLI has live credentials
+    engines: [aws, eks, lab]
+    tier: cloud
+    severity: warn
+    status: seen
+    what: |
+      An SSO profile of the AWS CLI expires, and `gcloud` needs a new login after some hours. Each
+      cloud check of this machine then fails or is not run, and the inventory cannot run. The check
+      calls `aws sts get-caller-identity`. For GCP, run `gcloud auth print-access-token` by hand.
+      A row of the lab; it runs wherever the AWS CLI is on the PATH.
+    check:
+      kind: exec
+      needs: [aws]
+      argv:
+        - aws
+        - sts
+        - get-caller-identity
+        - --output
+        - json
+      expr: |
+        if .exec.exit != 0 then ["aws sts get-caller-identity failed: \(.exec.stderr | tostring | .[:200]); the AWS CLI has no live credentials, log in again"]
+        elif (.exec.stdout.Account // "") == "" then ["aws sts get-caller-identity gave no Account: \(.exec.stdout | tostring | .[:200])"]
+        else [] end
+    reproduce:
+      - "aws sts get-caller-identity"
+      - "gcloud auth print-access-token > /dev/null && echo 'gcloud: logged in'"
+    fix:
+      owner: lab
+      text: Check the credentials of each cloud CLI at the start of a run.
+    evidence:
+      - kind: source
+        ref: docs/src/development/live-example.md Prerequisites
+        note: the token expires, so a run after some hours needs the login again
+    tests:
+      - fault: fixtures/eks/aws-token-expired.json
+        clean: fixtures/eks/cloud-cli-auth-clean.json
+
+  - id: tools-present
+    title: Each tool of the lab is on the PATH
+    engines: [all, lab]
+    tier: cloud
+    severity: warn
+    status: seen
+    what: |
+      A missing tool stops a lab run at the step that needs it. The list is the lab's: tofu, jq,
+      just, helm, crane, oras, zarf, kubectl, gcloud, aws. The check prints each name that
+      `command -v` cannot find. A company puts its own list in a probes file.
+    check:
+      kind: exec
+      needs: [sh]
+      argv:
+        - sh
+        - -c
+        - 'for t in tofu jq just helm crane oras zarf kubectl gcloud aws; do command -v $t >/dev/null || echo $t; done'
+      expr: |
+        if .exec.exit != 0 then ["the tool check failed: \(.exec.stderr | tostring | .[:200])"]
+        else [ (.exec.stdout | tostring) | split("\n")[] | select(length > 0) | "\(.) is not on the PATH" ] end
+    reproduce:
+      - "for t in tofu jq just helm crane oras zarf kubectl gcloud aws; do command -v $t >/dev/null || echo \"$t is missing\"; done"
+    fix:
+      owner: lab
+      text: Check each tool at the start of a run, before the first step that needs one.
+    evidence:
+      - kind: source
+        ref: examples/live/cluster.sh, examples/live/registry.sh
+        note: each script checks its own tools with `command -v` and stops on the first missing one
+    tests:
+      - fault: fixtures/eks/tool-missing.json
+        clean: fixtures/eks/tools-present-clean.json
+
+  - id: strata-binary-stale
+    title: The strata binary is newer than its sources
+    engines: [all, lab]
+    tier: tool
+    severity: warn
+    status: seen
+    what: |
+      A release binary older than a source file runs old code. A script that you run directly does
+      not build first, so a run can use a binary that lacks an option the script needs. `lib.sh`
+      compares the file times and stops. Run `just build`.
+    reproduce:
+      - "find src Cargo.toml Cargo.lock -type f -newer target/release/strata -print -quit   # a path means the binary is stale; run just build"
+    fix:
+      owner: lab
+      text: Build before each run; `lib.sh` refuses a stale binary.
+    evidence:
+      - kind: source
+        ref: examples/live/lib.sh
+        note: "`find ... -newer \"$strata\"` over src, Cargo.toml, and Cargo.lock; a hit stops the script"

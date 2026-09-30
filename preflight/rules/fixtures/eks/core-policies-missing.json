@@ -1,0 +1,46 @@
+{
+  "_base": "identity-clean.json",
+  "_note": "the account has no PaletteControlPlanePolicy and no EKS policy",
+  "_patch": {
+    "_exec": {
+      "aws iam list-policies --scope Local --output json": {
+        "exit": 0,
+        "stdout": {
+          "Policies": [
+            {
+              "PolicyName": "PaletteControllerPolicy",
+              "Arn": "arn:aws:iam::123456789012:policy/PaletteControllerPolicy",
+              "AttachmentCount": 1
+            },
+            {
+              "PolicyName": "PaletteNodesPolicy",
+              "Arn": "arn:aws:iam::123456789012:policy/PaletteNodesPolicy",
+              "AttachmentCount": 1
+            },
+            {
+              "PolicyName": "PaletteDeploymentPolicy",
+              "Arn": "arn:aws:iam::123456789012:policy/PaletteDeploymentPolicy",
+              "AttachmentCount": 1
+            },
+            {
+              "PolicyName": "PaletteCAPATaggingPolicy",
+              "Arn": "arn:aws:iam::123456789012:policy/PaletteCAPATaggingPolicy",
+              "AttachmentCount": 1
+            },
+            {
+              "PolicyName": "PaletteCloudFormationPolicy",
+              "Arn": "arn:aws:iam::123456789012:policy/PaletteCloudFormationPolicy",
+              "AttachmentCount": 1
+            },
+            {
+              "PolicyName": "ops-read-only",
+              "Arn": "arn:aws:iam::123456789012:policy/ops-read-only",
+              "AttachmentCount": 1
+            }
+          ]
+        },
+        "stderr": ""
+      }
+    }
+  }
+}

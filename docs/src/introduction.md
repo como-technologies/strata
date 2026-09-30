@@ -1,19 +1,27 @@
 # strata
 
-Spectro Cloud Palette lets a person edit a published profile version in place,
-and it keeps no digest of what a version holds. So the name of a release does
-not say what a cluster runs, and nothing tells you when the content under the
-name changes.
+Spectro Cloud Palette builds a cluster from a published profile version.
+Palette names the version by its name and its number, and a published version
+can be updated after its publish. So a team that approves a release by its name
+needs one more thing: a way to hold the name to its content, and to see each
+change of that content after the approval.
 
 Strata gives each version one digest, the **root**. It keeps the root, and the
 content behind it, in a **record** in your repository. Then it checks Palette
 against the record at each step of the life of a release: in the pull request,
 at the merge, at the publish, each night, and before a version is deleted.
 
+A cluster build depends on the cloud account, its quotas, its network, and the
+packs of the profile. A fault in one of them shows after the build starts, in
+the cloud. Before a build, `strata preflight` runs a catalog of rules against
+the body of the create and reports what stops the build, in seconds, with the
+command that shows the same thing by hand. See
+[Can Palette build this cluster?](./use-cases/stop-a-build.md).
+
 - [The everyday loop](./loop.md) shows who runs what, and when, with one change
   from the pull request to the retire.
-- [Where each part belongs](./boundary.md) says what Palette does already, what
-  strata adds, and why the check stays outside Palette.
+- [Where each part belongs](./boundary.md) says what Palette does, what strata
+  adds, and why the record lives in your repository.
 
 ## The model
 
@@ -66,8 +74,8 @@ still holds what a record says. `compare` reports what differs between two of
 them. `behind` names the pins that the registry has passed.
 
 The root joins the two files. A candidate and the published version give the
-same root, so `same-release` proves that Palette holds the version that a
-reviewer approved, with no trust in a tag or a name.
+same root, so `same-release` shows that Palette holds the version that a
+reviewer approved, by its content and not by a tag or a name.
 
 | Question | Command |
 | --- | --- |

@@ -1,0 +1,130 @@
+name: strata preflight
+
+# Reusable workflow. A repository calls it from its own pull request or build workflow to check that
+# Palette can build a cluster before the build: the body of the create, or an existing cluster, against
+# the catalog of strata-preflight; see docs/src/automation/preflight.md. The report goes to the job
+# summary and to an artifact, and the exit status of strata is the status of the job. It downloads
+# the two release binaries, checks them against SHA256SUMS, and runs `strata preflight`. Other CI
+# systems run the binary directly.
+on:
+  workflow_call:
+    inputs:
+      source:
+        description: The body of the create as a file in the caller's checkout, or cluster:UID for a cluster as Palette holds it
+        required: true
+        type: string
+      cloud:
+        description: "The engine of a file: aws, eks, gcp, gke, azure, aks, maas, edge, or vsphere. A cluster names its own"
+        default: ""
+        type: string
+      change:
+        description: A change of the cluster as a file, for cluster:UID
+        default: ""
+        type: string
+      tier:
+        description: "The tiers to run, as a list: static, palette, cloud. Empty runs all three; static needs no key"
+        default: ""
+        type: string
+      records:
+        description: Records of the profiles in the caller's checkout, snapshot files or patterns such as releases/**/*.json, separated by spaces. With none, strata records each profile from Palette
+        default: ""
+        type: string
+      probes:
+        description: A file of custom probes in the caller's checkout, in the format of the rules
+        default: ""
+        type: string
+      release:
+        description: The Palette release, such as 4.10; a tenant key cannot read it
+        default: ""
+        type: string
+      strict:
+        description: Count a failed probe as a failed check
+        default: false
+        type: boolean
+      ready:
+        description: Exit 1 when the readiness is under this percentage; empty is no gate
+        default: ""
+        type: string
+      palette-api:
+        description: The Palette API address, for a self-hosted Palette; empty means https://api.spectrocloud.com
+        default: ""
+        type: string
+      strata-version:
+        description: The strata release to use, a tag of this repository
+        required: true
+        type: string
+    secrets:
+      strata-token:
+        description: A token that can read como-technologies/strata (contents read), needed while that repository is private. The caller's own token cannot read another private repository.
+        required: false
+      palette-api-key:
+        description: PALETTE_API_KEY, needed for the palette tier and for cluster:UID; the static tier runs without it
+        required: false
+      palette-project-uid:
+        description: PALETTE_PROJECT_UID, the project of the cluster
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    steps:
+      # the caller's repository, where the entity and the records live
+      - uses: actions/checkout@v7
+      - name: install strata and strata-preflight
+        env:
+          GH_TOKEN: ${{ secrets.strata-token || github.token }}
+          VERSION: ${{ inputs.strata-version }}
+        run: |
+          mkdir -p .strata/bin && cd .strata/bin
+          gh release download "$VERSION" --repo como-technologies/strata \
+            --pattern strata-x86_64-unknown-linux-musl --pattern strata-preflight-x86_64-unknown-linux-musl \
+            --pattern SHA256SUMS
+          sha256sum --check --ignore-missing SHA256SUMS
+          chmod +x strata-x86_64-unknown-linux-musl strata-preflight-x86_64-unknown-linux-musl
+          mv strata-x86_64-unknown-linux-musl strata
+          mv strata-preflight-x86_64-unknown-linux-musl strata-preflight
+          ./strata --version && ./strata-preflight --version
+      - name: preflight
+        env:
+          PALETTE_API_KEY: ${{ secrets.palette-api-key }}
+          PALETTE_PROJECT_UID: ${{ secrets.palette-project-uid }}
+          PALETTE_API: ${{ inputs.palette-api }}
+          SOURCE: ${{ inputs.source }}
+          CLOUD: ${{ inputs.cloud }}
+          CHANGE: ${{ inputs.change }}
+          TIER: ${{ inputs.tier }}
+          RECORDS: ${{ inputs.records }}
+          PROBES: ${{ inputs.probes }}
+          RELEASE: ${{ inputs.release }}
+          STRICT: ${{ inputs.strict }}
+          READY: ${{ inputs.ready }}
+        run: |
+          args=("$SOURCE")
+          [ -z "$CHANGE" ] || args+=("$CHANGE")
+          [ -z "$CLOUD" ] || args+=(--cloud "$CLOUD")
+          [ -z "$TIER" ] || args+=(--tier "$TIER")
+          [ -z "$PROBES" ] || args+=(--probes "$PROBES")
+          [ -z "$RELEASE" ] || args+=(--release "$RELEASE")
+          [ -z "$READY" ] || args+=(--ready "$READY")
+          [ "$STRICT" != "true" ] || args+=(--strict)
+          # with no key, the static tier alone, and nothing read from Palette
+          [ -n "$PALETTE_API_KEY" ] || args+=(--offline)
+          # each record pattern is one argument, which strata expands; the shell must not expand
+          # it first, because bash reads `**` as `*` and drops the files it does not match
+          read -ra records <<< "$RECORDS"
+          for r in "${records[@]}"; do args+=(--records "$r"); done
+          set +e
+          .strata/bin/strata preflight "${args[@]}" --out preflight --format markdown --quiet > preflight.md
+          code=$?
+          set -e
+          cat preflight.md >> "$GITHUB_STEP_SUMMARY"
+          exit "$code"
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: preflight
+          path: preflight/
+          if-no-files-found: ignore

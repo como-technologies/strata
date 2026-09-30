@@ -4,11 +4,13 @@
 #   scripts/ci/install-strata.sh [--version vX.Y.Z] [--dir DIR] [--repo OWNER/REPO]
 #                                [--target TARGET] [--bin-only]
 #
-# Downloads the binary for this machine, SHA256SUMS, and the CI scripts pr-comment.sh,
-# merge-gate.sh, verify-report.sh, and upstream-report.sh into DIR (default .strata), checks the
-# checksums, and prints the path of the binary. A job then sets STRATA_BIN to that path and runs DIR/<script>.
+# Downloads the two binaries for this machine, strata and strata-preflight, SHA256SUMS, and the CI
+# scripts pr-comment.sh, merge-gate.sh, verify-report.sh, and upstream-report.sh into DIR (default
+# .strata), checks the checksums, and prints the path of the strata binary. A job then sets
+# STRATA_BIN to that path and runs DIR/<script>. `strata preflight` runs the strata-preflight
+# beside it. A release from before strata-preflight has no such binary, and the installer says so.
 #
-# --bin-only installs the binary alone, into a directory on your PATH. The installer checks the
+# --bin-only installs the binaries alone, into a directory on your PATH. The installer checks the
 # checksums before it installs any file.
 #
 # --version defaults to STRATA_VERSION, and latest means the latest release. A private repository
@@ -86,6 +88,15 @@ for name in "${want[@]}"; do
   [ -n "$id" ] || die "the release $tag has no $name"
   get "$api/repos/$repo/releases/assets/$id" "$work/$name" -H "Accept: application/octet-stream"
 done
+# strata-preflight came with v0.16.0; an older release has none, and installs without it
+preflight=""
+id=$(jq -r --arg n "strata-preflight-$target" '.assets[] | select(.name == $n) | .id' "$work/release.json" | sed -n 1p)
+if [ -n "$id" ]; then
+  preflight="strata-preflight-$target"
+  get "$api/repos/$repo/releases/assets/$id" "$work/$preflight" -H "Accept: application/octet-stream"
+else
+  note "the release $tag has no strata-preflight-$target; strata preflight will not run from this install"
+fi
 
 # Check before anything is installed, and check the names the release signed.
 (
@@ -101,6 +112,10 @@ done
 
 mv "$work/strata-$target" "$dir/strata"
 chmod +x "$dir/strata"
+if [ -n "$preflight" ]; then
+  mv "$work/$preflight" "$dir/strata-preflight"
+  chmod +x "$dir/strata-preflight"
+fi
 for name in ${scripts[@]+"${scripts[@]}"}; do
   mv "$work/$name" "$dir/$name"
   chmod +x "$dir/$name"

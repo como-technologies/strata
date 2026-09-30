@@ -1,0 +1,49 @@
+{
+  "_base": "clean.json",
+  "_note": "a pool of 8 addresses with 5 allotted; the cluster needs 6",
+  "_responses": {
+    "GET /v1/overlords/vsphere/ol-vsphere-1/pools": {
+      "ok": true,
+      "status": 200,
+      "body": {
+        "items": [
+          {
+            "metadata": {
+              "name": "lab-pool",
+              "uid": "pool-1"
+            },
+            "spec": {
+              "pool": {
+                "start": "10.10.140.100",
+                "end": "10.10.140.107",
+                "prefix": 24,
+                "gateway": "10.10.140.1",
+                "subnet": "",
+                "nameserver": {
+                  "addresses": [
+                    "10.10.140.1"
+                  ],
+                  "search": []
+                }
+              },
+              "priavetGatewayUid": "ol-vsphere-1",
+              "restrictToSingleCluster": false
+            },
+            "status": {
+              "allottedIps": [
+                "10.10.140.100",
+                "10.10.140.101",
+                "10.10.140.102",
+                "10.10.140.103",
+                "10.10.140.104"
+              ],
+              "associatedClusters": [],
+              "inUse": false,
+              "availableIps": []
+            }
+          }
+        ]
+      }
+    }
+  }
+}

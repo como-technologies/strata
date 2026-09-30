@@ -1,0 +1,18 @@
+$ strata preflight --rules --cloud aws --json | jq '.rules[] | select(.id == "worker-cpu-floor") | {id, tier, level, severity, status, engines, check: .check.kind}'
+{
+  "id": "worker-cpu-floor",
+  "tier": "palette",
+  "level": "probe",
+  "severity": "fail",
+  "status": "seen",
+  "engines": [
+    "aws",
+    "gcp",
+    "gke",
+    "azure",
+    "aks",
+    "maas",
+    "vsphere"
+  ],
+  "check": "palette"
+}

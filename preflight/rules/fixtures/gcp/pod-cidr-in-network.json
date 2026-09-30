@@ -1,0 +1,65 @@
+{
+  "_base": "clean.json",
+  "_note": "a dynamic network, and the Kubernetes pack sets pack.podCIDR to 10.0.0.0/16, the subnet CIDR Palette makes",
+  "_patch": {
+    "profiles": [
+      {
+        "schema": "strata-snapshot/1",
+        "source": {
+          "uid": "prof-gcp-1",
+          "name": "gcp-stack",
+          "version": "1.0.0",
+          "cloudType": "gcp",
+          "type": "cluster"
+        },
+        "packs": [
+          {
+            "key": "os/ubuntu-gcp",
+            "layer": "os",
+            "name": "ubuntu-gcp",
+            "version": "24.04",
+            "tag": "24.04",
+            "packUid": "pk-os-gcp",
+            "registryUid": "5eecc89d0b150045ae661cef",
+            "valuesCanon": null
+          },
+          {
+            "key": "k8s/kubernetes",
+            "layer": "k8s",
+            "name": "kubernetes",
+            "version": "1.32.4",
+            "tag": "1.32.4",
+            "packUid": "pk-k8s-gcp",
+            "registryUid": "5eecc89d0b150045ae661cef",
+            "valuesCanon": {
+              "pack": {
+                "podCIDR": "10.0.0.0/16",
+                "serviceClusterIpRange": "10.96.0.0/12"
+              }
+            }
+          },
+          {
+            "key": "cni/cni-cilium-oss",
+            "layer": "cni",
+            "name": "cni-cilium-oss",
+            "version": "1.19.6",
+            "tag": "1.19.6",
+            "packUid": "pk-cni-gcp",
+            "registryUid": "5eecc89d0b150045ae661cef",
+            "valuesCanon": null
+          },
+          {
+            "key": "csi/csi-gcp-driver",
+            "layer": "csi",
+            "name": "csi-gcp-driver",
+            "version": "1.15.0",
+            "tag": "1.15.0",
+            "packUid": "pk-csi-gcp",
+            "registryUid": "5eecc89d0b150045ae661cef",
+            "valuesCanon": null
+          }
+        ]
+      }
+    ]
+  }
+}

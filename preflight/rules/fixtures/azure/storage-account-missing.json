@@ -1,0 +1,13 @@
+{
+  "_base": "storage-account-clean.json",
+  "_note": "the storage account is not in the resource group",
+  "_patch": {
+    "entity": {
+      "spec": {
+        "cloudConfig": {
+          "storageAccountName": "stratanosuch"
+        }
+      }
+    }
+  }
+}

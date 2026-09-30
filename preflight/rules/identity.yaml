@@ -1,0 +1,1127 @@
+section: identity
+title: Identity and permissions
+about: |
+  The cloud account of the cluster, the role or the key behind it, and the permissions the build
+  needs of it. Palette checks that a role can be assumed and that policies exist, not that the role
+  can build the cluster type.
+rules:
+  - id: eks-role-no-eks-policy
+    title: The role of the cloud account holds the EKS policy
+    engines: [eks]
+    tier: cloud
+    severity: warn
+    status: seen
+    when: .account.spec.credentialType == "sts"
+    what: |
+      An STS role without the EKS policy of Palette fails with `AccessDenied` on `eks:DescribeCluster`
+      at create, after a full apply. The EKS name check of Palette finds it by chance; a role that can
+      describe but not create passes it. `POST /v1/clouds/eks/properties/validate` is that name check.
+      The check simulates the EKS and IAM actions of the build against the resources the build
+      names. Those are the cluster ARN and a node group ARN of the cluster name, and the three CAPA
+      roles. The EKS policy of Palette scopes `eks:CreateCluster` and `eks:DescribeCluster` to
+      `arn:*:eks:*:*:cluster/*`. So a simulation with no `--resource-arns` answers `implicitDeny`
+      for a role that builds clusters. An action counts as allowed when one listed resource allows
+      it. The simulator has no request context. So an `implicitDeny` on an action that a condition
+      key allows is a warning to read, not a proof. The role that built the #89 clusters gets
+      `implicitDeny` on `eks:CreateCluster` against every resource. `role-partial-permissions`
+      simulates the resource-less EC2 actions of the same policies.
+    check:
+      kind: exec
+      needs: [aws]
+      argv:
+        - aws
+        - iam
+        - simulate-principal-policy
+        - --policy-source-arn
+        - '{{ .account.spec.sts.arn }}'
+        - --action-names
+        - eks:CreateCluster
+        - eks:CreateNodegroup
+        - eks:DescribeCluster
+        - eks:DescribeNodegroup
+        - iam:PassRole
+        - iam:GetRole
+        - iam:ListAttachedRolePolicies
+        - --resource-arns
+        - 'arn:{{ .account.spec.sts.arn | split(":") | .[1] }}:eks:{{ .entity.spec.cloudConfig.region }}:{{ .account.spec.sts.arn | split(":") | .[4] }}:cluster/{{ .entity.metadata.name }}'
+        - 'arn:{{ .account.spec.sts.arn | split(":") | .[1] }}:eks:{{ .entity.spec.cloudConfig.region }}:{{ .account.spec.sts.arn | split(":") | .[4] }}:nodegroup/{{ .entity.metadata.name }}/{{ [ .entity.spec.machinepoolconfig[] | select((.poolConfig.isControlPlane // false) | not) | .poolConfig.name ] | .[0] // "worker-pool" }}/00000000-0000-0000-0000-000000000000'
+        - 'arn:{{ .account.spec.sts.arn | split(":") | .[1] }}:iam::{{ .account.spec.sts.arn | split(":") | .[4] }}:role/{{ .account.spec.namePrefix // "" }}control-plane.cluster-api-provider-aws.sigs.k8s.io'
+        - 'arn:{{ .account.spec.sts.arn | split(":") | .[1] }}:iam::{{ .account.spec.sts.arn | split(":") | .[4] }}:role/{{ .account.spec.namePrefix // "" }}nodes.cluster-api-provider-aws.sigs.k8s.io'
+        - 'arn:{{ .account.spec.sts.arn | split(":") | .[1] }}:iam::{{ .account.spec.sts.arn | split(":") | .[4] }}:role/{{ .account.spec.namePrefix // "" }}controllers.cluster-api-provider-aws.sigs.k8s.io'
+        - --output
+        - json
+      expr: |
+        def allowed: .EvalDecision == "allowed" or any((.ResourceSpecificResults // [])[]; .EvalResourceDecision == "allowed");
+        def per_resource: [ (.ResourceSpecificResults // [])[] | "\(.EvalResourceName | split(":") | .[5:] | join(":")) \(.EvalResourceDecision)" ] | join(", ");
+        if .exec.exit != 0 then ["aws iam simulate-principal-policy failed: \(.exec.stderr | tostring | .[:200])"]
+        else [ (.exec.stdout.EvaluationResults // [])[] | select(allowed | not)
+               | "\(.EvalActionName) is \(.EvalDecision) for the role on each resource of the build (\(per_resource)); the simulator has no request context, so read this as a warning: the role of #89 builds clusters and gets implicitDeny on eks:CreateCluster" ] end
+    reproduce:
+      - "aws iam simulate-principal-policy --policy-source-arn {{ .account.spec.sts.arn }} --action-names eks:CreateCluster eks:CreateNodegroup eks:DescribeCluster iam:PassRole --resource-arns arn:{{ .account.spec.sts.arn | split(\":\") | .[1] }}:eks:{{ .entity.spec.cloudConfig.region }}:{{ .account.spec.sts.arn | split(\":\") | .[4] }}:cluster/{{ .entity.metadata.name }} arn:{{ .account.spec.sts.arn | split(\":\") | .[1] }}:iam::{{ .account.spec.sts.arn | split(\":\") | .[4] }}:role/{{ .account.spec.namePrefix // \"\" }}nodes.cluster-api-provider-aws.sigs.k8s.io --query 'EvaluationResults[].[EvalActionName,EvalDecision,ResourceSpecificResults[].EvalResourceDecision]' --output json"
+      - "aws iam list-attached-role-policies --role-name {{ (.account.spec.sts.arn // \"\") | split(\"/\") | .[-1] }} --query 'AttachedPolicies[].PolicyName' --output text   # the EKS policy of Palette must be among them"
+    fix:
+      owner: palette
+      text: A permission check for each cloud type (SimulatePrincipalPolicy) in the validate route.
+    evidence:
+      - kind: run
+        ref: "#89"
+      - kind: run
+        ref: preflight-plan eks 20260929T042910Z
+        note: the simulation with no --resource-arns gave implicitDeny for eks:CreateNodegroup and eks:DescribeCluster on the role that built the #89 clusters; with the cluster, node group, and CAPA role ARNs they are allowed, and eks:CreateCluster stays implicitDeny
+      - kind: source
+        ref: strata examples/live/terraform/iam/eks-controllers.json
+        note: eks:CreateCluster, eks:DescribeCluster, and eks:ListClusters on arn:*:eks:*:*:cluster/* and arn:*:eks:*:*:nodegroup/*/*/*
+      - kind: report
+        ref: palette-precreate-validation-gaps-findings-2026-09-28 F4
+      - kind: doc
+        ref: https://docs.spectrocloud.com/clusters/public-cloud/aws/required-iam-policies/additional-iam-policies-specific-use-cases/
+    tests:
+      - fault: fixtures/eks/role-denied.json
+        clean: fixtures/eks/role-allowed.json
+
+  - id: role-partial-permissions
+    title: The role of the cloud account can call each action of the build
+    engines: [aws, eks]
+    tier: cloud
+    severity: warn
+    status: source
+    when: .account.spec.credentialType == "sts"
+    what: |
+      Palette checks that the role can be assumed and that its policy ARNs exist. It does not check
+      that the role can build the cluster type. A role that can call `DescribeCluster` and not
+      `CreateCluster`, `CreateNodegroup`, or `iam:PassRole` passes each Palette check and fails
+      during the build. The check simulates the 13 EC2, load balancer, and CloudFormation actions
+      of the documented policies. The policies grant them on the resource `*`. The check counts the
+      ones this build calls: a static network (`vpcId` set) drops the VPC actions, EKS drops the
+      instance actions, and a manual CloudFormation stack drops `cloudformation:DescribeStacks`.
+      The EKS and IAM actions are scoped to a cluster, a node group, or a role. A simulation with no
+      `--resource-arns` answers `implicitDeny` for them on a role that builds clusters.
+      `eks-role-no-eks-policy` simulates them against the ARNs of the build. The second reproduce
+      line simulates `iam:PassRole` against the three CAPA roles. The simulator has no request
+      context. So an `implicitDeny` on an action that a condition key allows is a warning to read,
+      not a proof. A `secret` account has no ARN in the world, and the rule skips it.
+    check:
+      kind: exec
+      needs: [aws]
+      argv:
+        - aws
+        - iam
+        - simulate-principal-policy
+        - --policy-source-arn
+        - '{{ .account.spec.sts.arn }}'
+        - --action-names
+        - ec2:CreateSecurityGroup
+        - ec2:AuthorizeSecurityGroupIngress
+        - ec2:DescribeKeyPairs
+        - ec2:DescribeImages
+        - ec2:RunInstances
+        - elasticloadbalancing:CreateLoadBalancer
+        - ec2:CreateVpc
+        - ec2:CreateSubnet
+        - ec2:CreateInternetGateway
+        - ec2:CreateRouteTable
+        - ec2:CreateNatGateway
+        - ec2:AllocateAddress
+        - cloudformation:DescribeStacks
+        - --output
+        - json
+      expr: |
+        def always: ["ec2:CreateSecurityGroup", "ec2:AuthorizeSecurityGroupIngress"];
+        def aws_only: ["ec2:DescribeImages", "ec2:RunInstances", "elasticloadbalancing:CreateLoadBalancer"];
+        def dynamic: ["ec2:CreateVpc", "ec2:CreateSubnet", "ec2:CreateInternetGateway", "ec2:CreateRouteTable", "ec2:CreateNatGateway", "ec2:AllocateAddress"];
+        def manual: [ (.profiles // [])[] | .packs[] | select(.layer == "k8s") | (.valuesCanon.manageCloudFormationStackManually.enabled // false) ] | any;
+        ( always
+          + (if .cloud == "eks" then [] else aws_only end)
+          + (if (.entity.spec.cloudConfig.vpcId // "") == "" then dynamic else [] end)
+          + (if (.entity.spec.cloudConfig.sshKeyName // "") != "" then ["ec2:DescribeKeyPairs"] else [] end)
+          + (if manual then [] else ["cloudformation:DescribeStacks"] end) ) as $need
+        | if .exec.exit != 0 then ["aws iam simulate-principal-policy failed: \(.exec.stderr | tostring | .[:200])"]
+          else [ (.exec.stdout.EvaluationResults // [])[]
+                 | select(.EvalDecision != "allowed")
+                 | select(.EvalActionName as $a | ($need | index($a)) != null)
+                 | "\(.EvalActionName) is \(.EvalDecision) for the role on the resource *, and this build calls it; the simulator has no request context, so read this as a warning" ] end
+    reproduce:
+      - "aws iam simulate-principal-policy --policy-source-arn {{ .account.spec.sts.arn }} --action-names ec2:RunInstances ec2:CreateVpc ec2:CreateSecurityGroup ec2:CreateNatGateway cloudformation:DescribeStacks --query 'EvaluationResults[].[EvalActionName,EvalDecision]' --output table"
+      - "aws iam simulate-principal-policy --policy-source-arn {{ .account.spec.sts.arn }} --action-names iam:PassRole --resource-arns arn:aws:iam::{{ .account.spec.sts.arn | split(\":\") | .[4] }}:role/{{ .account.spec.namePrefix // \"\" }}control-plane.cluster-api-provider-aws.sigs.k8s.io arn:aws:iam::{{ .account.spec.sts.arn | split(\":\") | .[4] }}:role/{{ .account.spec.namePrefix // \"\" }}nodes.cluster-api-provider-aws.sigs.k8s.io arn:aws:iam::{{ .account.spec.sts.arn | split(\":\") | .[4] }}:role/{{ .account.spec.namePrefix // \"\" }}controllers.cluster-api-provider-aws.sigs.k8s.io --query 'EvaluationResults[].[EvalActionName,EvalResourceName,EvalDecision]' --output table"
+    fix:
+      owner: palette
+      text: A permission check for each cloud type (SimulatePrincipalPolicy) in the validate route, with the actions of the documented policies and the resources of the build.
+    evidence:
+      - kind: report
+        ref: palette-precreate-validation-gaps-findings-2026-09-28 B5
+      - kind: run
+        ref: preflight-plan aws 20260929T041905Z, eks 20260929T042910Z
+        note: with no --resource-arns, iam:PassRole and the EKS actions gave implicitDeny on roles that build clusters; the EC2, load balancer, and CloudFormation actions gave allowed
+      - kind: source
+        ref: hubble services/service/cloud/internal/service/cloudservice/aws_service.go ValidateAwsAccount, ValidateArns
+        note: the account validate assumes the role and calls DescribeRegions; ValidateArns calls GetPolicy on each policy ARN
+      - kind: doc
+        ref: https://docs.spectrocloud.com/clusters/public-cloud/aws/required-iam-policies/
+    tests:
+      - fault: fixtures/eks/role-partial.json
+        clean: fixtures/eks/identity-clean.json
+
+  - id: sts-account-not-assumable
+    title: The STS cloud account can be assumed
+    engines: [aws, eks]
+    tier: palette
+    severity: fail
+    status: seen
+    when: .account.spec.credentialType == "sts"
+    what: |
+      Palette creates an STS cloud account over a role that does not exist, or that its trust
+      policy refuses. The cluster then fails with `AwsKeyPairsReadError` or an AssumeRole 403.
+      `POST /v1/clouds/aws/account/validate` answers in seconds, and a cluster create does not call
+      it.
+    check:
+      kind: palette
+      method: POST
+      path: /v1/clouds/aws/account/validate
+      body: .account.spec
+      expr: |
+        if .response.ok then [] else ["Palette cannot use the account \(.account.metadata.name // .entity.spec.cloudAccountUid): \(.response.body.code // .response.status): \(.response.body.message // "")"] end
+    fix:
+      owner: palette
+      text: Run the account check at cluster create.
+    evidence:
+      - kind: run
+        ref: teardown lab
+      - kind: source
+        ref: hubble services/service/cloud/internal/service/cloudservice/aws_service.go ValidateAwsAccount
+        note: assumes the role with the external id, then calls DescribeRegions
+    tests:
+      - fault: fixtures/eks/account-refused.json
+        clean: fixtures/eks/clean.json
+
+  - id: account-missing
+    title: The cloud account of the entity exists, and is of the cloud type
+    engines: [aws, eks, gcp, gke, azure, aks, maas, vsphere]
+    tier: palette
+    severity: fail
+    status: proposed
+    when: .entity.spec.cloudAccountUid != null
+    what: |
+      An entity can name a cloud account uid that is not in the project, or an account of another
+      cloud. Palette refuses it at create, or the build fails at the first call to the cloud.
+    check:
+      kind: palette
+      method: GET
+      path: /v1/cloudaccounts/{{ .cloud | if . == "eks" then "aws" elif . == "gke" then "gcp" elif . == "aks" then "azure" else . end }}/{{ .entity.spec.cloudAccountUid }}
+      expr: |
+        if .response.ok then []
+        else ["no cloud account \(.entity.spec.cloudAccountUid) of kind \(.cloud) in this project: \(.response.body.code // .response.status)"] end
+    tests:
+      - fault: fixtures/eks/account-missing.json
+        clean: fixtures/eks/clean.json
+
+  - id: iam-role-new
+    title: The role of the cloud account exists for 30 s before Palette assumes it
+    engines: [eks]
+    tier: watch
+    severity: warn
+    status: seen
+    what: |
+      IAM propagates a new role in some seconds. A cloud account made in that time fails its
+      validate with an AssumeRole error, and a retry passes. The fault is at the account create,
+      before any cluster exists. No watch of a cluster sees it. A watch that stops a build on one
+      AssumeRole event stops it on a fault that heals in seconds. This rule has no check.
+      `sts-account-not-assumable` calls the account validate route before the build, and finds the
+      role while it still fails.
+    reproduce:
+      - "aws iam get-role --role-name {{ (.account.spec.sts.arn // \"\") | split(\"/\") | .[-1] }} --query Role.CreateDate --output text"
+      - "sleep 30; strata-preflight cluster.json --cloud eks --rule sts-account-not-assumable"
+    fix:
+      owner: lab
+      text: A 30 s wait after the role create, before the cloud account (time_sleep.eks_role in cloud-eks.tf).
+    evidence:
+      - kind: run
+        ref: "#89"
+      - kind: source
+        ref: strata examples/live/terraform/cloud-eks.tf time_sleep.eks_role
+
+  - id: eks-core-policies
+    title: The core policies of Palette exist in the AWS account
+    engines: [eks]
+    tier: cloud
+    severity: fail
+    status: seen
+    what: |
+      The role of the cloud account takes the core policies of Palette by name. When a name is not
+      in the account, the apply of the lab fails at the data source, before Palette sees the role.
+      The public page names four core policies and the EKS policy; the check looks for those five by
+      name suffix, so a prefix such as `strata-live-` passes. The lab reads six:
+      `PaletteControllerPolicy`, `PaletteControlPlanePolicy`, `PaletteNodesPolicy`,
+      `PaletteDeploymentPolicy`, and its own `PaletteCAPATaggingPolicy` and
+      `PaletteCloudFormationPolicy`.
+    check:
+      kind: exec
+      needs: [aws]
+      argv:
+        - aws
+        - iam
+        - list-policies
+        - --scope
+        - Local
+        - --output
+        - json
+      expr: |
+        def core: ["PaletteControllerPolicy", "PaletteControlPlanePolicy", "PaletteNodesPolicy", "PaletteDeploymentPolicy", "PaletteControllersEKSPolicy"];
+        if .exec.exit != 0 then ["aws iam list-policies failed: \(.exec.stderr | .[:200])"]
+        else ([ (.exec.stdout.Policies // [])[] | .PolicyName ]) as $names
+          | [ core[] | . as $p | select(([ $names[] | select(endswith($p)) ] | length) == 0)
+              | "no customer managed policy named \($p) in the account; the role of the cloud account needs it" ]
+        end
+    reproduce:
+      - "aws iam list-policies --scope Local --query \"Policies[?contains(PolicyName, 'Palette')].PolicyName\" --output table"
+    fix:
+      owner: lab
+      text: The six policies are a prerequisite of the lab (palette_core_policies).
+    evidence:
+      - kind: run
+        ref: "#89"
+      - kind: source
+        ref: strata examples/live/terraform/cloud-eks.tf data.aws_iam_policy.palette_core
+      - kind: doc
+        ref: https://docs.spectrocloud.com/clusters/public-cloud/aws/required-iam-policies/core-iam-policies/
+    tests:
+      - fault: fixtures/eks/core-policies-missing.json
+        clean: fixtures/eks/identity-clean.json
+
+  - id: capa-bootstrap-stack
+    title: The CAPA CloudFormation stack is complete, and the credentials can read it
+    engines: [aws, eks]
+    tier: cloud
+    severity: fail
+    status: source
+    what: |
+      Before a build, Palette looks for the CloudFormation stack `cluster-api-provider-aws-sigs-k8s-io`
+      in each region. It updates a stack in `CREATE_COMPLETE` or `UPDATE_COMPLETE`, and makes a new
+      one when no region has it. An `AccessDenied` on `DescribeStacks` counts as no stack, and the
+      create then fails. A stack in another state, such as `ROLLBACK_COMPLETE`, is not updated, and
+      the create of a new one fails on the name. The check reads the region of the entity. No stack
+      in that region is not a fault: the stack can be in another region. Palette also probes the
+      roles of the stack: see `capa-manual-stack`.
+    check:
+      kind: exec
+      needs: [aws]
+      argv:
+        - aws
+        - cloudformation
+        - describe-stacks
+        - --stack-name
+        - cluster-api-provider-aws-sigs-k8s-io
+        - --region
+        - "{{ .entity.spec.cloudConfig.region }}"
+        - --output
+        - json
+      expr: |
+        .entity.spec.cloudConfig.region as $r
+        | if .exec.exit != 0 then
+            (.exec.stderr // "") as $e
+            | if ($e | test("does not exist")) then []
+              elif ($e | test("AccessDenied|not authorized")) then ["the credentials cannot describe stack cluster-api-provider-aws-sigs-k8s-io in \($r): Palette reads AccessDenied as no stack, and its create of the stack then fails"]
+              else ["aws cloudformation describe-stacks failed: \($e | .[:200])"] end
+          else [ (.exec.stdout.Stacks // [])[]
+                 | select((.StackStatus // "") | test("^(CREATE|UPDATE)_COMPLETE$") | not)
+                 | "stack \(.StackName) is \(.StackStatus) in \($r): Palette updates a stack in CREATE_COMPLETE or UPDATE_COMPLETE alone, and the create of a new one fails on the name" ]
+          end
+    reproduce:
+      - "aws cloudformation describe-stacks --stack-name cluster-api-provider-aws-sigs-k8s-io --region {{ .entity.spec.cloudConfig.region }} --query 'Stacks[].[StackStatus,DriftInformation.StackDriftStatus]' --output table"
+      - "aws iam get-role --role-name {{ (.account.spec.namePrefix // \"\") }}controllers.cluster-api-provider-aws.sigs.k8s.io --query Role.Arn --output text"
+    fix:
+      owner: palette
+      text: Describe the stack and the three CAPA roles in the cluster validate route.
+    evidence:
+      - kind: source
+        ref: palette pkg/provider/aws/aws_presetup.go SetUpCloud
+        note: DescribeStacks in each region; AccessDenied and "does not exist" both continue to the next region; a stack that is not COMPLETE is skipped
+      - kind: doc
+        ref: https://docs.spectrocloud.com/clusters/public-cloud/aws/required-iam-policies/minimum-permissions-policies/
+    tests:
+      - fault: fixtures/eks/stack-rollback.json
+        clean: fixtures/eks/identity-clean.json
+      - fault: fixtures/eks/stack-access-denied.json
+
+  - id: capa-manual-stack
+    title: The CAPA instance profiles exist when the stack is managed by hand
+    engines: [aws, eks]
+    tier: cloud
+    severity: fail
+    status: source
+    when: '[ .profiles[] | .packs[] | select(.layer == "k8s") | (.valuesCanon.manageCloudFormationStackManually.enabled // false) ] | any'
+    what: |
+      With `manageCloudFormationStackManually.enabled: true` in the Kubernetes pack values, Palette
+      makes no CloudFormation stack. It expects the CAPA roles and instance profiles to exist:
+      `control-plane.`, `controllers.`, and `nodes.cluster-api-provider-aws.sigs.k8s.io`, with the
+      `namePrefix` of the account in front. A missing role or instance profile fails the instance
+      launch. Palette has this probe (`validateBootstrapStackHealth`) for a stack it manages, and
+      does not run it in manual mode. The check lists the instance profiles; each of the three must
+      exist and hold a role.
+    check:
+      kind: exec
+      needs: [aws]
+      argv:
+        - aws
+        - iam
+        - list-instance-profiles
+        - --output
+        - json
+      expr: |
+        (.account.spec.namePrefix // "") as $p
+        | (["control-plane", "controllers", "nodes"] | map($p + . + ".cluster-api-provider-aws.sigs.k8s.io")) as $want
+        | if .exec.exit != 0 then ["aws iam list-instance-profiles failed: \(.exec.stderr | .[:200])"]
+          else (.exec.stdout.InstanceProfiles // []) as $have
+            | [ $want[] | . as $n | ([ $have[] | select(.InstanceProfileName == $n) ] | first) as $ip
+                | if $ip == null then "no instance profile \($n): the stack managed by hand did not make it, and the instance launch fails"
+                  elif (($ip.Roles // []) | length) == 0 then "instance profile \($n) holds no role, and the instance launch fails"
+                  else empty end ]
+          end
+    reproduce:
+      - "aws iam get-instance-profile --instance-profile-name {{ (.account.spec.namePrefix // \"\") }}nodes.cluster-api-provider-aws.sigs.k8s.io --query 'InstanceProfile.Roles[].RoleName' --output text"
+      - "aws iam get-role --role-name {{ (.account.spec.namePrefix // \"\") }}eks-nodegroup.cluster-api-provider-aws.sigs.k8s.io --query Role.Arn --output text"
+    fix:
+      owner: palette
+      text: Run validateBootstrapStackHealth in the validate route, in manual mode too.
+    evidence:
+      - kind: source
+        ref: palette pkg/provider/aws/aws_presetup.go validateBootstrapStackHealth
+        note: GetRole on five roles and GetInstanceProfile on three profiles, each with the NamePrefix of the account; SetUpCloud returns before it when the stack is managed by hand
+      - kind: source
+        ref: palette pkg/provider/aws/aws_common.go shouldUserManageCloudFormationStack
+      - kind: doc
+        ref: https://docs.spectrocloud.com/clusters/public-cloud/aws/required-iam-policies/minimum-permissions-policies/
+    tests:
+      - fault: fixtures/eks/manual-stack-no-nodes.json
+        clean: fixtures/eks/manual-stack.json
+
+  - id: global-policy-attach-silent
+    title: Each additional policy of the cloud account is on the nodes role
+    engines: [aws, eks]
+    tier: cloud
+    severity: fail
+    status: source
+    when: ((.account.spec.policyARNs // []) | length) > 0
+    what: |
+      Palette attaches each policy ARN of the cloud account to the CAPA roles `control-plane.` and
+      `nodes.cluster-api-provider-aws.sigs.k8s.io` at the start of a build. A failed attach, such as
+      `AmazonEBSCSIDriverPolicy` on a role at its policy quota, is logged and skipped; the build goes
+      on, and the CSI fails later. The check reads the nodes role. Before the first build in an
+      account, the role does not exist, and the check passes. After a build, a policy of the account
+      that is not on the role is the silent failure. A watch sees its effect: a CSI pod in
+      `CrashLoopBackOff`.
+    check:
+      kind: exec
+      needs: [aws]
+      argv:
+        - aws
+        - iam
+        - list-attached-role-policies
+        - --role-name
+        - "{{ (.account.spec.namePrefix // \"\") + \"nodes.cluster-api-provider-aws.sigs.k8s.io\" }}"
+        - --output
+        - json
+      expr: |
+        (.account.spec.policyARNs // []) as $want
+        | if .exec.exit != 0 then
+            if (.exec.stderr | test("NoSuchEntity")) then [] else ["aws iam list-attached-role-policies failed: \(.exec.stderr | .[:200])"] end
+          else ([ (.exec.stdout.AttachedPolicies // [])[] | .PolicyArn ]) as $have
+            | [ $want[] | select(. as $a | ($have | index($a)) == null)
+                | "policy \(.) of the cloud account is not on the nodes role: Palette logs a failed attach and continues, and the pods that need the policy fail later" ]
+          end
+    reproduce:
+      - "aws iam list-attached-role-policies --role-name {{ (.account.spec.namePrefix // \"\") }}nodes.cluster-api-provider-aws.sigs.k8s.io --query 'AttachedPolicies[].PolicyArn' --output text"
+      - "kubectl -n kube-system get pods -l app=ebs-csi-controller"
+    fix:
+      owner: palette
+      text: Fail the build on the attach error.
+    evidence:
+      - kind: source
+        ref: palette pkg/provider/aws/aws_presetup.go handleGlobalRoleAdditionalPolicies
+        note: AttachRolePolicy in a loop over the roles; an error is logged with "unable to attach policy to role", and the loop continues
+    tests:
+      - fault: fixtures/eks/nodes-policy-not-attached.json
+        clean: fixtures/eks/identity-clean.json
+
+  - id: iam-ten-policies
+    title: The nodes role stays under 10 managed policies
+    engines: [aws, eks]
+    tier: cloud
+    severity: fail
+    status: source
+    what: |
+      IAM attaches at most 10 managed policies to a role (the default quota; AWS raises it to 20 on
+      request). The CAPA stack attaches its own policies to the nodes role, and Palette attaches
+      each policy ARN of the cloud account on top. One over the quota fails the attach, and
+      `global-policy-attach-silent` says what Palette does then. The check counts the policies on
+      the nodes role plus the policy ARNs of the account that are not on it yet. Before the first
+      build, the role does not exist, and the check passes.
+    check:
+      kind: exec
+      needs: [aws]
+      argv:
+        - aws
+        - iam
+        - list-attached-role-policies
+        - --role-name
+        - "{{ (.account.spec.namePrefix // \"\") + \"nodes.cluster-api-provider-aws.sigs.k8s.io\" }}"
+        - --output
+        - json
+      expr: |
+        (.account.spec.policyARNs // []) as $plan
+        | if .exec.exit != 0 then
+            if (.exec.stderr | test("NoSuchEntity")) then [] else ["aws iam list-attached-role-policies failed: \(.exec.stderr | .[:200])"] end
+          else ([ (.exec.stdout.AttachedPolicies // [])[] | .PolicyArn ]) as $have
+            | ([ $plan[] | select(. as $a | ($have | index($a)) == null) ] | length) as $more
+            | if (($have | length) + $more) > 10
+              then ["the nodes role has \($have | length) managed policies, and the cloud account adds \($more) more: \(($have | length) + $more) is over the IAM quota of 10 for a role"]
+              else [] end
+          end
+    reproduce:
+      - "aws iam list-attached-role-policies --role-name {{ (.account.spec.namePrefix // \"\") }}nodes.cluster-api-provider-aws.sigs.k8s.io --query 'length(AttachedPolicies)'"
+      - "aws service-quotas get-service-quota --service-code iam --quota-code L-0DA4ABF3 --query Quota.Value"
+    fix:
+      owner: palette
+      text: Count the policies in the validate route.
+    evidence:
+      - kind: doc
+        ref: https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_iam-quotas.html
+      - kind: source
+        ref: palette pkg/provider/aws/aws_presetup.go handleGlobalRoleAdditionalPolicies
+    tests:
+      - fault: fixtures/eks/nodes-ten-policies.json
+        clean: fixtures/eks/identity-clean.json
+
+  - id: ebs-csi-node-policy
+    title: The nodes role holds AmazonEBSCSIDriverPolicy
+    engines: [aws]
+    tier: cloud
+    severity: fail
+    status: seen
+    when: '([ .profiles[] | .packs[] | select(.layer == "csi") | select(.name | test("ebs")) ] | length) > 0'
+    what: |
+      Without `AmazonEBSCSIDriverPolicy` on the worker node role `nodes.cluster-api-provider-aws.sigs.k8s.io`,
+      `ebs-csi-controller` crash-loops with `UnauthorizedOperation` on `ec2:DescribeAvailabilityZones`,
+      and Palette reports the cluster `Running`. The policy reaches the role in one of two ways: a
+      person attaches it, or the cloud account names it in `policyARNs` and Palette attaches it at
+      the build. The check passes when either is true. A watch sees the effect: the CSI pod in
+      `CrashLoopBackOff`.
+    check:
+      kind: exec
+      needs: [aws]
+      argv:
+        - aws
+        - iam
+        - list-attached-role-policies
+        - --role-name
+        - "{{ (.account.spec.namePrefix // \"\") + \"nodes.cluster-api-provider-aws.sigs.k8s.io\" }}"
+        - --output
+        - json
+      expr: |
+        def ebs: "AmazonEBSCSIDriverPolicy";
+        (.account.spec.policyARNs // []) as $plan
+        | ([ $plan[] | select(endswith("/" + ebs)) ] | length > 0) as $planned
+        | if .exec.exit != 0 then
+            if (.exec.stderr | test("NoSuchEntity")) then
+              (if $planned then [] else ["no nodes role yet, and the policyARNs of the cloud account do not name \(ebs): ebs-csi-controller then crash-loops with UnauthorizedOperation, and Palette says Running"] end)
+            else ["aws iam list-attached-role-policies failed: \(.exec.stderr | .[:200])"] end
+          else ([ (.exec.stdout.AttachedPolicies // [])[] | .PolicyArn | select(endswith("/" + ebs)) ] | length > 0) as $on
+            | if $on or $planned then []
+              else ["\(ebs) is not on the nodes role, and the policyARNs of the cloud account do not name it: ebs-csi-controller crash-loops with UnauthorizedOperation on ec2:DescribeAvailabilityZones, and Palette says Running"] end
+          end
+    reproduce:
+      - "aws iam list-attached-role-policies --role-name {{ (.account.spec.namePrefix // \"\") }}nodes.cluster-api-provider-aws.sigs.k8s.io --query 'AttachedPolicies[].PolicyName' --output text"
+      - "kubectl -n kube-system logs -l app=ebs-csi-controller -c ebs-plugin --tail 20"
+    fix:
+      owner: palette
+      text: Fail the build on the attach error, and check the policy in the validate route when the profile has the EBS CSI pack.
+    evidence:
+      - kind: run
+        ref: teardown lab
+      - kind: source
+        ref: strata docs/src/development/live-example.md Prerequisites
+      - kind: doc
+        ref: https://docs.spectrocloud.com/clusters/public-cloud/aws/required-iam-policies/additional-iam-policies-specific-use-cases/
+    tests:
+      - fault: fixtures/aws/nodes-no-ebs-policy.json
+        clean: fixtures/aws/identity-clean.json
+
+  - id: eks-irsa-roles
+    title: Each IRSA role of the pack values fits IAM
+    engines: [eks]
+    tier: static
+    severity: fail
+    status: source
+    when: '([ .profiles[] | .packs[] | select(.layer == "k8s") | (.valuesCanon.managedControlPlane.irsaRoles // [])[] ] | length) > 0'
+    what: |
+      Palette makes one IAM role for each entry of `managedControlPlane.irsaRoles` in the Kubernetes
+      pack values. The role gets the OIDC trust of the cluster and the policies of the entry. IAM
+      refuses a role name over 64 characters, or with a character outside letters, digits, and
+      `+=,.@_-`. A role that exists with a foreign owner tag, an out-of-band policy, or another trust
+      is refused or reconciled. The events then say `IRSARoleForeignOwner`. The static check reads
+      the names and the policies; the reproduce lines read the role in IAM.
+    check:
+      kind: static
+      expr: |
+        [ .profiles[] | .packs[] | select(.layer == "k8s") | (.valuesCanon.managedControlPlane.irsaRoles // [])[] ] as $roles
+        | [ $roles[] | (.name // "") as $n
+            | ( if ($n | length) > 64 then "IRSA role \($n) has \($n | length) characters; IAM allows 64" else empty end ),
+              ( if ($n | test("^[A-Za-z0-9+=,.@_-]+$") | not) then "IRSA role name \($n) has a character that IAM refuses; letters, digits, and +=,.@_- are allowed" else empty end ),
+              ( if ((.policies // []) | length) == 0 then "IRSA role \($n) names no policy" else empty end ),
+              ( (.policies // [])[] | select(startswith("arn:") | not) | "IRSA role \($n): policy \(.) is not an ARN" ) ]
+    reproduce:
+      - "aws iam get-role --role-name {{ [ .profiles[] | .packs[] | select(.layer == \"k8s\") | (.valuesCanon.managedControlPlane.irsaRoles // [])[] | .name ] | .[0] }} --query 'Role.[Arn,Tags,AssumeRolePolicyDocument]'"
+      - "aws iam list-attached-role-policies --role-name {{ [ .profiles[] | .packs[] | select(.layer == \"k8s\") | (.valuesCanon.managedControlPlane.irsaRoles // [])[] | .name ] | .[0] }} --query 'AttachedPolicies[].PolicyArn'"
+    fix:
+      owner: palette
+      text: Check the names and the policies in the validate route, and read the role in IAM.
+    evidence:
+      - kind: source
+        ref: palette pkg/provider/aws/aws_irsa.go getIRSARolesConfig
+        note: the roles come from managedControlPlane.irsaRoles of the k8s pack; irsa/reconciler.go refuses a foreign owner and adopts an untagged role that matches
+      - kind: doc
+        ref: https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_iam-quotas.html
+    tests:
+      - fault: fixtures/eks/irsa-name-long.json
+        clean: fixtures/eks/irsa-roles.json
+
+  - id: eks-pod-identity-mapusers
+    title: A Pod Identity account maps a user into the EKS cluster
+    engines: [eks]
+    tier: static
+    severity: fail
+    status: source
+    when: .account.spec.credentialType == "pod-identity"
+    what: |
+      With a Pod Identity cloud account and no `iamAuthenticatorConfig.mapUsers` in the Kubernetes
+      pack values, nobody can reach the cluster. Its delete is then stuck.
+    check:
+      kind: static
+      expr: |
+        [ .profiles[] | .packs[] | select(.layer == "k8s")
+          | select(((.valuesCanon.iamAuthenticatorConfig.mapUsers // []) | length) == 0)
+          | "pack \(.name)@\(.version) has no iamAuthenticatorConfig.mapUsers, and the account is Pod Identity" ]
+    fix:
+      owner: palette
+      text: Refuse the create.
+    evidence:
+      - kind: doc
+        ref: https://docs.spectrocloud.com/clusters/public-cloud/aws/eks/
+    tests:
+      - fault: fixtures/eks/pod-identity-no-mapusers.json
+        clean: fixtures/eks/pod-identity-mapusers.json
+
+  - id: iaas-pod-identity
+    title: The properties route accepts the cloud account for an AWS cluster
+    engines: [aws]
+    tier: palette
+    severity: fail
+    status: source
+    when: .entity.spec.cloudAccountUid != null
+    what: |
+      A Pod Identity cloud account serves EKS alone. `POST /v1/clouds/aws/properties/validate`
+      refuses it for an AWS infrastructure cluster with `FeatureNotSupported`, and checks the SSH
+      key pair of the region on the way. The console calls the route; the create path of the API
+      does not. The world shows the same fact in `.account.spec.credentialType`.
+    check:
+      kind: palette
+      method: POST
+      path: /v1/clouds/aws/properties/validate
+      body: '{cloudAccountUid: .entity.spec.cloudAccountUid, region: .entity.spec.cloudConfig.region, sshKeyName: (.entity.spec.cloudConfig.sshKeyName // "")}'
+      expr: |
+        if .response.ok then []
+        else ["Palette refuses the account for an AWS cluster: \(.response.body.code // .response.status): \(.response.body.message // "")"] end
+    fix:
+      owner: none
+      text: The check exists in the properties route; strata-preflight calls it.
+    evidence:
+      - kind: source
+        ref: hubble services/service/cloud/internal/service/cloudservice/aws_service.go validateAwsCloudAccountSupport
+        note: FeatureNotSupported("Pod Identity for AWS infrastructure clusters") when the account is Pod Identity
+    tests:
+      - fault: fixtures/aws/pod-identity-iaas.json
+        clean: fixtures/aws/identity-clean.json
+
+  - id: gcp-account-roles
+    title: A service account of the project holds the five roles of Palette
+    engines: [gcp, gke]
+    tier: cloud
+    severity: warn
+    status: source
+    what: |
+      The documentation gives the GCP cloud account `roles/compute.admin`, `roles/container.admin`,
+      `roles/iam.serviceAccountTokenCreator`, `roles/iam.serviceAccountUser`, and
+      `roles/storage.objectViewer` on the project. Palette checks that the key parses and that
+      `projects.list` is not empty. A missing permission gives a 403 during the build. The world
+      holds no email of the service account, because the key is redacted. So the check reads the
+      IAM policy of the project, and looks for one service account with the five roles.
+      `roles/owner` counts for all five. The check reads the project-level policy alone: a role
+      granted on the folder or the organization does not show in it. A documented role that is
+      missing there is a warning to read, not a proof. The account that built the #90 GKE clusters
+      and the #74 GCP clusters lacked `roles/storage.objectViewer` at the project level.
+    check:
+      kind: exec
+      needs: [gcloud]
+      argv:
+        - gcloud
+        - projects
+        - get-iam-policy
+        - "{{ .entity.spec.cloudConfig.project }}"
+        - --format
+        - json
+      expr: |
+        def need: ["roles/compute.admin", "roles/container.admin", "roles/iam.serviceAccountTokenCreator", "roles/iam.serviceAccountUser", "roles/storage.objectViewer"];
+        .entity.spec.cloudConfig.project as $p
+        | if .exec.exit != 0 then ["gcloud projects get-iam-policy failed: \(.exec.stderr | .[:200])"]
+          else (.exec.stdout.bindings // []) as $b
+            | ([ $b[] | (.members // [])[] | select(startswith("serviceAccount:")) ] | unique) as $sas
+            | [ $sas[] | . as $sa
+                | ([ $b[] | select(((.members // []) | index($sa)) != null) | .role ]) as $roles
+                | { sa: $sa, missing: (if ($roles | index("roles/owner")) != null then [] else [ need[] | select(. as $r | ($roles | index($r)) == null) ] end) } ] as $score
+            | if ([ $score[] | select(.missing == []) ] | length) > 0 then []
+              else ($score | sort_by(.missing | length) | first) as $best
+                | if $best == null then ["no service account has a role on project \($p); the cloud account of Palette needs \(need | join(", "))"]
+                  else ["no service account holds the five roles of Palette on project \($p) (roles/owner counts): \($best.sa | ltrimstr("serviceAccount:")) lacks \($best.missing | join(", "))"] end
+              end
+          end
+    reproduce:
+      - "gcloud projects get-iam-policy {{ .entity.spec.cloudConfig.project }} --flatten='bindings[].members' --filter='bindings.members:serviceAccount' --format='table(bindings.members,bindings.role)'"
+      - "gcloud projects test-iam-permissions {{ .entity.spec.cloudConfig.project }} --permissions=compute.instances.create,container.clusters.create,iam.serviceAccounts.actAs,iam.serviceAccounts.getAccessToken,storage.objects.get --impersonate-service-account=<email of the cloud account>"
+    fix:
+      owner: palette
+      text: Call testIamPermissions with the documented list in the GCP account and property routes; the role has the permission.
+    evidence:
+      - kind: doc
+        ref: https://docs.spectrocloud.com/clusters/public-cloud/gcp/add-gcp-accounts/
+      - kind: source
+        ref: hubble services/service/cloud/internal/service/cloudservice/gcp_service.go ValidateGcpAccount
+        note: the key parses, and projects.list is not empty; no permission is tested
+      - kind: report
+        ref: palette-precreate-validation-gaps-findings-2026-09-28 B5
+      - kind: run
+        ref: preflight-plan gke 20260929T043631Z
+        note: the check named a missing roles/storage.objectViewer on the account that built the #90 and #74 clusters
+    tests:
+      - fault: fixtures/gcp/account-roles-missing.json
+        clean: fixtures/gcp/identity-clean.json
+
+  - id: gcp-default-sa-no-role
+    title: The Compute Engine default service account holds a role on the project
+    engines: [gcp, gke]
+    tier: cloud
+    severity: fail
+    status: seen
+    what: |
+      The nodes of a GCP cluster run as the Compute Engine default service account
+      `<number>-compute@developer.gserviceaccount.com`. The GCE cloud controller in the cluster
+      calls the Compute API with it. An organization that enforces
+      `iam.automaticIamGrantsForDefaultServiceAccounts` gives the account no role. The cloud
+      controller then exits, and each node keeps the taint `node.cloudprovider.kubernetes.io/uninitialized`.
+      No pod starts, and the cluster stays `Provisioning`. `roles/compute.admin` let the #74 build
+      continue; another run granted `roles/editor`. The project number is not in the entity, so the
+      check matches the suffix of the member. For GKE the effect is inferred: the nodes run as the
+      same account, and Google runs the cloud controller.
+    check:
+      kind: exec
+      needs: [gcloud]
+      argv:
+        - gcloud
+        - projects
+        - get-iam-policy
+        - "{{ .entity.spec.cloudConfig.project }}"
+        - --format
+        - json
+      expr: |
+        .entity.spec.cloudConfig.project as $p
+        | if .exec.exit != 0 then ["gcloud projects get-iam-policy failed: \(.exec.stderr | .[:200])"]
+          else ([ (.exec.stdout.bindings // [])[] | . as $b | (.members // [])[]
+                  | select(test("^serviceAccount:[0-9]+-compute@developer\\.gserviceaccount\\.com$")) | $b.role ] | unique) as $roles
+            | if ($roles | length) == 0
+              then ["the Compute Engine default service account has no role on project \($p): the cloud controller exits, each node keeps the taint node.cloudprovider.kubernetes.io/uninitialized, and the cluster stays Provisioning; roles/compute.admin lets it continue"]
+              else [] end
+          end
+    reproduce:
+      - "gcloud projects get-iam-policy {{ .entity.spec.cloudConfig.project }} --flatten='bindings[].members' --filter='bindings.members ~ -compute@developer.gserviceaccount.com' --format='value(bindings.role)'"
+      - "gcloud resource-manager org-policies describe iam.automaticIamGrantsForDefaultServiceAccounts --project {{ .entity.spec.cloudConfig.project }} --effective"
+    fix:
+      owner: palette
+      text: Check the roles of the default service account in the GCP property route.
+    evidence:
+      - kind: run
+        ref: "#74"
+      - kind: source
+        ref: strata docs/src/internals/palette/clusters.md A cluster on GCP
+    tests:
+      - fault: fixtures/gcp/default-sa-no-role.json
+        clean: fixtures/gcp/identity-clean.json
+
+  - id: gcp-default-sa-missing
+    title: The Compute Engine default service account exists and is enabled
+    engines: [gcp, gke]
+    tier: cloud
+    severity: fail
+    status: inferred
+    what: |
+      The nodes run as the Compute Engine default service account. When a person deletes or
+      disables it, the instance create of a GCP cluster and the node pool create of a GKE cluster
+      fail. The project number is not in the entity, so the check lists the service accounts of the
+      project and matches the suffix `-compute@developer.gserviceaccount.com`.
+    check:
+      kind: exec
+      needs: [gcloud]
+      argv:
+        - gcloud
+        - iam
+        - service-accounts
+        - list
+        - --project
+        - "{{ .entity.spec.cloudConfig.project }}"
+        - --format
+        - json
+      expr: |
+        .entity.spec.cloudConfig.project as $p
+        | if .exec.exit != 0 then ["gcloud iam service-accounts list failed: \(.exec.stderr | .[:200])"]
+          else ([ (.exec.stdout // [])[] | select((.email // "") | test("^[0-9]+-compute@developer\\.gserviceaccount\\.com$")) ]) as $sa
+            | if ($sa | length) == 0 then ["no Compute Engine default service account in project \($p): it is deleted, and an instance or a node pool that runs as it cannot be made"]
+              else [ $sa[] | select(.disabled // false) | "the Compute Engine default service account \(.email) is disabled: an instance or a node pool that runs as it cannot be made" ] end
+          end
+    reproduce:
+      - "gcloud iam service-accounts list --project {{ .entity.spec.cloudConfig.project }} --filter='email ~ -compute@developer.gserviceaccount.com' --format='table(email,disabled)'"
+    fix:
+      owner: palette
+      text: Read the service account in the validate route.
+    evidence:
+      - kind: doc
+        ref: https://cloud.google.com/compute/docs/access/service-accounts#default_service_account
+    tests:
+      - fault: fixtures/gcp/default-sa-disabled.json
+        clean: fixtures/gcp/identity-clean.json
+      - fault: fixtures/gcp/default-sa-deleted.json
+
+  - id: gcp-org-policies
+    title: No organization policy refuses a resource of the build
+    engines: [gcp, gke]
+    tier: cloud
+    severity: fail
+    status: inferred
+    what: |
+      An organization policy can refuse a resource at create. `compute.trustedImageProjects` refuses
+      the node image of `spectro-image-build`. `compute.vmExternalIpAccess` refuses a node with a
+      public address. `gcp.resourceLocations` refuses the region. `compute.restrictLoadBalancerCreationForTypes`
+      refuses the load balancer of the API server. `compute.requireOsLogin` changes the login of the
+      nodes. The effective policy comes from the organization or the folder, so the list of the
+      project does not show it. The `gcloud` command describes one constraint for each call, and
+      strata-preflight runs one command for a rule. So this rule has no check. The reproduce line
+      describes each of the five.
+    reproduce:
+      - "for c in compute.trustedImageProjects compute.vmExternalIpAccess gcp.resourceLocations compute.restrictLoadBalancerCreationForTypes compute.requireOsLogin; do gcloud org-policies describe $c --project {{ .entity.spec.cloudConfig.project }} --effective; done"
+      - "gcloud resource-manager org-policies describe compute.trustedImageProjects --project {{ .entity.spec.cloudConfig.project }} --effective"
+    fix:
+      owner: palette
+      text: Read the effective policy of each constraint in the validate route; the documented role holds orgpolicy.policy.get.
+    evidence:
+      - kind: doc
+        ref: https://cloud.google.com/resource-manager/docs/organization-policy/org-policy-constraints
+      - kind: doc
+        ref: https://docs.spectrocloud.com/clusters/public-cloud/gcp/required-permissions/
+        note: the documented custom role holds orgpolicy.policy.get
+
+  - id: system-macros-hidden
+    title: The key can read the resolved pack values of the cluster
+    engines: [all]
+    tier: palette
+    severity: note
+    status: seen
+    when: .clusterUid != null
+    what: |
+      A system macro, such as `cloudanix.partnerIdentifier`, resolves on each cluster, and no
+      tenant or project list shows it: only an operations administrator lists system macros.
+      `GET /v1/spectroclusters/{uid}/packs/resolvedValues` shows each value a cluster gets, system
+      macros included, so a tenant can read the values and not their source. A 403 on the route
+      hides the values too. The reproduce line lists the macro keys that resolve.
+    check:
+      kind: palette
+      method: GET
+      path: /v1/spectroclusters/{{ .clusterUid }}/packs/resolvedValues
+      expr: |
+        if .response.ok then []
+        else ["the key cannot read the resolved pack values of cluster \(.clusterUid): \(.response.body.code // .response.status); a tenant administrator cannot list the system macros that resolve on the cluster"] end
+    reproduce:
+      - "curl -s -H \"ApiKey: $PALETTE_API_KEY\" \"$PALETTE_HOST/v1/spectroclusters/{{ .clusterUid }}/packs/resolvedValues\" | jq -r '[.profiles[].resolved | to_entries[] | select(.key | test(\"spectro.macro\")) | \"\\(.key) = \\(.value)\"] | unique[]'"
+    fix:
+      owner: palette
+      text: Read access to the system macros for a tenant administrator, with no write access.
+    evidence:
+      - kind: report
+        ref: palette-macro-findings-2026-09-25 F7, B5
+    tests:
+      - fault: fixtures/eks/resolved-values-403.json
+        clean: fixtures/eks/resolved-values.json
+
+  - id: account-just-created
+    title: The cloud account is 2 minutes old or more
+    engines: [aws, eks, gcp, gke, azure, aks, maas, vsphere]
+    tier: static
+    severity: warn
+    status: inferred
+    when: .account.metadata.creationTimestamp != null
+    what: |
+      A cloud account made seconds before the build can still fail its first call. IAM propagates
+      a new role or a new key in some seconds, and the #89 lab waits 30 s after the role create.
+      The check reads `metadata.creationTimestamp` of the account and warns under 2 minutes. The
+      2 minutes are a reading, not a measurement. Hubble never sets `status.state` of a cloud
+      account; the field is normally empty, so the check reads it only when it has a value that is
+      not `Active`. No run of these engines shows the fault.
+    check:
+      kind: static
+      expr: |
+        (.account.metadata.creationTimestamp | sub("\\.[0-9]+"; "") | fromdateiso8601) as $made
+        | ((now - $made) | floor) as $age
+        | (.account.status.state // "") as $state
+        | [ ( if $age < 120 then "the cloud account \(.account.metadata.name) was made \($age) s ago (\(.account.metadata.creationTimestamp)): IAM changes propagate for some seconds, and the #89 lab waits 30 s; wait until it is 2 minutes old, or run sts-account-not-assumable first" else empty end ),
+            ( if $state != "" and ($state | ascii_downcase) != "active" then "the cloud account \(.account.metadata.name) has status.state \($state), not Active" else empty end ) ]
+    reproduce:
+      - "curl -s -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" \"${PALETTE_API:-https://api.spectrocloud.com}/v1/cloudaccounts/{{ .cloud | if . == \"eks\" then \"aws\" elif . == \"gke\" then \"gcp\" elif . == \"aks\" then \"azure\" else . end }}/{{ .entity.spec.cloudAccountUid }}\" | jq '{made: .metadata.creationTimestamp, state: .status.state}'"
+    fix:
+      owner: palette
+      text: Set status.state of a cloud account after its first validate, and show the age in the console.
+    evidence:
+      - kind: run
+        ref: "#89"
+        note: the lab waits 30 s after the IAM role create before Palette assumes it
+      - kind: source
+        ref: hubble svcclient/converter/v1/cloudaccount_converter.go ToApiCloudAccountStatus
+        note: status.state passes through from the document; no hubble code sets a value for it
+      - kind: source
+        ref: palette-sdk-go api/models/v1_object_meta.go
+        note: creationTimestamp is RFC3339 in UTC
+    tests:
+      - fault: fixtures/azure/account-new.json
+        clean: fixtures/azure/clean.json
+      - fault: fixtures/azure/account-inactive.json
+
+  - id: ssh-key-format
+    title: Each SSH key of the cluster is an authorized key
+    engines: [maas, edge, vsphere]
+    tier: static
+    severity: fail
+    status: source
+    what: |
+      Palette parses each entry of `cloudConfig.sshKeys` with `ssh.ParseAuthorizedKey`. An entry
+      without the type word, or with a blob that is not base64, is refused with
+      `SshKeyValidationFailure`. The vSphere and Edge validate routes run the check; the MAAS create
+      runs it. The static check reads the same format: a type, a blob, and an optional comment. An
+      entry that holds the `AutoGenerate` marker is skipped, as Palette skips it.
+    check:
+      kind: static
+      expr: |
+        def ok: test("^(ssh-rsa|ssh-ed25519|ssh-dss|ecdsa-sha2-nistp(256|384|521)|sk-ssh-ed25519@openssh\\.com|sk-ecdsa-sha2-nistp256@openssh\\.com) [A-Za-z0-9+/]+=*( .*)?$");
+        [ (.entity.spec.cloudConfig.sshKeys // [])[] | select(test("AutoGenerate") | not) | select(ok | not)
+          | "sshKeys entry \(.[:40]) is not an authorized key (type, base64 blob, comment): Palette refuses it with SshKeyValidationFailure" ]
+    fix:
+      owner: none
+      text: The check exists in Palette; strata-preflight runs it before the request.
+    evidence:
+      - kind: source
+        ref: hubble svcclient/validator/params_validator.go ValidatePublicSshKey
+        note: ssh.ParseAuthorizedKey on each key; a failure is SshKeyValidationFailure
+      - kind: source
+        ref: hubble services/service/spectrocluster/internal/service/spectrocluster/internal/vsphere/spectrocluster_vsphere.go ValidateCreateCluster
+        note: ValidateSshs runs in the validate route and in the create
+    tests:
+      - fault: fixtures/vsphere/ssh-key-bad.json
+        clean: fixtures/vsphere/clean.json
+
+  - id: azure-ssh-key
+    title: An Azure cluster names an SSH public key
+    engines: [azure, aks]
+    tier: static
+    severity: fail
+    status: source
+    what: |
+      The converter refuses an Azure or AKS create without `cloudConfig.sshKey`: "Parameter
+      'cloudConfig.sshKey' should not be empty". The provider tolerates an empty key; hubble does
+      not. The docs need a key pair in the Azure environment. For AKS the docs take RSA and ED25519
+      keys alone. The check reads the field and its type word.
+    check:
+      kind: static
+      expr: |
+        (.entity.spec.cloudConfig.sshKey // "") as $k
+        | if $k == "" then ["cloudConfig.sshKey is empty: the converter refuses the create with \"Parameter 'cloudConfig.sshKey' should not be empty\""]
+          elif ($k | test("^(ssh-rsa|ssh-ed25519|ssh-dss|ecdsa-sha2-nistp(256|384|521)) [A-Za-z0-9+/]+=*( .*)?$") | not) then ["cloudConfig.sshKey is not an authorized key (type, base64 blob, comment)"]
+          elif .cloud == "aks" and ($k | test("^(ssh-rsa|ssh-ed25519) ") | not) then ["cloudConfig.sshKey is \($k | split(" ") | .[0]): AKS takes RSA and ED25519 keys alone"]
+          else [] end
+    fix:
+      owner: palette
+      text: Refuse the key type in the AKS validate route.
+    evidence:
+      - kind: source
+        ref: hubble services/service/spectrocluster/internal/handler/converter/v1/clusters_v1_converter.go ToSpectroAzureClusterSpecParam
+        note: validator.ShouldNotBeEmpty("cloudConfig.sshKey", s.CloudConfig.SSHKey)
+      - kind: doc
+        ref: https://docs.spectrocloud.com/clusters/public-cloud/azure/aks/
+        note: only RSA and ED25519 SSH keys are supported for AKS
+    tests:
+      - fault: fixtures/azure/no-ssh-key.json
+        clean: fixtures/azure/clean.json
+      - fault: fixtures/aks/ssh-key-ecdsa.json
+        clean: fixtures/aks/clean.json
+
+  - id: azure-account-roles
+    title: The service principal holds a role on the subscription or the resource group
+    engines: [azure, aks]
+    tier: cloud
+    severity: warn
+    status: source
+    when: .account.spec.clientId != null
+    what: |
+      The docs give the service principal custom roles on the subscription, or on the resource
+      group and the vnet. Palette checks that the principal can list subscriptions, and no
+      permission. A principal with no assignment on the subscription or the group passes the
+      account validate and fails at the first ARM call of the build. The names of the roles are
+      custom, so the check counts assignments and does not read their actions. One assignment on
+      the subscription, the resource group, or a management group passes. A pass is not a proof
+      that the role holds every action of the documented list; the reproduce line prints them.
+    check:
+      kind: exec
+      needs: [az]
+      argv:
+        - az
+        - role
+        - assignment
+        - list
+        - --assignee
+        - "{{ .account.spec.clientId }}"
+        - --all
+        - --output
+        - json
+      expr: |
+        .entity.spec.cloudConfig.subscriptionId as $sub | .entity.spec.cloudConfig.resourceGroup as $rg | .account.spec.clientId as $id
+        | ("/subscriptions/\($sub)" | ascii_downcase) as $subscope
+        | ("/subscriptions/\($sub)/resourcegroups/\($rg)" | ascii_downcase) as $rgscope
+        | if .exec.exit != 0 then ["az role assignment list failed: \(.exec.stderr | .[:200])"]
+          else ([ (.exec.stdout // [])[] | select(((.scope // "") | ascii_downcase) as $s | $s == $subscope or $s == $rgscope or ($s | startswith("/providers/microsoft.management/"))) ]) as $hits
+            | if ($hits | length) > 0 then []
+              else ["the service principal \($id) holds no role on subscription \($sub) or resource group \($rg); it holds \([ (.exec.stdout // [])[] | "\(.roleDefinitionName) on \(.scope)" ] | join(", ") | if . == "" then "nothing" else . end): the docs give it a custom role on the subscription or the group, and Palette checks the subscription list alone"] end
+          end
+    reproduce:
+      - "az role assignment list --assignee {{ .account.spec.clientId }} --all --query '[].[roleDefinitionName,scope]' --output table"
+      - "az role definition list --custom-role-only true --query \"[?contains(roleName, 'Palette')].[roleName,permissions[0].actions]\" --output json"
+    fix:
+      owner: palette
+      text: Check the actions of the documented roles with the Authorization API in the Azure account validate.
+    evidence:
+      - kind: doc
+        ref: https://docs.spectrocloud.com/clusters/public-cloud/azure/required-permissions/
+        note: custom roles on the subscription, or on the resource group and the vnet; the subscription scope is the recommendation
+      - kind: source
+        ref: hubble services/service/cloud/internal/service/cloudservice/azure_service.go validateAzureAccountStandard
+        note: lists the subscriptions of the principal; no role or permission is read
+    tests:
+      - fault: fixtures/azure/roles-other-rg.json
+        clean: fixtures/azure/roles-clean.json
+
+  - id: aks-aad-profile
+    title: An AKS AAD profile names an admin group
+    engines: [aks]
+    tier: static
+    severity: fail
+    status: source
+    what: |
+      With `cloudConfig.aadProfile` set, the provider reads `managed` and `adminGroupObjectIDs`
+      with no nil check, and the CRD marks both required. The AKS pack refuses an empty group list
+      with "minimum required AdminGroupObjectIDs is 1". With `disableLocalAccounts` in the pack,
+      the service principal of the cloud account must be in one of the groups, or nobody can
+      administer the cluster. The groups cannot change after the create.
+    check:
+      kind: static
+      expr: |
+        (.entity.spec.cloudConfig.aadProfile // null) as $a
+        | if $a == null then []
+          else [ ( if ($a | has("managed") | not) then "aadProfile.managed is not set: the provider reads it with no nil check, and the CRD marks it required" else empty end ),
+                 ( if (($a.adminGroupObjectIDs // []) | length) == 0 then "aadProfile.adminGroupObjectIDs is empty: the AKS pack refuses it with \"minimum required AdminGroupObjectIDs is 1\", and the groups cannot change after the create" else empty end ) ]
+          end
+    fix:
+      owner: palette
+      text: Check the AAD profile in the AKS validate route.
+    evidence:
+      - kind: source
+        ref: palette pkg/provider/azure/azure_managed_controlplane.go validateAADProfile
+        note: "\"minimum required AdminGroupObjectIDs is 1\"; the cluster config fields are dereferenced without a nil check"
+      - kind: doc
+        ref: https://docs.spectrocloud.com/clusters/public-cloud/azure/enable-iam-features-aks/enable-microsoft-entra-id-aks/
+        note: adminGroupObjectIDs is required when managed is true; the groups cannot be changed after cluster creation
+    tests:
+      - fault: fixtures/aks/aad-no-groups.json
+        clean: fixtures/aks/aad-clean.json
+
+  - id: maas-account-endpoint
+    title: The MAAS API endpoint of the cloud account is a URL with the /MAAS path
+    engines: [maas]
+    tier: static
+    severity: fail
+    status: source
+    when: .account != null
+    what: |
+      The MAAS account holds `apiEndpoint` and `apiKey`. The docs show the endpoint as
+      `http://10.1.1.1:5240/MAAS`; the API lives under `/MAAS/api/2.0/`. Palette refuses an endpoint
+      it cannot parse. The account validate route, `POST /v1/clouds/maas/account/validate`, needs
+      the key, and the world holds it redacted, so strata-preflight cannot call it. The check reads
+      the shape of the endpoint. The PCG, or Palette, must reach it; the reproduce line asks the
+      version route.
+    check:
+      kind: static
+      expr: |
+        (.account.spec.apiEndpoint // "") as $e
+        | if $e == "" then ["the MAAS account \(.account.metadata.name) has no apiEndpoint"]
+          elif ($e | test("^https?://[^/]+(/MAAS)?/?$") | not) then ["apiEndpoint \($e) is not http(s)://host:port/MAAS: the docs show http://10.1.1.1:5240/MAAS, and Palette refuses an endpoint it cannot parse"]
+          elif ($e | test("/MAAS/?$") | not) then ["apiEndpoint \($e) has no /MAAS path; the MAAS API lives under /MAAS/api/2.0/"]
+          else [] end
+    reproduce:
+      - "curl -s -o /dev/null -w '%{http_code}\\n' {{ (.account.spec.apiEndpoint // \"http://<maas>:5240/MAAS\") | rtrimstr(\"/\") }}/api/2.0/version/   # from the PCG, or from Palette with a direct connection; 200 or 401 means the endpoint answers"
+    fix:
+      owner: palette
+      text: Call the account validate route at cluster create, through the PCG of the account.
+    evidence:
+      - kind: doc
+        ref: https://docs.spectrocloud.com/clusters/pcg/deploy-pcg/maas/
+        note: "MAAS Server URL, example http://10.1.1.1:5240/MAAS"
+      - kind: source
+        ref: hubble services/service/spectrocluster/internal/service/overlord/overlord_properties_maas.go VerifyMaasAccount
+        note: net.ValidateEndpoint on the endpoint, then a credentials check through the PCG
+    tests:
+      - fault: fixtures/maas/endpoint-bad.json
+        clean: fixtures/maas/clean.json
+
+  - id: vsphere-account-endpoint
+    title: The vCenter server of the cloud account is a host name with no scheme
+    engines: [vsphere]
+    tier: static
+    severity: fail
+    status: source
+    when: .account != null
+    what: |
+      `ValidateVsphereAccount` refuses a `vcenterServer` that starts with `http` or `https`: "Vcenter
+      server name should not start with http or https". The account converter refuses a value
+      that is not a server endpoint. The account validate route, `POST /v1/clouds/vsphere/account/validate`,
+      needs the password, and the world holds it redacted, so strata-preflight cannot call it. The
+      route through the PCG, `POST /v1/overlords/vsphere/{uid}/account/validate`, needs it too.
+    check:
+      kind: static
+      expr: |
+        (.account.spec.vcenterServer // "") as $v
+        | if $v == "" then ["the vSphere account \(.account.metadata.name) has no vcenterServer"]
+          elif ($v | test("^https?://")) then ["vcenterServer \($v) starts with a scheme: Palette refuses it with \"Vcenter server name should not start with http or https\""]
+          elif ($v | test("^[A-Za-z0-9.-]+(:[0-9]+)?$") | not) then ["vcenterServer \($v) is not a host name or an address"]
+          else [] end
+    reproduce:
+      - "curl -sk -o /dev/null -w '%{http_code}\\n' https://{{ .account.spec.vcenterServer // \"<vcenter>\" }}/sdk   # from the PCG; vCenter answers on 443"
+    evidence:
+      - kind: source
+        ref: hubble services/service/cloud/internal/service/cloudservice/vsphere_service.go ValidateVsphereAccount
+        note: refuses a server that starts with http or https, then opens a session
+      - kind: source
+        ref: hubble svcclient/converter/v1/cloudaccount_converter.go ToVsphereCloudAccountSpec
+        note: ShouldNotBeNil("VcenterServer") and ValidServerEndpoint
+    tests:
+      - fault: fixtures/vsphere/vcenter-https.json
+        clean: fixtures/vsphere/clean.json

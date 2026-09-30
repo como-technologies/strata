@@ -1,0 +1,56 @@
+{
+  "_base": "clean.json",
+  "_note": "a static network: the vnet and the two subnets exist in shared-net-rg",
+  "_patch": {
+    "entity": {
+      "spec": {
+        "cloudConfig": {
+          "vnetName": "shared-vnet",
+          "vnetCidrBlock": "10.20.0.0/16",
+          "vnetResourceGroup": "shared-net-rg",
+          "controlPlaneSubnet": {
+            "name": "cp-subnet",
+            "cidrBlock": "10.20.1.0/24",
+            "securityGroupName": "cp-nsg"
+          },
+          "workerSubnet": {
+            "name": "worker-subnet",
+            "cidrBlock": "10.20.2.0/24",
+            "securityGroupName": "worker-nsg"
+          }
+        }
+      }
+    }
+  },
+  "_responses": {
+    "GET /v1/clouds/azure/regions/eastus/subscriptions/11111111-2222-3333-4444-555555555555/networks?cloudAccountUid=acc-azure-1&resourceGroup=shared-net-rg": {
+      "ok": true,
+      "status": 200,
+      "body": {
+        "virtualNetworkList": [
+          {
+            "name": "shared-vnet",
+            "location": "eastus",
+            "addressSpaces": [
+              "10.20.0.0/16"
+            ],
+            "subnets": [
+              {
+                "name": "cp-subnet",
+                "cidrBlock": "10.20.1.0/24"
+              },
+              {
+                "name": "worker-subnet",
+                "cidrBlock": "10.20.2.0/24"
+              },
+              {
+                "name": "bastion",
+                "cidrBlock": "10.20.9.0/24"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  }
+}

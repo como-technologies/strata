@@ -1,0 +1,64 @@
+{
+  "_base": "addon-profile.json",
+  "_note": "the add-on profile pins a chart of a Helm registry",
+  "_patch": {
+    "profiles": [
+      {
+        "source": {
+          "uid": "prof-eks-2"
+        },
+        "packs": [
+          {
+            "key": "addon/strata-live-chart",
+            "layer": "addon",
+            "name": "strata-live-chart",
+            "type": "helm",
+            "tag": "1.0.0",
+            "version": "1.0.0",
+            "packUid": "pk-chart-1",
+            "registryUid": "68d5a1b2c3d4e5f60718293a",
+            "refDigest": "f0b38ea9f0b38ea9f0b38ea9f0b38ea9f0b38ea9f0b38ea9f0b38ea9f0b38ea9",
+            "registryDigest": "f0b38ea9f0b38ea9f0b38ea9f0b38ea9f0b38ea9f0b38ea9f0b38ea9f0b38ea9",
+            "params": {},
+            "values": "pack:\n  content:\n    charts:\n      - name: strata-live-chart\n        version: 1.0.0\n        repo: https://charts.example.test\ncharts:\n  strata-live-chart:\n    purpose: strata-live\n",
+            "valuesCanon": {
+              "pack": {
+                "content": {
+                  "charts": [
+                    {
+                      "name": "strata-live-chart",
+                      "version": "1.0.0",
+                      "repo": "https://charts.example.test"
+                    }
+                  ]
+                }
+              },
+              "charts": {
+                "strata-live-chart": {
+                  "purpose": "strata-live"
+                }
+              }
+            },
+            "valuesHash": "8888888888888888888888888888888888888888888888888888888888888888",
+            "manifests": [],
+            "charts": [
+              {
+                "name": "strata-live-chart",
+                "version": "1.0.0",
+                "repo": "https://charts.example.test"
+              }
+            ],
+            "hash": {
+              "identity": "1111111111111111111111111111111111111111111111111111111111111131",
+              "upstream": "2222222222222222222222222222222222222222222222222222222222222241",
+              "upstreamRaw": "f0b38ea9f0b38ea9f0b38ea9f0b38ea9f0b38ea9f0b38ea9f0b38ea9f0b38ea9",
+              "upstreamSource": "packRef.digest",
+              "authored": "3333333333333333333333333333333333333333333333333333333333333351",
+              "node": "4444444444444444444444444444444444444444444444444444444444444461"
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

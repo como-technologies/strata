@@ -1,0 +1,18 @@
+{
+  "_base": "roles-clean.json",
+  "_note": "the only assignment is on another resource group",
+  "_exec": {
+    "az role assignment list --assignee bbbbbbbb-0000-0000-0000-000000000002 --all --output json": {
+      "exit": 0,
+      "stdout": [
+        {
+          "roleDefinitionName": "Reader",
+          "scope": "/subscriptions/11111111-2222-3333-4444-555555555555/resourceGroups/other-rg",
+          "principalId": "cccccccc-0000-0000-0000-000000000003",
+          "principalType": "ServicePrincipal"
+        }
+      ],
+      "stderr": ""
+    }
+  }
+}

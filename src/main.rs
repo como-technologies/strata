@@ -28,11 +28,16 @@ const COMMANDS: &[&str] = &[
     "help",
     "list",
     "packs",
+    "preflight",
     "same-release",
     "schema",
     "snapshot",
     "verify",
 ];
+
+/// The binary that `strata preflight` runs. It is a package of its own, `strata-preflight`, so the
+/// strata crate stays free of its dependencies; a release ships both binaries side by side.
+const PREFLIGHT_BIN: &str = "strata-preflight";
 
 #[derive(Parser)]
 #[command(
@@ -57,6 +62,12 @@ impl Cli {
             Cmd::List(a) => a.out.format() == Format::Json,
             Cmd::Packs(a) => a.out.format() == Format::Json,
             Cmd::Behind(a) => a.out.format() == Format::Json,
+            Cmd::Preflight(a) => {
+                a.args.iter().any(|x| x == "--json" || x == "--format=json")
+                    || a.args
+                        .windows(2)
+                        .any(|w| w[0] == "--format" && w[1] == "json")
+            }
             Cmd::Snapshot(_) | Cmd::Candidate(_) | Cmd::Schema { .. } => false,
         }
     }
@@ -78,6 +89,8 @@ enum Cmd {
     List(ListArgs),
     /// List the versions a registry offers for a pack
     Packs(PacksArgs),
+    /// Check that Palette can build a cluster, before the build; runs strata-preflight
+    Preflight(PreflightArgs),
     /// Make sure that two or more records are one release
     SameRelease(SameReleaseArgs),
     /// Print the JSON Schema of a document or of the candidate file
@@ -278,6 +291,14 @@ struct ConsumersArgs {
 }
 
 #[derive(Args)]
+#[command(disable_help_flag = true)]
+struct PreflightArgs {
+    /// The arguments of strata-preflight, as `strata-preflight --help` lists them
+    #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+    args: Vec<std::ffi::OsString>,
+}
+
+#[derive(Args)]
 struct PacksArgs {
     /// The pack name, as the registry holds it
     name: String,
@@ -434,7 +455,8 @@ fn command() -> clap::Command {
             "The book: https://legendary-train-pzq9ojj.pages.github.io/"
         ));
     for name in COMMANDS {
-        if *name == "help" {
+        // `strata preflight --help` is the help of strata-preflight, so it goes through
+        if *name == "help" || *name == "preflight" {
             continue;
         }
         cmd = cmd.mut_subcommand(name, |s| s.arg(help_flag()));
@@ -491,8 +513,32 @@ fn run(cli: Cli) -> Result<ExitCode> {
         Cmd::Behind(a) => cmd_behind(&a),
         Cmd::List(a) => cmd_list(&a),
         Cmd::Packs(a) => cmd_packs(&a),
+        Cmd::Preflight(a) => cmd_preflight(&a),
         Cmd::Schema { kind } => cmd_schema(kind),
     }
+}
+
+/// `strata preflight ...` runs the `strata-preflight` binary with the same arguments: the one
+/// beside this binary first, then the one on the PATH. Its exit status is the exit status.
+fn cmd_preflight(a: &PreflightArgs) -> Result<ExitCode> {
+    let beside = std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|d| d.join(PREFLIGHT_BIN)))
+        .filter(|p| p.is_file());
+    let program = beside.unwrap_or_else(|| PathBuf::from(PREFLIGHT_BIN));
+    let status = std::process::Command::new(&program)
+        .args(&a.args)
+        .status()
+        .map_err(|e| Error::Usage {
+            message: format!(
+                "cannot run {PREFLIGHT_BIN} ({e}): install it beside strata, or on the PATH; \
+                 the installer of a release puts both in one directory"
+            ),
+        })?;
+    Ok(match status.code() {
+        Some(code) => ExitCode::from(u8::try_from(code).unwrap_or(2)),
+        None => ExitCode::from(2),
+    })
 }
 
 fn now_utc() -> String {

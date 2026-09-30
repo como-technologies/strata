@@ -1,0 +1,13 @@
+{
+  "_base": "storage-account-clean.json",
+  "_note": "an upper-case letter and an underscore in the name",
+  "_patch": {
+    "entity": {
+      "spec": {
+        "cloudConfig": {
+          "storageAccountName": "Strata_Images"
+        }
+      }
+    }
+  }
+}

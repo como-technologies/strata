@@ -201,6 +201,12 @@ impl Tenant {
         file
     }
 
+    /// Write the answer of one request, for a route that no other helper writes: `path` is the
+    /// request path without the leading slash, such as `v1/spectroclusters/aws/validate`.
+    pub fn put(&self, project: &str, path: &str, value: &Value) {
+        self.write(project, path, value);
+    }
+
     fn write(&self, project: &str, path: &str, value: &Value) {
         let file = self.doc(project, path);
         let text = serde_json::to_string_pretty(value).expect("a document is JSON");

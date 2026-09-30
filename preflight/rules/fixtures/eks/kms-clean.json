@@ -1,0 +1,35 @@
+{
+  "_base": "clean.json",
+  "_note": "secrets encryption with a KMS key that exists and is Enabled",
+  "_patch": {
+    "entity": {
+      "spec": {
+        "cloudConfig": {
+          "encryptionConfig": {
+            "isEnabled": true,
+            "provider": "arn:aws:kms:us-east-2:123456789012:key/1234abcd-12ab-34cd-56ef-1234567890ab",
+            "resources": [ "secrets" ]
+          }
+        }
+      }
+    },
+    "_exec": {
+      "aws kms describe-key --key-id arn:aws:kms:us-east-2:123456789012:key/1234abcd-12ab-34cd-56ef-1234567890ab --region us-east-2 --output json": {
+        "exit": 0,
+        "stdout": {
+          "KeyMetadata": {
+            "AWSAccountId": "123456789012",
+            "KeyId": "1234abcd-12ab-34cd-56ef-1234567890ab",
+            "Arn": "arn:aws:kms:us-east-2:123456789012:key/1234abcd-12ab-34cd-56ef-1234567890ab",
+            "Enabled": true,
+            "KeyUsage": "ENCRYPT_DECRYPT",
+            "KeyState": "Enabled",
+            "KeyManager": "CUSTOMER",
+            "KeySpec": "SYMMETRIC_DEFAULT"
+          }
+        },
+        "stderr": ""
+      }
+    }
+  }
+}

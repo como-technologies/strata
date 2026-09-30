@@ -1,0 +1,69 @@
+{
+  "_base": "addon-profile.json",
+  "_note": "a second add-on profile pins the same pack name and version from another registry",
+  "_patch": {
+    "entity": {
+      "spec": {
+        "profiles": [
+          {
+            "uid": "prof-eks-3",
+            "packValues": [
+              {
+                "name": "spectro-proxy",
+                "tag": "1.5.0",
+                "type": "oci"
+              }
+            ],
+            "variables": []
+          }
+        ]
+      }
+    },
+    "profiles": [
+      {
+        "schema": "strata-snapshot/1",
+        "source": {
+          "uid": "prof-eks-3",
+          "name": "strata-live-addon-oci",
+          "version": "1.0.0",
+          "cloudType": "all",
+          "type": "add-on",
+          "template": "published"
+        },
+        "packs": [
+          {
+            "key": "addon/spectro-proxy",
+            "layer": "addon",
+            "name": "spectro-proxy",
+            "type": "oci",
+            "tag": "1.5.0",
+            "version": "1.5.0",
+            "packUid": "pk-proxy-oci-1",
+            "registryUid": "68d5a1b2c3d4e5f60718293c",
+            "refDigest": "sha256:0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d01",
+            "registryDigest": "sha256:0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d01",
+            "registryProviderType": "pack",
+            "params": {},
+            "values": "frpc:\n  loglevel: info\n",
+            "valuesCanon": {
+              "frpc": {
+                "loglevel": "info"
+              }
+            },
+            "valuesHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "manifests": [],
+            "hash": {
+              "identity": "1111111111111111111111111111111111111111111111111111111111111161",
+              "upstream": "2222222222222222222222222222222222222222222222222222222222222271",
+              "upstreamRaw": "sha256:0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d01",
+              "upstreamSource": "packRef.digest",
+              "authored": "3333333333333333333333333333333333333333333333333333333333333381",
+              "node": "4444444444444444444444444444444444444444444444444444444444444491"
+            }
+          }
+        ],
+        "variables": []
+      }
+    ]
+  }
+}

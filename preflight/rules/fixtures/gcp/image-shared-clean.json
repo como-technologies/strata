@@ -1,0 +1,30 @@
+{
+  "_base": "clean.json",
+  "_note": "the OS and Kubernetes packs carry the image annotations, and Spectro Cloud shares the image u-2404-0-k-1324-0",
+  "_patch": {
+    "packs": {
+      "pk-os-gcp": {
+        "packValues": [
+          { "packUid": "pk-os-gcp", "annotations": { "osName": "ubuntu", "os_version": "u-2404", "os_spectro_version": "0" } }
+        ]
+      },
+      "pk-k8s-gcp": {
+        "packValues": [
+          { "packUid": "pk-k8s-gcp", "annotations": { "k8s_version": "k-1324", "k8s_spectro_version": "0" } }
+        ]
+      }
+    },
+    "_exec": {
+      "gcloud compute images describe u-2404-0-k-1324-0 --project spectro-image-build --format json": {
+        "exit": 0,
+        "stdout": {
+          "name": "u-2404-0-k-1324-0",
+          "selfLink": "https://www.googleapis.com/compute/v1/projects/spectro-image-build/global/images/u-2404-0-k-1324-0",
+          "status": "READY",
+          "diskSizeGb": "20"
+        },
+        "stderr": ""
+      }
+    }
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "_base": "two-node-clean.json",
+  "_note": "two primary candidates",
+  "_patch": {
+    "entity": {
+      "spec": {
+        "machinepoolconfig": [
+          {
+            "cloudConfig": {
+              "edgeHosts": [
+                {
+                  "hostUid": "edge-host-cp-1",
+                  "hostName": "cp-1",
+                  "twoNodeCandidatePriority": "primary"
+                },
+                {
+                  "hostUid": "edge-host-cp-2",
+                  "hostName": "cp-2",
+                  "twoNodeCandidatePriority": "primary"
+                }
+              ]
+            },
+            "poolConfig": {
+              "name": "control-plane-pool"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

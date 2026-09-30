@@ -1,0 +1,41 @@
+{
+  "_base": "repave-none.json",
+  "_note": "the kubernetes-gke tag goes 1.34 to 1.35, and Palette repaves",
+  "_patch": {
+    "entity": {
+      "spec": {
+        "profiles": [
+          {
+            "uid": "prof-gke-1",
+            "packValues": [
+              { "name": "cos-gke", "tag": "1.0.0", "type": "spectro" },
+              { "name": "kubernetes-gke", "tag": "1.35", "type": "spectro" },
+              { "name": "cni-vpc-native-gke", "tag": "1.0.0", "type": "spectro" },
+              { "name": "gke-csi-gcp-driver", "tag": "1.0.0", "type": "spectro" }
+            ]
+          }
+        ]
+      }
+    },
+    "_responses": {
+      "POST /v1/spectroclusters/7bcb858bec85d411d42ee515/validate/repave": {
+        "ok": true,
+        "status": 200,
+        "body": {
+          "isRepaveRequired": true,
+          "reasons": [
+            {
+              "code": "PackUpgraded",
+              "message": "Pack kubernetes-gke is upgraded from 1.34 to 1.35",
+              "pack": {
+                "current": { "name": "kubernetes-gke", "tag": "1.34", "layer": "k8s" },
+                "target": { "name": "kubernetes-gke", "tag": "1.35", "layer": "k8s" },
+                "diffConfigKeys": []
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "_base": "clean.json",
+  "_note": "the clean world, with the answer of EC2: no instance carries the Cluster API tag of the name",
+  "_patch": {
+    "_exec": {
+      "aws ec2 describe-instances --filters Name=tag-key,Values=sigs.k8s.io/cluster-api-provider-aws/cluster/fred Name=instance-state-name,Values=pending,running,stopping,stopped,shutting-down --region us-east-2 --output json": {
+        "exit": 0,
+        "stdout": {
+          "Reservations": []
+        },
+        "stderr": ""
+      }
+    }
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "_base": "pvc-lb-leftover-clean.json",
+  "_note": "two volumes of PVCs of the cluster are available: attached to no node",
+  "_patch": {
+    "_exec": {
+      "aws ec2 describe-volumes --filters Name=tag-key,Values=kubernetes.io/cluster/fred --region us-east-2 --output json": {
+        "exit": 0,
+        "stdout": {
+          "Volumes": [
+            { "VolumeId": "vol-0123456789abcdef0", "State": "available", "Size": 8, "AvailabilityZone": "us-east-2a", "VolumeType": "gp3", "Tags": [ { "Key": "kubernetes.io/cluster/fred", "Value": "owned" }, { "Key": "kubernetes.io/created-for/pvc/name", "Value": "data-0" } ] },
+            { "VolumeId": "vol-0123456789abcdef1", "State": "in-use", "Size": 60, "AvailabilityZone": "us-east-2a", "VolumeType": "gp3", "Tags": [ { "Key": "kubernetes.io/cluster/fred", "Value": "owned" } ] },
+            { "VolumeId": "vol-0123456789abcdef2", "State": "available", "Size": 20, "AvailabilityZone": "us-east-2b", "VolumeType": "gp3", "Tags": [ { "Key": "kubernetes.io/cluster/fred", "Value": "owned" }, { "Key": "kubernetes.io/created-for/pvc/name", "Value": "data-1" } ] }
+          ]
+        },
+        "stderr": ""
+      }
+    }
+  }
+}

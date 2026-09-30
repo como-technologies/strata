@@ -10,9 +10,9 @@ scripts/ci/merge-gate.sh "releases/*.json" --base main
 ```
 
 A branch that sat for a day is the problem. Another merge request moved the
-record. Palette changed the version that the record names. The comment on the
-branch still shows yesterday's comparison, the merge is clean, and the cluster
-build gets something that nobody reviewed.
+record. The version that the record names changed in Palette. The comment on
+the branch still shows yesterday's comparison, the merge is clean, and the
+cluster build gets content from outside the review of the team.
 
 ## The three checks
 
@@ -82,7 +82,7 @@ is true of a branch that never read what it replaces. The declaration
 is the part that makes it a decision, and it stays in the history of the
 repository, where the next person can read why.
 
-### A record that Palette no longer matches
+### A record that the published version no longer matches
 
 The merge is clean and no pin moves back, and the gate is still red: the
 profile that the record names was edited in place after the record was written.
@@ -97,8 +97,8 @@ See [A published version is edited in place](../use-cases/edited-in-place.md).
 last line says `not verified` and why, in place of the count of records that
 did not verify. See [Settings](../reference/settings.md).
 
-The gate checks the record at the merge. Palette can change a published version
-after that. Run `strata verify` on the record again in the job that builds the
+The gate checks the record at the merge. A published version can change after
+that. Run `strata verify` on the record again in the job that builds the
 cluster.
 
 ## Options

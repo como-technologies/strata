@@ -1,0 +1,23 @@
+{
+  "_base": "identity-clean.json",
+  "_note": "the CAPA stack is in ROLLBACK_COMPLETE",
+  "_patch": {
+    "_exec": {
+      "aws cloudformation describe-stacks --stack-name cluster-api-provider-aws-sigs-k8s-io --region us-east-2 --output json": {
+        "exit": 0,
+        "stdout": {
+          "Stacks": [
+            {
+              "StackName": "cluster-api-provider-aws-sigs-k8s-io",
+              "StackStatus": "ROLLBACK_COMPLETE",
+              "DriftInformation": {
+                "StackDriftStatus": "NOT_CHECKED"
+              }
+            }
+          ]
+        },
+        "stderr": ""
+      }
+    }
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "_base": "clean.json",
+  "_patch": {
+    "_exec": {
+      "gcloud services list --enabled --project strata-lab --format json": {
+        "exit": 0,
+        "stdout": [
+          {
+            "config": {
+              "name": "container.googleapis.com"
+            }
+          },
+          {
+            "config": {
+              "name": "compute.googleapis.com"
+            }
+          }
+        ],
+        "stderr": ""
+      }
+    }
+  }
+}

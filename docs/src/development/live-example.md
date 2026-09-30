@@ -226,14 +226,15 @@ back to false with the default variables (`apply_baseline`).
 - For `cloud = "gke"`: the GCP cloud account and project of `cloud = "gcp"`,
   with the Kubernetes Engine API on as well
   (`gcloud services enable container.googleapis.com --project <project>`).
-  Without it, the cluster does not build, and its status shows no error. GCP
-  also refuses a new GKE cluster that is in no release channel, and Palette
-  sets no channel (its known issue PCP-7528). `cloud-gke.tf` sets the channel
-  `regular` with the workaround of Palette, a cluster-level CAPI override in
+  Without it, the cluster does not build. GCP also refuses a new GKE cluster
+  that is in no release channel. Palette sets no channel by default (known
+  issue PCP-7528), and gives a cluster-level CAPI override for it:
+  `cloud-gke.tf` sets the channel `regular` through
   `override_cluster_api_config`. Without it, GCP refuses each `CreateCluster`
   call, and the cluster stays `Provisioning` with its control plane shown as
-  done. In both cases the status of the cluster shows no error, and the events
-  of the cluster name it (`GET /v1/events/components/spectrocluster/<uid>`).
+  done. In both cases the events of the cluster name the refusal
+  (`GET /v1/events/components/spectrocluster/<uid>`), and the status of the
+  cluster stays `Provisioning` with no error field.
   When the create takes longer than its timeout, the provider gives a warning
   and ends the apply with success, so `just live-up` can end while the cluster
   still builds: `gke.sh` waits for `Running`.
@@ -269,8 +270,8 @@ back to false with the default variables (`apply_baseline`).
 - On AWS, the AWS managed policy `AmazonEBSCSIDriverPolicy` on the worker node role
   `nodes.cluster-api-provider-aws.sigs.k8s.io`. Without it, the EBS CSI
   controller fails on each cluster with `UnauthorizedOperation` on
-  `ec2:DescribeAvailabilityZones`. No strata check needs volumes, and Palette
-  still reports such a cluster `Running`.
+  `ec2:DescribeAvailabilityZones`. No strata check needs volumes, and such a
+  cluster reaches `Running` all the same.
 
 For a self-hosted Palette, set `PALETTE_API` in the environment or in
 `~/.palette.env`. Strata reads it, and `tf.sh` and `tenant.sh` pass it on.
@@ -298,18 +299,26 @@ work can use. It makes its own cloud account instead, in `cloud-eks.tf`:
 external id is sensitive, and OpenTofu keeps it in the local state alone.
 
 A change of the node pool of an EKS cluster, step 4 of `eks.sh` with
-`EKS_POOL_CHANGE=1`, leaves a node group that Palette no longer tracks, and the
-delete of the cluster then waits with no end. The recovery, after `just
-live-down` stops at the cluster:
+`EKS_POOL_CHANGE=1`, leaves a node group outside the machine pools of Palette,
+and the delete of the cluster then does not end by itself. The recovery, after
+`just live-down` stops at the cluster:
 
 1. `examples/live/eks-nodegroups.sh --delete`.
-2. `aws eks delete-cluster --name <cluster name>`, and then the VPC of the
-   cluster, with its NAT gateways, elastic IPs, internet gateway, subnets, route
-   tables, and security groups: each carries the tag
-   `sigs.k8s.io/cluster-api-provider-aws/cluster/<cluster name>`.
+2. `examples/live/aws-cleanup.sh <cluster name> <region> --yes`: the EKS
+   cluster, and then the VPC of the cluster with its NAT gateways, elastic IPs,
+   internet gateway, subnets, route tables, and security groups, each found by
+   the tag `sigs.k8s.io/cluster-api-provider-aws/cluster/<cluster name>`.
+   Without `--yes` it lists what it would delete and deletes nothing.
 3. `examples/live/aws-inventory.sh <cluster name> <region>` reads 0 for each kind.
 4. `examples/live/api.sh delete-cluster <uid> --force`, and `just live-down`
    again.
+
+A delete waits the same way after a delete of a cluster that is still
+`Provisioning` (`delete-while-provisioning`), with no pool change: the
+preflight plan met it on eks, and the same four steps end it. A second plain
+delete, which the findings report on the pivot webhook gives as the step that
+ends the wait, does not end it when the delete reads a control plane object
+that is gone as an error; step 4 does.
 
 For the questions of `eks.sh`, set `eks_k8s_bump` to a Kubernetes version of the
 EKS pack, such as `1.36`: the example then also makes the profile version 1.0.9,
@@ -333,8 +342,9 @@ A change of the node pool of a GKE cluster, step 4 of `gke.sh` with
 Palette gives the new machine pool the GKE name of the old one, `worker-pool`.
 The delete of the old machine pool removes the GKE node pool, and the
 controllers that make the new pool ran on its nodes. The cluster keeps no node.
-The delete of the cluster then removes the GKE cluster, and stays `Deleting`
-with no end. The recovery, after `just live-down` stops at the cluster:
+The delete of the cluster then removes the GKE cluster, and stays `Deleting`,
+so the recovery below ends it. The recovery, after `just live-down` stops at
+the cluster:
 
 1. `examples/live/gcp-inventory.sh <project> <cluster name> --gke` reads 0 for
    each kind. If a GKE cluster is left,
@@ -345,6 +355,70 @@ with no end. The recovery, after `just live-down` stops at the cluster:
 For the questions of `gke.sh`, set `gke_k8s_bump` to a Kubernetes version of the
 GKE pack, such as `1.35`: the example then also makes the profile version 1.0.9,
 the release with that version alone.
+
+## The preflight checks
+
+Two scripts run the three tiers of `strata preflight` around each build.
+
+**`preflight.sh`** checks the lab itself, before a recipe spends anything: the
+tools on the PATH, the key, the credentials of the cloud CLI, the APIs of the
+GCP project, the six core policies of an EKS run, the login of the OCI
+registry, and the leftovers of a run before, with the inventories. `just
+live-up` and `just live-profiles` run it first and stop at a failed check.
+`just live-preflight` runs it alone. These are checks of the lab, not of
+strata: the rows of the catalog with `engines: [lab]` name each one.
+
+**`preflight-plan.sh ENGINE`** is the test plan of #91 for one engine, with
+no cluster. It fills the entity of `examples/live/preflight/ENGINE.json` from
+the tenant, then runs two parts. In the first, one edit of the entity makes each
+fault the lab can make without a build, such as a GKE pool of 4, one zone on
+EKS, a GKE cluster with no release channel, or one worker of four cores, and
+`strata preflight --rule ID` must fail on it. In the second, the clean entity
+runs through every tier, and each rule of severity `fail` that ran must pass.
+The script appends the run to the ledger, `preflight/evidence/runs.yaml`, as
+`caught`, `missed`, `passed`, or `false-fail` for each rule, and
+`strata preflight --promotion` reads it. `--build` adds the build of cluster A
+through the provider, with the watch on it from the moment Palette lists it,
+until it is `Running` or a stuck state; then `strata preflight cluster:UID` on
+the cluster as Palette holds it, which is the entity the provider sent, and on
+a change of the instance type of its worker pool, which the rules on a change
+must fail. `--build --down` tears the example down after, and reads the
+inventory of the cloud; without `--down` the cluster stays, and `just
+live-down` follows. The watch of the build streams to the terminal.
+
+**`watch.sh`** is the watch a person sees. `just live-watch --build --down`
+makes cluster B beside cluster A, and from the moment Palette lists it runs
+`strata preflight cluster:UID --watch --verbose` on the terminal: one line for
+each rule at each reading, every 30 seconds, until the cluster is `Running` or
+a stuck state; then it removes cluster B. Cluster A stays as it is. Without
+`--build` it waits, by name, for a build started elsewhere. The report of the
+watch goes to `runs/<UTC time>/watch/out/`, or under `--out DIR`; `--every`
+and `--limit` go to the watch.
+
+```bash
+just live-profiles                # or just live-up; the profiles must be there
+just live-watch --build --down    # cluster B, watched, then removed: about 25 minutes
+```
+
+[Preflight: one cluster, end to end](./preflight-walkthrough.md) is the same
+story typed one line at a time: check a body, break it, build it, watch it,
+inspect it, remove it.
+
+```bash
+just live-down                                                # the profiles of one cloud at a time
+examples/live/tf.sh apply -var cluster=false -var cloud=gke   # the profiles of the engine
+just live-preflight-plan gke
+just live-down
+```
+
+The profiles of each cloud share one name and one version, so an apply with
+another cloud before a destroy is refused with `ClusterProfileAlreadyExists`:
+OpenTofu creates the new profile before it destroys the old one. Run
+`just live-down` between two clouds.
+
+`PALETTE_RELEASE` names the Palette release for the ledger, when known: a
+tenant key cannot read it. The runs are recorded in
+[Live runs](./live-runs.md#preflight-plansh).
 
 ## Steps
 
@@ -474,9 +548,8 @@ just live-eks                                                                  #
 stops at the first failure.
 
 - `in-place.sh` creates cluster `barney`: about 20 minutes. It deletes it at the
-  end: 10 to 30 minutes. It waits for `Running` before the delete, because
-  Palette does not complete the deletion of a cluster that is still
-  provisioning.
+  end: 10 to 30 minutes. It waits for `Running` before the delete, because a
+  delete of a cluster that is still provisioning stays in `Deleting`.
 - `registry-move.sh` runs no cluster, and takes a few minutes.
 - Each script writes `summary.md` and each output under its run directory. To
   continue an interrupted `in-place.sh`:
@@ -484,7 +557,11 @@ stops at the first failure.
 
 ### 5. Remove it
 
-Keep the uids first. The outputs go with the state.
+Keep the uids first. The outputs go with the state, and after that
+`tf.sh output -raw` prints the warning "No outputs found" on standard output: a
+shell that exports it as `PALETTE_PROJECT_UID` sends that text as the project
+header, and every request answers a plain-text `400 Bad Request`. When the
+outputs are gone, take the project uid from `~/.palette.env`.
 
 ```bash
 C=$(examples/live/tf.sh output -raw cluster_uid)
@@ -536,9 +613,9 @@ in Palette, which exists from the start of the creation.
 | A script stops with "not at its baseline" | An earlier run did not finish, or a person changed the example. `baseline-before.txt` names each difference. `just live-down && just live-up` builds it again. |
 | `registry-digest-oci` fails with "crane digest ... failed" or HTTP 401 | No login to the OCI registry, or an expired one. An AWS registry login lasts 12 hours. A login also stores an empty credential, and reports a success, when the token request before it failed: run `aws ecr get-login-password` alone first, and use a profile that has `ecr:GetAuthorizationToken`. |
 | `ebs-csi-controller` pods in `CrashLoopBackOff`, with `UnauthorizedOperation` on `ec2:DescribeAvailabilityZones` | The worker node role does not have `AmazonEBSCSIDriverPolicy`. See Prerequisites. |
-| A GCP cluster stays `Provisioning` with no instance, and the events say `Required 'compute.images.useReadOnly' permission for 'projects/spectro-image-build/global/images/<image>'` | Spectro Cloud shares no GCP image for that pair of OS and Kubernetes versions. The Kubernetes pack still lists `gcp`. Use a version whose image `gcloud compute images describe <image> --project spectro-image-build` reads; `cloud-gcp.tf` sets one. |
+| A GCP cluster stays `Provisioning` with no instance, and the events say `Required 'compute.images.useReadOnly' permission for 'projects/spectro-image-build/global/images/<image>'` | No GCP image is shared for that pair of OS and Kubernetes versions. Use a version whose image `gcloud compute images describe <image> --project spectro-image-build` reads; `cloud-gcp.tf` sets one. |
 | A GCP cluster stays `Provisioning` with its control plane instance running; `cloud-controller-manager` is in `CrashLoopBackOff`, and every other pod is `Pending` | The Compute Engine default service account has no role on the project. See Prerequisites. The cluster continues when it gets one. |
-| A cluster stays `Provisioning` with `not done: WorkerNodeAdditionDone: provision worker nodes`, although its machines are `Running` and its nodes `Ready` | Palette did not check the workers again. A restart of the Palette controller in the cluster does not help. The deletion of such a cluster runs normally: delete it, and send its diagnostics to Palette support. |
+| A cluster stays `Provisioning` with `not done: WorkerNodeAdditionDone: provision worker nodes`, although its machines are `Running` and its nodes `Ready` | The condition of the workers was not read again. A restart of the Palette controller in the cluster does not change it. The deletion of such a cluster runs as usual: delete it, and send its diagnostics to Spectro Cloud support. |
 
 ## When a teardown is slow or stuck
 
@@ -548,7 +625,7 @@ These rules come from the teardowns of this kind of cluster:
   `AWS_PROFILE` or `gcloud` for the inventory), or `tenant.sh diagnose <uid> <dir>` for
   one cluster. When the cluster is gone, the evidence is gone.
 - **Do not delete a cluster that is still provisioning**, unless its machines are
-  `Running` and its nodes `Ready`. Palette then does not complete the deletion,
+  `Running` and its nodes `Ready`. A delete before that stays in `Deleting`,
   and each cloud resource stays.
 - **A deletion continues in Palette after OpenTofu stops.** Check with
   `tenant.sh cluster`, and do not start again. While the state is not `Running`
@@ -570,7 +647,7 @@ These rules come from the teardowns of this kind of cluster:
   removes the records of Palette and nothing in the cloud. An earlier force leaves
   resources that cost money with nothing to track them. Palette refuses a forced
   delete for about 15 minutes after the deletion starts, and can answer 500
-  before it accepts one. A forced delete in that gap does no harm once the
+  before it accepts one. A forced delete in that window does no harm once the
   inventory is empty, and it saves a few minutes at most. Use the Palette
   console, or the API:
 

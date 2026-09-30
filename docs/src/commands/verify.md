@@ -50,8 +50,8 @@ the line is `who: no audit entry since the record`.
 
 `--json` puts the same entries in `verify.who`. Each entry has `time`, `actor`,
 `actorType`, `actorUid` for a person, `action`, `summary` when Palette gives
-one, and `auditUid`. Palette gives no request id: `auditUid` names the entry,
-and `GET /v1/audits/{auditUid}` reads it again.
+one, and `auditUid`. `auditUid` names the entry, and
+`GET /v1/audits/{auditUid}` reads it again. An entry carries no request id.
 
 - Strata reads the log only for a record that drifted. An unchanged record
   costs no request.

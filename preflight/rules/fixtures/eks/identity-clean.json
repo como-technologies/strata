@@ -1,0 +1,214 @@
+{
+  "_base": "clean.json",
+  "_note": "the clean world of the identity rules: the account adds the EBS CSI policy, and each IAM and CloudFormation command answers as a healthy account does",
+  "_patch": {
+    "account": {
+      "spec": {
+        "policyARNs": [
+          "arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy"
+        ]
+      }
+    },
+    "_exec": {
+      "aws iam simulate-principal-policy --policy-source-arn arn:aws:iam::123456789012:role/strata-live-eks-cloud --action-names ec2:CreateSecurityGroup ec2:AuthorizeSecurityGroupIngress ec2:DescribeKeyPairs ec2:DescribeImages ec2:RunInstances elasticloadbalancing:CreateLoadBalancer ec2:CreateVpc ec2:CreateSubnet ec2:CreateInternetGateway ec2:CreateRouteTable ec2:CreateNatGateway ec2:AllocateAddress cloudformation:DescribeStacks --output json": {
+        "exit": 0,
+        "stdout": {
+          "EvaluationResults": [
+            {
+              "EvalActionName": "ec2:CreateSecurityGroup",
+              "EvalResourceName": "*",
+              "EvalDecision": "allowed"
+            },
+            {
+              "EvalActionName": "ec2:AuthorizeSecurityGroupIngress",
+              "EvalResourceName": "*",
+              "EvalDecision": "allowed"
+            },
+            {
+              "EvalActionName": "ec2:DescribeKeyPairs",
+              "EvalResourceName": "*",
+              "EvalDecision": "allowed"
+            },
+            {
+              "EvalActionName": "ec2:DescribeImages",
+              "EvalResourceName": "*",
+              "EvalDecision": "allowed"
+            },
+            {
+              "EvalActionName": "ec2:RunInstances",
+              "EvalResourceName": "*",
+              "EvalDecision": "allowed"
+            },
+            {
+              "EvalActionName": "elasticloadbalancing:CreateLoadBalancer",
+              "EvalResourceName": "*",
+              "EvalDecision": "allowed"
+            },
+            {
+              "EvalActionName": "ec2:CreateVpc",
+              "EvalResourceName": "*",
+              "EvalDecision": "allowed"
+            },
+            {
+              "EvalActionName": "ec2:CreateSubnet",
+              "EvalResourceName": "*",
+              "EvalDecision": "allowed"
+            },
+            {
+              "EvalActionName": "ec2:CreateInternetGateway",
+              "EvalResourceName": "*",
+              "EvalDecision": "allowed"
+            },
+            {
+              "EvalActionName": "ec2:CreateRouteTable",
+              "EvalResourceName": "*",
+              "EvalDecision": "allowed"
+            },
+            {
+              "EvalActionName": "ec2:CreateNatGateway",
+              "EvalResourceName": "*",
+              "EvalDecision": "allowed"
+            },
+            {
+              "EvalActionName": "ec2:AllocateAddress",
+              "EvalResourceName": "*",
+              "EvalDecision": "allowed"
+            },
+            {
+              "EvalActionName": "cloudformation:DescribeStacks",
+              "EvalResourceName": "*",
+              "EvalDecision": "allowed"
+            }
+          ]
+        },
+        "stderr": ""
+      },
+      "aws iam list-policies --scope Local --output json": {
+        "exit": 0,
+        "stdout": {
+          "Policies": [
+            {
+              "PolicyName": "PaletteControllerPolicy",
+              "Arn": "arn:aws:iam::123456789012:policy/PaletteControllerPolicy",
+              "AttachmentCount": 1
+            },
+            {
+              "PolicyName": "PaletteControlPlanePolicy",
+              "Arn": "arn:aws:iam::123456789012:policy/PaletteControlPlanePolicy",
+              "AttachmentCount": 1
+            },
+            {
+              "PolicyName": "PaletteNodesPolicy",
+              "Arn": "arn:aws:iam::123456789012:policy/PaletteNodesPolicy",
+              "AttachmentCount": 1
+            },
+            {
+              "PolicyName": "PaletteDeploymentPolicy",
+              "Arn": "arn:aws:iam::123456789012:policy/PaletteDeploymentPolicy",
+              "AttachmentCount": 1
+            },
+            {
+              "PolicyName": "strata-live-PaletteControllersEKSPolicy",
+              "Arn": "arn:aws:iam::123456789012:policy/strata-live-PaletteControllersEKSPolicy",
+              "AttachmentCount": 1
+            },
+            {
+              "PolicyName": "PaletteCAPATaggingPolicy",
+              "Arn": "arn:aws:iam::123456789012:policy/PaletteCAPATaggingPolicy",
+              "AttachmentCount": 1
+            },
+            {
+              "PolicyName": "PaletteCloudFormationPolicy",
+              "Arn": "arn:aws:iam::123456789012:policy/PaletteCloudFormationPolicy",
+              "AttachmentCount": 1
+            },
+            {
+              "PolicyName": "ops-read-only",
+              "Arn": "arn:aws:iam::123456789012:policy/ops-read-only",
+              "AttachmentCount": 1
+            }
+          ]
+        },
+        "stderr": ""
+      },
+      "aws cloudformation describe-stacks --stack-name cluster-api-provider-aws-sigs-k8s-io --region us-east-2 --output json": {
+        "exit": 0,
+        "stdout": {
+          "Stacks": [
+            {
+              "StackName": "cluster-api-provider-aws-sigs-k8s-io",
+              "StackStatus": "CREATE_COMPLETE",
+              "DriftInformation": {
+                "StackDriftStatus": "NOT_CHECKED"
+              }
+            }
+          ]
+        },
+        "stderr": ""
+      },
+      "aws iam list-instance-profiles --output json": {
+        "exit": 0,
+        "stdout": {
+          "InstanceProfiles": [
+            {
+              "InstanceProfileName": "control-plane.cluster-api-provider-aws.sigs.k8s.io",
+              "Roles": [
+                {
+                  "RoleName": "control-plane.cluster-api-provider-aws.sigs.k8s.io",
+                  "Arn": "arn:aws:iam::123456789012:role/control-plane.cluster-api-provider-aws.sigs.k8s.io"
+                }
+              ]
+            },
+            {
+              "InstanceProfileName": "controllers.cluster-api-provider-aws.sigs.k8s.io",
+              "Roles": [
+                {
+                  "RoleName": "controllers.cluster-api-provider-aws.sigs.k8s.io",
+                  "Arn": "arn:aws:iam::123456789012:role/controllers.cluster-api-provider-aws.sigs.k8s.io"
+                }
+              ]
+            },
+            {
+              "InstanceProfileName": "nodes.cluster-api-provider-aws.sigs.k8s.io",
+              "Roles": [
+                {
+                  "RoleName": "nodes.cluster-api-provider-aws.sigs.k8s.io",
+                  "Arn": "arn:aws:iam::123456789012:role/nodes.cluster-api-provider-aws.sigs.k8s.io"
+                }
+              ]
+            }
+          ]
+        },
+        "stderr": ""
+      },
+      "aws iam list-attached-role-policies --role-name nodes.cluster-api-provider-aws.sigs.k8s.io --output json": {
+        "exit": 0,
+        "stdout": {
+          "AttachedPolicies": [
+            {
+              "PolicyName": "nodes.cluster-api-provider-aws.sigs.k8s.io",
+              "PolicyArn": "arn:aws:iam::123456789012:policy/nodes.cluster-api-provider-aws.sigs.k8s.io"
+            },
+            {
+              "PolicyName": "AmazonEKSWorkerNodePolicy",
+              "PolicyArn": "arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy"
+            },
+            {
+              "PolicyName": "AmazonEKS_CNI_Policy",
+              "PolicyArn": "arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy"
+            },
+            {
+              "PolicyName": "AmazonEC2ContainerRegistryReadOnly",
+              "PolicyArn": "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
+            },
+            {
+              "PolicyName": "AmazonEBSCSIDriverPolicy",
+              "PolicyArn": "arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy"
+            }
+          ]
+        },
+        "stderr": ""
+      }
+    }
+  }
+}

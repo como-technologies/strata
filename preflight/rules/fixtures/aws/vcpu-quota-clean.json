@@ -1,0 +1,15 @@
+{
+  "_base": "clean.json",
+  "_note": "the on-demand vCPU quota is 64, and the pools ask for 12 (3 x t3.xlarge)",
+  "_patch": {
+    "_exec": {
+      "aws service-quotas get-service-quota --service-code ec2 --quota-code L-1216C47A --region us-east-2 --output json": {
+        "exit": 0,
+        "stdout": {
+          "Quota": { "ServiceCode": "ec2", "QuotaCode": "L-1216C47A", "QuotaName": "Running On-Demand Standard (A, C, D, H, I, M, R, T, Z) instances", "Value": 64.0, "Unit": "None", "Adjustable": true }
+        },
+        "stderr": ""
+      }
+    }
+  }
+}

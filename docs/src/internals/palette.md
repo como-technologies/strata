@@ -1,8 +1,9 @@
 # What Palette does
 
 Strata is built around the behavior of the Palette API. These pages state that
-behavior, and what strata does about each part of it. Spectro Cloud documents
-little of this, so each answer here comes from reading a real tenant: see
+behavior, and what strata does with each part of it. The public documentation
+describes each feature, and the behavior of the API under each change comes
+from a live tenant: see
 [The live example](../development/live-example.md). Where a page gives the rule
 behind an answer from the Spectro Cloud source, it says so. A rule from the
 source that no run checks is in

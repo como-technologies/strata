@@ -1,0 +1,25 @@
+{
+  "_base": "clean.json",
+  "_note": "an Ubuntu 16.04 OS pack; Palette maps 18.04, 20.04, 22.04, and 24.04 alone",
+  "_patch": {
+    "profiles": [
+      {
+        "source": {
+          "uid": "prof-maas-1"
+        },
+        "packs": [
+          {
+            "key": "os/ubuntu-maas",
+            "layer": "os",
+            "name": "ubuntu-maas",
+            "version": "16.04",
+            "tag": "16.04",
+            "packUid": "pk-os-maas",
+            "registryUid": "5eecc89d0b150045ae661cef",
+            "valuesCanon": null
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,483 @@
+section: platform
+title: The Palette platform
+about: |
+  What Palette itself does with a build: the validate routes it has and does not call, the
+  states that hide an error, the webhook of the pivot, and the answers of its API.
+rules:
+  - id: palette-validate
+    title: The validate route of Palette for the cloud type passes
+    engines: [aws, eks, gcp, gke, azure, aks, maas, edge, vsphere]
+    tier: palette
+    severity: fail
+    status: seen
+    what: |
+      `POST /v1/spectroclusters/{cloudType}/validate` takes the body of the create. It checks the
+      name, the credit, the profile packs and their variables, and the machine resources against
+      the needs of the packs. For GKE it checks the pool size. Only the console calls it; the
+      provider and palette-cli do not, and the create path of the API runs the name and the limit
+      checks alone. A 4xx is one refusal, with its code; a 200 lists the errors of each pool and
+      each profile. On EKS the route reports no CPU floor for a managed node group. One `t3.xlarge`
+      worker got `200` with no error; the aws route answers `MachinePoolWithMinCpuRequired` for the
+      same pool. No run shows whether the EKS create fails later. `worker-cpu-floor`, `pack-dependency`,
+      and `ecr-oci-images` call the same route and read one class of its errors each; this rule
+      reads them all.
+    check:
+      kind: palette
+      method: POST
+      path: /v1/spectroclusters/{{ .cloud | if . == "edge" then "edge-native" else . end }}/validate
+      # for an existing cluster the route would refuse its own name with ResourceAlreadyExists,
+      # so the body of the check carries the name with a suffix; nothing else changes
+      body: |
+        . as $w | .entity
+        | if $w.clusterUid != null then .metadata.name = ((.metadata.name // "cluster") + "-preflight") else . end
+      expr: |
+        .response as $r
+        | if ($r.ok | not) then ["Palette refused the entity: \($r.body.code // $r.status): \($r.body.message // ($r.body | tostring))"]
+          else [ ($r.body.profiles // [])[] | .uid as $u | (.packs.results // [])[] | .name as $n | (.errors // [])[] | "profile \($u), pack \($n): \(.code): \(.message)" ]
+             + [ ($r.body.machinePools.results // [])[] | .name as $n | (.errors // [])[] | "pool \($n): \(.code): \(.message)" ]
+          end
+    fix:
+      owner: palette
+      text: Run the validate route at the start of each create, and add it to the SDK and the provider.
+    evidence:
+      - kind: report
+        ref: palette-precreate-validation-gaps-findings-2026-09-28 B3
+      - kind: source
+        ref: hubble services/service/spectrocluster/internal/service/spectrocluster/internal/base/spectrocluster_validate.go validateProfiles
+    tests:
+      - fault: fixtures/gke/validate-refused.json
+        clean: fixtures/gke/clean.json
+      - fault: fixtures/eks/validate-cpu.json
+
+  - id: status-not-cloud
+    title: The status shows an error when the cloud refuses the build
+    engines: [gke, gcp]
+    tier: watch
+    severity: fail
+    status: seen
+    what: |
+      GCP refuses the build, and the status of the cluster shows no error: `ReconcileManagedControlPlaneStatus`
+      of the GCP provider returns nothing, so `ControlPlaneNodeAdditionDone` is `True`. The
+      refusal is in the events alone, as `GCPManagedControlPlaneReconcile` with the message of GCP,
+      or `ReconcileError`. A stop of CAPG after a pool change, "machinePoolList length (1) !=
+      managedMachinePoolList length (2)", comes in the same event and shows in no condition.
+    check:
+      kind: watch
+      expr: |
+        [ (.events // [])[]
+          | select(.severity == "Warning" or .severity == "Error")
+          | select((.reason // "") | test("Reconcile"))
+          | select((.message // "") | test("InvalidArgument|PERMISSION_DENIED|has not been used in project|is disabled|QUOTA_EXCEEDED|NOT_FOUND|failed to (create|reconcile)|machinePoolList length"))
+          | "event \(.reason) at \(.metadata.creationTimestamp): \(.message | .[:240])" ]
+        | unique | .[:3]
+    fix:
+      owner: palette
+      text: Copy an error the provider gets from the cloud into a condition of the cluster.
+    evidence:
+      - kind: run
+        ref: "#90"
+        note: 193 GCPManagedControlPlaneReconcile events with the refusal of GCP, and no error in the status; after the pool change, the CAPG stop in the same event
+      - kind: source
+        ref: palette pkg/clusterdeployer/controlplane/controlplane_managed.go ReconcileManagedControlPlane
+    tests:
+      - fault: fixtures/gke/pool-roll-mismatch.json
+        clean: fixtures/gke/watch-running.json
+
+  - id: infrastructure-stalled
+    title: The infrastructure of the cluster is ready within 30 minutes, or the status says why
+    engines: [all]
+    tier: watch
+    severity: fail
+    status: seen
+    what: |
+      A build waits at `CloudInfrastructureReady: False` with the reason `PreparingInfrastructure`
+      for 30 minutes or more, and the status shows no error. In #90 the Kubernetes Engine API was
+      off, and only an event of the cluster named it. The watch stops here and names the
+      condition, so a person reads the events and the audit log of the cloud, and does not wait
+      for the timeout of the client.
+    check:
+      kind: watch
+      expr: |
+        (.cluster.status.state // "") as $s | (.elapsed // 0) as $e
+        | if ($s != "Provisioning" and $s != "Pending") or $e < 1800 then []
+          else [ (.cluster.status.conditions // [])[]
+                 | select(.type == "CloudInfrastructureReady" and (.status // "") == "False")
+                 | "the cluster is \($s) and CloudInfrastructureReady is False with the reason \(.reason // "?") after \($e)s, and the status shows no error: read the events of the cluster and the audit log of the cloud" ]
+          end
+    reproduce:
+      - "curl -s -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" \"${PALETTE_API:-https://api.spectrocloud.com}/v1/events/components/spectrocluster/{{ .clusterUid // \"<cluster uid>\" }}?limit=50\" | jq '.items[] | {reason, severity, message: .message[:160]}'"
+    fix:
+      owner: palette
+      text: Copy an error the provider gets from the cloud into the condition, and fail the build after a limit.
+    evidence:
+      - kind: run
+        ref: "#90"
+        note: PreparingInfrastructure for about 30 minutes with the Kubernetes Engine API off, and no error in the status
+      - kind: report
+        ref: palette-precreate-validation-gaps-findings-2026-09-28 F1
+    tests:
+      - fault: fixtures/gke/infrastructure-stalled.json
+        clean: fixtures/gke/watch-running.json
+
+  - id: pivot-webhook-timeout
+    title: The pivot moves the cluster, and its webhooks answer
+    engines: [all]
+    tier: watch
+    severity: fail
+    status: seen
+    what: |
+      During the pivot, the move of the cluster calls the webhook `vspectrocluster.kb.io` in the
+      new cluster, and the call times out after 10 seconds. The pivot is partial, and a delete
+      later waits for 51 minutes or more. The rule fails on an event that names the failed move,
+      or the cloud config the controller cannot read. It fails too when calls of the webhooks fail
+      for 10 minutes or more while the cluster is not `Running`. One minute of failed calls is
+      not this fault: on gcp, two webhooks refused the calls right after the pivot, Palette made
+      the calls again, and the cluster was `Running` 17 minutes later (`webhook-call-failed`
+      warns on that). The message shows the start and the end of each event, because the end
+      names the cause.
+    check:
+      kind: watch
+      expr: |
+        def cut: if length > 320 then .[:140] + " ... " + .[-160:] else . end;
+        def minute: (.[11:13] | tonumber) * 60 + (.[14:16] | tonumber);
+        (.cluster.status.state // "") as $s
+        | [ (.events // [])[]
+            | select((.message // "")
+              | test("failed calling webhook|failed to call webhook|failed to move spectroCluster|failed to get cloud config")) ] as $hits
+        | ([ $hits[] | select(.message | test("failed to move spectroCluster|failed to get cloud config")) ] | length > 0) as $move
+        | [ $hits[] | .metadata.creationTimestamp | select(. != null and length >= 16) | minute ] as $m
+        | (if ($m | length) > 1 then ((($m | max) - ($m | min)) + 1440) % 1440 else 0 end) as $span
+        | if $move or ($s != "Running" and $span >= 10)
+          then [ $hits[] | "event \(.reason) at \(.metadata.creationTimestamp): \(.message | cut)" ] | unique | .[:3]
+          else true end
+    fix:
+      owner: palette
+      text: Order the pivot so the webhook is up first, and retry the call.
+    evidence:
+      - kind: report
+        ref: palette-pivot-webhook-delete-stuck-findings-2026-09-26
+      - kind: run
+        ref: "#89, #90, lab"
+    tests:
+      - fault: fixtures/eks/pivot-webhook.json
+        clean: fixtures/eks/watch-running.json
+      - fault: fixtures/gcp/watch-webhook-persistent.json
+        clean: fixtures/gcp/watch-webhook-refused.json
+
+  - id: webhook-call-failed
+    title: The webhooks of Palette answer the calls after the pivot
+    engines: [all]
+    tier: watch
+    severity: warn
+    status: seen
+    what: |
+      After the pivot, the Palette controller in the new cluster and the agent call the webhooks
+      of Palette in that cluster: `mspectrocluster.kb.io`, `vspectrocluster.kb.io`, and the ones
+      of the cloud config. A call can fail before the webhook is up. Palette makes the call again:
+      on gcp, the calls of the two spectrocluster webhooks failed in one minute of the build, and
+      the cluster was `Running` 17 minutes later; on aws, the call of `mspectrocluster.kb.io`
+      failed at 11 minutes while the controller set the type of the control plane, and the
+      cluster was `Running` 11 minutes after that; on eks, the call of `mawscloudconfig.kb.io`
+      failed while the controller set the owner of the cloud config. When the calls fail for 10
+      minutes or more, or the move of the cluster fails, `pivot-webhook-timeout` fails. The
+      message shows the start and the end of each event, because the end names the cause: a
+      timeout, or a connection refused.
+    check:
+      kind: watch
+      expr: |
+        def cut: if length > 320 then .[:140] + " ... " + .[-160:] else . end;
+        [ (.events // [])[]
+          | select((.message // "") | test("failed calling webhook|failed to call webhook"))
+          | "event \(.reason) at \(.metadata.creationTimestamp): \(.message | cut)" ]
+        | unique | .[:3]
+    fix:
+      owner: palette
+      text: Start the webhook service before the controllers that call it, and make the call again.
+    evidence:
+      - kind: run
+        ref: "lab: the gcp and the eks builds"
+    tests:
+      - fault: fixtures/gcp/watch-webhook-refused.json
+        clean: fixtures/gcp/watch-running.json
+
+  - id: stale-worker-condition
+    title: WorkerNodeAdditionDone follows the workers
+    engines: [aws]
+    tier: watch
+    severity: warn
+    status: seen
+    what: |
+      `WorkerNodeAdditionDone` stays `False`, "provision worker nodes", while the machines of the
+      pool are `Running` and the nodes are `Ready`. The cluster then stays `Provisioning`, and a
+      restart of the Palette controller in the cluster does not help. Palette does not check the
+      workers again. The delete of such a cluster runs as usual. The watch reads the conditions
+      and not the machines. It fails when the cluster is `Running` with the condition `False`.
+      It fails too when the condition is `False` after 30 minutes of `Provisioning`. The
+      reproduce lines read the machines.
+    check:
+      kind: watch
+      expr: |
+        (.cluster.status.state // "") as $s
+        | [ (.cluster.status.conditions // [])[] | select(.type == "WorkerNodeAdditionDone" and .status == "False") ] as $c
+        | if ($c | length) == 0 then []
+          elif $s == "Running" then ["WorkerNodeAdditionDone is False (\($c[0].reason // ""): \($c[0].message // "")) and the cluster is Running: the condition is stale"]
+          elif $s == "Provisioning" and .elapsed > 1800 then ["WorkerNodeAdditionDone is False (\($c[0].reason // ""): \($c[0].message // "")) after \(.elapsed) s of Provisioning: read the machines of the pool; with the machines Running and the nodes Ready, the condition is stale, and Palette does not check the workers again"]
+          else [] end
+    reproduce:
+      - "curl -s -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" \"${PALETTE_API:-https://api.spectrocloud.com}/v1/spectroclusters/{{ .clusterUid // \"<cluster uid>\" }}\" | jq -r '.status.state as $s | .status.conditions[] | select(.type == \"WorkerNodeAdditionDone\") | \"state=\\($s) \\(.status) \\(.reason) \\(.message)\"'"
+      - "curl -s -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" \"${PALETTE_API:-https://api.spectrocloud.com}/v1/cloudconfigs/aws/<cloudConfigUid>/machinePools/worker-pool/machines\" | jq -r '.items[] | \"\\(.metadata.name) \\(.status.instanceState // .status.state)\"'   # the machines of the pool"
+    fix:
+      owner: palette
+      text: Check the workers again when the machines are Running and the nodes are Ready.
+    evidence:
+      - kind: run
+        ref: teardown lab
+        note: "the book, live-example.md: a cluster stays Provisioning with `not done: WorkerNodeAdditionDone: provision worker nodes`, its machines Running and its nodes Ready"
+    tests:
+      - fault: fixtures/aws/stale-worker.json
+        clean: fixtures/aws/watch-running.json
+
+  - id: validate-routes-unused
+    title: Only the console calls the cluster validate routes
+    engines: [all]
+    tier: palette
+    severity: note
+    status: source
+    what: |
+      The provider, the SDK for cloud clusters, and palette-cli call no cluster validate route. The
+      create path of the API skips the checks of the packs and the machines. strata-preflight calls
+      the route for you (`palette-validate`); this row is the fact.
+    fix:
+      owner: palette
+      text: Call the routes at create, and add them to the SDK and the provider.
+    evidence:
+      - kind: report
+        ref: palette-precreate-validation-gaps-findings-2026-09-28 B3
+
+  - id: conditions-not-cloud
+    title: The cloud inventory is the truth of a delete
+    engines: [aws]
+    tier: static
+    severity: note
+    status: seen
+    what: |
+      The conditions of a delete run ahead of the cloud. `DeProvisionDone` flips while instances
+      run, and Palette logs the event "Cluster <name> has been deleted" before the state changes;
+      the state stays `Deleting` for several minutes after that event. Judge a delete by the
+      cloud inventory, not by a condition or by the time: 0 on every line of the inventory means
+      the cloud is empty. No check reads this before a build; the reproduce line is the inventory.
+    reproduce:
+      - "examples/live/aws-inventory.sh {{ .entity.metadata.name }} {{ .entity.spec.cloudConfig.region }}   # 0 on every line: the cloud is empty"
+    evidence:
+      - kind: run
+        ref: teardown lab
+        note: "the book, live-example.md: the event `Cluster <name> has been deleted` comes before the state changes"
+
+  - id: consumers-empty-on-error
+    title: An empty consumer list is not proof
+    engines: [all]
+    tier: palette
+    severity: note
+    status: seen
+    when: (.entity.spec.profiles // []) | length > 0
+    what: |
+      `status.inUseClusters` of a profile is what Palette computes when it is asked. When Palette
+      cannot compute it, the list comes back empty, and says nothing of the error. So an empty
+      list does not prove that no cluster runs the profile. `strata consumers` reads each cluster
+      the key can list as well, and names a cluster that applies the version and is not in the
+      list. The check reads the first profile of the entity.
+    check:
+      kind: palette
+      method: GET
+      path: /v1/clusterprofiles/{{ .entity.spec.profiles[0].uid }}
+      expr: |
+        .entity.spec.profiles[0].uid as $u
+        | if (.response.ok | not) then ["cannot read profile \($u): \(.response.body.code // .response.status)"]
+          elif ((.response.body.status.inUseClusters // []) | length) == 0
+          then ["profile \($u): status.inUseClusters is empty; Palette gives an empty list on an error too, so it does not prove that no cluster runs the profile; strata consumers reads each cluster the key can list as well"]
+          else [] end
+    reproduce:
+      - "strata consumers {{ .entity.spec.profiles[0].uid }}   # each cluster that runs the version, from the list and from the clusters"
+    evidence:
+      - kind: run
+        ref: "#12"
+        note: "the book, clusters.md: when Palette cannot compute the list, it comes back empty and says nothing of the error"
+      - kind: source
+        ref: strata src/ops/consumers.rs consumers
+    tests:
+      - fault: fixtures/eks/consumers-empty.json
+        clean: fixtures/eks/consumers-listed.json
+
+  - id: api-quirks
+    title: The client keeps to the limits of the API
+    engines: [all]
+    tier: static
+    severity: note
+    status: seen
+    what: |
+      The API of Palette has limits that a client must know. A page size over 50 for the
+      clusters, or over 100 for the events, answers 500. The cluster listing
+      `GET /v1/dashboard/spectroclusters/meta` answers a JSON array at the top level, not an
+      object with `items`. The kubeconfig route answers 500 while the cluster provisions. strata
+      pages at 50 and 100 and reads both listing shapes; this row is the fact, with no check.
+      A plain-text `400 Bad Request` on every route, the `DELETE` too, is a bad `ProjectUid` header:
+      `tofu output -raw` prints a warning beside a value, and a shell that exports it as the project
+      uid sends that text to Palette. The answer of Palette itself is JSON, `ResourceNotFound` for a
+      uid that does not exist (eks, run 20260929T142534Z).
+    reproduce:
+      - "curl -s -o /dev/null -w '%{http_code}\\n' -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" \"${PALETTE_API:-https://api.spectrocloud.com}/v1/events/components/spectrocluster/{{ .clusterUid // \"<cluster uid>\" }}?limit=101\"   # 500; 100 answers 200"
+      - "curl -s -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" \"${PALETTE_API:-https://api.spectrocloud.com}/v1/dashboard/spectroclusters/meta\" | jq -r 'type'   # array"
+    evidence:
+      - kind: source
+        ref: strata src/api/palette.rs CLUSTER_SEARCH, audits, cluster_notifications
+        note: Palette gives at most 50 clusters and 100 audit entries on a page
+      - kind: run
+        ref: teardown lab
+        note: "the book, clusters.md: the listing answers a JSON array at the top level"
+
+  - id: transient-errors
+    title: A transient error of the API is retried once
+    engines: [all]
+    tier: watch
+    severity: note
+    status: seen
+    what: |
+      Palette refuses one read of a profile with `OperationForbidden` and no cause now and then,
+      under the parallel refresh of the provider, and the next read passes. A delete can answer
+      500 for a while. During a gateway outage Palette answers a plain-text 404, and a client can
+      take it for a finished delete: a 404 of Palette is JSON with the code `ResourceNotFound`.
+      Retry a 5xx, a 429, and an `OperationForbidden` read once. Treat a 404 that is not JSON as
+      an error, not as an answer. strata retries a 5xx, a 429, and a transport error. The live
+      scripts run the provider with `-parallelism=1`, and run an `OperationForbidden` apply again.
+      The watch has no check for it: the errors are answers to the client, not events.
+    reproduce:
+      - "curl -s -o /dev/null -w '%{http_code} %{content_type}\\n' -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" \"${PALETTE_API:-https://api.spectrocloud.com}/v1/spectroclusters/{{ .clusterUid // \"<cluster uid>\" }}\"   # a 404 must be application/json with code ResourceNotFound"
+    evidence:
+      - kind: run
+        ref: teardown lab
+        note: "examples/live/tf.sh and lib.sh: OperationForbidden under the parallel refresh; live-example.md: the plain-text 404 of the gateway"
+      - kind: source
+        ref: strata src/api/retry.rs Retry
+        note: retries a 5xx, a 429, and a transport error, with a backoff from 1 s
+
+  - id: auto-cleanup-never
+    title: A delete that makes no progress moves to the cleanup path
+    engines: [all]
+    tier: race
+    severity: fail
+    status: source
+    what: |
+      Hubble gives a delete to the pilot only while `DeProvisionDone` is absent. After that, the
+      agent in the cluster runs the delete. Palette moves a delete to the cleanup cluster only
+      when it cannot reach the target cluster for `ForcePivotWaitDuration`, 10 minutes. A
+      deleting cluster with a live agent that makes no progress stays where it is; no step of the
+      source moves it. In one run a second delete request moved it, by a path that is not in the
+      source. No check before a build finds it; the watch sees the state.
+    fix:
+      owner: palette
+      text: Move a delete that makes no progress for a limit to the cleanup path.
+    evidence:
+      - kind: source
+        ref: palette controllers/spectrocluster_reconcile.go ForcePivotWaitDuration
+        note: the cleanup cluster waits 10 minutes for the target cluster, then makes the objects again from hubble
+      - kind: source
+        ref: hubble services/service/spectrocluster/internal/service/spectrocluster/spectrocluster_acquire.go
+        note: a delete goes to the pilot only while DeProvisionDone is absent
+      - kind: report
+        ref: palette-pivot-webhook-delete-stuck-findings-2026-09-26 B2
+
+  - id: pcg-running
+    title: The PCG of the cloud account is Running and active
+    engines: [maas, vsphere]
+    tier: palette
+    severity: fail
+    status: source
+    when: ((.account.metadata.annotations.overlordUid // "") != "") and ((.account.metadata.annotations.overlordType // "") != "system")
+    what: |
+      A MAAS or vSphere cloud account links to its private cloud gateway (PCG) through the
+      annotation `overlordUid`. The create refuses a PCG that is not `Running`: "Unable to deploy
+      the cluster as the gateway is in ... state". The vSphere validate route refuses an unhealthy
+      one too. The account validate and the property routes need `isActive`. A system gateway of a
+      self-hosted Palette skips the check. `GET /v1/overlords/{uid}` gives the state, `isActive`,
+      and the health.
+    check:
+      kind: palette
+      method: GET
+      path: /v1/overlords/{{ .account.metadata.annotations.overlordUid }}
+      expr: |
+        .account.metadata.annotations.overlordUid as $ol | .account.metadata.name as $acc
+        | if (.response.ok | not) then ["the PCG \($ol) of cloud account \($acc) is not there: \(.response.body.code // .response.status): \(.response.body.message // ""); Palette refuses the create with ClusterDeploymentFailureForMissingOverlord"]
+          else (.response.body.status // {}) as $s | (.response.body.spec // {}) as $sp | (.response.body.metadata.name // $ol) as $name
+            | if ($sp.isSystem // false) then []
+              else [ ( if ($s.state // "") != "Running" then "the PCG \($name) is \($s.state // "in no state"), not Running: Palette refuses the create (\"should be in Running state\")" else empty end ),
+                     ( if (($s.isActive // false) | not) then "the PCG \($name) is not active: the account validate and the property routes need an active PCG" else empty end ),
+                     ( if (($s.health.state // "Healthy") | ascii_downcase) != "healthy" then "the PCG \($name) health is \($s.health.state): the vSphere validate route refuses an unhealthy PCG (OverlordClusterUnHealthyState)" else empty end ) ]
+              end
+          end
+    reproduce:
+      - "curl -s -H \"ApiKey: $PALETTE_API_KEY\" \"${PALETTE_API:-https://api.spectrocloud.com}/v1/overlords/{{ .account.metadata.annotations.overlordUid }}\" | jq '{name: .metadata.name, state: .status.state, active: .status.isActive, ready: .status.isReady, health: .status.health.state, system: .spec.isSystem}'"
+    fix:
+      owner: palette
+      text: Show the PCG state next to the cloud account in the console, and in the validate route of MAAS.
+    evidence:
+      - kind: source
+        ref: hubble services/service/spectrocluster/internal/service/spectrocluster/internal/base/spectrocluster_base.go ValidateOverlordState
+        note: "!ol.IsSystem() && ol.Status.State != domain.ClusterRunning"
+      - kind: source
+        ref: hubble services/service/spectrocluster/internal/service/overlord/overlord_service.go validateOverlordState
+        note: OverlordClusterNotReady and OverlordClusterUnHealthyState in the vSphere validate route
+      - kind: source
+        ref: hubble domain/doc.go AnnotationOverlordUid
+        note: the cloud account carries the PCG uid in metadata.annotations.overlordUid; overlordType system marks the system gateway
+      - kind: doc
+        ref: https://docs.spectrocloud.com/clusters/pcg/architecture/
+        note: all Palette deployed clusters use the PCG during the creation and deletion phase
+    tests:
+      - fault: fixtures/vsphere/pcg-pending.json
+        clean: fixtures/vsphere/clean.json
+      - fault: fixtures/vsphere/pcg-missing.json
+        clean: fixtures/maas/clean.json
+
+  - id: edge-agent-version
+    title: The Palette agent of each edge host is as new as the Palette release
+    engines: [edge]
+    tier: palette
+    severity: warn
+    status: inferred
+    when: .release != null
+    what: |
+      The compatibility matrix pairs each Palette release with an agent (Stylus) release, such as
+      4.10.16 with 4.10.4. Hubble sets no floor on the agent version at create. A host with an
+      agent from an older minor release misses the features that the profile and the release
+      expect. The docs gate some features on the agent version. The check compares the
+      major.minor of `status.health.agentVersion` with the release given; it is a reading of the
+      matrix, not a run. It reads the first host of the first pool.
+    check:
+      kind: palette
+      method: GET
+      path: /v1/edgehosts/{{ .entity.spec.machinepoolconfig[0].cloudConfig.edgeHosts[0].hostUid }}
+      expr: |
+        def mm: split(".") | .[:2] | map(sub("[^0-9].*$"; "") | if . == "" then 0 else tonumber end);
+        (.entity.spec.machinepoolconfig[0].cloudConfig.edgeHosts[0].hostUid) as $u | .release as $rel
+        | if (.response.ok | not) then ["Palette cannot read edge host \($u): \(.response.body.code // .response.status): \(.response.body.message // "")"]
+          else (.response.body.status.health.agentVersion // .response.body.spec.version // "") as $a
+            | if $a == "" then ["edge host \($u) reports no agent version"]
+              else ($a | mm) as $av | ($rel | mm) as $rv
+                | if ($av[0] < $rv[0]) or ($av[0] == $rv[0] and ($av[1] // 0) < ($rv[1] // 0)) then ["edge host \($u) runs agent \($a), and Palette is \($rel): the compatibility matrix pairs each Palette release with an agent release, and an older agent misses the features of the profile; upgrade the host first"] else [] end
+              end
+          end
+    reproduce:
+      - "for h in {{ [ .entity.spec.machinepoolconfig[] | (.cloudConfig.edgeHosts // [])[] | .hostUid ] | join(\" \") }}; do curl -s -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" \"${PALETTE_API:-https://api.spectrocloud.com}/v1/edgehosts/$h\" | jq -r '[.metadata.uid, .status.health.agentVersion, .spec.version] | @tsv'; done"
+    fix:
+      owner: palette
+      text: Warn in the validate route when the agent is older than the release, with the matrix as the source.
+    evidence:
+      - kind: doc
+        ref: https://docs.spectrocloud.com/clusters/edge/edge-compatibility-matrix/
+        note: Palette release to agent release, such as 4.10.16 to 4.10.4
+      - kind: source
+        ref: palette-sdk-go api/models/v1_edge_host_health.go
+        note: status.health.agentVersion
+    tests:
+      - fault: fixtures/edge/agent-old.json
+        clean: fixtures/edge/clean.json

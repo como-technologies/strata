@@ -1,0 +1,128 @@
+$ strata preflight cluster.json --cloud aws --no-exec --json --quiet | jq '{summary, scorecard: [.sections[] | {title, ran, passed, failed, notChecked, readiness}]}'
+{
+  "summary": {
+    "rules": 103,
+    "ran": 22,
+    "passed": 19,
+    "failed": 0,
+    "probeFailed": 2,
+    "warned": 1,
+    "noted": 2,
+    "notRun": 10,
+    "notRunReasons": {
+      "--no-exec: the command did not run": 10
+    },
+    "notChecked": 25,
+    "skipped": 39,
+    "errors": 0,
+    "readiness": 0.59375,
+    "exitCode": 0,
+    "verdict": "OK: each counted check passed; 2 probe(s) failed, not counted"
+  },
+  "scorecard": [
+    {
+      "title": "Identity and permissions",
+      "ran": 2,
+      "passed": 2,
+      "failed": 0,
+      "notChecked": 0,
+      "readiness": 0.4
+    },
+    {
+      "title": "Cloud services and APIs",
+      "ran": 1,
+      "passed": 1,
+      "failed": 0,
+      "notChecked": 1,
+      "readiness": 1.0
+    },
+    {
+      "title": "Quotas and limits",
+      "ran": 1,
+      "passed": 0,
+      "failed": 1,
+      "notChecked": 2,
+      "readiness": 0.0
+    },
+    {
+      "title": "Networking",
+      "ran": 4,
+      "passed": 4,
+      "failed": 0,
+      "notChecked": 1,
+      "readiness": 1.0
+    },
+    {
+      "title": "Compute and pools",
+      "ran": 0,
+      "passed": 0,
+      "failed": 0,
+      "notChecked": 2,
+      "readiness": null
+    },
+    {
+      "title": "Kubernetes version and engine",
+      "ran": 2,
+      "passed": 2,
+      "failed": 0,
+      "notChecked": 0,
+      "readiness": 1.0
+    },
+    {
+      "title": "Storage and CSI",
+      "ran": 0,
+      "passed": 0,
+      "failed": 0,
+      "notChecked": 0,
+      "readiness": 0.0
+    },
+    {
+      "title": "Images and registries",
+      "ran": 6,
+      "passed": 5,
+      "failed": 1,
+      "notChecked": 7,
+      "readiness": 0.8333333333333334
+    },
+    {
+      "title": "Profiles and packs",
+      "ran": 3,
+      "passed": 3,
+      "failed": 0,
+      "notChecked": 2,
+      "readiness": 1.0
+    },
+    {
+      "title": "Lifecycle: update, repave, delete",
+      "ran": 1,
+      "passed": 1,
+      "failed": 0,
+      "notChecked": 2,
+      "readiness": 1.0
+    },
+    {
+      "title": "The Palette platform",
+      "ran": 1,
+      "passed": 0,
+      "failed": 1,
+      "notChecked": 5,
+      "readiness": 0.0
+    },
+    {
+      "title": "Client tools",
+      "ran": 0,
+      "passed": 0,
+      "failed": 0,
+      "notChecked": 0,
+      "readiness": 0.0
+    },
+    {
+      "title": "Teardown and leftovers",
+      "ran": 1,
+      "passed": 1,
+      "failed": 0,
+      "notChecked": 3,
+      "readiness": 0.3333333333333333
+    }
+  ]
+}

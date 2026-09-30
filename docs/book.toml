@@ -26,3 +26,7 @@ additional-js = ["mermaid.min.js", "mermaid-init.js", "gruvbox/gruvbox.js", "gru
 default-theme = "gruvbox"
 preferred-dark-theme = "gruvbox"
 additional-css = ["gruvbox/css/variables.css", "gruvbox/highlight.css"]
+
+[output.html.redirect]
+# The page was development/walkthrough.md before its name said preflight.
+"/development/walkthrough.html" = "preflight-walkthrough.html"

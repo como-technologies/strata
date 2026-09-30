@@ -1,0 +1,127 @@
+{
+  "_base": "clean.json",
+  "_note": "a Cilium CNI pack on EKS whose values set neither ENI mode nor kube-proxy replacement",
+  "_patch": {
+    "entity": {
+      "spec": {
+        "profiles": [
+          {
+            "uid": "prof-eks-1",
+            "packValues": [
+              {
+                "name": "amazon-linux-eks",
+                "tag": "1.0.0",
+                "type": "spectro"
+              },
+              {
+                "name": "kubernetes-eks",
+                "tag": "1.32",
+                "type": "spectro"
+              },
+              {
+                "name": "cni-cilium-oss",
+                "tag": "1.17.0",
+                "type": "spectro"
+              },
+              {
+                "name": "csi-aws-ebs",
+                "tag": "1.44.0",
+                "type": "spectro"
+              }
+            ],
+            "variables": []
+          }
+        ]
+      }
+    },
+    "profiles": [
+      {
+        "schema": "strata-snapshot/1",
+        "source": {
+          "uid": "prof-eks-1",
+          "name": "strata-live-profile",
+          "version": "1.0.0",
+          "cloudType": "eks",
+          "type": "cluster"
+        },
+        "packs": [
+          {
+            "key": "os/amazon-linux-eks",
+            "layer": "os",
+            "name": "amazon-linux-eks",
+            "version": "1.0.0",
+            "tag": "1.0.0",
+            "packUid": "pk-os-eks",
+            "registryUid": "5eecc89d0b150045ae661cef",
+            "valuesCanon": null
+          },
+          {
+            "key": "k8s/kubernetes-eks",
+            "layer": "k8s",
+            "name": "kubernetes-eks",
+            "version": "1.32",
+            "tag": "1.32",
+            "packUid": "pk-k8s-eks",
+            "registryUid": "5eecc89d0b150045ae661cef",
+            "valuesCanon": {
+              "iamAuthenticatorConfig": {
+                "mapUsers": [
+                  {
+                    "userarn": "arn:aws:iam::123456789012:user/ops",
+                    "username": "ops",
+                    "groups": [
+                      "system:masters"
+                    ]
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "key": "cni/cni-cilium-oss",
+            "layer": "cni",
+            "name": "cni-cilium-oss",
+            "version": "1.17.0",
+            "tag": "1.17.0",
+            "packUid": "pk-cni-cilium",
+            "registryUid": "5eecc89d0b150045ae661cef",
+            "valuesCanon": {
+              "charts": {
+                "cilium": {
+                  "hubble": {
+                    "enabled": true
+                  }
+                }
+              }
+            }
+          },
+          {
+            "key": "csi/csi-aws-ebs",
+            "layer": "csi",
+            "name": "csi-aws-ebs",
+            "version": "1.44.0",
+            "tag": "1.44.0",
+            "packUid": "pk-csi-eks",
+            "registryUid": "5eecc89d0b150045ae661cef",
+            "valuesCanon": {
+              "storageClasses": [
+                {
+                  "name": "spectro-storage-class"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    ],
+    "packs": {
+      "pk-cni-cilium": {
+        "name": "cni-cilium-oss",
+        "layer": "cni",
+        "cloudTypes": [
+          "all"
+        ]
+      }
+    }
+  }
+}

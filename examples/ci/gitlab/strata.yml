@@ -58,6 +58,23 @@ strata-comment:
     - .strata/pr-comment.sh "$STRATA_A" "$STRATA_B"
         --label "$STRATA_LABEL" --threshold "$STRATA_THRESHOLD"
 
+# Can Palette build the cluster this merge request changes? The static tier, with the records of
+# this repository: no key, milliseconds. The installer puts strata-preflight beside strata, and
+# `strata preflight` runs it. The live tier runs before the build, with the key, from the job that
+# builds: see docs/src/automation/preflight.md. The report is the job's artifact.
+strata-preflight:
+  extends: .strata
+  stage: test
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+  script:
+    - .strata/strata preflight clusters/payments.json --cloud eks --tier static
+        --records 'releases/**/*.json' --offline --out preflight --format markdown --quiet
+        | tee preflight.md
+  artifacts:
+    when: always
+    paths: [preflight/, preflight.md]
+
 # The check the merge button waits for: the records of the merge result, against the target
 # branch as it is now. GIT_DEPTH 0 gives the job the history a merge needs.
 strata-merge-gate:

@@ -1,0 +1,16 @@
+{
+  "_base": "static-vpc-clean.json",
+  "_note": "the public subnet does not map a public address on launch: Palette refuses the EKS properties",
+  "_patch": {
+    "_responses": {
+      "POST /v1/clouds/eks/properties/validate": {
+        "ok": false,
+        "status": 400,
+        "body": {
+          "code": "InvalidSubnetMapping",
+          "message": "Invalid subnet mapping: MapPublicIpOnLaunch is not set for the public subnet subnet-0aaa"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "_base": "image-clean.json",
+  "_note": "EC2 has no image named u-2404-0-k-1324-0 in the region",
+  "_patch": {
+    "_exec": {
+      "aws ec2 describe-images --region us-east-2 --filters Name=name,Values=u-2404-0-k-1324-0 --output json": {
+        "exit": 0,
+        "stdout": { "Images": [] },
+        "stderr": ""
+      }
+    }
+  }
+}

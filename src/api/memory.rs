@@ -105,6 +105,7 @@ impl PaletteApi for MemoryApi {
         {
             t.remaining -= 1;
             return Err(Error::Api {
+                method: "GET".into(),
                 path: path.to_string(),
                 status: t.status,
                 body: t.body.clone(),
@@ -113,6 +114,7 @@ impl PaletteApi for MemoryApi {
         }
         if let Some((status, body)) = self.fail.get(path) {
             return Err(Error::Api {
+                method: "GET".into(),
                 path: path.to_string(),
                 status: *status,
                 body: body.clone(),
@@ -120,6 +122,7 @@ impl PaletteApi for MemoryApi {
             });
         }
         self.ok.get(path).cloned().ok_or_else(|| Error::Api {
+            method: "GET".into(),
             path: path.to_string(),
             status: 404,
             body: r#"{"code":"ResourceNotFound"}"#.to_string(),

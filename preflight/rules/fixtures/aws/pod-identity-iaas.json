@@ -1,0 +1,28 @@
+{
+  "_base": "identity-clean.json",
+  "_note": "a Pod Identity account for an AWS infrastructure cluster: the properties route refuses it",
+  "_patch": {
+    "account": {
+      "spec": {
+        "credentialType": "pod-identity",
+        "podIdentity": {
+          "roleArn": "arn:aws:iam::123456789012:role/pod"
+        }
+      }
+    },
+    "_responses": {
+      "POST /v1/clouds/aws/properties/validate": {
+        "ok": false,
+        "status": 400,
+        "body": {
+          "code": "FeatureNotSupported",
+          "message": "Pod Identity for AWS infrastructure clusters is not supported"
+        }
+      }
+    }
+  },
+  "_delete": [
+    "/account/spec/accessKey",
+    "/account/spec/secretKey"
+  ]
+}

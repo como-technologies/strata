@@ -1,0 +1,33 @@
+{
+  "_base": "clean.json",
+  "_note": "the worker pool has a launch template with an AMI id, and EC2 has the AMI in the region",
+  "_patch": {
+    "entity": {
+      "spec": {
+        "machinepoolconfig": [
+          {
+            "poolConfig": { "name": "worker-pool" },
+            "cloudConfig": {
+              "enableAwsLaunchTemplate": true,
+              "awsLaunchTemplate": {
+                "ami": { "id": "ami-0123456789abcdef0" },
+                "rootVolume": { "type": "gp3" }
+              }
+            }
+          }
+        ]
+      }
+    },
+    "_exec": {
+      "aws ec2 describe-images --region us-east-2 --filters Name=image-id,Values=ami-0123456789abcdef0 --output json": {
+        "exit": 0,
+        "stdout": {
+          "Images": [
+            { "ImageId": "ami-0123456789abcdef0", "State": "available", "Name": "custom-eks-node-1.32", "OwnerId": "123456789012" }
+          ]
+        },
+        "stderr": ""
+      }
+    }
+  }
+}

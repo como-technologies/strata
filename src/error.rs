@@ -20,17 +20,20 @@ pub enum Error {
     },
     /// Palette answered with a non-2xx status. A 401 or a 403 is almost always the key, so the
     /// message names where a key comes from; the body alone names nothing the reader can set.
-    #[error("GET {path} failed with HTTP {status}: {body}{}", if *status == 401 || *status == 403 {
+    #[error("{method} {path} failed with HTTP {status}: {}{}", first_part(body), if *status == 401 || *status == 403 {
         "; check PALETTE_API_KEY, SPECTROCLOUD_APIKEY, or ~/.palette.env: the key can be wrong, expired, or for another tenant"
     } else {
         ""
     })]
     Api {
+        /// The request method: `GET`, `POST`, `PUT`, `PATCH`, or `DELETE`.
+        method: String,
         /// Request path.
         path: String,
         /// HTTP status code.
         status: u16,
-        /// The first part of the response body, one line.
+        /// The response body, on one line. The message shows its first part; a caller that reads
+        /// the answer of a validate route parses the whole of it.
         body: String,
         /// The `Retry-After` header in whole seconds, when Palette sent one.
         retry_after: Option<u64>,
@@ -342,6 +345,15 @@ pub enum Error {
     Serialize(#[from] serde_json::Error),
 }
 
+/// The first 300 characters of a body, for a message. The field keeps the whole body.
+fn first_part(body: &str) -> String {
+    if body.chars().count() <= 300 {
+        body.to_string()
+    } else {
+        format!("{}…", body.chars().take(300).collect::<String>())
+    }
+}
+
 /// `a, b, c`, or `none` for an empty list.
 fn list_or_none(items: &[String]) -> String {
     if items.is_empty() {
@@ -457,8 +469,12 @@ impl Error {
             // the message carries the whole of it, and no field adds to that
             Error::Usage { .. } => {}
             Error::Api {
-                path: p, status, ..
+                method,
+                path: p,
+                status,
+                ..
             } => {
+                m.insert("method".into(), Value::from(method.as_str()));
                 m.insert("path".into(), Value::from(p.as_str()));
                 m.insert("status".into(), Value::from(*status));
             }
@@ -636,6 +652,7 @@ mod tests {
                 alternate: "SPECTROCLOUD_APIKEY",
             },
             Error::Api {
+                method: "GET".into(),
                 path: "/v1/x".into(),
                 status: 503,
                 body: "busy".into(),

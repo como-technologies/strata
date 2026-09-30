@@ -1,0 +1,27 @@
+{
+  "_base": "clean.json",
+  "_note": "a third pool, worker-pool-b, whose name starts with the name of worker-pool",
+  "_patch": {
+    "entity": {
+      "spec": {
+        "machinepoolconfig": [
+          {
+            "cloudConfig": {
+              "instanceType": "t3.xlarge",
+              "azs": [
+                "us-east-2a"
+              ],
+              "rootDeviceSize": 60
+            },
+            "poolConfig": {
+              "name": "worker-pool-b",
+              "size": 1,
+              "isControlPlane": false,
+              "useControlPlaneAsWorker": false
+            }
+          }
+        ]
+      }
+    }
+  }
+}

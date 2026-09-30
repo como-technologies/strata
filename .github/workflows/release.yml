@@ -38,13 +38,20 @@ jobs:
       - uses: ./.github/actions/build
         with:
           target: ${{ matrix.target }}
-      - run: cp "target/${{ matrix.target }}/release/strata" "strata-${{ matrix.target }}"
-      - run: ./strata-${{ matrix.target }} --version
+      # the two binaries of a release: strata, and strata-preflight, which `strata preflight` runs
+      - run: |
+          cp "target/${{ matrix.target }}/release/strata" "strata-${{ matrix.target }}"
+          cp "target/${{ matrix.target }}/release/strata-preflight" "strata-preflight-${{ matrix.target }}"
+      - run: |
+          ./strata-${{ matrix.target }} --version
+          ./strata-preflight-${{ matrix.target }} --version
         if: matrix.target == 'x86_64-unknown-linux-musl' || matrix.target == 'aarch64-apple-darwin'
       - uses: actions/upload-artifact@v7
         with:
           name: strata-${{ matrix.target }}
-          path: strata-${{ matrix.target }}
+          path: |
+            strata-${{ matrix.target }}
+            strata-preflight-${{ matrix.target }}
           if-no-files-found: error
 
   release:
@@ -68,6 +75,7 @@ jobs:
           for t in x86_64-unknown-linux-musl aarch64-unknown-linux-musl \
                    aarch64-apple-darwin x86_64-apple-darwin; do
             [ -f "strata-$t" ] || { echo "::error::the build of $t is not here"; missing=1; }
+            [ -f "strata-preflight-$t" ] || { echo "::error::the build of strata-preflight for $t is not here"; missing=1; }
           done
           for f in *; do
             case "$f" in strata-*) ;; *) echo "::error::$f is not a target binary"; missing=1 ;; esac
@@ -118,9 +126,12 @@ jobs:
           STRATA_REPO: ${{ github.repository }}
         run: |
           scripts/ci/install-strata.sh --version "${{ github.ref_name }}" --dir .published
-      - name: run the binary and each script it installed
+      - name: run the binaries and each script it installed
         run: |
           .published/strata --version
+          .published/strata-preflight --version
+          # `strata preflight` finds strata-preflight beside it
+          .published/strata preflight --rules --cloud eks > /dev/null
           # the scripts the installer installs; it does not install itself, because running it
           # is how you got it
           for s in pr-comment.sh merge-gate.sh verify-report.sh upstream-report.sh; do

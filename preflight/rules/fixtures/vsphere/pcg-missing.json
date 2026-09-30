@@ -1,0 +1,14 @@
+{
+  "_base": "clean.json",
+  "_note": "the PCG of the account is gone",
+  "_responses": {
+    "GET /v1/overlords/ol-vsphere-1": {
+      "ok": false,
+      "status": 404,
+      "body": {
+        "code": "ResourceNotFound",
+        "message": "Overlord 'ol-vsphere-1' not found"
+      }
+    }
+  }
+}

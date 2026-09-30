@@ -1,0 +1,18 @@
+{
+  "_base": "csi-crash-after-running-clean.json",
+  "_note": "Running and Healthy, and csi-attacher of the EBS CSI is in CrashLoopBackOff",
+  "_patch": {
+    "cluster": {
+      "status": {
+        "packs": [
+          { "name": "kubernetes-eks", "version": "1.32", "profileUid": "prof-eks-1", "condition": { "type": "Healthy", "status": "True", "reason": "WorkloadsReady", "message": "" } },
+          { "name": "csi-aws-ebs", "version": "1.44.0", "profileUid": "prof-eks-1", "condition": { "type": "Healthy", "status": "False", "reason": "InstallFailed", "message": "pod kube-system/ebs-csi-controller-7d9c8b5f4-x2k9q container csi-attacher is in CrashLoopBackOff" } }
+        ]
+      }
+    },
+    "events": [
+      { "reason": "ClusterRunning", "severity": "Normal", "message": "cluster fred is running", "involvedObject": { "kind": "spectrocluster", "name": "fred" }, "metadata": { "creationTimestamp": "2026-09-28T10:20:00Z" } },
+      { "reason": "CSIInstallFailed", "severity": "Warning", "message": "pack csi-aws-ebs: pod ebs-csi-controller-7d9c8b5f4-x2k9q container csi-attacher is in CrashLoopBackOff (restarts 14)", "involvedObject": { "kind": "spectrocluster", "name": "fred" }, "metadata": { "creationTimestamp": "2026-09-28T10:31:00Z" } }
+    ]
+  }
+}

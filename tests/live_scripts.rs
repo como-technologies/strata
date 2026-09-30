@@ -1265,3 +1265,191 @@ fn tenant_sh_repave_asks_palette_whether_a_move_to_another_profile_version_repav
         text(&o.stderr)
     );
 }
+
+// ---- preflight.sh and preflight-plan.sh ------------------------------------------------------------
+
+fn preflight_script(name: &str, args: &[&str]) -> Output {
+    // a strata binary that is newer than the sources, so lib.sh does not stop the script
+    let dir = tempfile::tempdir().unwrap();
+    let bin = dir.path().join("strata");
+    executable(&bin, "#!/usr/bin/env bash\necho strata 0.0.0\n");
+    Command::new("bash")
+        .arg(live_script(name))
+        .args(args)
+        .env("STRATA_BIN", &bin)
+        .env("OUT", dir.path().join("out"))
+        .output()
+        .unwrap()
+}
+
+#[test]
+fn preflight_scripts_print_their_usage_and_refuse_an_engine_they_have_no_plan_for() {
+    let o = preflight_script("preflight.sh", &["--help"]);
+    assert!(o.status.success(), "{}{}", text(&o.stdout), text(&o.stderr));
+    assert!(
+        text(&o.stdout).contains("The checks of the lab itself"),
+        "{}",
+        text(&o.stdout)
+    );
+    let o = preflight_script("preflight.sh", &["--cloud", "mars"]);
+    assert_eq!(o.status.code(), Some(2));
+    assert!(
+        text(&o.stderr).contains("no lab for the cloud 'mars'"),
+        "{}",
+        text(&o.stderr)
+    );
+
+    let o = preflight_script("preflight-plan.sh", &["--help"]);
+    assert!(o.status.success(), "{}{}", text(&o.stdout), text(&o.stderr));
+    assert!(
+        text(&o.stdout).contains("The test plan of #91"),
+        "{}",
+        text(&o.stdout)
+    );
+    let o = preflight_script("preflight-plan.sh", &["mars"]);
+    assert_eq!(o.status.code(), Some(2));
+    assert!(
+        text(&o.stderr).contains("no plan for the engine 'mars'"),
+        "{}",
+        text(&o.stderr)
+    );
+    let o = preflight_script("preflight-plan.sh", &[]);
+    assert_eq!(o.status.code(), Some(2), "no engine is usage, exit 2");
+}
+
+#[test]
+fn the_entities_of_the_test_plan_are_the_shape_of_a_create_for_each_engine() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/live/preflight");
+    for engine in ["aws", "eks", "gcp", "gke"] {
+        let text = std::fs::read_to_string(dir.join(format!("{engine}.json"))).unwrap();
+        let doc: serde_json::Value = serde_json::from_str(&text).unwrap();
+        assert_eq!(
+            doc["spec"]["cloudAccountUid"], "__ACCOUNT_UID__",
+            "{engine}"
+        );
+        assert_eq!(
+            doc["spec"]["profiles"][0]["uid"], "__PROFILE_UID__",
+            "{engine}"
+        );
+        let pools = doc["spec"]["machinepoolconfig"].as_array().unwrap();
+        assert!(!pools.is_empty(), "{engine} has a pool");
+        // preflight-plan.sh edits the first pool for the faults of size and type, and on gke and
+        // eks that pool is the one worker pool
+        if engine == "gke" || engine == "eks" {
+            assert_eq!(pools[0]["poolConfig"]["isControlPlane"], false, "{engine}");
+        }
+    }
+}
+
+/// An `aws` that answers every query with nothing, and records each call.
+const FAKE_AWS_EMPTY: &str = r#"#!/usr/bin/env bash
+echo "$*" >> "$FAKE_AWS_LOG"
+exit 0
+"#;
+
+#[test]
+fn aws_cleanup_takes_yes_in_any_position_and_keeps_the_name_and_the_region() {
+    let dir = tempfile::tempdir().unwrap();
+    let bin = dir.path().join("bin");
+    std::fs::create_dir(&bin).unwrap();
+    executable(&bin.join("aws"), FAKE_AWS_EMPTY);
+    let log = dir.path().join("aws.log");
+    let o = Command::new("bash")
+        .arg(live_script("aws-cleanup.sh"))
+        .args(["--yes", "barney"])
+        .env(
+            "PATH",
+            format!("{}:{}", bin.display(), std::env::var("PATH").unwrap()),
+        )
+        .env("FAKE_AWS_LOG", &log)
+        .output()
+        .unwrap();
+    assert!(o.status.success(), "{}{}", text(&o.stdout), text(&o.stderr));
+    let calls = std::fs::read_to_string(&log).unwrap();
+    assert!(
+        calls.contains("--region us-east-2"),
+        "the region stays the default: {calls}"
+    );
+    assert!(
+        calls.contains("cluster/barney"),
+        "the name is the first word: {calls}"
+    );
+    let o = Command::new("bash")
+        .arg(live_script("aws-cleanup.sh"))
+        .args(["barney", "us-west-2", "--yes", "one-more"])
+        .output()
+        .unwrap();
+    assert_eq!(o.status.code(), Some(2));
+    assert!(
+        text(&o.stderr).contains("too many arguments"),
+        "{}",
+        text(&o.stderr)
+    );
+}
+
+/// `record` of preflight-plan.sh keeps a result the ledger does not know out of the entry: the
+/// ledger schema has caught, missed, passed, and false-fail, and an entry with another word makes
+/// the whole file unreadable.
+#[test]
+fn preflight_plan_keeps_a_result_the_ledger_does_not_know_out_of_the_entry() {
+    let script = std::fs::read_to_string(live_script("preflight-plan.sh")).unwrap();
+    let start = script.find("\nrecord() {").unwrap() + 1;
+    let end = start + script[start..].find("\n}\n").unwrap() + 3;
+    let record = &script[start..end];
+    let dir = tempfile::tempdir().unwrap();
+    let o = Command::new("bash")
+        .arg("-c")
+        .arg(format!(
+            "{record}\nresults=()\nrecord a caught n\nrecord b not-made 'the edit failed'\nrecord c passed n\nprintf '%s\\n' \"${{results[@]}}\""
+        ))
+        .current_dir(dir.path())
+        .output()
+        .unwrap();
+    assert!(o.status.success(), "{}", text(&o.stderr));
+    let out = text(&o.stdout);
+    assert!(
+        out.contains("not in the ledger: b not-made: the edit failed"),
+        "{out}"
+    );
+    assert_eq!(
+        out.lines().filter(|l| l.contains('|')).collect::<Vec<_>>(),
+        vec!["a|caught|n", "c|passed|n"]
+    );
+    assert!(
+        std::fs::read_to_string(dir.path().join("steps.log"))
+            .unwrap()
+            .contains("b not-made"),
+        "steps.log names it"
+    );
+}
+
+#[test]
+fn aws_cleanup_deletes_nothing_without_yes_and_names_what_it_would() {
+    let dir = tempfile::tempdir().unwrap();
+    let bin = dir.path().join("bin");
+    std::fs::create_dir(&bin).unwrap();
+    executable(&bin.join("aws"), FAKE_AWS_EMPTY);
+    let log = dir.path().join("aws.log");
+    let o = Command::new("bash")
+        .arg(live_script("aws-cleanup.sh"))
+        .args(["fred", "us-east-2"])
+        .env(
+            "PATH",
+            format!("{}:{}", bin.display(), std::env::var("PATH").unwrap()),
+        )
+        .env("FAKE_AWS_LOG", &log)
+        .output()
+        .unwrap();
+    assert!(o.status.success(), "{}{}", text(&o.stdout), text(&o.stderr));
+    let out = text(&o.stdout);
+    assert!(out.contains("nothing deleted; add --yes"), "{out}");
+    assert!(out.contains("eks cluster"), "{out}");
+    let calls = std::fs::read_to_string(&log).unwrap();
+    assert!(
+        !calls.contains("delete-")
+            && !calls.contains("release-address")
+            && !calls.contains("detach-"),
+        "no delete without --yes: {calls}"
+    );
+    assert!(calls.contains("describe-nat-gateways"), "{calls}");
+}

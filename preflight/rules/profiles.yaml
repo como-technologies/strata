@@ -1,0 +1,258 @@
+section: profiles
+title: Profiles and packs
+about: |
+  The profiles of the entity: their order, their versions, their templates, and their variables.
+rules:
+  - id: profile-order
+    title: The order of the add-on profiles means nothing
+    engines: [all]
+    tier: static
+    severity: note
+    status: seen
+    when: (.profiles | length) > 0
+    what: |
+      Palette stores the profiles in the order it receives, and the provider sends a set, so two
+      clusters from one configuration get two orders. The install order on the cluster is the pack
+      priority, not the profile order. Never compare the raw order. This note names an entity with
+      more than one add-on profile, where a reader can assume an order.
+    check:
+      kind: static
+      expr: |
+        [ .profiles | map(select((.source.type // "") == "add-on"))
+          | select(length > 1)
+          | "the entity names \(length) add-on profiles (\(map(.source.name) | join(", "))): their order means nothing, and the install order is the pack priority" ]
+    fix:
+      owner: palette
+      text: Sort the profiles by a stated key in the API; the provider keeps the configured order.
+    evidence:
+      - kind: report
+        ref: palette-profile-order-findings-2026-09-22 F1
+        note: the provider discards the configured order
+      - kind: report
+        ref: palette-profile-order-findings-2026-09-22 F7
+        note: the install order on the cluster does not depend on the profile order
+      - kind: source
+        ref: terraform-provider-spectrocloud spectrocloud/schemas/cluster_profile.go
+        note: the profiles are a set since v0.28.1
+      - kind: source
+        ref: palette controllers/packpriority_reconciler.go
+    tests:
+      - fault: fixtures/eks/two-addons.json
+        clean: fixtures/eks/full-records.json
+
+  - id: position-zero
+    title: The profile at position 0 is the infrastructure profile
+    engines: [all]
+    tier: static
+    severity: warn
+    status: source
+    when: (.profiles | length) > 0 and (.entity.spec.profiles | length) > 0
+    what: |
+      Seven code paths in the console, in Palette, and in the agent read position 0 as the
+      infrastructure profile. Among them: the FIPS guard of the console, the `clusterProfileTemplate`
+      field of the dashboard API, and the repave check of CNI and CSI. The console puts
+      an add-on at position 0 on each cluster it creates with an add-on. On such a cluster, each of
+      these code paths reads the wrong profile. The check reads the record of the first profile of
+      the entity. Its `type` must be `cluster` or `infra`.
+    check:
+      kind: static
+      expr: |
+        .entity.spec.profiles[0].uid as $first
+        | [ .profiles[] | select(.source.uid == $first)
+            | select((.source.type // "") as $t | $t != "cluster" and $t != "infra")
+            | "profile \(.source.name) at position 0 is of type \(.source.type // "unknown"), not cluster or infra: the FIPS guard, the dashboard, and the repave check read the wrong profile" ]
+    fix:
+      owner: palette
+      text: Read the infrastructure profile by its type, not by its position.
+    evidence:
+      - kind: report
+        ref: palette-profile-order-findings-2026-09-22 F5
+      - kind: report
+        ref: palette-profile-order-findings-2026-09-22 B1
+        note: the FIPS guard of the console passes when position 0 is an add-on; reproduced against FIPS fixtures
+      - kind: source
+        ref: hubble domain/spectrocluster.go
+        note: the position-0 reads and the first-match pack lookups
+      - kind: source
+        ref: optic src/state/cluster/actions/details.jsx
+        note: the FIPS guard
+    tests:
+      - fault: fixtures/eks/addon-first.json
+        clean: fixtures/eks/full-records.json
+
+  - id: edit-in-place
+    title: A published profile version stays as published
+    engines: [all]
+    tier: race
+    severity: warn
+    status: seen
+    what: |
+      The API takes an edit of a published version: the version keeps its uid and its number, stays
+      published, and no new version appears. The `immutable-clusterprofiles` flag of the provider
+      stops the edit through the provider alone. The API, the console, and a push again of a pack
+      change the version whatever the flag says. No check before the build finds an edit. `strata
+      verify` on a record from before reports `DRIFT`, and the audit log names who changed it.
+    reproduce:
+      - "strata verify <record.json> --who"
+    fix:
+      owner: palette
+      text: Lock a published version on the server, as a setting.
+    evidence:
+      - kind: run
+        ref: strata live example
+        note: a PUT of a published version is accepted, and the version keeps its uid and its number
+      - kind: doc
+        ref: https://docs.spectrocloud.com/profiles/cluster-profiles/modify-cluster-profiles/update-cluster-profile/
+      - kind: source
+        ref: terraform-provider-spectrocloud spectrocloud/resource_cluster_profile.go
+        note: the immutable-clusterprofiles feature_preview flag is a check of the provider
+
+  - id: template-lock-route
+    title: The lock of a cluster template covers each route of an edit
+    engines: [all]
+    tier: race
+    severity: warn
+    status: seen
+    what: |
+      A cluster template locks the profile versions it links. The lock refuses a `PUT` of the whole
+      version with `ClusterProfileUpdateValidationFailure`, and takes an edit through the route of
+      one manifest, `PUT /v1/clusterprofiles/{uid}/packs/{pack}/manifests/{manifest}`, then the
+      publish. The linked version changes. No check before the build finds it; `strata verify` on
+      a record from before reports `DRIFT`.
+    reproduce:
+      - "strata verify <record.json> --who"
+    fix:
+      owner: palette
+      text: Check the lock on the route of one pack and of one manifest too.
+    evidence:
+      - kind: run
+        ref: "#81"
+      - kind: doc
+        ref: https://docs.spectrocloud.com/cluster-templates/
+
+  - id: template-outside
+    title: No profile of the entity is linked to a cluster template
+    engines: [all]
+    tier: palette
+    severity: fail
+    status: seen
+    when: (.entity.spec.profiles | length) > 0
+    what: |
+      A cluster outside a template cannot use a profile version that a template links: Palette
+      refuses the create with `ClusterCreateWithTemplateProfileForbidden`. `GET /v1/clusterprofiles/{uid}`
+      lists the templates in `status.inUseClusterTemplates`. The check reads the first profile of
+      the entity, and fails when a template links it and the entity names no `clusterTemplate`.
+      The reproduce line reads each profile.
+    check:
+      kind: palette
+      method: GET
+      path: /v1/clusterprofiles/{{ .entity.spec.profiles[0].uid }}
+      expr: |
+        .entity.spec.profiles[0].uid as $u
+        | if (.response.ok | not) then ["Palette cannot read profile \($u): \(.response.body.code // .response.status)"]
+          elif ((.response.body.status.inUseClusterTemplates // []) | length) > 0 and ((.entity.spec.clusterTemplate // null) == null)
+          then ["profile \(.response.body.metadata.name // $u) is linked to the cluster template \([ .response.body.status.inUseClusterTemplates[] | .name // .uid ] | join(", ")), and the entity names no clusterTemplate: Palette refuses the create with ClusterCreateWithTemplateProfileForbidden"]
+          else [] end
+    reproduce:
+      - "for u in {{ [ .entity.spec.profiles[].uid ] | join(\" \") }}; do curl -s -H \"ApiKey: $PALETTE_API_KEY\" \"$PALETTE_HOST/v1/clusterprofiles/$u\" | jq '{name: .metadata.name, templates: .status.inUseClusterTemplates}'; done"
+    fix:
+      owner: none
+      text: Build the cluster from the template, or use a version that no template links.
+    evidence:
+      - kind: run
+        ref: "#81"
+        note: a cluster outside the template, built with a linked version, is refused
+      - kind: source
+        ref: hubble services/service/spectrocluster/internal/service/spectroclustertemplate/internal/base/spectrocluster_template_validate.go ValidateProfilesNotLinkedToClusterTemplates
+      - kind: doc
+        ref: https://docs.spectrocloud.com/cluster-templates/
+    tests:
+      - fault: fixtures/eks/template-linked.json
+        clean: fixtures/eks/full-records.json
+
+  - id: variables-in-use
+    title: The variable definitions of a version in use stay as they are
+    engines: [all]
+    tier: palette
+    severity: note
+    status: source
+    when: (.entity.spec.profiles | length) > 0
+    what: |
+      Palette refuses a change of the variable definitions of a profile version that a cluster
+      uses. Its message: "you must create a new version of your cluster profile before you can
+      modify the variables". The packs, the values, and the manifests have no such rule. This note
+      names the clusters that use the first profile of the entity, from `status.inUseClusters`.
+    check:
+      kind: palette
+      method: GET
+      path: /v1/clusterprofiles/{{ .entity.spec.profiles[0].uid }}
+      expr: |
+        .entity.spec.profiles[0].uid as $u
+        | if (.response.ok | not) then ["Palette cannot read profile \($u): \(.response.body.code // .response.status)"]
+          elif ((.response.body.status.inUseClusters // []) | length) > 0
+          then ["profile \(.response.body.metadata.name // $u) is in use by \(.response.body.status.inUseClusters | length) cluster(s) (\([ .response.body.status.inUseClusters[] | .name // .uid ] | join(", "))): a change of its variable definitions is refused; make a new version"]
+          else [] end
+    reproduce:
+      - "curl -s -H \"ApiKey: $PALETTE_API_KEY\" \"$PALETTE_HOST/v1/clusterprofiles/{{ .entity.spec.profiles[0].uid }}\" | jq '.status.inUseClusters'"
+    evidence:
+      - kind: source
+        ref: hubble services/service/spectrocluster/internal/service/clusterprofile/clusterprofile_service.go UpdateClusterProfileVariables
+        note: validateInUseClustersForClusterProfileVariables runs before the update
+      - kind: doc
+        ref: https://docs.spectrocloud.com/profiles/cluster-profiles/create-cluster-profiles/define-profile-variables/modify-cluster-profile-variables/
+    tests:
+      - fault: fixtures/eks/profile-in-use.json
+        clean: fixtures/eks/full-records.json
+
+  - id: version-string
+    title: Each profile version is MAJOR.MINOR.PATCH
+    engines: [all]
+    tier: static
+    severity: warn
+    status: seen
+    when: (.profiles | length) > 0
+    what: |
+      Palette keeps a version string as given (`1.2`, `v1.2.3`), where its documentation says it
+      normalizes it. Two spellings of one version are two versions.
+    check:
+      kind: static
+      expr: |
+        [ .profiles[] | select((.source.version // "") | test("^[0-9]+\\.[0-9]+\\.[0-9]+$") | not)
+          | "profile \(.source.name) has the version \(.source.version), not MAJOR.MINOR.PATCH" ]
+    evidence:
+      - kind: run
+        ref: "#81"
+    tests:
+      - fault: fixtures/eks/version-v.json
+        clean: fixtures/eks/clean.json
+
+  - id: macro-flag-scope
+    title: The content of a profile reads no macro
+    engines: [all]
+    tier: static
+    severity: note
+    status: source
+    when: (.profiles | length) > 0
+    what: |
+      A macro is a name and a value, with no version and no digest. A profile whose values or
+      manifests read `{{.spectro.macro.<name>}}` gets a new value at once, in the running cluster.
+      No publish, no notification, and no audit entry comes with it. The `immutable-clusterprofiles`
+      flag of the provider covers the profile, not the macro. This note names each pack that reads
+      a macro.
+    check:
+      kind: static
+      expr: |
+        [ .profiles[] | .source.name as $p | .packs[]
+          | select((((.values // "") + "\n" + ((.manifests // []) | map(.content // "") | join("\n")))) | test("\\{\\{\\s*\\.spectro\\.macro\\."))
+          | "profile \($p): pack \(.name)@\(.version) reads a user macro; a change of the macro value changes the cluster with no publish and no audit entry" ]
+    reproduce:
+      - "strata snapshot cluster:<uid> --macros"
+    evidence:
+      - kind: doc
+        ref: https://docs.spectrocloud.com/clusters/cluster-management/macros/
+      - kind: source
+        ref: terraform-provider-spectrocloud spectrocloud/resource_cluster_profile.go
+        note: the immutable-clusterprofiles feature_preview flag checks the profile resource alone
+    tests:
+      - fault: fixtures/eks/macro-values.json
+        clean: fixtures/eks/addon-profile.json

@@ -1,6 +1,7 @@
 //! Progress notes on stderr. Library users pass [`Progress::silent`] to keep the library quiet.
 
 use crate::TOOL_NAME;
+use std::io::Write;
 
 /// Writes short progress notes to stderr unless quiet.
 #[derive(Debug, Clone, Copy)]
@@ -28,7 +29,8 @@ impl Progress {
     /// Write one note, prefixed with the tool name.
     pub fn note(&self, message: &str) {
         if !self.quiet {
-            eprintln!("{TOOL_NAME}: {message}");
+            // a reader that closes the pipe early (`| head`) is not an error of strata
+            let _ = writeln!(std::io::stderr(), "{TOOL_NAME}: {message}");
         }
     }
 
@@ -41,7 +43,7 @@ impl Progress {
     /// person at the terminal, who passes no `-q`.
     pub fn warn(&self, message: &str) {
         if !self.quiet {
-            eprintln!("{TOOL_NAME}: warning: {message}");
+            let _ = writeln!(std::io::stderr(), "{TOOL_NAME}: warning: {message}");
         }
     }
 }

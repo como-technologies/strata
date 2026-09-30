@@ -1,0 +1,15 @@
+{
+  "_base": "clean.json",
+  "_note": "the quota of nodes for each managed node group is at its default",
+  "_patch": {
+    "_exec": {
+      "aws service-quotas get-service-quota --service-code eks --quota-code L-BD136A63 --region us-east-2 --output json": {
+        "exit": 0,
+        "stdout": {
+          "Quota": { "ServiceCode": "eks", "QuotaCode": "L-BD136A63", "QuotaName": "Nodes per managed node group", "Value": 450.0, "Unit": "None", "Adjustable": true }
+        },
+        "stderr": ""
+      }
+    }
+  }
+}

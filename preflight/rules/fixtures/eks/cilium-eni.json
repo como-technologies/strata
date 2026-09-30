@@ -1,0 +1,93 @@
+{
+  "_base": "cilium-no-eni.json",
+  "_note": "the same Cilium pack, with ENI mode and kube-proxy replacement in its values",
+  "_patch": {
+    "profiles": [
+      {
+        "schema": "strata-snapshot/1",
+        "source": {
+          "uid": "prof-eks-1",
+          "name": "strata-live-profile",
+          "version": "1.0.0",
+          "cloudType": "eks",
+          "type": "cluster"
+        },
+        "packs": [
+          {
+            "key": "os/amazon-linux-eks",
+            "layer": "os",
+            "name": "amazon-linux-eks",
+            "version": "1.0.0",
+            "tag": "1.0.0",
+            "packUid": "pk-os-eks",
+            "registryUid": "5eecc89d0b150045ae661cef",
+            "valuesCanon": null
+          },
+          {
+            "key": "k8s/kubernetes-eks",
+            "layer": "k8s",
+            "name": "kubernetes-eks",
+            "version": "1.32",
+            "tag": "1.32",
+            "packUid": "pk-k8s-eks",
+            "registryUid": "5eecc89d0b150045ae661cef",
+            "valuesCanon": {
+              "iamAuthenticatorConfig": {
+                "mapUsers": [
+                  {
+                    "userarn": "arn:aws:iam::123456789012:user/ops",
+                    "username": "ops",
+                    "groups": [
+                      "system:masters"
+                    ]
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "key": "cni/cni-cilium-oss",
+            "layer": "cni",
+            "name": "cni-cilium-oss",
+            "version": "1.17.0",
+            "tag": "1.17.0",
+            "packUid": "pk-cni-cilium",
+            "registryUid": "5eecc89d0b150045ae661cef",
+            "valuesCanon": {
+              "charts": {
+                "cilium": {
+                  "eni": {
+                    "enabled": true
+                  },
+                  "ipam": {
+                    "mode": "eni"
+                  },
+                  "routingMode": "native",
+                  "kubeProxyReplacement": true,
+                  "k8sServiceHost": "auto",
+                  "k8sServicePort": 443
+                }
+              }
+            }
+          },
+          {
+            "key": "csi/csi-aws-ebs",
+            "layer": "csi",
+            "name": "csi-aws-ebs",
+            "version": "1.44.0",
+            "tag": "1.44.0",
+            "packUid": "pk-csi-eks",
+            "registryUid": "5eecc89d0b150045ae661cef",
+            "valuesCanon": {
+              "storageClasses": [
+                {
+                  "name": "spectro-storage-class"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

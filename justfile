@@ -11,9 +11,12 @@ default: build
 
 # ---- build and test -------------------------------------------------------------------------
 
-# Build the release binary at target/release/strata
+# strata-preflight is a package of its own in preflight/; `strata preflight` runs its binary from
+# the same directory. The two build together, and a release ships both.
+
+# Build the release binaries at target/release/strata and target/release/strata-preflight
 build:
-    cargo build --release
+    cargo build --release -p strata -p strata-preflight
 
 # Linux targets are static musl builds in the containers of cross. The other targets build
 # natively with cargo.
@@ -23,19 +26,20 @@ build-target target:
     #!/usr/bin/env bash
     set -euo pipefail
     case "{{target}}" in
-      *linux*) cross build --release --target "{{target}}" ;;
-      *) cargo build --release --target "{{target}}" ;;
+      *linux*) cross build --release --target "{{target}}" -p strata -p strata-preflight ;;
+      *) cargo build --release --target "{{target}}" -p strata -p strata-preflight ;;
     esac
 
-# Run the unit, library, binary, and script tests. No network.
+# Run the unit, library, binary, and script tests of strata and of strata-preflight. No network.
 test: stand-in
     cargo test
+    cargo test -p strata-preflight
 
 # Test the format, the clippy lints, and the rustdoc
 lint:
     cargo fmt --check
     cargo clippy --workspace --all-targets -- -D warnings
-    RUSTDOCFLAGS="-D warnings" cargo doc --no-deps
+    RUSTDOCFLAGS="-D warnings" cargo doc --no-deps -p strata -p strata-preflight
 
 # Build and run examples/library, a separate crate that uses strata as a library
 library-example:
@@ -119,21 +123,39 @@ tofu-uninstall:
 
 # When the apply fails, examples/live/diagnose.sh saves what holds each cluster.
 
+# Each recipe that builds runs the checks of the lab first, examples/live/preflight.sh: the tools,
+# the credentials of the cloud CLIs, the APIs of the GCP project, and the leftovers of a run
+# before. A failed check stops the recipe before it spends anything.
+
 # Build the live example: a cluster and the profile versions. Billable until live-down.
-live-up:
+live-up: build
     #!/usr/bin/env bash
     set -uo pipefail
+    examples/live/preflight.sh || exit 1
     examples/live/tf.sh init -input=false || exit 1
     examples/live/tf.sh apply && exit 0
     examples/live/diagnose.sh
     exit 1
 
 # Build the profiles of the live example and no cluster: seconds, and no cost
-live-profiles:
+live-profiles: build
     #!/usr/bin/env bash
     set -uo pipefail
+    examples/live/preflight.sh || exit 1
     examples/live/tf.sh init -input=false || exit 1
     examples/live/tf.sh apply -var cluster=false
+
+# The checks of the lab itself, with no build: the tools, the key, the cloud CLIs, the APIs, the leftovers (#91)
+live-preflight: build
+    examples/live/preflight.sh
+
+# Watch a build on the terminal: strata preflight --watch --verbose on a cluster from the moment Palette lists it, one line for each rule at each reading (#91). --build makes cluster B beside A, --down removes it after; needs live-profiles or live-up.
+live-watch *args: build
+    examples/live/watch.sh {{args}}
+
+# The test plan of #91 for one engine: each fault on purpose fails, and a clean entity passes; the run goes to the ledger. Needs live-profiles with that cloud; --build adds the build of cluster A, watched, and the checks of the cluster; --build --down tears it down after.
+live-preflight-plan engine *args: build
+    examples/live/preflight-plan.sh {{engine}} {{args}}
 
 # Serve the tenant of one chapter of the book on this machine: no key, no tenant, no cost
 playground chapter="list": build examples stand-in

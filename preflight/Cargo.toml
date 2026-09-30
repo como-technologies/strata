@@ -1,0 +1,50 @@
+[package]
+name = "strata-preflight"
+version = "0.1.0"
+edition = "2024"
+# The same floor as strata: this crate uses the same `if let` chains.
+rust-version = "1.88"
+description = "Check that Spectro Cloud Palette can build a cluster, before the build: a catalog of rules as data, each a probe or a preflight check, with the confidence of each from the runs that prove it"
+license = "Apache-2.0"
+repository = "https://github.com/como-technologies/strata"
+readme = "README.md"
+keywords = ["kubernetes", "spectrocloud", "palette", "preflight", "validation"]
+categories = ["command-line-utilities", "development-tools"]
+# As strata: a private repository publishes no crate. Another repository depends on this package by
+# its git address and its name, which `automation/preflight.md` in the book shows.
+publish = false
+
+[lib]
+name = "strata_preflight"
+path = "src/lib.rs"
+
+[[bin]]
+name = "strata-preflight"
+path = "src/main.rs"
+
+[dependencies]
+# The Palette client, the records of profiles, and the error type come from strata. This crate
+# adds the rules and the checks; strata never depends on it.
+strata = { path = "..", version = "0.15" }
+chrono = "0.4"
+# The record patterns, by the same rules as strata: `**` matches zero or more directories.
+glob = "0.3"
+clap = { version = "4", features = ["derive"] }
+# The checks of the rules are jq programs over one JSON document, so a person reads a rule with
+# the jq they know, and runs the same program by hand with `jq`. jaq is jq in Rust, with no
+# process and no binary to find.
+jaq-core = "3.1"
+jaq-std = "3.0"
+jaq-json = { version = "2.0", features = ["serde"] }
+schemars = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_yaml = "0.9"
+thiserror = "2"
+
+[dev-dependencies]
+tempfile = "3"
+
+[lints.rust]
+unsafe_code = "forbid"
+missing_docs = "deny"

@@ -1,0 +1,13 @@
+{
+  "_base": "clean.json",
+  "_note": "no EBS volume carries the tag of the cluster",
+  "_patch": {
+    "_exec": {
+      "aws ec2 describe-volumes --filters Name=tag-key,Values=kubernetes.io/cluster/fred --region us-east-2 --output json": {
+        "exit": 0,
+        "stdout": { "Volumes": [] },
+        "stderr": ""
+      }
+    }
+  }
+}

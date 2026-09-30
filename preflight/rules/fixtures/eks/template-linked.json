@@ -1,0 +1,24 @@
+{
+  "_base": "full-records.json",
+  "_note": "a cluster template links the profile version, and the entity names no template",
+  "_patch": {
+    "_responses": {
+      "GET /v1/clusterprofiles/prof-eks-1": {
+        "ok": true,
+        "status": 200,
+        "body": {
+          "status": {
+            "inUseClusterTemplates": [
+              {
+                "kind": "clustertemplate",
+                "name": "strata-live-template",
+                "uid": "tpl-eks-1",
+                "projectUid": "proj-1"
+              }
+            ]
+          }
+        }
+      }
+    }
+  }
+}

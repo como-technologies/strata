@@ -1,0 +1,48 @@
+{
+  "_base": "clean.json",
+  "_note": "a static network whose subnet in the region carries a pod range and a service range",
+  "_patch": {
+    "entity": {
+      "spec": {
+        "cloudConfig": {
+          "network": "shared-net"
+        },
+        "machinepoolconfig": [
+          {
+            "cloudConfig": {
+              "subnet": "shared-net-us-east1"
+            },
+            "poolConfig": {
+              "name": "worker-pool"
+            }
+          }
+        ]
+      }
+    },
+    "_exec": {
+      "gcloud compute networks subnets list --network shared-net --regions us-east1 --project strata-lab --format json": {
+        "exit": 0,
+        "stdout": [
+          {
+            "name": "shared-net-us-east1",
+            "ipCidrRange": "10.10.0.0/20",
+            "network": "https://www.googleapis.com/compute/v1/projects/strata-lab/global/networks/shared-net",
+            "region": "https://www.googleapis.com/compute/v1/projects/strata-lab/regions/us-east1",
+            "purpose": "PRIVATE",
+            "secondaryIpRanges": [
+              {
+                "rangeName": "pods",
+                "ipCidrRange": "10.20.0.0/16"
+              },
+              {
+                "rangeName": "services",
+                "ipCidrRange": "10.30.0.0/20"
+              }
+            ]
+          }
+        ],
+        "stderr": ""
+      }
+    }
+  }
+}

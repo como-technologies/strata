@@ -8,12 +8,13 @@ versions, the clusters, edge hosts, cluster groups, and app profiles that run
 them, and pack versions in a registry. A published profile version is what
 Palette builds a cluster from. Strata calls it a release.
 
-Palette lets a person edit a published version in place, and it keeps no digest
-of what a version holds. Strata calculates one, the root, and keeps it in a
-record in your repository. Equal roots mean one release. When the roots differ,
-strata names the layer, the value, and the impact on running clusters. A record
-in Git, checked against Palette, is evidence that stays true when Palette
-changes. [The everyday loop](docs/src/loop.md) shows who runs what, and when.
+Palette names a version by its name and its number, and a published version can
+be updated after its publish. Strata adds a digest of the content of a version,
+the root, and keeps it in a record in your repository. Equal roots mean one
+release. When the roots differ, strata names the layer, the value, and the
+impact on running clusters. A record in Git holds the content that the team
+approved, and a check against Palette shows each change after the approval.
+[The everyday loop](docs/src/loop.md) shows who runs what, and when.
 
 ## Quick start
 
@@ -27,6 +28,7 @@ strata verify aws-stack.json                                    # exit 1 when so
 strata compare aws-stack.json cluster:payments                  # does the cluster run it?
 strata compare aws-stack@1.1.0 aws-stack@1.1.1                  # what changed, and the impact
 strata compare pack:csi-aws-ebs@1.63.1 pack:csi-aws-ebs@1.65.0  # two pack versions
+strata preflight cluster.json --cloud eks                       # can Palette build this cluster?
 ```
 
 With no tenant, `just examples` builds real profiles offline. See the
@@ -40,6 +42,7 @@ With no tenant, `just examples` builds real profiles offline. See the
 | Record | `snapshot`, `candidate` |
 | Compare | `compare`, `same-release` |
 | Check | `verify`, `consumers`, `behind` |
+| Before a build | `preflight` |
 | Reference | `schema` |
 
 Run `strata --help` for the list, and `strata <command> --help` for the options.
@@ -75,7 +78,7 @@ The source is in `docs/src/`.
 
 ## Requirements
 
-To use strata: the binary, a Palette API key, `jq`, and `gh`.
+To use strata: the two binaries, `strata` and `strata-preflight`, a Palette API key, `jq`, and `gh`.
 [Install](docs/src/install.md) lists each.
 
 To work on strata:

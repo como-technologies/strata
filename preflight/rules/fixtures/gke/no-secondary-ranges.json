@@ -1,0 +1,22 @@
+{
+  "_base": "static-network-clean.json",
+  "_note": "the subnet of the pool carries no secondary range",
+  "_patch": {
+    "_exec": {
+      "gcloud compute networks subnets list --network shared-net --regions us-east1 --project strata-lab --format json": {
+        "exit": 0,
+        "stdout": [
+          {
+            "name": "shared-net-us-east1",
+            "ipCidrRange": "10.10.0.0/20",
+            "network": "https://www.googleapis.com/compute/v1/projects/strata-lab/global/networks/shared-net",
+            "region": "https://www.googleapis.com/compute/v1/projects/strata-lab/regions/us-east1",
+            "purpose": "PRIVATE",
+            "secondaryIpRanges": []
+          }
+        ],
+        "stderr": ""
+      }
+    }
+  }
+}

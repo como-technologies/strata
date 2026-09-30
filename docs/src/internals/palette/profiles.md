@@ -9,7 +9,8 @@ appears. A pack can also be pushed again under one version, with
 `spectro pack push --force`
 ([Spectro CLI reference](https://docs.spectrocloud.com/registries-and-packs/spectro-cli-reference/))
 or `oras push`. A published profile that pins the version with the values of
-the pack follows such a push, with no person and no request: see
+the pack follows such a push at the next sync of the registry, with no request
+from a person: see
 [A pack version pushed again](packs.md#a-pack-version-pushed-again).
 
 This is why [`strata verify`](../../commands/verify.md) exists. A record of a
@@ -89,13 +90,14 @@ The clone carries the content over exactly: the values, the manifests, and the
 variables of a flag-on bump equal those of a flag-off bump from the same
 configuration.
 
-A version is a semantic version. The documentation says that Palette writes a
-short form and a lowercase `v` prefix as the full version, `1.2` as `1.2.0` and
-`v1.2.3` as `1.2.3`
+A version is a semantic version. The public documentation says that the
+console writes a short form and a lowercase `v` prefix as the full version,
+`1.2` as `1.2.0` and `v1.2.3` as `1.2.3`
 ([Version a cluster profile](https://docs.spectrocloud.com/profiles/cluster-profiles/modify-cluster-profiles/version-cluster-profile/)).
-The API does not: a version published through the provider as `1.2` is listed
-as `1.2`, and `v1.2.3` as `v1.2.3`. So two versions can name one number in two
-ways. A ref names the string that Palette lists.
+A version published through the API, as the provider does, keeps the string
+that the request sent: `1.2` is listed as `1.2`, and `v1.2.3` as `v1.2.3`. So
+two versions can name one number in two ways. A ref names the string that
+Palette lists.
 
 With the flag on, set `skip_destroy` on each profile **before** the first bump.
 A flag-on bump replaces the profile resource, and the provider deletes the
@@ -116,8 +118,8 @@ refusal, and the version stays. See
 A cluster template links profile versions and a maintenance policy, and applies
 them to the clusters attached to it
 ([Cluster templates](https://docs.spectrocloud.com/cluster-templates/)). The
-documentation says that a linked version becomes immutable. A live run shows
-what that lock is:
+public documentation says that a linked version is immutable. A live run shows
+what the lock covers:
 
 | Request | Answer |
 | --- | --- |
@@ -126,14 +128,13 @@ what that lock is:
 | A cluster outside the template, built with a linked version | Refused: `ClusterCreateWithTemplateProfileForbidden`, "Cluster creation is not allowed as profile ... is already attached to one or more cluster templates". |
 | The same edit, after the template is removed | Accepted. A record from before reports `DRIFT`. |
 
-So the lock belongs to the template, not to the version, and it covers one
-route. The `PUT` of the whole version checks it. In the Spectro Cloud source,
-the routes of one pack and of one manifest do not, and the live run edits a
-linked version through the route of one manifest. A linked
-version is not immutable, whatever the documentation says, and `verify` is
-what finds an edit through such a route. The lock holds against a new cluster:
-it keeps every cluster outside the template away from a linked version. A cluster that runs a linked version is a cluster the
-template applies.
+So the lock belongs to the template, and it covers the route of the whole
+version: the `PUT` of the whole version checks it. In the Spectro Cloud source,
+the routes of one pack and of one manifest do not check it, and the live run
+changes a linked version through the route of one manifest. `verify` finds an
+edit through such a route. The lock holds against a new cluster: it keeps every
+cluster outside the template away from a linked version. A cluster that runs a
+linked version is a cluster the template applies.
 
 ## Macros
 
@@ -162,9 +163,9 @@ When a macro gets another value:
 The cluster still gets the new value. Palette writes it into the running
 cluster on its own, with no update to accept: a live run read it inside the
 cluster 11 minutes after the change, and a run before it 13 minutes after. So a
-cluster runs other content, and its record, its copy, its notifications, and
-its audit log say nothing. The digests of `snapshot --macros` are how strata
-sees it: see [Macros](../../commands/snapshot.md#macros).
+cluster runs the new value, and its record, its copy, its notifications, and
+its audit log stay as they were. The digests of `snapshot --macros` show it:
+see [Macros](../../commands/snapshot.md#macros).
 
 A create, a change, or a delete of a project macro writes no audit entry, at
 project or tenant scope. No audit entry names a macro.

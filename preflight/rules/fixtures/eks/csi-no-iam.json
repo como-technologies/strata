@@ -1,0 +1,5 @@
+{
+  "_base": "eks-csi-iam-clean.json",
+  "_note": "no pack grants the EBS CSI its IAM: neither irsaRoles nor roleAdditionalPolicies",
+  "_delete": [ "/profiles/0/packs/1/valuesCanon/managedMachinePool" ]
+}

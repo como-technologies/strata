@@ -1,0 +1,317 @@
+{
+  "cloud": "maas",
+  "release": "4.10",
+  "source": "fixtures/maas/clean.json",
+  "entity": {
+    "metadata": {
+      "name": "fred",
+      "labels": {}
+    },
+    "spec": {
+      "cloudAccountUid": "acc-maas-1",
+      "cloudConfig": {
+        "domain": "maas",
+        "sshKeys": [
+          "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJstrata00000000000000000000000000000000001 ops@lab"
+        ],
+        "ntpServers": [
+          "10.10.128.1"
+        ],
+        "staticIp": false,
+        "enableLxdVm": false
+      },
+      "machinepoolconfig": [
+        {
+          "cloudConfig": {
+            "resourcePool": "palette",
+            "azs": [
+              "default"
+            ],
+            "instanceType": {
+              "minCPU": 4,
+              "minMemInMB": 8192,
+              "minDiskSizeInGB": 60
+            },
+            "tags": [
+              "palette"
+            ]
+          },
+          "poolConfig": {
+            "name": "cp-pool",
+            "size": 1,
+            "isControlPlane": true,
+            "useControlPlaneAsWorker": false
+          }
+        },
+        {
+          "cloudConfig": {
+            "resourcePool": "palette",
+            "azs": [
+              "default"
+            ],
+            "instanceType": {
+              "minCPU": 4,
+              "minMemInMB": 8192,
+              "minDiskSizeInGB": 60
+            },
+            "tags": [
+              "palette",
+              "worker"
+            ]
+          },
+          "poolConfig": {
+            "name": "worker-pool",
+            "size": 2,
+            "isControlPlane": false,
+            "useControlPlaneAsWorker": false
+          }
+        }
+      ],
+      "profiles": [
+        {
+          "uid": "prof-maas-1",
+          "packValues": [
+            {
+              "name": "ubuntu-maas",
+              "tag": "22.04",
+              "type": "spectro"
+            },
+            {
+              "name": "kubernetes",
+              "tag": "1.32.3",
+              "type": "spectro"
+            },
+            {
+              "name": "cni-calico",
+              "tag": "3.29.3",
+              "type": "spectro"
+            },
+            {
+              "name": "csi-maas-volume",
+              "tag": "1.0.0",
+              "type": "spectro"
+            }
+          ],
+          "variables": []
+        }
+      ],
+      "clusterConfig": {
+        "timezone": "Etc/UTC"
+      }
+    }
+  },
+  "before": null,
+  "profiles": [
+    {
+      "schema": "strata-snapshot/1",
+      "source": {
+        "uid": "prof-maas-1",
+        "name": "maas-stack",
+        "version": "1.0.0",
+        "cloudType": "maas",
+        "type": "cluster"
+      },
+      "packs": [
+        {
+          "key": "os/ubuntu-maas",
+          "layer": "os",
+          "name": "ubuntu-maas",
+          "version": "22.04",
+          "tag": "22.04",
+          "packUid": "pk-os-maas",
+          "registryUid": "5eecc89d0b150045ae661cef",
+          "valuesCanon": null
+        },
+        {
+          "key": "k8s/kubernetes",
+          "layer": "k8s",
+          "name": "kubernetes",
+          "version": "1.32.3",
+          "tag": "1.32.3",
+          "packUid": "pk-k8s-maas",
+          "registryUid": "5eecc89d0b150045ae661cef",
+          "valuesCanon": null
+        },
+        {
+          "key": "cni/cni-calico",
+          "layer": "cni",
+          "name": "cni-calico",
+          "version": "3.29.3",
+          "tag": "3.29.3",
+          "packUid": "pk-cni-maas",
+          "registryUid": "5eecc89d0b150045ae661cef",
+          "valuesCanon": null
+        },
+        {
+          "key": "csi/csi-maas-volume",
+          "layer": "csi",
+          "name": "csi-maas-volume",
+          "version": "1.0.0",
+          "tag": "1.0.0",
+          "packUid": "pk-csi-maas",
+          "registryUid": "5eecc89d0b150045ae661cef",
+          "valuesCanon": null
+        }
+      ]
+    }
+  ],
+  "packs": {
+    "pk-os-maas": {
+      "name": "ubuntu-maas",
+      "layer": "os",
+      "cloudTypes": [
+        "maas"
+      ]
+    },
+    "pk-k8s-maas": {
+      "name": "kubernetes",
+      "layer": "k8s",
+      "cloudTypes": [
+        "maas"
+      ]
+    },
+    "pk-cni-maas": {
+      "name": "cni-calico",
+      "layer": "cni",
+      "cloudTypes": [
+        "maas"
+      ]
+    },
+    "pk-csi-maas": {
+      "name": "csi-maas-volume",
+      "layer": "csi",
+      "cloudTypes": [
+        "maas"
+      ]
+    }
+  },
+  "account": {
+    "metadata": {
+      "name": "como-maas",
+      "uid": "acc-maas-1",
+      "annotations": {
+        "overlordUid": "ol-maas-1"
+      },
+      "creationTimestamp": "2026-09-01T10:00:00.000Z"
+    },
+    "spec": {
+      "apiEndpoint": "http://10.10.128.10:5240/MAAS",
+      "apiKey": "<redacted>",
+      "preferredSubnets": []
+    },
+    "status": {
+      "state": ""
+    }
+  },
+  "clusterUid": null,
+  "_responses": {
+    "POST /v1/spectroclusters/maas/validate": {
+      "ok": true,
+      "status": 200,
+      "body": {
+        "machinePools": {
+          "results": []
+        },
+        "profiles": []
+      }
+    },
+    "GET /v1/cloudaccounts/maas/acc-maas-1": {
+      "ok": true,
+      "status": 200,
+      "body": {
+        "metadata": {
+          "name": "como-maas",
+          "uid": "acc-maas-1"
+        },
+        "kind": "maas"
+      }
+    },
+    "GET /v1/overlords/ol-maas-1": {
+      "ok": true,
+      "status": 200,
+      "body": {
+        "metadata": {
+          "name": "lab-pcg",
+          "uid": "ol-maas-1"
+        },
+        "spec": {
+          "isSystem": false,
+          "isSelfHosted": false,
+          "cloudAccountUid": "acc-maas-1",
+          "ipPools": []
+        },
+        "status": {
+          "state": "Running",
+          "isActive": true,
+          "isReady": true,
+          "health": {
+            "state": "Healthy"
+          }
+        }
+      }
+    },
+    "GET /v1/cloudaccounts/maas/acc-maas-1/properties/domains": {
+      "ok": true,
+      "status": 200,
+      "body": {
+        "items": [
+          {
+            "name": "maas"
+          },
+          {
+            "name": "lab.example.com"
+          }
+        ]
+      }
+    },
+    "GET /v1/cloudaccounts/maas/acc-maas-1/properties/resourcePools": {
+      "ok": true,
+      "status": 200,
+      "body": {
+        "items": [
+          {
+            "name": "default",
+            "description": ""
+          },
+          {
+            "name": "palette",
+            "description": "machines for Palette"
+          }
+        ]
+      }
+    },
+    "GET /v1/cloudaccounts/maas/acc-maas-1/properties/azs": {
+      "ok": true,
+      "status": 200,
+      "body": {
+        "items": [
+          {
+            "name": "default",
+            "description": ""
+          },
+          {
+            "name": "rack-2",
+            "description": ""
+          }
+        ]
+      }
+    },
+    "GET /v1/cloudaccounts/maas/acc-maas-1/properties/tags": {
+      "ok": true,
+      "status": 200,
+      "body": {
+        "items": [
+          {
+            "name": "palette"
+          },
+          {
+            "name": "worker"
+          },
+          {
+            "name": "virtual"
+          }
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "_base": "overlay-clean.json",
+  "_note": "the VIP is outside the overlay CIDR",
+  "_patch": {
+    "entity": {
+      "spec": {
+        "cloudConfig": {
+          "controlPlaneEndpoint": {
+            "host": "10.10.100.20",
+            "type": "VIP"
+          }
+        }
+      }
+    }
+  }
+}

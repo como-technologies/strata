@@ -1,0 +1,15 @@
+{
+  "_base": "clean.json",
+  "_patch": {
+    "_responses": {
+      "POST /v1/spectroclusters/gke/validate": {
+        "ok": false,
+        "status": 400,
+        "body": {
+          "code": "InvalidParam",
+          "message": "Node pool size should be multiple of 3"
+        }
+      }
+    }
+  }
+}

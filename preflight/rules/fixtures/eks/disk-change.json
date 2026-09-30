@@ -1,0 +1,20 @@
+{
+  "_base": "type-same.json",
+  "_note": "a change of the root device size of the node group, from 60 to 100",
+  "_patch": {
+    "entity": {
+      "spec": {
+        "machinepoolconfig": [
+          {
+            "cloudConfig": {
+              "rootDeviceSize": 100
+            },
+            "poolConfig": {
+              "name": "worker-pool"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

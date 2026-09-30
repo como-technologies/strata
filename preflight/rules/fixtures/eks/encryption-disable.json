@@ -1,0 +1,13 @@
+{
+  "_base": "eks-encryption-fixed-clean.json",
+  "_note": "the change turns the secrets encryption off",
+  "_patch": {
+    "entity": {
+      "spec": {
+        "cloudConfig": {
+          "encryptionConfig": { "isEnabled": false }
+        }
+      }
+    }
+  }
+}
