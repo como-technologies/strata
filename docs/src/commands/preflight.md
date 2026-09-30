@@ -154,7 +154,9 @@ holds the last reading: the conditions and the events the rules saw. A build
 that Palette cannot finish stops in minutes, not at the timeout of the client.
 `--verbose` prints, at each reading, the three requests the reading made and
 what they gave, each condition that changed, each new event, and one line for
-each rule; and before the first reading, the program of each rule. To see a
+each rule; and before the first reading, the program of each rule. On a
+terminal the lines carry the colors of the report; `--no-color` or `NO_COLOR`
+turns them off, and a stream to a file has none. To see a
 watch on a real build, `just live-watch --build --down` in the live example
 ([The preflight checks](../development/live-example.md#the-preflight-checks)).
 

@@ -674,7 +674,8 @@ fn pct(v: Option<f64>) -> String {
     v.map_or("-".to_string(), |x| format!("{:.0}%", x * 100.0))
 }
 
-fn paint(color: bool, code: &str, text: &str) -> String {
+/// `text` in the ANSI color `code` when `color` is on, else as it is.
+pub(crate) fn paint(color: bool, code: &str, text: &str) -> String {
     if color {
         format!("\x1b[{code}m{text}\x1b[0m")
     } else {
@@ -683,7 +684,13 @@ fn paint(color: bool, code: &str, text: &str) -> String {
 }
 
 fn label_color(c: &CheckResult) -> &'static str {
-    match (c.verdict, c.severity, c.level) {
+    label_color_for(c.verdict, c.severity, c.level)
+}
+
+/// The ANSI color of a label: green for a pass, red for a counted failure, magenta for a failed
+/// probe, yellow for a warning, cyan for a note, dim for what did not run.
+pub(crate) fn label_color_for(verdict: Verdict, severity: Severity, level: Level) -> &'static str {
+    match (verdict, severity, level) {
         (Verdict::Passed, _, _) => "32",
         (Verdict::Failed, Severity::Note, _) => "36",
         (Verdict::Failed, Severity::Warn, _) => "33",

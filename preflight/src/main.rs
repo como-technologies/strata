@@ -172,6 +172,13 @@ fn color(cli: &Cli) -> bool {
         && std::io::IsTerminal::is_terminal(&std::io::stdout())
 }
 
+/// Color for the progress lines, which go to stderr.
+fn color_err(cli: &Cli) -> bool {
+    !cli.no_color
+        && std::env::var_os("NO_COLOR").is_none()
+        && std::io::IsTerminal::is_terminal(&std::io::stderr())
+}
+
 fn tiers_of(cli: &Cli) -> Result<Vec<Tier>> {
     if cli.tier.is_empty() {
         return Ok(if cli.offline {
@@ -416,6 +423,7 @@ fn run_cli(cli: Cli) -> Result<ExitCode> {
             sleep: &std::thread::sleep,
             out_dir: out_dir.as_deref(),
             verbose: cli.verbose,
+            color: color_err(&cli),
         })
         .map(|(report, world)| {
             reading = Some(world);
@@ -436,6 +444,7 @@ fn run_cli(cli: Cli) -> Result<ExitCode> {
             out_dir: out_dir.as_deref(),
             progress: &progress,
             verbose: cli.verbose,
+            color: color_err(&cli),
         })?
     };
     if let Some(dir) = &cli.out {
