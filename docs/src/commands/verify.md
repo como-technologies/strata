@@ -145,6 +145,11 @@ record ends with the last sync of the registry:
   the copy did not change.
 - No note: the registry does not sync, or Palette does not give the sync status.
 
+The sync status is a note beside the verdict. When Palette answers the sync
+request with a 5xx, or the request does not complete, strata writes a note to
+stderr and gives the verdict with no sync note. The status and the exit of the
+verdict do not change: an unchanged pack is `OK` and exits `0`.
+
 With many records, the line of a pack record ends with the same note.
 
 ```text
@@ -153,6 +158,8 @@ With many records, the line of a pack record ends with the same note.
 
 `--json` puts the same in `verify.registrySync`: `lastSyncedTime`, `status`
 (`Completed`, `InProgress`, or `Failed`), and `message` when Palette gives one.
+When strata cannot read the sync status, `verify.registrySync` is absent, and
+`verify.registrySyncError` gives the reason, such as `HTTP 500: <body>`.
 Strata sends one request for each pack record, by the type of the pack, and two
 for a pack in an ECR registry: see
 [Other reads](../reference/palette-api.md#other-reads).

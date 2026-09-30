@@ -215,6 +215,9 @@ A comparison of two sides, `a` and `b`.
     one. The verdict states the copy of the registry in Palette, and this field
     tells how old that copy is. It is absent when the registry does not sync,
     or when Palette does not answer.
+  - `registrySyncError`: for a pack record, why strata could not read the last
+    sync of the registry: Palette answered with a 5xx, or the request did not
+    complete. `registrySync` is then absent. It does not change `status`.
   - `who`, only with `--who` and for a drifted profile or cluster record: each
     write to the profile, or to the cluster, that the audit log of Palette
     holds since `recordedAt`, oldest first: `time`, `actor`, `actorType`
