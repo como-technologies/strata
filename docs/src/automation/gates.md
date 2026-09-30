@@ -6,7 +6,7 @@ Two questions are gates: a job asks strata, and the next step runs only on exit
 | Gate | The question | The command | Exit `1` means |
 | --- | --- | --- | --- |
 | promotion | Are the records of this promotion one release? | `same-release` | a pair differs, and the reason names the pack and the value path |
-| retire | Does a cluster or an edge host that the key can read still use this version? | `consumers` | one does, or strata could not read a cluster, and the report names each one |
+| retire | Does a cluster or an edge host that the key can read, or a cluster template, still use this version? | `consumers` | one does, or strata could not read a cluster, and the report names each one |
 
 Both take a moment that a person picks, so both run on demand. A promotion gate
 on every pull request goes red whenever one environment is ahead of another,

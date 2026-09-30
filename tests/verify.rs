@@ -6677,6 +6677,85 @@ fn consumers_counts_an_edge_host_bound_to_the_profile() {
     assert_eq!(json["edgeHostsRead"]["read"], 1);
 }
 
+/// Palette refuses the delete of a version that a cluster template links, and the profile document
+/// names each such template. A version that a template links and no cluster runs has a consumer.
+#[test]
+fn consumers_counts_a_cluster_template_that_links_the_version() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let mut profile = read(&dir.path().join("a").join("profile.json"));
+    profile["status"]["inUseClusterUids"] = serde_json::json!([]);
+    profile["status"]["inUseClusters"] = serde_json::json!([]);
+    profile["status"]["inUseClusterTemplates"] = serde_json::json!([
+        {"uid": "tmpl-1", "name": "barney-template", "projectUid": "p1", "kind": "clustertemplate"}
+    ]);
+    let api = serve(MemoryApi::new(), dir.path(), "a", UID_A)
+        .with(format!("/v1/clusterprofiles/{UID_A}"), profile);
+    for options in [
+        ops::ConsumersOptions::default(),
+        ops::ConsumersOptions { list_only: true },
+    ] {
+        let r = ops::consumers_with(
+            &Ref::Uid(UID_A.into()),
+            &options,
+            |_| Ok(Palette::new(api.clone())),
+            "t1",
+            &Progress::silent(),
+        )
+        .unwrap();
+        assert_eq!(
+            (r.count, r.exit_code()),
+            (1, 1),
+            "a template links the version, so Palette refuses the delete: {options:?}"
+        );
+        let t = &r.consumers[0];
+        assert_eq!(
+            (
+                t.kind.as_str(),
+                t.uid.as_str(),
+                t.name.as_str(),
+                t.project_uid.as_str(),
+                t.state.as_str(),
+                t.version.as_str()
+            ),
+            ("template", "tmpl-1", "barney-template", "p1", "", "")
+        );
+        assert!(t.error.is_none() && !t.unlisted);
+        assert_eq!(r.overwritten, 0, "a template keeps no copy of the version");
+    }
+
+    let r = ops::consumers(
+        &Ref::Uid(UID_A.into()),
+        |_| Ok(Palette::new(api.clone())),
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    let text = render::renderer(Format::Terminal, Paint::off(), false)
+        .render_consumers(&r)
+        .unwrap();
+    assert!(
+        text.contains("barney-template  tmpl-1  project p1  cluster template\n"),
+        "{text}"
+    );
+    let md = render::renderer(Format::Markdown, Paint::off(), false)
+        .render_consumers(&r)
+        .unwrap();
+    assert!(
+        md.contains("| `barney-template` | `tmpl-1` | `p1` | - | (cluster template) |"),
+        "{md}"
+    );
+    let json: Value = serde_json::from_str(
+        &render::renderer(Format::Json, Paint::off(), true)
+            .render_consumers(&r)
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(json["count"], 1);
+    assert_eq!(json["consumers"][0]["kind"], "template");
+    assert_eq!(json["consumers"][0]["projectUid"], "p1");
+}
+
 // ---- cluster groups ---------------------------------------------------------------------------
 
 /// A cluster group `g1`, `group-1`, that pins the add-on profile of cluster-merged, with that

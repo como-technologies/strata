@@ -41,6 +41,7 @@ const PAYMENTS_PROD: &str = "64f1000000000000000000f1";
 const TENANT_A: &str = "64f1000000000000000000e4";
 const TENANT_B: &str = "64f1000000000000000000e5";
 const TEAM_A_APPS: &str = "64e2000000000000000000b1";
+const AWS_STANDARD: &str = "64f8000000000000000000a1";
 const DEV_GROUP: &str = "64f5000000000000000000a1";
 // the saved tag filter of the loop
 const PRODUCTION: &str = "64f7000000000000000000a2";
@@ -1946,6 +1947,15 @@ fn use_cases(r: &mut Runner) {
         r#"strata consumers aws-stack@1.0.0 && echo "no cluster uses aws-stack@1.0.0""#,
     );
     r.step("retire-json", 1, false, r#"strata consumers aws-stack@1.1.0 --json | jq -r '.consumers[] | "\(.name) \(.state) \(.version)"'"#);
+    // no cluster runs 1.1.1, and a cluster template links it: Palette refuses the delete
+    r.profile(DEV, A111, "1.1.1", "aws-stack@1.1.1", &[]);
+    r.cluster_template(DEV, AWS_STANDARD, "aws-standard", &[A111]);
+    r.step(
+        "retire-template",
+        1,
+        false,
+        "strata consumers aws-stack@1.1.1",
+    );
 }
 
 fn automation(r: &mut Runner) {

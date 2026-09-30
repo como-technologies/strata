@@ -7,7 +7,8 @@
 #
 #   just live-profiles && just live-template
 #
-#   1  a maintenance policy and a template link the two versions
+#   1  a maintenance policy and a template link the two versions; strata consumers counts the
+#      template, and Palette refuses the delete of the linked release version
 #   2  an edit in place of the linked release version is refused, and the version verifies
 #   3  a cluster outside the template, with a linked version, is refused
 #   4  the template is removed, and the cluster is built with the same versions and a second
@@ -65,6 +66,14 @@ check template-links 0 "#66: it links the release version and the add-on version
 check release-doc 0 "the release version, as Palette holds it" -- "$live/api.sh" get "/v1/clusterprofiles/$P"
 check release-names-template 0 "#66: the version names the template that uses it, and no cluster" -- \
   jq -e --arg t "$T" '([.status.inUseClusterTemplates[]?.uid] | index($t) != null) and ((.status.inUseClusters // []) | length == 0)' release-doc.out
+check release-consumers 1 "#147: strata consumers of the linked version counts the template, and exits 1" -- \
+  "$strata" consumers "$P" --json
+check release-consumers-template 0 "#147: the consumer is the template, with kind template" -- \
+  jq -e --arg t "$T" '[.consumers[] | select(.kind == "template") | .uid] | index($t) != null' release-consumers.out
+check release-delete 2 "#147: Palette refuses the delete of a version that a template links" -- \
+  "$live/api.sh" delete "$P"
+check release-delete-says 0 "the refusal says that the version is in use" -- \
+  grep -q DeletionResourceInUseError release-delete.err
 
 # ---- 2. an edit in place of a linked version ----------------------------------------------------
 
