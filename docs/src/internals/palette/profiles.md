@@ -159,7 +159,9 @@ any project, also a project that the key cannot read:
 
 The refusal has the code `DeletionResourceInUseError`, and names the kind of the
 first consumer that it finds, in the order of the list above. A template blocks
-the delete also when no cluster runs the version.
+the delete also when no cluster runs the version. The refusal is HTTP `500`, and
+its message names the consumer, for example `Unable to delete the resource as
+strata-live-template clustertemplate(s) in-use`.
 
 `GET /v1/clusterprofiles/<uid>` names the clusters in `status.inUseClusters`
 and `status.inUseClusterUids`, and the templates in
