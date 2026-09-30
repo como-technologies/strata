@@ -16,6 +16,6 @@ DRIFTED: releases/dev.json does not verify; a cluster built from it does not get
           ~ charts.aws-ebs-csi-driver.storageClasses[name=spectro-storage-class].reclaimPolicy: "Delete" -> "Retain"
         impact: cluster-wide infra addon update
     [addon] cert-manager               1.21.1             unchanged
-  DRIFT: published version aws-stack@1.1.0 differs from the copy recorded 2026-09-17T09:30:00Z
+  DRIFT: published version aws-stack@1.1.0 differs from the copy recorded 2026-09-17T09:30:00Z; Palette last changed it 2026-09-18T14:02:11.482Z
 merge-gate: 1 record: 0 behind main, 0 declared rollback, 1 did not verify
 merge-gate: the merge button must wait: settle the records above, then push again

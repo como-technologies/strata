@@ -1,0 +1,6 @@
+$ strata verify runs/payments.json --who
+aws-stack@1.1.1 on cluster payments (uid 64f1000000000000000000e1)  ->  aws-stack@1.1.1 on cluster payments (uid 64f1000000000000000000e1)
+...
+DRIFT: cluster payments runs aws-stack@1.1.1, but uid 64e0000000000000000000c3 now names 1.2.0: the version was overwritten in place
+who: 1 write in the audit log since the record
+  2026-09-18T14:02:11.482Z  John Doe (user)  update clusterprofile aws-stack

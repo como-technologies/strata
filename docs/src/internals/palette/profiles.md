@@ -38,15 +38,20 @@ and the OS layer last. `verify` on a record from before reports `DRIFT` and
 
 ## The audit log
 
-Palette logs each write to a profile and to a cluster.
+Palette logs each write to a profile, an app profile, a cluster, an edge host,
+and a cluster group.
 `GET /v1/audits?resourceKind=<kind>&resourceUid=<uid>&startTime=<time>` lists
 the writes to one resource since a time, newest first, at most 100 on a page.
-`listmeta.continue` names the next page, and is empty on the last one. The kind
-is `clusterprofile` or `spectrocluster`. Each entry gives the time, the action
-(`create`, `update`, `delete`, `activity`, or `action`), and the actor: a user,
-with a name and a uid, or a Palette service, with a name. Some entries also
-give `contentMsg`, a summary of the change. The API gives each entry a uid, and
-no request id. [`verify --who`](../../commands/verify.md#who-changed-it) reads
+`listmeta.continue` names the next page, and is empty on the last one. Each
+kind of object has its own kind in the log: `clusterprofile`, `appprofile`,
+`spectrocluster`, `edgehost`, and `clustergroup`. A query with the uid of an
+object and another kind finds no entry. Each entry gives the time, the action
+(`create`, `update`, `delete`, `activity`, or `action`), the actor (a user,
+with a name and a uid, or a Palette service, with a name), and `resource`: the
+kind, the name, and the uid of the object. Some entries also give `contentMsg`,
+a summary of the change, and `userMsg`, a note that a person adds with
+`PATCH /v1/audits/{uid}/userMsg`. The API gives each entry a uid, and no
+request id. [`verify --who`](../../commands/verify.md#who-changed-it) reads
 this log. The log is also a page of the console, a CSV download, and a stream to
 an external store
 ([Audit logs](https://docs.spectrocloud.com/audit-logs/),
@@ -74,6 +79,13 @@ A cluster that accepts an update through the API gives the cluster one entry:
 an `update` by the user who sent the `PUT`, with a summary that names the uid
 of the profile and the manifest that changed. The entry names who accepted the
 update. The edit of the profile before it is an entry of the profile.
+
+A version bump that overwrites the version that a cluster runs is a write to
+the profile, and not to the cluster. The log of the cluster does not name it.
+
+Each document of an object gives the time of its last change,
+`metadata.lastModifiedTimestamp`. It is also in each pack of the pack listing.
+The time costs no request more than the document.
 
 ## Version bumps
 

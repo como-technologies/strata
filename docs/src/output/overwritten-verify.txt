@@ -13,4 +13,4 @@ consumers  1 -> 1 cluster
         ~ charts.aws-ebs-csi-driver.storageClasses[name=spectro-storage-class].reclaimPolicy: "Delete" -> "Retain"
       impact: cluster-wide infra addon update
   [addon] cert-manager               1.21.1             unchanged
-DRIFT: published version aws-stack@1.1.1 now names aws-stack@1.2.0: the version recorded 2026-09-17T09:30:00Z was overwritten in place
+DRIFT: published version aws-stack@1.1.1 now names aws-stack@1.2.0: the version recorded 2026-09-17T09:30:00Z was overwritten in place; Palette last changed it 2026-09-18T14:02:11.482Z

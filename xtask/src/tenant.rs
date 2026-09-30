@@ -468,15 +468,17 @@ impl Tenant {
     }
 
     /// Change a published profile in place, as an edit through the API does, and log the write
-    /// in the audit log, as Palette does.
+    /// in the audit log, as Palette does. The document takes the time of the write in
+    /// `metadata.lastModifiedTimestamp`.
     pub fn edit(&self, project: &str, uid: &str, edits: &[Edit]) {
         let path = format!("v1/clusterprofiles/{uid}");
         let mut doc = self.read(project, &path);
         for edit in edits {
             edit.apply(&mut doc);
         }
+        let at = self.log_write(project, "clusterprofile", uid, &doc);
+        doc["metadata"]["lastModifiedTimestamp"] = json!(at);
         self.write(project, &path, &doc);
-        self.log_write(project, "clusterprofile", uid, &doc);
         self.notify_clusters(project, uid, &doc);
         self.listings();
     }
@@ -791,8 +793,9 @@ impl Tenant {
 
     /// Add one entry to the audit log of a resource: an update by the person of the examples.
     /// The server leaves the time out of the query, so one file holds the log of the resource,
-    /// newest first, as Palette lists it. Each entry is one minute after the one before it.
-    fn log_write(&self, project: &str, kind: &str, uid: &str, doc: &Value) {
+    /// newest first, as Palette lists it. Each entry is one minute after the one before it. It
+    /// gives the time of the entry.
+    fn log_write(&self, project: &str, kind: &str, uid: &str, doc: &Value) -> String {
         let path = format!("v1/audits@resourceKind={kind}&resourceUid={uid}&limit=100");
         let mut log = if self.doc(project, &path).is_file() {
             self.read(project, &path)
@@ -802,12 +805,13 @@ impl Tenant {
         let items = log["items"].as_array_mut().expect("an audit log has items");
         let n = items.len();
         let name = doc["metadata"]["name"].as_str().unwrap_or_default();
+        let at = format!("2026-09-18T14:{:02}:11.482Z", 2 + n);
         items.insert(
             0,
             json!({
                 "metadata": {
                     "uid": format!("64fa{:020x}", n + 1),
-                    "creationTimestamp": format!("2026-09-18T14:{:02}:11.482Z", 2 + n),
+                    "creationTimestamp": at,
                 },
                 "spec": {
                     "actionMsg": format!("John Doe updated {name} Profile"),
@@ -826,6 +830,7 @@ impl Tenant {
             }),
         );
         self.write(project, &path, &log);
+        at
     }
 
     /// Delete a cluster as Palette does: the document stays, with the state `Deleted`,

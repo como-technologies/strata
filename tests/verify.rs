@@ -4804,21 +4804,22 @@ fn verify_rechecks_a_pack_version_against_its_registry() {
 
     // the registry now serves other content under the same version
     // the same version, with other content under it
-    let moved = serve_summaries(
-        vec![pack_summary(
-            "pk-65",
-            "1.65.0",
-            "reg-public",
-            "sha256:moved",
-            CSI_63,
-        )],
-        &[("reg-public", public_entity())],
-    );
+    let mut summary = pack_summary("pk-65", "1.65.0", "reg-public", "sha256:moved", CSI_63);
+    summary["metadata"]["lastModifiedTimestamp"] = Value::from("2026-09-29T08:00:00.000Z");
+    let moved = serve_summaries(vec![summary], &[("reg-public", public_entity())]);
     let v = ops::verify(&recorded, &Palette::new(moved), "t1", &Progress::silent()).unwrap();
     assert!(!v.unchanged, "a pack version whose content moved is drift");
+    let ver = v.diff.verify.as_ref().unwrap();
+    assert_eq!(ver.status, VerifyStatus::Drifted);
+    // the pack in the listing carries the time Palette last changed it
     assert_eq!(
-        v.diff.verify.as_ref().unwrap().status,
-        VerifyStatus::Drifted
+        ver.last_modified.as_deref(),
+        Some("2026-09-29T08:00:00.000Z")
+    );
+    let line = verdict_of(&v, &recorded);
+    assert!(
+        line.ends_with("; Palette last changed it 2026-09-29T08:00:00.000Z"),
+        "{line}"
     );
 }
 
@@ -5282,6 +5283,291 @@ fn verify_who_names_the_last_write_on_the_summary_line_of_a_drifted_record() {
         text.contains("; last write: John Doe (user), update at 2026-09-18T14:02:11.482Z\n"),
         "{text}"
     );
+}
+
+/// `audit`, with the object of the write in `spec.resource`, and the note of a person.
+fn audit_of(uid: &str, time: &str, resource: Value, user_msg: Option<&str>) -> Value {
+    let mut e = audit(uid, time, person(), "update", None);
+    e["spec"]["resource"] = resource;
+    if let Some(m) = user_msg {
+        e["spec"]["userMsg"] = Value::from(m);
+    }
+    e
+}
+
+#[test]
+fn verify_who_reads_the_log_of_a_cluster_group_as_clustergroup_and_of_an_app_profile_as_appprofile()
+{
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let options = ops::VerifyOptions {
+        who: true,
+        ..Default::default()
+    };
+
+    // a cluster group whose pin was edited after the record
+    let group_api = serve_cluster_group(MemoryApi::new(), dir.path());
+    let group = ops::snapshot_for(
+        &Ref::parse("clustergroup:g1"),
+        || Ok(Palette::new(group_api.clone())),
+        "t0",
+        &Progress::silent(),
+    )
+    .unwrap();
+    let mut doc = group_api.get_json("/v1/clustergroups/g1").unwrap();
+    doc["spec"]["clusterProfileTemplates"][0]["packs"][0]["values"] = Value::from("edited: true\n");
+    let group_log = "/v1/audits?resourceKind=clustergroup&resourceUid=g1&startTime=t0&limit=100";
+    let edited = group_api.clone().with("/v1/clustergroups/g1", doc).with(
+        group_log,
+        audits_page(
+            vec![audit_of(
+                "au7",
+                "2026-09-18T14:02:11.482Z",
+                serde_json::json!({"kind": "clustergroup", "name": "group-1", "uid": "g1"}),
+                None,
+            )],
+            "",
+        ),
+    );
+    let v = ops::verify_with(
+        &group,
+        &Palette::new(&edited),
+        "t1",
+        &options,
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert!(!v.unchanged, "the edit is a drift");
+    assert_eq!(edited.calls(group_log), 1);
+    assert_eq!(
+        edited
+            .calls("/v1/audits?resourceKind=spectrocluster&resourceUid=g1&startTime=t0&limit=100"),
+        0,
+        "a group is not a cluster in the log"
+    );
+    let line = verdict_of(&v, &group);
+    assert!(
+        line.ends_with(
+            "\nwho: 1 write in the audit log since the record\n  \
+             2026-09-18T14:02:11.482Z  John Doe (user)  update"
+        ),
+        "the write to the group itself names no object: {line}"
+    );
+
+    // an app profile whose tier was edited after the record
+    let app = ops::snapshot_for(
+        &Ref::parse("appprofile:shop@1.0.0"),
+        || Ok(Palette::new(serve_app_profile(MemoryApi::new(), "2"))),
+        "t0",
+        &Progress::silent(),
+    )
+    .unwrap();
+    let app_log = "/v1/audits?resourceKind=appprofile&resourceUid=ap1&startTime=t0&limit=100";
+    let api = serve_app_profile(MemoryApi::new(), "3").with(
+        app_log,
+        audits_page(
+            vec![audit_of(
+                "au8",
+                "2026-09-18T14:03:11.482Z",
+                serde_json::json!({"kind": "appprofile", "name": "shop", "uid": "ap1"}),
+                Some("CHG-42: three replicas"),
+            )],
+            "",
+        ),
+    );
+    let v = ops::verify_with(
+        &app,
+        &Palette::new(&api),
+        "t1",
+        &options,
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert!(!v.unchanged, "the edit is a drift");
+    assert_eq!(api.calls(app_log), 1);
+    assert_eq!(
+        api.calls("/v1/audits?resourceKind=clusterprofile&resourceUid=ap1&startTime=t0&limit=100"),
+        0,
+        "an app profile is not a cluster profile in the log"
+    );
+    let line = verdict_of(&v, &app);
+    assert!(
+        line.ends_with(
+            "\n  2026-09-18T14:03:11.482Z  John Doe (user)  update; note: CHG-42: three replicas"
+        ),
+        "{line}"
+    );
+    let json = serde_json::to_value(&v.diff).unwrap();
+    assert_eq!(
+        json["verify"]["who"][0]["userMsg"],
+        "CHG-42: three replicas"
+    );
+    assert_eq!(
+        json["verify"]["who"][0]["resource"],
+        serde_json::json!({"kind": "appprofile", "name": "shop", "uid": "ap1"})
+    );
+}
+
+#[test]
+fn verify_who_of_a_cluster_record_names_the_write_that_overwrote_the_profile_it_runs() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let recorded = snapshot_cluster(
+        &serve_cluster(MemoryApi::new(), dir.path(), "cluster-a"),
+        None,
+    )
+    .unwrap();
+    // a legacy version bump took the uid of the version that the cluster runs
+    let mut bumped = read(&dir.path().join("a/profile.json"));
+    bumped["spec"]["version"] = Value::from("1.3.0");
+    let cluster_log = format!(
+        "/v1/audits?resourceKind=spectrocluster&resourceUid={CLUSTER_UID}&startTime=t0&limit=100"
+    );
+    let profile_log = format!(
+        "/v1/audits?resourceKind=clusterprofile&resourceUid={UID_A}&startTime=t0&limit=100"
+    );
+    // an entry of the system that names no resource
+    let mut bare = audit("au3", "2026-09-18T14:09:00.000Z", system(), "update", None);
+    bare["spec"].as_object_mut().unwrap().remove("resource");
+    let api = serve_cluster(MemoryApi::new(), dir.path(), "cluster-a")
+        .with(format!("/v1/clusterprofiles/{UID_A}"), bumped)
+        .with(
+            cluster_log.clone(),
+            audits_page(
+                vec![audit_of(
+                    "au2",
+                    "2026-09-18T14:05:00.000Z",
+                    serde_json::json!({"kind": "spectrocluster", "name": "lab-cluster",
+                        "uid": CLUSTER_UID}),
+                    None,
+                )],
+                "",
+            ),
+        )
+        // Palette lists the newest first
+        .with(
+            profile_log.clone(),
+            audits_page(
+                vec![
+                    bare,
+                    audit_of(
+                        "au1",
+                        "2026-09-18T14:02:11.482Z",
+                        serde_json::json!({"kind": "clusterprofile", "label": "Profile",
+                            "name": "lab-profile", "uid": UID_A}),
+                        None,
+                    ),
+                ],
+                "",
+            ),
+        );
+    let v = ops::verify_with(
+        &recorded,
+        &Palette::new(&api),
+        "t1",
+        &ops::VerifyOptions {
+            who: true,
+            ..Default::default()
+        },
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert!(!v.unchanged);
+    assert_eq!((api.calls(&cluster_log), api.calls(&profile_log)), (1, 1));
+    let line = verdict_of(&v, &recorded);
+    assert!(
+        line.ends_with(
+            "\nwho: 3 writes in the audit log since the record\n  \
+             2026-09-18T14:02:11.482Z  John Doe (user)  update clusterprofile lab-profile\n  \
+             2026-09-18T14:05:00.000Z  John Doe (user)  update\n  \
+             2026-09-18T14:09:00.000Z  system (service)  update clusterprofile lab-profile"
+        ),
+        "the writes of both logs, oldest first, each to the profile named: {line}"
+    );
+    let json = serde_json::to_value(&v.diff).unwrap();
+    assert_eq!(
+        json["verify"]["who"][0]["resource"],
+        serde_json::json!({"kind": "clusterprofile", "name": "lab-profile", "uid": UID_A})
+    );
+    assert_eq!(
+        json["verify"]["who"][2]["resource"],
+        serde_json::json!({"kind": "clusterprofile", "name": "lab-profile", "uid": UID_A}),
+        "strata names the profile when the entry names no resource"
+    );
+    assert!(json["verify"]["who"][1].get("userMsg").is_none());
+}
+
+#[test]
+fn verify_gives_the_time_palette_last_changed_the_object_and_a_drift_verdict_ends_with_it() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let recorded = ops::snapshot_from_dir(&dir.path().join("a"), "a", "t0").unwrap();
+    let with_time = |from: &str| {
+        let mut doc = read(&dir.path().join(from).join("profile.json"));
+        doc["metadata"]["lastModifiedTimestamp"] = Value::from("2026-09-18T14:02:11.482Z");
+        serve(MemoryApi::new(), dir.path(), from, UID_A)
+            .with(format!("/v1/clusterprofiles/{UID_A}"), doc)
+    };
+
+    // the document carries the time: no request more
+    let api = with_time("b");
+    let v = ops::verify(&recorded, &Palette::new(&api), "t1", &Progress::silent()).unwrap();
+    let ver = v.diff.verify.as_ref().unwrap();
+    assert_eq!(
+        ver.last_modified.as_deref(),
+        Some("2026-09-18T14:02:11.482Z")
+    );
+    let line = verdict_of(&v, &recorded);
+    assert!(
+        line.ends_with("; Palette last changed it 2026-09-18T14:02:11.482Z"),
+        "{line}"
+    );
+    let json = serde_json::to_value(&v.diff).unwrap();
+    assert_eq!(json["verify"]["lastModified"], "2026-09-18T14:02:11.482Z");
+
+    // an unchanged record gives the time too, and its verdict does not end with it
+    let v = ops::verify(
+        &recorded,
+        &Palette::new(with_time("a")),
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert!(v.unchanged);
+    let ver = v.diff.verify.as_ref().unwrap();
+    assert_eq!(
+        ver.last_modified.as_deref(),
+        Some("2026-09-18T14:02:11.482Z")
+    );
+    assert!(verdict_of(&v, &recorded).ends_with("is unchanged since t0"));
+
+    // each record of a summary gives it
+    let path = dir.path().join("rec.json");
+    fs::write(&path, recorded.to_json(true).unwrap()).unwrap();
+    let s = ops::verify_many(
+        &[path],
+        None,
+        |_| Ok(Palette::new(api.clone())),
+        "t1",
+        &ops::VerifyOptions::default(),
+        &Progress::silent(),
+    );
+    let json = serde_json::to_value(&s).unwrap();
+    assert_eq!(
+        json["records"][0]["lastModified"],
+        "2026-09-18T14:02:11.482Z"
+    );
+
+    // a document with no time gives none
+    let v = ops::verify(
+        &recorded,
+        &Palette::new(serve(MemoryApi::new(), dir.path(), "b", UID_A)),
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert!(v.diff.verify.as_ref().unwrap().last_modified.is_none());
+    assert!(!verdict_of(&v, &recorded).contains("last changed"));
 }
 
 // ---- the updates that wait for a cluster -----------------------------------------------------

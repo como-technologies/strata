@@ -1,0 +1,3 @@
+$ strata verify releases/1.1.1/dev.json
+...
+DRIFT: published version aws-stack@1.1.1 differs from the copy recorded 2026-09-17T09:30:00Z; Palette last changed it 2026-09-18T14:02:11.482Z

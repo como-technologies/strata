@@ -1019,6 +1019,8 @@ fn use_cases(r: &mut Runner) {
         false,
         "strata verify releases/1.1.1/dev.json",
     );
+    // the verdict alone: it ends with the time of the last change of the document (#140)
+    r.excerpt("edited-verify-verdict", "edited-verify", r"^DRIFT");
     // the same drift, and who made it: the page teaches the lines that --who adds
     r.step(
         "edited-verify-who-full",
@@ -1151,6 +1153,18 @@ fn use_cases(r: &mut Runner) {
         1,
         false,
         "strata verify runs/payments.json",
+    );
+    // the bump is a write to the profile, and not to the cluster: --who reads both logs (#140)
+    r.step(
+        "overwritten-cluster-who-full",
+        1,
+        false,
+        "strata verify runs/payments.json --who",
+    );
+    r.excerpt(
+        "overwritten-cluster-who",
+        "overwritten-cluster-who-full",
+        r"^(aws-stack|DRIFT|who:|  \d{4}-)",
     );
     r.step(
         "overwritten-consumers",

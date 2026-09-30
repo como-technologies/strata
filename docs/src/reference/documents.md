@@ -218,12 +218,20 @@ A comparison of two sides, `a` and `b`.
   - `registrySyncError`: for a pack record, why strata could not read the last
     sync of the registry: Palette answered with a 5xx, or the request did not
     complete. `registrySync` is then absent. It does not change `status`.
-  - `who`, only with `--who` and for a drifted profile or cluster record: each
-    write to the profile, or to the cluster, that the audit log of Palette
-    holds since `recordedAt`, oldest first: `time`, `actor`, `actorType`
-    (`user` or `service`), `actorUid` (for a user), `action`, `summary` (when
-    Palette gives one), and `auditUid`. An empty list means the log holds no
-    write since the record.
+  - `who`, only with `--who` and for a drifted record that is not a pack
+    record: each write to the object of the record that the audit log of
+    Palette holds since `recordedAt`, oldest first. For a cluster record, also
+    each write to a profile of `profilesOverwritten`. Each entry has `time`,
+    `actor`, `actorType` (`user` or `service`), `actorUid` (for a user),
+    `action`, `summary` (when Palette gives one), `userMsg` (the note of a
+    person, when the entry has one), `resource` (the `kind`, the `name`, and
+    the `uid` of the object of the write, when Palette gives it), and
+    `auditUid`. An empty list means the log holds no write since the record.
+  - `lastModified`: when Palette last changed the object of the record, from
+    `metadata.lastModifiedTimestamp` of its document: the profile, the app
+    profile, the cluster, the edge host, the cluster group, or the pack in the
+    listing of its registry. It is absent when Palette gives no time, and for
+    a gone object.
 
 Each changed value is a leaf with `op`, `path`, `segments`, `old`, and `new`. A
 leaf is a scalar or an empty container. The path joins keys with a dot. A list
@@ -247,6 +255,8 @@ is the path as a list: strings for keys, numbers for indexes, and
     whatever its status.
   - A record of a cluster, an edge host, or a cluster group adds `state`, as
     in `verify.state`, whatever its status.
+  - A record adds `lastModified`, as in `verify.lastModified`, whatever its
+    status.
   - A failed record adds `error`. See [Errors](./errors.md).
 
 ## strata-chain/1

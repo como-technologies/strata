@@ -10,7 +10,8 @@ use serde_json::Value;
 
 use crate::api::{Palette, PaletteApi};
 use crate::diff::{
-    self, AuditEntry, ClusterProfileOverwritten, Diff, ImpactLevel, Verify, VerifyStatus,
+    self, AuditEntry, AuditResource, ClusterProfileOverwritten, Diff, ImpactLevel, Verify,
+    VerifyStatus,
 };
 use crate::error::{Error, Result};
 use crate::progress::Progress;
@@ -155,6 +156,40 @@ fn live_holder<A: PaletteApi>(
     Ok(live.with_kind(c.kind))
 }
 
+/// The kind of the object of a record in the audit log of Palette: each kind of object has its
+/// own (hubble `domain/kind.go`).
+fn audit_kind(recorded: &Snapshot) -> &'static str {
+    match &recorded.source.cluster {
+        Some(c) => match c.kind {
+            SubjectKind::Cluster => "spectrocluster",
+            SubjectKind::EdgeHost => "edgehost",
+            SubjectKind::ClusterGroup => "clustergroup",
+        },
+        None if recorded.source.kind == APP_KIND => "appprofile",
+        None => "clusterprofile",
+    }
+}
+
+/// The writes to one object that the audit log of Palette holds since `since`, oldest first.
+fn writes<A: PaletteApi>(
+    palette: &Palette<A>,
+    kind: &str,
+    uid: &str,
+    since: &str,
+    progress: &Progress,
+) -> Result<Vec<AuditEntry>> {
+    progress.note(&format!(
+        "reading the audit log of {kind} {uid} since {since}"
+    ));
+    let mut entries: Vec<AuditEntry> = palette
+        .audits(kind, uid, since)?
+        .iter()
+        .map(AuditEntry::from_palette)
+        .collect();
+    entries.reverse(); // Palette lists the newest first
+    Ok(entries)
+}
+
 /// Re-fetch what a snapshot was taken from and compare: the profile, or for a cluster snapshot
 /// the cluster, with the same profile selection.
 pub fn verify<A: PaletteApi>(
@@ -191,7 +226,7 @@ pub fn verify_with<A: PaletteApi>(
             recorded.source.title(),
             recorded.source.fetched_at
         ));
-        let live = crate::candidate::pack_snapshot(
+        let (live, last_modified) = crate::candidate::pack_snapshot_modified(
             palette,
             Some(&p.registry_uid),
             &p.name,
@@ -199,8 +234,8 @@ pub fn verify_with<A: PaletteApi>(
             &recorded.source.reference,
             checked_at,
             progress,
-        )?
-        .with_project(palette.project_uid());
+        )?;
+        let live = live.with_project(palette.project_uid());
         // the verdict states the copy of the registry in Palette, so it says how old that copy is
         let pack_type = live
             .packs
@@ -243,6 +278,7 @@ pub fn verify_with<A: PaletteApi>(
             profiles_overwritten: Vec::new(),
             cluster_values_changed: 0,
             who: None,
+            last_modified,
             upstream_unknown: Vec::new(),
             macros_changed: Vec::new(),
             registry_sync,
@@ -270,6 +306,8 @@ pub fn verify_with<A: PaletteApi>(
     let mut gone = false;
     let mut deleted_at = None;
     let mut state = None;
+    // when Palette last changed the object: its document carries the time, so it costs no request
+    let mut last_modified = None;
     let live = match &recorded.source.cluster {
         Some(c) => {
             // the document by uid alone: a 404 is a gone object, and not a name to look up
@@ -279,6 +317,7 @@ pub fn verify_with<A: PaletteApi>(
                 Err(e) => return Err(e),
             };
             state = subject_state(c.kind, &doc);
+            last_modified = text(&doc, "/metadata/lastModifiedTimestamp");
             if doc.is_null() || is_deleted(&doc) {
                 gone = true;
                 deleted_at = text(&doc, "/metadata/deletionTimestamp");
@@ -290,6 +329,7 @@ pub fn verify_with<A: PaletteApi>(
         None if recorded.source.kind == APP_KIND => {
             match palette.fetch_app_profile(uid, progress) {
                 Ok(raw) => {
+                    last_modified = text(&raw.profile, "/metadata/lastModifiedTimestamp");
                     let mut live = Snapshot::from_raw(&raw, uid, checked_at)?;
                     live.source.consumers = None;
                     live
@@ -303,7 +343,10 @@ pub fn verify_with<A: PaletteApi>(
         }
         // a version that Palette no longer has is a drift, not an error: a retire deletes it
         None => match palette.fetch_profile(uid, progress) {
-            Ok(raw) => Snapshot::from_raw(&raw, uid, checked_at)?,
+            Ok(raw) => {
+                last_modified = text(&raw.profile, "/metadata/lastModifiedTimestamp");
+                Snapshot::from_raw(&raw, uid, checked_at)?
+            }
             Err(Error::Api { status: 404, .. }) => {
                 gone = true;
                 recorded.gone(checked_at)
@@ -352,6 +395,8 @@ pub fn verify_with<A: PaletteApi>(
         profiles_overwritten,
         cluster_values_changed: 0,
         who: None,
+        // a gone object has no time of its own: the verdict names the deletion
+        last_modified: last_modified.filter(|_| !gone),
         upstream_unknown: Vec::new(),
         macros_changed: macros_changed.clone(),
         registry_sync: None,
@@ -363,22 +408,31 @@ pub fn verify_with<A: PaletteApi>(
         .as_ref()
         .map_or(0, |c| c.values.len());
     let who = if options.who && !unchanged {
-        // the kinds of the audit log, as Palette names them
-        let kind = match &recorded.source.cluster {
-            Some(c) if c.kind == SubjectKind::EdgeHost => "edgehost",
-            Some(_) => "spectrocluster",
-            None => "clusterprofile",
-        };
-        progress.note(&format!(
-            "reading the audit log of {kind} {uid} since {}",
-            recorded.source.fetched_at
-        ));
-        let mut entries: Vec<AuditEntry> = palette
-            .audits(kind, uid, &recorded.source.fetched_at)?
-            .iter()
-            .map(AuditEntry::from_palette)
-            .collect();
-        entries.reverse(); // Palette lists the newest first
+        let since = &recorded.source.fetched_at;
+        let mut entries = writes(palette, audit_kind(recorded), uid, since, progress)?;
+        // the write that overwrote a version that a cluster runs is an entry of the profile
+        let overwritten = diff
+            .verify
+            .as_ref()
+            .map(|v| v.profiles_overwritten.clone())
+            .unwrap_or_default();
+        for o in &overwritten {
+            let mut more = writes(palette, "clusterprofile", &o.uid, since, progress)?;
+            // the line names the profile, also when Palette gives no resource on the entry
+            for e in &mut more {
+                let r = e.resource.get_or_insert_with(|| AuditResource {
+                    kind: "clusterprofile".to_string(),
+                    name: String::new(),
+                    uid: o.uid.clone(),
+                });
+                if r.name.is_empty() {
+                    r.name = o.name.clone();
+                }
+            }
+            entries.extend(more);
+        }
+        // oldest first over all the logs; each time has the same form, so the text sorts it
+        entries.sort_by(|a, b| a.time.cmp(&b.time));
         Some(entries)
     } else {
         None
@@ -496,6 +550,10 @@ pub struct VerifiedRecord {
     /// as in `verify.state`, whatever the status.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub state: Option<String>,
+    /// When Palette last changed the object of the record, as in `verify.lastModified`, whatever
+    /// the status.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_modified: Option<String>,
     /// The error object, for records that could not be checked.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<Value>,
@@ -522,6 +580,7 @@ impl VerifiedRecord {
             diff: None,
             cluster_variables: None,
             state: None,
+            last_modified: None,
             error: Some(e.to_json()),
         }
     }
@@ -620,6 +679,7 @@ where
                     packs_changed: (!v.unchanged).then_some(v.diff.summary.packs_changed),
                     cluster_variables: v.diff.cluster_variables.clone().filter(|c| c.changed),
                     state: v.diff.verify.as_ref().and_then(|x| x.state.clone()),
+                    last_modified: v.diff.verify.as_ref().and_then(|x| x.last_modified.clone()),
                     // an unverified record keeps its diff too: it names the packs
                     diff: (v.status != VerifyStatus::Unchanged).then_some(v.diff),
                     error: None,

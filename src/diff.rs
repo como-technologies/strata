@@ -923,11 +923,19 @@ pub struct Verify {
     /// record. They do not change `status`.
     #[serde(default, skip_serializing_if = "is_zero")]
     pub cluster_values_changed: usize,
-    /// With `--who`, for a drifted profile or cluster record: each write to the profile, or to the
-    /// cluster, that the audit log of Palette holds from `recordedAt`, oldest first. Empty when
-    /// the log holds none. Absent without `--who`, for an unchanged record, and for a pack record.
+    /// With `--who`, for a drifted record: each write to the object of the record that the audit
+    /// log of Palette holds from `recordedAt`, oldest first. For a cluster record, also each write
+    /// to a profile of `profilesOverwritten`: the write that overwrote the version is an entry of
+    /// the profile, not of the cluster. Empty when the log holds none. Absent without `--who`, for
+    /// an unchanged record, and for a pack record.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub who: Option<Vec<AuditEntry>>,
+    /// When Palette last changed the object of the record, from `metadata.lastModifiedTimestamp`
+    /// of the document that `verify` reads: the profile, the app profile, the cluster, the edge
+    /// host, the cluster group, or the pack in its registry. It costs no request. Absent when
+    /// Palette gives no time, or when the object is gone.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_modified: Option<String>,
     /// For an `unverified` record: the key of each pack with no upstream digest.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub upstream_unknown: Vec<String>,
@@ -962,7 +970,7 @@ pub struct RegistrySync {
     pub message: String,
 }
 
-/// One write to a profile or a cluster, as the audit log of Palette holds it.
+/// One write to an object, as the audit log of Palette holds it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct AuditEntry {
@@ -981,8 +989,30 @@ pub struct AuditEntry {
     /// What Palette says changed, when it says it, such as the manifest that an edit changed.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub summary: String,
+    /// The note that a person adds to the entry with `PATCH /v1/audits/{uid}/userMsg`, such as
+    /// the ticket of the change. Empty when the entry has no note.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub user_msg: String,
+    /// The object that the write touched, from `spec.resource` of the entry. Absent when Palette
+    /// gives none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resource: Option<AuditResource>,
     /// The uid of the entry: `GET /v1/audits/{uid}` reads it again. Palette gives no request id.
     pub audit_uid: String,
+}
+
+/// The object of an audit entry: `spec.resource` of the entry, `v1AuditResourceReference`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AuditResource {
+    /// The kind of the object in the log: `clusterprofile`, `appprofile`, `spectrocluster`,
+    /// `edgehost`, or `clustergroup`, as Palette gives it.
+    pub kind: String,
+    /// The name of the object, as Palette gives it. Empty when it gives none.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub name: String,
+    /// The uid of the object.
+    pub uid: String,
 }
 
 impl AuditEntry {
@@ -1021,6 +1051,15 @@ impl AuditEntry {
                 .split_whitespace()
                 .collect::<Vec<_>>()
                 .join(" "),
+            user_msg: text("/spec/userMsg"),
+            resource: item
+                .pointer("/spec/resource")
+                .filter(|r| r.is_object())
+                .map(|_| AuditResource {
+                    kind: text("/spec/resource/kind"),
+                    name: text("/spec/resource/name"),
+                    uid: text("/spec/resource/uid"),
+                }),
             audit_uid: text("/metadata/uid"),
         }
     }

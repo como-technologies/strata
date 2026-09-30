@@ -83,7 +83,7 @@ in [Edge hosts, cluster groups, and app profiles](../internals/palette/other-obj
 | `GET /v1/registries/pack/{uid}/sync/status` | `verify` on a record of a pack of type `spectro` | The last sync of the registry: `isSyncSupported`, `lastSyncedTime`, `status`, and `message`. |
 | `GET /v1/registries/helm/{uid}/sync/status` | `verify` on a record of a pack of type `helm` | The same, for a Helm registry. |
 | `GET /v1/registries/oci/{uid}/basic/sync/status`, then `GET /v1/registries/oci/{uid}/ecr/sync/status` | `verify` on a record of a pack of type `oci` | The same, for an OCI registry. Strata sends the second request only when Palette answers the first with a 4xx: the registry is then an ECR registry. When Palette answers no route, the verdict has no sync note. When Palette answers a route with a 5xx, or the request does not complete, the verdict has no sync note, and `verify.registrySyncError` gives the reason. |
-| `GET /v1/audits?resourceKind=<kind>&resourceUid=<uid>&startTime=<time>&limit=100` | `verify --who` | The writes to the object since the record, every page. The kind is `clusterprofile`, `spectrocluster`, or `edgehost`. |
+| `GET /v1/audits?resourceKind=<kind>&resourceUid=<uid>&startTime=<time>&limit=100` | `verify --who` | The writes to the object since the record, every page. The kind is `clusterprofile`, `appprofile`, `spectrocluster`, `edgehost`, or `clustergroup`. For a cluster record, strata also reads the log of each profile of `profilesOverwritten`, as `clusterprofile`. |
 
 `list --packs`, and `list --pack`, read `GET /v1/clusterprofiles/{uid}` for each
 profile version. `list clusters --applied`, and `list --cluster`, read

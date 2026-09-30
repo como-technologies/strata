@@ -64,6 +64,7 @@ This is the source for
 | `a4-still-a3` | 0 | 0 | #27: the bump left cluster A as it was |
 | `verify-a3-after-bump` | 1 | 0 | #30: `verify` of cluster A's record fails only without the flag: the version it runs was overwritten |
 | `a3-names-overwritten-profile` | 0 | 1 | #30: the verify names the add-on profile, only without the flag |
+| `verify-a3-who`, `a3-who-names-profile` | 1, 0 | 0, 1 | #140: `verify --who` of the same record reads the log of the overwritten profile, and a write names the add-on profile as its object, only without the flag. No run has passed this check yet. |
 | `consumers-old` | 1 | 1 | #27: both clusters are still consumers of the first uid |
 | `consumers-old-overwritten` | 0 | 1 | #28: `consumers` marks both clusters as running a version the uid no longer names, only without the flag |
 | `clone-carried-nothing` | - | 0 | #27, #32: the flag's clone is the same release as the legacy bump of the same configuration, whatever pack uid Palette minted |
@@ -399,6 +400,9 @@ API, reads what `verify --who` says, and puts the edit back.
 | `api-edit`, `edit-who`, `edit-who-says` | 0, 1, 0 | #69: after an edit in place, the record reports `DRIFT`, and `--who` lists the writes since the record |
 | `edit-who-person` | 0 | #69: the edit is one `update` by the user who owns the key, with a summary that names the manifest |
 | `edit-who-json` | 0 | #69: `verify.who` in `--json` ends with that update: `actorType` `user`, an `actorUid`, and a time after the record |
+| `edit-who-resource` | 0 | #140: each entry of `verify.who` names the profile as its object: `resource.kind` `clusterprofile` and its uid. No run has passed this check yet. |
+| `edit-last-modified` | 0 | #140: the document of the profile gives the time of the edit: `verify.lastModified` is after the record, and the `DRIFT` verdict ends with it. No run has passed this check yet. |
+| `audits-none` | 0 | #140: Palette answers the log of an object with no entry with an empty list, and not `404`. No run has passed this check yet. |
 | `api-undo`, `restored` | 0 | the edit is put back, and the record verifies again |
 | `cluster-record`, `cluster-edit`, `cluster-apply` | 0 | record cluster A, edit the add-on version it runs, and accept the update on the cluster through the API |
 | `cluster-who`, `cluster-who-says`, `cluster-who-person`, `cluster-who-json` | 1, 0, 0, 0 | #69: the cluster record reports `DRIFT`, and `--who` reads the audit log of the cluster: an `update` by the user who accepted it |
@@ -702,6 +706,8 @@ cluster, and costs nothing.
 | `verify` | 0 | #78: `verify` of the record |
 | `edit`, `edit-same-version` | 0 | #78: a plain update of the manifest keeps the uid and the version, and makes no new version |
 | `edit-verify`, `edit-verify-says` | 1, 0 | #78: `verify` of the record reports drift, with the tier `AUTHORED` and the manifest named |
+| `edit-who`, `edit-who-appprofile` | 1, 0 | #140: `verify --who` reads the log of the kind `appprofile`, and its entries name the app profile as their object. No run has passed this check yet. |
+| `edit-last-modified` | 0 | #140: the document of the app profile gives the time of the update, after the record. No run has passed this check yet. |
 | `delete` | 0 | the app profile is deleted |
 
 No run updates the properties of a tier: the tier of the run is a manifest tier,

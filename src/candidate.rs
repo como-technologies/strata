@@ -503,6 +503,23 @@ pub fn pack_snapshot<A: PaletteApi>(
     fetched_at: &str,
     progress: &Progress,
 ) -> Result<Snapshot> {
+    pack_snapshot_modified(
+        palette, registry, name, version, reference, fetched_at, progress,
+    )
+    .map(|(snap, _)| snap)
+}
+
+/// [`pack_snapshot`], and when Palette last changed the pack in its registry:
+/// `metadata.lastModifiedTimestamp` of the pack in the listing, `None` when Palette gives none.
+pub(crate) fn pack_snapshot_modified<A: PaletteApi>(
+    palette: &Palette<A>,
+    registry: Option<&str>,
+    name: &str,
+    version: &str,
+    reference: &str,
+    fetched_at: &str,
+    progress: &Progress,
+) -> Result<(Snapshot, Option<String>)> {
     let visible = registries(palette)?;
     let entries = versions_of(palette, name)?;
     let not_found = |registry: String| Error::PackNotFound {
@@ -583,6 +600,11 @@ pub fn pack_snapshot<A: PaletteApi>(
         "recording pack {name}@{resolved} from registry {}",
         named(&registry_uid)
     ));
+    let last_modified = entries
+        .iter()
+        .find(|e| of(e, "/spec/registryUid") == registry_uid && of(e, "/spec/version") == resolved)
+        .and_then(|e| text(e, "/metadata/lastModifiedTimestamp"))
+        .filter(|t| !t.is_empty());
 
     // one layer, the registry's own values: the same path a candidate file takes
     let candidate = Candidate {
@@ -632,7 +654,7 @@ pub fn pack_snapshot<A: PaletteApi>(
             .map(|p| p.pack_uid.clone())
             .unwrap_or_default(),
     });
-    Ok(snap)
+    Ok((snap, last_modified))
 }
 
 fn text(v: &Value, ptr: &str) -> Option<String> {

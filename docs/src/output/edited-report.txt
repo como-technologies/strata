@@ -35,7 +35,7 @@ $ scripts/ci/verify-report.sh 'releases/**/*.json' 'runs/*.json' --dry-run
 </details>
 
 
-**DRIFT**: published version aws-stack@1.1.1 differs from the copy recorded 2026-09-17T09:30:00Z
+**DRIFT**: published version aws-stack@1.1.1 differs from the copy recorded 2026-09-17T09:30:00Z; Palette last changed it 2026-09-18T14:02:11.482Z
 
 verify-report: would open or update the issue for releases/1.1.1/dev.json: strata verify: aws-stack@1.1.1 drifted (releases/1.1.1/dev.json)
 verify-report: would close the open issue for runs/payments.json, if any
