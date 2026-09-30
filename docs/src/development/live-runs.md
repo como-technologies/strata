@@ -886,9 +886,9 @@ script as it runs, so the process resumed in the changed file and ended. The
 script is one function since, which bash parses before it runs, and the
 cluster was removed by hand with `tofu apply -var second_cluster=false`.
 
-## walkthrough.md
+## preflight-walkthrough.md
 
-The story of [One cluster, end to end, on your tenant](./walkthrough.md), run
+The story of [Preflight: one cluster, end to end](./preflight-walkthrough.md), run
 once as written, on aws. The clean entity of the last plan run passed every
 tier in 31 seconds, exit 0; the copy with one worker of four cores failed
 `worker-cpu-floor` and `palette-validate` in 33 seconds, exit 1 under

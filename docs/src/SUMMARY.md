@@ -98,5 +98,5 @@
 - [Write the documentation](./development/documentation.md)
 - [The offline examples](./development/examples.md)
 - [The live example](./development/live-example.md)
-- [One cluster, end to end, on your tenant](./development/walkthrough.md)
+- [Preflight: one cluster, end to end](./development/preflight-walkthrough.md)
 - [What the live example verifies](./development/live-runs.md)

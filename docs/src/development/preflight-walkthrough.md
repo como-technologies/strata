@@ -1,4 +1,4 @@
-# One cluster, end to end, on your tenant
+# Preflight: one cluster, end to end
 
 Type these lines, one at a time, in a terminal at the root of this repository.
 They run the story of [Can Palette build this cluster?](../use-cases/stop-a-build.md)

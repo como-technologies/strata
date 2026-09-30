@@ -400,7 +400,7 @@ just live-profiles                # or just live-up; the profiles must be there
 just live-watch --build --down    # cluster B, watched, then removed: about 25 minutes
 ```
 
-[One cluster, end to end, on your tenant](./walkthrough.md) is the same
+[Preflight: one cluster, end to end](./preflight-walkthrough.md) is the same
 story typed one line at a time: check a body, break it, build it, watch it,
 inspect it, remove it.
 
