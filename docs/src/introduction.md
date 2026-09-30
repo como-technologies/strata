@@ -14,7 +14,7 @@ A cluster build in Palette fails late, and often with no message. Before a
 build, `strata preflight` runs a catalog of rules against the body of the
 create and reports what will stop the build, in seconds, with the command that
 shows the same thing by hand. See
-[Stop a build that Palette cannot finish](./use-cases/stop-a-build.md).
+[Can Palette build this cluster?](./use-cases/stop-a-build.md).
 
 - [The everyday loop](./loop.md) shows who runs what, and when, with one change
   from the pull request to the retire.

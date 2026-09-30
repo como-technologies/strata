@@ -886,6 +886,21 @@ script as it runs, so the process resumed in the changed file and ended. The
 script is one function since, which bash parses before it runs, and the
 cluster was removed by hand with `tofu apply -var second_cluster=false`.
 
+## walkthrough.md
+
+The story of [One cluster, end to end, on your tenant](./walkthrough.md), run
+once as written, on aws. The clean entity of the last plan run passed every
+tier in 31 seconds, exit 0; the copy with one worker of four cores failed
+`worker-cpu-floor` and `palette-validate` in 33 seconds, exit 1 under
+`--strict`. `POST /v1/spectroclusters/aws` with the same body answered the uid
+in 4 seconds. The watch started at once: 25 readings, `Running` after 764
+seconds, each watch rule passed, and no warning this time. On the cluster as
+Palette holds it, two notes, `bastion-cost` and `variables-in-use`; on the
+change of the worker instance type to `m5.xlarge`, `pool-replace-fields`
+warned that the machines roll. The delete was accepted at once; ten minutes
+later the events named the security groups and the VPC as deleted, and the
+inventory of AWS read 0 on all 12 lines.
+
 ## What the preflight runs show
 
 The runs of `preflight-plan.sh` on the tenant of the live example, with the

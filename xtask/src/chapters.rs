@@ -2039,6 +2039,32 @@ fn automation(r: &mut Runner) {
         false,
         "strata preflight cluster.json --cloud aws --no-exec --strict --quiet | tail -n 3",
     );
+    // once Running: the cluster as Palette holds it, a change of its worker pool before the
+    // change is made, and one reading of the watch (the stand-in's cluster is Running, so the
+    // watch ends at once; a real build reads every 30 seconds until Running)
+    r.cluster(DEV, PAYMENTS, "payments", &[A111]);
+    r.write_file(
+        "change.json",
+        r#"{"spec": {"machinepoolconfig": [{"poolConfig": {"name": "worker-pool"}, "cloudConfig": {"instanceType": "m5.xlarge"}}]}}"#,
+    );
+    r.step(
+        "preflight-cluster",
+        0,
+        false,
+        "strata preflight cluster:64f1000000000000000000e1 --tier static,palette --quiet | tail -n 4",
+    );
+    r.step(
+        "preflight-change",
+        0,
+        false,
+        "strata preflight cluster:64f1000000000000000000e1 change.json --tier static --quiet | grep -A 1 WARN",
+    );
+    r.step(
+        "preflight-watch",
+        0,
+        false,
+        "strata preflight cluster:64f1000000000000000000e1 --watch --limit 1 --verbose --color never 2>&1 > /dev/null | grep -v 'reads the cluster' | sed -n '1,12p'",
+    );
     r.step(
         "preflight-json",
         0,

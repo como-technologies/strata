@@ -1,0 +1,13 @@
+$ strata preflight cluster:64f1000000000000000000e1 --watch --limit 1 --verbose --color never 2>&1 > /dev/null | grep -v 'reads the cluster' | sed -n '1,12p'
+strata: looking up project dev
+strata: reading cluster 64f1000000000000000000e1
+strata: recording profile 64e0000000000000000000c3
+strata: fetching profile 64e0000000000000000000c3
+strata: watch: read GET /v1/spectroclusters/64f1000000000000000000e1, GET /v1/dashboard/spectroclusters/64f1000000000000000000e1, GET /v1/events/components/spectrocluster/64f1000000000000000000e1?limit=50: state Running, health ?, 0 events
+strata: watch: Running after 0s, reading 1
+strata: watch: agent-egress: PROBE PASS
+strata: watch: csi-crash-after-running: PROBE PASS
+strata: watch: node-egress-images: PROBE PASS
+strata: watch: infrastructure-stalled: PROBE PASS
+strata: watch: pivot-webhook-timeout: PROBE PASS
+strata: watch: webhook-call-failed: PROBE PASS

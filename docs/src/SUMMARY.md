@@ -51,7 +51,7 @@
 - [A team pins each environment](./use-cases/fan-out.md)
 - [A publish fans out to what pins it](./use-cases/publish-fan-out.md)
 - [Find the fleet from Palette](./use-cases/fleet.md)
-- [Stop a build that Palette cannot finish](./use-cases/stop-a-build.md)
+- [Can Palette build this cluster?](./use-cases/stop-a-build.md)
 
 # Automation
 
@@ -98,4 +98,5 @@
 - [Write the documentation](./development/documentation.md)
 - [The offline examples](./development/examples.md)
 - [The live example](./development/live-example.md)
+- [One cluster, end to end, on your tenant](./development/walkthrough.md)
 - [What the live example verifies](./development/live-runs.md)

@@ -398,6 +398,10 @@ just live-profiles                # or just live-up; the profiles must be there
 just live-watch --build --down    # cluster B, watched, then removed: about 25 minutes
 ```
 
+[One cluster, end to end, on your tenant](./walkthrough.md) is the same
+story typed one line at a time: check a body, break it, build it, watch it,
+inspect it, remove it.
+
 ```bash
 just live-down                                                # the profiles of one cloud at a time
 examples/live/tf.sh apply -var cluster=false -var cloud=gke   # the profiles of the engine
