@@ -940,6 +940,11 @@ pub struct Verify {
     /// or when Palette does not answer.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub registry_sync: Option<RegistrySync>,
+    /// For a pack record: why strata could not read the last sync of the registry, when Palette
+    /// answered with a 5xx or the request did not complete. `registrySync` is then absent. It does
+    /// not change `status`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub registry_sync_error: Option<String>,
 }
 
 /// The last sync of a registry: `status.sync` of the registry in Palette, `v1RegistrySyncStatus`.

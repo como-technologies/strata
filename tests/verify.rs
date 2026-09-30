@@ -4717,6 +4717,74 @@ fn verify_of_a_pack_record_gives_no_sync_note_for_a_registry_that_does_not_sync(
     assert!(json["verify"].get("registrySync").is_none(), "{json}");
 }
 
+/// Verify a record of csi-aws-ebs@1.65.0 in the Public Repo on `api`, which has the pack: the
+/// verdict line, and the diff as `--json` writes it. The verify must succeed with `unchanged`,
+/// the status that exits 0.
+fn verify_pack_on<A: PaletteApi>(recorded: &Snapshot, api: A) -> (String, Value) {
+    let v = ops::verify(recorded, &Palette::new(api), "t1", &Progress::silent()).unwrap();
+    assert!(v.unchanged);
+    assert_eq!(v.status, VerifyStatus::Unchanged);
+    let verdict = render::renderer(Format::Terminal, Paint::off(), false)
+        .verdict(v.diff.verify.as_ref().unwrap(), &recorded.source)
+        .unwrap();
+    (verdict, serde_json::to_value(&v.diff).unwrap())
+}
+
+/// Answers the sync route of the Public Repo with a dropped connection, and delegates each other
+/// request. The in-memory API cannot produce a transport error.
+struct SyncDropped(MemoryApi);
+
+impl PaletteApi for SyncDropped {
+    fn get_json(&self, path: &str) -> strata::Result<Value> {
+        if path == "/v1/registries/pack/reg-public/sync/status" {
+            return Err(Error::Transport {
+                path: path.to_string(),
+                message: "connection reset".into(),
+            });
+        }
+        self.0.get_json(path)
+    }
+}
+
+#[test]
+fn verify_of_a_pack_record_gives_the_verdict_when_the_sync_route_answers_500() {
+    let api = serve_registry(vec![], &[("reg-public", public_entity())]);
+    let recorded = snapshot_pack(&api, "pack:csi-aws-ebs@1.65.0").unwrap();
+    let api = api.failing(
+        "/v1/registries/pack/reg-public/sync/status",
+        500,
+        r#"{"code":"InternalError"}"#,
+    );
+    let (verdict, json) = verify_pack_on(&recorded, api);
+    assert_eq!(
+        verdict,
+        "OK: pack csi-aws-ebs@1.65.0 in registry Public Repo is unchanged since t0"
+    );
+    assert!(json["verify"].get("registrySync").is_none(), "{json}");
+    assert_eq!(
+        json["verify"]["registrySyncError"],
+        r#"HTTP 500: {"code":"InternalError"}"#
+    );
+    assert_eq!(json["verify"]["status"], "unchanged");
+}
+
+#[test]
+fn verify_of_a_pack_record_gives_the_verdict_when_the_sync_request_does_not_complete() {
+    let api = serve_registry(vec![], &[("reg-public", public_entity())]);
+    let recorded = snapshot_pack(&api, "pack:csi-aws-ebs@1.65.0").unwrap();
+    let (verdict, json) = verify_pack_on(&recorded, SyncDropped(api));
+    assert_eq!(
+        verdict,
+        "OK: pack csi-aws-ebs@1.65.0 in registry Public Repo is unchanged since t0"
+    );
+    assert!(json["verify"].get("registrySync").is_none(), "{json}");
+    assert_eq!(
+        json["verify"]["registrySyncError"],
+        "GET /v1/registries/pack/reg-public/sync/status: connection reset"
+    );
+    assert_eq!(json["verify"]["status"], "unchanged");
+}
+
 #[test]
 fn verify_reports_drift_and_names_the_order_when_only_the_order_of_the_packs_changed() {
     let dir = tempfile::tempdir().unwrap();
