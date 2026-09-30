@@ -8,7 +8,7 @@ Commands:
   behind        Report the pack versions that records pin, and the newer versions the registries offer
   candidate     Write a candidate file from a profile version or a record
   compare       Compare two profile versions, records, clusters, edge hosts, cluster groups, app profiles, or pack versions
-  consumers     List the clusters, the edge hosts, and the cluster templates that use a profile version
+  consumers     List the clusters, edge hosts, cluster templates, and app deployments that use a profile version
   list          List the profile versions, clusters, projects, and saved tag filters in the scope
   packs         List the versions a registry offers for a pack
   preflight     Check that Palette can build a cluster, before the build; runs strata-preflight

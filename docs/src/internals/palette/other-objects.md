@@ -101,8 +101,26 @@ manifests. The content of a manifest comes from
   stay, and no new version appears: an app profile has no publish step.
 - A tier has no digest of its chart or its operator, so a record of an app
   profile cannot show a push again under one version.
-- `status.inUseApps` names the app deployments that use the app profile. They
-  are not clusters, so `consumers` does not read them.
+- `status.inUseApps` of `GET /v1/appProfiles/<uid>` names the app deployments
+  that use the app profile version, each with `uid`, `name`, `projectUid`, and
+  `kind`. Palette computes the list when it is asked: each app deployment that
+  is not deleted and whose `spec.profile.metadata.uid` is the version, in the
+  projects the key can read (hubble
+  `resrelation/internal/resrelation_service.go`,
+  `GetAppDeploymentsMetaForAppProfileByAcl`).
+- `GET /v1/appDeployments/<uid>` gives one app deployment: the version its copy
+  names in `spec.profile.metadata.version`, and its state in `status.state`:
+  `Pending`, `Deploying`, `Deployed`, or `Updating`.
+- Palette refuses the delete of an app profile while an app deployment uses it
+  (hubble `appprofile/appprofile_validate.go`, `validateDelete` and
+  `checkDependentResources`, from `DeleteAppProfile`). The check reads the
+  deployments of all projects, and not only those the key can read. So a
+  deployment that the key cannot read is not in `status.inUseApps`, and it
+  still stops the delete. `consumers` reads the list:
+  [consumers](../../commands/consumers.md#app-profiles).
+- The dashboard route of the app deployments, `POST /v1/dashboard/appDeployments`,
+  filters by name, cluster, and tag, and not by profile. So `consumers` does no
+  second reading for an app profile.
 
 A live run shows each rule on this page that does not name the source. See
 [What the live example verifies](../../development/live-runs.md).

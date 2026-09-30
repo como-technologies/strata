@@ -83,7 +83,8 @@ enum Cmd {
     /// Compare two profile versions, records, clusters, edge hosts, cluster groups, app profiles,
     /// or pack versions
     Compare(CompareArgs),
-    /// List the clusters, the edge hosts, and the cluster templates that use a profile version
+    /// List the clusters, edge hosts, cluster templates, and app deployments that use a profile
+    /// version
     Consumers(ConsumersArgs),
     /// List the profile versions, clusters, projects, and saved tag filters in the scope
     List(ListArgs),
@@ -280,7 +281,7 @@ struct BehindArgs {
 
 #[derive(Args)]
 struct ConsumersArgs {
-    /// A profile version, by ref or by record
+    /// A profile version or an app profile version, by ref or by record
     r#ref: String,
     /// Read the consumer list that Palette computes, and not each cluster of the fleet. Faster,
     /// but it does not find a consumer that the list omits

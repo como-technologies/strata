@@ -719,6 +719,31 @@ impl Tenant {
         );
     }
 
+    /// The app deployment `name`, `uid`, of the app profile `profile` at its version now, in the
+    /// state `Deployed`. Palette names it in `status.inUseApps` of the app profile.
+    pub fn app_deployment(&self, project: &str, uid: &str, name: &str, profile: &str) {
+        let path = format!("v1/appProfiles/{profile}");
+        let mut doc = self.read(project, &path);
+        let version = doc["spec"]["version"].clone();
+        doc["status"]["inUseApps"]
+            .as_array_mut()
+            .expect("an app profile")
+            .push(json!({"kind": "appdeployment", "uid": uid, "name": name,
+                "projectUid": project}));
+        self.write(project, &path, &doc);
+        self.write(
+            project,
+            &format!("v1/appDeployments/{uid}"),
+            &json!({
+                "metadata": {"name": name, "uid": uid,
+                    "annotations": {"projectUid": project}},
+                "spec": {"profile": {"metadata": {"name": doc["metadata"]["name"],
+                    "uid": profile, "version": version}}},
+                "status": {"state": "Deployed"},
+            }),
+        );
+    }
+
     /// The notifications of a cluster, newest first; none for a cluster that has no file yet.
     fn notifications(&self, project: &str, cluster: &str) -> Vec<Value> {
         let path = format!("v1/notifications/spectrocluster/{cluster}");
