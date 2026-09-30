@@ -96,8 +96,6 @@ echo "== 1. the clean entity of $engine" | tee -a steps.log
 case "$engine" in
   aws|eks)
     account_name=$(var cloud_account_name)
-    [ "$engine" = eks ] && account_name="$(var name_prefix)-eks" && account_name=${account_name#-eks}
-    [ "$engine" = eks ] && account_name="$(var name_prefix || echo strata-live)-eks"
     kind=aws; region=$(var region); region=${region:-us-east-2}; az=$(var az); az=${az:-${region}a}
     ssh_key=$(var ssh_key_name); project=""
     ;;
@@ -128,7 +126,12 @@ pf() { "$strata" preflight "$@" --cloud "$engine" "${release_arg[@]}" --json --q
 # rule must FAIL on the edited entity. A rule that PASSES missed the fault.
 echo "== 2. each fault on purpose" | tee -a steps.log
 results=()
-record() { results+=("$1|$2|$3"); }   # rule|result|note
+record() { # rule|result|note. A result the ledger does not know stays out of the entry, and steps.log names it
+  case "$2" in
+    caught|missed|passed|false-fail) results+=("$1|$2|$3") ;;
+    *) echo "not in the ledger: $1 $2: $3" | tee -a steps.log ;;
+  esac
+}
 fault() {
   local id=$1 edit=$2 label
   jq "$edit" clean.json > "fault-$id.json" || { record "$id" not-made "the edit failed"; return; }

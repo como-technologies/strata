@@ -1348,6 +1348,82 @@ exit 0
 "#;
 
 #[test]
+fn aws_cleanup_takes_yes_in_any_position_and_keeps_the_name_and_the_region() {
+    let dir = tempfile::tempdir().unwrap();
+    let bin = dir.path().join("bin");
+    std::fs::create_dir(&bin).unwrap();
+    executable(&bin.join("aws"), FAKE_AWS_EMPTY);
+    let log = dir.path().join("aws.log");
+    let o = Command::new("bash")
+        .arg(live_script("aws-cleanup.sh"))
+        .args(["--yes", "barney"])
+        .env(
+            "PATH",
+            format!("{}:{}", bin.display(), std::env::var("PATH").unwrap()),
+        )
+        .env("FAKE_AWS_LOG", &log)
+        .output()
+        .unwrap();
+    assert!(o.status.success(), "{}{}", text(&o.stdout), text(&o.stderr));
+    let calls = std::fs::read_to_string(&log).unwrap();
+    assert!(
+        calls.contains("--region us-east-2"),
+        "the region stays the default: {calls}"
+    );
+    assert!(
+        calls.contains("cluster/barney"),
+        "the name is the first word: {calls}"
+    );
+    let o = Command::new("bash")
+        .arg(live_script("aws-cleanup.sh"))
+        .args(["barney", "us-west-2", "--yes", "one-more"])
+        .output()
+        .unwrap();
+    assert_eq!(o.status.code(), Some(2));
+    assert!(
+        text(&o.stderr).contains("too many arguments"),
+        "{}",
+        text(&o.stderr)
+    );
+}
+
+/// `record` of preflight-plan.sh keeps a result the ledger does not know out of the entry: the
+/// ledger schema has caught, missed, passed, and false-fail, and an entry with another word makes
+/// the whole file unreadable.
+#[test]
+fn preflight_plan_keeps_a_result_the_ledger_does_not_know_out_of_the_entry() {
+    let script = std::fs::read_to_string(live_script("preflight-plan.sh")).unwrap();
+    let start = script.find("\nrecord() {").unwrap() + 1;
+    let end = start + script[start..].find("\n}\n").unwrap() + 3;
+    let record = &script[start..end];
+    let dir = tempfile::tempdir().unwrap();
+    let o = Command::new("bash")
+        .arg("-c")
+        .arg(format!(
+            "{record}\nresults=()\nrecord a caught n\nrecord b not-made 'the edit failed'\nrecord c passed n\nprintf '%s\\n' \"${{results[@]}}\""
+        ))
+        .current_dir(dir.path())
+        .output()
+        .unwrap();
+    assert!(o.status.success(), "{}", text(&o.stderr));
+    let out = text(&o.stdout);
+    assert!(
+        out.contains("not in the ledger: b not-made: the edit failed"),
+        "{out}"
+    );
+    assert_eq!(
+        out.lines().filter(|l| l.contains('|')).collect::<Vec<_>>(),
+        vec!["a|caught|n", "c|passed|n"]
+    );
+    assert!(
+        std::fs::read_to_string(dir.path().join("steps.log"))
+            .unwrap()
+            .contains("b not-made"),
+        "steps.log names it"
+    );
+}
+
+#[test]
 fn aws_cleanup_deletes_nothing_without_yes_and_names_what_it_would() {
     let dir = tempfile::tempdir().unwrap();
     let bin = dir.path().join("bin");

@@ -5,7 +5,7 @@
 #
 #   AWS_PROFILE=<profile> examples/live/aws-cleanup.sh [CLUSTER_NAME] [REGION] [--yes]
 #
-# Defaults: fred, in us-east-2. Without --yes it prints what it would delete and exits 0. With
+# Defaults: fred, in us-east-2. --yes goes in any position. Without --yes it prints what it would delete and exits 0. With
 # --yes it deletes, in the order that AWS accepts: the EKS cluster of the name (after its node
 # groups, which examples/live/eks-nodegroups.sh --delete removes first), the NAT gateways, the
 # elastic IPs, the network interfaces of the VPC that are available, the internet gateway, the
@@ -16,12 +16,22 @@
 # `just live-down` the rest of the example. Exit 0 when everything is gone, 1 while something is
 # left, 2 when AWS cannot be asked.
 set -uo pipefail
-name=${1:-fred}
-region=${2:-us-east-2}
+name=fred
+region=us-east-2
 yes=""
-[ "${3:-}" = "--yes" ] && yes=1
-[ "${1:-}" = "--yes" ] && { yes=1; name=fred; }
-[ "${2:-}" = "--yes" ] && { yes=1; region=us-east-2; }
+n=0
+for arg in "$@"; do
+  case "$arg" in
+    --yes) yes=1 ;;
+    -*) echo "aws-cleanup: unknown option $arg" >&2; exit 2 ;;
+    *) n=$((n + 1))
+       case $n in
+         1) name=$arg ;;
+         2) region=$arg ;;
+         *) echo "aws-cleanup: too many arguments; give [CLUSTER_NAME] [REGION] [--yes]" >&2; exit 2 ;;
+       esac ;;
+  esac
+done
 tag="sigs.k8s.io/cluster-api-provider-aws/cluster/$name"
 aws() { command aws --region "$region" --output text "$@"; }
 ids() { # ids LABEL COMMAND...: the ids one query gives, on one line, or exit 2 when AWS cannot answer
