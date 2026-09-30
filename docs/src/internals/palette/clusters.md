@@ -56,7 +56,7 @@ API, changes its `spcHash`. The other tiers of the two clusters are the same:
 [tiers.sh](../../development/live-runs.md#tierssh).
 
 Strata records these as tiers: see
-[More of the cluster than its release](../../commands/snapshot.md#more-of-the-cluster-than-its-release).
+[More of the cluster than its release](../../commands/snapshot/cluster.md#more-of-the-cluster-than-its-release).
 It leaves out the times and the conditions, which change with no change of the
 cluster. Between two clusters, the `applied` tier compares `spcInfraHash` alone.
 
@@ -146,7 +146,7 @@ the same content. A notification that is done stays in the list.
 `GET /v1/spectroclusters/<uid>/profileUpdates` is no flag: it lists each profile
 of the cluster also when no update waits. So strata reads the notifications,
 and a cluster record says whether an update waits: see
-[Whether an update waits](../../commands/snapshot.md#whether-an-update-waits). It is the content of the
+[Whether an update waits](../../commands/snapshot/cluster.md#whether-an-update-waits). It is the content of the
 update: `cluster:<uid>@pending` reads it. See
 [The update that waits](other-objects.md#the-update-that-waits).
 

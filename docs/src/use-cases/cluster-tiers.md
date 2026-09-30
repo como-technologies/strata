@@ -9,7 +9,7 @@ policy, their labels, or the pack version that each one reconciled.
 
 Palette gives each of these in the cluster document, and in the cloud config of
 the cluster. A cluster record keeps them in tiers, beside the release: see
-[More of the cluster than its release](../commands/snapshot.md#more-of-the-cluster-than-its-release).
+[More of the cluster than its release](../commands/snapshot/cluster.md#more-of-the-cluster-than-its-release).
 
 In this example, `payments` and `search` run `aws-stack@1.1.1`.
 

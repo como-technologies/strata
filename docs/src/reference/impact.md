@@ -67,7 +67,7 @@ the node pool is not a change of a layer, and the table gives it no level. See
 
 For a cluster, ask Palette: `compare --repave` prints its answer beside
 the level, and says when the two disagree. See
-[Ask Palette if the change repaves](../commands/compare.md#ask-palette-if-the-change-repaves).
+[Ask Palette if the change repaves](../commands/compare/repave.md).
 
 | Level | Condition | Meaning |
 | --- | --- | --- |

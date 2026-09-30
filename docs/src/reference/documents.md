@@ -64,7 +64,7 @@ profile, or pack version.
     `unresolved`. `labels`: the labels of the cluster. `tiers`: each tier that
     the record carries, by name (`applied`, `running`, `policy`, and, with
     `snapshot --shape`, `shape`), each with `hash` and `fields`: see
-    [More of the cluster than its release](../commands/snapshot.md#more-of-the-cluster-than-its-release).
+    [More of the cluster than its release](../commands/snapshot/cluster.md#more-of-the-cluster-than-its-release).
     `pending`, only when true: the record is of `cluster:<cluster>@pending`,
     and holds no `updatesPending`. `kind`, only for an object that is not a
     cluster: `edgeHost` or `clusterGroup`; `uid` and `name` are then those of

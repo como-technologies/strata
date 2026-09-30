@@ -81,7 +81,7 @@ with no `candidate` parameter are each a terminal failure.
   other failure of the summary is a failure of the read.
 - **Whether an update waits, where Palette serves no notifications.** The
   adapter gives `pending` as a cluster record reads it:
-  [Whether an update waits](../commands/snapshot.md#whether-an-update-waits).
+  [Whether an update waits](../commands/snapshot/cluster.md#whether-an-update-waits).
   `Waiting` names each profile that has an open update, and `Clear` says that
   none waits. Where Palette does not serve the notifications, the adapter says
   `Unknown`, and the read still succeeds.

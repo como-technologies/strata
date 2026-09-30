@@ -82,7 +82,7 @@ that an update waits for the cluster, and the listing marks the profile:
 
 The cluster is behind its profile until it takes the update. A record of the
 cluster says `updatesPending: true`: see
-[Whether an update waits](../commands/snapshot.md#whether-an-update-waits).
+[Whether an update waits](../commands/snapshot/cluster.md#whether-an-update-waits).
 
 Before anybody accepts the update, see what it changes. `cluster:payments@pending`
 is the cluster after it takes the update:
@@ -93,7 +93,7 @@ is the cluster after it takes the update:
 ```
 
 The update brings the edit, and nothing else. See
-[What a waiting update changes](../commands/snapshot.md#what-a-waiting-update-changes).
+[What a waiting update changes](../commands/snapshot/cluster.md#what-a-waiting-update-changes).
 
 Then ask Palette if it replaces the nodes:
 
@@ -104,7 +104,7 @@ Then ask Palette if it replaces the nodes:
 The `palette` line is Palette's own answer for `payments`, and the level above
 it is strata's hint. Here a change of the CSI values repaves nothing, and the
 two agree. See
-[Ask Palette if the change repaves](../commands/compare.md#ask-palette-if-the-change-repaves).
+[Ask Palette if the change repaves](../commands/compare/repave.md).
 
 ### Read the two verdicts as a pair
 

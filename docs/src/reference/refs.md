@@ -55,7 +55,7 @@ A ref names the thing that a command reads.
 - **`@pending`.** The profiles that Palette gives for the update that waits for
   the cluster, and not the copies that the cluster runs. When no update waits,
   they are the same. Put it last: `cluster:payments/aws-stack@pending`. See
-  [What a waiting update changes](../commands/snapshot.md#what-a-waiting-update-changes).
+  [What a waiting update changes](../commands/snapshot/cluster.md#what-a-waiting-update-changes).
 - **`<host>`.** A uid, or the name of one edge host in the scope. A name that no
   edge host has is `edge-host-not-found`, which lists the names. A name that two
   edge hosts have is `edge-host-name-ambiguous`. See

@@ -121,7 +121,7 @@ request for each. See [A version bump overwrites a version](../use-cases/overwri
 
 `verify` of a cluster record reads the tiers that the record carries again, and
 the report names each tier that changed: see
-[More of the cluster than its release](snapshot.md#more-of-the-cluster-than-its-release).
+[More of the cluster than its release](snapshot/cluster.md#more-of-the-cluster-than-its-release).
 The verdict follows the release alone, so a changed tier does not make a record
 `DRIFT`. A record written before the tiers carries none, and verifies as before.
 

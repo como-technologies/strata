@@ -56,6 +56,14 @@ Its text also names each option of that help, with what the option does or a
 link to the page that says. `just docs-check` fails on a command page that
 leaves the help out, or that has no sentence for an option.
 
+A long command page splits by what the command reads. The command page keeps
+what the command does, a table of its pages, what to expect, and its options,
+with a table that names each option and links the page that shows it. One page
+in `docs/src/commands/<command>/` holds each kind of subject or question, with
+its output and its options, and `SUMMARY.md` lists it under the command. A
+page in that directory is not a command page: `just docs-check` reads the help
+of the command page alone. `snapshot`, `compare`, and `preflight` are split.
+
 ## Serve a chapter, to try a command by hand
 
 ```bash

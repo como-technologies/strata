@@ -73,7 +73,7 @@ sensitive variable was added or removed, but never that its value changed.
 
 This covers profile variables. A pack's values and manifests go into the record
 in full: see
-[Where to keep a record](../commands/snapshot.md#where-to-keep-a-record).
+[Where to keep a record](../commands/snapshot/profile-version.md#where-to-keep-a-record).
 
 ## What to do
 

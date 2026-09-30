@@ -84,8 +84,8 @@ reviewer approved, by its content and not by a tag or a name.
 | Who changed it? | [`strata verify record.json --who`](./commands/verify.md#who-changed-it) |
 | Do dev and prod have the same release? | [`strata same-release dev.json prod.json`](./commands/same-release.md) |
 | Does this cluster run its release? | [`strata compare record.json cluster:NAME`](./use-cases/cluster-release.md) |
-| What does the update that waits for a cluster change? | [`strata compare cluster:NAME cluster:NAME@pending`](./commands/snapshot.md#what-a-waiting-update-changes) |
-| Does this change replace the nodes? | [`strata compare cluster:NAME B --repave`](./commands/compare.md#ask-palette-if-the-change-repaves) |
+| What does the update that waits for a cluster change? | [`strata compare cluster:NAME cluster:NAME@pending`](./commands/snapshot/cluster.md#what-a-waiting-update-changes) |
+| Does this change replace the nodes? | [`strata compare cluster:NAME B --repave`](./commands/compare/repave.md) |
 | What changed between two pack versions? | [`strata compare pack:NAME@A pack:NAME@B`](./use-cases/pack-versions.md) |
 | Does the registry have newer versions of what we pin? | [`strata behind 'releases/*.json'`](./commands/behind.md) |
 | Which clusters are production? | [`strata snapshot filter:production --dir fleet`](./use-cases/fleet.md) |

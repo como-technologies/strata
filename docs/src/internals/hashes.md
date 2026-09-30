@@ -100,7 +100,7 @@ manifest, so such a value shows its change too.
 | The annotations of a pack in the registry | Strata reads one, the provider type of an OCI registry, and keeps it outside the root as `registryProviderType`. |
 | The bytes of each image and chart that a pack pulls | The values declare each image by a tag, and each chart by a version, and `authored` covers that text. An image pushed again under the same tag keeps the text, so the root does not move. See [The change flags](../reference/impact.md#the-change-flags). |
 | The value of a macro | The content holds the macro name, `{{.spectro.macro.<name>}}`, and the root covers that text. Palette gives the value when it applies the profile, and a value can be a secret. `snapshot --macros` keeps the digest of each value on a cluster record, outside the root, and `verify` checks it. See [A macro value changes](../use-cases/macros.md). |
-| Whether an update waits for a cluster | It is what Palette says about the copy, not the copy. A cluster record keeps it as `updatesPending`. See [Whether an update waits](../commands/snapshot.md#whether-an-update-waits). |
+| Whether an update waits for a cluster | It is what Palette says about the copy, not the copy. A cluster record keeps it as `updatesPending`. See [Whether an update waits](../commands/snapshot/cluster.md#whether-an-update-waits). |
 | Who changed a version, and when | The audit log of Palette holds that. `verify --who` reads it. See [Who changed it](../commands/verify.md#who-changed-it). |
 | The kind of a record, and the members of a cluster group | They say where the profiles are, and not what they are. See [Other objects that hold profiles](#other-objects-that-hold-profiles). |
 
@@ -206,7 +206,7 @@ the sha256 of the canonical JSON of its fields, in [The canonical form](#the-can
 The `running` tier is in the order of profile uid and then pack name, and the
 `shape` tier holds its machine pools in the order of their names, so the order
 that Palette lists them in does not change a hash. See
-[More of the cluster than its release](../commands/snapshot.md#more-of-the-cluster-than-its-release).
+[More of the cluster than its release](../commands/snapshot/cluster.md#more-of-the-cluster-than-its-release).
 
 ## Other objects that hold profiles
 

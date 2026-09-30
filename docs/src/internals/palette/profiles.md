@@ -165,7 +165,7 @@ cluster on its own, with no update to accept: a live run read it inside the
 cluster 11 minutes after the change, and a run before it 13 minutes after. So a
 cluster runs the new value, and its record, its copy, its notifications, and
 its audit log stay as they were. The digests of `snapshot --macros` show it:
-see [Macros](../../commands/snapshot.md#macros).
+see [Macros](../../commands/snapshot/cluster.md#macros).
 
 A create, a change, or a delete of a project macro writes no audit entry, at
 project or tenant scope. No audit entry names a macro.

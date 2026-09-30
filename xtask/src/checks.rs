@@ -166,10 +166,19 @@ fn follow_along_first(repo: &Path) -> Vec<String> {
 /// A command page shows the `--help` of its command, which `just docs-examples` writes, so the
 /// options on the page are those of the binary. Its text also names each option of that help, so
 /// a new option gets a sentence and not only a line in the help block. `--help` needs none.
+///
+/// A command page is a file of `docs/src/commands/` itself. A page under `commands/<command>/`
+/// is a part of a long command page, split by what the command reads: it shows no help, and
+/// the command page names each option in its own table, so the check reads the command page
+/// alone.
 fn command_flags(repo: &Path) -> Vec<String> {
     let mut bad = Vec::new();
     let flag = Regex::new(r"--[a-z][a-z0-9-]*").expect("the flag pattern");
-    for page in pages(&repo.join("docs/src/commands")) {
+    let dir = repo.join("docs/src/commands");
+    let command_pages = pages(&dir)
+        .into_iter()
+        .filter(|page| page.parent() == Some(dir.as_path()));
+    for page in command_pages {
         let Some(command) = page.file_stem().and_then(|s| s.to_str()) else {
             continue;
         };

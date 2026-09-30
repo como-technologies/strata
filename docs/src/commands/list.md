@@ -87,7 +87,7 @@ shows each one: see
 
 A profile whose line ends with `behind: an update waits` has a change that the
 cluster has not taken: Palette says an update waits for it. See
-[A cluster record says whether an update waits](./snapshot.md#whether-an-update-waits).
+[A cluster record says whether an update waits](./snapshot/cluster.md#whether-an-update-waits).
 With `--format markdown`, the `behind` column says `yes` and names the
 profiles, `no`, or `-` when Palette did not say.
 
