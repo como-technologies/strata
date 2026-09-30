@@ -390,7 +390,8 @@ makes cluster B beside cluster A, and from the moment Palette lists it runs
 each rule at each reading, every 30 seconds, until the cluster is `Running` or
 a stuck state; then it removes cluster B. Cluster A stays as it is. Without
 `--build` it waits, by name, for a build started elsewhere. The report of the
-watch goes to `runs/<UTC time>/watch/out/`.
+watch goes to `runs/<UTC time>/watch/out/`, or under `--out DIR`; `--every`
+and `--limit` go to the watch.
 
 ```bash
 just live-profiles                # or just live-up; the profiles must be there
