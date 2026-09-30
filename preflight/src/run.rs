@@ -346,9 +346,14 @@ fn reading_lines(
         .iter()
         .map(|e| {
             let at = text(e.pointer("/metadata/creationTimestamp"));
+            let reason = e.get("reason").and_then(Value::as_str).unwrap_or("");
             let line = format!(
-                "watch: event {at} {}: {}",
-                text(e.get("reason")),
+                "watch: event {at}{}: {}",
+                if reason.is_empty() {
+                    String::new()
+                } else {
+                    format!(" {reason}")
+                },
                 cut(&probe::one_line(text(e.get("message"))), 200)
             );
             (at, line)
