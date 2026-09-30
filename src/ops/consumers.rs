@@ -1,4 +1,4 @@
-//! `consumers`: the clusters that run a profile version.
+//! `consumers`: the clusters, edge hosts, and cluster templates that use a profile version.
 
 use std::collections::HashMap;
 
@@ -27,6 +27,9 @@ pub const CLUSTER_KIND: &str = "cluster";
 /// The kind of a consumer that is an edge host.
 pub const EDGE_HOST_KIND: &str = "edgehost";
 
+/// The kind of a consumer that is a cluster template.
+pub const TEMPLATE_KIND: &str = "template";
+
 fn cluster_kind() -> String {
     CLUSTER_KIND.to_string()
 }
@@ -42,27 +45,29 @@ pub struct ConsumedProfile {
     pub version: String,
 }
 
-/// One cluster, or one edge host, that uses the profile version.
+/// One cluster, edge host, or cluster template that uses the profile version.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct Consumer {
-    /// `cluster`, or `edgehost` for an edge host that the profile is bound to.
+    /// `cluster`, `edgehost` for an edge host that the profile is bound to, or `template` for a
+    /// cluster template that links the version.
     #[serde(default = "cluster_kind")]
     pub kind: String,
-    /// Cluster uid, or edge host uid.
+    /// Cluster uid, edge host uid, or cluster template uid.
     pub uid: String,
     /// Cluster name; empty when neither the profile nor the cluster could name it.
     pub name: String,
-    /// The project the cluster is in; empty for tenant scope or when unknown.
+    /// The project the consumer is in; empty for tenant scope or when unknown.
     pub project_uid: String,
     /// That project's name. A name is a convenience, so it is empty when the project listing
     /// could not be read, and the reports fall back to the uid.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub project_name: String,
     /// The cluster's `status.state`, for example `Running`, or `unknown` when it could not be read.
+    /// Empty for a cluster template: a template has no state.
     pub state: String,
     /// The version the cluster's own copy of the profile names, from the cluster document; empty
-    /// when the cluster could not be read. It differs from `profile.version` when the version the
+    /// when the cluster could not be read, and for a cluster template, which keeps no copy. It differs from `profile.version` when the version the
     /// cluster runs was overwritten in place, by a legacy version bump or a rename.
     #[serde(default)]
     pub version: String,
@@ -128,14 +133,15 @@ pub struct ConsumersReport {
     pub generated_at: String,
     /// The profile version.
     pub profile: ConsumedProfile,
-    /// The number of clusters that use it. Exit status 0 when zero, 1 otherwise.
+    /// The number of clusters, edge hosts, and cluster templates that use it. Exit status 0 when
+    /// zero, 1 otherwise.
     pub count: usize,
     /// The consumers whose copy names another version than `profile.version`: the version they run
     /// was overwritten in place.
     #[serde(default)]
     pub overwritten: usize,
-    /// One entry per cluster: those Palette lists, in its order, then those the second reading
-    /// found.
+    /// One entry per consumer: the clusters Palette lists, in its order, then those the second
+    /// reading found, then the edge hosts, then the cluster templates.
     pub consumers: Vec<Consumer>,
     /// The second reading: the clusters read for the profiles they apply.
     #[serde(default)]
@@ -153,7 +159,8 @@ impl ConsumersReport {
     }
 }
 
-/// List the clusters that use a profile version, with each cluster's name, project, and state.
+/// List the clusters that use a profile version, with each cluster's name, project, and state,
+/// then the edge hosts bound to it and the cluster templates that link it.
 /// The profile comes from a uid, `<name>@<version>`, or a profile record (whose uid and project
 /// are used; the list is always fetched live). Names and projects come from the profile's
 /// `status.inUseClusters`; each cluster is then read in its own project for its state, with one
@@ -305,6 +312,9 @@ where
     // the consumer list names no edge host, and the search of the edge hosts is one request a
     // page, so it is done also with --list-only
     let edge_hosts_read = edge_hosts_bound(&mut list, &uid, wide, &home, progress);
+    // Palette refuses the delete of a version that a cluster template links, in any project, and
+    // the profile document names each such template, so they cost no request (#147)
+    linked_templates(&mut list, &doc);
     // a uid names no project to a reader, so give each row the project's name as well
     name_projects_of(
         &mut list,
@@ -333,6 +343,33 @@ where
         clusters_read,
         edge_hosts_read,
     })
+}
+
+/// Add each cluster template that `status.inUseClusterTemplates` of the profile document names. A
+/// template keeps no copy of the version and has no state, so both stay empty.
+fn linked_templates(list: &mut Vec<Consumer>, doc: &Value) {
+    let templates = doc
+        .pointer("/status/inUseClusterTemplates")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten();
+    for t in templates {
+        let uid = text(t, "/uid");
+        if uid.is_empty() || list.iter().any(|c| c.kind == TEMPLATE_KIND && c.uid == uid) {
+            continue;
+        }
+        list.push(Consumer {
+            kind: TEMPLATE_KIND.to_string(),
+            name: text(t, "/name"),
+            project_uid: text(t, "/projectUid"),
+            project_name: String::new(),
+            state: String::new(),
+            version: String::new(),
+            error: None,
+            unlisted: false,
+            uid,
+        });
+    }
 }
 
 /// Add each edge host that the profile `uid` is bound to. The search is read through `wide`, and

@@ -243,10 +243,12 @@ is the path as a list: strings for keys, numbers for indexes, and
 - `profile`: `uid`, `name`, and `version`.
 - `count`: the number of consumers. Exit `0` when it is `0`.
 - `overwritten`: the number of consumers whose copy names another version.
-- `consumers[]`: `kind`, `cluster` or `edgehost`, `uid`, `name`, `projectUid`,
-  `state`, `version`, and `error` when strata cannot read the cluster. `projectName` joins them when strata
-  could read the project listing. The names and the projects come from
-  `status.inUseClusters` of the profile. `unlisted`, only when true: the profile
+- `consumers[]`: `kind`, `cluster`, `edgehost`, or `template`, `uid`, `name`,
+  `projectUid`, `state`, `version`, and `error` when strata cannot read the
+  cluster. `projectName` joins them when strata could read the project listing.
+  The names and the projects come from `status.inUseClusters` of the profile,
+  and from `status.inUseClusterTemplates` for a cluster template. A cluster
+  template has an empty `state` and an empty `version`. `unlisted`, only when true: the profile
   did not list the cluster, and the second reading found it.
 - `clustersRead`: the second reading. `read`: the cluster documents read.
   `unread`: the clusters the listing names that strata could not read. `error`:

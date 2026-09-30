@@ -320,6 +320,15 @@ impl Runner {
         self.tenant.edge_host(project, uid, name, profiles);
     }
 
+    /// A cluster template that links profiles: see [`Tenant::cluster_template`].
+    pub fn cluster_template(&mut self, project: &str, uid: &str, name: &str, profiles: &[&str]) {
+        if !self.building() {
+            return;
+        }
+        self.changed();
+        self.tenant.cluster_template(project, uid, name, profiles);
+    }
+
     /// A cluster group and its virtual clusters: see [`Tenant::cluster_group`].
     pub fn cluster_group(
         &mut self,

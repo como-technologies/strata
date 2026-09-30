@@ -447,7 +447,10 @@ impl Renderer for MarkdownRenderer {
         for c in &r.consumers {
             // an empty version means two things: the cluster named none, or strata could not read
             // the cluster at all. `-` states the first for both, so the error decides the cell.
-            let mut runs = if let Some(msg) = entry_error(c.error.as_ref()) {
+            // a cluster template keeps no copy of the version, so its cell names the kind alone
+            let mut runs = if c.kind == crate::ops::TEMPLATE_KIND {
+                "(cluster template)".to_string()
+            } else if let Some(msg) = entry_error(c.error.as_ref()) {
                 format!("not read: {}", escape(msg))
             } else if c.version.is_empty() {
                 "-".to_string()
@@ -467,7 +470,7 @@ impl Renderer for MarkdownRenderer {
                 escape(dash(&c.name)),
                 escape(&c.uid),
                 escape(&project_label(&c.project_uid, &c.project_name)),
-                escape(&c.state)
+                escape(dash(&c.state))
             ));
         }
         o.push('\n');

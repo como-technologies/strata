@@ -1,7 +1,9 @@
 # strata consumers
 
-List the clusters and the edge hosts that use a profile version. Strata always
-reads the list from Palette.
+List the clusters, the edge hosts, and the cluster templates that use a profile
+version. Strata always reads the list from Palette. Palette refuses the delete
+of a version while one of them uses it: see
+[What the delete of a version checks](../internals/palette/profiles.md#what-the-delete-of-a-version-checks).
 
 The first examples use the project `dev`, which holds `aws-stack@1.0.0` and
 `aws-stack@1.1.0`. The clusters `payments` and `search` run 1.1.0.
@@ -42,6 +44,20 @@ profile names clusters only, so strata reads each edge host the key can list:
 An edge host line ends with `edge host`. The last line says how many edge hosts
 strata read. See [A profile runs on edge hosts](../use-cases/edge-hosts.md).
 
+## Cluster templates
+
+A cluster template that links the version is a consumer too, also when no
+cluster runs the version. In `dev`, the template `aws-standard` links
+`aws-stack@1.1.1`:
+
+```text
+{{#include ../output/retire-template.txt}}
+```
+
+Exit `1`. A template line ends with `cluster template`. A template has no state,
+and it keeps no copy of the version. The profile document names each template,
+so a template costs no request.
+
 ## The list of Palette alone
 
 `--list-only` reads the consumer list that Palette computes, and no other
@@ -55,6 +71,7 @@ one for each cluster of the fleet:
 A consumer that the list does not name is then not found, and the list is
 empty when the read fails. So a gate before a delete runs without `--list-only`.
 The edge hosts are read with it too: the consumer list names clusters alone.
+The cluster templates are in it too: the profile document names them.
 
 ## A cluster that runs an overwritten version
 
@@ -93,18 +110,22 @@ version bump or a rename overwrote the version that the cluster runs. See
   `edge hosts: 2 read` says how many it read, or
   `edge hosts: not read` with the reason. A Palette without the search has no
   edge hosts.
+- The cluster templates come from `status.inUseClusterTemplates` of the
+  profile, in every project, also the projects that the key cannot read. Each
+  one joins the answer with `kind: template`, its uid, name, and project, and no
+  state and no version.
 - A cluster that Palette is deleting stays in the list with the state
   `Deleting`, and the exit is `1`. After the deletion, the list drops it. See
   [What the cluster listing answers](../internals/palette/clusters.md#what-the-cluster-listing-answers).
 
 | Exit | Meaning |
 | --- | --- |
-| `0` | Nothing uses the version: the profile lists no cluster, no cluster the key can list applies it, and no edge host is bound to it. |
-| `1` | A cluster or an edge host uses the version. |
+| `0` | Nothing uses the version: the profile lists no cluster and no cluster template, no cluster the key can list applies it, and no edge host is bound to it. |
+| `1` | A cluster, an edge host, or a cluster template uses the version. |
 | `2` | Strata could not answer. |
 
 `--format markdown` writes a table with the version that each cluster runs, and
-marks each edge host.
+marks each edge host and each cluster template.
 `--json` writes [`strata-consumers/1`](../reference/documents.md#strata-consumers1).
 
 ## Options

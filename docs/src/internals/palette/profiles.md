@@ -136,6 +136,29 @@ edit through such a route. The lock holds against a new cluster: it keeps every
 cluster outside the template away from a linked version. A cluster that runs a
 linked version is a cluster the template applies.
 
+## What the delete of a version checks
+
+Palette refuses the delete of a profile version while one of these uses it, in
+any project, also a project that the key cannot read:
+
+- a cluster that runs the version
+- a cluster template that links the version and is not deleted
+- an edge host that the version is bound to
+
+The refusal has the code `DeletionResourceInUseError`, and names the kind of the
+first consumer that it finds, in the order of the list above. A template blocks
+the delete also when no cluster runs the version.
+
+`GET /v1/clusterprofiles/<uid>` names the clusters in `status.inUseClusters`
+and `status.inUseClusterUids`, and the templates in
+`status.inUseClusterTemplates`, each with `uid`, `name`, `projectUid`, and
+`kind: clustertemplate`. Palette computes the three lists when it is asked, with
+the query of the delete check. When one query fails, all three lists are empty.
+The profile document names no edge host.
+
+So [`strata consumers`](../../commands/consumers.md) counts the clusters and the
+templates of the profile document, and searches the edge hosts.
+
 ## Macros
 
 A macro is a name and a value, with no version, no history, and no digest

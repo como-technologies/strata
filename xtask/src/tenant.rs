@@ -608,6 +608,27 @@ impl Tenant {
         self.write("tenant", "v1/dashboard/edgehosts/search@limit=50", &search);
     }
 
+    /// A cluster template `uid`, `name`, that links `profiles`. Palette names each template that
+    /// links a version in `status.inUseClusterTemplates` of the profile document, with the fields
+    /// of `v1ProjectResourceReference`, and refuses the delete of the version while one does.
+    pub fn cluster_template(&self, project: &str, uid: &str, name: &str, profiles: &[&str]) {
+        for p in profiles {
+            let path = format!("v1/clusterprofiles/{p}");
+            let mut doc = self.read(project, &path);
+            let mut rows: Vec<Value> = doc["status"]["inUseClusterTemplates"]
+                .as_array()
+                .cloned()
+                .unwrap_or_default()
+                .into_iter()
+                .filter(|t| t["uid"] != json!(uid))
+                .collect();
+            rows.push(json!({"kind": "clustertemplate", "name": name,
+                             "projectUid": project, "uid": uid}));
+            doc["status"]["inUseClusterTemplates"] = json!(rows);
+            self.write(project, &path, &doc);
+        }
+    }
+
     /// A cluster group `uid`, `name`, that pins `profiles` for its virtual clusters, with the
     /// clusters `members` as those virtual clusters.
     pub fn cluster_group(

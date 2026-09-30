@@ -83,7 +83,7 @@ enum Cmd {
     /// Compare two profile versions, records, clusters, edge hosts, cluster groups, app profiles,
     /// or pack versions
     Compare(CompareArgs),
-    /// List the clusters and the edge hosts that use a profile version
+    /// List the clusters, the edge hosts, and the cluster templates that use a profile version
     Consumers(ConsumersArgs),
     /// List the profile versions, clusters, projects, and saved tag filters in the scope
     List(ListArgs),

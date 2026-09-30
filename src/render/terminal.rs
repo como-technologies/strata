@@ -508,14 +508,20 @@ impl Renderer for TerminalRenderer {
                 _ => c.state.clone(),
             };
             out.push_str(&format!(
-                "  {}  {}  project {}  {}",
+                "  {}  {}  project {}",
                 p.bold(&format!("{:<width$}", dash(&c.name))),
                 p.dim(&c.uid),
                 project_label(&c.project_uid, &c.project_name),
-                state
             ));
+            // a cluster template has no state
+            if !state.is_empty() {
+                out.push_str(&format!("  {state}"));
+            }
             if c.kind == crate::ops::EDGE_HOST_KIND {
                 out.push_str(&format!("  {}", p.cyan("edge host")));
+            }
+            if c.kind == crate::ops::TEMPLATE_KIND {
+                out.push_str(&format!("  {}", p.cyan("cluster template")));
             }
             if !c.version.is_empty() && c.version != r.profile.version {
                 out.push_str(&format!(
