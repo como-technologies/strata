@@ -31,10 +31,10 @@ or the version as the input:
 ```yaml
   promote-gate:
     if: github.event_name == 'workflow_dispatch' && inputs.promote != ''
-    uses: como-technologies/strata/.github/workflows/promote-gate.yml@v0.15.0
+    uses: como-technologies/strata/.github/workflows/promote-gate.yml@v0.16.0
     with:
       records: ${{ inputs.promote }}
-      strata-version: v0.15.0
+      strata-version: v0.16.0
     secrets:
       strata-token: ${{ secrets.STRATA_READ_TOKEN }}
       palette-api-key: ${{ secrets.PALETTE_API_KEY }}
