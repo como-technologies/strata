@@ -2,7 +2,7 @@
 //! catalog once, keeps the rules of the engine, the release, and the tiers asked for, runs each
 //! check, and assembles the report with the confidence of each rule from the ledger.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::time::{Duration, Instant};
 
 use serde_json::{Value, json};
@@ -301,6 +301,74 @@ fn verbose_line(rule: &Rule, o: &Outcome) -> String {
     line
 }
 
+/// The lines of `--verbose` for one reading: the three requests it made and what they gave, then
+/// each condition that changed since the reading before, then each event new since it.
+fn reading_lines(
+    uid: &str,
+    read: &Value,
+    seen_conditions: &mut BTreeMap<String, String>,
+    seen_events: &mut BTreeSet<String>,
+) -> Vec<String> {
+    let mut out = Vec::new();
+    let text = |v: Option<&Value>| v.and_then(Value::as_str).unwrap_or("?").to_string();
+    let events = read
+        .get("events")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    out.push(format!(
+        "watch: read GET /v1/spectroclusters/{uid}, GET /v1/dashboard/spectroclusters/{uid}, GET /v1/events/components/spectrocluster/{uid}?limit=50: state {}, health {}, {} events",
+        text(read.pointer("/cluster/status/state")),
+        text(read.pointer("/summary/status/health/state")),
+        events.len()
+    ));
+    for c in read
+        .pointer("/cluster/status/conditions")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+    {
+        let kind = text(c.get("type"));
+        let now = format!("{} {}", text(c.get("status")), text(c.get("reason")));
+        if seen_conditions.insert(kind.clone(), now.clone()).as_deref() != Some(now.as_str()) {
+            let message = text(c.get("message"));
+            out.push(format!(
+                "watch: condition {kind}={now}{}",
+                if message == "?" || message.is_empty() {
+                    String::new()
+                } else {
+                    format!(": {}", cut(&message, 160))
+                }
+            ));
+        }
+    }
+    let mut fresh: Vec<(String, String)> = events
+        .iter()
+        .map(|e| {
+            let at = text(e.pointer("/metadata/creationTimestamp"));
+            let line = format!(
+                "watch: event {at} {}: {}",
+                text(e.get("reason")),
+                cut(&probe::one_line(text(e.get("message"))), 200)
+            );
+            (at, line)
+        })
+        .filter(|(_, line)| seen_events.insert(line.clone()))
+        .collect();
+    fresh.sort();
+    out.extend(fresh.into_iter().map(|(_, line)| line));
+    out
+}
+
+/// The first `n` characters, with a mark when there are more.
+fn cut(s: &str, n: usize) -> String {
+    if s.chars().count() <= n {
+        s.to_string()
+    } else {
+        format!("{} ...", s.chars().take(n).collect::<String>())
+    }
+}
+
 /// One line of `--verbose` at a reading of the watch: the rule and its verdict, with the first
 /// message when it did not pass. The time of a watch rule is the time of the reading, which the
 /// line above it names, so no time here.
@@ -388,6 +456,21 @@ pub fn watch<A: PaletteApi>(inputs: WatchInputs<'_, A>) -> Result<(Report, Value
     let mut readings = 0u32;
     let final_state: String;
     let mut last_reading: Value;
+    // for --verbose: the conditions and the events seen at the reading before, so each reading
+    // prints what changed
+    let mut seen_conditions: BTreeMap<String, String> = BTreeMap::new();
+    let mut seen_events: BTreeSet<String> = BTreeSet::new();
+    if verbose {
+        for rule in &rules {
+            if let Some(Check::Watch { expr }) = &rule.check {
+                progress.note(&format!(
+                    "watch: {} reads the cluster, its summary, and its events with: {}",
+                    rule.id,
+                    cut(&probe::one_line(expr.clone()), 160)
+                ));
+            }
+        }
+    }
     loop {
         let elapsed = started.elapsed();
         let read = reading(api, &uid, elapsed)?;
@@ -397,6 +480,11 @@ pub fn watch<A: PaletteApi>(inputs: WatchInputs<'_, A>) -> Result<(Report, Value
             .and_then(Value::as_str)
             .unwrap_or("?")
             .to_string();
+        if verbose {
+            for line in reading_lines(&uid, &read, &mut seen_conditions, &mut seen_events) {
+                progress.note(&line);
+            }
+        }
         let mut with = base.clone();
         for (k, v) in read.as_object().into_iter().flatten() {
             with[k] = v.clone();

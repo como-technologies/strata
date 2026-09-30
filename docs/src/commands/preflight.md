@@ -152,8 +152,10 @@ with `--strict`), with the event that shows the fault, or when the cluster is
 warning is in the report, and the watch reads on. With `--out`, `world.json`
 holds the last reading: the conditions and the events the rules saw. A build
 that Palette cannot finish stops in minutes, not at the timeout of the client.
-`--verbose` prints one line for each rule at each reading. To see a watch on a
-real build, `just live-watch --build --down` in the live example
+`--verbose` prints, at each reading, the three requests the reading made and
+what they gave, each condition that changed, each new event, and one line for
+each rule; and before the first reading, the program of each rule. To see a
+watch on a real build, `just live-watch --build --down` in the live example
 ([The preflight checks](../development/live-example.md#the-preflight-checks)).
 
 ## Confidence and promotion

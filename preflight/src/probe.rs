@@ -445,7 +445,7 @@ fn judge(rule: &Rule, expr: &str, world: &Value, jq: &Jq, started: Instant) -> O
 
 /// A message on one line: the report prints each message under its rule, and a line break inside
 /// one, such as the output of a tool, would leave the column.
-fn one_line(s: String) -> String {
+pub(crate) fn one_line(s: String) -> String {
     if s.contains(['\n', '\r']) {
         s.split(['\n', '\r'])
             .map(str::trim)
