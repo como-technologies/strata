@@ -2333,6 +2333,38 @@ fn the_line_of_the_second_reading_counts_a_virtual_cluster_that_strata_cannot_re
 }
 
 #[test]
+fn the_second_reading_reads_a_group_in_the_scope_of_the_key_when_the_tenant_cannot() {
+    // the tenant lists g1 but cannot read it (403); the scope of the key reads it and its
+    // virtual clusters, and vc-1 is found (#184)
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let tenant = with_pinning_group(serve(MemoryApi::new(), dir.path(), "a", UID_A))
+        .failing("/v1/clustergroups/g1", 403, "forbidden")
+        .failing(
+            "POST /v1/dashboard/clustergroups/g1/virtualClusters?limit=50",
+            403,
+            "forbidden",
+        );
+    let home = with_pinning_group(serve(MemoryApi::new(), dir.path(), "a", UID_A));
+    let r = ops::consumers(
+        &Ref::Uid(UID_A.into()),
+        |scope| match scope {
+            Some(ops::TENANT_SCOPE) => Ok(Palette::new(&tenant)),
+            _ => Ok(Palette::new(&home)),
+        },
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert_eq!((r.count, r.exit_code()), (1, 1));
+    assert_eq!(r.consumers[0].uid, "vc-1");
+    assert_eq!((r.clusters_read.groups, r.clusters_read.members), (1, 1));
+    assert!(r.clusters_read.groups_error.is_none());
+    assert_eq!(tenant.calls("/v1/clustergroups/g1"), 1);
+    assert_eq!(home.calls("/v1/clustergroups/g1"), 1);
+}
+
+#[test]
 fn the_second_reading_searches_a_project_profile_in_its_own_project() {
     // a profile of the project p9: the search goes to p9, where Palette knows the name, and where
     // each cluster that can run the profile is (#181)

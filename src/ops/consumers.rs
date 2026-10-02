@@ -791,7 +791,8 @@ where
 /// search reads a summary of each cluster, and the summary of such a virtual cluster does not
 /// name the profiles of its group. So strata lists the cluster groups of the tenant (`wide`) and
 /// of the scope of the key (`home`), keeps each group whose `spec.clusterProfileTemplates` holds
-/// `uid`, and lists its virtual clusters, in the scope that listed the group. A Palette that has
+/// `uid`, and lists its virtual clusters, in the scope that listed the group, and in the scope of
+/// the key when that scope cannot read the group. A Palette that has
 /// no cluster groups answers the listing with `404` or `405`: no group. The count of the groups
 /// and an error go into `read`.
 fn group_members<A: PaletteApi>(
