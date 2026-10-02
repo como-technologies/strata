@@ -70,10 +70,44 @@ The same command as step 3 now fails, and names the manifest, not the line:
 {{#include ../output/manifest-full-diff.txt}}
 ```
 
+## 5. Review a change before you publish it
+
+A team that keeps its own manifests in a profile reviews a change to them before
+it publishes the version. A [candidate file](../reference/candidate-file.md)
+describes that version. Write one from the published 1.0.0 in dev:
+
+```text
+{{#include ../output/manifest-candidate.txt}}
+```
+
+The layer has `type: manifest` and no registry. Keep the file in a repository,
+and review each change to the manifest in a pull request. Make the record of the
+file:
+
+```text
+{{#include ../output/manifest-candidate-record.txt}}
+```
+
+Strata sends no request to a registry for a `manifest` layer. The record has no
+pack uid for the layer, because Palette gives the uid when it creates the
+profile. So the root differs from the root of the published version by that uid
+alone, and `same-release` passes the pair:
+
+```text
+{{#include ../output/manifest-candidate-same.txt}}
+```
+
+`mintedUidOnly` names each pack whose only difference is the pack uid. Here the
+file comes from the published 1.0.0, so the pair passes. Do the same after you
+publish a changed file: record the new version, and give `same-release` the
+record of the file and the record of the version. A pass shows that Palette
+holds the release that you reviewed.
+
 ## What to do
 
 - Use `same-release`, not the equality of roots, to compare profiles with
   manifest packs.
+- Give a manifest pack `type: manifest` in a candidate file, with no registry.
 - A pack from a registry keeps its pack uid in the comparison, because there
   the uid names the build of the registry.
 

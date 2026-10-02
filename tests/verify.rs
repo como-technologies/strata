@@ -4203,6 +4203,64 @@ fn a_candidate_written_from_a_record_reproduces_its_root_inline_or_with_files() 
 }
 
 #[test]
+fn a_candidate_of_a_manifest_pack_is_the_published_version_but_for_the_minted_uid() {
+    // an add-on profile with one manifest pack, as Palette returns it: no registry, no digest,
+    // and the pack uid that Palette minted at the create
+    let dir = tempfile::tempdir().unwrap();
+    let raw = dir.path().join("addons");
+    fs::create_dir_all(&raw).unwrap();
+    let content = "apiVersion: v1\nkind: Namespace\nmetadata:\n  name: payments";
+    for (name, doc) in [
+        (
+            "profile.json",
+            serde_json::json!({"metadata": {"name": "platform-addons", "uid": "p1"},
+                "spec": {"version": "1.0.0", "published": {"cloudType": "all", "type": "add-on",
+                    "packs": [{"name": "namespace-policy", "layer": "addon", "type": "manifest",
+                        "tag": "1.0.0", "version": "1.0.0", "packUid": "pk-minted-1",
+                        "manifests": [{"name": "namespace-policy"}]}]}}}),
+        ),
+        (
+            "manifests.json",
+            serde_json::json!({"metadata": {"name": "platform-addons", "uid": "p1"},
+                "spec": {"packs": [{"metadata": {"name": "namespace-policy", "uid": "pk-minted-1"},
+                    "spec": {"name": "namespace-policy", "layer": "addon", "version": "1.0.0",
+                        "manifests": [{"name": "namespace-policy", "content": content}]}}]}}),
+        ),
+        ("variables.json", serde_json::json!({"variables": []})),
+    ] {
+        fs::write(raw.join(name), doc.to_string()).unwrap();
+    }
+    let published = ops::snapshot_from_dir(&raw, "platform-addons@1.0.0", "t0").unwrap();
+
+    let c = Candidate::from_snapshot(&published).unwrap();
+    let file = dir.path().join("c.yaml");
+    candidate::write(&c, &file, None).unwrap();
+    let doc: Value = serde_yaml::from_str(&fs::read_to_string(&file).unwrap()).unwrap();
+    let layer = &doc["layers"][0];
+    assert_eq!(layer["type"], "manifest", "{doc}");
+    assert!(layer.get("registryUid").is_none() && layer.get("registry").is_none());
+
+    // the API knows no path: a manifest layer asks the registry nothing
+    let snap = ops::snapshot_from_candidate(
+        &file,
+        || Ok(Palette::new(MemoryApi::new())),
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert_ne!(snap.root, published.root, "the candidate has no minted uid");
+
+    let chain = ops::same_release(
+        &[("c.json".into(), snap), ("dev.json".into(), published)],
+        Policy::Exact,
+        "t1",
+    );
+    assert!(chain.same, "{:?}", chain.pairs[0].reasons);
+    assert_eq!(chain.pairs[0].status, PairStatus::SameContent);
+    assert_eq!(chain.pairs[0].minted_uid_only, ["addon/namespace-policy"]);
+}
+
+#[test]
 fn a_candidate_in_memory_reproduces_the_root_with_no_file() {
     let dir = tempfile::tempdir().unwrap();
     common::make_fixtures(dir.path());

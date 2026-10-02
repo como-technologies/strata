@@ -270,6 +270,8 @@ is the path as a list: strings for keys, numbers for indexes, and
   `different`, or `unknown-upstream`), `rootA`, `rootB`, `packsRepinned`,
   `packsRetagged`, and `reasons[]`. `upstreamUnknown`, only when it is not
   empty: the packs with no upstream digest, also when they are allowed.
+  `mintedUidOnly`, only when it is not empty: the manifest packs whose only
+  difference is the pack uid that Palette gives each profile.
 
 ## strata-consumers/1
 

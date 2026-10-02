@@ -4,7 +4,8 @@
 //! manifests the profile will have. Strata looks each pack up in the registry for what Palette
 //! fills in on publication (the pack uid, the tag, the digest, and the default values) and builds
 //! the same documents a published profile returns, so the candidate hashes exactly as the
-//! published version will.
+//! published version will. A `manifest` layer holds manifests from no registry: strata makes
+//! no request for it, and its pack has no uid until Palette mints one at the create.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -87,6 +88,9 @@ impl Candidate {
                     name: p.name.clone(),
                     version: p.version.clone(),
                     layer: nonempty(&p.layer),
+                    // a pack from a registry takes its type from the registry; a manifest pack has
+                    // no registry, so the file says what it is
+                    kind: Some(p.kind.clone()).filter(|k| k == MANIFEST),
                     tag: nonempty(&p.tag),
                     registry: None,
                     registry_uid: nonempty(&p.registry_uid),
@@ -191,13 +195,20 @@ fn default_type() -> String {
 pub struct CandidateLayer {
     /// Pack name.
     pub name: String,
-    /// Pack version.
+    /// Pack version. For a `manifest` layer, the version that Palette gives its own manifest
+    /// pack: `strata candidate` copies it from the record.
     pub version: String,
-    /// Layer: os, k8s, cni, csi, addon. Defaults to the registry's.
+    /// Layer: os, k8s, cni, csi, addon. Defaults to the registry's. A `manifest` layer takes
+    /// only `addon`, the layer that Palette gives each manifest pack.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub layer: Option<String>,
+    /// `manifest` for a layer of manifests from no registry: it names no registry, and it needs
+    /// one manifest or more. Leave it out for a pack from a registry: the registry gives the type.
+    #[serde(default, rename = "type", skip_serializing_if = "Option::is_none")]
+    pub kind: Option<String>,
     /// The tag to pin: one of the registry's tags for the version, or the version itself. Defaults
-    /// to the tag equal to the version, else the first tag of that version.
+    /// to the tag equal to the version, else the first tag of that version. A `manifest` layer
+    /// takes any tag, and defaults to the version.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tag: Option<String>,
     /// The registry, by name; overrides the top-level registry.
@@ -249,10 +260,17 @@ impl RegistryRef {
     }
 }
 
-/// A layer with its registry settled and its files read.
+/// The `type` of a layer of manifests that comes from no registry.
+pub const MANIFEST: &str = "manifest";
+
+/// The layer that Palette gives each manifest pack: the layer of its own manifest pack. It drops
+/// the layer of the request.
+const MANIFEST_LAYER: &str = "addon";
+
+/// A layer with its registry settled and its files read. A `manifest` layer has no registry.
 #[derive(Debug, Clone)]
 struct LoadedLayer {
-    registry: RegistryRef,
+    registry: Option<RegistryRef>,
     values: Option<String>,
     manifests: Vec<(String, String)>,
 }
@@ -329,13 +347,49 @@ pub fn check(candidate: Candidate, path: &Path) -> Result<LoadedCandidate> {
     let mut layers = Vec::with_capacity(candidate.layers.len());
     for (i, l) in candidate.layers.iter().enumerate() {
         let whom = format!("layer {} ({})", i + 1, l.name);
-        let registry = pick_registry(&l.registry_uid, &l.registry, invalid, &whom)?
-            .or_else(|| top.clone())
-            .ok_or_else(|| {
-                invalid(format!(
-                    "{whom} has no registry; set registry or registryUid on the layer or at the top"
-                ))
-            })?;
+        let registry = match l.kind.as_deref() {
+            None => Some(
+                pick_registry(&l.registry_uid, &l.registry, invalid, &whom)?
+                    .or_else(|| top.clone())
+                    .ok_or_else(|| {
+                        invalid(format!(
+                            "{whom} has no registry; set registry or registryUid on the layer or \
+                             at the top"
+                        ))
+                    })?,
+            ),
+            // Palette makes the pack of a manifest layer from its own manifest pack: no registry
+            // holds it, and the top-level registry does not apply to it
+            Some(MANIFEST) => {
+                if l.registry.is_some() || l.registry_uid.is_some() {
+                    return Err(invalid(format!(
+                        "{whom} is a manifest layer and names a registry; remove registry and \
+                         registryUid from it"
+                    )));
+                }
+                if l.manifests.is_empty() {
+                    return Err(invalid(format!(
+                        "{whom} is a manifest layer with no manifest; give it one manifest or more"
+                    )));
+                }
+                // Palette takes the layer from its own manifest pack, and drops the layer of the
+                // request, so another layer gives a record that the published version never has
+                if let Some(layer) = l.layer.as_deref().filter(|&x| x != MANIFEST_LAYER) {
+                    return Err(invalid(format!(
+                        "{whom} is a manifest layer with layer {layer}; Palette gives each manifest \
+                         pack the layer {MANIFEST_LAYER}, so remove layer or set it to \
+                         {MANIFEST_LAYER}"
+                    )));
+                }
+                None
+            }
+            Some(other) => {
+                return Err(invalid(format!(
+                    "{whom} has type {other}; only manifest is allowed, and the registry gives \
+                     the type of each other pack"
+                )));
+            }
+        };
         let values = match (&l.values, &l.values_file) {
             (Some(_), Some(_)) => {
                 return Err(invalid(format!("{whom} sets both values and valuesFile")));
@@ -618,6 +672,7 @@ pub(crate) fn pack_snapshot_modified<A: PaletteApi>(
             name: name.to_string(),
             version: resolved.clone(),
             layer: None,
+            kind: None,
             tag: None,
             registry: None,
             registry_uid: None,
@@ -632,7 +687,7 @@ pub(crate) fn pack_snapshot_modified<A: PaletteApi>(
         path: PathBuf::from(reference),
         candidate,
         layers: vec![LoadedLayer {
-            registry: RegistryRef::Uid(registry_uid.clone()),
+            registry: Some(RegistryRef::Uid(registry_uid.clone())),
             values: None,
             manifests: Vec::new(),
         }],
@@ -695,7 +750,8 @@ fn find_version<A: PaletteApi>(
 /// Look each layer's pack up in its registry and build the three documents a published profile
 /// with this content returns: `GET /v1/registries/metadata` for registry names,
 /// `GET /v1/packs?filters=spec.name=<name>` for the pack uid, digest, layer, type, and default
-/// values, and `GET /v1/packs/<name>/registries/<uid>` for the tags.
+/// values, and `GET /v1/packs/<name>/registries/<uid>` for the tags. A `manifest` layer needs
+/// none of these.
 pub fn resolve<A: PaletteApi>(
     loaded: &LoadedCandidate,
     palette: &Palette<A>,
@@ -713,7 +769,33 @@ pub fn resolve<A: PaletteApi>(
     let mut refs = Vec::with_capacity(c.layers.len());
     let mut entries = Vec::with_capacity(c.layers.len());
     for (l, loaded_layer) in c.layers.iter().zip(&loaded.layers) {
-        let registry = match &loaded_layer.registry {
+        let manifests: Vec<Value> = loaded_layer
+            .manifests
+            .iter()
+            .map(|(name, content)| json!({"name": name, "uid": "", "digest": "", "content": content}))
+            .collect();
+        let Some(registry_ref) = &loaded_layer.registry else {
+            // A manifest layer: no registry holds it, so no request. Palette mints its pack uid at
+            // the create, so the candidate has none, and it has no digest.
+            let layer = l.layer.as_deref().unwrap_or(MANIFEST_LAYER);
+            let tag = l.tag.as_deref().unwrap_or(&l.version);
+            let values = loaded_layer.values.clone().unwrap_or_default();
+            refs.push(json!({
+                "name": l.name, "layer": layer, "type": MANIFEST, "tag": tag,
+                "version": l.version, "packUid": "", "registryUid": "", "values": values,
+                "manifests": [], "params": l.params, "presets": [],
+            }));
+            entries.push(json!({
+                "metadata": {"name": l.name, "uid": ""},
+                "spec": {
+                    "name": l.name, "layer": layer, "version": l.version, "digest": "",
+                    "registryUid": "", "values": values, "manifests": manifests,
+                },
+                "status": {},
+            }));
+            continue;
+        };
+        let registry = match registry_ref {
             RegistryRef::Uid(u) => u.clone(),
             RegistryRef::Name(n) => {
                 if names.is_none() {
@@ -734,7 +816,7 @@ pub fn resolve<A: PaletteApi>(
             name: l.name.clone(),
             version: l.version.clone(),
             tag,
-            registry: loaded_layer.registry.text().to_string(),
+            registry: registry_ref.text().to_string(),
         };
         let summary = find_version(palette, &l.name, &l.version, &registry)?
             .ok_or_else(|| not_found(None))?;
@@ -742,7 +824,7 @@ pub fn resolve<A: PaletteApi>(
         // profile that pins one is refused. Say so before that read.
         if let Some(state) = retired_state(&summary) {
             // a `pack:` ref comes here with the uid of the registry; the error gives its name
-            let registry = match &loaded_layer.registry {
+            let registry = match registry_ref {
                 RegistryRef::Name(n) => n.clone(),
                 RegistryRef::Uid(u) => registries(palette)?
                     .into_iter()
@@ -824,10 +906,7 @@ pub fn resolve<A: PaletteApi>(
             "metadata": {"name": l.name, "uid": pack_uid},
             "spec": {
                 "name": l.name, "layer": layer, "version": l.version, "digest": digest,
-                "registryUid": registry, "values": values,
-                "manifests": loaded_layer.manifests.iter()
-                    .map(|(name, content)| json!({"name": name, "uid": "", "digest": "", "content": content}))
-                    .collect::<Vec<_>>(),
+                "registryUid": registry, "values": values, "manifests": manifests,
             },
             "status": {},
         }));
@@ -875,6 +954,99 @@ mod tests {
                 .is_none()
         );
         assert!(registry_sync(&basic, "reg-none", "oci").unwrap().is_none());
+    }
+
+    /// A candidate with one `manifest` layer, as `strata candidate` writes it for a manifest pack.
+    fn manifest_candidate() -> Candidate {
+        serde_yaml::from_str(
+            "name: platform-addons\nversion: 1.0.0\ntype: add-on\ncloudType: all\n\
+             layers:\n- name: namespace-policy\n  version: 1.0.0\n  type: manifest\n  \
+             manifests:\n  - name: namespace-policy\n    content: 'kind: Namespace'\n",
+        )
+        .unwrap()
+    }
+
+    fn refusal(c: Candidate) -> String {
+        match check(c, Path::new("c.yaml")).unwrap_err() {
+            Error::CandidateInvalid { message, .. } => message,
+            other => panic!("not candidate-invalid: {other}"),
+        }
+    }
+
+    #[test]
+    fn a_manifest_layer_needs_no_registry_and_resolves_with_no_request() {
+        // the registry at the top is for the packs from a registry, not for a manifest layer
+        let mut c = manifest_candidate();
+        c.registry = Some("Public Repo".into());
+        let loaded = check(c, Path::new("c.yaml")).unwrap();
+        // the API knows no path: each request would fail
+        let raw = resolve(
+            &loaded,
+            &Palette::new(MemoryApi::new()),
+            &Progress::silent(),
+        )
+        .unwrap();
+        let pack = &raw.profile["spec"]["published"]["packs"][0];
+        assert_eq!(pack["type"], "manifest");
+        assert_eq!(
+            pack["layer"], "addon",
+            "the layer of Palette's manifest pack"
+        );
+        assert_eq!(pack["tag"], "1.0.0", "the tag defaults to the version");
+        assert_eq!(pack["packUid"], "", "Palette mints the uid at the create");
+        assert_eq!(pack["registryUid"], "");
+        assert!(pack.get("digest").is_none());
+        let entry = &raw.manifests["spec"]["packs"][0]["spec"];
+        assert_eq!(entry["manifests"][0]["content"], "kind: Namespace");
+    }
+
+    #[test]
+    fn a_manifest_layer_that_names_a_registry_is_candidate_invalid() {
+        let mut by_name = manifest_candidate();
+        by_name.layers[0].registry = Some("Public Repo".into());
+        let mut by_uid = manifest_candidate();
+        by_uid.layers[0].registry_uid = Some("r1".into());
+        for c in [by_name, by_uid] {
+            let message = refusal(c);
+            assert!(
+                message.contains("layer 1 (namespace-policy)")
+                    && message.contains("names a registry"),
+                "{message}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_manifest_layer_with_no_manifest_or_another_type_is_candidate_invalid() {
+        let mut empty = manifest_candidate();
+        empty.layers[0].manifests.clear();
+        let message = refusal(empty);
+        assert!(
+            message.contains("layer 1 (namespace-policy)") && message.contains("no manifest"),
+            "{message}"
+        );
+        let mut helm = manifest_candidate();
+        helm.layers[0].kind = Some("helm".into());
+        let message = refusal(helm);
+        assert!(
+            message.contains("layer 1 (namespace-policy) has type helm"),
+            "{message}"
+        );
+    }
+
+    #[test]
+    fn a_manifest_layer_takes_only_the_layer_that_palette_gives_a_manifest_pack() {
+        let mut k8s = manifest_candidate();
+        k8s.layers[0].layer = Some("k8s".into());
+        let message = refusal(k8s);
+        assert!(
+            message.contains("layer 1 (namespace-policy) is a manifest layer with layer k8s"),
+            "{message}"
+        );
+        // the layer that Palette gives, written out, is the same as no layer
+        let mut addon = manifest_candidate();
+        addon.layers[0].layer = Some("addon".into());
+        assert!(check(addon, Path::new("c.yaml")).is_ok());
     }
 
     #[test]

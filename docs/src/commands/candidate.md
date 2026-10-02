@@ -95,7 +95,9 @@ change to one line.
 ```
 
 The file pins the tag and the registry uid of each layer. It carries the values,
-the params, the manifests, and the variables.
+the params, the manifests, and the variables. A manifest pack has no registry,
+so its layer has `type: manifest` and no registry uid: see
+[A manifest layer](../reference/candidate-file.md#a-manifest-layer).
 
 ## Build the snapshot of a candidate
 
