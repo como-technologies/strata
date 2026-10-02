@@ -32,8 +32,7 @@ These are open:
 - The variables of a cluster template while the template applies.
 - The answer of `POST /v1/clusterprofiles/validate/packs` to a pack that
   requires a pack that the profile does not hold: no pack of the Public Repo
-  lists a dependency. The answer of `POST /v1/clusterprofiles/{uid}/validate/packs`
-  for a version that Palette holds. See
+  lists a dependency. See
   [The validate routes](validate-routes.md#post-v1clusterprofilesvalidatepacks).
 
 ## What strata preflight does not check

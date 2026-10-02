@@ -555,8 +555,8 @@ and puts each edit back. Cluster A takes no update. Stage 7 asks Palette with
 | `undo-baseline` | 0 | the example is at its baseline |
 | `release-record`, `os-value` | 0, 1 | #81: a new key in the values of the OS pack: Palette says repave. It checks every value of the OS layer, so the table gives `repave` for an OS values change |
 | `csi-value` | 0 | #81: a changed value in the CSI pack: Palette says no repave. Its check reads no CNI or CSI layer, so `cluster-wide` means no repave |
-| `validate`, `validate-says`, `validate-json` | 0 | #134: at the baseline, `compare --validate` prints `palette    accepts`; `--json` gives `accepts` true and no error. No run has passed this check yet. |
-| `validate-usage`, `validate-usage-says` | 2, 0 | #134: two profile versions and no cluster are a usage error for `--validate`. No run has passed this check yet. |
+| `validate`, `validate-says`, `validate-json` | 0 | #134: at the baseline, `compare --validate` prints `palette    accepts`; `--json` gives `accepts` true and no error. |
+| `validate-usage`, `validate-usage-says` | 2, 0 | #134: two profile versions and no cluster are a usage error for `--validate`. |
 
 Each answer agrees with the impact table, on AWS and on GCP: the two clouds run
 the kubeadm engine alone. The edit in place also opens an update notification for cluster A, and
@@ -602,7 +602,7 @@ states what it shows.
 | `auth-candidate`, `auth-candidate-minted` | 0 | #154: a candidate with the chart builds a record before any profile pins it: no pack uid, no digest, the layer `addon`, the type `helm`, and the tag as the version |
 | `auth-pin`, `auth-record` | 0 | a profile that pins the chart by name, and a record of it |
 | `auth-candidate-same`, `auth-candidate-minted-only` | 0 | #154: `same-release` with `--allow no-digest` passes the candidate and the published version, and `mintedUidOnly` names the chart |
-| `auth-candidate-again`, `auth-candidate-listed` | 0, ? | #154: a record of the candidate after the create, and whether it has the published root, as the listing now has the chart |
+| `auth-candidate-again`, `auth-candidate-listed` | 0, 0 | #154: a record of the candidate after the create has the published root, as the listing now has the chart |
 | `auth-no-digest` | 0 | #75 #71: the pack reference carries no digest, and Palette made a pack uid |
 | `auth-verify`, `auth-verify-says`, `auth-verify-allowed` | 1, 0, 0 | #71: `verify` reports `UNVERIFIED`, and `--allow-no-digest` accepts it |
 | `auth-same-release`, `auth-same-release-allowed` | 1, 0 | #71: `same-release` refuses it, and `--allow no-digest` accepts it |

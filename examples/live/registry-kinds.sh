@@ -222,7 +222,7 @@ check auth-candidate-minted-only 0 "#154: and names the pack in mintedUidOnly" -
   jq -e --arg k "addon/$CHART" '.pairs[0].mintedUidOnly == [$k]' auth-candidate-same.json
 check auth-candidate-again 0 "#154: a record of the candidate after the create" -- \
   "$strata" snapshot --from-candidate auth-candidate.yaml -o auth-candidate-again.json
-check auth-candidate-listed ? "#154: whether that record has the published root, as the listing now has the chart" -- \
+check auth-candidate-listed 0 "#154: that record has the published root, as the listing now has the chart" -- \
   jq -e --slurpfile p auth.json '.root == $p[0].root' auth-candidate-again.json
 check auth-no-digest 0 "#75 #71: the pack reference carries no digest, and Palette made a pack uid" -- \
   jq -e '.packs[0] | .hash.upstreamSource == "none" and .refDigest == "" and .registryDigest == "" and .packUid != ""' auth.json
