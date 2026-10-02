@@ -163,6 +163,61 @@ Palette refuses it while a cluster uses the version: the provider reports the
 refusal, and the version stays. See
 [A version bump overwrites a version](../../use-cases/overwritten.md#what-to-do).
 
+## Drafts
+
+A profile version has two templates: `spec.published` and `spec.draft`. An
+edit of a published version through the API has two steps. The live example
+does both:
+
+1. `PUT /v1/clusterprofiles/{uid}` writes the packs, the values, and the
+   manifests of the request to the draft. The published template stays.
+2. `PATCH /v1/clusterprofiles/{uid}/publish` makes the draft the published
+   template, and empties the draft. The version keeps its uid and its number.
+
+Between the two steps, the draft waits. A person who edits a version in the
+console, and a pipeline that updates and publishes in two steps, make a draft
+that waits. A cluster runs the published template, and a new cluster gets the
+published template too.
+
+The source of Palette gives these facts (hubble):
+
+- The profile document gives both templates. Palette masks a secret only in
+  the published template. Palette gives no `status.hasDraft`. A version has a
+  draft when `spec.draft.packs` holds a pack.
+- A manifest is one object, with a published content and a draft content. The
+  `PUT` writes the draft content of each manifest that it names by uid, and
+  the published content stays. A manifest that the `PUT` adds has a draft
+  content only.
+- `GET /v1/clusterprofiles/{uid}/packs/manifests` lists the packs of the draft
+  when there is a draft, with the values of the draft. For each manifest, it
+  gives the published content. So while a draft waits, this answer holds the
+  content of neither template. A manifest that the draft adds has an empty
+  content in it. Each manifest of a version that was never published has an
+  empty content in it too.
+- `GET /v1/clusterprofiles/{uid}/packs/{packName}/manifests/{manifestUid}`
+  gives one manifest with `spec.draft.content` and `spec.published.content`.
+  A draft content is empty when the draft did not change the manifest.
+- The publish writes the draft content of each changed manifest over its
+  published content, and empties the draft content.
+
+What strata does with this:
+
+- A record of a version reads the published template. When the version has a
+  draft, strata reads each manifest by its uid, and takes its published
+  content. When the version was never published, the record reads the draft.
+- `<ref>@draft` records the draft: the values of the draft, and the draft
+  content of each manifest that the draft changed. A version with no draft is
+  the error `no-draft`. See [Refs](../../reference/refs.md).
+- Strata reads the variables of the version from
+  `GET /v1/clusterprofiles/{uid}/variables` for both templates.
+- `verify` of a record of the draft compares it with the published version.
+  After the publish, the record verifies:
+  `OK: published version aws-stack@1.1.1 holds the draft recorded <time>`.
+
+[`draft.sh`](../../development/live-runs.md#draftsh) checks these facts on the
+live tenant. The use case is
+[Review a draft before its publish](../../use-cases/draft.md).
+
 ## The lock of a cluster template
 
 A cluster template links profile versions and a maintenance policy, and applies

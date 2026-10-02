@@ -116,12 +116,14 @@ can give different roots, and how strata says so.
 - [The registry has newer versions](./behind.md): every record verifies, and the registry
   offers newer versions of the packs that they pin.
 
-**6. A version that changes after you record it.** These four are what a team
+**6. A version that changes after you record it.** These five are what a team
 must not do, and what to do when somebody already did. This is why a record
 is worth keeping, and what `verify` is for.
 
 - [A published version is edited in place](./edited-in-place.md): `verify`
   reports `DRIFT` on a version whose number did not change.
+- [Review a draft before its publish](./draft.md): a person edited a version,
+  and the change waits in its draft until the publish.
 - [A version bump overwrites a version](./overwritten.md): a version
   disappeared from the list, and clusters still run it.
 - [A macro value changes](./macros.md): a profile reads a macro, and the value

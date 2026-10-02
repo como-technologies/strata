@@ -594,6 +594,79 @@ impl Tenant {
         self.listings();
     }
 
+    /// Edit a published profile with no publish, as a PUT of `/v1/clusterprofiles/{uid}` does:
+    /// the edits go to `spec.draft`, which starts as a copy of the published template, and
+    /// `spec.published` stays. Palette gives no `status.hasDraft`. `packs/manifests` then lists
+    /// the packs of the draft, with their values, and the published content of each manifest.
+    /// Each manifest with a uid answers its own route, with its draft content and its published
+    /// content; an edit of values leaves the draft content of a manifest empty.
+    pub fn draft(&self, project: &str, uid: &str, edits: &[Edit]) {
+        let path = format!("v1/clusterprofiles/{uid}");
+        let mut doc = self.read(project, &path);
+        let mut edited = doc.clone();
+        for edit in edits {
+            edit.apply(&mut edited);
+        }
+        doc["spec"]["draft"] = edited["spec"]["published"].clone();
+        let at = self.log_write(project, "clusterprofile", uid, &doc);
+        doc["metadata"]["lastModifiedTimestamp"] = json!(at);
+        self.write(project, &path, &doc);
+
+        let listed = format!("{path}/packs/manifests");
+        let mut manifests = self.read(project, &listed);
+        let draft = doc["spec"]["draft"]["packs"]
+            .as_array()
+            .cloned()
+            .unwrap_or_default();
+        for pack in manifests["spec"]["packs"]
+            .as_array_mut()
+            .into_iter()
+            .flatten()
+        {
+            if let Some(d) = draft.iter().find(|d| d["name"] == pack["spec"]["name"]) {
+                pack["spec"]["values"] = d["values"].clone();
+            }
+        }
+        for edit in edits {
+            edit.apply_manifests(&mut manifests);
+        }
+        self.write(project, &listed, &manifests);
+        for pack in manifests["spec"]["packs"].as_array().into_iter().flatten() {
+            for m in pack["spec"]["manifests"].as_array().into_iter().flatten() {
+                let Some(manifest) = m["uid"].as_str().filter(|u| !u.is_empty()) else {
+                    continue;
+                };
+                self.write(
+                    project,
+                    &format!(
+                        "{path}/packs/{}/manifests/{manifest}",
+                        pack["spec"]["name"].as_str().unwrap_or_default()
+                    ),
+                    &json!({"metadata": {"name": m["name"], "uid": manifest},
+                        "spec": {"published": {"content": m["content"], "digest": m["digest"]},
+                            "draft": {"content": "", "digest": ""}}}),
+                );
+            }
+        }
+        self.listings();
+    }
+
+    /// Publish the draft of a profile, as `PATCH /v1/clusterprofiles/{uid}/publish` does: the
+    /// draft becomes the published template, and the draft is empty again. The version keeps its
+    /// uid and its number, so each cluster that runs it learns of an update, as after an edit in
+    /// place.
+    pub fn publish(&self, project: &str, uid: &str) {
+        let path = format!("v1/clusterprofiles/{uid}");
+        let mut doc = self.read(project, &path);
+        doc["spec"]["published"] = doc["spec"]["draft"].clone();
+        doc["spec"]["draft"] = json!({"packs": []});
+        let at = self.log_write(project, "clusterprofile", uid, &doc);
+        doc["metadata"]["lastModifiedTimestamp"] = json!(at);
+        self.write(project, &path, &doc);
+        self.notify_clusters(project, uid, &doc);
+        self.listings();
+    }
+
     /// Tell each cluster that runs profile `uid` whether an update waits for it, as Palette does
     /// after an edit in place. A live run gives the rules: a change of a pack opens one
     /// notification, a change of the version number alone opens none, and an edit that gives the

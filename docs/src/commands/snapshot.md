@@ -26,7 +26,7 @@ takes:
 - Exit `0`, or `2` on an error.
 - `--macros` and `--shape` need a `cluster:` ref. `--raw-dir` takes a profile or
   a cluster: a record read back from the directory does not say `@pending`,
-  edge host, cluster group, or app profile.
+  `@draft`, edge host, cluster group, or app profile.
 - `--validate` takes `--from-candidate` or a profile version. With `--from-raw`,
   `--dir`, or a cluster, edge host, cluster group, app profile, or pack ref, it is
   a `usage` error. Palette refuses the packs: exit `2`, the error
@@ -35,8 +35,10 @@ takes:
 - `-o releases/1.1.0/dev.json` makes the directory that the path names, so a
   release directory needs no `mkdir` first.
 - When a profile version has no published template, strata reads its draft.
-  `source.template` names the one that it read: `published`, `draft`, `applied`
-  for a cluster, `candidate`, or `registry` for a pack record.
+  `<ref>@draft` reads the draft of a published version: see
+  [The draft of a version](snapshot/profile-version.md#the-draft-of-a-version).
+  `source.template` names the template that strata read: `published`, `draft`,
+  `applied` for a cluster, `candidate`, or `registry` for a pack record.
 
 ## Options
 

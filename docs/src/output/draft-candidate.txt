@@ -1,0 +1,9 @@
+$ strata candidate aws-stack@1.1.1@draft -o aws-stack.yaml
+strata: looking up project dev
+strata: fetching profile 64e0000000000000000000c3
+strata: reading the schema of pack 6917446d9da9b9852faf5f60 to mask the draft
+strata: reading the schema of pack 6a6bd41b16c3cbf9999ad3be to mask the draft
+strata: reading the schema of pack 6a75f43fd410c3b56c0d4e51 to mask the draft
+strata: reading the schema of pack 6aa410eb144aaec799b5c0fa to mask the draft
+strata: reading the schema of pack 6aa410ec144aaec79d547a9e to mask the draft
+strata: wrote aws-stack.yaml from aws-stack@1.1.1@draft (root 78a86f401545)

@@ -21,6 +21,14 @@ pub enum Ref {
     },
     /// A profile uid.
     Uid(String),
+    /// `<name>@<version>@draft` or `<uid>@draft`: the draft template of a profile version, which
+    /// the next publish makes the published template.
+    Draft {
+        /// Profile uid, or its name when `version` is set.
+        id: String,
+        /// The version of the name, or [`LATEST`].
+        version: Option<String>,
+    },
     /// `pack:<name>@<version>` or `pack:<registry>/<name>@<version>`: one pack version in a
     /// registry, with the values the registry ships. The version [`LATEST`] picks the highest
     /// version of that pack in the registry.
@@ -79,6 +87,9 @@ pub enum Ref {
 /// The suffix of a cluster ref that names the update that waits for the cluster.
 pub const PENDING_SUFFIX: &str = "@pending";
 
+/// The suffix of a profile ref that names the draft template of the version.
+pub const DRAFT_SUFFIX: &str = "@draft";
+
 /// The prefix of a cluster ref.
 pub const CLUSTER_PREFIX: &str = "cluster:";
 
@@ -105,8 +116,9 @@ impl Ref {
     /// version; `cluster:<uid>[/<profile>][@pending]` with a non-empty uid is a cluster;
     /// `edgehost:<uid>[/<profile>]` is an edge host; `clustergroup:<uid>` is a cluster group;
     /// `appprofile:<uid>` or `appprofile:<name>@<version>` is an app profile; `tag:<key>=<value>`
-    /// and `filter:<name>` are a set of clusters; `name@version` with both parts non-empty is a
-    /// name and version; anything else is a uid.
+    /// and `filter:<name>` are a set of clusters; `name@version@draft` and `uid@draft` are the
+    /// draft of a version; `name@version` with both parts non-empty is a name and version;
+    /// anything else is a uid.
     pub fn parse(text: &str) -> Ref {
         Self::parse_with(text, |p| p.is_file())
     }
@@ -210,6 +222,20 @@ impl Ref {
         if looks_like_a_path(text) {
             return Ref::Snapshot(PathBuf::from(text));
         }
+        if let Some(rest) = text.strip_suffix(DRAFT_SUFFIX)
+            && !rest.is_empty()
+        {
+            return match rest.rsplit_once('@') {
+                Some((name, version)) if !name.is_empty() && !version.is_empty() => Ref::Draft {
+                    id: name.to_string(),
+                    version: Some(version.to_string()),
+                },
+                _ => Ref::Draft {
+                    id: rest.to_string(),
+                    version: None,
+                },
+            };
+        }
         if let Some((name, version)) = text.rsplit_once('@')
             && !name.is_empty()
             && !version.is_empty()
@@ -229,6 +255,10 @@ impl fmt::Display for Ref {
             Ref::Snapshot(p) => write!(f, "{}", p.display()),
             Ref::NameVersion { name, version } => write!(f, "{name}@{version}"),
             Ref::Uid(u) => write!(f, "{u}"),
+            Ref::Draft { id, version } => match version {
+                Some(v) => write!(f, "{id}@{v}{DRAFT_SUFFIX}"),
+                None => write!(f, "{id}{DRAFT_SUFFIX}"),
+            },
             Ref::Pack {
                 registry,
                 name,
@@ -364,6 +394,47 @@ mod tests {
             Ref::Snapshot("rel.json".into())
         );
         assert_eq!(Ref::parse("aws-stack@1.2.0").to_string(), "aws-stack@1.2.0");
+    }
+
+    #[test]
+    fn a_profile_ref_with_draft_reads_the_draft_of_the_version() {
+        let no_files = |_: &Path| false;
+        let by_name = Ref::parse_with("aws-stack@1.2.0@draft", no_files);
+        assert_eq!(
+            by_name,
+            Ref::Draft {
+                id: "aws-stack".into(),
+                version: Some("1.2.0".into()),
+            }
+        );
+        assert_eq!(by_name.to_string(), "aws-stack@1.2.0@draft");
+        let latest = Ref::parse_with("aws-stack@latest@draft", no_files);
+        assert_eq!(
+            latest,
+            Ref::Draft {
+                id: "aws-stack".into(),
+                version: Some(LATEST.into()),
+            }
+        );
+        let by_uid = Ref::parse_with("64f0a1@draft", no_files);
+        assert_eq!(
+            by_uid,
+            Ref::Draft {
+                id: "64f0a1".into(),
+                version: None,
+            }
+        );
+        assert_eq!(by_uid.to_string(), "64f0a1@draft");
+        assert_eq!(
+            Ref::parse_with("@draft", no_files),
+            Ref::Uid("@draft".into()),
+            "no profile, no draft"
+        );
+        assert_eq!(
+            Ref::parse_with("releases/dev@draft", no_files),
+            Ref::Snapshot("releases/dev@draft".into()),
+            "a path stays a file"
+        );
     }
 
     #[test]

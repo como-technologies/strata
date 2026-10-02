@@ -1,0 +1,4 @@
+$ strata snapshot aws-stack@1.1.1@draft
+strata: looking up project dev
+strata: fetching profile 64e0000000000000000000c3
+strata: profile aws-stack version 1.1.1 (uid 64e0000000000000000000c3) has no draft: Palette holds only its published template, which `strata snapshot 64e0000000000000000000c3` reads

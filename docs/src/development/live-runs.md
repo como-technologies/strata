@@ -411,6 +411,32 @@ API, reads what `verify --who` says, and puts the edit back.
 | `cluster-who`, `cluster-who-says`, `cluster-who-person`, `cluster-who-json` | 1, 0, 0, 0 | #69: the cluster record reports `DRIFT`, and `--who` reads the audit log of the cluster: an `update` by the user who accepted it |
 | `cluster-restored` | 0 | the edit is put back and accepted again, and the cluster record verifies |
 
+## draft.sh
+
+Read-write. It needs the profiles and no cluster. It edits the manifest of the
+add-on version through the API with no publish, records the draft, publishes
+it, and puts the edit back with a publish. This is the source for
+[Drafts](../internals/palette/profiles.md#drafts).
+
+| Check | Expected exit | What it shows |
+|---|---|---|
+| `record` | 0 | record the add-on version |
+| `no-draft`, `no-draft-says` | 2, 0 | #155: a version with no draft: `<uid>@draft` exits `2`, and says that the version has no draft |
+| `api-draft` | 0 | #155: a `PUT` of the version with no publish |
+| `version-holds` | 0 | #155: the version keeps its content while the draft waits: its record verifies |
+| `draft-record`, `draft-template` | 0 | #155: `<uid>@draft` records the draft: `source.template` `draft`, and the edit in the manifest |
+| `version-record` | 0 | #155: a record of the version, read while the draft waits, holds the published manifest |
+| `compare`, `compare-names` | 1, 0 | #155: `compare <uid> <uid>@draft` exits `1`, and names the manifest pack with `AUTHORED` |
+| `route-list` | 0 | #155: `packs/manifests` gives the published content of the manifest while the draft waits |
+| `route-entity` | 0 | #155: the route of one manifest gives the draft content beside the published content |
+| `no-has-draft` | 0 | #155: the profile document gives no `status.hasDraft` |
+| `draft-before-publish` | 1 | #155: the record of the draft reports `DRIFT` against the version before the publish |
+| `api-publish` | 0 | #155: the publish of the draft |
+| `draft-after-publish` | 0 | #155: after the publish, the record of the draft verifies against the version |
+| `version-after-publish` | 1 | #155: the record of the version from before the publish reports `DRIFT` |
+| `no-draft-after-publish` | 2 | #155: the publish empties the draft |
+| `restored` | 0 | the edit is put back, and the first record verifies again |
+
 ## pending.sh
 
 Read-write. It needs the example at its baseline with cluster A. Each stage

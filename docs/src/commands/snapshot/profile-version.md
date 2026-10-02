@@ -36,6 +36,27 @@ lists each field.
 `<name>@latest` is the highest version in natural order: `22.04` is above
 `20.04`, and `1.30.6` is above `1.29.10`.
 
+## The draft of a version
+
+A person who edits a published version and does not publish makes a draft.
+`<name>@<version>@draft` and `<uid>@draft` record the draft, and not the
+published template:
+
+```text
+{{#include ../../output/draft-record.txt}}
+```
+
+The record says `source.template` `draft`, and keeps `@draft` in `source.ref`.
+It holds the values of the draft, and the draft content of each manifest that
+the draft changed. A version with no draft exits `2` with `no-draft`:
+
+```text
+{{#include ../../output/draft-none.txt}}
+```
+
+`compare <ref> <ref>@draft` shows what the publish changes. See
+[Review a draft before its publish](../../use-cases/draft.md).
+
 ## Record a pack version
 
 `pack:<name>@<version>` records one pack version from a registry, with the

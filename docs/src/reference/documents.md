@@ -40,7 +40,8 @@ profile, or pack version.
   - `uid`, `projectUid` (empty for tenant scope), `name`, `version`,
     `cloudType`, `type`, and `tags`. `type` is `app` for an app profile.
   - `template`: `published`, `draft`, `applied` for a cluster, `candidate`, or
-    `registry` for a pack record.
+    `registry` for a pack record. `draft` is a record of `<ref>@draft`, or of a
+    version that was never published.
   - `consumers`, for a published or a draft version: `clusters[]`, the uids of
     the clusters that used the version, and `count`. A candidate, a cluster
     record, a pack record, and an app profile record have no `consumers`. The

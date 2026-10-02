@@ -304,15 +304,27 @@ where
             }
             (scope, Some(recorded.source.uid))
         }
-        Ref::Uid(uid) => (None, Some(uid.clone())),
-        Ref::NameVersion { .. } => (None, None),
+        Ref::Uid(uid)
+        | Ref::Draft {
+            id: uid,
+            version: None,
+        } => (None, Some(uid.clone())),
+        // a draft has the consumers of its version: a cluster runs a published template
+        Ref::NameVersion { .. } | Ref::Draft { .. } => (None, None),
     };
 
     let mut clients: HashMap<String, Palette<A>> = HashMap::new();
     let home = connect(profile_scope.as_deref())?;
     let uid = match (uid_hint, reference) {
         (Some(uid), _) => uid,
-        (None, Ref::NameVersion { name, version }) => home.resolve(name, version)?,
+        (None, Ref::NameVersion { name, version })
+        | (
+            None,
+            Ref::Draft {
+                id: name,
+                version: Some(version),
+            },
+        ) => home.resolve(name, version)?,
         (None, _) => unreachable!("every other ref carries a uid"),
     };
     progress.note(&format!("listing consumers of profile {uid}"));

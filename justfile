@@ -236,6 +236,10 @@ live-order: build
 live-who: build
     examples/live/who.sh
 
+# The draft test: a PUT of the add-on version with no publish, <uid>@draft, and the publish (#155). Needs live-profiles and no cluster. Puts the edit back.
+live-draft: build
+    examples/live/draft.sh
+
 # The pending update test: when Palette says an update waits for cluster A, what a record, the listing, and compare say, and what cluster:<uid>@pending holds (#70, #78). Needs live-up; undoes each change.
 live-pending: build
     examples/live/pending.sh

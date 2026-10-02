@@ -244,6 +244,7 @@ impl<A: PaletteApi> Palette<A> {
             variables_unavailable: false,
             project_uid: self.project_uid().map(str::to_string),
             fetched_at: None,
+            manifest_entities: None,
         })
     }
 
@@ -323,7 +324,8 @@ impl<A: PaletteApi> Palette<A> {
     }
 
     /// Fetch the three documents for one profile. A missing variables endpoint (404 or 405, as on
-    /// older Palette versions) is treated as "no variables"; other errors propagate.
+    /// older Palette versions) is treated as "no variables"; other errors propagate. For a profile
+    /// that has a draft, also each of its manifests: see [`RawProfile::manifest_entities`].
     /// Palette serves the draft packs with each secret in clear: strata masks them first, see
     /// `mask_draft`.
     pub fn fetch_profile(&self, uid: &str, progress: &Progress) -> Result<RawProfile> {
@@ -333,6 +335,7 @@ impl<A: PaletteApi> Palette<A> {
             .api
             .get_json(&format!("/v1/clusterprofiles/{uid}/packs/manifests"))?;
         self.mask_draft(&mut profile, &mut manifests, progress)?;
+        let manifest_entities = self.manifest_entities(uid, &profile, progress)?;
         let (variables, variables_unavailable) = self.variables_or(
             &format!("/v1/clusterprofiles/{uid}/variables"),
             serde_json::json!({ "variables": [] }),
@@ -345,6 +348,7 @@ impl<A: PaletteApi> Palette<A> {
             variables_unavailable,
             project_uid: self.project_uid().map(str::to_string),
             fetched_at: None,
+            manifest_entities,
         })
     }
 
@@ -426,6 +430,63 @@ impl<A: PaletteApi> Palette<A> {
             }
         }
         Ok(())
+    }
+
+    /// Each manifest of the two templates of a profile that has a draft, by manifest uid:
+    /// `GET /v1/clusterprofiles/{uid}/packs/{packName}/manifests/{manifestUid}`, which gives the
+    /// draft content and the published content. `None` for a profile with no draft.
+    ///
+    /// With a draft, `packs/manifests` lists the packs of the draft, and gives the published
+    /// content of each manifest. So it gives the content of neither template: a manifest that the
+    /// draft adds or edits, and each manifest of a version that was never published, has the
+    /// wrong content or none.
+    fn manifest_entities(
+        &self,
+        uid: &str,
+        profile: &Value,
+        progress: &Progress,
+    ) -> Result<Option<Value>> {
+        if !super::raw::has_draft(profile) {
+            return Ok(None);
+        }
+        let text = |v: &Value, p: &str| {
+            v.pointer(p)
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string()
+        };
+        let mut out = serde_json::Map::new();
+        for template in ["/spec/published/packs", "/spec/draft/packs"] {
+            for pack in profile
+                .pointer(template)
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+            {
+                let name = text(pack, "/name");
+                for m in pack
+                    .get("manifests")
+                    .and_then(Value::as_array)
+                    .into_iter()
+                    .flatten()
+                {
+                    let manifest = text(m, "/uid");
+                    if name.is_empty() || manifest.is_empty() || out.contains_key(&manifest) {
+                        continue;
+                    }
+                    progress.note(&format!(
+                        "reading manifest {manifest} of pack {name}: the profile has a draft"
+                    ));
+                    let doc = self.api.get_json(&format!(
+                        "/v1/clusterprofiles/{uid}/packs/{}/manifests/{}",
+                        query_value(&name),
+                        query_value(&manifest)
+                    ))?;
+                    out.insert(manifest, doc);
+                }
+            }
+        }
+        Ok(Some(Value::Object(out)))
     }
 
     /// The profile document alone, `GET /v1/clusterprofiles/{uid}`: metadata, versions, and the

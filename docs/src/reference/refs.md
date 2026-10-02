@@ -7,6 +7,8 @@ A ref names the thing that a command reads.
 | `<uid>` | the profile version with this uid | `64e0000000000000000000c3` |
 | `<name>@<version>` | the profile version with this name and version in the scope | `aws-stack@1.1.1` |
 | `<name>@latest` | the highest version of the name in the scope | `aws-stack@latest` |
+| `<name>@<version>@draft` | the draft of the profile version: what its publish gives | `aws-stack@1.1.1@draft` |
+| `<uid>@draft` | the draft of the profile version with this uid | `64e0000000000000000000c3@draft` |
 | `pack:<name>@<version>` | one pack version, when one registry has that name and version | `pack:kubernetes@1.36.2` |
 | `pack:<registry>/<name>@<version>` | the same, from the registry of that name or uid | `pack:Public Repo/csi-aws-ebs@1.65.0` |
 | `pack:<name>@latest` | the highest version of the pack in the registry | `pack:kubernetes@latest` |
@@ -34,6 +36,15 @@ A ref names the thing that a command reads.
   numbers, other text as text. `22.04` is above `20.04`, and `1.30.6` is above
   `1.29.10`. The snapshot records the version that it found in
   `source.version`, and keeps `aws-stack@latest` in `source.ref`.
+- **`@draft`.** The draft template of a profile version, and not its published
+  template. A person who edits a published version and does not publish makes
+  a draft. The record holds the values and the manifests of the draft, and
+  `source.template` is `draft`. A version with no draft is the error
+  `no-draft`. `@latest@draft` reads the draft of the highest version. Put it
+  last. `verify` of the record compares it with the published version, so it
+  verifies after the publish. See
+  [Review a draft before its publish](../use-cases/draft.md) and
+  [Drafts](../internals/palette/profiles.md#drafts).
 - **`pack:`.** A pack version, read from the registry, not from a profile. Its
   snapshot holds that one pack with the values that the registry ships, and no
   manifests or params: those belong to a profile. Comparing two of them says
@@ -92,7 +103,7 @@ Strata asks Palette nothing:
 
 ## Which commands take which refs
 
-| Command | uid, `name@version`, `name@latest` | `pack:` | `cluster:`, `edgehost:`, `clustergroup:`, `appprofile:` | `tag:`, `filter:` | file |
+| Command | uid, `name@version`, `name@latest`, and each with `@draft` | `pack:` | `cluster:`, `edgehost:`, `clustergroup:`, `appprofile:` | `tag:`, `filter:` | file |
 | --- | --- | --- | --- | --- | --- |
 | `compare` | yes | yes | yes | no | yes |
 | `snapshot` | yes | yes | yes | with `--dir` | no: `--from-raw DIR` or `--from-candidate FILE` |
@@ -103,4 +114,5 @@ Strata asks Palette nothing:
 | `behind` | no | no | no | no | yes: a record of each kind |
 
 `snapshot --raw-dir` takes a profile or a cluster: a record read back from the
-directory does not say `@pending`, edge host, cluster group, or app profile.
+directory does not say `@pending`, `@draft`, edge host, cluster group, or app
+profile.

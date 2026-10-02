@@ -8,6 +8,11 @@
 #       through the API, which Palette accepts whatever the Spectro Cloud provider's
 #       immutable-clusterprofiles flag says. Exit 2 when no place, or more than one, contains
 #       FROM.
+#   api.sh draft PROFILE_UID FROM TO
+#       The change of api.sh edit, with no publish: PUT the version only. Palette writes the
+#       change to the draft of the version, and the published template stays.
+#   api.sh publish PROFILE_UID
+#       Publish the draft of a version: PATCH /v1/clusterprofiles/{uid}/publish.
 #   api.sh edit-manifest PROFILE_UID FROM TO
 #       The same change of one manifest, through the route of that manifest: PUT
 #       /v1/clusterprofiles/{uid}/packs/{pack}/manifests/{manifest uid}, then publish. Exit 2
@@ -192,19 +197,42 @@ reorder_cluster() {
   echo "sent the profiles of cluster $cluster in the other order: $(jq -r '[.profiles[].uid] | join(", ")' "$tmp/body")"
 }
 
+# edit_body UID FROM TO DIR: DIR/body, the published version UID with the text FROM changed to
+# TO in the one pack values or manifest that holds it
+edit_body() {
+  local uid=$1 from=$2 to=$3 dir=$4 matches
+  fetch_published "$uid" "$dir"
+  matches=$(jq --arg from "$from" --slurpfile c "$dir/contents" '
+      [.spec.published.packs[] | (.values // ""), ($c[0][.name] // [] | .[].content)]
+      | map(select(contains($from))) | length' "$dir/profile")
+  [ "$matches" = 1 ] || die "$matches values and manifests of $uid contain the text to replace; want exactly 1"
+  body "$dir" '.values |= (split($from) | join($to)) | .manifests |= map(.content = ((.content // "") | split($from) | join($to)))' \
+    --arg from "$from" --arg to "$to" > "$dir/body"
+}
+
 edit() {
-  local uid=${1:-} from=${2:-} to=${3:-} tmp matches
+  local uid=${1:-} from=${2:-} to=${3:-} tmp
   [ -n "$uid" ] && [ -n "$from" ] || die "usage: api.sh edit PROFILE_UID FROM TO"
   tmp=$(mktemp -d); trap 'rm -rf "${tmp:-}"' RETURN EXIT
-  fetch_published "$uid" "$tmp"
-  matches=$(jq --arg from "$from" --slurpfile c "$tmp/contents" '
-      [.spec.published.packs[] | (.values // ""), ($c[0][.name] // [] | .[].content)]
-      | map(select(contains($from))) | length' "$tmp/profile")
-  [ "$matches" = 1 ] || die "$matches values and manifests of $uid contain the text to replace; want exactly 1"
-  body "$tmp" '.values |= (split($from) | join($to)) | .manifests |= map(.content = ((.content // "") | split($from) | join($to)))' \
-    --arg from "$from" --arg to "$to" > "$tmp/body"
+  edit_body "$uid" "$from" "$to" "$tmp"
   put_published "$uid" "$tmp"
   echo "edited $uid in place: '$from' -> '$to'"
+}
+
+draft() {
+  local uid=${1:-} from=${2:-} to=${3:-} tmp
+  [ -n "$uid" ] && [ -n "$from" ] || die "usage: api.sh draft PROFILE_UID FROM TO"
+  tmp=$(mktemp -d); trap 'rm -rf "${tmp:-}"' RETURN EXIT
+  edit_body "$uid" "$from" "$to" "$tmp"
+  call PUT "/v1/clusterprofiles/$uid" "$tmp/body" > /dev/null || exit 2
+  echo "edited the draft of $uid, with no publish: '$from' -> '$to'"
+}
+
+publish() {
+  local uid=${1:-}
+  [ -n "$uid" ] || die "usage: api.sh publish PROFILE_UID"
+  call PATCH "/v1/clusterprofiles/$uid/publish" > /dev/null || exit 2
+  echo "published the draft of $uid"
 }
 
 edit_manifest() {
@@ -603,6 +631,8 @@ macro_delete() {
 
 case "${1:-}" in
   edit) shift; edit "$@" ;;
+  draft) shift; draft "$@" ;;
+  publish) shift; publish "$@" ;;
   reorder) shift; reorder "$@" ;;
   reorder-cluster) shift; reorder_cluster "$@" ;;
   retag) shift; retag "$@" ;;

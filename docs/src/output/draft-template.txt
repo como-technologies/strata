@@ -1,0 +1,2 @@
+$ jq -r '.source | "\(.ref)  \(.template)  uid \(.uid)"' review/aws-stack-1.1.1-draft.json
+aws-stack@1.1.1@draft  draft  uid 64e0000000000000000000c3

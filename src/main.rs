@@ -802,6 +802,7 @@ fn cmd_snapshot(a: &SnapshotArgs) -> Result<ExitCode> {
             let flagged = matches!(
                 reference,
                 Ref::Cluster { pending: true, .. }
+                    | Ref::Draft { .. }
                     | Ref::EdgeHost { .. }
                     | Ref::ClusterGroup { .. }
                     | Ref::AppProfile { .. }
@@ -809,8 +810,8 @@ fn cmd_snapshot(a: &SnapshotArgs) -> Result<ExitCode> {
             if a.raw_dir.is_some() && flagged {
                 return Err(Error::Usage {
                     message: "--raw-dir takes a profile or a cluster: a record read back from \
-                              the directory does not say pending, edge host, cluster group, or \
-                              app profile"
+                              the directory does not say pending, draft, edge host, cluster \
+                              group, or app profile"
                         .to_string(),
                 });
             }
@@ -879,6 +880,14 @@ fn cmd_snapshot(a: &SnapshotArgs) -> Result<ExitCode> {
                     return Err(Error::RecordNotASource {
                         path: path.display().to_string(),
                     });
+                }
+                Ref::Draft { id, version } => {
+                    let uid = match version {
+                        Some(version) => palette.resolve(id, version)?,
+                        None => id.clone(),
+                    };
+                    let raw = palette.fetch_profile(&uid, &progress)?;
+                    Snapshot::from_raw_draft(&raw, text, &now)?
                 }
                 Ref::Uid(_) | Ref::NameVersion { .. } => {
                     let uid = match &reference {

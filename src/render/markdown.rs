@@ -3,16 +3,17 @@
 use super::{
     Renderer, VarLine, applied_ref, artifact_lines, artifacts_summary, capitalized, chain_verdict,
     cluster_count, cluster_value, consumer_count, consumer_counts, consumers_heading,
-    consumers_sentence, count_of, counts_line, cross_kind_note, dash, edge_hosts_line,
+    consumers_sentence, count_of, counts_line, cross_kind_note, dash, draft_note, edge_hosts_line,
     edited_in_place_note, entry_error, gone_sentence, last_modified_suffix, list_count, list_scope,
     macros_changed_note, macros_changed_sentence, macros_note, overwritten_in_place_notes,
     pack_version, pair_detail, pair_word, palette_repave_lines, palette_repave_note,
     palette_validation_lines, plain_flags, profiles_overwritten_sentence, project_label,
-    record_detail, record_label, registry_note, registry_sync_suffix, running_behind_notes,
-    same_content_note, second_reading_counts, short, show, state_suffix, subject, tier_path,
-    tier_states, traits_suffix, unverified_sentence, updates_pending_notes, upstream_unknown_note,
-    values_changed, values_changed_suffix, variable_lines, variables_comparable,
-    variables_unavailable_note, version_display, who_entry, who_heading,
+    record_detail, record_label, recorded_noun, registry_note, registry_sync_suffix,
+    running_behind_notes, same_content_note, second_reading_counts, short, show, state_suffix,
+    subject, tier_path, tier_states, traits_suffix, unchanged_sentence, unverified_sentence,
+    updates_pending_notes, upstream_unknown_note, values_changed, values_changed_suffix,
+    variable_lines, variables_comparable, variables_unavailable_note, version_display, who_entry,
+    who_heading,
 };
 use crate::color::Paint;
 use crate::diff::{Diff, Leaf, Op, Status, Verify, VerifyStatus};
@@ -114,6 +115,9 @@ impl Renderer for MarkdownRenderer {
             o.push_str(&format!("**Consumers:** {sentence}\n\n"));
         }
         if let Some(note) = edited_in_place_note(d) {
+            o.push_str(&format!("**Note:** {note}\n\n"));
+        }
+        if let Some(note) = draft_note(d) {
             o.push_str(&format!("**Note:** {note}\n\n"));
         }
         for note in overwritten_in_place_notes(d) {
@@ -305,7 +309,8 @@ impl Renderer for MarkdownRenderer {
         let (what, at) = (subject(recorded), &recorded.fetched_at);
         Some(match v.status {
             VerifyStatus::Unchanged => format!(
-                "\n**OK**: {what} is unchanged since {at}{}",
+                "\n**OK**: {what} {}{}",
+                unchanged_sentence(recorded, at),
                 values_changed_suffix(v.cluster_values_changed)
             ),
             VerifyStatus::Unverified => format!(
@@ -337,7 +342,8 @@ impl Renderer for MarkdownRenderer {
                     values_changed_suffix(v.cluster_values_changed)
                 ),
                 None => format!(
-                    "\n**DRIFT**: {what} differs from the copy recorded {at}{}",
+                    "\n**DRIFT**: {what} differs from {} recorded {at}{}",
+                    recorded_noun(recorded),
                     values_changed_suffix(v.cluster_values_changed)
                 ),
             },

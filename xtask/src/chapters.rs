@@ -121,6 +121,7 @@ pub fn names() -> Vec<&'static str> {
         "tag-name",
         "manifest-pack",
         "edited-in-place",
+        "draft",
         "overwritten",
         "cluster-release",
         "cluster-values",
@@ -1228,6 +1229,78 @@ fn use_cases(r: &mut Runner) {
         1,
         false,
         "strata verify runs/payments.json",
+    );
+
+    r.chapter("draft", DEV_ENV);
+    r.projects(&[("dev", DEV)]);
+    r.registries(DEV);
+    r.profile(DEV, A111, "1.1.1", "aws-stack@1.1.1", &[]);
+    r.step(
+        "draft-release",
+        0,
+        true,
+        "strata snapshot aws-stack@1.1.1 -o releases/1.1.1/dev.json",
+    );
+    r.step(
+        "draft-none",
+        2,
+        true,
+        "strata snapshot aws-stack@1.1.1@draft",
+    );
+    r.serve_here(); // state 1: aws-stack@1.1.1 has no draft, and the release record is there
+    // a person edits the version in the console, and does not publish
+    r.draft(DEV, A111, RETAIN);
+    r.serve_here(); // state 2: a draft of aws-stack@1.1.1 waits
+    r.step(
+        "draft-compare",
+        1,
+        false,
+        "strata compare aws-stack@1.1.1 aws-stack@1.1.1@draft",
+    );
+    r.step(
+        "draft-version-holds",
+        0,
+        false,
+        "strata verify releases/1.1.1/dev.json",
+    );
+    r.step(
+        "draft-record",
+        0,
+        true,
+        "strata snapshot aws-stack@1.1.1@draft -o review/aws-stack-1.1.1-draft.json",
+    );
+    r.step(
+        "draft-template",
+        0,
+        false,
+        "jq -r '.source | \"\\(.ref)  \\(.template)  uid \\(.uid)\"' review/aws-stack-1.1.1-draft.json",
+    );
+    r.step(
+        "draft-candidate",
+        0,
+        true,
+        "strata candidate aws-stack@1.1.1@draft -o aws-stack.yaml",
+    );
+    // the reviewer approves, and the person publishes the draft
+    r.publish_draft(DEV, A111);
+    r.serve_here(); // state 3: the draft is published
+    r.step(
+        "draft-published",
+        0,
+        false,
+        "strata verify review/aws-stack-1.1.1-draft.json",
+    );
+    r.step(
+        "draft-release-drift",
+        1,
+        false,
+        "strata verify releases/1.1.1/dev.json",
+    );
+    r.step(
+        "draft-gone",
+        2,
+        true,
+        "strata snapshot aws-stack@1.1.1@draft",
     );
 
     r.chapter("overwritten", DEV_ENV);

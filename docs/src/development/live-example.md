@@ -21,6 +21,7 @@ show.
 | `cluster.sh` | A variable value that a cluster changes, and other answers that only a cluster gives (#66). It needs cluster A, and it ends with the cluster gone. |
 | `order.sh` | What a reorder of the packs of a published version is to Palette (#66). It needs cluster A, and it leaves the versions edited: run `just live-down` after it. |
 | `who.sh` | What `verify --who` reads from the audit log, for an edit through the API and for an update that a cluster accepts (#69). Stage 1 needs the profiles; stage 2 needs cluster A. |
+| `draft.sh` | A draft of the add-on version: a `PUT` with no publish, what `<uid>@draft` records, what each route of Palette gives while the draft waits, and the publish (#155). It needs the profiles, and no cluster. |
 | `pending.sh` | When Palette says that an update waits for a cluster, and what a record of `cluster:<uid>@pending` holds (#70, #78). It needs cluster A. |
 | `macros.sh` | What a new value of a project macro does to a version, to the copy of a cluster, and to a record (#72). It needs cluster A. |
 | `macro-repave.sh` | Whether a new macro value in an infrastructure layer replaces the nodes of a cluster (#72). It needs cluster A, and it leaves a repave that waits for approval: run `just live-down` after it. |
@@ -120,6 +121,7 @@ its end.
 | `cluster.sh` | The cluster test (#66): a change of the value the cluster gives a variable, and a deletion through the API. It ends with the cluster gone. |
 | `order.sh` | The order test (#66): a reorder of the packs of two published versions, and of the profiles of the cluster, through the API. It leaves the versions edited; `live-down` follows it. |
 | `who.sh` | The audit log test (#69): who made an edit through the API, and an update that a cluster accepted, as `verify --who` reads them. |
+| `draft.sh` | The draft test (#155): a draft of the add-on version, `<uid>@draft`, and the publish. |
 | `pending.sh` | The pending update test (#70, #78): when Palette says that an update waits for cluster A, what a record, the listing, and `compare` say, and what `cluster:<uid>@pending` holds; `consumers --list-only`. |
 | `macros.sh` | The macro test (#72): what a project macro does to a version, to the copy that cluster A runs, and to a record, when the macro gets another value. |
 | `macro-repave.sh` | The macro repave test (#72): a macro in a field that repaves cluster A, and what a change of its value alone does. It ends with a repave that waits for approval; `live-down` follows it. |
@@ -154,6 +156,7 @@ they found it. `packs.sh` and `knurl.sh` read the profiles and change nothing.
 creates at once. `validate-packs.sh` asks validate routes, which change nothing.
 `merge-gate.sh` makes one edit in place, and puts it back.
 `who.sh` makes one edit in place at a time, and puts each back.
+`draft.sh` makes one draft, publishes it, and puts the edit back.
 `pending.sh` checks the baseline before it starts, and puts each change back.
 `macros.sh` does the same, and deletes the macro it makes.
 `repave.sh` checks the baseline before it starts, puts each change back, and takes no update on cluster A.
@@ -181,6 +184,7 @@ each.
 | `cluster.sh` | the value cluster A gives one variable; then the cluster, deleted through the API | the profiles |
 | `order.sh` | the pack order of two published versions, and the profile order of cluster A | the packs, the values, the manifests; it leaves the versions edited |
 | `who.sh` | the add-on version, edited in place and put back; with a cluster, the update that cluster A accepts, and its undo | the profiles, the clusters |
+| `draft.sh` | the manifest of the add-on version, in a draft and then published; it puts the edit back | the profiles, the clusters |
 | `pending.sh` | a manifest of the add-on version, a value of the release version, and the add-on version number, each in place and put back; the updates that cluster A accepts | the clusters, the flag (off), the baseline |
 | `macros.sh` | a project macro, and the manifest of the add-on version that reads it; the update that cluster A accepts; all put back | the clusters, the flag (off), the baseline |
 | `macro-repave.sh` | a project macro in the Kubernetes pack of the release version, and then its value alone; it leaves a repave that waits for approval | the flag (off); it ends with the removal of the example |
@@ -532,6 +536,7 @@ just live-order                                                                #
 just live-pack-states                                                          # #68, needs no cluster
 just live-knurl                                                                # #66, read-only; the instance checks need just live-up
 just live-who                                                                  # #69, stage 2 needs just live-up
+just live-draft                                                                # #155, needs just live-profiles
 just live-pending                                                              # #70, needs just live-up
 just live-macros                                                               # #72, needs just live-up
 just live-macro-repave                                                         # #72, needs just live-up; leaves a repave that waits, so live-down follows
