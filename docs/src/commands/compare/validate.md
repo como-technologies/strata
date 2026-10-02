@@ -37,8 +37,9 @@ such as `PackSpectroIntegrationNotSupported`, and a `message`. Strata does not
 send that request again. It prints the refusal as one `refuses` line with no
 pack: `palette    refuses: <code>: <message>`. Each code is in
 [Refusals that strata does not send again](../../reference/errors.md#refusals-that-strata-does-not-send-again).
-Another HTTP error, for example a `403`, or a `500` with another code, is an
-error of strata and exits `2`.
+One refusal comes as HTTP `403`, `PackValuesOverrideForbidden`, and strata
+prints it the same way. Another HTTP error, for example a `403` with another
+code, or a `500` with another code, is an error of strata and exits `2`.
 
 It costs two requests, the cluster document and one `POST` to
 `/v1/spectroclusters/<uid>/validate/packs`, with the body of `--repave`. The

@@ -369,9 +369,9 @@ pub const REFUSAL_CODES: [&str; 7] = [
 
 /// The codes of the refusals of the whole request that `POST
 /// /v1/spectroclusters/{uid}/validate/packs` answers with HTTP 500: the checks of the YAML, of
-/// the metadata of the packs, and of the integration packs. `compare --validate` reads them as
-/// the answer of Palette. A retry gets the same refusal.
-pub const PACK_REFUSAL_CODES: [&str; 10] = [
+/// the metadata of the packs, of the integration packs, and of their OIDC identity provider.
+/// `compare --validate` reads them as the answer of Palette. A retry gets the same refusal.
+pub const PACK_REFUSAL_CODES: [&str; 11] = [
     "PackValuesYamlInvalid",
     "PackManifestYamlInvalid",
     "ClusterDashboardPacksMutuallyExclusive",
@@ -381,8 +381,15 @@ pub const PACK_REFUSAL_CODES: [&str; 10] = [
     "DuplicateClusterPacksForbidden",
     "MultiPackVersionsForbidden",
     "PackSpectroIntegrationNotSupported",
+    "ClusterProfileOidcNotConfigured",
     "DisabledPacksForbidden",
 ];
+
+/// The code of the one refusal of `validate/packs` that Palette answers with HTTP 403, and not
+/// 500: its constructor sets the response type `Forbidden`. A pack that an integration pack
+/// needs read-only has values other than its defaults. `compare --validate` reads it as the
+/// answer of Palette.
+pub const PACK_FORBIDDEN_CODE: &str = "PackValuesOverrideForbidden";
 
 /// The `code` of the body of a Palette error, when the body is JSON with one.
 pub fn error_code(body: &str) -> Option<String> {

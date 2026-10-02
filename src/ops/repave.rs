@@ -6,7 +6,7 @@ use serde_json::{Value, json};
 
 use crate::api::{Palette, PaletteApi};
 use crate::diff::{ImpactLevel, PaletteRefusal, PaletteRepave, PaletteValidation};
-use crate::error::{Error, PACK_REFUSAL_CODES, Result, error_code};
+use crate::error::{Error, PACK_FORBIDDEN_CODE, PACK_REFUSAL_CODES, Result, error_code};
 use crate::snapshot::{AppliedProfile, ClusterSource, Snapshot, SubjectKind};
 
 /// A profile type that builds a cluster: its OS and Kubernetes layers.
@@ -122,8 +122,9 @@ pub fn palette_repave<A: PaletteApi>(
 /// Ask Palette whether it accepts the packs of the profile side on the cluster side: `POST
 /// validate/packs` with the body of `--repave`, which changes nothing. The sides follow the rules
 /// of [`palette_repave`]. Palette answers `200` with an error for each pack it refuses. It
-/// refuses the whole request with HTTP 500 and a code of [`PACK_REFUSAL_CODES`]: that is an
-/// answer too, and the retry does not send it again. Each other error is an error of strata.
+/// refuses the whole request with HTTP 500 and a code of [`PACK_REFUSAL_CODES`], or with HTTP 403
+/// and [`PACK_FORBIDDEN_CODE`]: that is an answer too, and the retry does not send it again. Each
+/// other error is an error of strata.
 pub fn palette_validation<A: PaletteApi>(
     palette: &Palette<A>,
     a: &Snapshot,
@@ -131,11 +132,16 @@ pub fn palette_validation<A: PaletteApi>(
 ) -> Result<PaletteValidation> {
     let (cluster, target) = cluster_and_target(a, b, "--validate")?;
     let running = AppliedProfile::of_cluster(&palette.cluster_document(&cluster.uid)?);
+    let refusal = |status: u16, body: &str| {
+        error_code(body).is_some_and(|c| match status {
+            500 => PACK_REFUSAL_CODES.contains(&c.as_str()),
+            403 => c == PACK_FORBIDDEN_CODE,
+            _ => false,
+        })
+    };
     match palette.validate_packs(&cluster.uid, &validate_body(&running, target)) {
         Ok(answer) => Ok(PaletteValidation::from_palette(&cluster.uid, &answer)),
-        Err(Error::Api {
-            status: 500, body, ..
-        }) if error_code(&body).is_some_and(|c| PACK_REFUSAL_CODES.contains(&c.as_str())) => {
+        Err(Error::Api { status, body, .. }) if refusal(status, &body) => {
             let error: Value = serde_json::from_str(&body).unwrap_or(Value::Null);
             let text = |key: &str| {
                 error

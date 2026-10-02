@@ -70,8 +70,14 @@ The checks, in order:
 4. The integration packs: a pack that the cloud of the cluster does not
    support, and on an imported cluster each integration pack but Headlamp, is a
    refusal of the whole request, `PackSpectroIntegrationNotSupported`.
-5. The pack validator, over the packs of each profile of the body that is not a
-   system profile: the values of each pack, and the dependencies of each pack.
+5. The integration packs again: the OIDC identity provider that an integration
+   pack names is set in the Kubernetes pack or in the organization
+   (`ClusterProfileOidcNotConfigured`), and a pack that an integration pack
+   names as a read-only dependency keeps the default values of that pack
+   (`PackValuesOverrideForbidden`). Then the pack validator, over the packs of
+   each profile of the body that is not a system profile: no disabled pack
+   (`DisabledPacksForbidden`), the values of each pack, and the dependencies of
+   each pack.
    A dependency is checked over the packs of all the profiles of the body, so a
    pack that needs a newer version of a pack in another profile of the cluster
    fails here: `DependencyPackWithMinVersionRequired`,
@@ -85,11 +91,14 @@ that name, and gives the profiles in no fixed order. With no error, the answer
 has no profile. `machinePools` stays empty: the route checks no machine. The
 route does not say whether the change repaves: `validate/repave` answers that.
 
-A refusal of the whole request, from steps 1, 3, 4, and the disabled packs of
-step 5, is HTTP `500` with `code` and `message`. Palette gives each new error
-the response type of a server fault, and these errors set no other type. So a
-refusal by design arrives with the status of a fault. The codes are in
+A refusal of the whole request, from the YAML check of step 1, from steps 3 and
+4, and from step 5 before the values and the dependencies, is HTTP `500` with
+`code` and `message`. Palette gives each new error the response type of a
+server fault, and these errors set no other type. So a refusal by design
+arrives with the status of a fault. The codes are in
 [Refusals that strata does not send again](../../reference/errors.md#refusals-that-strata-does-not-send-again).
+One refusal sets another type: `PackValuesOverrideForbidden` is HTTP `403`.
+A cluster that does not exist is HTTP `404`.
 
 No live run has asked this route yet. Stage 7 of `repave.sh` asks it on
 cluster A: see [repave.sh](../../development/live-runs.md#repavesh).

@@ -6849,6 +6849,32 @@ fn compare_validate_prints_each_error_of_palette_and_keeps_the_exit_of_the_compa
     );
     assert_eq!(api.calls(&path), 1, "one attempt and no retry");
     assert!(slept.borrow().is_empty());
+    // the check of the OIDC identity provider of an integration pack refuses with a 500 too, and
+    // the check of a read-only dependency of an integration pack with a 403
+    for (status, code, message) in [
+        (
+            500,
+            "ClusterProfileOidcNotConfigured",
+            "Pack 'Spectro Proxy' OIDC is not configured at kubernetes pack",
+        ),
+        (
+            403,
+            "PackValuesOverrideForbidden",
+            "Pack 'nginx' values override is forbidden",
+        ),
+    ] {
+        let body = serde_json::json!({"code": code, "message": message}).to_string();
+        let api = cluster_api
+            .clone()
+            .failing_n_times(path.clone(), 99, status, body);
+        let (retry, _) = retrying(&api, 3);
+        let v = ops::palette_validation(&Palette::new(retry), &cluster, &target).unwrap();
+        assert_eq!(
+            (v.errors[0].code.as_str(), v.errors[0].message.as_str()),
+            (code, message)
+        );
+        assert_eq!(api.calls(&path), 1, "{code}: one attempt and no retry");
+    }
     // a 500 with a code that is not a refusal, and a refused key, are errors of strata
     for (status, body) in [
         (
@@ -6856,6 +6882,8 @@ fn compare_validate_prints_each_error_of_palette_and_keeps_the_exit_of_the_compa
             r#"{"code":"DataReadError","message":"Data access error"}"#,
         ),
         (403, r#"{"code":"Forbidden"}"#),
+        // a refusal code of the route with another status is not its refusal
+        (403, r#"{"code":"ClusterProfileOidcNotConfigured"}"#),
     ] {
         let api = cluster_api.clone().failing(path.clone(), status, body);
         let err = ops::palette_validation(&Palette::new(&api), &cluster, &target).unwrap_err();

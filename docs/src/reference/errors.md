@@ -90,7 +90,13 @@ HTTP `500` and one of these codes. Strata does not send it again, and
 | `DuplicateClusterPacksForbidden` | One pack in two profiles of the cluster. |
 | `MultiPackVersionsForbidden` | Two versions of one pack across the profiles. |
 | `PackSpectroIntegrationNotSupported` | An integration pack that the cloud, or an imported cluster, does not support. |
+| `ClusterProfileOidcNotConfigured` | An integration pack whose OIDC identity provider is set in neither the Kubernetes pack nor the organization. |
 | `DisabledPacksForbidden` | A pack that is disabled. |
+
+The same route refuses one more case with HTTP `403`, and not `500`:
+`PackValuesOverrideForbidden`, a pack that an integration pack names as a
+read-only dependency, with values other than its defaults. `compare --validate`
+prints it as the answer of Palette too. Each other `403` is an error of strata.
 
 A 5xx with a different code, or with no code, is a fault. Strata sends the
 request again.
