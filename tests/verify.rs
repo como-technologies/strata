@@ -2175,6 +2175,15 @@ fn the_second_reading_asks_the_cluster_search_and_finds_a_virtual_cluster() {
     }
 }
 
+/// The key under which the memory API keeps the POST of the virtual clusters of the group `g1`:
+/// the path and the body.
+static MEMBERS_POST: std::sync::LazyLock<String> = std::sync::LazyLock::new(|| {
+    format!(
+        "POST /v1/dashboard/clustergroups/g1/virtualClusters?limit=50 {}",
+        serde_json::json!({"filter": {}, "sort": []})
+    )
+});
+
 /// A Palette with one cluster group `g1` that pins the profile `UID_A`, and one virtual cluster
 /// `vc-1` in it that runs the profile through the group. The search answers no cluster: it does
 /// not name a virtual cluster that runs the version through its group (#184).
@@ -2340,11 +2349,7 @@ fn the_second_reading_reads_a_group_in_the_scope_of_the_key_when_the_tenant_cann
     common::make_fixtures(dir.path());
     let tenant = with_pinning_group(serve(MemoryApi::new(), dir.path(), "a", UID_A))
         .failing("/v1/clustergroups/g1", 403, "forbidden")
-        .failing(
-            "POST /v1/dashboard/clustergroups/g1/virtualClusters?limit=50",
-            403,
-            "forbidden",
-        );
+        .failing(MEMBERS_POST.as_str(), 403, "forbidden");
     let home = with_pinning_group(serve(MemoryApi::new(), dir.path(), "a", UID_A));
     let r = ops::consumers(
         &Ref::Uid(UID_A.into()),
@@ -2362,6 +2367,9 @@ fn the_second_reading_reads_a_group_in_the_scope_of_the_key_when_the_tenant_cann
     assert!(r.clusters_read.groups_error.is_none());
     assert_eq!(tenant.calls("/v1/clustergroups/g1"), 1);
     assert_eq!(home.calls("/v1/clustergroups/g1"), 1);
+    // the tenant refuses the virtual clusters of the group too, and the scope of the key lists them
+    assert_eq!(tenant.calls(&MEMBERS_POST), 1);
+    assert_eq!(home.calls(&MEMBERS_POST), 1);
 }
 
 #[test]
