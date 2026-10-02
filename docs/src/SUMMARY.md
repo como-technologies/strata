@@ -26,6 +26,7 @@
   - [Two versions](./commands/compare/versions.md)
   - [Two clusters](./commands/compare/clusters.md)
   - [Ask Palette if the change repaves](./commands/compare/repave.md)
+  - [Ask Palette if it accepts the packs](./commands/compare/validate.md)
   - [A pull request comment and a script](./commands/compare/scripts.md)
 - [same-release](./commands/same-release.md)
 - [verify](./commands/verify.md)

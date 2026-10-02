@@ -1,8 +1,9 @@
 # Palette API requests
 
-Strata reads. Most requests are `GET` requests. Five are `POST` requests, and
+Strata reads. Most requests are `GET` requests. Six are `POST` requests, and
 none of them changes anything: four are searches that Palette takes as a
-`POST`, and `compare --repave` asks Palette a question. Each request has the
+`POST`, and `compare --repave` and `compare --validate` ask Palette a
+question. Each request has the
 headers `ApiKey` and `Accept: application/json`. A request in a project has
 the header `ProjectUid` too. The
 [Palette API reference](https://docs.spectrocloud.com/api/v1/) gives the shape
@@ -37,6 +38,7 @@ variables. The record says so in `source.variablesUnavailable`: see
 | `GET /v1/spectroclusters/{uid}/packs/resolvedValues` | The value that Palette gives each macro, for `snapshot --macros`, and `verify` of a record that holds macro digests. |
 | `GET /v1/cloudconfigs/{cloudType}/{configUid}` | The machine pools and the cloud part of the cluster, for `snapshot --shape`, and `verify` of a record that holds the `shape` tier. |
 | `POST /v1/spectroclusters/{uid}/validate/repave` | Whether a change of the profiles of the cluster replaces its nodes, for `compare --repave`. The request changes nothing. |
+| `POST /v1/spectroclusters/{uid}/validate/packs` | Whether Palette accepts the packs of a change of the profiles of the cluster, for `compare --validate`. It takes the body of `validate/repave`, and changes nothing. |
 
 ## The fleet
 

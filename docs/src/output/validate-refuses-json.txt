@@ -1,0 +1,12 @@
+$ strata compare cluster:payments aws-stack@1.1.7 --validate --json | jq .paletteValidation
+{
+  "clusterUid": "64f1000000000000000000e1",
+  "accepts": false,
+  "errors": [
+    {
+      "pack": "kubernetes",
+      "code": "DependencyPackWithMinVersionRequired",
+      "message": "Pack 'cni-cilium-oss' is required with minimum compatible version '1.21.0'"
+    }
+  ]
+}

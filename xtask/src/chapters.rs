@@ -1568,6 +1568,48 @@ fn use_cases(r: &mut Runner) {
         "strata compare aws-stack@1.1.1 aws-stack@1.1.6 --repave",
     );
 
+    // Palette's own check of the packs of the change on the cluster: a refusal, and an accept
+    r.packs_answer(
+        DEV,
+        PAYMENTS,
+        Some((A117, "kubernetes", "cni-cilium-oss", "1.21.0")),
+    );
+    r.step(
+        "validate-refuses",
+        1,
+        false,
+        "strata compare cluster:payments aws-stack@1.1.7 --validate",
+    );
+    r.excerpt(
+        "validate-refuses-lines",
+        "validate-refuses",
+        r"^(aws-stack|root |palette|[ ~] \[k8s|  \[cni)",
+    );
+    r.step(
+        "validate-refuses-json",
+        1,
+        false,
+        "strata compare cluster:payments aws-stack@1.1.7 --validate --json | jq .paletteValidation",
+    );
+    r.packs_answer(DEV, PAYMENTS, None);
+    r.step(
+        "validate-accepts",
+        1,
+        false,
+        "strata compare cluster:payments aws-stack@1.1.2 --validate",
+    );
+    r.excerpt(
+        "validate-accepts-lines",
+        "validate-accepts",
+        r"^(aws-stack|root |palette|[ ~] \[csi)",
+    );
+    r.step(
+        "validate-usage",
+        2,
+        true,
+        "strata compare aws-stack@1.1.1 aws-stack@1.1.7 --validate",
+    );
+
     // More of a cluster than its release: the tiers that Palette reports of the cluster
     r.chapter("cluster-tiers", DEV_ENV);
     r.projects(&[("dev", DEV)]);

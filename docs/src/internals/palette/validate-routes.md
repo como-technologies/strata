@@ -4,7 +4,8 @@ Palette has routes that check a cluster before a create. The console calls them
 in its create wizard, and a create through the API goes to the create route.
 This page states what each route checks, from the source of Palette (hubble on
 master), and who calls it. `strata preflight` calls each one that takes the
-body of a create.
+body of a create. One more route checks the packs of a cluster before an update
+of its profiles: `compare --validate` calls it.
 
 ## POST /v1/spectroclusters/{cloudType}/validate
 
@@ -48,6 +49,60 @@ palette-cli, and the SDK for cloud clusters do not. The create path of the API
 runs the checks of the name and the limits, not those of the packs and the
 machines.
 
+## POST /v1/spectroclusters/{uid}/validate/packs
+
+This route checks a cluster before an update of its profiles. The body is a
+`v1SpectroClusterPacksEntity`, the body of `validate/repave`: `profiles[]`,
+each with a `uid` and the `packValues` to send. The route treats the profiles
+of the body as all the profiles that the cluster will run. `compare --validate`
+sends it.
+
+The checks, in order:
+
+1. The cluster exists, and the values of each pack of the body are YAML.
+2. For each profile of the body, Palette builds the target: the copy that the
+   cluster holds of that uid, or the published profile for a new uid, with the
+   sent values over it.
+3. The metadata of the packs: two dashboard packs that cannot go together, the
+   names of the packs and the manifests, one pack or one manifest two times in
+   a profile, one pack name in two profiles of one workload scope (the system
+   scope or the app scope), and two versions of one pack across the profiles.
+4. The integration packs: a pack that the cloud of the cluster does not
+   support, and on an imported cluster each integration pack but Headlamp, is a
+   refusal of the whole request, `PackSpectroIntegrationNotSupported`.
+5. The integration packs again: the OIDC identity provider that an integration
+   pack names is set in the Kubernetes pack or in the organization
+   (`ClusterProfileOidcNotConfigured`), and a pack that an integration pack
+   names as a read-only dependency keeps the default values of that pack
+   (`PackValuesOverrideForbidden`). Then the pack validator, over the packs of
+   each profile of the body that is not a system profile: no disabled pack
+   (`DisabledPacksForbidden`), the values of each pack, and the dependencies of
+   each pack.
+   A dependency is checked over the packs of all the profiles of the body, so a
+   pack that needs a newer version of a pack in another profile of the cluster
+   fails here: `DependencyPackWithMinVersionRequired`,
+   `Pack '<pack>' is required with minimum compatible version '<version>'`. On
+   an imported cluster, only the values are checked.
+
+The answer is `200` with `profiles[]`: only the profiles with an error, each
+with its `uid` and `packs.results[].errors[]` of `code` and `message`. Palette
+puts the error of a pack under each profile of the body that holds a pack of
+that name, and gives the profiles in no fixed order. With no error, the answer
+has no profile. `machinePools` stays empty: the route checks no machine. The
+route does not say whether the change repaves: `validate/repave` answers that.
+
+A refusal of the whole request, from the YAML check of step 1, from steps 3 and
+4, and from step 5 before the values and the dependencies, is HTTP `500` with
+`code` and `message`. Palette gives each new error the response type of a
+server fault, and these errors set no other type. So a refusal by design
+arrives with the status of a fault. The codes are in
+[Refusals that strata does not send again](../../reference/errors.md#refusals-that-strata-does-not-send-again).
+One refusal sets another type: `PackValuesOverrideForbidden` is HTTP `403`.
+A cluster that does not exist is HTTP `404`.
+
+No live run has asked this route yet. Stage 7 of `repave.sh` asks it on
+cluster A: see [repave.sh](../../development/live-runs.md#repavesh).
+
 ## The property routes
 
 Each answers `204` on success, and a 4xx `V1Error` on a fault. Each calls the
@@ -86,7 +141,10 @@ these, and prints `NOT CHECKED` with the command for the rest: see
 
 The source of hubble on master:
 `services/service/spectrocluster/internal/service/spectrocluster/internal/base/spectrocluster_validate.go`
-(the profiles and the machines), `handler/converter/v1/clusters_v1_converter.go`
+(the profiles and the machines), `internal/base/spectrocluster_profile.go` and
+`internal/base/spectrocluster_base.go` in the same directory (`validate/packs`
+of a cluster, and the shape of its answer),
+`handler/converter/v1/clusters_v1_converter.go`
 (the converter, and the GKE pool size), `aws/spectrocluster_aws_validate.go`
 (the zones and the CIDRs of AWS), and
 `services/service/cloud/internal/service/cloudservice/{aws,gcp}_service.go`

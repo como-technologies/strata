@@ -1,12 +1,13 @@
-//! `compare --repave`: ask Palette whether a change from what a cluster runs to a profile
-//! version replaces the nodes of the cluster.
+//! `compare --repave` and `compare --validate`: ask Palette whether a change from what a cluster
+//! runs to a profile version replaces the nodes of the cluster, and whether Palette accepts its
+//! packs.
 
 use serde_json::{Value, json};
 
 use crate::api::{Palette, PaletteApi};
-use crate::diff::{ImpactLevel, PaletteRepave};
-use crate::error::{Error, Result};
-use crate::snapshot::{AppliedProfile, Snapshot, SubjectKind};
+use crate::diff::{ImpactLevel, PaletteRefusal, PaletteRepave, PaletteValidation};
+use crate::error::{Error, PACK_FORBIDDEN_CODE, PACK_REFUSAL_CODES, Result, error_code};
+use crate::snapshot::{AppliedProfile, ClusterSource, Snapshot, SubjectKind};
 
 /// A profile type that builds a cluster: its OS and Kubernetes layers.
 fn is_infra(kind: &str) -> bool {
@@ -59,31 +60,29 @@ pub fn validate_body(running: &[AppliedProfile], target: &Snapshot) -> Value {
     json!({ "profiles": profiles })
 }
 
-/// Ask Palette whether moving the cluster side of a comparison to its profile side repaves the
-/// cluster. One side must be a cluster, and the other a profile version with a uid, in either
-/// order. It reads the cluster document for the profiles it runs now, and sends one POST, which
-/// changes nothing. `level` is the most severe level of the impact table, for `agrees`.
-pub fn palette_repave<A: PaletteApi>(
-    palette: &Palette<A>,
-    a: &Snapshot,
-    b: &Snapshot,
-    level: ImpactLevel,
-) -> Result<PaletteRepave> {
+/// The cluster side and the profile side of a comparison, for the question of `option`. One side
+/// must be a cluster, and the other a profile version with a uid, in either order. Any other pair
+/// is a usage error.
+fn cluster_and_target<'a>(
+    a: &'a Snapshot,
+    b: &'a Snapshot,
+    option: &str,
+) -> Result<(&'a ClusterSource, &'a Snapshot)> {
     let (cluster, target) = match (&a.source.cluster, &b.source.cluster) {
         (Some(c), None) => (c, b),
         (None, Some(c)) => (c, a),
         _ => {
             return Err(Error::Usage {
-                message: "--repave needs one side that is a cluster and one that is a \
-                          profile version"
-                    .to_string(),
+                message: format!(
+                    "{option} needs one side that is a cluster and one that is a profile version"
+                ),
             });
         }
     };
     if !cluster.kind.is_cluster() {
         return Err(Error::Usage {
             message: format!(
-                "--repave needs a cluster: Palette answers it for a cluster, and not for {} {}",
+                "{option} needs a cluster: Palette answers it for a cluster, and not for {} {}",
                 if cluster.kind == SubjectKind::EdgeHost {
                     "an"
                 } else {
@@ -95,12 +94,69 @@ pub fn palette_repave<A: PaletteApi>(
     }
     if target.source.pack.is_some() || target.source.uid.is_empty() {
         return Err(Error::Usage {
-            message: "--repave needs the profile side to be a profile version that \
-                      Palette holds, with its uid"
-                .to_string(),
+            message: format!(
+                "{option} needs the profile side to be a profile version that Palette holds, \
+                 with its uid"
+            ),
         });
     }
+    Ok((cluster, target))
+}
+
+/// Ask Palette whether moving the cluster side of a comparison to its profile side repaves the
+/// cluster. One side must be a cluster, and the other a profile version with a uid, in either
+/// order. It reads the cluster document for the profiles it runs now, and sends one POST, which
+/// changes nothing. `level` is the most severe level of the impact table, for `agrees`.
+pub fn palette_repave<A: PaletteApi>(
+    palette: &Palette<A>,
+    a: &Snapshot,
+    b: &Snapshot,
+    level: ImpactLevel,
+) -> Result<PaletteRepave> {
+    let (cluster, target) = cluster_and_target(a, b, "--repave")?;
     let running = AppliedProfile::of_cluster(&palette.cluster_document(&cluster.uid)?);
     let answer = palette.validate_repave(&cluster.uid, &validate_body(&running, target))?;
     Ok(PaletteRepave::from_palette(&cluster.uid, &answer, level))
+}
+
+/// Ask Palette whether it accepts the packs of the profile side on the cluster side: `POST
+/// validate/packs` with the body of `--repave`, which changes nothing. The sides follow the rules
+/// of [`palette_repave`]. Palette answers `200` with an error for each pack it refuses. It
+/// refuses the whole request with HTTP 500 and a code of [`PACK_REFUSAL_CODES`], or with HTTP 403
+/// and [`PACK_FORBIDDEN_CODE`]: that is an answer too, and the retry does not send it again. Each
+/// other error is an error of strata.
+pub fn palette_validation<A: PaletteApi>(
+    palette: &Palette<A>,
+    a: &Snapshot,
+    b: &Snapshot,
+) -> Result<PaletteValidation> {
+    let (cluster, target) = cluster_and_target(a, b, "--validate")?;
+    let running = AppliedProfile::of_cluster(&palette.cluster_document(&cluster.uid)?);
+    let refusal = |status: u16, body: &str| {
+        error_code(body).is_some_and(|c| match status {
+            500 => PACK_REFUSAL_CODES.contains(&c.as_str()),
+            403 => c == PACK_FORBIDDEN_CODE,
+            _ => false,
+        })
+    };
+    match palette.validate_packs(&cluster.uid, &validate_body(&running, target)) {
+        Ok(answer) => Ok(PaletteValidation::from_palette(&cluster.uid, &answer)),
+        Err(Error::Api { status, body, .. }) if refusal(status, &body) => {
+            let error: Value = serde_json::from_str(&body).unwrap_or(Value::Null);
+            let text = |key: &str| {
+                error
+                    .get(key)
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .to_string()
+            };
+            let refusal = PaletteRefusal {
+                pack: String::new(),
+                code: text("code"),
+                message: text("message"),
+            };
+            Ok(PaletteValidation::refused(&cluster.uid, vec![refusal]))
+        }
+        Err(e) => Err(e),
+    }
 }

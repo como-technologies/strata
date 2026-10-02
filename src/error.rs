@@ -367,12 +367,43 @@ pub const REFUSAL_CODES: [&str; 7] = [
     "InvalidLimit",
 ];
 
-/// True when the body of a Palette error is JSON with a `code` in [`REFUSAL_CODES`].
-fn is_refusal(body: &str) -> bool {
+/// The codes of the refusals of the whole request that `POST
+/// /v1/spectroclusters/{uid}/validate/packs` answers with HTTP 500: the checks of the YAML, of
+/// the metadata of the packs, of the integration packs, and of their OIDC identity provider.
+/// `compare --validate` reads them as the answer of Palette. A retry gets the same refusal.
+pub const PACK_REFUSAL_CODES: [&str; 11] = [
+    "PackValuesYamlInvalid",
+    "PackManifestYamlInvalid",
+    "ClusterDashboardPacksMutuallyExclusive",
+    "InvalidName",
+    "DuplicatePacksForbidden",
+    "DuplicatePackManifestsForbidden",
+    "DuplicateClusterPacksForbidden",
+    "MultiPackVersionsForbidden",
+    "PackSpectroIntegrationNotSupported",
+    "ClusterProfileOidcNotConfigured",
+    "DisabledPacksForbidden",
+];
+
+/// The code of the one refusal of `validate/packs` that Palette answers with HTTP 403, and not
+/// 500: its constructor sets the response type `Forbidden`. A pack that an integration pack
+/// needs read-only has values other than its defaults. `compare --validate` reads it as the
+/// answer of Palette.
+pub const PACK_FORBIDDEN_CODE: &str = "PackValuesOverrideForbidden";
+
+/// The `code` of the body of a Palette error, when the body is JSON with one.
+pub fn error_code(body: &str) -> Option<String> {
     serde_json::from_str::<Value>(body)
         .ok()
         .and_then(|v| v.get("code").and_then(Value::as_str).map(str::to_owned))
-        .is_some_and(|code| REFUSAL_CODES.contains(&code.as_str()))
+}
+
+/// True when the body of a Palette error is JSON with a `code` in [`REFUSAL_CODES`] or in
+/// [`PACK_REFUSAL_CODES`].
+fn is_refusal(body: &str) -> bool {
+    error_code(body).is_some_and(|code| {
+        REFUSAL_CODES.contains(&code.as_str()) || PACK_REFUSAL_CODES.contains(&code.as_str())
+    })
 }
 
 /// `a, b, c`, or `none` for an empty list.
@@ -901,7 +932,8 @@ pub enum FailureClass {
     /// longer than strata waits.
     Transient,
     /// It stays while the inputs stay: another HTTP 4xx, a 5xx with a code in
-    /// [`REFUSAL_CODES`], a thing that is not there, a file or a setting that is not valid.
+    /// [`REFUSAL_CODES`] or [`PACK_REFUSAL_CODES`], a thing that is not there, a file or a
+    /// setting that is not valid.
     Terminal,
     /// Strata cannot tell.
     Unknown,

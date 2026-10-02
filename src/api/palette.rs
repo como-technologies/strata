@@ -1007,6 +1007,16 @@ impl<A: PaletteApi> Palette<A> {
         )
     }
 
+    /// Palette's answer to whether it accepts the packs of a change of the profiles of a cluster:
+    /// `POST /v1/spectroclusters/{uid}/validate/packs`, with the body of `validate/repave`. The
+    /// request changes nothing.
+    pub fn validate_packs(&self, uid: &str, body: &Value) -> Result<Value> {
+        self.api.post_json(
+            &format!("/v1/spectroclusters/{}/validate/packs", query_value(uid)),
+            body,
+        )
+    }
+
     /// The notifications of one cluster, `GET /v1/notifications/spectrocluster/{uid}`, every page,
     /// newest first. Palette gives `items: null` when there are none, and at most 50 on a page;
     /// `listmeta.continue` names the next page, and is empty on the last one.

@@ -95,6 +95,10 @@ pub struct Diff {
     /// cluster side, beside the level of the impact table.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub palette_repave: Option<PaletteRepave>,
+    /// With `compare --validate`: what Palette answers when asked if it accepts the packs of the
+    /// change on the cluster side.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub palette_validation: Option<PaletteValidation>,
 }
 
 /// Plain-language meaning of every flag and enum value, for readers without the docs.
@@ -838,6 +842,94 @@ impl PaletteRepave {
             required,
             reasons,
             agrees,
+        }
+    }
+}
+
+/// Palette's answer to `POST /v1/spectroclusters/{uid}/validate/packs`, for a change from what a
+/// cluster runs to a profile version.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct PaletteValidation {
+    /// The cluster that Palette was asked about.
+    pub cluster_uid: String,
+    /// True when Palette gives no error.
+    pub accepts: bool,
+    /// Each error that Palette gives, sorted by pack, code, and message: Palette sorts the
+    /// profiles in no fixed order.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub errors: Vec<PaletteRefusal>,
+}
+
+/// One error that Palette gives for a pack.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct PaletteRefusal {
+    /// The pack that the error is about. Empty when Palette refuses the whole request.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub pack: String,
+    /// For example `PackDependencyNotFound`.
+    pub code: String,
+    /// Palette's sentence.
+    pub message: String,
+}
+
+impl PaletteRefusal {
+    /// The errors of a `v1ConstraintValidatorResponse`: `results[]`, each with the `name` of its
+    /// pack and `errors[]` of `code` and `message`.
+    pub fn from_constraints(answer: &Value) -> Vec<PaletteRefusal> {
+        let text = |v: &Value, key: &str| {
+            v.get(key)
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string()
+        };
+        answer
+            .get("results")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .flat_map(|r| {
+                let pack = text(r, "name");
+                r.get("errors")
+                    .and_then(Value::as_array)
+                    .into_iter()
+                    .flatten()
+                    .map(move |e| PaletteRefusal {
+                        pack: pack.clone(),
+                        code: text(e, "code"),
+                        message: text(e, "message"),
+                    })
+            })
+            .collect()
+    }
+}
+
+impl PaletteValidation {
+    /// Read Palette's answer: the errors under `profiles[].packs` and under `machinePools`.
+    /// Palette gives the error of a pack under each profile that holds a pack of that name, so
+    /// strata keeps one copy.
+    pub fn from_palette(cluster_uid: &str, answer: &Value) -> PaletteValidation {
+        let errors = answer
+            .get("profiles")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter_map(|p| p.get("packs"))
+            .chain(answer.get("machinePools"))
+            .flat_map(PaletteRefusal::from_constraints)
+            .collect();
+        PaletteValidation::refused(cluster_uid, errors)
+    }
+
+    /// The answer with these errors, sorted and with no copy. It accepts when there is none.
+    pub fn refused(cluster_uid: &str, mut errors: Vec<PaletteRefusal>) -> PaletteValidation {
+        errors.sort();
+        errors.dedup();
+        PaletteValidation {
+            cluster_uid: cluster_uid.to_string(),
+            accepts: errors.is_empty(),
+            errors,
         }
     }
 }
@@ -1597,6 +1689,7 @@ pub fn compute(a: &Snapshot, b: &Snapshot, generated_at: &str, verify: Option<Ve
         },
         macros_changed: macros_changed(a, b),
         palette_repave: None,
+        palette_validation: None,
         upstream_unknown: packs
             .iter()
             .filter(|p| p.upstream_unknown)

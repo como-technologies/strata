@@ -25,7 +25,7 @@ the kind.
 | `cluster-profile-not-found` | The cluster runs no profile with this name or uid. | `cluster`, `profile`, `applied` |
 | `profile-ref-required` | The command needs a profile, and got a cluster, an edge host, a cluster group, an app profile, a pack, or a record of one. | `reference` |
 | `record-not-a-source` | `snapshot` got a record. It writes one, and does not read one. | `path` |
-| `usage` | The command line cannot work as given, so strata sent no request. Examples: `snapshot` with no ref and no `--from-raw`, `snapshot --raw-dir` of a ref that is not a profile or a cluster, and `compare --repave` with an edge host or a cluster group, and `behind --since`
+| `usage` | The command line cannot work as given, so strata sent no request. Examples: `snapshot` with no ref and no `--from-raw`, `snapshot --raw-dir` of a ref that is not a profile or a cluster, and `compare --repave` or `compare --validate` with an edge host or a cluster group, and `behind --since`
 with a file that is not a `strata-behind/1` document. `snapshot` takes no `--json`, so this kind prints as a `strata:` line. | |
 | `candidate-invalid` | The candidate file has a problem. | `path` |
 | `pack-not-found` | The registry has no such pack version or tag. | `name`, `version`, `registry`, `tag` when given |
@@ -72,6 +72,31 @@ sent.
 | `ClusterProfileUpdateValidationFailure` | A change to a profile that is not valid. |
 | `ClusterProfileInvalidPackState` | A profile that pins a pack version that is disabled or deleted. |
 | `InvalidLimit` | A listing with a `limit` above the maximum. |
+
+`POST /v1/spectroclusters/{uid}/validate/packs` refuses the whole request with
+HTTP `500` and one of these codes. Strata does not send it again, and
+`compare --validate` prints the refusal as the answer of Palette, with exit
+`0` or `1` from the comparison:
+[Ask Palette if it accepts the packs](../commands/compare/validate.md).
+
+| Code | Palette refuses |
+| --- | --- |
+| `PackValuesYamlInvalid` | Pack values that are not YAML. |
+| `PackManifestYamlInvalid` | A manifest of a pack that is not YAML. |
+| `ClusterDashboardPacksMutuallyExclusive` | Two dashboard packs that cannot go together. |
+| `InvalidName` | A pack or a manifest with a name that is not valid. |
+| `DuplicatePacksForbidden` | One pack two times in a profile. |
+| `DuplicatePackManifestsForbidden` | One manifest two times in a pack. |
+| `DuplicateClusterPacksForbidden` | One pack in two profiles of the cluster. |
+| `MultiPackVersionsForbidden` | Two versions of one pack across the profiles. |
+| `PackSpectroIntegrationNotSupported` | An integration pack that the cloud, or an imported cluster, does not support. |
+| `ClusterProfileOidcNotConfigured` | An integration pack whose OIDC identity provider is set in neither the Kubernetes pack nor the organization. |
+| `DisabledPacksForbidden` | A pack that is disabled. |
+
+The same route refuses one more case with HTTP `403`, and not `500`:
+`PackValuesOverrideForbidden`, a pack that an integration pack names as a
+read-only dependency, with values other than its defaults. `compare --validate`
+prints it as the answer of Palette too. Each other `403` is an error of strata.
 
 A 5xx with a different code, or with no code, is a fault. Strata sends the
 request again.

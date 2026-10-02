@@ -19,6 +19,7 @@ takes:
 | [Two versions](compare/versions.md) | What changed between two profile versions, and the impact: how to read the report, `--full`, the images and the charts of a pack, and a version that replaces nodes. |
 | [Two clusters](compare/clusters.md) | The tiers of two clusters, a cluster against the update that waits for it, and a cluster group against a member. |
 | [Ask Palette if the change repaves](compare/repave.md) | `--repave`: the answer of Palette for one cluster, beside the level of the table. |
+| [Ask Palette if it accepts the packs](compare/validate.md) | `--validate`: the check of Palette of the packs of the change, on one cluster. |
 | [A pull request comment and a script](compare/scripts.md) | `--format markdown` for a pull request, and `--json` for a job. |
 
 ## Compare two identical refs
@@ -75,4 +76,5 @@ The markdown report writes the same line as a quotation.
 | --- | --- | --- |
 | `--full` | Adds a unified diff of the raw values and of each changed manifest. | [See the full diff](compare/versions.md#see-the-full-diff) |
 | `--repave` | Asks Palette if the change repaves the cluster side. One side must be a cluster. | [Ask Palette if the change repaves](compare/repave.md) |
+| `--validate` | Asks Palette if it accepts the packs of the change on the cluster side. One side must be a cluster. | [Ask Palette if it accepts the packs](compare/validate.md) |
 | `--format`, `--json`, `--compact`, `--color`, `--no-color`, `-q` (`--quiet`) | The output options that each report command takes. | [Output formats](./index.md#output-formats) |

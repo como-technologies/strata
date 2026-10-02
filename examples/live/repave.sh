@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # The repave test (#73): `compare --repave` asks Palette if a change repaves
-# cluster A, and prints the answer beside the level of the impact table.
+# cluster A, and prints the answer beside the level of the impact table. `compare --validate`
+# asks Palette if it accepts the packs of the change (#134).
 #
 #   examples/live/repave.sh [FROM_STAGE]
 #
@@ -15,6 +16,8 @@
 #   6  a new value in the OS pack, and a changed value in the CSI pack, asked with tenant.sh and
 #      with no edit of the profile: the answer of Palette for each layer that the impact table
 #      calls may-repave and cluster-wide (#81)
+#   7  `compare --validate` at the baseline: Palette accepts the packs of the release version on
+#      cluster A, and a side that is not a cluster is a usage error (#134)
 #
 # AWS and GCP run one upgrade engine, so every answer here agrees with the table. A disagreement
 # needs another engine, such as Edge, and no live run has one. Needs the live example at its baseline with
@@ -25,7 +28,7 @@
 set -uo pipefail
 script=repave
 from=${1:-1}
-case "$from" in 1|2|3|4|5|6) ;; *) sed -n '2,/^set -uo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; exit 2 ;; esac
+case "$from" in 1|2|3|4|5|6|7) ;; *) sed -n '2,/^set -uo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; exit 2 ;; esac
 . "$(cd "$(dirname "$0")" && pwd)/lib.sh"
 [ -x "$strata" ] || die "no strata binary at $strata"
 
@@ -126,6 +129,18 @@ if stage 6 "a value of the OS pack, and a value of the CSI pack"; then
 $os_first"
   check csi-value 0 "#81: a changed value in the CSI pack: Palette says no repave, and checks no CSI layer for one" -- \
     "$live/tenant.sh" repave "$C" "$R" "$R" "$csi_pack" "$(out csi_reclaim_delete)" "$(out csi_reclaim_delete | sed 's/Delete/Retain/')"
+fi
+
+if stage 7 "Palette's check of the packs"; then
+  require_baseline
+  check validate 0 "#134: a profile version equal to the copy of cluster A: the comparison is IDENTICAL, and Palette accepts its packs" -- \
+    "$strata" compare "cluster:$C/$release" "$R" --validate
+  check validate-says 0 "#134: the output has a palette line: accepts" -- grep -q '^palette    accepts$' validate.out
+  check validate-json 0 "#134: --json carries paletteValidation, accepts true, and no error" -- \
+    bash -c "\"$strata\" compare cluster:$C/$release $R --validate --json | jq -e '.paletteValidation | .accepts == true and .clusterUid == \"$C\" and (has(\"errors\") | not)'"
+  check validate-usage 2 "#134: two profile versions and no cluster: a usage error" -- \
+    "$strata" compare "$R" "$AD" --validate
+  check validate-usage-says 0 "and it says what it needs" -- grep -q '^strata: --validate needs one side that is a cluster' validate-usage.err
 fi
 
 echo

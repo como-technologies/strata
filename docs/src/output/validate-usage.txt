@@ -1,0 +1,5 @@
+$ strata compare aws-stack@1.1.1 aws-stack@1.1.7 --validate
+strata: looking up project dev
+strata: fetching profile 64e0000000000000000000c3
+strata: fetching profile 64e0000000000000000000fa
+strata: --validate needs one side that is a cluster and one that is a profile version
