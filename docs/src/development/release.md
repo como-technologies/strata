@@ -23,7 +23,9 @@
    ```
 
    The recipe refuses a dirty tree or a tag that exists.
-3. Push the commit and the tag. The tag starts the release workflow:
+3. Push the commit and the tag. The tag starts the release workflow. A push to
+   `main` with no pull request needs an admin of the repository: see
+   [How a change lands](./changes.md#the-merge).
 
    ```bash
    git push origin main

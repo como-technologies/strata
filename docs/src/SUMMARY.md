@@ -109,6 +109,7 @@
 # Development
 
 - [Build and test](./development/build-test.md)
+- [How a change lands](./development/changes.md)
 - [Release](./development/release.md)
 - [Write the documentation](./development/documentation.md)
 - [The offline examples](./development/examples.md)
