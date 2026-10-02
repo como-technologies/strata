@@ -1,0 +1,5 @@
+$ strata snapshot aws-stack@1.1.1 --validate -o checked.json
+strata: looking up project dev
+strata: fetching profile 64e0000000000000000000c3
+palette    accepts
+strata: wrote checked.json (root 088136c929bd)

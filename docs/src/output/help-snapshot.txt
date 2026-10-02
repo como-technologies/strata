@@ -15,6 +15,8 @@ Options:
           Read the raw answers of --raw-dir, with no network
       --from-candidate <FROM_CANDIDATE>
           Read a candidate file, before the version is in Palette
+      --validate
+          Ask Palette whether it takes the packs: of a candidate as a new profile, or of a profile version as an update of itself. A refusal exits 2 and writes no record
       --compact
           Write the JSON on one line
       --macros

@@ -8,6 +8,7 @@ program can use the same parts:
 | `api::PaletteApi` | The Palette API. `HttpApi` calls Palette. `MemoryApi` serves documents from memory, for tests. |
 | `api::PaletteApi::post_json` | A `POST` that asks a question and changes nothing. `HttpApi` and `Retry` send it, and `MemoryApi::posted` keeps each body for a test. An API that cannot send it says so. |
 | `api::Palette::validate_repave`, `ops::palette_repave`, `ops::validate_body`, `diff::PaletteRepave` | Palette's answer to whether a change of the profiles of a cluster replaces its nodes, for a cluster and a profile version, with its reasons and whether it agrees with the impact table. |
+| `api::Palette::validate_profile_packs`, `ops::profile_validation`, `ops::profile_validate_body`, `ops::snapshot_from_candidate_validated`, `snapshot::ProfileValidation` | Palette's answer to whether it takes the packs of a candidate in a new profile, or of a profile version as an update of itself, with each error. `snapshot_from_candidate_validated` puts the answer in `source.paletteValidation`, and the caller decides what a refusal does. |
 | `api::Palette` | The client over a `PaletteApi`: the reads of a profile, a cluster, and a cluster summary. `audits`, `cluster_notifications`, and `resolved_values` read the audit log of a resource, the notifications of a cluster, and the value Palette gives each macro of a cluster. `api::Retry` tries a transient failure again. |
 | `config::Config` | Where Palette is, and the key. `Config::from_env` reads the environment and then `~/.palette.env`, as the command does. |
 | `reference::Ref` | What a ref means: a record file, `<name>@<version>`, a uid, `cluster:<name>` with `@pending` or not, `edgehost:<name>`, `clustergroup:<name>`, `appprofile:<name>@<version>`, `pack:<name>@<version>`, or a set of clusters, `tag:<key>=<value>` or `filter:<name>` (`Ref::ClusterSet`). |
@@ -35,7 +36,7 @@ program can use the same parts:
 | `diff::ParamChange` | Each param of a pack that differs between two sides: `PackDiff::param_changes`. For an app tier, a param is a property. |
 | `Snapshot::macros`, `Snapshot::upstream_unknown` | The user macros that the content of a record reads, and the packs with no upstream digest. Neither needs a request, so both work on a record written before either existed. |
 | `candidate::check`, `ops::snapshot_from_loaded` | A candidate that a program builds, with no file: the rules of a [candidate file](../reference/candidate-file.md) hold for it, and it gives the snapshot that `snapshot --from-candidate` gives. |
-| `Error::class`, `error::REFUSAL_CODES` | `Transient`, `Terminal`, or `Unknown`: what a caller does before it tries again. `Retry` uses the same rule. A 5xx with a code in `REFUSAL_CODES` is `Terminal`. |
+| `Error::class`, `error::REFUSAL_CODES`, `error::PACK_REFUSAL_CODES`, `error::PROFILE_PACK_REFUSAL_CODES` | `Transient`, `Terminal`, or `Unknown`: what a caller does before it tries again. `Retry` uses the same rule. A 5xx with a code in one of the three lists is `Terminal`. |
 
 The command line adds only the arguments, the output, and the exit codes.
 

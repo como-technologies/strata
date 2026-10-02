@@ -1017,6 +1017,18 @@ impl<A: PaletteApi> Palette<A> {
         )
     }
 
+    /// Palette's answer to whether it takes the packs of a profile: `POST
+    /// /v1/clusterprofiles/validate/packs` for a profile that Palette does not hold, or `POST
+    /// /v1/clusterprofiles/{uid}/validate/packs` for an update of the version `uid`. The body is
+    /// a `v1ClusterProfileTemplateDraft`. The request changes nothing.
+    pub fn validate_profile_packs(&self, uid: Option<&str>, body: &Value) -> Result<Value> {
+        let path = match uid {
+            Some(uid) => format!("/v1/clusterprofiles/{}/validate/packs", query_value(uid)),
+            None => "/v1/clusterprofiles/validate/packs".to_string(),
+        };
+        self.api.post_json(&path, body)
+    }
+
     /// The notifications of one cluster, `GET /v1/notifications/spectrocluster/{uid}`, every page,
     /// newest first. Palette gives `items: null` when there are none, and at most 50 on a page;
     /// `listmeta.continue` names the next page, and is empty on the last one.

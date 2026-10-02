@@ -1,0 +1,2 @@
+$ strata snapshot --from-raw raw/aws-stack-1.1.1 --validate
+strata: --validate asks Palette about the packs of one profile version or candidate. --from-raw sends no request, and --dir records clusters

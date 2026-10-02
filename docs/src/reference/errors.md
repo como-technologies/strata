@@ -25,7 +25,8 @@ the kind.
 | `cluster-profile-not-found` | The cluster runs no profile with this name or uid. | `cluster`, `profile`, `applied` |
 | `profile-ref-required` | The command needs a profile, and got a cluster, an edge host, a cluster group, an app profile, a pack, or a record of one. | `reference` |
 | `record-not-a-source` | `snapshot` got a record. It writes one, and does not read one. | `path` |
-| `usage` | The command line cannot work as given, so strata sent no request. Examples: `snapshot` with no ref and no `--from-raw`, `snapshot --raw-dir` of a ref that is not a profile or a cluster, and `compare --repave` or `compare --validate` with an edge host or a cluster group, and `behind --since`
+| `palette-refuses` | `snapshot --validate` asked Palette whether it takes the packs, and Palette refused them. Strata prints each error as a `palette    refuses:` line first, and writes no record. | `reference`, `errors[]` of `pack`, `code`, and `message` |
+| `usage` | The command line cannot work as given, so strata sent no request. Examples: `snapshot` with no ref and no `--from-raw`, `snapshot --raw-dir` of a ref that is not a profile or a cluster, `compare --repave` or `compare --validate` with an edge host or a cluster group, `snapshot --validate` with `--from-raw` or a cluster ref, and `behind --since`
 with a file that is not a `strata-behind/1` document. `snapshot` takes no `--json`, so this kind prints as a `strata:` line. | |
 | `candidate-invalid` | The candidate file has a problem. | `path` |
 | `pack-not-found` | The registry has no such pack version or tag. | `name`, `version`, `registry`, `tag` when given |
@@ -97,6 +98,22 @@ The same route refuses one more case with HTTP `403`, and not `500`:
 `PackValuesOverrideForbidden`, a pack that an integration pack names as a
 read-only dependency, with values other than its defaults. `compare --validate`
 prints it as the answer of Palette too. Each other `403` is an error of strata.
+
+`POST /v1/clusterprofiles/validate/packs` and
+`POST /v1/clusterprofiles/{uid}/validate/packs` refuse the whole request with
+HTTP `500` and one of these codes. Strata does not send it again, and
+`snapshot --validate` prints the refusal as the answer of Palette, with exit
+`2` and the error `palette-refuses`:
+[Ask Palette before you publish](../commands/candidate.md#ask-palette-before-you-publish).
+
+| Code | Palette refuses |
+| --- | --- |
+| `ClusterDashboardPacksMutuallyExclusive` | Two dashboard packs that cannot go together. |
+| `PackValuesYamlInvalid` | Pack values that are not YAML. |
+| `PackManifestYamlInvalid` | A manifest of a pack that is not YAML. |
+| `DisabledPacksForbidden` | A pack that is disabled. |
+| `SubResourceLimitValidationFailure` | More than 200 packs, or more than 200 manifests. |
+| `ClusterProfilePacksInConflict` | For the route of an update: a pack whose name a pack of another profile of a cluster that runs the version also has. |
 
 A 5xx with a different code, or with no code, is a fault. Strata sends the
 request again.

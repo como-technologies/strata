@@ -30,6 +30,11 @@ These are open:
   other than ECR and the Docker registry: ACR, GHCR, Harbor, and JFrog
   Artifactory are named on the public page, and no run uses one.
 - The variables of a cluster template while the template applies.
+- The answer of `POST /v1/clusterprofiles/validate/packs` to a pack that
+  requires a pack that the profile does not hold: no pack of the Public Repo
+  lists a dependency. The answer of `POST /v1/clusterprofiles/{uid}/validate/packs`
+  for a version that Palette holds. See
+  [The validate routes](validate-routes.md#post-v1clusterprofilesvalidatepacks).
 
 ## What strata preflight does not check
 

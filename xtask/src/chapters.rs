@@ -549,6 +549,47 @@ fn commands(r: &mut Runner) {
         false,
         "strata same-release candidate.json published.json",
     );
+    // Palette's own check of the packs before a create: a refusal, then an accept
+    r.profile_packs_answer(DEV, None, Some(("cni-cilium-oss", "kubernetes", "1.37.0")));
+    r.step(
+        "candidate-validate-refuses",
+        2,
+        true,
+        "strata snapshot --from-candidate aws-stack.yaml --validate -o validated.json",
+    );
+    r.step(
+        "candidate-validate-refuses",
+        0,
+        false,
+        "test -e validated.json || echo no record",
+    );
+    r.profile_packs_answer(DEV, None, None);
+    r.step(
+        "candidate-validate-accepts",
+        0,
+        true,
+        "strata snapshot --from-candidate aws-stack.yaml --validate -o validated.json",
+    );
+    r.step(
+        "candidate-validate-accepts",
+        0,
+        false,
+        "jq -c .source.paletteValidation validated.json",
+    );
+    // a version that Palette holds, as an update of itself
+    r.profile_packs_answer(DEV, Some(A111), None);
+    r.step(
+        "snapshot-validate-version",
+        0,
+        true,
+        "strata snapshot aws-stack@1.1.1 --validate -o checked.json",
+    );
+    r.step(
+        "snapshot-validate-usage",
+        2,
+        true,
+        "strata snapshot --from-raw raw/aws-stack-1.1.1 --validate",
+    );
     // a template on cert-manager 1.21.1 with one input parameter and one option, as the listing
     // gives it: the option has no presets
     r.pack_template(

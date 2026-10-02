@@ -877,6 +877,15 @@ pub struct PaletteRefusal {
 }
 
 impl PaletteRefusal {
+    /// `<code> <pack>: <message>`, with no pack for a refusal of the whole request.
+    pub fn line(&self) -> String {
+        if self.pack.is_empty() {
+            format!("{}: {}", self.code, self.message)
+        } else {
+            format!("{} {}: {}", self.code, self.pack, self.message)
+        }
+    }
+
     /// The errors of a `v1ConstraintValidatorResponse`: `results[]`, each with the `name` of its
     /// pack and `errors[]` of `code` and `message`.
     pub fn from_constraints(answer: &Value) -> Vec<PaletteRefusal> {

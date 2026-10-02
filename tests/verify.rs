@@ -9165,3 +9165,176 @@ fn verify_reports_a_renamed_version_as_renamed_and_not_as_overwritten() {
         verdict_of(&v, &recorded)
     );
 }
+
+// ---- snapshot --validate ---------------------------------------------------------------
+
+#[test]
+fn snapshot_validate_asks_palette_whether_it_takes_the_packs_of_a_candidate() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let recorded_b = ops::snapshot_from_dir(&dir.path().join("b"), "b", "t0").unwrap();
+    let file = dir.path().join("c.yaml");
+    candidate::write(&Candidate::from_snapshot(&recorded_b).unwrap(), &file, None).unwrap();
+    let registry = serve_registry_for_b(dir.path());
+    let path = "POST /v1/clusterprofiles/validate/packs";
+    let message = "Pack 'strata-live-dep' is required with minimum compatible version '1.0.0'";
+    let answer = serde_json::json!({"packs": {"results": [{"name": "kubernetes",
+        "displayName": "kubernetes",
+        "errors": [{"code": "DependencyPackWithMinVersionRequired", "message": message}]}]}});
+    let api = registry.clone().with(path, answer);
+    let snap = ops::snapshot_from_candidate_validated(
+        &file,
+        || Ok(Palette::new(&api)),
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    let v = snap.source.palette_validation.clone().unwrap();
+    assert!(!v.accepts);
+    assert_eq!(v.errors.len(), 1, "{v:?}");
+    assert_eq!(
+        v.errors[0].line(),
+        format!("DependencyPackWithMinVersionRequired kubernetes: {message}")
+    );
+    // one POST to the route of a create, with the packs of the candidate in profile order
+    let posted = api.posted();
+    assert_eq!(posted.len(), 1);
+    assert_eq!(posted[0].0, "/v1/clusterprofiles/validate/packs");
+    assert_eq!(posted[0].1, ops::profile_validate_body(&snap));
+    let body = &posted[0].1;
+    assert_eq!(body["cloudType"], recorded_b.source.cloud_type.as_str());
+    assert_eq!(body["type"], recorded_b.source.kind.as_str());
+    let names: Vec<&str> = body["packs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| p["name"].as_str().unwrap())
+        .collect();
+    let expected: Vec<&str> = recorded_b.packs.iter().map(|p| p.name.as_str()).collect();
+    assert_eq!(names, expected);
+    for (sent, pack) in body["packs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .zip(&recorded_b.packs)
+    {
+        assert_eq!(sent["uid"], pack.pack_uid.as_str());
+        assert_eq!(sent["registryUid"], pack.registry_uid.as_str());
+        assert_eq!(sent["tag"], pack.tag.as_str());
+        assert_eq!(sent["values"], pack.values.as_str());
+        assert_eq!(
+            sent["manifests"].as_array().unwrap().len(),
+            pack.manifests.len()
+        );
+    }
+    // the command line makes a refusal an error: exit 2, kind palette-refuses, and no record
+    let err = Error::PaletteRefuses {
+        reference: snap.source.reference.clone(),
+        errors: v.errors.clone(),
+    };
+    assert_eq!(err.kind(), "palette-refuses");
+    assert_eq!(err.exit_code(), 2);
+    assert_eq!(
+        err.to_json()["errors"][0]["code"],
+        "DependencyPackWithMinVersionRequired"
+    );
+
+    // a 200 with no error: Palette accepts, and the record holds the answer and the same root
+    let api = registry
+        .clone()
+        .with(path, serde_json::json!({"packs": {"results": []}}));
+    let snap = ops::snapshot_from_candidate_validated(
+        &file,
+        || Ok(Palette::new(api.clone())),
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert_eq!(snap.root, recorded_b.root);
+    let json = serde_json::to_value(&snap).unwrap();
+    assert_eq!(
+        json["source"]["paletteValidation"],
+        serde_json::json!({"accepts": true})
+    );
+    // without --validate, the record has no such field
+    let plain = ops::snapshot_from_candidate(
+        &file,
+        || Ok(Palette::new(registry.clone())),
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert!(
+        serde_json::to_value(&plain).unwrap()["source"]
+            .get("paletteValidation")
+            .is_none()
+    );
+}
+
+#[test]
+fn snapshot_validate_takes_a_refusal_of_the_whole_request_as_an_answer() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let b = ops::snapshot_from_dir(&dir.path().join("b"), "b", "t0").unwrap();
+    let mut candidate = b.clone();
+    candidate.source.uid = String::new();
+    let path = "POST /v1/clusterprofiles/validate/packs";
+    // Palette sends each refusal of the whole request as HTTP 500
+    for code in strata::error::PROFILE_PACK_REFUSAL_CODES {
+        let body = format!(r#"{{"code":"{code}","message":"refused"}}"#);
+        // the retry does not send it again: Palette gives the same refusal
+        let error = Error::Api {
+            method: "POST".into(),
+            path: path.into(),
+            status: 500,
+            body: body.clone(),
+            retry_after: None,
+        };
+        assert_eq!(error.class(), FailureClass::Terminal, "{code}");
+        let api = MemoryApi::new().failing(path, 500, body);
+        let v = ops::profile_validation(&Palette::new(&api), &candidate).unwrap();
+        assert!(!v.accepts, "{code}");
+        assert_eq!(v.errors.len(), 1);
+        assert_eq!(v.errors[0].pack, "");
+        assert_eq!(v.errors[0].line(), format!("{code}: refused"));
+    }
+    // a 500 with another code is a fault of Palette, a 403 is the key, and a 400 is a body that
+    // strata got wrong: errors of strata
+    for (status, code) in [
+        (500, "InternalError"),
+        (403, "Forbidden"),
+        (400, "InvalidPayload"),
+    ] {
+        let body = format!(r#"{{"code":"{code}"}}"#);
+        let api = MemoryApi::new().failing(path, status, body);
+        let err = ops::profile_validation(&Palette::new(&api), &candidate).unwrap_err();
+        assert!(
+            matches!(err, Error::Api { status: s, .. } if s == status),
+            "{err}"
+        );
+    }
+}
+
+#[test]
+fn snapshot_validate_of_a_version_asks_the_route_of_an_update_of_that_version() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let b = ops::snapshot_from_dir(&dir.path().join("b"), "b", "t0").unwrap();
+    assert!(!b.source.uid.is_empty());
+    let route = format!("/v1/clusterprofiles/{}/validate/packs", b.source.uid);
+    let api = MemoryApi::new().with(format!("POST {route}"), serde_json::json!({}));
+    let v = ops::profile_validation(&Palette::new(&api), &b).unwrap();
+    assert!(v.accepts);
+    let posted = api.posted();
+    assert_eq!(posted.len(), 1);
+    assert_eq!(posted[0].0, route);
+    assert_eq!(posted[0].1, ops::profile_validate_body(&b));
+
+    // a record of a cluster is not a profile: a usage error, and no request
+    let cluster_api = serve_cluster(MemoryApi::new(), dir.path(), "cluster-a");
+    let cluster = snapshot_cluster(&cluster_api, None).unwrap();
+    let api = MemoryApi::new();
+    let err = ops::profile_validation(&Palette::new(&api), &cluster).unwrap_err();
+    assert!(matches!(err, Error::Usage { .. }), "{err}");
+    assert!(api.posted().is_empty());
+}

@@ -1064,3 +1064,28 @@ fn a_quiet_run_skips_the_scope_conflict_lookup() {
         "no project listing on a quiet run: {e}"
     );
 }
+
+#[test]
+fn snapshot_validate_with_no_profile_to_ask_about_is_a_usage_error_before_any_request() {
+    let home = tempfile::tempdir().unwrap();
+    let home = home.path().to_str().unwrap();
+    for args in [
+        &["snapshot", "--from-raw", "raw/aws-stack", "--validate"][..],
+        &["snapshot", "cluster:c1", "--validate"][..],
+        &["snapshot", "pack:kubernetes@1.36.2", "--validate"][..],
+        &["snapshot", "tag:env=dev", "--dir", "records", "--validate"][..],
+    ] {
+        // no key: a usage error comes before strata needs one
+        let r = run_in(
+            args,
+            &[("HOME", home)],
+            &["PALETTE_API_KEY", "SPECTROCLOUD_APIKEY"],
+        );
+        assert_eq!(r.code, 2, "{args:?}: {}", r.err);
+        assert!(
+            r.err.starts_with("strata: --validate "),
+            "{args:?}: {}",
+            r.err
+        );
+    }
+}

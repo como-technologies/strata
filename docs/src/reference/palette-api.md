@@ -1,9 +1,9 @@
 # Palette API requests
 
-Strata reads. Most requests are `GET` requests. Six are `POST` requests, and
+Strata reads. Most requests are `GET` requests. Eight are `POST` requests, and
 none of them changes anything: four are searches that Palette takes as a
-`POST`, and `compare --repave` and `compare --validate` ask Palette a
-question. Each request has the
+`POST`, and `compare --repave`, `compare --validate`, and `snapshot --validate`
+ask Palette a question. Each request has the
 headers `ApiKey` and `Accept: application/json`. A request in a project has
 the header `ProjectUid` too. The
 [Palette API reference](https://docs.spectrocloud.com/api/v1/) gives the shape
@@ -18,6 +18,7 @@ of each response.
 | `GET /v1/clusterprofiles/{uid}/variables` | The profile variables. |
 | `GET /v1/packs/{uid}` | Only when the profile has a draft: for each pack of the draft, `packValues[].schema[]`, with the `name` and the `format` of each value. Strata writes `********` over each value whose format is `password`. See [Secrets in the values](../internals/palette/profiles.md#secrets-in-the-values). |
 | `GET /v1/dashboard/clusterprofiles/metadata` | The listing: `list`, and the uid of `<name>@<version>` and of `<name>@latest`. |
+| `POST /v1/clusterprofiles/{uid}/validate/packs` | Whether Palette takes the packs of the version as an update of itself, for `snapshot <ref> --validate`. The request changes nothing. |
 
 A missing variables endpoint, HTTP 404 or 405 on an older Palette, counts as no
 variables. The record says so in `source.variablesUnavailable`: see
@@ -82,6 +83,7 @@ in [Edge hosts, cluster groups, and app profiles](../internals/palette/other-obj
 | `GET /v1/registries/metadata` | `packs`, `behind`, a `pack:` ref, `verify` on a pack record, and `snapshot --from-candidate` when a layer names its registry by name, or when the listing does not have the version of a layer | The registries the key can see: name and uid. Also `kind` and `isPrivate`: Palette does not sync a Helm registry that is private. |
 | `GET /v1/packs?filters=spec.name=<name>&limit=100&offset=<n>` | `snapshot --from-candidate` for each layer that is not a `manifest` layer, `packs`, `behind`, a `pack:` ref, and `verify` on a pack record | Each version of the pack in each registry: the pack uid, the layer, the type, the default values, the digest when the registry gives one, and when Palette first listed the version. |
 | `GET /v1/packs/<name>/registries/<uid>` | `snapshot --from-candidate` for each layer that is not a `manifest` layer, `packs`, `behind`, a `pack:` ref, and `verify` on a pack record | The tags of the pack in one registry, with its values and its layer. |
+| `POST /v1/clusterprofiles/validate/packs` | `snapshot --from-candidate --validate` | Whether Palette takes the packs of the candidate in a new profile. The request changes nothing. See [The validate routes](../internals/palette/validate-routes.md#post-v1clusterprofilesvalidatepacks). |
 | `GET /v1/registries/oci/summary` | `snapshot --from-candidate`, a `pack:` ref, and `verify` on a pack record | The provider type of each OCI registry: `pack`, `helm`, or `zarf`. A record names no provider type when Palette does not answer. Also `status.sync.isSyncSupported`, which `snapshot --from-candidate` reads when the listing does not have the version of a layer from an OCI registry. |
 | `GET /v1/registries/pack/{uid}/sync/status` | `verify` on a record of a pack of type `spectro` | The last sync of the registry: `isSyncSupported`, `lastSyncedTime`, `status`, and `message`. |
 | `GET /v1/registries/helm/{uid}/sync/status` | `verify` on a record of a pack of type `helm` | The same, for a Helm registry. |

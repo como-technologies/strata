@@ -194,6 +194,10 @@ struct SnapshotArgs {
     /// Read a candidate file, before the version is in Palette
     #[arg(long, conflicts_with_all = ["from_raw", "raw_dir", "ref"])]
     from_candidate: Option<PathBuf>,
+    /// Ask Palette whether it takes the packs: of a candidate as a new profile, or of a profile
+    /// version as an update of itself. A refusal exits 2 and writes no record
+    #[arg(long)]
+    validate: bool,
     /// Write the JSON on one line
     #[arg(long)]
     compact: bool,
@@ -681,6 +685,13 @@ fn cmd_compare(a: &CompareArgs) -> Result<ExitCode> {
 fn cmd_snapshot(a: &SnapshotArgs) -> Result<ExitCode> {
     let progress = progress(a.quiet);
     let now = now_utc();
+    if a.validate && (a.from_raw.is_some() || a.dir.is_some()) {
+        return Err(Error::Usage {
+            message: "--validate asks Palette about the packs of one profile version or \
+                      candidate. --from-raw sends no request, and --dir records clusters"
+                .to_string(),
+        });
+    }
     // a set of clusters is one record for each, in a directory
     let set = a.r#ref.as_deref().map(Ref::parse);
     match (&set, &a.dir) {
@@ -749,6 +760,12 @@ fn cmd_snapshot(a: &SnapshotArgs) -> Result<ExitCode> {
         _ => {}
     }
     let snap = match (&a.from_candidate, &a.from_raw) {
+        (Some(file), _) if a.validate => ops::snapshot_from_candidate_validated(
+            file,
+            || connect(progress, None),
+            &now,
+            &progress,
+        )?,
         (Some(file), _) => {
             ops::snapshot_from_candidate(file, || connect(progress, None), &now, &progress)?
         }
@@ -765,6 +782,14 @@ fn cmd_snapshot(a: &SnapshotArgs) -> Result<ExitCode> {
                 return Err(Error::Usage {
                     message: "--macros needs a cluster ref: a cluster resolves the macros, and \
                               a profile does not"
+                        .to_string(),
+                });
+            }
+            if a.validate && !matches!(reference, Ref::Uid(_) | Ref::NameVersion { .. }) {
+                return Err(Error::Usage {
+                    message: "--validate takes a profile version or --from-candidate: Palette \
+                              checks the packs of a profile, and not of a cluster, a cluster \
+                              group, an app profile, or one pack"
                         .to_string(),
                 });
             }
@@ -864,12 +889,33 @@ fn cmd_snapshot(a: &SnapshotArgs) -> Result<ExitCode> {
                     if let Some(dir) = &a.raw_dir {
                         raw.save_dir(dir, &now)?;
                     }
-                    Snapshot::from_raw(&raw, text, &now)?
+                    let mut snap = Snapshot::from_raw(&raw, text, &now)?;
+                    if a.validate {
+                        snap.source.palette_validation =
+                            Some(ops::profile_validation(&palette, &snap)?);
+                    }
+                    snap
                 }
             };
             snap.with_project(palette.project_uid())
         }
     };
+    // the answer of Palette is what --validate asks for, so -q does not hide it; it goes to
+    // standard error, beside the record on standard output
+    if let Some(v) = &snap.source.palette_validation {
+        if v.accepts {
+            eprintln!("palette    accepts");
+        }
+        for e in &v.errors {
+            eprintln!("palette    refuses: {}", e.line());
+        }
+        if !v.accepts {
+            return Err(Error::PaletteRefuses {
+                reference: snap.source.reference.clone(),
+                errors: v.errors.clone(),
+            });
+        }
+    }
     let text = snap.to_json(a.compact)?;
     match &a.output {
         Some(path) => {

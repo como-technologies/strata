@@ -7,7 +7,8 @@ its checks establishes, so you can see the coverage without running anything.
 `verify.sh` is the read-only script over the cluster, and
 [its checks are on the live example page](./live-example.md#the-checks-of-verifysh).
 `packs.sh` and `knurl.sh` read too. The other scripts below write to the tenant;
-`pack-states.sh` keeps nothing that it writes.
+`pack-states.sh` keeps nothing that it writes, and `validate-packs.sh` writes
+nothing.
 
 Each check names its expected exit code. A run that gets another code fails, and
 prints both. The issue numbers name what the check was written for.
@@ -534,6 +535,24 @@ and puts each edit back. Cluster A takes no update. Stage 7 asks Palette with
 Each answer agrees with the impact table, on AWS and on GCP: the two clouds run
 the kubeadm engine alone. The edit in place also opens an update notification for cluster A, and
 `compare` names it; the undo closes it.
+
+## validate-packs.sh
+
+No cluster, no profile, and no cost. Each request to Palette is a read or a
+`POST` to a validate route, which writes nothing. It uses `cert-manager` 1.21.1
+from the Public Repo, in an add-on candidate. Stage 3 needs a profile version
+in the project of the key: give it as `PROFILE=<name>@<version>`.
+
+| Check | Expected exit | What it shows |
+|---|---|---|
+| `validate-accepts`, `validate-accepts-says`, `validate-accepts-record` | 0 | #152: Palette takes the packs of the candidate; `snapshot --validate` prints `palette    accepts` and writes the record with `source.paletteValidation` `{"accepts": true}` |
+| `validate-not-yaml`, `validate-not-yaml-says`, `validate-not-yaml-no-record` | 2, 0, 1 | #152: values that are not YAML are a refusal of the whole request, `PackValuesYamlInvalid`, with no pack; strata exits `2` and writes no record |
+| `validate-not-yaml-status`, `validate-not-yaml-status-says` | 2, 0 | #152: Palette sends that refusal as HTTP 500 |
+| `validate-no-pack`, `validate-no-pack-says` | 2, 0 | #152: a body with no pack gets HTTP 400 with `ShouldNotBeEmpty`, from the converter of the route |
+| `validate-version`, `validate-version-says` | 0 | #152: `snapshot <ref> --validate` asks the route of an update, and Palette takes the version as it is. No run has passed this check yet. |
+
+No pack of the Public Repo lists a dependency in its tags route, so no stage
+asks for a refusal of a dependency.
 
 ## registry-kinds.sh
 

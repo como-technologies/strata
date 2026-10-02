@@ -80,8 +80,9 @@
 #       PATCH one document of the API with the body JSON, such as
 #       /v1/spectroclusters/<uid>/clusterConfig/timezone '{"timezone": "America/Chicago"}'.
 #   api.sh post PATH JSON
-#       POST the body JSON to a search of the API, such as /v1/dashboard/edgehosts/search, and
-#       print the answer. A POST to another path can create something: use a search path only.
+#       POST the body JSON to a search of the API, such as /v1/dashboard/edgehosts/search, or to
+#       a validate route, such as /v1/clusterprofiles/validate/packs, and print the answer. A
+#       POST to another path can create something: use a search path or a validate path only.
 #   api.sh probe-profile NAME REGISTRY_UID VERSION
 #       Ask Palette to create an add-on profile that pins one pack version, with the values the
 #       registry lists for it. When Palette creates it, delete it at once, print `accepted`, and
