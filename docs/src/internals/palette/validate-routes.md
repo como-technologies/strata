@@ -115,7 +115,10 @@ nothing, and does not check the name or the version of the profile.
 
 The checks, in order:
 
-1. The body holds one pack or more.
+1. The body holds one pack or more. The converter of the route refuses an
+   empty `packs` with HTTP 400 and the code `ShouldNotBeEmpty`, before the
+   checks below. A live request shows it:
+   `Parameter 'Packs' should not be empty`.
 2. The body holds no more than one dashboard pack:
    `ClusterDashboardPacksMutuallyExclusive`.
 3. The values and the manifests of each pack are YAML:
@@ -154,12 +157,14 @@ update of itself.
 
 The checks, in order:
 
-1. The version exists, and the key can read it.
-2. Palette reads the clusters that run the version. A pack of the body whose
-   name a pack of another profile of such a cluster also has is a refusal:
-   `ClusterProfilePacksInConflict`, with the names of the clusters.
-3. The limits, the dashboard packs, and the YAML, as above.
-4. The pack validator, as above. It also checks the dependencies over the packs
+1. The body holds one pack or more, as above.
+2. The version exists, and the key can read it.
+3. Palette reads the clusters that run the version. A pack of the body whose
+   name a pack of another profile of such a cluster also has, in the same
+   workload scope, is a refusal: `ClusterProfilePacksInConflict`, with the
+   names of the clusters.
+4. The limits, the dashboard packs, and the YAML, as above.
+5. The pack validator, as above. It also checks the dependencies over the packs
    that each such cluster runs.
 
 The answer has the shape of the route above. No live run has asked this route
@@ -211,6 +216,8 @@ of a cluster, and the shape of its answer),
 of a profile version),
 `services/service/spectrocluster/internal/service/clusterprofile/clusterprofile_service.go`
 and `../pack/pack_validate.go` (the checks of the packs of a profile),
+`handler/converter/v1/clusterprofiles_v1_converter.go` lines 265-283 and
+`svcclient/validator/params_validator.go` lines 41-45 (an empty `packs`),
 `base/herr/err_pack.go` (the codes),
 `handler/converter/v1/clusters_v1_converter.go`
 (the converter, and the GKE pool size), `aws/spectrocluster_aws_validate.go`

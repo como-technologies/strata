@@ -7,7 +7,8 @@
 #   examples/live/validate-packs.sh [STAGE]
 #
 #   1  a candidate whose packs Palette takes: POST /v1/clusterprofiles/validate/packs
-#   2  a candidate whose values are not YAML: Palette refuses the whole request
+#   2  a candidate whose values are not YAML, and a body with no pack: Palette refuses the whole
+#      request
 #   3  a version that Palette holds, as an update of itself: POST
 #      /v1/clusterprofiles/{uid}/validate/packs. It needs PROFILE=<name>@<version>, a version in
 #      the project of the key, for example one that `just live-up` publishes; with no PROFILE it
@@ -65,7 +66,7 @@ if [ "$stage" = all ] || [ "$stage" = 1 ]; then
 fi
 
 if [ "$stage" = all ] || [ "$stage" = 2 ]; then
-  echo "== a candidate whose values are not YAML (#152)" | tee -a steps.log
+  echo "== a candidate whose values are not YAML, and a body with no pack (#152)" | tee -a steps.log
   candidate strata-validate-fred 'installCRDs: [true'
   check validate-not-yaml 2 '#152: Palette refuses the values, so strata exits 2 and writes no record' -- \
     "$strata" snapshot --from-candidate strata-validate-fred.yaml --validate -o fred.json
@@ -84,6 +85,11 @@ if [ "$stage" = all ] || [ "$stage" = 2 ]; then
     "$live/api.sh" post /v1/clusterprofiles/validate/packs "$body"
   check validate-not-yaml-status-says 0 '#152: HTTP 500 with the code PackValuesYamlInvalid' -- \
     grep -q 'answered HTTP 500: {"code":"PackValuesYamlInvalid"' validate-not-yaml-status.err
+  # a body with no pack: the converter of the route refuses it before the checks of the packs
+  check validate-no-pack 2 '#152: Palette refuses a body with no pack' -- \
+    "$live/api.sh" post /v1/clusterprofiles/validate/packs '{"cloudType": "all", "type": "add-on", "packs": []}'
+  check validate-no-pack-says 0 '#152: HTTP 400 with the code ShouldNotBeEmpty' -- \
+    grep -q 'answered HTTP 400: {"code":"ShouldNotBeEmpty"' validate-no-pack.err
 fi
 
 if [ "$stage" = all ] || [ "$stage" = 3 ]; then
