@@ -36,7 +36,7 @@ variables:
 
 | Field | Required | Function |
 | --- | --- | --- |
-| `name`, `version` | yes | The profile and its version. Neither can be empty. |
+| `name`, `version` | yes | The profile and its version. Neither can be empty. The version is one that Palette takes: see [Checks before any request](#checks-before-any-request). |
 | `type` | no | `cluster`, `infra`, `add-on`, or `system`. The default is `cluster`. |
 | `cloudType` | no | The cloud of the profile. The default is empty. |
 | `registry` or `registryUid` | no | The registry for each layer that names none. It does not apply to a `manifest` layer. |
@@ -54,7 +54,7 @@ library. It then writes no file.
 | `registry` or `registryUid` | yes, on the layer or at the top; no on a `manifest` layer | The registry, by name or uid. Not both. The setting on the layer has priority over the one at the top. A registry that Palette does not sync is permitted: see [A layer from a registry that Palette does not sync](#a-layer-from-a-registry-that-palette-does-not-sync). |
 | `type` | no | `manifest` for a layer of manifests that comes from no registry. See [A manifest layer](#a-manifest-layer). Leave it out for a pack from a registry: the registry gives the type. |
 | `values` or `valuesFile` | no | The values, inline or in a file. Not both. With neither, the layer gets the default values of the pack. |
-| `layer` | no | The layer. The default comes from the registry. A `manifest` layer takes only `addon`: see [A manifest layer](#a-manifest-layer). |
+| `layer` | no | The layer. The default comes from the registry. Palette takes the layer from the registry, so strata checks the type of the profile against the layer of the registry too. A `manifest` layer takes only `addon`: see [A manifest layer](#a-manifest-layer). |
 | `tag` | no | The tag. The default is the tag that equals the version, else the first tag of that version, else the version itself. An explicit tag must be a tag of that version in the registry, or the version itself. A `manifest` layer takes any tag, and its default is the version. A floating tag, such as `1.0.x`, pins the build that the tag names now: see [Tag names](../internals/palette/packs.md#tag-names). |
 | `params` | no | A map that Palette carries on a pack beside its values. Strata puts it in the authored hash, so a change to it is an `AUTHORED` change. |
 | `manifests[]` | no; one or more on a `manifest` layer | Each with a `name`, and `content` inline or a `contentFile`. |
@@ -84,6 +84,34 @@ Strata reads the whole file before it sends a request:
 
   So strata reports a misspelled field such as `valuesfile`.
 - A values file or a manifest file that strata cannot read is `io`.
+- A candidate that Palette refuses at the create is `candidate-invalid`. The
+  message names the rule, the code of Palette, and the layer or the manifest.
+  Strata checks the rules in this order:
+  1. The version parses as semver, as Palette parses it: `1.1` and `v1.2.3`
+     pass, and `1.2.3.4` does not.
+  2. The candidate has at most 200 packs, and at most 200 manifests. A
+     `manifest` layer counts as one manifest more.
+  3. Each pack name is in one layer only.
+  4. The name of each manifest, and the name of a `manifest` layer, is a
+     lowercase DNS-1123 label of 32 characters at most.
+  5. Each manifest name is in its layer once.
+  6. The values and each manifest are YAML whose first document is a map, or
+     are empty. Quote a template: `replicas: "{{ .spectro.var.replicas }}"`.
+  7. The type takes the `layer` of each layer that gives one: `infra` takes
+     `os`, `k8s`, `cni`, and `csi`; `add-on` and `system` take `addon`, `cni`,
+     and `csi`; `cluster` takes each layer.
+  8. When each layer gives its `layer`, a `cluster` or `infra` candidate has an
+     `os`, a `k8s`, a `cni`, and a `csi` layer. On the cloud `edge-native`, it
+     needs no `csi` layer.
+
+[What the create of a version checks](../internals/palette/profiles.md#what-the-create-of-a-version-checks)
+gives the source of each rule in Palette. A version and a type that Palette
+refuses, in two copies of the candidate of
+[Write one from a published version](#write-one-from-a-published-version):
+
+```text
+{{#include ../output/candidate-refused.txt}}
+```
 
 ## The registry lookups
 
@@ -100,6 +128,20 @@ is not a `manifest` layer:
 When the listing does not have the version, and the registry is one that
 Palette does not sync, the layer gets the pack that Palette makes at the create.
 See [A layer from a registry that Palette does not sync](#a-layer-from-a-registry-that-palette-does-not-sync).
+
+From these answers, strata checks the two rules that need the registry, as
+`candidate-invalid`:
+
+- The cloud types of each pack in the listing hold the `cloudType` of the
+  candidate, or `all`, or `custom` for a cloud that Palette does not know. A
+  pack with no cloud type, a candidate with the cloud `all`, and a candidate
+  with no `cloudType` take each pack.
+- Rules 7 and 8 above, with the layer of each pack in the registry. Palette
+  takes the layer of a pack from the registry, and not from the profile.
+
+The pack that Palette makes for a registry that it does not sync has the layer
+`addon` and no cloud type. So rule 7 refuses it in an `infra` candidate, and
+each cloud takes it.
 
 A version or a tag that the registry does not have is `pack-not-found`. A
 registry name that the key cannot see is `registry-not-found`. A `registryUid`
