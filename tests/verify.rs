@@ -8,7 +8,7 @@ use std::path::Path;
 use serde_json::Value;
 use strata::api::{MemoryApi, Palette, RawProfile};
 use strata::diff::VerifyStatus;
-use strata::error::Error;
+use strata::error::{Error, FailureClass};
 use strata::ops;
 use strata::progress::Progress;
 use strata::reference::Ref;
@@ -303,6 +303,51 @@ fn a_permanent_500_fails_with_the_last_error_after_the_configured_attempts() {
         .unwrap_err();
     assert!(matches!(err, Error::Api { status: 500, .. }), "{err}");
     assert_eq!(err.exit_code(), 2);
+    assert_eq!(
+        api.calls(&profile_path()),
+        4,
+        "one attempt plus three retries"
+    );
+    assert_eq!(slept.borrow().len(), 3);
+}
+
+#[test]
+fn a_500_that_palette_gives_for_a_refusal_is_not_retried() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    // The body of a live refusal: a profile that a template uses cannot be deleted.
+    let body = r#"{"code":"DeletionResourceInUseError","details":null,"message":"Unable to delete the resource as strata-live-template clustertemplate(s) in-use","ref":"x"}"#;
+    let api = serve(MemoryApi::new(), dir.path(), "a", UID_A).failing_n_times(
+        profile_path(),
+        99,
+        500,
+        body,
+    );
+    let (retry, slept) = retrying(&api, 3);
+    let err = Palette::new(retry)
+        .fetch_profile(UID_A, &Progress::silent())
+        .unwrap_err();
+    assert!(matches!(err, Error::Api { status: 500, .. }), "{err}");
+    assert_eq!(err.class(), FailureClass::Terminal);
+    assert_eq!(api.calls(&profile_path()), 1, "one attempt and no retry");
+    assert!(slept.borrow().is_empty());
+}
+
+#[test]
+fn a_500_with_a_code_that_is_not_a_refusal_is_retried() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let api = serve(MemoryApi::new(), dir.path(), "a", UID_A).failing_n_times(
+        profile_path(),
+        99,
+        500,
+        r#"{"code":"DataReadError","message":"Data access error"}"#,
+    );
+    let (retry, slept) = retrying(&api, 3);
+    let err = Palette::new(retry)
+        .fetch_profile(UID_A, &Progress::silent())
+        .unwrap_err();
+    assert_eq!(err.class(), FailureClass::Transient);
     assert_eq!(
         api.calls(&profile_path()),
         4,

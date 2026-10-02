@@ -54,6 +54,28 @@ with a file that is not a `strata-behind/1` document. `snapshot` takes no `--jso
 
 A record that is empty or is not JSON is `not-snapshot`.
 
+## Refusals that strata does not send again
+
+Strata sends a request again after HTTP 5xx (see
+[Settings](./settings.md)). Palette also answers some refusals with HTTP `500`.
+A refusal stays while the request stays, so a second request gets the same
+refusal. When the body of a 5xx has one of these codes in `code`, strata does
+not send the request again. The error is `api`, with the status that Palette
+sent.
+
+| Code | Palette refuses |
+| --- | --- |
+| `DeletionResourceInUseError` | The delete of an object that another object uses. |
+| `ResOperationForbidden` | An operation on this object, for this key. |
+| `OperationForbidden` | An operation, for this key. |
+| `ClusterProfileCreationValidationFailure` | A new profile that is not valid. |
+| `ClusterProfileUpdateValidationFailure` | A change to a profile that is not valid. |
+| `ClusterProfileInvalidPackState` | A profile that pins a pack version that is disabled or deleted. |
+| `InvalidLimit` | A listing with a `limit` above the maximum. |
+
+A 5xx with a different code, or with no code, is a fault. Strata sends the
+request again.
+
 An error in the command line itself, such as a missing argument, comes from the
 argument parser. It exits `2` with its own message, with no `strata:` prefix and
 no JSON line, also with `--json`.

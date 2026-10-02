@@ -354,6 +354,27 @@ fn first_part(body: &str) -> String {
     }
 }
 
+/// The codes of the refusals that Palette answers with HTTP 500. Palette gives a new error the
+/// response type of a server fault, and these constructors set no other type, so a refusal by
+/// design arrives as a 5xx. A retry gets the same refusal.
+pub const REFUSAL_CODES: [&str; 7] = [
+    "DeletionResourceInUseError",
+    "ResOperationForbidden",
+    "OperationForbidden",
+    "ClusterProfileCreationValidationFailure",
+    "ClusterProfileUpdateValidationFailure",
+    "ClusterProfileInvalidPackState",
+    "InvalidLimit",
+];
+
+/// True when the body of a Palette error is JSON with a `code` in [`REFUSAL_CODES`].
+fn is_refusal(body: &str) -> bool {
+    serde_json::from_str::<Value>(body)
+        .ok()
+        .and_then(|v| v.get("code").and_then(Value::as_str).map(str::to_owned))
+        .is_some_and(|code| REFUSAL_CODES.contains(&code.as_str()))
+}
+
 /// `a, b, c`, or `none` for an empty list.
 fn list_or_none(items: &[String]) -> String {
     if items.is_empty() {
@@ -391,6 +412,10 @@ impl Error {
     pub fn class(&self) -> FailureClass {
         match self {
             Error::Transport { .. } | Error::RetryAfterTooLong { .. } => FailureClass::Transient,
+            // A refusal by design that Palette answers with a 5xx stays while the inputs stay.
+            Error::Api { status, body, .. } if (500..600).contains(status) && is_refusal(body) => {
+                FailureClass::Terminal
+            }
             Error::Api { status, .. } if *status == 429 || (500..600).contains(status) => {
                 FailureClass::Transient
             }
@@ -875,8 +900,8 @@ pub enum FailureClass {
     /// Time can remove it: a transport error, HTTP 5xx, HTTP 429, or a `Retry-After` that is
     /// longer than strata waits.
     Transient,
-    /// It stays while the inputs stay: another HTTP 4xx, a thing that is not there, a file or a
-    /// setting that is not valid.
+    /// It stays while the inputs stay: another HTTP 4xx, a 5xx with a code in
+    /// [`REFUSAL_CODES`], a thing that is not there, a file or a setting that is not valid.
     Terminal,
     /// Strata cannot tell.
     Unknown,
