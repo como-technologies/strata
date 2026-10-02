@@ -77,9 +77,12 @@ The default is `https://api.spectrocloud.com`.
 
 ## Retries
 
-Strata sends a request again after HTTP 5xx, HTTP 429, or a transport error. A
-`Retry-After` that is longer than the limit stops the command at once. A
-scheduled job then stops early, and can run again at a later time.
+Strata sends a request again after HTTP 5xx, HTTP 429, or a transport error.
+A 5xx that is a
+[refusal of Palette](./reference/errors.md#refusals-that-strata-does-not-send-again)
+gets no second request. A `Retry-After` that is longer than the limit stops the
+command at once. A scheduled job then stops early, and can run again at a later
+time.
 
 [Settings](./reference/settings.md) gives `STRATA_RETRIES`,
 `STRATA_MAX_RETRY_AFTER`, the wait between attempts, and each other variable

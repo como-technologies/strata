@@ -15,7 +15,7 @@ line.
 | `SPECTROCLOUD_HOST` | | The Palette address, when `PALETTE_API` is not set. An address with no scheme gets `https://`, in either variable. |
 | `PALETTE_PROJECT_UID` | tenant scope | The project, by uid. An empty value is no uid, also when `~/.palette.env` sets one. `PALETTE_PROJECT` then decides. |
 | `PALETTE_PROJECT` | tenant scope | The project, by name, when `PALETTE_PROJECT_UID` is not set. An empty value is tenant scope, also when `~/.palette.env` sets a name. An unknown name is the error `project-not-found`, which lists the projects that the key can see. |
-| `STRATA_RETRIES` | `3` | The number of retries after HTTP 5xx, HTTP 429, or a transport error. Strata sends no other request again. |
+| `STRATA_RETRIES` | `3` | The number of retries after HTTP 5xx, HTTP 429, or a transport error. Strata sends no other request again, and no 5xx that is a [refusal of Palette](./errors.md#refusals-that-strata-does-not-send-again). |
 | `STRATA_MAX_RETRY_AFTER` | `300` | The longest `Retry-After` wait, in seconds. A longer one is the error `retry-after-too-long`, while a retry remains. On the last attempt, the error is `api`. |
 | `STRATA_QUIET` | not set | Any value stops the progress messages, as `--quiet` does. Environment only. |
 | `NO_COLOR` | not set | A value removes the color of the terminal report under `--color auto`, the default. Environment only. |
