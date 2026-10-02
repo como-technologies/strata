@@ -21,7 +21,7 @@ pub use http::HttpApi;
 pub use mask::{MASKED, is_password_format, mask_values, password_fields};
 pub use memory::MemoryApi;
 pub use palette::Palette;
-pub use raw::{RawCluster, RawProfile};
+pub use raw::{RawCluster, RawProfile, has_draft};
 pub use retry::{Retry, RetryPolicy};
 
 /// One GET of a JSON document from Palette. Implementations add authentication and scoping.

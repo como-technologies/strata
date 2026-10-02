@@ -290,6 +290,25 @@ impl Runner {
         self.tenant.edit(project, uid, edits);
     }
 
+    /// Edit a published profile with no publish, as a PUT of the version does: the edits go to
+    /// its draft.
+    pub fn draft(&mut self, project: &str, uid: &str, edits: &[Edit]) {
+        if !self.building() {
+            return;
+        }
+        self.changed();
+        self.tenant.draft(project, uid, edits);
+    }
+
+    /// Publish the draft of a profile version.
+    pub fn publish_draft(&mut self, project: &str, uid: &str) {
+        if !self.building() {
+            return;
+        }
+        self.changed();
+        self.tenant.publish(project, uid);
+    }
+
     /// Create a cluster, or apply the update that waits for one that exists.
     pub fn cluster(&mut self, project: &str, uid: &str, name: &str, profiles: &[&str]) {
         self.cluster_with(project, uid, name, profiles, &[]);

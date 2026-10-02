@@ -42,7 +42,8 @@ pub struct Diff {
     #[serde(default)]
     pub same_content: bool,
     /// True when both sides name the same profile uid and version but their roots differ: the
-    /// version was edited in place, or, between two clusters, changed on one of them.
+    /// version was edited in place, or, between two clusters, changed on one of them. A version
+    /// and a record of its draft are not.
     #[serde(default)]
     pub edited_in_place: bool,
     /// Each profile uid that the two sides name under different versions: the version was
@@ -1696,10 +1697,12 @@ pub fn compute(a: &Snapshot, b: &Snapshot, generated_at: &str, verify: Option<Ve
         b: b.source.clone(),
         same: a.root == b.root,
         same_content,
+        // a version and its draft differ by what the publish changes, and not by an edit in place
         edited_in_place: a.root != b.root
             && !a.source.uid.is_empty()
             && a.source.uid == b.source.uid
-            && a.source.version == b.source.version,
+            && a.source.version == b.source.version
+            && a.source.is_draft() == b.source.is_draft(),
         overwritten_in_place: overwritten_in_place(a, b),
         macros: {
             let mut names = a.macros();

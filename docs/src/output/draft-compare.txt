@@ -1,0 +1,16 @@
+$ strata compare aws-stack@1.1.1 aws-stack@1.1.1@draft
+aws-stack@1.1.1 (uid 64e0000000000000000000c3)  ->  aws-stack@1.1.1 (uid 64e0000000000000000000c3)
+root       088136c929bd -> 78a86f401545   CHANGED
+note       aws-stack@1.1.1@draft is the draft of aws-stack@1.1.1 (uid 64e0000000000000000000c3): its publish makes this change
+consumers  0 -> 0 clusters
+
+  variables unchanged
+
+  [os   ] ubuntu-aws                 24.04              unchanged
+  [k8s  ] kubernetes                 1.36.2             unchanged
+  [cni  ] cni-cilium-oss             1.20.1             unchanged
+~ [csi  ] csi-aws-ebs                1.65.0             AUTHORED
+      values: 1 changed, 0 added, 0 removed
+        ~ charts.aws-ebs-csi-driver.storageClasses[name=spectro-storage-class].reclaimPolicy: "Delete" -> "Retain"
+      impact: cluster-wide infra addon update
+  [addon] cert-manager               1.21.1             unchanged

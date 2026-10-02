@@ -65,6 +65,18 @@ where
             let raw = palette.fetch_profile(uid, progress)?;
             Ok(Snapshot::from_raw(&raw, uid, fetched_at)?.with_project(palette.project_uid()))
         }
+        Ref::Draft { id, version } => {
+            let palette = connect()?;
+            let uid = match version {
+                Some(version) => palette.resolve(id, version)?,
+                None => id.clone(),
+            };
+            let raw = palette.fetch_profile(&uid, progress)?;
+            Ok(
+                Snapshot::from_raw_draft(&raw, &reference.to_string(), fetched_at)?
+                    .with_project(palette.project_uid()),
+            )
+        }
         Ref::Pack {
             registry,
             name,

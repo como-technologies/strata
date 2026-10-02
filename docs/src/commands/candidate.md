@@ -170,7 +170,9 @@ packs against the clusters that run the version:
 ## What to expect
 
 - The ref is a profile uid, `<name>@<version>`, `<name>@latest`, or a profile
-  record. A cluster, edge host, cluster group, app profile, or pack ref is an
+  record. Each of the first three takes `@draft`, which writes the draft of
+  the version, before its publish: see
+  [Review a draft before its publish](../use-cases/draft.md#3-record-the-draft-that-the-reviewer-approves). A cluster, edge host, cluster group, app profile, or pack ref is an
   error: `profile-ref-required`. A pack is one layer of a profile version, a
   cluster holds a copy of one, and an app profile has tiers and no packs.
 - `--files-dir` needs `-o`.

@@ -595,6 +595,71 @@ fn api_sh_edit_keeps_each_manifest_uid_so_clusters_keep_their_copies() {
 }
 
 #[test]
+fn api_sh_draft_puts_the_change_with_no_publish_and_publish_publishes_it() {
+    let dir = tempfile::tempdir().unwrap();
+    let (bin, routes) = (dir.path().join("bin"), dir.path().join("routes"));
+    for d in [&bin, &routes] {
+        std::fs::create_dir(d).unwrap();
+    }
+    executable(&bin.join("curl"), FAKE_API_CURL);
+    std::fs::write(
+        routes.join("v1_clusterprofiles_prof-1"),
+        r#"{"metadata":{"name":"addon","uid":"prof-1"},"spec":{"version":"1.0.0","published":{
+            "type":"add-on","cloudType":"all","packs":[{"name":"config","tag":"1.0.0",
+            "type":"manifest","layer":"addon","packUid":"pk-1","values":""}]}}}"#,
+    )
+    .unwrap();
+    std::fs::write(
+        routes.join("v1_clusterprofiles_prof-1_packs_manifests"),
+        r#"{"metadata":{},"spec":{"packs":[{"metadata":{},"spec":{"name":"config","manifests":[
+            {"name":"config","uid":"m-1","digest":"d","content":"edited: \"no\"\n"}]}}]}}"#,
+    )
+    .unwrap();
+    std::fs::write(routes.join("v1_clusterprofiles_prof-1_publish"), "{}").unwrap();
+    let log = dir.path().join("curl.log");
+    let api = |args: &[&str]| {
+        Command::new("bash")
+            .arg(live_script("api.sh"))
+            .args(args)
+            .env(
+                "PATH",
+                format!("{}:{}", bin.display(), std::env::var("PATH").unwrap()),
+            )
+            .env("HOME", dir.path())
+            .env("PALETTE_API_KEY", "k")
+            .env("PALETTE_PROJECT_UID", "p-1")
+            .env("FAKE_ROUTES", &routes)
+            .env("FAKE_LOG", &log)
+            .output()
+            .unwrap()
+    };
+    let o = api(&["draft", "prof-1", r#"edited: "no""#, r#"edited: "yes""#]);
+    assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
+    let calls = std::fs::read_to_string(&log).unwrap();
+    assert!(calls.contains("PUT /v1/clusterprofiles/prof-1"), "{calls}");
+    assert!(
+        !calls.contains("publish"),
+        "a draft is not published: {calls}"
+    );
+    let put: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(routes.join("sent/PUT_v1_clusterprofiles_prof-1")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        put["spec"]["template"]["packs"][0]["manifests"],
+        serde_json::json!([{"name": "config", "uid": "m-1", "content": "edited: \"yes\"\n"}]),
+    );
+
+    let o = api(&["publish", "prof-1"]);
+    assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
+    let calls = std::fs::read_to_string(&log).unwrap();
+    assert!(
+        calls.ends_with("PATCH /v1/clusterprofiles/prof-1/publish\n"),
+        "{calls}"
+    );
+}
+
+#[test]
 fn api_sh_delete_named_deletes_every_version_of_exactly_that_name() {
     let dir = tempfile::tempdir().unwrap();
     let (bin, routes) = (dir.path().join("bin"), dir.path().join("routes"));

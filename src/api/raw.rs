@@ -26,6 +26,24 @@ pub struct RawProfile {
     /// When the responses were read from Palette; `None` for a fetch, which stamps the time
     /// itself, and for a directory that an older build saved
     pub fetched_at: Option<String>,
+    /// For a profile that has a draft: each manifest of its two templates,
+    /// `GET /v1/clusterprofiles/{uid}/packs/{packName}/manifests/{manifestUid}`, in one object by
+    /// manifest uid. Each answer holds the draft content and the published content. `None` for a
+    /// profile with no draft, where `manifests` holds the content, and for a directory that an
+    /// older build saved.
+    pub manifest_entities: Option<Value>,
+}
+
+/// The file of a raw directory that holds [`RawProfile::manifest_entities`].
+const MANIFEST_ENTITIES_FILE: &str = "manifest-entities.json";
+
+/// True when a profile document has a draft: packs in `spec.draft`. Palette does not give
+/// `status.hasDraft`, and the publish empties the draft.
+pub fn has_draft(profile: &Value) -> bool {
+    profile
+        .pointer("/spec/draft/packs")
+        .and_then(Value::as_array)
+        .is_some_and(|p| !p.is_empty())
 }
 
 /// The file that records the project a raw directory's responses came from.
@@ -156,23 +174,28 @@ impl RawProfile {
             variables_unavailable: read_scope_variables_unavailable(dir)?,
             project_uid: read_scope(dir)?,
             fetched_at: read_scope_fetched_at(dir)?,
+            manifest_entities: if dir.join(MANIFEST_ENTITIES_FILE).is_file() {
+                Some(read_json_file(dir, MANIFEST_ENTITIES_FILE)?)
+            } else {
+                None
+            },
         })
     }
 
-    /// Write the three files and `scope.json` under `dir`, creating it.
+    /// Write the three files and `scope.json` under `dir`, creating it, and the manifests of a
+    /// profile that has a draft.
     pub fn save_dir(&self, dir: &Path, fetched_at: &str) -> Result<()> {
-        write_json_files(
-            dir,
-            &[
-                ("profile.json", &self.profile),
-                ("manifests.json", &self.manifests),
-                ("variables.json", &self.variables),
-                (
-                    SCOPE_FILE,
-                    &scope_document(&self.project_uid, fetched_at, self.variables_unavailable),
-                ),
-            ],
-        )
+        let scope = scope_document(&self.project_uid, fetched_at, self.variables_unavailable);
+        let mut files = vec![
+            ("profile.json", &self.profile),
+            ("manifests.json", &self.manifests),
+            ("variables.json", &self.variables),
+            (SCOPE_FILE, &scope),
+        ];
+        if let Some(entities) = &self.manifest_entities {
+            files.push((MANIFEST_ENTITIES_FILE, entities));
+        }
+        write_json_files(dir, &files)
     }
 }
 
@@ -336,6 +359,7 @@ impl RawCluster {
             variables_unavailable: self.variables_unavailable,
             project_uid: self.project_uid.clone(),
             fetched_at: self.fetched_at.clone(),
+            manifest_entities: None,
         }
     }
 }
@@ -355,11 +379,13 @@ mod tests {
             variables_unavailable: false,
             project_uid: Some("p1".into()),
             fetched_at: None,
+            manifest_entities: Some(json!({"m1": {"spec": {"draft": {"content": "c"}}}})),
         };
         raw.save_dir(dir.path(), "t0").unwrap();
         let back = RawProfile::load_dir(dir.path()).unwrap();
         assert_eq!(back.profile, raw.profile);
         assert_eq!(back.project_uid.as_deref(), Some("p1"));
+        assert_eq!(back.manifest_entities, raw.manifest_entities);
         fs::write(dir.path().join("variables.json"), "").unwrap();
         assert!(matches!(
             RawProfile::load_dir(dir.path()).unwrap_err(),

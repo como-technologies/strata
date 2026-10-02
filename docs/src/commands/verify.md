@@ -26,6 +26,15 @@ content. [What Palette does](../internals/palette/profiles.md#edits-in-place) na
 can change it. See
 [A published version is edited in place](../use-cases/edited-in-place.md).
 
+## A record of a draft
+
+`verify` of a record of `<ref>@draft` compares the draft with the published
+version. Before the publish, it reports `DRIFT`: `published version
+<name>@<version> differs from the draft recorded <time>`. After the publish, it
+verifies: `published version <name>@<version> holds the draft recorded
+<time>`. See
+[Review a draft before its publish](../use-cases/draft.md#4-after-the-publish-the-version-holds-the-draft).
+
 ## Who changed it
 
 `DRIFT` says that the object changed. It does not say who changed it.

@@ -16,6 +16,13 @@ use crate::error::{Error, Result};
 /// Schema id written into every snapshot.
 pub const SNAPSHOT_SCHEMA: &str = "strata-snapshot/1";
 
+/// The `source.template` of a record of the published template of a profile version.
+pub const PUBLISHED_TEMPLATE: &str = "published";
+
+/// The `source.template` of a record of the draft template of a profile version: of
+/// `<ref>@draft`, or of a version that was never published.
+pub const DRAFT_TEMPLATE: &str = "draft";
+
 /// The part of a snapshot schema id shared by every version of it.
 const SNAPSHOT_FAMILY: &str = "strata-snapshot/";
 
@@ -177,6 +184,13 @@ pub struct PackSource {
 }
 
 impl Source {
+    /// True for a record of `<ref>@draft`: the draft of a version, which its publish makes the
+    /// published template. A record of a version that was never published reads its draft too,
+    /// with no `@draft` in its ref, and is not one.
+    pub fn is_draft(&self) -> bool {
+        self.template == DRAFT_TEMPLATE && self.reference.ends_with(crate::reference::DRAFT_SUFFIX)
+    }
+
     /// `name@version`, and `on cluster <name>` for a snapshot of a cluster, or `pending for cluster
     /// <name>` for the update that waits for it.
     pub fn title(&self) -> String {
@@ -915,6 +929,30 @@ fn normalize_variable(v: &Value) -> Value {
     })
 }
 
+/// The manifests of pack `pk` of one template, each as `name`, `uid`, `digest`, and `content`,
+/// from the answers of the manifests by uid (see [`RawProfile::manifest_entities`]). A manifest
+/// of the published template has its published content. A manifest of the draft has its draft
+/// content, and its published content when the draft did not change it: Palette writes the draft
+/// content of a manifest at an edit, and empties it at the publish.
+fn manifests_of_template(pk: &Value, entities: &Value, template: &str) -> Vec<Value> {
+    arr(pk, "/manifests")
+        .iter()
+        .map(|m| {
+            let uid = s(m, "/uid");
+            let entity = entities.get(&uid).cloned().unwrap_or(Value::Null);
+            let edited = !s(&entity, &format!("/spec/{template}/content")).is_empty();
+            let from = if edited { template } else { PUBLISHED_TEMPLATE };
+            let content = s(&entity, &format!("/spec/{from}/content"));
+            json!({
+                "name": or(s(m, "/name"), &s(&entity, "/metadata/name")),
+                "uid": uid,
+                "digest": s(&entity, &format!("/spec/{from}/digest")),
+                "content": content,
+            })
+        })
+        .collect()
+}
+
 impl Pack {
     /// True when the upstream of the pack is unknown: Palette gave no digest for it, so the
     /// `upstream` hash is the hash of nothing and a change of its archive cannot show. A manifest
@@ -926,12 +964,24 @@ impl Pack {
     /// Build one pack from its ref on the profile template and the matching entry of the
     /// packs/manifests response (matched by name; missing entries leave those fields empty).
     pub fn from_api(pk: &Value, manifests_packs: &[Value]) -> Pack {
+        Self::from_api_with(pk, manifests_packs, None)
+    }
+
+    /// [`Pack::from_api`], with the manifests of the pack given apart, each as `name`, `uid`,
+    /// `digest`, and `content`, in place of those of the packs/manifests entry.
+    fn from_api_with(pk: &Value, manifests_packs: &[Value], given: Option<Vec<Value>>) -> Pack {
         let name = s(pk, "/name");
-        let mm = manifests_packs
+        let mut mm = manifests_packs
             .iter()
             .find(|m| s(m, "/metadata/name") == name || s(m, "/spec/name") == name)
             .cloned()
             .unwrap_or(Value::Null);
+        if let Some(given) = given {
+            if !mm.is_object() {
+                mm = json!({});
+            }
+            mm["spec"]["manifests"] = Value::Array(given);
+        }
         let layer = or(s(pk, "/layer"), "addon");
         let kind = or(s(pk, "/type"), "spectro");
         let tag = s(pk, "/tag");
@@ -1087,16 +1137,48 @@ impl Snapshot {
             .collect()
     }
 
-    /// Build a snapshot from the raw API responses of one profile.
+    /// Build a snapshot from the raw API responses of one profile: of its published template, or
+    /// of its draft when it has no published template.
     pub fn from_raw(raw: &RawProfile, reference: &str, fetched_at: &str) -> Result<Snapshot> {
-        let prof = &raw.profile;
-        let published = arr(prof, "/spec/published/packs");
-        let (tpl_packs, tpl_ptr, template) = if !published.is_empty() {
-            (published, "/spec/published", "published")
+        if arr(&raw.profile, "/spec/published/packs").is_empty() {
+            Self::from_raw_template(raw, reference, fetched_at, DRAFT_TEMPLATE)
         } else {
-            (arr(prof, "/spec/draft/packs"), "/spec/draft", "draft")
-        };
-        let mpacks = arr(&raw.manifests, "/spec/packs");
+            Self::from_raw_template(raw, reference, fetched_at, PUBLISHED_TEMPLATE)
+        }
+    }
+
+    /// Build a snapshot of the draft template of one profile: what the next publish makes the
+    /// version. A profile with no draft is the error [`Error::NoDraft`].
+    pub fn from_raw_draft(raw: &RawProfile, reference: &str, fetched_at: &str) -> Result<Snapshot> {
+        let prof = &raw.profile;
+        if !crate::api::has_draft(prof) {
+            return Err(Error::NoDraft {
+                name: s(prof, "/metadata/name"),
+                version: s(prof, "/spec/version"),
+                uid: s(prof, "/metadata/uid"),
+            });
+        }
+        Self::from_raw_template(raw, reference, fetched_at, DRAFT_TEMPLATE)
+    }
+
+    /// Build a snapshot of one template of a profile, [`PUBLISHED_TEMPLATE`] or
+    /// [`DRAFT_TEMPLATE`].
+    fn from_raw_template(
+        raw: &RawProfile,
+        reference: &str,
+        fetched_at: &str,
+        template: &str,
+    ) -> Result<Snapshot> {
+        let prof = &raw.profile;
+        let tpl_ptr = format!("/spec/{template}");
+        let tpl_packs = arr(prof, &format!("{tpl_ptr}/packs"));
+        let mut mpacks = arr(&raw.manifests, "/spec/packs");
+        if crate::api::has_draft(prof) && template == PUBLISHED_TEMPLATE {
+            // packs/manifests holds the packs of the draft: keep only the entries of the packs
+            // that the published template holds, by pack uid
+            let uids: Vec<String> = tpl_packs.iter().map(|pk| s(pk, "/packUid")).collect();
+            mpacks.retain(|m| uids.contains(&s(m, "/metadata/uid")));
+        }
 
         let tags: BTreeMap<String, String> = prof
             .pointer("/metadata/labels")
@@ -1141,7 +1223,15 @@ impl Snapshot {
 
         let packs: Vec<Pack> = tpl_packs
             .iter()
-            .map(|pk| Pack::from_api(pk, &mpacks))
+            .map(|pk| {
+                // a ref that lists no manifest keeps the manifests of the packs/manifests entry
+                let given = raw
+                    .manifest_entities
+                    .as_ref()
+                    .filter(|_| !arr(pk, "/manifests").is_empty())
+                    .map(|e| manifests_of_template(pk, e, template));
+                Pack::from_api_with(pk, &mpacks, given)
+            })
             .collect();
 
         let root = root_of(&variables_hash, &packs);

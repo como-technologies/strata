@@ -219,6 +219,19 @@ pub enum Error {
         /// The ref as given.
         reference: String,
     },
+    /// `<ref>@draft` named a profile version that has no draft: Palette holds only its published
+    /// template.
+    #[error(
+        "profile {name} version {version} (uid {uid}) has no draft: Palette holds only its published template, which `strata snapshot {uid}` reads"
+    )]
+    NoDraft {
+        /// The profile name.
+        name: String,
+        /// The profile version.
+        version: String,
+        /// The profile uid.
+        uid: String,
+    },
     /// The command was called in a way that cannot work, and no request was made.
     #[error("{message}")]
     Usage {
@@ -500,6 +513,7 @@ impl Error {
             Error::ProfileNotFound { .. } => "profile-not-found",
             Error::ClusterProfileNotFound { .. } => "cluster-profile-not-found",
             Error::ProfileRefRequired { .. } => "profile-ref-required",
+            Error::NoDraft { .. } => "no-draft",
             Error::RecordNotASource { .. } => "record-not-a-source",
             Error::PaletteRefuses { .. } => "palette-refuses",
             Error::Usage { .. } => "usage",
@@ -647,6 +661,11 @@ impl Error {
             Error::ProfileRefRequired { reference } => {
                 m.insert("reference".into(), Value::from(reference.as_str()));
             }
+            Error::NoDraft { name, version, uid } => {
+                m.insert("name".into(), Value::from(name.as_str()));
+                m.insert("version".into(), Value::from(version.as_str()));
+                m.insert("uid".into(), Value::from(uid.as_str()));
+            }
             Error::ProfileNotFound {
                 name,
                 version,
@@ -785,6 +804,11 @@ mod tests {
             },
             Error::ProfileRefRequired {
                 reference: "cluster:c1".into(),
+            },
+            Error::NoDraft {
+                name: "aws-stack".into(),
+                version: "1.1.1".into(),
+                uid: "64e0000000000000000000c3".into(),
             },
             Error::PaletteRefuses {
                 reference: "aws-stack.yaml".into(),

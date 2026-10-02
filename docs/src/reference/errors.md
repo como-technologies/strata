@@ -22,6 +22,7 @@ the kind.
 | `transport` | The request did not reach Palette, or the answer did not arrive whole. | `path` |
 | `not-json` | Palette answered with a body that is not JSON. | `path` |
 | `profile-not-found` | No profile version with this name and version in the scope. | `name`, `version`, `tenantScope` |
+| `no-draft` | A `<ref>@draft` named a profile version with no draft: Palette holds only its published template. | `name`, `version`, `uid` |
 | `cluster-profile-not-found` | The cluster runs no profile with this name or uid. | `cluster`, `profile`, `applied` |
 | `profile-ref-required` | The command needs a profile, and got a cluster, an edge host, a cluster group, an app profile, a pack, or a record of one. | `reference` |
 | `record-not-a-source` | `snapshot` got a record. It writes one, and does not read one. | `path` |

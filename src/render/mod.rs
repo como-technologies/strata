@@ -777,6 +777,43 @@ pub(crate) fn tier_states(d: &Diff) -> Vec<(String, bool)> {
         .collect()
 }
 
+/// `aws-stack@1.1.1@draft is the draft of aws-stack@1.1.1 (uid u): its publish makes this
+/// change`, for a diff of a version and its draft whose roots differ.
+pub(crate) fn draft_note(d: &Diff) -> Option<String> {
+    let draft = match (d.a.is_draft(), d.b.is_draft()) {
+        (false, true) => &d.b,
+        (true, false) => &d.a,
+        _ => return None,
+    };
+    (!d.same && !draft.uid.is_empty() && d.a.uid == d.b.uid).then(|| {
+        format!(
+            "{} is the draft of {}@{} (uid {}): its publish makes this change",
+            draft.reference, draft.name, draft.version, draft.uid
+        )
+    })
+}
+
+/// What a verdict says that a record holds: `the draft` for a record of `<ref>@draft`, which the
+/// verify compares with the published version, and `the copy` for each other record.
+pub(crate) fn recorded_noun(recorded: &Source) -> &'static str {
+    if recorded.is_draft() {
+        "the draft"
+    } else {
+        "the copy"
+    }
+}
+
+/// The verdict of a record that verifies: `holds the draft recorded <at>` for a record of
+/// `<ref>@draft`, as the publish of the draft gives it, and `is unchanged since <at>` for each
+/// other record.
+pub(crate) fn unchanged_sentence(recorded: &Source, at: &str) -> String {
+    if recorded.is_draft() {
+        format!("holds the draft recorded {at}")
+    } else {
+        format!("is unchanged since {at}")
+    }
+}
+
 pub(crate) fn edited_in_place_note(d: &Diff) -> Option<String> {
     // a version that Palette no longer has was deleted, and not edited
     let gone = d.verify.as_ref().is_some_and(|v| v.gone);
@@ -903,6 +940,11 @@ fn record_sentence(r: &crate::ops::VerifiedRecord) -> String {
             .and_then(|v| v.registry_sync.as_ref()),
     );
     let detail = match r.status {
+        RecordStatus::Unchanged if r.diff.as_ref().is_some_and(|d| d.a.is_draft()) => format!(
+            "holds the draft recorded {}{}",
+            r.recorded_at,
+            values_changed_suffix(record_values_changed(r))
+        ),
         RecordStatus::Unchanged => format!(
             "unchanged since {}{}",
             r.recorded_at,
@@ -956,7 +998,8 @@ fn record_sentence(r: &crate::ops::VerifiedRecord) -> String {
             who_suffix(r)
         ),
         RecordStatus::Drifted => format!(
-            "differs from the copy recorded {}; max impact {}, {} changed{}{}{}",
+            "differs from {} recorded {}; max impact {}, {} changed{}{}{}",
+            r.diff.as_ref().map_or("the copy", |d| recorded_noun(&d.a)),
             r.recorded_at,
             r.max_impact
                 .and_then(|l| serde_json::to_value(l).ok())

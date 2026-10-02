@@ -1220,6 +1220,7 @@ pub fn resolve<A: PaletteApi>(
         variables_unavailable: false,
         fetched_at: None,
         project_uid: None,
+        manifest_entities: None,
     })
 }
 

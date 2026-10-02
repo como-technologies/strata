@@ -60,6 +60,7 @@
 - [Retire a version](./use-cases/retire.md)
 - [The registry has newer versions](./use-cases/behind.md)
 - [A published version is edited in place](./use-cases/edited-in-place.md)
+- [Review a draft before its publish](./use-cases/draft.md)
 - [A version bump overwrites a version](./use-cases/overwritten.md)
 - [A macro value changes](./use-cases/macros.md)
 - [An app profile is updated in place](./use-cases/app-profiles.md)
