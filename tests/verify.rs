@@ -2247,7 +2247,7 @@ fn the_second_reading_finds_a_virtual_cluster_through_the_group_that_pins_the_ve
         .render_consumers(&r)
         .unwrap();
     assert!(
-        text.contains("1 cluster group pins the version, 1 other virtual cluster read"),
+        text.contains("1 cluster group pins the version, 1 other virtual cluster, 1 read"),
         "{text}"
     );
     let json: Value = serde_json::from_str(
@@ -2285,6 +2285,51 @@ fn the_second_reading_does_not_read_again_a_virtual_cluster_that_the_list_names(
     assert_eq!((r.clusters_read.groups, r.clusters_read.members), (1, 0));
     // read once, for the consumer list, and not again by the group reading
     assert_eq!(api.calls("/v1/spectroclusters/vc-1"), 1);
+}
+
+#[test]
+fn the_line_of_the_second_reading_counts_a_virtual_cluster_that_strata_cannot_read_apart() {
+    // the search names c-9, which strata reads; the group g1 names vc-1, whose document answers
+    // 500 (from the verify of 6d21758)
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let mut c9 = cluster_doc("c-9", "c-9", "p1", "Running");
+    c9["spec"] = serde_json::json!({"clusterProfileTemplates": []});
+    let api = with_pinning_group(serve(MemoryApi::new(), dir.path(), "a", UID_A))
+        .with_post(
+            CLUSTER_SEARCH,
+            &profile_search("lab-profile", false),
+            serde_json::json!({"items": [{"metadata": {"uid": "c-9", "name": "c-9",
+                "annotations": {"projectUid": "p1"}}}], "listmeta": {"continue": ""}}),
+        )
+        .with("/v1/spectroclusters/c-9", c9)
+        .failing("/v1/spectroclusters/vc-1", 500, "boom");
+    let r = ops::consumers(
+        &Ref::Uid(UID_A.into()),
+        |_| Ok(Palette::new(&api)),
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert_eq!(
+        (
+            r.clusters_read.read,
+            r.clusters_read.unread,
+            r.clusters_read.members,
+            r.clusters_read.members_unread
+        ),
+        (1, 1, 1, 1)
+    );
+    let text = render::renderer(Format::Terminal, Paint::off(), false)
+        .render_consumers(&r)
+        .unwrap();
+    assert!(
+        text.contains(
+            "the cluster search names 1 other cluster with the profile, 1 read; \
+             1 cluster group pins the version, 1 other virtual cluster, 0 read"
+        ),
+        "{text}"
+    );
 }
 
 #[test]

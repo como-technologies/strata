@@ -176,7 +176,7 @@ version bump or a rename overwrote the version that the cluster runs. See
   applies. The listing names no virtual cluster.
 - The last line says how far the second reading got:
   `second reading: the cluster search names 1 other cluster with the profile, 1 read`
-  from the search, with `; 1 cluster group pins the version, 1 other virtual cluster read`
+  from the search, with `; 1 cluster group pins the version, 1 other virtual cluster, 1 read`
   when a group pins it, `second reading: 3 of 3 clusters read` from the listing, or
   `second reading: not done` with the reason.
 - Strata then searches the edge hosts, at tenant scope, and at the scope of

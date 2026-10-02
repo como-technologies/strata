@@ -139,6 +139,9 @@ pub struct ClustersRead {
     /// the search did not name. Each one also counts in `read` or `unread`.
     #[serde(default, skip_serializing_if = "is_zero")]
     pub members: usize,
+    /// The virtual clusters of `members` that strata could not read. They also count in `unread`.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub members_unread: usize,
     /// Why strata could not read the cluster groups, or one of them, when it could not.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub groups_error: Option<Value>,
@@ -745,6 +748,9 @@ where
             Ok(doc) => doc,
             Err(_) => {
                 clusters_read.unread += 1;
+                if of_group {
+                    clusters_read.members_unread += 1;
+                }
                 continue;
             }
         };
@@ -820,7 +826,11 @@ fn group_members<A: PaletteApi>(
     }
     let mut members = Vec::new();
     for (scope, group) in groups {
-        let doc = match scope.cluster_group_document(&group) {
+        // a group that the tenant lists can be one that only the scope of the key can read
+        let doc = match scope
+            .cluster_group_document(&group)
+            .or_else(|_| home.cluster_group_document(&group))
+        {
             Ok(doc) => doc,
             Err(e) => {
                 read.groups_error.get_or_insert(e.to_json());
@@ -835,7 +845,10 @@ fn group_members<A: PaletteApi>(
             continue;
         }
         read.groups += 1;
-        match scope.cluster_group_members(&group) {
+        match scope
+            .cluster_group_members(&group)
+            .or_else(|_| home.cluster_group_members(&group))
+        {
             Ok(found) => members.extend(found),
             Err(e) => {
                 read.groups_error.get_or_insert(e.to_json());

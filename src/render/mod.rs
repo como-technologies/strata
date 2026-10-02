@@ -361,22 +361,25 @@ pub(crate) fn second_reading_counts(read: &crate::ops::ClustersRead) -> String {
             entry_error(Some(e)).unwrap_or("an error")
         ),
         (g, _) => format!(
-            "{counts}; {g} cluster {} the version, {} other virtual {} read",
+            "{counts}; {g} cluster {} the version, {} other virtual {}, {} read",
             if g == 1 { "group pins" } else { "groups pin" },
             read.members,
             if read.members == 1 {
                 "cluster"
             } else {
                 "clusters"
-            }
+            },
+            read.members.saturating_sub(read.members_unread)
         ),
     }
 }
 
 fn second_reading_main(read: &crate::ops::ClustersRead) -> String {
-    // the virtual clusters of the groups are counted apart
+    // the virtual clusters of the groups are counted apart, read and not read
     let n = (read.read + read.unread).saturating_sub(read.members);
-    let read_n = read.read.saturating_sub(read.members);
+    let read_n = read
+        .read
+        .saturating_sub(read.members.saturating_sub(read.members_unread));
     match read.resolved {
         Some(crate::ops::Resolved::Search) if n == 0 => {
             "the cluster search names no other cluster with the profile".to_string()
