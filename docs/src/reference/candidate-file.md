@@ -54,7 +54,7 @@ library. It then writes no file.
 | `registry` or `registryUid` | yes, on the layer or at the top; no on a `manifest` layer | The registry, by name or uid. Not both. The setting on the layer has priority over the one at the top. |
 | `type` | no | `manifest` for a layer of manifests that comes from no registry. See [A manifest layer](#a-manifest-layer). Leave it out for a pack from a registry: the registry gives the type. |
 | `values` or `valuesFile` | no | The values, inline or in a file. Not both. With neither, the layer gets the default values of the pack. |
-| `layer` | no | The layer. The default comes from the registry, and is `addon` for a `manifest` layer. |
+| `layer` | no | The layer. The default comes from the registry. A `manifest` layer takes only `addon`: see [A manifest layer](#a-manifest-layer). |
 | `tag` | no | The tag. The default is the tag that equals the version, else the first tag of that version, else the version itself. An explicit tag must be a tag of that version in the registry, or the version itself. A `manifest` layer takes any tag, and its default is the version. A floating tag, such as `1.0.x`, pins the build that the tag names now: see [Tag names](../internals/palette/packs.md#tag-names). |
 | `params` | no | A map that Palette carries on a pack beside its values. Strata puts it in the authored hash, so a change to it is an `AUTHORED` change. |
 | `manifests[]` | no; one or more on a `manifest` layer | Each with a `name`, and `content` inline or a `contentFile`. |
@@ -77,7 +77,7 @@ Strata reads the whole file before it sends a request:
   - A layer sets `registry` or `registryUid`, or the top of the file does. Not
     both, and not neither.
   - A `manifest` layer sets no `registry` and no `registryUid`, and it has one
-    manifest or more.
+    manifest or more. Its `layer` is `addon`, or it has no `layer`.
   - `type` is `manifest`, or the layer has no `type`.
   - A layer sets `values` or `valuesFile`, or neither. Not both.
   - A manifest sets `content` or `contentFile`. Not both, and not neither.
@@ -142,9 +142,15 @@ that pack uid alone. `same-release` passes the pair as `SAME CONTENT`, and
 [One manifest in two profiles](../use-cases/manifest-pack.md#5-review-a-change-before-you-publish-it)
 and [Manifest pack uids](../internals/palette/packs.md#manifest-pack-uids).
 
-Palette keeps the tag that the profile gives, so give the tag that you publish.
-`strata candidate` writes the version, the tag, and the layer of the published
-version.
+Palette builds the pack of a manifest layer from its own manifest pack:
+
+- **The tag** comes from the profile. Give the tag that you publish.
+- **The version** comes from the manifest pack of Palette, and not from the
+  profile. Give that version. `strata candidate` copies it from the record of a
+  published version.
+- **The layer** comes from the manifest pack of Palette too, and is `addon`.
+  Palette drops a layer that the profile gives. So strata refuses another
+  layer on a `manifest` layer: the published version would not have it.
 
 ## Write one from a published version
 

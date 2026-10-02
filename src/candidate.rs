@@ -195,10 +195,11 @@ fn default_type() -> String {
 pub struct CandidateLayer {
     /// Pack name.
     pub name: String,
-    /// Pack version.
+    /// Pack version. For a `manifest` layer, the version that Palette gives its own manifest
+    /// pack: `strata candidate` copies it from the record.
     pub version: String,
-    /// Layer: os, k8s, cni, csi, addon. Defaults to the registry's, and to `addon` for a
-    /// `manifest` layer.
+    /// Layer: os, k8s, cni, csi, addon. Defaults to the registry's. A `manifest` layer takes
+    /// only `addon`, the layer that Palette gives each manifest pack.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub layer: Option<String>,
     /// `manifest` for a layer of manifests from no registry: it names no registry, and it needs
@@ -262,7 +263,8 @@ impl RegistryRef {
 /// The `type` of a layer of manifests that comes from no registry.
 pub const MANIFEST: &str = "manifest";
 
-/// The layer that Palette gives a manifest pack when the file names none.
+/// The layer that Palette gives each manifest pack: the layer of its own manifest pack. It drops
+/// the layer of the request.
 const MANIFEST_LAYER: &str = "addon";
 
 /// A layer with its registry settled and its files read. A `manifest` layer has no registry.
@@ -368,6 +370,15 @@ pub fn check(candidate: Candidate, path: &Path) -> Result<LoadedCandidate> {
                 if l.manifests.is_empty() {
                     return Err(invalid(format!(
                         "{whom} is a manifest layer with no manifest; give it one manifest or more"
+                    )));
+                }
+                // Palette takes the layer from its own manifest pack, and drops the layer of the
+                // request, so another layer gives a record that the published version never has
+                if let Some(layer) = l.layer.as_deref().filter(|&x| x != MANIFEST_LAYER) {
+                    return Err(invalid(format!(
+                        "{whom} is a manifest layer with layer {layer}; Palette gives each manifest \
+                         pack the layer {MANIFEST_LAYER}, so remove layer or set it to \
+                         {MANIFEST_LAYER}"
                     )));
                 }
                 None
@@ -1021,6 +1032,21 @@ mod tests {
             message.contains("layer 1 (namespace-policy) has type helm"),
             "{message}"
         );
+    }
+
+    #[test]
+    fn a_manifest_layer_takes_only_the_layer_that_palette_gives_a_manifest_pack() {
+        let mut k8s = manifest_candidate();
+        k8s.layers[0].layer = Some("k8s".into());
+        let message = refusal(k8s);
+        assert!(
+            message.contains("layer 1 (namespace-policy) is a manifest layer with layer k8s"),
+            "{message}"
+        );
+        // the layer that Palette gives, written out, is the same as no layer
+        let mut addon = manifest_candidate();
+        addon.layers[0].layer = Some("addon".into());
+        assert!(check(addon, Path::new("c.yaml")).is_ok());
     }
 
     #[test]
