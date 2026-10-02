@@ -69,8 +69,10 @@ With auto-merge on, GitHub merges the pull request when the checks pass and the
 verify status is success, and deletes the branch. A verify that fails stops the
 merge: the author fixes the change, pushes, and asks for a new verify.
 
-An admin of the repository can push to `main` with no pull request: a change of
-the book, or the commit of a release (see [Release](./release.md)).
+An admin of the repository can go around each rule of the ruleset: for example,
+push to `main` with no pull request, for the commit of a release (see
+[Release](./release.md)). The rules do not stop an admin, so an admin keeps to
+the steps of this page for each other change.
 
 ## The evidence
 
