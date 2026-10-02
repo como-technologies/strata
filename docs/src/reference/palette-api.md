@@ -102,4 +102,6 @@ entries it got, until a page is short or `offset` reaches `listmeta.count`.
 `--raw-dir` saves the three documents of a profile or a cluster, and
 `scope.json`. `scope.json` holds the project, the time of the read, and
 `variablesUnavailable`. So `--from-raw` rebuilds the same record, with the same
-fetch time and the same flag.
+fetch time and the same flag. For a cluster, it also saves the notifications,
+with the values of each pack masked: see
+[The saved answers of Palette](../commands/snapshot/no-network.md#the-saved-answers-of-palette).

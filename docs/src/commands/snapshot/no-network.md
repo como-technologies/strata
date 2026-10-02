@@ -21,6 +21,13 @@ Palette answered:
 `scope.json` keeps the project. A directory with no `scope.json` builds a
 snapshot at tenant scope.
 
+`notifications.json` keeps the notifications of a cluster. Palette serves the
+full values of a pack in each event, and these values can hold a password.
+Before the save, strata writes `********` in place of each `packValues`,
+`appTierValues`, and `appTierProperties` that is not empty. Strata masks all of
+the values, not only the fields that `passwordFields` names. Strata reads none
+of these fields, so `--from-raw` builds the same record.
+
 ## A version before you publish it
 
 `--from-candidate` builds a snapshot from a candidate file. See
