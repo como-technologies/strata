@@ -678,7 +678,7 @@ baseline with cluster A.
 | `group-verify` | 0 | #78: `verify` of the record of the group |
 | `member-consumer`, `member-consumer-listed` | 1, 0 | #78: `consumers` of the add-on version names the virtual cluster, from the consumer list of Palette |
 | `member-not-in-listing` | 0 | #78: the cluster listing does not name the virtual cluster |
-| `search-profile`, `search-profile-runs` | 0 | #181: the cluster search with `clusterProfiles eq <add-on name>` answers cluster A, which runs the add-on version, and not the virtual cluster. A search with the uid of the add-on answers no cluster. |
+| `search-profile`, `search-profile-runs` | 0 | #181: the cluster search with `clusterProfiles eq <add-on name>` answers cluster A, which runs the add-on version, and not the virtual cluster |
 | `search-nested`, `search-nested-misses-member` | 0 | #184: the same search with `environment eq nested` does not answer the virtual cluster of the group, which runs the add-on version through its group |
 | `member-consumer-search` | 0 | #149: `consumers` does its second reading through the search |
 | `member-consumer-group`, `group-virtual-clusters` | 0 | #184: `consumers` finds the group that pins the add-on version, and the virtual clusters of the group, which it reads, name the virtual cluster |
