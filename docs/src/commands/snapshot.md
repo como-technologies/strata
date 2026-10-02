@@ -28,8 +28,8 @@ takes:
   a cluster: a record read back from the directory does not say `@pending`,
   `@draft`, edge host, cluster group, or app profile.
 - `--validate` takes `--from-candidate` or a profile version. With `--from-raw`,
-  `--dir`, or a cluster, edge host, cluster group, app profile, or pack ref, it is
-  a `usage` error. Palette refuses the packs: exit `2`, the error
+  `--dir`, or an `@draft`, cluster, edge host, cluster group, app profile, or pack
+  ref, it is a `usage` error. Palette refuses the packs: exit `2`, the error
   `palette-refuses`, and no record.
 - Without `-o`, the snapshot goes to standard output.
 - `-o releases/1.1.0/dev.json` makes the directory that the path names, so a
