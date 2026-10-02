@@ -1,0 +1,25 @@
+$ PALETTE_PROJECT=dev strata candidate platform-addons@1.0.0 -o addons/candidate.yaml
+strata: looking up project dev
+strata: fetching profile 64e2000000000000000000a1
+strata: wrote addons/candidate.yaml from platform-addons@1.0.0 (root b49f91f9df85)
+$ cat addons/candidate.yaml
+name: platform-addons
+version: 1.0.0
+type: add-on
+cloudType: all
+layers:
+- name: namespace-policy
+  version: 1.0.0
+  layer: addon
+  type: manifest
+  tag: 1.0.0
+  values: ''
+  manifests:
+  - name: namespace-policy
+    content: |-
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: payments
+        labels:
+          pod-security.kubernetes.io/enforce: restricted

@@ -1,0 +1,4 @@
+$ PALETTE_PROJECT=dev strata snapshot --from-candidate addons/candidate.yaml -o addons/candidate.json
+strata: looking up project dev
+strata: resolving platform-addons@1.0.0 against the registry
+strata: wrote addons/candidate.json (root 8f19d75be941)

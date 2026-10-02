@@ -988,6 +988,33 @@ fn use_cases(r: &mut Runner) {
         "manifest-full",
         r"^([$]|--- |[+][+][+] |[-+] +pod-security)",
     );
+    // a manifest pack in a candidate file: a layer of type manifest, with no registry, whose
+    // record differs from the published version by the minted uid alone (#150)
+    r.step(
+        "manifest-candidate",
+        0,
+        true,
+        "PALETTE_PROJECT=dev strata candidate platform-addons@1.0.0 -o addons/candidate.yaml",
+    );
+    r.step("manifest-candidate", 0, false, "cat addons/candidate.yaml");
+    r.step(
+        "manifest-candidate-record",
+        0,
+        true,
+        "PALETTE_PROJECT=dev strata snapshot --from-candidate addons/candidate.yaml -o addons/candidate.json",
+    );
+    r.step(
+        "manifest-candidate-same",
+        0,
+        false,
+        "strata same-release addons/candidate.json addons/1.0.0/dev.json",
+    );
+    r.step(
+        "manifest-candidate-same",
+        0,
+        false,
+        "strata same-release addons/candidate.json addons/1.0.0/dev.json --json | jq -c '.pairs[] | {status, mintedUidOnly}'",
+    );
 
     r.chapter("edited-in-place", DEV_ENV);
     r.projects(&[("dev", DEV)]);

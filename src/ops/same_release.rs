@@ -91,6 +91,10 @@ pub struct Pair {
     /// The key of each pack, on either side, with no upstream digest; also when it is allowed.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub upstream_unknown: Vec<String>,
+    /// The key of each manifest pack whose only difference is the `packUid` that Palette mints
+    /// for each profile, as `packs[].mintedUidOnly` of `compare` marks it.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub minted_uid_only: Vec<String>,
 }
 
 /// Counts over the pairs.
@@ -318,6 +322,12 @@ pub fn same_release_with(
                 packs_repinned,
                 packs_retagged,
                 reasons,
+                minted_uid_only: d
+                    .packs
+                    .iter()
+                    .filter(|p| p.minted_uid_only)
+                    .map(|p| p.key.clone())
+                    .collect(),
                 upstream_unknown: d.upstream_unknown,
             }
         })
