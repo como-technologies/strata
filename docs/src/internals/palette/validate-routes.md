@@ -101,7 +101,8 @@ arrives with the status of a fault. The codes are in
 One refusal sets another type: `PackValuesOverrideForbidden` is HTTP `403`.
 A cluster that does not exist is HTTP `404`.
 
-No live run has asked this route yet. Stage 7 of `repave.sh` asks it on
+A live run shows that the route accepts the packs of the release version on
+the cluster that runs it, at the baseline. Stage 7 of `repave.sh` asks it on
 cluster A: see [repave.sh](../../development/live-runs.md#repavesh).
 
 ## POST /v1/clusterprofiles/validate/packs
