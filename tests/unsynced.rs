@@ -223,3 +223,19 @@ fn the_pack_uids_of_a_pack_with_a_digest_are_not_minted_uid_only() {
     assert!(d.packs[0].identity && !d.packs[0].minted_uid_only);
     assert!(!d.same_content);
 }
+
+#[test]
+fn the_pack_that_palette_makes_has_the_layer_addon_for_the_rules_of_the_profile_type() {
+    // the type rule of Palette reads the layer of that pack: an infra profile does not take addon
+    let dir = tempfile::tempdir().unwrap();
+    let file = candidate(dir.path(), "charts-auth", json!({}));
+    let text = fs::read_to_string(&file).unwrap();
+    fs::write(&file, text.replace("type: add-on", "type: infra")).unwrap();
+    let err = snapshot(&file, tenant()).unwrap_err();
+    assert!(matches!(err, Error::CandidateInvalid { .. }), "{err}");
+    assert!(
+        err.to_string()
+            .contains(&format!("layer 1 ({CHART}) has the layer addon")),
+        "{err}"
+    );
+}

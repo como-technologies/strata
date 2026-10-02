@@ -241,6 +241,40 @@ edit through such a route. The lock holds against a new cluster: it keeps every
 cluster outside the template away from a linked version. A cluster that runs a
 linked version is a cluster the template applies.
 
+## What the create of a version checks
+
+Palette refuses a profile version at the create when it breaks one of these
+rules. The paths are in the `hubble` source. In them,
+`service/` is `services/service/spectrocluster/internal/service/`, and
+`models/` is `services/service/spectrocluster/internal/models/`.
+
+| Rule | Code | Source |
+| --- | --- | --- |
+| The version parses as semver. Palette gives it to `NewVersion` of `github.com/Masterminds/semver` v1.5.0: an optional `v`, one to three numbers, an optional pre-release after `-`, and optional build data after `+`. So `1.1` and `v1.2.3` pass, and `2.2.2.develop` and `1.2.3.4` do not. | `VersionParseFailure` | `service/clusterprofile/clusterprofile_validate.go:763-779`, `util/semver/semver.go:95-103` |
+| The profile has at most 200 packs, and at most 200 manifests. A manifest pack counts as one manifest more. The limit is the same in each tenant. | `SubResourceLimitValidationFailure` | `domain/clusterprofile.go:786-797`, `hubs/tenant/internal/resource_limit_service.go:106-128`, `models/param/clusterprofiles_param.go:210-222` |
+| Each pack name is in the profile once. Palette compares the names as they are. | `DuplicatePacksForbidden` | `service/clusterprofile/clusterprofile_validate.go:1164-1174`, `util/list/list_utils.go:150-164` |
+| The name of each manifest, and the name of each manifest pack, is a DNS-1123 label of 32 characters at most: lowercase letters, digits, and `-`, with a letter or a digit at the start and at the end. | `InvalidName` | `service/clusterprofile/clusterprofile_validate.go:1213-1226`, `domain/validator/validate_k8s.go:70-88` |
+| Each manifest name is in its pack once. | `DuplicatePackManifestsForbidden` | `service/clusterprofile/clusterprofile_validate.go:1195-1211` |
+| The values of each pack, and the content of each manifest, are YAML whose first document is a map, or is empty. An unquoted template, such as `{{ .spectro.var.x }}`, is a map key that is a map, so it is not. Palette reads only the first document. | `PackValuesYamlInvalid`, `PackManifestYamlInvalid` | `service/pack/pack_validate.go:112-123`, `util/yaml/yaml.go:960-966` |
+| Each pack supports the cloud of the profile: the cloud is `all`, the pack has no cloud type, or the cloud types of the pack hold the cloud, `all`, or `custom` for a cloud that Palette does not know. | `PackNotSupported` | `service/pack/pack_service.go:424-426`, `domain/pack.go:1345-1356` |
+| The type of the profile takes the layer of each pack. An `infra` profile takes `os`, `k8s`, `cni`, and `csi`. A `cluster` profile takes each layer. Each other type takes `addon`, `cni`, and `csi`. | `ClusterProfilePackNotAllowed` | `service/clusterprofile/clusterprofile_validate.go:811-819`, `:849-874`, `domain/pack.go:213-224` |
+| A `cluster` or `infra` profile has an `os`, a `k8s`, a `cni`, and a `csi` layer. On the cloud `edge-native`, it needs no `csi` layer. | `ErrPackCoreLayersMissing` | `service/pack/pack_validate.go:19-42`, `domain/pack.go:1143-1150`, `service/clusterprofile/clusterprofile_service.go:550-557` |
+
+The layer of a pack comes from the pack in its registry, and not from the
+profile (`ToPackRef`, `service/pack/pack_service.go:722-747`). So the last two rules
+use the layer that the registry gives.
+
+Palette checks the version, the counts, the names, and the YAML first, in the
+stages of `ValidateCreate`
+(`service/clusterprofile/clusterprofile_validate.go:94-113`). It runs these
+stages at the same time, in the order of a Go map, which changes from one
+request to the next (`hulib/pipeline/pipeline.go:84-89`, `:220-245`). So when a
+version breaks two of these rules, the code of the refusal can change from one
+request to the next. Palette checks the cloud and the layers after these stages.
+
+[The candidate file](../../reference/candidate-file.md#checks-before-any-request)
+lists the same rules: strata refuses such a candidate before Palette does.
+
 ## What the delete of a version checks
 
 Palette refuses the delete of a profile version while one of these uses it, in

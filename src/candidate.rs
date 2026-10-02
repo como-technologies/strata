@@ -271,6 +271,169 @@ const MANIFEST_LAYER: &str = "addon";
 /// The layer of the pack that Palette makes for a layer from a registry that it does not sync.
 const UNSYNCED_LAYER: &str = "addon";
 
+/// The most packs, and the most manifests, that Palette takes in one profile
+/// (`GetClusterProfileResourceLimits`, `hubble/domain/clusterprofile.go:786-797`). A manifest
+/// layer counts as one manifest more.
+const PROFILE_LIMIT: usize = 200;
+
+/// The longest name that Palette takes for a manifest or a manifest pack
+/// (`DNS1123LabelMaxLength`, `hubble/domain/validator/validate_k8s.go:70`).
+const NAME_LIMIT: usize = 32;
+
+/// Whether Palette takes `v` as the version of a profile. `semver.ParseStrict` gives it to
+/// `NewVersion` of `github.com/Masterminds/semver` v1.5.0, which takes an optional `v`, one to
+/// three numbers, a pre-release, and build data: so `1.1` and `v1.2.3` pass, and
+/// `2.2.2.develop` does not (`hubble/util/semver/semver.go:95-103`).
+fn palette_version(v: &str) -> bool {
+    let ident = |s: &str| {
+        s.split('.')
+            .all(|i| !i.is_empty() && i.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-'))
+    };
+    let v = v.strip_prefix('v').unwrap_or(v);
+    let (v, build) = match v.split_once('+') {
+        Some((v, b)) => (v, Some(b)),
+        None => (v, None),
+    };
+    let (core, pre) = match v.split_once('-') {
+        Some((c, p)) => (c, Some(p)),
+        None => (v, None),
+    };
+    let numbers: Vec<&str> = core.split('.').collect();
+    numbers.len() <= 3
+        && numbers.iter().all(|n| {
+            !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()) && n.parse::<i64>().is_ok()
+        })
+        && pre.is_none_or(ident)
+        && build.is_none_or(ident)
+}
+
+/// Whether Palette takes `name` as the name of a manifest or of a manifest pack: a DNS-1123
+/// label of 32 characters at most (`IsValidName`, `hubble/domain/validator/validate_k8s.go:79-88`).
+fn palette_name(name: &str) -> bool {
+    let b = name.as_bytes();
+    let inner = |c: &u8| c.is_ascii_lowercase() || c.is_ascii_digit() || *c == b'-';
+    name.len() <= NAME_LIMIT
+        && b.first().is_some_and(|c| *c != b'-' && inner(c))
+        && b.last().is_some_and(|c| *c != b'-' && inner(c))
+        && b.iter().all(inner)
+}
+
+/// The names that are in `names` more than once, each one time, in the order of their first
+/// repeat. Palette compares the names as they are (`FindDuplicates`,
+/// `hubble/util/list/list_utils.go:150-164`).
+fn repeated<'a>(names: impl IntoIterator<Item = &'a str>) -> Vec<&'a str> {
+    let mut seen = std::collections::BTreeSet::new();
+    let mut out = Vec::new();
+    for n in names {
+        if !seen.insert(n) && !out.contains(&n) {
+            out.push(n);
+        }
+    }
+    out
+}
+
+/// The layers that a profile of type `kind` takes (`validatePackLayersByType`,
+/// `clusterprofile_validate.go:811-874`): each layer for `cluster`; `os`, `k8s`, `cni`, and `csi`
+/// for `infra`; `addon`, `cni`, and `csi` for each other type. None for each layer.
+fn layers_of_type(kind: &str) -> Option<&'static [&'static str]> {
+    match kind {
+        "" | "cluster" | PACK_TYPE => None,
+        "infra" => Some(&["os", "k8s", "cni", "csi"]),
+        _ => Some(&["addon", "cni", "csi"]),
+    }
+}
+
+/// The layers that a `cluster` or `infra` profile must have (`GetMandatoryInfraPackLayers`,
+/// `hubble/domain/pack.go:1143-1150`): `os`, `k8s`, and `cni` on the cloud `edge-native`, and
+/// `csi` too on each other cloud. None for each other type.
+fn core_layers(kind: &str, cloud: &str) -> Option<&'static [&'static str]> {
+    match (kind, cloud) {
+        ("cluster" | "infra", "edge-native") => Some(&["os", "k8s", "cni"]),
+        ("cluster" | "infra", _) => Some(&["os", "k8s", "cni", "csi"]),
+        _ => None,
+    }
+}
+
+/// `items` as `a, b, and c`.
+fn listed(items: &[&str]) -> String {
+    match items {
+        [] => String::new(),
+        [one] => one.to_string(),
+        [a, b] => format!("{a} and {b}"),
+        [rest @ .., last] => format!("{}, and {last}", rest.join(", ")),
+    }
+}
+
+/// Check the layer of each pack against the type of the profile, as Palette does at the create and
+/// at the publish. `layers` gives, in candidate order, the layer of each pack, and None when it is
+/// not known yet: the core layers are then not checked.
+fn check_layers(c: &Candidate, layers: &[Option<&str>]) -> std::result::Result<(), String> {
+    if let Some(allowed) = layers_of_type(&c.kind) {
+        for (i, (l, layer)) in c.layers.iter().zip(layers).enumerate() {
+            if let Some(layer) = layer.filter(|x| !allowed.contains(x)) {
+                return Err(format!(
+                    "layer {} ({}) has the layer {layer}; a profile of type {} takes only the \
+                     layers {} (ClusterProfilePackNotAllowed)",
+                    i + 1,
+                    l.name,
+                    c.kind,
+                    listed(allowed)
+                ));
+            }
+        }
+    }
+    if let Some(core) = core_layers(&c.kind, &c.cloud_type)
+        && layers.iter().all(Option::is_some)
+    {
+        let missing: Vec<&str> = core
+            .iter()
+            .copied()
+            .filter(|x| !layers.contains(&Some(*x)))
+            .collect();
+        if !missing.is_empty() {
+            return Err(format!(
+                "a profile of type {} needs the layers {}; this one has no layer {} \
+                 (ErrPackCoreLayersMissing)",
+                c.kind,
+                listed(core),
+                listed(&missing)
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// The cloud types that Palette knows (`toCloudType`, `hubble/cloudtypes/cloudtypes.go:44-59`).
+/// Each other cloud type is a custom cloud.
+const KNOWN_CLOUDS: &[&str] = &[
+    "all",
+    "baremetal",
+    "maas",
+    "aws",
+    "gcp",
+    "azure",
+    "vsphere",
+    "eks",
+    "aks",
+    "apache-cloudstack",
+    "edge-native",
+    "nested",
+    "gke",
+    "generic",
+];
+
+/// Whether a pack whose listing gives the cloud types `clouds` goes in a profile of the cloud
+/// `cloud` (`IsCloudSupported`, `hubble/domain/pack.go:1345-1356`): the cloud `all`, a pack with
+/// no cloud type, a pack of that cloud or of `all`, and a pack of `custom` on a custom cloud.
+fn cloud_supported(cloud: &str, clouds: &[String]) -> bool {
+    let custom = !KNOWN_CLOUDS.contains(&cloud);
+    cloud == "all"
+        || clouds.is_empty()
+        || clouds
+            .iter()
+            .any(|c| c == cloud || c == "all" || (custom && c == "custom"))
+}
+
 /// A layer with its registry settled and its files read. A `manifest` layer has no registry.
 #[derive(Debug, Clone)]
 struct LoadedLayer {
@@ -422,11 +585,95 @@ pub fn check(candidate: Candidate, path: &Path) -> Result<LoadedCandidate> {
             manifests,
         });
     }
+    palette_rules(&candidate, &layers).map_err(invalid)?;
     Ok(LoadedCandidate {
         path: path.to_path_buf(),
         candidate,
         layers,
     })
+}
+
+/// The rules of Palette that the file alone can break, in this order: the version, the count of
+/// packs and of manifests, a pack name twice, the name of a manifest and of a manifest pack, a
+/// manifest name twice in one pack, values and manifests that are not YAML, and the layers of the
+/// type. The layer of a pack that the file does not give comes from the registry, so [`resolve`]
+/// checks the layers again.
+fn palette_rules(c: &Candidate, layers: &[LoadedLayer]) -> std::result::Result<(), String> {
+    if !palette_version(&c.version) {
+        return Err(format!(
+            "version {} is not a version that Palette takes: give one to three numbers, such as \
+             1.2.3, with an optional pre-release, such as 1.2.3-rc.1 (VersionParseFailure)",
+            c.version
+        ));
+    }
+    if c.layers.len() > PROFILE_LIMIT {
+        return Err(format!(
+            "the candidate has {} packs; Palette takes {PROFILE_LIMIT} at most in one profile \
+             (SubResourceLimitValidationFailure)",
+            c.layers.len()
+        ));
+    }
+    let manifests: usize = c
+        .layers
+        .iter()
+        .map(|l| l.manifests.len() + usize::from(l.kind.as_deref() == Some(MANIFEST)))
+        .sum();
+    if manifests > PROFILE_LIMIT {
+        return Err(format!(
+            "the candidate has {manifests} manifests, with one for each manifest layer; Palette \
+             takes {PROFILE_LIMIT} at most in one profile (SubResourceLimitValidationFailure)"
+        ));
+    }
+    if let [first, ..] = repeated(c.layers.iter().map(|l| l.name.as_str()))[..] {
+        return Err(format!(
+            "the pack {first} is in more than one layer; Palette takes each pack once in a \
+             profile (DuplicatePacksForbidden)"
+        ));
+    }
+    let named = |what: String, name: &str| {
+        format!(
+            "{what} has the name {name:?}; Palette takes only a name of {NAME_LIMIT} characters \
+             at most, of lowercase letters, digits, and '-', that starts and ends with a letter or \
+             a digit (InvalidName)"
+        )
+    };
+    for (i, (l, loaded)) in c.layers.iter().zip(layers).enumerate() {
+        let whom = format!("layer {} ({})", i + 1, l.name);
+        if l.kind.as_deref() == Some(MANIFEST) && !palette_name(&l.name) {
+            return Err(named(format!("{whom} is a manifest layer and"), &l.name));
+        }
+        if let Some(m) = l.manifests.iter().find(|m| !palette_name(&m.name)) {
+            return Err(named(format!("a manifest of {whom}"), &m.name));
+        }
+        if let [first, ..] = repeated(l.manifests.iter().map(|m| m.name.as_str()))[..] {
+            return Err(format!(
+                "{whom} has more than one manifest named {first}; Palette takes each name once \
+                 in a pack (DuplicatePackManifestsForbidden)"
+            ));
+        }
+        if let Some(Err(e)) = loaded.values.as_deref().map(crate::canon::map_yaml) {
+            return Err(format!(
+                "the values of {whom} are not YAML that Palette takes: {e} (PackValuesYamlInvalid)"
+            ));
+        }
+        for (name, content) in &loaded.manifests {
+            if let Err(e) = crate::canon::map_yaml(content) {
+                return Err(format!(
+                    "manifest {name} of {whom} is not YAML that Palette takes: {e} \
+                     (PackManifestYamlInvalid)"
+                ));
+            }
+        }
+    }
+    let known: Vec<Option<&str>> = c
+        .layers
+        .iter()
+        .map(|l| match l.kind.as_deref() {
+            Some(MANIFEST) => Some(MANIFEST_LAYER),
+            _ => l.layer.as_deref(),
+        })
+        .collect();
+    check_layers(c, &known)
 }
 
 /// Read `/v1/packs?filters=spec.name=<name>` and give each entry to `each`. Palette serves this
@@ -996,6 +1243,13 @@ pub fn resolve<A: PaletteApi>(
     let mut unsynced_of: BTreeMap<String, Option<Unsynced>> = BTreeMap::new();
     let mut refs = Vec::with_capacity(c.layers.len());
     let mut entries = Vec::with_capacity(c.layers.len());
+    // the layer that Palette gives each pack: the layer of the pack in its registry, not the
+    // layer of the request (`ToPackRef`, `pack_service.go:722-747`)
+    let mut palette_layers: Vec<String> = Vec::with_capacity(c.layers.len());
+    let invalid = |message: String| Error::CandidateInvalid {
+        path: loaded.path.clone(),
+        message,
+    };
     for (i, (l, loaded_layer)) in c.layers.iter().zip(&loaded.layers).enumerate() {
         let manifests: Vec<Value> = loaded_layer
             .manifests
@@ -1006,6 +1260,7 @@ pub fn resolve<A: PaletteApi>(
             // A manifest layer: no registry holds it, so no request. Palette mints its pack uid at
             // the create, so the candidate has none, and it has no digest.
             let layer = l.layer.as_deref().unwrap_or(MANIFEST_LAYER);
+            palette_layers.push(MANIFEST_LAYER.to_string());
             let tag = l.tag.as_deref().unwrap_or(&l.version);
             let values = loaded_layer.values.clone().unwrap_or_default();
             refs.push(json!({
@@ -1100,6 +1355,9 @@ pub fn resolve<A: PaletteApi>(
             if let Some(t) = &how.provider {
                 pack_ref["annotations"] = json!({ "ociRegistryProviderType": t });
             }
+            // the pack that Palette makes has no cloud type, so each cloud takes it
+            // (`createPackDoc`, `pack_service.go:570-585`)
+            palette_layers.push(UNSYNCED_LAYER.to_string());
             refs.push(pack_ref);
             entries.push(json!({
                 "metadata": {"name": l.name, "uid": ""},
@@ -1128,6 +1386,26 @@ pub fn resolve<A: PaletteApi>(
                 registry,
                 state,
             });
+        }
+        // Palette refuses a pack that does not support the cloud of the profile
+        // (`ConstructPackRefs`, `pack_service.go:424-426`)
+        let clouds: Vec<String> = summary
+            .pointer("/spec/cloudTypes")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter_map(|v| v.as_str().map(str::to_string))
+            .collect();
+        if !c.cloud_type.is_empty() && !cloud_supported(&c.cloud_type, &clouds) {
+            return Err(invalid(format!(
+                "layer {} ({}) is the version {} of a pack for the clouds {}; Palette refuses it \
+                 in a profile of the cloud {} (PackNotSupported)",
+                i + 1,
+                l.name,
+                l.version,
+                listed(&clouds.iter().map(String::as_str).collect::<Vec<_>>()),
+                c.cloud_type
+            )));
         }
         let pack_uid = text(&summary, "/metadata/uid").unwrap_or_default();
         let entity = palette
@@ -1173,6 +1451,11 @@ pub fn resolve<A: PaletteApi>(
             .or_else(|| text(&summary, "/spec/layer"))
             .or_else(|| text(&entity, "/layer"))
             .unwrap_or_default();
+        palette_layers.push(
+            text(&summary, "/spec/layer")
+                .or_else(|| text(&entity, "/layer"))
+                .unwrap_or_else(|| layer.clone()),
+        );
         let kind = text(&summary, "/spec/type").unwrap_or_else(|| "spectro".to_string());
         let digest = text(&summary, "/spec/digest").unwrap_or_default();
 
@@ -1206,6 +1489,8 @@ pub fn resolve<A: PaletteApi>(
             "status": {},
         }));
     }
+    let known: Vec<Option<&str>> = palette_layers.iter().map(|l| Some(l.as_str())).collect();
+    check_layers(c, &known).map_err(invalid)?;
     Ok(RawProfile {
         profile: json!({
             "metadata": {"name": c.name, "uid": ""},
@@ -1343,6 +1628,330 @@ mod tests {
         let mut addon = manifest_candidate();
         addon.layers[0].layer = Some("addon".into());
         assert!(check(addon, Path::new("c.yaml")).is_ok());
+    }
+
+    /// A cluster candidate that Palette takes, with each layer given: the core layers and one
+    /// add-on with one manifest.
+    fn stack() -> Candidate {
+        serde_yaml::from_str(
+            "name: aws-stack\nversion: 1.1.1\ncloudType: aws\nregistryUid: r1\nlayers:\n\
+             - {name: ubuntu-aws, version: '24.04', layer: os}\n\
+             - {name: kubernetes, version: 1.33.6, layer: k8s, values: 'a: 1'}\n\
+             - {name: cni-cilium-oss, version: 1.18.4, layer: cni}\n\
+             - {name: csi-aws-ebs, version: 1.48.0, layer: csi}\n\
+             - name: cert-manager\n  version: 1.19.1\n  layer: addon\n  manifests:\n  \
+             - {name: namespace-labels, content: 'kind: Namespace'}\n",
+        )
+        .unwrap()
+    }
+
+    /// The refusal of `c`, with the rule of Palette that it names.
+    fn refused(c: Candidate, rule: &str) -> String {
+        let message = refusal(c);
+        assert!(message.contains(&format!("({rule})")), "{message}");
+        message
+    }
+
+    #[test]
+    fn the_stack_is_a_candidate_that_palette_takes() {
+        assert!(check(stack(), Path::new("c.yaml")).is_ok());
+    }
+
+    #[test]
+    fn a_version_that_semver_of_palette_does_not_parse_is_candidate_invalid() {
+        // Masterminds/semver v1.5.0 takes an optional v and one to three numbers
+        for ok in [
+            "1.1",
+            "v1.2.3",
+            "7",
+            "1.2.3-rc.1",
+            "1.2.3+build.5",
+            "1.2.3-rc-1.x+b",
+        ] {
+            let mut c = stack();
+            c.version = ok.into();
+            assert!(check(c, Path::new("c.yaml")).is_ok(), "{ok}");
+        }
+        for bad in [
+            "2.2.2.develop",
+            "chart-v1.2.3",
+            "latest",
+            "1.2.3-",
+            "1.2.3-a..b",
+            "1..2",
+            "V1.2.3",
+            "99999999999999999999.0.0",
+        ] {
+            let mut c = stack();
+            c.version = bad.into();
+            let message = refused(c, "VersionParseFailure");
+            assert!(message.contains(&format!("version {bad} ")), "{message}");
+        }
+    }
+
+    #[test]
+    fn a_pack_twice_is_candidate_invalid() {
+        let mut c = stack();
+        let again = c.layers[4].clone();
+        c.layers.push(again);
+        let message = refused(c, "DuplicatePacksForbidden");
+        assert!(message.contains("the pack cert-manager"), "{message}");
+    }
+
+    #[test]
+    fn a_manifest_name_twice_in_one_pack_is_candidate_invalid() {
+        let mut c = stack();
+        let again = c.layers[4].manifests[0].clone();
+        c.layers[4].manifests.push(again);
+        let message = refused(c, "DuplicatePackManifestsForbidden");
+        assert!(
+            message.contains("layer 5 (cert-manager)") && message.contains("namespace-labels"),
+            "{message}"
+        );
+        // the same name in two packs is not a repeat
+        let mut c = stack();
+        c.layers[1].manifests = c.layers[4].manifests.clone();
+        assert!(check(c, Path::new("c.yaml")).is_ok());
+    }
+
+    #[test]
+    fn a_name_that_is_not_a_dns_label_is_candidate_invalid() {
+        for bad in [
+            "Namespace Labels",
+            "-labels",
+            "labels-",
+            "labels_x",
+            &"a".repeat(33),
+        ] {
+            let mut c = stack();
+            c.layers[4].manifests[0].name = bad.to_string();
+            let message = refused(c, "InvalidName");
+            assert!(
+                message.contains("a manifest of layer 5 (cert-manager)"),
+                "{message}"
+            );
+        }
+        let mut c = stack();
+        c.layers[4].manifests[0].name = "a".repeat(32);
+        assert!(check(c, Path::new("c.yaml")).is_ok());
+        // the name of a manifest pack too, and not the name of a pack from a registry
+        let mut c = manifest_candidate();
+        c.layers[0].name = "Namespace-Policy".into();
+        let message = refused(c, "InvalidName");
+        assert!(
+            message.contains("layer 1 (Namespace-Policy) is a manifest layer"),
+            "{message}"
+        );
+        let mut c = stack();
+        c.layers[4].name = "Cert-Manager".into();
+        assert!(check(c, Path::new("c.yaml")).is_ok());
+    }
+
+    #[test]
+    fn values_or_a_manifest_that_are_not_yaml_are_candidate_invalid() {
+        let mut c = stack();
+        c.layers[1].values = Some("a: [b".into());
+        let message = refused(c, "PackValuesYamlInvalid");
+        assert!(
+            message.contains("the values of layer 2 (kubernetes)"),
+            "{message}"
+        );
+        let mut c = stack();
+        c.layers[1].values = Some("replicas: {{ .spectro.var.replicas }}".into());
+        refused(c, "PackValuesYamlInvalid");
+        let mut c = stack();
+        c.layers[4].manifests[0].content = Some("- kind: Namespace".into());
+        let message = refused(c, "PackManifestYamlInvalid");
+        assert!(
+            message.contains("manifest namespace-labels of layer 5 (cert-manager)"),
+            "{message}"
+        );
+    }
+
+    #[test]
+    fn a_layer_that_the_type_of_the_profile_does_not_take_is_candidate_invalid() {
+        let mut c = stack();
+        c.kind = "add-on".into();
+        let message = refused(c, "ClusterProfilePackNotAllowed");
+        assert!(
+            message.contains("layer 1 (ubuntu-aws) has the layer os")
+                && message.contains("type add-on takes only the layers addon, cni, and csi"),
+            "{message}"
+        );
+        // an add-on profile takes a cni and a csi layer
+        let mut c = stack();
+        c.kind = "add-on".into();
+        c.layers.drain(0..2);
+        assert!(check(c, Path::new("c.yaml")).is_ok());
+        let mut c = stack();
+        c.kind = "infra".into();
+        let message = refused(c, "ClusterProfilePackNotAllowed");
+        assert!(
+            message.contains("layer 5 (cert-manager) has the layer addon"),
+            "{message}"
+        );
+        // a manifest layer has the layer addon
+        let mut c = manifest_candidate();
+        c.kind = "infra".into();
+        refused(c, "ClusterProfilePackNotAllowed");
+    }
+
+    #[test]
+    fn a_cluster_or_infra_profile_with_no_core_layer_is_candidate_invalid() {
+        let mut c = stack();
+        c.layers.remove(0);
+        let message = refused(c, "ErrPackCoreLayersMissing");
+        assert!(
+            message.contains("type cluster needs the layers os, k8s, cni, and csi")
+                && message.contains("has no layer os"),
+            "{message}"
+        );
+        let mut c = stack();
+        c.kind = "infra".into();
+        c.layers.truncate(2);
+        let message = refused(c, "ErrPackCoreLayersMissing");
+        assert!(message.contains("has no layer cni and csi"), "{message}");
+        // edge-native needs no csi
+        let mut c = stack();
+        c.cloud_type = "edge-native".into();
+        c.layers.remove(3);
+        assert!(check(c, Path::new("c.yaml")).is_ok());
+        // a layer that the file does not give comes from the registry: resolve checks it
+        let mut c = stack();
+        c.layers.remove(0);
+        c.layers[0].layer = None;
+        assert!(check(c, Path::new("c.yaml")).is_ok());
+    }
+
+    #[test]
+    fn more_than_200_packs_or_manifests_is_candidate_invalid() {
+        let mut c = stack();
+        let addon = c.layers[4].clone();
+        c.layers.extend((0..196).map(|i| CandidateLayer {
+            name: format!("addon-{i}"),
+            manifests: Vec::new(),
+            ..addon.clone()
+        }));
+        assert_eq!(c.layers.len(), 201);
+        let message = refused(c, "SubResourceLimitValidationFailure");
+        assert!(message.contains("201 packs"), "{message}");
+        // 198 manifests, and a manifest layer with one manifest, are 200; one more is too many
+        let mut c = stack();
+        let m = c.layers[4].manifests[0].clone();
+        c.layers[4].manifests = (0..198)
+            .map(|i| CandidateManifest {
+                name: format!("m-{i}"),
+                ..m.clone()
+            })
+            .collect();
+        c.layers.push(manifest_candidate().layers.remove(0));
+        assert!(check(c.clone(), Path::new("c.yaml")).is_ok());
+        c.layers[4].manifests.push(m);
+        let message = refused(c, "SubResourceLimitValidationFailure");
+        assert!(message.contains("201 manifests"), "{message}");
+    }
+
+    /// A registry that serves each layer of [`stack`] with the layer `layers[i]` and the cloud
+    /// types `clouds[i]`.
+    fn served(layers: &[&str], clouds: &[Value]) -> Palette<MemoryApi> {
+        let mut api = MemoryApi::new();
+        for (i, l) in stack().layers.iter().enumerate() {
+            let uid = format!("pk-{i}");
+            let summary = json!({"metadata": {"uid": uid},
+                "spec": {"name": l.name, "version": l.version, "registryUid": "r1",
+                         "layer": layers[i], "type": "spectro", "values": "",
+                         "cloudTypes": clouds[i]}});
+            api = api
+                .with(
+                    format!("/v1/packs?filters=spec.name={}&limit=100&offset=0", l.name),
+                    json!({"items": [summary], "listmeta": {"count": 1}}),
+                )
+                .with(
+                    format!("/v1/packs/{}/registries/r1", l.name),
+                    json!({"tags": [{"tag": l.version, "packUid": uid}]}),
+                );
+        }
+        Palette::new(api)
+    }
+
+    const STACK_LAYERS: [&str; 5] = ["os", "k8s", "cni", "csi", "addon"];
+
+    fn resolved(c: Candidate, palette: &Palette<MemoryApi>) -> Result<RawProfile> {
+        resolve(
+            &check(c, Path::new("c.yaml")).unwrap(),
+            palette,
+            &Progress::silent(),
+        )
+    }
+
+    #[test]
+    fn a_pack_that_does_not_support_the_cloud_of_the_profile_is_candidate_invalid() {
+        let aws = json!(["aws"]);
+        let mut clouds = vec![aws.clone(); 5];
+        assert!(resolved(stack(), &served(&STACK_LAYERS, &clouds)).is_ok());
+        clouds[2] = json!(["vsphere", "edge-native"]);
+        let palette = served(&STACK_LAYERS, &clouds);
+        let err = resolved(stack(), &palette).unwrap_err();
+        let Error::CandidateInvalid { message, .. } = &err else {
+            panic!("not candidate-invalid: {err}");
+        };
+        assert!(
+            message.contains("layer 3 (cni-cilium-oss)")
+                && message.contains("the clouds vsphere and edge-native")
+                && message.contains("the cloud aws (PackNotSupported)"),
+            "{message}"
+        );
+        // the cloud all, and a candidate with no cloud, take each pack
+        for cloud in ["all", ""] {
+            let mut c = stack();
+            c.cloud_type = cloud.into();
+            assert!(resolved(c, &palette).is_ok(), "{cloud:?}");
+        }
+        // a pack of each cloud, a pack with no cloud type, and a custom pack on a custom cloud
+        clouds[2] = json!(["all"]);
+        clouds[3] = json!([]);
+        assert!(resolved(stack(), &served(&STACK_LAYERS, &clouds)).is_ok());
+        let mut c = stack();
+        c.cloud_type = "my-cloud".into();
+        assert!(resolved(c, &served(&STACK_LAYERS, &vec![json!(["custom"]); 5])).is_ok());
+    }
+
+    #[test]
+    fn resolve_checks_the_layers_that_the_registry_gives() {
+        // the file gives no layer for kubernetes, and the registry gives k8s
+        let mut c = stack();
+        c.kind = "add-on".into();
+        c.layers
+            .retain(|l| l.name == "kubernetes" || l.name == "cert-manager");
+        c.layers[0].layer = None;
+        assert!(check(c.clone(), Path::new("c.yaml")).is_ok());
+        let clouds = vec![json!(["aws"]); 5];
+        let err = resolved(c, &served(&STACK_LAYERS, &clouds)).unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("layer 1 (kubernetes) has the layer k8s"),
+            "{err}"
+        );
+        // Palette takes the layer from the registry, and not from the file
+        let mut c = stack();
+        c.kind = "add-on".into();
+        c.layers
+            .retain(|l| l.name == "kubernetes" || l.name == "cert-manager");
+        c.layers[0].layer = Some("addon".into());
+        assert!(check(c.clone(), Path::new("c.yaml")).is_ok());
+        let err = resolved(c, &served(&STACK_LAYERS, &clouds)).unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("layer 1 (kubernetes) has the layer k8s"),
+            "{err}"
+        );
+        // and a missing core layer that only the registry shows
+        let mut c = stack();
+        c.layers[0].layer = None;
+        let mut layers = STACK_LAYERS;
+        layers[0] = "addon";
+        let err = resolved(c, &served(&layers, &clouds)).unwrap_err();
+        assert!(err.to_string().contains("has no layer os"), "{err}");
     }
 
     #[test]

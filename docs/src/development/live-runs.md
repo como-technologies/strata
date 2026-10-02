@@ -1241,6 +1241,12 @@ What differs is outside strata:
   other upgrade engine.
 - [What Palette does](../internals/palette/limits.md#what-no-run-covers) lists the
   behaviors that no script here establishes.
+- No script creates a profile version that breaks a rule of
+  [What the create of a version checks](../internals/palette/profiles.md#what-the-create-of-a-version-checks).
+  The rules come from the source of Palette. A run of the YAML parser of
+  Palette, `gopkg.in/yaml.v3` v3.0.1, gives the cases in the test of
+  `map_yaml`. The cases of the version test come from the regular expression
+  of `NewVersion` in `github.com/Masterminds/semver` v1.5.0.
 - No script installs a Zarf package on a cluster: Palette gives a Zarf pack the
   values of an app profile, `{{.spectro.system.appdeployment.tiername}}`, so it
   needs an app deployment of Palette Dev Engine.
