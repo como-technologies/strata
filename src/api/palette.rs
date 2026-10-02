@@ -669,11 +669,11 @@ impl<A: PaletteApi> Palette<A> {
         )
     }
 
-    /// The uid of the one cluster group in the scope that has the name `name`, from `GET
+    /// The name and the uid of each cluster group in the scope, from `GET
     /// /v1/clustergroups/hostCluster/metadata`.
-    fn cluster_group_uid_named(&self, name: &str) -> Result<String> {
+    pub fn cluster_groups(&self) -> Result<Vec<(String, String)>> {
         let listing = self.api.get_json(CLUSTER_GROUP_LISTING)?;
-        let groups: Vec<(String, String)> = listing
+        Ok(listing
             .get("items")
             .and_then(Value::as_array)
             .map(|items| {
@@ -690,7 +690,20 @@ impl<A: PaletteApi> Palette<A> {
                     })
                     .collect()
             })
-            .unwrap_or_default();
+            .unwrap_or_default())
+    }
+
+    /// The document of the cluster group `uid`, `GET /v1/clustergroups/{uid}`: the profiles that
+    /// the group pins for its virtual clusters are in `spec.clusterProfileTemplates`.
+    pub fn cluster_group_document(&self, uid: &str) -> Result<Value> {
+        self.api
+            .get_json(&format!("/v1/clustergroups/{}", query_value(uid)))
+    }
+
+    /// The uid of the one cluster group in the scope that has the name `name`, from `GET
+    /// /v1/clustergroups/hostCluster/metadata`.
+    fn cluster_group_uid_named(&self, name: &str) -> Result<String> {
+        let groups = self.cluster_groups()?;
         let mut uids: Vec<String> = groups
             .iter()
             .filter(|(n, _)| n == name)

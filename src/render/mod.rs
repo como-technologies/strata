@@ -352,7 +352,34 @@ pub(crate) fn consumers_sentence(d: &Diff) -> Option<String> {
 /// a version of it; strata keeps the clusters that run this version. Only the clusters that the
 /// consumer list did not name are read.
 pub(crate) fn second_reading_counts(read: &crate::ops::ClustersRead) -> String {
-    let n = read.read + read.unread;
+    let counts = second_reading_main(read);
+    // the virtual clusters of the cluster groups that pin the version (#184)
+    match (read.groups, &read.groups_error) {
+        (0, None) => counts,
+        (0, Some(e)) => format!(
+            "{counts}; cluster groups not read ({})",
+            entry_error(Some(e)).unwrap_or("an error")
+        ),
+        (g, _) => format!(
+            "{counts}; {g} cluster {} the version, {} other virtual {}, {} read",
+            if g == 1 { "group pins" } else { "groups pin" },
+            read.members,
+            if read.members == 1 {
+                "cluster"
+            } else {
+                "clusters"
+            },
+            read.members.saturating_sub(read.members_unread)
+        ),
+    }
+}
+
+fn second_reading_main(read: &crate::ops::ClustersRead) -> String {
+    // the virtual clusters of the groups are counted apart, read and not read
+    let n = (read.read + read.unread).saturating_sub(read.members);
+    let read_n = read
+        .read
+        .saturating_sub(read.members.saturating_sub(read.members_unread));
     match read.resolved {
         Some(crate::ops::Resolved::Search) if n == 0 => {
             "the cluster search names no other cluster with the profile".to_string()
@@ -361,9 +388,9 @@ pub(crate) fn second_reading_counts(read: &crate::ops::ClustersRead) -> String {
             "the cluster search names {} other {} with the profile, {} read",
             n,
             if n == 1 { "cluster" } else { "clusters" },
-            read.read
+            read_n
         ),
-        _ => format!("{} of {n} clusters read", read.read),
+        _ => format!("{read_n} of {n} clusters read"),
     }
 }
 

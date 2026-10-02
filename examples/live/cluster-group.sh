@@ -91,10 +91,15 @@ if stage 1 "a cluster group, and a virtual cluster in it"; then
       and ([.items[].metadata.uid] | index($m) | not)' search-profile.out
   check search-nested 0 '#181: the same search with environment eq nested' -- \
     "$live/api.sh" post '/v1/dashboard/spectroclusters/search?limit=50' "$(cat search-nested.json)"
-  check search-nested-member 0 '#181: it answers the virtual cluster of the group' -- \
-    jq -e --arg m "$M" '[.items[].metadata.uid] | index($m)' search-nested.out
+  check search-nested-misses-member 0 '#184: it does not answer the virtual cluster, which runs the add-on version through its group' -- \
+    jq -e --arg m "$M" '[.items[].metadata.uid] | index($m) | not' search-nested.out
   check member-consumer-search 0 '#149: consumers read the second reading from the search' -- \
     jq -e '.clustersRead.resolved == "search"' member-consumer.out
+  # so consumers also reads the virtual clusters of each group that pins the version (#184)
+  check member-consumer-group 0 '#184: consumers finds the group that pins the add-on version' -- \
+    jq -e '.clustersRead.groups >= 1' member-consumer.out
+  check group-virtual-clusters 0 '#184: the virtual clusters of the group, which consumers reads, name the virtual cluster' -- \
+    bash -c "\"$live/api.sh\" post '/v1/dashboard/clustergroups/$G/virtualClusters?limit=50' '{\"filter\": {}, \"sort\": []}' | jq -e --arg m $M '[.items[].metadata.uid] | index(\$m)'"
 fi
 
 G=${G:-$(out cluster_group_uid)} M=${M:-$(out member_cluster_uid)}

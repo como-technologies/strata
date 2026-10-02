@@ -327,14 +327,49 @@ impl Tenant {
                 )
             })
             .collect();
+        // The search reads a summary of each cluster, and the summary of a virtual cluster does
+        // not name the profiles that its cluster group pins, as on a live Palette (#184). So a
+        // search by profile does not find a virtual cluster through its group.
+        let mut group_pins: Map<String, Value> = Map::new();
+        for project in &scopes {
+            for group in self.documents_in(project, "v1/clustergroups") {
+                let gid = group["metadata"]["uid"].as_str().unwrap_or_default();
+                let pinned: Vec<Value> = group["spec"]["clusterProfileTemplates"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .map(|t| t["uid"].clone())
+                    .collect();
+                let members = self.read(
+                    project,
+                    &format!("v1/dashboard/clustergroups/{gid}/virtualClusters@limit=50"),
+                );
+                for m in members["items"].as_array().into_iter().flatten() {
+                    let muid = m["metadata"]["uid"].as_str().unwrap_or_default();
+                    let entry = group_pins.entry(muid.to_string()).or_insert(json!([]));
+                    if let Some(list) = entry.as_array_mut() {
+                        list.extend(pinned.iter().cloned());
+                    }
+                }
+            }
+        }
         let found: Vec<Value> = every_cluster
             .iter()
             .map(|c| {
                 let project = c["metadata"]["annotations"]["projectUid"]
                     .as_str()
                     .unwrap_or_default();
+                let mut c = c.clone();
+                let pins = group_pins
+                    .get(c["metadata"]["uid"].as_str().unwrap_or_default())
+                    .cloned();
+                if let (true, Some(pins)) = (nested(&c), pins)
+                    && let Some(ts) = c["spec"]["clusterProfileTemplates"].as_array_mut()
+                {
+                    ts.retain(|t| !pins.as_array().is_some_and(|p| p.contains(&t["uid"])));
+                }
                 search_row(
-                    c,
+                    &c,
                     names
                         .get(project)
                         .and_then(Value::as_str)
