@@ -1,0 +1,12 @@
+$ cat certs.yaml
+name: certs
+version: 1.0.0
+type: add-on
+registry: Public Repo
+layers:
+  - name: cert-manager
+    version: 1.21.1
+    values: |
+      pack:
+        namespace: cert-manager
+        access: public

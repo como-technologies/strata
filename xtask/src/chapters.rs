@@ -546,6 +546,32 @@ fn commands(r: &mut Runner) {
         false,
         "strata same-release candidate.json published.json",
     );
+    // a template on cert-manager 1.21.1 with one input parameter and one option, as the listing
+    // gives it: the option has no presets
+    r.pack_template(
+        DEV,
+        "cert-manager",
+        "1.21.1",
+        &json!({"parameters": {"inputParameters": [{
+            "name": "access", "displayName": "Access", "type": "string",
+            "targetKey": "pack.access",
+            "options": {"public": {"label": "Direct", "dependencies": []}},
+        }]}}),
+    );
+    r.write_file("certs.yaml", PRESET_CANDIDATE_YAML);
+    r.step("candidate-preset-yaml", 0, false, "cat certs.yaml");
+    r.step(
+        "candidate-preset-warning",
+        0,
+        true,
+        "strata snapshot --from-candidate certs.yaml -o certs.json",
+    );
+    r.step(
+        "candidate-preset-options",
+        0,
+        false,
+        "jq -c '.packs[0].presetOptions' certs.json",
+    );
 
     r.chapter("compare", DEV_ENV);
     r.projects(&[("dev", DEV)]);
@@ -621,6 +647,21 @@ layers:
     version: 1.65.0
   - name: cert-manager
     version: 1.21.1
+";
+
+/// An add-on candidate whose values select the option `public` of the template of cert-manager.
+const PRESET_CANDIDATE_YAML: &str = "\
+name: certs
+version: 1.0.0
+type: add-on
+registry: Public Repo
+layers:
+  - name: cert-manager
+    version: 1.21.1
+    values: |
+      pack:
+        namespace: cert-manager
+        access: public
 ";
 
 fn use_cases(r: &mut Runner) {

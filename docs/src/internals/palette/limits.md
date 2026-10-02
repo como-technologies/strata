@@ -105,8 +105,9 @@ makes no claim that depends on them.
   it.** Palette then refuses an update or a publish of that profile. It refuses
   a new cluster from it only for a deleted pack: a disabled pack still builds
   clusters. A tag that the registry deletes marks the profile invalid.
-- **The keys of a preset.** No key is required. Palette writes the values of the
-  preset option that the values select into the values of the pack.
+- **The presets of a template option.** Palette writes them into the values of
+  a pack on a create and on an update of a profile, and no route gives them:
+  see [The presets of a template option](packs.md#the-presets-of-a-template-option).
 - **A Helm registry of type `helm` whose endpoint is `oci://`.** Palette reads
   `index.yaml` from the endpoint over HTTP, so such a registry lists nothing. An
   `oci://` chart URL inside an index is read. An OCI Helm registry is its own

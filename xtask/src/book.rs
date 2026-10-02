@@ -311,6 +311,21 @@ impl Runner {
         self.tenant.hide_pack_version(project, name, version);
     }
 
+    /// A template on one version of a pack: see [`Tenant::pack_template`].
+    pub fn pack_template(
+        &mut self,
+        project: &str,
+        name: &str,
+        version: &str,
+        template: &serde_json::Value,
+    ) {
+        if !self.building() {
+            return;
+        }
+        self.changed();
+        self.tenant.pack_template(project, name, version, template);
+    }
+
     /// An edge host with profiles bound to it: see [`Tenant::edge_host`].
     pub fn edge_host(&mut self, project: &str, uid: &str, name: &str, profiles: &[&str]) {
         if !self.building() {

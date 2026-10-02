@@ -9,6 +9,7 @@
 #   2  a pack version against itself, a record of one, and the record verified again
 #   3  the refs that name a registry or a tag, and the errors for a version and a registry that
 #      the tenant does not have
+#   4  the options of a pack template, and a candidate whose values select one (#151)
 #
 # The CSI versions are the one the live profiles pin and an older one, from the file of the cloud
 # in terraform/. On AWS they are the two that the offline examples also use. Results go under runs/<UTC time>/packs/, or OUT. Exit 0 only when no
@@ -121,6 +122,34 @@ check packs-unknown-registry 2 '#54: an unknown registry is an error that lists 
   "$strata" packs "$pack" --registry "No Such Registry"
 check packs-unknown-pack 2 '#54: a pack no registry has is pack-not-found' -- \
   "$strata" packs no-such-pack-anywhere
+
+# headlamp 0.45.0 has the template parameter access, and the pack source gives its option public
+# the preset charts.headlamp.service.type: LoadBalancer. No route of Palette gives the presets.
+echo "== the presets of a template option (#151)" | tee -a steps.log
+preset_key=pack.palette.config.headlamp.access
+check preset-listing 0 '#151: the listing gives each option of the access parameter of headlamp 0.45.0, and no option has presets' -- \
+  bash -c "\"$live/api.sh\" get '/v1/packs?filters=spec.name=headlamp&limit=100' | jq -e '[.items[] | select(.spec.version == \"0.45.0\") | .spec.template.parameters.inputParameters[]? | select(.targetKey == \"$preset_key\") | .options[]] | length > 0 and all(has(\"presets\") | not)'"
+cat > preset-candidate.yaml <<EOF
+name: barney
+version: 1.0.0
+type: add-on
+registry: $reg
+layers:
+  - name: headlamp
+    version: 0.45.0
+    values: |
+      pack:
+        palette:
+          config:
+            headlamp:
+              access: public
+EOF
+check preset-warning 0 '#151: a candidate whose values select the option public records it' -- \
+  env -u STRATA_QUIET "$strata" snapshot --from-candidate preset-candidate.yaml -o preset-candidate.json
+check preset-warning-says 0 '#151: the warning names the pack, the option, the parameter, and the key' -- \
+  grep -qF "warning: headlamp: the values select the option public of access ($preset_key)" preset-warning.err
+check preset-recorded 0 '#151: the record has packs[].presetOptions[] with that selection' -- \
+  jq -e --arg k "$preset_key" '.packs[0].presetOptions == [{"parameter": "access", "targetKey": $k, "option": "public"}]' preset-candidate.json
 
 echo
 echo "$script: $(grep -c PASS steps.log) passed, $failures failed; results in $run"

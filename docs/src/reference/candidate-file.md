@@ -113,9 +113,42 @@ candidate with the published tags, values, and manifests has the published
 root. The live example checks that: see
 [What the live example verifies](../development/live-runs.md).
 
-Strata applies no pack preset. Whether a candidate must carry, in its values,
-the keys of the preset option that the values select is open: see
-[What no run covers](../internals/palette/limits.md#what-no-run-covers).
+## Template options
+
+The template of a pack can have input parameters with options. Each parameter
+reads one key of the values, its `targetKey`. When the value at that key is the
+name of an option, the values select that option. On a create or an update of
+the profile, Palette can then write the presets of that option into the values.
+No route of Palette gives the presets, so strata does not apply them: see
+[The presets of a template option](../internals/palette/packs.md#the-presets-of-a-template-option).
+
+For each layer, strata reads the template of the version from the listing entry
+that it already reads. When the values select an option, strata:
+
+- Writes one warning on standard error for each selection. `-q` hides it, as it
+  hides each warning.
+- Records the selection in `packs[].presetOptions[]`: `parameter`, `targetKey`,
+  and `option`, sorted by parameter. The field is not part of the root.
+
+Strata does not change the values. So the root of the candidate can differ from
+the root of the version that Palette publishes from the same file. For
+example, the `headlamp` 0.45.0 template has the parameter `access`, at
+`pack.palette.config.headlamp.access`. The value `public` selects the option
+`public`, with the label `Direct`. In the pack source, the presets of that
+option set `charts.headlamp.service.type` to `LoadBalancer`.
+
+In this example, the stand-in gives `cert-manager` 1.21.1 a template with one
+parameter, `access` at `pack.access`, and one option, `public`:
+
+```text
+{{#include ../output/candidate-preset-yaml.txt}}
+{{#include ../output/candidate-preset-warning.txt}}
+{{#include ../output/candidate-preset-options.txt}}
+```
+
+A value that names no option, or values with no such key, give no warning and
+no field. After a warning, record the version when Palette publishes it, and
+compare that record with the candidate.
 
 ## A manifest layer
 

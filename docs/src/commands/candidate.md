@@ -62,9 +62,10 @@ follow them:
 - **Strata uses the names that Palette uses.** A variable field such as
   `display_name` is `displayName` in the candidate file.
 - **Strata applies no pack preset.** The documents that strata builds for a
-  candidate carry an empty `presets` list.
-  [What no run covers](../internals/palette/limits.md#what-no-run-covers) names the
-  open question about the values that a preset option needs.
+  candidate carry an empty `presets` list. When the values select an option of
+  the pack template, Palette can write the presets of that option into the
+  values, and strata warns: see
+  [Template options](../reference/candidate-file.md#template-options).
 - **A candidate pins a pack version, and not a tag.** A record of a profile
   pinned under a floating tag gives a candidate with that version and that tag.
   After the registry moves the tag to another version, `snapshot
