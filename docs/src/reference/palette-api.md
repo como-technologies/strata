@@ -42,7 +42,7 @@ variables. The record says so in `source.variablesUnavailable`: see
 | Request | Gives |
 | --- | --- |
 | `GET /v1/dashboard/spectroclusters/search/schema` | The properties that the cluster search takes. `list` searches when it names `tags`, and the second reading of `consumers` when it names `clusterProfiles`. |
-| `POST /v1/dashboard/spectroclusters/search?limit=50` | The clusters that the filter of the body selects, every page, at tenant scope: each with its labels, its project, its cloud, and its profiles. `list clusters --tag` and `--filter`, and a `tag:` or `filter:` ref, read it. The second reading of `consumers` reads it twice: with `clusterProfiles eq <profile uid>`, and with `environment eq nested` too, for the virtual clusters. The request changes nothing. |
+| `POST /v1/dashboard/spectroclusters/search?limit=50` | The clusters that the filter of the body selects, every page, at tenant scope: each with its labels, its project, its cloud, and its profiles. `list clusters --tag` and `--filter`, and a `tag:` or `filter:` ref, read it. The second reading of `consumers` reads it twice, in the scope of the profile: with `clusterProfiles eq <profile name>`, and with `environment eq nested` too, for the virtual clusters. The property takes a name, and not a uid. The request changes nothing. |
 | `GET /v1/filters/metadata?filterType=tag` | The name and the uid of each saved tag filter of the tenant. |
 | `GET /v1/filters/tag/{uid}` | One saved tag filter: `spec.filterGroup`, its conjunction and its conditions. |
 

@@ -97,7 +97,9 @@ struct Request {
 /// The clusters of the search file that the body of a search selects, as Palette reads it: each
 /// group of conditions holds. A condition on `tags` holds when a value `key:value` names a label
 /// of the cluster, or a value `key` names a label key; on `clusterProfiles` when a value is the
-/// uid of a profile of the cluster; on `environment` when a value is its cloud type. The search
+/// name of a profile of the cluster, since Palette changes each name into the uids of the profiles
+/// with that name and a uid matches no name (#181); on `environment` when a value is its cloud
+/// type. The search
 /// leaves out each virtual cluster, of the cloud type `nested`, unless a condition asks for it.
 fn searched(file: &[u8], body: &[u8]) -> Vec<u8> {
     let Ok(mut doc) = serde_json::from_slice::<serde_json::Value>(file) else {
@@ -123,7 +125,7 @@ fn searched(file: &[u8], body: &[u8]) -> Vec<u8> {
                         .as_array()
                         .into_iter()
                         .flatten()
-                        .any(|t| t["uid"] == v),
+                        .any(|t| t["name"] == v),
                     "environment" => summary["cloudConfig"]["cloudType"] == v,
                     _ => match v.split_once(':') {
                         Some((k, value)) => labels[k] == value,

@@ -347,16 +347,18 @@ pub(crate) fn consumers_sentence(d: &Diff) -> Option<String> {
 }
 
 /// What the second reading read, after `second reading: `: `3 of 3 clusters read` from the
-/// listing, or, from the cluster search, `the cluster search finds 2 other clusters, 2 read`.
-/// Only the clusters that the consumer list did not name are read.
+/// listing, or, from the cluster search, `the cluster search names 2 other clusters with the
+/// profile, 2 read`. The search takes the name of the profile, so it names each cluster that runs
+/// a version of it; strata keeps the clusters that run this version. Only the clusters that the
+/// consumer list did not name are read.
 pub(crate) fn second_reading_counts(read: &crate::ops::ClustersRead) -> String {
     let n = read.read + read.unread;
     match read.resolved {
         Some(crate::ops::Resolved::Search) if n == 0 => {
-            "the cluster search finds no other cluster".to_string()
+            "the cluster search names no other cluster with the profile".to_string()
         }
         Some(crate::ops::Resolved::Search) => format!(
-            "the cluster search finds {} other {}, {} read",
+            "the cluster search names {} other {} with the profile, {} read",
             n,
             if n == 1 { "cluster" } else { "clusters" },
             read.read

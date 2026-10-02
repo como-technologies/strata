@@ -106,7 +106,7 @@ pub struct Consumer {
 #[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ClustersRead {
-    /// How strata found the clusters to read: `search`, the cluster search with the profile uid,
+    /// How strata found the clusters to read: `search`, the cluster search with the profile name,
     /// which holds the virtual clusters too; or `listing`, each cluster of the cluster listing,
     /// when the search of Palette takes no `clusterProfiles`. Absent when the second reading was
     /// not done.
@@ -343,9 +343,9 @@ where
         list.push(c);
     }
     // Palette computes the list above when it is asked, in the projects the key can read, and
-    // gives an empty list on an error too. So the cluster search names the clusters that run the
-    // version (#149), or each cluster the key can list is read for the profiles it applies, and a
-    // cluster that applies the version joins the list (#66).
+    // gives an empty list on an error too. So the cluster search names the clusters that run a
+    // version of the profile (#149, #181), or each cluster the key can list is read for the
+    // profiles it applies, and a cluster that applies the version joins the list (#66).
     // the second reading and the edge hosts are read at tenant scope, so a cluster or a host in
     // any project the key can read is in them; a key that cannot read the tenant reads its own
     // scope
@@ -357,9 +357,18 @@ where
             ..ClustersRead::default()
         }
     } else {
+        // the search takes the name of the profile, in the scope of the profile (#181)
+        let name = text(&doc, "/metadata/name");
+        let project = if text(&doc, "/metadata/annotations/scope") == "tenant" {
+            String::new()
+        } else {
+            text(&doc, "/metadata/annotations/projectUid")
+        };
         second_reading(
             &mut list,
             &uid,
+            &name,
+            &project,
             wide,
             &home,
             &mut clients,
@@ -592,14 +601,20 @@ fn search_condition(property: &str, value: &str) -> Value {
     })
 }
 
-/// The clusters that run the profile `uid`, from the cluster search of `palette`: one search with
-/// `clusterProfiles eq <uid>`, and one with `environment eq nested` too, since the search leaves
-/// out each virtual cluster unless a condition asks for it. None when the search of Palette takes
-/// no `clusterProfiles`: its schema does not name the property, or Palette has no search.
+/// The clusters that run a version of the profile `name`, from the cluster search of `palette`:
+/// one search with `clusterProfiles eq <name>`, and one with `environment eq nested` too, since the
+/// search leaves out each virtual cluster unless a condition asks for it. Palette takes the name of
+/// a profile there, and not its uid: it changes each name into the uids of the profiles with that
+/// name, in the scope of the request, and a uid matches no name (#181). So the answer holds each
+/// cluster that runs a version of the name, and the caller keeps the clusters that run the uid.
+/// None when the search of Palette takes no `clusterProfiles`, or when the profile has no name.
 fn searched_consumers<A: PaletteApi>(
     palette: &Palette<A>,
-    uid: &str,
+    name: &str,
 ) -> Result<Option<Vec<ListedCluster>>> {
+    if name.is_empty() {
+        return Ok(None);
+    }
     let takes_profiles = match palette.cluster_search_schema() {
         Ok(schema) => schema
             .pointer("/schema/properties")
@@ -618,7 +633,7 @@ fn searched_consumers<A: PaletteApi>(
     }
     let mut found = Vec::new();
     for nested in [false, true] {
-        let mut filters = vec![search_condition("clusterProfiles", uid)];
+        let mut filters = vec![search_condition("clusterProfiles", name)];
         if nested {
             filters.push(search_condition("environment", "nested"));
         }
@@ -633,14 +648,19 @@ fn searched_consumers<A: PaletteApi>(
     Ok(Some(clusters))
 }
 
-/// The second reading of `consumers`. Strata asks the cluster search for the clusters that run
-/// `uid`, and reads the cluster listing when the search takes no profile. The search or the
-/// listing is read through `wide`, and through `home` when `wide` cannot read it. A cluster the
-/// consumer list named is not read again. A cluster that applies `uid` joins `list`, marked
-/// `unlisted`, with what its document and the search or the listing say of it.
+/// The second reading of `consumers`. Strata asks the cluster search for the clusters that run a
+/// version of the profile `name`, and reads the cluster listing when the search takes no profile.
+/// The search goes to the scope of the profile: its project `project`, where the name is known and
+/// where each cluster that can run it is, or `wide` for a tenant profile. Then `home` when that
+/// scope cannot answer. The listing is read through `wide`, and through `home` when `wide` cannot
+/// read it. A cluster the consumer list named is not read again. A cluster that applies `uid`
+/// joins `list`, marked `unlisted`, with what its document and the search or the listing say of it.
+#[allow(clippy::too_many_arguments)]
 fn second_reading<A, F>(
     list: &mut Vec<Consumer>,
     uid: &str,
+    name: &str,
+    project: &str,
     wide: &Palette<A>,
     home: &Palette<A>,
     clients: &mut HashMap<String, Palette<A>>,
@@ -652,7 +672,18 @@ where
     F: FnMut(Option<&str>) -> Result<Palette<A>>,
 {
     progress.note("searching the clusters that run the version");
-    let searched = searched_consumers(wide, uid).or_else(|_| searched_consumers(home, uid));
+    let searched = {
+        let own = if project.is_empty() {
+            Ok(wide)
+        } else {
+            client_for(clients, home, project, connect)
+        };
+        match own {
+            Ok(own) => searched_consumers(own, name),
+            Err(e) => Err(e),
+        }
+        .or_else(|_| searched_consumers(home, name))
+    };
     let (candidates, resolved) = match searched {
         Ok(Some(found)) => (Ok(found), Resolved::Search),
         Ok(None) => {

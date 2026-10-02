@@ -1,17 +1,17 @@
 $ for v in 1.0.0 1.1.0 1.1.1; do strata consumers aws-stack@$v; done
 aws-stack@1.0.0 (uid 64e0000000000000000000a1): no consumers
-  second reading: the cluster search finds no other cluster
+  second reading: the cluster search names 3 other clusters with the profile, 3 read
   edge hosts: 0 read
 aws-stack@1.1.0 (uid 64e0000000000000000000b2): 1 consumer
   payments  64f1000000000000000000e1  project dev (uid 64f20000000000000000a0d1)  Running
-  second reading: the cluster search finds no other cluster
+  second reading: the cluster search names 2 other clusters with the profile, 2 read
   edge hosts: 0 read
 aws-stack@1.1.1 (uid 64e0000000000000000000c3): 1 consumer
   search  64f1000000000000000000e2  project dev (uid 64f20000000000000000a0d1)  Running
-  second reading: the cluster search finds no other cluster
+  second reading: the cluster search names 2 other clusters with the profile, 2 read
   edge hosts: 0 read
 $ PALETTE_PROJECT_UID= PALETTE_PROJECT=prod strata consumers aws-stack@1.1.1
 aws-stack@1.1.1 (uid 64e1000000000000000000c3): 1 consumer
   payments  64f1000000000000000000f1  project prod (uid 64f20000000000000000a0f1)  Running
-  second reading: the cluster search finds no other cluster
+  second reading: the cluster search names 2 other clusters with the profile, 2 read
   edge hosts: 0 read
