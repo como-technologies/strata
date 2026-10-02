@@ -99,6 +99,39 @@ fn read_json_file(dir: &Path, name: &str) -> Result<Value> {
     serde_json::from_str(&text).map_err(|source| Error::FileNotJson { path, source })
 }
 
+/// The fields of a notification event that hold the full values of a pack or an app tier. Palette
+/// serves them with no mask, also the fields that `passwordFields` names.
+const EVENT_VALUE_FIELDS: [&str; 3] = ["packValues", "appTierValues", "appTierProperties"];
+
+/// The text that stands in for a masked value, the same text that Palette writes in its log.
+const MASKED: &str = "********";
+
+/// A copy of `notifications` with each value field of each event masked, so a raw directory holds
+/// no secret of a pack. The mask covers all of the values, not only the fields that
+/// `passwordFields` names: a value can hold a secret that the pack does not mark. No reading of
+/// strata uses these fields.
+fn masked_notifications(notifications: &Value) -> Value {
+    let mut out = notifications.clone();
+    let events = out
+        .as_array_mut()
+        .into_iter()
+        .flatten()
+        .filter_map(|n| n.pointer_mut("/action/events"))
+        .filter_map(Value::as_object_mut)
+        .flat_map(|m| m.values_mut());
+    for event in events {
+        for field in EVENT_VALUE_FIELDS {
+            if let Some(v) = event
+                .get_mut(field)
+                .filter(|v| !v.is_null() && v.as_str() != Some(""))
+            {
+                *v = Value::String(MASKED.to_string());
+            }
+        }
+    }
+    out
+}
+
 /// Write each named document under `dir`, creating it.
 fn write_json_files(dir: &Path, files: &[(&str, &Value)]) -> Result<()> {
     fs::create_dir_all(dir).map_err(|source| Error::Io {
@@ -219,7 +252,7 @@ impl RawCluster {
     pub const NOTIFICATIONS: &'static str = "notifications.json";
 
     /// Write the three files, the notifications when they were read, and `scope.json` under
-    /// `dir`, creating it.
+    /// `dir`, creating it. The saved notifications hold the values of each pack masked.
     pub fn save_dir(&self, dir: &Path, fetched_at: &str) -> Result<()> {
         let scope = scope_document(&self.project_uid, fetched_at, self.variables_unavailable);
         let mut files: Vec<(&str, &Value)> = vec![
@@ -228,7 +261,8 @@ impl RawCluster {
             ("variables.json", &self.variables),
             (SCOPE_FILE, &scope),
         ];
-        if let Some(n) = &self.notifications {
+        let notifications = self.notifications.as_ref().map(masked_notifications);
+        if let Some(n) = &notifications {
             files.push((Self::NOTIFICATIONS, n));
         }
         if let Some(r) = &self.resolved_values {

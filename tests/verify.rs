@@ -6048,6 +6048,83 @@ fn a_raw_cluster_directory_keeps_the_notifications() {
     assert_eq!(snap.source.cluster.unwrap().updates_pending, Some(true));
 }
 
+/// A notification whose one event changes the values of a pack, with the fields that Palette
+/// writes for it: the full values, and the names of the password fields.
+fn values_notification(addon: &str) -> Value {
+    serde_json::json!({
+        "metadata": {"uid": "n1", "creationTimestamp": "2026-09-24T23:55:02.083Z"},
+        "type": "NotificationPackUpdate",
+        "action": {
+            "actionType": "NotifyActionClusterProfileUpdate",
+            "isDone": false,
+            "events": {"e0": {
+                "profileUid": addon,
+                "packName": "csi-aws-ebs",
+                "type": "PackValuesUpdate",
+                "message": "csi-aws-ebs 1.30.0 values are updated",
+                "packValues": "pack:\n  adminPassword: barney-clear-secret\n  replicas: 2\n",
+                "passwordFields": "pack.adminPassword",
+                "appTierValues": "",
+            }},
+        },
+    })
+}
+
+#[test]
+fn a_raw_cluster_directory_masks_the_values_of_each_pack_in_the_notifications() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let (_, addon) = merged_uids(dir.path());
+    let api = serve_cluster(MemoryApi::new(), dir.path(), "cluster-merged").with(
+        NOTIFICATIONS,
+        notifications_page(vec![values_notification(&addon)], ""),
+    );
+    let saved = dir.path().join("raw");
+    Palette::new(api)
+        .fetch_cluster(CLUSTER_UID, &Progress::silent())
+        .unwrap()
+        .save_dir(&saved, "t0")
+        .unwrap();
+    let text = fs::read_to_string(saved.join("notifications.json")).unwrap();
+    assert!(!text.contains("barney-clear-secret"), "{text}");
+    assert!(!text.contains("replicas"), "{text}");
+    let saved: Value = serde_json::from_str(&text).unwrap();
+    let event = &saved[0]["action"]["events"]["e0"];
+    assert_eq!(event["packValues"], "********");
+    // the names of the fields are no secret, and an empty value stays empty
+    assert_eq!(event["passwordFields"], "pack.adminPassword");
+    assert_eq!(event["appTierValues"], "");
+    assert_eq!(event["message"], "csi-aws-ebs 1.30.0 values are updated");
+}
+
+#[test]
+fn a_record_from_a_raw_directory_with_masked_notifications_is_the_record_of_the_fetch() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let (_, addon) = merged_uids(dir.path());
+    let api = serve_cluster(MemoryApi::new(), dir.path(), "cluster-merged").with(
+        NOTIFICATIONS,
+        notifications_page(vec![values_notification(&addon)], ""),
+    );
+    let fetched = Palette::new(api)
+        .fetch_cluster(CLUSTER_UID, &Progress::silent())
+        .unwrap();
+    let saved = dir.path().join("raw");
+    fetched.save_dir(&saved, "t0").unwrap();
+    let direct = Snapshot::from_cluster(&fetched, None, "raw", "t0").unwrap();
+    let from_raw = ops::snapshot_from_dir(&saved, "raw", "t1").unwrap();
+    assert_eq!(
+        serde_json::to_value(&from_raw).unwrap(),
+        serde_json::to_value(&direct).unwrap()
+    );
+    let c = from_raw.source.cluster.unwrap();
+    assert_eq!(c.updates_pending, Some(true));
+    assert_eq!(
+        c.pending_updates[0].message,
+        "csi-aws-ebs 1.30.0 values are updated"
+    );
+}
+
 #[test]
 fn list_and_compare_name_a_cluster_that_is_behind() {
     let dir = tempfile::tempdir().unwrap();

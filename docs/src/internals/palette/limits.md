@@ -116,6 +116,12 @@ makes no claim that depends on them.
   new pack version on either layer repaves on every engine. Strata does not copy
   the lists: they can change with each release of Palette, and
   `compare --repave` asks Palette for its answer for a cluster.
+- **The values in a notification event.** An event of the values of a pack
+  holds the full values in `packValues`, and the names of the password fields in
+  `passwordFields`. Palette serves the event with no mask, and masks the values
+  only in its own log. So `--raw-dir` masks the values before it saves the
+  notifications: see
+  [The saved answers of Palette](../../commands/snapshot/no-network.md#the-saved-answers-of-palette).
 
 ## Where these answers come from
 
