@@ -32,6 +32,9 @@ const A117: &str = "64e0000000000000000000fa";
 const ADDONS_DEV: &str = "64e2000000000000000000a1";
 const ADDONS_PROD: &str = "64e3000000000000000000a1";
 const ADDONS_PROD2: &str = "64e3000000000000000000a2";
+// charts-probe@1.0.0: one chart of a private Helm registry, and the pack that Palette made for it
+const CHARTS_PROBE: &str = "64ed000000000000000000c1";
+const CHART_PACK: &str = "64ed000000000000000000b1";
 const A112_PROD: &str = "64e1000000000000000000d4";
 const PAYMENTS: &str = "64f1000000000000000000e1";
 const SEARCH: &str = "64f1000000000000000000e2";
@@ -1494,6 +1497,58 @@ fn use_cases(r: &mut Runner) {
         1,
         false,
         "strata same-release aws-stack@1.1.1 aws-stack@1.1.5",
+    );
+    // a candidate layer from a private Helm registry: Palette lists no chart of it, and makes
+    // the pack when it creates the profile (#154)
+    r.registries(DEV);
+    r.private_charts(DEV);
+    r.write_file(
+        "charts-probe.yaml",
+        "name: charts-probe\nversion: 1.0.0\ntype: add-on\ncloudType: all\nlayers:\n  - name: podinfo\n    version: 6.7.1\n    registry: charts-auth\n    values: |\n      replicaCount: 2\n",
+    );
+    r.step("nodigest-chart-file", 0, false, "cat charts-probe.yaml");
+    r.step(
+        "nodigest-chart-record",
+        0,
+        true,
+        "strata snapshot --from-candidate charts-probe.yaml -o charts/candidate.json",
+    );
+    r.step(
+        "nodigest-chart-pack",
+        0,
+        false,
+        "jq -c '.packs[] | {name, type, layer, version, packUid, upstreamSource: .hash.upstreamSource}' charts/candidate.json",
+    );
+    r.chart_profile(DEV, CHARTS_PROBE, CHART_PACK, "6.7.1");
+    r.step(
+        "nodigest-chart-published",
+        0,
+        true,
+        "strata snapshot charts-probe@1.0.0 -o charts/published.json",
+    );
+    r.step(
+        "nodigest-chart-pack",
+        0,
+        false,
+        "jq -c '.packs[] | {name, type, layer, version, packUid, upstreamSource: .hash.upstreamSource}' charts/published.json",
+    );
+    r.step(
+        "nodigest-chart-same",
+        1,
+        false,
+        "strata same-release charts/candidate.json charts/published.json",
+    );
+    r.step(
+        "nodigest-chart-allow",
+        0,
+        false,
+        "strata same-release charts/candidate.json charts/published.json --allow no-digest",
+    );
+    r.step(
+        "nodigest-chart-allow",
+        0,
+        false,
+        "strata same-release charts/candidate.json charts/published.json --allow no-digest --json | jq -c '.pairs[] | {status, mintedUidOnly}'",
     );
 
     // Palette's own answer beside the impact table: a change that repaves, and one that does not

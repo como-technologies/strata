@@ -160,7 +160,8 @@ A comparison of two sides, `a` and `b`.
   - `status`: `unchanged`, `changed`, `added`, or `removed`.
   - `identity`, `upstream`, `authored`, and `paramsChanged`.
   - `tagRenamed`: only the tag name differs, for the same build.
-  - `mintedUidOnly`: a manifest pack whose only difference is its pack uid.
+  - `mintedUidOnly`: the only difference is a pack uid that Palette mints: for a
+    manifest pack, or for a pack from a registry that Palette does not sync.
   - `impact`: `level` and `text`.
   - `a` and `b`: `tag`, `version`, `packUid`, `registryUid`, `upstream`,
     `upstreamSource`, `valuesHash`, and `node`.
@@ -280,8 +281,9 @@ is the path as a list: strings for keys, numbers for indexes, and
   `different`, or `unknown-upstream`), `rootA`, `rootB`, `packsRepinned`,
   `packsRetagged`, and `reasons[]`. `upstreamUnknown`, only when it is not
   empty: the packs with no upstream digest, also when they are allowed.
-  `mintedUidOnly`, only when it is not empty: the manifest packs whose only
-  difference is the pack uid that Palette gives each profile.
+  `mintedUidOnly`, only when it is not empty: the packs whose only difference
+  is a pack uid that Palette mints, for a manifest pack or for a pack from a
+  registry that Palette does not sync.
 
 ## strata-consumers/1
 

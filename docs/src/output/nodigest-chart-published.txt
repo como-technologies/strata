@@ -1,0 +1,4 @@
+$ strata snapshot charts-probe@1.0.0 -o charts/published.json
+strata: looking up project dev
+strata: fetching profile 64ed000000000000000000c1
+strata: wrote charts/published.json (root ddf3fba69608)

@@ -268,6 +268,9 @@ pub const MANIFEST: &str = "manifest";
 /// the layer of the request.
 const MANIFEST_LAYER: &str = "addon";
 
+/// The layer of the pack that Palette makes for a layer from a registry that it does not sync.
+const UNSYNCED_LAYER: &str = "addon";
+
 /// A layer with its registry settled and its files read. A `manifest` layer has no registry.
 #[derive(Debug, Clone)]
 struct LoadedLayer {
@@ -527,6 +530,118 @@ pub(crate) fn registry_sync<A: PaletteApi>(
         }));
     }
     Ok(None)
+}
+
+/// How Palette makes the pack of a layer from a registry that it does not sync.
+#[derive(Debug, Clone)]
+struct Unsynced {
+    /// The pack type: `helm` or `oci`.
+    kind: &'static str,
+    /// The provider type of an OCI registry: `helm` or `zarf`.
+    provider: Option<String>,
+}
+
+/// Whether Palette syncs the registry `uid`. It does not sync a Helm registry that is private,
+/// or an OCI registry of the provider type `helm` or `zarf` with sync off, so the pack listing
+/// has no pack of it. Palette makes the pack of such a layer when it creates the profile
+/// (`isPackCreationRequired` in hubble `pack_service.go`). `GET /v1/registries/metadata` gives
+/// the kind and `isPrivate`, and `GET /v1/registries/oci/summary` gives the provider type and
+/// `status.sync.isSyncSupported`. None for a registry that syncs, and when Palette answers either
+/// listing with a 4xx.
+fn unsynced<A: PaletteApi>(palette: &Palette<A>, uid: &str) -> Result<Option<Unsynced>> {
+    // the entry of the registry in a listing; none when Palette answers the listing with a 4xx
+    let find = |path: &str, ptr: &str| -> Result<Option<Value>> {
+        let listing = match palette.api().get_json(path) {
+            Ok(l) => l,
+            Err(Error::Api { status, .. }) if (400..500).contains(&status) => return Ok(None),
+            Err(e) => return Err(e),
+        };
+        Ok(listing
+            .get("items")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .find(|it| text(it, ptr).as_deref() == Some(uid))
+            .cloned())
+    };
+    let Some(meta) = find("/v1/registries/metadata", "/uid")? else {
+        return Ok(None);
+    };
+    match text(&meta, "/kind").as_deref() {
+        Some("helm") => Ok(meta
+            .get("isPrivate")
+            .and_then(Value::as_bool)
+            .unwrap_or(false)
+            .then_some(Unsynced {
+                kind: "helm",
+                provider: None,
+            })),
+        Some("oci") => {
+            let Some(reg) = find("/v1/registries/oci/summary", "/metadata/uid")? else {
+                return Ok(None);
+            };
+            // Palette syncs each OCI registry of the provider type pack
+            let provider = text(&reg, "/spec/providerType").unwrap_or_default();
+            let syncs = provider == "pack"
+                || reg
+                    .pointer("/status/sync/isSyncSupported")
+                    .and_then(Value::as_bool)
+                    == Some(true);
+            Ok((!syncs).then_some(Unsynced {
+                kind: "oci",
+                provider: Some(provider).filter(|p| !p.is_empty()),
+            }))
+        }
+        _ => Ok(None),
+    }
+}
+
+/// True when Palette takes `tag` as the version of a pack that it makes: a semantic version in
+/// the loose form of Masterminds semver 1.5 (`v1`, `1.2`, `1.2.3-rc.1+b5`), or a text that holds
+/// three numbers with dots between them (`chart-1.2.3`). hubble `util/semver` `Parse` tries the
+/// first, then the second; `createPackDoc` refuses the create with `InvalidPackVersion` when
+/// both fail.
+fn palette_parses_version(tag: &str) -> bool {
+    let ids = |s: &str| {
+        s.split('.')
+            .all(|id| !id.is_empty() && id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-'))
+    };
+    let loose = || {
+        let v = tag.strip_prefix('v').unwrap_or(tag);
+        let (v, build) = v.split_once('+').map_or((v, None), |(a, b)| (a, Some(b)));
+        let (core, pre) = v.split_once('-').map_or((v, None), |(a, b)| (a, Some(b)));
+        let parts: Vec<&str> = core.split('.').collect();
+        parts.len() <= 3
+            && parts
+                .iter()
+                .all(|p| !p.is_empty() && p.bytes().all(|b| b.is_ascii_digit()))
+            && pre.is_none_or(ids)
+            && build.is_none_or(ids)
+    };
+    // `\d+\.\d+\.\d+` at any place in the text
+    let three = || {
+        let b = tag.as_bytes();
+        (0..b.len()).any(|start| {
+            let mut i = start;
+            for part in 0..3 {
+                let from = i;
+                while i < b.len() && b[i].is_ascii_digit() {
+                    i += 1;
+                }
+                if i == from {
+                    return false;
+                }
+                if part < 2 {
+                    if b.get(i) != Some(&b'.') {
+                        return false;
+                    }
+                    i += 1;
+                }
+            }
+            true
+        })
+    };
+    loose() || three()
 }
 
 /// The registries this key can see, name and uid, in the order Palette lists them.
@@ -860,7 +975,9 @@ fn find_version<A: PaletteApi>(
 /// with this content returns: `GET /v1/registries/metadata` for registry names,
 /// `GET /v1/packs?filters=spec.name=<name>` for the pack uid, digest, layer, type, and default
 /// values, and `GET /v1/packs/<name>/registries/<uid>` for the tags. A `manifest` layer needs
-/// none of these.
+/// none of these. When the listing does not have the version, and the registry is one that
+/// Palette does not sync, the pack is the one that Palette makes at the create: no pack uid, no
+/// digest, the layer `addon`, and the tag as the version.
 pub fn resolve<A: PaletteApi>(
     loaded: &LoadedCandidate,
     palette: &Palette<A>,
@@ -875,9 +992,11 @@ pub fn resolve<A: PaletteApi>(
     let mut names: Option<Vec<(String, String)>> = None;
     // the provider type of each OCI registry; fetched once, and only for an OCI pack
     let mut oci_types: Option<BTreeMap<String, String>> = None;
+    // whether Palette syncs each registry; read only for a layer that the listing does not have
+    let mut unsynced_of: BTreeMap<String, Option<Unsynced>> = BTreeMap::new();
     let mut refs = Vec::with_capacity(c.layers.len());
     let mut entries = Vec::with_capacity(c.layers.len());
-    for (l, loaded_layer) in c.layers.iter().zip(&loaded.layers) {
+    for (i, (l, loaded_layer)) in c.layers.iter().zip(&loaded.layers).enumerate() {
         let manifests: Vec<Value> = loaded_layer
             .manifests
             .iter()
@@ -927,8 +1046,71 @@ pub fn resolve<A: PaletteApi>(
             tag,
             registry: registry_ref.text().to_string(),
         };
-        let summary = find_version(palette, &l.name, &l.version, &registry)?
-            .ok_or_else(|| not_found(None))?;
+        let Some(summary) = find_version(palette, &l.name, &l.version, &registry)? else {
+            // Palette lists no pack of a registry that it does not sync, and makes the pack at
+            // the create. A registry that syncs and lists no such version does not have it.
+            if !unsynced_of.contains_key(&registry) {
+                unsynced_of.insert(registry.clone(), unsynced(palette, &registry)?);
+            }
+            let Some(how) = unsynced_of[&registry].clone() else {
+                return Err(not_found(None));
+            };
+            let invalid = |message: String| Error::CandidateInvalid {
+                path: loaded.path.clone(),
+                message: format!(
+                    "layer {} ({}) is from registry {}, which Palette does not sync; {message}",
+                    i + 1,
+                    l.name,
+                    registry_ref.text()
+                ),
+            };
+            // the pack that Palette makes has the layer addon and the tag as its version
+            // (`createPackDoc`), and a profile takes both from it (`ToPackRef`)
+            if let Some(layer) = l.layer.as_deref().filter(|&x| x != UNSYNCED_LAYER) {
+                return Err(invalid(format!(
+                    "Palette gives the pack that it makes the layer {UNSYNCED_LAYER}, not \
+                     {layer}, so remove layer or set it to {UNSYNCED_LAYER}"
+                )));
+            }
+            let tag = l.tag.as_deref().unwrap_or(&l.version);
+            if tag != l.version {
+                return Err(invalid(format!(
+                    "Palette gives the pack that it makes the tag as its version, so set version \
+                     to {tag}, or remove tag"
+                )));
+            }
+            if !palette_parses_version(tag) {
+                return Err(invalid(format!(
+                    "Palette refuses the create, because the tag {tag} is not a semantic version"
+                )));
+            }
+            progress.note(&format!(
+                "{}@{}: registry {} does not sync, so Palette makes the pack when it creates the \
+                 profile; the record has no pack uid and no digest",
+                l.name,
+                l.version,
+                registry_ref.text()
+            ));
+            let values = loaded_layer.values.clone().unwrap_or_default();
+            let mut pack_ref = json!({
+                "name": l.name, "layer": UNSYNCED_LAYER, "type": how.kind, "tag": tag,
+                "version": tag, "packUid": "", "registryUid": registry, "values": values,
+                "manifests": [], "params": l.params, "presets": [],
+            });
+            if let Some(t) = &how.provider {
+                pack_ref["annotations"] = json!({ "ociRegistryProviderType": t });
+            }
+            refs.push(pack_ref);
+            entries.push(json!({
+                "metadata": {"name": l.name, "uid": ""},
+                "spec": {
+                    "name": l.name, "layer": UNSYNCED_LAYER, "version": tag, "digest": "",
+                    "registryUid": registry, "values": values, "manifests": manifests,
+                },
+                "status": {},
+            }));
+            continue;
+        };
         // Palette serves no disabled or deleted pack: the registry answers 404 for it, and a
         // profile that pins one is refused. Say so before that read.
         if let Some(state) = retired_state(&summary) {
@@ -1172,5 +1354,33 @@ mod tests {
         let sync = registry_sync(&never, "reg-helm", "helm").unwrap().unwrap();
         assert_eq!(sync.last_synced_time, "");
         assert_eq!(sync.status, "InProgress");
+    }
+
+    #[test]
+    fn palette_takes_a_loose_semantic_version_or_a_text_with_three_numbers_as_the_version() {
+        for tag in [
+            "1.0.0",
+            "v1.2.3",
+            "1",
+            "1.2",
+            "1.2.3-rc.1+b5",
+            "01.2.3",
+            "chart-1.2.3",
+            "1.2.3.4",
+            "1.2.3-",
+        ] {
+            assert!(palette_parses_version(tag), "{tag}");
+        }
+        for tag in [
+            "",
+            "stable",
+            "latest",
+            "1.2.x",
+            "LTS__24.x",
+            "1.2-rc..1",
+            "v",
+        ] {
+            assert!(!palette_parses_version(tag), "{tag}");
+        }
     }
 }

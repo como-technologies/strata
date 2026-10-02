@@ -35,8 +35,8 @@ pub struct Diff {
     pub b: Source,
     /// True when the roots are equal: same release
     pub same: bool,
-    /// True when the roots are equal, or differ only by the `packUid`s Palette mints for each
-    /// profile's manifest packs (`packs[].mintedUidOnly`) and the tag names packs are pinned under
+    /// True when the roots are equal, or differ only by the `packUid`s that Palette mints
+    /// (`packs[].mintedUidOnly`) and the tag names packs are pinned under
     /// for the same build (`packs[].tagRenamed`): the same content. `same-release` accepts such a
     /// pair.
     #[serde(default)]
@@ -552,9 +552,11 @@ pub struct PackDiff {
     pub authored: bool,
     /// The params differ.
     pub params_changed: bool,
-    /// True when the pack comes from no registry on either side (a manifest pack) and the only
-    /// difference is its `packUid`: Palette mints that uid for each profile it creates, so two
-    /// profiles with the same manifests carry different ones. The content is the same.
+    /// True when the only difference is a `packUid` that Palette mints. A manifest pack comes
+    /// from no registry, and Palette mints its uid for each profile it creates, so two profiles
+    /// with the same manifests carry different ones. A pack from a registry that Palette does not
+    /// sync gets its uid at the create, so the record of a candidate has none. The content is the
+    /// same.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub minted_uid_only: bool,
     /// True when `IDENTITY` moved only because the tag name differs: the same name, layer, type,
@@ -1223,6 +1225,23 @@ pub fn leaf_diff(a: &Value, b: &Value) -> Vec<Leaf> {
     out
 }
 
+/// True when the two sides of one pack have a different `packUid` that Palette mints, and are
+/// otherwise the same pack: the same name, layer, type, tag, version, and registry. Palette mints
+/// the uid of a manifest pack, from no registry, for each profile. It mints the uid of a pack from
+/// a registry that it does not sync at the create, so the record of a candidate has none, and
+/// that pack has no digest.
+pub(crate) fn minted_uid_pair(x: &Pack, y: &Pack) -> bool {
+    let manifest = x.registry_uid.is_empty();
+    let unsynced = (x.pack_uid.is_empty() || y.pack_uid.is_empty())
+        && x.upstream_unknown()
+        && y.upstream_unknown();
+    x.pack_uid != y.pack_uid
+        && x.registry_uid == y.registry_uid
+        && (manifest || unsynced)
+        && (&x.name, &x.layer, &x.kind, &x.tag, &x.version)
+            == (&y.name, &y.layer, &y.kind, &y.tag, &y.version)
+}
+
 fn side(p: &Pack) -> PackSide {
     PackSide {
         tag: p.tag.clone(),
@@ -1521,14 +1540,7 @@ pub fn compute(a: &Snapshot, b: &Snapshot, generated_at: &str, verify: Option<Ve
                     upstream,
                     authored,
                     params_changed: canonical_json(&x.params) != canonical_json(&y.params),
-                    minted_uid_only: identity
-                        && !upstream
-                        && !authored
-                        && x.registry_uid.is_empty()
-                        && y.registry_uid.is_empty()
-                        && x.pack_uid != y.pack_uid
-                        && (&x.name, &x.layer, &x.kind, &x.tag, &x.version)
-                            == (&y.name, &y.layer, &y.kind, &y.tag, &y.version),
+                    minted_uid_only: identity && !upstream && !authored && minted_uid_pair(x, y),
                     tag_renamed,
                     impact: imp,
                     values: values_diff(x, y),

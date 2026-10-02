@@ -174,6 +174,7 @@ two cases instead.
 | --- | --- | --- |
 | The same build under another tag name | `tag` in `identity` | `compare` marks the pack `tagRenamed` and says `SAME CONTENT`. `same-release` passes the pair. `verify` reports a rename in place as `DRIFT`. A hash without the tag misses that edit. |
 | A manifest pack in two profiles | `packUid` in `identity`, which Palette gives each profile | `compare` marks the pack `mintedUidOnly` and says `SAME CONTENT`. `same-release` passes the pair. A pack from a registry keeps its `packUid`, which names the build of the registry. |
+| A candidate with a pack from a registry that Palette does not sync, and the published version | `packUid` in `identity`, which Palette gives at the create | The pack of the candidate has no `packUid`, and neither side has a digest. `compare` marks the pack `mintedUidOnly` and says `SAME CONTENT`. `same-release` passes the pair with `--allow no-digest`. |
 
 ## Clusters
 
