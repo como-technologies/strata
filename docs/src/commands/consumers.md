@@ -113,6 +113,10 @@ cluster listing names no virtual cluster, so a reading of the listing cannot
 find `tenant-b`. See
 [What the cluster listing answers](../internals/palette/clusters.md#what-the-cluster-listing-answers).
 
+> **On a live Palette, the search does not name a virtual cluster that runs the
+> version through its cluster group.** See the search by profile in
+> [What the cluster listing answers](../internals/palette/clusters.md#what-the-cluster-listing-answers).
+
 ## The list of Palette alone
 
 `--list-only` reads the consumer list that Palette computes, and no other

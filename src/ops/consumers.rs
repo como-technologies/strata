@@ -604,9 +604,10 @@ fn search_condition(property: &str, value: &str) -> Value {
 /// The clusters that run a version of the profile `name`, from the cluster search of `palette`:
 /// one search with `clusterProfiles eq <name>`, and one with `environment eq nested` too, since the
 /// search leaves out each virtual cluster unless a condition asks for it. Palette takes the name of
-/// a profile there, and not its uid: it changes each name into the uids of the profiles with that
-/// name, in the scope of the request, and a uid matches no name (#181). So the answer holds each
-/// cluster that runs a version of the name, and the caller keeps the clusters that run the uid.
+/// a profile there, and not its uid: it changes each name into the uids of every profile with that
+/// name, with no scope, and a uid matches no name (#181). The search of the clusters then holds to
+/// the scope of the request. So the answer holds each cluster in that scope that runs a version of
+/// the name, and the caller keeps the clusters that run the uid.
 /// None when the search of Palette takes no `clusterProfiles`, or when the profile has no name.
 fn searched_consumers<A: PaletteApi>(
     palette: &Palette<A>,
@@ -650,8 +651,8 @@ fn searched_consumers<A: PaletteApi>(
 
 /// The second reading of `consumers`. Strata asks the cluster search for the clusters that run a
 /// version of the profile `name`, and reads the cluster listing when the search takes no profile.
-/// The search goes to the scope of the profile: its project `project`, where the name is known and
-/// where each cluster that can run it is, or `wide` for a tenant profile. Then `home` when that
+/// The search goes to the scope of the profile: its project `project`, where each cluster that can
+/// run it is, or `wide` for a tenant profile. Then `home` when that
 /// scope cannot answer. The listing is read through `wide`, and through `home` when `wide` cannot
 /// read it. A cluster the consumer list named is not read again. A cluster that applies `uid`
 /// joins `list`, marked `unlisted`, with what its document and the search or the listing say of it.

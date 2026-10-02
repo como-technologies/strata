@@ -237,13 +237,16 @@ there, `negation` turns a condition with values over, and the search lists no
 virtual cluster unless its filter asks for the environment `nested`.
 
 **The search by profile.** The property `clusterProfiles` takes the name of a
-profile, and not its uid. Palette changes each name into the uids of the
-profiles with that name, in the scope of the request, and then selects the
-clusters that run one of those uids. A value that is not the name of a profile
-selects no cluster, so a search with the uid of a profile answers nothing. So
-a search with `clusterProfiles eq <name>` gives the clusters that run any
-version of the profile, and the same search with `environment eq nested` gives
-the virtual clusters that run it. The item of a cluster does not say which
+profile, and not its uid. Palette changes each name into the uids of every
+profile with that name, with no scope, and then selects the clusters in the
+scope of the request that run one of those uids. A value that is not the name
+of a profile selects no cluster, so a search with the uid of a profile answers
+nothing. So a search with `clusterProfiles eq <name>` gives the clusters that
+run any version of the profile, and the same search with `environment eq
+nested` gives the virtual clusters whose own profiles include it. It does not
+give a virtual cluster that runs the version through its cluster group: the
+search reads a summary of each cluster, and the summary of such a virtual
+cluster does not name the profiles of its group. The item of a cluster does not say which
 version it runs: on a live tenant, `specSummary.clusterProfileTemplates` is
 empty. So strata reads the document of each cluster that the search names, and
 keeps the clusters that run the version. The checks `search-profile-runs` and
