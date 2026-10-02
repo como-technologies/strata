@@ -1,7 +1,7 @@
 //! `consumers`: the clusters, edge hosts, and cluster templates that use a profile version, and
 //! the app deployments of an app profile.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -130,6 +130,22 @@ pub struct ClustersRead {
     /// Why the second reading was not done, when `--list-only` did not ask: for an app profile.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub reason: String,
+    /// The cluster groups that pin the version (#184). The cluster search does not name a virtual
+    /// cluster that runs the version through its group, so strata reads the virtual clusters of
+    /// each such group.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub groups: usize,
+    /// The virtual clusters of those groups that strata read: each one that the consumer list and
+    /// the search did not name. Each one also counts in `read` or `unread`.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub members: usize,
+    /// Why strata could not read the cluster groups, or one of them, when it could not.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub groups_error: Option<Value>,
+}
+
+fn is_zero(n: &usize) -> bool {
+    *n == 0
 }
 
 /// The edge hosts that `consumers` read. The consumer list of a profile names clusters only, so
@@ -708,9 +724,20 @@ where
         resolved: Some(resolved),
         ..ClustersRead::default()
     };
-    for listed in candidates {
-        if list.iter().any(|c| c.uid == listed.uid) {
+    // the virtual clusters of each cluster group that pins the version (#184)
+    progress.note("reading the virtual clusters of the cluster groups that pin the version");
+    let members = group_members(wide, home, uid, &mut clusters_read);
+    let mut seen: HashSet<String> = HashSet::new();
+    let tagged = candidates
+        .into_iter()
+        .map(|c| (c, false))
+        .chain(members.into_iter().map(|c| (c, true)));
+    for (listed, of_group) in tagged {
+        if list.iter().any(|c| c.uid == listed.uid) || !seen.insert(listed.uid.clone()) {
             continue;
+        }
+        if of_group {
+            clusters_read.members += 1;
         }
         let doc = client_for(clients, home, &listed.project_uid, connect)
             .and_then(|p| p.cluster_document(&listed.uid));
@@ -751,4 +778,69 @@ where
         }
     }
     clusters_read
+}
+
+/// The virtual clusters of each cluster group that pins `uid`, for the second reading (#184). The
+/// cluster search does not name a virtual cluster that runs the version through its group: the
+/// search reads a summary of each cluster, and the summary of such a virtual cluster does not
+/// name the profiles of its group. So strata lists the cluster groups of the tenant (`wide`) and
+/// of the scope of the key (`home`), keeps each group whose `spec.clusterProfileTemplates` holds
+/// `uid`, and lists its virtual clusters, in the scope that listed the group. A Palette that has
+/// no cluster groups answers the listing with `404` or `405`: no group. The count of the groups
+/// and an error go into `read`.
+fn group_members<A: PaletteApi>(
+    wide: &Palette<A>,
+    home: &Palette<A>,
+    uid: &str,
+    read: &mut ClustersRead,
+) -> Vec<ListedCluster> {
+    let mut groups: Vec<(&Palette<A>, String)> = Vec::new();
+    let mut seen: HashSet<String> = HashSet::new();
+    let mut failed = None;
+    let mut answered = false;
+    for scope in [wide, home] {
+        match scope.cluster_groups() {
+            Ok(listed) => {
+                answered = true;
+                for (_, group) in listed {
+                    if seen.insert(group.clone()) {
+                        groups.push((scope, group));
+                    }
+                }
+            }
+            Err(Error::Api {
+                status: 404 | 405, ..
+            }) => answered = true,
+            Err(e) => failed = Some(e.to_json()),
+        }
+    }
+    if !answered {
+        read.groups_error = failed;
+        return Vec::new();
+    }
+    let mut members = Vec::new();
+    for (scope, group) in groups {
+        let doc = match scope.cluster_group_document(&group) {
+            Ok(doc) => doc,
+            Err(e) => {
+                read.groups_error.get_or_insert(e.to_json());
+                continue;
+            }
+        };
+        let pins = doc
+            .pointer("/spec/clusterProfileTemplates")
+            .and_then(Value::as_array)
+            .is_some_and(|ts| ts.iter().any(|t| text(t, "/uid") == uid));
+        if !pins {
+            continue;
+        }
+        read.groups += 1;
+        match scope.cluster_group_members(&group) {
+            Ok(found) => members.extend(found),
+            Err(e) => {
+                read.groups_error.get_or_insert(e.to_json());
+            }
+        }
+    }
+    list_clusters(&Value::Array(members))
 }

@@ -679,8 +679,9 @@ baseline with cluster A.
 | `member-consumer`, `member-consumer-listed` | 1, 0 | #78: `consumers` of the add-on version names the virtual cluster, from the consumer list of Palette |
 | `member-not-in-listing` | 0 | #78: the cluster listing does not name the virtual cluster |
 | `search-profile`, `search-profile-runs` | 0 | #181: the cluster search with `clusterProfiles eq <add-on name>` answers cluster A, which runs the add-on version, and not the virtual cluster. A search with the uid of the add-on answers no cluster. No run has passed this check yet. |
-| `search-nested`, `search-nested-member` | 0 | #181: the same search with `environment eq nested` answers the virtual cluster of the group. No run has passed this check: the search answers no virtual cluster that runs the version through its group. #184 finds such a virtual cluster through its group. |
+| `search-nested`, `search-nested-misses-member` | 0 | #184: the same search with `environment eq nested` does not answer the virtual cluster of the group, which runs the add-on version through its group |
 | `member-consumer-search` | 0 | #149: `consumers` does its second reading through the search |
+| `member-consumer-group`, `group-virtual-clusters` | 0 | #184: `consumers` finds the group that pins the add-on version, and the virtual clusters of the group, which it reads, name the virtual cluster. No run has passed this check yet. |
 | `edit`, `edit-group-verify` | 0, 0 | #81: after an edit in place of the manifest of the add-on version, `verify` of the record of the group passes: the group keeps its own copy |
 | `edit-group-compare` | 0 | #81: the member keeps its copy too, so the group and the member still agree |
 | `edit-group-vs-version`, `edit-group-vs-version-says` | 1, 0 | #81: the version differs from the copy of the group, and the compare names the manifest |

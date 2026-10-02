@@ -293,7 +293,11 @@ is the path as a list: strings for keys, numbers for indexes, and
   of the listing. `read`: the cluster documents read, one for each cluster that
   the search or the listing names and the consumer list does not. `unread`: the
   clusters of those that strata could not read. `error`: why strata could not
-  read the search or the cluster listing. Then `read` is `0`.
+  read the search or the cluster listing. Then `read` is `0`. `groups`, only
+  when not zero: the cluster groups that pin the version, whose virtual clusters
+  strata read. `members`, only when not zero: the virtual clusters of those
+  groups that strata read, which also count in `read` or `unread`.
+  `groupsError`: why strata could not read the cluster groups, or one of them.
   `skipped`, only when true: `--list-only` asked for no second reading, or the
   profile is an app profile. `reason`, only for an app profile: why strata did
   no second reading.

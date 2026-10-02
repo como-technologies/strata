@@ -2175,6 +2175,118 @@ fn the_second_reading_asks_the_cluster_search_and_finds_a_virtual_cluster() {
     }
 }
 
+/// A Palette with one cluster group `g1` that pins the profile `UID_A`, and one virtual cluster
+/// `vc-1` in it that runs the profile through the group. The search answers no cluster: it does
+/// not name a virtual cluster that runs the version through its group (#184).
+fn with_pinning_group(api: MemoryApi) -> MemoryApi {
+    let mut vc = cluster_doc("vc-1", "vc-1", "p1", "Running");
+    vc["spec"] = serde_json::json!({"cloudType": "nested", "clusterProfileTemplates": [
+        {"uid": UID_A, "name": "lab-profile", "profileVersion": "1.2.0", "type": "add-on"}
+    ]});
+    api.with(
+        "/v1/dashboard/spectroclusters/search/schema",
+        serde_json::json!({"schema": {"properties": [
+            {"name": "clusterProfiles", "type": "string"},
+            {"name": "environment", "type": "string"}]}}),
+    )
+    .with_post(
+        CLUSTER_SEARCH,
+        &profile_search("lab-profile", false),
+        serde_json::json!({"items": [], "listmeta": {"continue": ""}}),
+    )
+    .with_post(
+        CLUSTER_SEARCH,
+        &profile_search("lab-profile", true),
+        serde_json::json!({"items": [], "listmeta": {"continue": ""}}),
+    )
+    .with(
+        "/v1/clustergroups/hostCluster/metadata",
+        serde_json::json!({"items": [{"uid": "g1", "name": "dev-group"}]}),
+    )
+    .with(
+        "/v1/clustergroups/g1",
+        serde_json::json!({"metadata": {"uid": "g1", "name": "dev-group"},
+            "spec": {"clusterProfileTemplates": [{"uid": UID_A, "name": "lab-profile"}]}}),
+    )
+    .with_post(
+        "/v1/dashboard/clustergroups/g1/virtualClusters?limit=50",
+        &serde_json::json!({"filter": {}, "sort": []}),
+        serde_json::json!({"items": [{"metadata": {"uid": "vc-1", "name": "vc-1",
+            "annotations": {"projectUid": "p1"}}}], "listmeta": {"continue": ""}}),
+    )
+    .with("/v1/spectroclusters/vc-1", vc)
+}
+
+#[test]
+fn the_second_reading_finds_a_virtual_cluster_through_the_group_that_pins_the_version() {
+    // the consumer list is empty, and the search names no cluster; the group g1 pins the version,
+    // and its virtual cluster vc-1 runs it (#184)
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let api = with_pinning_group(serve(MemoryApi::new(), dir.path(), "a", UID_A));
+    let r = ops::consumers(
+        &Ref::Uid(UID_A.into()),
+        |_| Ok(Palette::new(&api)),
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert_eq!((r.count, r.exit_code()), (1, 1));
+    assert_eq!(r.consumers[0].uid, "vc-1");
+    assert!(r.consumers[0].unlisted);
+    assert_eq!(
+        (
+            r.clusters_read.groups,
+            r.clusters_read.members,
+            r.clusters_read.read
+        ),
+        (1, 1, 1)
+    );
+    assert_eq!(api.calls("/v1/spectroclusters/vc-1"), 1);
+    let text = render::renderer(Format::Terminal, Paint::off(), false)
+        .render_consumers(&r)
+        .unwrap();
+    assert!(
+        text.contains("1 cluster group pins the version, 1 other virtual cluster read"),
+        "{text}"
+    );
+    let json: Value = serde_json::from_str(
+        &render::renderer(Format::Json, Paint::off(), true)
+            .render_consumers(&r)
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(json["clustersRead"]["groups"], 1);
+    assert_eq!(json["clustersRead"]["members"], 1);
+}
+
+#[test]
+fn the_second_reading_does_not_read_again_a_virtual_cluster_that_the_list_names() {
+    // the consumer list names vc-1, so the group reading counts the group and reads no cluster
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let mut profile = read(&dir.path().join("a").join("profile.json"));
+    profile["status"]["inUseClusterUids"] = serde_json::json!(["vc-1"]);
+    profile["status"]["inUseClusters"] =
+        serde_json::json!([{"uid": "vc-1", "name": "vc-1", "projectUid": "p1"}]);
+    let api = with_pinning_group(
+        serve(MemoryApi::new(), dir.path(), "a", UID_A)
+            .with(format!("/v1/clusterprofiles/{UID_A}"), profile),
+    );
+    let r = ops::consumers(
+        &Ref::Uid(UID_A.into()),
+        |_| Ok(Palette::new(&api)),
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert_eq!(r.count, 1);
+    assert!(!r.consumers[0].unlisted);
+    assert_eq!((r.clusters_read.groups, r.clusters_read.members), (1, 0));
+    // read once, for the consumer list, and not again by the group reading
+    assert_eq!(api.calls("/v1/spectroclusters/vc-1"), 1);
+}
+
 #[test]
 fn the_second_reading_searches_a_project_profile_in_its_own_project() {
     // a profile of the project p9: the search goes to p9, where Palette knows the name, and where

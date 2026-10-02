@@ -246,7 +246,8 @@ run any version of the profile, and the same search with `environment eq
 nested` gives the virtual clusters whose own profiles include it. It does not
 give a virtual cluster that runs the version through its cluster group: the
 search reads a summary of each cluster, and the summary of such a virtual
-cluster does not name the profiles of its group. The item of a cluster does not say which
+cluster does not name the profiles of its group. So `consumers` also reads the
+virtual clusters of each cluster group that pins the version. The item of a cluster does not say which
 version it runs: on a live tenant, `specSummary.clusterProfileTemplates` is
 empty. So strata reads the document of each cluster that the search names, and
 keeps the clusters that run the version. The checks `search-profile-runs` and
