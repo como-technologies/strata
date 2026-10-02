@@ -15,6 +15,7 @@ of each response.
 | `GET /v1/clusterprofiles/{uid}` | The metadata, the consumers, and the published pack references. |
 | `GET /v1/clusterprofiles/{uid}/packs/manifests` | The registry digests and the manifest contents. |
 | `GET /v1/clusterprofiles/{uid}/variables` | The profile variables. |
+| `GET /v1/packs/{uid}` | Only when the profile has a draft: for each pack of the draft, `packValues[].schema[]`, with the `name` and the `format` of each value. Strata writes `********` over each value whose format is `password`. See [Secrets in the values](../internals/palette/profiles.md#secrets-in-the-values). |
 | `GET /v1/dashboard/clusterprofiles/metadata` | The listing: `list`, and the uid of `<name>@<version>` and of `<name>@latest`. |
 
 A missing variables endpoint, HTTP 404 or 405 on an older Palette, counts as no

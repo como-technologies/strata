@@ -36,6 +36,44 @@ infrastructure layers of a version a cluster runs as well: the CSI layer first
 and the OS layer last. `verify` on a record from before reports `DRIFT` and
 `note: pack order changed between the two profiles`.
 
+## Secrets in the values
+
+The schema of a pack can give a value the format `password`. Palette writes
+`********` over such a value when it serves the published packs of a profile
+([Pack constraints](https://docs.spectrocloud.com/registries-and-packs/pack-constraints/)).
+It does not write it over an empty value, or over a value that holds a
+variable, `{{.spectro.var.NAME}}`. A record of a published version holds
+`********`, and not the secret.
+
+The source of Palette shows that Palette does not do this for the packs of a
+draft. A draft is the content of a `PUT` with no publish. A profile that was
+never published has only a draft. `GET /v1/clusterprofiles/{uid}` gives
+`spec.draft.packs` with each secret in clear, and
+`GET /v1/clusterprofiles/{uid}/packs/manifests` serves the packs of the draft
+when the profile has one. No live run checks this: see
+[What the source of Palette says](limits.md#what-the-source-of-palette-says).
+
+So strata writes the mask itself. When a profile has a draft, strata reads the
+schema of each pack of the draft with `GET /v1/packs/{uid}`. That answer gives
+`packValues[].schema[]`, with the `name` of each value, such as
+`charts.kube-prometheus-stack.grafana.adminPassword`, and its `format`, such as
+`${password}`. Strata writes `********` over each value whose format is
+`password`, with the rules of Palette, in the draft and in `packs/manifests`.
+It does this before it makes the record, and before `--raw-dir` saves the
+answers. The record of a profile with a draft only holds `********`, and not
+the secret.
+
+Strata changes only the line of each secret, so the rest of the values text
+stays. When a value takes more than one line, strata writes the values again
+from the parsed YAML, with no comments. The digest of the values does not
+change with the layout: a masked draft has the values digest of the same
+version that Palette masks after the publish.
+
+A pack that Palette no longer has answers HTTP 404. Palette has no schema for
+it, so it masks nothing, and strata masks nothing. Each other failure of that
+read stops the record, so that strata never writes a secret that it could not
+check.
+
 ## The audit log
 
 Palette logs each write to a profile, an app profile, a cluster, an edge host,

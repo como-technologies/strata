@@ -3,7 +3,7 @@
 
 use serde_json::Value;
 
-use super::{PaletteApi, RawCluster, RawProfile};
+use super::{PaletteApi, RawCluster, RawProfile, mask};
 use crate::error::{Error, Result};
 use crate::progress::Progress;
 use crate::reference::LATEST;
@@ -324,12 +324,15 @@ impl<A: PaletteApi> Palette<A> {
 
     /// Fetch the three documents for one profile. A missing variables endpoint (404 or 405, as on
     /// older Palette versions) is treated as "no variables"; other errors propagate.
+    /// Palette serves the draft packs with each secret in clear: strata masks them first, see
+    /// `mask_draft`.
     pub fn fetch_profile(&self, uid: &str, progress: &Progress) -> Result<RawProfile> {
         progress.note(&format!("fetching profile {uid}"));
-        let profile = self.api.get_json(&format!("/v1/clusterprofiles/{uid}"))?;
-        let manifests = self
+        let mut profile = self.api.get_json(&format!("/v1/clusterprofiles/{uid}"))?;
+        let mut manifests = self
             .api
             .get_json(&format!("/v1/clusterprofiles/{uid}/packs/manifests"))?;
+        self.mask_draft(&mut profile, &mut manifests, progress)?;
         let (variables, variables_unavailable) = self.variables_or(
             &format!("/v1/clusterprofiles/{uid}/variables"),
             serde_json::json!({ "variables": [] }),
@@ -343,6 +346,86 @@ impl<A: PaletteApi> Palette<A> {
             project_uid: self.project_uid().map(str::to_string),
             fetched_at: None,
         })
+    }
+
+    /// Write `********` over each secret of the draft packs of a profile, as Palette does for the
+    /// published packs. Palette masks a value whose schema format is `password` in
+    /// `spec.published.packs`, but not in `spec.draft.packs`, and `packs/manifests` serves the
+    /// draft packs when the profile has a draft. The schema of each pack comes from
+    /// `GET /v1/packs/{uid}`. A pack that Palette no longer has (404) has no schema, so Palette
+    /// masks nothing in it, and strata does the same.
+    fn mask_draft(
+        &self,
+        profile: &mut Value,
+        manifests: &mut Value,
+        progress: &Progress,
+    ) -> Result<()> {
+        let pack_uid = |pk: &Value| {
+            pk.get("packUid")
+                .and_then(Value::as_str)
+                .filter(|u| !u.is_empty() && u.bytes().all(|b| b.is_ascii_alphanumeric()))
+                .map(str::to_string)
+        };
+        let mut uids: Vec<String> = profile
+            .pointer("/spec/draft/packs")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter(|pk| pk.get("type").and_then(Value::as_str) != Some("manifest"))
+            .filter_map(pack_uid)
+            .collect();
+        uids.sort();
+        uids.dedup();
+        let mut secrets: std::collections::BTreeMap<String, Vec<String>> = Default::default();
+        for uid in uids {
+            progress.note(&format!(
+                "reading the schema of pack {uid} to mask the draft"
+            ));
+            match self.api.get_json(&format!("/v1/packs/{uid}")) {
+                Ok(pack) => {
+                    let fields = mask::password_fields(&pack, &uid);
+                    if !fields.is_empty() {
+                        secrets.insert(uid, fields);
+                    }
+                }
+                Err(Error::Api { status: 404, .. }) => {}
+                Err(e) => return Err(e),
+            }
+        }
+        if secrets.is_empty() {
+            return Ok(());
+        }
+        let mask_at = |v: &mut Value, fields: &[String]| {
+            if let Some(text) = v.as_str().filter(|t| !t.is_empty()) {
+                *v = Value::String(mask::mask_values(text, fields));
+            }
+        };
+        if let Some(packs) = profile
+            .pointer_mut("/spec/draft/packs")
+            .and_then(Value::as_array_mut)
+        {
+            for pk in packs {
+                if let Some(fields) = pack_uid(pk).and_then(|u| secrets.get(&u))
+                    && let Some(v) = pk.get_mut("values")
+                {
+                    mask_at(v, fields);
+                }
+            }
+        }
+        if let Some(packs) = manifests
+            .pointer_mut("/spec/packs")
+            .and_then(Value::as_array_mut)
+        {
+            for pk in packs {
+                let uid = pk.pointer("/metadata/uid").and_then(Value::as_str);
+                if let Some(fields) = uid.and_then(|u| secrets.get(u))
+                    && let Some(v) = pk.pointer_mut("/spec/values")
+                {
+                    mask_at(v, fields);
+                }
+            }
+        }
+        Ok(())
     }
 
     /// The profile document alone, `GET /v1/clusterprofiles/{uid}`: metadata, versions, and the

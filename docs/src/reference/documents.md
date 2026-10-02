@@ -92,7 +92,10 @@ profile, or pack version.
     It is outside the root.
   - `params`: the params of the pack on the profile, as a map. For an app tier,
     its properties: each name and its value.
-  - `values`: the raw values YAML. `valuesCanon`: the values as JSON with
+  - `values`: the raw values YAML. Palette writes `********` over each value
+    whose schema format is `password`. Strata does the same for the packs of a
+    draft: see [Secrets in the values](../internals/palette/profiles.md#secrets-in-the-values).
+    `valuesCanon`: the values as JSON with
     sorted keys, or `null` when the values do not parse. `valuesHash`: the
     sha256 of `valuesCanon`, or of the trimmed text when the values do not
     parse. `valuesParseError`, only then: why.
