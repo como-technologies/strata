@@ -1,0 +1,5 @@
+$ strata snapshot --from-candidate certs.yaml -o certs.json
+strata: looking up project dev
+strata: resolving certs@1.0.0 against the registry
+strata: warning: cert-manager: the values select the option public of access (pack.access); Palette can write the presets of that option into the values, and no route of Palette shows them, so the root can differ from the version that Palette publishes
+strata: wrote certs.json (root d1bc3ce3170d)

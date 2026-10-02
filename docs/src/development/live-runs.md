@@ -214,6 +214,8 @@ registries the tenant can see, including one pack that two registries hold.
 | `packs-cloud-none`, `packs-cloud-none-says` | 0 | #54: a cloud no version supports is an empty answer, not an error, and it says so |
 | `packs-json` | 0 | #54: `--json` writes `strata-packs/1` |
 | `packs-unknown-registry`, `packs-unknown-pack` | 2 | #54: an unknown registry lists the visible ones; a pack no registry has is an error |
+| `preset-listing` | 0 | #151: the listing gives each option of the `access` parameter of `headlamp` 0.45.0 with no presets: see [The presets of a template option](../internals/palette/packs.md#the-presets-of-a-template-option) |
+| `preset-warning`, `preset-warning-says`, `preset-recorded` | 0 | #151: a candidate whose values select the option `public` warns, and records `packs[].presetOptions[]` |
 
 Palette lists the registries of a tenant in no fixed order, so strata sorts them
 and the ambiguous-ref message reads the same every time:

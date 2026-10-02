@@ -1,0 +1,2 @@
+$ jq -c '.packs[0].presetOptions' certs.json
+[{"parameter":"access","targetKey":"pack.access","option":"public"}]

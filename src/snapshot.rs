@@ -688,8 +688,27 @@ pub struct Pack {
     /// the root, as `images`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub charts: Vec<PackChart>,
+    /// For a pack that strata reads from the registry, of a candidate or of a `pack:` record:
+    /// each option of the pack template that the values select,
+    /// sorted by parameter. Palette can write the presets of such an option into the values, and
+    /// no route shows them. Outside the root: the values are in it.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub preset_options: Vec<PresetOption>,
     /// The three sub-hashes and the node hash.
     pub hash: PackHash,
+}
+
+/// One option of a pack template that the values of the pack select: the value at the target
+/// key of an input parameter names the option.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct PresetOption {
+    /// The name of the input parameter.
+    pub parameter: String,
+    /// The key in the values that the parameter reads, as a dotted path.
+    pub target_key: String,
+    /// The option that the value at that key names.
+    pub option: String,
 }
 
 /// One Helm chart that the values of a pack declare.
@@ -895,6 +914,11 @@ impl Pack {
         let registry_digest = s(&mm, "/spec/digest");
         let registry_provider_type =
             Some(s(pk, "/annotations/ociRegistryProviderType")).filter(|t| !t.is_empty());
+        // a key of strata on the pack ref of a candidate: a pack ref of Palette has none
+        let preset_options: Vec<PresetOption> = pk
+            .get("presetOptions")
+            .and_then(|o| serde_json::from_value(o.clone()).ok())
+            .unwrap_or_default();
         let params = pk
             .get("params")
             .cloned()
@@ -967,6 +991,7 @@ impl Pack {
             manifests,
             images,
             charts,
+            preset_options,
             hash: PackHash {
                 identity,
                 upstream,

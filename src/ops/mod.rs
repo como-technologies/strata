@@ -286,6 +286,7 @@ where
     let palette = connect()?;
     let raw = crate::candidate::resolve(loaded, &palette, progress)?;
     let mut snap = Snapshot::from_raw(&raw, &loaded.path.display().to_string(), fetched_at)?;
+    crate::candidate::warn_preset_options(&snap, progress);
     snap.source.template = crate::candidate::TEMPLATE.to_string();
     // Palette does not hold a candidate, so no request asked which clusters use it
     snap.source.consumers = None;

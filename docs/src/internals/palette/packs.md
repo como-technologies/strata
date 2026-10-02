@@ -65,8 +65,35 @@ So a change to a schema or a preset under one version is a change to the content
 of the pack. The digest that Palette lists for the version follows it, and a
 published profile keeps the digest it was pinned with. A preset that a profile
 applies goes into the values of that profile, where strata reads it. Strata
-applies no pack preset of its own. What the values of a profile must carry for a
-preset is open: see [What no run covers](limits.md#what-no-run-covers).
+applies no pack preset of its own.
+
+### The presets of a template option
+
+The template of a pack can have input parameters. Each one has a `targetKey`, a
+dotted path in the values, and `options`. An option can have presets: keys, each
+with a value. On a create and on an update of a profile, Palette reads the
+value at the `targetKey` as text. When the text is the name of an option,
+Palette writes each preset of that option into the values of the pack. It adds a
+key that is not there, and it replaces a key that is there
+(`doutil.AddPackParameterPresets`, `hubble/doutil/pack-util.go`).
+
+No route of Palette gives the presets of an option. The listing (`spec.template`
+of `GET /v1/packs`) and the tags route (`packValues[].template` of
+`GET /v1/packs/<name>/registries/<uid>`) give each input parameter with its
+`targetKey` and its `options`. Each option has only `label`, `description`, and
+`dependencies`: the API type `v1PackTemplateParameterOption` has no presets, and
+the converter of Palette drops them. The `presets` of `packValues[]` are another
+list: the presets of the pack, and not of a template option.
+
+For example, the `headlamp` 0.45.0 template has the parameter `access` at
+`pack.palette.config.headlamp.access`. In the pack source, its option `public`
+sets `charts.headlamp.service.type` to `LoadBalancer`. The listing gives that
+option as `{"dependencies":[],"label":"Direct"}`. The default values of the pack
+do not set the key, so they select no option.
+
+So strata cannot apply the presets. A candidate records the option that its
+values select, and strata warns: see
+[Template options](../../reference/candidate-file.md#template-options).
 
 ## A pack that moves between registries
 

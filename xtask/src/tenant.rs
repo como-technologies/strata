@@ -1336,6 +1336,20 @@ impl Tenant {
         }
         self.write(project, &path, &listing);
     }
+
+    /// Give one version of a pack in the listing of the Public Repo a template, as
+    /// `spec.template` of `v1PackSummarySpec`. Palette gives each option of an input parameter
+    /// with its label and dependencies, and with no presets: its converter drops them.
+    pub fn pack_template(&self, project: &str, name: &str, version: &str, template: &Value) {
+        let path = format!("v1/packs@filters=spec.name={name}&limit=100&offset=0");
+        let mut listing = self.read(project, &path);
+        for item in listing["items"].as_array_mut().into_iter().flatten() {
+            if item["spec"]["version"] == version && item["spec"]["registryUid"] == PUBLIC_REPO {
+                item["spec"]["template"] = template.clone();
+            }
+        }
+        self.write(project, &path, &listing);
+    }
 }
 
 fn read_json(path: &Path) -> Value {
