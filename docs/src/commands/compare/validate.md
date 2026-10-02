@@ -31,10 +31,14 @@ error:
 {{#include ../../output/validate-refuses-json.txt}}
 ```
 
-Palette can also refuse the whole request with a `400` or a `422`, for example
-for a pack that the cloud of the cluster does not support. Strata prints that
-answer as one `refuses` line with no pack. Another HTTP error, for example a
-`403`, is an error of strata and exits `2`.
+Palette can also refuse the whole request, for example for a pack that the
+cloud of the cluster does not support. It answers HTTP `500` with a `code`,
+such as `PackSpectroIntegrationNotSupported`, and a `message`. Strata does not
+send that request again. It prints the refusal as one `refuses` line with no
+pack: `palette    refuses: <code>: <message>`. Each code is in
+[Refusals that strata does not send again](../../reference/errors.md#refusals-that-strata-does-not-send-again).
+Another HTTP error, for example a `403`, or a `500` with another code, is an
+error of strata and exits `2`.
 
 It costs two requests, the cluster document and one `POST` to
 `/v1/spectroclusters/<uid>/validate/packs`, with the body of `--repave`. The

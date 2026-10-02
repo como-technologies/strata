@@ -6,7 +6,7 @@ use serde_json::{Value, json};
 
 use crate::api::{Palette, PaletteApi};
 use crate::diff::{ImpactLevel, PaletteRefusal, PaletteRepave, PaletteValidation};
-use crate::error::{Error, Result};
+use crate::error::{Error, PACK_REFUSAL_CODES, Result, error_code};
 use crate::snapshot::{AppliedProfile, ClusterSource, Snapshot, SubjectKind};
 
 /// A profile type that builds a cluster: its OS and Kubernetes layers.
@@ -121,9 +121,9 @@ pub fn palette_repave<A: PaletteApi>(
 
 /// Ask Palette whether it accepts the packs of the profile side on the cluster side: `POST
 /// validate/packs` with the body of `--repave`, which changes nothing. The sides follow the rules
-/// of [`palette_repave`]. Palette answers `200` with an error for each pack it refuses, or a
-/// `400` or a `422` with one `code` and `message` when it refuses the whole request: both are an
-/// answer, and not an error of strata.
+/// of [`palette_repave`]. Palette answers `200` with an error for each pack it refuses. It
+/// refuses the whole request with HTTP 500 and a code of [`PACK_REFUSAL_CODES`]: that is an
+/// answer too, and the retry does not send it again. Each other error is an error of strata.
 pub fn palette_validation<A: PaletteApi>(
     palette: &Palette<A>,
     a: &Snapshot,
@@ -134,10 +134,8 @@ pub fn palette_validation<A: PaletteApi>(
     match palette.validate_packs(&cluster.uid, &validate_body(&running, target)) {
         Ok(answer) => Ok(PaletteValidation::from_palette(&cluster.uid, &answer)),
         Err(Error::Api {
-            status: 400 | 422,
-            body,
-            ..
-        }) => {
+            status: 500, body, ..
+        }) if error_code(&body).is_some_and(|c| PACK_REFUSAL_CODES.contains(&c.as_str())) => {
             let error: Value = serde_json::from_str(&body).unwrap_or(Value::Null);
             let text = |key: &str| {
                 error
@@ -149,11 +147,7 @@ pub fn palette_validation<A: PaletteApi>(
             let refusal = PaletteRefusal {
                 pack: String::new(),
                 code: text("code"),
-                message: if error.get("message").is_some() {
-                    text("message")
-                } else {
-                    body.clone()
-                },
+                message: text("message"),
             };
             Ok(PaletteValidation::refused(&cluster.uid, vec![refusal]))
         }

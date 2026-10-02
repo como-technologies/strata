@@ -63,7 +63,10 @@ The checks, in order:
 2. For each profile of the body, Palette builds the target: the copy that the
    cluster holds of that uid, or the published profile for a new uid, with the
    sent values over it.
-3. The metadata of the packs.
+3. The metadata of the packs: two dashboard packs that cannot go together, the
+   names of the packs and the manifests, one pack or one manifest two times in
+   a profile, one pack name in two profiles of one workload scope (the system
+   scope or the app scope), and two versions of one pack across the profiles.
 4. The integration packs: a pack that the cloud of the cluster does not
    support, and on an imported cluster each integration pack but Headlamp, is a
    refusal of the whole request, `PackSpectroIntegrationNotSupported`.
@@ -79,9 +82,14 @@ The answer is `200` with `profiles[]`: only the profiles with an error, each
 with its `uid` and `packs.results[].errors[]` of `code` and `message`. Palette
 puts the error of a pack under each profile of the body that holds a pack of
 that name, and gives the profiles in no fixed order. With no error, the answer
-has no profile. `machinePools` stays empty: the route checks no machine. A
-refusal of the whole request is a 4xx `V1Error` with `code` and `message`. The
+has no profile. `machinePools` stays empty: the route checks no machine. The
 route does not say whether the change repaves: `validate/repave` answers that.
+
+A refusal of the whole request, from steps 1, 3, 4, and the disabled packs of
+step 5, is HTTP `500` with `code` and `message`. Palette gives each new error
+the response type of a server fault, and these errors set no other type. So a
+refusal by design arrives with the status of a fault. The codes are in
+[Refusals that strata does not send again](../../reference/errors.md#refusals-that-strata-does-not-send-again).
 
 No live run has asked this route yet. Stage 7 of `repave.sh` asks it on
 cluster A: see [repave.sh](../../development/live-runs.md#repavesh).

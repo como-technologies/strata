@@ -73,6 +73,25 @@ sent.
 | `ClusterProfileInvalidPackState` | A profile that pins a pack version that is disabled or deleted. |
 | `InvalidLimit` | A listing with a `limit` above the maximum. |
 
+`POST /v1/spectroclusters/{uid}/validate/packs` refuses the whole request with
+HTTP `500` and one of these codes. Strata does not send it again, and
+`compare --validate` prints the refusal as the answer of Palette, with exit
+`0` or `1` from the comparison:
+[Ask Palette if it accepts the packs](../commands/compare/validate.md).
+
+| Code | Palette refuses |
+| --- | --- |
+| `PackValuesYamlInvalid` | Pack values that are not YAML. |
+| `PackManifestYamlInvalid` | A manifest of a pack that is not YAML. |
+| `ClusterDashboardPacksMutuallyExclusive` | Two dashboard packs that cannot go together. |
+| `InvalidName` | A pack or a manifest with a name that is not valid. |
+| `DuplicatePacksForbidden` | One pack two times in a profile. |
+| `DuplicatePackManifestsForbidden` | One manifest two times in a pack. |
+| `DuplicateClusterPacksForbidden` | One pack in two profiles of the cluster. |
+| `MultiPackVersionsForbidden` | Two versions of one pack across the profiles. |
+| `PackSpectroIntegrationNotSupported` | An integration pack that the cloud, or an imported cluster, does not support. |
+| `DisabledPacksForbidden` | A pack that is disabled. |
+
 A 5xx with a different code, or with no code, is a fault. Strata sends the
 request again.
 

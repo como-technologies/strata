@@ -6829,29 +6829,41 @@ fn compare_validate_prints_each_error_of_palette_and_keeps_the_exit_of_the_compa
         .unwrap();
     assert!(text.contains("palette    accepts\n"), "{text}");
 
-    // a refusal of the whole request is an answer too: no pack, the code, and the message
-    for status in [400, 422] {
-        let api = cluster_api.clone().failing(
-            path.clone(),
-            status,
-            r#"{"code":"PackSpectroIntegrationNotSupported","message":"Pack 'spectro-k8s-dashboard' is not supported for imported cluster"}"#,
-        );
-        let v = ops::palette_validation(&Palette::new(&api), &cluster, &target).unwrap();
-        assert!(!v.accepts);
-        assert_eq!(v.errors.len(), 1);
-        assert_eq!(v.errors[0].pack, "");
-        assert_eq!(v.errors[0].code, "PackSpectroIntegrationNotSupported");
-        assert_eq!(
-            v.errors[0].message,
-            "Pack 'spectro-k8s-dashboard' is not supported for imported cluster"
+    // Palette refuses the whole request with HTTP 500 and a code of the route: an answer, with no
+    // pack, the code, and the message, and the retry does not send it again
+    let api = cluster_api.clone().failing_n_times(
+        path.clone(),
+        99,
+        500,
+        r#"{"code":"PackSpectroIntegrationNotSupported","details":null,"message":"Pack 'spectro-k8s-dashboard' is not supported for imported cluster","ref":"x"}"#,
+    );
+    let (retry, slept) = retrying(&api, 3);
+    let v = ops::palette_validation(&Palette::new(retry), &cluster, &target).unwrap();
+    assert!(!v.accepts);
+    assert_eq!(v.errors.len(), 1);
+    assert_eq!(v.errors[0].pack, "");
+    assert_eq!(v.errors[0].code, "PackSpectroIntegrationNotSupported");
+    assert_eq!(
+        v.errors[0].message,
+        "Pack 'spectro-k8s-dashboard' is not supported for imported cluster"
+    );
+    assert_eq!(api.calls(&path), 1, "one attempt and no retry");
+    assert!(slept.borrow().is_empty());
+    // a 500 with a code that is not a refusal, and a refused key, are errors of strata
+    for (status, body) in [
+        (
+            500,
+            r#"{"code":"DataReadError","message":"Data access error"}"#,
+        ),
+        (403, r#"{"code":"Forbidden"}"#),
+    ] {
+        let api = cluster_api.clone().failing(path.clone(), status, body);
+        let err = ops::palette_validation(&Palette::new(&api), &cluster, &target).unwrap_err();
+        assert!(
+            matches!(&err, Error::Api { status: s, .. } if *s == status),
+            "{err}"
         );
     }
-    // and a refused key is an error of strata, not an answer
-    let api = cluster_api
-        .clone()
-        .failing(path, 403, r#"{"code":"Forbidden"}"#);
-    let err = ops::palette_validation(&Palette::new(&api), &cluster, &target).unwrap_err();
-    assert!(matches!(err, Error::Api { status: 403, .. }), "{err}");
 
     // two profile versions, and an edge host: a usage error that names the option
     let err = ops::palette_validation(&palette, &target, &target).unwrap_err();
