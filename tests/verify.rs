@@ -2036,9 +2036,10 @@ fn the_second_reading_finds_a_consumer_the_profile_does_not_list() {
 
 const CLUSTER_SEARCH: &str = "/v1/dashboard/spectroclusters/search?limit=50";
 
-/// The body of a cluster search for the clusters that run `uid`, and with `nested` for the
-/// virtual clusters that run it, as the second reading of `consumers` sends it.
-fn profile_search(uid: &str, nested: bool) -> Value {
+/// The body of the cluster search for the clusters that run a version of the profile `name`, and
+/// with `nested` for the virtual clusters that run it, as the second reading of `consumers` sends
+/// it. Palette takes the name of a profile in `clusterProfiles`, and not its uid (#181).
+fn profile_search(name: &str, nested: bool) -> Value {
     let condition = |property: &str, value: &str| {
         serde_json::json!({
             "property": property, "type": "string",
@@ -2046,7 +2047,7 @@ fn profile_search(uid: &str, nested: bool) -> Value {
                 "match": {"conjunction": "or", "values": [value]}}},
         })
     };
-    let mut filters = vec![condition("clusterProfiles", uid)];
+    let mut filters = vec![condition("clusterProfiles", name)];
     if nested {
         filters.push(condition("environment", "nested"));
     }
@@ -2089,13 +2090,13 @@ fn the_second_reading_asks_the_cluster_search_and_finds_a_virtual_cluster() {
         )
         .with_post(
             CLUSTER_SEARCH,
-            &profile_search(UID_A, false),
+            &profile_search("lab-profile", false),
             serde_json::json!({"items": [search_item("cluster-ccc", "gamma", "p1", "aws")],
                                "listmeta": {"continue": ""}}),
         )
         .with_post(
             CLUSTER_SEARCH,
-            &profile_search(UID_A, true),
+            &profile_search("lab-profile", true),
             serde_json::json!({"items": [search_item("cluster-vvv", "vc-1", "p1", "nested")],
                                "listmeta": {"continue": ""}}),
         )
@@ -2147,7 +2148,9 @@ fn the_second_reading_asks_the_cluster_search_and_finds_a_virtual_cluster() {
         "{text}"
     );
     assert!(
-        text.contains("  second reading: the cluster search finds 2 other clusters, 2 read\n"),
+        text.contains(
+            "  second reading: the cluster search names 2 other clusters with the profile, 2 read\n"
+        ),
         "{text}"
     );
     let json: Value = serde_json::from_str(
@@ -2157,6 +2160,73 @@ fn the_second_reading_asks_the_cluster_search_and_finds_a_virtual_cluster() {
     )
     .unwrap();
     assert_eq!(json["clustersRead"]["resolved"], "search");
+    // each search sends the name of the profile, and never its uid: Palette changes a name into
+    // the uids of the profiles with that name, and a uid matches no name (#181)
+    let bodies: Vec<String> = api
+        .posted()
+        .into_iter()
+        .filter(|(path, _)| path == CLUSTER_SEARCH)
+        .map(|(_, body)| body.to_string())
+        .collect();
+    assert_eq!(bodies.len(), 2);
+    for body in &bodies {
+        assert!(body.contains("\"lab-profile\""), "{body}");
+        assert!(!body.contains(UID_A), "{body}");
+    }
+}
+
+#[test]
+fn the_second_reading_searches_a_project_profile_in_its_own_project() {
+    // a profile of the project p9: the search goes to p9, where Palette knows the name, and where
+    // each cluster that can run the profile is (#181)
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let mut profile = read(&dir.path().join("a").join("profile.json"));
+    profile["metadata"]["annotations"] =
+        serde_json::json!({"scope": "project", "projectUid": "p9"});
+    let mut doc = cluster_doc("cluster-ccc", "gamma", "p9", "Running");
+    doc["spec"] = serde_json::json!({"clusterProfileTemplates": [
+        {"uid": UID_A, "name": "lab-profile", "profileVersion": "1.2.0", "type": "cluster"}
+    ]});
+    let api = serve(MemoryApi::new(), dir.path(), "a", UID_A)
+        .with(format!("/v1/clusterprofiles/{UID_A}"), profile)
+        .with(
+            "/v1/dashboard/spectroclusters/search/schema",
+            serde_json::json!({"schema": {"properties": [
+                {"name": "clusterProfiles", "type": "string"},
+                {"name": "environment", "type": "string"}]}}),
+        )
+        .with_post(
+            CLUSTER_SEARCH,
+            &profile_search("lab-profile", false),
+            serde_json::json!({"items": [search_item("cluster-ccc", "gamma", "p9", "aws")],
+                               "listmeta": {"continue": ""}}),
+        )
+        .with_post(
+            CLUSTER_SEARCH,
+            &profile_search("lab-profile", true),
+            serde_json::json!({"items": [], "listmeta": {"continue": ""}}),
+        )
+        .with("/v1/spectroclusters/cluster-ccc", doc);
+    let scopes = std::cell::RefCell::new(Vec::new());
+    let r = ops::consumers(
+        &Ref::Uid(UID_A.into()),
+        |scope| {
+            scopes.borrow_mut().push(scope.map(str::to_string));
+            Ok(Palette::new(&api))
+        },
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert_eq!((r.count, r.exit_code()), (1, 1));
+    assert_eq!(r.consumers[0].uid, "cluster-ccc");
+    assert!(r.consumers[0].unlisted);
+    assert!(
+        scopes.borrow().contains(&Some("p9".to_string())),
+        "the search goes to the project of the profile: {:?}",
+        scopes.borrow()
+    );
 }
 
 #[test]

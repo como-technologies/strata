@@ -101,14 +101,21 @@ names `tenant-a` alone:
 ```
 
 Exit `1`. The second reading asks the cluster search of Palette for the
-clusters that run the version. It sends two searches: one with
-`clusterProfiles` equal to the uid of the profile, and one that also has the
-environment `nested`. The search leaves out each virtual cluster unless a
-condition asks for it. Strata then reads each cluster that the search names and
-the list does not, for its state and the version that its copy names. The
+clusters that run the profile. It sends two searches: one with
+`clusterProfiles` equal to the name of the profile, and one that also has the
+environment `nested`. The search takes a name, and not a uid, so it names the
+clusters that run any version of the profile. It goes to the scope of the
+profile: its project, or the tenant for a profile of the tenant. The search
+leaves out each virtual cluster unless a condition asks for it. Strata then
+reads each cluster that the search names and the list does not, and keeps the
+clusters whose copy is the version, with the state and the version of each. The
 cluster listing names no virtual cluster, so a reading of the listing cannot
 find `tenant-b`. See
 [What the cluster listing answers](../internals/palette/clusters.md#what-the-cluster-listing-answers).
+
+> **On a live Palette, the search does not name a virtual cluster that runs the
+> version through its cluster group.** See the search by profile in
+> [What the cluster listing answers](../internals/palette/clusters.md#what-the-cluster-listing-answers).
 
 ## The list of Palette alone
 
@@ -152,18 +159,18 @@ version bump or a rename overwrote the version that the cluster runs. See
 - A cluster that strata cannot read shows `unknown` and the error. Strata counts
   it as a consumer, so the exit status is `1`.
 - Palette computes `status.inUseClusters` when it is asked, in the projects the
-  key can read. So strata does a second reading, at tenant scope, and at the
-  scope of the key when it cannot read the tenant. It asks the cluster search
-  for the clusters that run the version, the virtual clusters too, and reads
-  each cluster that the search names and the list does not. A cluster that
+  key can read. So strata does a second reading. It asks the cluster search, in
+  the scope of the profile, for the clusters that run a version of the profile
+  by its name, the virtual clusters too. It reads each cluster that the search
+  names and the list does not. A cluster that
   applies the version and is not in the list joins the answer, marked
   `not in the consumer list of the profile`.
 - When the search of Palette takes no `clusterProfiles`, or Palette has no
   search, strata reads each cluster of the cluster listing for the profiles it
   applies. The listing names no virtual cluster.
 - The last line says how far the second reading got:
-  `second reading: the cluster search finds 1 other cluster, 1 read` from the
-  search, `second reading: 3 of 3 clusters read` from the listing, or
+  `second reading: the cluster search names 1 other cluster with the profile, 1 read`
+  from the search, `second reading: 3 of 3 clusters read` from the listing, or
   `second reading: not done` with the reason.
 - Strata then searches the edge hosts, at tenant scope, and at the scope of
   the key when it cannot read the tenant. An edge host that the version is

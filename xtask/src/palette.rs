@@ -97,7 +97,9 @@ struct Request {
 /// The clusters of the search file that the body of a search selects, as Palette reads it: each
 /// group of conditions holds. A condition on `tags` holds when a value `key:value` names a label
 /// of the cluster, or a value `key` names a label key; on `clusterProfiles` when a value is the
-/// uid of a profile of the cluster; on `environment` when a value is its cloud type. The search
+/// name of a profile of the cluster, since Palette changes each name into the uids of the profiles
+/// with that name and a uid matches no name (#181); on `environment` when a value is its cloud
+/// type. The search
 /// leaves out each virtual cluster, of the cloud type `nested`, unless a condition asks for it.
 fn searched(file: &[u8], body: &[u8]) -> Vec<u8> {
     let Ok(mut doc) = serde_json::from_slice::<serde_json::Value>(file) else {
@@ -123,7 +125,7 @@ fn searched(file: &[u8], body: &[u8]) -> Vec<u8> {
                         .as_array()
                         .into_iter()
                         .flatten()
-                        .any(|t| t["uid"] == v),
+                        .any(|t| t["name"] == v),
                     "environment" => summary["cloudConfig"]["cloudType"] == v,
                     _ => match v.split_once(':') {
                         Some((k, value)) => labels[k] == value,
@@ -251,6 +253,40 @@ fn percent_decode(text: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The body of a search with one condition on `clusterProfiles`.
+    fn profile_query(value: &str) -> Vec<u8> {
+        serde_json::json!({"filter": {"conjunction": "and", "filterGroups": [
+            {"conjunction": "and", "filters": [{"property": "clusterProfiles", "type": "string",
+                "condition": {"string": {"operator": "eq", "negation": false, "ignoreCase": false,
+                    "match": {"conjunction": "or", "values": [value]}}}}]}]}})
+        .to_string()
+        .into_bytes()
+    }
+
+    #[test]
+    fn the_search_takes_the_name_of_a_profile_and_a_uid_selects_no_cluster() {
+        // Palette changes the name into the uids of the profiles with that name, and a value that
+        // is no name selects nothing (#181)
+        let file = serde_json::json!({"items": [{
+            "metadata": {"uid": "c1", "name": "fred"},
+            "specSummary": {"cloudConfig": {"cloudType": "aws"},
+                "clusterProfileTemplates": [{"uid": "p-uid", "name": "lab-profile", "type": "cluster"}]},
+        }]})
+        .to_string()
+        .into_bytes();
+        let names = |body: &[u8]| -> Vec<String> {
+            let doc: serde_json::Value = serde_json::from_slice(&searched(&file, body)).unwrap();
+            doc["items"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|c| c["metadata"]["name"].as_str().unwrap().to_string())
+                .collect()
+        };
+        assert_eq!(names(&profile_query("lab-profile")), ["fred"]);
+        assert!(names(&profile_query("p-uid")).is_empty());
+    }
 
     #[test]
     fn a_project_uid_is_the_first_part_of_the_path() {

@@ -287,7 +287,8 @@ is the path as a list: strings for keys, numbers for indexes, and
   and an empty `version`. `unlisted`, only when true: the profile did not list
   the cluster, and the second reading found it.
 - `clustersRead`: the second reading. `resolved`: `search` when strata asked
-  the cluster search for the clusters that run the version, or `listing` when
+  the cluster search for the clusters that run a version of the profile, by its
+  name, or `listing` when
   the search of Palette takes no `clusterProfiles` and strata read each cluster
   of the listing. `read`: the cluster documents read, one for each cluster that
   the search or the listing names and the consumer list does not. `unread`: the

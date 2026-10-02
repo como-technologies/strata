@@ -64,7 +64,7 @@ This is the source for
 | `a4-still-a3` | 0 | 0 | #27: the bump left cluster A as it was |
 | `verify-a3-after-bump` | 1 | 0 | #30: `verify` of cluster A's record fails only without the flag: the version it runs was overwritten |
 | `a3-names-overwritten-profile` | 0 | 1 | #30: the verify names the add-on profile, only without the flag |
-| `verify-a3-who`, `a3-who-names-profile` | 1, 0 | 0, 1 | #140: `verify --who` of the same record reads the log of the overwritten profile, and a write names the add-on profile as its object, only without the flag. No run has passed this check yet. |
+| `verify-a3-who`, `a3-who-names-profile` | 1, 0 | 0, 1 | #140: `verify --who` of the same record reads the log of the overwritten profile, and a write names the add-on profile as its object, only without the flag. |
 | `consumers-old` | 1 | 1 | #27: both clusters are still consumers of the first uid |
 | `consumers-old-overwritten` | 0 | 1 | #28: `consumers` marks both clusters as running a version the uid no longer names, only without the flag |
 | `clone-carried-nothing` | - | 0 | #27, #32: the flag's clone is the same release as the legacy bump of the same configuration, whatever pack uid Palette minted |
@@ -333,8 +333,8 @@ version that the cluster runs.
 | `release-before` | 0 | a record of the release version before the link |
 | `template`, `template-links` | 0 | #66: the template links the release version and the add-on version |
 | `release-doc`, `release-names-template` | 0 | #66: the version names the template that uses it, and no cluster |
-| `release-consumers`, `release-consumers-template` | 1, 0 | #147: `strata consumers` of the linked version names the template with `kind: template`, and exits `1`. No run has passed this check yet. |
-| `release-delete`, `release-delete-says` | 2, 0 | #147: Palette refuses the delete of the linked version, `DeletionResourceInUseError`. No run has passed this check yet. |
+| `release-consumers`, `release-consumers-template` | 1, 0 | #147: `strata consumers` of the linked version names the template with `kind: template`, and exits `1`. |
+| `release-delete`, `release-delete-says` | 2, 0 | #147: Palette refuses the delete of the linked version, `DeletionResourceInUseError`. |
 | `lock-edit`, `lock-edit-says` | 2, 0 | #66: an edit in place of a linked version, a `PUT` of the whole version, is refused, and the refusal carries the code `ClusterProfileUpdateValidationFailure` |
 | `lock-verify` | 0 | #66: the version is unchanged |
 | `addon-before`, `lock-manifest-edit` | 0 | #81: the linked add-on version, edited through the route of one manifest and then published, is accepted: the lock does not cover that route |
@@ -343,7 +343,7 @@ version that the cluster runs.
 | `cluster-outside-template`, `refusal-says` | 1, 0 | #66: a cluster outside the template with a linked version is refused, `ClusterCreateWithTemplateProfileForbidden` |
 | `cluster-runs-release`, `cluster-doc`, `cluster-three-profiles` | 0 | with the template gone, the cluster runs the release version and two add-on profiles |
 | `lock-gone`, `lock-gone-verify` | 0, 1 | #66: the edit in place is accepted again, and the record from before reports `DRIFT`: the lock was the template's |
-| `addon-order` | 0 | #66: the packs of the two add-on profiles start within thirty seconds of each other, whatever order the cluster lists the profiles in: the listed order is no install order. No run has passed this check yet. |
+| `addon-order` | 0 | #66: the packs of the two add-on profiles start within thirty seconds of each other, whatever order the cluster lists the profiles in: the listed order is no install order. |
 
 ## cluster.sh
 
@@ -364,7 +364,7 @@ line. It ends with the cluster gone and the profiles in place.
 | `delete` | 0 | #66: `DELETE /v1/spectroclusters/<uid>` |
 | `listing-deleting`, `consumers-deleting`, `consumers-shows-deleting` | 0, 1, 0 | #66: while the cluster goes, the listing keeps it with the state `Deleting`, and `consumers` lists it with that state |
 | `doc-after`, `doc-after-deleted` | 0 | #66: the cluster document still answers, with the state `Deleted` |
-| `verify-deleted`, `verify-deleted-says` | 1, 0 | #139: `verify` of the record from before the deletion says `DRIFT: cluster <c> no longer exists: deleted <time>`, and exits 1. No run has passed this check yet. |
+| `verify-deleted`, `verify-deleted-says` | 1, 0 | #139: `verify` of the record from before the deletion says `DRIFT: cluster <c> no longer exists: deleted <time>`, and exits 1. |
 | `listing-after`, `listing-drops-cluster` | 0 | #66: the listing no longer holds the cluster |
 | `consumers-after`, `consumers-drops-cluster` | 0 | #66: `consumers` no longer lists it, and exits 0: the version has no consumer |
 | `state-has-no-cluster` | 0 | an apply with `cluster=false` sees the deletion, and the OpenTofu state holds no cluster |
@@ -400,9 +400,9 @@ API, reads what `verify --who` says, and puts the edit back.
 | `api-edit`, `edit-who`, `edit-who-says` | 0, 1, 0 | #69: after an edit in place, the record reports `DRIFT`, and `--who` lists the writes since the record |
 | `edit-who-person` | 0 | #69: the edit is one `update` by the user who owns the key, with a summary that names the manifest |
 | `edit-who-json` | 0 | #69: `verify.who` in `--json` ends with that update: `actorType` `user`, an `actorUid`, and a time after the record |
-| `edit-who-resource` | 0 | #140: each entry of `verify.who` names the profile as its object: `resource.kind` `clusterprofile` and its uid. No run has passed this check yet. |
-| `edit-last-modified` | 0 | #140: the document of the profile gives the time of the edit: `verify.lastModified` is after the record, and the `DRIFT` verdict ends with it. No run has passed this check yet. |
-| `audits-none` | 0 | #140: Palette answers the log of an object with no entry with an empty list, and not `404`. No run has passed this check yet. |
+| `edit-who-resource` | 0 | #140: each entry of `verify.who` names the profile as its object: `resource.kind` `clusterprofile` and its uid. |
+| `edit-last-modified` | 0 | #140: the document of the profile gives the time of the edit: `verify.lastModified` is after the record, and the `DRIFT` verdict ends with it. |
+| `audits-none` | 0 | #140: Palette answers the log of an object with no entry with an empty list, and not `404`. |
 | `api-undo`, `restored` | 0 | the edit is put back, and the record verifies again |
 | `cluster-record`, `cluster-edit`, `cluster-apply` | 0 | record cluster A, edit the add-on version it runs, and accept the update on the cluster through the API |
 | `cluster-who`, `cluster-who-says`, `cluster-who-person`, `cluster-who-json` | 1, 0, 0, 0 | #69: the cluster record reports `DRIFT`, and `--who` reads the audit log of the cluster: an `update` by the user who accepted it |
@@ -678,9 +678,9 @@ baseline with cluster A.
 | `group-verify` | 0 | #78: `verify` of the record of the group |
 | `member-consumer`, `member-consumer-listed` | 1, 0 | #78: `consumers` of the add-on version names the virtual cluster, from the consumer list of Palette |
 | `member-not-in-listing` | 0 | #78: the cluster listing does not name the virtual cluster |
-| `search-profile`, `search-profile-runs` | 0 | #149: the cluster search with `clusterProfiles eq <add-on uid>` answers the clusters that run the add-on version, and no other, and not the virtual cluster. No run has passed this check yet. |
-| `search-nested`, `search-nested-member` | 0 | #149: the same search with `environment eq nested` answers the virtual cluster of the group. No run has passed this check yet. |
-| `member-consumer-search` | 0 | #149: `consumers` does its second reading through the search. No run has passed this check yet. |
+| `search-profile`, `search-profile-runs` | 0 | #181: the cluster search with `clusterProfiles eq <add-on name>` answers cluster A, which runs the add-on version, and not the virtual cluster. A search with the uid of the add-on answers no cluster. No run has passed this check yet. |
+| `search-nested`, `search-nested-member` | 0 | #181: the same search with `environment eq nested` answers the virtual cluster of the group. No run has passed this check: the search answers no virtual cluster that runs the version through its group. #184 finds such a virtual cluster through its group. |
+| `member-consumer-search` | 0 | #149: `consumers` does its second reading through the search |
 | `edit`, `edit-group-verify` | 0, 0 | #81: after an edit in place of the manifest of the add-on version, `verify` of the record of the group passes: the group keeps its own copy |
 | `edit-group-compare` | 0 | #81: the member keeps its copy too, so the group and the member still agree |
 | `edit-group-vs-version`, `edit-group-vs-version-says` | 1, 0 | #81: the version differs from the copy of the group, and the compare names the manifest |
@@ -706,8 +706,8 @@ cluster, and costs nothing.
 | `verify` | 0 | #78: `verify` of the record |
 | `edit`, `edit-same-version` | 0 | #78: a plain update of the manifest keeps the uid and the version, and makes no new version |
 | `edit-verify`, `edit-verify-says` | 1, 0 | #78: `verify` of the record reports drift, with the tier `AUTHORED` and the manifest named |
-| `edit-who`, `edit-who-appprofile` | 1, 0 | #140: `verify --who` reads the log of the kind `appprofile`, and its entries name the app profile as their object. No run has passed this check yet. |
-| `edit-last-modified` | 0 | #140: the document of the app profile gives the time of the update, after the record. No run has passed this check yet. |
+| `edit-who`, `edit-who-appprofile` | 1, 0 | #140: `verify --who` reads the log of the kind `appprofile`, and its entries name the app profile as their object. |
+| `edit-last-modified` | 0 | #140: the document of the app profile gives the time of the update, after the record. |
 | `delete` | 0 | the app profile is deleted |
 
 No run updates the properties of a tier: the tier of the run is a manifest tier,
