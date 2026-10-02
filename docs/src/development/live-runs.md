@@ -509,7 +509,8 @@ log holds no entry for the approval.
 Read-write, and it replaces no node. It needs the example at its baseline with
 cluster A, and `AWS_PROFILE` to read the EC2 instances. It edits the release
 version and the add-on version in place, asks Palette with `compare --repave`,
-and puts each edit back. Cluster A takes no update.
+and puts each edit back. Cluster A takes no update. Stage 7 asks Palette with
+`compare --validate`.
 
 | Check | Expected exit | What it shows |
 |---|---|---|
@@ -527,6 +528,8 @@ and puts each edit back. Cluster A takes no update.
 | `undo-baseline` | 0 | the example is at its baseline |
 | `release-record`, `os-value` | 0, 1 | #81: a new key in the values of the OS pack: Palette says repave. It checks every value of the OS layer, so the table gives `repave` for an OS values change |
 | `csi-value` | 0 | #81: a changed value in the CSI pack: Palette says no repave. Its check reads no CNI or CSI layer, so `cluster-wide` means no repave |
+| `validate`, `validate-says`, `validate-json` | 0 | #134: at the baseline, `compare --validate` prints `palette    accepts`; `--json` gives `accepts` true and no error. No run has passed this check yet. |
+| `validate-usage`, `validate-usage-says` | 2, 0 | #134: two profile versions and no cluster are a usage error for `--validate`. No run has passed this check yet. |
 
 Each answer agrees with the impact table, on AWS and on GCP: the two clouds run
 the kubeadm engine alone. The edit in place also opens an update notification for cluster A, and

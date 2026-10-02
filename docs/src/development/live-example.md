@@ -23,7 +23,7 @@ show.
 | `pending.sh` | When Palette says that an update waits for a cluster, and what a record of `cluster:<uid>@pending` holds (#70, #78). It needs cluster A. |
 | `macros.sh` | What a new value of a project macro does to a version, to the copy of a cluster, and to a record (#72). It needs cluster A. |
 | `macro-repave.sh` | Whether a new macro value in an infrastructure layer replaces the nodes of a cluster (#72). It needs cluster A, and it leaves a repave that waits for approval: run `just live-down` after it. |
-| `repave.sh` | `compare --repave`: the answer of Palette beside the level of the impact table (#73). It needs cluster A. |
+| `repave.sh` | `compare --repave`: the answer of Palette beside the level of the impact table (#73), and `compare --validate` (#134). It needs cluster A. |
 | `merge-gate.sh` | `scripts/ci/merge-gate.sh` over records of the live profiles, in a git repository that the script builds (#57). It needs the profiles, and no cluster. |
 | `knurl.sh` | [The knurl adapter](../automation/knurl.md): each method of the port against the strata answer for the same real object. Read-only. It needs the profiles; the instance checks need the cluster. |
 | `registry-kinds.sh` | The digest of each registry kind, and a push again of one version into each (#75); a Helm registry with synchronization off, the case with no digest (#71). It needs no cluster. |
@@ -121,7 +121,7 @@ its end.
 | `pending.sh` | The pending update test (#70, #78): when Palette says that an update waits for cluster A, what a record, the listing, and `compare` say, and what `cluster:<uid>@pending` holds; `consumers --list-only`. |
 | `macros.sh` | The macro test (#72): what a project macro does to a version, to the copy that cluster A runs, and to a record, when the macro gets another value. |
 | `macro-repave.sh` | The macro repave test (#72): a macro in a field that repaves cluster A, and what a change of its value alone does. It ends with a repave that waits for approval; `live-down` follows it. |
-| `repave.sh` | The repave test (#73): `compare --repave` asks Palette if a change repaves cluster A, and prints its answer beside the impact level. |
+| `repave.sh` | The repave test (#73): `compare --repave` asks Palette if a change repaves cluster A, and prints its answer beside the impact level. `compare --validate` asks Palette if it accepts the packs (#134). |
 | `edge-host.sh` | The edge host test (#78). |
 | `cluster-group.sh`, `terraform/cluster-group.tf` | The cluster group test (#78), and the group and the virtual cluster that it builds. Off unless `cluster_group` is set. |
 | `app-profile.sh` | The app profile test (#78). |

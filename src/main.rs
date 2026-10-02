@@ -170,6 +170,10 @@ struct CompareArgs {
     /// Ask Palette if the change repaves the cluster side; one side must be a cluster
     #[arg(long)]
     repave: bool,
+    /// Ask Palette if it accepts the packs of the change on the cluster side; one side must be a
+    /// cluster
+    #[arg(long)]
+    validate: bool,
     #[command(flatten)]
     out: OutputArgs,
 }
@@ -649,20 +653,25 @@ fn cmd_compare(a: &CompareArgs) -> Result<ExitCode> {
         &progress,
     )?;
     let mut d = ops::compare(&sa, &sb, &now);
-    if a.repave {
-        // the cluster side names its project; the question goes to that project
+    if a.repave || a.validate {
+        // the cluster side names its project; the questions go to that project
         let scope = [&sa, &sb]
             .into_iter()
             .find(|s| s.source.cluster.is_some())
             .map(|s| s.source.project_uid.clone())
             .filter(|p| !p.is_empty());
         let palette = connect(progress, scope.as_deref())?;
-        d.palette_repave = Some(ops::palette_repave(
-            &palette,
-            &sa,
-            &sb,
-            d.summary.max_impact,
-        )?);
+        if a.repave {
+            d.palette_repave = Some(ops::palette_repave(
+                &palette,
+                &sa,
+                &sb,
+                d.summary.max_impact,
+            )?);
+        }
+        if a.validate {
+            d.palette_validation = Some(ops::palette_validation(&palette, &sa, &sb)?);
+        }
     }
     print!("{}", a.out.renderer().render(&d, &sa, &sb, a.full)?);
     // two clusters whose macros resolve two ways run other content, also where the roots are equal

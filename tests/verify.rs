@@ -6746,6 +6746,132 @@ fn compare_asks_palette_and_names_a_disagreement_with_the_impact_table() {
     assert!(matches!(err, Error::Usage { .. }), "{err}");
 }
 
+// ---- compare --validate ----------------------------------------------------------------
+
+#[test]
+fn compare_validate_prints_each_error_of_palette_and_keeps_the_exit_of_the_comparison() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let cluster_api = serve_cluster(MemoryApi::new(), dir.path(), "cluster-a");
+    let cluster = snapshot_cluster(&cluster_api, None).unwrap();
+    let target = ops::snapshot_from_dir(&dir.path().join("b"), "b", "t0").unwrap();
+    let path = format!("POST /v1/spectroclusters/{CLUSTER_UID}/validate/packs");
+    let message = "Pack 'strata-live-dep' is required with minimum compatible version '1.0.0'";
+    // Palette gives the error under each profile that holds a pack of that name
+    let error = serde_json::json!({"packs": {"results": [{"name": "strata-live-pack",
+        "displayName": "strata-live-pack",
+        "errors": [{"code": "PackDependencyNotFound", "message": message}]}]}});
+    let answer = serde_json::json!({"profiles": [
+        {"uid": "p1", "packs": error["packs"]}, {"uid": "p2", "packs": error["packs"]}]});
+    let api = cluster_api.clone().with(path.clone(), answer);
+    let palette = Palette::new(&api);
+
+    let mut d = ops::compare(&cluster, &target, "t1");
+    let same = d.same;
+    let v = ops::palette_validation(&palette, &cluster, &target).unwrap();
+    assert!(!v.accepts);
+    assert_eq!(v.cluster_uid, CLUSTER_UID);
+    assert_eq!(v.errors.len(), 1, "{v:?}");
+    assert_eq!(v.errors[0].pack, "strata-live-pack");
+    // one POST, with the body of --repave, in either order of the sides
+    let posted = api.posted();
+    assert_eq!(posted.len(), 1);
+    assert_eq!(
+        posted[0].0,
+        format!("/v1/spectroclusters/{CLUSTER_UID}/validate/packs")
+    );
+    let running = strata::snapshot::AppliedProfile::of_cluster(
+        &Palette::new(&cluster_api)
+            .cluster_document(CLUSTER_UID)
+            .unwrap(),
+    );
+    assert_eq!(posted[0].1, ops::validate_body(&running, &target));
+    assert_eq!(
+        ops::palette_validation(&palette, &target, &cluster).unwrap(),
+        v
+    );
+
+    d.palette_validation = Some(v);
+    let text = render::renderer(Format::Terminal, Paint::off(), false)
+        .render(&d, &cluster, &target, false)
+        .unwrap();
+    assert!(
+        text.contains(&format!(
+            "palette    refuses: PackDependencyNotFound strata-live-pack: {message}\n"
+        )),
+        "{text}"
+    );
+    let json: Value = serde_json::from_str(
+        &render::renderer(Format::Json, Paint::off(), false)
+            .render(&d, &cluster, &target, false)
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(json["paletteValidation"]["accepts"], false);
+    assert_eq!(
+        json["paletteValidation"]["errors"][0]["code"],
+        "PackDependencyNotFound"
+    );
+    // the answer of Palette does not change the result of the comparison
+    assert_eq!(d.same, same);
+    assert!(!d.same);
+
+    // a 200 with no error: Palette accepts
+    let api = cluster_api
+        .clone()
+        .with(path.clone(), serde_json::json!({}));
+    let mut d = ops::compare(&cluster, &target, "t1");
+    d.palette_validation =
+        Some(ops::palette_validation(&Palette::new(&api), &cluster, &target).unwrap());
+    assert!(d.palette_validation.as_ref().unwrap().accepts);
+    let text = render::renderer(Format::Terminal, Paint::off(), false)
+        .render(&d, &cluster, &target, false)
+        .unwrap();
+    assert!(text.contains("palette    accepts\n"), "{text}");
+
+    // a refusal of the whole request is an answer too: no pack, the code, and the message
+    for status in [400, 422] {
+        let api = cluster_api.clone().failing(
+            path.clone(),
+            status,
+            r#"{"code":"PackSpectroIntegrationNotSupported","message":"Pack 'spectro-k8s-dashboard' is not supported for imported cluster"}"#,
+        );
+        let v = ops::palette_validation(&Palette::new(&api), &cluster, &target).unwrap();
+        assert!(!v.accepts);
+        assert_eq!(v.errors.len(), 1);
+        assert_eq!(v.errors[0].pack, "");
+        assert_eq!(v.errors[0].code, "PackSpectroIntegrationNotSupported");
+        assert_eq!(
+            v.errors[0].message,
+            "Pack 'spectro-k8s-dashboard' is not supported for imported cluster"
+        );
+    }
+    // and a refused key is an error of strata, not an answer
+    let api = cluster_api
+        .clone()
+        .failing(path, 403, r#"{"code":"Forbidden"}"#);
+    let err = ops::palette_validation(&Palette::new(&api), &cluster, &target).unwrap_err();
+    assert!(matches!(err, Error::Api { status: 403, .. }), "{err}");
+
+    // two profile versions, and an edge host: a usage error that names the option
+    let err = ops::palette_validation(&palette, &target, &target).unwrap_err();
+    assert!(matches!(err, Error::Usage { .. }), "{err}");
+    assert!(
+        err.to_string().contains("--validate needs one side"),
+        "{err}"
+    );
+    let mut host = cluster.clone();
+    host.source.cluster.as_mut().unwrap().kind = strata::snapshot::SubjectKind::EdgeHost;
+    let err = ops::palette_validation(&palette, &host, &target).unwrap_err();
+    assert!(matches!(err, Error::Usage { .. }), "{err}");
+    assert!(
+        err.to_string().contains(
+            "--validate needs a cluster: Palette answers it for a cluster, and not for an edge host"
+        ),
+        "{err}"
+    );
+}
+
 // ---- the provider type of an OCI registry ---------------------------------------------------------
 
 #[test]

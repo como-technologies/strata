@@ -397,6 +397,20 @@ impl Runner {
         self.tenant.repave_answer(project, cluster, required);
     }
 
+    /// Set the answer of `validate/packs` for a cluster: see [`Tenant::packs_answer`].
+    pub fn packs_answer(
+        &mut self,
+        project: &str,
+        cluster: &str,
+        refusal: Option<(&str, &str, &str, &str)>,
+    ) {
+        if !self.building() {
+            return;
+        }
+        self.changed();
+        self.tenant.packs_answer(project, cluster, refusal);
+    }
+
     /// Delete a cluster at the time `at`: see [`Tenant::delete_cluster`].
     pub fn delete_cluster(&mut self, project: &str, uid: &str, at: &str) {
         if !self.building() {

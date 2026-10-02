@@ -1186,6 +1186,41 @@ impl Tenant {
         );
     }
 
+    /// The answer of `POST /v1/spectroclusters/{uid}/validate/packs` for a cluster. A refusal is
+    /// `(profile, pack, required, version)`: `pack` of `profile` requires `required` at `version`
+    /// or newer, and the cluster runs an older one. Palette gives the error under the profile,
+    /// with the code and the message of `hubble/base/herr/err_pack.go`, and gives no profile
+    /// when it accepts. The stand-in gives one answer for every request; it does not check
+    /// anything.
+    pub fn packs_answer(
+        &self,
+        project: &str,
+        cluster: &str,
+        refusal: Option<(&str, &str, &str, &str)>,
+    ) {
+        let profiles: Vec<Value> = refusal
+            .map(|(profile, pack, required, version)| {
+                json!({"uid": profile, "packs": {"results": [{
+                    "name": pack,
+                    "displayName": pack,
+                    "errors": [{
+                        "code": "DependencyPackWithMinVersionRequired",
+                        "message": format!(
+                            "Pack '{required}' is required with minimum compatible version \
+                             '{version}'"
+                        ),
+                    }],
+                }]}})
+            })
+            .into_iter()
+            .collect();
+        self.write(
+            project,
+            &format!("v1/spectroclusters/{cluster}/validate/packs"),
+            &json!({ "profiles": profiles }),
+        );
+    }
+
     /// Give a project macro a value, as `PATCH /v1/projects/{uid}/macros` does, and let each
     /// cluster of the project resolve it again: Palette answers `packs/resolvedValues` with the
     /// value the macro has now.
