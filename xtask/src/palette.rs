@@ -254,6 +254,40 @@ fn percent_decode(text: &str) -> String {
 mod tests {
     use super::*;
 
+    /// The body of a search with one condition on `clusterProfiles`.
+    fn profile_query(value: &str) -> Vec<u8> {
+        serde_json::json!({"filter": {"conjunction": "and", "filterGroups": [
+            {"conjunction": "and", "filters": [{"property": "clusterProfiles", "type": "string",
+                "condition": {"string": {"operator": "eq", "negation": false, "ignoreCase": false,
+                    "match": {"conjunction": "or", "values": [value]}}}}]}]}})
+        .to_string()
+        .into_bytes()
+    }
+
+    #[test]
+    fn the_search_takes_the_name_of_a_profile_and_a_uid_selects_no_cluster() {
+        // Palette changes the name into the uids of the profiles with that name, and a value that
+        // is no name selects nothing (#181)
+        let file = serde_json::json!({"items": [{
+            "metadata": {"uid": "c1", "name": "fred"},
+            "specSummary": {"cloudConfig": {"cloudType": "aws"},
+                "clusterProfileTemplates": [{"uid": "p-uid", "name": "lab-profile", "type": "cluster"}]},
+        }]})
+        .to_string()
+        .into_bytes();
+        let names = |body: &[u8]| -> Vec<String> {
+            let doc: serde_json::Value = serde_json::from_slice(&searched(&file, body)).unwrap();
+            doc["items"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|c| c["metadata"]["name"].as_str().unwrap().to_string())
+                .collect()
+        };
+        assert_eq!(names(&profile_query("lab-profile")), ["fred"]);
+        assert!(names(&profile_query("p-uid")).is_empty());
+    }
+
     #[test]
     fn a_project_uid_is_the_first_part_of_the_path() {
         let got = file_for(Path::new("/r"), Some("p1"), "/v1/clusterprofiles/abc");

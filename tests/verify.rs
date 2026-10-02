@@ -2036,10 +2036,9 @@ fn the_second_reading_finds_a_consumer_the_profile_does_not_list() {
 
 const CLUSTER_SEARCH: &str = "/v1/dashboard/spectroclusters/search?limit=50";
 
-/// The body of a cluster search for the clusters that run `uid`, and with `nested` for the
-/// virtual clusters that run it, as the second reading of `consumers` sends it.
-/// The body of the cluster search for the clusters that run a version of the profile `name`.
-/// Palette takes the name of a profile in `clusterProfiles`, and not its uid (#181).
+/// The body of the cluster search for the clusters that run a version of the profile `name`, and
+/// with `nested` for the virtual clusters that run it, as the second reading of `consumers` sends
+/// it. Palette takes the name of a profile in `clusterProfiles`, and not its uid (#181).
 fn profile_search(name: &str, nested: bool) -> Value {
     let condition = |property: &str, value: &str| {
         serde_json::json!({
