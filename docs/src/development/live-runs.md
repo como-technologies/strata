@@ -572,10 +572,10 @@ in the project of the key: give it as `PROFILE=<name>@<version>`.
 | Check | Expected exit | What it shows |
 |---|---|---|
 | `validate-accepts`, `validate-accepts-says`, `validate-accepts-record` | 0 | #152: Palette takes the packs of the candidate; `snapshot --validate` prints `palette    accepts` and writes the record with `source.paletteValidation` `{"accepts": true}` |
-| `validate-not-yaml`, `validate-not-yaml-says`, `validate-not-yaml-no-record` | 2, 0, 1 | #152: values that are not YAML are a refusal of the whole request, `PackValuesYamlInvalid`, with no pack; strata exits `2` and writes no record |
-| `validate-not-yaml-status`, `validate-not-yaml-status-says` | 2, 0 | #152: Palette sends that refusal as HTTP 500 |
+| `validate-not-yaml`, `validate-not-yaml-says`, `validate-not-yaml-no-record` | 2, 0, 1 | #153: strata refuses values that are not YAML before any request, as `candidate-invalid` with the code of Palette, `PackValuesYamlInvalid`; it exits `2` and writes no record |
+| `validate-not-yaml-status`, `validate-not-yaml-status-says` | 2, 0 | #152: Palette refuses the same body as the whole request, `PackValuesYamlInvalid` with no pack, and sends the refusal as HTTP 500 |
 | `validate-no-pack`, `validate-no-pack-says` | 2, 0 | #152: a body with no pack gets HTTP 400 with `ShouldNotBeEmpty`, from the converter of the route |
-| `validate-version`, `validate-version-says` | 0 | #152: `snapshot <ref> --validate` asks the route of an update, and Palette takes the version as it is. No run has passed this check yet. |
+| `validate-version`, `validate-version-says` | 0 | #152: `snapshot <ref> --validate` asks the route of an update, and Palette takes the version as it is |
 
 No pack of the Public Repo lists a dependency in its tags route, so no stage
 asks for a refusal of a dependency.

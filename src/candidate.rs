@@ -1674,6 +1674,7 @@ mod tests {
         }
         for bad in [
             "2.2.2.develop",
+            "1.2.3.4",
             "chart-v1.2.3",
             "latest",
             "1.2.3-",

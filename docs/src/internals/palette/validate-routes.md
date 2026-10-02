@@ -167,9 +167,10 @@ The checks, in order:
 5. The pack validator, as above. It also checks the dependencies over the packs
    that each such cluster runs.
 
-The answer has the shape of the route above. No live run has asked this route
-yet: the project of the key holds no profile version. Stage 3 of
-`validate-packs.sh` asks it for a version that you name.
+The answer has the shape of the route above. A live run shows that the route
+takes a published version of a cluster profile that no cluster runs, as an
+update of itself. Stage 3 of `validate-packs.sh` asks it for a version that you
+name.
 
 ## The property routes
 
