@@ -9223,7 +9223,7 @@ fn verify_reports_a_renamed_version_as_renamed_and_not_as_overwritten() {
 #[test]
 fn snapshot_validate_asks_palette_whether_it_takes_the_packs_of_a_candidate() {
     let dir = tempfile::tempdir().unwrap();
-    common::make_fixtures(dir.path());
+    make_fixtures_that_palette_takes(dir.path());
     let recorded_b = ops::snapshot_from_dir(&dir.path().join("b"), "b", "t0").unwrap();
     let file = dir.path().join("c.yaml");
     candidate::write(&Candidate::from_snapshot(&recorded_b).unwrap(), &file, None).unwrap();

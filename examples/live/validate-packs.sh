@@ -7,8 +7,9 @@
 #   examples/live/validate-packs.sh [STAGE]
 #
 #   1  a candidate whose packs Palette takes: POST /v1/clusterprofiles/validate/packs
-#   2  a candidate whose values are not YAML, and a body with no pack: Palette refuses the whole
-#      request
+#   2  a candidate whose values are not YAML: strata refuses it before any request (#153), and
+#      Palette refuses the same body as the whole request; and a body with no pack: Palette refuses
+#      the whole request
 #   3  a version that Palette holds, as an update of itself: POST
 #      /v1/clusterprofiles/{uid}/validate/packs. It needs PROFILE=<name>@<version>, a version in
 #      the project of the key, for example one that `just live-up` publishes; with no PROFILE it
@@ -68,10 +69,10 @@ fi
 if [ "$stage" = all ] || [ "$stage" = 2 ]; then
   echo "== a candidate whose values are not YAML, and a body with no pack (#152)" | tee -a steps.log
   candidate strata-validate-fred 'installCRDs: [true'
-  check validate-not-yaml 2 '#152: Palette refuses the values, so strata exits 2 and writes no record' -- \
+  check validate-not-yaml 2 '#152, #153: values that are not YAML are candidate-invalid, so strata exits 2 and writes no record' -- \
     "$strata" snapshot --from-candidate strata-validate-fred.yaml --validate -o fred.json
-  check validate-not-yaml-says 0 '#152: the refusal is PackValuesYamlInvalid, of the whole request, with no pack' -- \
-    grep -q "^palette    refuses: PackValuesYamlInvalid: Pack '$pack' values yaml is invalid" validate-not-yaml.err
+  check validate-not-yaml-says 0 '#153: strata refuses the values before any request, with the code of Palette' -- \
+    grep -q "the values of layer 1 ($pack) are not YAML that Palette takes: .*(PackValuesYamlInvalid)$" validate-not-yaml.err
   check validate-not-yaml-no-record 1 '#152: strata wrote no record' -- \
     test -e fred.json
   # the same body, with no retry and no strata between: the HTTP status of the refusal. The record

@@ -116,6 +116,11 @@ HTTP `500` and one of these codes. Strata does not send it again, and
 | `SubResourceLimitValidationFailure` | More than 200 packs, or more than 200 manifests. |
 | `ClusterProfilePacksInConflict` | For the route of an update: a pack whose name a pack of another profile of a cluster that runs the version also has. |
 
+A candidate with values or a manifest that are not YAML, or with more than 200
+packs or manifests, does not get to this route: strata refuses it before any
+request, as `candidate-invalid` with the same code. See
+[Checks before any request](candidate-file.md#checks-before-any-request).
+
 A 5xx with a different code, or with no code, is a fault. Strata sends the
 request again.
 
