@@ -7,6 +7,7 @@
 //! are the responses a snapshot is built from.
 
 mod http;
+mod mask;
 mod memory;
 mod palette;
 mod raw;
@@ -17,6 +18,7 @@ use serde_json::Value;
 use crate::error::{Error, Result};
 
 pub use http::HttpApi;
+pub use mask::{MASKED, is_password_format, mask_values, password_fields};
 pub use memory::MemoryApi;
 pub use palette::Palette;
 pub use raw::{RawCluster, RawProfile};

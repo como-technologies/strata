@@ -111,6 +111,12 @@ makes no claim that depends on them.
   `index.yaml` from the endpoint over HTTP, so such a registry lists nothing. An
   `oci://` chart URL inside an index is read. An OCI Helm registry is its own
   kind: see [The digest of each registry kind](packs.md#the-digest-of-each-registry-kind).
+- **The mask of a draft.** Palette writes `********` over each value of the
+  format `password` in the published packs only, and serves the packs of a
+  draft in clear. Strata writes the mask over the draft itself: see
+  [Secrets in the values](profiles.md#secrets-in-the-values). When Palette
+  masks the draft too, the values hold `********` already, and the mask of
+  strata changes nothing.
 - **The fields that repave, for each engine.** Palette keeps a list for the OS
   layer and the Kubernetes layer of each engine, and checks no other layer. A
   new pack version on either layer repaves on every engine. Strata does not copy
