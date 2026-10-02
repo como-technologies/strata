@@ -233,6 +233,15 @@ pub enum Error {
         /// The path as given.
         path: String,
     },
+    /// `snapshot --validate` asked Palette whether it takes the packs, and Palette refused them.
+    /// Strata wrote no record. The CLI prints each error before this message.
+    #[error("Palette refuses the packs of '{reference}' with {} {}; strata wrote no record", errors.len(), if errors.len() == 1 { "error" } else { "errors" })]
+    PaletteRefuses {
+        /// The ref or the candidate file, as given.
+        reference: String,
+        /// Each error that Palette gave, sorted.
+        errors: Vec<crate::diff::PaletteRefusal>,
+    },
     /// A candidate file does not parse or breaks a rule of the format.
     #[error("'{}': {message}", path.display())]
     CandidateInvalid {
@@ -385,6 +394,19 @@ pub const PACK_REFUSAL_CODES: [&str; 11] = [
     "DisabledPacksForbidden",
 ];
 
+/// The codes of the refusals of the whole request that `POST /v1/clusterprofiles/validate/packs`
+/// and `POST /v1/clusterprofiles/{uid}/validate/packs` answer with HTTP 500: the six checks before
+/// the pack validator in `ValidatePacks` and `ValidateUpdatePacks` of hubble. `snapshot
+/// --validate` reads them as the answer of Palette. A retry gets the same refusal.
+pub const PROFILE_PACK_REFUSAL_CODES: [&str; 6] = [
+    "ClusterDashboardPacksMutuallyExclusive",
+    "PackValuesYamlInvalid",
+    "PackManifestYamlInvalid",
+    "DisabledPacksForbidden",
+    "SubResourceLimitValidationFailure",
+    "ClusterProfilePacksInConflict",
+];
+
 /// The code of the one refusal of `validate/packs` that Palette answers with HTTP 403, and not
 /// 500: its constructor sets the response type `Forbidden`. A pack that an integration pack
 /// needs read-only has values other than its defaults. `compare --validate` reads it as the
@@ -398,11 +420,14 @@ pub fn error_code(body: &str) -> Option<String> {
         .and_then(|v| v.get("code").and_then(Value::as_str).map(str::to_owned))
 }
 
-/// True when the body of a Palette error is JSON with a `code` in [`REFUSAL_CODES`] or in
-/// [`PACK_REFUSAL_CODES`].
+/// True when the body of a Palette error is JSON with a `code` in [`REFUSAL_CODES`],
+/// [`PACK_REFUSAL_CODES`], or [`PROFILE_PACK_REFUSAL_CODES`].
 fn is_refusal(body: &str) -> bool {
     error_code(body).is_some_and(|code| {
-        REFUSAL_CODES.contains(&code.as_str()) || PACK_REFUSAL_CODES.contains(&code.as_str())
+        let code = code.as_str();
+        REFUSAL_CODES.contains(&code)
+            || PACK_REFUSAL_CODES.contains(&code)
+            || PROFILE_PACK_REFUSAL_CODES.contains(&code)
     })
 }
 
@@ -476,6 +501,7 @@ impl Error {
             Error::ClusterProfileNotFound { .. } => "cluster-profile-not-found",
             Error::ProfileRefRequired { .. } => "profile-ref-required",
             Error::RecordNotASource { .. } => "record-not-a-source",
+            Error::PaletteRefuses { .. } => "palette-refuses",
             Error::Usage { .. } => "usage",
             Error::CandidateInvalid { .. } => "candidate-invalid",
             Error::PackNotFound { .. } => "pack-not-found",
@@ -506,7 +532,7 @@ impl Error {
 
     /// The machine-readable form: `kind`, `message`, and the variant's own fields (`path`,
     /// `status`, `retryAfter`, `limit`, `name`, `version`, `schema`, `variable`, `alternate`, `value`, `cluster`,
-    /// `profile`, `applied`, `reference`, `tag`, `registry`, `state`, `available`) when it has them.
+    /// `profile`, `applied`, `reference`, `tag`, `registry`, `state`, `available`, `errors`) when it has them.
     pub fn to_json(&self) -> Value {
         let mut m = Map::new();
         m.insert("kind".into(), Value::from(self.kind()));
@@ -521,6 +547,13 @@ impl Error {
             }
             Error::RecordNotASource { path: p } => {
                 m.insert("path".into(), Value::from(p.as_str()));
+            }
+            Error::PaletteRefuses { reference, errors } => {
+                m.insert("reference".into(), Value::from(reference.as_str()));
+                m.insert(
+                    "errors".into(),
+                    serde_json::to_value(errors).unwrap_or_default(),
+                );
             }
             // the message carries the whole of it, and no field adds to that
             Error::Usage { .. } => {}
@@ -753,6 +786,16 @@ mod tests {
             Error::ProfileRefRequired {
                 reference: "cluster:c1".into(),
             },
+            Error::PaletteRefuses {
+                reference: "aws-stack.yaml".into(),
+                errors: vec![crate::diff::PaletteRefusal {
+                    pack: "kubernetes".into(),
+                    code: "DependencyPackWithMinVersionRequired".into(),
+                    message: "Pack 'cni-cilium-oss' is required with minimum compatible version \
+                              '1.21.0'"
+                        .into(),
+                }],
+            },
             Error::CandidateInvalid {
                 path: "profile.yaml".into(),
                 message: "a candidate needs at least one layer".into(),
@@ -932,8 +975,8 @@ pub enum FailureClass {
     /// longer than strata waits.
     Transient,
     /// It stays while the inputs stay: another HTTP 4xx, a 5xx with a code in
-    /// [`REFUSAL_CODES`] or [`PACK_REFUSAL_CODES`], a thing that is not there, a file or a
-    /// setting that is not valid.
+    /// [`REFUSAL_CODES`], [`PACK_REFUSAL_CODES`], or [`PROFILE_PACK_REFUSAL_CODES`], a thing
+    /// that is not there, a file or a setting that is not valid.
     Terminal,
     /// Strata cannot tell.
     Unknown,

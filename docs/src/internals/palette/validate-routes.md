@@ -5,7 +5,8 @@ in its create wizard, and a create through the API goes to the create route.
 This page states what each route checks, from the source of Palette (hubble on
 master), and who calls it. `strata preflight` calls each one that takes the
 body of a create. One more route checks the packs of a cluster before an update
-of its profiles: `compare --validate` calls it.
+of its profiles: `compare --validate` calls it. Two routes check the packs of a
+profile before a create or an update: `snapshot --validate` calls them.
 
 ## POST /v1/spectroclusters/{cloudType}/validate
 
@@ -103,6 +104,68 @@ A cluster that does not exist is HTTP `404`.
 No live run has asked this route yet. Stage 7 of `repave.sh` asks it on
 cluster A: see [repave.sh](../../development/live-runs.md#repavesh).
 
+## POST /v1/clusterprofiles/validate/packs
+
+This route checks the packs of a profile before a create. The body is a
+`v1ClusterProfileTemplateDraft`: `cloudType`, `type`, and `packs[]`, each a
+`v1PackManifestEntity` with `name`, `tag`, `uid`, `registryUid`, `type`,
+`layer`, `values`, and `manifests[]` of `name` and `content`. The route writes
+nothing, and does not check the name or the version of the profile.
+`snapshot --from-candidate --validate` sends it.
+
+The checks, in order:
+
+1. The body holds one pack or more.
+2. The body holds no more than one dashboard pack:
+   `ClusterDashboardPacksMutuallyExclusive`.
+3. The values and the manifests of each pack are YAML:
+   `PackValuesYamlInvalid` or `PackManifestYamlInvalid`, for the first pack that
+   fails.
+4. The pack validator. It skips each manifest pack, and reads each other pack
+   by its `uid`. A pack that Spectro Cloud disabled is
+   `DisabledPacksForbidden`. Then it checks the values of each pack, and the
+   dependencies of each pack over the packs of the body. In an add-on profile,
+   it does not check a dependency on an infrastructure layer.
+5. The limits: 200 packs and 200 manifests,
+   `SubResourceLimitValidationFailure`.
+
+The validator gives an error of a pack in a `200` answer:
+`packs.results[]`, each with the `name` of a pack and `errors[]` of `code` and
+`message`. With no error, `results` is empty. Each other check refuses the
+whole request with a `V1Error` of `code` and `message`. Palette gives these
+errors the response type of a server fault, so each one is HTTP 500. A live
+run shows it: values that are not YAML get HTTP 500 with the code
+`PackValuesYamlInvalid` and the message
+`Pack 'cert-manager' values yaml is invalid`. Strata reads a 500 with a code
+of these two routes as the answer of Palette, and does not send it again: see
+[Refusals that strata does not send again](../../reference/errors.md#refusals-that-strata-does-not-send-again).
+It reads each other status as an error.
+
+A live run also shows that the route takes a candidate of `cert-manager`
+1.21.1 from the Public Repo, with the values of the registry. See
+[validate-packs.sh](../../development/live-runs.md#validate-packssh).
+
+## POST /v1/clusterprofiles/{uid}/validate/packs
+
+This route checks the packs of a profile version before an update of that
+version. The body is the body of the route above. `snapshot <ref> --validate`
+sends it with the packs of the version, so Palette checks the version as an
+update of itself.
+
+The checks, in order:
+
+1. The version exists, and the key can read it.
+2. Palette reads the clusters that run the version. A pack of the body whose
+   name a pack of another profile of such a cluster also has is a refusal:
+   `ClusterProfilePacksInConflict`, with the names of the clusters.
+3. The limits, the dashboard packs, and the YAML, as above.
+4. The pack validator, as above. It also checks the dependencies over the packs
+   that each such cluster runs.
+
+The answer has the shape of the route above. No live run has asked this route
+yet: the project of the key holds no profile version. Stage 3 of
+`validate-packs.sh` asks it for a version that you name.
+
 ## The property routes
 
 Each answers `204` on success, and a 4xx `V1Error` on a fault. Each calls the
@@ -144,6 +207,11 @@ The source of hubble on master:
 (the profiles and the machines), `internal/base/spectrocluster_profile.go` and
 `internal/base/spectrocluster_base.go` in the same directory (`validate/packs`
 of a cluster, and the shape of its answer),
+`internal/base/spectrocluster_pack.go` in the same directory (`validate/packs`
+of a profile version),
+`services/service/spectrocluster/internal/service/clusterprofile/clusterprofile_service.go`
+and `../pack/pack_validate.go` (the checks of the packs of a profile),
+`base/herr/err_pack.go` (the codes),
 `handler/converter/v1/clusters_v1_converter.go`
 (the converter, and the GKE pool size), `aws/spectrocluster_aws_validate.go`
 (the zones and the CIDRs of AWS), and

@@ -120,6 +120,53 @@ The two roots stay equal when the registry still has the same pack versions.
 After a person edits the published version in place, `same-release` between
 the candidate and the version fails and names the edited value.
 
+## Ask Palette before you publish
+
+The roots tell you what the version will be. They do not tell you whether
+Palette takes it. `snapshot --from-candidate --validate` asks Palette with
+`POST /v1/clusterprofiles/validate/packs`, the check of a create. The request
+changes nothing, and Palette holds no profile after it. Palette checks the
+values and the manifests of each pack, a pack that Spectro Cloud disabled, the
+dependencies of each pack, and the limits.
+[The validate routes](../internals/palette/validate-routes.md#post-v1clusterprofilesvalidatepacks)
+gives each check.
+
+When Palette refuses, strata prints one line for each error, exits `2`, and
+writes no record:
+
+```text
+{{#include ../output/candidate-validate-refuses.txt}}
+```
+
+A line names the code of Palette, the pack, and the message of Palette. A
+refusal of the whole request, for example values that are not YAML, names no
+pack. Fix the candidate, and ask again.
+
+When Palette takes the packs, strata prints `palette    accepts` and writes the
+record. The record holds the answer in `source.paletteValidation`:
+
+```text
+{{#include ../output/candidate-validate-accepts.txt}}
+```
+
+The answer does not change the root. A pipeline that publishes from the
+candidate can run this step first, and stop on exit `2`.
+
+`strata snapshot <name>@<version> --validate` asks the same of a version that
+Palette holds, as an update of itself, with
+`POST /v1/clusterprofiles/{uid}/validate/packs`. Palette then also checks the
+packs against the clusters that run the version:
+
+```text
+{{#include ../output/snapshot-validate-version.txt}}
+```
+
+`--validate` needs the network, so it does not go with `--from-raw`:
+
+```text
+{{#include ../output/snapshot-validate-usage.txt}}
+```
+
 ## What to expect
 
 - The ref is a profile uid, `<name>@<version>`, `<name>@latest`, or a profile
@@ -127,6 +174,8 @@ the candidate and the version fails and names the edited value.
   error: `profile-ref-required`. A pack is one layer of a profile version, a
   cluster holds a copy of one, and an app profile has tiers and no packs.
 - `--files-dir` needs `-o`.
+- `snapshot --from-candidate --validate` exits `2` with `palette-refuses` when
+  Palette refuses the packs, and then writes no record.
 - Exit `0`, or `2` on an error.
 
 [The candidate file](../reference/candidate-file.md) describes each field,

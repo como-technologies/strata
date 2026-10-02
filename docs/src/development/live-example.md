@@ -15,6 +15,7 @@ show.
 | `drift-report.sh off`, `drift-report.sh on` | `scripts/ci/verify-report.sh` around an edit in place and a version bump (#25). |
 | `packs.sh` | `pack:` refs against the tenant's own registries (#55). Read-only, and it needs no cluster. |
 | `pack-states.sh` | Pack versions that Spectro Cloud deprecated, disabled, or deleted: what `packs` and `snapshot` report, and which profiles Palette refuses (#68). It needs no cluster. |
+| `validate-packs.sh` | What Palette answers when `snapshot --validate` asks whether it takes the packs of a candidate, and of a version (#152). It needs no cluster and no profile. |
 | `registry.sh` | The example's own OCI pack registry: a push, a push again of one version with other bytes, and a new version, and what Palette does after each (#66). It needs the profiles, and no cluster. |
 | `template.sh` | The lock of a cluster template on the versions it links, and the order in which a cluster installs the packs of two add-on profiles (#66). It needs the profiles and no cluster, and it ends with the removal of the example. |
 | `cluster.sh` | A variable value that a cluster changes, and other answers that only a cluster gives (#66). It needs cluster A, and it ends with the cluster gone. |
@@ -103,9 +104,10 @@ its end.
 | `registry-move.sh` | The registry move test (#24). |
 | `tag-only.sh` | The tag name test (#19). |
 | `drift-report.sh` | The drift report test (#25). It opens and closes issues in this repository with the label `strata-live-drift`. |
-| `api.sh` | The writes outside OpenTofu: an edit in place, a push of a profile to a cluster, the delete of profile versions, the delete of a cluster, a probe profile that it deletes at once, an edge host with no device, and an app profile. `api.sh post` sends a search that Palette takes as a `POST`. |
+| `api.sh` | The writes outside OpenTofu: an edit in place, a push of a profile to a cluster, the delete of profile versions, the delete of a cluster, a probe profile that it deletes at once, an edge host with no device, and an app profile. `api.sh post` sends a search that Palette takes as a `POST`, or a question to a validate route. |
 | `packs.sh` | The pack ref test (#55). |
 | `pack-states.sh` | The pack state test (#68). |
+| `validate-packs.sh` | The profile validate test (#152). |
 | `merge-gate.sh` | The merge gate test (#57). |
 | `knurl.sh` | The knurl adapter test. |
 | `registry.sh` | The registry test (#66): pushes into the example's own OCI pack registry and OCI Helm registry, and reads what Palette does with each push. |
@@ -149,7 +151,7 @@ it:
 `drift-report.sh` check the baseline before they start, and leave the example as
 they found it. `packs.sh` and `knurl.sh` read the profiles and change nothing.
 `pack-states.sh` asks for three profiles, and deletes the one that Palette
-creates at once.
+creates at once. `validate-packs.sh` asks validate routes, which change nothing.
 `merge-gate.sh` makes one edit in place, and puts it back.
 `who.sh` makes one edit in place at a time, and puts each back.
 `pending.sh` checks the baseline before it starts, and puts each change back.
@@ -169,6 +171,7 @@ each.
 | `tag-only.sh` | the tag name of the OS pack, and which of two such versions cluster A runs | the pack uid, each other pack, the values, the flag (off), the baseline |
 | `packs.sh` | nothing; it only reads | the baseline |
 | `pack-states.sh` | nothing that stays: a probe profile, deleted at once | the baseline |
+| `validate-packs.sh` | nothing; it only reads and asks validate routes | the baseline |
 | `merge-gate.sh` | the add-on version, which stage 4 edits in place and stage 5 puts back | the profiles, the clusters, the baseline |
 | `knurl.sh` | nothing; it only reads | the baseline |
 | `registry.sh` | the images of the example's own registries, and the profiles that pin them | the shared registries, the clusters, the release and add-on versions |

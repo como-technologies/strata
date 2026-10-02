@@ -130,6 +130,34 @@ pub struct Source {
     /// Present when the snapshot records one pack version from a registry.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pack: Option<PackSource>,
+    /// Present after `snapshot --validate`: what Palette answered when strata asked whether it
+    /// takes the packs of this content.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub palette_validation: Option<ProfileValidation>,
+}
+
+/// Palette's answer to `POST /v1/clusterprofiles/validate/packs` for a candidate, or to `POST
+/// /v1/clusterprofiles/{uid}/validate/packs` for a version that Palette holds.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ProfileValidation {
+    /// True when Palette gives no error.
+    pub accepts: bool,
+    /// Each error that Palette gives, sorted by pack, code, and message.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub errors: Vec<crate::diff::PaletteRefusal>,
+}
+
+impl ProfileValidation {
+    /// The answer with these errors, sorted and with no copy. It accepts when there is none.
+    pub fn refused(mut errors: Vec<crate::diff::PaletteRefusal>) -> ProfileValidation {
+        errors.sort();
+        errors.dedup();
+        ProfileValidation {
+            accepts: errors.is_empty(),
+            errors,
+        }
+    }
 }
 
 /// The registry pack a snapshot was taken from.
@@ -1101,6 +1129,7 @@ impl Snapshot {
             fetched_at: fetched_at.to_string(),
             cluster: None,
             pack: None,
+            palette_validation: None,
         };
 
         let mut variables: Vec<Value> = arr(&raw.variables, "/variables")
@@ -1252,6 +1281,7 @@ impl Snapshot {
             consumers: None,
             fetched_at: fetched_at.to_string(),
             pack: None,
+            palette_validation: None,
             cluster: Some({
                 let pending_updates = raw
                     .notifications

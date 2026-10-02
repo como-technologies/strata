@@ -173,6 +173,11 @@ live-packs: build
 live-pack-states: build
     examples/live/pack-states.sh
 
+# The profile validate checks: what Palette answers when strata asks whether it takes the packs;
+# no cluster, no profile, no cost (#152)
+live-validate-packs: build
+    examples/live/validate-packs.sh
+
 # Read-only. It needs live-profiles; the instance checks need live-up, and are SEEN without it.
 
 # The knurl adapter against the tenant: each port method against the strata answer for the same object

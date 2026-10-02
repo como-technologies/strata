@@ -27,6 +27,10 @@ takes:
 - `--macros` and `--shape` need a `cluster:` ref. `--raw-dir` takes a profile or
   a cluster: a record read back from the directory does not say `@pending`,
   edge host, cluster group, or app profile.
+- `--validate` takes `--from-candidate` or a profile version. With `--from-raw`,
+  `--dir`, or a cluster, edge host, cluster group, app profile, or pack ref, it is
+  a `usage` error. Palette refuses the packs: exit `2`, the error
+  `palette-refuses`, and no record.
 - Without `-o`, the snapshot goes to standard output.
 - `-o releases/1.1.0/dev.json` makes the directory that the path names, so a
   release directory needs no `mkdir` first.
@@ -46,6 +50,7 @@ takes:
 | `--raw-dir` | Also saves the API responses and the time of the read in a directory. | [A record with no network](snapshot/no-network.md) |
 | `--from-raw` | Builds the record from the directory of `--raw-dir`, with no network and no key. | [A record with no network](snapshot/no-network.md) |
 | `--from-candidate` | Builds the record from a candidate file, before the version is in Palette. | [A record with no network](snapshot/no-network.md) |
+| `--validate` | Asks Palette whether it takes the packs: of a candidate in a new profile, or of a profile version as an update of itself. A refusal exits `2` and writes no record. | [Ask Palette before you publish](candidate.md#ask-palette-before-you-publish) |
 | `--compact` | Writes the JSON on one line. | |
 | `--macros` | For a cluster: records the digest of the value that Palette gives each macro that the content uses. | [Macros](snapshot/cluster.md#macros) |
 | `--shape` | For a cluster: records the `shape` tier, with one more request. | [More of the cluster than its release](snapshot/cluster.md#more-of-the-cluster-than-its-release) |

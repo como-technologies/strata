@@ -24,6 +24,7 @@ mod list;
 mod packs;
 mod repave;
 mod same_release;
+mod validate;
 mod verify;
 
 pub use behind::*;
@@ -33,6 +34,7 @@ pub use list::*;
 pub use packs::*;
 pub use repave::*;
 pub use same_release::*;
+pub use validate::*;
 pub use verify::*;
 
 /// Turn a ref into a snapshot. A snapshot file is loaded; anything else is fetched through the
@@ -283,8 +285,36 @@ where
     A: PaletteApi,
     F: FnOnce() -> Result<Palette<A>>,
 {
+    candidate_snapshot(loaded, &connect()?, fetched_at, progress)
+}
+
+/// [`snapshot_from_candidate`], and then ask Palette whether it takes the packs of the candidate,
+/// as [`profile_validation`] does. `source.paletteValidation` of the record holds the answer: the
+/// caller decides what a refusal does.
+pub fn snapshot_from_candidate_validated<A, F>(
+    path: &Path,
+    connect: F,
+    fetched_at: &str,
+    progress: &Progress,
+) -> Result<Snapshot>
+where
+    A: PaletteApi,
+    F: FnOnce() -> Result<Palette<A>>,
+{
+    let loaded = crate::candidate::load(path)?;
     let palette = connect()?;
-    let raw = crate::candidate::resolve(loaded, &palette, progress)?;
+    let mut snap = candidate_snapshot(&loaded, &palette, fetched_at, progress)?;
+    snap.source.palette_validation = Some(profile_validation(&palette, &snap)?);
+    Ok(snap)
+}
+
+fn candidate_snapshot<A: PaletteApi>(
+    loaded: &LoadedCandidate,
+    palette: &Palette<A>,
+    fetched_at: &str,
+    progress: &Progress,
+) -> Result<Snapshot> {
+    let raw = crate::candidate::resolve(loaded, palette, progress)?;
     let mut snap = Snapshot::from_raw(&raw, &loaded.path.display().to_string(), fetched_at)?;
     crate::candidate::warn_preset_options(&snap, progress);
     snap.source.template = crate::candidate::TEMPLATE.to_string();

@@ -680,14 +680,7 @@ pub(crate) fn palette_validation_lines(d: &Diff) -> Vec<String> {
     }
     v.errors
         .iter()
-        .map(|e| {
-            let pack = if e.pack.is_empty() {
-                String::new()
-            } else {
-                format!(" {}", e.pack)
-            };
-            format!("refuses: {}{pack}: {}", e.code, e.message)
-        })
+        .map(|e| format!("refuses: {}", e.line()))
         .collect()
 }
 
