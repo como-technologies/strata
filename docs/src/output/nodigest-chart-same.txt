@@ -1,0 +1,4 @@
+$ strata same-release charts/candidate.json charts/published.json
+NO DIGEST      charts/candidate.json -> charts/published.json   root 96c14b41aff5 -> ddf3fba69608
+               pack addon/podinfo has no upstream digest, so an equal root does not show an equal archive; --allow no-digest accepts it
+NOT THE SAME RELEASE: 1 of 1 pair failed

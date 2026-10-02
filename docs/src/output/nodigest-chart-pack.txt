@@ -1,0 +1,4 @@
+$ jq -c '.packs[] | {name, type, layer, version, packUid, upstreamSource: .hash.upstreamSource}' charts/candidate.json
+{"name":"podinfo","type":"helm","layer":"addon","version":"6.7.1","packUid":"","upstreamSource":"none"}
+$ jq -c '.packs[] | {name, type, layer, version, packUid, upstreamSource: .hash.upstreamSource}' charts/published.json
+{"name":"podinfo","type":"helm","layer":"addon","version":"6.7.1","packUid":"64ed000000000000000000b1","upstreamSource":"none"}

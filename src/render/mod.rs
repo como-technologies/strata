@@ -453,7 +453,7 @@ pub(crate) fn pair_detail(p: &Pair) -> String {
             count_of(p.packs_retagged, "pack")
         ),
         PairStatus::SameContent => format!(
-            "root {} -> {}, only the packUid minted for each manifest pack differs",
+            "root {} -> {}, only the packUid that Palette mints differs",
             short(&p.root_a),
             short(&p.root_b)
         ),
@@ -581,8 +581,8 @@ pub(crate) fn overwritten_in_place_notes(d: &Diff) -> Vec<String> {
 }
 
 /// `the roots differ only by the tag name a pack is pinned under: the same pack build`, or by the
-/// packUid Palette mints for each profile's manifest pack, for a diff whose roots differ in
-/// nothing else.
+/// packUid that Palette mints for a manifest pack or for a pack from a registry that it does not
+/// sync, for a diff whose roots differ in nothing else.
 pub(crate) fn same_content_note(d: &Diff) -> Option<String> {
     if d.same || !d.same_content {
         return None;
@@ -593,8 +593,8 @@ pub(crate) fn same_content_note(d: &Diff) -> Option<String> {
         (true, false) => {
             "the roots differ only by the tag name a pack is pinned under: the same pack build"
         }
-        (true, true) => "the roots differ only by the tag name a pack is pinned under and the packUid Palette mints for each profile's manifest pack: the same content",
-        _ => "the roots differ only by the packUid Palette mints for each profile's manifest pack: the same content",
+        (true, true) => "the roots differ only by the tag name a pack is pinned under and the packUid that Palette mints for a manifest pack or for a pack from a registry that it does not sync: the same content",
+        _ => "the roots differ only by the packUid that Palette mints for a manifest pack or for a pack from a registry that it does not sync: the same content",
     }.to_string())
 }
 

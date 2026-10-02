@@ -29,8 +29,8 @@ pub enum Policy {
 pub enum PairStatus {
     /// Equal roots.
     Identical,
-    /// Roots differ only by the `packUid`s Palette mints for each profile's manifest packs: the
-    /// same content, under either policy.
+    /// Roots differ only by the `packUid`s that Palette mints, and by the tag name a pack is
+    /// pinned under for the same build: the same content, under either policy.
     SameContent,
     /// Roots differ only because packs were re-pinned from another registry; accepted by policy.
     RegistryMove,
@@ -91,8 +91,9 @@ pub struct Pair {
     /// The key of each pack, on either side, with no upstream digest; also when it is allowed.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub upstream_unknown: Vec<String>,
-    /// The key of each manifest pack whose only difference is the `packUid` that Palette mints
-    /// for each profile, as `packs[].mintedUidOnly` of `compare` marks it.
+    /// The key of each pack whose only difference is a `packUid` that Palette mints: for a
+    /// manifest pack, and for a pack from a registry that Palette does not sync. `compare` marks
+    /// it as `packs[].mintedUidOnly`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub minted_uid_only: Vec<String>,
 }
@@ -213,12 +214,8 @@ fn pair_reasons(
             Status::Removed => reasons.push(format!("pack {} removed", pd.key)),
             Status::Changed => {
                 let (x, y) = (pa[pd.key.as_str()], pb[pd.key.as_str()]);
-                // a manifest pack's packUid is minted for each profile: not part of the release
-                let minted = x.registry_uid.is_empty()
-                    && y.registry_uid.is_empty()
-                    && x.pack_uid != y.pack_uid
-                    && (&x.name, &x.layer, &x.kind, &x.tag, &x.version)
-                        == (&y.name, &y.layer, &y.kind, &y.tag, &y.version);
+                // a packUid that Palette mints is not part of the release
+                let minted = diff::minted_uid_pair(x, y);
                 // The type follows the registry (spectro, helm, oci), so a move may change it; a
                 // pack from no registry, a manifest, did not move.
                 let moved = !x.registry_uid.is_empty()
@@ -351,7 +348,7 @@ pub fn same_release_with(
                 ),
                 (
                     "same-content",
-                    "The roots differ only by the packUid Palette mints for each profile's manifest packs, or by the tag name a pack is pinned under for the same build: the same content, so the same release under either policy.",
+                    "The roots differ only by the packUid that Palette mints for a manifest pack or for a pack from a registry that it does not sync, or by the tag name a pack is pinned under for the same build: the same content, so the same release under either policy.",
                 ),
                 (
                     "registry-move",

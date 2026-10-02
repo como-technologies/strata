@@ -263,6 +263,24 @@ impl Runner {
         self.tenant.addons(project, uid, pack, label, version);
     }
 
+    /// A private Helm registry: see [`Tenant::private_charts`].
+    pub fn private_charts(&mut self, project: &str) {
+        if !self.building() {
+            return;
+        }
+        self.changed();
+        self.tenant.private_charts(project);
+    }
+
+    /// A profile that pins a chart of the private Helm registry: see [`Tenant::chart_profile`].
+    pub fn chart_profile(&mut self, project: &str, uid: &str, pack: &str, version: &str) {
+        if !self.building() {
+            return;
+        }
+        self.changed();
+        self.tenant.chart_profile(project, uid, pack, version);
+    }
+
     /// Change a published profile in place, as an edit through the API does.
     pub fn edit(&mut self, project: &str, uid: &str, edits: &[Edit]) {
         if !self.building() {

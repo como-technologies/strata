@@ -1,5 +1,5 @@
 $ strata same-release addons/candidate.json addons/1.0.0/dev.json
-SAME CONTENT   addons/candidate.json -> addons/1.0.0/dev.json   root 8f19d75be941 -> b49f91f9df85, only the packUid minted for each manifest pack differs
+SAME CONTENT   addons/candidate.json -> addons/1.0.0/dev.json   root 8f19d75be941 -> b49f91f9df85, only the packUid that Palette mints differs
 SAME RELEASE: 1 pair passed
 $ strata same-release addons/candidate.json addons/1.0.0/dev.json --json | jq -c '.pairs[] | {status, mintedUidOnly}'
 {"status":"same-content","mintedUidOnly":["addon/namespace-policy"]}

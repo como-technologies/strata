@@ -949,7 +949,7 @@ fn two_profiles_with_the_same_manifest_content_are_one_release_whatever_uid_pale
         .render(&d, &one, &two, false)
         .unwrap();
     assert!(
-        text.contains("the roots differ only by the packUid Palette mints for each profile's manifest pack: the same content"),
+        text.contains("the roots differ only by the packUid that Palette mints for a manifest pack or for a pack from a registry that it does not sync: the same content"),
         "{text}"
     );
     assert!(

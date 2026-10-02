@@ -7,8 +7,9 @@
 #
 #   1  push version 1.0.0 into each kind, sync, and record the pack: the digest Palette lists, and
 #      the provider type that a record of an OCI pack names
-#   2  a Helm registry with credentials, which Palette does not synchronize: a profile that pins a
-#      chart from it, the pack reference with no digest, and what verify and same-release say
+#   2  a Helm registry with credentials, which Palette does not synchronize: a candidate with a
+#      chart from it, a profile that pins the chart, the pack reference with no digest, and what
+#      verify and same-release say
 #   3  push 1.0.0 again into each kind, with other bytes, and sync: the digest Palette lists now,
 #      and the record from before, verified again
 #
@@ -195,10 +196,34 @@ echo "== 2. a chart from the Helm registry with credentials" | tee -a steps.log
 # Palette lists a chart of this registry only while a profile pins it by name
 check auth-listed ? "#75: whether Palette lists the chart of the Helm registry it does not synchronize" -- \
   "$strata" snapshot "pack:$(regf charts-auth name)/$CHART@1.0.0" -o auth-leaf.json
+# the candidate of that profile, before the create: Palette makes the pack at the create (#154)
+cat > auth-candidate.yaml <<EOF
+name: strata-live-probe-auth
+version: 1.0.0
+type: add-on
+cloudType: all
+layers:
+  - name: $CHART
+    version: 1.0.0
+    registryUid: $(regf charts-auth uid)
+EOF
+check auth-candidate 0 "#154: a candidate with the chart builds a record, before any profile pins it" -- \
+  "$strata" snapshot --from-candidate auth-candidate.yaml -o auth-candidate.json
+check auth-candidate-minted 0 "#154: its pack has no uid, no digest, the layer addon, and the tag as the version" -- \
+  jq -e '.packs[0] | .packUid == "" and .hash.upstreamSource == "none" and .layer == "addon" and .type == "helm" and .version == "1.0.0"' auth-candidate.json
 check auth-pin 0 "a profile that pins $CHART 1.0.0 from it by name, made and published through the API" -- \
   "$live/api.sh" pin-profile "strata-live-probe-auth" "$(regf charts-auth uid)" helm "$CHART" 1.0.0
 PINNED=$(tail -1 auth-pin.out)
 check auth-record 0 "a record of that profile" -- "$strata" snapshot "$PINNED" --raw-dir raw/auth -o auth.json
+check auth-candidate-same 0 "#154: same-release passes the candidate and the published version, with --allow no-digest" -- \
+  "$strata" same-release auth-candidate.json auth.json --allow no-digest
+"$strata" same-release auth-candidate.json auth.json --allow no-digest --json > auth-candidate-same.json
+check auth-candidate-minted-only 0 "#154: and names the pack in mintedUidOnly" -- \
+  jq -e --arg k "addon/$CHART" '.pairs[0].mintedUidOnly == [$k]' auth-candidate-same.json
+check auth-candidate-again 0 "#154: a record of the candidate after the create" -- \
+  "$strata" snapshot --from-candidate auth-candidate.yaml -o auth-candidate-again.json
+check auth-candidate-listed ? "#154: whether that record has the published root, as the listing now has the chart" -- \
+  jq -e --slurpfile p auth.json '.root == $p[0].root' auth-candidate-again.json
 check auth-no-digest 0 "#75 #71: the pack reference carries no digest, and Palette made a pack uid" -- \
   jq -e '.packs[0] | .hash.upstreamSource == "none" and .refDigest == "" and .registryDigest == "" and .packUid != ""' auth.json
 check auth-verify 1 "#71: verify says UNVERIFIED" -- "$strata" verify auth.json

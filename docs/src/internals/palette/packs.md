@@ -274,6 +274,36 @@ why [`same-release`](../../commands/same-release.md) passes such a pair and the
 equality of roots does not: see
 [One manifest in two profiles](../../use-cases/manifest-pack.md).
 
+## A pack that Palette makes at the create
+
+Palette lists no pack of a registry that it does not sync: a Helm registry that
+is private, and an OCI registry of the provider type `helm` or `zarf` with sync
+off. A profile can still pin a chart of such a registry by its name and tag,
+with no pack uid. When Palette creates the profile, it looks for a pack with
+that registry, name, and tag. When it finds none, it makes one
+(`createPackIfNotExists` and `createPackDoc` in hubble `pack_service.go`):
+
+- a new pack uid,
+- the tag as the version,
+- the layer `addon`, whatever layer the profile gives,
+- no digest, and no default values,
+- for an OCI registry, the provider type of the registry as an annotation.
+
+Palette refuses the create when the tag is not a semantic version. The profile
+takes the layer, the version, and the digest from that pack. A second profile
+that pins the same chart and tag gets the same pack. The listing then has the
+chart while a profile pins it: see
+[The digest of each registry kind](#the-digest-of-each-registry-kind).
+
+`GET /v1/registries/metadata` gives `isPrivate` for each registry, and
+`GET /v1/registries/oci/summary` gives `status.sync.isSyncSupported` for each
+OCI registry. So a client can know, before the create, which registry Palette
+does not sync.
+
+A [candidate file](../../reference/candidate-file.md#a-layer-from-a-registry-that-palette-does-not-sync)
+builds the same pack, with no uid. The check on a live tenant is
+`registry-kinds.sh` stage 2: see [Live runs](../../development/live-runs.md).
+
 ## What a registry answers about a pack
 
 `GET /v1/packs/<name>/registries/<uid>` answers with everything the registry

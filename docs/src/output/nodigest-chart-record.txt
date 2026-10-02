@@ -1,0 +1,5 @@
+$ strata snapshot --from-candidate charts-probe.yaml -o charts/candidate.json
+strata: looking up project dev
+strata: resolving charts-probe@1.0.0 against the registry
+strata: podinfo@6.7.1: registry charts-auth does not sync, so Palette makes the pack when it creates the profile; the record has no pack uid and no digest
+strata: wrote charts/candidate.json (root 96c14b41aff5)

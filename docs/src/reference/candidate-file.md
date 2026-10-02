@@ -51,7 +51,7 @@ library. It then writes no file.
 | Field | Required | Function |
 | --- | --- | --- |
 | `name`, `version` | yes | The pack and its version. |
-| `registry` or `registryUid` | yes, on the layer or at the top; no on a `manifest` layer | The registry, by name or uid. Not both. The setting on the layer has priority over the one at the top. |
+| `registry` or `registryUid` | yes, on the layer or at the top; no on a `manifest` layer | The registry, by name or uid. Not both. The setting on the layer has priority over the one at the top. A registry that Palette does not sync is permitted: see [A layer from a registry that Palette does not sync](#a-layer-from-a-registry-that-palette-does-not-sync). |
 | `type` | no | `manifest` for a layer of manifests that comes from no registry. See [A manifest layer](#a-manifest-layer). Leave it out for a pack from a registry: the registry gives the type. |
 | `values` or `valuesFile` | no | The values, inline or in a file. Not both. With neither, the layer gets the default values of the pack. |
 | `layer` | no | The layer. The default comes from the registry. A `manifest` layer takes only `addon`: see [A manifest layer](#a-manifest-layer). |
@@ -96,6 +96,10 @@ is not a `manifest` layer:
    registry.
 2. `GET /v1/packs/<name>/registries/<uid>`: the tags of that version, and the
    default values and the layer when the listing gives none.
+
+When the listing does not have the version, and the registry is one that
+Palette does not sync, the layer gets the pack that Palette makes at the create.
+See [A layer from a registry that Palette does not sync](#a-layer-from-a-registry-that-palette-does-not-sync).
 
 A version or a tag that the registry does not have is `pack-not-found`. A
 registry name that the key cannot see is `registry-not-found`. A `registryUid`
@@ -184,6 +188,59 @@ Palette builds the pack of a manifest layer from its own manifest pack:
 - **The layer** comes from the manifest pack of Palette too, and is `addon`.
   Palette drops a layer that the profile gives. So strata refuses another
   layer on a `manifest` layer: the published version would not have it.
+
+## A layer from a registry that Palette does not sync
+
+Palette does not sync a Helm registry that is private, or an OCI registry of the
+provider type `helm` or `zarf` with sync off. Its pack listing has no chart of
+such a registry, until a profile pins one. Give the layer its name, its
+version, and its registry, as for another pack:
+
+```text
+{{#include ../output/nodigest-chart-file.txt}}
+```
+
+When the listing does not have the version, strata asks Palette whether the
+registry syncs:
+
+1. `GET /v1/registries/metadata`: the `kind` and `isPrivate` of the registry. A
+   Helm registry that is private does not sync.
+2. `GET /v1/registries/oci/summary`, only for an OCI registry: the provider type
+   and `status.sync.isSyncSupported`. A registry of the provider type `pack`
+   syncs.
+
+A registry that syncs, and does not have the version, is `pack-not-found`. For
+a registry that does not sync, strata builds the pack that Palette makes when it
+creates the profile:
+
+- **No pack uid.** Palette gives the uid at the create.
+- **No digest.** `upstreamSource` is `none`.
+- **The type** of the registry: `helm`, or `oci` with the provider type of the
+  registry.
+- **The layer** `addon`. Palette drops a layer that the profile gives, so
+  strata refuses another layer.
+- **The tag as the version.** Strata refuses a `tag` that is not equal to the
+  version. Palette refuses the create when the tag is not a semantic version,
+  so strata refuses that tag too. All three refusals are `candidate-invalid`.
+- **The values of the file.** Palette has no default values for such a pack.
+
+```text
+{{#include ../output/nodigest-chart-record.txt}}
+{{#include ../output/nodigest-chart-pack.txt}}
+```
+
+The record of the published version has the pack uid that Palette made, so the
+roots differ by that uid alone. `same-release` passes the pair as
+`SAME CONTENT` with `--allow no-digest`, because the pack has no digest, and
+`mintedUidOnly` names the pack:
+
+```text
+{{#include ../output/nodigest-chart-allow.txt}}
+```
+
+After the create, the listing has the chart with that uid. A record of the same
+file then gets the uid, and has the published root. See
+[A pack that Palette makes at the create](../internals/palette/packs.md#a-pack-that-palette-makes-at-the-create).
 
 ## Write one from a published version
 

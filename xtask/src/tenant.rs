@@ -16,6 +16,10 @@ pub const PUBLIC_REPO: &str = "5eecc89d0b150045ae661cef";
 /// The uid of the OCI pack registry that the live run of 20260917T150025Z found.
 pub const PALETTE_REGISTRY: &str = "64ec000000000000000000a1";
 const OCI_CSI_PACK: &str = "64ec000000000000000000b1";
+/// The uid of a private Helm registry, which Palette does not sync.
+pub const PRIVATE_CHARTS: &str = "64ed000000000000000000a1";
+/// The chart that a profile pins from it.
+const CHART: &str = "podinfo";
 const OCI_CSI_DIGEST: &str =
     "sha256:a746e14689085b14531566f9c9cfb2bc7716e96a394547ef50a1c52eab510c9e";
 
@@ -498,6 +502,78 @@ impl Tenant {
             project,
             &format!("v1/clusterprofiles/{uid}/variables"),
             &json!({"variables": []}),
+        );
+        self.listings();
+    }
+
+    /// A Helm registry that is private, `charts-auth`. Palette does not sync it, so the pack
+    /// listing has no chart of it until a profile pins one.
+    pub fn private_charts(&self, project: &str) {
+        let path = "v1/registries/metadata";
+        let mut listing = self.read(project, path);
+        if let Some(items) = listing["items"].as_array_mut() {
+            items.push(
+                json!({"name": "charts-auth", "uid": PRIVATE_CHARTS, "kind": "helm",
+                "isPrivate": true}),
+            );
+        }
+        self.write(project, path, &listing);
+        self.write(
+            project,
+            &format!("v1/packs@filters=spec.name={CHART}&limit=100&offset=0"),
+            &json!({"items": [], "listmeta": {"count": 0}}),
+        );
+    }
+
+    /// Create and publish the add-on profile `charts-probe`, which pins the chart of
+    /// [`Tenant::private_charts`] at `version`. Palette makes the pack at the create, with the uid
+    /// `pack`, the layer addon, the tag as the version, and no digest, and the listing then has it
+    /// (hubble `createPackDoc`).
+    pub fn chart_profile(&self, project: &str, uid: &str, pack: &str, version: &str) {
+        let values = "replicaCount: 2\n";
+        self.write(
+            project,
+            &format!("v1/clusterprofiles/{uid}"),
+            &json!({
+                "apiVersion": "v1", "kind": "ClusterProfile",
+                "metadata": {"name": "charts-probe", "uid": uid},
+                "spec": {"version": "1.0.0", "published": {"cloudType": "all", "type": "add-on",
+                    "packs": [{"name": CHART, "layer": "addon", "type": "helm", "tag": version,
+                        "version": version, "packUid": pack, "registryUid": PRIVATE_CHARTS,
+                        "values": values, "presets": [], "schema": []}]}},
+                "status": {"isPublished": true, "inUseClusterUids": [], "inUseClusters": []}
+            }),
+        );
+        self.write(
+            project,
+            &format!("v1/clusterprofiles/{uid}/packs/manifests"),
+            &json!({
+                "metadata": {"name": "charts-probe", "uid": uid},
+                "spec": {"packs": [{"metadata": {"name": CHART, "uid": pack},
+                    "spec": {"name": CHART, "layer": "addon", "version": version,
+                        "registryUid": PRIVATE_CHARTS, "digest": "", "manifests": []},
+                    "status": {}}]}
+            }),
+        );
+        self.write(
+            project,
+            &format!("v1/clusterprofiles/{uid}/variables"),
+            &json!({"variables": []}),
+        );
+        let made = json!({"metadata": {"uid": pack, "name": CHART},
+            "spec": {"name": CHART, "version": version, "registryUid": PRIVATE_CHARTS,
+                "layer": "addon", "type": "helm", "digest": ""}});
+        self.write(
+            project,
+            &format!("v1/packs@filters=spec.name={CHART}&limit=100&offset=0"),
+            &json!({"items": [made], "listmeta": {"count": 1}}),
+        );
+        self.write(
+            project,
+            &format!("v1/packs/{CHART}/registries/{PRIVATE_CHARTS}"),
+            &json!({"name": CHART, "layer": "addon",
+                "tags": [{"tag": version, "version": version, "packUid": pack}],
+                "packValues": [{"packUid": pack, "values": ""}]}),
         );
         self.listings();
     }
