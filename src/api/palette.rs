@@ -319,13 +319,25 @@ impl<A: PaletteApi> Palette<A> {
 
     /// GET a variables endpoint; a missing endpoint (404 or 405, as on older Palette versions) is
     /// `none`, other errors propagate.
+    /// Palette also answers 404 when it does not have the object. So after a 404, strata reads
+    /// `owner`, the document of the object, again. An error of that read returns: the object is
+    /// gone, and "no variables" is wrong.
     /// The second value is true when the endpoint was unavailable and `none` stands in for it. A
     /// caller must record that: "no variables" and "the variables could not be read" give the same
     /// root, and only this flag tells them apart afterwards.
-    fn variables_or(&self, path: &str, none: Value, progress: &Progress) -> Result<(Value, bool)> {
+    fn variables_or(
+        &self,
+        path: &str,
+        owner: &str,
+        none: Value,
+        progress: &Progress,
+    ) -> Result<(Value, bool)> {
         match self.api.get_json(path) {
             Ok(v) => Ok((v, false)),
             Err(Error::Api { status, .. }) if status == 404 || status == 405 => {
+                if status == 404 {
+                    self.api.get_json(owner)?;
+                }
                 progress.note(&format!(
                     "note: {path} is unavailable; treating as no variables"
                 ));
@@ -336,8 +348,9 @@ impl<A: PaletteApi> Palette<A> {
     }
 
     /// Fetch the three documents for one profile. If the variables endpoint answers 404 or 405, as
-    /// on older Palette versions, the profile has no variables. Other errors return. For a profile
-    /// that has a draft, also each of its manifests: see [`RawProfile::manifest_entities`].
+    /// on older Palette versions, the profile has no variables. If the profile is gone, the error
+    /// of its document returns. Other errors return. For a profile that has a draft, also each of
+    /// its manifests: see [`RawProfile::manifest_entities`].
     /// Palette serves the draft packs with each secret in clear: strata masks them first, see
     /// `mask_draft`.
     pub fn fetch_profile(&self, uid: &str, progress: &Progress) -> Result<RawProfile> {
@@ -350,6 +363,7 @@ impl<A: PaletteApi> Palette<A> {
         let manifest_entities = self.manifest_entities(uid, &profile, progress)?;
         let (variables, variables_unavailable) = self.variables_or(
             &format!("/v1/clusterprofiles/{uid}/variables"),
+            &format!("/v1/clusterprofiles/{uid}"),
             serde_json::json!({ "variables": [] }),
             progress,
         )?;
@@ -577,6 +591,7 @@ impl<A: PaletteApi> Palette<A> {
         ))?;
         let (variables, variables_unavailable) = self.variables_or(
             &format!("/v1/spectroclusters/{uid}/variables"),
+            &format!("/v1/spectroclusters/{uid}"),
             serde_json::json!([]),
             progress,
         )?;
@@ -847,8 +862,10 @@ impl<A: PaletteApi> Palette<A> {
         let mut variables_unavailable = false;
         for t in &templates {
             let puid = t.get("uid").and_then(Value::as_str).unwrap_or_default();
+            let profile = format!("/v1/clusterprofiles/{}", query_value(puid));
             let (v, unavailable) = self.variables_or(
-                &format!("/v1/clusterprofiles/{}/variables", query_value(puid)),
+                &format!("{profile}/variables"),
+                &profile,
                 serde_json::json!({ "variables": [] }),
                 progress,
             )?;
