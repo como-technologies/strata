@@ -640,24 +640,26 @@ impl<A: PaletteApi> Palette<A> {
             serde_json::json!([]),
             progress,
         )?;
-        // the updates that wait for the cluster are a statement of Palette beside the copy, not
-        // part of it: a failed read is recorded, and the record is still taken
-        let (notifications, notifications_error) = match self.cluster_notifications(uid) {
-            Ok(items) => (Some(Value::Array(items)), None),
-            Err(Error::Api { status, body, .. }) => {
-                progress.note(&format!(
-                    "note: the notifications of cluster {uid} are unavailable (HTTP {status})"
-                ));
-                (None, Some(format!("HTTP {status}: {body}")))
-            }
-            Err(e) => return Err(e),
-        };
+        // the updates and the repave that wait, the bindings, and the namespaces are beside the
+        // copy, not part of it: strata records the error of a read, and still takes the record
+        let (notifications, notifications_error) = or_unread(
+            self.cluster_notifications(uid).map(Value::Array),
+            &format!("notifications of cluster {uid}"),
+            progress,
+        )?;
         // the cluster document gives only the state of a repave; its own route gives the reasons
-        let repave = if crate::repave::is_pending(&cluster) {
-            Some(self.cluster_repave(uid)?)
+        let (repave, repave_error) = if crate::repave::is_pending(&cluster) {
+            or_unread(
+                self.cluster_repave(uid),
+                &format!("reasons of the repave of cluster {uid}"),
+                progress,
+            )?
         } else {
-            None
+            (None, None)
         };
+        let (rbacs, rbacs_error) = self.cluster_config(uid, ConfigPart::Rbacs, progress)?;
+        let (namespaces, namespaces_error) =
+            self.cluster_config(uid, ConfigPart::Namespaces, progress)?;
         Ok(RawCluster {
             cluster,
             manifests,
@@ -668,10 +670,13 @@ impl<A: PaletteApi> Palette<A> {
             notifications,
             notifications_error,
             repave,
+            repave_error,
             resolved_values: None,
             cloud_config: None,
-            rbacs: self.cluster_config(uid, ConfigPart::Rbacs, progress)?,
-            namespaces: self.cluster_config(uid, ConfigPart::Namespaces, progress)?,
+            rbacs,
+            rbacs_error,
+            namespaces,
+            namespaces_error,
         })
     }
 
@@ -938,10 +943,13 @@ impl<A: PaletteApi> Palette<A> {
             notifications: None,
             notifications_error: None,
             repave: None,
+            repave_error: None,
             resolved_values: None,
             cloud_config: None,
             rbacs: None,
+            rbacs_error: None,
             namespaces: None,
+            namespaces_error: None,
         })
     }
 
@@ -1176,34 +1184,34 @@ impl<A: PaletteApi> Palette<A> {
     }
 
     /// One part of the config of the cluster `uid`, `GET
-    /// /v1/spectroclusters/{uid}/config/{part}`: its role bindings or its namespaces. Palette
-    /// gives `items`, one entry for each. A 404 gives `None`, so the record holds null for the
-    /// part, and not an empty list.
+    /// /v1/spectroclusters/{uid}/config/{part}`: its role bindings or its namespaces, and why
+    /// Palette did not give them.
+    ///
+    /// Palette gives `items`, one entry for each. A 404 gives no part and no error, so the record
+    /// holds null for the part, and not an empty list. Another answer of Palette that is an error
+    /// gives no part, and its error: see [`or_unread`].
     ///
     /// # Errors
     ///
-    /// Each error of the request other than a 404.
+    /// Each error of the request that is not an answer of Palette.
     fn cluster_config(
         &self,
         uid: &str,
         part: ConfigPart,
         progress: &Progress,
-    ) -> Result<Option<Value>> {
+    ) -> Result<(Option<Value>, Option<String>)> {
         let path = format!(
             "/v1/spectroclusters/{}/config/{}",
             query_value(uid),
             part.route()
         );
+        let what = format!("{} of cluster {uid}", part.noun());
         match self.api.get_json(&path) {
-            Ok(v) => Ok(Some(v)),
             Err(Error::Api { status: 404, .. }) => {
-                progress.note(&format!(
-                    "note: the {} of cluster {uid} are unavailable (HTTP 404)",
-                    part.noun()
-                ));
-                Ok(None)
+                progress.note(&format!("note: the {what} are unavailable (HTTP 404)"));
+                Ok((None, None))
             }
-            Err(e) => Err(e),
+            answer => or_unread(answer, &what, progress),
         }
     }
 
@@ -1336,6 +1344,30 @@ mod tests {
             .fetch_profile("u1", &Progress::silent())
             .unwrap_err();
         assert!(matches!(err, Error::Api { status: 500, .. }), "{err}");
+    }
+}
+
+/// The answer of a read beside the profiles of a cluster, or why Palette did not give it.
+///
+/// An answer of Palette that is an error does not stop the record. The record holds `HTTP
+/// <status>: <body>` in place of the document, and a note names `what`: `notifications of
+/// cluster <uid>`.
+///
+/// # Errors
+///
+/// Each error that is not an answer of Palette, such as a refused connection.
+fn or_unread(
+    answer: Result<Value>,
+    what: &str,
+    progress: &Progress,
+) -> Result<(Option<Value>, Option<String>)> {
+    match answer {
+        Ok(doc) => Ok((Some(doc), None)),
+        Err(Error::Api { status, body, .. }) => {
+            progress.note(&format!("note: the {what} are unavailable (HTTP {status})"));
+            Ok((None, Some(format!("HTTP {status}: {}", body.trim()))))
+        }
+        Err(e) => Err(e),
     }
 }
 

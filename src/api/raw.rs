@@ -266,8 +266,11 @@ pub struct RawCluster {
     /// Why Palette did not give the notifications, when it did not
     pub notifications_error: Option<String>,
     /// `GET /v1/spectroclusters/{uid}/repave/status`: the repave that waits for approval. `None`
-    /// when no repave waits, and for a directory that an older build saved.
+    /// when no repave waits, when Palette did not give it, and for a directory that an older build
+    /// saved.
     pub repave: Option<Value>,
+    /// Why Palette did not give the repave that waits, when it did not
+    pub repave_error: Option<String>,
     /// `GET /v1/spectroclusters/{uid}/packs/resolvedValues`: for each applied profile, the value
     /// Palette gives each macro. `None` unless asked for, with `snapshot --macros`.
     pub resolved_values: Option<Value>,
@@ -275,12 +278,16 @@ pub struct RawCluster {
     /// the cluster. `None` unless asked for, with `snapshot --shape`.
     pub cloud_config: Option<Value>,
     /// `GET /v1/spectroclusters/{uid}/config/rbacs`: the role bindings of the cluster. `None`
-    /// when Palette answered 404, for an edge host and a cluster group, and for a directory that
-    /// an older build saved.
+    /// when Palette did not give them, for an edge host and a cluster group, and for a directory
+    /// that an older build saved.
     pub rbacs: Option<Value>,
+    /// Why Palette did not give the role bindings, when it answered with an error other than 404
+    pub rbacs_error: Option<String>,
     /// `GET /v1/spectroclusters/{uid}/config/namespaces`: the namespaces of the cluster, with the
     /// resources that each one can use. `None` in the same cases as `rbacs`.
     pub namespaces: Option<Value>,
+    /// Why Palette did not give the namespaces, when it answered with an error other than 404
+    pub namespaces_error: Option<String>,
 }
 
 impl RawCluster {
@@ -299,10 +306,13 @@ impl RawCluster {
             notifications: read_optional(dir, Self::NOTIFICATIONS)?,
             notifications_error: None,
             repave: read_optional(dir, Self::REPAVE)?,
+            repave_error: None,
             resolved_values: read_optional(dir, Self::RESOLVED_VALUES)?,
             cloud_config: read_optional(dir, Self::CLOUD_CONFIG)?,
             rbacs: read_optional(dir, Self::RBACS)?,
+            rbacs_error: None,
             namespaces: read_optional(dir, Self::NAMESPACES)?,
+            namespaces_error: None,
         })
     }
 

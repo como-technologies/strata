@@ -1601,6 +1601,23 @@ impl Tenant {
         );
     }
 
+    /// Make Palette refuse `GET path` in `project` with HTTP 403, as it does for a user whose role
+    /// does not give the permission that the route needs. The body is in the form of the bodies of
+    /// Palette, with the code `AccessDenied`.
+    pub fn forbid(&self, project: &str, path: &str) {
+        let file = self.doc(project, path);
+        if file.is_file() {
+            std::fs::remove_file(&file).unwrap_or_else(|e| panic!("{}: {e}", file.display()));
+        }
+        let refused = crate::palette::forbidden(&file);
+        let body = json!({
+            "code": "AccessDenied",
+            "message": "cluster.get operation is not permitted, required permissions cluster.get",
+        });
+        std::fs::write(&refused, body.to_string() + "\n")
+            .unwrap_or_else(|e| panic!("{}: {e}", refused.display()));
+    }
+
     /// Hold a repave of a cluster for approval, as Palette does at the next read of the agent
     /// after a macro in `kubeadmconfig.postKubeadmCommands` gets a new value.
     ///

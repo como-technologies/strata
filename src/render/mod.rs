@@ -914,6 +914,8 @@ pub(crate) fn repave_pending_notes(d: &Diff) -> Vec<String> {
                 if !reasons.is_empty() {
                     note.push_str(&format!(": {}", reasons.join("; ")));
                 }
+            } else if let Some(e) = &c.pending_repave_error {
+                note.push_str(&format!(" (strata could not read its reasons: {e})"));
             }
             note.push_str(". Palette refuses an update of its profiles until a person approves it");
             note
@@ -921,6 +923,28 @@ pub(crate) fn repave_pending_notes(d: &Diff) -> Vec<String> {
         .collect();
     notes.dedup();
     notes
+}
+
+/// One note for each field of a cluster tier that strata could not read on a side: `strata could
+/// not read policy.rbacs of cluster fred (HTTP 403: forbidden), so it does not compare it`, in
+/// text order. Two sides that say the same get one note.
+pub(crate) fn unread_notes(d: &Diff) -> Vec<String> {
+    let notes: std::collections::BTreeSet<String> = [&d.a, &d.b]
+        .into_iter()
+        .filter_map(|side| side.cluster.as_ref())
+        .flat_map(|c| {
+            c.tiers.iter().flat_map(move |(tier, t)| {
+                t.errors.iter().map(move |(field, e)| {
+                    format!(
+                        "strata could not read {} of cluster {} ({e}), so it does not compare it",
+                        tier_path(tier, field),
+                        c.name
+                    )
+                })
+            })
+        })
+        .collect();
+    notes.into_iter().collect()
 }
 
 /// One note for each pack that a cluster side runs at another version than its profile

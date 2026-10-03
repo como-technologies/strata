@@ -403,6 +403,11 @@ impl Runner {
         self.build(|t| t.repave_waits(project, cluster, since));
     }
 
+    /// Make Palette refuse one request with HTTP 403: see [`Tenant::forbid`].
+    pub fn forbid(&mut self, project: &str, path: &str) {
+        self.build(|t| t.forbid(project, path));
+    }
+
     /// Set the answer of `validate/packs` for a cluster: see [`Tenant::packs_answer`].
     pub fn packs_answer(&mut self, project: &str, cluster: &str, refusal: Option<PackRefusal>) {
         self.build(|t| t.packs_answer(project, cluster, refusal));

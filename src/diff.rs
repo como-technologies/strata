@@ -13,7 +13,7 @@ use crate::cluster_template::ClusterTemplateRef;
 pub use crate::impact::{Flags, Impact, ImpactLevel, impact, presence_impact};
 use crate::layer::Layer;
 pub use crate::repave::PaletteRepaveReason;
-use crate::snapshot::{ClusterVariable, Pack, Snapshot, Source, Tool};
+use crate::snapshot::{ClusterTier, ClusterVariable, Pack, Snapshot, Source, Tool};
 pub use crate::validation::{PaletteRefusal, PaletteValidation};
 
 /// Schema id written into every diff document.
@@ -251,6 +251,17 @@ pub struct RunningBehind {
     pub running: String,
 }
 
+/// `fields` less each field that strata could not read in the tier `a` or `b`: an error of
+/// Palette is not a change of the cluster.
+fn read_fields(mut fields: Value, a: &ClusterTier, b: &ClusterTier) -> Value {
+    if let Some(map) = fields.as_object_mut() {
+        for key in a.errors.keys().chain(b.errors.keys()) {
+            map.remove(key);
+        }
+    }
+    fields
+}
+
 /// The tiers that two cluster records both carry, and their labels, compared.
 fn tiers_diff(a: &Snapshot, b: &Snapshot) -> Vec<TierDiff> {
     let (Some(x), Some(y)) = (&a.source.cluster, &b.source.cluster) else {
@@ -279,6 +290,7 @@ fn tiers_diff(a: &Snapshot, b: &Snapshot) -> Vec<TierDiff> {
                 "policy" => crate::policy::comparable(&t.fields, &u.fields),
                 _ => (t.fields.clone(), u.fields.clone()),
             };
+            let (f, g) = (read_fields(f, t, u), read_fields(g, t, u));
             let same = f == g;
             Some(TierDiff {
                 tier: name.clone(),

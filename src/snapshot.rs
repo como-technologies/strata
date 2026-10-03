@@ -316,9 +316,13 @@ pub struct ClusterSource {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub repave_pending: Option<bool>,
     /// The repave that waits, with the reasons that Palette gives for it. Absent when no repave
-    /// waits.
+    /// waits, and when strata could not read it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pending_repave: Option<PendingRepave>,
+    /// Why strata could not read the repave that waits, when `pendingRepave` is absent for that
+    /// reason.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pending_repave_error: Option<String>,
     /// With `snapshot --macros`: each user macro the recorded content uses, and the `sha256:` of
     /// the value Palette gives it for this cluster, or `unresolved`. A value can be a secret, so
     /// the record holds its digest and not the value. Outside the root; `verify` reads the values
@@ -357,6 +361,10 @@ pub struct ClusterTier {
     pub hash: String,
     /// What the tier covers, as Palette gives it.
     pub fields: Value,
+    /// Each field that strata could not read, with why: `rbacs` and `HTTP 403: <body>`. The field
+    /// is null in `fields`, and `compare` and `verify` do not compare it. Not part of the hash.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub errors: BTreeMap<String, String>,
 }
 
 impl ClusterTier {
@@ -364,6 +372,7 @@ impl ClusterTier {
         ClusterTier {
             hash: sha256_hex(&canonical_json(&fields)),
             fields,
+            errors: BTreeMap::new(),
         }
     }
 }
@@ -400,7 +409,10 @@ pub fn cluster_tiers(
     if let Some(config) = cluster.pointer("/spec/clusterConfig") {
         tiers.insert(
             "policy".to_string(),
-            ClusterTier::of(crate::policy::fields(raw, config)),
+            ClusterTier {
+                errors: crate::policy::errors(raw),
+                ..ClusterTier::of(crate::policy::fields(raw, config))
+            },
         );
     }
     // the document of a cluster group has spec.clustersConfig, and no spec.clusterConfig
@@ -1414,6 +1426,7 @@ impl Snapshot {
                     pending_updates,
                     repave_pending: Some(is_pending(&raw.cluster)),
                     pending_repave: raw.repave.as_ref().map(PendingRepave::read),
+                    pending_repave_error: raw.repave_error.clone(),
                     macro_values: raw
                         .resolved_values
                         .as_ref()
@@ -1481,6 +1494,7 @@ impl Snapshot {
             c.pending_updates.clear();
             c.repave_pending = None;
             c.pending_repave = None;
+            c.pending_repave_error = None;
         }
         self
     }
@@ -1496,6 +1510,7 @@ impl Snapshot {
                 c.variables.clear();
                 c.repave_pending = None;
                 c.pending_repave = None;
+                c.pending_repave_error = None;
             }
         }
         self

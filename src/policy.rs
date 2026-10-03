@@ -4,6 +4,8 @@
 //! bindings and its namespaces, and how it takes an update. The tier of a cluster group holds the
 //! config that the group gives each virtual cluster.
 
+use std::collections::BTreeMap;
+
 use serde_json::{Map, Value, json};
 
 use crate::api::RawCluster;
@@ -11,6 +13,9 @@ use crate::canon::{canon_yaml_hashed, canonical_json};
 
 /// The key of the policy fields that holds the role bindings.
 const RBACS: &str = "rbacs";
+
+/// The key of the policy fields that holds the namespaces.
+const NAMESPACES: &str = "namespaces";
 
 /// The key of the policy fields of a cluster record from before strata read the bindings: the
 /// references to the bindings and the namespaces. The policy tier of a cluster group does not
@@ -48,7 +53,7 @@ pub(crate) fn fields(raw: &RawCluster, config: &Value) -> Value {
         "timezone": text(config, "/timezone"),
         "fips": text(cluster, "/status/fips/mode"),
         RBACS: raw.rbacs.as_ref().map(bindings),
-        "namespaces": raw.namespaces.as_ref().map(namespaces),
+        NAMESPACES: raw.namespaces.as_ref().map(namespaces),
         // Palette omits the field when it is false
         "updateWorkerPoolsInParallel": config
             .get("updateWorkerPoolsInParallel")
@@ -70,6 +75,18 @@ fn agent_upgrades_forbidden(cluster: &Value) -> Option<&Value> {
     cluster
         .pointer("/metadata/annotations")?
         .get(AGENT_UPGRADES_FORBIDDEN)
+}
+
+/// Each policy field of the cluster in `raw` that strata could not read, with why: the role
+/// bindings and the namespaces, when Palette answered their route with an error other than 404.
+pub(crate) fn errors(raw: &RawCluster) -> BTreeMap<String, String> {
+    [
+        (RBACS, &raw.rbacs_error),
+        (NAMESPACES, &raw.namespaces_error),
+    ]
+    .into_iter()
+    .filter_map(|(key, error)| Some((key.to_string(), error.clone()?)))
+    .collect()
 }
 
 /// The fields of the policy tier of a cluster group, from its `spec.clustersConfig` in `config`:

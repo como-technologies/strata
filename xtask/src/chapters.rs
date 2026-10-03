@@ -2282,6 +2282,28 @@ fn use_cases(r: &mut Runner) {
         false,
         "strata compare cluster:payments aws-stack@1.1.1 --json | jq -c '.runningBehind'",
     );
+    // the key loses the permission to read the role bindings of payments: the record holds the
+    // error in the policy tier, and verify does not compare the field (#251)
+    r.forbid(DEV, &format!("v1/spectroclusters/{PAYMENTS}/config/rbacs"));
+    r.serve_here(); // state 3: Palette refuses the role bindings of payments
+    r.step(
+        "tiers-forbidden-record",
+        0,
+        true,
+        "strata snapshot cluster:payments -o runs/payments-now.json",
+    );
+    r.step(
+        "tiers-forbidden-errors",
+        0,
+        false,
+        "jq '.source.cluster.tiers.policy | {rbacs: .fields.rbacs, errors}' runs/payments-now.json",
+    );
+    r.step(
+        "tiers-forbidden-verify",
+        0,
+        false,
+        "strata verify runs/payments.json",
+    );
 
     // The shape tier reads the fields of the cloud type of the cluster. lab runs on vSphere: its
     // cloud config has the model of the API reference of Palette.

@@ -1949,7 +1949,7 @@ fn a_policy_tier_of_strata_0_18_with_agent_upgrades_still_verifies() {
 }
 
 #[test]
-fn a_404_of_the_route_of_the_bindings_records_null_and_another_error_stops_the_record() {
+fn a_404_of_the_route_of_the_bindings_records_null_and_another_error_is_a_field_of_the_tier() {
     let dir = tempfile::tempdir().unwrap();
     common::make_fixtures(dir.path());
     // the route of the role bindings answers 404, and the cluster has no namespace
@@ -1962,9 +1962,120 @@ fn a_404_of_the_route_of_the_bindings_records_null_and_another_error_stops_the_r
     assert_eq!(p["rbacs"], Value::Null, "not read, and not an empty list");
     assert_eq!(p["namespaces"], serde_json::json!([]));
 
-    let forbidden = serve_policy(dir.path(), barney()).failing(rbacs_route(), 403, "forbidden");
-    let err = snapshot_cluster(&forbidden, None).unwrap_err();
-    assert!(matches!(err, Error::Api { status: 403, .. }), "{err}");
+    // a 403 of the route of the role bindings does not stop the record
+    let forbidden = serve_policy(dir.path(), barney()).failing(rbacs_route(), 403, "forbidden\n");
+    let s = snapshot_cluster(&forbidden, None).unwrap();
+    let tier = &s.source.cluster.as_ref().unwrap().tiers["policy"];
+    assert_eq!(tier.fields["rbacs"], Value::Null);
+    assert_eq!(
+        tier.fields["timezone"], "Etc/UTC",
+        "the other fields are read"
+    );
+    assert_eq!(
+        tier.errors,
+        std::collections::BTreeMap::from([(
+            "rbacs".to_string(),
+            "HTTP 403: forbidden".to_string()
+        )])
+    );
+    let json = serde_json::to_value(&s).unwrap();
+    assert_eq!(
+        json["source"]["cluster"]["tiers"]["policy"]["errors"]["rbacs"],
+        "HTTP 403: forbidden"
+    );
+    // the error is not part of the hash: a 404 gives the same fields, and no error
+    let missing = serve_policy(dir.path(), barney()).failing(rbacs_route(), 404, "not found");
+    let m = snapshot_cluster(&missing, None).unwrap();
+    let missing_tier = &m.source.cluster.as_ref().unwrap().tiers["policy"];
+    assert_eq!(missing_tier.hash, tier.hash);
+    assert!(missing_tier.errors.is_empty());
+    assert!(
+        serde_json::to_value(&m).unwrap()["source"]["cluster"]["tiers"]["policy"]
+            .get("errors")
+            .is_none()
+    );
+
+    // the same for the route of the namespaces
+    let forbidden =
+        serve_policy(dir.path(), barney()).failing(namespaces_route(), 403, "forbidden");
+    let s = snapshot_cluster(&forbidden, None).unwrap();
+    let tier = &s.source.cluster.as_ref().unwrap().tiers["policy"];
+    assert_eq!(tier.fields["namespaces"], Value::Null);
+    assert_ne!(tier.fields["rbacs"], Value::Null);
+    assert_eq!(
+        tier.errors,
+        std::collections::BTreeMap::from([(
+            "namespaces".to_string(),
+            "HTTP 403: forbidden".to_string()
+        )])
+    );
+}
+
+#[test]
+fn verify_and_compare_do_not_compare_a_policy_field_that_strata_could_not_read_and_name_it() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let recorded = snapshot_cluster(&serve_policy(dir.path(), barney()), None).unwrap();
+    let name = recorded.source.cluster.as_ref().unwrap().name.clone();
+    // the bindings changed, and Palette now refuses their route: strata cannot see the change
+    let forbidden = serve_policy(
+        dir.path(),
+        serde_json::json!([{"type": "User", "name": "fred"}]),
+    )
+    .failing(rbacs_route(), 403, "forbidden");
+    let note = format!(
+        "strata could not read policy.rbacs of cluster {name} (HTTP 403: forbidden), so it does \
+         not compare it"
+    );
+
+    let v = ops::verify(
+        &recorded,
+        &Palette::new(forbidden.clone()),
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert_eq!(v.status, VerifyStatus::Unchanged);
+    assert!(policy_diff(&v.diff).same, "{:?}", policy_diff(&v.diff).diff);
+    let text = render::renderer(Format::Terminal, Paint::off(), false)
+        .render(&v.diff, &recorded, &v.live, false)
+        .unwrap();
+    assert!(text.contains(&format!("note       {note}\n")), "{text}");
+    assert_eq!(text.matches(&note).count(), 1, "{text}");
+
+    // compare of two records that both could not read the field gives one note
+    let live = snapshot_cluster(&forbidden, None).unwrap();
+    let d = ops::compare(&live, &live, "t1");
+    assert!(policy_diff(&d).same);
+    let md = render::renderer(Format::Markdown, Paint::off(), false)
+        .render(&d, &live, &live, false)
+        .unwrap();
+    assert_eq!(
+        md.matches(&format!("**Note:** {note}\n")).count(),
+        1,
+        "{md}"
+    );
+
+    // a field that both records read still compares
+    let fred = snapshot_cluster(
+        &serve_policy(
+            dir.path(),
+            serde_json::json!([{"type": "User", "name": "fred"}]),
+        )
+        .failing(namespaces_route(), 403, "forbidden"),
+        None,
+    )
+    .unwrap();
+    let d = ops::compare(&recorded, &fred, "t1");
+    let paths: Vec<&str> = policy_diff(&d)
+        .diff
+        .iter()
+        .map(|l| l.path.as_str())
+        .collect();
+    assert!(
+        paths.iter().all(|p| p.starts_with("rbacs[")) && !paths.is_empty(),
+        "{paths:?}"
+    );
 }
 
 #[test]
@@ -6723,6 +6834,55 @@ fn mark_pending_and_with_kind_clear_the_pending_repave() {
         assert_eq!(c.repave_pending, None, "{kind:?}");
         assert!(c.pending_repave.is_none(), "{kind:?}");
     }
+}
+
+#[test]
+fn a_cluster_record_holds_the_error_of_the_route_of_the_repave_and_verify_names_it() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let before = snapshot_cluster(
+        &serve_cluster(MemoryApi::new(), dir.path(), "cluster-merged"),
+        None,
+    )
+    .unwrap();
+    let api =
+        serve_repave(dir.path(), "cluster-merged", "Pending").failing(REPAVE, 403, "forbidden");
+    let waits = snapshot_cluster(&api, None).unwrap();
+    let c = waits.source.cluster.as_ref().unwrap();
+    assert_eq!(c.repave_pending, Some(true), "the cluster document says it");
+    assert!(c.pending_repave.is_none());
+    assert_eq!(
+        c.pending_repave_error.as_deref(),
+        Some("HTTP 403: forbidden")
+    );
+    let json = serde_json::to_value(&waits).unwrap();
+    assert_eq!(
+        json["source"]["cluster"]["pendingRepaveError"],
+        "HTTP 403: forbidden"
+    );
+
+    let v = ops::verify(&before, &Palette::new(api), "t1", &Progress::silent()).unwrap();
+    assert_eq!(v.status, VerifyStatus::Unchanged);
+    let text = render::renderer(Format::Terminal, Paint::off(), false)
+        .render(&v.diff, &before, &v.live, false)
+        .unwrap();
+    let note = "a repave of cluster lab-cluster waits for approval (strata could not read its \
+                reasons: HTTP 403: forbidden). Palette refuses an update of its profiles until a \
+                person approves it";
+    assert!(text.contains(&format!("note       {note}\n")), "{text}");
+
+    // the error says nothing about the profiles of a pending update, or of another kind
+    let pending = waits.clone().mark_pending();
+    assert!(
+        pending
+            .source
+            .cluster
+            .unwrap()
+            .pending_repave_error
+            .is_none()
+    );
+    let host = waits.with_kind(strata::snapshot::SubjectKind::EdgeHost);
+    assert!(host.source.cluster.unwrap().pending_repave_error.is_none());
 }
 
 #[test]

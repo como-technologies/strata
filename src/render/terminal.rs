@@ -11,7 +11,7 @@ use super::{
     palette_validation_lines, profiles_overwritten_sentence, project_label, record_detail,
     record_label, recorded_noun, registry_note, registry_sync_suffix, repave_pending_notes,
     running_behind_notes, same_content_note, second_reading_counts, short, show, state_suffix,
-    subject, tag_rename, tier_path, tier_states, traits_suffix, unchanged_sentence,
+    subject, tag_rename, tier_path, tier_states, traits_suffix, unchanged_sentence, unread_notes,
     unverified_sentence, updates_pending_notes, upstream_unknown_note, values_changed_suffix,
     variable_lines, variables_comparable, variables_unavailable_note, version_display, who_entry,
     who_heading,
@@ -301,6 +301,9 @@ impl Renderer for TerminalRenderer {
             out.push(format!("note       {}", p.byellow(&note)));
         }
         for note in repave_pending_notes(d) {
+            out.push(format!("note       {}", p.byellow(&note)));
+        }
+        for note in unread_notes(d) {
             out.push(format!("note       {}", p.byellow(&note)));
         }
         for note in running_behind_notes(d) {
