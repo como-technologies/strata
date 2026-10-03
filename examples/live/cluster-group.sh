@@ -11,7 +11,10 @@
 #   2  an edit in place of a manifest of the add-on version: the group and the member each keep
 #      their own copy of the manifest, under a uid of its own, and the version differs; then the
 #      undo
-#   3  the group and the member removed: the baseline
+#   3  the CPU limit of the group changes, through OpenTofu: verify of a record from before
+#      reports the policy tier, and compare of it with the group names limitConfig.cpuMilliCore
+#      and the tier, each with exit 0 (#110); then the limit back
+#   4  the group and the member removed: the baseline
 #
 # Needs the live example at its baseline with cluster A (just live-up), the strata release binary,
 # jq, and the key as verify.sh needs it. The virtual cluster runs in cluster A, so it adds no
@@ -20,7 +23,7 @@
 set -uo pipefail
 script=cluster-group
 from=${1:-1}
-case "$from" in 1|2|3) ;; *) sed -n '2,/^set -uo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; exit 2 ;; esac
+case "$from" in 1|2|3|4) ;; *) sed -n '2,/^set -uo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; exit 2 ;; esac
 . "$(cd "$(dirname "$0")" && pwd)/lib.sh"
 [ -x "$strata" ] || die "no strata binary at $strata"
 
@@ -131,7 +134,28 @@ if stage 2 "an edit in place of the add-on version"; then
   check edit-undo 0 'undo the edit' -- "$live/api.sh" edit "$AD" 'edited: "yes"' 'edited: "no"'
 fi
 
-if stage 3 "the baseline"; then
+if stage 3 "the CPU limit of the group"; then
+  check limit-record 0 '#110: a record of the group before the change' -- \
+    "$strata" snapshot "clustergroup:$G" -o limit.json
+  check limit-before 0 '#110: the policy tier holds the CPU limit of the group, 6000 millicores' -- \
+    jq -e '.source.cluster.tiers.policy.fields.limitConfig.cpuMilliCore == 6000' limit.json
+  apply -var cluster_group=true -var group_cpu_millicore=4000
+  check limit-verify 0 '#110: verify of the record: the pinned profile is unchanged, exit 0' -- "$strata" verify limit.json
+  check limit-verify-says 0 '#110: and it reports the policy tier' -- grep -q 'policy CHANGED' limit-verify.out
+  check limit-compare 0 '#110: compare of the record with the group: one release, exit 0' -- \
+    "$strata" compare limit.json "clustergroup:$G"
+  check limit-compare-says 0 '#110: the report names the field' -- \
+    grep -q '~ policy.limitConfig.cpuMilliCore: 6000 -> 4000' limit-compare.out
+  check limit-compare-json 0 'the same comparison as JSON' -- "$strata" compare limit.json "clustergroup:$G" --json
+  check limit-compare-tier 0 '#110: the policy tier differs, at limitConfig.cpuMilliCore' -- \
+    jq -e '.clusterTiers[] | select(.tier == "policy") | .same == false
+      and ([.diff[].path] | index("limitConfig.cpuMilliCore"))' limit-compare-json.out
+  apply -var cluster_group=true
+  check limit-undone 0 'the limit is back: compare of the record with the group finds the same policy tier' -- \
+    bash -c "\"$strata\" compare limit.json clustergroup:$G --json | jq -e '.clusterTiers[] | select(.tier == \"policy\") | .same'"
+fi
+
+if stage 4 "the baseline"; then
   apply_baseline
   check gone 0 'the group and the member are gone' -- \
     test -z "$(out cluster_group_uid)$(out member_cluster_uid)"

@@ -1881,3 +1881,64 @@ fn app_profile_sh_stage_3_changes_the_install_order_of_the_tier_and_puts_it_back
         "one more than the order of the record, then the order back"
     );
 }
+
+#[test]
+fn cluster_group_sh_stage_3_changes_the_cpu_limit_of_the_group_and_puts_it_back() {
+    let mut outputs = baseline_outputs();
+    outputs["cluster_group_uid"] = "g-1".into();
+    outputs["member_cluster_uid"] = "m-1".into();
+    let mut stage = Stage::new(outputs);
+    stage.strata(
+        "snapshot clustergroup:g-1 -o limit.json",
+        0,
+        r#"{"source":{"cluster":{"tiers":{"policy":{"fields":{"limitConfig":{"cpu":6,"cpuMilliCore":6000}}}}}}}"#,
+    );
+    stage.strata(
+        "verify limit.json",
+        0,
+        "  cluster tiers policy CHANGED, labels unchanged\n",
+    );
+    stage.strata(
+        "compare limit.json clustergroup:g-1 --json",
+        0,
+        r#"{"clusterTiers":[{"tier":"policy","same":false,"diff":[
+            {"op":"changed","path":"limitConfig.cpu"},{"op":"changed","path":"limitConfig.cpuMilliCore"}]}]}"#,
+    );
+    stage.strata(
+        "compare limit.json clustergroup:g-1",
+        0,
+        "        ~ policy.limitConfig.cpuMilliCore: 6000 -> 4000\n",
+    );
+
+    let (_, steps) = stage.run("cluster-group.sh", &["3"]);
+    passed(
+        &steps,
+        &[
+            "limit-record",
+            "limit-before",
+            "limit-verify",
+            "limit-verify-says",
+            "limit-compare",
+            "limit-compare-says",
+            "limit-compare-tier",
+        ],
+    );
+    assert!(
+        steps.contains("FAIL  limit-undone"),
+        "the stand-in still gives a changed tier after the undo, and the check sees it: {steps}"
+    );
+    let applies: Vec<String> = stage
+        .tofu_calls()
+        .lines()
+        .filter(|l| l.contains("apply"))
+        .map(String::from)
+        .collect();
+    assert!(
+        applies[0].contains("-var cluster_group=true -var group_cpu_millicore=4000"),
+        "{applies:?}"
+    );
+    assert!(
+        applies[1].contains("-var cluster_group=true") && !applies[1].contains("group_cpu"),
+        "the second apply gives the default limit again: {applies:?}"
+    );
+}

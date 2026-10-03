@@ -183,6 +183,12 @@ variable "cluster_group" {
   default     = false
 }
 
+variable "group_cpu_millicore" {
+  description = "The CPU limit, in millicores, that the cluster group gives each virtual cluster. cluster-group.sh changes it."
+  type        = number
+  default     = 6000
+}
+
 variable "second_cluster" {
   description = "Create cluster B next to the cluster. Billable while it exists."
   type        = bool
