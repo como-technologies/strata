@@ -333,60 +333,6 @@ impl ClusterTier {
     }
 }
 
-/// The fields of a machine pool that describe its shape: not the ids that Palette gives each
-/// cluster, such as its subnets and security groups.
-const POOL_FIELDS: &[&str] = &[
-    "name",
-    "isControlPlane",
-    "useControlPlaneAsWorker",
-    "instanceType",
-    "size",
-    "minSize",
-    "maxSize",
-    "azs",
-    "labels",
-    "taints",
-    "additionalLabels",
-    "additionalAnnotations",
-    "additionalTags",
-    "rootDeviceSize",
-    "capacityType",
-    "spotMarketOptions",
-    "nodeRepaveInterval",
-    "updateStrategy",
-    "skipK8sUpgrade",
-    "overrideKubeadmConfiguration",
-    // a managed node group of EKS: the image family and the launch template of its nodes
-    "amiType",
-    "awsLaunchTemplate",
-];
-
-/// The fields of the cloud part of a cloud config that a person chooses: not the network that
-/// Palette makes for each cluster.
-const CLOUD_FIELDS: &[&str] = &[
-    "region",
-    "project",
-    "sshKeyName",
-    "controlPlaneLoadBalancer",
-    "bastionDisabled",
-    // a managed control plane of EKS: who reaches its API server, and its managed add-ons
-    "endpointAccess",
-    "addons",
-    // a managed control plane of GKE: its settings, and the cluster API override, such as its
-    // release channel
-    "managedClusterConfig",
-    "overrideClusterAPIConfig",
-];
-
-fn pick(v: &Value, keys: &[&str]) -> Value {
-    Value::Object(
-        keys.iter()
-            .filter_map(|k| v.get(*k).map(|x| (k.to_string(), x.clone())))
-            .filter(|(_, x)| !x.is_null())
-            .collect(),
-    )
-}
-
 /// The tiers of a cluster record from the cluster document, and from its cloud config when it
 /// was read. `covered` limits `running` to the profiles that the record covers. A tier is carried
 /// only when Palette gives the part of the document that it reads.
@@ -417,7 +363,10 @@ pub fn cluster_tiers(
         tiers.insert("policy".to_string(), policy_tier(cluster, config));
     }
     if let Some(cc) = cloud_config {
-        tiers.insert("shape".to_string(), shape_tier(cc));
+        tiers.insert(
+            "shape".to_string(),
+            ClusterTier::of(crate::shape::fields(cluster, cc)),
+        );
     }
     tiers
 }
@@ -447,18 +396,6 @@ fn policy_tier(cluster: &Value, config: &Value) -> ClusterTier {
         "resources": field("clusterResources"),
         "rbac": field("clusterRbac"),
         "fips": s(cluster, "/status/fips/mode"),
-    }))
-}
-
-fn shape_tier(cc: &Value) -> ClusterTier {
-    let mut pools: Vec<Value> = arr(cc, "/spec/machinePoolConfig")
-        .iter()
-        .map(|p| pick(p, POOL_FIELDS))
-        .collect();
-    pools.sort_by_key(|p| s(p, "/name"));
-    ClusterTier::of(json!({
-        "cloud": pick(cc.pointer("/spec/clusterConfig").unwrap_or(&Value::Null), CLOUD_FIELDS),
-        "pools": pools,
     }))
 }
 

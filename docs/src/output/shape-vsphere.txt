@@ -1,0 +1,53 @@
+$ jq '.source.cluster.tiers.shape.fields | {cloudType, cloud, pool: .pools[0]}' runs/lab.json
+{
+  "cloudType": "vsphere",
+  "cloud": {
+    "controlPlaneEndpoint": {
+      "host": "10.10.0.10",
+      "type": "IP"
+    },
+    "ntpServers": [
+      "pool.ntp.org"
+    ],
+    "placement": {
+      "datacenter": "dc-east",
+      "folder": "spectro/lab",
+      "network": {
+        "networkName": "VM Network",
+        "staticIp": true
+      }
+    },
+    "sshKeys": [
+      "ssh-ed25519 AAAAC3Nza lab"
+    ],
+    "staticIp": true
+  },
+  "pool": {
+    "instanceType": {
+      "diskGiB": 60,
+      "memoryMiB": 8192,
+      "numCPUs": 4
+    },
+    "isControlPlane": true,
+    "labels": [
+      "control-plane"
+    ],
+    "machinePoolProperties": {
+      "archType": "amd64"
+    },
+    "name": "cp-pool",
+    "placements": [
+      {
+        "cluster": "compute-1",
+        "datastore": "ds-fast",
+        "folder": "spectro/lab",
+        "network": {
+          "networkName": "VM Network",
+          "staticIp": true
+        },
+        "resourcePool": "rp-lab"
+      }
+    ],
+    "size": 1
+  }
+}

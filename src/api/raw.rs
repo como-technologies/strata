@@ -296,6 +296,21 @@ impl RawCluster {
         write_json_files(dir, &files)
     }
 
+    /// The cloud type of the cluster document `cluster`: the kind of its `spec.cloudConfigRef`,
+    /// else its `spec.cloudType`, or empty when it names neither.
+    pub(crate) fn cloud_type(cluster: &Value) -> &str {
+        let field = |p: &str| {
+            cluster
+                .pointer(p)
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+        };
+        match field("/spec/cloudConfigRef/kind") {
+            "" => field("/spec/cloudType"),
+            k => k,
+        }
+    }
+
     /// The applied profile templates, in the order the cluster document lists them. That order is
     /// no install order; `AppliedProfile::of_cluster` puts them in canonical order.
     pub fn templates(&self) -> Vec<Value> {

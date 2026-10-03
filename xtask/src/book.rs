@@ -394,6 +394,11 @@ impl Runner {
         self.build(|t| t.cluster_field(project, uid, pointer, value));
     }
 
+    /// Move a cluster to another cloud type: see [`Tenant::cloud`].
+    pub fn cloud(&mut self, project: &str, uid: &str, kind: &str, spec: serde_json::Value) {
+        self.build(|t| t.cloud(project, uid, kind, spec));
+    }
+
     /// Take a cluster out of the consumer list of a profile: see [`Tenant::drop_consumer`].
     pub fn drop_consumer(&mut self, project: &str, profile: &str, cluster: &str) {
         self.build(|t| t.drop_consumer(project, profile, cluster));

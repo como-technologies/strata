@@ -1077,7 +1077,7 @@ impl Tenant {
     /// what Palette reports changes, as a change on the cluster does, and its profiles do not.
     pub fn cluster_field(&self, project: &str, uid: &str, pointer: &str, value: Value) {
         let (path, pointer) = match pointer.strip_prefix("/cloudconfig") {
-            Some(rest) => (format!("v1/cloudconfigs/aws/{uid}c"), rest.to_string()),
+            Some(rest) => (self.cloud_config_path(project, uid), rest.to_string()),
             None => (format!("v1/spectroclusters/{uid}"), pointer.to_string()),
         };
         let mut doc = self.read(project, &path);
@@ -1115,6 +1115,31 @@ impl Tenant {
             &json!({"metadata": {"name": name, "uid": uid},
                 "spec": {"filterGroup": {"conjunction": "and", "filters": [
                     {"key": key, "values": [value], "operator": "eq", "negation": false}]}}}),
+        );
+    }
+
+    /// The path of the cloud config of the cluster `uid`, from the kind that its document names.
+    fn cloud_config_path(&self, project: &str, uid: &str) -> String {
+        let doc = self.read(project, &format!("v1/spectroclusters/{uid}"));
+        let kind = doc["spec"]["cloudConfigRef"]["kind"]
+            .as_str()
+            .unwrap_or("aws");
+        format!("v1/cloudconfigs/{kind}/{uid}c")
+    }
+
+    /// Move the cluster `uid` to the cloud type `kind`, with `spec` as the spec of its cloud
+    /// config. Palette serves the cloud config of each cloud type at its own path.
+    pub fn cloud(&self, project: &str, uid: &str, kind: &str, spec: Value) {
+        let path = format!("v1/spectroclusters/{uid}");
+        let mut doc = self.read(project, &path);
+        doc["spec"]["cloudType"] = json!(kind);
+        doc["spec"]["cloudConfigRef"]["kind"] = json!(kind);
+        self.write(project, &path, &doc);
+        let config_uid = format!("{uid}c");
+        self.write(
+            project,
+            &format!("v1/cloudconfigs/{kind}/{config_uid}"),
+            &json!({"metadata": {"uid": config_uid}, "spec": spec}),
         );
     }
 
@@ -1197,9 +1222,11 @@ impl Tenant {
                         "vpcId": format!("vpc-{uid}")},
                     "machinePoolConfig": [
                         {"name": "cp-pool", "isControlPlane": true, "instanceType": "t3.xlarge",
-                            "size": 1, "azs": ["us-east-2a"], "subnetIds": {"us-east-2a": format!("subnet-{uid}")}},
+                            "size": 1, "azs": ["us-east-2a"], "subnetIds": {"us-east-2a": format!("subnet-{uid}")},
+                            "machinePoolProperties": {"archType": "amd64"}},
                         {"name": "worker-pool", "isControlPlane": false, "instanceType": "t3.xlarge",
-                            "size": 2, "azs": ["us-east-2a"], "subnetIds": {"us-east-2a": format!("subnet-{uid}")}},
+                            "size": 2, "azs": ["us-east-2a"], "subnetIds": {"us-east-2a": format!("subnet-{uid}")},
+                            "machinePoolProperties": {"archType": "amd64"}},
                     ]
                 }
             }),

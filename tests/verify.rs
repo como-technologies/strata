@@ -7397,6 +7397,7 @@ fn a_cluster_record_carries_the_tiers_that_palette_gives_and_names_them() {
     raw.cloud_config = Some(palette.cloud_config(&raw.cluster).unwrap());
     let shaped = Snapshot::from_cluster(&raw, None, "cluster", "t0").unwrap();
     let shape = &shaped.source.cluster.as_ref().unwrap().tiers["shape"].fields;
+    assert_eq!(shape["cloudType"], "aws");
     assert_eq!(shape["cloud"], serde_json::json!({"region": "us-east-2"}));
     assert_eq!(shape["pools"][0]["name"], "cp-pool", "pools in name order");
     assert!(shape["pools"][1].get("subnetIds").is_none());
@@ -7412,7 +7413,8 @@ fn a_cluster_record_carries_the_tiers_that_palette_gives_and_names_them() {
         "machinePoolConfig": [{"name": "worker-pool", "instanceType": "t3.xlarge", "size": 2,
             "amiType": "AL2023_x86_64_STANDARD", "awsLaunchTemplate": {"ami": {"id": "ami-1"}},
             "instanceConfig": {"cpuSet": 4, "memoryMiB": 16384}}]}});
-    let palette = Palette::new(api.clone().with("/v1/cloudconfigs/aws/cc1", eks));
+    raw.cluster["spec"]["cloudConfigRef"]["kind"] = Value::from("eks");
+    let palette = Palette::new(api.clone().with("/v1/cloudconfigs/eks/cc1", eks));
     raw.cloud_config = Some(palette.cloud_config(&raw.cluster).unwrap());
     let shaped = Snapshot::from_cluster(&raw, None, "cluster", "t0").unwrap();
     let shape = &shaped.source.cluster.as_ref().unwrap().tiers["shape"].fields;
@@ -7425,6 +7427,7 @@ fn a_cluster_record_carries_the_tiers_that_palette_gives_and_names_them() {
 
     // a GKE cluster: the managed cluster settings and the cluster API override, which sets the
     // release channel, are chosen, so the tier holds them
+    raw.cluster["spec"]["cloudConfigRef"]["kind"] = Value::from("gke");
     raw.cloud_config = Some(serde_json::json!({"spec": {
         "clusterConfig": {"project": "p1", "region": "us-east1",
             "managedClusterConfig": {"location": "us-east1"},
@@ -7563,6 +7566,414 @@ fn between_two_clusters_the_applied_tier_compares_the_infra_hash_alone() {
         .unwrap();
     assert!(!applied.same);
     assert_eq!(applied.diff[0].path, "spcHash");
+}
+
+// ---- the shape tier on each cloud (#105) -------------------------------------------------------
+
+/// A cloud config of AWS, as Palette gives it: each pool has its architecture, and the ids that
+/// Palette gives the cluster.
+fn aws_cloud_config(size: u64) -> Value {
+    serde_json::json!({"spec": {
+    "clusterConfig": {"region": "us-east-2", "sshKeyName": "platform", "vpcId": "vpc-fred",
+        "hybridConfig": {"iamRolesAnywhere": {}}},
+    "machinePoolConfig": [
+        {"name": "worker-pool", "isControlPlane": false, "useControlPlaneAsWorker": false,
+         "instanceType": "t3.xlarge", "size": size, "azs": ["us-east-2a"], "labels": ["worker"],
+         "taints": [], "rootDeviceSize": 65, "capacityType": "on-demand",
+         "updateStrategy": {"type": "RollingUpdateScaleOut"}, "skipK8sUpgrade": "disabled",
+         "machinePoolProperties": {"archType": "amd64"},
+         "instanceConfig": {"name": "t3.xlarge", "numCPUs": 4, "memoryMiB": 16384},
+         "additionalSecurityGroups": [{"id": "sg-fred"}],
+         "subnetIds": {"us-east-2a": "subnet-fred"}},
+        {"name": "cp-pool", "isControlPlane": true, "useControlPlaneAsWorker": false,
+         "instanceType": "t3.xlarge", "size": 1, "azs": ["us-east-2a"],
+         "labels": ["control-plane"], "taints": [], "rootDeviceSize": 65,
+         "capacityType": "on-demand", "updateStrategy": {"type": "RollingUpdateScaleOut"},
+         "machinePoolProperties": {"archType": "amd64"}, "additionalSecurityGroups": [],
+         "subnetIds": {"us-east-2a": "subnet-fred"}},
+    ]}})
+}
+
+/// A cloud config of EKS, as Palette gives it.
+fn eks_cloud_config() -> Value {
+    serde_json::json!({"spec": {
+        "clusterConfig": {"region": "us-east-2", "sshKeyName": "platform", "bastionDisabled": true,
+            "endpointAccess": {"public": true, "publicCIDRs": [], "privateCIDRs": []},
+            "addons": [], "encryptionConfig": {"isEnabled": true, "provider": "arn:aws:kms:key-fred"},
+            "vpcId": "vpc-fred"},
+        "machinePoolConfig": [{"name": "worker-pool", "isControlPlane": false,
+            "useControlPlaneAsWorker": false, "instanceType": "t3.xlarge", "size": 2,
+            "azs": ["us-east-2a", "us-east-2b"], "labels": ["worker"], "taints": [],
+            "rootDeviceSize": 60, "capacityType": "on-demand", "amiType": "AL2023_x86_64_STANDARD",
+            "awsLaunchTemplate": {"additionalSecurityGroups": [], "ami": {}, "rootVolume": {}},
+            "updateStrategy": {"type": "RollingUpdateScaleOut"},
+            "machinePoolProperties": {"archType": "amd64"},
+            "subnetIds": {"us-east-2a": "subnet-fred"}}]}})
+}
+
+/// A cloud config of GKE, as Palette gives it, in the model of GCP.
+fn gke_cloud_config() -> Value {
+    serde_json::json!({"spec": {
+        "clusterConfig": {"project": "barney-project", "region": "us-east1",
+            "managedClusterConfig": {"location": "us-east1"}, "network": "barney-net",
+            "overrideClusterAPIConfig": "gcpManagedControlPlane:\n  spec:\n    releaseChannel: regular\n"},
+        "machinePoolConfig": [{"name": "worker-pool", "isControlPlane": false,
+            "instanceType": "e2-standard-4", "size": 3, "azs": null, "labels": ["worker"],
+            "taints": [], "rootDeviceSize": 60, "skipK8sUpgrade": "disabled",
+            "updateStrategy": {"type": "RollingUpdateScaleOut"}, "subnet": "barney-subnet",
+            "machinePoolProperties": {"archType": "amd64"}, "subnetIds": {"us-east1": "subnet-1"}}]}})
+}
+
+/// A cloud config of vSphere, in the model of the API reference of Palette.
+fn vsphere_cloud_config() -> Value {
+    let network = serde_json::json!({"networkName": "VM Network", "staticIp": true,
+        "parentPoolRef": {"uid": "pool-barney"}});
+    serde_json::json!({"spec": {
+    "clusterConfig": {
+        "placement": {"uid": "placement-of-cluster", "datacenter": "dc-east",
+            "folder": "spectro/barney", "imageTemplateFolder": "spectro-templates",
+            "network": network},
+        "ntpServers": ["pool.ntp.org"], "staticIp": true, "sshKeys": ["ssh-ed25519 AAAA barney"],
+        "controlPlaneEndpoint": {"type": "IP", "host": "10.10.0.10"}},
+    "machinePoolConfig": [
+        {"name": "worker-pool", "isControlPlane": false, "size": 2,
+         "instanceType": {"diskGiB": 80, "memoryMiB": 16384, "numCPUs": 8},
+         "placements": [{"uid": "placement-of-pool", "cluster": "compute-1",
+            "datastore": "ds-fast", "resourcePool": "rp-barney", "folder": "spectro/barney",
+            "network": network}],
+         "machinePoolProperties": {"archType": "amd64"}, "labels": ["worker"], "taints": []},
+        {"name": "cp-pool", "isControlPlane": true, "size": 1,
+         "instanceType": {"diskGiB": 60, "memoryMiB": 8192, "numCPUs": 4},
+         "placements": [{"uid": "placement-of-cp", "cluster": "compute-1",
+            "datastore": "ds-fast", "resourcePool": "rp-barney", "folder": "spectro/barney",
+            "network": network}],
+         "machinePoolProperties": {"archType": "amd64"}, "labels": ["control-plane"],
+         "taints": []},
+    ]}})
+}
+
+/// A cloud config of Azure, in the model of the API reference of Palette.
+fn azure_cloud_config() -> Value {
+    serde_json::json!({"spec": {
+        "clusterConfig": {"location": "eastus", "resourceGroup": "rg-fred",
+            "subscriptionId": "sub-fred", "sshKey": "ssh-ed25519 AAAA fred",
+            "vnetName": "vnet-fred", "vnetResourceGroup": "rg-net", "vnetCidrBlock": "10.0.0.0/16",
+            "controlPlaneSubnet": {"name": "cp-subnet", "cidrBlock": "10.0.0.0/24"},
+            "workerSubnet": {"name": "worker-subnet", "cidrBlock": "10.0.1.0/24"},
+            "storageAccountName": "fredstore", "containerName": "fred"},
+        "machinePoolConfig": [{"name": "worker-pool", "isControlPlane": false, "size": 2,
+            "instanceType": "Standard_D4s_v3", "azs": ["1", "2"], "isSystemNodePool": true,
+            "osType": "Linux", "osDisk": {"diskSizeGB": 60, "osType": "Linux",
+                "managedDisk": {"storageAccountType": "Premium_LRS"}},
+            "machinePoolProperties": {"archType": "amd64"}, "labels": ["worker"], "taints": []}]}})
+}
+
+/// A cloud config of edge native, in the model of the API reference of Palette.
+fn edge_native_cloud_config() -> Value {
+    serde_json::json!({"spec": {
+        "clusterConfig": {"controlPlaneEndpoint": {"type": "IP", "host": "10.20.0.5"},
+            "isTwoNodeCluster": false, "ntpServers": ["pool.ntp.org"], "staticIp": false,
+            "sshKeys": ["ssh-ed25519 AAAA barney"],
+            "overlayNetworkConfiguration": {"enable": true, "cidr": "100.64.192.0/23"}},
+        "machinePoolConfig": [{"name": "edge-pool", "isControlPlane": true,
+            "useControlPlaneAsWorker": true, "size": 1, "osType": "linux",
+            "hosts": [{"hostUid": "edge-barney", "hostAddress": "10.20.0.11",
+                "hostName": "barney-edge-1"}],
+            "machinePoolProperties": {"archType": "arm64"}, "labels": ["control-plane"],
+            "taints": []}]}})
+}
+
+/// A cloud config of OpenStack, in the model of the API reference of Palette.
+fn openstack_cloud_config() -> Value {
+    let pool = |name: &str, cp: bool, size: u32, label: &str| {
+        serde_json::json!({"name": name, "isControlPlane": cp, "useControlPlaneAsWorker": false,
+            "size": size, "azs": ["nova"], "flavor": "m1.large",
+            "flavorConfig": {"name": "m1.large", "numCPUs": 4, "memoryMiB": 8192, "diskGiB": 80},
+            "image": "ubuntu-22.04-barney", "diskGiB": 80,
+            "subnet": {"id": "subnet-barney", "name": "barney-subnet"},
+            "machinePoolProperties": {"archType": "amd64"}, "labels": [label], "taints": []})
+    };
+    serde_json::json!({"spec": {
+        "clusterConfig": {"region": "RegionOne", "project": {"id": "p-barney", "name": "barney"},
+            "domain": {"id": "default", "name": "Default"}, "sshKeyName": "barney-key",
+            "bastionDisabled": true, "nodeCidr": "10.6.0.0/24", "dnsNameservers": ["10.6.0.2"]},
+        "machinePoolConfig": [pool("cp-pool", true, 1, "control-plane"),
+            pool("worker-pool", false, 2, "worker")]}})
+}
+
+/// A cloud config of CloudStack, in the model of the API reference of Palette.
+fn cloudstack_cloud_config() -> Value {
+    serde_json::json!({"spec": {
+        "clusterConfig": {"project": {"id": "p-fred", "name": "fred"},
+            "zones": [{"id": "zone-1", "name": "zone-fred", "network": {"name": "fred-net"}}],
+            "sshKeyName": "fred-key", "controlPlaneEndpoint": "10.30.0.5", "syncWithCKS": false},
+        "machinePoolConfig": [{"name": "worker-pool", "isControlPlane": false, "size": 2,
+            "offering": {"name": "Medium Instance"}, "template": {"name": "ubuntu-22.04-fred"},
+            "networks": [{"id": "net-1", "name": "fred-net"}],
+            "instanceConfig": {"numCPUs": 2, "memoryMiB": 4096},
+            "machinePoolProperties": {"archType": "amd64"}, "labels": ["worker"], "taints": []}]}})
+}
+
+/// The shape tier of the cluster of the fixtures on the cloud type `kind`, from the cloud config
+/// `cloud_config` that Palette serves at `/v1/cloudconfigs/<kind>/cc1`.
+fn shape_on(kind: &str, cloud_config: Value) -> Value {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    with_cluster_status(dir.path());
+    let api = serve_cluster(MemoryApi::new(), dir.path(), "cluster-a")
+        .with(format!("/v1/cloudconfigs/{kind}/cc1"), cloud_config);
+    let palette = Palette::new(api);
+    let mut raw = palette
+        .fetch_cluster(CLUSTER_UID, &Progress::silent())
+        .unwrap();
+    raw.cluster["spec"]["cloudConfigRef"]["kind"] = Value::from(kind);
+    raw.cloud_config = Some(palette.cloud_config(&raw.cluster).unwrap());
+    let snap = Snapshot::from_cluster(&raw, None, "cluster", "t0").unwrap();
+    snap.source.cluster.unwrap().tiers["shape"].fields.clone()
+}
+
+#[test]
+fn the_shape_tier_of_a_vsphere_cluster_holds_the_placements_and_the_cloud_part() {
+    let shape = shape_on("vsphere", vsphere_cloud_config());
+    assert_eq!(shape["cloudType"], "vsphere");
+    for pool in shape["pools"].as_array().unwrap() {
+        let placement = &pool["placements"][0];
+        assert_eq!(placement["datastore"], "ds-fast");
+        assert_eq!(placement["resourcePool"], "rp-barney");
+        assert!(placement.get("uid").is_none(), "Palette gives the uid");
+        assert!(pool["instanceType"]["numCPUs"].is_number());
+    }
+    let cloud = &shape["cloud"];
+    assert_eq!(cloud["placement"]["datacenter"], "dc-east");
+    assert!(cloud["placement"].get("uid").is_none());
+    assert_eq!(cloud["ntpServers"][0], "pool.ntp.org");
+    assert_eq!(cloud["staticIp"], true);
+    assert_eq!(cloud["controlPlaneEndpoint"]["host"], "10.10.0.10");
+}
+
+#[test]
+fn the_shape_tier_of_an_azure_cluster_holds_the_os_disk_and_the_network_that_a_person_chooses() {
+    for kind in ["azure", "aks"] {
+        let shape = shape_on(kind, azure_cloud_config());
+        let pool = &shape["pools"][0];
+        assert_eq!(pool["osDisk"]["diskSizeGB"], 60, "{kind}");
+        assert_eq!(pool["isSystemNodePool"], true);
+        assert_eq!(pool["osType"], "Linux");
+        let cloud = &shape["cloud"];
+        assert_eq!(cloud["location"], "eastus");
+        assert_eq!(cloud["resourceGroup"], "rg-fred");
+        assert_eq!(cloud["vnetName"], "vnet-fred");
+        assert_eq!(cloud["workerSubnet"]["name"], "worker-subnet");
+        assert!(cloud.get("storageAccountName").is_none());
+    }
+}
+
+#[test]
+fn the_shape_tier_of_an_edge_native_cluster_holds_the_hosts_and_the_os_type_of_each_pool() {
+    let shape = shape_on("edge-native", edge_native_cloud_config());
+    let pool = &shape["pools"][0];
+    assert_eq!(pool["hosts"][0]["hostUid"], "edge-barney");
+    assert_eq!(pool["osType"], "linux");
+    assert_eq!(shape["cloud"]["isTwoNodeCluster"], false);
+    assert_eq!(
+        shape["cloud"]["overlayNetworkConfiguration"]["enable"],
+        true
+    );
+}
+
+#[test]
+fn each_pool_on_each_cloud_holds_its_architecture_and_no_id_that_palette_gives_the_cluster() {
+    let clouds = [
+        ("aws", aws_cloud_config(2)),
+        ("eks", eks_cloud_config()),
+        ("gke", gke_cloud_config()),
+        ("gcp", gke_cloud_config()),
+        ("vsphere", vsphere_cloud_config()),
+        ("azure", azure_cloud_config()),
+        ("edge-native", edge_native_cloud_config()),
+        ("openstack", openstack_cloud_config()),
+        ("apache-cloudstack", cloudstack_cloud_config()),
+    ];
+    for (kind, cc) in clouds {
+        let shape = shape_on(kind, cc);
+        assert_eq!(shape["cloudType"], kind);
+        for pool in shape["pools"].as_array().unwrap() {
+            let arch = &pool["machinePoolProperties"]["archType"];
+            assert!(arch == "amd64" || arch == "arm64", "{kind}: {pool}");
+            for id in ["subnetIds", "additionalSecurityGroups"] {
+                assert!(pool.get(id).is_none(), "{kind}: {id}");
+            }
+        }
+        assert!(shape["cloud"].get("vpcId").is_none(), "{kind}");
+    }
+    // the cloud part of EKS holds the encryption of its secrets, and a GCP pool its subnet
+    let eks = shape_on("eks", eks_cloud_config());
+    assert_eq!(eks["cloud"]["encryptionConfig"]["isEnabled"], true);
+    let gke = shape_on("gke", gke_cloud_config());
+    assert_eq!(gke["pools"][0]["subnet"], "barney-subnet");
+    assert_eq!(gke["cloud"]["network"], "barney-net");
+}
+
+#[test]
+fn the_shape_tier_of_an_openstack_cluster_holds_the_cloud_part_that_an_older_record_holds() {
+    let shape = shape_on("openstack", openstack_cloud_config());
+    let cloud = &shape["cloud"];
+    assert_eq!(cloud["region"], "RegionOne");
+    assert_eq!(cloud["project"]["name"], "barney");
+    assert_eq!(cloud["sshKeyName"], "barney-key");
+    assert_eq!(cloud["bastionDisabled"], true);
+    assert_eq!(cloud["nodeCidr"], "10.6.0.0/24");
+    let pool = &shape["pools"][0];
+    assert_eq!(pool["flavorConfig"]["name"], "m1.large");
+    assert_eq!(pool["image"], "ubuntu-22.04-barney");
+    assert_eq!(pool["subnet"]["name"], "barney-subnet");
+}
+
+#[test]
+fn the_shape_tier_of_a_cloudstack_cluster_holds_the_offering_and_not_the_instance_config() {
+    let shape = shape_on("apache-cloudstack", cloudstack_cloud_config());
+    let pool = &shape["pools"][0];
+    assert_eq!(pool["offering"]["name"], "Medium Instance");
+    assert_eq!(pool["template"]["name"], "ubuntu-22.04-fred");
+    assert_eq!(pool["networks"][0]["name"], "fred-net");
+    assert!(
+        pool.get("instanceConfig").is_none(),
+        "Palette gives it from the offering"
+    );
+    let cloud = &shape["cloud"];
+    assert_eq!(cloud["project"]["name"], "fred");
+    assert_eq!(cloud["zones"][0]["name"], "zone-fred");
+    assert_eq!(cloud["sshKeyName"], "fred-key");
+}
+
+#[test]
+fn a_cloud_type_that_strata_does_not_name_holds_the_fields_of_an_older_record() {
+    let shape = shape_on("custom", openstack_cloud_config());
+    assert_eq!(shape["cloudType"], "custom");
+    let cloud = &shape["cloud"];
+    assert_eq!(cloud["region"], "RegionOne");
+    assert_eq!(cloud["project"]["name"], "barney");
+    assert_eq!(cloud["sshKeyName"], "barney-key");
+    assert_eq!(cloud["bastionDisabled"], true);
+    assert!(cloud.get("nodeCidr").is_none());
+    let pool = &shape["pools"][0];
+    assert_eq!(pool["azs"][0], "nova");
+    assert_eq!(pool["machinePoolProperties"]["archType"], "amd64");
+    assert!(pool.get("flavorConfig").is_none());
+}
+
+/// The shape fields that strata recorded before it read them by cloud type, for each cloud of
+/// the live example, from the cloud configs above.
+fn shape_before_the_cloud_type(kind: &str) -> Value {
+    let update = serde_json::json!({"type": "RollingUpdateScaleOut"});
+    match kind {
+        "aws" => serde_json::json!({"cloud": {"region": "us-east-2", "sshKeyName": "platform"},
+            "pools": [
+                {"name": "cp-pool", "isControlPlane": true, "useControlPlaneAsWorker": false,
+                 "instanceType": "t3.xlarge", "size": 1, "azs": ["us-east-2a"],
+                 "labels": ["control-plane"], "taints": [], "rootDeviceSize": 65,
+                 "capacityType": "on-demand", "updateStrategy": update},
+                {"name": "worker-pool", "isControlPlane": false, "useControlPlaneAsWorker": false,
+                 "instanceType": "t3.xlarge", "size": 2, "azs": ["us-east-2a"],
+                 "labels": ["worker"], "taints": [], "rootDeviceSize": 65,
+                 "capacityType": "on-demand", "updateStrategy": update,
+                 "skipK8sUpgrade": "disabled"}]}),
+        "eks" => serde_json::json!({"cloud": {"region": "us-east-2", "sshKeyName": "platform",
+                "bastionDisabled": true, "addons": [],
+                "endpointAccess": {"public": true, "publicCIDRs": [], "privateCIDRs": []}},
+            "pools": [{"name": "worker-pool", "isControlPlane": false,
+                "useControlPlaneAsWorker": false, "instanceType": "t3.xlarge", "size": 2,
+                "azs": ["us-east-2a", "us-east-2b"], "labels": ["worker"], "taints": [],
+                "rootDeviceSize": 60, "capacityType": "on-demand",
+                "amiType": "AL2023_x86_64_STANDARD",
+                "awsLaunchTemplate": {"additionalSecurityGroups": [], "ami": {}, "rootVolume": {}},
+                "updateStrategy": update}]}),
+        "openstack" | "custom" => {
+            let pool = |name: &str, cp: bool, size: u32, label: &str| {
+                serde_json::json!({"name": name, "isControlPlane": cp,
+                    "useControlPlaneAsWorker": false, "size": size, "azs": ["nova"],
+                    "labels": [label], "taints": []})
+            };
+            serde_json::json!({"cloud": {"region": "RegionOne",
+                    "project": {"id": "p-barney", "name": "barney"}, "sshKeyName": "barney-key",
+                    "bastionDisabled": true},
+                "pools": [pool("cp-pool", true, 1, "control-plane"),
+                    pool("worker-pool", false, 2, "worker")]})
+        }
+        _ => serde_json::json!({"cloud": {"project": "barney-project", "region": "us-east1",
+                "managedClusterConfig": {"location": "us-east1"},
+                "overrideClusterAPIConfig": "gcpManagedControlPlane:\n  spec:\n    releaseChannel: regular\n"},
+            "pools": [{"name": "worker-pool", "isControlPlane": false,
+                "instanceType": "e2-standard-4", "size": 3, "labels": ["worker"], "taints": [],
+                "rootDeviceSize": 60, "skipK8sUpgrade": "disabled", "updateStrategy": update}]}),
+    }
+}
+
+/// Verify a record that an older strata wrote of a cluster on the cloud type `kind`, with the
+/// cloud config `cc`. The cluster did not change, so the shape tier is the same.
+fn an_older_record_verifies(kind: &str, cc: Value) {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    with_cluster_status(dir.path());
+    let path = dir.path().join("cluster-a").join("cluster.json");
+    let mut doc = read(&path);
+    doc["spec"]["cloudConfigRef"]["kind"] = Value::from(kind);
+    fs::write(&path, serde_json::to_string(&doc).unwrap()).unwrap();
+    let api = serve_cluster(MemoryApi::new(), dir.path(), "cluster-a")
+        .with(format!("/v1/cloudconfigs/{kind}/cc1"), cc);
+
+    // the record as an older strata wrote it: a shape tier without the cloud type
+    let mut record = serde_json::to_value(snapshot_cluster(&api, None).unwrap()).unwrap();
+    let fields = shape_before_the_cloud_type(kind);
+    // compare and verify read the fields of a tier, and not its hash
+    record["source"]["cluster"]["tiers"]["shape"] =
+        serde_json::json!({"hash": "0c27a8402b75", "fields": fields});
+    let old: Snapshot = serde_json::from_value(record).unwrap();
+
+    let v = ops::verify(&old, &Palette::new(api.clone()), "t1", &Progress::silent()).unwrap();
+    assert_eq!(v.status, VerifyStatus::Unchanged, "{kind}");
+    let shape = v.diff.cluster_tiers.iter().find(|t| t.tier == "shape");
+    assert!(shape.unwrap().same, "{kind}: {:?}", shape.unwrap().diff);
+    // the live record holds the fields of its cloud, and compares with the old record
+    let live = &v.live.source.cluster.as_ref().unwrap().tiers["shape"].fields;
+    assert_eq!(live["cloudType"], kind);
+    let d = strata::diff::compute(&old, &v.live, "t1", None);
+    assert!(d.cluster_tiers.iter().all(|t| t.same), "{kind}");
+}
+
+#[test]
+fn a_record_of_openstack_or_another_cloud_from_before_the_shape_by_cloud_type_verifies() {
+    an_older_record_verifies("openstack", openstack_cloud_config());
+    an_older_record_verifies("custom", openstack_cloud_config());
+}
+
+#[test]
+fn a_record_of_aws_eks_or_gke_from_before_the_shape_by_cloud_type_loads_and_verifies() {
+    an_older_record_verifies("aws", aws_cloud_config(2));
+    an_older_record_verifies("eks", eks_cloud_config());
+    an_older_record_verifies("gke", gke_cloud_config());
+
+    // a change of a field that the old record holds still shows
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    with_cluster_status(dir.path());
+    let api = serve_cluster(MemoryApi::new(), dir.path(), "cluster-a")
+        .with("/v1/cloudconfigs/aws/cc1", aws_cloud_config(3));
+    let mut record = serde_json::to_value(snapshot_cluster(&api, None).unwrap()).unwrap();
+    let fields = shape_before_the_cloud_type("aws");
+    record["source"]["cluster"]["tiers"]["shape"] =
+        serde_json::json!({"hash": "0c27a8402b75", "fields": fields});
+    let old: Snapshot = serde_json::from_value(record).unwrap();
+    let v = ops::verify(&old, &Palette::new(api), "t1", &Progress::silent()).unwrap();
+    let shape = v
+        .diff
+        .cluster_tiers
+        .iter()
+        .find(|t| t.tier == "shape")
+        .unwrap();
+    assert!(!shape.same);
+    assert_eq!(shape.diff.len(), 1, "{:?}", shape.diff);
+    assert_eq!(shape.diff[0].path, "pools[name=worker-pool].size");
 }
 
 // ---- the images and the charts of a pack (#77) ---------------------------------------------------

@@ -625,6 +625,7 @@ API, and removes it. It needs the example at its baseline with cluster A.
 |---|---|---|
 | `a-record`, `a-tiers` | 0 | #76: a record of cluster A with `--shape` carries `applied`, `policy`, `running`, and `shape`, and the labels |
 | `a-applied`, `a-running`, `a-shape` | 0 | #76: Palette's two hashes; one `running` entry for each pack of the record; two machine pools and the region, and no subnet id |
+| `a-arch` | 0 | #105: the shape tier names the cloud type, and Palette gives the architecture of each machine pool, `amd64` or `arm64` |
 | `a-behind` | 0 | #76: at the baseline, no pack of cluster A runs another version than its profile declares |
 | `b-record`, `same-release` | 0 | #76: a record of cluster B, from the same definition; the release is the same |
 | `same-applied`, `same-policy`, `same-running`, `same-shape`, `same-labels` | ? | #76: each tier of the two clusters: `policy`, `running`, `shape`, and the labels are the same (recorded 0); `applied` differs at `spcHash` (recorded 1) |

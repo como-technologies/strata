@@ -34,15 +34,62 @@ profiles, in tiers. Each tier has its own hash, and none is part of the root:
 | `applied` | `spcHash` and `spcInfraHash`: the hashes that Palette computes of the spec it applied to the cluster. `spcHash` is its own for each cluster, so between two clusters `compare` reads `spcInfraHash` alone | the cluster document |
 | `running` | each pack that the cluster reconciled, with its version and profile uid | the cluster document, `status.packs` |
 | `policy` | the OS patch policy, the lifecycle, the machine health, the timezone, the cluster resources, the RBAC, and the FIPS mode | the cluster document, `spec.clusterConfig` |
-| `shape` | each machine pool, with its instance type, size, zones, labels, and taints; the region and the project; and the settings of a managed control plane, on EKS and GKE | the cloud config: one more request, with `--shape` |
+| `shape` | the cloud type; each machine pool, with its instance type, size, zones, labels, taints, and architecture; and the cloud part that a person chooses. See [The shape on each cloud](#the-shape-on-each-cloud) | the cloud config: one more request, with `--shape` |
 
 The record also keeps the labels of the cluster, in `source.cluster.labels`.
 A tier is in the record only when Palette gives the part of the document that
-it reads, so a record names the tiers that it carries. The `shape` tier leaves
-out the ids that Palette gives each cluster, such as its subnets and its VPC.
+it reads, so a record names the tiers that it carries.
 
 `compare` of two cluster records names each tier that differs, and each field in
 it. See [Two clusters on one release differ](../../use-cases/cluster-tiers.md).
+
+## The shape on each cloud
+
+Palette gives each cloud type its own cloud config. The `shape` tier reads the
+fields of the cloud type of the cluster, and `cloudType` names that type. Each
+machine pool holds its `name`, `isControlPlane`, `useControlPlaneAsWorker`,
+`instanceType`, `size`, `minSize`, `maxSize`, `azs`, `labels`, `taints`,
+`additionalLabels`, `additionalAnnotations`, `additionalTags`,
+`nodeRepaveInterval`, `updateStrategy`, `skipK8sUpgrade`, and
+`overrideKubeadmConfiguration`. `machinePoolProperties.archType` gives the
+architecture of the nodes, `amd64` or `arm64`. The cloud part holds
+`overrideClusterAPIConfig`.
+
+Each cloud type adds these fields. A field that a cloud does not give is not
+in the tier.
+
+| Cloud type | Machine pool | Cloud part |
+| --- | --- | --- |
+| `aws` | `rootDeviceSize`, `capacityType`, `spotMarketOptions` | `region`, `sshKeyName`, `controlPlaneLoadBalancer`, `bastionDisabled` |
+| `eks` | the fields of `aws`, `amiType`, `awsLaunchTemplate` | the fields of `aws`, `endpointAccess`, `addons`, `encryptionConfig` |
+| `gcp`, `gke` | `rootDeviceSize`, `subnet` | `region`, `project`, `network`, `managedClusterConfig` |
+| `azure`, `aks` | `osDisk`, `osType`, `osSku`, `isSystemNodePool`, `spotVMOptions` | `location`, `resourceGroup`, `subscriptionId`, `sshKey`, `vnetName`, `vnetResourceGroup`, `vnetCidrBlock`, `controlPlaneSubnet`, `workerSubnet`, `aadProfile`, `apiServerAccessProfile`, `infraLBConfig`, `enablePrivateCluster` |
+| `vsphere` | `placements`: the compute cluster, the datastore, the folder, the resource pool, and the network of the pool | `placement`, `ntpServers`, `staticIp`, `sshKeys`, `controlPlaneEndpoint` |
+| `edge-native` | `hosts`: the edge hosts of the pool; `osType` | `controlPlaneEndpoint`, `isTwoNodeCluster`, `ntpServers`, `overlayNetworkConfiguration`, `staticIp`, `sshKeys` |
+| `maas` | `network`, `resourcePool`, `tags`, `useLxdVm` | `domain`, `enableLxdVm`, `ntpServers`, `staticIp`, `sshKeys` |
+| `openstack` | `flavorConfig`, `image`, `diskGiB`, `subnet` | `region`, `project`, `domain`, `sshKeyName`, `bastionDisabled`, `network`, `subnet`, `nodeCidr`, `dnsNameservers` |
+| `apache-cloudstack` | `offering`, `template`, `networks` | `project`, `zones`, `sshKeyName`, `controlPlaneEndpoint`, `syncWithCKS` |
+| another type | `rootDeviceSize`, `capacityType`, `spotMarketOptions`, `amiType`, `awsLaunchTemplate` | `region`, `project`, `sshKeyName`, `controlPlaneLoadBalancer`, `bastionDisabled`, `endpointAccess`, `addons`, `managedClusterConfig` |
+
+On another type, the tier holds the fields that an older version of strata
+recorded on each cloud. So the tier of that type holds no fewer fields than
+before.
+
+The tier does not hold the ids that Palette gives each cluster: `subnetIds`,
+`additionalSecurityGroups`, `vpcId`, and the `uid` of a vSphere placement. It
+does not hold `instanceConfig`, which Palette calculates from the instance
+type, or on CloudStack from the offering. Here the cluster `lab` runs on
+vSphere:
+
+```text
+{{#include ../../output/shape-vsphere-record.txt}}
+{{#include ../../output/shape-vsphere.txt}}
+```
+
+A record that an older version of strata wrote has no `cloudType`. When one of
+two records has none, `compare` and `verify` compare only the fields that the
+older record holds. So the older record still verifies. Record the cluster
+again to compare all the fields of its cloud.
 
 ## Whether an update waits
 
