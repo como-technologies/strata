@@ -26,7 +26,7 @@ takes:
 - Exit `0`, or `2` on an error.
 - `--macros` takes a profile version, a `cluster:` ref, or a `clustergroup:`
   ref. `--shape` needs a `cluster:` ref. With another ref, each is a `usage`
-  error. `--raw-dir` takes a profile or a cluster: a record read back from the
+  error. `--raw-dir` takes a profile or a cluster: a record that strata reads from the
   directory does not say `@pending`, `@draft`, edge host, cluster group, or app
   profile.
 - `--validate` takes `--from-candidate` or a profile version. With `--from-raw`,

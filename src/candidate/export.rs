@@ -22,10 +22,11 @@ pub(super) fn is_export(doc: &Value) -> bool {
 /// `metadata.name` and `spec.version` are the profile and its version, `spec.template.type` and
 /// `cloudType` its type and cloud, and `spec.variables` its variables. Each pack is one layer, in
 /// order. A pack of type `manifest` is a manifest layer with no registry. Each other pack names
-/// its registry by `registry.metadata.uid`, else by `registry.metadata.name`. The export holds no
-/// params. It leaves out values that are empty, so a pack with no values gets empty values, and
-/// not the default values of the pack. [`super::check`] then checks the candidate as it checks a
-/// candidate file.
+/// its registry by `registry.metadata.uid`, else by `registry.metadata.name`.
+///
+/// The export holds no params. It omits values that are empty, so a pack with no values gets
+/// empty values, and not the default values of the pack. [`super::check`] then checks the
+/// candidate as it checks a candidate file.
 ///
 /// # Errors
 ///

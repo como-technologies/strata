@@ -117,8 +117,8 @@ and of each wave, checks them.
    checks that the routes do not make.
 5. **Each item names its question.** An issue names the question of
    [the table in the introduction](./introduction.md#the-model) that it
-   answers, or the gap of build readiness that it fills. When an item answers
-   neither, the maintainers decide before the work starts.
+   answers. Or it names the part of build readiness that it adds. When an item
+   does neither, the maintainers decide before the work starts.
 
 ## A pipeline that publishes
 

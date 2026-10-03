@@ -47,11 +47,15 @@ One release, and each tier is the same.
 ## 3. The clusters change
 
 **Follow along.** `just playground cluster-tiers-2` is the same tenant after
-four changes: the worker pool of `search` has three nodes and a taint, `search`
-has another timezone and one more label, a person added a user to the role
-binding of `search`, and `payments` reconciled Kubernetes `1.36.1`, where its
-profile declares `1.36.2`. Stop the first seed, and export what this one
-prints. Keep the records from step 1.
+four changes:
+
+- The worker pool of `search` has three nodes and a taint.
+- `search` has another timezone and one more label.
+- A person added a user to the role binding of `search`.
+- `payments` reconciled Kubernetes `1.36.1`, and its profile declares `1.36.2`.
+
+Stop the first seed, and export what this one prints. Keep the records from
+step 1.
 
 `verify` of the record of `search` from step 1 names each change in the
 `policy` tier. The verdict follows the release, so it is `OK`:

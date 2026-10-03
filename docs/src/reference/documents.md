@@ -50,7 +50,7 @@ profile, or pack version.
   - `clusterTemplates[]`, for a published or a draft version, only when it is
     not empty: `uid`, `name`, and `projectUid` of each cluster template that
     links the version, from `status.inUseClusterTemplates` of the profile.
-    Palette refuses an edit in place and the delete of a linked version. It is
+    Palette refuses a `PUT` of the whole linked version, and its delete. It is
     not part of the root. See
     [The cluster templates of a version](../commands/snapshot/profile-version.md#the-cluster-templates-of-a-version).
   - `variablesUnavailable`, only when true: Palette did not serve the variables
@@ -71,48 +71,55 @@ profile, or pack version.
     `registryUid` and `registryName` it came from, and `packUid`, the uid of
     that version in the registry. `template` is `registry` and `type` is
     `pack`.
-  - `cluster`, for a cluster record: its `uid` and `name`, the `profile` that
-    `cluster:<cluster>/<profile>` selected, `profiles[]`, and `variables[]`.
-    `updatesPending` is `true` when Palette says an update of a profile the
-    record covers waits, `false` when none waits, and absent when strata could
-    not read it; `updatesPendingError` then says why. `pendingUpdates[]` has
-    `profileUid`, `profile`, `message`, and `since` for each change that waits.
-    `repavePending` is `true` when Palette holds a repave of the cluster for
-    approval, `false` when none waits, and absent for an edge host, a cluster
-    group, and an older record. `pendingRepave`, only when a repave waits:
-    `source`, `since`, and `reasons[]` with `code`, `message`, `pack`, and
-    `keys`: see
-    [Whether a repave waits](../commands/snapshot/cluster.md#whether-a-repave-waits).
-    `macroValues`, only with `snapshot --macros`: each user macro the content
-    uses, and `sha256:` of the value Palette gives it for this cluster or
-    cluster group, or `unresolved`. `labels`: the labels of the cluster. `tiers`: each tier that
-    the record carries, by name (`applied`, `running`, `policy`, and, with
-    `snapshot --shape`, `shape`), each with `hash` and `fields`: see
-    [More of the cluster than its release](../commands/snapshot/cluster.md#more-of-the-cluster-than-its-release).
-    The `fields` of `shape` are `cloudType`, `cloud`, and `pools[]`, by
-    [The shape on each cloud](../commands/snapshot/cluster.md#the-shape-on-each-cloud).
-    A cluster group carries `policy` alone. Its `fields` are `endpointType`,
-    `kubernetesDistroType`, `limitConfig`, `values`, `valuesHash`,
-    `valuesParseError` when the values are not YAML, and `hostClusters[]` with
-    `uid` and `endpointConfig`: see
-    [The config that a cluster group gives](../commands/snapshot/other-objects.md#the-config-that-a-cluster-group-gives).
-    A record that an older version of strata wrote has no `cloudType`.
-    The `fields` of `policy` are in
-    [The policy tier](../commands/snapshot/cluster.md#the-policy-tier). A
-    record that an older version of strata wrote holds `resources` and `rbac`
-    there, in place of `rbacs` and `namespaces`.
-    `pending`, only when true: the record is of `cluster:<cluster>@pending`,
-    and holds no `updatesPending` and no `repavePending`. `kind`, only for an
-    object that is not a cluster: `edgeHost` or `clusterGroup`; `uid` and
-    `name` are then those of the edge host or the group. `members[]`, for a cluster group: `uid`, `name`,
-    and `projectUid` of each virtual cluster.
-    None of these is part of the root.
-    Each entry of `profiles[]` has `uid`, `name`, `version`, and `type`, in the
-    order [The order of the profiles of a cluster](../internals/palette/clusters.md#the-order-of-the-profiles-of-a-cluster)
-    gives. Each entry of `variables[]` has `profile`, `profileUid`, `name`,
-    `value`, and `sensitive`. `verify` reads only the uids, so a rename does
-    not stop it. `variables` is not part of the root. A sensitive variable has
-    `sensitive: true`, and no value or hash.
+  - `cluster`, for a cluster record. None of its fields is part of the root.
+    - `uid` and `name` of the cluster, the `profile` that
+      `cluster:<cluster>/<profile>` selected, `profiles[]`, and `variables[]`.
+    - `updatesPending` is `true` when Palette says that an update of a profile
+      of the record waits, `false` when none waits, and absent when strata could
+      not read it. `updatesPendingError` then says why. `pendingUpdates[]` has
+      `profileUid`, `profile`, `message`, and `since` for each change that
+      waits.
+    - `repavePending` is `true` when Palette holds a repave of the cluster for
+      approval, and `false` when none waits. It is absent for an edge host, a
+      cluster group, and an older record. `pendingRepave`, only when a repave
+      waits: `source`, `since`, and `reasons[]` with `code`, `message`, `pack`,
+      and `keys`. See
+      [Whether a repave waits](../commands/snapshot/cluster.md#whether-a-repave-waits).
+    - `macroValues`, only with `snapshot --macros`: each user macro that the
+      content uses, with a digest. The digest is the `sha256:` of the value
+      that Palette gives the macro for this cluster or cluster group. It is
+      `unresolved` when Palette gives no value.
+    - `labels`: the labels of the cluster.
+    - `tiers`: each tier that the record carries, by name, each with `hash`
+      and `fields`. The tiers are `applied`, `running`, `policy`, and, with
+      `snapshot --shape`, `shape`. See
+      [More of the cluster than its release](../commands/snapshot/cluster.md#more-of-the-cluster-than-its-release).
+      The `fields` of `shape` are `cloudType`, `cloud`, and `pools[]`, by
+      [The shape on each cloud](../commands/snapshot/cluster.md#the-shape-on-each-cloud).
+      A record that an older version of strata wrote has no `cloudType`.
+    - The `fields` of `policy` are in
+      [The policy tier](../commands/snapshot/cluster.md#the-policy-tier). A
+      record that an older version of strata wrote holds `resources` and `rbac`
+      there, in place of `rbacs` and `namespaces`.
+    - A cluster group carries `policy` alone. Its `fields` are `endpointType`,
+      `kubernetesDistroType`, `limitConfig`, `values`, `valuesHash`,
+      `valuesParseError` when the values are not YAML, and `hostClusters[]`
+      with `uid` and `endpointConfig`. See
+      [The config that a cluster group gives](../commands/snapshot/other-objects.md#the-config-that-a-cluster-group-gives).
+    - `pending`, only when true: the record is of `cluster:<cluster>@pending`,
+      and holds no `updatesPending` and no `repavePending`.
+    - `kind`, only for an object that is not a cluster: `edgeHost` or
+      `clusterGroup`. `uid` and `name` are then those of the edge host or the
+      group. `members[]`, for a cluster group: `uid`, `name`, and `projectUid`
+      of each virtual cluster.
+    - Each entry of `profiles[]` has `uid`, `name`, `version`, and `type`, in
+      the order that
+      [The order of the profiles of a cluster](../internals/palette/clusters.md#the-order-of-the-profiles-of-a-cluster)
+      gives.
+    - Each entry of `variables[]` has `profile`, `profileUid`, `name`,
+      `value`, and `sensitive`. `verify` reads only the uids, so a rename does
+      not stop it. A sensitive variable has `sensitive: true`, and no value or
+      hash.
 - `variables` and `variablesHash`: the profile variables.
 - `packs[]`: one entry for each pack, in the order the profile holds them. The
   diff document sorts its packs by layer and then by name; the snapshot does
@@ -240,8 +247,8 @@ A comparison of two sides, `a` and `b`.
 - `upstreamUnknown`, only when it is not empty: the key of each such pack. An
   equal root does not show an equal archive for it.
 - `macros`, only when it is not empty: each user macro that either side uses.
-- `macrosChanged`, only when it is not empty: between two records with macro
-  digests, each macro whose value differs.
+- `macrosChanged`, only when it is not empty: between two records with the
+  digests of their macro values, each macro whose value differs.
 - `imageIdsChanged`, only when it is not empty: each pack that names an image
   in `imageId` on both sides, with two different images. Each entry has `key`,
   `a`, and `b`. `compare` exits `1` for it, also when `same` is `true`.
@@ -263,8 +270,8 @@ A comparison of two sides, `a` and `b`.
 - `verify`, only after `verify`: `status` (`unchanged`, `drifted`, or
   `unverified`), `uid`, `recordedAt`, and `checkedAt`.
   - `upstreamUnknown`: for an `unverified` record, the packs that make it so.
-  - `macrosChanged`: for a record with macro digests, each macro whose value
-    moved. The status is `drifted`, also when the roots are equal.
+  - `macrosChanged`: for a record with the digests of its macro values, each
+    macro whose value moved. The status is `drifted`, also when the roots are equal.
   - `imageIdsChanged`: when the roots are equal, each pack that names another
     image in `imageId` now, with `key`, `a`, and `b`. The status is `drifted`.
   - `invalidPacks`, only when it is not empty: each pack that Palette marks

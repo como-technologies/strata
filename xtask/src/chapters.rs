@@ -1708,8 +1708,8 @@ fn use_cases(r: &mut Runner) {
         "strata compare releases/1.1.8/dev.json aws-stack@1.1.8 --json | jq -c '{same, imageIdsChanged}'",
     );
 
-    // a registry deletes the tag of a pack that a published version uses: Palette marks the
-    // pack ref invalid, the root stays, and snapshot, verify, and compare say so (#108)
+    // a registry deletes the tag of a pack that a published version uses. Palette marks the
+    // pack ref invalid, the root stays, and snapshot, verify, and compare say so (#108).
     r.chapter("invalid-pack", DEV_ENV);
     r.projects(&[("dev", DEV)]);
     r.profile(DEV, A119, "1.1.9", "aws-stack@1.1.1", &[]);
@@ -2859,8 +2859,8 @@ fn automation(r: &mut Runner) {
 }
 
 /// The spec of the cloud config of a vSphere cluster, in the model of the API reference of
-/// Palette: a placement for the cluster and for each pool, each with the uid that Palette gives
-/// it, and the network of the control plane.
+/// Palette. It holds a placement for the cluster and for each pool, with the uid that Palette gives
+/// each one. It also holds the network of the control plane.
 fn vsphere_spec() -> serde_json::Value {
     let network = json!({"networkName": "VM Network", "staticIp": true});
     let placement = |uid: &str| {

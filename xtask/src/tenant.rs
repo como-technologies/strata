@@ -79,7 +79,7 @@ pub enum Edit {
         /// The id of the image, such as an AMI.
         id: &'static str,
     },
-    /// Mark a pack ref invalid, as Palette does when the registry deletes the tag of the pack:
+    /// Mark a pack ref invalid, as Palette does when the registry deletes the tag of the pack.
     /// `isInvalid` is true, and `inValidReason` is the message of the event of the registry. The
     /// values and the pack build stay.
     Invalid {
@@ -524,10 +524,13 @@ impl Tenant {
     }
 
     /// The export of the published profile `uid`, as `GET /v1/clusterprofiles/{uid}/export` gives
-    /// it with `format=json`: the name, the description, and the labels; the version; the type,
-    /// the cloud, and each pack with its values, its manifests, and the metadata of its registry;
-    /// and the variables. Palette leaves out values that are empty and a pack with no manifest, and
-    /// gives a manifest pack an empty registry. The export holds no params and no pack uid.
+    /// it with `format=json`.
+    ///
+    /// The export holds the name, the description, the labels, the version, the type, and the
+    /// cloud. It also holds each pack with its values, its manifests, and the metadata of its
+    /// registry, and the variables. Palette omits values that are empty and a pack with no
+    /// manifest, and gives a manifest pack an empty registry. The export holds no params and no
+    /// pack uid.
     pub fn export(&self, project: &str, uid: &str) {
         let doc = self.read(project, &format!("v1/clusterprofiles/{uid}"));
         let manifests = self.read(
@@ -1216,10 +1219,11 @@ impl Tenant {
         self.write(project, &path, &doc);
     }
 
-    /// Change one field of the document of a cluster, at a JSON pointer: what Palette reports
-    /// changes, as a change on the cluster does, and its profiles do not. A pointer that starts
-    /// with `/cloudconfig`, `/rbacs`, or `/namespaces` changes the cloud config, the role
-    /// bindings, or the namespaces of the cluster.
+    /// Change one field of the document of a cluster, at a JSON pointer.
+    ///
+    /// What Palette reports changes, as a change on the cluster does, and its profiles do not. A
+    /// pointer that starts with `/cloudconfig`, `/rbacs`, or `/namespaces` changes the cloud
+    /// config, the role bindings, or the namespaces of the cluster.
     pub fn cluster_field(&self, project: &str, uid: &str, pointer: &str, value: Value) {
         let cluster = format!("v1/spectroclusters/{uid}");
         let (path, pointer) = if let Some(rest) = pointer.strip_prefix("/cloudconfig") {
@@ -1286,7 +1290,7 @@ impl Tenant {
         let kind = doc["spec"]["cloudConfigRef"]["kind"]
             .as_str()
             .unwrap_or("aws");
-        format!("v1/cloudconfigs/{kind}/{uid}c")
+        cloud_config_route(kind, uid)
     }
 
     /// Move the cluster `uid` to the cloud type `kind`, with `spec` as the spec of its cloud
@@ -1297,11 +1301,10 @@ impl Tenant {
         doc["spec"]["cloudType"] = json!(kind);
         doc["spec"]["cloudConfigRef"]["kind"] = json!(kind);
         self.write(project, &path, &doc);
-        let config_uid = format!("{uid}c");
         self.write(
             project,
-            &format!("v1/cloudconfigs/{kind}/{config_uid}"),
-            &json!({"metadata": {"uid": config_uid}, "spec": spec}),
+            &cloud_config_route(kind, uid),
+            &json!({"metadata": {"uid": format!("{uid}c")}, "spec": spec}),
         );
     }
 
@@ -1377,7 +1380,7 @@ impl Tenant {
         );
         self.write(
             project,
-            &format!("v1/cloudconfigs/aws/{config_uid}"),
+            &cloud_config_route("aws", uid),
             &json!({
                 "metadata": {"uid": config_uid, "name": format!("{name}-aws-config")},
                 "spec": {
@@ -1395,8 +1398,8 @@ impl Tenant {
             }),
         );
 
-        // the role bindings and the namespaces of the cluster are on routes of their own: one
-        // binding of a group to a cluster role, and one namespace with a quota
+        // the role bindings and the namespaces of the cluster are on routes of their own. The
+        // cluster has one binding of a group to a cluster role, and one namespace with a quota.
         let related = json!({"kind": "spectrocluster", "name": name, "uid": uid});
         self.write(
             project,
@@ -1580,8 +1583,9 @@ impl Tenant {
     }
 
     /// Hold a repave of a cluster for approval, as Palette does at the next read of the agent
-    /// after a macro in `kubeadmconfig.postKubeadmCommands` gets a new value: the cluster
-    /// document says `status.repave.state: Pending`, and `GET
+    /// after a macro in `kubeadmconfig.postKubeadmCommands` gets a new value.
+    ///
+    /// The cluster document says `status.repave.state: Pending`. `GET
     /// /v1/spectroclusters/{uid}/repave/status` gives the source `hubble` and one reason, with the
     /// resolved values on each side. `since` is the time of the state.
     pub fn repave_waits(&self, project: &str, cluster: &str, since: &str) {
@@ -1916,6 +1920,13 @@ fn profile_row(doc: &Value) -> Value {
         "spec": {"version": doc["spec"]["version"],
                  "cloudType": doc["spec"]["published"]["cloudType"]}
     })
+}
+
+/// The route of the cloud config of the cluster `uid` for the cloud type `kind`. Palette serves
+/// the cloud config of each cloud type at its own path. The stand-in gives the config the uid of
+/// the cluster with a `c` at the end.
+fn cloud_config_route(kind: &str, uid: &str) -> String {
+    format!("v1/cloudconfigs/{kind}/{uid}c")
 }
 
 fn cluster_row(doc: &Value) -> Value {

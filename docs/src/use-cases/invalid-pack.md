@@ -70,7 +70,7 @@ invalid pack in `summary.packsInvalid`:
   `verify.invalidPacks` of `strata verify --json`. A record that verifies can
   name a pack that the registry no longer has.
 - When the delete of the tag was a mistake, push the tag to the registry again.
-  Palette clears the flag when each tag of the pack is back.
+  No live run shows that Palette then clears the flag.
 - When the delete was correct, publish a new profile version with a pack
   version that the registry has, and record the new version.
 

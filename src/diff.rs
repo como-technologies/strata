@@ -256,7 +256,7 @@ fn tiers_diff(a: &Snapshot, b: &Snapshot) -> Vec<TierDiff> {
         return Vec::new();
     };
     // the tiers of a cluster group hold what the group gives its virtual clusters, and not what
-    // a cluster runs: a group and a cluster have no tier to compare
+    // a cluster runs. A group and a cluster have no tier to compare.
     if x.kind != y.kind || x.tiers.is_empty() || y.tiers.is_empty() {
         return Vec::new();
     }
@@ -940,9 +940,9 @@ pub struct ImageIdChange {
     pub b: String,
 }
 
-/// Each pack on both sides whose `imageId` differs, in the pack order of A. A side with no
-/// `imageId` is not compared: a record written before the annotations holds none, and a pack
-/// with none leaves the choice of the image to Palette.
+/// Each pack on both sides whose `imageId` differs, in the pack order of A. Strata does not
+/// compare a side with no `imageId`. A record written before the annotations holds none, and a
+/// pack with none leaves the choice of the image to Palette.
 pub fn image_ids_changed(a: &Snapshot, b: &Snapshot) -> Vec<ImageIdChange> {
     let images: BTreeMap<&str, &str> = b
         .packs

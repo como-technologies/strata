@@ -1525,9 +1525,9 @@ impl<A: PaletteApi> Resolver<'_, A> {
             .or_else(|| text(summary, "/spec/values"))
             .or(pack_values)
             .unwrap_or_default();
-        // Palette gives the pack the layer of the registry, and drops the layer of the request
-        // with no error, so another layer in the file gives a root that the published version
-        // does not have
+        // Palette gives the pack the layer of the registry and drops the layer of the request with
+        // no error. So another layer in the file gives a root that the published version does not
+        // have.
         let registry_layer = text(summary, "/spec/layer").or_else(|| text(&entity, "/layer"));
         if let (Some(given), Some(theirs)) = (l.layer.as_deref(), registry_layer.as_deref())
             && given != theirs

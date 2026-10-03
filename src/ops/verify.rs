@@ -148,7 +148,7 @@ fn live_holder<A: PaletteApi>(
     if c.pending {
         raw = palette.with_pending(raw)?;
     }
-    // a record that holds the digests of the macro values is checked on them too
+    // strata also checks the macro values of a record that holds their digests
     if c.macro_values.is_some() {
         raw.resolved_values = Some(palette.resolved_values(c.kind, uid)?);
     }
@@ -167,8 +167,8 @@ fn live_holder<A: PaletteApi>(
 }
 
 /// The kind of the object of a record in the audit log of Palette, or `None` for a cluster.
-/// strata reads the log of a cluster by its uid alone: Palette logs the create and the delete of
-/// a virtual cluster under `virtualCluster`, and not under `spectrocluster`.
+/// strata reads the log of a cluster by its uid alone. Palette logs the create and the delete of
+/// a virtual cluster under `virtualCluster`, not under `spectrocluster`.
 fn audit_kind(recorded: &Snapshot) -> Option<AuditKind> {
     match &recorded.source.cluster {
         Some(c) => match c.kind {
@@ -359,7 +359,7 @@ pub fn verify_with<A: PaletteApi>(
         None => match palette.fetch_profile(uid, progress) {
             Ok(mut raw) => {
                 last_modified = text(&raw.profile, "/metadata/lastModifiedTimestamp");
-                // a record that holds the digests of the macro values is checked on them too
+                // strata also checks the macro values of a record that holds their digests
                 if recorded.source.macro_values.is_some() {
                     raw.resolved_values = Some(palette.profile_resolved_values(uid)?);
                 }

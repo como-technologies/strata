@@ -922,14 +922,8 @@ fn cmd_snapshot(a: &SnapshotArgs) -> Result<ExitCode> {
         }
     }
     ops::require_acceptance(&snap)?;
-    // the root does not cover the flag, so the record alone does not show it to a person
-    for p in snap.packs.iter().filter(|p| p.invalid) {
-        let reason = Some(p.invalid_reason.as_str()).filter(|r| !r.is_empty());
-        progress.warn(&format!(
-            "Palette marks pack {} invalid{}. The record keeps the flag, outside the root",
-            p.key,
-            reason.map_or_else(String::new, |r| format!(" ({r})"))
-        ));
+    for warning in render::invalid_pack_warnings(&snap) {
+        progress.warn(&warning);
     }
     let text = snap.to_json(a.compact)?;
     match &a.output {
