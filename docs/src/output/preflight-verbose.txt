@@ -1,7 +1,7 @@
 $ strata preflight cluster.json --cloud aws --tier static --offline --verbose 2>&1 > /dev/null | sed -n '1,6p'
 strata: static: aws-local-zone-letter
-strata: static: aws-local-zone-letter: jq over the world -> 0 ms, PROBE PASS
+strata: static: aws-local-zone-letter: jq over the world -> 1 ms, PROBE PASS
 strata: static: api-endpoint-reach
-strata: static: api-endpoint-reach: jq over the world -> 0 ms, PROBE PASS
+strata: static: api-endpoint-reach: jq over the world -> 1 ms, PROBE PASS
 strata: static: bastion-cost
-strata: static: bastion-cost: jq over the world -> 0 ms, NOTE: bastionDisabled is not set: the build makes a bastion instance
+strata: static: bastion-cost: jq over the world -> 1 ms, NOTE: bastionDisabled is not set: the build makes a bastion instance

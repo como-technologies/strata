@@ -2,7 +2,8 @@
 //! `docs/src/output/`.
 //!
 //! Each step gives the exit code that the book states, and a different one stops the run. Each
-//! time stamp becomes one fixed stamp, so an output file changes only when strata changes.
+//! time stamp and each duration becomes one fixed value, so an output file changes only when
+//! strata changes.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
@@ -73,10 +74,8 @@ pub struct Runner {
     /// What each (project, uid, version) was seeded from, so two chapters cannot print two roots
     /// for one identity.
     seeded: BTreeMap<(String, String, String), (String, String)>,
-    stamp: Regex,
+    clock: Clock,
     commit: Regex,
-    /// The time a preflight check took, which differs on each run: one fixed count.
-    millis: Regex,
 }
 
 impl Runner {
@@ -143,10 +142,8 @@ impl Runner {
             states: BTreeSet::new(),
             chapters: BTreeMap::new(),
             seeded: BTreeMap::new(),
-            stamp: Regex::new(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z").expect("a pattern"),
+            clock: Clock::new(),
             commit: Regex::new(r"(?m) in [0-9a-f]{7,40}$").expect("a pattern"),
-            millis: Regex::new(r#"( {2,})\d+ ms\b|\| \d+ ms \||"elapsedMs": \d+"#)
-                .expect("a pattern"),
         })
     }
 
@@ -539,19 +536,7 @@ impl Runner {
                 "{name}: '{command}' exited with {got}, and the book says {want}"
             ));
         }
-        let text = self.stamp.replace_all(&text, "2026-09-17T09:30:00Z");
-        let text = self.millis.replace_all(&text, |c: &regex::Captures| {
-            let whole = c.get(0).map_or("", |m| m.as_str());
-            if whole.starts_with('|') {
-                "| 1 ms |".to_string()
-            } else if whole.starts_with('"') {
-                "\"elapsedMs\": 1".to_string()
-            } else {
-                // the same width as the field had, so the columns stay where they were
-                let width = whole.len() - " ms".len();
-                format!("{:>width$} ms", 1)
-            }
-        });
+        let text = self.clock.fixed(&text);
         let text = self
             .commit
             .replace_all(&text, " in 8c1d4f2")
@@ -891,6 +876,52 @@ fn symlink(from: &Path, to: &Path) -> std::io::Result<()> {
     std::os::unix::fs::symlink(from, to)
 }
 
+/// The values of an output that come from the clock: a time stamp, and the time that a step
+/// took. The time of a step changes with the load of the machine, so the runner writes one fixed
+/// value in its place.
+struct Clock {
+    stamp: Regex,
+    /// The milliseconds of a preflight check, in each form that preflight prints.
+    millis: Regex,
+    /// The seconds of a preflight watch.
+    seconds: Regex,
+}
+
+impl Clock {
+    fn new() -> Clock {
+        Clock {
+            stamp: Regex::new(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z").expect("a pattern"),
+            // the column of the text table, the cell of the Markdown table, the field of the JSON
+            // report, and the end of a verbose line
+            millis: Regex::new(
+                r#"(?P<pad> {2,})\d+ ms\b|\| \d+ ms \||"elapsedMs": \d+|(?P<lead>-> |, )\d+ ms,"#,
+            )
+            .expect("a pattern"),
+            seconds: Regex::new(r"\bafter \d+s\b").expect("a pattern"),
+        }
+    }
+
+    /// Replace each time stamp with `2026-09-17T09:30:00Z`, each count of milliseconds with 1,
+    /// and each count of seconds with 0.
+    fn fixed(&self, text: &str) -> String {
+        let text = self.stamp.replace_all(text, "2026-09-17T09:30:00Z");
+        let text = self.millis.replace_all(&text, |c: &regex::Captures| {
+            if c.name("pad").is_some() {
+                // the same width as the field had, so the columns stay where they were
+                let width = c[0].len() - " ms".len();
+                format!("{:>width$} ms", 1)
+            } else if let Some(lead) = c.name("lead") {
+                format!("{}1 ms,", lead.as_str())
+            } else if c[0].starts_with('|') {
+                "| 1 ms |".to_string()
+            } else {
+                "\"elapsedMs\": 1".to_string()
+            }
+        });
+        self.seconds.replace_all(&text, "after 0s").into_owned()
+    }
+}
+
 /// Stop the run, as the book's build must fail loudly rather than write a wrong page.
 pub fn die(message: &str) -> ! {
     eprintln!("docs-examples: {message}");
@@ -912,5 +943,40 @@ mod tests {
             ("merge-gate-rollback", 1)
         );
         assert_eq!(playground("loop-12"), ("loop-12", 1));
+    }
+
+    #[test]
+    fn each_duration_that_preflight_prints_becomes_one_fixed_value() {
+        let clock = Clock::new();
+        let cases = [
+            (
+                "strata: static: bastion-cost: jq over the world -> 12 ms, NOTE: no bastion",
+                "strata: static: bastion-cost: jq over the world -> 1 ms, NOTE: no bastion",
+            ),
+            (
+                "strata: static: floating-tag: jq over the world -> [\"a\"], 3 ms, WARN",
+                "strata: static: floating-tag: jq over the world -> [\"a\"], 1 ms, WARN",
+            ),
+            (
+                "  WARN  floating-tag  No profile pins a tag    104 ms",
+                "  WARN  floating-tag  No profile pins a tag      1 ms",
+            ),
+            (
+                "| WARN | `floating-tag` | 7 ms | |",
+                "| WARN | `floating-tag` | 1 ms | |",
+            ),
+            ("\"elapsedMs\": 250,", "\"elapsedMs\": 1,"),
+            (
+                "strata: watch: Running after 3s, reading 1",
+                "strata: watch: Running after 0s, reading 1",
+            ),
+            (
+                "made at 2026-10-03T11:02:59Z",
+                "made at 2026-09-17T09:30:00Z",
+            ),
+        ];
+        for (from, to) in cases {
+            assert_eq!(clock.fixed(from), to, "{from}");
+        }
     }
 }

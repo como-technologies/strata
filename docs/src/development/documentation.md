@@ -129,6 +129,10 @@ changes it.
 
 A step with another exit code stops the runner. The runner replaces each time
 stamp with `2026-09-17T09:30:00Z`, so a file changes only when strata changes.
+The time that a step takes changes with the load of the machine. Thus no output
+shows a duration: the runner writes `1 ms` for each count of milliseconds, and
+`after 0s` for each count of seconds. When a new output prints a duration in a
+new form, add the form to `Clock` in `xtask/src/book.rs`.
 A change to Palette behavior in the stand-in needs a live run that shows it.
 
 ## The style rules
