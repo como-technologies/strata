@@ -940,6 +940,17 @@ pub struct ImageIdChange {
     pub b: String,
 }
 
+impl ImageIdChange {
+    /// The sentence that names the pack and its two images: `pack os/ubuntu-aws names image
+    /// ami-1 on one side and ami-2 on the other: the root does not cover the annotations`.
+    pub(crate) fn sentence(&self) -> String {
+        format!(
+            "pack {} names image {} on one side and {} on the other: the root does not cover the annotations",
+            self.key, self.a, self.b
+        )
+    }
+}
+
 /// Each pack on both sides whose `imageId` differs, in the pack order of A. Strata does not
 /// compare a side with no `imageId`. A record written before the annotations holds none, and a
 /// pack with none leaves the choice of the image to Palette.

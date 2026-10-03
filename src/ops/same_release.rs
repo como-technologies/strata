@@ -5,7 +5,7 @@ use std::collections::{BTreeMap, HashMap};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::diff::{self, Diff, MaskedPack, PackDiff, Status};
+use crate::diff::{self, Diff, ImageIdChange, MaskedPack, PackDiff, Status};
 use crate::snapshot::{Pack, Snapshot, Tool};
 
 /// Schema id of the document `same-release` writes.
@@ -27,7 +27,7 @@ pub enum Policy {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "kebab-case")]
 pub enum PairStatus {
-    /// Equal roots.
+    /// Equal roots, and no pack names another machine image.
     Identical,
     /// Roots differ only by the `packUid`s that Palette mints, and by the tag name of a pack for
     /// the same build: the same content, under either policy.
@@ -266,6 +266,7 @@ fn pair_reasons(
     if d.order_changed {
         reasons.push("pack order changed".to_string());
     }
+    reasons.extend(d.image_ids_changed.iter().map(ImageIdChange::sentence));
     if reasons.is_empty() && !d.same_content && policy == Policy::Exact {
         reasons.push("roots differ".to_string());
     }
@@ -293,7 +294,11 @@ pub fn same_release_with(
             let ((la, a), (lb, b)) = (&w[0], &w[1]);
             let d = diff::compute(a, b, generated_at, None);
             let (mut reasons, packs_repinned, packs_retagged) = pair_reasons(&d, a, b, policy);
-            let mut status = if d.same {
+            // The root does not cover the annotations, so two records with one root can boot
+            // their nodes from two machine images.
+            let mut status = if !d.image_ids_changed.is_empty() {
+                PairStatus::Different
+            } else if d.same {
                 PairStatus::Identical
             } else if d.same_content {
                 PairStatus::SameContent
@@ -350,7 +355,7 @@ pub fn same_release_with(
             status: m(&[
                 (
                     "identical",
-                    "The two records have the same root: the same release.",
+                    "The two records have the same root, and no pack names another machine image in imageId: the same release.",
                 ),
                 (
                     "same-content",

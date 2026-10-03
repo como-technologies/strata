@@ -706,12 +706,7 @@ pub(crate) fn macros_changed_note(d: &Diff) -> Option<String> {
 pub(crate) fn image_ids_changed_notes(d: &Diff) -> Vec<String> {
     d.image_ids_changed
         .iter()
-        .map(|c| {
-            format!(
-                "pack {} names image {} on one side and {} on the other: the root does not cover the annotations",
-                c.key, c.a, c.b
-            )
-        })
+        .map(ImageIdChange::sentence)
         .collect()
 }
 

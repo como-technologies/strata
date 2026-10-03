@@ -1672,7 +1672,7 @@ fn use_cases(r: &mut Runner) {
     );
 
     // an OS pack that names its machine image in the annotation imageId: the root does not
-    // cover the annotations, and compare and verify name a new image (#189)
+    // cover the annotations, and compare, verify, and same-release name a new image (#189)
     r.chapter("os-image", DEV_ENV);
     r.projects(&[("dev", DEV)]);
     r.profile(DEV, A118, "1.1.8", "aws-stack@1.1.1", IMAGE_1);
@@ -1706,6 +1706,13 @@ fn use_cases(r: &mut Runner) {
         1,
         false,
         "strata compare releases/1.1.8/dev.json aws-stack@1.1.8 --json | jq -c '{same, imageIdsChanged}'",
+    );
+    // same-release reads the imageId of each pack too: one root, two images (#229)
+    r.step(
+        "os-image-same-release",
+        1,
+        false,
+        "strata same-release releases/1.1.8/dev.json aws-stack@1.1.8",
     );
 
     // a registry deletes the tag of a pack that a published version uses. Palette marks the
