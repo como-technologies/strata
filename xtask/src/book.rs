@@ -447,6 +447,11 @@ impl Runner {
         self.build(|t| t.set_value(project, uid, variable, value));
     }
 
+    /// The export of a published profile, at the export route of Palette.
+    pub fn export(&mut self, project: &str, uid: &str) {
+        self.build(|t| t.export(project, uid));
+    }
+
     /// The pack registries and their versions.
     pub fn registries(&mut self, project: &str) {
         self.build(|t| t.registries(project));

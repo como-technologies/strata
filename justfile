@@ -178,6 +178,11 @@ live-pack-states: build
 live-validate-packs: build
     examples/live/validate-packs.sh
 
+# The profile export checks: the export of each version of the example, read as a candidate;
+# each request is a GET, no cluster, no cost (#156)
+live-export: build
+    examples/live/export.sh
+
 # Read-only. It needs live-profiles; the instance checks need live-up, and are SEEN without it.
 
 # The knurl adapter against the tenant: each port method against the strata answer for the same object

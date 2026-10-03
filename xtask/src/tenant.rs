@@ -518,6 +518,79 @@ impl Tenant {
         self.listings();
     }
 
+    /// The export of the published profile `uid`, as `GET /v1/clusterprofiles/{uid}/export` gives
+    /// it with `format=json`: the name, the description, and the labels; the version; the type,
+    /// the cloud, and each pack with its values, its manifests, and the metadata of its registry;
+    /// and the variables. Palette leaves out values that are empty and a pack with no manifest, and
+    /// gives a manifest pack an empty registry. The export holds no params and no pack uid.
+    pub fn export(&self, project: &str, uid: &str) {
+        let doc = self.read(project, &format!("v1/clusterprofiles/{uid}"));
+        let manifests = self.read(
+            project,
+            &format!("v1/clusterprofiles/{uid}/packs/manifests"),
+        );
+        let variables = self.read(project, &format!("v1/clusterprofiles/{uid}/variables"));
+        let registries = self.read(project, "v1/registries/metadata");
+        let registry = |registry_uid: &Value| {
+            let row = registries["items"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .find(|r| r["uid"] == *registry_uid);
+            match row {
+                Some(r) => json!({"uid": r["uid"], "name": r["name"], "kind": r["kind"],
+                    "isPrivate": false, "providerType": "", "isSyncSupported": true}),
+                None => json!({"uid": "", "name": "", "kind": "", "isPrivate": false,
+                    "providerType": "", "isSyncSupported": false}),
+            }
+        };
+        let published = &doc["spec"]["published"];
+        let packs: Vec<Value> = published["packs"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .map(|p| {
+                let mut pack = json!({"name": p["name"], "type": p["type"], "layer": p["layer"],
+                    "version": p["version"], "tag": p["tag"],
+                    "registry": {"metadata": registry(&p["registryUid"])}});
+                if p["values"].as_str().is_some_and(|v| !v.is_empty()) {
+                    pack["values"] = p["values"].clone();
+                }
+                let content: Vec<Value> = manifests["spec"]["packs"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .filter(|m| m["metadata"]["name"] == p["name"])
+                    .flat_map(|m| {
+                        m["spec"]["manifests"]
+                            .as_array()
+                            .cloned()
+                            .unwrap_or_default()
+                    })
+                    .map(|m| json!({"name": m["name"], "content": m["content"]}))
+                    .collect();
+                if !content.is_empty() {
+                    pack["manifests"] = json!(content);
+                }
+                pack
+            })
+            .collect();
+        let export = json!({
+            "metadata": {"name": doc["metadata"]["name"],
+                "description": doc["metadata"]["annotations"]["description"].as_str().unwrap_or(""),
+                "labels": doc["metadata"]["labels"]},
+            "spec": {"version": doc["spec"]["version"],
+                "template": {"type": published["type"], "cloudType": published["cloudType"],
+                    "packs": packs},
+                "variables": variables["variables"]},
+        });
+        self.write(
+            project,
+            &format!("v1/clusterprofiles/{uid}/export@format=json"),
+            &export,
+        );
+    }
+
     /// Publish `platform-addons`, an add-on profile with one manifest pack. Palette gives the
     /// manifest pack of each profile a new pack uid, so two copies of one manifest differ.
     pub fn addons(&self, project: &str, uid: &str, pack: &str, label: &str, version: &str) {

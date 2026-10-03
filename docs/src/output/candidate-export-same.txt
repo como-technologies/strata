@@ -1,0 +1,3 @@
+$ strata same-release from-export.json published.json
+IDENTICAL      from-export.json -> published.json   root 088136c929bd
+SAME RELEASE: 1 pair passed

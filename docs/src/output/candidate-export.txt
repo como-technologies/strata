@@ -1,0 +1,6 @@
+$ jq -c '.spec.template.packs[] | {name, type, layer, version, tag, registry: .registry.metadata.name}' aws-stack-export.json
+{"name":"ubuntu-aws","type":"spectro","layer":"os","version":"24.04","tag":"LTS__24.x","registry":"Public Repo"}
+{"name":"kubernetes","type":"spectro","layer":"k8s","version":"1.36.2","tag":"1.36.2","registry":"Public Repo"}
+{"name":"cni-cilium-oss","type":"spectro","layer":"cni","version":"1.20.1","tag":"1.20.1","registry":"Public Repo"}
+{"name":"csi-aws-ebs","type":"spectro","layer":"csi","version":"1.65.0","tag":"1.65.0","registry":"Public Repo"}
+{"name":"cert-manager","type":"spectro","layer":"addon","version":"1.21.1","tag":"1.21.1","registry":"Public Repo"}

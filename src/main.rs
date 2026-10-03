@@ -192,7 +192,7 @@ struct SnapshotArgs {
     /// Read the raw answers of --raw-dir, with no network
     #[arg(long, conflicts_with = "raw_dir")]
     from_raw: Option<PathBuf>,
-    /// Read a candidate file, before the version is in Palette
+    /// Read a candidate file, or a profile export of Palette, before the version is in Palette
     #[arg(long, conflicts_with_all = ["from_raw", "raw_dir", "ref"])]
     from_candidate: Option<PathBuf>,
     /// Ask Palette whether it takes the packs: of a candidate as a new profile, or of a profile

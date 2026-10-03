@@ -107,6 +107,11 @@
 #       deletes it. It is a credential: do not save it, and do not print it to a log.
 #   api.sh get PATH
 #       GET one path, `/v1/...`, and print the answer. A read, for a check.
+#   api.sh export PROFILE_UID [yaml|json]
+#       Print the export file of a profile version: GET /v1/clusterprofiles/{uid}/export. A read.
+#       Palette sends the file only to a request that accepts a file; to a request that accepts
+#       JSON, it sends `{"Reader":{}}`. Palette can refuse an export that follows another one
+#       at once with HTTP 429.
 #
 # The key comes from PALETTE_API_KEY or ~/.palette.env and is never printed; the address from
 # PALETTE_API (default https://api.spectrocloud.com). PALETTE_PROJECT_UID scopes the requests.
@@ -130,7 +135,7 @@ call() {
   local method=$1 path=$2 body=${3:-} out status
   out=$(mktemp)
   status=$(curl -sS -o "$out" -w '%{http_code}' -X "$method" \
-    -H "ApiKey: $KEY" -H 'Accept: application/json' -H 'Content-Type: application/json' \
+    -H "ApiKey: $KEY" -H "Accept: ${ACCEPT:-application/json}" -H 'Content-Type: application/json' \
     ${PROJECT:+-H "ProjectUid: $PROJECT"} ${body:+--data-binary "@$body"} "$API$path")
   if [ "${status:0:1}" != 2 ]; then
     echo "api.sh: $method $path answered HTTP $status: $(head -c 300 "$out")" >&2
@@ -683,6 +688,8 @@ case "${1:-}" in
   macro-delete) shift; macro_delete "$@" ;;
   get-kubeconfig) shift; get_kubeconfig "$@" ;;
   get) shift; [ -n "${1:-}" ] || die "usage: api.sh get PATH"; call GET "$1" ;;
+  export) shift; [ -n "${1:-}" ] || die "usage: api.sh export PROFILE_UID [yaml|json]"
+    ACCEPT=application/octet-stream call GET "/v1/clusterprofiles/$1/export?format=${2:-yaml}" ;;
   patch) shift; patch "$@" ;;
   post) shift; post "$@" ;;
   *) sed -n '2,/^set -uo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; exit 2 ;;
