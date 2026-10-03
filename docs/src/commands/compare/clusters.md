@@ -6,9 +6,9 @@ other questions, the notes, what to expect, and the options.
 
 ## Compare two clusters by more than the release
 
-Two cluster records that carry tiers are compared on each tier that both carry,
-and on their labels. A `cluster tiers` line names the state of each, and a line
-for each field that differs, as `<tier>.<path>`:
+Two cluster records of one kind that carry tiers are compared on each tier
+that both carry, and on their labels. A `cluster tiers` line names the state
+of each, and a line for each field that differs, as `<tier>.<path>`:
 
 ```text
 {{#include ../../output/tiers-differ-lines.txt}}
@@ -45,3 +45,8 @@ question is whether the member runs the pin, and not what else it runs:
 `tenant-a` runs one more profile of its own, and the comparison leaves it out.
 A `cluster:<cluster>/<profile>` ref is not narrowed. See
 [A cluster group pins a profile](../../use-cases/cluster-groups.md).
+
+The tiers of a group hold what the group gives its virtual clusters, so
+`compare` of a group with a member compares no tier. Two records of one group
+compare their `policy` tiers: see
+[The config that a cluster group gives](../snapshot/other-objects.md#the-config-that-a-cluster-group-gives).

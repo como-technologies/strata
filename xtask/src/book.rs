@@ -427,6 +427,18 @@ impl Runner {
         self.build(|t| t.cluster_field(project, uid, pointer, value));
     }
 
+    /// Change one field of the document of a cluster group: see
+    /// [`Tenant::cluster_group_field`].
+    pub fn cluster_group_field(
+        &mut self,
+        project: &str,
+        uid: &str,
+        pointer: &str,
+        value: serde_json::Value,
+    ) {
+        self.build(|t| t.cluster_group_field(project, uid, pointer, value));
+    }
+
     /// Move a cluster to another cloud type: see [`Tenant::cloud`].
     pub fn cloud(&mut self, project: &str, uid: &str, kind: &str, spec: serde_json::Value) {
         self.build(|t| t.cloud(project, uid, kind, spec));

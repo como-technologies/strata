@@ -20,6 +20,11 @@ const OCI_CSI_PACK: &str = "64ec000000000000000000b1";
 pub const PRIVATE_CHARTS: &str = "64ed000000000000000000a1";
 /// The chart that a profile pins from it.
 const CHART: &str = "podinfo";
+/// The host cluster of each cluster group. The book lists no host cluster.
+const GROUP_HOST: &str = "64f5000000000000000000b1";
+/// The values that a cluster group gives each virtual cluster: YAML with comments, as Palette
+/// gives it.
+const GROUP_VALUES: &str = "# Sync describes how to sync resources to the host cluster.\nsync:\n  toHost:\n    services:\n      enabled: true\n    ingresses:\n      enabled: false\n";
 const OCI_CSI_DIGEST: &str =
     "sha256:a746e14689085b14531566f9c9cfb2bc7716e96a394547ef50a1c52eab510c9e";
 
@@ -899,7 +904,8 @@ impl Tenant {
     }
 
     /// A cluster group `uid`, `name`, that pins `profiles` for its virtual clusters, with the
-    /// clusters `members` as those virtual clusters.
+    /// clusters `members` as those virtual clusters. The group gives each virtual cluster the
+    /// config of `spec.clustersConfig`, as Palette gives it: limits, an endpoint, and values.
     pub fn cluster_group(
         &self,
         project: &str,
@@ -916,7 +922,22 @@ impl Tenant {
             &format!("v1/clustergroups/{uid}"),
             &json!({
                 "metadata": {"uid": uid, "name": name},
-                "spec": {"type": "hostCluster", "clusterProfileTemplates": templates},
+                "spec": {
+                    "type": "hostCluster",
+                    "clusterProfileTemplates": templates,
+                    "clustersConfig": {
+                        "endpointType": "LoadBalancer",
+                        "hostClustersConfig": [{"clusterUid": GROUP_HOST, "endpointConfig": {
+                            "ingressConfig": {"host": "*", "port": 6443},
+                            "loadBalancerConfig": {"externalIPs": null,
+                                "loadBalancerSourceRanges": null},
+                        }}],
+                        "kubernetesDistroType": "vcluster-generic",
+                        "limitConfig": {"cpu": 6, "cpuMilliCore": 6000, "memory": 12288,
+                            "memoryMiB": 12288, "overSubscription": 120, "storageGiB": 10},
+                        "values": GROUP_VALUES,
+                    },
+                },
             }),
         );
         self.write(
@@ -1129,10 +1150,23 @@ impl Tenant {
             Some(rest) => (self.cloud_config_path(project, uid), rest.to_string()),
             None => (format!("v1/spectroclusters/{uid}"), pointer.to_string()),
         };
-        let mut doc = self.read(project, &path);
-        // an existing field is replaced; a new key of an existing object is added
-        let (parent, key) = pointer.rsplit_once('/').unwrap_or(("", pointer.as_str()));
-        match doc.pointer_mut(&pointer) {
+        self.set_field(project, &path, &pointer, value);
+        // a label is in the listing and the search too
+        self.listings();
+    }
+
+    /// Change one field of the document of a cluster group at a JSON pointer, as a person
+    /// changes the group: the profiles that it pins stay.
+    pub fn cluster_group_field(&self, project: &str, uid: &str, pointer: &str, value: Value) {
+        self.set_field(project, &format!("v1/clustergroups/{uid}"), pointer, value);
+    }
+
+    /// Set the field at `pointer` of the document at `path`. An existing field is replaced, and a
+    /// new key of an existing object is added.
+    fn set_field(&self, project: &str, path: &str, pointer: &str, value: Value) {
+        let mut doc = self.read(project, path);
+        let (parent, key) = pointer.rsplit_once('/').unwrap_or(("", pointer));
+        match doc.pointer_mut(pointer) {
             Some(slot) => *slot = value,
             None => match doc.pointer_mut(parent).and_then(Value::as_object_mut) {
                 Some(object) => {
@@ -1141,9 +1175,7 @@ impl Tenant {
                 None => panic!("{path} has no object at {parent} for {key}"),
             },
         }
-        self.write(project, &path, &doc);
-        // a label is in the listing and the search too
-        self.listings();
+        self.write(project, path, &doc);
     }
 
     /// A saved tag filter of the tenant, `name`, that selects the clusters with the label

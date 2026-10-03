@@ -2271,6 +2271,33 @@ fn use_cases(r: &mut Runner) {
         false,
         "strata consumers platform-addons@1.0.0",
     );
+    r.step(
+        "group-policy",
+        0,
+        false,
+        "jq -c '.source.cluster.tiers.policy.fields | {endpointType, kubernetesDistroType, limitConfig, hostClusters: [.hostClusters[].uid]}' runs/dev-group.json",
+    );
+    // the group gives each virtual cluster 4 cores in place of 6
+    r.cluster_group_field(
+        DEV,
+        DEV_GROUP,
+        "/spec/clustersConfig/limitConfig",
+        json!({"cpu": 4, "cpuMilliCore": 4000, "memory": 12288, "memoryMiB": 12288,
+            "overSubscription": 120, "storageGiB": 10}),
+    );
+    r.serve_here(); // state 2: the group gives each virtual cluster less CPU
+    r.step(
+        "group-policy-verify",
+        0,
+        false,
+        "strata verify runs/dev-group.json",
+    );
+    r.step(
+        "group-policy-compare",
+        0,
+        false,
+        "strata compare runs/dev-group.json clustergroup:dev-group",
+    );
 
     // An app profile, and a plain update of it
     r.chapter("app-profiles", DEV_ENV);

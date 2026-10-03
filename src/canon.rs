@@ -100,9 +100,19 @@ pub fn map_yaml(text: &str) -> Result<(), String> {
 
 /// Hash YAML text canonically; unparseable text is hashed as trimmed text and the error is returned.
 pub fn hash_yaml(text: &str) -> (String, Option<String>) {
+    let (_, hash, error) = canon_yaml_hashed(text);
+    (hash, error)
+}
+
+/// YAML text in canonical form, with the hash of that form. Unparseable text gives null, the hash
+/// of the trimmed text, and the error.
+pub fn canon_yaml_hashed(text: &str) -> (Value, String, Option<String>) {
     match canon_yaml(text) {
-        Canon::Parsed(v) => (sha256_hex(&canonical_json(&v)), None),
-        Canon::Unparseable(e) => (sha256_hex(text.trim()), Some(e)),
+        Canon::Parsed(v) => {
+            let hash = sha256_hex(&canonical_json(&v));
+            (v, hash, None)
+        }
+        Canon::Unparseable(e) => (Value::Null, sha256_hex(text.trim()), Some(e)),
     }
 }
 

@@ -91,6 +91,11 @@ profile, or pack version.
     [More of the cluster than its release](../commands/snapshot/cluster.md#more-of-the-cluster-than-its-release).
     The `fields` of `shape` are `cloudType`, `cloud`, and `pools[]`, by
     [The shape on each cloud](../commands/snapshot/cluster.md#the-shape-on-each-cloud).
+    A cluster group carries `policy` alone. Its `fields` are `endpointType`,
+    `kubernetesDistroType`, `limitConfig`, `values`, `valuesHash`,
+    `valuesParseError` when the values are not YAML, and `hostClusters[]` with
+    `uid` and `endpointConfig`: see
+    [The config that a cluster group gives](../commands/snapshot/other-objects.md#the-config-that-a-cluster-group-gives).
     A record that an older version of strata wrote has no `cloudType`.
     `pending`, only when true: the record is of `cluster:<cluster>@pending`,
     and holds no `updatesPending` and no `repavePending`. `kind`, only for an
@@ -236,7 +241,8 @@ A comparison of two sides, `a` and `b`.
 - `imageIdsChanged`, only when it is not empty: each pack that names an image
   in `imageId` on both sides, with two different images. Each entry has `key`,
   `a`, and `b`. `compare` exits `1` for it, also when `same` is `true`.
-- `clusterTiers`, only between two cluster records that carry tiers: for each
+- `clusterTiers`, only between two cluster records of one kind that carry
+  tiers: for each
   tier that both carry, and for `labels`, `tier`, `same`, and `diff[]` with the
   fields that differ. A difference here does not change `same`.
 - `runningBehind`, only when it is not empty: for each cluster side with a

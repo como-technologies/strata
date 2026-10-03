@@ -37,6 +37,10 @@ These are open:
   gives an OS pack an `imageId`. So no run shows if Palette replaces the nodes
   for a new image, or which `imageId` a cluster copy holds. See
   [The OS pack names a new machine image](../../use-cases/os-image.md).
+- A change of the config of a cluster group, `spec.clustersConfig`: no run
+  changes the limits, the endpoint, or the values of a group. So no run shows
+  the `policy` tier of a group record after such a change. See
+  [The config that a cluster group gives](../../commands/snapshot/other-objects.md#the-config-that-a-cluster-group-gives).
 - The answer of `GET /v1/spectroclusters/{uid}/repave/status` to a cluster
   record. A run read the route by hand, and no run takes a record of a cluster
   while its repave waits. See

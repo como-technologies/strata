@@ -36,6 +36,10 @@ profiles, in tiers. Each tier has its own hash, and none is part of the root:
 | `policy` | the OS patch policy, the lifecycle, the machine health, the timezone, the cluster resources, the RBAC, and the FIPS mode | the cluster document, `spec.clusterConfig` |
 | `shape` | the cloud type; each machine pool, with its instance type, size, zones, labels, taints, and architecture; and the cloud part that a person chooses. See [The shape on each cloud](#the-shape-on-each-cloud) | the cloud config: one more request, with `--shape` |
 
+A record of a cluster group carries a `policy` tier of its own: the config
+that the group gives each virtual cluster. See
+[The config that a cluster group gives](other-objects.md#the-config-that-a-cluster-group-gives).
+
 The record also keeps the labels of the cluster, in `source.cluster.labels`.
 A tier is in the record only when Palette gives the part of the document that
 it reads, so a record names the tiers that it carries.

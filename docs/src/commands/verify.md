@@ -257,6 +257,8 @@ the report names each tier that changed: see
 [More of the cluster than its release](snapshot/cluster.md#more-of-the-cluster-than-its-release).
 The verdict follows the release alone, so a changed tier does not make a record
 `DRIFT`. A record written before the tiers carries none, and verifies as before.
+A record of a cluster group carries the `policy` tier of the group: see
+[The config that a cluster group gives](snapshot/other-objects.md#the-config-that-a-cluster-group-gives).
 
 ## Each kind of record
 
