@@ -23,7 +23,11 @@ of each response.
 
 A missing variables endpoint, HTTP 404 or 405 on an older Palette, counts as no
 variables. The record says so in `source.variablesUnavailable`: see
-[JSON documents](./documents.md#strata-snapshot1).
+[JSON documents](./documents.md#strata-snapshot1). Palette also answers HTTP 404
+when it does not have the profile. So after a 404, strata reads the profile
+document again. When that read fails, the record fails, and `verify` reports the
+version as gone. A cluster does the same with its own document. See
+[The variables route](../internals/palette/profiles.md#the-variables-route).
 
 ## A cluster
 

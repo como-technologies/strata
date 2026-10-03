@@ -66,6 +66,17 @@ check addon-copy-variables-hash 0 "#66: the copy has the variables hash of the p
   jq -e --slurpfile a addon.json \
     '.variablesUnavailable != true and .variablesHash == $a[0].variablesHash and [.variables[].name] == ["purpose"]' \
     addon-copy.json
+
+# ---- #190: the variables route of a profile. The release version declares no variables, and a
+# uid that Palette does not have gets HTTP 404 with the code ResourceNotFound.
+check release-variables 0 "#190: read the variables route of the release version" -- \
+  "$live/api.sh" get "/v1/clusterprofiles/$P/variables"
+check release-variables-empty 0 "#190: a version with no variables gives an empty list" -- \
+  jq -e '. == {"variables": []}' release-variables.out
+check missing-profile-variables 2 "#190: the variables route of a uid that Palette does not have fails" -- \
+  "$live/api.sh" get /v1/clusterprofiles/000000000000000000000000/variables
+check missing-profile-not-found 0 "#190: that failure is HTTP 404 with the code ResourceNotFound" -- \
+  grep -q 'HTTP 404: {"code":"ResourceNotFound"' missing-profile-variables.err
 check snapshot-next 0 "record the newer version" -- \
   "$strata" snapshot "$P2" --raw-dir raw/next -o next.json
 check compare-next-cluster 1 "#1: against a newer record, the cluster shows the change" -- \

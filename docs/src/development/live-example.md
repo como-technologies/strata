@@ -681,6 +681,9 @@ These rules come from the teardowns of this kind of cluster:
 | `cluster-variables-endpoint` | 0 | #66: `GET /v1/spectroclusters/<uid>/variables` serves the variable of the add-on profile |
 | `snapshot-addon-copy` | 0 | #66: record the copy of the add-on profile that the cluster holds |
 | `addon-copy-variables-hash` | 0 | #66: the copy has the variables hash of the profile, so the endpoint repeats the definition fields |
+| `release-variables`, `release-variables-empty` | 0 | #190: the variables route of the release version, which declares no variables, gives `{"variables":[]}` |
+| `missing-profile-variables` | 2 | #190: the variables route of a uid that Palette does not have fails |
+| `missing-profile-not-found` | 0 | #190: that failure is HTTP 404 with the code `ResourceNotFound` |
 | `snapshot-next` | 0 | record the newer version |
 | `compare-next-cluster` | 1 | #1: against a newer record, the cluster shows the change |
 | `compare-next-cluster-json` | 1 | #1: the same comparison as JSON |

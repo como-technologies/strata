@@ -490,6 +490,52 @@ fn an_unavailable_variables_endpoint_is_recorded_and_reported() {
     );
 }
 
+/// Answers the profile document once, then HTTP 404 for each path of the profile. This is a
+/// profile that a person deletes after the first read and before strata reads its variables.
+struct DeletedAfterFirstRead<'a> {
+    inner: &'a MemoryApi,
+    profile_reads: RefCell<u32>,
+}
+
+impl PaletteApi for DeletedAfterFirstRead<'_> {
+    fn get_json(&self, path: &str) -> strata::Result<Value> {
+        if path == profile_path() {
+            *self.profile_reads.borrow_mut() += 1;
+        }
+        if *self.profile_reads.borrow() > 1 || path.ends_with("/variables") {
+            return MemoryApi::new().get_json(path);
+        }
+        self.inner.get_json(path)
+    }
+}
+
+#[test]
+fn a_404_of_the_variables_route_of_a_deleted_profile_reads_as_gone_and_not_as_no_variables() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let recorded = ops::snapshot_from_dir(&dir.path().join("a"), "a", "t0").unwrap();
+    let served = serve(MemoryApi::new(), dir.path(), "a", UID_A);
+    let api = || DeletedAfterFirstRead {
+        inner: &served,
+        profile_reads: RefCell::new(0),
+    };
+
+    // the record fails with the 404 of the profile document, and records no empty variables
+    let err = Palette::new(api())
+        .fetch_profile(UID_A, &Progress::silent())
+        .unwrap_err();
+    assert!(
+        matches!(&err, Error::Api { status: 404, path, .. } if *path == profile_path()),
+        "{err}"
+    );
+
+    // verify reports the version as gone, not as a version whose variables are unavailable
+    let v = ops::verify(&recorded, &Palette::new(api()), "t1", &Progress::silent()).unwrap();
+    let ver = v.diff.verify.as_ref().unwrap();
+    assert!(ver.gone, "the profile is gone");
+    assert!(!v.live.source.variables_unavailable, "{:?}", v.live.source);
+}
+
 #[test]
 fn other_4xx_are_not_retried() {
     let dir = tempfile::tempdir().unwrap();

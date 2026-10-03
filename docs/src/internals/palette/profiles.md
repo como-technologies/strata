@@ -296,6 +296,21 @@ The profile document names no edge host.
 So [`strata consumers`](../../commands/consumers.md) counts the clusters and the
 templates of the profile document, and searches the edge hosts.
 
+## The variables route
+
+`GET /v1/clusterprofiles/<uid>/variables` gives `{"variables":[]}` for a version
+that declares no variables. When Palette does not have the version, the route
+answers HTTP `404` with the code `ResourceNotFound`, as the profile document
+does.
+
+An older Palette with no variables route also answers 404. So after a 404 of
+the variables route, strata reads the profile document again. When that read
+fails, the version is gone: the record fails, and `verify` reports the version
+as gone. When strata can read the profile, it records no variables and sets
+`variablesUnavailable`.
+[`verify.sh`](../../development/live-example.md#the-checks-of-verifysh) checks
+these answers on the live tenant.
+
 ## Macros
 
 A macro is a name and a value, with no version, no history, and no digest
