@@ -595,8 +595,8 @@ the kubeadm engine alone. The edit in place also opens an update notification fo
 `compare` names it; the undo closes it.
 
 When the answers of `var-none` and `var-default` differ, Palette does not
-give the default of a variable to a target version that the cluster does not
-run. Then #132 changes `compare --repave`, so that it sends `variables[]`.
+give the default of a variable to the target version, which the cluster does
+not run. Then #132 changes `compare --repave`, so that it sends `variables[]`.
 
 ## registry-move-nodes.sh
 

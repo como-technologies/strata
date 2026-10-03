@@ -7,8 +7,8 @@
 #
 #   1  at the baseline: a record of the release version, and the machines of cluster A
 #   2  the OS pack of the release version comes from move_registry_name, through OpenTofu, in
-#      place: the record shows the move, and compare of the copy of cluster A with the version
-#      gives the level of the impact table and the answer of Palette (--repave)
+#      place, and the record shows the move. compare --repave of the copy of cluster A with the
+#      version gives the level of the impact table and the answer of Palette
 #   3  cluster A takes the update. For WATCH_MINUTES (default 30), each minute: the state, the
 #      machines, and whether a repave waits for approval. Then: the nodes are replaced, or not
 #   4  undo: the release version back, and cluster A takes it. When a repave waits for approval,
