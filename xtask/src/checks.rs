@@ -312,17 +312,4 @@ mod tests {
             ]
         );
     }
-
-    #[test]
-    fn a_playground_name_splits_into_its_chapter_and_its_state() {
-        assert_eq!(crate::book::playground("loop"), ("loop", 1));
-        assert_eq!(crate::book::playground("loop-3"), ("loop", 3));
-        assert_eq!(crate::book::playground("os-image"), ("os-image", 1));
-        assert_eq!(crate::book::playground("os-image-2"), ("os-image", 2));
-        assert_eq!(
-            crate::book::playground("merge-gate-rollback"),
-            ("merge-gate-rollback", 1)
-        );
-        assert_eq!(crate::book::playground("loop-12"), ("loop-12", 1));
-    }
 }

@@ -879,3 +879,21 @@ pub fn die(message: &str) -> ! {
     eprintln!("docs-examples: {message}");
     std::process::exit(2)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_playground_name_splits_into_its_chapter_and_its_state() {
+        assert_eq!(playground("loop"), ("loop", 1));
+        assert_eq!(playground("loop-3"), ("loop", 3));
+        assert_eq!(playground("os-image"), ("os-image", 1));
+        assert_eq!(playground("os-image-2"), ("os-image", 2));
+        assert_eq!(
+            playground("merge-gate-rollback"),
+            ("merge-gate-rollback", 1)
+        );
+        assert_eq!(playground("loop-12"), ("loop-12", 1));
+    }
+}

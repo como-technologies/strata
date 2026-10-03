@@ -91,8 +91,8 @@ The playground takes each chapter that `r.chapter(...)` starts in
 needs no other change. Two chapters with one name stop the runner.
 `just playground CHAPTER-N` serves state `N` of the chapter. A chapter has one
 state more than its calls of `serve_here`. `just docs-check` fails on a page
-that gives `just playground` with a chapter that the runner does not start, or
-with a state that the chapter does not have.
+that gives `just playground` with a chapter that the runner does not start. It
+also fails on a state that the chapter does not have.
 
 ## Add an output
 
