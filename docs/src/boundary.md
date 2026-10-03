@@ -99,11 +99,18 @@ See [How preflight works](./internals/preflight.md).
 Five rules decide what a new item of strata can do. The review of each item,
 and of each wave, checks them.
 
-1. **Ask Palette. Do not copy its rules.** When a validate route of Palette
-   answers a check, strata and `strata-preflight` call that route. A copy of
-   the rule goes stale when Palette changes the rule. Strata keeps a local rule
-   only when the root needs it: for a change that Palette makes to the content
-   and does not report.
+1. **Ask Palette first. Make a check only where no route answers.** The rule
+   has three parts:
+   - When a route of Palette answers a check before the point where the answer
+     matters, strata and `strata-preflight` call that route. They do not copy
+     the rule, because a copy goes stale when Palette changes the rule.
+   - When no route answers the check before that point, strata makes the check
+     itself. The check names Palette as the owner of the rule.
+     [The gaps that strata fills](./internals/palette/profiles.md#the-gaps-that-strata-fills)
+     lists each such check. An answer at the create is too late for a check of
+     a candidate, because the team needs it before the publish.
+   - When Palette adds a route that answers the check, strata removes its own
+     check. The review at the end of each wave reads the list for this.
 2. **Do not repeat a status that Palette shows.** Palette shows flags and
    states in its console, its notifications, and its audit log. A record holds
    one of them only when `compare`, `verify`, or `same-release` needs it to
