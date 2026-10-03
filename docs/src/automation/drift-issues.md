@@ -49,6 +49,10 @@ A changed cluster value is not drift. `verify` exits `0` for it, so this job
 opens no issue for it. See
 [Clusters give variables different values](../use-cases/cluster-values.md).
 
+An invalid pack is not drift either. `verify` exits `0` for it, so this job
+opens no issue for it. See
+[A registry deletes the tag of a pack](../use-cases/invalid-pack.md).
+
 ## Options
 
 | Option | Default | Function |

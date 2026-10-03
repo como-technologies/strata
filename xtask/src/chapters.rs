@@ -144,6 +144,7 @@ pub fn names() -> Vec<&'static str> {
         "cluster-release",
         "cluster-values",
         "macros",
+        "invalid-pack",
         "no-digest",
         "repave",
         "cluster-tiers",

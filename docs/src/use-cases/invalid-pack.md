@@ -18,8 +18,11 @@ A record keeps the flag and the reason of each pack, outside the root.
 In this example, `dev` has `aws-stack@1.1.9`, the content of 1.1.1. After the
 record, the registry deletes the tag `1.21.1` of `cert-manager`.
 
-**Who runs this.** The scheduled verify job finds this. The job is
-[Drift issues](../automation/drift-issues.md).
+**Who runs this.** A person who runs `strata verify` on a record finds this.
+A job finds it in `verify.invalidPacks` of `strata verify --json`, or in
+`records[].invalidPacks` with `--summary`. The scheduled job of
+[Drift issues](../automation/drift-issues.md) does not find it: the status of
+the record is `unchanged`, so the job opens no issue.
 
 **Follow along.** `just playground invalid-pack-1` serves this tenant on this
 machine, with no key and no cost. `just playground invalid-pack-2` serves it
@@ -63,8 +66,9 @@ invalid pack in `summary.packsInvalid`:
 
 ## What to do
 
-- Read the `INVALID` lines of the scheduled verify job. A record that verifies
-  can name a pack that the registry no longer has.
+- Read the `INVALID` lines of `strata verify`. In a job, read
+  `verify.invalidPacks` of `strata verify --json`. A record that verifies can
+  name a pack that the registry no longer has.
 - When the delete of the tag was a mistake, push the tag to the registry again.
   Palette clears the flag when each tag of the pack is back.
 - When the delete was correct, publish a new profile version with a pack
