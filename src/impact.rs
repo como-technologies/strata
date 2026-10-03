@@ -41,6 +41,8 @@ pub struct Impact {
 pub struct Flags {
     /// The identity hash moved.
     pub identity: bool,
+    /// The version moved: a part of the identity.
+    pub version: bool,
     /// The upstream hash moved.
     pub upstream: bool,
     /// The authored hash moved.
@@ -149,7 +151,37 @@ const RULES: &[Rule] = &[
 ];
 
 /// The impact of a change on a layer, from the rules table.
+///
+/// On the OS, Kubernetes, and kernel layers, an identity change that keeps the version takes the
+/// level of the other flags. Palette replaces the nodes for a new version of such a pack, and not
+/// for the same version from another registry: a live run moved the OS pack of a running cluster
+/// to another registry, and Palette replaced no node.
 pub fn impact(layer: Layer, flags: Flags) -> Impact {
+    if !(flags.identity && !flags.version && Layers::NodeImage.matches(layer)) {
+        return rule_impact(layer, flags);
+    }
+    let other = rule_impact(
+        layer,
+        Flags {
+            identity: false,
+            ..flags
+        },
+    );
+    let text = match other.level {
+        ImpactLevel::None => "none (the same version from another pack reference)",
+        ImpactLevel::Sync => {
+            "the same version from another pack reference, applied on next profile sync"
+        }
+        _ => return other,
+    };
+    Impact {
+        level: other.level,
+        text: text.to_string(),
+    }
+}
+
+/// The impact of the first rule that matches the layer and the flags.
+fn rule_impact(layer: Layer, flags: Flags) -> Impact {
     RULES
         .iter()
         .find(|r| r.layers.matches(layer) && r.needs.matches(flags))
@@ -171,6 +203,7 @@ pub fn presence_impact(layer: &str, added: bool) -> Impact {
         Layer::parse(layer),
         Flags {
             identity: true,
+            version: true,
             upstream: false,
             authored: false,
         },
@@ -198,6 +231,7 @@ mod tests {
         assert!(ImpactLevel::Sync > ImpactLevel::None);
         let f = |identity, upstream, authored| Flags {
             identity,
+            version: identity,
             upstream,
             authored,
         };
@@ -229,5 +263,57 @@ mod tests {
             impact(Layer::Addon, f(false, false, false)).level,
             ImpactLevel::None
         );
+    }
+
+    #[test]
+    fn a_node_image_pack_from_another_registry_at_the_same_version_takes_the_level_of_its_other_flags()
+     {
+        // the registry uid alone moved: no node repave, as the live run of the OS pack showed
+        let moved = Flags {
+            identity: true,
+            ..Flags::default()
+        };
+        for layer in [Layer::Os, Layer::K8s, Layer::Kernel] {
+            let imp = impact(layer, moved);
+            assert_eq!(imp.level, ImpactLevel::None, "{layer:?}");
+            assert_eq!(
+                imp.text,
+                "none (the same version from another pack reference)"
+            );
+        }
+        // the digest moved with the registry, as between two kinds of registry
+        let imp = impact(
+            Layer::Os,
+            Flags {
+                upstream: true,
+                ..moved
+            },
+        );
+        assert_eq!(imp.level, ImpactLevel::Sync);
+        assert_eq!(
+            imp.text,
+            "the same version from another pack reference, applied on next profile sync"
+        );
+        // a value of the OS pack still repaves, and a new version still repaves
+        let imp = impact(
+            Layer::Os,
+            Flags {
+                authored: true,
+                ..moved
+            },
+        );
+        assert_eq!(imp.level, ImpactLevel::Repave);
+        assert_eq!(imp.text, "node repave (OS values change)");
+        let imp = impact(
+            Layer::K8s,
+            Flags {
+                version: true,
+                ..moved
+            },
+        );
+        assert_eq!(imp.level, ImpactLevel::Repave);
+        // another layer keeps the identity rule
+        assert_eq!(impact(Layer::Csi, moved).level, ImpactLevel::ClusterWide);
+        assert_eq!(impact(Layer::Addon, moved).level, ImpactLevel::InPlace);
     }
 }

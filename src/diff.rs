@@ -1681,6 +1681,7 @@ pub fn compute(a: &Snapshot, b: &Snapshot, generated_at: &str, verify: Option<Ve
                     Layer::parse(&x.layer),
                     Flags {
                         identity: identity && !tag_renamed,
+                        version: x.version != y.version,
                         upstream,
                         authored,
                     },
