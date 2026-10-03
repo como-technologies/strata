@@ -116,8 +116,10 @@ fn repeated<'a>(names: impl IntoIterator<Item = &'a str>) -> Vec<&'a str> {
     out
 }
 
-/// The layers that a profile of type `kind` takes: each layer for `cluster`; `os`, `k8s`, `cni`,
-/// and `csi` for `infra`; `addon`, `cni`, and `csi` for each other type. None for each layer.
+/// The layers that a profile of type `kind` takes, or None for each layer.
+///
+/// `cluster` takes each layer. `infra` takes `os`, `k8s`, `cni`, and `csi`. Each other type takes
+/// `addon`, `cni`, and `csi`.
 fn layers_of_type(kind: &str) -> Option<&'static [&'static str]> {
     match kind {
         "" | "cluster" | PACK_TYPE => None,
@@ -146,10 +148,11 @@ fn listed(items: &[&str]) -> String {
     }
 }
 
-/// Check the rules that the file alone can break, in this order: the version, a pack name twice,
-/// the name of a manifest and of a manifest pack, a manifest name twice in one pack, and the
-/// layers of the type. The layer of a pack that the file does not give comes from the registry,
-/// so [`super::resolve`] checks the layers again.
+/// Check the rules that the file alone can break.
+///
+/// The order is the version, a pack name twice, the name of a manifest and of a manifest pack, a
+/// manifest name twice in one pack, and the layers of the type. The layer of a pack that the file
+/// does not give comes from the registry, so [`super::resolve`] checks the layers again.
 pub(super) fn check_file(c: &Candidate) -> Result<(), String> {
     if !palette_version(&c.version) {
         return Err(CreateRule::Version.refuse(&format!(
@@ -235,8 +238,10 @@ pub(super) fn check_layers(c: &Candidate, layers: &[Option<&str>]) -> Result<(),
 }
 
 /// Whether a pack whose listing gives the cloud types `clouds` goes in a profile of the cloud
-/// `cloud`: the cloud `all`, a pack with no cloud type, a pack of that cloud or of `all`, and a
-/// pack of `custom` on a custom cloud.
+/// `cloud`.
+///
+/// This is true for the cloud `all`, and for a pack with no cloud type. It is also true for a pack
+/// of that cloud or of `all`, and for a pack of `custom` on a custom cloud.
 fn cloud_supported(cloud: &str, clouds: &[String]) -> bool {
     let custom = !KNOWN_CLOUDS.contains(&cloud);
     cloud == "all"

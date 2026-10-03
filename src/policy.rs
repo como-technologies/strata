@@ -27,8 +27,9 @@ const LEGACY_RESOURCES: &str = "resources";
 /// read an older record through it.
 const LEGACY_FIELDS: &[&str] = &["osPatch", "lifecycle", "machineHealth", "timezone", "fips"];
 
-/// The annotation of a cluster that pauses the upgrades of the agent of Palette, and the key of the
-/// policy field that holds its value as Palette gives it.
+/// The annotation of a cluster that pauses the upgrades of the agent of Palette.
+///
+/// It is also the key of the policy field that holds its value as Palette gives it.
 const AGENT_UPGRADES_FORBIDDEN: &str = "spectroComponentsUpgradeForbidden";
 
 /// The key of the policy fields of a cluster record from strata 0.18: `allowed` or `paused`, which
@@ -77,8 +78,10 @@ fn agent_upgrades_forbidden(cluster: &Value) -> Option<&Value> {
         .get(AGENT_UPGRADES_FORBIDDEN)
 }
 
-/// Each policy field of the cluster in `raw` that strata could not read, with why: the role
-/// bindings and the namespaces, when Palette answered their route with an error other than 404.
+/// Each policy field of the cluster in `raw` that strata could not read, with why.
+///
+/// These are the role bindings and the namespaces, when Palette answered their route with an
+/// error other than 404.
 pub(crate) fn errors(raw: &RawCluster) -> BTreeMap<String, String> {
     [
         (RBACS, &raw.rbacs_error),

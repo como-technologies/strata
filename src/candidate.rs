@@ -1801,8 +1801,8 @@ variables:
 
     #[test]
     fn a_candidate_that_the_validate_route_checks_gives_a_record() {
-        // `--validate` asks Palette for these rules, so strata does not copy them: values and a
-        // manifest that are not YAML, more than 200 packs, and more than 200 manifests
+        // `--validate` asks Palette for these rules, so strata does not copy them. They are values
+        // and a manifest that are not YAML, more than 200 packs, and more than 200 manifests
         let mut c = stack();
         c.layers[1].values = Some("replicas: {{ .spectro.var.replicas }}".into());
         c.layers[4].manifests[0].content = Some("- kind: Namespace".into());

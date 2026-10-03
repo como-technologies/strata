@@ -251,8 +251,9 @@ pub struct RunningBehind {
     pub running: String,
 }
 
-/// `fields` less each field that strata could not read in the tier `a` or `b`: an error of
-/// Palette is not a change of the cluster.
+/// `fields` less each field that strata could not read in the tier `a` or `b`.
+///
+/// An error of Palette is not a change of the cluster.
 fn read_fields(mut fields: Value, a: &ClusterTier, b: &ClusterTier) -> Value {
     if let Some(map) = fields.as_object_mut() {
         for key in a.errors.keys().chain(b.errors.keys()) {
@@ -933,8 +934,13 @@ impl PaletteRepave {
     }
 }
 
+/// Whether strata compares the macro values of two records: both records hold the digests.
+pub(crate) fn macros_compared(a: &Snapshot, b: &Snapshot) -> bool {
+    a.source.macro_values().is_some() && b.source.macro_values().is_some()
+}
+
 /// Each macro whose value digest differs between two records, by name: see
-/// [`Diff::macros_changed`]. Empty unless both records hold the digests.
+/// [`Diff::macros_changed`]. Empty unless [`macros_compared`].
 pub fn macros_changed(a: &Snapshot, b: &Snapshot) -> Vec<String> {
     let (Some(x), Some(y)) = (a.source.macro_values(), b.source.macro_values()) else {
         return Vec::new();

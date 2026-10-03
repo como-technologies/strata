@@ -1,5 +1,7 @@
-//! `compare --repave`: ask Palette whether a change from what a cluster runs to a profile version,
-//! or to the update that waits for the cluster, replaces the nodes of the cluster. `compare
+//! `compare --repave`: ask Palette whether a change replaces the nodes of a cluster.
+//!
+//! The change goes from what the cluster runs to a profile version, or to the update that waits
+//! for the cluster. `compare
 //! --validate` sends the same body for a profile version: see the `validate` module.
 
 use std::collections::BTreeSet;
@@ -150,10 +152,10 @@ fn cluster_and_pending<'a>(
 ///
 /// An update that waits is an edit in place: each profile keeps its uid. Palette keeps the packs
 /// of a profile that the body names with no pack values. For a profile with pack values, it keeps
-/// only the packs that they name, and takes a pack that the cluster does not run from the profile
-/// as it is now. So a profile of the record whose packs change gets the pack values: its packs by
-/// the names that the cluster runs, and each pack that is new to the cluster. The body names each
-/// other profile by its uid alone.
+/// only the packs that they name. It takes a pack that the cluster does not run from the profile
+/// as it is now. So a profile of the record whose packs change gets the pack values. These are
+/// its packs by the names that the cluster runs, and each pack that is new to the cluster. The
+/// body names each other profile by its uid alone.
 ///
 /// # Errors
 ///
@@ -209,9 +211,10 @@ fn pending_body(doc: &Value, pending: &Snapshot, source: &ClusterSource) -> Resu
 }
 
 /// The pack values of one profile in the body of [`pending_body`], or `None` when the update
-/// changes no pack of the profile. `current` is the packs of the profile that the cluster runs,
-/// `pending` is each pack of the record, and `new` is each pack of the record that the cluster
-/// does not run.
+/// changes no pack of the profile.
+///
+/// `current` is the packs of the profile that the cluster runs. `pending` is each pack of the
+/// record. `new` is each pack of the record that the cluster does not run.
 fn pending_packs(current: &[Value], pending: &[Pack], new: &[&Pack]) -> Option<Vec<Value>> {
     let own: Vec<&Pack> = pending
         .iter()
@@ -241,11 +244,11 @@ fn pending_packs(current: &[Value], pending: &[Pack], new: &[&Pack]) -> Option<V
 ///
 /// # Errors
 ///
-/// [`Error::Usage`] for any other pair, and for a record of the update that waits that holds a
+/// [`Error::Usage`] for any other pair. Also for a record of the update that waits that holds a
 /// profile that the cluster does not run now. Also for a cluster in a template, when the body
-/// gives pack values to a profile that the cluster runs: a target version that the cluster runs,
-/// or an update that changes a profile. The route of the template takes no pack values, so it
-/// compares nothing for that profile. An error of a request.
+/// gives pack values to a profile that the cluster runs. This is a target version that the
+/// cluster runs, or an update that changes a profile. The route of the template takes no pack
+/// values, so it compares nothing for that profile. An error of a request.
 pub fn palette_repave<A: PaletteApi>(
     palette: &Palette<A>,
     a: &Snapshot,

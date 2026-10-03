@@ -46,6 +46,18 @@ fn shown(repo: &Path, page: &Path) -> String {
         .to_string()
 }
 
+/// The text of the file at `path`. When strata cannot read it, None, and a message in `bad` that
+/// names the file: a page that a check cannot read must not pass.
+fn read(repo: &Path, path: &Path, bad: &mut Vec<String>) -> Option<String> {
+    match std::fs::read_to_string(path) {
+        Ok(text) => Some(text),
+        Err(e) => {
+            bad.push(format!("{}: cannot read the file: {e}", shown(repo, path)));
+            None
+        }
+    }
+}
+
 /// A release tag that a reader copies -- an install command, or a workflow ref -- must be this
 /// release. A tag from the release before sends them to the wrong binary, and nothing else
 /// notices.
@@ -55,25 +67,32 @@ fn shown(repo: &Path, page: &Path) -> String {
 /// names an older release for what it first carried is a fact about that release, so only the
 /// shapes below count.
 fn release_tags(repo: &Path) -> Vec<String> {
-    let manifest = std::fs::read_to_string(repo.join("Cargo.toml")).unwrap_or_default();
-    let version = manifest
+    let mut bad = Vec::new();
+    let Some(manifest) = read(repo, &repo.join("Cargo.toml"), &mut bad) else {
+        return bad;
+    };
+    let Some(version) = manifest
         .lines()
         .find_map(|l| l.strip_prefix("version = "))
         .map(|v| format!("v{}", v.trim_matches(['"', ' '])))
-        .unwrap_or_default();
+    else {
+        return vec!["Cargo.toml has no version line".to_string()];
+    };
     let copyable = Regex::new(
         r"(?:--version|strata-version:|STRATA_VERSION:|v=)\s*(v\d+\.\d+\.\d+)|uses:.*@(v\d+\.\d+\.\d+)",
     )
     .expect("a pattern");
-    let mut bad = Vec::new();
     for page in pages(&repo.join("docs/src")) {
         let name = shown(repo, &page);
         if name.ends_with("development/live-runs.md") || name.ends_with("development/release.md") {
             continue;
         }
-        let text = std::fs::read_to_string(&page).unwrap_or_default();
+        let Some(text) = read(repo, &page, &mut bad) else {
+            continue;
+        };
         for (number, line) in text.lines().enumerate() {
             for found in copyable.captures_iter(line) {
+                // each match fills one of the two groups, so the empty tag does not occur
                 let tag = found
                     .get(1)
                     .or_else(|| found.get(2))
@@ -98,7 +117,9 @@ fn links_resolve(repo: &Path) -> Vec<String> {
     let link = Regex::new(r"\]\(([^)\s#]+\.md)#([a-z0-9-]+)\)").expect("a pattern");
     let mut bad = Vec::new();
     for page in pages(&repo.join("docs/src")) {
-        let text = std::fs::read_to_string(&page).unwrap_or_default();
+        let Some(text) = read(repo, &page, &mut bad) else {
+            continue;
+        };
         let here = page.parent().expect("a page sits in a directory");
         for found in link.captures_iter(&text) {
             let (target, anchor) = (&found[1], &found[2]);
@@ -110,7 +131,10 @@ fn links_resolve(repo: &Path) -> Vec<String> {
                 ));
                 continue;
             };
-            let headings = anchors(&std::fs::read_to_string(&path).unwrap_or_default());
+            let Some(target_text) = read(repo, &path, &mut bad) else {
+                continue;
+            };
+            let headings = anchors(&target_text);
             if !headings.contains(anchor) {
                 bad.push(format!(
                     "{} links to {target}#{anchor}, and that page has no such heading",
@@ -148,7 +172,9 @@ fn anchors(text: &str) -> BTreeSet<String> {
 fn follow_along_first(repo: &Path) -> Vec<String> {
     let mut bad = Vec::new();
     for page in pages(&repo.join("docs/src/use-cases")) {
-        let text = std::fs::read_to_string(&page).unwrap_or_default();
+        let Some(text) = read(repo, &page, &mut bad) else {
+            continue;
+        };
         let name = shown(repo, &page);
         let Some(block) = text.find("{{#include ../output/") else {
             continue;
@@ -189,7 +215,9 @@ fn command_flags(repo: &Path) -> Vec<String> {
             continue;
         }
         let name = shown(repo, &page);
-        let text = std::fs::read_to_string(&page).unwrap_or_default();
+        let Some(text) = read(repo, &page, &mut bad) else {
+            continue;
+        };
         let include = format!("{{{{#include ../output/help-{command}.txt}}}}");
         if !text.contains(&include) {
             bad.push(format!(
@@ -197,9 +225,10 @@ fn command_flags(repo: &Path) -> Vec<String> {
             ));
             continue;
         }
-        let help =
-            std::fs::read_to_string(repo.join(format!("docs/src/output/help-{command}.txt")))
-                .unwrap_or_default();
+        let help_file = repo.join(format!("docs/src/output/help-{command}.txt"));
+        let Some(help) = read(repo, &help_file, &mut bad) else {
+            continue;
+        };
         // the text of the page, without the help block itself
         let prose: String = text
             .lines()
@@ -233,13 +262,13 @@ fn command_flags(repo: &Path) -> Vec<String> {
 fn playgrounds(repo: &Path, chapters: &BTreeMap<String, u32>) -> Vec<String> {
     let mut files = pages(&repo.join("docs/src"));
     files.push(repo.join("README.md"));
-    files
-        .iter()
-        .flat_map(|page| match std::fs::read_to_string(page) {
-            Ok(text) => playground_faults(&shown(repo, page), &text, chapters),
-            Err(e) => vec![format!("{}: cannot read the page: {e}", shown(repo, page))],
-        })
-        .collect()
+    let mut bad = Vec::new();
+    for page in &files {
+        if let Some(text) = read(repo, page, &mut bad) {
+            bad.extend(playground_faults(&shown(repo, page), &text, chapters));
+        }
+    }
+    bad
 }
 
 /// The messages for each `just playground NAME` in `text` that the runner cannot serve. `name`
@@ -272,6 +301,25 @@ fn playground_faults(name: &str, text: &str, chapters: &BTreeMap<String, u32>) -
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn each_check_reports_a_page_that_it_cannot_read() {
+        let repo = std::env::temp_dir().join(format!("strata-checks-{}", std::process::id()));
+        let use_cases = repo.join("docs/src/use-cases");
+        std::fs::create_dir_all(&use_cases).unwrap();
+        std::fs::write(repo.join("Cargo.toml"), "version = \"1.0.0\"\n").unwrap();
+        std::fs::write(repo.join("README.md"), "strata\n").unwrap();
+        // bytes that are not UTF-8, so the read of the page fails
+        std::fs::write(use_cases.join("broken.md"), [0xff, 0xfe]).unwrap();
+        let bad = check(&repo, &chapters());
+        std::fs::remove_dir_all(&repo).unwrap();
+        // release_tags, links_resolve, follow_along_first, and playgrounds each read the page
+        let unread = bad
+            .iter()
+            .filter(|m| m.starts_with("docs/src/use-cases/broken.md: cannot read the file"))
+            .count();
+        assert_eq!(unread, 4, "{bad:?}");
+    }
 
     /// The chapters of a small runner: `list` with one state, and `loop` with four.
     fn chapters() -> BTreeMap<String, u32> {
