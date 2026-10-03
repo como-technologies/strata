@@ -53,6 +53,13 @@ what the root can show. A pair that differs for another reason stays
 more than one value: `--allow registry-move --allow no-digest`. See
 [The content digest](../internals/hashes.md#the-content-digest).
 
+A pack whose values hold `********` gets a line under its pair: `pack <key> has
+a masked value at <path>: an equal root does not show an equal secret`. Palette
+masks a value whose schema format is `password`, so the root covers the mask
+and not the secret. The line does not change the result, and `pairs[].masked` in
+the JSON gives the same fact. See
+[A secret changes in a pack value](../use-cases/masked-value.md).
+
 ## Refs
 
 Each side is a ref: a snapshot file, a profile uid, `<name>@<version>`,

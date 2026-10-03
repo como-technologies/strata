@@ -1,0 +1,4 @@
+$ strata same-release releases/1.1.10/dev.json releases/1.1.10/prod.json
+IDENTICAL      releases/1.1.10/dev.json -> releases/1.1.10/prod.json   root 7dbf0976d17a
+               pack addon/cert-manager has a masked value at registryPassword: an equal root does not show an equal secret
+SAME RELEASE: 1 pair passed

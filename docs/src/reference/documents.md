@@ -144,6 +144,13 @@ profile, or pack version.
     presets of such an option into the values: see
     [Template options](candidate-file.md#template-options). It is outside the
     root.
+  - `masked`, only when the values hold a mask: the path of each value that
+    is the text `********`, sorted, in the form of the value paths of
+    `strata-diff/1`. Palette writes that text over a value whose schema format
+    is `password`, so the root covers the mask and not the secret. It is
+    outside the root: the values are in it. A record written before this field
+    gets it from its values when strata reads it. See
+    [A secret changes in a pack value](../use-cases/masked-value.md).
   - `hash`: `identity`, `upstream`, `upstreamRaw`, `upstreamSource`,
     `authored`, and `node`. `upstreamSource` is the field that gave `UPSTREAM`:
     `packRef.digest`, `packSummary.digest`, or `none`.
@@ -209,6 +216,8 @@ A comparison of two sides, `a` and `b`.
     the params are its properties, `installOrder`, and `containerRegistryUid`.
   - `upstreamUnknown`, only when true: a pack from a registry with no upstream
     digest on either side.
+  - `masked`, only when it is not empty: the path of each value that Palette
+    masks on either side, sorted. An equal root does not show an equal secret.
 - `upstreamUnknown`, only when it is not empty: the key of each such pack. An
   equal root does not show an equal archive for it.
 - `macros`, only when it is not empty: each user macro that either side uses.
@@ -330,6 +339,8 @@ is the path as a list: strings for keys, numbers for indexes, and
   `mintedUidOnly`, only when it is not empty: the packs whose only difference
   is a pack uid that Palette mints, for a manifest pack or for a pack from a
   registry that Palette does not sync.
+  `masked[]`, only when it is not empty: `key` and `paths` of each pack with a
+  value that Palette masks, on either side. It does not change `status`.
 
 ## strata-consumers/1
 

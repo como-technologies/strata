@@ -83,6 +83,15 @@ pub enum Edit {
         /// The message of the event, `<display name> <tag> tag is deleted`.
         reason: &'static str,
     },
+    /// Give a pack a secret value: a line `<key>: '********'` at the end of the pack's values.
+    /// The schema of the pack gives the key the format `password`, so Palette serves its mask in
+    /// place of the secret, whatever the secret is.
+    Masked {
+        /// The pack whose values hold the secret.
+        pack: &'static str,
+        /// The key of the secret.
+        key: &'static str,
+    },
 }
 
 impl Edit {
@@ -187,6 +196,15 @@ impl Edit {
                     if pack["name"] == *name {
                         pack["isInvalid"] = json!(true);
                         pack["inValidReason"] = json!(reason);
+                    }
+                }
+            }
+            Edit::Masked { pack: name, key } => {
+                for pack in packs_mut(doc) {
+                    if pack["name"] == *name {
+                        let values = pack["values"].as_str().unwrap_or_default();
+                        pack["values"] =
+                            json!(format!("{}\n{key}: '********'\n", values.trim_end()));
                     }
                 }
             }

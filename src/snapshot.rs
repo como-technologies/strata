@@ -9,6 +9,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 
+use crate::api::mask::MASKED;
 use crate::api::{RawCluster, RawProfile};
 use crate::canon::{Canon, canon_yaml, canonical_json, hash_yaml, sha256_hex};
 use crate::error::{Error, Result};
@@ -678,6 +679,12 @@ pub struct Pack {
     /// root: the values are in it.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub preset_options: Vec<PresetOption>,
+    /// The path of each value that Palette masks, sorted: each value that is the text
+    /// `********`. Palette writes that text over a value whose schema format is `password`, so
+    /// the root covers the mask and not the secret. Outside the root: the values are in it. A
+    /// record written before this field gets it from its values when it is read.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub masked: Vec<String>,
     /// The three sub-hashes and the node hash.
     pub hash: PackHash,
 }
@@ -736,6 +743,12 @@ pub fn pack_content(values: &Value) -> (Vec<String>, Vec<PackChart>) {
     charts.sort();
     charts.dedup();
     (images, charts)
+}
+
+/// The path of each value of parsed `values` that Palette masks, sorted, in the form of
+/// [`crate::diff::leaf_diff`]: each value that is the text `********`.
+fn masked_paths(values: &Value) -> Vec<String> {
+    crate::diff::paths_of_text(values, MASKED)
 }
 
 /// A manifest attached to a pack on the profile.
@@ -1016,6 +1029,7 @@ impl Pack {
         let node = sha256_hex(&format!("{identity}{upstream}{authored}"));
 
         let (images, charts) = pack_content(&values_canon);
+        let masked = masked_paths(&values_canon);
         Pack {
             key: format!("{layer}/{name}"),
             layer,
@@ -1040,6 +1054,7 @@ impl Pack {
             images,
             charts,
             preset_options,
+            masked,
             hash: PackHash {
                 identity,
                 upstream,
@@ -1477,12 +1492,15 @@ impl Snapshot {
         Ok(snap)
     }
 
-    /// Give each pack the images and the charts of its values, when the record holds none: a
-    /// record written before those fields has the values, and so the lists.
+    /// Give each pack the images, the charts, and the masked paths of its values, when the record
+    /// holds none: a record written before those fields has the values, and so the lists.
     pub fn fill_content(&mut self) {
         for p in &mut self.packs {
             if p.images.is_empty() && p.charts.is_empty() {
                 (p.images, p.charts) = pack_content(&p.values_canon);
+            }
+            if p.masked.is_empty() {
+                p.masked = masked_paths(&p.values_canon);
             }
         }
     }

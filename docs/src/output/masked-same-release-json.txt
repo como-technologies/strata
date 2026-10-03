@@ -1,0 +1,2 @@
+$ strata same-release releases/1.1.10/dev.json releases/1.1.10/prod.json --json | jq -c '.pairs[] | {status, masked}'
+{"status":"identical","masked":[{"key":"addon/cert-manager","paths":["registryPassword"]}]}

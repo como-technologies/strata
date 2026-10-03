@@ -8,7 +8,7 @@
 
 mod audit;
 mod http;
-mod mask;
+pub(crate) mod mask;
 mod memory;
 mod palette;
 mod raw;
