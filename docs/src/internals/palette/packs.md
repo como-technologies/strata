@@ -261,6 +261,24 @@ record of the profile from before reports `DRIFT` with `IDENTITY UPSTREAM`. The
 move follows the tag, with no request from a person and no publish. A profile
 pinned to the exact version `1.0.0` does not move when `1.0.1` arrives.
 
+## The layer of a pack
+
+When Palette creates a profile, it gives each pack the layer of the pack in its
+registry. It drops the layer that the profile gives, with no error. The manifest
+pack of a profile gets the layer `addon` from the manifest pack of Palette. A
+pack that Palette makes at the create also gets `addon`: see
+[A pack that Palette makes at the create](#a-pack-that-palette-makes-at-the-create).
+This comes from the code of Palette, not from a live run.
+
+So a profile that gives `kubernetes` the layer `addon` has the layer `k8s` when
+Palette publishes it. A record of that profile file has `addon`. The layer is
+part of `IDENTITY`, so the two roots differ. The rules of the profile type also
+use the layer of the registry: see
+[What the create of a version checks](./profiles.md#what-the-create-of-a-version-checks).
+
+A [candidate file](../../reference/candidate-file.md#the-registry-lookups) that
+gives a pack another layer than its registry is `candidate-invalid`.
+
 ## Manifest pack uids
 
 Palette gives the manifest pack of every profile it creates a new pack uid, a
