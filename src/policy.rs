@@ -177,26 +177,30 @@ fn sort_canonical(values: &mut [Value]) {
 
 /// The policy fields `a` and `b` of two records, in a form that compares. When one of them is
 /// from before strata read the bindings, each keeps only the fields that the two forms share. When
-/// one of them is from strata 0.18, each keeps all the fields less the two forms of the upgrades of
-/// the agent.
+/// only one of them is from strata 0.18, each keeps all the fields less the two forms of the
+/// upgrades of the agent.
 pub(crate) fn comparable(a: &Value, b: &Value) -> (Value, Value) {
-    let either = |k: &str| a.get(k).is_some() || b.get(k).is_some();
-    if either(LEGACY_RESOURCES) {
+    let legacy = |v: &Value| v.get(LEGACY_RESOURCES).is_some();
+    let legacy_agent = |v: &Value| v.get(LEGACY_AGENT_UPGRADES).is_some();
+    if legacy(a) || legacy(b) {
         let shared = |v: &Value| Value::Object(pick(v, LEGACY_FIELDS));
         (shared(a), shared(b))
-    } else if either(LEGACY_AGENT_UPGRADES) {
-        let shared = |v: &Value| {
-            let mut v = v.clone();
-            if let Some(m) = v.as_object_mut() {
-                m.remove(LEGACY_AGENT_UPGRADES);
-                m.remove(AGENT_UPGRADES_FORBIDDEN);
-            }
-            v
-        };
-        (shared(a), shared(b))
+    } else if legacy_agent(a) != legacy_agent(b) {
+        (without_agent_upgrades(a), without_agent_upgrades(b))
     } else {
         (a.clone(), b.clone())
     }
+}
+
+/// The policy fields `v` less the two forms of the upgrades of the agent: `agentUpgrades` of strata
+/// 0.18, and the annotation `spectroComponentsUpgradeForbidden`.
+fn without_agent_upgrades(v: &Value) -> Value {
+    let mut v = v.clone();
+    if let Some(m) = v.as_object_mut() {
+        m.remove(LEGACY_AGENT_UPGRADES);
+        m.remove(AGENT_UPGRADES_FORBIDDEN);
+    }
+    v
 }
 
 #[cfg(test)]
@@ -216,7 +220,8 @@ mod tests {
     }
 
     #[test]
-    fn a_policy_tier_of_strata_0_18_compares_on_each_field_less_the_upgrades_of_the_agent() {
+    fn a_policy_tier_of_strata_0_18_compares_with_a_newer_one_on_each_field_less_the_agent_upgrades()
+     {
         let older = json!({"timezone": "Etc/UTC", RBACS: [], LEGACY_AGENT_UPGRADES: "paused"});
         let newer = json!({"timezone": "Etc/UTC", RBACS: [], AGENT_UPGRADES_FORBIDDEN: "true"});
         let (a, b) = comparable(&older, &newer);
@@ -225,6 +230,10 @@ mod tests {
         assert_eq!(a, b, "no annotation on the cluster now");
         let (a, b) = comparable(&older, &json!({"timezone": "UTC", RBACS: []}));
         assert_ne!(a, b, "each other field still compares");
+        // two records of strata 0.18 compare on each field
+        let allowed = json!({"timezone": "Etc/UTC", RBACS: [], LEGACY_AGENT_UPGRADES: "allowed"});
+        let (a, b) = comparable(&older, &allowed);
+        assert_ne!(a, b);
     }
 
     #[test]

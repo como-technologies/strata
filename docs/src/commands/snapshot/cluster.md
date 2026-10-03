@@ -96,9 +96,10 @@ the namespaces, with their uids. When one of two records holds them, `compare` a
 all the fields.
 
 A record that strata 0.18 wrote holds `agentUpgrades`, with the value `allowed`
-or `paused`, in place of `spectroComponentsUpgradeForbidden`. When one of two
-records holds it, `compare` and `verify` compare each other field, and not
-these two. So the older record still verifies.
+or `paused`, in place of `spectroComponentsUpgradeForbidden`. When only one of
+two records holds it, `compare` and `verify` compare each other field, and not
+these two. So the older record still verifies. Two records of strata 0.18
+compare on each field.
 
 ## The shape on each cloud
 
