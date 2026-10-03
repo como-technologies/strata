@@ -18,7 +18,7 @@ use crate::ops::{
     VerifySummary,
 };
 use crate::repave::PaletteRepaveReason;
-use crate::snapshot::{Snapshot, Source};
+use crate::snapshot::{Snapshot, Source, SubjectKind};
 
 pub use json::JsonRenderer;
 pub use markdown::MarkdownRenderer;
@@ -514,7 +514,8 @@ pub(crate) fn chain_verdict(c: &Chain) -> String {
     }
 }
 
-/// What a verdict line is about: a published version, or what a cluster runs.
+/// What a verdict line is about: a published version, what a cluster runs, or what an edge host
+/// or a cluster group holds, as [`Source::title`] names it.
 pub(crate) fn subject(recorded: &Source) -> String {
     if let Some(p) = &recorded.pack {
         let registry = if p.registry_name.is_empty() {
@@ -524,12 +525,14 @@ pub(crate) fn subject(recorded: &Source) -> String {
         };
         return format!("pack {}@{} in registry {registry}", p.name, p.version);
     }
+    let profile = format!("{}@{}", recorded.name, recorded.version);
     match &recorded.cluster {
-        Some(c) => format!(
-            "cluster {} running {}@{}",
-            c.name, recorded.name, recorded.version
-        ),
-        None => format!("published version {}@{}", recorded.name, recorded.version),
+        Some(c) => match c.kind {
+            SubjectKind::Cluster => format!("cluster {} running {profile}", c.name),
+            SubjectKind::EdgeHost => format!("{profile} on edge host {}", c.name),
+            SubjectKind::ClusterGroup => format!("{profile} pinned by cluster group {}", c.name),
+        },
+        None => format!("published version {profile}"),
     }
 }
 
@@ -668,11 +671,11 @@ pub(crate) fn outside_root_sentence(macros: &[String], images: &[ImageIdChange])
     (!parts.is_empty()).then(|| parts.join(", and "))
 }
 
-/// The note for two cluster records whose macro values differ.
+/// The note for two records whose macro values differ.
 pub(crate) fn macros_changed_note(d: &Diff) -> Option<String> {
     (!d.macros_changed.is_empty()).then(|| {
         format!(
-            "{}: the clusters run other content, also where the roots are equal",
+            "{}: Palette applies other content, also when the roots are equal",
             match d.macros_changed.as_slice() {
                 [one] => format!("macro {one} has another value on each side"),
                 many => format!("macros {} have other values on each side", many.join(", ")),

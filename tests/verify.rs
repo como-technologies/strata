@@ -6946,6 +6946,96 @@ fn a_cluster_record_with_macro_digests_drifts_when_a_macro_value_moves() {
     assert_eq!(again.source.cluster.unwrap().macro_values, Some(digests));
 }
 
+/// The resolvedValues answer for one profile version: one map, with `region` as given.
+fn profile_resolved(region: &str) -> Value {
+    serde_json::json!({"resolved": {
+        "{{.spectro.macro.region}}": region,
+        "{{.spectro.system.cluster.name}}": "",
+    }})
+}
+
+#[test]
+fn a_profile_record_with_macro_digests_drifts_when_a_macro_value_moves() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    with_macro(dir.path(), "macro");
+    let path = format!("/v1/clusterprofiles/{UID_A}/packs/resolvedValues");
+    let tenant =
+        |answer: Value| serve(MemoryApi::new(), dir.path(), "macro", UID_A).with(&path, answer);
+
+    // the record holds the digest of the value at the scope of the version, and not the value
+    let palette = Palette::new(tenant(profile_resolved("us-east-2")));
+    let mut raw = palette.fetch_profile(UID_A, &Progress::silent()).unwrap();
+    raw.resolved_values = Some(palette.profile_resolved_values(UID_A).unwrap());
+    let recorded = Snapshot::from_raw(&raw, "aws-stack@1.1.1", "t0").unwrap();
+    let digests = recorded.source.macro_values.clone().unwrap();
+    assert_eq!(digests.keys().collect::<Vec<_>>(), ["region"]);
+    assert!(digests["region"].starts_with("sha256:"), "{digests:?}");
+    assert_eq!(recorded.source.macro_values(), Some(&digests));
+    let json = recorded.to_json(false).unwrap();
+    assert!(!json.contains("us-east-2"), "{json}");
+    assert!(json.contains("\"macroValues\""), "{json}");
+
+    // the same value: unchanged
+    let v = ops::verify(
+        &recorded,
+        &Palette::new(tenant(profile_resolved("us-east-2"))),
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert_eq!(v.status, VerifyStatus::Unchanged);
+
+    // another value: the root is the same, and the record drifts, and the verdict names the macro
+    let v = ops::verify(
+        &recorded,
+        &Palette::new(tenant(profile_resolved("eu-west-1"))),
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert!(v.diff.same, "the root covers the name and not the value");
+    assert_eq!(v.status, VerifyStatus::Drifted);
+    let ver = v.diff.verify.as_ref().unwrap();
+    assert_eq!(ver.macros_changed, ["region"]);
+    let verdict = render::renderer(Format::Terminal, Paint::off(), false)
+        .verdict(ver, &recorded.source)
+        .unwrap();
+    assert!(
+        verdict.contains("published version lab-profile@1.2.0 has the content recorded t0, but macro region has another value now"),
+        "{verdict}"
+    );
+
+    // a macro that the scope of the version does not give is unresolved, and that is a change too
+    let v = ops::verify(
+        &recorded,
+        &Palette::new(tenant(serde_json::json!({"resolved": {}}))),
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert_eq!(v.live.source.macro_values.unwrap()["region"], "unresolved");
+    assert_eq!(v.status, VerifyStatus::Drifted);
+
+    // a record without the digests asks for no values, and cannot see the change
+    let mut plain = recorded.clone();
+    plain.source.macro_values = None;
+    let v = ops::verify(
+        &plain,
+        &Palette::new(serve(MemoryApi::new(), dir.path(), "macro", UID_A)),
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert_eq!(v.status, VerifyStatus::Unchanged);
+
+    // a raw directory keeps the values, so a record rebuilt from it keeps the digests
+    let saved = dir.path().join("raw-profile-macro");
+    raw.save_dir(&saved, "t0").unwrap();
+    let again = ops::snapshot_from_dir(&saved, "aws-stack@1.1.1", "t0").unwrap();
+    assert_eq!(again.source.macro_values, Some(digests));
+}
+
 // ---- compare --repave ------------------------------------------------------------------
 
 fn applied(uid: &str, name: &str, kind: &str) -> strata::snapshot::AppliedProfile {
@@ -9066,6 +9156,91 @@ fn a_cluster_group_record_holds_the_pin_and_compares_against_a_member() {
     )
     .unwrap();
     assert!(v.unchanged, "{:?}", v.status);
+}
+
+#[test]
+fn a_cluster_group_record_with_macro_digests_reads_the_values_of_the_group() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let (_, addon) = merged_uids(dir.path());
+    // the pin reads the macro region in the values of its first pack
+    let base = serve_cluster_group(MemoryApi::new(), dir.path());
+    let mut doc = base.get_json("/v1/clustergroups/g1").unwrap();
+    let pack = &mut doc["spec"]["clusterProfileTemplates"][0]["packs"][0];
+    let values = pack["values"].as_str().unwrap_or_default().to_string();
+    pack["values"] = Value::from(format!(
+        "{values}\nregion: \"{{{{.spectro.macro.region}}}}\"\n"
+    ));
+    // only the route of the group answers: a request to the route of a cluster is a 404
+    let tenant = |region: &str| {
+        base.clone().with("/v1/clustergroups/g1", doc.clone()).with(
+            "/v1/clustergroups/g1/packs/resolvedValues",
+            serde_json::json!({"profiles": [{"uid": addon, "resolved": {
+                "{{.spectro.macro.region}}": region,
+            }}]}),
+        )
+    };
+
+    let group = ops::cluster_group_snapshot(
+        &Palette::new(tenant("us-east-2")),
+        "g1",
+        true,
+        "clustergroup:g1",
+        "t0",
+        &Progress::silent(),
+    )
+    .unwrap();
+    let c = group.source.cluster.as_ref().unwrap();
+    let digests = c.macro_values.clone().unwrap();
+    assert!(digests["region"].starts_with("sha256:"), "{digests:?}");
+    assert!(
+        group.source.macro_values.is_none(),
+        "a group record holds them in cluster"
+    );
+    let json = serde_json::to_value(&group).unwrap();
+    assert!(
+        json["source"]["cluster"]["macroValues"].is_object(),
+        "{json}"
+    );
+
+    // without --macros, no request for the values
+    let plain = ops::cluster_group_snapshot(
+        &Palette::new(base.clone().with("/v1/clustergroups/g1", doc.clone())),
+        "g1",
+        false,
+        "clustergroup:g1",
+        "t0",
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert!(plain.source.cluster.unwrap().macro_values.is_none());
+
+    // verify reads the values of the group again, and names the macro that has another value
+    let v = ops::verify(
+        &group,
+        &Palette::new(tenant("us-east-2")),
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert_eq!(v.status, VerifyStatus::Unchanged);
+    let v = ops::verify(
+        &group,
+        &Palette::new(tenant("eu-west-1")),
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert_eq!(v.status, VerifyStatus::Drifted);
+    let ver = v.diff.verify.as_ref().unwrap();
+    assert_eq!(ver.macros_changed, ["region"]);
+    let verdict = render::renderer(Format::Terminal, Paint::off(), false)
+        .verdict(ver, &group.source)
+        .unwrap();
+    assert!(
+        verdict.contains("pinned by cluster group group-1 has the content recorded t0, but macro region has another value now"),
+        "the verdict names the group, and not a cluster: {verdict}"
+    );
 }
 
 // ---- app profiles -----------------------------------------------------------------------------

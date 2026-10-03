@@ -342,6 +342,15 @@ The map holds every macro Palette can resolve for the profile, the system ones
 too, such as the cluster name and the region, and not only the ones the profile
 reads. It gives a new macro value at once.
 
+`GET /v1/clusterprofiles/<uid>/packs/resolvedValues` resolves the macros of a
+profile version with no cluster. It gives one `resolved` map, and not one map
+for each profile. The map holds the user macros of the scope of the version
+and the system macros. A system macro of a cluster, such as
+`{{.spectro.system.cluster.name}}`, has an empty value there.
+`GET /v1/clustergroups/<uid>/packs/resolvedValues` answers HTTP 404
+`ResourceNotFound` for a group that Palette does not have. The message starts
+with `Cluster Group '<uid>' is not found`.
+
 When a macro gets another value:
 
 - The profile and its record do not change: `verify` of the record reports `OK`.

@@ -288,6 +288,7 @@ impl<A: PaletteApi> Palette<A> {
             project_uid: self.project_uid().map(str::to_string),
             fetched_at: None,
             manifest_entities: None,
+            resolved_values: None,
         })
     }
 
@@ -406,6 +407,7 @@ impl<A: PaletteApi> Palette<A> {
             project_uid: self.project_uid().map(str::to_string),
             fetched_at: None,
             manifest_entities,
+            resolved_values: None,
         })
     }
 
@@ -1063,14 +1065,43 @@ impl<A: PaletteApi> Palette<A> {
         ))
     }
 
-    /// The value Palette gives each macro for one cluster, `GET
-    /// /v1/spectroclusters/{uid}/packs/resolvedValues`: `profiles[]`, each with its `uid` and a
-    /// `resolved` map from each placeholder, such as `{{.spectro.macro.region}}`, to its value. The
-    /// map holds every macro Palette can resolve for the profile, the system ones too, and not
-    /// only the ones it uses.
-    pub fn resolved_values(&self, uid: &str) -> Result<Value> {
+    /// The value Palette gives each macro for the cluster or the cluster group `uid`: `GET
+    /// /v1/spectroclusters/{uid}/packs/resolvedValues` or `GET
+    /// /v1/clustergroups/{uid}/packs/resolvedValues`. The answer has `profiles[]`, each with its
+    /// `uid` and a `resolved` map from each placeholder, such as `{{.spectro.macro.region}}`, to
+    /// its value. The map holds every macro Palette can resolve for the profile, the system ones
+    /// too, and not only the ones it uses.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Usage`] for an edge host, before any request: strata reads no macro values for
+    /// an edge host. An error of the request otherwise.
+    pub fn resolved_values(&self, kind: SubjectKind, uid: &str) -> Result<Value> {
+        let base = match kind {
+            SubjectKind::Cluster => "/v1/spectroclusters",
+            SubjectKind::ClusterGroup => "/v1/clustergroups",
+            SubjectKind::EdgeHost => {
+                return Err(Error::Usage {
+                    message: "strata reads no macro values for an edge host".to_string(),
+                });
+            }
+        };
+        self.api
+            .get_json(&format!("{base}/{}/packs/resolvedValues", query_value(uid)))
+    }
+
+    /// The value Palette gives each macro at the scope of the profile version `uid`, with no
+    /// cluster: `GET /v1/clusterprofiles/{uid}/packs/resolvedValues`. The answer is one
+    /// `resolved` map from each placeholder to its value, with the user macros of the scope of the
+    /// profile and the system macros. A system macro of a cluster, such as
+    /// `{{.spectro.system.cluster.name}}`, has an empty value there.
+    ///
+    /// # Errors
+    ///
+    /// An error of the request, such as a 404 for a version that Palette does not have.
+    pub fn profile_resolved_values(&self, uid: &str) -> Result<Value> {
         self.api.get_json(&format!(
-            "/v1/spectroclusters/{}/packs/resolvedValues",
+            "/v1/clusterprofiles/{}/packs/resolvedValues",
             query_value(uid)
         ))
     }

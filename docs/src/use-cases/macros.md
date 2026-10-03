@@ -14,8 +14,8 @@ reports `OK`. Palette still gives the cluster the new value.
 In this example, `dev` has `aws-stack@1.1.4`, whose CSI values read the project
 macro `region`, and the cluster `payments` runs it.
 
-**Who runs this.** The scheduled verify job finds this when its cluster records
-hold the digests of the macro values. The job is
+**Who runs this.** The scheduled verify job finds this when its records hold
+the digests of the macro values. The job is
 [Drift issues](../automation/drift-issues.md).
 
 **Follow along.** `just playground macros-1` serves this tenant on this
@@ -33,7 +33,9 @@ the value that Palette gives each macro the content uses, and keeps its digest.
 ```
 
 The record holds `sha256:` of each value, and not the value, because a macro
-can hold a secret. The digests are not part of the root.
+can hold a secret. The digests are not part of the root. A record of the version
+with `--macros` holds the digests of the values at the scope of the version.
+See [Macros](../commands/snapshot/cluster.md#macros).
 
 ## 2. The macro gets another value
 
@@ -55,13 +57,13 @@ The cluster record with the digests reports the change, and names the macro:
 ```
 
 `verify` exits `1`. The roots are equal: only the value of the macro moved. A
-cluster record without `--macros` reports `OK` here, as the version record
-does.
+record without `--macros` reports `OK` here, as the version record does.
 
 ## What to do
 
-- Record each cluster whose profiles read a macro with `snapshot --macros`, and
-  keep those records under the scheduled verify job.
+- Record each version, cluster, and cluster group whose content reads a macro
+  with `snapshot --macros`, and keep those records under the scheduled verify
+  job.
 - Find the versions that read a macro: the note `the content uses macro` names
   them in each report.
 - Keep macro values out of the fields that repave a cluster, such as
@@ -69,7 +71,8 @@ does.
 - The `immutable-clusterprofiles` flag of the Spectro Cloud provider covers
   `spectrocloud_cluster_profile` alone: it keeps a published version the same.
   A macro is a resource of its own, `spectrocloud_macros`, and it updates in
-  place with the flag on or off. The digests of the cluster record cover it.
+  place with the flag on or off. The digests of a record with `--macros` cover
+  it.
 
 ## Palette behavior
 

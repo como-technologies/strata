@@ -1637,6 +1637,7 @@ pub fn resolve<A: PaletteApi>(
         fetched_at: None,
         project_uid: None,
         manifest_entities: None,
+        resolved_values: None,
     })
 }
 

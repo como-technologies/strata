@@ -1,0 +1,5 @@
+$ strata snapshot clustergroup:dev-group --macros -o runs/dev-group.json
+strata: looking up project dev
+strata: fetching cluster group dev-group
+strata: cluster group 'dev-group' is 64f5000000000000000000a1
+strata: wrote runs/dev-group.json (root bf0781d98254)

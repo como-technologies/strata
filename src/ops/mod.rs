@@ -134,16 +134,15 @@ where
         }
         Ref::ClusterGroup { uid } => {
             let palette = connect()?;
-            Ok(
-                cluster_group_snapshot(
-                    &palette,
-                    uid,
-                    &reference.to_string(),
-                    fetched_at,
-                    progress,
-                )?
-                .with_project(palette.project_uid()),
-            )
+            Ok(cluster_group_snapshot(
+                &palette,
+                uid,
+                false,
+                &reference.to_string(),
+                fetched_at,
+                progress,
+            )?
+            .with_project(palette.project_uid()))
         }
         Ref::EdgeHost { uid, profile } => {
             let palette = connect()?;
@@ -183,16 +182,26 @@ pub fn app_profile_snapshot<A: PaletteApi>(
     Ok(snap)
 }
 
-/// A record of a cluster group: the profiles that it pins, and its virtual clusters.
+/// A record of a cluster group: the profiles that it pins, and its virtual clusters. With
+/// `macros`, also the digest of the value Palette gives each macro that the pins use, for the
+/// group.
+///
+/// # Errors
+///
+/// An error of a request, such as a 404 for a group that Palette does not have.
 pub fn cluster_group_snapshot<A: PaletteApi>(
     palette: &Palette<A>,
     group: &str,
+    macros: bool,
     reference: &str,
     fetched_at: &str,
     progress: &Progress,
 ) -> Result<Snapshot> {
-    let raw = palette.fetch_cluster_group(group, progress)?;
+    let mut raw = palette.fetch_cluster_group(group, progress)?;
     let uid = text(&raw.cluster, "/metadata/uid");
+    if macros {
+        raw.resolved_values = Some(palette.resolved_values(SubjectKind::ClusterGroup, &uid)?);
+    }
     let members = palette
         .cluster_group_members(&uid)?
         .iter()

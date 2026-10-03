@@ -4,14 +4,15 @@
 #
 #   examples/live/macros.sh [FROM_STAGE]
 #
-#   1  at the baseline: the add-on version reads no macro, and its record names none
+#   1  at the baseline: the add-on version reads no macro, and its record names none; Palette
+#      resolves the macros of the version with no cluster, in one map
 #   2  a project macro, and the manifest of the add-on version reads it, through the API; cluster
 #      A takes the update. Palette says the version has user macros, strata names the macro, and
-#      a cluster record with --macros holds the digest of its value
+#      a record of the version or of the cluster with --macros holds the digest of its value
 #   3  the macro gets another value: Palette resolves it at once; the record of the version, and a
-#      cluster record without the digests, still verify; a cluster record with the digests reports
-#      DRIFT and names the macro; no notification opens, and the audit log of the cluster holds no
-#      entry
+#      cluster record without the digests, still verify; a record of the version or of the cluster
+#      with the digests reports DRIFT and names the macro; no notification opens, and the audit
+#      log of the cluster holds no entry
 #   4  what the cluster runs: the value inside the cluster, read with its kubeconfig, until it is
 #      the new one or PROPAGATION_MINUTES pass (default 20); the runs saw it after 11 and 13
 #      minutes
@@ -60,6 +61,8 @@ export PALETTE_PROJECT_UID=$P
 
 has_macros() { "$live/api.sh" get "/v1/clusterprofiles/$AD" | jq -r '.status.hasUserMacros'; }
 resolved() { "$live/api.sh" get "/v1/spectroclusters/$C/packs/resolvedValues" | jq -r --arg k "{{.spectro.macro.$macro}}" '[.profiles[].resolved[$k]] | first // "none"'; }
+# profile_resolved: the value of the macro at the scope of the add-on version, with no cluster
+profile_resolved() { "$live/api.sh" get "/v1/clusterprofiles/$AD/packs/resolvedValues" | jq -r --arg k "{{.spectro.macro.$macro}}" '.resolved[$k] // "none"'; }
 # inside: the value of the ConfigMap that the manifest makes, read inside the cluster
 inside() {
   local k
@@ -83,6 +86,8 @@ if stage 1 "the baseline"; then
   check base-record 0 "record $addon" -- "$strata" snapshot "$AD" -o addon-0.json
   check base-no-note 1 '#72: a report of it names no macro' -- \
     grep -q 'the content uses macro' <("$strata" compare addon-0.json "$AD")
+  check base-profile-resolved 0 '#111: Palette resolves the macros of the version in one map, and the system macro of the cluster name is empty there' -- \
+    bash -c "\"$live/api.sh\" get /v1/clusterprofiles/$AD/packs/resolvedValues | jq -e '(.resolved | type == \"object\") and .resolved[\"{{.spectro.system.cluster.name}}\"] == \"\"'"
 fi
 
 if stage 2 "a macro that the add-on reads"; then
@@ -93,6 +98,11 @@ if stage 2 "a macro that the add-on reads"; then
   check macro-record 0 "record $addon" -- "$strata" snapshot "$AD" -o addon-1.json
   check macro-names 0 '#72: a report of the record names the macro' -- \
     grep -q "note       the content uses macro $macro: the root covers its name and not its value" <("$strata" compare addon-1.json "$AD")
+  check macro-version 0 '#111: record the add-on version with the digests of its macro values' -- \
+    "$strata" snapshot "$AD" --macros -o addon-macros-1.json
+  check macro-version-digest 0 '#111: the record holds the sha256 of the value at the scope of the version, and not the value' -- \
+    jq -e --arg m "$macro" '(.source.macroValues[$m] | startswith("sha256:")) and (tostring | contains("\"one\"") | not)' addon-macros-1.json
+  check macro-profile-resolved-1 0 '#111: resolvedValues of the version gives the value one' -- test "$(profile_resolved)" = one
   check macro-accept 0 '#72: cluster A takes the update' -- "$live/api.sh" apply "$C"
   check macro-settled 0 'no update waits for cluster A' -- settled
   check macro-cluster 0 '#72: record cluster A with the digests of its macro values' -- \
@@ -108,8 +118,12 @@ if stage 3 "the macro gets another value"; then
   check change 0 "#72: the macro gets the value two" -- "$live/api.sh" macro-set "$macro" two
   sleep 20
   check change-resolved 0 '#72: resolvedValues gives the value two at once' -- test "$(resolved)" = two
+  check change-profile-resolved 0 '#111: resolvedValues of the version gives the value two at once' -- test "$(profile_resolved)" = two
   check change-version 0 '#72: the record of the version still verifies' -- "$strata" verify addon-1.json
   check change-plain 0 '#72: a cluster record without the digests still verifies' -- "$strata" verify cluster-plain.json
+  check change-version-macros 1 '#111: the record of the version with the digests reports DRIFT' -- "$strata" verify addon-macros-1.json
+  check change-version-macros-says 0 '#111: the verdict names the macro' -- \
+    grep -q "^DRIFT: .* but macro $macro has another value now" change-version-macros.out
   check change-cluster 1 '#72: the cluster record with the digests reports DRIFT' -- "$strata" verify cluster-1.json
   check change-cluster-says 0 '#72: the verdict names the macro' -- \
     grep -q "^DRIFT: .* but macro $macro has another value now" change-cluster.out

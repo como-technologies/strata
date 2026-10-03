@@ -57,6 +57,10 @@ profile, or pack version.
     `{"accepts": true}`. A library caller gets the errors too. The field is not
     part of the root. See
     [The validate routes](../internals/palette/validate-routes.md#post-v1clusterprofilesvalidatepacks).
+  - `macroValues`, only with `snapshot --macros` on a profile version: each
+    user macro the content uses, and `sha256:` of the value Palette gives it at
+    the scope of the version, or `unresolved`. A cluster record and a cluster
+    group record hold them in `cluster.macroValues`. Not part of the root.
   - `pack`, for a pack record: the pack's `name` and `version`, the
     `registryUid` and `registryName` it came from, and `packUid`, the uid of
     that version in the registry. `template` is `registry` and `type` is
@@ -74,8 +78,8 @@ profile, or pack version.
     `keys`: see
     [Whether a repave waits](../commands/snapshot/cluster.md#whether-a-repave-waits).
     `macroValues`, only with `snapshot --macros`: each user macro the content
-    uses, and `sha256:` of the value Palette gives it for this cluster, or
-    `unresolved`. `labels`: the labels of the cluster. `tiers`: each tier that
+    uses, and `sha256:` of the value Palette gives it for this cluster or
+    cluster group, or `unresolved`. `labels`: the labels of the cluster. `tiers`: each tier that
     the record carries, by name (`applied`, `running`, `policy`, and, with
     `snapshot --shape`, `shape`), each with `hash` and `fields`: see
     [More of the cluster than its release](../commands/snapshot/cluster.md#more-of-the-cluster-than-its-release).
@@ -221,8 +225,8 @@ A comparison of two sides, `a` and `b`.
 - `upstreamUnknown`, only when it is not empty: the key of each such pack. An
   equal root does not show an equal archive for it.
 - `macros`, only when it is not empty: each user macro that either side uses.
-- `macrosChanged`, only when it is not empty: between two cluster records with
-  `macroValues`, each macro whose value differs.
+- `macrosChanged`, only when it is not empty: between two records with macro
+  digests, each macro whose value differs.
 - `imageIdsChanged`, only when it is not empty: each pack that names an image
   in `imageId` on both sides, with two different images. Each entry has `key`,
   `a`, and `b`. `compare` exits `1` for it, also when `same` is `true`.
@@ -243,8 +247,8 @@ A comparison of two sides, `a` and `b`.
 - `verify`, only after `verify`: `status` (`unchanged`, `drifted`, or
   `unverified`), `uid`, `recordedAt`, and `checkedAt`.
   - `upstreamUnknown`: for an `unverified` record, the packs that make it so.
-  - `macrosChanged`: for a cluster record with `macroValues`, each macro whose
-    value moved. The status is `drifted`, also when the roots are equal.
+  - `macrosChanged`: for a record with macro digests, each macro whose value
+    moved. The status is `drifted`, also when the roots are equal.
   - `imageIdsChanged`: when the roots are equal, each pack that names another
     image in `imageId` now, with `key`, `a`, and `b`. The status is `drifted`.
   - `invalidPacks`, only when it is not empty: each pack that Palette marks

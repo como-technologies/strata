@@ -31,6 +31,9 @@ on standard error. The registry deleted the tag of that pack. The record keeps
 `invalid` and `invalidReason` on the pack, outside the root. See
 [A registry deletes the tag of a pack](../../use-cases/invalid-pack.md).
 
+With `--macros`, the record also holds the digest of the value that Palette
+gives each macro at the scope of the version. See [Macros](cluster.md#macros).
+
 ## Record the newest version
 
 ```text

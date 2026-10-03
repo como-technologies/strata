@@ -149,6 +149,12 @@ pub struct Source {
     /// takes the packs of this content.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub palette_validation: Option<ProfileValidation>,
+    /// With `snapshot --macros` on a profile version: each user macro the recorded content uses,
+    /// and the `sha256:` of the value Palette gives it at the scope of the profile, or
+    /// `unresolved`. A record of a cluster holds them in `cluster.macroValues`. Outside the root;
+    /// `verify` reads the values again and compares.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub macro_values: Option<BTreeMap<String, String>>,
 }
 
 /// The registry pack a snapshot was taken from.
@@ -197,6 +203,15 @@ impl Source {
             Some(c) if self.name.is_empty() => format!("cluster {}", c.name),
             Some(c) if c.pending => format!("{profile} pending for cluster {}", c.name),
             Some(c) => format!("{profile} on cluster {}", c.name),
+        }
+    }
+
+    /// The digests of the macro values that the record holds: those of the cluster for a cluster
+    /// record, else those of the profile. `None` when the record was taken without `--macros`.
+    pub fn macro_values(&self) -> Option<&BTreeMap<String, String>> {
+        match &self.cluster {
+            Some(c) => c.macro_values.as_ref(),
+            None => self.macro_values.as_ref(),
         }
     }
 
@@ -412,7 +427,8 @@ fn policy_tier(cluster: &Value, config: &Value) -> ClusterTier {
 }
 
 /// The digest of each macro in `names` that `resolved` gives for one of `profiles`:
-/// `sha256:<hex>` of the value, or `unresolved` when no profile has it.
+/// `sha256:<hex>` of the value, or `unresolved` when no profile has it. `resolved` is the answer
+/// for a cluster or a cluster group, with one map for each profile.
 pub fn macro_digests(
     resolved: &Value,
     profiles: &[AppliedProfile],
@@ -426,6 +442,17 @@ pub fn macro_digests(
         .filter(|p| profiles.iter().any(|a| s(p, "/uid") == a.uid))
         .map(|p| &p["resolved"])
         .collect();
+    digests_in(&maps, names)
+}
+
+/// The digest of each macro in `names` that the answer for one profile version gives: its one
+/// `resolved` map, as in [`macro_digests`].
+fn profile_macro_digests(resolved: &Value, names: &[String]) -> BTreeMap<String, String> {
+    digests_in(&[&resolved["resolved"]], names)
+}
+
+/// The digest of each macro in `names`, from the first of `maps` that gives it a text value.
+fn digests_in(maps: &[&Value], names: &[String]) -> BTreeMap<String, String> {
     names
         .iter()
         .map(|name| {
@@ -1197,6 +1224,7 @@ impl Snapshot {
             cluster: None,
             pack: None,
             palette_validation: None,
+            macro_values: None,
         };
 
         let mut variables: Vec<Value> = arr(&raw.variables, "/variables")
@@ -1220,6 +1248,13 @@ impl Snapshot {
             .collect();
 
         let root = root_of(&variables_hash, &packs);
+        let source = Source {
+            macro_values: raw
+                .resolved_values
+                .as_ref()
+                .map(|r| profile_macro_digests(r, &macros_of(&packs))),
+            ..source
+        };
 
         Ok(Snapshot {
             schema: SNAPSHOT_SCHEMA.to_string(),
@@ -1357,6 +1392,8 @@ impl Snapshot {
             fetched_at: fetched_at.to_string(),
             pack: None,
             palette_validation: None,
+            // a cluster record holds the digests in cluster.macroValues
+            macro_values: None,
             cluster: Some({
                 let pending_updates = raw
                     .notifications

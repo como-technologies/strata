@@ -40,9 +40,10 @@ When `verify` checks nothing, for example when no pattern matches a file, the
 script exits `2` and touches no issue. A host call that fails ends the script
 with the status of that call.
 
-A record of a cluster finds a macro that changed only when it holds the
-digests of the macro values: take it with `strata snapshot cluster:<name>
---macros`. A record without them reports `OK` after the macro changes. See
+A record finds a macro that changed only when it holds the digests of the
+macro values: take it with `strata snapshot <ref> --macros`, for a version, a
+cluster, or a cluster group. A record without them reports `OK` after the macro
+changes. See
 [A macro value changes](../use-cases/macros.md).
 
 A changed cluster value is not drift. `verify` exits `0` for it, so this job

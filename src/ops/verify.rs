@@ -150,7 +150,7 @@ fn live_holder<A: PaletteApi>(
     }
     // a record that holds the digests of the macro values is checked on them too
     if c.macro_values.is_some() {
-        raw.resolved_values = Some(palette.resolved_values(uid)?);
+        raw.resolved_values = Some(palette.resolved_values(c.kind, uid)?);
     }
     // and one that holds the shape tier on its shape
     if c.tiers.contains_key("shape") {
@@ -357,8 +357,12 @@ pub fn verify_with<A: PaletteApi>(
         }
         // a version that Palette no longer has is a drift, not an error: a retire deletes it
         None => match palette.fetch_profile(uid, progress) {
-            Ok(raw) => {
+            Ok(mut raw) => {
                 last_modified = text(&raw.profile, "/metadata/lastModifiedTimestamp");
+                // a record that holds the digests of the macro values is checked on them too
+                if recorded.source.macro_values.is_some() {
+                    raw.resolved_values = Some(palette.profile_resolved_values(uid)?);
+                }
                 Snapshot::from_raw(&raw, uid, checked_at)?
             }
             Err(Error::Api { status: 404, .. }) => {
