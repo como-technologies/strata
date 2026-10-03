@@ -27,7 +27,7 @@ the kind.
 | `profile-ref-required` | The command needs a profile, and got a cluster, an edge host, a cluster group, an app profile, a pack, or a record of one. | `reference` |
 | `record-not-a-source` | `snapshot` got a record. It writes one, and does not read one. | `path` |
 | `palette-refuses` | `snapshot --validate` asked Palette whether it takes the packs, and Palette refused them. Strata prints each error as a `palette    refuses:` line first, and writes no record. | `reference`, `errors[]` of `pack`, `code`, and `message` |
-| `usage` | The command line cannot work as given, so strata sent no request. Examples: `snapshot` with no ref and no `--from-raw`, `snapshot --raw-dir` of a ref that is not a profile or a cluster, `compare --repave` or `compare --validate` with an edge host or a cluster group, `snapshot --validate` with `--from-raw` or a cluster ref, and `behind --since`
+| `usage` | The command line cannot work as given, so strata sent no request. Examples: `snapshot` with no ref and no `--from-raw`, `snapshot --raw-dir` of a ref that is not a profile or a cluster, `compare --repave` or `compare --validate` with an edge host or a cluster group, `snapshot --validate` with `--from-raw`, a cluster ref, or an `@draft` ref, and `behind --since`
 with a file that is not a `strata-behind/1` document. `snapshot` takes no `--json`, so this kind prints as a `strata:` line. | |
 | `candidate-invalid` | The candidate file has a problem, or Palette refuses the version that it describes at the create. | `path` |
 | `pack-not-found` | The registry has no such pack version or tag. | `name`, `version`, `registry`, `tag` when given |

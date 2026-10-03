@@ -29,8 +29,10 @@ takes:
   `@draft`, edge host, cluster group, or app profile.
 - `--validate` takes `--from-candidate` or a profile version. With `--from-raw`,
   `--dir`, or an `@draft`, cluster, edge host, cluster group, app profile, or pack
-  ref, it is a `usage` error. If Palette refuses the packs, strata exits `2`
-  with the error `palette-refuses`, and writes no record.
+  ref, it is a `usage` error. To ask Palette about a draft, write its candidate
+  with `strata candidate <ref>@draft -o <file>`. Then give that file to
+  `--from-candidate`. If Palette refuses the packs, strata exits `2` with the
+  error `palette-refuses`, and writes no record.
 - Without `-o`, the snapshot goes to standard output.
 - `-o releases/1.1.0/dev.json` makes the directory that the path names, so a
   release directory needs no `mkdir` first.

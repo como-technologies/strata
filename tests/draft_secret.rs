@@ -7,7 +7,7 @@ use serde_json::{Value, json};
 use strata::api::{MemoryApi, Palette};
 use strata::error::Error;
 use strata::progress::Progress;
-use strata::snapshot::DRAFT_TEMPLATE;
+use strata::snapshot::{DRAFT_TEMPLATE, PUBLISHED_TEMPLATE};
 
 mod common;
 use common::snapshot_of;
@@ -171,4 +171,141 @@ fn a_pack_uid_with_a_character_that_is_not_alphanumeric_is_masked() {
     assert!(!raw.profile.to_string().contains(SECRET));
     assert!(!raw.manifests.to_string().contains(SECRET));
     assert_eq!(api.calls("/v1/packs/64f0-barney%2Be1"), 1);
+}
+
+// ---- a draft with a secret and manifests ------------------------------------------------------
+
+const RULES_PACK: &str = "64f0000000000000000000e2";
+const DASH: &str = "64f00000000000000000a0d1";
+const RULES: &str = "64f00000000000000000a0e1";
+const PUBLISHED_VALUES: &str =
+    "charts:\n  grafana:\n    adminPassword: '********'\n    replicas: 2\n";
+const DRAFT_VALUES: &str =
+    "charts:\n  grafana:\n    adminPassword: s3cret-barney\n    replicas: 3\n";
+const MASKED_DRAFT_VALUES: &str =
+    "charts:\n  grafana:\n    adminPassword: '********'\n    replicas: 3\n";
+const PUBLISHED_DASH: &str =
+    "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: dash\ndata:\n  panels: \"1\"";
+const DRAFT_DASH: &str =
+    "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: dash\ndata:\n  panels: \"2\"";
+const PUBLISHED_RULES: &str =
+    "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: rules\ndata:\n  level: warn";
+const DRAFT_RULES: &str =
+    "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: rules\ndata:\n  level: error";
+
+/// A template with the pack `grafana`, which has `values` and the manifest `dash`, and the
+/// manifest pack `team-rules`, which has the manifest `rules`.
+fn template_with_manifests(values: &str) -> Value {
+    json!({"cloudType": "all", "type": "add-on", "packs": [
+        {"name": "grafana", "layer": "addon", "type": "spectro", "tag": "1.0.0",
+         "version": "1.0.0", "packUid": PACK, "registryUid": "r1", "values": values,
+         "manifests": [{"name": "dash", "uid": DASH, "kind": "manifest"}]},
+        {"name": "team-rules", "layer": "addon", "type": "manifest", "tag": "1.0.0",
+         "version": "1.0.0", "packUid": RULES_PACK, "values": "",
+         "manifests": [{"name": "rules", "uid": RULES, "kind": "manifest"}]}]})
+}
+
+/// One manifest of the two templates, as Palette gives it by manifest uid.
+fn manifest_entity(uid: &str, name: &str, published: &str, draft: &str) -> Value {
+    json!({"metadata": {"name": name, "uid": uid},
+           "spec": {"published": {"content": published}, "draft": {"content": draft}}})
+}
+
+/// Palette with a published version and a draft. The draft changes `replicas` and the content of
+/// both manifests. Palette masks the secret of the published template, but not of the draft, and
+/// `packs/manifests` serves the draft packs with the published content of each manifest.
+fn draft_with_manifests() -> MemoryApi {
+    let served = |name: &str, uid: &str, values: &str, manifest: Value| {
+        json!({"metadata": {"name": name, "uid": uid},
+               "spec": {"name": name, "version": "1.0.0", "values": values,
+                        "manifests": [manifest]}})
+    };
+    MemoryApi::new()
+        .with(
+            format!("/v1/clusterprofiles/{PROFILE}"),
+            json!({"metadata": {"uid": PROFILE, "name": "barney"},
+                   "spec": {"version": "1.0.0",
+                            "published": template_with_manifests(PUBLISHED_VALUES),
+                            "draft": template_with_manifests(DRAFT_VALUES)},
+                   "status": {"isPublished": true, "inUseClusterUids": []}}),
+        )
+        .with(
+            format!("/v1/clusterprofiles/{PROFILE}/packs/manifests"),
+            json!({"spec": {"packs": [
+                served("grafana", PACK, DRAFT_VALUES,
+                       json!({"name": "dash", "uid": DASH, "content": PUBLISHED_DASH})),
+                served("team-rules", RULES_PACK, "",
+                       json!({"name": "rules", "uid": RULES, "content": PUBLISHED_RULES}))]}}),
+        )
+        .with(
+            format!("/v1/clusterprofiles/{PROFILE}/variables"),
+            json!({"variables": []}),
+        )
+        .with(format!("/v1/packs/{PACK}"), pack_doc())
+        .with(
+            format!("/v1/clusterprofiles/{PROFILE}/packs/grafana/manifests/{DASH}"),
+            manifest_entity(DASH, "dash", PUBLISHED_DASH, DRAFT_DASH),
+        )
+        .with(
+            format!("/v1/clusterprofiles/{PROFILE}/packs/team-rules/manifests/{RULES}"),
+            manifest_entity(RULES, "rules", PUBLISHED_RULES, DRAFT_RULES),
+        )
+}
+
+/// The content of the manifest `name` in a record.
+fn manifest_content<'a>(snap: &'a strata::snapshot::Snapshot, name: &str) -> &'a str {
+    snap.packs
+        .iter()
+        .flat_map(|p| &p.manifests)
+        .find(|m| m.name == name)
+        .map(|m| m.content.as_str())
+        .unwrap_or_default()
+}
+
+#[test]
+fn a_draft_with_a_secret_and_manifests_records_no_clear_secret_and_the_content_of_each_template() {
+    let api = draft_with_manifests();
+
+    let raw = Palette::new(&api)
+        .fetch_profile(PROFILE, &Progress::silent())
+        .unwrap();
+    assert!(!raw.profile.to_string().contains(SECRET));
+    assert!(!raw.manifests.to_string().contains(SECRET));
+    let entities = raw.manifest_entities.as_ref().unwrap();
+    assert!(
+        entities.get(DASH).is_some() && entities.get(RULES).is_some(),
+        "{entities}"
+    );
+    let dir = tempfile::tempdir().unwrap();
+    raw.save_dir(dir.path(), "t0").unwrap();
+    for file in std::fs::read_dir(dir.path()).unwrap() {
+        let path = file.unwrap().path();
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert!(!text.contains(SECRET), "{}: {text}", path.display());
+    }
+
+    let draft = snapshot_of(&api, &format!("{PROFILE}@draft")).unwrap();
+    assert_eq!(draft.source.template, DRAFT_TEMPLATE);
+    let record = draft.to_json(false).unwrap();
+    assert!(!record.contains(SECRET), "{record}");
+    let grafana = draft.packs.iter().find(|p| p.name == "grafana").unwrap();
+    assert_eq!(grafana.values, MASKED_DRAFT_VALUES);
+    assert_eq!(
+        grafana.values_canon["charts"]["grafana"]["adminPassword"],
+        "********"
+    );
+    assert_eq!(grafana.values_canon["charts"]["grafana"]["replicas"], 3);
+    assert_eq!(manifest_content(&draft, "dash"), DRAFT_DASH);
+    assert_eq!(manifest_content(&draft, "rules"), DRAFT_RULES);
+
+    let version = snapshot_of(&api, PROFILE).unwrap();
+    assert_eq!(version.source.template, PUBLISHED_TEMPLATE);
+    let record = version.to_json(false).unwrap();
+    assert!(!record.contains(SECRET), "{record}");
+    assert_eq!(manifest_content(&version, "dash"), PUBLISHED_DASH);
+    assert_eq!(manifest_content(&version, "rules"), PUBLISHED_RULES);
+    assert_ne!(draft.root, version.root);
+
+    // strata reads no schema for a manifest pack: it has no values to mask
+    assert_eq!(api.calls(&format!("/v1/packs/{RULES_PACK}")), 0);
 }
