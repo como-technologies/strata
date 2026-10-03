@@ -37,19 +37,13 @@ These are open:
   gives an OS pack an `imageId`. So no run shows if Palette replaces the nodes
   for a new image, or which `imageId` a cluster copy holds. See
   [The OS pack names a new machine image](../../use-cases/os-image.md).
-- A change of the config of a cluster group, `spec.clustersConfig`: no run
-  changes the limits, the endpoint, or the values of a group. So no run shows
-  the `policy` tier of a group record after such a change. See
+- A change of the endpoint or the values of a cluster group: the run of
+  [cluster-group.sh](../../development/live-runs.md#cluster-groupsh) changes
+  the CPU limit alone. See
   [The config that a cluster group gives](../../commands/snapshot/other-objects.md#the-config-that-a-cluster-group-gives).
-- The answer of `GET /v1/spectroclusters/{uid}/repave/status` to a cluster
-  record. A run read the route by hand, and no run takes a record of a cluster
-  while its repave waits. See
-  [macro-repave.sh](../../development/live-runs.md#macro-repavesh).
-- A tag that a registry deletes: no run deletes a tag from a registry. So no
-  run shows `isInvalid` and `inValidReason` on a pack reference, or what
-  Palette answers to a cluster create from that version. The stand-in of the
-  book follows the API documentation of the field. See
-  [A registry deletes the tag of a pack](../../use-cases/invalid-pack.md).
+- A cluster create from a version with an invalid pack: no run shows what
+  Palette answers. See
+  [A tag that a registry deletes](packs.md#a-tag-that-a-registry-deletes).
 - The answer of `POST /v1/clusterprofiles/validate/packs` to a pack that
   requires a pack that the profile does not hold. No pack of the Public Repo
   lists a dependency. See

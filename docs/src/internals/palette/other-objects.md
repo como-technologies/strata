@@ -94,6 +94,10 @@ to the host clusters of the group.
   the same value. `values` is YAML with its comments. Each entry of
   `hostClustersConfig[]` has the `clusterUid` and the `endpointConfig` of a
   host cluster.
+- A change of the CPU limit of the group through the provider, from 6000 to
+  4000 millicores, also changes `cpu` from 6 to 4. Palette changes the two
+  units together. [cluster-group.sh](../../development/live-runs.md#cluster-groupsh)
+  shows it.
 - The live run gives a virtual cluster a CPU limit of 3 cores. The API sets no
   lower limit: it checks a virtual cluster against the upper limits of the
   group alone.
@@ -115,8 +119,9 @@ manifests. The content of a manifest comes from
 - An app profile that is made with an install order on each tier keeps the
   orders, and the tiers route gives them. The document of the app profile gives
   no order. A plain update of a tier with another order,
-  `PUT /v1/appProfiles/<uid>/tiers/<tierUid>`, gets a 2xx answer, and the tier
-  keeps its order. [app-profile.sh](../../development/live-runs.md#app-profilesh)
+  `PUT /v1/appProfiles/<uid>/tiers/<tierUid>`, gets a 2xx answer with no error,
+  and the tier keeps its order. So the order comes only from the create: a new
+  order needs a new app profile. [app-profile.sh](../../development/live-runs.md#app-profilesh)
   shows it.
 - `spec.containerRegistryUid` of a container tier is the registry of its image.
   Palette does not give the field when the tier names no registry.

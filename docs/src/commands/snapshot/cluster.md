@@ -108,6 +108,9 @@ the cluster `search`:
 {{#include ../../output/tiers-verify-search-lines.txt}}
 ```
 
+Stage 5 of [tiers.sh](../../development/live-runs.md#tierssh) changes the
+subject of a binding on a live cluster, and `compare` and `verify` name it.
+
 A record that an older version of strata wrote holds `resources` and `rbac` in
 place of `rbacs` and `namespaces`. They are the references to the bindings and
 the namespaces, with their uids. When one of two records holds them, `compare` and

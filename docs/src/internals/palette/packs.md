@@ -154,6 +154,28 @@ beside `1.0.0` is listed, newest first. So for a chart in an OCI Helm registry,
 `verify` on a record of the chart says what Palette lists, and not what the
 registry serves now. A pack in an OCI pack registry follows each push.
 
+## A tag that a registry deletes
+
+A published profile pins a pack of an OCI pack registry of the example's own.
+When the registry deletes the tag of the pack, Palette marks the pack invalid
+after the next sync, in ten minutes or less. `GET /v1/clusterprofiles/<uid>`
+then gives:
+
+| Where | What |
+| --- | --- |
+| `spec.published.packs[].isInvalid` | `true` |
+| `spec.published.packs[].inValidReason` | `<display name> <version> tag is deleted`, such as `strata live pack 1.0.9 tag is deleted` |
+| `spec.published.packs[].digest` | the digest of the deleted push, as before the delete |
+| `metadata.annotations.isInValid` | `"true"` |
+| `metadata.annotations.inValidReason` | `The cluster profile is invalid as one or more pack tags are deleted from the registry` |
+
+A push of the same tag again, with other bytes, and a sync do not clear the
+flag in ten minutes. The pack keeps the flag and the digest of the deleted push.
+The values and the digest do not change, so the root does not change.
+`verify` names the pack: see
+[A registry deletes the tag of a pack](../../use-cases/invalid-pack.md).
+[registry.sh](../../development/live-runs.md#registrysh), step 3b, shows it.
+
 ## The digest of each registry kind
 
 A tenant adds a Helm registry, an OCI registry with the provider type `pack`,
