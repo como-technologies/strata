@@ -35,7 +35,10 @@ These are hard rules. `docs/src/development/documentation.md` explains each one.
 
 `docs/src/boundary.md` explains each rule in "The rules of the scope".
 
-1. **Ask Palette. Do not copy its rules.** Call its validate route.
+1. **Ask Palette first.** When a route answers a check before the point where
+   the answer matters, call it and do not copy the rule. When no route answers,
+   strata makes the check, names Palette as the owner of the rule, and lists it
+   in "The gaps that strata fills". When Palette adds a route, remove the check.
 2. **Do not repeat a status that Palette shows.** Record it only when a
    difference needs it.
 3. **`packs` serves the records and `behind`.** It is not a catalog.
