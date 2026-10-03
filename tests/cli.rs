@@ -1139,3 +1139,59 @@ fn snapshot_validate_with_no_profile_to_ask_about_is_a_usage_error_before_any_re
         );
     }
 }
+
+#[test]
+fn snapshot_of_a_version_whose_pack_palette_marks_invalid_warns_on_standard_error() {
+    let fx = fixtures();
+    let raw = fx.raw.join("invalid");
+    std::fs::create_dir_all(&raw).unwrap();
+    for name in ["manifests.json", "variables.json"] {
+        std::fs::copy(fx.raw.join("a").join(name), raw.join(name)).unwrap();
+    }
+    let mut profile = json(fx.raw.join("a").join("profile.json").to_str().unwrap());
+    for pack in profile["spec"]["published"]["packs"]
+        .as_array_mut()
+        .unwrap()
+    {
+        if pack["layer"] == "os" {
+            pack["isInvalid"] = serde_json::Value::Bool(true);
+            pack["inValidReason"] = "ubuntu-aws 22.04 tag is deleted".into();
+        }
+    }
+    std::fs::write(
+        raw.join("profile.json"),
+        serde_json::to_string(&profile).unwrap(),
+    )
+    .unwrap();
+    let out = fx.raw.join("invalid.json");
+    let args = [
+        "snapshot",
+        "--from-raw",
+        raw.to_str().unwrap(),
+        "-o",
+        out.to_str().unwrap(),
+    ];
+    let r = run_in(&args, &[], &["NO_COLOR", "CLICOLOR_FORCE", "STRATA_QUIET"]);
+    assert_eq!(r.code, 0, "{}", r.err);
+    assert!(
+        r.err.contains(
+            "strata: warning: Palette marks pack os/ubuntu-aws invalid (ubuntu-aws 22.04 tag is \
+             deleted). The record keeps the flag, outside the root"
+        ),
+        "{}",
+        r.err
+    );
+    let record = json(out.to_str().unwrap());
+    assert_eq!(record["root"], json(&fx.a)["root"]);
+    // a quiet run writes no warning, as for each other warning
+    let r = run(&args);
+    assert_eq!((r.code, r.err.as_str()), (0, ""));
+    // the record of the valid version warns of nothing
+    let r = run_in(
+        &["snapshot", "--from-raw", fx.raw.join("a").to_str().unwrap()],
+        &[],
+        &["NO_COLOR", "CLICOLOR_FORCE", "STRATA_QUIET"],
+    );
+    assert_eq!(r.code, 0, "{}", r.err);
+    assert!(!r.err.contains("invalid"), "{}", r.err);
+}

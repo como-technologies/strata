@@ -31,6 +31,8 @@ const A116: &str = "64e0000000000000000000f9";
 const A117: &str = "64e0000000000000000000fa";
 // aws-stack@1.1.8: the content of 1.1.1, with an OS pack that names its machine image
 const A118: &str = "64e0000000000000000000fb";
+// aws-stack@1.1.9: the content of 1.1.1, whose cert-manager tag the registry deletes
+const A119: &str = "64e0000000000000000000fc";
 const ADDONS_DEV: &str = "64e2000000000000000000a1";
 const ADDONS_PROD: &str = "64e3000000000000000000a1";
 const ADDONS_PROD2: &str = "64e3000000000000000000a2";
@@ -75,6 +77,10 @@ const IMAGE_1: &[Edit] = &[Edit::ImageId {
 const IMAGE_2: &[Edit] = &[Edit::ImageId {
     pack: "ubuntu-aws",
     id: "ami-0a1b2c3d4e5f60002",
+}];
+const CERT_MANAGER_TAG_DELETED: &[Edit] = &[Edit::Invalid {
+    pack: "cert-manager",
+    reason: "Cert Manager 1.21.1 tag is deleted",
 }];
 const MACRO_REGION: &[Edit] = &[Edit::Macro {
     pack: "csi-aws-ebs",
@@ -138,6 +144,7 @@ pub fn names() -> Vec<&'static str> {
         "cluster-release",
         "cluster-values",
         "macros",
+        "invalid-pack",
         "no-digest",
         "repave",
         "cluster-tiers",
@@ -1636,6 +1643,49 @@ fn use_cases(r: &mut Runner) {
         1,
         false,
         "strata compare releases/1.1.8/dev.json aws-stack@1.1.8 --json | jq -c '{same, imageIdsChanged}'",
+    );
+
+    // a registry deletes the tag of a pack that a published version uses: Palette marks the
+    // pack ref invalid, the root stays, and snapshot, verify, and compare say so (#108)
+    r.chapter("invalid-pack", DEV_ENV);
+    r.projects(&[("dev", DEV)]);
+    r.profile(DEV, A119, "1.1.9", "aws-stack@1.1.1", &[]);
+    r.step(
+        "invalid-pack-record",
+        0,
+        true,
+        "strata snapshot aws-stack@1.1.9 -o releases/1.1.9/dev.json",
+    );
+    r.serve_here(); // state 1: the record is taken, and each pack is valid
+    r.edit(DEV, A119, CERT_MANAGER_TAG_DELETED);
+    r.step(
+        "invalid-pack-verify-full",
+        0,
+        false,
+        "strata verify releases/1.1.9/dev.json",
+    );
+    r.excerpt(
+        "invalid-pack-verify",
+        "invalid-pack-verify-full",
+        r"^(aws-stack|root |  \[addon|OK|INVALID)",
+    );
+    r.step(
+        "invalid-pack-snapshot",
+        0,
+        true,
+        "strata snapshot aws-stack@1.1.9 -o releases/1.1.9/dev-now.json",
+    );
+    r.step(
+        "invalid-pack-fields",
+        0,
+        false,
+        r#"jq -c '.packs[] | select(.invalid) | {key, invalid, invalidReason}' releases/1.1.9/dev-now.json"#,
+    );
+    r.step(
+        "invalid-pack-compare-json",
+        0,
+        false,
+        "strata compare releases/1.1.9/dev.json releases/1.1.9/dev-now.json --json | jq -c '{same, packsInvalid: .summary.packsInvalid}'",
     );
 
     // a pack with no upstream digest, as a registry that Palette does not sync gives it

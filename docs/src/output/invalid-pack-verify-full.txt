@@ -1,0 +1,14 @@
+$ strata verify releases/1.1.9/dev.json
+aws-stack@1.1.9 (uid 64e0000000000000000000fc)  ->  aws-stack@1.1.9 (uid 64e0000000000000000000fc)
+root       088136c929bd -> 088136c929bd   IDENTICAL
+consumers  0 -> 0 clusters
+
+  variables unchanged
+
+  [os   ] ubuntu-aws                 24.04              unchanged
+  [k8s  ] kubernetes                 1.36.2             unchanged
+  [cni  ] cni-cilium-oss             1.20.1             unchanged
+  [csi  ] csi-aws-ebs                1.65.0             unchanged
+  [addon] cert-manager               1.21.1             unchanged  INVALID on side B: Cert Manager 1.21.1 tag is deleted
+OK: published version aws-stack@1.1.9 is unchanged since 2026-09-17T09:30:00Z
+INVALID: Palette marks pack addon/cert-manager invalid now (Cert Manager 1.21.1 tag is deleted)

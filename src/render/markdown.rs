@@ -4,10 +4,10 @@ use super::{
     Renderer, VarLine, applied_ref, artifact_lines, artifacts_summary, capitalized, chain_verdict,
     cluster_count, cluster_value, consumer_count, consumer_counts, consumers_heading,
     consumers_sentence, count_of, counts_line, cross_kind_note, dash, draft_note, edge_hosts_line,
-    edited_in_place_note, entry_error, gone_sentence, image_ids_changed_notes,
-    last_modified_suffix, list_count, list_scope, macros_changed_note, macros_note,
-    outside_root_sentence, overwritten_in_place_notes, pack_version, pair_detail, pair_word,
-    palette_repave_lines, palette_repave_note, palette_validation_lines, plain_flags,
+    edited_in_place_note, entry_error, gone_sentence, image_ids_changed_notes, invalid_mark,
+    invalid_pack_sentences, last_modified_suffix, list_count, list_scope, macros_changed_note,
+    macros_note, outside_root_sentence, overwritten_in_place_notes, pack_version, pair_detail,
+    pair_word, palette_repave_lines, palette_repave_note, palette_validation_lines, plain_flags,
     profiles_overwritten_sentence, project_label, record_detail, record_label, recorded_noun,
     registry_note, registry_sync_suffix, repave_pending_notes, running_behind_notes,
     same_content_note, second_reading_counts, short, show, state_suffix, subject, tier_path,
@@ -180,6 +180,10 @@ impl Renderer for MarkdownRenderer {
                 Status::Added => ("+", "ADDED".to_string()),
                 Status::Removed => ("-", "REMOVED".to_string()),
                 Status::Changed => ("~", plain_flags(pd).replace("->", "→")),
+            };
+            let change = match invalid_mark(pd) {
+                Some(m) => format!("{change} **{}**", escape(&m)),
+                None => change,
             };
             o.push_str(&format!(
                 "| `{mark}` | {} | `{}` | {} | {} | {} |\n",
@@ -359,6 +363,9 @@ impl Renderer for MarkdownRenderer {
             line.push_str(&registry_sync_suffix(v.registry_sync.as_ref()));
             line.push_str(&state_suffix(v, recorded));
             line.push_str(&last_modified_suffix(v));
+            for sentence in invalid_pack_sentences(&v.invalid_packs) {
+                line.push_str(&format!("\n\n**INVALID**: {}", escape(&sentence)));
+            }
             if let Some(heading) = who_heading(v) {
                 line.push_str("\n\n");
                 line.push_str(&heading);

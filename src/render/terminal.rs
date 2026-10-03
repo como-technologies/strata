@@ -4,10 +4,10 @@ use super::{
     Renderer, VarLine, applied_ref, artifact_lines, artifacts_summary, chain_verdict,
     cluster_count, cluster_value, consumer_count, consumer_counts, consumers_heading,
     consumers_sentence, count_of, counts_line, cross_kind_note, dash, draft_note, edge_hosts_line,
-    edited_in_place_note, entry_error, gone_sentence, image_ids_changed_notes,
-    last_modified_suffix, list_count, list_scope, macros_changed_note, macros_note,
-    outside_root_sentence, overwritten_in_place_notes, pack_version, pair_detail, pair_word,
-    palette_repave_lines, palette_repave_note, palette_validation_lines,
+    edited_in_place_note, entry_error, gone_sentence, image_ids_changed_notes, invalid_mark,
+    invalid_pack_sentences, last_modified_suffix, list_count, list_scope, macros_changed_note,
+    macros_note, outside_root_sentence, overwritten_in_place_notes, pack_version, pair_detail,
+    pair_word, palette_repave_lines, palette_repave_note, palette_validation_lines,
     profiles_overwritten_sentence, project_label, record_detail, record_label, recorded_noun,
     registry_note, registry_sync_suffix, repave_pending_notes, running_behind_notes,
     same_content_note, second_reading_counts, short, show, state_suffix, subject, tag_rename,
@@ -190,11 +190,13 @@ fn paint_impact(level: ImpactLevel, text: &str, p: &Paint) -> String {
 
 fn packline(pd: &PackDiff, p: &Paint) -> String {
     let ver = version_display(pd);
+    let invalid = invalid_mark(pd).map_or_else(String::new, |m| format!("  {}", p.bred(&m)));
     if pd.status == Status::Unchanged {
-        return p.dim(&format!(
+        let line = p.dim(&format!(
             "  [{:<5}] {:<26} {:<18} unchanged",
             pd.layer, pd.name, ver
         ));
+        return format!("{line}{invalid}");
     }
     let (mark, st) = match pd.status {
         Status::Added => (p.green("+"), p.bgreen("ADDED")),
@@ -202,7 +204,7 @@ fn packline(pd: &PackDiff, p: &Paint) -> String {
         _ => (p.yellow("~"), flags(pd, p)),
     };
     format!(
-        "{mark} [{:<5}] {} {:<18} {st}",
+        "{mark} [{:<5}] {} {:<18} {st}{invalid}",
         pd.layer,
         p.bold(&format!("{:<26}", pd.name)),
         ver
@@ -453,6 +455,9 @@ impl Renderer for TerminalRenderer {
             line.push_str(&registry_sync_suffix(v.registry_sync.as_ref()));
             line.push_str(&state_suffix(v, recorded));
             line.push_str(&last_modified_suffix(v));
+            for sentence in invalid_pack_sentences(&v.invalid_packs) {
+                line.push_str(&format!("\n{}: {sentence}", p.bred("INVALID")));
+            }
             if let Some(heading) = who_heading(v) {
                 line.push('\n');
                 line.push_str(&heading);

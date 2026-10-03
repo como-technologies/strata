@@ -74,6 +74,15 @@ pub enum Edit {
         /// The id of the image, such as an AMI.
         id: &'static str,
     },
+    /// Mark a pack ref invalid, as Palette does when the registry deletes the tag of the pack:
+    /// `isInvalid` is true, and `inValidReason` is the message of the event of the registry. The
+    /// values and the pack build stay.
+    Invalid {
+        /// The pack whose tag the registry deleted.
+        pack: &'static str,
+        /// The message of the event, `<display name> <tag> tag is deleted`.
+        reason: &'static str,
+    },
 }
 
 impl Edit {
@@ -170,6 +179,14 @@ impl Edit {
                 for pack in packs_mut(doc) {
                     if pack["name"] == *name {
                         pack["annotations"]["imageId"] = json!(id);
+                    }
+                }
+            }
+            Edit::Invalid { pack: name, reason } => {
+                for pack in packs_mut(doc) {
+                    if pack["name"] == *name {
+                        pack["isInvalid"] = json!(true);
+                        pack["inValidReason"] = json!(reason);
                     }
                 }
             }

@@ -26,6 +26,11 @@ explains the hashes.
 after a rename of the project. [JSON documents](../../reference/documents.md#strata-snapshot1)
 lists each field.
 
+When Palette marks a pack of the version invalid, `snapshot` writes a warning
+on standard error. The registry deleted the tag of that pack. The record keeps
+`invalid` and `invalidReason` on the pack, outside the root. See
+[A registry deletes the tag of a pack](../../use-cases/invalid-pack.md).
+
 ## Record the newest version
 
 ```text

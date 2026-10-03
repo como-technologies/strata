@@ -641,6 +641,15 @@ pub struct Pack {
     /// a record written before this field has none. [`Pack::image_id`] reads one of them.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub annotations: BTreeMap<String, String>,
+    /// True when Palette marks the pack ref invalid, from `isInvalid`: the registry deleted the
+    /// tag of the pack, and Palette builds no cluster from the version. Outside the root: the
+    /// flag is a statement of Palette about the registry, and the content of the pack stays.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub invalid: bool,
+    /// Why Palette marks the pack invalid, from `inValidReason`, as Palette gives it. Empty when
+    /// the pack is not invalid.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub invalid_reason: String,
     /// Pack params as set on the profile.
     pub params: Value,
     /// Raw values YAML as returned by the API
@@ -943,6 +952,13 @@ impl Pack {
             .flatten()
             .filter_map(|(k, v)| v.as_str().map(|v| (k.clone(), v.to_string())))
             .collect();
+        // a reason without the flag is not a reason: Palette clears the flag when the tag is back
+        let invalid = pk.get("isInvalid").and_then(Value::as_bool) == Some(true);
+        let invalid_reason = if invalid {
+            s(pk, "/inValidReason")
+        } else {
+            String::new()
+        };
         // a key of strata on the pack ref of a candidate: a pack ref of Palette has none
         let preset_options: Vec<PresetOption> = pk
             .get("presetOptions")
@@ -1013,6 +1029,8 @@ impl Pack {
             registry_digest,
             registry_provider_type,
             annotations,
+            invalid,
+            invalid_reason,
             params,
             values,
             values_canon,

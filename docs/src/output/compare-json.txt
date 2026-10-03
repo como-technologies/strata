@@ -10,5 +10,6 @@ $ strata compare aws-stack@1.0.0 aws-stack@1.1.0 --json | jq .summary
   "variablesChanged": false,
   "imagesChanged": 30,
   "chartsChanged": 1,
+  "packsInvalid": 0,
   "maxImpact": "repave"
 }

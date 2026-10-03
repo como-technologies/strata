@@ -203,6 +203,10 @@ pub struct Summary {
     /// The charts that changed across the packs on both sides.
     #[serde(default)]
     pub charts_changed: usize,
+    /// The packs that Palette marks invalid on one side or on the two sides. They do not change
+    /// `same`.
+    #[serde(default)]
+    pub packs_invalid: usize,
     /// The most severe impact level across the packs that changed, and the packs that only one
     /// side has
     pub max_impact: ImpactLevel,
@@ -545,6 +549,12 @@ pub struct PackSide {
     pub values_hash: String,
     /// Node hash.
     pub node: String,
+    /// True when Palette marks the pack ref of this side invalid: see [`Pack::invalid`].
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub invalid: bool,
+    /// Why Palette marks it invalid, as Palette gives it: see [`Pack::invalid_reason`].
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub invalid_reason: String,
 }
 
 /// One pack across the two sides.
@@ -613,6 +623,58 @@ pub struct PackDiff {
     /// params of an app tier are its properties.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub param_changes: Vec<ParamChange>,
+}
+
+/// The sides of a pack that Palette marks invalid: see [`PackDiff::invalid_sides`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum InvalidSides<'a> {
+    /// Only side A, with its reason.
+    A(&'a str),
+    /// Only side B, with its reason.
+    B(&'a str),
+    /// The two sides, with the reason of side B.
+    Both(&'a str),
+}
+
+impl PackDiff {
+    /// The sides that Palette marks invalid, each with the reason that Palette gives. None when
+    /// neither side is invalid.
+    pub(crate) fn invalid_sides(&self) -> Option<InvalidSides<'_>> {
+        fn reason(s: &Option<PackSide>) -> Option<&str> {
+            s.as_ref()
+                .filter(|s| s.invalid)
+                .map(|s| s.invalid_reason.as_str())
+        }
+        match (reason(&self.a), reason(&self.b)) {
+            (Some(_), Some(b)) => Some(InvalidSides::Both(b)),
+            (Some(a), None) => Some(InvalidSides::A(a)),
+            (None, Some(b)) => Some(InvalidSides::B(b)),
+            (None, None) => None,
+        }
+    }
+}
+
+/// One pack that Palette marks invalid: see [`Verify::invalid_packs`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct InvalidPack {
+    /// `<layer>/<name>` of the pack.
+    pub key: String,
+    /// Why Palette marks it invalid, as Palette gives it. Empty when Palette gives no reason.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub reason: String,
+}
+
+/// Each pack of `s` that Palette marks invalid, in pack order.
+pub(crate) fn invalid_packs(s: &Snapshot) -> Vec<InvalidPack> {
+    s.packs
+        .iter()
+        .filter(|p| p.invalid)
+        .map(|p| InvalidPack {
+            key: p.key.clone(),
+            reason: p.invalid_reason.clone(),
+        })
+        .collect()
 }
 
 /// One param of a pack, compared.
@@ -958,6 +1020,10 @@ pub struct Verify {
     /// annotation `imageId`. The status is `drifted`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub image_ids_changed: Vec<ImageIdChange>,
+    /// Each pack that Palette marks invalid now, with its reason: the registry deleted its tag.
+    /// It does not change `status`: the content is still the recorded content.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub invalid_packs: Vec<InvalidPack>,
     /// For a pack record: the last sync of the registry, as Palette gives it. Palette holds a copy
     /// of each registry, and the verdict states that copy. Absent when the registry does not sync,
     /// or when Palette does not answer.
@@ -1265,6 +1331,8 @@ fn side(p: &Pack) -> PackSide {
         upstream_source: p.hash.upstream_source.clone(),
         values_hash: p.values_hash.clone(),
         node: p.hash.node.clone(),
+        invalid: p.invalid,
+        invalid_reason: p.invalid_reason.clone(),
     }
 }
 
@@ -1568,6 +1636,7 @@ pub fn compute(a: &Snapshot, b: &Snapshot, generated_at: &str, verify: Option<Ve
             }
             (None, None) => unreachable!("key came from one of the maps"),
         };
+        summary.packs_invalid += usize::from(pd.invalid_sides().is_some());
         packs.push(pd);
     }
     packs.sort_by(|p, q| {

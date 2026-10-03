@@ -9,7 +9,8 @@ use serde_json::Value;
 
 use crate::color::Paint;
 use crate::diff::{
-    Diff, ImageIdChange, Leaf, PackDiff, Status, VariableSummary, VariablesByName, Verify,
+    Diff, ImageIdChange, InvalidPack, InvalidSides, Leaf, PackDiff, Status, VariableSummary,
+    VariablesByName, Verify,
 };
 use crate::error::Result;
 use crate::ops::{Chain, ConsumersReport, Listing, PackListing, Pair, PairStatus, VerifySummary};
@@ -670,6 +671,36 @@ pub(crate) fn image_ids_changed_notes(d: &Diff) -> Vec<String> {
         .collect()
 }
 
+/// The mark on the line of a pack that Palette marks invalid: `INVALID on side B: <reason>`, or
+/// `INVALID on both sides: <reason>` with the reason of side B. None when neither side is.
+pub(crate) fn invalid_mark(pd: &PackDiff) -> Option<String> {
+    let (sides, reason) = match pd.invalid_sides()? {
+        InvalidSides::A(r) => ("side A", r),
+        InvalidSides::B(r) => ("side B", r),
+        InvalidSides::Both(r) => ("both sides", r),
+    };
+    Some(if reason.is_empty() {
+        format!("INVALID on {sides}")
+    } else {
+        format!("INVALID on {sides}: {reason}")
+    })
+}
+
+/// One sentence for each pack that Palette marks invalid now: `Palette marks pack
+/// addon/hello-universe invalid now (<reason>)`.
+pub(crate) fn invalid_pack_sentences(packs: &[InvalidPack]) -> Vec<String> {
+    packs
+        .iter()
+        .map(|p| {
+            if p.reason.is_empty() {
+                format!("Palette marks pack {} invalid now", p.key)
+            } else {
+                format!("Palette marks pack {} invalid now ({})", p.key, p.reason)
+            }
+        })
+        .collect()
+}
+
 /// Palette's answer to `--repave`, one line for each reason: `repave: PackValuesUpdated
 /// kubernetes (kubeadmconfig.postKubeadmCommands)`, or `no repave`. Empty without the option.
 pub(crate) fn palette_repave_lines(d: &Diff) -> Vec<String> {
@@ -974,12 +1005,17 @@ fn record_outside_root(r: &crate::ops::VerifiedRecord) -> Option<String> {
 /// of one that runs: `; the state is Deleting`.
 pub(crate) fn record_detail(r: &crate::ops::VerifiedRecord) -> String {
     let gone = record_verify(r).is_some_and(|v| v.gone);
-    match r.state.as_deref() {
+    let mut detail = match r.state.as_deref() {
         Some(state) if !gone && !normal_state(state) => {
             format!("{}; the state is {state}", record_sentence(r))
         }
         _ => record_sentence(r),
+    };
+    for sentence in invalid_pack_sentences(&r.invalid_packs) {
+        detail.push_str("; ");
+        detail.push_str(&sentence);
     }
+    detail
 }
 
 fn record_sentence(r: &crate::ops::VerifiedRecord) -> String {

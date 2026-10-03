@@ -1,0 +1,2 @@
+$ strata compare releases/1.1.9/dev.json releases/1.1.9/dev-now.json --json | jq -c '{same, packsInvalid: .summary.packsInvalid}'
+{"same":true,"packsInvalid":1}

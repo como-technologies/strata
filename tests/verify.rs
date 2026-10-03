@@ -10395,3 +10395,208 @@ fn snapshot_validate_of_a_version_asks_the_route_of_an_update_of_that_version() 
     assert!(matches!(err, Error::Usage { .. }), "{err}");
     assert!(api.posted().is_empty());
 }
+
+// ---- a pack that Palette marks invalid (#108) ---------------------------------------------------
+
+/// The reason that the tests give an invalid pack ref, in the form of the message of Palette.
+const INVALID_REASON: &str = "ubuntu-aws 22.04 tag is deleted";
+
+/// An API that serves fixture A under `UID_A`. Palette marks its OS pack invalid when `invalid`
+/// is true.
+fn serve_invalid(raw_root: &Path, invalid: bool) -> MemoryApi {
+    let dir = if invalid { "invalid" } else { "valid" };
+    with_os_pack(raw_root, dir, |p| {
+        if invalid {
+            p["isInvalid"] = Value::Bool(true);
+            p["inValidReason"] = Value::from(INVALID_REASON);
+        }
+    });
+    serve(MemoryApi::new(), raw_root, dir, UID_A)
+}
+
+#[test]
+fn a_record_keeps_the_invalid_flag_and_the_reason_of_palette_outside_the_root() {
+    use strata::snapshot::Pack;
+    let pack = |invalid: Value, reason: &str| {
+        serde_json::json!({"name": "ubuntu-aws", "type": "spectro", "layer": "os", "tag": "22.04",
+            "packUid": "p1", "registryUid": "r1", "values": "a: 1", "isInvalid": invalid,
+            "inValidReason": reason})
+    };
+    let invalid = Pack::from_api(&pack(Value::Bool(true), INVALID_REASON), &[]);
+    assert!(invalid.invalid);
+    assert_eq!(invalid.invalid_reason, INVALID_REASON);
+    let doc = serde_json::to_value(&invalid).unwrap();
+    assert_eq!(doc["invalid"], true);
+    assert_eq!(doc["invalidReason"], INVALID_REASON);
+    // the flag is outside the root: the node hash is the node hash of the valid pack
+    let valid = Pack::from_api(&pack(Value::Null, ""), &[]);
+    assert_eq!(invalid.hash.node, valid.hash.node);
+    let doc = serde_json::to_value(&valid).unwrap();
+    assert!(doc.get("invalid").is_none() && doc.get("invalidReason").is_none());
+    // a reason without the flag is not kept: Palette clears the flag when the tag is back
+    let cleared = Pack::from_api(&pack(Value::Bool(false), INVALID_REASON), &[]);
+    assert!(!cleared.invalid && cleared.invalid_reason.is_empty());
+    // a record written before the fields reads as one with a valid pack
+    let mut old = serde_json::to_value(&invalid).unwrap();
+    let fields = old.as_object_mut().unwrap();
+    fields.remove("invalid");
+    fields.remove("invalidReason");
+    let read: Pack = serde_json::from_value(old).unwrap();
+    assert!(!read.invalid && read.invalid_reason.is_empty());
+
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let with_flag = snapshot_uid(&serve_invalid(dir.path(), true), "t0");
+    let without = snapshot_uid(&serve_invalid(dir.path(), false), "t0");
+    assert_eq!(with_flag.root, without.root);
+    assert_eq!(with_flag.content_digest(), without.content_digest());
+    let os = with_flag.packs.iter().find(|p| p.layer == "os").unwrap();
+    assert!(os.invalid);
+    assert_eq!(os.invalid_reason, INVALID_REASON);
+}
+
+#[test]
+fn compare_marks_an_invalid_pack_on_its_line_and_counts_it_in_the_summary() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let valid = snapshot_uid(&serve_invalid(dir.path(), false), "t0");
+    let invalid = snapshot_uid(&serve_invalid(dir.path(), true), "t1");
+    let terminal = |d: &strata::diff::Diff, a: &Snapshot, b: &Snapshot| {
+        render::renderer(Format::Terminal, Paint::off(), false)
+            .render(d, a, b, false)
+            .unwrap()
+    };
+    let d = ops::compare(&valid, &invalid, "t2");
+    assert!(
+        d.same && d.nothing_differs(),
+        "the flag is outside the root"
+    );
+    assert_eq!(d.summary.packs_invalid, 1);
+    let mark = format!("INVALID on side B: {INVALID_REASON}");
+    let text = terminal(&d, &valid, &invalid);
+    let line = text
+        .lines()
+        .find(|l| l.contains("ubuntu-aws"))
+        .expect("a line for the OS pack");
+    assert!(
+        line.contains("unchanged") && line.ends_with(&mark),
+        "{text}"
+    );
+    let md = render::renderer(Format::Markdown, Paint::off(), false)
+        .render(&d, &valid, &invalid, false)
+        .unwrap();
+    assert!(md.contains(&format!("unchanged **{mark}**")), "{md}");
+    let json = serde_json::to_value(&d).unwrap();
+    assert_eq!(json["summary"]["packsInvalid"], 1);
+    let os = json["packs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|p| p["key"] == "os/ubuntu-aws")
+        .unwrap();
+    assert_eq!(os["b"]["invalid"], true);
+    assert_eq!(os["b"]["invalidReason"], INVALID_REASON);
+    assert!(os["a"].get("invalid").is_none());
+
+    // the other side, and the two sides
+    let d = ops::compare(&invalid, &valid, "t2");
+    assert_eq!(d.summary.packs_invalid, 1);
+    let text = terminal(&d, &invalid, &valid);
+    assert!(text.contains("INVALID on side A: "), "{text}");
+    let d = ops::compare(&invalid, &invalid, "t2");
+    assert_eq!(d.summary.packs_invalid, 1, "one pack, on the two sides");
+    let text = terminal(&d, &invalid, &invalid);
+    assert!(text.contains("INVALID on both sides: "), "{text}");
+    // no invalid pack: no mark, and the count is 0
+    let d = ops::compare(&valid, &valid, "t2");
+    assert_eq!(d.summary.packs_invalid, 0);
+    assert!(!terminal(&d, &valid, &valid).contains("INVALID"));
+}
+
+#[test]
+fn verify_reports_each_pack_that_palette_marks_invalid_now_and_keeps_the_status_of_the_content() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let recorded = snapshot_uid(&serve_invalid(dir.path(), false), "t0");
+    let live = serve_invalid(dir.path(), true);
+    let v = ops::verify(
+        &recorded,
+        &Palette::new(live.clone()),
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert!(v.unchanged, "the content is the recorded content");
+    let ver = v.diff.verify.as_ref().unwrap();
+    assert_eq!(ver.status, VerifyStatus::Unchanged);
+    assert_eq!(
+        ver.invalid_packs,
+        vec![strata::diff::InvalidPack {
+            key: "os/ubuntu-aws".into(),
+            reason: INVALID_REASON.into(),
+        }]
+    );
+    let sentence = format!("Palette marks pack os/ubuntu-aws invalid now ({INVALID_REASON})");
+    let verdict = render::renderer(Format::Terminal, Paint::off(), false)
+        .verdict(ver, &recorded.source)
+        .unwrap();
+    assert!(verdict.starts_with("OK: "), "{verdict}");
+    assert!(
+        verdict.contains(&format!("\nINVALID: {sentence}")),
+        "{verdict}"
+    );
+    let verdict = render::renderer(Format::Markdown, Paint::off(), false)
+        .verdict(ver, &recorded.source)
+        .unwrap();
+    assert!(
+        verdict.contains(&format!("**INVALID**: {sentence}")),
+        "{verdict}"
+    );
+    let report = render::renderer(Format::Terminal, Paint::off(), false)
+        .render(&v.diff, &recorded, &v.live, false)
+        .unwrap();
+    assert!(
+        report.contains(&format!("INVALID on side B: {INVALID_REASON}")),
+        "{report}"
+    );
+    let json = serde_json::to_value(&v.diff).unwrap();
+    assert_eq!(
+        json["verify"]["invalidPacks"],
+        serde_json::json!([{"key": "os/ubuntu-aws", "reason": INVALID_REASON}])
+    );
+
+    // the summary of many records names the pack too, and the exit stays 0
+    let path = dir.path().join("invalid.json");
+    fs::write(&path, recorded.to_json(true).unwrap()).unwrap();
+    let s = ops::verify_many(
+        &[path],
+        None,
+        |_| Ok(Palette::new(live.clone())),
+        "t1",
+        &ops::VerifyOptions::default(),
+        &Progress::silent(),
+    );
+    assert_eq!(
+        (s.records[0].status, s.exit_code()),
+        (RecordStatus::Unchanged, 0)
+    );
+    let lines = render::renderer(Format::Terminal, Paint::off(), false)
+        .render_verify_summary(&s)
+        .unwrap();
+    assert!(lines.contains(&format!("; {sentence}")), "{lines}");
+
+    // a pack that is valid again: nothing to report
+    let v = ops::verify(
+        &recorded,
+        &Palette::new(serve_invalid(dir.path(), false)),
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    let ver = v.diff.verify.as_ref().unwrap();
+    assert!(ver.invalid_packs.is_empty());
+    let verdict = render::renderer(Format::Terminal, Paint::off(), false)
+        .verdict(ver, &recorded.source)
+        .unwrap();
+    assert!(!verdict.contains("INVALID"), "{verdict}");
+}
