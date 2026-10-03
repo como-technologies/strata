@@ -12,6 +12,7 @@ use serde_json::{Map, Value, json};
 use crate::api::mask::MASKED;
 use crate::api::{RawCluster, RawProfile};
 use crate::canon::{Canon, canon_yaml, canonical_json, hash_yaml, sha256_hex};
+use crate::cluster_template::ClusterTemplateRef;
 use crate::error::{Error, Result};
 pub use crate::repave::PendingRepave;
 use crate::repave::is_pending;
@@ -131,6 +132,11 @@ pub struct Source {
     /// a cluster can use. `0` there would state a count that nothing counted.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub consumers: Option<Consumers>,
+    /// For a profile record: each cluster template that links the version, as
+    /// `status.inUseClusterTemplates` of the profile document names it. Palette refuses an edit in
+    /// place and the delete of a version that a template links. Outside the root.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub cluster_templates: Vec<ClusterTemplateRef>,
     /// True when Palette did not serve the variables endpoint, so the snapshot was taken as if
     /// the version had no variables. The root is the root of a version with no variables, so a
     /// record with this flag does not compare equal to one taken from a Palette that serves the
@@ -1220,6 +1226,7 @@ impl Snapshot {
                 count: clusters.len(),
                 clusters,
             }),
+            cluster_templates: ClusterTemplateRef::linked(prof),
             fetched_at: fetched_at.to_string(),
             cluster: None,
             pack: None,
@@ -1389,6 +1396,7 @@ impl Snapshot {
             variables_unavailable: raw.variables_unavailable,
             tags: BTreeMap::new(),
             consumers: None,
+            cluster_templates: Vec::new(),
             fetched_at: fetched_at.to_string(),
             pack: None,
             palette_validation: None,

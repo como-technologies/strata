@@ -1,0 +1,15 @@
+$ strata snapshot aws-stack@1.1.1 -o linked.json
+strata: looking up project dev
+strata: fetching profile 64e0000000000000000000c3
+strata: wrote linked.json (root 088136c929bd)
+$ jq '{root, clusterTemplates: .source.clusterTemplates}' linked.json
+{
+  "root": "088136c929bd2837cf59ab12920367187654c128964cea737c28b98e13f79dc4",
+  "clusterTemplates": [
+    {
+      "uid": "64f8000000000000000000a1",
+      "name": "aws-standard",
+      "projectUid": "64f20000000000000000a0d1"
+    }
+  ]
+}

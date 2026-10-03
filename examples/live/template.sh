@@ -7,8 +7,9 @@
 #
 #   just live-profiles && just live-template
 #
-#   1  a maintenance policy and a template link the two versions; strata consumers counts the
-#      template, and Palette refuses the delete of the linked release version
+#   1  a maintenance policy and a template link the two versions; a record of the release version
+#      names the template, strata consumers counts it, and Palette refuses the delete of the
+#      linked release version
 #   2  an edit in place of the linked release version is refused, and the version verifies
 #   3  a cluster outside the template, with a linked version, is refused
 #   4  the template is removed, and the cluster is built with the same versions and a second
@@ -66,6 +67,10 @@ check template-links 0 "#66: it links the release version and the add-on version
 check release-doc 0 "the release version, as Palette holds it" -- "$live/api.sh" get "/v1/clusterprofiles/$P"
 check release-names-template 0 "#66: the version names the template that uses it, and no cluster" -- \
   jq -e --arg t "$T" '([.status.inUseClusterTemplates[]?.uid] | index($t) != null) and ((.status.inUseClusters // []) | length == 0)' release-doc.out
+check release-record-template 0 "#109: a record of the linked release version" -- "$strata" snapshot "$P" -o release-linked.json
+check release-record-names-template 0 "#109: the record names the template in source.clusterTemplates, with its name, and its root is the root before the link" -- \
+  jq -e --arg t "$T" --slurpfile before release.json \
+    '([.source.clusterTemplates[]? | select(.uid == $t and .name != "")] | length == 1) and (.root == $before[0].root)' release-linked.json
 check release-consumers 1 "#147: strata consumers of the linked version counts the template, and exits 1" -- \
   "$strata" consumers "$P" --json
 check release-consumers-template 0 "#147: the consumer is the template, with kind template" -- \
