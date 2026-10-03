@@ -43,8 +43,10 @@ The reason names the move. It does not name a value, because no value changed.
 
 `IDENTITY UPSTREAM` with no `AUTHORED`: another pack reference and another
 digest, with the same configuration. The impact `cluster-wide` comes from the
-layer and the flags, not from Palette. No live run moved a cluster between two
-such versions.
+layer and the flags, not from Palette. A live run moved the OS pack of a
+running cluster between two registries at one version, and Palette replaced no
+node: see
+[A pack that moves between registries](../internals/palette/packs.md#a-pack-that-moves-between-registries).
 
 The JSON document names the fields that moved. For each pack whose identity
 changed, it gives the pack uid, the registry uid, and the upstream digest on

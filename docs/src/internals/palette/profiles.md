@@ -411,6 +411,37 @@ can read the profile, it records no variables and sets `variablesUnavailable`.
 [`verify.sh`](../../development/live-example.md#the-checks-of-verifysh) checks
 these answers on the live tenant.
 
+## A variable in a field that repaves
+
+A profile version can read a profile variable in a field that repaves a
+cluster. When the cluster does not run that version, it holds no value for the
+variable. A live run asks `POST /v1/spectroclusters/<uid>/validate/repave`
+about such a move:
+
+- Cluster A runs the release version 1.0.0. Its Kubernetes pack has the kubeadm
+  command `chmod 600 /var/lib/kubelet/config.yaml`.
+- Version 1.0.1 declares the variable `strata_mode`, with the default `600`.
+  Its command is
+  `chmod {{.spectro.var.strata_mode}} /var/lib/kubelet/config.yaml`. Its CSI
+  pack also has another `reclaimPolicy`, which does not repave.
+
+| The body of the request | The answer of Palette |
+| --- | --- |
+| The uid of 1.0.1 in place of 1.0.0, and the uid of the add-on profile of the cluster, with no `packValues` and no `variables[]`. `compare --repave` sends this body. | No repave. |
+| One profile: the uid of 1.0.0, `replaceWithProfile` 1.0.1, and the `packValues` of 1.0.1, with no `variables[]`. `tenant.sh repave` sends this body. | Repave: `PackValuesUpdated`, `kubernetes`, `kubeadmconfig.postKubeadmCommands`. |
+| The same, with `strata_mode` `600`, the default | The same repave. |
+| The same, with `strata_mode` `644` | The same repave. |
+
+So the value that the body gives a variable does not change the answer. With
+the `packValues` of 1.0.1, Palette says repave also for the value that gives
+the command the cluster runs. A body with `variables[]` gets the same answer as
+a body without it, so `compare --repave` sends no `variables[]`.
+
+The two forms of the body give two answers for one move. No run applies such a
+version to a cluster, so no run shows which answer the nodes follow. Stage 8 of
+[repave.sh](../../development/live-runs.md#repavesh) gives the answers:
+`examples/live/repave.sh 8`.
+
 ## Macros
 
 A macro is a name and a value, with no version, no history, and no digest

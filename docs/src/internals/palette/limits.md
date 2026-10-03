@@ -9,8 +9,11 @@ pack-ref digest, and no check asserts it.
 
 The live runs used three engines. The first is a kubeadm cluster that Palette
 builds with the cluster API, on AWS and on GCP. On each cloud Palette gives the
-same answers, and each repave answer agrees with the impact table (see
-[A second cloud: GCP](../../development/live-runs.md#a-second-cloud-gcp)). The
+same answers (see
+[A second cloud: GCP](../../development/live-runs.md#a-second-cloud-gcp)). Each
+repave answer agrees with the impact table, except for a move of the OS pack
+to another registry at one version (see
+[A pack that moves between registries](packs.md#a-pack-that-moves-between-registries)). The
 second is EKS, a managed engine: a Kubernetes version bump repaves, and a change
 of the values of the Kubernetes or CSI pack does not (see
 [eks.sh](../../development/live-runs.md#ekssh)). The third is GKE, a managed
@@ -59,6 +62,11 @@ These are open:
 - `compare --repave` with `cluster:<c>@pending`: no run asks Palette about an
   update that waits. See
   [Ask about the update that waits](../../commands/compare/repave.md#ask-about-the-update-that-waits).
+- A move of a cluster to a version that reads a profile variable in a field
+  that repaves. The body of `compare --repave` gets no repave, and a body with
+  the `packValues` of the version gets a repave. No run applies such a version
+  to a cluster. See
+  [A variable in a field that repaves](profiles.md#a-variable-in-a-field-that-repaves).
 
 ## What strata preflight does not check
 

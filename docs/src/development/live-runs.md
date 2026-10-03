@@ -593,20 +593,22 @@ through OpenTofu, and puts it back.
 | `csi-value` | 0 | #81: a changed value in the CSI pack: Palette says no repave. Its check reads no CNI or CSI layer, so `cluster-wide` means no repave |
 | `validate`, `validate-says`, `validate-json` | 0 | #134: at the baseline, `compare --validate` prints `palette    accepts`; `--json` gives `accepts` true and no error. |
 | `validate-usage`, `validate-usage-says` | 2, 0 | #134: two profile versions and no cluster are a usage error for `--validate`. |
-| `var-record-before`, `var-command` | 0 | #132: the Kubernetes pack of 1.0.1 has the kubeadm command `chmod 600 /var/lib/kubelet/config.yaml`. No result yet |
-| `var-record`, `var-in-values` | 0 | #132: with `next_variable` and `next_variable_in_values`, 1.0.1 has the profile variable `strata_mode`, default `600`, and the command reads it in place of `600`. No result yet |
-| `var-strata`, `var-strata-answer` | ? | #132: `compare --repave` of cluster A with 1.0.1, which sends no variables: Palette says repave, or not. No result yet |
-| `var-none`, `var-default` | ? | #132: `tenant.sh repave` with no variables, and with `strata_mode` `600`: Palette says repave, or not. No result yet |
-| `var-control`, `var-control-says` | 1, 0 | #132: with `strata_mode` `644`, the command changes, and Palette says repave for `kubeadmconfig.postKubeadmCommands`. No result yet |
-| `var-undone` | 0 | 1.0.1 is as before the stage: its record from before verifies. No result yet |
+| `var-record-before`, `var-command` | 0 | #132: the Kubernetes pack of 1.0.1 has the kubeadm command `chmod 600 /var/lib/kubelet/config.yaml` |
+| `var-record`, `var-in-values` | 0 | #132: with `next_variable` and `next_variable_in_values`, 1.0.1 has the profile variable `strata_mode`, default `600`, and the command reads it in place of `600` |
+| `var-strata`, `var-strata-answer` | ? | #132: `compare --repave` of cluster A with 1.0.1 sends the uid of 1.0.1 alone, with no `packValues` and no variables. Palette says no repave: `required` false (recorded 1, 1) |
+| `var-none`, `var-default` | ? | #132: `tenant.sh repave` sends the uid of 1.0.0, `replaceWithProfile` 1.0.1, and the `packValues` of 1.0.1. With no variables, and with `strata_mode` `600`, Palette says repave: `PackValuesUpdated` for `kubeadmconfig.postKubeadmCommands` (recorded 1, 1) |
+| `var-control`, `var-control-says` | 1, 0 | #132: with `strata_mode` `644`, the command changes, and Palette says repave for `kubeadmconfig.postKubeadmCommands` |
+| `var-undone` | 0 | 1.0.1 is as before the stage: its record from before verifies |
 
 Each answer agrees with the impact table, on AWS and on GCP: the two clouds run
 the kubeadm engine alone. The edit in place also opens an update notification for cluster A, and
 `compare` names it; the undo closes it.
 
-When the answers of `var-none` and `var-default` differ, Palette does not
-give the default of a variable to the target version, which the cluster does
-not run. Then #132 changes `compare --repave`, so that it sends `variables[]`.
+In stage 8, `var-none`, `var-default`, and `var-control` give the same
+answer. So the value that the body gives a variable does not change the answer,
+and `compare --repave` sends no `variables[]`. The body of strata and the body
+of `tenant.sh` get two different answers for one move. This is the source for
+[A variable in a field that repaves](../internals/palette/profiles.md#a-variable-in-a-field-that-repaves).
 
 ## registry-move-nodes.sh
 
@@ -620,16 +622,19 @@ before the undo, and `live-down` follows it.
 
 | Check | Expected exit | What it shows |
 |---|---|---|
-| `base-instances`, `base-record` | 0 | the machines of cluster A, and a record of the release version. No result yet |
-| `move-record`, `move-same-uid`, `move-identity` | 0 | #135: the move is in place, and the OS pack has another registry and the type `oci`, with the same version and values. No result yet |
-| `move-compare`, `move-impact`, `move-palette`, `move-reasons` | ? | #135: the level of the impact table for the OS pack, and the answer of Palette, with its reasons. No result yet |
+| `base-instances`, `base-record` | 0 | the machines of cluster A, three EC2 instances, and a record of the release version |
+| `move-record`, `move-same-uid`, `move-identity` | 0 | #135: the move is in place, and the OS pack has another registry and the type `oci`, with the same version and values. The pack uid changes too |
+| `move-compare`, `move-impact`, `move-palette`, `move-reasons` | ? | #135: the impact table gives the OS pack `repave` (recorded 0). Palette says no repave, with no reason (recorded 1, 0). `--json` gives `agrees` false |
 | `take` | 0 | #135: cluster A takes the update |
-| `replaced`, `waits` | ? | #135: the move alone replaced the nodes, or not, and a repave waits for approval, or not. No result yet |
-| `after-record`, `after-runs` | 0 | #135: cluster A runs the OS pack from the other registry. No result yet |
-| `undo-take`, `undo-baseline` | 0 | the release version back, and the example at its baseline. No result yet |
+| `replaced`, `waits` | ? | #135: for 33 minutes, cluster A keeps the same three EC2 instances, and no repave waits for approval (recorded 1, 1) |
+| `after-record`, `after-runs` | 0 | #135: cluster A runs the OS pack from the other registry |
+| `undo-take`, `undo-baseline` | 0 | the release version back, and the example at its baseline |
 
-The result of `replaced` decides the impact table for an identity change that
-keeps the version (#135).
+The watch reads cluster A 30 times in 33 minutes: it stays `Running` with the
+same instances each time. So a move of the OS pack to another registry, at one version and
+with the same values, replaces no node, as Palette says. The impact table says
+`repave`. This is the source for
+[A pack that moves between registries](../internals/palette/packs.md#a-pack-that-moves-between-registries).
 
 ## validate-packs.sh
 

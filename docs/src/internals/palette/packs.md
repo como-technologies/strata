@@ -120,6 +120,23 @@ pack, which comes from no registry. It still checks the content: after
 an edit of the CSI values in place on the moved version, the check fails and names
 `charts.aws-ebs-csi-driver.storageClasses[name=spectro-storage-class].reclaimPolicy`.
 
+A running cluster takes such a move of its OS pack with no repave. In a live
+run, the OS pack `ubuntu-aws` 24.04 of the release version moves in place from
+a Spectro pack registry (type `spectro`) to an OCI registry (type `oci`). The
+version and the values stay. The registry uid and the pack uid change.
+
+| Question | Answer |
+| --- | --- |
+| Does Palette repave the cluster? (`POST /v1/spectroclusters/<uid>/validate/repave`) | No, with no reason. |
+| What level does the impact table give the OS pack? | `repave`, from the identity change of the OS layer. So `compare --repave` prints that strata and Palette do not agree. |
+| What happens to the nodes when the cluster takes the update? | The same three EC2 instances for 33 minutes. The cluster stays `Running`, and no repave waits for approval. |
+| What does the cluster run after the update? | The OS pack from the OCI registry: a record of the cluster holds its registry uid. |
+
+So the check of Palette and the nodes agree: a move of the OS pack to another
+registry, at one version and with the same values, replaces no node.
+[registry-move-nodes.sh](../../development/live-runs.md#registry-move-nodessh)
+gives the result: `examples/live/registry-move-nodes.sh`.
+
 ## A pack version pushed again
 
 A pack version can be pushed again under the same tag, with other bytes. In an
