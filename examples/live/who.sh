@@ -79,6 +79,8 @@ if stage 1 "an edit of a published version through the API"; then
       && grep -Eq '^DRIFT: .*; Palette last changed it [0-9TZ:.-]+$' edit-who.out"
   check audits-none 0 '#140: Palette answers the log of an object with no entry with an empty list, and not 404' -- \
     bash -c "\"$live/api.sh\" get '/v1/audits?resourceKind=clustergroup&resourceUid=$AD&limit=100' | jq -e '(.items // []) | length == 0'"
+  check audits-limit 0 '#188: Palette serves at most 100 entries on a page: a limit of 101 answers 500 with InvalidLimit' -- \
+    bash -c "\"$live/api.sh\" get '/v1/audits?resourceUid=$AD&limit=101' 2>&1 | grep -q 'HTTP 500: .*InvalidLimit'"
   check api-undo 0 '#69: undo the edit through the API' -- \
     "$live/api.sh" edit "$AD" "$edit_to" "$edit_from"
   check restored 0 '#69: the record verifies again after the undo' -- "$strata" verify addon.json

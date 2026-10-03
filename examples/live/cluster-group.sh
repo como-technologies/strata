@@ -129,6 +129,10 @@ if stage 3 "the baseline"; then
   apply_baseline
   check gone 0 'the group and the member are gone' -- \
     test -z "$(out cluster_group_uid)$(out member_cluster_uid)"
+  check member-audit-kind 0 '#188: the log of the member by its uid alone has its create and its delete under virtualCluster' -- \
+    bash -c "\"$live/api.sh\" get '/v1/audits?resourceUid=$M&limit=100' | jq -e '[.items[] | select(.spec.resource.kind == \"virtualCluster\") | .spec.actionType] | index(\"create\") and index(\"delete\")'"
+  check member-audit-not-cluster 0 '#188: a query with spectrocluster and the uid of the member does not find them' -- \
+    bash -c "\"$live/api.sh\" get '/v1/audits?resourceKind=spectrocluster&resourceUid=$M&limit=100' | jq -e '[(.items // [])[] | select(.spec.actionType == \"create\" or .spec.actionType == \"delete\")] | length == 0'"
 fi
 
 echo

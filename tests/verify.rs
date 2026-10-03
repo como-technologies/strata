@@ -5623,9 +5623,7 @@ fn verify_who_reads_the_audit_log_of_the_cluster_for_a_cluster_record() {
         None,
     )
     .unwrap();
-    let path = format!(
-        "/v1/audits?resourceKind=spectrocluster&resourceUid={CLUSTER_UID}&startTime=t0&limit=100"
-    );
+    let path = format!("/v1/audits?resourceUid={CLUSTER_UID}&startTime=t0&limit=100");
     let api = serve_cluster(MemoryApi::new(), dir.path(), "cluster-b").with(
         path.clone(),
         audits_page(
@@ -5654,6 +5652,49 @@ fn verify_who_reads_the_audit_log_of_the_cluster_for_a_cluster_record() {
     assert_eq!(api.calls(&path), 1);
     let who = v.diff.verify.unwrap().who.unwrap();
     assert_eq!((who.len(), who[0].actor.as_str()), (1, "John Doe"));
+}
+
+#[test]
+fn verify_who_of_a_virtual_cluster_record_names_the_create_that_palette_logs_under_virtual_cluster()
+{
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let recorded = snapshot_cluster(
+        &serve_cluster(MemoryApi::new(), dir.path(), "cluster-a"),
+        None,
+    )
+    .unwrap();
+    // Palette logs the create of a virtual cluster under virtualCluster, not spectrocluster
+    let created = serde_json::json!({"kind": "virtualCluster", "label": "Virtual Cluster",
+        "name": "lab-cluster", "uid": CLUSTER_UID});
+    let mut entry = audit_of("au1", "2026-09-18T14:02:11.482Z", created, None);
+    entry["spec"]["actionType"] = Value::from("create");
+    let path = format!("/v1/audits?resourceUid={CLUSTER_UID}&startTime=t0&limit=100");
+    let api = serve_cluster(MemoryApi::new(), dir.path(), "cluster-b")
+        .with(path.clone(), audits_page(vec![entry], ""));
+    let v = ops::verify_with(
+        &recorded,
+        &Palette::new(&api),
+        "t1",
+        &ops::VerifyOptions {
+            who: true,
+            ..Default::default()
+        },
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert_eq!(api.calls(&path), 1, "the log is read by the uid alone");
+    let who = v.diff.verify.as_ref().unwrap().who.as_ref().unwrap();
+    let resource = who[0].resource.as_ref().unwrap();
+    assert_eq!(
+        (who.len(), who[0].action.as_str(), resource.kind.as_str()),
+        (1, "create", "virtualCluster")
+    );
+    let line = verdict_of(&v, &recorded);
+    assert!(
+        line.contains("John Doe (user)  create"),
+        "the who line names the create: {line}"
+    );
 }
 
 #[test]
@@ -5773,10 +5814,9 @@ fn verify_who_reads_the_log_of_a_cluster_group_as_clustergroup_and_of_an_app_pro
     assert!(!v.unchanged, "the edit is a drift");
     assert_eq!(edited.calls(group_log), 1);
     assert_eq!(
-        edited
-            .calls("/v1/audits?resourceKind=spectrocluster&resourceUid=g1&startTime=t0&limit=100"),
+        edited.calls("/v1/audits?resourceUid=g1&startTime=t0&limit=100"),
         0,
-        "a group is not a cluster in the log"
+        "a group is not read as a cluster, by its uid alone"
     );
     let line = verdict_of(&v, &group);
     assert!(
@@ -5853,9 +5893,7 @@ fn verify_who_of_a_cluster_record_names_the_write_that_overwrote_the_profile_it_
     // a legacy version bump took the uid of the version that the cluster runs
     let mut bumped = read(&dir.path().join("a/profile.json"));
     bumped["spec"]["version"] = Value::from("1.3.0");
-    let cluster_log = format!(
-        "/v1/audits?resourceKind=spectrocluster&resourceUid={CLUSTER_UID}&startTime=t0&limit=100"
-    );
+    let cluster_log = format!("/v1/audits?resourceUid={CLUSTER_UID}&startTime=t0&limit=100");
     let profile_log = format!(
         "/v1/audits?resourceKind=clusterprofile&resourceUid={UID_A}&startTime=t0&limit=100"
     );
