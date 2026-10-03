@@ -1136,6 +1136,23 @@ impl<A: PaletteApi> Palette<A> {
         )
     }
 
+    /// Palette's answer to whether a change of the profiles of the cluster template `uid` replaces
+    /// the nodes of its clusters: `POST /v1/spectroclusters/clusterTemplates/{uid}/validate/repave`.
+    /// The body names profiles by uid, with no pack values. The request changes nothing.
+    ///
+    /// # Errors
+    ///
+    /// An error of the request, such as a 404 for a template that Palette does not have.
+    pub fn validate_template_repave(&self, uid: &str, body: &Value) -> Result<Value> {
+        self.api.post_json(
+            &format!(
+                "/v1/spectroclusters/clusterTemplates/{}/validate/repave",
+                query_value(uid)
+            ),
+            body,
+        )
+    }
+
     /// Palette's answer to whether it accepts the packs of a change of the profiles of a cluster:
     /// `POST /v1/spectroclusters/{uid}/validate/packs`, with the body of `validate/repave`. The
     /// request changes nothing.

@@ -265,6 +265,8 @@ A comparison of two sides, `a` and `b`.
   (Palette's `isRepaveRequired`), `reasons[]` with `code`, `message`, `pack`, and
   `keys` (the config keys that differ), and `agrees`. `agrees` is `false` when
   the most severe level of the table and Palette's answer disagree.
+  `clusterTemplate`, only for a cluster that a cluster template governs, names
+  the template that Palette answered for, with `uid` and `projectUid`.
 - `paletteValidation`, only with `compare --validate`: `clusterUid`, `accepts`
   (`true` when Palette gives no error), and `errors[]`, only when it is not
   empty, with `pack`, `code`, and `message`. An error of the whole request has

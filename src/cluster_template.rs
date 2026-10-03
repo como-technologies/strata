@@ -40,6 +40,17 @@ impl ClusterTemplateRef {
             .filter(|t| !t.uid.is_empty() && seen.insert(t.uid.clone()))
             .collect()
     }
+
+    /// The template that governs the cluster of the cluster document `cluster`, from
+    /// `spec.clusterTemplate`. None when the cluster is in no template.
+    pub(crate) fn of_cluster(cluster: &Value) -> Option<Self> {
+        let uid = text(cluster, "/spec/clusterTemplate/uid");
+        (!uid.is_empty()).then(|| ClusterTemplateRef {
+            uid,
+            name: String::new(),
+            project_uid: text(cluster, "/spec/clusterTemplate/projectUid"),
+        })
+    }
 }
 
 /// The string at `ptr` in `v`, or empty.
@@ -69,5 +80,15 @@ mod tests {
             .collect();
         assert_eq!(uids, ["t2", "t1"]);
         assert!(ClusterTemplateRef::linked(&json!({"status": {}})).is_empty());
+    }
+
+    #[test]
+    fn a_cluster_names_its_template_only_when_the_uid_is_set() {
+        let cluster = json!({"spec": {"clusterTemplate": {"uid": "t1", "projectUid": "p1"}}});
+        let t = ClusterTemplateRef::of_cluster(&cluster).unwrap();
+        assert_eq!((t.uid.as_str(), t.project_uid.as_str()), ("t1", "p1"));
+        let empty = json!({"spec": {"clusterTemplate": {"uid": ""}}});
+        assert_eq!(ClusterTemplateRef::of_cluster(&empty), None);
+        assert_eq!(ClusterTemplateRef::of_cluster(&json!({"spec": {}})), None);
     }
 }

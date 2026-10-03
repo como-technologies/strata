@@ -351,6 +351,10 @@ version that the cluster runs.
 | `lock-gone`, `lock-gone-verify` | 0, 1 | #66: the edit in place is accepted again, and the record from before reports `DRIFT`: the lock was the template's |
 | `addon-order` | 0 | #66: the packs of the two add-on profiles start within thirty seconds of each other, whatever order the cluster lists the profiles in: the listed order is no install order. |
 
+The script builds no cluster in the template. So no check shows the repave
+answer for such a cluster yet: see
+[The lock of a cluster template](../internals/palette/profiles.md#the-lock-of-a-cluster-template).
+
 ## cluster.sh
 
 Read-write. It needs the example at its baseline with cluster A, changes the

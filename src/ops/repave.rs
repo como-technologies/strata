@@ -5,6 +5,7 @@
 use serde_json::{Value, json};
 
 use crate::api::{Palette, PaletteApi};
+use crate::cluster_template::ClusterTemplateRef;
 use crate::diff::{ImpactLevel, PaletteRepave};
 use crate::error::{Error, Result};
 use crate::snapshot::{AppliedProfile, ClusterSource, Snapshot, SubjectKind};
@@ -103,10 +104,33 @@ pub(super) fn cluster_and_target<'a>(
     Ok((cluster, target))
 }
 
+/// The body of the template route of `validate/repave`: the profile uids of `body`, the body of
+/// the cluster route, with no pack values. `isUpgradeNow` is false: when it is true, Palette
+/// ignores the profiles of the request and uses the profiles of the template.
+fn template_body(body: &Value) -> Value {
+    let profiles: Vec<Value> = body["profiles"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .map(|p| json!({"uid": p["uid"]}))
+        .collect();
+    json!({"profiles": profiles, "isUpgradeNow": false})
+}
+
 /// Ask Palette whether a move of the cluster side of a comparison to its profile side repaves
 /// the cluster. One side must be a cluster, and the other a profile version with a uid, in either
 /// order. It reads the cluster document for the profiles it runs now, and sends one POST, which
 /// changes nothing. `level` is the most severe level of the impact table, for `agrees`.
+///
+/// On the route of a cluster that a cluster template governs, Palette compares nothing and
+/// answers no repave. So the cluster document, and not the answer, tells strata to send the POST
+/// to the route of the template for such a cluster. The answer then names the template.
+///
+/// # Errors
+///
+/// [`Error::Usage`] for a pair that is not a cluster and a profile version, and for a cluster in
+/// a template with a target version that the cluster runs now: the route of the template takes no
+/// pack values, so it compares nothing for that version. An error of a request.
 pub fn palette_repave<A: PaletteApi>(
     palette: &Palette<A>,
     a: &Snapshot,
@@ -114,7 +138,26 @@ pub fn palette_repave<A: PaletteApi>(
     level: ImpactLevel,
 ) -> Result<PaletteRepave> {
     let (cluster, target) = cluster_and_target(a, b, "--repave")?;
-    let running = AppliedProfile::of_cluster(&palette.cluster_document(&cluster.uid)?);
-    let answer = palette.validate_repave(&cluster.uid, &validate_body(&running, target))?;
-    Ok(PaletteRepave::from_palette(&cluster.uid, &answer, level))
+    let doc = palette.cluster_document(&cluster.uid)?;
+    let running = AppliedProfile::of_cluster(&doc);
+    let body = validate_body(&running, target);
+    let Some(template) = ClusterTemplateRef::of_cluster(&doc) else {
+        let answer = palette.validate_repave(&cluster.uid, &body)?;
+        return Ok(PaletteRepave::from_palette(&cluster.uid, &answer, level));
+    };
+    if running.iter().any(|p| p.uid == target.source.uid) {
+        return Err(Error::Usage {
+            message: format!(
+                "--repave cannot ask about {}@{}: the cluster {} runs it, and the cluster template \
+                 {} governs the cluster. Palette answers for the template by profile uid, with no \
+                 pack values, so it compares nothing for a version that the cluster runs",
+                target.source.name, target.source.version, cluster.name, template.uid
+            ),
+        });
+    }
+    let answer = palette.validate_template_repave(&template.uid, &template_body(&body))?;
+    Ok(PaletteRepave {
+        cluster_template: Some(template),
+        ..PaletteRepave::from_palette(&cluster.uid, &answer, level)
+    })
 }

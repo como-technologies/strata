@@ -769,21 +769,30 @@ pub(crate) fn invalid_pack_sentences(packs: &[InvalidPack]) -> Vec<String> {
 }
 
 /// Palette's answer to `--repave`, one line for each reason: `repave: PackValuesUpdated
-/// kubernetes (kubeadmconfig.postKubeadmCommands)`, or `no repave`. Empty without the option.
+/// kubernetes (kubeadmconfig.postKubeadmCommands)`, or `no repave`. For a cluster in a cluster
+/// template, a first line names the template that Palette answered for. Empty without the option.
 pub(crate) fn palette_repave_lines(d: &Diff) -> Vec<String> {
     let Some(r) = &d.palette_repave else {
         return Vec::new();
     };
-    if !r.required {
-        return vec!["no repave".to_string()];
-    }
-    if r.reasons.is_empty() {
-        return vec!["repave".to_string()];
-    }
-    r.reasons
-        .iter()
-        .map(|x| format!("repave: {}", repave_reason_text(x)))
-        .collect()
+    let template = r.cluster_template.as_ref().map(|t| {
+        format!(
+            "the cluster template {} governs the cluster: Palette answers for the template, by \
+             profile uid",
+            t.uid
+        )
+    });
+    let answer: Vec<String> = if !r.required {
+        vec!["no repave".to_string()]
+    } else if r.reasons.is_empty() {
+        vec!["repave".to_string()]
+    } else {
+        r.reasons
+            .iter()
+            .map(|x| format!("repave: {}", repave_reason_text(x)))
+            .collect()
+    };
+    template.into_iter().chain(answer).collect()
 }
 
 /// One reason of Palette for a repave: `PackValuesUpdated kubernetes
@@ -814,9 +823,14 @@ pub(crate) fn palette_repave_note(d: &Diff) -> Option<String> {
         .and_then(|v| v.as_str().map(str::to_string))
         .unwrap_or_default();
     Some(format!(
-        "the impact table says {level}, and Palette says {} for this cluster: the table does not \
-         describe its upgrade engine",
-        if r.required { "repave" } else { "no repave" }
+        "the impact table says {level}, and Palette says {} for {}: the table does not describe \
+         its upgrade engine",
+        if r.required { "repave" } else { "no repave" },
+        if r.cluster_template.is_some() {
+            "the cluster template"
+        } else {
+            "this cluster"
+        }
     ))
 }
 

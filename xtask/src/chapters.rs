@@ -2099,6 +2099,34 @@ fn use_cases(r: &mut Runner) {
         "jq '.source.cluster | {repavePending, pendingRepave}' runs/payments-now.json",
     );
 
+    // a cluster that a cluster template governs: on the route of the cluster, Palette compares
+    // nothing and answers no repave, so --repave asks the route of the template (#130)
+    r.cluster_in_template(DEV, PAYMENTS, AWS_STANDARD);
+    r.template_repave_answer(DEV, AWS_STANDARD, true);
+    r.step(
+        "repave-template",
+        1,
+        false,
+        "strata compare cluster:payments aws-stack@1.1.6 --repave",
+    );
+    r.excerpt(
+        "repave-template-lines",
+        "repave-template",
+        r"^(aws-stack|root |palette|[ ~] \[k8s|      impact)",
+    );
+    r.step(
+        "repave-template-json",
+        1,
+        false,
+        "strata compare cluster:payments aws-stack@1.1.6 --repave --json | jq .paletteRepave",
+    );
+    r.step(
+        "repave-template-usage",
+        2,
+        true,
+        "strata compare cluster:payments aws-stack@1.1.1 --repave",
+    );
+
     // More of a cluster than its release: the tiers that Palette reports of the cluster
     r.chapter("cluster-tiers", DEV_ENV);
     r.projects(&[("dev", DEV)]);
