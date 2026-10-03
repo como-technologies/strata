@@ -294,33 +294,39 @@ linked version is a cluster the template applies.
 
 ## What the create of a version checks
 
-Palette refuses a profile version at the create when it breaks one of these
-rules. These rules come from the code of Palette, not from a live run.
+Palette refuses a profile version at the create when it breaks a rule. Some
+rules are on the values and the packs: the YAML of the values and the
+manifests, the limit of 200 packs and 200 manifests, a disabled pack, and the
+dependencies of each pack. `POST /v1/clusterprofiles/validate/packs` checks
+these rules and writes nothing:
+see [The validate routes](./validate-routes.md#post-v1clusterprofilesvalidatepacks).
+
+The create also checks rules that the validate route does not check:
 
 | Rule | Code |
 | --- | --- |
-| The version parses as semver: an optional `v`, one to three numbers, an optional pre-release after `-`, and optional build data after `+`. So `1.1` and `v1.2.3` pass, and `2.2.2.develop` and `1.2.3.4` do not. | `VersionParseFailure` |
-| The profile has at most 200 packs, and at most 200 manifests. A manifest pack counts as one manifest more. The limit is the same in each tenant. | `SubResourceLimitValidationFailure` |
-| Each pack name is in the profile once. Palette compares the names as they are. | `DuplicatePacksForbidden` |
-| The name of each manifest, and of each manifest pack, is a DNS-1123 label of 32 characters at most. It holds lowercase letters, digits, and `-`, and it starts and ends with a letter or a digit. | `InvalidName` |
+| The version parses as semver. | `VersionParseFailure` |
+| Each pack name is in the profile once. | `DuplicatePacksForbidden` |
+| Each manifest, and each manifest pack, has a valid name. | `InvalidName` |
 | Each manifest name is in its pack once. | `DuplicatePackManifestsForbidden` |
-| The values of each pack, and the content of each manifest, are YAML whose first document is a map, or is empty. An unquoted template, such as `{{ .spectro.var.x }}`, is a map key that is a map, so the check fails. Palette reads only the first document. | `PackValuesYamlInvalid`, `PackManifestYamlInvalid` |
-| Each pack supports the cloud of the profile. This is true when the cloud is `all`, or when the pack has no cloud type. It is also true when the cloud types of the pack hold the cloud, `all`, or `custom` for a cloud that Palette does not know. | `PackNotSupported` |
-| The type of the profile takes the layer of each pack. An `infra` profile takes `os`, `k8s`, `cni`, and `csi`. A `cluster` profile takes each layer. Each other type takes `addon`, `cni`, and `csi`. | `ClusterProfilePackNotAllowed` |
-| A `cluster` or `infra` profile has an `os`, a `k8s`, a `cni`, and a `csi` layer. On the cloud `edge-native`, it needs no `csi` layer. | `ErrPackCoreLayersMissing` |
+| Each pack supports the cloud of the profile. | `PackNotSupported` |
+| The type of the profile takes the layer of each pack. | `ClusterProfilePackNotAllowed` |
+| A `cluster` or `infra` profile has its core layers. | `ErrPackCoreLayersMissing` |
 
-The layer of a pack comes from the pack in its registry, and not from the
-profile: see [The layer of a pack](./packs.md#the-layer-of-a-pack). So the last
-two rules use the layer that the registry gives.
+These rules come from the code of Palette, not from a live run. Strata copies
+none of them, because a copy goes stale when Palette changes. A candidate that
+breaks one of them gives a record. `snapshot --from-candidate --validate`
+gives the answer of the validate route, and only the create gives the answer
+for these rules.
 
-Palette checks the version, the counts, the names, and the YAML first. It runs
-these checks at the same time, in an order that changes from one request to the
-next. So when a version breaks two of these rules, the code of the refusal can
-change from one request to the next. Palette checks the cloud and the layers
-after these checks.
-
-[The candidate file](../../reference/candidate-file.md#checks-before-any-request)
-lists the same rules: strata refuses such a candidate before Palette does.
+Strata keeps only the rules that the root needs. At the create, Palette
+changes some content with no error. A candidate with that content gives a root
+that the published version does not have. A
+[manifest layer](../../reference/candidate-file.md#a-manifest-layer) takes the
+layer `addon`. A pack from a registry takes
+[the layer of the registry](./packs.md#the-layer-of-a-pack). A
+[pack from a registry that Palette does not sync](../../reference/candidate-file.md#a-layer-from-a-registry-that-palette-does-not-sync)
+gets the pack that Palette makes.
 
 ## What the delete of a version checks
 

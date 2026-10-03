@@ -29,7 +29,7 @@ the kind.
 | `palette-refuses` | `snapshot --validate` asked Palette whether it takes the packs, and Palette refused them. Strata prints each error as a `palette    refuses:` line first, and writes no record. | `reference`, `errors[]` of `pack`, `code`, and `message` |
 | `usage` | The command line cannot work as given, so strata sent no request. Examples: `snapshot` with no ref and no `--from-raw`, `snapshot --raw-dir` of a ref that is not a profile or a cluster, `compare --repave` or `compare --validate` with an edge host or a cluster group, `snapshot --validate` with `--from-raw`, a cluster ref, or an `@draft` ref, and `behind --since`
 with a file that is not a `strata-behind/1` document. `snapshot` takes `--json` only with `--dir`. Without `--dir`, this kind prints as a `strata:` line. | |
-| `candidate-invalid` | The candidate file has a problem, or Palette refuses the version that it describes at the create. | `path` |
+| `candidate-invalid` | The candidate file has a problem, or it gives a value that Palette changes at the create. Strata does not check the rules of Palette: `snapshot --validate` asks Palette. See [Checks before any request](candidate-file.md#checks-before-any-request). | `path` |
 | `pack-not-found` | The registry has no such pack version or tag. | `name`, `version`, `registry`, `tag` when given |
 | `pack-name-not-found` | No visible registry offers a pack of that name. | `name` |
 | `pack-unavailable` | The registry lists the version as `disabled` or `deleted`. Palette does not serve it, and refuses a profile that pins it. | `name`, `version`, `registry`, `state` |
@@ -116,11 +116,8 @@ HTTP `500` and one of these codes. Strata does not send it again, and
 | `SubResourceLimitValidationFailure` | More than 200 packs, or more than 200 manifests. |
 | `ClusterProfilePacksInConflict` | For the route of an update: a pack name that is also in another profile of a cluster that runs the version. |
 
-Strata refuses some candidates before any request, so they do not reach this
-route. These are a candidate with values or a manifest that are not YAML, and a
-candidate with more than 200 packs or manifests. The error is
-`candidate-invalid`, with the same code. See
-[Checks before any request](candidate-file.md#checks-before-any-request).
+Strata does not copy these checks. A candidate that breaks one of them gives a
+record without `--validate`, and this refusal with `--validate`.
 
 A 5xx with a different code, or with no code, is a fault. Strata sends the
 request again.

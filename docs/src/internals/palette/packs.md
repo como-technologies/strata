@@ -275,7 +275,8 @@ Palette publishes it. The layer is part of `IDENTITY`, so a candidate file with
 that layer has another root. So strata refuses it: a
 [candidate file](../../reference/candidate-file.md#the-registry-lookups) that
 gives a pack another layer than its registry is `candidate-invalid`. The rules
-of the profile type also use the layer of the registry: see
+of the profile type also use the layer of the registry. Strata does not copy
+them: see
 [What the create of a version checks](./profiles.md#what-the-create-of-a-version-checks).
 
 ## Manifest pack uids

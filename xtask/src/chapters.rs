@@ -642,22 +642,6 @@ fn commands(r: &mut Runner) {
         false,
         "jq -c '.packs[0].presetOptions' certs.json",
     );
-    // Palette refuses a version that semver does not parse, and an os layer in an add-on
-    // profile; strata refuses both before any request
-    r.quiet("sed 's/^version: 1.1.1$/version: 1.1.1.1/' aws-stack.yaml > bad-version.yaml");
-    r.step(
-        "candidate-refused",
-        2,
-        true,
-        "strata snapshot --from-candidate bad-version.yaml -o bad-version.json",
-    );
-    r.quiet("sed 's/^type: cluster$/type: add-on/' aws-stack.yaml > add-on.yaml");
-    r.step(
-        "candidate-refused",
-        2,
-        true,
-        "strata snapshot --from-candidate add-on.yaml -o add-on.json",
-    );
     // Palette takes the layer of a pack from its registry, so strata refuses another layer
     r.quiet("sed 's/^  layer: addon$/  layer: cni/' aws-stack.yaml > wrong-layer.yaml");
     r.step(

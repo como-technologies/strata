@@ -3614,23 +3614,6 @@ fn serve_registry_pack(
     .with(format!("/v1/packs/{name}/registries/{registry}"), entity)
 }
 
-/// The fixtures, with the values of profile `b` as Palette takes them at a create: the fixture
-/// template of metrics-server has no quotes, so it is not YAML, and Palette refuses a candidate
-/// with it (`PackValuesYamlInvalid`).
-fn make_fixtures_that_palette_takes(dir: &Path) {
-    common::make_fixtures(dir);
-    for file in ["profile.json", "manifests.json"] {
-        let path = dir.join("b").join(file);
-        let text = fs::read_to_string(&path).unwrap();
-        let quoted = text.replace(
-            "{{ .spectro.var.replicas }}",
-            "\\\"{{ .spectro.var.replicas }}\\\"",
-        );
-        assert_ne!(text, quoted, "{file} has the template");
-        fs::write(&path, quoted).unwrap();
-    }
-}
-
 fn write_yaml(path: &Path, doc: &Value) {
     fs::write(path, serde_yaml::to_string(doc).unwrap()).unwrap();
 }
@@ -3789,7 +3772,7 @@ fn serve_registry_for_b(dir: &Path) -> MemoryApi {
 #[test]
 fn a_candidate_carries_values_and_manifests_inline_or_from_files_next_to_it() {
     let dir = tempfile::tempdir().unwrap();
-    make_fixtures_that_palette_takes(dir.path());
+    common::make_fixtures(dir.path());
     let recorded_b = ops::snapshot_from_dir(&dir.path().join("b"), "b", "t0").unwrap();
     let profile = read(&dir.path().join("b").join("profile.json"));
     let manifests = read(&dir.path().join("b").join("manifests.json"));
@@ -3890,7 +3873,7 @@ fn a_candidate_carries_values_and_manifests_inline_or_from_files_next_to_it() {
 #[test]
 fn candidate_errors_name_what_is_wrong() {
     let dir = tempfile::tempdir().unwrap();
-    make_fixtures_that_palette_takes(dir.path());
+    common::make_fixtures(dir.path());
     let api = serve_registry_for_b(dir.path());
     let cand = dir.path().join("errors");
     fs::create_dir_all(&cand).unwrap();
@@ -3899,23 +3882,12 @@ fn candidate_errors_name_what_is_wrong() {
         write_yaml(&p, &doc);
         p
     };
-    // Palette refuses a cluster profile with no os, cni, or csi layer, so each candidate has the
-    // other core layers of b after kubernetes
-    let b = read(&dir.path().join("b").join("profile.json"));
-    let core: Vec<Value> = b["spec"]["published"]["packs"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .filter(|p| ["os", "cni", "csi"].contains(&p["layer"].as_str().unwrap()))
-        .map(|p| serde_json::json!({"name": p["name"], "version": p["version"]}))
-        .collect();
     let k8s = |extra: Value| {
         let mut l = serde_json::json!({"name": "kubernetes", "version": "1.30.2"});
         for (k, v) in extra.as_object().unwrap() {
             l[k] = v.clone();
         }
-        let layers: Vec<Value> = std::iter::once(l).chain(core.iter().cloned()).collect();
-        serde_json::json!({"name": "p", "version": "1", "registryUid": "reg-public", "layers": layers})
+        serde_json::json!({"name": "p", "version": "1", "registryUid": "reg-public", "layers": [l]})
     };
 
     // local problems are found before connecting
@@ -4047,41 +4019,17 @@ fn an_explicit_tag_equal_to_the_version_is_accepted_as_palette_does() {
         {"tag": "LTS__24.x", "packUid": "pk-ubuntu-2404"},
         {"tag": "LTS__24.04", "packUid": "pk-ubuntu-2404"},
     ]});
-    let mut api = serve_registry_pack(MemoryApi::new(), "ubuntu-aws", summary, entity, "reg");
-    // Palette refuses a cluster profile with no k8s, cni, or csi layer: serve one of each
-    let core = [
-        ("kubernetes", "k8s"),
-        ("cni-cilium-oss", "cni"),
-        ("csi-aws-ebs", "csi"),
-    ];
-    for (name, layer) in core {
-        let uid = format!("pk-{layer}");
-        api = serve_registry_pack(
-            api,
-            name,
-            serde_json::json!([{"metadata": {"uid": uid},
-                "spec": {"name": name, "version": "1.0.0", "registryUid": "reg", "layer": layer,
-                         "type": "spectro", "values": ""}}]),
-            serde_json::json!({"tags": [{"tag": "1.0.0", "packUid": uid}]}),
-            "reg",
-        );
-    }
+    let api = serve_registry_pack(MemoryApi::new(), "ubuntu-aws", summary, entity, "reg");
     let dir = tempfile::tempdir().unwrap();
     let candidate = |name: &str, tag: Option<&str>| {
         let mut layer = serde_json::json!({"name": "ubuntu-aws", "version": "24.04"});
         if let Some(t) = tag {
             layer["tag"] = serde_json::json!(t);
         }
-        let layers: Vec<Value> = std::iter::once(layer)
-            .chain(
-                core.iter()
-                    .map(|(name, _)| serde_json::json!({"name": name, "version": "1.0.0"})),
-            )
-            .collect();
         let file = dir.path().join(name);
         write_yaml(
             &file,
-            &serde_json::json!({"name": "p", "version": "1", "registryUid": "reg", "layers": layers}),
+            &serde_json::json!({"name": "p", "version": "1", "registryUid": "reg", "layers": [layer]}),
         );
         ops::snapshot_from_candidate(
             &file,
@@ -4467,7 +4415,7 @@ use strata::candidate::{self, Candidate};
 #[test]
 fn a_candidate_written_from_a_record_reproduces_its_root_inline_or_with_files() {
     let dir = tempfile::tempdir().unwrap();
-    make_fixtures_that_palette_takes(dir.path());
+    common::make_fixtures(dir.path());
     let recorded_b = ops::snapshot_from_dir(&dir.path().join("b"), "b", "t0").unwrap();
     let c = Candidate::from_snapshot(&recorded_b).unwrap();
     assert!(
@@ -4584,7 +4532,7 @@ fn a_candidate_of_a_manifest_pack_is_the_published_version_but_for_the_minted_ui
 #[test]
 fn a_candidate_in_memory_reproduces_the_root_with_no_file() {
     let dir = tempfile::tempdir().unwrap();
-    make_fixtures_that_palette_takes(dir.path());
+    common::make_fixtures(dir.path());
     let recorded_b = ops::snapshot_from_dir(&dir.path().join("b"), "b", "t0").unwrap();
     let candidate = Candidate::from_snapshot(&recorded_b).unwrap();
 
@@ -4624,7 +4572,7 @@ fn a_candidate_in_memory_reproduces_the_root_with_no_file() {
 #[test]
 fn a_candidate_stops_matching_a_version_edited_in_place_and_same_release_names_the_edit() {
     let dir = tempfile::tempdir().unwrap();
-    make_fixtures_that_palette_takes(dir.path());
+    common::make_fixtures(dir.path());
     let recorded_b = ops::snapshot_from_dir(&dir.path().join("b"), "b", "t0").unwrap();
     let file = dir.path().join("profile.yaml");
     candidate::write(&Candidate::from_snapshot(&recorded_b).unwrap(), &file, None).unwrap();
@@ -10950,7 +10898,7 @@ fn verify_reports_a_renamed_version_as_renamed_and_not_as_overwritten() {
 #[test]
 fn snapshot_validate_asks_palette_whether_it_takes_the_packs_of_a_candidate() {
     let dir = tempfile::tempdir().unwrap();
-    make_fixtures_that_palette_takes(dir.path());
+    common::make_fixtures(dir.path());
     let recorded_b = ops::snapshot_from_dir(&dir.path().join("b"), "b", "t0").unwrap();
     let file = dir.path().join("c.yaml");
     candidate::write(&Candidate::from_snapshot(&recorded_b).unwrap(), &file, None).unwrap();

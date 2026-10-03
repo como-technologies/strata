@@ -585,7 +585,7 @@ in the project of the key: give it as `PROFILE=<name>@<version>`.
 | Check | Expected exit | What it shows |
 |---|---|---|
 | `validate-accepts`, `validate-accepts-says`, `validate-accepts-record` | 0 | #152: Palette takes the packs of the candidate; `snapshot --validate` prints `palette    accepts` and writes the record with `source.paletteValidation` `{"accepts": true}` |
-| `validate-not-yaml`, `validate-not-yaml-says`, `validate-not-yaml-no-record` | 2, 0, 1 | #153: strata refuses values that are not YAML before any request, as `candidate-invalid` with the code of Palette, `PackValuesYamlInvalid`; it exits `2` and writes no record |
+| `validate-not-yaml`, `validate-not-yaml-says`, `validate-not-yaml-no-record` | 2, 0, 1 | #152, #242: strata sends values that are not YAML to Palette. Palette refuses the whole request, `PackValuesYamlInvalid`, with no pack. Strata exits `2` and writes no record |
 | `validate-not-yaml-status`, `validate-not-yaml-status-says` | 2, 0 | #152: Palette refuses the same body as the whole request, `PackValuesYamlInvalid` with no pack, and sends the refusal as HTTP 500 |
 | `validate-no-pack`, `validate-no-pack-says` | 2, 0 | #152: Palette refuses a body with no pack before it checks the packs: HTTP 400 with `ShouldNotBeEmpty` |
 | `validate-version`, `validate-version-says` | 0 | #152: `snapshot <ref> --validate` asks the route of an update, and Palette takes the version as it is |
@@ -1291,9 +1291,7 @@ What differs is outside strata:
   behaviors that no script here establishes.
 - No script creates a profile version that breaks a rule of
   [What the create of a version checks](../internals/palette/profiles.md#what-the-create-of-a-version-checks).
-  Each rule states what Palette does, and no live run shows it. The test cases
-  of the YAML check and of the version check come from the YAML parser and the
-  version pattern that Palette uses.
+  Each rule states what Palette does, and no live run shows it.
 - No script installs a Zarf package on a cluster: Palette gives a Zarf pack the
   values of an app profile, `{{.spectro.system.appdeployment.tiername}}`, so it
   needs an app deployment of Palette Dev Engine.
