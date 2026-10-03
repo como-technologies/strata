@@ -7683,6 +7683,37 @@ fn edge_native_cloud_config() -> Value {
             "taints": []}]}})
 }
 
+/// A cloud config of OpenStack, in the model of the API reference of Palette.
+fn openstack_cloud_config() -> Value {
+    let pool = |name: &str, cp: bool, size: u32, label: &str| {
+        serde_json::json!({"name": name, "isControlPlane": cp, "useControlPlaneAsWorker": false,
+            "size": size, "azs": ["nova"], "flavor": "m1.large",
+            "flavorConfig": {"name": "m1.large", "numCPUs": 4, "memoryMiB": 8192, "diskGiB": 80},
+            "image": "ubuntu-22.04-barney", "diskGiB": 80,
+            "subnet": {"id": "subnet-barney", "name": "barney-subnet"},
+            "machinePoolProperties": {"archType": "amd64"}, "labels": [label], "taints": []})
+    };
+    serde_json::json!({"spec": {
+        "clusterConfig": {"region": "RegionOne", "project": {"id": "p-barney", "name": "barney"},
+            "domain": {"id": "default", "name": "Default"}, "sshKeyName": "barney-key",
+            "bastionDisabled": true, "nodeCidr": "10.6.0.0/24", "dnsNameservers": ["10.6.0.2"]},
+        "machinePoolConfig": [pool("cp-pool", true, 1, "control-plane"),
+            pool("worker-pool", false, 2, "worker")]}})
+}
+
+/// A cloud config of CloudStack, in the model of the API reference of Palette.
+fn cloudstack_cloud_config() -> Value {
+    serde_json::json!({"spec": {
+        "clusterConfig": {"project": {"id": "p-fred", "name": "fred"},
+            "zones": [{"id": "zone-1", "name": "zone-fred", "network": {"name": "fred-net"}}],
+            "sshKeyName": "fred-key", "controlPlaneEndpoint": "10.30.0.5", "syncWithCKS": false},
+        "machinePoolConfig": [{"name": "worker-pool", "isControlPlane": false, "size": 2,
+            "offering": {"name": "Medium Instance"}, "template": {"name": "ubuntu-22.04-fred"},
+            "networks": [{"id": "net-1", "name": "fred-net"}],
+            "instanceConfig": {"numCPUs": 2, "memoryMiB": 4096},
+            "machinePoolProperties": {"archType": "amd64"}, "labels": ["worker"], "taints": []}]}})
+}
+
 /// The shape tier of the cluster of the fixtures on the cloud type `kind`, from the cloud config
 /// `cloud_config` that Palette serves at `/v1/cloudconfigs/<kind>/cc1`.
 fn shape_on(kind: &str, cloud_config: Value) -> Value {
@@ -7760,6 +7791,8 @@ fn each_pool_on_each_cloud_holds_its_architecture_and_no_id_that_palette_gives_t
         ("vsphere", vsphere_cloud_config()),
         ("azure", azure_cloud_config()),
         ("edge-native", edge_native_cloud_config()),
+        ("openstack", openstack_cloud_config()),
+        ("apache-cloudstack", cloudstack_cloud_config()),
     ];
     for (kind, cc) in clouds {
         let shape = shape_on(kind, cc);
@@ -7779,6 +7812,54 @@ fn each_pool_on_each_cloud_holds_its_architecture_and_no_id_that_palette_gives_t
     let gke = shape_on("gke", gke_cloud_config());
     assert_eq!(gke["pools"][0]["subnet"], "barney-subnet");
     assert_eq!(gke["cloud"]["network"], "barney-net");
+}
+
+#[test]
+fn the_shape_tier_of_an_openstack_cluster_holds_the_cloud_part_that_an_older_record_holds() {
+    let shape = shape_on("openstack", openstack_cloud_config());
+    let cloud = &shape["cloud"];
+    assert_eq!(cloud["region"], "RegionOne");
+    assert_eq!(cloud["project"]["name"], "barney");
+    assert_eq!(cloud["sshKeyName"], "barney-key");
+    assert_eq!(cloud["bastionDisabled"], true);
+    assert_eq!(cloud["nodeCidr"], "10.6.0.0/24");
+    let pool = &shape["pools"][0];
+    assert_eq!(pool["flavorConfig"]["name"], "m1.large");
+    assert_eq!(pool["image"], "ubuntu-22.04-barney");
+    assert_eq!(pool["subnet"]["name"], "barney-subnet");
+}
+
+#[test]
+fn the_shape_tier_of_a_cloudstack_cluster_holds_the_offering_and_not_the_instance_config() {
+    let shape = shape_on("apache-cloudstack", cloudstack_cloud_config());
+    let pool = &shape["pools"][0];
+    assert_eq!(pool["offering"]["name"], "Medium Instance");
+    assert_eq!(pool["template"]["name"], "ubuntu-22.04-fred");
+    assert_eq!(pool["networks"][0]["name"], "fred-net");
+    assert!(
+        pool.get("instanceConfig").is_none(),
+        "Palette gives it from the offering"
+    );
+    let cloud = &shape["cloud"];
+    assert_eq!(cloud["project"]["name"], "fred");
+    assert_eq!(cloud["zones"][0]["name"], "zone-fred");
+    assert_eq!(cloud["sshKeyName"], "fred-key");
+}
+
+#[test]
+fn a_cloud_type_that_strata_does_not_name_holds_the_fields_of_an_older_record() {
+    let shape = shape_on("custom", openstack_cloud_config());
+    assert_eq!(shape["cloudType"], "custom");
+    let cloud = &shape["cloud"];
+    assert_eq!(cloud["region"], "RegionOne");
+    assert_eq!(cloud["project"]["name"], "barney");
+    assert_eq!(cloud["sshKeyName"], "barney-key");
+    assert_eq!(cloud["bastionDisabled"], true);
+    assert!(cloud.get("nodeCidr").is_none());
+    let pool = &shape["pools"][0];
+    assert_eq!(pool["azs"][0], "nova");
+    assert_eq!(pool["machinePoolProperties"]["archType"], "amd64");
+    assert!(pool.get("flavorConfig").is_none());
 }
 
 /// The shape fields that strata recorded before it read them by cloud type, for each cloud of
@@ -7807,6 +7888,18 @@ fn shape_before_the_cloud_type(kind: &str) -> Value {
                 "amiType": "AL2023_x86_64_STANDARD",
                 "awsLaunchTemplate": {"additionalSecurityGroups": [], "ami": {}, "rootVolume": {}},
                 "updateStrategy": update}]}),
+        "openstack" | "custom" => {
+            let pool = |name: &str, cp: bool, size: u32, label: &str| {
+                serde_json::json!({"name": name, "isControlPlane": cp,
+                    "useControlPlaneAsWorker": false, "size": size, "azs": ["nova"],
+                    "labels": [label], "taints": []})
+            };
+            serde_json::json!({"cloud": {"region": "RegionOne",
+                    "project": {"id": "p-barney", "name": "barney"}, "sshKeyName": "barney-key",
+                    "bastionDisabled": true},
+                "pools": [pool("cp-pool", true, 1, "control-plane"),
+                    pool("worker-pool", false, 2, "worker")]})
+        }
         _ => serde_json::json!({"cloud": {"project": "barney-project", "region": "us-east1",
                 "managedClusterConfig": {"location": "us-east1"},
                 "overrideClusterAPIConfig": "gcpManagedControlPlane:\n  spec:\n    releaseChannel: regular\n"},
@@ -7816,41 +7909,49 @@ fn shape_before_the_cloud_type(kind: &str) -> Value {
     }
 }
 
+/// Verify a record that an older strata wrote of a cluster on the cloud type `kind`, with the
+/// cloud config `cc`. The cluster did not change, so the shape tier is the same.
+fn an_older_record_verifies(kind: &str, cc: Value) {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    with_cluster_status(dir.path());
+    let path = dir.path().join("cluster-a").join("cluster.json");
+    let mut doc = read(&path);
+    doc["spec"]["cloudConfigRef"]["kind"] = Value::from(kind);
+    fs::write(&path, serde_json::to_string(&doc).unwrap()).unwrap();
+    let api = serve_cluster(MemoryApi::new(), dir.path(), "cluster-a")
+        .with(format!("/v1/cloudconfigs/{kind}/cc1"), cc);
+
+    // the record as an older strata wrote it: a shape tier without the cloud type
+    let mut record = serde_json::to_value(snapshot_cluster(&api, None).unwrap()).unwrap();
+    let fields = shape_before_the_cloud_type(kind);
+    // compare and verify read the fields of a tier, and not its hash
+    record["source"]["cluster"]["tiers"]["shape"] =
+        serde_json::json!({"hash": "0c27a8402b75", "fields": fields});
+    let old: Snapshot = serde_json::from_value(record).unwrap();
+
+    let v = ops::verify(&old, &Palette::new(api.clone()), "t1", &Progress::silent()).unwrap();
+    assert_eq!(v.status, VerifyStatus::Unchanged, "{kind}");
+    let shape = v.diff.cluster_tiers.iter().find(|t| t.tier == "shape");
+    assert!(shape.unwrap().same, "{kind}: {:?}", shape.unwrap().diff);
+    // the live record holds the fields of its cloud, and compares with the old record
+    let live = &v.live.source.cluster.as_ref().unwrap().tiers["shape"].fields;
+    assert_eq!(live["cloudType"], kind);
+    let d = strata::diff::compute(&old, &v.live, "t1", None);
+    assert!(d.cluster_tiers.iter().all(|t| t.same), "{kind}");
+}
+
+#[test]
+fn a_record_of_openstack_or_another_cloud_from_before_the_shape_by_cloud_type_verifies() {
+    an_older_record_verifies("openstack", openstack_cloud_config());
+    an_older_record_verifies("custom", openstack_cloud_config());
+}
+
 #[test]
 fn a_record_of_aws_eks_or_gke_from_before_the_shape_by_cloud_type_loads_and_verifies() {
-    for (kind, cc) in [
-        ("aws", aws_cloud_config(2)),
-        ("eks", eks_cloud_config()),
-        ("gke", gke_cloud_config()),
-    ] {
-        let dir = tempfile::tempdir().unwrap();
-        common::make_fixtures(dir.path());
-        with_cluster_status(dir.path());
-        let path = dir.path().join("cluster-a").join("cluster.json");
-        let mut doc = read(&path);
-        doc["spec"]["cloudConfigRef"]["kind"] = Value::from(kind);
-        fs::write(&path, serde_json::to_string(&doc).unwrap()).unwrap();
-        let api = serve_cluster(MemoryApi::new(), dir.path(), "cluster-a")
-            .with(format!("/v1/cloudconfigs/{kind}/cc1"), cc);
-
-        // the record as an older strata wrote it: a shape tier without the cloud type
-        let mut record = serde_json::to_value(snapshot_cluster(&api, None).unwrap()).unwrap();
-        let fields = shape_before_the_cloud_type(kind);
-        // compare and verify read the fields of a tier, and not its hash
-        record["source"]["cluster"]["tiers"]["shape"] =
-            serde_json::json!({"hash": "0c27a8402b75", "fields": fields});
-        let old: Snapshot = serde_json::from_value(record).unwrap();
-
-        let v = ops::verify(&old, &Palette::new(api.clone()), "t1", &Progress::silent()).unwrap();
-        assert_eq!(v.status, VerifyStatus::Unchanged, "{kind}");
-        let shape = v.diff.cluster_tiers.iter().find(|t| t.tier == "shape");
-        assert!(shape.unwrap().same, "{kind}: {:?}", shape.unwrap().diff);
-        // the live record holds the fields of its cloud, and compares with the old record
-        let live = &v.live.source.cluster.as_ref().unwrap().tiers["shape"].fields;
-        assert_eq!(live["cloudType"], kind);
-        let d = strata::diff::compute(&old, &v.live, "t1", None);
-        assert!(d.cluster_tiers.iter().all(|t| t.same), "{kind}");
-    }
+    an_older_record_verifies("aws", aws_cloud_config(2));
+    an_older_record_verifies("eks", eks_cloud_config());
+    an_older_record_verifies("gke", gke_cloud_config());
 
     // a change of a field that the old record holds still shows
     let dir = tempfile::tempdir().unwrap();

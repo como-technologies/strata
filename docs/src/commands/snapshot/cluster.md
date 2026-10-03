@@ -67,12 +67,19 @@ in the tier.
 | `vsphere` | `placements`: the compute cluster, the datastore, the folder, the resource pool, and the network of the pool | `placement`, `ntpServers`, `staticIp`, `sshKeys`, `controlPlaneEndpoint` |
 | `edge-native` | `hosts`: the edge hosts of the pool; `osType` | `controlPlaneEndpoint`, `isTwoNodeCluster`, `ntpServers`, `overlayNetworkConfiguration`, `staticIp`, `sshKeys` |
 | `maas` | `network`, `resourcePool`, `tags`, `useLxdVm` | `domain`, `enableLxdVm`, `ntpServers`, `staticIp`, `sshKeys` |
-| another type | no more fields | no more fields |
+| `openstack` | `flavorConfig`, `image`, `diskGiB`, `subnet` | `region`, `project`, `domain`, `sshKeyName`, `bastionDisabled`, `network`, `subnet`, `nodeCidr`, `dnsNameservers` |
+| `apache-cloudstack` | `offering`, `template`, `networks` | `project`, `zones`, `sshKeyName`, `controlPlaneEndpoint`, `syncWithCKS` |
+| another type | `rootDeviceSize`, `capacityType`, `spotMarketOptions`, `amiType`, `awsLaunchTemplate` | `region`, `project`, `sshKeyName`, `controlPlaneLoadBalancer`, `bastionDisabled`, `endpointAccess`, `addons`, `managedClusterConfig` |
+
+On another type, the tier holds the fields that an older version of strata
+recorded on each cloud. So the tier of that type holds no fewer fields than
+before.
 
 The tier does not hold the ids that Palette gives each cluster: `subnetIds`,
 `additionalSecurityGroups`, `vpcId`, and the `uid` of a vSphere placement. It
 does not hold `instanceConfig`, which Palette calculates from the instance
-type. Here the cluster `lab` runs on vSphere:
+type, or on CloudStack from the offering. Here the cluster `lab` runs on
+vSphere:
 
 ```text
 {{#include ../../output/shape-vsphere-record.txt}}

@@ -43,7 +43,8 @@ itself. A cluster on AWS gives these fields:
 
 The API reference of Palette gives each cloud type its own model of the cloud
 config, with its own machine pool fields and cloud part fields. The cloud
-config of AKS has the model of Azure, and that of GKE the model of GCP. On AWS,
+config of AKS has the model of Azure, and that of GKE the model of GCP. The
+cloud type of CloudStack is `apache-cloudstack`. On AWS,
 each machine pool also gives `instanceConfig`, the CPUs and the memory of the
 instance type, and `machinePoolProperties.archType`, such as `amd64`. See
 [tiers.sh](../../development/live-runs.md#tierssh).

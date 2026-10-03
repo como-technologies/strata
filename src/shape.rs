@@ -92,7 +92,10 @@ enum Cloud {
     Vsphere,
     EdgeNative,
     Maas,
-    /// A cloud type that strata does not read by name: the tier holds the shared fields alone.
+    Openstack,
+    Cloudstack,
+    /// A cloud type that strata does not read by name. The tier holds the fields of an older
+    /// record, so that it holds no fewer fields than before.
     Other,
 }
 
@@ -106,6 +109,8 @@ impl Cloud {
             "vsphere" => Cloud::Vsphere,
             "edge-native" => Cloud::EdgeNative,
             "maas" => Cloud::Maas,
+            "openstack" => Cloud::Openstack,
+            "apache-cloudstack" => Cloud::Cloudstack,
             _ => Cloud::Other,
         }
     }
@@ -135,7 +140,11 @@ impl Cloud {
             // the edge hosts of the pool
             Cloud::EdgeNative => &["hosts", "osType"],
             Cloud::Maas => &["network", "resourcePool", "tags", "useLxdVm"],
-            Cloud::Other => &[],
+            // the flavor, the image, and the root volume of each node, and the subnet of the pool
+            Cloud::Openstack => &["flavorConfig", "image", "diskGiB", "subnet"],
+            // Palette gives `instanceConfig` from the offering, so it stays out
+            Cloud::Cloudstack => &["offering", "template", "networks"],
+            Cloud::Other => LEGACY_POOL_FIELDS,
         }
     }
 
@@ -193,7 +202,25 @@ impl Cloud {
                 "sshKeys",
             ],
             Cloud::Maas => &["domain", "enableLxdVm", "ntpServers", "staticIp", "sshKeys"],
-            Cloud::Other => &[],
+            Cloud::Openstack => &[
+                "region",
+                "project",
+                "domain",
+                "sshKeyName",
+                "bastionDisabled",
+                "network",
+                "subnet",
+                "nodeCidr",
+                "dnsNameservers",
+            ],
+            Cloud::Cloudstack => &[
+                "project",
+                "zones",
+                "sshKeyName",
+                "controlPlaneEndpoint",
+                "syncWithCKS",
+            ],
+            Cloud::Other => LEGACY_CLOUD_FIELDS,
         }
     }
 }
@@ -281,11 +308,14 @@ mod tests {
     use super::*;
 
     #[test]
-    fn each_cloud_type_names_one_model_and_an_unknown_type_reads_the_shared_fields() {
+    fn each_cloud_type_names_one_model_and_an_unknown_type_reads_the_fields_of_an_older_record() {
         assert_eq!(Cloud::of("aks"), Cloud::Azure);
         assert_eq!(Cloud::of("gke"), Cloud::Gcp);
         assert_eq!(Cloud::of("edge-native"), Cloud::EdgeNative);
-        assert_eq!(Cloud::of("openstack"), Cloud::Other);
-        assert!(Cloud::Other.pool_fields().is_empty());
+        assert_eq!(Cloud::of("openstack"), Cloud::Openstack);
+        assert_eq!(Cloud::of("apache-cloudstack"), Cloud::Cloudstack);
+        assert_eq!(Cloud::of("custom"), Cloud::Other);
+        assert_eq!(Cloud::Other.pool_fields(), LEGACY_POOL_FIELDS);
+        assert_eq!(Cloud::Other.cloud_fields(), LEGACY_CLOUD_FIELDS);
     }
 }
