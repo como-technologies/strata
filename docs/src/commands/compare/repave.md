@@ -51,9 +51,15 @@ Edge cluster, where that change repaves nothing:
 {{#include ../../output/repave-disagree-lines.txt}}
 ```
 
-That note is the signal that the table is wrong for the environment. No live
-run has produced it: AWS and GCP, the two clouds that the runs used, have one
-upgrade engine, and give the answer of the table each time. It costs two requests, the cluster document and one `POST` to
+That note is the signal that the table is wrong for the environment, or for the
+change. AWS and GCP, the two clouds that the runs used, have one upgrade
+engine. One live run on AWS produced a disagreement: a move of the OS pack to
+another registry, at one version and with the same values. The table says
+`repave`, Palette says no repave, and the cluster kept its nodes. There the
+table is wrong about the change, and not about the engine: see
+[A pack that moves between registries](../../internals/palette/packs.md#a-pack-that-moves-between-registries).
+
+`--repave` costs two requests, the cluster document and one `POST` to
 `/v1/spectroclusters/<uid>/validate/repave`. The `POST` asks a question and
 changes nothing: the cluster keeps its instances.
 
