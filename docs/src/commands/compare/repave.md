@@ -19,6 +19,20 @@ is not on it repaves nothing. A change of the CSI values does not:
 {{#include ../../output/repave-csi-lines.txt}}
 ```
 
+Palette checks the OS layer and the Kubernetes layer. Each reason has one of
+four codes:
+
+| Code | The pack of the layer |
+| --- | --- |
+| `PackUpgraded` | has another version |
+| `PackValuesUpdated` | has another value at a key on the list |
+| `PackAdded` | is in the change, and not on the cluster |
+| `PackRemoved` | is on the cluster, and not in the change |
+
+Strata prints the code that Palette gives, and makes no code of its own. The
+live runs show `PackValuesUpdated`. The other three codes come from the code of
+Palette, and no live run shows them.
+
 `--json` carries the answer as `paletteRepave`, with `required`, each reason,
 and `agrees`:
 

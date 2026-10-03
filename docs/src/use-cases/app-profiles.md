@@ -122,8 +122,9 @@ it to another version. The record from step 1 gives the same answer as the ref:
 The live run of `just live-app-profile` updates the manifest of a tier. It shows
 that a plain update keeps the uid and the version, and that the record drifts
 with the tier `AUTHORED`. A property is part of the same tier, and the root
-covers it as it covers the manifest. No live run changes the install order of a
-tier. Palette names the app deployments of an app profile, and refuses the
+covers it as it covers the manifest. An update of a tier cannot change its
+install order: Palette answers with 2xx, and the tier keeps its order. The
+stand-in of step 4 takes the change. Palette names the app deployments of an app profile, and refuses the
 delete of an app profile while an app deployment uses it. No live run shows
 these two rules. See
 [Edge hosts, cluster groups, and app profiles](../internals/palette/other-objects.md#app-profiles).

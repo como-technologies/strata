@@ -110,9 +110,14 @@ manifests. The content of a manifest comes from
   stay, and no new version appears: an app profile has no publish step.
 - `spec.installOrder` of a tier is the order in which Palette installs the
   tiers. Palette does not give the field for a tier whose order is 0, and it
-  does not list the tiers in install order. A plain update of a tier,
-  `PUT /v1/appProfiles/<uid>/tiers/<tierUid>`, sets the order. The code of
-  Palette gives these rules.
+  does not list the tiers in install order. The code of Palette gives these
+  two rules.
+- An app profile that is made with an install order on each tier keeps the
+  orders, and the tiers route gives them. The document of the app profile gives
+  no order. A plain update of a tier with another order,
+  `PUT /v1/appProfiles/<uid>/tiers/<tierUid>`, gets a 2xx answer, and the tier
+  keeps its order. [app-profile.sh](../../development/live-runs.md#app-profilesh)
+  shows it.
 - `spec.containerRegistryUid` of a container tier is the registry of its image.
   Palette does not give the field when the tier names no registry.
 - A tier has no digest of its chart or its operator, so a record of an app

@@ -17,7 +17,7 @@ show.
 | `pack-states.sh` | Pack versions that Spectro Cloud deprecated, disabled, or deleted: what `packs` and `snapshot` report, and which profiles Palette refuses (#68). It needs no cluster. |
 | `validate-packs.sh` | What Palette answers when `snapshot --validate` asks whether it takes the packs of a candidate, and of a version (#152). It needs no cluster and no profile. |
 | `export.sh` | The export of each version of the example, read with `snapshot --from-candidate`, and what the export route answers (#156). It needs the profiles, and no cluster. |
-| `registry.sh` | The example's own OCI pack registry: a push, a push again of one version with other bytes, and a new version, and what Palette does after each (#66). It needs the profiles, and no cluster. |
+| `registry.sh` | The example's own OCI pack registry: a push, a push again of one version with other bytes, and a new version, and what Palette does after each (#66); a tag that the registry deletes while a profile pins it (#108). It needs the profiles, and no cluster. |
 | `template.sh` | The lock of a cluster template on the versions it links, and the order in which a cluster installs the packs of two add-on profiles (#66). It needs the profiles and no cluster, and it ends with the removal of the example. |
 | `cluster.sh` | A variable value that a cluster changes, and other answers that only a cluster gives (#66). It needs cluster A, and it ends with the cluster gone. |
 | `order.sh` | What a reorder of the packs of a published version is to Palette (#66). It needs cluster A, and it leaves the versions edited: run `just live-down` after it. |
@@ -26,14 +26,15 @@ show.
 | `pending.sh` | When Palette says that an update waits for a cluster, and what a record of `cluster:<uid>@pending` holds (#70, #78). It needs cluster A. |
 | `macros.sh` | What a new value of a project macro does to a version, to the copy of a cluster, and to a record (#72). It needs cluster A. |
 | `macro-repave.sh` | Whether a new macro value in an infrastructure layer replaces the nodes of a cluster (#72). It needs cluster A, and it leaves a repave that waits for approval: run `just live-down` after it. |
-| `repave.sh` | `compare --repave`: the answer of Palette beside the level of the impact table (#73), and `compare --validate` (#134). It needs cluster A. |
+| `repave.sh` | `compare --repave`: the answer of Palette beside the level of the impact table (#73), and `compare --validate` (#134). Stage 8 asks about a profile variable in a repave key of a version that the cluster does not run (#132). It needs cluster A. |
+| `registry-move-nodes.sh` | Whether a move of the OS pack to another registry, at the same version, replaces the nodes of a cluster, and what the impact table and Palette say (#135). It needs cluster A, and it can repave it two times. |
 | `merge-gate.sh` | `scripts/ci/merge-gate.sh` over records of the live profiles, in a git repository that the script builds (#57). It needs the profiles, and no cluster. |
 | `knurl.sh` | [The knurl adapter](../automation/knurl.md): each method of the port against the strata answer for the same real object. Read-only. It needs the profiles; the instance checks need the cluster. |
 | `registry-kinds.sh` | The digest of each registry kind, and a push again of one version into each (#75); a Helm registry with synchronization off, the case with no digest (#71). It needs no cluster. |
-| `tiers.sh` | The tiers of a cluster record, and `compare` of two cluster records beyond the release (#76). It builds cluster B for a while. |
+| `tiers.sh` | The tiers of a cluster record, and `compare` of two cluster records beyond the release (#76). It builds cluster B for a while. Stage 5 edits a role binding of cluster A, and needs no cluster B (#106). |
 | `edge-host.sh` | A record of an edge host, `consumers` of a profile bound to one, and what an edit in place does to an edge host (#78). It registers edge hosts with no device. |
-| `cluster-group.sh` | A record of a cluster group, and `compare` of the group with its virtual cluster (#78). It builds a virtual cluster in cluster A. |
-| `app-profile.sh` | A record of an app profile, and a plain update of it (#78). It needs no cluster. |
+| `cluster-group.sh` | A record of a cluster group, and `compare` of the group with its virtual cluster (#78); a change of the CPU limit of the group (#110). It builds a virtual cluster in cluster A. |
+| `app-profile.sh` | A record of an app profile, and a plain update of it (#78); two app profiles whose tiers differ in the install order (#112). It needs no cluster. |
 | `fleet.sh` | `list clusters --tag` and `--filter`, `list filters`, and a record of each cluster of a set (#80). It labels cluster A through the API. |
 | `upstream.sh` | `strata behind` against the registries, and `upstream-report.sh` around a version that arrives in the example's own registry (#79). It needs no cluster. |
 | `loop.sh` | [The everyday loop](../loop.md), end to end: a change, the gates, the publish, the nightly jobs, a value overridden on a cluster, an edit in place, an incident, and a retire, with the records in a git repository that it builds (#81). It needs cluster A, and undoes each change. |
@@ -128,6 +129,7 @@ its end.
 | `macros.sh` | The macro test (#72): what a project macro does to a version, to the copy that cluster A runs, and to a record, when the macro gets another value. |
 | `macro-repave.sh` | The macro repave test (#72): a macro in a field that repaves cluster A, and what a change of its value alone does. It ends with a repave that waits for approval; `live-down` follows it. |
 | `repave.sh` | The repave test (#73): `compare --repave` asks Palette if a change repaves cluster A, and prints its answer beside the impact level. `compare --validate` asks Palette if it accepts the packs (#134). |
+| `registry-move-nodes.sh` | The registry move of a running cluster (#135): the OS pack of the release version from `move_registry_name`, and what cluster A does when it takes it. |
 | `edge-host.sh` | The edge host test (#78). |
 | `cluster-group.sh`, `terraform/cluster-group.tf` | The cluster group test (#78), and the group and the virtual cluster that it builds. Off unless `cluster_group` is set. |
 | `app-profile.sh` | The app profile test (#78). |
@@ -163,6 +165,7 @@ creates at once. `validate-packs.sh` asks validate routes, which change nothing.
 `pending.sh` checks the baseline before it starts, and puts each change back.
 `macros.sh` does the same, and deletes the macro it makes.
 `repave.sh` checks the baseline before it starts, puts each change back, and takes no update on cluster A.
+`registry-move-nodes.sh` checks the baseline, and puts the release version back, unless a repave waits for approval.
 `registry.sh` leaves the pushed versions in its own registry.
 `template.sh` ends with the example removed, `cluster.sh` ends with the cluster
 gone, and `order.sh` leaves two versions edited: run `just live-down` after
@@ -181,9 +184,9 @@ each.
 | `export.sh` | nothing; it only reads | the baseline |
 | `merge-gate.sh` | the add-on version, which stage 4 edits in place and stage 5 puts back | the profiles, the clusters, the baseline |
 | `knurl.sh` | nothing; it only reads | the baseline |
-| `registry.sh` | the images of the example's own registries, and the profiles that pin them | the shared registries, the clusters, the release and add-on versions |
+| `registry.sh` | the images of the example's own registries, a tag that it deletes and pushes again, and the profiles that pin them | the shared registries, the clusters, the release and add-on versions |
 | `registry-kinds.sh` | the registry host and a Palette registry over each kind, then pushes of `1.0.0` into each, and one profile of stage 2; it removes each at its end | the profiles, the clusters, the baseline |
-| `tiers.sh` | cluster B, then its timezone and its labels through the API; it removes B | the profiles, cluster A, the baseline |
+| `tiers.sh` | cluster B, then its timezone and its labels through the API; it removes B. Stage 5: a role binding of cluster A, through the API, and back | the profiles, cluster A, the baseline |
 | `template.sh` | a template over the release and add-on versions; then the release version, in place | the pack versions; it ends with the example removed |
 | `cluster.sh` | the value cluster A gives one variable; then the cluster, deleted through the API | the profiles |
 | `order.sh` | the pack order of two published versions, and the profile order of cluster A | the packs, the values, the manifests; it leaves the versions edited |
@@ -192,10 +195,11 @@ each.
 | `pending.sh` | a manifest of the add-on version, a value of the release version, and the add-on version number, each in place and put back; the updates that cluster A accepts | the clusters, the flag (off), the baseline |
 | `macros.sh` | a project macro, and the manifest of the add-on version that reads it; the update that cluster A accepts; all put back | the clusters, the flag (off), the baseline |
 | `macro-repave.sh` | a project macro in the Kubernetes pack of the release version, and then its value alone; it leaves a repave that waits for approval | the flag (off); it ends with the removal of the example |
-| `repave.sh` | the Kubernetes pack of the release version, and a manifest of the add-on version, each in place and put back; no update is accepted | the clusters, the flag (off), the baseline |
+| `repave.sh` | the Kubernetes pack of the release version, and a manifest of the add-on version, each in place and put back; a profile variable on version 1.0.1, through OpenTofu, and back; no update is accepted | the clusters, the flag (off), the baseline |
+| `registry-move-nodes.sh` | the registry of the OS pack of the release version, in place, and the update that cluster A takes; both put back | the version and the values of each pack, the flag (off) |
 | `edge-host.sh` | two edge hosts with no device, each bound to a version; a manifest of the add-on version and a value of the release version, each in place and put back; it deletes the hosts | the profiles, the clusters, the baseline |
-| `cluster-group.sh` | a cluster group on cluster A and a virtual cluster in it; a manifest of the add-on version, in place and put back; it removes the group | the profiles, cluster A, the baseline |
-| `app-profile.sh` | an app profile, a plain update of it, and its delete | the baseline |
+| `cluster-group.sh` | a cluster group on cluster A and a virtual cluster in it; a manifest of the add-on version, in place and put back; the CPU limit of the group, and back; it removes the group | the profiles, cluster A, the baseline |
+| `app-profile.sh` | an app profile, a plain update of it, and its delete; two app profiles with install orders, and their delete | the baseline |
 | `fleet.sh` | a label of cluster A and a saved tag filter, through the API, each put back | the profiles, cluster A, the baseline |
 | `upstream.sh` | three versions of the example's own pack, pushed and then removed; issues of this repository | the profiles, the baseline |
 
