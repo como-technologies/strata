@@ -323,8 +323,8 @@ impl<A: PaletteApi> Palette<A> {
         }
     }
 
-    /// Fetch the three documents for one profile. A missing variables endpoint (404 or 405, as on
-    /// older Palette versions) is treated as "no variables"; other errors propagate. For a profile
+    /// Fetch the three documents for one profile. If the variables endpoint answers 404 or 405, as
+    /// on older Palette versions, the profile has no variables. Other errors return. For a profile
     /// that has a draft, also each of its manifests: see [`RawProfile::manifest_entities`].
     /// Palette serves the draft packs with each secret in clear: strata masks them first, see
     /// `mask_draft`.

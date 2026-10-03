@@ -11,7 +11,7 @@ use serde_yaml::Value as Yaml;
 pub const MASKED: &str = "********";
 
 /// True when a format of the pack schema marks a secret: one of its `${...}` parts starts with
-/// `password`, as `IsSensitive` in Palette finds it. `${password}` and `${password:/.{8,}/}` are
+/// `password`, as Palette finds it. `${password}` and `${password:/.{8,}/}` are
 /// secrets; `${string}` is not.
 pub fn is_password_format(format: &str) -> bool {
     format.split("${").skip(1).any(|part| {

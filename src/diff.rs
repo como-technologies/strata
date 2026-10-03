@@ -36,14 +36,13 @@ pub struct Diff {
     /// True when the roots are equal: same release
     pub same: bool,
     /// True when the roots are equal, or differ only by the `packUid`s that Palette mints
-    /// (`packs[].mintedUidOnly`) and the tag names packs are pinned under
-    /// for the same build (`packs[].tagRenamed`): the same content. `same-release` accepts such a
-    /// pair.
+    /// (`packs[].mintedUidOnly`) and by the tag name of a pack for the same build
+    /// (`packs[].tagRenamed`): the same content. `same-release` accepts such a pair.
     #[serde(default)]
     pub same_content: bool,
-    /// True when both sides name the same profile uid and version but their roots differ: the
-    /// version was edited in place, or, between two clusters, changed on one of them. A version
-    /// and a record of its draft are not.
+    /// True when both sides name the same profile uid and version but their roots differ: an edit
+    /// in place changed the version, or, between two clusters, one cluster changed. It is false
+    /// for a version and a record of its draft.
     #[serde(default)]
     pub edited_in_place: bool,
     /// Each profile uid that the two sides name under different versions: the version was
@@ -92,12 +91,12 @@ pub struct Diff {
     /// equal: the content names the macro, and Palette gives it another value.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub macros_changed: Vec<String>,
-    /// With `compare --repave`: what Palette answers when asked if the change repaves the
-    /// cluster side, beside the level of the impact table.
+    /// With `compare --repave`: what Palette answers when strata asks whether the change repaves
+    /// the cluster side, beside the level of the impact table.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub palette_repave: Option<PaletteRepave>,
-    /// With `compare --validate`: what Palette answers when asked if it accepts the packs of the
-    /// change on the cluster side.
+    /// With `compare --validate`: what Palette answers when strata asks whether it accepts the
+    /// packs of the change on the cluster side.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub palette_validation: Option<PaletteValidation>,
 }
@@ -559,7 +558,7 @@ pub struct PackDiff {
     pub params_changed: bool,
     /// True when the only difference is a `packUid` that Palette mints. A manifest pack comes
     /// from no registry, and Palette mints its uid for each profile it creates, so two profiles
-    /// with the same manifests carry different ones. A pack from a registry that Palette does not
+    /// with the same manifests have different uids. A pack from a registry that Palette does not
     /// sync gets its uid at the create, so the record of a candidate has none. The content is the
     /// same.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
@@ -769,7 +768,7 @@ pub struct ValuesDiff {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct PaletteRepave {
-    /// The cluster that Palette was asked about.
+    /// The cluster that strata asked Palette about.
     pub cluster_uid: String,
     /// `isRepaveRequired`: Palette would replace the nodes.
     pub required: bool,
@@ -854,7 +853,7 @@ impl PaletteRepave {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct PaletteValidation {
-    /// The cluster that Palette was asked about.
+    /// The cluster that strata asked Palette about.
     pub cluster_uid: String,
     /// True when Palette gives no error.
     pub accepts: bool,

@@ -593,8 +593,8 @@ pub(crate) fn same_content_note(d: &Diff) -> Option<String> {
         (true, false) => {
             "the roots differ only by the tag name a pack is pinned under: the same pack build"
         }
-        (true, true) => "the roots differ only by the tag name a pack is pinned under and the packUid that Palette mints for a manifest pack or for a pack from a registry that it does not sync: the same content",
-        _ => "the roots differ only by the packUid that Palette mints for a manifest pack or for a pack from a registry that it does not sync: the same content",
+        (true, true) => "the roots differ only by the tag name of a pack and the packUid that Palette mints: the same content",
+        _ => "the roots differ only by the packUid that Palette mints: the same content",
     }.to_string())
 }
 

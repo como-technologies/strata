@@ -2,11 +2,13 @@
 
 Palette has routes that check a cluster before a create. The console calls them
 in its create wizard, and a create through the API goes to the create route.
-This page states what each route checks, from the source of Palette (hubble on
-master), and who calls it. `strata preflight` calls each one that takes the
-body of a create. One more route checks the packs of a cluster before an update
-of its profiles: `compare --validate` calls it. Two routes check the packs of a
-profile before a create or an update: `snapshot --validate` calls them.
+This page states what each route checks, and who calls it. The checks come
+from the code of Palette. Each fact that names a live run comes from that run.
+
+`strata preflight` calls each route that takes the body of a create. One more
+route checks the packs of a cluster before an update of its profiles:
+`compare --validate` calls it. Two routes check the packs of a profile before a
+create or an update: `snapshot --validate` calls them.
 
 ## POST /v1/spectroclusters/{cloudType}/validate
 
@@ -16,7 +18,7 @@ GCP entity, and `aks` the Azure entity.
 
 The checks, in order:
 
-1. The converter of the entity: a nil spec, the timezone, the cluster API
+1. The fields of the entity: a nil spec, the timezone, the cluster API
    override, and for each pool a size over 0, min and max that agree, and a
    size inside them. For a GKE worker pool, a size that is not a multiple of 3
    is refused here, as a 400 `InvalidParam` "Node pool size should be multiple
@@ -61,43 +63,48 @@ sends it.
 The checks, in order:
 
 1. The cluster exists, and the values of each pack of the body are YAML.
-2. For each profile of the body, Palette builds the target: the copy that the
-   cluster holds of that uid, or the published profile for a new uid, with the
-   sent values over it.
-3. The metadata of the packs: two dashboard packs that cannot go together, the
-   names of the packs and the manifests, one pack or one manifest two times in
-   a profile, one pack name in two profiles of one workload scope (the system
-   scope or the app scope), and two versions of one pack across the profiles.
-4. The integration packs: a pack that the cloud of the cluster does not
-   support, and on an imported cluster each integration pack but Headlamp, is a
-   refusal of the whole request, `PackSpectroIntegrationNotSupported`.
-5. The integration packs again: the OIDC identity provider that an integration
-   pack names is set in the Kubernetes pack or in the organization
-   (`ClusterProfileOidcNotConfigured`), and a pack that an integration pack
-   names as a read-only dependency keeps the default values of that pack
-   (`PackValuesOverrideForbidden`). Then the pack validator, over the packs of
-   each profile of the body that is not a system profile: no disabled pack
-   (`DisabledPacksForbidden`), the values of each pack, and the dependencies of
-   each pack.
-   A dependency is checked over the packs of all the profiles of the body, so a
-   pack that needs a newer version of a pack in another profile of the cluster
-   fails here: `DependencyPackWithMinVersionRequired`,
+2. For each profile of the body, Palette builds the target. The target is the
+   copy that the cluster holds of that uid, or the published profile for a new
+   uid. Palette puts the sent values over it.
+3. The metadata of the packs. Palette checks these items:
+   - two dashboard packs that cannot go together,
+   - the names of the packs and the manifests,
+   - one pack or one manifest two times in a profile,
+   - one pack name in two profiles of one workload scope: the system scope or
+     the app scope,
+   - two versions of one pack across the profiles.
+4. The integration packs. Palette refuses the whole request with
+   `PackSpectroIntegrationNotSupported` for a pack that the cloud of the
+   cluster does not support. On an imported cluster, it also refuses each
+   integration pack except Headlamp.
+5. The integration packs again. The OIDC identity provider that an integration
+   pack names must be in the Kubernetes pack or in the organization
+   (`ClusterProfileOidcNotConfigured`). A pack that an integration pack names as
+   a read-only dependency must keep its default values
+   (`PackValuesOverrideForbidden`).
+6. The pack validator, over the packs of each profile of the body that is not
+   a system profile. It refuses a disabled pack (`DisabledPacksForbidden`).
+   Then it checks the values and the dependencies of each pack. It checks a
+   dependency over the packs of all the profiles of the body. So a pack that
+   needs a newer version of a pack in another profile of the cluster fails
+   here: `DependencyPackWithMinVersionRequired`,
    `Pack '<pack>' is required with minimum compatible version '<version>'`. On
-   an imported cluster, only the values are checked.
+   an imported cluster, the validator checks only the values.
 
 The answer is `200` with `profiles[]`: only the profiles with an error, each
 with its `uid` and `packs.results[].errors[]` of `code` and `message`. Palette
 puts the error of a pack under each profile of the body that holds a pack of
-that name, and gives the profiles in no fixed order. With no error, the answer
+that name. It gives the profiles in no fixed order. With no error, the answer
 has no profile. `machinePools` stays empty: the route checks no machine. The
 route does not say whether the change repaves: `validate/repave` answers that.
 
-A refusal of the whole request, from the YAML check of step 1, from steps 3 and
-4, and from step 5 before the values and the dependencies, is HTTP `500` with
-`code` and `message`. Palette gives each new error the response type of a
-server fault, and these errors set no other type. So a refusal by design
-arrives with the status of a fault. The codes are in
+Some checks refuse the whole request: the YAML check of step 1, steps 3, 4,
+and 5, and the check of a disabled pack in step 6. Such a refusal is HTTP `500`
+with `code` and `message`. Palette gives each new error the response type of a
+server fault, and these errors set no other type. So a planned refusal has the
+status of a fault. The codes are in
 [Refusals that strata does not send again](../../reference/errors.md#refusals-that-strata-does-not-send-again).
+
 One refusal sets another type: `PackValuesOverrideForbidden` is HTTP `403`.
 A cluster that does not exist is HTTP `404`.
 
@@ -108,17 +115,17 @@ cluster A: see [repave.sh](../../development/live-runs.md#repavesh).
 ## POST /v1/clusterprofiles/validate/packs
 
 This route checks the packs of a profile before a create. The body is a
-`v1ClusterProfileTemplateDraft`: `cloudType`, `type`, and `packs[]`, each a
-`v1PackManifestEntity` with `name`, `tag`, `uid`, `registryUid`, `type`,
+`v1ClusterProfileTemplateDraft`: `cloudType`, `type`, and `packs[]`. Each pack
+is a `v1PackManifestEntity` with `name`, `tag`, `uid`, `registryUid`, `type`,
 `layer`, `values`, and `manifests[]` of `name` and `content`. The route writes
 nothing, and does not check the name or the version of the profile.
 `snapshot --from-candidate --validate` sends it.
 
 The checks, in order:
 
-1. The body holds one pack or more. The converter of the route refuses an
-   empty `packs` with HTTP 400 and the code `ShouldNotBeEmpty`, before the
-   checks below. A live request shows it:
+1. The body holds one pack or more. Palette refuses an empty `packs` with
+   HTTP 400 and the code `ShouldNotBeEmpty`, before the checks below. A live
+   request shows it:
    `Parameter 'Packs' should not be empty`.
 2. The body holds no more than one dashboard pack:
    `ClusterDashboardPacksMutuallyExclusive`.
@@ -137,8 +144,9 @@ The validator gives an error of a pack in a `200` answer:
 `packs.results[]`, each with the `name` of a pack and `errors[]` of `code` and
 `message`. With no error, `results` is empty. Each other check refuses the
 whole request with a `V1Error` of `code` and `message`. Palette gives these
-errors the response type of a server fault, so each one is HTTP 500. A live
-run shows it: values that are not YAML get HTTP 500 with the code
+errors the response type of a server fault, so each one is HTTP 500.
+
+A live run shows it: values that are not YAML get HTTP 500 with the code
 `PackValuesYamlInvalid` and the message
 `Pack 'cert-manager' values yaml is invalid`. Strata reads a 500 with a code
 of these two routes as the answer of Palette, and does not send it again: see
@@ -160,10 +168,10 @@ The checks, in order:
 
 1. The body holds one pack or more, as above.
 2. The version exists, and the key can read it.
-3. Palette reads the clusters that run the version. A pack of the body whose
-   name a pack of another profile of such a cluster also has, in the same
-   workload scope, is a refusal: `ClusterProfilePacksInConflict`, with the
-   names of the clusters.
+3. Palette reads the clusters that run the version. It refuses a pack of the
+   body when another profile of such a cluster has a pack of that name in the
+   same workload scope. The refusal is `ClusterProfilePacksInConflict`,
+   with the names of the clusters.
 4. The limits, the dashboard packs, and the YAML, as above.
 5. The pack validator, as above. It also checks the dependencies over the packs
    that each such cluster runs.
@@ -202,30 +210,16 @@ of a cloud account calls it. A cluster create does not.
 The routes check the entity and the cloud account. A policy, a permission, a
 cloud API that is off, an instance type in a zone, a quota, the count of zones
 of EKS, and the release channel of GKE are checks of the cloud, and no route
-runs them: hubble has no call to `SimulatePrincipalPolicy` or
-`testIamPermissions`. `strata preflight` runs the tool of the cloud for some of
+runs them. Palette does not ask the cloud to simulate a policy or to test a
+permission. `strata preflight` runs the tool of the cloud for some of
 these, and prints `NOT CHECKED` with the command for the rest: see
 [What strata preflight does not check](limits.md#what-strata-preflight-does-not-check).
 
 ## Where these answers come from
 
-The source of hubble on master:
-`services/service/spectrocluster/internal/service/spectrocluster/internal/base/spectrocluster_validate.go`
-(the profiles and the machines), `internal/base/spectrocluster_profile.go` and
-`internal/base/spectrocluster_base.go` in the same directory (`validate/packs`
-of a cluster, and the shape of its answer),
-`internal/base/spectrocluster_pack.go` in the same directory (`validate/packs`
-of a profile version),
-`services/service/spectrocluster/internal/service/clusterprofile/clusterprofile_service.go`
-and `../pack/pack_validate.go` (the checks of the packs of a profile),
-`handler/converter/v1/clusterprofiles_v1_converter.go` lines 265-283 and
-`svcclient/validator/params_validator.go` lines 41-45 (an empty `packs`),
-`base/herr/err_pack.go` (the codes),
-`handler/converter/v1/clusters_v1_converter.go`
-(the converter, and the GKE pool size), `aws/spectrocluster_aws_validate.go`
-(the zones and the CIDRs of AWS), and
-`services/service/cloud/internal/service/cloudservice/{aws,gcp}_service.go`
-(the property and account routes). The findings report
+The code of Palette gives the checks of each route, the codes of the
+refusals, and the shape of each answer. Each fact that names a live run comes
+from that run. The findings report
 `palette-precreate-validation-gaps-findings-2026-09-28` lists each check that
 no route runs, and proposes the ones that fit a validate route to Spectro
 Cloud.

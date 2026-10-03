@@ -731,9 +731,9 @@ pub struct Pack {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub charts: Vec<PackChart>,
     /// For a pack that strata reads from the registry, of a candidate or of a `pack:` record:
-    /// each option of the pack template that the values select,
-    /// sorted by parameter. Palette can write the presets of such an option into the values, and
-    /// no route shows them. Outside the root: the values are in it.
+    /// each option of the pack template that the values select, sorted by parameter. Palette can
+    /// write the presets of such an option into the values, and no route shows them. Outside the
+    /// root: the values are in it.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub preset_options: Vec<PresetOption>,
     /// The three sub-hashes and the node hash.

@@ -376,9 +376,9 @@ fn first_part(body: &str) -> String {
     }
 }
 
-/// The codes of the refusals that Palette answers with HTTP 500. Palette gives a new error the
-/// response type of a server fault, and these constructors set no other type, so a refusal by
-/// design arrives as a 5xx. A retry gets the same refusal.
+/// The codes of the refusals that Palette answers with HTTP 500. Palette gives these errors the
+/// response type of a server fault, so a refusal by design arrives as a 5xx. A retry gets the
+/// same refusal.
 pub const REFUSAL_CODES: [&str; 7] = [
     "DeletionResourceInUseError",
     "ResOperationForbidden",
@@ -408,9 +408,9 @@ pub const PACK_REFUSAL_CODES: [&str; 11] = [
 ];
 
 /// The codes of the refusals of the whole request that `POST /v1/clusterprofiles/validate/packs`
-/// and `POST /v1/clusterprofiles/{uid}/validate/packs` answer with HTTP 500: the six checks before
-/// the pack validator in `ValidatePacks` and `ValidateUpdatePacks` of hubble. `snapshot
-/// --validate` reads them as the answer of Palette. A retry gets the same refusal.
+/// and `POST /v1/clusterprofiles/{uid}/validate/packs` answer with HTTP 500: the six checks that
+/// Palette does before it checks each pack. `snapshot --validate` reads them as the answer of
+/// Palette. A retry gets the same refusal.
 pub const PROFILE_PACK_REFUSAL_CODES: [&str; 6] = [
     "ClusterDashboardPacksMutuallyExclusive",
     "PackValuesYamlInvalid",
@@ -420,9 +420,9 @@ pub const PROFILE_PACK_REFUSAL_CODES: [&str; 6] = [
     "ClusterProfilePacksInConflict",
 ];
 
-/// The code of the one refusal of `validate/packs` that Palette answers with HTTP 403, and not
-/// 500: its constructor sets the response type `Forbidden`. A pack that an integration pack
-/// needs read-only has values other than its defaults. `compare --validate` reads it as the
+/// The code of the one refusal of `validate/packs` that Palette answers with HTTP 403 and the
+/// response type `Forbidden`, and not with 500. Palette gives it when a pack that an integration
+/// pack needs read-only has values other than its defaults. `compare --validate` reads it as the
 /// answer of Palette.
 pub const PACK_FORBIDDEN_CODE: &str = "PackValuesOverrideForbidden";
 

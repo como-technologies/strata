@@ -60,8 +60,8 @@ A record that is empty or is not JSON is `not-snapshot`.
 
 Strata sends a request again after HTTP 5xx (see
 [Settings](./settings.md)). Palette also answers some refusals with HTTP `500`.
-A refusal stays while the request stays, so a second request gets the same
-refusal. When the body of a 5xx has one of these codes in `code`, strata does
+If the request does not change, the refusal does not change. A second request
+gets the same refusal. When the body of a 5xx has one of these codes in `code`, strata does
 not send the request again. The error is `api`, with the status that Palette
 sent.
 
@@ -85,14 +85,14 @@ HTTP `500` and one of these codes. Strata does not send it again, and
 | --- | --- |
 | `PackValuesYamlInvalid` | Pack values that are not YAML. |
 | `PackManifestYamlInvalid` | A manifest of a pack that is not YAML. |
-| `ClusterDashboardPacksMutuallyExclusive` | Two dashboard packs that cannot go together. |
+| `ClusterDashboardPacksMutuallyExclusive` | Two dashboard packs that exclude each other. |
 | `InvalidName` | A pack or a manifest with a name that is not valid. |
 | `DuplicatePacksForbidden` | One pack two times in a profile. |
 | `DuplicatePackManifestsForbidden` | One manifest two times in a pack. |
 | `DuplicateClusterPacksForbidden` | One pack in two profiles of the cluster. |
 | `MultiPackVersionsForbidden` | Two versions of one pack across the profiles. |
 | `PackSpectroIntegrationNotSupported` | An integration pack that the cloud, or an imported cluster, does not support. |
-| `ClusterProfileOidcNotConfigured` | An integration pack whose OIDC identity provider is set in neither the Kubernetes pack nor the organization. |
+| `ClusterProfileOidcNotConfigured` | An integration pack that needs an OIDC identity provider, when neither the Kubernetes pack nor the organization gives one. |
 | `DisabledPacksForbidden` | A pack that is disabled. |
 
 The same route refuses one more case with HTTP `403`, and not `500`:
@@ -109,16 +109,17 @@ HTTP `500` and one of these codes. Strata does not send it again, and
 
 | Code | Palette refuses |
 | --- | --- |
-| `ClusterDashboardPacksMutuallyExclusive` | Two dashboard packs that cannot go together. |
+| `ClusterDashboardPacksMutuallyExclusive` | Two dashboard packs that exclude each other. |
 | `PackValuesYamlInvalid` | Pack values that are not YAML. |
 | `PackManifestYamlInvalid` | A manifest of a pack that is not YAML. |
 | `DisabledPacksForbidden` | A pack that is disabled. |
 | `SubResourceLimitValidationFailure` | More than 200 packs, or more than 200 manifests. |
-| `ClusterProfilePacksInConflict` | For the route of an update: a pack whose name a pack of another profile of a cluster that runs the version also has. |
+| `ClusterProfilePacksInConflict` | For the route of an update: a pack name that is also in another profile of a cluster that runs the version. |
 
-A candidate with values or a manifest that are not YAML, or with more than 200
-packs or manifests, does not get to this route: strata refuses it before any
-request, as `candidate-invalid` with the same code. See
+Strata refuses some candidates before any request, so they do not reach this
+route. These are a candidate with values or a manifest that are not YAML, and a
+candidate with more than 200 packs or manifests. The error is
+`candidate-invalid`, with the same code. See
 [Checks before any request](candidate-file.md#checks-before-any-request).
 
 A 5xx with a different code, or with no code, is a fault. Strata sends the

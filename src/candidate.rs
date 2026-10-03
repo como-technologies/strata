@@ -1,11 +1,11 @@
 //! A profile version that does not exist in Palette yet, described by a file.
 //!
-//! The file names each layer's pack by name, version, and registry, and carries the values and
-//! manifests the profile will have. Strata looks each pack up in the registry for what Palette
-//! fills in on publication (the pack uid, the tag, the digest, and the default values) and builds
-//! the same documents a published profile returns, so the candidate hashes exactly as the
-//! published version will. A `manifest` layer holds manifests from no registry: strata makes
-//! no request for it, and its pack has no uid until Palette mints one at the create.
+//! The file names the pack of each layer by name, version, and registry, and holds the values
+//! and manifests that the profile will have. Strata reads each pack from the registry for what
+//! Palette adds at the publish: the pack uid, the tag, the digest, and the default values. It
+//! builds the same documents that a published profile gives, so the candidate has the same root
+//! as the published version. A `manifest` layer holds manifests from no registry. Strata makes no
+//! request for it, and its pack has no uid until Palette mints one at the create.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -271,19 +271,16 @@ const MANIFEST_LAYER: &str = "addon";
 /// The layer of the pack that Palette makes for a layer from a registry that it does not sync.
 const UNSYNCED_LAYER: &str = "addon";
 
-/// The most packs, and the most manifests, that Palette takes in one profile
-/// (`GetClusterProfileResourceLimits`, `hubble/domain/clusterprofile.go:786-797`). A manifest
-/// layer counts as one manifest more.
+/// The most packs, and the most manifests, that Palette takes in one profile. A manifest layer
+/// counts as one manifest more.
 const PROFILE_LIMIT: usize = 200;
 
-/// The longest name that Palette takes for a manifest or a manifest pack
-/// (`DNS1123LabelMaxLength`, `hubble/domain/validator/validate_k8s.go:70`).
+/// The longest name that Palette takes for a manifest or a manifest pack.
 const NAME_LIMIT: usize = 32;
 
-/// Whether Palette takes `v` as the version of a profile. `semver.ParseStrict` gives it to
-/// `NewVersion` of `github.com/Masterminds/semver` v1.5.0, which takes an optional `v`, one to
-/// three numbers, a pre-release, and build data: so `1.1` and `v1.2.3` pass, and
-/// `2.2.2.develop` does not (`hubble/util/semver/semver.go:95-103`).
+/// Whether Palette takes `v` as the version of a profile. Palette takes an optional `v`, one to
+/// three numbers, a pre-release, and build data. So `1.1` and `v1.2.3` pass, and
+/// `2.2.2.develop` does not.
 fn palette_version(v: &str) -> bool {
     let ident = |s: &str| {
         s.split('.')
@@ -308,7 +305,7 @@ fn palette_version(v: &str) -> bool {
 }
 
 /// Whether Palette takes `name` as the name of a manifest or of a manifest pack: a DNS-1123
-/// label of 32 characters at most (`IsValidName`, `hubble/domain/validator/validate_k8s.go:79-88`).
+/// label of 32 characters at most.
 fn palette_name(name: &str) -> bool {
     let b = name.as_bytes();
     let inner = |c: &u8| c.is_ascii_lowercase() || c.is_ascii_digit() || *c == b'-';
@@ -319,8 +316,7 @@ fn palette_name(name: &str) -> bool {
 }
 
 /// The names that are in `names` more than once, each one time, in the order of their first
-/// repeat. Palette compares the names as they are (`FindDuplicates`,
-/// `hubble/util/list/list_utils.go:150-164`).
+/// repeat. Palette compares the names as they are.
 fn repeated<'a>(names: impl IntoIterator<Item = &'a str>) -> Vec<&'a str> {
     let mut seen = std::collections::BTreeSet::new();
     let mut out = Vec::new();
@@ -332,9 +328,8 @@ fn repeated<'a>(names: impl IntoIterator<Item = &'a str>) -> Vec<&'a str> {
     out
 }
 
-/// The layers that a profile of type `kind` takes (`validatePackLayersByType`,
-/// `clusterprofile_validate.go:811-874`): each layer for `cluster`; `os`, `k8s`, `cni`, and `csi`
-/// for `infra`; `addon`, `cni`, and `csi` for each other type. None for each layer.
+/// The layers that a profile of type `kind` takes: each layer for `cluster`; `os`, `k8s`, `cni`,
+/// and `csi` for `infra`; `addon`, `cni`, and `csi` for each other type. None for each layer.
 fn layers_of_type(kind: &str) -> Option<&'static [&'static str]> {
     match kind {
         "" | "cluster" | PACK_TYPE => None,
@@ -343,9 +338,8 @@ fn layers_of_type(kind: &str) -> Option<&'static [&'static str]> {
     }
 }
 
-/// The layers that a `cluster` or `infra` profile must have (`GetMandatoryInfraPackLayers`,
-/// `hubble/domain/pack.go:1143-1150`): `os`, `k8s`, and `cni` on the cloud `edge-native`, and
-/// `csi` too on each other cloud. None for each other type.
+/// The layers that a `cluster` or `infra` profile must have: `os`, `k8s`, and `cni` on the cloud
+/// `edge-native`, and `csi` too on each other cloud. None for each other type.
 fn core_layers(kind: &str, cloud: &str) -> Option<&'static [&'static str]> {
     match (kind, cloud) {
         ("cluster" | "infra", "edge-native") => Some(&["os", "k8s", "cni"]),
@@ -403,8 +397,7 @@ fn check_layers(c: &Candidate, layers: &[Option<&str>]) -> std::result::Result<(
     Ok(())
 }
 
-/// The cloud types that Palette knows (`toCloudType`, `hubble/cloudtypes/cloudtypes.go:44-59`).
-/// Each other cloud type is a custom cloud.
+/// The cloud types that Palette knows. Each other cloud type is a custom cloud.
 const KNOWN_CLOUDS: &[&str] = &[
     "all",
     "baremetal",
@@ -423,8 +416,8 @@ const KNOWN_CLOUDS: &[&str] = &[
 ];
 
 /// Whether a pack whose listing gives the cloud types `clouds` goes in a profile of the cloud
-/// `cloud` (`IsCloudSupported`, `hubble/domain/pack.go:1345-1356`): the cloud `all`, a pack with
-/// no cloud type, a pack of that cloud or of `all`, and a pack of `custom` on a custom cloud.
+/// `cloud`: the cloud `all`, a pack with no cloud type, a pack of that cloud or of `all`, and a
+/// pack of `custom` on a custom cloud.
 fn cloud_supported(cloud: &str, clouds: &[String]) -> bool {
     let custom = !KNOWN_CLOUDS.contains(&cloud);
     cloud == "all"
@@ -552,8 +545,8 @@ pub fn check(candidate: Candidate, path: &Path) -> Result<LoadedCandidate> {
             }
             Some(other) => {
                 return Err(invalid(format!(
-                    "{whom} has type {other}; only manifest is allowed, and the registry gives \
-                     the type of each other pack"
+                    "{whom} has type {other}; a layer can give only the type manifest, and the \
+                     registry gives the type of each other pack"
                 )));
             }
         };
@@ -790,11 +783,10 @@ struct Unsynced {
 
 /// Whether Palette syncs the registry `uid`. It does not sync a Helm registry that is private,
 /// or an OCI registry of the provider type `helm` or `zarf` with sync off, so the pack listing
-/// has no pack of it. Palette makes the pack of such a layer when it creates the profile
-/// (`isPackCreationRequired` in hubble `pack_service.go`). `GET /v1/registries/metadata` gives
-/// the kind and `isPrivate`, and `GET /v1/registries/oci/summary` gives the provider type and
-/// `status.sync.isSyncSupported`. None for a registry that syncs, and when Palette answers either
-/// listing with a 4xx.
+/// has no pack of it. Palette makes the pack of such a layer when it creates the profile.
+/// `GET /v1/registries/metadata` gives the kind and `isPrivate`, and
+/// `GET /v1/registries/oci/summary` gives the provider type and `status.sync.isSyncSupported`.
+/// None for a registry that syncs, and when Palette answers either listing with a 4xx.
 fn unsynced<A: PaletteApi>(palette: &Palette<A>, uid: &str) -> Result<Option<Unsynced>> {
     // the entry of the registry in a listing; none when Palette answers the listing with a 4xx
     let find = |path: &str, ptr: &str| -> Result<Option<Value>> {
@@ -843,11 +835,10 @@ fn unsynced<A: PaletteApi>(palette: &Palette<A>, uid: &str) -> Result<Option<Uns
     }
 }
 
-/// True when Palette takes `tag` as the version of a pack that it makes: a semantic version in
-/// the loose form of Masterminds semver 1.5 (`v1`, `1.2`, `1.2.3-rc.1+b5`), or a text that holds
-/// three numbers with dots between them (`chart-1.2.3`). hubble `util/semver` `Parse` tries the
-/// first, then the second; `createPackDoc` refuses the create with `InvalidPackVersion` when
-/// both fail.
+/// True when Palette takes `tag` as the version of a pack that it makes. Palette takes a semantic
+/// version in a loose form (`v1`, `1.2`, `1.2.3-rc.1+b5`), or a text that holds three numbers with
+/// dots between them (`chart-1.2.3`). When both fail, Palette refuses the create with
+/// `InvalidPackVersion`.
 fn palette_parses_version(tag: &str) -> bool {
     let ids = |s: &str| {
         s.split('.')
@@ -1083,9 +1074,8 @@ fn text(v: &Value, ptr: &str) -> Option<String> {
 /// entry of the pack version in the listing, which gives the template in
 /// `spec.template.parameters.inputParameters`. On a create and an update of a profile, Palette
 /// reads the value at the `targetKey` of each input parameter as text, and when the text names
-/// one of its `options`, writes the presets of that option into the values
-/// (`doutil.AddPackParameterPresets`). The listing gives each option with no presets, so strata
-/// records the selection and does not change the values.
+/// one of its `options`, writes the presets of that option into the values. The listing gives
+/// each option with no presets, so strata records the selection and does not change the values.
 pub(crate) fn preset_options(summary: &Value, values: &str) -> Vec<PresetOption> {
     let params = summary
         .pointer("/spec/template/parameters/inputParameters")
@@ -1178,9 +1168,9 @@ pub fn warn_preset_options(snap: &Snapshot, progress: &Progress) {
     for p in &snap.packs {
         for o in &p.preset_options {
             progress.warn(&format!(
-                "{}: the values select the option {} of {} ({}); Palette can write the presets of \
-                 that option into the values, and no route of Palette shows them, so the root can \
-                 differ from the version that Palette publishes",
+                "{}: the values select the option {} of {} ({}). Palette can write the presets of \
+                 that option into the values, and no route of Palette shows them. So the root \
+                 can differ from the version that Palette publishes",
                 p.name, o.option, o.parameter, o.target_key
             ));
         }
@@ -1244,7 +1234,7 @@ pub fn resolve<A: PaletteApi>(
     let mut refs = Vec::with_capacity(c.layers.len());
     let mut entries = Vec::with_capacity(c.layers.len());
     // the layer that Palette gives each pack: the layer of the pack in its registry, not the
-    // layer of the request (`ToPackRef`, `pack_service.go:722-747`)
+    // layer of the request
     let mut palette_layers: Vec<String> = Vec::with_capacity(c.layers.len());
     let invalid = |message: String| Error::CandidateInvalid {
         path: loaded.path.clone(),
@@ -1319,8 +1309,8 @@ pub fn resolve<A: PaletteApi>(
                     registry_ref.text()
                 ),
             };
-            // the pack that Palette makes has the layer addon and the tag as its version
-            // (`createPackDoc`), and a profile takes both from it (`ToPackRef`)
+            // the pack that Palette makes has the layer addon and the tag as its version, and a
+            // profile takes both from it
             if let Some(layer) = l.layer.as_deref().filter(|&x| x != UNSYNCED_LAYER) {
                 return Err(invalid(format!(
                     "Palette gives the pack that it makes the layer {UNSYNCED_LAYER}, not \
@@ -1356,7 +1346,6 @@ pub fn resolve<A: PaletteApi>(
                 pack_ref["annotations"] = json!({ "ociRegistryProviderType": t });
             }
             // the pack that Palette makes has no cloud type, so each cloud takes it
-            // (`createPackDoc`, `pack_service.go:570-585`)
             palette_layers.push(UNSYNCED_LAYER.to_string());
             refs.push(pack_ref);
             entries.push(json!({
@@ -1388,7 +1377,6 @@ pub fn resolve<A: PaletteApi>(
             });
         }
         // Palette refuses a pack that does not support the cloud of the profile
-        // (`ConstructPackRefs`, `pack_service.go:424-426`)
         let clouds: Vec<String> = summary
             .pointer("/spec/cloudTypes")
             .and_then(Value::as_array)
@@ -1560,7 +1548,7 @@ mod tests {
         let mut c = manifest_candidate();
         c.registry = Some("Public Repo".into());
         let loaded = check(c, Path::new("c.yaml")).unwrap();
-        // the API knows no path: each request would fail
+        // the API knows no path: each request fails
         let raw = resolve(
             &loaded,
             &Palette::new(MemoryApi::new()),
@@ -1659,7 +1647,7 @@ mod tests {
 
     #[test]
     fn a_version_that_semver_of_palette_does_not_parse_is_candidate_invalid() {
-        // Masterminds/semver v1.5.0 takes an optional v and one to three numbers
+        // Palette takes an optional v and one to three numbers
         for ok in [
             "1.1",
             "v1.2.3",
@@ -1946,7 +1934,7 @@ mod tests {
                 .contains("layer 1 (kubernetes) has the layer k8s"),
             "{err}"
         );
-        // and a missing core layer that only the registry shows
+        // and a core layer that is not there, which only the registry shows
         let mut c = stack();
         c.layers[0].layer = None;
         let mut layers = STACK_LAYERS;

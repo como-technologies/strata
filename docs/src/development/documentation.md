@@ -35,6 +35,11 @@ cargo install mdbook mdbook-mermaid mdbook-gruvbox mdbook-lint
    establishes it to
    [What the live example verifies](./live-runs.md). Neither page tells the
    reader which day a run happened on.
+7. **Do not cite the code of Palette.** A page or a code comment states what
+   Palette does. It does not give a path, a line number, or a function name
+   from the code of Spectro Cloud. That code changes, and the reference becomes
+   wrong. Give the error code that Palette returns, or link the live run that
+   shows the behavior.
 
 ## Where a page goes
 
@@ -124,6 +129,8 @@ Test each sentence: does it tell an expert something that the command, the
 heading, and their own knowledge do not? If not, delete it.
 
 - Write short sentences: 20 words or fewer in a procedure, 25 in a description.
+- Put six sentences or fewer in a paragraph, and three words or fewer in a noun
+  cluster.
 - Use the active voice and the present tense.
 - Write one instruction in each sentence. Start a condition with "if" or "when".
 - Use "can" and "must". Do not use "may", "might", "should", or "would". Use

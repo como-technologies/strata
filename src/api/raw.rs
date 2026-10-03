@@ -126,8 +126,8 @@ const MASKED: &str = "********";
 
 /// A copy of `notifications` with each value field of each event masked, so a raw directory holds
 /// no secret of a pack. The mask covers all of the values, not only the fields that
-/// `passwordFields` names: a value can hold a secret that the pack does not mark. No reading of
-/// strata uses these fields.
+/// `passwordFields` names: a value can hold a secret that the pack does not mark. Strata reads
+/// none of these fields.
 fn masked_notifications(notifications: &Value) -> Value {
     let mut out = notifications.clone();
     let events = out
@@ -182,8 +182,8 @@ impl RawProfile {
         })
     }
 
-    /// Write the three files and `scope.json` under `dir`, creating it, and the manifests of a
-    /// profile that has a draft.
+    /// Write the three files and `scope.json` under `dir`, and make `dir` if it is not there. For
+    /// a profile that has a draft, also write its manifests.
     pub fn save_dir(&self, dir: &Path, fetched_at: &str) -> Result<()> {
         let scope = scope_document(&self.project_uid, fetched_at, self.variables_unavailable);
         let mut files = vec![
@@ -275,7 +275,8 @@ impl RawCluster {
     pub const NOTIFICATIONS: &'static str = "notifications.json";
 
     /// Write the three files, the notifications when they were read, and `scope.json` under
-    /// `dir`, creating it. The saved notifications hold the values of each pack masked.
+    /// `dir`, and make `dir` if it is not there. Strata masks the values of each pack in the saved
+    /// notifications.
     pub fn save_dir(&self, dir: &Path, fetched_at: &str) -> Result<()> {
         let scope = scope_document(&self.project_uid, fetched_at, self.variables_unavailable);
         let mut files: Vec<(&str, &Value)> = vec![

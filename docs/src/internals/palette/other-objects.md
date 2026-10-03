@@ -38,7 +38,7 @@ profile template in the shape of `spec.clusterProfileTemplates`:
 - Palette masks the sensitive values in the answer. When nothing waits, the
   pending record and the cluster record have one root all the same.
 
-The Spectro Cloud source gives the rule: Palette puts the profile as it is now
+The code of Palette gives the rule: Palette puts the profile as it is now
 in place of each profile that the open notification names, and keeps the other
 profiles of the cluster.
 
@@ -107,15 +107,12 @@ manifests. The content of a manifest comes from
   that use the app profile version, each with `uid`, `name`, `projectUid`, and
   `kind`. Palette computes the list when it is asked: each app deployment that
   is not deleted and whose `spec.profile.metadata.uid` is the version, in the
-  projects the key can read (hubble
-  `resrelation/internal/resrelation_service.go`,
-  `GetAppDeploymentsMetaForAppProfileByAcl`).
+  projects the key can read. The code of Palette gives this rule.
 - `GET /v1/appDeployments/<uid>` gives one app deployment: the version its copy
   names in `spec.profile.metadata.version`, and its state in `status.state`:
   `Pending`, `Deploying`, `Deployed`, or `Updating`.
-- Palette refuses the delete of an app profile while an app deployment uses it
-  (hubble `appprofile/appprofile_validate.go`, `validateDelete` and
-  `checkDependentResources`, from `DeleteAppProfile`). The check reads the
+- Palette refuses the delete of an app profile while an app deployment uses it.
+  The code of Palette gives this rule. The check reads the
   deployments of all projects, and not only those the key can read. So a
   deployment that the key cannot read is not in `status.inUseApps`, and it
   still stops the delete. `consumers` reads the list:
@@ -124,5 +121,6 @@ manifests. The content of a manifest comes from
   filters by name, cluster, and tag, and not by profile. So `consumers` does no
   second reading for an app profile.
 
-A live run shows each rule on this page that does not name the source. See
+A live run shows each rule on this page, except a rule that comes from the
+code of Palette. See
 [What the live example verifies](../../development/live-runs.md).

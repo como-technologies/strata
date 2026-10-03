@@ -120,7 +120,7 @@ fn a_masked_draft_has_the_values_digest_of_the_version_that_palette_masks() {
     let b = snapshot(&published).unwrap();
     assert_eq!(a.packs[0].values_hash, b.packs[0].values_hash);
     assert_eq!(a.content_digest(), b.content_digest());
-    // a published profile is masked by Palette: strata reads no schema for it
+    // Palette masks a published profile: strata reads no schema for it
     assert_eq!(published.calls(&format!("/v1/packs/{PACK}")), 0);
 }
 

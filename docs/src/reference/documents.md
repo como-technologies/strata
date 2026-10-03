@@ -114,11 +114,11 @@ profile, or pack version.
     `pack.content.charts`. Both are outside the root: the values are in it. A
     record written before these fields gets them from its values when strata
     reads it.
-  - `presetOptions[]`, only for a pack that strata reads from the registry, of
-    a candidate or of a `pack:` record, whose values select an option of the
-    pack template: `parameter`, `targetKey`, and `option` of
-    each selection, sorted by parameter. Palette can write the presets of
-    such an option into the values: see
+  - `presetOptions[]`: `parameter`, `targetKey`, and `option` of each
+    selection, sorted by parameter. Only a pack that strata reads from the
+    registry, for a candidate or a `pack:` record, has it. The values of the
+    pack must select an option of the pack template. Palette can write the
+    presets of such an option into the values: see
     [Template options](candidate-file.md#template-options). It is outside the
     root.
   - `hash`: `identity`, `upstream`, `upstreamRaw`, `upstreamSource`,

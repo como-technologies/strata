@@ -80,8 +80,8 @@ describes that version. Write one from the published 1.0.0 in dev:
 {{#include ../output/manifest-candidate.txt}}
 ```
 
-The layer has `type: manifest` and no registry. Keep the file in a repository,
-and review each change to the manifest in a pull request. Make the record of the
+The layer has `type: manifest` and no registry. Keep the file in a repository.
+Review each change to the manifest in a pull request. Make the record of the
 file:
 
 ```text
@@ -99,7 +99,7 @@ alone, and `same-release` passes the pair:
 
 `mintedUidOnly` names each pack whose only difference is the pack uid. Here the
 file comes from the published 1.0.0, so the pair passes. Do the same after you
-publish a changed file: record the new version, and give `same-release` the
+publish a changed file. Record the new version. Then give `same-release` the
 record of the file and the record of the version. A pass shows that Palette
 holds the release that you reviewed.
 

@@ -1,9 +1,9 @@
 # Palette API requests
 
 Strata reads. Most requests are `GET` requests. Eight are `POST` requests, and
-none of them changes anything: four are searches that Palette takes as a
-`POST`, and `compare --repave`, `compare --validate`, and `snapshot --validate`
-ask Palette a question. Each request has the
+none of them changes anything. Four are searches that Palette takes as a
+`POST`. With the other four, `compare --repave`, `compare --validate`, and
+`snapshot --validate` ask Palette a question. Each request has the
 headers `ApiKey` and `Accept: application/json`. A request in a project has
 the header `ProjectUid` too. The
 [Palette API reference](https://docs.spectrocloud.com/api/v1/) gives the shape

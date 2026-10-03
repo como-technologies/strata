@@ -103,8 +103,8 @@ fn cluster_and_target<'a>(
     Ok((cluster, target))
 }
 
-/// Ask Palette whether moving the cluster side of a comparison to its profile side repaves the
-/// cluster. One side must be a cluster, and the other a profile version with a uid, in either
+/// Ask Palette whether a move of the cluster side of a comparison to its profile side repaves
+/// the cluster. One side must be a cluster, and the other a profile version with a uid, in either
 /// order. It reads the cluster document for the profiles it runs now, and sends one POST, which
 /// changes nothing. `level` is the most severe level of the impact table, for `agrees`.
 pub fn palette_repave<A: PaletteApi>(

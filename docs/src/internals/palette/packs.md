@@ -74,15 +74,14 @@ dotted path in the values, and `options`. An option can have presets: keys, each
 with a value. On a create and on an update of a profile, Palette reads the
 value at the `targetKey` as text. When the text is the name of an option,
 Palette writes each preset of that option into the values of the pack. It adds a
-key that is not there, and it replaces a key that is there
-(`doutil.AddPackParameterPresets`, `hubble/doutil/pack-util.go`).
+key that is not there, and it replaces a key that is there.
 
 No route of Palette gives the presets of an option. The listing (`spec.template`
 of `GET /v1/packs`) and the tags route (`packValues[].template` of
 `GET /v1/packs/<name>/registries/<uid>`) give each input parameter with its
 `targetKey` and its `options`. Each option has only `label`, `description`, and
-`dependencies`: the API type `v1PackTemplateParameterOption` has no presets, and
-the converter of Palette drops them. The `presets` of `packValues[]` are another
+`dependencies`. The API type `v1PackTemplateParameterOption` has no presets, so
+the answer does not give them. The `presets` of `packValues[]` are another
 list: the presets of the pack, and not of a template option.
 
 For example, the `headlamp` 0.45.0 template has the parameter `access` at
@@ -136,7 +135,7 @@ OCI pack registry of the example's own, after Palette reads the registry again:
 So a published version follows the registry, with no request from a person: a
 push to the registry is enough, when the profile keeps the values of the pack.
 The version keeps its uid and its number. `verify` on the record of the profile
-is what finds it, and `--who` names the service. The Spectro Cloud source gives
+is what finds it, and `--who` names the service. The code of Palette gives
 the rule: a profile follows a new push of a pinned version unless a person
 changed its values from those of the pack, and it always follows a change that
 touches only the schema, the presets, or the system annotations of the pack.
@@ -276,16 +275,16 @@ equality of roots does not: see
 
 ## A pack that Palette makes at the create
 
-Palette lists no pack of a registry that it does not sync: a Helm registry that
-is private, and an OCI registry of the provider type `helm` or `zarf` with sync
-off. A profile can still pin a chart of such a registry by its name and tag,
-with no pack uid. When Palette creates the profile, it looks for a pack with
-that registry, name, and tag. When it finds none, it makes one
-(`createPackIfNotExists` and `createPackDoc` in hubble `pack_service.go`):
+Palette lists no pack of a registry that it does not sync. Such a registry is a
+private Helm registry, or an OCI registry of the provider type `helm` or `zarf`
+with sync off. A profile can still pin a chart of such a registry by its name
+and tag, with no pack uid. When Palette creates the profile, it uses the pack
+with that registry, name, and tag. When no such pack exists, Palette makes one
+with:
 
 - a new pack uid,
 - the tag as the version,
-- the layer `addon`, whatever layer the profile gives,
+- the layer `addon`, also when the profile gives another layer,
 - no digest, and no default values,
 - for an OCI registry, the provider type of the registry as an annotation.
 

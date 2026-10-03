@@ -27,6 +27,9 @@ These are hard rules. `docs/src/development/documentation.md` explains each one.
 6. **State a live result as a fact**, with no run id and no date, in
    `docs/src/internals/palette/`
    and `docs/src/development/live-runs.md`.
+7. **Do not cite the code of Palette.** No path, line number, or function name
+   from the Spectro Cloud repos in a comment or a page. State what Palette does,
+   with the error code it returns or the live run that shows it.
 
 ## Before you finish
 

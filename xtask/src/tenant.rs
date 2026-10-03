@@ -527,8 +527,7 @@ impl Tenant {
 
     /// Create and publish the add-on profile `charts-probe`, which pins the chart of
     /// [`Tenant::private_charts`] at `version`. Palette makes the pack at the create, with the uid
-    /// `pack`, the layer addon, the tag as the version, and no digest, and the listing then has it
-    /// (hubble `createPackDoc`).
+    /// `pack`, the layer addon, the tag as the version, and no digest. The listing then has it.
     pub fn chart_profile(&self, project: &str, uid: &str, pack: &str, version: &str) {
         let values = "replicaCount: 2\n";
         self.write(
@@ -1337,10 +1336,9 @@ impl Tenant {
 
     /// The answer of `POST /v1/spectroclusters/{uid}/validate/packs` for a cluster. A refusal is
     /// `(profile, pack, required, version)`: `pack` of `profile` requires `required` at `version`
-    /// or newer, and the cluster runs an older one. Palette gives the error under the profile,
-    /// with the code and the message of `hubble/base/herr/err_pack.go`, and gives no profile
-    /// when it accepts. The stand-in gives one answer for every request; it does not check
-    /// anything.
+    /// or newer, and the cluster runs an older one. Palette gives the error, with its code and
+    /// its message, under the profile, and gives no profile when it accepts. The stand-in gives
+    /// one answer for every request; it does not check anything.
     pub fn packs_answer(
         &self,
         project: &str,
@@ -1373,9 +1371,9 @@ impl Tenant {
     /// The answer of `POST /v1/clusterprofiles/validate/packs`, or of `POST
     /// /v1/clusterprofiles/{uid}/validate/packs` with `profile`. A refusal is `(pack, required,
     /// version)`: `pack` requires `required` at `version` or newer, and the packs of the body do
-    /// not hold it. Palette gives the error under `packs.results`, with the code and the message
-    /// of `hubble/base/herr/err_pack.go`, and gives an empty `results` when it accepts. The
-    /// stand-in gives one answer for every request; it does not check anything.
+    /// not hold it. Palette gives the error, with its code and its message, under
+    /// `packs.results`, and gives an empty `results` when it accepts. The stand-in gives one
+    /// answer for every request; it does not check anything.
     pub fn profile_packs_answer(
         &self,
         project: &str,
@@ -1558,7 +1556,7 @@ impl Tenant {
 
     /// Give one version of a pack in the listing of the Public Repo a template, as
     /// `spec.template` of `v1PackSummarySpec`. Palette gives each option of an input parameter
-    /// with its label and dependencies, and with no presets: its converter drops them.
+    /// with its label and dependencies, and with no presets.
     pub fn pack_template(&self, project: &str, name: &str, version: &str, template: &Value) {
         let path = format!("v1/packs@filters=spec.name={name}&limit=100&offset=0");
         let mut listing = self.read(project, &path);

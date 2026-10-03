@@ -54,5 +54,5 @@ answers for one cluster. So are an edge host and a cluster group:
 {{#include ../../output/validate-usage.txt}}
 ```
 
-`--repave` and `--validate` go together on one command: strata prints the two
+One command can take `--repave` and `--validate`: strata prints the two
 answers.

@@ -315,7 +315,7 @@ fn a_permanent_500_fails_with_the_last_error_after_the_configured_attempts() {
 fn a_500_that_palette_gives_for_a_refusal_is_not_retried() {
     let dir = tempfile::tempdir().unwrap();
     common::make_fixtures(dir.path());
-    // The body of a live refusal: a profile that a template uses cannot be deleted.
+    // The body of a live refusal: Palette does not delete a profile that a template uses.
     let body = r#"{"code":"DeletionResourceInUseError","details":null,"message":"Unable to delete the resource as strata-live-template clustertemplate(s) in-use","ref":"x"}"#;
     let api = serve(MemoryApi::new(), dir.path(), "a", UID_A).failing_n_times(
         profile_path(),
@@ -949,7 +949,7 @@ fn two_profiles_with_the_same_manifest_content_are_one_release_whatever_uid_pale
         .render(&d, &one, &two, false)
         .unwrap();
     assert!(
-        text.contains("the roots differ only by the packUid that Palette mints for a manifest pack or for a pack from a registry that it does not sync: the same content"),
+        text.contains("the roots differ only by the packUid that Palette mints: the same content"),
         "{text}"
     );
     assert!(
@@ -3356,7 +3356,7 @@ fn serve_registry_pack(
 }
 
 /// The fixtures, with the values of profile `b` as Palette takes them at a create: the fixture
-/// template of metrics-server is not quoted, so it is not YAML, and Palette refuses a candidate
+/// template of metrics-server has no quotes, so it is not YAML, and Palette refuses a candidate
 /// with it (`PackValuesYamlInvalid`).
 fn make_fixtures_that_palette_takes(dir: &Path) {
     common::make_fixtures(dir);
@@ -9350,8 +9350,8 @@ fn snapshot_validate_takes_a_refusal_of_the_whole_request_as_an_answer() {
         assert_eq!(v.errors[0].pack, "");
         assert_eq!(v.errors[0].line(), format!("{code}: refused"));
     }
-    // a 500 with another code is a fault of Palette, a 403 is the key, and a 400 is a body that
-    // strata got wrong: errors of strata
+    // a 500 with another code is a fault of Palette, a 403 is the key, and a 400 is a body with
+    // an error of strata: errors of strata
     for (status, code) in [
         (500, "InternalError"),
         (403, "Forbidden"),

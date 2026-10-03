@@ -232,7 +232,7 @@ and the cluster document carry the same labels.
 **Saved tag filters** belong to the tenant: `GET /v1/filters/metadata?filterType=tag`
 lists them, and `GET /v1/filters/tag/{uid}` gives the conditions of one. The
 search takes no filter uid, so strata turns the conditions into a search. The
-Spectro Cloud source gives the rest: a key with no value means the label is
+code of Palette gives the rest: a key with no value means the label is
 there, `negation` turns a condition with values over, and the search lists no
 virtual cluster unless its filter asks for the environment `nested`.
 
@@ -269,7 +269,7 @@ state and exits `1`. After, the listing drops it, the document reports
 `Deleted`, and `consumers` lists nothing and exits `0`. An apply of the Spectro
 Cloud provider then holds no cluster in the OpenTofu state.
 
-The Spectro Cloud source gives the rest of the document. The delete sets
+The code of Palette gives the rest of the document. The delete sets
 `metadata.isDeleted` to `true`, the time in `metadata.deletionTimestamp`, and
 the annotation `deleted`, and keeps the spec. So `verify` of a record of the
 cluster says `DRIFT: cluster <c> no longer exists: deleted <time>`, and not
