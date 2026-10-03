@@ -514,7 +514,8 @@ fn tenant_sh_digest_exits_2_when_the_registry_cannot_be_read() {
 /// A `curl` for api.sh: FAKE_ROUTED_CURL that also logs each request as `METHOD path` to
 /// $FAKE_LOG, keeps each request body as $FAKE_ROUTES/sent/<METHOD>_<route key>, and its query and
 /// headers, without the key, as $FAKE_ROUTES/sent/<METHOD>_<route key>.request. It also adds each
-/// body to $FAKE_ROUTES/sent/<METHOD>_<route key>.all, in the order of the requests.
+/// body to $FAKE_ROUTES/sent/<METHOD>_<route key>.all, in the order of the requests. When an
+/// executable $FAKE_ROUTES/<route key>.sh exists, its output is the body of each answer.
 const FAKE_API_CURL: &str = r#"#!/usr/bin/env bash
 out=""; write=""; url=""; method=GET; sent=""; headers=""
 while [ $# -gt 0 ]; do
@@ -535,6 +536,7 @@ mkdir -p "$FAKE_ROUTES/sent"
 [ -n "$sent" ] && cp "$sent" "$FAKE_ROUTES/sent/${method}_$key" && cat "$sent" >> "$FAKE_ROUTES/sent/${method}_$key.all"
 printf 'query=%s\n%s' "$query" "$headers" | grep -v '^ApiKey:' > "$FAKE_ROUTES/sent/${method}_$key.request"
 body="$FAKE_ROUTES/$key"; status=404
+[ -x "$body.sh" ] && "$body.sh" > "$body"
 [ -f "$body" ] && status=200 || body=/dev/null
 if [ -n "$out" ]; then cp "$body" "$out"; else cat "$body"; fi
 [ -n "$write" ] && printf '%s' "$status"
@@ -1606,6 +1608,8 @@ exit 0
 struct Stage {
     root: tempfile::TempDir,
     answers: usize,
+    /// More variables of the environment of the script.
+    env: Vec<(String, String)>,
 }
 
 impl Stage {
@@ -1616,6 +1620,7 @@ impl Stage {
             bin.clone(),
             root.path().join("routes"),
             root.path().join("strata"),
+            root.path().join("aws"),
         ] {
             std::fs::create_dir_all(d).unwrap();
         }
@@ -1633,7 +1638,11 @@ impl Stage {
         )
         .unwrap();
         std::fs::write(root.path().join("strata/rules"), "").unwrap();
-        Stage { root, answers: 0 }
+        Stage {
+            root,
+            answers: 0,
+            env: Vec::new(),
+        }
     }
 
     /// Palette answers `path`, such as `/v1/spectroclusters/c-a`, with `body` and status 200.
@@ -1653,6 +1662,11 @@ impl Stage {
         std::fs::write(dir.join("rules"), rules).unwrap();
     }
 
+    /// The script runs with the variable `key` set to `value`.
+    fn env(&mut self, key: &str, value: &str) {
+        self.env.push((key.to_string(), value.to_string()));
+    }
+
     /// A file that the stage reads, under the root.
     fn path(&self, rel: &str) -> PathBuf {
         self.root.path().join(rel)
@@ -1667,9 +1681,14 @@ impl Stage {
             ("FAKE_OUTPUTS", root.join("outputs.json")),
             ("FAKE_TOFU_LOG", root.join("tofu.log")),
             ("FAKE_STRATA", root.join("strata")),
+            ("FAKE_AWS", root.join("aws")),
         ]
         .map(|(k, v)| (k, v.display().to_string()));
-        let env: Vec<(&str, &str)> = env.iter().map(|(k, v)| (*k, v.as_str())).collect();
+        let env: Vec<(&str, &str)> = env
+            .iter()
+            .map(|(k, v)| (*k, v.as_str()))
+            .chain(self.env.iter().map(|(k, v)| (k.as_str(), v.as_str())))
+            .collect();
         let o = run_live(script, args, root, &env);
         let steps = std::fs::read_to_string(root.join("out/steps.log")).unwrap_or_default();
         (o, steps)
@@ -1941,4 +1960,128 @@ fn cluster_group_sh_stage_3_changes_the_cpu_limit_of_the_group_and_puts_it_back(
         applies[1].contains("-var cluster_group=true") && !applies[1].contains("group_cpu"),
         "the second apply gives the default limit again: {applies:?}"
     );
+}
+
+/// An `oras` that logs its arguments to $FAKE_AWS/oras.log, and prints a digest for a push.
+const FAKE_ORAS: &str = r#"#!/usr/bin/env bash
+echo "$*" >> "$FAKE_AWS/oras.log"
+[ "$1" = push ] && echo "Digest: sha256:$(printf '%s' "$*" | sha256sum | cut -c1-64)"
+exit 0
+"#;
+
+#[test]
+fn registry_sh_step_3b_deletes_the_tag_that_the_profile_pins_and_pushes_it_again() {
+    let mut stage = Stage::new(serde_json::json!({
+        "project_uid": "p-1", "cluster_uid": "c-a", "region": "us-east-2",
+        "aws_profile": "spectro-admin", "owned_registry_uid": "reg-1",
+        "owned_registry_name": "strata-live-registry", "owned_registry_host": "host.example",
+        "owned_repository": "host.example/strata/strata-live-pack",
+        "owned_pack_name": "strata-live-pack", "owned_profile_uid": "own-1",
+    }));
+    let bin = stage.path("bin");
+    executable(&bin.join("aws"), FAKE_AWS);
+    executable(&bin.join("oras"), FAKE_ORAS);
+    std::fs::write(stage.path("aws/list-images"), "[]\n").unwrap();
+    // the profile route of the stand-in keeps the flag, so the wait for the clear ends at once
+    stage.env("INVALID_MINUTES", "0");
+    // each read of the sync status gives a new run time, so each sync ends at once
+    stage.route("/v1/registries/oci/reg-1/ecr/sync", "{}");
+    executable(
+        &stage.path("routes/v1_registries_oci_reg-1_ecr_sync_status.sh"),
+        "#!/usr/bin/env bash\necho \"{\\\"status\\\":\\\"Completed\\\",\\\"lastRunTime\\\":\\\"$(date +%s%N)\\\"}\"\n",
+    );
+    stage.route(
+        "/v1/clusterprofiles/own-1",
+        r#"{"spec":{"published":{"packs":[{"name":"strata-live-pack","tag":"1.0.9",
+            "isInvalid":true,"inValidReason":"strata-live-pack 1.0.9 tag is deleted"}]}}}"#,
+    );
+    stage.strata("verify profile-1.json*", 1, "DRIFT\n");
+    stage.strata(
+        "snapshot own-1 -o deleted-before.json",
+        0,
+        r#"{"root":"aaa","packs":[{"key":"addon/strata-live-pack"}]}"#,
+    );
+    stage.strata(
+        "snapshot own-1 -o deleted-now.json",
+        0,
+        r#"{"root":"aaa","packs":[{"key":"addon/strata-live-pack","invalid":true,
+            "invalidReason":"strata-live-pack 1.0.9 tag is deleted"}]}"#,
+    );
+    stage.strata(
+        "verify deleted-before.json",
+        0,
+        "INVALID: Palette marks pack addon/strata-live-pack invalid now (strata-live-pack 1.0.9 tag is deleted)\n",
+    );
+
+    let (o, steps) = stage.run("registry.sh", &[]);
+    // the stand-ins give no OCI Helm registry, so the script stops at step 5
+    assert_eq!(o.status.code(), Some(2), "{steps}{}", text(&o.stderr));
+    assert!(steps.contains("== 3b."), "{steps}");
+    passed(
+        &steps,
+        &[
+            "push-del",
+            "sync-del-1",
+            "del-record",
+            "del-tag",
+            "sync-del-2",
+            "del-doc",
+            "del-record-now",
+            "del-record-flag",
+            "del-record-root",
+            "del-verify-says",
+            "push-del-again",
+            "sync-del-3",
+            "del-doc-after",
+            "del-tag-end",
+            "sync-del-4",
+        ],
+    );
+    for seen in ["del-flag ", "del-doc-fields ", "del-verify ", "del-cleared "] {
+        assert!(steps.contains(&format!("SEEN  {seen}")), "{seen}: {steps}");
+    }
+    let fields = std::fs::read_to_string(stage.path("out/del-doc-fields.out")).unwrap();
+    assert!(
+        fields.contains(r#""isInvalid":true"#) && fields.contains("tag is deleted"),
+        "{fields}"
+    );
+
+    let aws = std::fs::read_to_string(stage.path("aws/calls.log")).unwrap();
+    let deletes: Vec<&str> = aws
+        .lines()
+        .filter(|l| l.contains("batch-delete-image"))
+        .collect();
+    assert_eq!(deletes.len(), 2, "the delete, then the delete at the end: {aws}");
+    assert!(
+        deletes.iter().all(|l| l.contains(
+            "--repository-name strata/strata-live-pack --image-ids imageTag=1.0.9"
+        )),
+        "{aws}"
+    );
+    let oras = std::fs::read_to_string(stage.path("aws/oras.log")).unwrap();
+    assert_eq!(
+        oras.matches("push host.example/strata/strata-live-pack:1.0.9 ")
+            .count(),
+        2,
+        "the push, then the push again: {oras}"
+    );
+    let tofu = stage.tofu_calls();
+    let pins: Vec<&str> = tofu
+        .lines()
+        .filter(|l| l.contains("owned_pack_profile=true"))
+        .collect();
+    assert!(
+        pins.iter().any(|l| l
+            .contains("-var owned_pack_profile=true -var owned_pack_version=1.0.9 -var owned_pack_tag=1.0.9")),
+        "{tofu}"
+    );
+    let back = pins
+        .iter()
+        .rposition(|l| !l.contains("owned_pack_version"))
+        .unwrap();
+    let pin = pins
+        .iter()
+        .position(|l| l.contains("owned_pack_version=1.0.9"))
+        .unwrap();
+    assert!(back > pin, "the profile goes back to 1.0.0 after the step: {tofu}");
 }
