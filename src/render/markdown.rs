@@ -420,6 +420,33 @@ impl Renderer for MarkdownRenderer {
         Ok(o)
     }
 
+    fn render_set(&self, r: &crate::ops::SetReport) -> Result<String> {
+        let mut o = format!("### snapshot: {}\n\n", escape(&super::set_counts_line(r)));
+        if !r.records.is_empty() {
+            o.push_str("| cluster | uid | file | root |\n|---|---|---|---|\n");
+        }
+        for rec in &r.records {
+            let root = match &rec.root {
+                Some(root) => format!("`{}`", short(root)),
+                None => format!("error: {}", escape(super::set_error(rec))),
+            };
+            o.push_str(&format!(
+                "| {} | `{}` | `{}` | {root} |\n",
+                escape(dash(&rec.cluster.name)),
+                escape(&rec.cluster.uid),
+                escape(&rec.path.display().to_string())
+            ));
+        }
+        if !r.removed.is_empty() {
+            o.push_str("\nRemoved:\n\n");
+            for path in &r.removed {
+                o.push_str(&format!("- `{}`\n", escape(&path.display().to_string())));
+            }
+        }
+        o.push('\n');
+        Ok(o)
+    }
+
     fn render_behind(&self, r: &crate::ops::BehindReport) -> Result<String> {
         let mut o = format!("### behind: {}\n\n", escape(&super::behind_heading(r)));
         if r.pins.is_empty() {

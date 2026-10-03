@@ -79,6 +79,16 @@ no longer selects. The same query as JSON:
 {{#include ../output/fleet-json.txt}}
 ```
 
+A scheduled job reads the report of the snapshot as JSON, and not its lines.
+Each entry gives the file and the root of a record, or the error of a cluster
+that strata could not record:
+
+```text
+{{#include ../output/fleet-set-json.txt}}
+```
+
+See [`strata-set/1`](../reference/documents.md#strata-set1) for each field.
+
 ## 4. The fleet changes
 
 **Follow along.** `just playground fleet-2` is the same tenant after the

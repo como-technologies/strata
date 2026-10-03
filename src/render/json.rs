@@ -54,4 +54,8 @@ impl Renderer for JsonRenderer {
     fn render_behind(&self, r: &crate::ops::BehindReport) -> Result<String> {
         self.document(r)
     }
+
+    fn render_set(&self, r: &crate::ops::SetReport) -> Result<String> {
+        self.document(r)
+    }
 }

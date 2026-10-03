@@ -13,7 +13,10 @@ use crate::diff::{
     VariablesByName, Verify,
 };
 use crate::error::Result;
-use crate::ops::{Chain, ConsumersReport, Listing, PackListing, Pair, PairStatus, VerifySummary};
+use crate::ops::{
+    Chain, ConsumersReport, Listing, PackListing, Pair, PairStatus, Resolved, SetRecord, SetReport,
+    VerifySummary,
+};
 use crate::repave::PaletteRepaveReason;
 use crate::snapshot::{Snapshot, Source};
 
@@ -61,6 +64,9 @@ pub trait Renderer {
 
     /// The pack versions that records pin, against the newer versions the registries offer.
     fn render_behind(&self, r: &crate::ops::BehindReport) -> Result<String>;
+
+    /// The records that `snapshot` wrote for a set of clusters, and the files it removed.
+    fn render_set(&self, r: &SetReport) -> Result<String>;
 }
 
 /// `env=prod, team`: the labels of a cluster, with a tag that has no value by its key alone.
@@ -244,6 +250,24 @@ pub(crate) fn pack_version(pk: &crate::ops::ListedPack) -> String {
     } else {
         format!("{} (tag {})", pk.version, pk.tag)
     }
+}
+
+/// `2 of 3 clusters recorded, 1 removed; found by the search of Palette`: the counts of a set.
+pub fn set_counts_line(r: &SetReport) -> String {
+    let c = &r.summary;
+    let found = match r.resolved {
+        Resolved::Search => "search of Palette",
+        Resolved::Listing => "cluster listing",
+    };
+    format!(
+        "{} of {} clusters recorded, {} removed; found by the {found}",
+        c.recorded, c.clusters, c.removed
+    )
+}
+
+/// Why strata could not record a cluster of a set: the message of its error.
+pub(crate) fn set_error(r: &SetRecord) -> &str {
+    entry_error(r.error.as_ref()).unwrap_or("see the error")
 }
 
 /// The error message of a listed entry, when it has one.

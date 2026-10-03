@@ -2331,6 +2331,12 @@ fn use_cases(r: &mut Runner) {
         "strata snapshot filter:production --dir fleet/prod --prune",
     );
     r.step(
+        "fleet-set-json",
+        0,
+        false,
+        "strata snapshot filter:production --dir fleet/prod --json --quiet | jq -c '.schema, .summary, (.records[] | {name: .cluster.name, path, root, error})'",
+    );
+    r.step(
         "fleet-json",
         0,
         false,

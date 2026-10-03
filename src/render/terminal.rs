@@ -598,6 +598,31 @@ impl Renderer for TerminalRenderer {
         Ok(out)
     }
 
+    fn render_set(&self, r: &crate::ops::SetReport) -> Result<String> {
+        let mut out = String::new();
+        for rec in &r.records {
+            out.push_str(&match &rec.root {
+                Some(root) => format!(
+                    "wrote {}  cluster {} (uid {})  root {}\n",
+                    rec.path.display(),
+                    rec.cluster.name,
+                    rec.cluster.uid,
+                    short(root)
+                ),
+                None => format!(
+                    "could not record cluster {} (uid {}): {}\n",
+                    rec.cluster.name,
+                    rec.cluster.uid,
+                    super::set_error(rec)
+                ),
+            });
+        }
+        for path in &r.removed {
+            out.push_str(&format!("removed {}\n", path.display()));
+        }
+        Ok(out)
+    }
+
     fn render_behind(&self, r: &crate::ops::BehindReport) -> Result<String> {
         let p = &self.paint;
         let mut out = format!("{}\n", super::behind_heading(r));
