@@ -9,7 +9,7 @@ Arguments:
 
 Options:
       --full             Also print the unified diffs of the values and the manifests
-      --repave           Ask Palette if the change repaves the cluster side; one side must be a cluster
+      --repave           Ask Palette if the change repaves the cluster side; one side must be a cluster, and the other a profile version or the update that waits for it (cluster:<c>@pending)
       --validate         Ask Palette if it accepts the packs of the change on the cluster side; one side must be a cluster
       --format <FORMAT>  The report format: terminal, markdown, or json [default: terminal]
       --json             The same as --format json

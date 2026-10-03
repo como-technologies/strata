@@ -112,6 +112,30 @@ A live run shows that the route accepts the packs of the release version on
 the cluster that runs it, at the baseline. Stage 7 of `repave.sh` asks it on
 cluster A: see [repave.sh](../../development/live-runs.md#repavesh).
 
+## POST /v1/spectroclusters/{uid}/validate/repave
+
+This route says whether a change of the profiles of a cluster replaces its
+nodes. The body is the `v1SpectroClusterPacksEntity` of `validate/packs`.
+`compare --repave` sends it. The request changes nothing.
+
+Palette builds the target cluster from the body:
+
+- A profile that the cluster runs, with no `packValues`, keeps the copy that
+  the cluster holds.
+- A profile that the cluster runs, with `packValues`, holds only the packs that
+  the body names. Palette removes each other pack of the profile.
+- Palette puts the sent values over the copy of each named pack. When the sent
+  tag is not the version of that copy, Palette takes the pack from the profile
+  as it is now.
+- Palette takes a named pack that the cluster does not run from the profile as
+  it is now. It ignores a name that the profile does not hold.
+- A profile that the cluster does not run is the published profile, with the
+  sent values over it.
+- The target holds no profile that the body does not name.
+
+Then Palette compares the cluster with the target, and gives a reason for each
+pack that repaves the cluster.
+
 ## POST /v1/clusterprofiles/validate/packs
 
 This route checks the packs of a profile before a create. The body is a

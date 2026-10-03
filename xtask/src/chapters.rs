@@ -1273,7 +1273,7 @@ fn use_cases(r: &mut Runner) {
         "edited-repave",
         1,
         false,
-        "strata compare cluster:payments aws-stack@1.1.1 --repave",
+        "strata compare cluster:payments cluster:payments@pending --repave",
     );
     r.excerpt(
         "edited-repave-lines",
@@ -1287,6 +1287,13 @@ fn use_cases(r: &mut Runner) {
         1,
         false,
         "strata compare cluster:payments cluster:search",
+    );
+    // Palette answers for one cluster: two clusters ask nothing
+    r.step(
+        "edited-repave-usage",
+        2,
+        true,
+        "strata compare cluster:payments cluster:search --repave",
     );
     r.step(
         "edited-bulk",

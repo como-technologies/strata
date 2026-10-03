@@ -32,6 +32,15 @@ accepts it:
 
 See [What a waiting update changes](../snapshot/cluster.md#what-a-waiting-update-changes).
 
+Add `--repave` to ask Palette whether the cluster repaves when it takes the
+update:
+
+```text
+{{#include ../../output/edited-repave-lines.txt}}
+```
+
+See [Ask about the update that waits](repave.md#ask-about-the-update-that-waits).
+
 ## Compare a cluster group with a member
 
 When one side is a cluster group and the other is a `cluster:` ref that selects

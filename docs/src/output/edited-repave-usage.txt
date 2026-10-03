@@ -1,0 +1,7 @@
+$ strata compare cluster:payments cluster:search --repave
+strata: looking up project dev
+strata: fetching cluster payments
+strata: cluster 'payments' is 64f1000000000000000000e1
+strata: fetching cluster search
+strata: cluster 'search' is 64f1000000000000000000e2
+strata: --repave needs one side that is a cluster and one that is a profile version, or a cluster and the update that waits for it: cluster:<c> cluster:<c>@pending

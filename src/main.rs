@@ -168,7 +168,8 @@ struct CompareArgs {
     /// Also print the unified diffs of the values and the manifests
     #[arg(long)]
     full: bool,
-    /// Ask Palette if the change repaves the cluster side; one side must be a cluster
+    /// Ask Palette if the change repaves the cluster side; one side must be a cluster, and the
+    /// other a profile version or the update that waits for it (cluster:<c>@pending)
     #[arg(long)]
     repave: bool,
     /// Ask Palette if it accepts the packs of the change on the cluster side; one side must be a

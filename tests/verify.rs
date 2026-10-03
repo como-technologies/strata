@@ -7503,6 +7503,217 @@ fn compare_asks_the_template_route_for_a_cluster_that_a_cluster_template_governs
     assert_eq!(api.posted().len(), 1);
 }
 
+/// The update that waits for cluster-merged, from its templates: `edit` changes them.
+fn serve_merged_pending(api: MemoryApi, raw_root: &Path, edit: impl Fn(&mut Value)) -> MemoryApi {
+    let m = raw_root.join("cluster-merged");
+    let mut templates = read(&m.join("cluster.json"))["spec"]["clusterProfileTemplates"].clone();
+    edit(&mut templates);
+    let mut api = api.with(
+        format!("/v1/spectroclusters/{CLUSTER_UID}/profileUpdates"),
+        serde_json::json!({ "profiles": templates }),
+    );
+    for m in read(&m.join("manifests.json"))["profiles"]
+        .as_array()
+        .unwrap()
+    {
+        let uid = m["metadata"]["uid"].as_str().unwrap();
+        api = api.with(
+            format!("/v1/clusterprofiles/{uid}/packs/manifests"),
+            m.clone(),
+        );
+    }
+    api
+}
+
+#[test]
+fn the_repave_request_for_the_update_that_waits_gives_the_pending_values_to_each_profile_it_edits()
+{
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let (infra, addon) = merged_uids(dir.path());
+    let running = serve_cluster(MemoryApi::new(), dir.path(), "cluster-merged");
+    let cluster = snapshot_cluster(&running, None).unwrap();
+    let path = format!("POST /v1/spectroclusters/{CLUSTER_UID}/validate/repave");
+    let answer = serde_json::json!({"isRepaveRequired": true, "reasons": [{
+        "code": "PackValuesUpdated", "message": "Pack 'kubernetes' values are updated",
+        "pack": {"current": {"name": "kubernetes"}, "diffConfigKeys": ["kubeadmconfig.postKubeadmCommands"]}}]});
+    let pending_of = |api: &MemoryApi, profile: Option<&str>| {
+        ops::snapshot_for(
+            &Ref::Cluster {
+                uid: CLUSTER_UID.into(),
+                profile: profile.map(str::to_string),
+                pending: true,
+            },
+            || Ok(Palette::new(api.clone())),
+            "t0",
+            &Progress::silent(),
+        )
+        .unwrap()
+    };
+    let profile_of = |template: &Value| template["uid"] != addon.as_str();
+    let edited = "kubeadmconfig:\n  postKubeadmCommands:\n  - echo strata-pending\n";
+    // an edit in place of the values of the Kubernetes pack of the cluster profile
+    let edit_values = |templates: &mut Value| {
+        for t in templates.as_array_mut().unwrap() {
+            if profile_of(t) {
+                for p in t["packs"].as_array_mut().unwrap() {
+                    if p["layer"] == "k8s" {
+                        p["values"] = edited.into();
+                    }
+                }
+            }
+        }
+    };
+    let ask = |api: &MemoryApi, a: &Snapshot, b: &Snapshot| -> strata::Result<Value> {
+        let api = api.clone().with(path.clone(), answer.clone());
+        let d = ops::compare(a, b, "t1");
+        let r = ops::palette_repave(&Palette::new(&api), a, b, d.summary.max_impact)?;
+        assert!(r.required);
+        let posted = api.posted();
+        assert_eq!(posted.len(), 1);
+        assert_eq!(
+            posted[0].0,
+            format!("/v1/spectroclusters/{CLUSTER_UID}/validate/repave")
+        );
+        Ok(posted[0].1.clone())
+    };
+    let uid_and_packs = |body: &Value| -> Vec<(String, Option<Vec<String>>)> {
+        body["profiles"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|p| {
+                let packs = p.get("packValues").map(|v| {
+                    v.as_array()
+                        .unwrap()
+                        .iter()
+                        .map(|p| p["name"].as_str().unwrap().to_string())
+                        .collect()
+                });
+                (p["uid"].as_str().unwrap().to_string(), packs)
+            })
+            .collect()
+    };
+    let mut b_names: Vec<String> = read(&dir.path().join("cluster-merged").join("cluster.json"))
+        ["spec"]["clusterProfileTemplates"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|t| profile_of(t))
+        .flat_map(|t| t["packs"].as_array().unwrap())
+        .map(|p| p["name"].as_str().unwrap().to_string())
+        .collect();
+    b_names.sort();
+
+    // one profile edited in place: it alone carries the pack values, each pack of it, in either
+    // order of the two sides
+    let api = serve_merged_pending(running.clone(), dir.path(), edit_values);
+    let pending = pending_of(&api, None);
+    assert_ne!(pending.root, cluster.root);
+    let body = ask(&api, &cluster, &pending).unwrap();
+    let k8s = body["profiles"][0]["packValues"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|p| p["values"] == edited)
+        .expect("the pending values of the Kubernetes pack");
+    assert!(k8s.get("tag").is_some() && k8s.get("type").is_some());
+    let names = uid_and_packs(&body);
+    let mut sent = names[0].1.clone().unwrap();
+    sent.sort();
+    assert_eq!(sent, b_names, "each pack of the edited profile");
+    assert_eq!(
+        names[1],
+        (addon.clone(), None),
+        "the add-on profile does not change"
+    );
+    assert_eq!(ask(&api, &pending, &cluster).unwrap(), body);
+
+    // a pack that is new to the cluster: Palette takes it from the profile that holds it now,
+    // so each profile of the record gets it
+    let add_pack = |templates: &mut Value| {
+        for t in templates.as_array_mut().unwrap() {
+            if !profile_of(t) {
+                let mut new = t["packs"][0].clone();
+                new["name"] = "strata-new-pack".into();
+                t["packs"].as_array_mut().unwrap().push(new);
+            }
+        }
+    };
+    let api = serve_merged_pending(running.clone(), dir.path(), add_pack);
+    let body = ask(&api, &cluster, &pending_of(&api, None)).unwrap();
+    for (uid, packs) in uid_and_packs(&body) {
+        assert!(
+            packs
+                .as_ref()
+                .unwrap()
+                .contains(&"strata-new-pack".to_string()),
+            "{uid}: {packs:?}"
+        );
+    }
+
+    // a record of one profile gives the pack values to that profile alone
+    let api = serve_merged_pending(running.clone(), dir.path(), edit_values);
+    let body = ask(&api, &cluster, &pending_of(&api, Some("lab-addons"))).unwrap();
+    assert!(
+        uid_and_packs(&body)
+            .iter()
+            .all(|(_, packs)| packs.is_none())
+    );
+
+    // a record of a profile that the cluster no longer runs is older than the cluster
+    let moved = serve_cluster(MemoryApi::new(), dir.path(), "cluster-a");
+    let err = ask(&moved, &cluster, &pending).unwrap_err();
+    assert!(
+        matches!(&err, Error::Usage { message } if message.contains("Record cluster:lab-cluster@pending again")),
+        "{err}"
+    );
+
+    // a cluster in a template: the route of the template takes no pack values. So an update that
+    // changes a profile is a usage error before the POST, and an update that changes nothing asks
+    // the route of the template by profile uid
+    let mut doc = read(&dir.path().join("cluster-merged").join("cluster.json"));
+    doc["spec"]["clusterTemplate"] = serde_json::json!({"uid": "tmpl-1", "projectUid": "p1"});
+    let governed = running
+        .clone()
+        .with(format!("/v1/spectroclusters/{CLUSTER_UID}"), doc);
+    let err = ask(&governed, &cluster, &pending).unwrap_err();
+    assert!(
+        matches!(&err, Error::Usage { message }
+            if message.contains("the update that waits for the cluster lab-cluster")
+                && message.contains("cluster template tmpl-1")),
+        "{err}"
+    );
+    let api = serve_merged_pending(governed, dir.path(), |_| {}).with(
+        "POST /v1/spectroclusters/clusterTemplates/tmpl-1/validate/repave",
+        serde_json::json!({"isRepaveRequired": false, "reasons": []}),
+    );
+    let unchanged = pending_of(&api, None);
+    let d = ops::compare(&cluster, &unchanged, "t1");
+    let r = ops::palette_repave(
+        &Palette::new(&api),
+        &cluster,
+        &unchanged,
+        d.summary.max_impact,
+    )
+    .unwrap();
+    assert!(!r.required);
+    assert_eq!(r.cluster_template.unwrap().uid, "tmpl-1");
+    assert_eq!(
+        api.posted(),
+        [(
+            "/v1/spectroclusters/clusterTemplates/tmpl-1/validate/repave".to_string(),
+            serde_json::json!({"profiles": [{"uid": infra}, {"uid": addon}], "isUpgradeNow": false})
+        )]
+    );
+
+    // two records of what runs, or two of the update that waits: a usage error, before a request
+    for (a, b) in [(&cluster, &cluster), (&pending, &pending)] {
+        let err = ask(&running, a, b).unwrap_err();
+        assert!(matches!(err, Error::Usage { .. }), "{err}");
+    }
+}
+
 // ---- compare --validate ----------------------------------------------------------------
 
 #[test]

@@ -95,7 +95,7 @@ is the cluster after it takes the update:
 The update brings the edit, and nothing else. See
 [What a waiting update changes](../commands/snapshot/cluster.md#what-a-waiting-update-changes).
 
-Then ask Palette if it replaces the nodes:
+Then ask Palette if the update replaces the nodes:
 
 ```text
 {{#include ../output/edited-repave-lines.txt}}
