@@ -1,6 +1,5 @@
 $ jq '.source.cluster.tiers.policy.fields' runs/payments.json
 {
-  "agentUpgrades": "allowed",
   "applySetting": "DownloadAndInstall",
   "clusterMetaAttribute": "",
   "controlPlaneHealthCheckTimeout": "",

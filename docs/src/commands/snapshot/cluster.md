@@ -65,14 +65,15 @@ The `policy` tier holds the settings of the cluster:
 | `controlPlaneHealthCheckTimeout` | how long Palette waits for a new control plane node to become ready, before it replaces the node | `spec.clusterConfig` |
 | `clusterMetaAttribute` | the text that a person adds to the cluster as more data | `spec.clusterConfig` |
 | `applySetting` | `DownloadAndInstall` when the cluster applies each update at once, and `DownloadAndInstallLater` when each update waits until a person applies it | `status.spcApply.actionType` |
-| `agentUpgrades` | `paused` when a person stopped the upgrades of the agent of Palette on the cluster, and `allowed` when not | the annotation `spectroComponentsUpgradeForbidden` of the cluster |
+| `spectroComponentsUpgradeForbidden` | the value of the annotation as Palette gives it. Palette sets the annotation when a person pauses the upgrades of its agent on the cluster | the annotation `spectroComponentsUpgradeForbidden` of the cluster |
 
 ```text
 {{#include ../../output/tiers-policy.txt}}
 ```
 
-A field that Palette does not give is `null`, empty, or `false`, and
-`agentUpgrades` is `allowed`. The bindings
+A field that Palette does not give is `null`, empty, or `false`. When the
+cluster has no annotation `spectroComponentsUpgradeForbidden`, the tier has no
+field for it. The bindings
 and the namespaces have no uid and no time. A binding is a set of subjects, so strata
 sorts the subjects of each binding, and the bindings. When Palette answers
 HTTP 404 for the bindings or the namespaces, the field is `null`, and not an
@@ -93,6 +94,12 @@ the namespaces, with their uids. When one of two records holds them, `compare` a
 `verify` compare only `osPatch`, `lifecycle`, `machineHealth`, `timezone`, and
 `fips`. So the older record still verifies. Record the cluster again to compare
 all the fields.
+
+A record that strata 0.18 wrote holds `agentUpgrades`, with the value `allowed`
+or `paused`, in place of `spectroComponentsUpgradeForbidden`. When only one of
+two records holds it, `compare` and `verify` compare each other field, and not
+these two. So the older record still verifies. Two records of strata 0.18
+compare on each field.
 
 ## The shape on each cloud
 
