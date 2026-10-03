@@ -1,0 +1,2 @@
+$ jq -c '.source.cluster.tiers.policy.fields | {endpointType, kubernetesDistroType, limitConfig, hostClusters: [.hostClusters[].uid]}' runs/dev-group.json
+{"endpointType":"LoadBalancer","kubernetesDistroType":"vcluster-generic","limitConfig":{"cpu":6,"cpuMilliCore":6000,"memory":12288,"memoryMiB":12288,"overSubscription":120,"storageGiB":10},"hostClusters":["64f5000000000000000000b1"]}

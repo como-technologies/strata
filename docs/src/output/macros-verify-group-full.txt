@@ -5,6 +5,7 @@ note       the content uses macro podSecurity: the root covers its name and not 
 note       macro podSecurity has another value on each side: Palette applies other content, also when the roots are equal
 
   variables unchanged
+  cluster tiers unchanged
 
   [addon] namespace-policy           1.0.0              unchanged
 DRIFT: platform-addons@1.0.0 pinned by cluster group dev-group has the content recorded 2026-09-17T09:30:00Z, but macro podSecurity has another value now

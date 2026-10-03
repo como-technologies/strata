@@ -1,0 +1,11 @@
+$ strata verify runs/dev-group.json
+platform-addons@1.0.0 pinned by cluster group dev-group (uid 64f5000000000000000000a1)  ->  platform-addons@1.0.0 pinned by cluster group dev-group (uid 64f5000000000000000000a1)
+root       f6312d5a2793 -> f6312d5a2793   IDENTICAL
+
+  variables unchanged
+  cluster tiers policy CHANGED, labels unchanged
+        ~ policy.limitConfig.cpu: 6 -> 4
+        ~ policy.limitConfig.cpuMilliCore: 6000 -> 4000
+
+  [addon] namespace-policy           1.0.0              unchanged
+OK: platform-addons@1.0.0 pinned by cluster group dev-group is unchanged since 2026-09-17T09:30:00Z

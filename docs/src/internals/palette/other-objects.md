@@ -87,6 +87,13 @@ to the host clusters of the group.
 - `POST /v1/dashboard/clustergroups/<uid>/virtualClusters` lists the virtual
   clusters of a group. `GET /v1/clustergroups/hostCluster/metadata` gives the
   name and the uid of each group.
+- `spec.clustersConfig` of the group is the config that the group gives each
+  virtual cluster: `endpointType`, `kubernetesDistroType`, `limitConfig`,
+  `values`, and `hostClustersConfig[]`. `limitConfig` gives each limit in two
+  units: `cpu` in cores and `cpuMilliCore`, and `memory` and `memoryMiB`, with
+  the same value. `values` is YAML with its comments. Each entry of
+  `hostClustersConfig[]` has the `clusterUid` and the `endpointConfig` of a
+  host cluster.
 - The live run gives a virtual cluster a CPU limit of 3 cores. The API sets no
   lower limit: it checks a virtual cluster against the upper limits of the
   group alone.

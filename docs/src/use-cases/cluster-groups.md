@@ -62,11 +62,32 @@ version drifts: a record of `platform-addons@1.0.0` from before the edit
 reports `DRIFT`, and `compare` of the group with the version names the
 manifest.
 
+## When the group changes its config
+
+The group also gives each virtual cluster a config: limits, an endpoint, and
+values. The record keeps it in its `policy` tier:
+
+```text
+{{#include ../output/group-policy.txt}}
+```
+
+A person who lowers the CPU limit of the group changes no pinned profile. The
+root stays, and `verify` of the record names the change:
+
+```text
+{{#include ../output/group-policy-verify.txt}}
+```
+
+`just playground cluster-groups-2` serves the tenant after the change.
+
 ## What to do
 
 - Record each cluster group, and compare the group with each member on a
   schedule. A member that differs runs another version of a pinned profile, or
   another copy of it, as after an edit in place.
+- Verify the record of each group on a schedule. A change of the limits, the
+  endpoint, or the values of the group shows in the `policy` tier. The root
+  stays.
 - `consumers` of a pinned version names each virtual cluster that runs it: the
   consumer list of Palette names them. The cluster listing does not, so `list
   clusters` does not show a virtual cluster.
@@ -74,5 +95,7 @@ manifest.
 ## Palette behavior
 
 The live run of `just live-cluster-group` builds a group on cluster A with one
-virtual cluster, and shows each rule on this page. See
+virtual cluster, and shows each rule on this page except one. No run changes
+the config of a group yet, so the change of the CPU limit comes from the
+stand-in. See
 [Edge hosts, cluster groups, and app profiles](../internals/palette/other-objects.md#cluster-groups).

@@ -11,7 +11,7 @@ use serde_json::{Map, Value, json};
 
 use crate::api::mask::MASKED;
 use crate::api::{RawCluster, RawProfile};
-use crate::canon::{Canon, canon_yaml, canonical_json, hash_yaml, sha256_hex};
+use crate::canon::{canon_yaml_hashed, canonical_json, hash_yaml, sha256_hex};
 use crate::cluster_template::ClusterTemplateRef;
 use crate::error::{Error, Result};
 pub use crate::repave::PendingRepave;
@@ -341,7 +341,8 @@ pub struct ClusterSource {
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub labels: BTreeMap<String, String>,
     /// More of the cluster than its release, by tier: `applied`, `running`, `policy`, and, with
-    /// `snapshot --shape`, `shape`. Each tier has its own hash. A record names the tiers that it
+    /// `snapshot --shape`, `shape`. A cluster group carries `policy` alone: the config that it
+    /// gives each virtual cluster. Each tier has its own hash. A record names the tiers that it
     /// carries by carrying them, so a record without one still verifies. Outside the root.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub tiers: BTreeMap<String, ClusterTier>,
@@ -366,9 +367,9 @@ impl ClusterTier {
     }
 }
 
-/// The tiers of a cluster record from the cluster document, and from its cloud config when it
-/// was read. `covered` limits `running` to the profiles that the record covers. A tier is carried
-/// only when Palette gives the part of the document that it reads.
+/// The tiers of a cluster record from the document of the cluster or the cluster group, and from
+/// its cloud config when it was read. `covered` limits `running` to the profiles that the record
+/// covers. A tier is carried only when Palette gives the part of the document that it reads.
 pub fn cluster_tiers(
     cluster: &Value,
     cloud_config: Option<&Value>,
@@ -394,6 +395,10 @@ pub fn cluster_tiers(
     }
     if let Some(config) = cluster.pointer("/spec/clusterConfig") {
         tiers.insert("policy".to_string(), policy_tier(cluster, config));
+    }
+    // the document of a cluster group has spec.clustersConfig, and no spec.clusterConfig
+    if let Some(config) = cluster.pointer("/spec/clustersConfig") {
+        tiers.insert("policy".to_string(), group_policy_tier(config));
     }
     if let Some(cc) = cloud_config {
         tiers.insert(
@@ -430,6 +435,38 @@ fn policy_tier(cluster: &Value, config: &Value) -> ClusterTier {
         "rbac": field("clusterRbac"),
         "fips": s(cluster, "/status/fips/mode"),
     }))
+}
+
+/// The `policy` tier of a cluster group, from `spec.clustersConfig`: the config that the group
+/// gives each virtual cluster.
+///
+/// The group applies `values` to each virtual cluster as YAML, as a pack applies its values. So
+/// the tier holds the values in canonical form with their hash, and the host clusters sorted by
+/// uid.
+fn group_policy_tier(config: &Value) -> ClusterTier {
+    let (values, values_hash, values_parse_error) = canon_yaml_hashed(str_at(config, "/values"));
+    let mut hosts: Vec<Value> = arr(config, "/hostClustersConfig")
+        .iter()
+        .map(|h| {
+            json!({
+                "uid": s(h, "/clusterUid"),
+                "endpointConfig": h.get("endpointConfig").cloned().unwrap_or(Value::Null),
+            })
+        })
+        .collect();
+    hosts.sort_by_key(|h| s(h, "/uid"));
+    let mut fields = json!({
+        "endpointType": s(config, "/endpointType"),
+        "kubernetesDistroType": s(config, "/kubernetesDistroType"),
+        "limitConfig": config.get("limitConfig").cloned().unwrap_or(Value::Null),
+        "values": values,
+        "valuesHash": values_hash,
+        "hostClusters": hosts,
+    });
+    if let Some(e) = values_parse_error {
+        fields["valuesParseError"] = Value::String(e);
+    }
+    ClusterTier::of(fields)
 }
 
 /// The digest of each macro in `names` that `resolved` gives for one of `profiles`:
@@ -1034,13 +1071,7 @@ impl Pack {
             .collect();
         manifests.sort_by(|a, b| a.name.cmp(&b.name));
 
-        let (values_canon, values_hash, values_parse_error) = match canon_yaml(&values) {
-            Canon::Parsed(v) => {
-                let h = sha256_hex(&canonical_json(&v));
-                (v, h, None)
-            }
-            Canon::Unparseable(e) => (Value::Null, sha256_hex(values.trim()), Some(e)),
-        };
+        let (values_canon, values_hash, values_parse_error) = canon_yaml_hashed(&values);
 
         let identity = sha256_hex(&canonical_json(&json!({
             "name": name, "layer": layer, "type": kind, "tag": tag, "version": version,

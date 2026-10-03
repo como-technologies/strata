@@ -9031,28 +9031,42 @@ fn consumers_counts_a_cluster_template_that_links_the_version() {
 
 // ---- cluster groups ---------------------------------------------------------------------------
 
+/// The template of the add-on profile of cluster-merged, and its place in the templates of the
+/// cluster.
+fn merged_addon_template(raw_root: &Path) -> (usize, Value) {
+    let (_, addon) = merged_uids(raw_root);
+    let templates = read(&raw_root.join("cluster-merged").join("cluster.json"))["spec"]
+        ["clusterProfileTemplates"]
+        .clone();
+    templates
+        .as_array()
+        .unwrap()
+        .iter()
+        .cloned()
+        .enumerate()
+        .find(|(_, t)| t["uid"] == addon.as_str())
+        .unwrap()
+}
+
+/// The document of the cluster group `g1`, `group-1`, that pins the add-on profile of
+/// cluster-merged.
+fn group_doc(raw_root: &Path) -> Value {
+    let (_, template) = merged_addon_template(raw_root);
+    serde_json::json!({
+        "metadata": {"uid": "g1", "name": "group-1"},
+        "spec": {"type": "hostCluster", "clusterProfileTemplates": [template]},
+    })
+}
+
 /// A cluster group `g1`, `group-1`, that pins the add-on profile of cluster-merged, with that
 /// cluster as its one virtual cluster, and the profile documents it needs.
 fn serve_cluster_group(api: MemoryApi, raw_root: &Path) -> MemoryApi {
     let m = raw_root.join("cluster-merged");
     let (_, addon) = merged_uids(raw_root);
-    let templates = read(&m.join("cluster.json"))["spec"]["clusterProfileTemplates"].clone();
     let manifests = read(&m.join("manifests.json"))["profiles"].clone();
-    let (i, template) = templates
-        .as_array()
-        .unwrap()
-        .iter()
-        .enumerate()
-        .find(|(_, t)| t["uid"] == addon.as_str())
-        .unwrap();
+    let (i, _) = merged_addon_template(raw_root);
     serve_cluster(api, raw_root, "cluster-merged")
-        .with(
-            "/v1/clustergroups/g1",
-            serde_json::json!({
-                "metadata": {"uid": "g1", "name": "group-1"},
-                "spec": {"type": "hostCluster", "clusterProfileTemplates": [template]},
-            }),
-        )
+        .with("/v1/clustergroups/g1", group_doc(raw_root))
         .with(
             "/v1/clustergroups/hostCluster/metadata",
             serde_json::json!({"items": [{"uid": "g1", "name": "group-1", "scope": "project"}]}),
@@ -9271,6 +9285,175 @@ fn a_cluster_group_record_with_macro_digests_reads_the_values_of_the_group() {
         verdict.contains("pinned by cluster group group-1 has the content recorded t0, but macro region has another value now"),
         "the verdict names the group, and not a cluster: {verdict}"
     );
+}
+
+/// The config that the cluster group `g1` gives each virtual cluster, with the CPU limit `cpu`
+/// in millicores, and `values` as YAML, as Palette gives it in `spec.clustersConfig`.
+fn clusters_config(cpu: u64, values: &str) -> Value {
+    let endpoint = serde_json::json!({"ingressConfig": {"host": "*", "port": 6443}});
+    serde_json::json!({
+        "endpointType": "LoadBalancer",
+        "kubernetesDistroType": "k3s",
+        "limitConfig": {"cpu": cpu / 1000, "cpuMilliCore": cpu, "memory": 12288,
+            "memoryMiB": 12288, "overSubscription": 120, "storageGiB": 10},
+        "values": values,
+        "hostClustersConfig": [
+            {"clusterUid": "host-2", "endpointConfig": endpoint},
+            {"clusterUid": "host-1", "endpointConfig": endpoint},
+        ],
+    })
+}
+
+const GROUP_VALUES: &str =
+    "# sync to the host\nsync:\n  toHost:\n    services:\n      enabled: true\n";
+
+#[test]
+fn a_cluster_group_record_holds_the_config_of_each_virtual_cluster_in_a_policy_tier_outside_the_root()
+ {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    // the member has a policy tier of its own
+    let member_path = dir.path().join("cluster-merged").join("cluster.json");
+    let mut member_doc = read(&member_path);
+    member_doc["spec"]["clusterConfig"] = serde_json::json!({"timezone": "Etc/UTC"});
+    fs::write(&member_path, serde_json::to_string(&member_doc).unwrap()).unwrap();
+    let serve = |config: Option<Value>| {
+        let mut doc = group_doc(dir.path());
+        if let Some(c) = config {
+            doc["spec"]["clustersConfig"] = c;
+        }
+        serve_cluster_group(MemoryApi::new(), dir.path()).with("/v1/clustergroups/g1", doc)
+    };
+    let snap = |api: &MemoryApi| {
+        ops::snapshot_for(
+            &Ref::parse("clustergroup:g1"),
+            || Ok(Palette::new(api.clone())),
+            "t0",
+            &Progress::silent(),
+        )
+        .unwrap()
+    };
+    let api = serve(Some(clusters_config(6000, GROUP_VALUES)));
+    let group = snap(&api);
+    let tiers = &group.source.cluster.as_ref().unwrap().tiers;
+    assert_eq!(tiers.keys().collect::<Vec<_>>(), ["policy"]);
+    let f = &tiers["policy"].fields;
+    assert_eq!(f["endpointType"], "LoadBalancer");
+    assert_eq!(f["kubernetesDistroType"], "k3s");
+    assert_eq!(f["limitConfig"]["cpuMilliCore"], 6000);
+    assert_eq!(f["limitConfig"]["memoryMiB"], 12288);
+    assert_eq!(f["limitConfig"]["storageGiB"], 10);
+    assert_eq!(f["limitConfig"]["overSubscription"], 120);
+    assert_eq!(
+        f["values"],
+        serde_json::json!({"sync": {"toHost": {"services": {"enabled": true}}}}),
+        "the values in canonical form"
+    );
+    assert_eq!(f["valuesHash"].as_str().map(str::len), Some(64));
+    assert_eq!(f["hostClusters"][0]["uid"], "host-1", "sorted by uid");
+    assert_eq!(f["hostClusters"][1]["uid"], "host-2");
+    assert_eq!(
+        f["hostClusters"][0]["endpointConfig"]["ingressConfig"]["port"],
+        6443
+    );
+    let json = serde_json::to_value(&group).unwrap();
+    assert_eq!(
+        json["source"]["cluster"]["tiers"]["policy"]["fields"]["limitConfig"]["cpuMilliCore"],
+        6000
+    );
+
+    // outside the root: a group with no config has the same root, and no tier
+    let bare = snap(&serve(None));
+    assert_eq!(bare.root, group.root);
+    assert!(bare.source.cluster.as_ref().unwrap().tiers.is_empty());
+
+    // a comment in the values is not a change of the config
+    let commented = snap(&serve(Some(clusters_config(
+        6000,
+        &format!("# another comment\n{GROUP_VALUES}"),
+    ))));
+    assert_eq!(
+        commented.source.cluster.as_ref().unwrap().tiers["policy"].hash,
+        tiers["policy"].hash
+    );
+
+    // values that are not YAML are kept by the hash of their text, with the error
+    let broken = snap(&serve(Some(clusters_config(6000, "sync: [\n"))));
+    let f = &broken.source.cluster.as_ref().unwrap().tiers["policy"].fields;
+    assert_eq!(f["values"], Value::Null);
+    assert_eq!(f["valuesHash"].as_str().map(str::len), Some(64));
+    assert!(f["valuesParseError"].is_string(), "{f}");
+
+    // a group and its member have no tier to compare: their policy tiers say different things
+    let member = Ref::Cluster {
+        uid: CLUSTER_UID.into(),
+        profile: None,
+        pending: false,
+    };
+    let connect = || Ok(Palette::new(api.clone()));
+    let (sa, sb) = ops::snapshot_pair(
+        &Ref::parse("clustergroup:g1"),
+        &member,
+        connect,
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert!(
+        sb.source
+            .cluster
+            .as_ref()
+            .unwrap()
+            .tiers
+            .contains_key("policy")
+    );
+    let d = ops::compare(&sa, &sb, "t1");
+    assert!(
+        d.same && d.cluster_tiers.is_empty(),
+        "{:?}",
+        d.cluster_tiers
+    );
+
+    // the group gives each virtual cluster less CPU now
+    let less = serve(Some(clusters_config(4000, GROUP_VALUES)));
+    let named = |tiers: &[strata::diff::TierDiff]| {
+        let policy = tiers.iter().find(|t| t.tier == "policy").unwrap();
+        assert!(!policy.same);
+        policy
+            .diff
+            .iter()
+            .map(|l| l.path.clone())
+            .collect::<Vec<_>>()
+    };
+    let d = ops::compare(&group, &snap(&less), "t1");
+    assert!(d.same, "the root covers the pin alone");
+    assert_eq!(
+        named(&d.cluster_tiers),
+        ["limitConfig.cpu", "limitConfig.cpuMilliCore"]
+    );
+    let v = ops::verify(
+        &group,
+        &Palette::new(less.clone()),
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert_eq!(v.status, VerifyStatus::Unchanged);
+    assert_eq!(
+        named(&v.diff.cluster_tiers),
+        ["limitConfig.cpu", "limitConfig.cpuMilliCore"]
+    );
+
+    // a record of the group from before the tier loads, and verifies with no tier to compare
+    let mut doc = serde_json::to_value(&group).unwrap();
+    doc["source"]["cluster"]
+        .as_object_mut()
+        .unwrap()
+        .remove("tiers");
+    let old: Snapshot = serde_json::from_value(doc).unwrap();
+    let v = ops::verify(&old, &Palette::new(less), "t1", &Progress::silent()).unwrap();
+    assert_eq!(v.status, VerifyStatus::Unchanged);
+    assert!(v.diff.cluster_tiers.is_empty());
 }
 
 // ---- app profiles -----------------------------------------------------------------------------

@@ -773,7 +773,7 @@ baseline with cluster A.
 | `edit-group-compare` | 0 | #81: the member keeps its copy too, so the group and the member still agree |
 | `edit-group-vs-version`, `edit-group-vs-version-says` | 1, 0 | #81: the version differs from the copy of the group, and the compare names the manifest |
 | `edit-group-own-uid` | 0 | #81: the copy has a uid of its own |
-| `edit-group-raw`, `edit-group-manifest-uid` | 0 | #78: the template of the group names the manifest by its uid, with no content |
+| `edit-group-raw`, `edit-group-manifest-uid` | 0 | #78: the template of the group names the manifest by its uid, with no content. #110: the document of the group holds `spec.clustersConfig`, with each limit in two units, the values as YAML with comments, and the host cluster |
 | `edit-undo`, `gone` | 0 | the edit is put back, and the group and the member are gone |
 | `member-audit-kind` | 0 | #188: the audit log of the member, read by its uid alone, has its create and its delete under the kind `virtualCluster` |
 | `member-audit-not-cluster` | 0 | #188: a query with the kind `spectrocluster` and the uid of the member does not find them |

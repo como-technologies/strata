@@ -64,8 +64,8 @@ pub struct Diff {
     /// sides are clusters. A difference here does not change `same`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cluster_variables: Option<ClusterVariablesDiff>,
-    /// Between two cluster records that carry tiers: each tier that both carry, and the labels,
-    /// with what differs in each. A difference here does not change `same`.
+    /// Between two cluster records of one kind that carry tiers: each tier that both carry, and
+    /// the labels, with what differs in each. A difference here does not change `same`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub cluster_tiers: Vec<TierDiff>,
     /// For each side that records a cluster with its `running` tier: each pack whose version, as
@@ -255,7 +255,9 @@ fn tiers_diff(a: &Snapshot, b: &Snapshot) -> Vec<TierDiff> {
     let (Some(x), Some(y)) = (&a.source.cluster, &b.source.cluster) else {
         return Vec::new();
     };
-    if x.tiers.is_empty() || y.tiers.is_empty() {
+    // the tiers of a cluster group hold what the group gives its virtual clusters, and not what
+    // a cluster runs: a group and a cluster have no tier to compare
+    if x.kind != y.kind || x.tiers.is_empty() || y.tiers.is_empty() {
         return Vec::new();
     }
     let mut out: Vec<TierDiff> = x
