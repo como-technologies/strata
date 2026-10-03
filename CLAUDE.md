@@ -31,6 +31,18 @@ These are hard rules. `docs/src/development/documentation.md` explains each one.
    from the Spectro Cloud repos in a comment or a page. State what Palette does,
    with the error code it returns or the live run that shows it.
 
+## Scope rules
+
+`docs/src/boundary.md` explains each rule in "The rules of the scope".
+
+1. **Ask Palette. Do not copy its rules.** Call its validate route.
+2. **Do not repeat a status that Palette shows.** Record it only when a
+   difference needs it.
+3. **`packs` serves the records and `behind`.** It is not a catalog.
+4. **A check of build readiness goes to `strata-preflight`.**
+5. **Each item names its question** from the table in `introduction.md`, or
+   its gap of build readiness. If it names none, ask the lead and brett first.
+
 ## Code rules
 
 Read `docs/src/development/code.md` before you change the Rust code: the layers,

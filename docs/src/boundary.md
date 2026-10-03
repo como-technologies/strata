@@ -94,6 +94,32 @@ such as a cluster status that names the refusal of the cloud, is a row of the
 catalog with its owner, and a findings report proposes it to Spectro Cloud.
 See [How preflight works](./internals/preflight.md).
 
+## The rules of the scope
+
+Five rules decide what a new item of strata can do. The review of each item,
+and of each wave, checks them.
+
+1. **Ask Palette. Do not copy its rules.** When a validate route of Palette
+   answers a check, strata and `strata-preflight` call that route. A copy of
+   the rule goes stale when Palette changes the rule. Strata keeps a local rule
+   only when the root needs it: for a change that Palette makes to the content
+   and does not report.
+2. **Do not repeat a status that Palette shows.** Palette shows flags and
+   states in its console, its notifications, and its audit log. A record holds
+   one of them only when `compare`, `verify`, or `same-release` needs it to
+   explain a difference.
+3. **`packs` serves the records and `behind`.** [`strata packs`](./commands/packs.md)
+   reads the versions of a pack for a record and for `behind`. It is not a
+   catalog of the registry.
+4. **A check of build readiness goes to `strata-preflight`.** Palette has no
+   such check, so `strata-preflight` is a product of its own beside strata. It
+   follows rule 1: it calls the validate routes of Palette, and adds only the
+   checks that the routes do not make.
+5. **Each item names its question.** An issue names the question of
+   [the table in the introduction](./introduction.md#the-model) that it
+   answers, or the gap of build readiness that it fills. When an item answers
+   neither, the maintainers decide before the work starts.
+
 ## A pipeline that publishes
 
 Strata publishes nothing. A pipeline that publishes has the other half of the
