@@ -13,6 +13,7 @@ use crate::diff::{
 };
 use crate::error::Result;
 use crate::ops::{Chain, ConsumersReport, Listing, PackListing, Pair, PairStatus, VerifySummary};
+use crate::repave::PaletteRepaveReason;
 use crate::snapshot::{Snapshot, Source};
 
 pub use json::JsonRenderer;
@@ -683,15 +684,19 @@ pub(crate) fn palette_repave_lines(d: &Diff) -> Vec<String> {
     }
     r.reasons
         .iter()
-        .map(|x| {
-            let keys = if x.keys.is_empty() {
-                String::new()
-            } else {
-                format!(" ({})", x.keys.join(", "))
-            };
-            format!("repave: {} {}{keys}", x.code, dash(&x.pack))
-        })
+        .map(|x| format!("repave: {}", repave_reason_text(x)))
         .collect()
+}
+
+/// One reason of Palette for a repave: `PackValuesUpdated kubernetes
+/// (kubeadmconfig.postKubeadmCommands)`.
+fn repave_reason_text(x: &PaletteRepaveReason) -> String {
+    let keys = if x.keys.is_empty() {
+        String::new()
+    } else {
+        format!(" ({})", x.keys.join(", "))
+    };
+    format!("{} {}{keys}", x.code, dash(&x.pack))
 }
 
 /// Palette's answer to `--validate`: `accepts`, or one line for each error, `refuses:
@@ -759,6 +764,33 @@ pub(crate) fn updates_pending_notes(d: &Diff) -> Vec<String> {
             )
         })
         .collect()
+}
+
+/// One note for each cluster side that Palette says holds a repave for approval: `a repave of
+/// cluster fred waits for approval, since <time>: PackValuesUpdated kubernetes
+/// (kubeadmconfig.postKubeadmCommands)`. Two sides that say the same get one note.
+pub(crate) fn repave_pending_notes(d: &Diff) -> Vec<String> {
+    let mut notes: Vec<String> = [&d.a, &d.b]
+        .into_iter()
+        .filter_map(|side| side.cluster.as_ref())
+        .filter(|c| c.repave_pending == Some(true))
+        .map(|c| {
+            let mut note = format!("a repave of cluster {} waits for approval", c.name);
+            if let Some(r) = &c.pending_repave {
+                if !r.since.is_empty() {
+                    note.push_str(&format!(", since {}", r.since));
+                }
+                let reasons: Vec<String> = r.reasons.iter().map(repave_reason_text).collect();
+                if !reasons.is_empty() {
+                    note.push_str(&format!(": {}", reasons.join("; ")));
+                }
+            }
+            note.push_str(". Palette refuses an update of its profiles until a person approves it");
+            note
+        })
+        .collect();
+    notes.dedup();
+    notes
 }
 
 /// One note for each pack that a cluster side runs at another version than its profile

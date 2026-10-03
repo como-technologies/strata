@@ -28,6 +28,13 @@ Before the save, strata writes `********` in place of each `packValues`,
 the values, not only the fields that `passwordFields` names. Strata reads none
 of these fields, so `--from-raw` builds the same record.
 
+`repave.json` keeps the repave that waits for approval, when one waits. Each
+reason of Palette holds the values of the pack on each side of the change, with
+the value of each macro in its place. A macro value can be a secret. Before the
+save, strata writes `********` in place of each value that is not empty. Strata
+reads only the code, the message, the pack name, and the keys, so `--from-raw`
+builds the same record.
+
 ## A version before you publish it
 
 `--from-candidate` builds a snapshot from a candidate file. See

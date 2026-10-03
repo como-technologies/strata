@@ -111,6 +111,39 @@ clusters --applied` say when a cluster is behind. What Palette says for each
 kind of change is in
 [Cluster copies](../../internals/palette/clusters.md#cluster-copies).
 
+## Whether a repave waits
+
+Palette can hold a repave of a cluster until a person approves it. A new value
+of a macro in a field that repaves the cluster does this. While the repave
+waits, Palette refuses an update of the profiles of the cluster, and a delete
+of the cluster stays in `Deleting`. The record carries the repave in
+`source.cluster`:
+
+- `repavePending`: `true` when the cluster document says
+  `status.repave.state: Pending`, and `false` when no repave waits.
+- `pendingRepave`: only when a repave waits. `source` is what started the
+  repave, such as `hubble` when Palette found the change. `since` is the time
+  of the state. `reasons[]` has the `code`, the `message`, the `pack`, and the
+  `keys` that differ, for each reason that Palette gives.
+
+Strata reads `GET /v1/spectroclusters/{uid}/repave/status` only when a repave
+waits. That answer holds the values of the pack on each side of the change.
+The record keeps the names of the keys, and no value.
+
+These fields are not part of the root: the copy that the cluster runs is the
+same. `compare` and `verify` name the repave that waits:
+
+```text
+{{#include ../../output/repave-waits-verify-lines.txt}}
+```
+
+```text
+{{#include ../../output/repave-waits-json.txt}}
+```
+
+What Palette does is in
+[Macros](../../internals/palette/profiles.md#macros).
+
 ## What a waiting update changes
 
 `cluster:<cluster>@pending` records the profiles that the cluster runs after it
@@ -123,9 +156,9 @@ two before anybody accepts the update:
 ```
 
 Here the update brings one change: the reclaim policy of the CSI pack. The
-record says `pending: true`, and it holds no `updatesPending`: that is a
-statement about the copy that runs. When no update waits, the pending record
-has the root of the cluster.
+record says `pending: true`, and it holds no `updatesPending` and no
+`repavePending`: these are statements about the cluster as it runs now. When no
+update waits, the pending record has the root of the cluster.
 
 - Palette gives each profile of the cluster, and puts the profile as it is now
   in place of each profile that a waiting notification names. So the pending

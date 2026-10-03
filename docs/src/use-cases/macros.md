@@ -78,5 +78,7 @@ opens no notification. Palette gives a cluster the new value at the next read
 of its agent, in a live run 11 minutes after the change. When the macro is in
 a field that repaves the cluster, Palette holds a repave for approval, and
 refuses an update of the cluster profiles until a person approves the repave.
+A cluster record holds that repave, and `verify` names it: see
+[Whether a repave waits](../commands/snapshot/cluster.md#whether-a-repave-waits).
 See
 [Macros](../internals/palette/profiles.md#macros).

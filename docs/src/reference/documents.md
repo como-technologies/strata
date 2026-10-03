@@ -66,6 +66,12 @@ profile, or pack version.
     record covers waits, `false` when none waits, and absent when strata could
     not read it; `updatesPendingError` then says why. `pendingUpdates[]` has
     `profileUid`, `profile`, `message`, and `since` for each change that waits.
+    `repavePending` is `true` when Palette holds a repave of the cluster for
+    approval, `false` when none waits, and absent for an edge host, a cluster
+    group, and an older record. `pendingRepave`, only when a repave waits:
+    `source`, `since`, and `reasons[]` with `code`, `message`, `pack`, and
+    `keys`: see
+    [Whether a repave waits](../commands/snapshot/cluster.md#whether-a-repave-waits).
     `macroValues`, only with `snapshot --macros`: each user macro the content
     uses, and `sha256:` of the value Palette gives it for this cluster, or
     `unresolved`. `labels`: the labels of the cluster. `tiers`: each tier that
@@ -76,9 +82,9 @@ profile, or pack version.
     [The shape on each cloud](../commands/snapshot/cluster.md#the-shape-on-each-cloud).
     A record that an older version of strata wrote has no `cloudType`.
     `pending`, only when true: the record is of `cluster:<cluster>@pending`,
-    and holds no `updatesPending`. `kind`, only for an object that is not a
-    cluster: `edgeHost` or `clusterGroup`; `uid` and `name` are then those of
-    the edge host or the group. `members[]`, for a cluster group: `uid`, `name`,
+    and holds no `updatesPending` and no `repavePending`. `kind`, only for an
+    object that is not a cluster: `edgeHost` or `clusterGroup`; `uid` and
+    `name` are then those of the edge host or the group. `members[]`, for a cluster group: `uid`, `name`,
     and `projectUid` of each virtual cluster.
     None of these is part of the root.
     Each entry of `profiles[]` has `uid`, `name`, `version`, and `type`, in the

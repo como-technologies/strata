@@ -607,6 +607,12 @@ impl<A: PaletteApi> Palette<A> {
             }
             Err(e) => return Err(e),
         };
+        // the cluster document gives only the state of a repave; its own route gives the reasons
+        let repave = if crate::repave::is_pending(&cluster) {
+            Some(self.cluster_repave(uid)?)
+        } else {
+            None
+        };
         Ok(RawCluster {
             cluster,
             manifests,
@@ -616,6 +622,7 @@ impl<A: PaletteApi> Palette<A> {
             fetched_at: None,
             notifications,
             notifications_error,
+            repave,
             resolved_values: None,
             cloud_config: None,
         })
@@ -883,6 +890,7 @@ impl<A: PaletteApi> Palette<A> {
             fetched_at: None,
             notifications: None,
             notifications_error: None,
+            repave: None,
             resolved_values: None,
             cloud_config: None,
         })
@@ -1065,6 +1073,16 @@ impl<A: PaletteApi> Palette<A> {
             None => "/v1/clusterprofiles/validate/packs".to_string(),
         };
         self.api.post_json(&path, body)
+    }
+
+    /// The last repave of one cluster, `GET /v1/spectroclusters/{uid}/repave/status`: its source,
+    /// its reasons, and its state. The pack ref on each side of a reason holds the values of the
+    /// pack, with the value of each macro in its place.
+    pub(crate) fn cluster_repave(&self, uid: &str) -> Result<Value> {
+        self.api.get_json(&format!(
+            "/v1/spectroclusters/{}/repave/status",
+            query_value(uid)
+        ))
     }
 
     /// The notifications of one cluster, `GET /v1/notifications/spectrocluster/{uid}`, every page,

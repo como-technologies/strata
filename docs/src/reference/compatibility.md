@@ -28,12 +28,14 @@ reads a record of its own id that a later release wrote. `source.projectUid` and
 A field can also become absent, and that keeps the id as well. For most fields
 absent is a value: a field that is false, empty, or zero is left out, and each
 such field says so at its own definition in
-[JSON documents](./documents.md). Seven fields are different, and for these
+[JSON documents](./documents.md). Eight fields are different, and for these
 absent means unknown: `source.consumers`, `rootLive`, `maxImpact`,
-`packsChanged`, `error`, `updatesPending`, and the `value`, `old`, or `new` of
-a sensitive variable. `updatesPending` joined `source.cluster` in 0.10.0, and
-`strata-list/1` in the same release: absent means that strata could not read
-the notifications, and `updatesPendingError` says why. In 0.7.0 `source.consumers` became absent on a record that no
+`packsChanged`, `error`, `updatesPending`, `repavePending`, and the `value`,
+`old`, or `new` of a sensitive variable. `updatesPending` joined
+`source.cluster` in 0.10.0, and `strata-list/1` in the same release: absent
+means that strata could not read the notifications, and `updatesPendingError`
+says why. `repavePending` joined `source.cluster` after 0.17.0: absent means a
+record of an older release, or of an object that is not a cluster. In 0.7.0 `source.consumers` became absent on a record that no
 consumers request produced, where 0.6.3 wrote `count: 0` and stated a count
 that nothing counted. A reader that takes absent for zero reads such a record
 wrong, so this page names each field that changed this way, with the release

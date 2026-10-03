@@ -34,6 +34,10 @@ These are open:
   gives an OS pack an `imageId`. So no run shows if Palette replaces the nodes
   for a new image, or which `imageId` a cluster copy holds. See
   [The OS pack names a new machine image](../../use-cases/os-image.md).
+- The answer of `GET /v1/spectroclusters/{uid}/repave/status` to a cluster
+  record. A run read the route by hand, and no run takes a record of a cluster
+  while its repave waits. See
+  [macro-repave.sh](../../development/live-runs.md#macro-repavesh).
 - The answer of `POST /v1/clusterprofiles/validate/packs` to a pack that
   requires a pack that the profile does not hold. No pack of the Public Repo
   lists a dependency. See

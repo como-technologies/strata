@@ -14,8 +14,8 @@
 #   4  what each record says: the instances, the notifications, the audit entries of any resource
 #      since the change, and verify on a cluster record with and without the macro digests
 #   5  undo: the profile back. While the repave waits for approval, Palette refuses the update
-#      of cluster A and the delete of the macro, so the script ends here, and live-down removes
-#      the example
+#      of cluster A and the delete of the macro. A record of cluster A holds the repave that
+#      waits (#107), and verify names it. The script ends here, and live-down removes the example
 #
 # It measures. It names nothing to evade: the record of each signal, and where it is missing, is
 # the result. Needs the live example at its baseline with cluster A (just live-up), the strata
@@ -166,6 +166,15 @@ if stage 5 "undo"; then
     "$live/api.sh" apply "$C"
   check undo-accept-says 0 "and says why" -- grep -q "repave is pending for approval" undo-accept.err
   check undo-macro 2 "Palette refuses to delete the macro that cluster A reads" -- "$live/api.sh" macro-delete "$macro"
+  check repave-record 0 "#107: record cluster A while the repave waits" -- \
+    "$strata" snapshot "cluster:$C" -o cluster-repave.json
+  check repave-names 0 "#107: the record says that a repave waits, with the pack and the code that Palette gives" -- \
+    jq -e '.source.cluster.repavePending == true
+      and any(.source.cluster.pendingRepave.reasons[]; .pack == "kubernetes" and .code == "PackValuesUpdated")' \
+    cluster-repave.json
+  check repave-verify 0 "#107: verify of the record without the digests" -- "$strata" verify cluster-plain.json
+  check repave-verify-says 0 "#107: and the verdict names the repave that waits" -- \
+    grep -q "a repave of cluster $CN waits for approval" repave-verify.out
   echo "cluster A holds a repave that waits for approval: just live-down removes the example, then" \
     "api.sh macro-delete $macro" | tee -a steps.log
 fi

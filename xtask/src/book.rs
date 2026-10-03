@@ -362,6 +362,11 @@ impl Runner {
         self.build(|t| t.repave_answer(project, cluster, required));
     }
 
+    /// Hold a repave of a cluster for approval: see [`Tenant::repave_waits`].
+    pub fn repave_waits(&mut self, project: &str, cluster: &str, since: &str) {
+        self.build(|t| t.repave_waits(project, cluster, since));
+    }
+
     /// Set the answer of `validate/packs` for a cluster: see [`Tenant::packs_answer`].
     pub fn packs_answer(&mut self, project: &str, cluster: &str, refusal: Option<PackRefusal>) {
         self.build(|t| t.packs_answer(project, cluster, refusal));
