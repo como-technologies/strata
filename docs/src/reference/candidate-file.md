@@ -331,7 +331,8 @@ Strata does not read `metadata.description`, `metadata.labels`, or the other
 fields of `registry.metadata`. The export holds no `params`, so each layer has
 no params. The root does not hold the `order` of a variable. When a field of
 the export holds a number and not text, the export is `candidate-invalid`, and
-the message names the field. Then strata checks the candidate as it checks a
+the message names the field. When `spec.variables` is not a list, the export
+is also `candidate-invalid`, and the message names the field. Then strata checks the candidate as it checks a
 candidate file: see [Checks before any request](#checks-before-any-request).
 
 In this example, the stand-in gives the export of `aws-stack@1.1.1` in JSON:

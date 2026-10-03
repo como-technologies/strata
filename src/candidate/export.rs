@@ -31,7 +31,7 @@ pub(super) fn is_export(doc: &Value) -> bool {
 /// # Errors
 ///
 /// A message that names the field, when a field that holds text in an export holds another
-/// value, such as a number.
+/// value, such as a number, or when `spec.variables` is not a list.
 pub(super) fn to_candidate(doc: &Value) -> Result<Candidate, String> {
     let packs = doc.pointer(PACKS).and_then(Value::as_array);
     let layers = packs
@@ -53,11 +53,7 @@ pub(super) fn to_candidate(doc: &Value) -> Result<Candidate, String> {
         registry: None,
         registry_uid: None,
         layers,
-        variables: doc
-            .pointer("/spec/variables")
-            .and_then(Value::as_array)
-            .cloned()
-            .unwrap_or_default(),
+        variables: list(doc, "/spec/variables")?,
     })
 }
 
@@ -125,6 +121,19 @@ fn text(v: &Value, ptr: &str, at: &str) -> Result<String, String> {
     }
 }
 
+/// The list at `ptr` in `doc`, and an empty list when `doc` has no value there. The export omits
+/// a list that is empty.
+fn list(doc: &Value, ptr: &str) -> Result<Vec<Value>, String> {
+    match doc.pointer(ptr) {
+        None | Some(Value::Null) => Ok(Vec::new()),
+        Some(Value::Array(items)) => Ok(items.clone()),
+        Some(other) => {
+            let field = ptr.trim_start_matches('/').replace('/', ".");
+            Err(format!("{field} is {other} in the export, and not a list"))
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -145,6 +154,32 @@ mod tests {
             to_candidate(&doc).unwrap_err(),
             "spec.template.packs[0].version is 24.04 in the export, and not text; quote it"
         );
+    }
+
+    #[test]
+    fn an_export_whose_variables_are_not_a_list_is_candidate_invalid_and_names_the_field() {
+        let dir = tempfile::tempdir().unwrap();
+        let export = dir.path().join("export.yaml");
+        std::fs::write(
+            &export,
+            "metadata:\n  name: barney\nspec:\n  version: 1.0.0\n  variables:\n    name: fred\n  \
+             template:\n    packs:\n    - name: fred\n      version: 1.0.0\n",
+        )
+        .unwrap();
+        match crate::candidate::load(&export).unwrap_err() {
+            crate::Error::CandidateInvalid { message, .. } => assert_eq!(
+                message,
+                r#"spec.variables is {"name":"fred"} in the export, and not a list"#
+            ),
+            other => panic!("not candidate-invalid: {other}"),
+        }
+    }
+
+    #[test]
+    fn an_export_with_null_variables_has_no_variables() {
+        let doc = json!({"metadata": {"name": "barney"}, "spec": {"version": "1.0.0",
+            "variables": null, "template": {"packs": []}}});
+        assert!(to_candidate(&doc).unwrap().variables.is_empty());
     }
 
     #[test]
