@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 use crate::canon::canonical_json;
+use crate::cluster_template::ClusterTemplateRef;
 pub use crate::impact::{Flags, Impact, ImpactLevel, impact, presence_impact};
 use crate::layer::Layer;
 pub use crate::repave::PaletteRepaveReason;
@@ -890,6 +891,11 @@ pub struct PaletteRepave {
     /// True when the impact table and Palette say the same: both a repave, or both no repave. A
     /// level of `may-repave` agrees with either answer.
     pub agrees: bool,
+    /// The cluster template that Palette answered for, when the cluster is in one. Palette gives
+    /// an empty answer on the route of such a cluster, and answers on the route of the template,
+    /// by profile uid.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cluster_template: Option<ClusterTemplateRef>,
 }
 
 impl PaletteRepave {
@@ -910,6 +916,7 @@ impl PaletteRepave {
             required,
             reasons,
             agrees,
+            cluster_template: None,
         }
     }
 }

@@ -387,6 +387,17 @@ impl Runner {
         self.build(|t| t.repave_answer(project, cluster, required));
     }
 
+    /// Put a cluster in a cluster template: see [`Tenant::cluster_in_template`].
+    pub fn cluster_in_template(&mut self, project: &str, cluster: &str, template: &str) {
+        self.build(|t| t.cluster_in_template(project, cluster, template));
+    }
+
+    /// The answer that Palette gives when asked if a change of the profiles of a cluster
+    /// template repaves its clusters: see [`Tenant::template_repave_answer`].
+    pub fn template_repave_answer(&mut self, project: &str, template: &str, required: bool) {
+        self.build(|t| t.template_repave_answer(project, template, required));
+    }
+
     /// Hold a repave of a cluster for approval: see [`Tenant::repave_waits`].
     pub fn repave_waits(&mut self, project: &str, cluster: &str, since: &str) {
         self.build(|t| t.repave_waits(project, cluster, since));

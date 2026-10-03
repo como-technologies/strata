@@ -1,0 +1,6 @@
+$ strata compare cluster:payments aws-stack@1.1.1 --repave
+strata: looking up project dev
+strata: fetching profile 64e0000000000000000000c3
+strata: fetching cluster payments
+strata: cluster 'payments' is 64f1000000000000000000e1
+strata: --repave cannot ask about aws-stack@1.1.1: the cluster payments runs it, and the cluster template 64f8000000000000000000a1 governs the cluster. Palette answers for the template by profile uid, with no pack values, so it compares nothing for a version that the cluster runs

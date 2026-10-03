@@ -292,6 +292,30 @@ edit through such a route. The lock holds against a new cluster: it keeps every
 cluster outside the template away from a linked version. A cluster that runs a
 linked version is a cluster the template applies.
 
+The template also takes the repave question of its clusters. These facts come
+from the code of Palette, not from a live run:
+
+- The cluster document names the template in `spec.clusterTemplate`, with
+  `uid` and `projectUid`.
+- `POST /v1/spectroclusters/<uid>/validate/repave` compares nothing for such a
+  cluster. The answer is `200` with an empty body, and `isRepaveRequired` is
+  absent.
+- `POST /v1/spectroclusters/clusterTemplates/<uid>/validate/repave` answers
+  for the template. The body is `profiles[]`, each with a `uid` only, and
+  `isUpgradeNow`. Palette asks the question of one cluster of the template,
+  with the profiles of the body as the target. A profile that the cluster runs
+  keeps its copy, and a new uid takes its published packs.
+- Palette takes that cluster from a map, in no fixed order. So two requests
+  can ask two different clusters of the template, and the cluster that
+  `compare` names can be a different one.
+- With `isUpgradeNow: true`, Palette uses the profiles of the template, not
+  the profiles of the body. It asks one cluster that waits for the update of
+  the template, or that failed it.
+- A template with no cluster gets `isRepaveRequired: false` and no reason.
+
+`compare --repave` sends the route of the template for such a cluster: see
+[A cluster in a cluster template](../../commands/compare/repave.md#a-cluster-in-a-cluster-template).
+
 ## What the create of a version checks
 
 Palette refuses a profile version at the create when it breaks a rule. Some

@@ -7419,6 +7419,90 @@ fn compare_asks_palette_and_names_a_disagreement_with_the_impact_table() {
     assert!(matches!(err, Error::Usage { .. }), "{err}");
 }
 
+#[test]
+fn compare_asks_the_template_route_for_a_cluster_that_a_cluster_template_governs() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let mut doc = read(&dir.path().join("cluster-a").join("cluster.json"));
+    doc["spec"]["clusterTemplate"] = serde_json::json!({"uid": "tmpl-1", "projectUid": "p1"});
+    let cluster_api = serve_cluster(MemoryApi::new(), dir.path(), "cluster-a")
+        .with(format!("/v1/spectroclusters/{CLUSTER_UID}"), doc);
+    let cluster = snapshot_cluster(&cluster_api, None).unwrap();
+    let target = ops::snapshot_from_dir(&dir.path().join("b"), "b", "t0").unwrap();
+    // Palette gives an empty answer on the route of a cluster in a template, and answers for the
+    // template on its own route
+    let template_route = "/v1/spectroclusters/clusterTemplates/tmpl-1/validate/repave";
+    let api = cluster_api
+        .clone()
+        .with(
+            format!("POST /v1/spectroclusters/{CLUSTER_UID}/validate/repave"),
+            serde_json::json!({}),
+        )
+        .with(
+            format!("POST {template_route}"),
+            serde_json::json!({"isRepaveRequired": true, "reasons": [{
+                "code": "PackUpgraded", "message": "Pack 'kubernetes' is upgraded",
+                "pack": {"current": {"name": "kubernetes"}}}]}),
+        );
+    let palette = Palette::new(&api);
+
+    let mut d = ops::compare(&cluster, &target, "t1");
+    let r = ops::palette_repave(&palette, &cluster, &target, d.summary.max_impact).unwrap();
+    assert!(r.required);
+    assert_eq!(r.cluster_template.as_ref().unwrap().uid, "tmpl-1");
+    // one POST, to the route of the template: the profile uids of the cluster route, with no
+    // pack values, and not for an upgrade now, which ignores the profiles of the request
+    let posted = api.posted();
+    assert_eq!(posted.len(), 1);
+    assert_eq!(posted[0].0, template_route);
+    let running = strata::snapshot::AppliedProfile::of_cluster(
+        &Palette::new(&cluster_api)
+            .cluster_document(CLUSTER_UID)
+            .unwrap(),
+    );
+    let uids: Vec<Value> = ops::validate_body(&running, &target)["profiles"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| serde_json::json!({"uid": p["uid"]}))
+        .collect();
+    assert_eq!(
+        posted[0].1,
+        serde_json::json!({"profiles": uids, "isUpgradeNow": false})
+    );
+
+    d.palette_repave = Some(r);
+    let text = render::renderer(Format::Terminal, Paint::off(), false)
+        .render(&d, &cluster, &target, false)
+        .unwrap();
+    assert!(!text.contains("palette    no repave"), "{text}");
+    assert!(
+        text.contains(
+            "palette    the cluster template tmpl-1 governs the cluster: Palette answers for the \
+             template, by profile uid\n\
+             palette    repave: PackUpgraded kubernetes\n"
+        ),
+        "{text}"
+    );
+    let json: Value = serde_json::from_str(
+        &render::renderer(Format::Json, Paint::off(), false)
+            .render(&d, &cluster, &target, false)
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(json["paletteRepave"]["required"], true);
+    assert_eq!(json["paletteRepave"]["clusterTemplate"]["uid"], "tmpl-1");
+
+    // a version that the cluster runs: the route of the template takes no values, so it compares
+    // nothing, and strata stops before the POST
+    let running_version = ops::snapshot_from_dir(&dir.path().join("a"), "a", "t0").unwrap();
+    let err = ops::palette_repave(&palette, &cluster, &running_version, d.summary.max_impact)
+        .unwrap_err();
+    assert!(matches!(err, Error::Usage { .. }), "{err}");
+    assert!(err.to_string().contains("cluster template tmpl-1"), "{err}");
+    assert_eq!(api.posted().len(), 1);
+}
+
 // ---- compare --validate ----------------------------------------------------------------
 
 #[test]

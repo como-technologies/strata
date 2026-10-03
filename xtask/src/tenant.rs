@@ -1563,22 +1563,41 @@ impl Tenant {
     /// asked change repaves it, and the reason, as a live run gave it for a kubeadm command. The
     /// stand-in gives one answer for every request; it does not compare anything.
     pub fn repave_answer(&self, project: &str, cluster: &str, required: bool) {
-        let reasons = if required {
-            json!([{
-                "code": "PackValuesUpdated",
-                "message": "Pack 'kubernetes' values are updated",
-                "pack": {
-                    "current": {"name": "kubernetes"},
-                    "diffConfigKeys": ["kubeadmconfig.postKubeadmCommands"],
-                },
-            }])
-        } else {
-            json!([])
-        };
         self.write(
             project,
             &format!("v1/spectroclusters/{cluster}/validate/repave"),
-            &json!({"isRepaveRequired": required, "reasons": reasons}),
+            &repave_answer_of(required),
+        );
+    }
+
+    /// Put a cluster in the cluster template `template`, as a cluster that the template launched.
+    ///
+    /// The cluster document names the template in `spec.clusterTemplate`. Palette then gives an
+    /// empty answer on `POST /v1/spectroclusters/{uid}/validate/repave` for the cluster: it
+    /// compares nothing and sends no `isRepaveRequired`.
+    pub fn cluster_in_template(&self, project: &str, cluster: &str, template: &str) {
+        self.cluster_field(
+            project,
+            cluster,
+            "/spec/clusterTemplate",
+            json!({"uid": template, "projectUid": project}),
+        );
+        self.write(
+            project,
+            &format!("v1/spectroclusters/{cluster}/validate/repave"),
+            &json!({}),
+        );
+    }
+
+    /// The answer of `POST /v1/spectroclusters/clusterTemplates/{uid}/validate/repave` for a
+    /// cluster template: whether the asked change of its profiles repaves its clusters. Palette
+    /// gives the answer of the cluster route, for one cluster of the template. The stand-in gives
+    /// one answer for every request, with the reason of [`Tenant::repave_answer`].
+    pub fn template_repave_answer(&self, project: &str, template: &str, required: bool) {
+        self.write(
+            project,
+            &format!("v1/spectroclusters/clusterTemplates/{template}/validate/repave"),
+            &repave_answer_of(required),
         );
     }
 
@@ -2020,6 +2039,24 @@ fn fnv_hex(text: &str) -> String {
         h = h.wrapping_mul(0x0100_0000_01b3);
     }
     format!("{h:016x}")
+}
+
+/// An answer of a `validate/repave` route: a repave for a kubeadm command when `required`, as a
+/// live run gave it, or no repave and no reason.
+fn repave_answer_of(required: bool) -> Value {
+    let reasons = if required {
+        json!([{
+            "code": "PackValuesUpdated",
+            "message": "Pack 'kubernetes' values are updated",
+            "pack": {
+                "current": {"name": "kubernetes"},
+                "diffConfigKeys": ["kubeadmconfig.postKubeadmCommands"],
+            },
+        }])
+    } else {
+        json!([])
+    };
+    json!({"isRepaveRequired": required, "reasons": reasons})
 }
 
 /// The template of a profile on a cluster, from the profile document: the published profile.

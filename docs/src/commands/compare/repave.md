@@ -50,3 +50,35 @@ answers for a cluster, and not for them:
 ```text
 {{#include ../../output/repave-usage.txt}}
 ```
+
+## A cluster in a cluster template
+
+Palette does not answer on the route of the cluster when a cluster template
+governs the cluster. The cluster document names the template in
+`spec.clusterTemplate.uid`, and the answer of the route is empty. An empty
+answer is not "no repave", so strata does not print it. For such a cluster,
+`--repave` asks the route of the template,
+`POST /v1/spectroclusters/clusterTemplates/<uid>/validate/repave`, and a first
+`palette` line names the template:
+
+```text
+{{#include ../../output/repave-template-lines.txt}}
+```
+
+The request names the profiles by uid, with no pack values, and sends
+`isUpgradeNow: false`. `--json` names the template in `clusterTemplate`:
+
+```text
+{{#include ../../output/repave-template-json.txt}}
+```
+
+The route of the template takes no pack values. For a version that the cluster
+runs now, Palette compares the copy of the cluster with itself, and the answer
+says nothing. So strata stops with a usage error, before the `POST`:
+
+```text
+{{#include ../../output/repave-template-usage.txt}}
+```
+
+[The lock of a cluster template](../../internals/palette/profiles.md#the-lock-of-a-cluster-template)
+gives the rule of Palette.
