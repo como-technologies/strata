@@ -11,8 +11,8 @@ The live runs used three engines. The first is a kubeadm cluster that Palette
 builds with the cluster API, on AWS and on GCP. On each cloud Palette gives the
 same answers (see
 [A second cloud: GCP](../../development/live-runs.md#a-second-cloud-gcp)). Each
-repave answer agrees with the impact table, except for a move of the OS pack
-to another registry at one version (see
+repave answer agrees with the impact table. The table takes the rule for a
+move of the OS pack to another registry at one version from a live run (see
 [A pack that moves between registries](packs.md#a-pack-that-moves-between-registries)). The
 second is EKS, a managed engine: a Kubernetes version bump repaves, and a change
 of the values of the Kubernetes or CSI pack does not (see

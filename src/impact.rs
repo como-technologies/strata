@@ -153,9 +153,9 @@ const RULES: &[Rule] = &[
 /// The impact of a change on a layer, from the rules table.
 ///
 /// On the OS, Kubernetes, and kernel layers, an identity change that keeps the version takes the
-/// level of the other flags. Palette replaces the nodes for a new version of such a pack, and not
-/// for the same version from another registry: a live run moved the OS pack of a running cluster
-/// to another registry, and Palette replaced no node.
+/// level of the other flags. Palette replaces the nodes for a new version of such a pack. A live
+/// run moved the OS pack of a running cluster to another registry at one version, and Palette
+/// replaced no node.
 pub fn impact(layer: Layer, flags: Flags) -> Impact {
     if !(flags.identity && !flags.version && Layers::NodeImage.matches(layer)) {
         return rule_impact(layer, flags);

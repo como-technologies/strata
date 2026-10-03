@@ -53,10 +53,10 @@ Edge cluster, where that change repaves nothing:
 
 That note is the signal that the table is wrong for the environment, or for the
 change. AWS and GCP, the two clouds that the runs used, have one upgrade
-engine. One live run on AWS produced a disagreement: a move of the OS pack to
-another registry, at one version and with the same values. The table says
-`repave`, Palette says no repave, and the cluster kept its nodes. There the
-table is wrong about the change, and not about the engine: see
+engine. One live run on AWS moved the OS pack to another registry, at one
+version and with the same values. Palette said no repave, and the cluster kept
+its nodes. The table takes that result: a new pack reference at one version
+does not repave. See
 [A pack that moves between registries](../../internals/palette/packs.md#a-pack-that-moves-between-registries).
 
 `--repave` costs two requests, the cluster document and one `POST` to

@@ -80,8 +80,9 @@ somebody renamed the tag on purpose.
 - Nothing, for the pair: the clusters run the same build. The live run moved a
   cluster between two such versions, and Palette replaced no node.
 - Pick one tag style for a team, so the roots of equal versions are equal.
-- A tag that names another build, with another version or pack uid, is an
-  `IDENTITY` change with the impact `repave`. A floating tag is not covered: no
+- A tag that names another version is an `IDENTITY` change with the impact
+  `repave`. Another pack uid at the same version is not a repave: see
+  [The impact levels](../reference/impact.md#the-impact-levels). A floating tag is not covered: no
   run shows whether Palette moves the pack uid of a profile when a new build
   lands under a tag that the profile already pins.
 

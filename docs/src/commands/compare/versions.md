@@ -75,7 +75,7 @@ does not show. See [The change flags](../../reference/impact.md#the-change-flags
 ...
 ```
 
-`IDENTITY` with a new pack uid on the OS or Kubernetes layer means a new pack
+`IDENTITY` with a new version on the OS or Kubernetes layer means a new pack
 build: on a kubeadm cluster, Palette replaces the nodes (`repave`). Schedule a
 maintenance window for this release. The level is a hint from a table that
 describes one upgrade engine: see

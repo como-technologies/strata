@@ -624,7 +624,7 @@ before the undo, and `live-down` follows it.
 |---|---|---|
 | `base-instances`, `base-record` | 0 | the machines of cluster A, three EC2 instances, and a record of the release version |
 | `move-record`, `move-same-uid`, `move-identity` | 0 | #135: the move is in place, and the OS pack has another registry and the type `oci`, with the same version and values. The pack uid changes too |
-| `move-compare`, `move-impact`, `move-palette`, `move-reasons` | ? | #135: the impact table gives the OS pack `repave` (recorded 0). Palette says no repave, with no reason (recorded 1, 0). `--json` gives `agrees` false |
+| `move-compare`, `move-impact`, `move-palette`, `move-reasons` | ? | #135: the impact table gave the OS pack `repave` (recorded 0), and `--json` gave `agrees` false. Palette says no repave, with no reason (recorded 1, 0). The table now takes this result: the OS pack is `sync`, and `move-impact` exits 1 |
 | `take` | 0 | #135: cluster A takes the update |
 | `replaced`, `waits` | ? | #135: for 33 minutes, cluster A keeps the same three EC2 instances, and no repave waits for approval (recorded 1, 1) |
 | `after-record`, `after-runs` | 0 | #135: cluster A runs the OS pack from the other registry |
@@ -632,8 +632,8 @@ before the undo, and `live-down` follows it.
 
 The watch reads cluster A 30 times in 33 minutes: it stays `Running` with the
 same instances each time. So a move of the OS pack to another registry, at one version and
-with the same values, replaces no node, as Palette says. The impact table says
-`repave`. This is the source for
+with the same values, replaces no node, as Palette says. The impact table took
+this result. This is the source for
 [A pack that moves between registries](../internals/palette/packs.md#a-pack-that-moves-between-registries).
 
 ## validate-packs.sh
