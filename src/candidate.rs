@@ -1990,5 +1990,9 @@ variables:
         ] {
             assert!(gaps::check_pack_tag(tag).is_err(), "{tag}");
         }
+        // only the create checks the tag, so the refusal names the code and the gap
+        let message = gaps::check_pack_tag("stable").unwrap_err();
+        assert!(message.contains("(InvalidPackVersion). "), "{message}");
+        assert!(message.ends_with(gaps::GAP), "{message}");
     }
 }

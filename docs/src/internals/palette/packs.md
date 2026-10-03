@@ -275,8 +275,8 @@ Palette publishes it. The layer is part of `IDENTITY`, so a candidate file with
 that layer has another root. So strata refuses it: a
 [candidate file](../../reference/candidate-file.md#the-registry-lookups) that
 gives a pack another layer than its registry is `candidate-invalid`. The rules
-of the profile type also use the layer of the registry. No route of Palette
-answers them before the create, so strata checks them: see
+of the profile type also use the layer of the registry. No route that takes a
+candidate answers them before the create, so strata checks them: see
 [The gaps that strata fills](./profiles.md#the-gaps-that-strata-fills).
 
 ## Manifest pack uids
@@ -306,7 +306,8 @@ with:
 - no digest, and no default values,
 - for an OCI registry, the provider type of the registry as an annotation.
 
-Palette refuses the create when the tag is not a semantic version. The profile
+Palette refuses the create with `InvalidPackVersion` when the tag is not a
+semantic version and holds no three numbers with dots between them. The profile
 takes the layer, the version, and the digest from that pack. A second profile
 that pins the same chart and tag gets the same pack. The listing then has the
 chart while a profile pins it: see

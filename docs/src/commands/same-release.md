@@ -65,8 +65,8 @@ are equal. The reason names the pack and the two images:
 {{#include ../output/os-image-same-release.txt}}
 ```
 
-A side with no `imageId` is not compared. A record written before strata kept
-the annotations has none. See
+Strata does not compare a side with no `imageId`. A record written before
+strata kept the annotations has none. See
 [The OS pack names a new machine image](../use-cases/os-image.md).
 
 ## A macro has another value in each project

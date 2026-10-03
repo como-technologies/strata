@@ -1,7 +1,7 @@
 //! The rules of Palette that only the create of a profile version checks.
 //!
-//! `POST /v1/clusterprofiles/validate/packs` does not check these rules, so a team learns of a
-//! fault only when the create refuses it. Strata fills each gap with a check before any request.
+//! No route that takes a candidate checks these rules, so a team learns of a fault only when the
+//! create refuses it. Strata fills each gap with a check before any request.
 //! Each message names the code that Palette gives at the create. When a route of Palette answers a
 //! rule before the create, strata removes its check. The book lists each rule in "The gaps that
 //! strata fills".
@@ -30,8 +30,9 @@ const KNOWN_CLOUDS: &[&str] = &[
 ];
 
 /// What strata says after each refusal of this module.
-pub(super) const GAP: &str = "Palette checks this only at the create, and no route of Palette answers it \
-                   before the create. Strata removes this check when a route answers it";
+pub(super) const GAP: &str = "Palette checks this only at the create, and no route that takes a \
+                   candidate answers it before the create. Strata removes this check when a route \
+                   answers it";
 
 /// A rule that Palette checks only at the create of a profile version.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -306,6 +307,6 @@ pub(super) fn check_pack_tag(tag: &str) -> Result<(), String> {
     }
     Err(CreateRule::PackTag.refuse(&format!(
         "the tag {tag} is not a semantic version, and it holds no three numbers with dots \
-         between them; Palette gives the pack that it makes the tag as its version"
+         between them"
     )))
 }

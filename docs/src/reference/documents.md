@@ -371,7 +371,7 @@ is the path as a list: strings for keys, numbers for indexes, and
   `packsRetagged`, and `reasons[]`. A pack that names another image in
   `imageId` on each side makes the pair `different`, also when the roots are
   equal. `upstreamUnknown`, only when it is not empty: the packs with no
-  upstream digest, also when they are allowed.
+  upstream digest, also when `--allow no-digest` accepts them.
   `mintedUidOnly`, only when it is not empty: the packs whose only difference
   is a pack uid that Palette mints, for a manifest pack or for a pack from a
   registry that Palette does not sync.
