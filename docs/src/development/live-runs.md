@@ -672,6 +672,13 @@ of the timezone and the labels changed the `spcHash` of B.
 No run makes a cluster run another pack version than its profile declares; the
 book shows it on the stand-in.
 
+No script reads the role bindings or the namespaces of a cluster. Read-only
+requests to the tenant show the facts in
+[Cluster tiers](../internals/palette/clusters.md#cluster-tiers): a deleted
+cluster of the live example gives `{"items": []}` for each route, and a uid that
+is not a cluster of the project gives HTTP 404 `ResourceNotFound`. No run edits
+the subjects of a binding; the book shows the change on the stand-in.
+
 ## fleet.sh
 
 Read-write: it gives cluster A the label `env=prod` through the API, makes a

@@ -1,0 +1,45 @@
+$ jq '.source.cluster.tiers.policy.fields' runs/payments.json
+{
+  "agentUpgrades": "allowed",
+  "applySetting": "DownloadAndInstall",
+  "clusterMetaAttribute": "",
+  "controlPlaneHealthCheckTimeout": "",
+  "fips": "none",
+  "lifecycle": {
+    "pause": false
+  },
+  "machineHealth": {},
+  "namespaces": [
+    {
+      "isRegex": false,
+      "name": "apps",
+      "resourceAllocation": {
+        "cpuCores": 2,
+        "memoryMiB": 4096
+      }
+    }
+  ],
+  "osPatch": {
+    "patchOnBoot": false,
+    "rebootIfRequired": false
+  },
+  "rbacs": [
+    {
+      "namespace": "",
+      "role": {
+        "kind": "ClusterRole",
+        "name": "view"
+      },
+      "subjects": [
+        {
+          "name": "platform",
+          "namespace": "",
+          "type": "Group"
+        }
+      ],
+      "type": "ClusterRoleBinding"
+    }
+  ],
+  "timezone": "Etc/UTC",
+  "updateWorkerPoolsInParallel": false
+}

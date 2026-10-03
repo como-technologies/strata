@@ -9,13 +9,15 @@ flowchart LR
   release["the root<br/>the copies of the profiles"]
   applied["applied<br/>status.spcApply"]
   running["running<br/>status.packs"]
-  policy["policy<br/>spec.clusterConfig"]
+  config["GET /v1/spectroclusters/{uid}/config/rbacs<br/>GET /v1/spectroclusters/{uid}/config/namespaces"]
+  policy["policy<br/>spec.clusterConfig, the bindings, the namespaces"]
   labels["labels<br/>metadata.labels"]
   shape["shape<br/>machine pools, cloud part"]
   doc --> release
   doc --> applied
   doc --> running
   doc --> policy
+  config --> policy
   doc --> labels
   cc --> shape
 ```
@@ -35,7 +37,19 @@ itself. A cluster on AWS gives these fields:
 - `spec.clusterConfig`: `machineManagementConfig.osPatchConfig`,
   `lifecycleConfig`, `machineHealthConfig`, `timezone`, `clusterResources`,
   `clusterRbac`, and the host and hybrid cluster config. `status.fips.mode` is
-  beside it.
+  beside it. Palette omits `updateWorkerPoolsInParallel`,
+  `controlPlaneHealthCheckTimeout`, and `clusterMetaAttribute` when nobody set
+  them: a cluster of the live example gives none of the three.
+- `status.spcApply.actionType`: `DownloadAndInstall` for a cluster of the live
+  example.
+- `clusterResources` holds only references to the role bindings and the
+  namespaces: a uid, a name, and a kind for each. The bindings and the
+  namespaces are on routes of their own,
+  `GET /v1/spectroclusters/{uid}/config/rbacs` and
+  `GET /v1/spectroclusters/{uid}/config/namespaces`. Each answers `items`. A
+  deleted cluster of the live example gives `{"items": []}` for each. For a
+  uid that is not a cluster of the project, Palette answers HTTP 404 with the
+  code `ResourceNotFound`.
 - `metadata.labels`: the tags that the cluster was created with, as a map.
 - `spec.cloudConfigRef`: the kind and uid of the cloud config, whose document,
   `GET /v1/cloudconfigs/{kind}/{uid}`, holds `spec.machinePoolConfig[]` and

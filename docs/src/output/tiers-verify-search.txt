@@ -1,0 +1,22 @@
+$ strata verify runs/search.json
+aws-stack@1.1.1 on cluster search (uid 64f1000000000000000000e2)  ->  aws-stack@1.1.1 on cluster search (uid 64f1000000000000000000e2)
+root       088136c929bd -> 088136c929bd   IDENTICAL
+
+  variables unchanged
+  cluster tiers applied unchanged, policy CHANGED, running unchanged, shape CHANGED, labels CHANGED
+        + policy.rbacs[0].subjects[name=fred@example.com].name: "fred@example.com"
+        + policy.rbacs[0].subjects[name=fred@example.com].namespace: ""
+        + policy.rbacs[0].subjects[name=fred@example.com].type: "User"
+        ~ policy.timezone: "Etc/UTC" -> "America/Chicago"
+        ~ shape.pools[name=worker-pool].size: 2 -> 3
+        + shape.pools[name=worker-pool].taints[0].effect: "NoSchedule"
+        + shape.pools[name=worker-pool].taints[0].key: "dedicated"
+        + shape.pools[name=worker-pool].taints[0].value: "search"
+        + labels.team: "search"
+
+  [os   ] ubuntu-aws                 24.04              unchanged
+  [k8s  ] kubernetes                 1.36.2             unchanged
+  [cni  ] cni-cilium-oss             1.20.1             unchanged
+  [csi  ] csi-aws-ebs                1.65.0             unchanged
+  [addon] cert-manager               1.21.1             unchanged
+OK: cluster search running aws-stack@1.1.1 is unchanged since 2026-09-17T09:30:00Z

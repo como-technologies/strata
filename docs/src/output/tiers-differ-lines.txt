@@ -4,6 +4,9 @@ root       088136c929bd -> 088136c929bd   IDENTICAL
 ...
   variables unchanged
   cluster tiers applied unchanged, policy CHANGED, running unchanged, shape CHANGED, labels CHANGED
+        + policy.rbacs[0].subjects[name=fred@example.com].name: "fred@example.com"
+        + policy.rbacs[0].subjects[name=fred@example.com].namespace: ""
+        + policy.rbacs[0].subjects[name=fred@example.com].type: "User"
         ~ policy.timezone: "Etc/UTC" -> "America/Chicago"
         ~ shape.pools[name=worker-pool].size: 2 -> 3
         + shape.pools[name=worker-pool].taints[0].effect: "NoSchedule"

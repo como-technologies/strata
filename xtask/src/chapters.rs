@@ -2084,6 +2084,12 @@ fn use_cases(r: &mut Runner) {
         "jq '.source.cluster | {labels, tiers: (.tiers | map_values(.hash[0:12]))}' runs/payments.json",
     );
     r.step(
+        "tiers-policy",
+        0,
+        false,
+        "jq '.source.cluster.tiers.policy.fields' runs/payments.json",
+    );
+    r.step(
         "tiers-same",
         0,
         false,
@@ -2119,9 +2125,30 @@ fn use_cases(r: &mut Runner) {
         "/metadata/labels",
         json!({"managed-by": "opentofu", "team": "search"}),
     );
+    // a person adds a user to the role binding of search: the binding keeps its uid
+    r.cluster_field(
+        DEV,
+        SEARCH,
+        "/rbacs/items/0/spec/bindings/0/subjects",
+        json!([
+            {"type": "Group", "name": "platform", "namespace": ""},
+            {"type": "User", "name": "fred@example.com", "namespace": ""}
+        ]),
+    );
     // payments reconciled an older Kubernetes version than its profile declares
     r.cluster_field(DEV, PAYMENTS, "/status/packs/1/version", json!("1.36.1"));
     r.serve_here(); // state 2: search has another shape and policy, and payments is behind
+    r.step(
+        "tiers-verify-search",
+        0,
+        false,
+        "strata verify runs/search.json",
+    );
+    r.excerpt(
+        "tiers-verify-search-lines",
+        "tiers-verify-search",
+        r"^(root |  cluster tiers|        ~ policy|        \+ policy|OK)",
+    );
     r.step(
         "tiers-record-search-again",
         0,

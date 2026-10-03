@@ -97,6 +97,10 @@ profile, or pack version.
     `uid` and `endpointConfig`: see
     [The config that a cluster group gives](../commands/snapshot/other-objects.md#the-config-that-a-cluster-group-gives).
     A record that an older version of strata wrote has no `cloudType`.
+    The `fields` of `policy` are in
+    [The policy tier](../commands/snapshot/cluster.md#the-policy-tier). A
+    record that an older version of strata wrote holds `resources` and `rbac`
+    there, in place of `rbacs` and `namespaces`.
     `pending`, only when true: the record is of `cluster:<cluster>@pending`,
     and holds no `updatesPending` and no `repavePending`. `kind`, only for an
     object that is not a cluster: `edgeHost` or `clusterGroup`; `uid` and

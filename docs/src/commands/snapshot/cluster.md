@@ -33,7 +33,7 @@ profiles, in tiers. Each tier has its own hash, and none is part of the root:
 | --- | --- | --- |
 | `applied` | `spcHash` and `spcInfraHash`: the hashes that Palette computes of the spec it applied to the cluster. `spcHash` is its own for each cluster, so between two clusters `compare` reads `spcInfraHash` alone | the cluster document |
 | `running` | each pack that the cluster reconciled, with its version and profile uid | the cluster document, `status.packs` |
-| `policy` | the OS patch policy, the lifecycle, the machine health, the timezone, the cluster resources, the RBAC, and the FIPS mode | the cluster document, `spec.clusterConfig` |
+| `policy` | the OS patch policy, the lifecycle, the machine health, the timezone, the FIPS mode, the role bindings, the namespaces, and how the cluster takes an update. See [The policy tier](#the-policy-tier) | the cluster document, and two more requests: the role bindings and the namespaces |
 | `shape` | the cloud type; each machine pool, with its instance type, size, zones, labels, taints, and architecture; and the cloud part that a person chooses. See [The shape on each cloud](#the-shape-on-each-cloud) | the cloud config: one more request, with `--shape` |
 
 A record of a cluster group carries a `policy` tier of its own: the config
@@ -46,6 +46,52 @@ it reads, so a record names the tiers that it carries.
 
 `compare` of two cluster records names each tier that differs, and each field in
 it. See [Two clusters on one release differ](../../use-cases/cluster-tiers.md).
+A tier difference does not change the exit of `compare` or `verify`.
+
+## The policy tier
+
+The `policy` tier holds the settings of the cluster:
+
+| Field | What it holds | From |
+| --- | --- | --- |
+| `osPatch` | the OS patch policy | `spec.clusterConfig.machineManagementConfig.osPatchConfig` |
+| `lifecycle` | whether a person paused the cluster | `spec.clusterConfig.lifecycleConfig` |
+| `machineHealth` | the machine health checks | `spec.clusterConfig.machineHealthConfig` |
+| `timezone` | the timezone of the scheduled tasks of the cluster | `spec.clusterConfig.timezone` |
+| `fips` | the FIPS mode | `status.fips.mode` |
+| `rbacs` | each role binding, with its `namespace`, `role`, `subjects`, and `type` | `GET /v1/spectroclusters/{uid}/config/rbacs` |
+| `namespaces` | each namespace, with its `name`, `isRegex`, and `resourceAllocation` | `GET /v1/spectroclusters/{uid}/config/namespaces` |
+| `updateWorkerPoolsInParallel` | `true` when Palette updates all the worker pools at one time, and `false` when it updates them one after the other | `spec.clusterConfig` |
+| `controlPlaneHealthCheckTimeout` | how long Palette waits for a new control plane node to become ready, before it replaces the node | `spec.clusterConfig` |
+| `clusterMetaAttribute` | the text that a person adds to the cluster as more data | `spec.clusterConfig` |
+| `applySetting` | `DownloadAndInstall` when the cluster applies each update at once, and `DownloadAndInstallLater` when each update waits until a person applies it | `status.spcApply.actionType` |
+| `agentUpgrades` | `paused` when a person stopped the upgrades of the agent of Palette on the cluster, and `allowed` when not | the annotation `spectroComponentsUpgradeForbidden` of the cluster |
+
+```text
+{{#include ../../output/tiers-policy.txt}}
+```
+
+A field that Palette does not give is `null`, empty, or `false`. The bindings
+and the namespaces have no uid and no time. A binding is a set of subjects, so strata
+sorts the subjects of each binding, and the bindings. When Palette answers
+HTTP 404 for the bindings or the namespaces, the field is `null`, and not an
+empty list.
+
+A person can edit the subjects of a binding, or the quota of a namespace, and
+the uid stays. The hash of the tier changes, and `compare` and `verify` name
+the field. Here a person added the user `fred@example.com` to the binding of
+the cluster `search`:
+
+```text
+{{#include ../../output/tiers-verify-search-lines.txt}}
+```
+
+A record that an older version of strata wrote holds `resources` and `rbac` in
+place of `rbacs` and `namespaces`: the references to the bindings and the
+namespaces, with their uids. When one of two records holds them, `compare` and
+`verify` compare only `osPatch`, `lifecycle`, `machineHealth`, `timezone`, and
+`fips`. So the older record still verifies. Record the cluster again to compare
+all the fields.
 
 ## The shape on each cloud
 

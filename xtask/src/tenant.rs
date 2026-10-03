@@ -1216,12 +1216,20 @@ impl Tenant {
         self.write(project, &path, &doc);
     }
 
-    /// Change one field of the document of a cluster, or of its cloud config, at a JSON pointer:
-    /// what Palette reports changes, as a change on the cluster does, and its profiles do not.
+    /// Change one field of the document of a cluster, at a JSON pointer: what Palette reports
+    /// changes, as a change on the cluster does, and its profiles do not. A pointer that starts
+    /// with `/cloudconfig`, `/rbacs`, or `/namespaces` changes the cloud config, the role
+    /// bindings, or the namespaces of the cluster.
     pub fn cluster_field(&self, project: &str, uid: &str, pointer: &str, value: Value) {
-        let (path, pointer) = match pointer.strip_prefix("/cloudconfig") {
-            Some(rest) => (self.cloud_config_path(project, uid), rest.to_string()),
-            None => (format!("v1/spectroclusters/{uid}"), pointer.to_string()),
+        let cluster = format!("v1/spectroclusters/{uid}");
+        let (path, pointer) = if let Some(rest) = pointer.strip_prefix("/cloudconfig") {
+            (self.cloud_config_path(project, uid), rest.to_string())
+        } else if let Some(rest) = pointer.strip_prefix("/rbacs") {
+            (format!("{cluster}/config/rbacs"), rest.to_string())
+        } else if let Some(rest) = pointer.strip_prefix("/namespaces") {
+            (format!("{cluster}/config/namespaces"), rest.to_string())
+        } else {
+            (cluster, pointer.to_string())
         };
         self.set_field(project, &path, &pointer, value);
         // a label is in the listing and the search too
@@ -1360,7 +1368,8 @@ impl Tenant {
                         "clusterResources": {"namespaces": [], "rbacs": []},
                     }},
                 "status": {"state": "Running",
-                    "spcApply": {"spcHash": fnv_hex(&json!(templates).to_string()),
+                    "spcApply": {"actionType": "DownloadAndInstall",
+                        "spcHash": fnv_hex(&json!(templates).to_string()),
                         "spcInfraHash": fnv_hex(&json!(infra).to_string())},
                     "packs": running,
                     "fips": {"mode": "none"}}
@@ -1384,6 +1393,32 @@ impl Tenant {
                     ]
                 }
             }),
+        );
+
+        // the role bindings and the namespaces of the cluster are on routes of their own: one
+        // binding of a group to a cluster role, and one namespace with a quota
+        let related = json!({"kind": "spectrocluster", "name": name, "uid": uid});
+        self.write(
+            project,
+            &format!("v1/spectroclusters/{uid}/config/rbacs"),
+            &json!({"items": [{
+                "metadata": {"uid": format!("{uid}r"), "name": format!("{name}-rbac"),
+                    "creationTimestamp": "2026-09-01T10:00:00.000Z"},
+                "spec": {"isSystem": false, "relatedObject": related,
+                    "bindings": [{"type": "ClusterRoleBinding", "namespace": "",
+                        "role": {"kind": "ClusterRole", "name": "view"},
+                        "subjects": [{"type": "Group", "name": "platform", "namespace": ""}]}]},
+                "status": {}}]}),
+        );
+        self.write(
+            project,
+            &format!("v1/spectroclusters/{uid}/config/namespaces"),
+            &json!({"items": [{
+                "metadata": {"uid": format!("{uid}n"), "name": "apps",
+                    "creationTimestamp": "2026-09-01T10:00:00.000Z"},
+                "spec": {"isRegex": false, "relatedObject": related,
+                    "resourceAllocation": {"cpuCores": 2, "memoryMiB": 4096}},
+                "status": {}}]}),
         );
 
         let manifests: Vec<Value> = profiles
