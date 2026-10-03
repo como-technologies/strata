@@ -139,7 +139,9 @@ if stage 3 "the CPU limit of the group"; then
     "$strata" snapshot "clustergroup:$G" -o limit.json
   check limit-before 0 '#110: the policy tier holds the CPU limit of the group, 6000 millicores' -- \
     jq -e '.source.cluster.tiers.policy.fields.limitConfig.cpuMilliCore == 6000' limit.json
-  apply -var cluster_group=true -var group_cpu_millicore=4000
+  # only the group: a plan of the member also removes the profile that the group pins, and
+  # Palette refuses that update (ClusterUpdateValidationFailure)
+  apply -var cluster_group=true -var group_cpu_millicore=4000 -target='spectrocloud_cluster_group.group[0]'
   check limit-verify 0 '#110: verify of the record: the pinned profile is unchanged, exit 0' -- "$strata" verify limit.json
   check limit-verify-says 0 '#110: and it reports the policy tier' -- grep -q 'policy CHANGED' limit-verify.out
   check limit-compare 0 '#110: compare of the record with the group: one release, exit 0' -- \
@@ -150,7 +152,7 @@ if stage 3 "the CPU limit of the group"; then
   check limit-compare-tier 0 '#110: the policy tier differs, at limitConfig.cpuMilliCore' -- \
     jq -e '.clusterTiers[] | select(.tier == "policy") | .same == false
       and ([.diff[].path] | index("limitConfig.cpuMilliCore"))' limit-compare-json.out
-  apply -var cluster_group=true
+  apply -var cluster_group=true -target='spectrocloud_cluster_group.group[0]'
   check limit-undone 0 'the limit is back: compare of the record with the group finds the same policy tier' -- \
     bash -c "\"$strata\" compare limit.json clustergroup:$G --json | jq -e '.clusterTiers[] | select(.tier == \"policy\") | .same'"
 fi
