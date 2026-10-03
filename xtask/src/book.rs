@@ -28,6 +28,19 @@ pub enum Mode {
     },
 }
 
+/// Split the name that `just playground NAME` takes into its chapter and its state.
+///
+/// `NAME` is `CHAPTER` or `CHAPTER-N`, with one digit in `N`. `CHAPTER` alone asks for state 1.
+pub fn playground(name: &str) -> (&str, u32) {
+    if let Some((chapter, tail)) = name.rsplit_once('-')
+        && tail.len() == 1
+        && let Ok(seed) = tail.parse()
+    {
+        return (chapter, seed);
+    }
+    (name, 1)
+}
+
 /// One run of the book's commands.
 pub struct Runner {
     /// The tenant the commands talk to.
@@ -54,6 +67,9 @@ pub struct Runner {
     mutated: u32,
     /// Which seed reaches each output, for the page check. One name can be written by two steps.
     states: BTreeSet<(String, String, u32)>,
+    /// The name of each chapter that the run defined, and how many states it has. The playground
+    /// and the page check read it, so no second list of the chapters can disagree with the runner.
+    chapters: BTreeMap<String, u32>,
     /// What each (project, uid, version) was seeded from, so two chapters cannot print two roots
     /// for one identity.
     seeded: BTreeMap<(String, String, String), (String, String)>,
@@ -125,6 +141,7 @@ impl Runner {
             serves_seen: 0,
             mutated: 1,
             states: BTreeSet::new(),
+            chapters: BTreeMap::new(),
             seeded: BTreeMap::new(),
             stamp: Regex::new(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z").expect("a pattern"),
             commit: Regex::new(r"(?m) in [0-9a-f]{7,40}$").expect("a pattern"),
@@ -145,6 +162,10 @@ impl Runner {
     /// Start a chapter: an empty tenant, a new working directory, and the environment of the
     /// commands that follow.
     pub fn chapter(&mut self, name: &str, env: &[(&str, &str)]) {
+        // a chapter starts with one state: the end of the chapter
+        if self.chapters.insert(name.to_string(), 1).is_some() {
+            die(&format!("two chapters have the name '{name}'"));
+        }
         if let Mode::Serve { chapter, .. } = self.mode.clone() {
             if self.served {
                 self.serve_last();
@@ -456,6 +477,9 @@ impl Runner {
     pub fn serve_here(&mut self) {
         self.serves_seen += 1;
         self.mutated = 0;
+        if let Some(states) = self.chapters.get_mut(&self.chapter) {
+            *states = self.serves_seen + 1;
+        }
         if !self.serving() || !self.served {
             return;
         }
@@ -641,13 +665,14 @@ impl Runner {
             if self.served {
                 self.serve_last();
             }
+            let names: Vec<&str> = self.chapters.keys().map(String::as_str).collect();
             die(&format!(
                 "no chapter '{chapter}'. The chapters are: {}",
-                crate::chapters::names().join(" ")
+                names.join(" ")
             ));
         }
         self.check_seeds();
-        let problems = crate::checks::check(&self.repo);
+        let problems = crate::checks::check(&self.repo, &self.chapters);
         if !problems.is_empty() {
             for problem in &problems {
                 eprintln!("docs-examples: {problem}");
@@ -853,4 +878,22 @@ fn symlink(from: &Path, to: &Path) -> std::io::Result<()> {
 pub fn die(message: &str) -> ! {
     eprintln!("docs-examples: {message}");
     std::process::exit(2)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_playground_name_splits_into_its_chapter_and_its_state() {
+        assert_eq!(playground("loop"), ("loop", 1));
+        assert_eq!(playground("loop-3"), ("loop", 3));
+        assert_eq!(playground("os-image"), ("os-image", 1));
+        assert_eq!(playground("os-image-2"), ("os-image", 2));
+        assert_eq!(
+            playground("merge-gate-rollback"),
+            ("merge-gate-rollback", 1)
+        );
+        assert_eq!(playground("loop-12"), ("loop-12", 1));
+    }
 }

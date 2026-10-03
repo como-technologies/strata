@@ -128,48 +128,6 @@ const GIT: &[(&str, &str)] = &[
 
 const DEV_ENV: &[(&str, &str)] = &[("PALETTE_PROJECT", "dev")];
 
-/// Every chapter, in the order the book builds them.
-pub fn names() -> Vec<&'static str> {
-    vec![
-        "help",
-        "quickstart",
-        "loop",
-        "list",
-        "snapshot",
-        "candidate",
-        "compare",
-        "schema",
-        "review",
-        "merge-gate",
-        "merge-gate-rollback",
-        "promote",
-        "registry-move",
-        "tag-name",
-        "manifest-pack",
-        "edited-in-place",
-        "draft",
-        "overwritten",
-        "cluster-release",
-        "cluster-values",
-        "macros",
-        "invalid-pack",
-        "no-digest",
-        "masked-value",
-        "repave",
-        "cluster-tiers",
-        "edge-hosts",
-        "cluster-groups",
-        "app-profiles",
-        "behind",
-        "fleet",
-        "same-names",
-        "packs",
-        "retire",
-        "automation",
-        "preflight",
-    ]
-}
-
 /// Run every chapter against `r`.
 pub fn run(r: &mut Runner) {
     getting_started(r);

@@ -31,22 +31,11 @@ fn main() -> ExitCode {
         ["docs-examples"] => examples(book::Mode::Write),
         ["docs-examples", "--check"] => examples(book::Mode::Check),
         ["playground", name] => {
-            let (chapter, seed) = match name.rsplit_once('-') {
-                Some((head, tail))
-                    if tail.len() == 1 && tail.chars().all(|c| c.is_ascii_digit()) =>
-                {
-                    (head.to_string(), tail.parse().unwrap_or(1))
-                }
-                _ => ((*name).to_string(), 1),
-            };
-            if !chapters::names().contains(&chapter.as_str()) {
-                eprintln!(
-                    "docs-examples: no chapter '{chapter}'. The chapters are: {}",
-                    chapters::names().join(" ")
-                );
-                return ExitCode::from(2);
-            }
-            examples(book::Mode::Serve { chapter, seed })
+            let (chapter, seed) = book::playground(name);
+            examples(book::Mode::Serve {
+                chapter: chapter.to_string(),
+                seed,
+            })
         }
         _ => fail(
             "usage: xtask [docs-examples [--check] | playground CHAPTER[-N] | serve ROOT PORT_FILE]",

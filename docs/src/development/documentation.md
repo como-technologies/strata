@@ -86,6 +86,14 @@ playground then serves the tenant that the steps before the change describe. The
 playground does not make it. Put `serve_here` before an `edit`, a second publish
 under one name, or any other line that a step of the page is written to cause.
 
+The playground takes each chapter that `r.chapter(...)` starts in
+`xtask/src/chapters.rs`. No second list of the chapters exists, so a new chapter
+needs no other change. Two chapters with one name stop the runner.
+`just playground CHAPTER-N` serves state `N` of the chapter. A chapter has one
+state more than its calls of `serve_here`. `just docs-check` fails on a page
+that gives `just playground` with a chapter that the runner does not start. It
+also fails on a state that the chapter does not have.
+
 ## Add an output
 
 `xtask` runs each command against a local stand-in for the Palette API, which is
