@@ -60,7 +60,7 @@ git command line, which uses your SSH configuration:
 
 ```toml
 [dependencies]
-strata = { git = "ssh://git@github.com/como-technologies/strata.git", tag = "v0.17.0" }
+strata = { git = "ssh://git@github.com/como-technologies/strata.git", tag = "v0.18.0" }
 ```
 
 ```bash
