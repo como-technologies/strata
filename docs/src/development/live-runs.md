@@ -302,13 +302,13 @@ shows. It then asks Palette to read the registry again after each push.
 | `profile-mod-keeps` | 0 | #81: the profile with values of its own keeps the digest it pinned: its record verifies |
 | `profile-who`, `profile-who-system` | 1, 0 | #81: the audit log names the move: an `update` by the Palette service `system` |
 | `delete-modified` | 0 | the second profile is deleted |
-| `push-del`, `sync-del-1`, `del-record` | 0 | #108: 1.0.9 is pushed, and the profile pins it. No result yet |
-| `del-tag`, `sync-del-2` | 0 | #108: the tag 1.0.9 is deleted from the repository, and Palette reads the registry again. No result yet |
-| `del-flag` | ? | #108: Palette marks the pack of the profile invalid in ten minutes, or not. No result yet |
-| `del-doc`, `del-doc-fields` | 0, ? | #108: the answer of `GET /v1/clusterprofiles/<uid>`, with `isInvalid` and `inValidReason` of the pack. No result yet |
-| `del-record-now`, `del-verify` | 0, ? | #108: a record of the profile now, and `verify` of the record from before. No result yet |
-| `del-record-flag`, `del-record-root`, `del-verify-says` | 0 | #108: when Palette sets the flag, the record holds `invalid` and `invalidReason`, the root does not move, and `verify` prints `INVALID`. No result yet |
-| `push-del-again`, `sync-del-3`, `del-cleared`, `del-doc-after` | 0, 0, ?, 0 | #108: 1.0.9 is pushed again: Palette clears the flag in ten minutes, or not. No result yet |
+| `push-del`, `sync-del-1`, `del-record` | 0 | #108: 1.0.9 is pushed, and the profile pins it |
+| `del-tag`, `sync-del-2` | 0 | #108: the tag 1.0.9 is deleted from the repository, and Palette reads the registry again |
+| `del-flag` | ? | #108: Palette marks the pack of the profile invalid in ten minutes (recorded 0) |
+| `del-doc`, `del-doc-fields` | 0, ? | #108: `GET /v1/clusterprofiles/<uid>` gives the pack `isInvalid: true` and `inValidReason` `strata live pack 1.0.9 tag is deleted` (recorded 0). The digest of the pack stays the digest of the deleted push |
+| `del-record-now`, `del-verify` | 0, ? | #108: a record of the profile now, and `verify` of the record from before: `OK`, with an `INVALID` line (recorded 0) |
+| `del-record-flag`, `del-record-root`, `del-verify-says` | 0 | #108: the record holds `invalid` and `invalidReason`, the root does not move, and `verify` prints `INVALID: Palette marks pack addon/strata-live-pack invalid now` |
+| `push-del-again`, `sync-del-3`, `del-cleared`, `del-doc-after` | 0, 0, ?, 0 | #108: 1.0.9 is pushed again with other bytes, and Palette reads the registry again. Palette does not clear the flag in ten minutes (recorded 1) |
 | `del-tag-end`, `sync-del-4` | 0 | the profile pins 1.0.0 again, and 1.0.9 is deleted, so step 4 finds the registry as step 3 left it |
 | `profile-after`, `push-3`, `sync-3` | 0 | 1.0.1 is pushed |
 | `packs-two`, `packs-two-order` | 0 | #66: `packs` lists 1.0.1 first, then 1.0.0 |
@@ -328,6 +328,12 @@ shows. It then asks Palette to read the registry again after each push.
 | `dep-profile-alone`, `dep-profile-alone-says` | 1, 0 | #66: a profile with the requiring pack and not the required one is refused at creation, and the refusal names the required pack |
 | `dep-profile-both` | 0 | #66: a profile with both packs is accepted |
 | `dep-record`, `dep-record-packs` | 0 | a record of that profile lists the two packs, the requiring one first, as authored |
+
+In step 3b, the document of the profile also gets the annotations `isInValid`
+`"true"` and `inValidReason` `The cluster profile is invalid as one or more
+pack tags are deleted from the registry`. Ten minutes after the push again, the
+pack still has the flag, and the digest of the deleted push. This is the source
+for [A tag that a registry deletes](../internals/palette/packs.md#a-tag-that-a-registry-deletes).
 
 The script ends with an apply of the baseline, which removes the profiles it
 made. The pushed versions stay in the registry until `live-down`.
@@ -542,8 +548,12 @@ gives the record: source `hubble`, reason `PackValuesUpdated` with the message
 `kubeadmconfig.postKubeadmCommands`, and the resolved values on each side, `echo
 one` and `echo two`. The record names no macro.
 
-The checks of #107 came after the recorded run. No run shows them yet: a run
-needs cluster A, and the repave replaces its nodes.
+A second run gives the same result for each check of #72. It also shows the
+checks of #107. A record of cluster A while the repave waits says
+`repavePending: true`. Its `pendingRepave.reasons[]` holds the code
+`PackValuesUpdated`, the pack `kubernetes`, and the key
+`kubeadmconfig.postKubeadmCommands`. `verify` of a record from before the change
+exits `0`, and its note names the repave that waits, with the same reason.
 
 The run expected `undo-accept` to exit `0`, and it got `2`; the script now
 expects the refusal. It stopped at `undo-accept`, so
@@ -714,12 +724,12 @@ It needs no cluster B: `tiers.sh 5` runs it alone.
 | `differ`, `differ-policy`, `differ-labels`, `differ-says` | 0 | #76: still one release; `policy` differs at `timezone`, and the labels at `team`; the report says `~ policy.timezone: "Etc/UTC" -> "America/Chicago"` |
 | `b-verify`, `b-verify-says` | 0 | #76: the record of B from before still verifies, and names `policy CHANGED` |
 | `undo-baseline` | 0 | the example is at its baseline |
-| `rbac-before`, `rbac-add` | 0 | #106: the role bindings of cluster A, then one more binding of `barney@example.com` to the cluster role `view`, through `PUT /v1/spectroclusters/<uid>/config/rbacs`. No result yet |
-| `rbac-record`, `rbac-in-record` | 0 | #106: the `policy` tier of a record of cluster A holds the binding, with its role and its subject. No result yet |
-| `rbac-edit` | 0 | #106: the subject of the binding becomes `fred@example.com`. No result yet |
-| `rbac-compare`, `rbac-compare-policy`, `rbac-compare-says` | 0 | #106: `compare` of the record with cluster A exits `0`, and names `policy.rbacs[...].subjects[name=fred@example.com]`. No result yet |
-| `rbac-verify`, `rbac-verify-says` | 0 | #106: `verify` of the record exits `0`, and names `policy CHANGED`. No result yet |
-| `rbac-undo`, `rbac-after-read`, `rbac-after` | 0 | the role bindings of cluster A are as before the stage. No result yet |
+| `rbac-before`, `rbac-add` | 0 | #106: the role bindings of cluster A, then one more binding of `barney@example.com` to the cluster role `view`, through `PUT /v1/spectroclusters/<uid>/config/rbacs`. Cluster A has no binding before the stage |
+| `rbac-record`, `rbac-in-record` | 0 | #106: the `policy` tier of a record of cluster A holds the binding: the type `ClusterRoleBinding`, the role `ClusterRole` `view`, and the subject `barney@example.com` of type `User` |
+| `rbac-edit` | 0 | #106: the subject of the binding becomes `fred@example.com` |
+| `rbac-compare`, `rbac-compare-policy`, `rbac-compare-says` | 0 | #106: `compare` of the record with cluster A exits `0` with the root `IDENTICAL`, and names `policy.rbacs[0].subjects[name=fred@example.com]` |
+| `rbac-verify`, `rbac-verify-says` | 0 | #106: `verify` of the record exits `0`, and names `policy CHANGED` |
+| `rbac-undo`, `rbac-after-read`, `rbac-after` | 0 | the role bindings of cluster A are as before the stage |
 
 `spcHash` is its own for each cluster, so `compare` now reads `spcInfraHash`
 alone between two clusters. On the two records of the run, `compare` then says
@@ -730,12 +740,13 @@ of the timezone and the labels changed the `spcHash` of B.
 No run makes a cluster run another pack version than its profile declares; the
 book shows it on the stand-in.
 
-No script reads the role bindings or the namespaces of a cluster. Read-only
-requests to the tenant show the facts in
-[Cluster tiers](../internals/palette/clusters.md#cluster-tiers). A deleted
+Stage 5 reads the role bindings of cluster A, and no script reads the
+namespaces of a cluster. Read-only requests to the tenant show the other facts
+in [Cluster tiers](../internals/palette/clusters.md#cluster-tiers). A deleted
 cluster of the live example gives `{"items": []}` for each route. A uid that is
-not a cluster of the project gives HTTP 404 `ResourceNotFound`. Stage 5 edits
-the subjects of a binding. No run of stage 5 has a result yet.
+not a cluster of the project gives HTTP 404 `ResourceNotFound`. The edit of the
+subjects in stage 5 also changes the `spcHash` of cluster A, so `compare` and
+`verify` name `applied CHANGED` beside `policy CHANGED`.
 
 ## fleet.sh
 
@@ -841,10 +852,10 @@ with cluster A.
 | `edit-group-own-uid` | 0 | #81: the copy has a uid of its own |
 | `edit-group-raw`, `edit-group-manifest-uid` | 0 | #78: the template of the group names the manifest by its uid, with no content. #110: the document of the group holds `spec.clustersConfig`, with each limit in two units, the values as YAML with comments, and the host cluster |
 | `edit-undo` | 0 | the edit is put back |
-| `limit-record`, `limit-before` | 0 | #110: a record of the group holds the CPU limit `cpuMilliCore` 6000 in its `policy` tier. No result yet |
-| `limit-verify`, `limit-verify-says` | 0 | #110: after `group_cpu_millicore=4000`, `verify` of the record exits `0`, and names `policy CHANGED`. No result yet |
-| `limit-compare`, `limit-compare-says`, `limit-compare-json`, `limit-compare-tier` | 0 | #110: `compare` of the record with the group exits `0`, and names `policy.limitConfig.cpuMilliCore: 6000 -> 4000`. No result yet |
-| `limit-undone` | 0 | the limit is back: `compare` finds the same `policy` tier. No result yet |
+| `limit-record`, `limit-before` | 0 | #110: a record of the group holds the CPU limit `cpuMilliCore` 6000 in its `policy` tier |
+| `limit-verify`, `limit-verify-says` | 0 | #110: after `group_cpu_millicore=4000`, `verify` of the record exits `0` with the root `IDENTICAL`, and names `policy CHANGED` |
+| `limit-compare`, `limit-compare-says`, `limit-compare-json`, `limit-compare-tier` | 0 | #110: `compare` of the record with the group exits `0`, and names `policy.limitConfig.cpuMilliCore: 6000 -> 4000`. Palette also changes `cpu` from 6 to 4 |
+| `limit-undone` | 0 | the limit is back: `compare` finds the same `policy` tier |
 | `gone` | 0 | the group and the member are gone |
 | `member-audit-kind` | 0 | #188: the audit log of the member, read by its uid alone, has its create and its delete under the kind `virtualCluster` |
 | `member-audit-not-cluster` | 0 | #188: a query with the kind `spectrocluster` and the uid of the member does not find them |
@@ -869,11 +880,11 @@ cluster, and costs nothing.
 | `edit-verify`, `edit-verify-says` | 1, 0 | #78: `verify` of the record reports drift, with the tier `AUTHORED` and the manifest named |
 | `edit-who`, `edit-who-appprofile` | 1, 0 | #140: `verify --who` reads the log of the kind `appprofile`, and its entries name the app profile as their object. |
 | `edit-last-modified` | 0 | #140: the document of the app profile gives the time of the update, after the record. |
-| `order-a-create`, `order-b-create` | 0 | #112: two app profiles with the same two tiers, made with the install orders 2 and 5, and 5 and 2. No result yet |
-| `order-a-tiers` | 0 | #112: the tiers route gives the install orders of the create. No result yet |
-| `order-a-record`, `order-a-params`, `order-b-record`, `order-b-params` | 0 | #112: each record holds the orders in `packs[].params.installOrder`, and lists the tiers by them. No result yet |
-| `order-compare`, `order-compare-says` | 1, 0 | #112: `compare` of the two records exits `1`, and names `~ param installOrder` under a tier. No result yet |
-| `order-update`, `order-update-verify` | 1, 0 | #112: an update of the order through the tier route does not change it, so the record still verifies. No result yet |
+| `order-a-create`, `order-b-create` | 0 | #112: two app profiles with the same two tiers, made with the install orders 2 and 5, and 5 and 2 |
+| `order-a-tiers` | 0 | #112: the tiers route gives the install orders of the create |
+| `order-a-record`, `order-a-params`, `order-b-record`, `order-b-params` | 0 | #112: each record holds the orders in `packs[].params.installOrder`, and lists the tiers by them: `tier1` then `tier2` in the first, `tier2` then `tier1` in the second |
+| `order-compare`, `order-compare-says` | 1, 0 | #112: `compare` of the two records exits `1` with two roots, and names `~ param installOrder: 2 -> 5` under `tier1` and `5 -> 2` under `tier2` |
+| `order-update`, `order-update-verify` | 1, 0 | #112: an update of the order of `tier1` to 7 through the tier route gets a 2xx answer, and the tier keeps the order 2. So the record still verifies |
 | `order-a-delete`, `order-b-delete` | 0 | the two app profiles are deleted |
 | `delete` | 0 | the app profile of stage 1 is deleted |
 

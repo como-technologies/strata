@@ -61,4 +61,6 @@ same. Here the group gives each virtual cluster 4 cores in place of 6:
 {{#include ../../output/group-policy-verify.txt}}
 ```
 
-The pin is the same, so the root is the same and the exit is `0`.
+The pin is the same, so the root is the same and the exit is `0`. A live run
+of [cluster-group.sh](../../development/live-runs.md#cluster-groupsh) gives the
+same report for the same change.

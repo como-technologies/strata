@@ -6,7 +6,8 @@ A published version pins each pack by its tag in a registry. When the registry
 deletes a tag that the version uses, Palette marks the pack reference of the
 version invalid. The pack reference then has `isInvalid` `true`, and
 `inValidReason` gives the message of the registry event, such as
-`Cert Manager 1.21.1 tag is deleted`.
+`Cert Manager 1.21.1 tag is deleted`. A live run shows it: see
+[A tag that a registry deletes](../internals/palette/packs.md#a-tag-that-a-registry-deletes).
 
 The values and the digest of the pack stay the same. So the root does not move,
 and a record of the version still verifies as unchanged. The content is the
@@ -70,7 +71,9 @@ invalid pack in `summary.packsInvalid`:
   `verify.invalidPacks` of `strata verify --json`. A record that verifies can
   name a pack that the registry no longer has.
 - When the delete of the tag was a mistake, push the tag to the registry again.
-  No live run shows that Palette then clears the flag.
+  In a live run, a push of the tag again with other bytes did not clear the
+  flag in ten minutes. Run `strata verify` again to see if Palette still marks
+  the pack.
 - When the delete was correct, publish a new profile version with a pack
   version that the registry has, and record the new version.
 
@@ -81,5 +84,5 @@ invalid pack in `summary.packsInvalid`:
   change of the content.
 - A record written before strata kept the flag has none. `verify` of that
   record reads the flag of Palette now.
-- No live run deletes a tag. See
+- No live run builds a cluster from a version with an invalid pack. See
   [What no run covers](../internals/palette/limits.md#what-no-run-covers).

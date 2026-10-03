@@ -95,7 +95,7 @@ root stays, and `verify` of the record names the change:
 ## Palette behavior
 
 The live run of `just live-cluster-group` builds a group on cluster A with one
-virtual cluster, and shows each rule on this page except one. No run changes
-the config of a group yet, so the change of the CPU limit comes from the
+virtual cluster, and shows each rule on this page. It also changes the CPU
+limit of the group, and `verify` and `compare` name the same fields as on the
 stand-in. See
 [Edge hosts, cluster groups, and app profiles](../internals/palette/other-objects.md#cluster-groups).

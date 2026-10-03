@@ -50,6 +50,10 @@ itself. A cluster on AWS gives these fields:
   deleted cluster of the live example gives `{"items": []}` for each. For a
   uid that is not a cluster of the project, Palette answers HTTP 404 with the
   code `ResourceNotFound`.
+- Palette takes an edit of the subjects of a binding through
+  `PUT /v1/spectroclusters/{uid}/config/rbacs`, and the bindings route then
+  gives the new subject. The edit also changes the `spcHash` of the cluster.
+  Stage 5 of [tiers.sh](../../development/live-runs.md#tierssh) shows it.
 - `metadata.labels`: the tags that the cluster was created with, as a map.
 - `spec.cloudConfigRef`: the kind and uid of the cloud config, whose document,
   `GET /v1/cloudconfigs/{kind}/{uid}`, holds `spec.machinePoolConfig[]` and
