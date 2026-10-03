@@ -37,6 +37,7 @@ builds the same record.
 
 ## A version before you publish it
 
-`--from-candidate` builds a snapshot from a candidate file. See
-[strata candidate](../candidate.md) and
+`--from-candidate` builds a snapshot from a candidate file, or from a profile
+export of Palette. See [strata candidate](../candidate.md),
+[A profile export of Palette](../../reference/candidate-file.md#a-profile-export-of-palette), and
 [Review a change before you publish it](../../use-cases/review.md).

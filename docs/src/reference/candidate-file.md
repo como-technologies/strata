@@ -1,7 +1,9 @@
 # The candidate file
 
 A candidate file describes a profile version before it is in Palette. It is YAML
-or JSON. `strata schema candidate` prints its JSON Schema.
+or JSON. `strata schema candidate` prints its JSON Schema. Strata also reads the
+export of a profile version that Palette writes: see
+[A profile export of Palette](#a-profile-export-of-palette).
 
 ```yaml
 name: aws-stack
@@ -297,6 +299,54 @@ roots differ by that uid alone. `same-release` passes the pair as
 After the create, the listing has the chart with that uid. A record of the same
 file then gets the uid, and has the published root. See
 [A pack that Palette makes at the create](../internals/palette/packs.md#a-pack-that-palette-makes-at-the-create).
+
+## A profile export of Palette
+
+Palette writes a profile version as one file: the export. The console exports
+it
+([Export and import](https://docs.spectrocloud.com/profiles/cluster-profiles/export-import-cluster-profile/)),
+and `GET /v1/clusterprofiles/{uid}/export` gives it. Give the export to
+`snapshot --from-candidate` as it is, in YAML or in JSON. Strata reads a file
+that has `spec.template.packs` as an export, and each other file as a candidate
+file. So a team that keeps the export in its repository writes no second file
+for strata.
+
+Each field of the export gives one field of the candidate:
+
+| Field of the export | Field of the candidate |
+| --- | --- |
+| `metadata.name` | `name` |
+| `spec.version` | `version` |
+| `spec.template.type` | `type`. An empty type gives `cluster`. |
+| `spec.template.cloudType` | `cloudType` |
+| `spec.template.packs[]` | `layers[]`, in the same order |
+| `name`, `version`, `tag`, and `layer` of a pack | the same fields of the layer |
+| `type` of a pack | `type: manifest` for a pack of the type `manifest`. The registry gives each other type. |
+| `registry.metadata.uid` of a pack | `registryUid`. When the uid is empty, `registry.metadata.name` gives `registry`. A `manifest` pack names no registry. |
+| `values` of a pack | `values`. The export leaves out values that are empty, so a pack with no `values` gets empty values, and not the default values of the pack. |
+| `manifests[]` of a pack, with `name` and `content` | `manifests[]`, with `name` and `content` |
+| `spec.variables[]` | `variables[]` |
+
+Strata does not read `metadata.description`, `metadata.labels`, or the other
+fields of `registry.metadata`. The export holds no `params`, so each layer has
+no params. The root does not hold the `order` of a variable. When a field of
+the export holds a number and not text, the export is `candidate-invalid`, and
+the message names the field. Then strata checks the candidate as it checks a
+candidate file: see [Checks before any request](#checks-before-any-request).
+
+In this example, the stand-in gives the export of `aws-stack@1.1.1` in JSON:
+
+```text
+{{#include ../output/candidate-export.txt}}
+{{#include ../output/candidate-export-record.txt}}
+{{#include ../output/candidate-export-same.txt}}
+```
+
+The record of the export of a version has the root of that version, while the
+registry serves the same pack versions. A version with a manifest pack differs
+by the pack uid that Palette mints, as for a
+[manifest layer](#a-manifest-layer). [The export of a version](../internals/palette/profiles.md#the-export-of-a-version)
+gives the live run.
 
 ## Write one from a published version
 

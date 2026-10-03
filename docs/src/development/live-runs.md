@@ -592,6 +592,26 @@ in the project of the key: give it as `PROFILE=<name>@<version>`.
 No pack of the Public Repo lists a dependency in its tags route, so no stage
 asks for a refusal of a dependency.
 
+## export.sh
+
+No cluster, no profile of its own, and no cost. Each request is a `GET`. It
+reads the export of three versions of the example: the release version, with
+four packs from the Public Repo; the registries version, with a Helm pack and
+an OCI pack; and the add-on version, with a manifest pack and a variable. Give
+other versions as `PROFILES="<name>@<version> ..."`.
+[The export of a version](../internals/palette/profiles.md#the-export-of-a-version)
+states what it shows.
+
+| Check | Expected exit | What it shows |
+|---|---|---|
+| `export-<name>` | 0 | #156: `GET /v1/clusterprofiles/{uid}/export?format=yaml` gives the file of the version |
+| `export-record-<name>`, `export-same-<name>` | 0 | #156: `snapshot --from-candidate` reads the export, and `same-release` passes it with the record of the version |
+| `export-root-<name>` | 0 | #156: the record of the export of the release version and of the registries version has the root of the version |
+| `export-minted-strata-live-addon` | 0 | #156: the root of the export of the add-on version differs by the pack uid that Palette mints for the manifest pack alone |
+| `export-json-<name>`, `export-json-record-<name>`, `export-json-root-<name>` | 0 | #156: the export with `format=json` gives the same root |
+| `export-accepts-json`, `export-accepts-json-no-file` | 0 | #156: to a request with `Accept: application/json`, Palette sends `{"Reader":{}}`, and not the file |
+| `export-limit` | ? | #156: exports at once. In two of four runs, Palette refused one or more with HTTP 429, `TooManyRequests`, "only 1 request in 10 seconds is allowed". In the other two, it refused none |
+
 ## registry-kinds.sh
 
 Read-write in the registries of its own host alone, and it needs no cluster. It

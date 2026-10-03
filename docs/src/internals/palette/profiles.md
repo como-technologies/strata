@@ -82,6 +82,40 @@ nothing. Each other failure of that
 read stops the record, so that strata never writes a secret that it could not
 check.
 
+## The export of a version
+
+Palette writes a profile version as one file: the export
+([Export and import](https://docs.spectrocloud.com/profiles/cluster-profiles/export-import-cluster-profile/)).
+`GET /v1/clusterprofiles/{uid}/export?format=yaml` gives it in YAML, and
+`format=json` in JSON. The file holds:
+
+- `metadata`: `name`, `description`, and `labels`.
+- `spec.version`.
+- `spec.template`: `type`, `cloudType`, and `packs[]`. Each pack has `name`,
+  `type`, `layer`, `version`, `tag`, `values`, `manifests[]` with `name` and
+  `content`, and `registry.metadata`: `uid`, `name`, `kind`, `isPrivate`,
+  `providerType`, and `isSyncSupported`.
+- `spec.variables[]`: each variable, with an `order`.
+
+Palette leaves out values that are empty, and a pack with no manifest has no
+`manifests`. A manifest pack has a `registry.metadata` with an empty `uid` and
+an empty `name`. The file has no pack uid, no digest, and no `params`.
+
+Palette sends the file only to a request that accepts a file, such as
+`Accept: application/octet-stream`. To a request with `Accept:
+application/json`, it answers HTTP 200 with `{"Reader":{}}`. Palette can refuse
+an export that follows another one at once: HTTP 429, with the code
+`TooManyRequests` and the message "only 1 request in 10 seconds is allowed". It
+does not refuse each such export. Wait 10 seconds between two exports.
+
+`snapshot --from-candidate` reads the file as a candidate: see
+[A profile export of Palette](../../reference/candidate-file.md#a-profile-export-of-palette).
+The record of the export of a version has the root of that version, in YAML
+and in JSON. A version with a manifest pack differs by the pack uid that
+Palette mints alone, as for each candidate with a manifest layer.
+[export.sh](../../development/live-runs.md#exportsh) shows each fact of this
+section.
+
 ## The audit log
 
 Palette logs each write to a profile, an app profile, a cluster, an edge host,

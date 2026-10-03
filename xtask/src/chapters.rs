@@ -578,6 +578,31 @@ fn commands(r: &mut Runner) {
         false,
         "strata same-release candidate.json published.json",
     );
+    // the export of Palette is a candidate too: the export route gives the file, and its record
+    // has the root of the version (#156)
+    r.export(DEV, A111);
+    r.quiet(&format!(
+        "curl -sS -H 'Accept: application/octet-stream' -H 'ProjectUid: {DEV}' \
+         \"$PALETTE_API/v1/clusterprofiles/{A111}/export?format=json\" -o aws-stack-export.json"
+    ));
+    r.step(
+        "candidate-export",
+        0,
+        false,
+        "jq -c '.spec.template.packs[] | {name, type, layer, version, tag, registry: .registry.metadata.name}' aws-stack-export.json",
+    );
+    r.step(
+        "candidate-export-record",
+        0,
+        true,
+        "strata snapshot --from-candidate aws-stack-export.json -o from-export.json",
+    );
+    r.step(
+        "candidate-export-same",
+        0,
+        false,
+        "strata same-release from-export.json published.json",
+    );
     // Palette's own check of the packs before a create: a refusal, then an accept
     r.profile_packs_answer(DEV, None, Some(("cni-cilium-oss", "kubernetes", "1.37.0")));
     r.step(

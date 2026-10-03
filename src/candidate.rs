@@ -21,6 +21,8 @@ use crate::progress::Progress;
 use crate::reference::LATEST;
 use crate::snapshot::{PackSource, PresetOption, Snapshot};
 
+mod export;
+
 /// The `source.template` of a snapshot built from a candidate file.
 pub const TEMPLATE: &str = "candidate";
 
@@ -32,7 +34,7 @@ pub const PACK_TYPE: &str = "pack";
 
 /// A candidate profile version. YAML or JSON. Quote versions that YAML would read as numbers,
 /// such as `"22.04"`.
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Candidate {
     /// Profile name.
@@ -191,7 +193,7 @@ fn default_type() -> String {
 }
 
 /// One layer of the candidate: a pack version and the configuration the profile gives it.
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct CandidateLayer {
     /// Pack name.
@@ -234,7 +236,7 @@ pub struct CandidateLayer {
 }
 
 /// A manifest attached to a layer: `content` inline or `contentFile`, not both.
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct CandidateManifest {
     /// Manifest name.
@@ -440,7 +442,7 @@ fn cloud_supported(cloud: &str, clouds: &[String]) -> bool {
 }
 
 /// A layer with its registry settled and its files read. A `manifest` layer has no registry.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 struct LoadedLayer {
     registry: Option<RegistryRef>,
     values: Option<String>,
@@ -477,16 +479,26 @@ fn pick_registry(
 /// Read and check a candidate file, and read the files it points at. Problems here need no
 /// network: a file that does not parse or breaks a rule is `CandidateInvalid`, and a values or
 /// manifest file that cannot be read is `Io` naming that file.
+///
+/// A file with `spec.template.packs` is a profile export of Palette. Strata reads it as the
+/// candidate that it holds. The page "The candidate file" of the book gives the field of the
+/// export that gives each field of the candidate.
 pub fn load(path: &Path) -> Result<LoadedCandidate> {
     let text = std::fs::read_to_string(path).map_err(|source| Error::Io {
         path: path.to_path_buf(),
         source,
     })?;
-    let candidate: Candidate =
-        serde_yaml::from_str(&text).map_err(|e| Error::CandidateInvalid {
-            path: path.to_path_buf(),
-            message: e.to_string(),
-        })?;
+    let invalid = |message: String| Error::CandidateInvalid {
+        path: path.to_path_buf(),
+        message,
+    };
+    let doc: Value = serde_yaml::from_str(&text).map_err(|e| invalid(e.to_string()))?;
+    let candidate: Candidate = if export::is_export(&doc) {
+        export::to_candidate(&doc).map_err(invalid)?
+    } else {
+        // parse the text again, and not `doc`: an error of the YAML parser names the line
+        serde_yaml::from_str(&text).map_err(|e| invalid(e.to_string()))?
+    };
     check(candidate, path)
 }
 
@@ -1667,6 +1679,130 @@ mod tests {
                 .is_none()
         );
         assert!(registry_sync(&basic, "reg-none", "oci").unwrap().is_none());
+    }
+
+    /// The profile `platform-addons` as the export of Palette writes it: a pack from the Public
+    /// Repo, and a manifest pack with an empty registry and no values.
+    const EXPORT: &str = r#"metadata:
+  name: platform-addons
+  description: ""
+  labels: {}
+spec:
+  version: 1.0.0
+  template:
+    type: add-on
+    cloudType: all
+    packs:
+    - name: cert-manager
+      type: spectro
+      layer: addon
+      version: 1.21.1
+      tag: 1.21.1
+      values: |-
+        pack:
+          namespace: cert-manager
+      registry:
+        metadata:
+          uid: 5eecc89d0b150045ae661cef
+          name: Public Repo
+          kind: pack
+          isPrivate: false
+          providerType: ""
+          isSyncSupported: true
+    - name: namespace-policy
+      type: manifest
+      layer: addon
+      version: 1.0.0
+      tag: 1.0.0
+      registry:
+        metadata:
+          uid: ""
+          name: ""
+          kind: ""
+          isPrivate: false
+          providerType: ""
+          isSyncSupported: false
+      manifests:
+      - name: namespace-policy
+        content: |-
+          kind: Namespace
+  variables:
+  - name: owner
+    displayName: Owner
+    format: string
+    required: true
+"#;
+
+    /// The candidate file of the same content as [`EXPORT`].
+    const SAME_CANDIDATE: &str = r#"name: platform-addons
+version: 1.0.0
+type: add-on
+cloudType: all
+layers:
+- name: cert-manager
+  version: 1.21.1
+  layer: addon
+  tag: 1.21.1
+  registryUid: 5eecc89d0b150045ae661cef
+  values: |-
+    pack:
+      namespace: cert-manager
+- name: namespace-policy
+  version: 1.0.0
+  layer: addon
+  type: manifest
+  tag: 1.0.0
+  values: ''
+  manifests:
+  - name: namespace-policy
+    content: |-
+      kind: Namespace
+variables:
+- name: owner
+  displayName: Owner
+  format: string
+  required: true
+"#;
+
+    #[test]
+    fn an_export_of_palette_with_a_manifest_pack_loads_as_the_candidate_file_of_the_same_content() {
+        let dir = tempfile::tempdir().unwrap();
+        let (export, file) = (dir.path().join("export.yaml"), dir.path().join("c.yaml"));
+        std::fs::write(&export, EXPORT).unwrap();
+        std::fs::write(&file, SAME_CANDIDATE).unwrap();
+        let (from_export, from_file) = (load(&export).unwrap(), load(&file).unwrap());
+        assert_eq!(from_export.candidate, from_file.candidate);
+        assert_eq!(from_export.layers, from_file.layers);
+        assert_eq!(
+            from_export.layers[1].registry, None,
+            "a manifest pack has no registry"
+        );
+        // the same file as JSON, as the export gives it with format=json
+        let doc: Value = serde_yaml::from_str(EXPORT).unwrap();
+        let json_export = dir.path().join("export.json");
+        std::fs::write(&json_export, serde_json::to_string(&doc).unwrap()).unwrap();
+        assert_eq!(load(&json_export).unwrap().candidate, from_file.candidate);
+    }
+
+    #[test]
+    fn an_export_whose_pack_has_no_registry_is_candidate_invalid() {
+        let dir = tempfile::tempdir().unwrap();
+        let export = dir.path().join("export.yaml");
+        std::fs::write(
+            &export,
+            EXPORT
+                .replace("uid: 5eecc89d0b150045ae661cef", "uid: \"\"")
+                .replace("name: Public Repo", "name: \"\""),
+        )
+        .unwrap();
+        match load(&export).unwrap_err() {
+            Error::CandidateInvalid { message, .. } => assert_eq!(
+                message,
+                "layer 1 (cert-manager) has no registry; set registry or registryUid on the layer \
+                 or at the top"
+            ),
+            other => panic!("not candidate-invalid: {other}"),
+        }
     }
 
     /// A candidate with one `manifest` layer, as `strata candidate` writes it for a manifest pack.

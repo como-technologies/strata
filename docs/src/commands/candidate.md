@@ -31,7 +31,10 @@ pipeline publishes the version. Strata tells you what that version will be.
   `0` says that the two are one release.
 
 This command writes the first file for you. Write the next one by hand, from the
-version before it, or from what your repository already holds.
+version before it, or from what your repository already holds. A repository
+that holds the export of Palette needs no candidate file: `snapshot
+--from-candidate` reads the export. See
+[A profile export of Palette](../reference/candidate-file.md#a-profile-export-of-palette).
 
 ## Write one from your own source
 
