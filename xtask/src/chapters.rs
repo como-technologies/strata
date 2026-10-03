@@ -547,6 +547,20 @@ fn commands(r: &mut Runner) {
         false,
         "jq -r .root online.json offline.json",
     );
+    // a cluster template links 1.1.1: the record names it, outside the root
+    r.cluster_template(DEV, AWS_STANDARD, "aws-standard", &[A111]);
+    r.step(
+        "snapshot-profile-templates",
+        0,
+        true,
+        "strata snapshot aws-stack@1.1.1 -o linked.json",
+    );
+    r.step(
+        "snapshot-profile-templates",
+        0,
+        false,
+        "jq '{root, clusterTemplates: .source.clusterTemplates}' linked.json",
+    );
 
     r.chapter("candidate", DEV_ENV);
     r.projects(&[("dev", DEV)]);

@@ -68,6 +68,7 @@
 pub mod api;
 pub mod candidate;
 pub(crate) mod canon;
+pub mod cluster_template;
 pub mod color;
 pub mod config;
 pub mod diff;

@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::api::{Palette, PaletteApi};
+use crate::cluster_template::ClusterTemplateRef;
 use crate::error::{Error, Result};
 use crate::progress::Progress;
 use crate::reference::Ref;
@@ -437,26 +438,17 @@ where
 /// Add each cluster template that `status.inUseClusterTemplates` of the profile document names. A
 /// template keeps no copy of the version and has no state, so both stay empty.
 fn linked_templates(list: &mut Vec<Consumer>, doc: &Value) {
-    let templates = doc
-        .pointer("/status/inUseClusterTemplates")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten();
-    for t in templates {
-        let uid = text(t, "/uid");
-        if uid.is_empty() || list.iter().any(|c| c.kind == TEMPLATE_KIND && c.uid == uid) {
-            continue;
-        }
+    for t in ClusterTemplateRef::linked(doc) {
         list.push(Consumer {
             kind: TEMPLATE_KIND.to_string(),
-            name: text(t, "/name"),
-            project_uid: text(t, "/projectUid"),
+            name: t.name,
+            project_uid: t.project_uid,
             project_name: String::new(),
             state: String::new(),
             version: String::new(),
             error: None,
             unlisted: false,
-            uid,
+            uid: t.uid,
         });
     }
 }

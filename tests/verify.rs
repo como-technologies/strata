@@ -6465,6 +6465,36 @@ fn a_cluster_record_holds_the_repave_that_waits_for_approval_and_its_reasons() {
 }
 
 #[test]
+fn a_profile_record_names_each_cluster_template_that_links_the_version_outside_the_root() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let plain =
+        common::snapshot_of(&serve(MemoryApi::new(), dir.path(), "a", UID_A), UID_A).unwrap();
+    let mut profile = read(&dir.path().join("a").join("profile.json"));
+    profile["status"]["inUseClusterTemplates"] = serde_json::json!([
+        {"uid": "tmpl-1", "name": "barney-template", "projectUid": "p1", "kind": "clustertemplate"},
+        {"uid": "tmpl-2", "name": "fred-template", "projectUid": "p1", "kind": "clustertemplate"}
+    ]);
+    let api = serve(MemoryApi::new(), dir.path(), "a", UID_A)
+        .with(format!("/v1/clusterprofiles/{UID_A}"), profile);
+    let linked = common::snapshot_of(&api, UID_A).unwrap();
+    assert_eq!(linked.root, plain.root);
+    let json = serde_json::to_value(&linked).unwrap();
+    assert_eq!(
+        json["source"]["clusterTemplates"],
+        serde_json::json!([
+            {"uid": "tmpl-1", "name": "barney-template", "projectUid": "p1"},
+            {"uid": "tmpl-2", "name": "fred-template", "projectUid": "p1"}
+        ])
+    );
+    assert!(
+        serde_json::to_value(&plain).unwrap()["source"]
+            .get("clusterTemplates")
+            .is_none()
+    );
+}
+
+#[test]
 fn compare_and_verify_name_the_repave_that_waits_for_approval() {
     let dir = tempfile::tempdir().unwrap();
     common::make_fixtures(dir.path());

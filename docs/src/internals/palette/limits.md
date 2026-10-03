@@ -30,6 +30,9 @@ These are open:
   other than ECR and the Docker registry: ACR, GHCR, Harbor, and JFrog
   Artifactory are named on the public page, and no run uses one.
 - The variables of a cluster template while the template applies.
+- The record of a version that a cluster template links:
+  [template.sh](../../development/live-runs.md#templatesh) checks
+  `source.clusterTemplates`, and no run of that check has a result yet.
 - A bring-your-own-image OS pack, and a new `imageId` under one version: no run
   gives an OS pack an `imageId`. So no run shows if Palette replaces the nodes
   for a new image, or which `imageId` a cluster copy holds. See

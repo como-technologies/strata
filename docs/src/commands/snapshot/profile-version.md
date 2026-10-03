@@ -41,6 +41,23 @@ on standard error. The registry deleted the tag of that pack. The record keeps
 `<name>@latest` is the highest version in natural order: `22.04` is above
 `20.04`, and `1.30.6` is above `1.29.10`.
 
+## The cluster templates of a version
+
+A cluster template links profile versions and applies them to the clusters
+that it governs. While a template links a version, Palette refuses a `PUT` of
+the whole version and refuses its delete. See
+[The lock of a cluster template](../../internals/palette/profiles.md#the-lock-of-a-cluster-template).
+The record names each template that links the version in
+`source.clusterTemplates`, with its uid, its name, and its project:
+
+```text
+{{#include ../../output/snapshot-profile-templates.txt}}
+```
+
+The templates are not part of the root. Here the root is the root of the record
+before the link. `strata consumers` counts each template: see
+[strata consumers](../consumers.md).
+
 ## The draft of a version
 
 A person who edits a published version and does not publish makes a draft.
