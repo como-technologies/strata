@@ -69,6 +69,40 @@ A side with no `imageId` is not compared. A record written before strata kept
 the annotations has none. See
 [The OS pack names a new machine image](../use-cases/os-image.md).
 
+## A macro has another value in each project
+
+The values and the manifests of a version can read a macro, as
+`{{.spectro.macro.<name>}}`. Each project gives the macro its own value. The
+root covers the name of the macro and not its value. So one release can run
+with a different configuration in each project.
+
+Record each side with `snapshot --macros`. Then each record holds the digests
+of its macro values, and strata compares them. A macro with another value on
+each side gets a line under its pair:
+
+```text
+{{#include ../output/promote-macro-changed.txt}}
+```
+
+The line does not change the result, and the exit stays `0`. The release is the
+text, and each project gives the value. `pairs[].macrosChanged` in the JSON
+names each macro:
+
+```text
+{{#include ../output/promote-macro-changed-json.txt}}
+```
+
+When a record holds no digests, strata cannot compare the values. The line
+under the pair names each macro that the content uses.
+`pairs[].macrosNotCompared` in the JSON gives the same names:
+
+```text
+{{#include ../output/promote-macro-not-compared.txt}}
+```
+
+See
+[A macro has another value in each project](../use-cases/promote.md#a-macro-has-another-value-in-each-project).
+
 ## A masked value
 
 A pack whose values hold `********` gets a line under its pair: `pack <key> has

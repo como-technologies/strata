@@ -640,8 +640,8 @@ fn same_release_checks_consecutive_records_with_an_optional_registry_move_policy
 fn same_release_names_a_macro_with_another_value_on_each_side_and_keeps_the_status() {
     let fx = fixtures();
     // A record whose content reads the macro region, as a promotion copies it to each project.
-    // `digest` is the digest of the value that the project gives, or none for a record taken
-    // without --macros.
+    // `digest` is the digest of the value that the project gives, or none for a record without
+    // --macros.
     let record = |name: &str, digest: Option<&str>| -> String {
         let mut doc = json(&fx.a);
         let pack = &mut doc["packs"][0];

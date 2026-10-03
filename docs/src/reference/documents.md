@@ -370,6 +370,10 @@ is the path as a list: strings for keys, numbers for indexes, and
   registry that Palette does not sync.
   `masked[]`, only when it is not empty: `key` and `paths` of each pack with a
   value that Palette masks, on either side. It does not change `status`.
+  `macrosChanged`, only when it is not empty: when both records hold the
+  digests of their macro values, each macro whose value differs. It does not
+  change `status`. `macrosNotCompared`, only when it is not empty: when a
+  record holds no digests, each macro that the content of either record uses.
 
 ## strata-consumers/1
 

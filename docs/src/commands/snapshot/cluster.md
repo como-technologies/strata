@@ -287,6 +287,9 @@ A record of the cluster group:
 ```
 
 `compare` of two records with the digests names each macro that differs, and
-exits `1`, also when the roots are equal. What Palette does with a
+exits `1`, also when the roots are equal. `same-release` names each macro that
+differs too, and keeps the result of the pair: see
+[A macro has another value in each project](../same-release.md#a-macro-has-another-value-in-each-project).
+What Palette does with a
 running cluster when a macro changes is in
 [Macros](../../internals/palette/profiles.md#macros).
