@@ -1,6 +1,6 @@
 $ strata compare runs/shop.json appprofile:shop@1.0.0
 shop@1.0.0 (uid 64f6000000000000000000a1)  ->  shop@1.0.0 (uid 64f6000000000000000000a1)
-root       eceb0bd614d3 -> bc93cec303c1   CHANGED
+root       4a5b305f0c3b -> 403b2aa01255   CHANGED
 note       both sides are shop@1.0.0 (uid 64f6000000000000000000a1): the version was edited in place
 note       pack app/web has no upstream digest: Palette gives none, so a change of the archive does not show
 
@@ -9,6 +9,8 @@ note       pack app/web has no upstream digest: Palette gives none, so a change 
   [app  ] config                     1.0.0              unchanged
 ~ [app  ] web                        2.1.0              AUTHORED
       upstream unknown: no digest, so a change of the archive does not show
-      ~ param installOrder: 0 -> 1
+      + param installOrder: 1
       ~ param replicas: 2 -> 3
       impact: in-place addon upgrade
+
+  note: pack order changed between the two profiles

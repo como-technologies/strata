@@ -1,6 +1,6 @@
 $ strata verify runs/shop.json --allow-no-digest
 shop@1.0.0 (uid 64f6000000000000000000a1)  ->  shop@1.0.0 (uid 64f6000000000000000000a1)
-root       eceb0bd614d3 -> eceb0bd614d3   IDENTICAL
+root       4a5b305f0c3b -> 4a5b305f0c3b   IDENTICAL
 note       pack app/web has no upstream digest: Palette gives none, so a change of the archive does not show
 
   variables unchanged

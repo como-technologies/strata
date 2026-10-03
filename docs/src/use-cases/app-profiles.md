@@ -31,8 +31,8 @@ section names the one it needs.
 ```
 
 Each tier is a pack in the layer `app`. The properties of a tier are its
-params, with the install order of the tier as `installOrder`. The root covers
-the params. The record lists the tiers by `installOrder`, then by name:
+params, and the root covers them. A tier with an install order also has the
+param `installOrder`, and the record lists the tiers in install order:
 
 ```text
 {{#include ../output/app-show.txt}}

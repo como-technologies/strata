@@ -21,13 +21,12 @@ Three more objects of Palette hold profiles, and strata records each:
   [An app profile is updated in place](../../use-cases/app-profiles.md).
 
 The params of a tier also hold `installOrder`, the install order of the tier,
-and `containerRegistryUid` when Palette gives a registry for the image of the
-tier. The author of the app profile sets each one, as for a property. So
-the root covers them, and a change of the install order changes the root. The
-record lists the tiers by `installOrder`, then by name. An older record of an
-app profile has no `installOrder`. So `verify` of it reports each tier
-`AUTHORED` with `+ param installOrder: 0`, and can report a change of the pack
-order. Record the app profile again.
+and `containerRegistryUid`, the registry of its image, when Palette gives them.
+The author of the app profile sets each one, as for a property. So the root
+covers them, and a change of the install order changes the root. The record
+lists the tiers by `installOrder`. A tier with no `installOrder` is at 0, and
+tiers of one order keep the order in which Palette lists them. So an app
+profile whose tiers have no install order keeps the root of an older record.
 
 An edge host and a cluster group give no variable values, so their records hold
 the variable definitions of each profile, as a profile record does. So a record

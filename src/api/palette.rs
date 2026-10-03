@@ -30,11 +30,9 @@ const TIER_INSTALL_ORDER: &str = "installOrder";
 /// The field of a container tier that gives the registry of its image.
 const TIER_CONTAINER_REGISTRY: &str = "containerRegistryUid";
 
-/// The install order of a tier, as Palette gives it, or `0` when Palette gives none.
-fn install_order(tier: &Value) -> Value {
+/// The install order of a tier, when Palette gives one.
+fn install_order(tier: &Value) -> Option<&Value> {
     tier.pointer(&format!("/spec/{TIER_INSTALL_ORDER}"))
-        .cloned()
-        .unwrap_or_else(|| Value::from(0))
 }
 
 /// `(name, uid)` of each entry of a listing: an array, or an object with `items`.
@@ -204,8 +202,10 @@ impl<A: PaletteApi> Palette<A> {
     /// The requests are `GET /v1/appProfiles/{uid}` and `GET /v1/appProfiles/{uid}/tiers`. Each
     /// tier is a pack in the layer `app`: its type, its version as the tag, its source tier as the
     /// pack uid, its values, and its properties as the params. The params also hold the install
-    /// order of the tier and the registry of its image, and the packs are in install order, then
-    /// in order of name. The content of each manifest of a tier comes from
+    /// order of the tier and the registry of its image, when Palette gives them. The packs are in
+    /// install order, and tiers of one order keep the order of the listing. So an app profile
+    /// whose tiers have no install order keeps the root of an older record. The content of each
+    /// manifest of a tier comes from
     /// `GET /v1/appProfiles/{uid}/tiers/{tierUid}/manifests/{manifestUid}`. A tier has no digest.
     ///
     /// # Errors
@@ -223,17 +223,17 @@ impl<A: PaletteApi> Palette<A> {
                 .to_string()
         };
         // Palette lists the tiers in the display order of the app profile, not in install order.
-        let mut ordered: Vec<(Value, &Value)> = tiers
+        let mut ordered: Vec<&Value> = tiers
             .pointer("/spec/appTiers")
             .and_then(Value::as_array)
             .into_iter()
             .flatten()
-            .map(|tier| (install_order(tier), tier))
             .collect();
-        // An order that is not an integer comes first, and the record keeps it as Palette gave it.
-        ordered.sort_by_key(|(order, tier)| (order.as_i64(), text(tier, "/metadata/name")));
+        // A stable sort: tiers of one order keep the order of the listing. Palette gives no order
+        // for a tier at 0. An order that is not an integer comes first, and the record keeps it.
+        ordered.sort_by_key(|tier| install_order(tier).map_or(Some(0), Value::as_i64));
         let (mut packs, mut mpacks) = (Vec::new(), Vec::new());
-        for (order, tier) in ordered {
+        for tier in ordered {
             let name = text(tier, "/metadata/name");
             let mut params: serde_json::Map<String, Value> = tier
                 .pointer("/spec/properties")
@@ -242,7 +242,9 @@ impl<A: PaletteApi> Palette<A> {
                 .flatten()
                 .map(|p| (text(p, "/name"), Value::from(text(p, "/value"))))
                 .collect();
-            params.insert(TIER_INSTALL_ORDER.to_string(), order);
+            if let Some(order) = install_order(tier) {
+                params.insert(TIER_INSTALL_ORDER.to_string(), order.clone());
+            }
             let registry = text(tier, &format!("/spec/{TIER_CONTAINER_REGISTRY}"));
             if !registry.is_empty() {
                 params.insert(TIER_CONTAINER_REGISTRY.to_string(), Value::from(registry));

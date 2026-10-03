@@ -1,6 +1,6 @@
 $ strata verify runs/shop.json --allow-no-digest
 shop@1.0.0 (uid 64f6000000000000000000a1)  ->  shop@1.0.0 (uid 64f6000000000000000000a1)
-root       eceb0bd614d3 -> 3d31233810df   CHANGED
+root       4a5b305f0c3b -> 54c3e595aae9   CHANGED
 note       both sides are shop@1.0.0 (uid 64f6000000000000000000a1): the version was edited in place
 note       pack app/web has no upstream digest: Palette gives none, so a change of the archive does not show
 

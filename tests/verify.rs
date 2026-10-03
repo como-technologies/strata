@@ -8954,16 +8954,13 @@ fn an_app_profile_record_holds_each_tier_as_a_pack() {
             .map(|p| (p.key.as_str(), p.kind.as_str(), p.tag.as_str()))
             .collect::<Vec<_>>(),
         [
-            ("app/db-config", "manifest", "1.0.0"),
-            ("app/web", "helm", "2.1.0")
+            ("app/web", "helm", "2.1.0"),
+            ("app/db-config", "manifest", "1.0.0")
         ]
     );
-    assert_eq!(
-        app.packs[1].params,
-        serde_json::json!({"replicas": "2", "installOrder": 0})
-    );
-    assert_eq!(app.packs[0].manifests[0].content, "kind: ConfigMap\n");
-    assert!(app.packs[1].upstream_unknown(), "a tier has no digest");
+    assert_eq!(app.packs[0].params, serde_json::json!({"replicas": "2"}));
+    assert_eq!(app.packs[1].manifests[0].content, "kind: ConfigMap\n");
+    assert!(app.packs[0].upstream_unknown(), "a tier has no digest");
     // by uid, and the highest version by name
     assert_eq!(take(&api, "appprofile:ap1").unwrap().root, app.root);
     assert_eq!(take(&api, "appprofile:shop@latest").unwrap().root, app.root);
@@ -9003,8 +9000,8 @@ fn an_app_profile_record_holds_each_tier_as_a_pack() {
 }
 
 /// The tiers of `ap1` as `GET /v1/appProfiles/ap1/tiers` gives them: `web`, `db-config`, and
-/// `cache`, in that order, with the install order of `web` at `web_order`. Palette gives no
-/// `installOrder` for a tier whose order is 0, as for `db-config` and `cache`.
+/// `cache`, in that order, with the install order of `web` at `web_order`, or none. Palette gives
+/// no `installOrder` for a tier whose order is 0, as for `db-config` and `cache`.
 fn app_tiers(web_order: Option<i64>) -> Value {
     let mut web = serde_json::json!({"metadata": {"name": "web", "uid": "t1"},
         "spec": {"type": "helm", "version": "2.1.0", "registryUid": "r1",
@@ -9035,55 +9032,92 @@ fn app_record(tiers: Value) -> Snapshot {
     .unwrap()
 }
 
+/// The root that strata 0.16.0 gives `appprofile:ap1` of [`serve_app_profile`] with the replicas
+/// `2`, before a record read the install order of a tier.
+const APP_ROOT_BEFORE_INSTALL_ORDER: &str =
+    "0486a3007718b8c492a8fc059906794594fee3923a6f4e01b100d7e72c769972";
+
 #[test]
-fn an_app_profile_record_lists_the_tiers_by_install_order_then_by_name() {
+fn an_app_profile_whose_tiers_have_no_install_order_keeps_the_root_of_an_older_record() {
+    let api = serve_app_profile(MemoryApi::new(), "2");
+    let app = ops::snapshot_for(
+        &Ref::parse("appprofile:ap1"),
+        || Ok(Palette::new(api)),
+        "t0",
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert_eq!(app.root, APP_ROOT_BEFORE_INSTALL_ORDER);
+}
+
+#[test]
+fn an_app_profile_record_lists_the_tiers_by_install_order_and_keeps_the_listing_order_at_a_tie() {
     let app = app_record(app_tiers(Some(2)));
     assert_eq!(
         app.packs
             .iter()
-            .map(|p| (p.key.as_str(), &p.params["installOrder"]))
+            .map(|p| (p.key.as_str(), p.params.get("installOrder")))
             .collect::<Vec<_>>(),
         [
-            ("app/cache", &Value::from(0)),
-            ("app/db-config", &Value::from(0)),
-            ("app/web", &Value::from(2)),
-        ]
+            ("app/db-config", None),
+            ("app/cache", None),
+            ("app/web", Some(&Value::from(2))),
+        ],
+        "a tier with no installOrder is at 0, and keeps its place in the listing"
     );
     assert_eq!(
-        app.packs[0].params,
-        serde_json::json!({"installOrder": 0, "containerRegistryUid": "cr1"}),
+        app.packs[1].params,
+        serde_json::json!({"containerRegistryUid": "cr1"}),
         "a container tier keeps the registry of its image"
     );
     assert_eq!(
         app.packs[2].params,
         serde_json::json!({"replicas": "2", "installOrder": 2})
     );
+    let listed = app_record(app_tiers(None));
+    assert_eq!(
+        listed
+            .packs
+            .iter()
+            .map(|p| p.key.as_str())
+            .collect::<Vec<_>>(),
+        ["app/web", "app/db-config", "app/cache"],
+        "with no installOrder, the record keeps the order of the listing"
+    );
 }
 
-#[test]
-fn two_app_profiles_whose_tiers_differ_in_install_order_alone_have_two_roots() {
-    let first = app_record(app_tiers(Some(2)));
-    let second = app_record(app_tiers(None));
-    assert_ne!(first.root, second.root);
-    let d = ops::compare(&first, &second, "t1");
+/// The text of `compare` from `a` to `b`, from the line of the tier `web` on.
+fn web_lines(a: &Snapshot, b: &Snapshot) -> String {
+    let d = ops::compare(a, b, "t1");
     assert!(!d.same, "compare exits 1");
     let web = d.packs.iter().find(|p| p.name == "web").unwrap();
     assert!(
         web.authored && web.params_changed && !web.identity,
         "{web:?}"
     );
-    assert_eq!(
-        serde_json::to_value(&web.param_changes).unwrap(),
-        serde_json::json!([{"op": "changed", "name": "installOrder", "old": 2, "new": 0}])
-    );
     let text = render::renderer(Format::Terminal, Paint::off(), false)
-        .render(&d, &first, &second, false)
+        .render(&d, a, b, false)
         .unwrap();
     let tier = text.find("] web ").unwrap_or_else(|| panic!("{text}"));
-    assert!(
-        text[tier..].contains("      ~ param installOrder: 2 -> 0\n"),
-        "{text}"
+    text[tier..].to_string()
+}
+
+#[test]
+fn two_app_profiles_whose_tiers_differ_in_install_order_alone_have_two_roots() {
+    let (none, first, second) = (
+        app_record(app_tiers(None)),
+        app_record(app_tiers(Some(1))),
+        app_record(app_tiers(Some(2))),
     );
+    assert_ne!(first.root, second.root);
+    assert_ne!(none.root, first.root);
+    let lines = web_lines(&first, &second);
+    assert!(
+        lines.contains("      ~ param installOrder: 1 -> 2\n"),
+        "{lines}"
+    );
+    let lines = web_lines(&none, &first);
+    assert!(lines.contains("      + param installOrder: 1\n"), "{lines}");
 }
 
 /// The consumers of an app profile are its app deployments: `status.inUseApps`, each read with

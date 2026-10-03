@@ -106,8 +106,8 @@ profile, or pack version.
     before this field has none.
   - `params`: the params of the pack on the profile, as a map. For an app tier,
     its properties: each name and its value. They also hold `installOrder`, the
-    install order of the tier, and `containerRegistryUid`, only when Palette
-    gives one. See
+    install order of the tier, and `containerRegistryUid`, each only when
+    Palette gives it. See
     [Edge hosts, cluster groups, and app profiles](../commands/snapshot/other-objects.md).
   - `values`: the raw values YAML. Palette writes `********` over each value
     whose schema format is `password`. Strata does the same for the packs of a
