@@ -26,6 +26,14 @@ locals {
     for p in [data.spectrocloud_pack.os, data.spectrocloud_pack.k8s, data.spectrocloud_pack.cni, data.spectrocloud_pack.csi] :
     { name = p.name, tag = p.version, uid = p.id, values = p.values }
   ]
+  # The packs of version 1.0.0. With move_os_registry, the OS pack comes from move_registry_name
+  # at the same version, with the same values (registry-move-nodes.sh, #135).
+  release_version_packs = [
+    for p in local.release_packs :
+    var.move_os_registry && p.name == data.spectrocloud_pack.os.name
+    ? merge(p, { uid = data.spectrocloud_pack.os_moved[0].id, type = "oci", registry_uid = data.spectrocloud_registry.move[0].id })
+    : merge(p, { type = null, registry_uid = null })
+  ]
   # The one difference between the two versions.
   next_csi_values = replace(data.spectrocloud_pack.csi.values, local.cloud.csi_reclaim, local.cloud.csi_next)
   # With next_variable_in_values, a kubeadm command of the Kubernetes pack of 1.0.1 reads the
@@ -111,12 +119,14 @@ resource "spectrocloud_cluster_profile" "release" {
   skip_destroy = var.immutable_profiles
 
   dynamic "pack" {
-    for_each = local.release_packs
+    for_each = local.release_version_packs
     content {
-      name   = pack.value.name
-      tag    = pack.value.tag
-      uid    = pack.value.uid
-      values = pack.value.values
+      name         = pack.value.name
+      tag          = pack.value.tag
+      uid          = pack.value.uid
+      type         = pack.value.type
+      registry_uid = pack.value.registry_uid
+      values       = pack.value.values
     }
   }
 
@@ -400,8 +410,15 @@ resource "spectrocloud_cluster_profile" "owned_helm" {
 }
 
 data "spectrocloud_registry" "move" {
-  count = var.registry_move ? 1 : 0
+  count = var.registry_move || var.move_os_registry ? 1 : 0
   name  = var.move_registry_name
+}
+
+data "spectrocloud_pack" "os_moved" {
+  count        = var.move_os_registry ? 1 : 0
+  name         = local.cloud.os_pack
+  version      = local.os_version
+  registry_uid = data.spectrocloud_registry.move[0].id
 }
 
 data "spectrocloud_pack" "csi_oci" {

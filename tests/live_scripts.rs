@@ -2220,3 +2220,113 @@ fn repave_sh_stage_8_asks_palette_about_a_variable_in_a_repave_key_with_and_with
         "the variable before its use, and its use away before the variable"
     );
 }
+
+#[test]
+fn registry_move_nodes_sh_moves_the_os_pack_of_the_release_and_cluster_a_takes_it() {
+    let mut stage = Stage::new(baseline_outputs());
+    stage.env("WATCH_MINUTES", "0");
+    stage.route(
+        "/v1/spectroclusters/c-a",
+        r#"{"metadata":{"name":"fred"},"status":{"state":"Running"},"spec":{"cloudType":"aws",
+            "cloudConfigRef":{"uid":"cc-1"},"clusterProfileTemplates":[{"uid":"r-1"}]}}"#,
+    );
+    stage.route("/v1/cloudconfigs/aws/cc-1", r#"{"spec":{"machinePoolConfig":[]}}"#);
+    stage.route("/v1/spectroclusters/c-a/profiles/packs/manifests", "{}");
+    stage.route("/v1/spectroclusters/c-a/profiles", "{}");
+    stage.route(
+        "/v1/clusterprofiles/r-1",
+        r#"{"metadata":{"uid":"r-1"},"spec":{"published":{"packs":[{"name":"ubuntu-aws","tag":"24.04","type":"oci"}]}}}"#,
+    );
+    stage.route("/v1/clusterprofiles/r-1/packs/manifests", "{}");
+    std::fs::create_dir_all(stage.path("out")).unwrap();
+    std::fs::write(
+        stage.path("out/release-0.json"),
+        r#"{"packs":[{"layer":"os","version":"24.04","values":"os: values\n","registryUid":"reg-a","type":"spectro"}]}"#,
+    )
+    .unwrap();
+    stage.strata(
+        "snapshot r-1 -o release-moved.json",
+        0,
+        r#"{"source":{"uid":"r-1"},"packs":[{"layer":"os","version":"24.04","values":"os: values\n","registryUid":"reg-b","type":"oci"}]}"#,
+    );
+    stage.strata(
+        "compare cluster:c-a/strata-live-profile r-1 --repave --json",
+        1,
+        r#"{"packs":[{"key":"os/ubuntu-aws","impact":{"level":"repave"}}],"paletteRepave":{"required":false,"reasons":[]}}"#,
+    );
+    stage.strata(
+        "snapshot cluster:c-a -o cluster-moved.json",
+        0,
+        r#"{"packs":[{"layer":"os","registryUid":"reg-b"}]}"#,
+    );
+    stage.strata(
+        "snapshot cluster:c-a",
+        0,
+        r#"{"source":{"cluster":{"repavePending":false}}}"#,
+    );
+
+    let (o, steps) = stage.run("registry-move-nodes.sh", &["2"]);
+    assert_eq!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
+    assert!(!steps.contains("FAIL"), "{steps}");
+    passed(
+        &steps,
+        &[
+            "move-record",
+            "move-same-uid",
+            "move-identity",
+            "take",
+            "after-record",
+            "after-runs",
+            "undo-take",
+            "undo-baseline",
+        ],
+    );
+    for seen in [
+        "move-compare ",
+        "move-impact ",
+        "move-palette ",
+        "move-reasons ",
+        "replaced ",
+        "waits ",
+    ] {
+        assert!(steps.contains(&format!("SEEN  {seen}")), "{seen}: {steps}");
+    }
+    let applies: Vec<&str> = stage
+        .tofu_calls()
+        .lines()
+        .filter(|l| l.contains("apply"))
+        .map(|l| {
+            if l.contains("move_os_registry=true") {
+                "move"
+            } else {
+                "back"
+            }
+        })
+        .collect();
+    assert_eq!(applies, ["move", "back"], "{}", stage.tofu_calls());
+    assert_eq!(
+        stage.sent("PUT", "/v1/spectroclusters/c-a/profiles").len(),
+        2,
+        "cluster A takes the move, then the release back"
+    );
+}
+
+#[test]
+fn registry_move_nodes_sh_stops_before_the_undo_when_a_repave_waits_for_approval() {
+    let mut stage = Stage::new(baseline_outputs());
+    stage.strata(
+        "snapshot cluster:c-a",
+        0,
+        r#"{"source":{"cluster":{"repavePending":true}}}"#,
+    );
+    let (_, steps) = stage.run("registry-move-nodes.sh", &["4"]);
+    assert!(
+        steps.contains("a repave of cluster A waits for approval"),
+        "{steps}"
+    );
+    assert!(
+        !stage.tofu_calls().contains("apply"),
+        "no apply: {}",
+        stage.tofu_calls()
+    );
+}

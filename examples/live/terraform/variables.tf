@@ -237,9 +237,15 @@ variable "move_csi_to_oci" {
 }
 
 variable "move_registry_name" {
-  description = "An OCI pack registry that holds the CSI pack of the cloud at its version"
+  description = "An OCI pack registry that holds the CSI pack and the OS pack of the cloud at their versions"
   type        = string
   default     = "Palette Registry"
+}
+
+variable "move_os_registry" {
+  description = "Take the OS pack of version 1.0.0 from move_registry_name, at the same version and values. registry-move-nodes.sh sets it."
+  type        = bool
+  default     = false
 }
 
 # examples/live/registry.sh's variables: the example's own OCI pack registry, and the profile that
