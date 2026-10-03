@@ -940,7 +940,7 @@ pub(crate) fn macros_compared(a: &Snapshot, b: &Snapshot) -> bool {
 }
 
 /// Each macro whose value digest differs between two records, by name: see
-/// [`Diff::macros_changed`]. Empty unless [`macros_compared`].
+/// [`Diff::macros_changed`]. Empty unless both records hold the digests.
 pub fn macros_changed(a: &Snapshot, b: &Snapshot) -> Vec<String> {
     let (Some(x), Some(y)) = (a.source.macro_values(), b.source.macro_values()) else {
         return Vec::new();
