@@ -6,6 +6,7 @@
 //! tests. [`Palette`] holds the operations over any of them, and [`RawProfile`] and [`RawCluster`]
 //! are the responses a snapshot is built from.
 
+mod audit;
 mod http;
 mod mask;
 mod memory;
@@ -17,6 +18,7 @@ use serde_json::Value;
 
 use crate::error::{Error, Result};
 
+pub use audit::AuditKind;
 pub use http::HttpApi;
 pub use memory::MemoryApi;
 pub use palette::Palette;

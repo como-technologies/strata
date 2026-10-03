@@ -406,6 +406,7 @@ API, reads what `verify --who` says, and puts the edit back.
 | `edit-who-resource` | 0 | #140: each entry of `verify.who` names the profile as its object: `resource.kind` `clusterprofile` and its uid. |
 | `edit-last-modified` | 0 | #140: the document of the profile gives the time of the edit: `verify.lastModified` is after the record, and the `DRIFT` verdict ends with it. |
 | `audits-none` | 0 | #140: Palette answers the log of an object with no entry with an empty list, and not `404`. |
+| `audits-limit` | 0 | #188: Palette serves at most 100 entries on a page of the audit log: a `limit` of 101 answers `500` with the code `InvalidLimit`. |
 | `api-undo`, `restored` | 0 | the edit is put back, and the record verifies again |
 | `cluster-record`, `cluster-edit`, `cluster-apply` | 0 | record cluster A, edit the add-on version it runs, and accept the update on the cluster through the API |
 | `cluster-who`, `cluster-who-says`, `cluster-who-person`, `cluster-who-json` | 1, 0, 0, 0 | #69: the cluster record reports `DRIFT`, and `--who` reads the audit log of the cluster: an `update` by the user who accepted it |
@@ -741,6 +742,8 @@ baseline with cluster A.
 | `edit-group-own-uid` | 0 | #81: the copy has a uid of its own |
 | `edit-group-raw`, `edit-group-manifest-uid` | 0 | #78: the template of the group names the manifest by its uid, with no content |
 | `edit-undo`, `gone` | 0 | the edit is put back, and the group and the member are gone |
+| `member-audit-kind` | 0 | #188: the audit log of the member, read by its uid alone, has its create and its delete under the kind `virtualCluster` |
+| `member-audit-not-cluster` | 0 | #188: a query with the kind `spectrocluster` and the uid of the member does not find them |
 
 The virtual cluster runs with a CPU limit of 3 cores, and a memory limit that
 leaves 1 GiB beside the 3.2 GiB that the agents of Palette take in it.

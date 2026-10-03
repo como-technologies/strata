@@ -8,7 +8,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::api::{Palette, PaletteApi};
+use crate::api::{AuditKind, Palette, PaletteApi};
 use crate::diff::{
     self, AuditEntry, AuditResource, ClusterProfileOverwritten, Diff, ImpactLevel, Verify,
     VerifyStatus,
@@ -156,30 +156,32 @@ fn live_holder<A: PaletteApi>(
     Ok(live.with_kind(c.kind))
 }
 
-/// The kind of the object of a record in the audit log of Palette.
-fn audit_kind(recorded: &Snapshot) -> &'static str {
+/// The kind of the object of a record in the audit log of Palette, or `None` for a cluster.
+/// strata reads the log of a cluster by its uid alone: Palette logs the create and the delete of
+/// a virtual cluster under `virtualCluster`, and not under `spectrocluster`.
+fn audit_kind(recorded: &Snapshot) -> Option<AuditKind> {
     match &recorded.source.cluster {
         Some(c) => match c.kind {
-            SubjectKind::Cluster => "spectrocluster",
-            SubjectKind::EdgeHost => "edgehost",
-            SubjectKind::ClusterGroup => "clustergroup",
+            SubjectKind::Cluster => None,
+            SubjectKind::EdgeHost => Some(AuditKind::EdgeHost),
+            SubjectKind::ClusterGroup => Some(AuditKind::ClusterGroup),
         },
-        None if recorded.source.kind == APP_KIND => "appprofile",
-        None => "clusterprofile",
+        None if recorded.source.kind == APP_KIND => Some(AuditKind::AppProfile),
+        None => Some(AuditKind::ClusterProfile),
     }
 }
 
 /// The writes to one object that the audit log of Palette holds since `since`, oldest first.
+/// With no `kind`, the entries of each kind for the uid.
 fn writes<A: PaletteApi>(
     palette: &Palette<A>,
-    kind: &str,
+    kind: Option<AuditKind>,
     uid: &str,
     since: &str,
     progress: &Progress,
 ) -> Result<Vec<AuditEntry>> {
-    progress.note(&format!(
-        "reading the audit log of {kind} {uid} since {since}"
-    ));
+    let object = kind.map_or_else(|| uid.to_string(), |k| format!("{} {uid}", k.as_str()));
+    progress.note(&format!("reading the audit log of {object} since {since}"));
     let mut entries: Vec<AuditEntry> = palette
         .audits(kind, uid, since)?
         .iter()
@@ -416,11 +418,17 @@ pub fn verify_with<A: PaletteApi>(
             .map(|v| v.profiles_overwritten.clone())
             .unwrap_or_default();
         for o in &overwritten {
-            let mut more = writes(palette, "clusterprofile", &o.uid, since, progress)?;
+            let mut more = writes(
+                palette,
+                Some(AuditKind::ClusterProfile),
+                &o.uid,
+                since,
+                progress,
+            )?;
             // the line names the profile, also when Palette gives no resource on the entry
             for e in &mut more {
                 let r = e.resource.get_or_insert_with(|| AuditResource {
-                    kind: "clusterprofile".to_string(),
+                    kind: AuditKind::ClusterProfile.as_str().to_string(),
                     name: String::new(),
                     uid: o.uid.clone(),
                 });

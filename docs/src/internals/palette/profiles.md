@@ -96,6 +96,13 @@ an external store
 ([Audit logs](https://docs.spectrocloud.com/audit-logs/),
 [the API](https://docs.spectrocloud.com/api/v1/v-1-audits-list/)).
 
+A virtual cluster has its create and its delete under the kind
+`virtualCluster`. A query with `spectrocluster` and the uid of the virtual
+cluster does not find them. A query with the uid alone, and no `resourceKind`,
+finds the entries of each kind. The API reference gives 50 as the largest
+`limit`, but Palette serves 100. A `limit` above 100 answers `500` with the
+code `InvalidLimit`.
+
 An edit in place through the API, a `PUT` of the version and then its publish,
 is one entry: an `update` by the user who owns the key, with a summary that
 names the manifest that changed.

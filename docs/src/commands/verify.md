@@ -54,6 +54,11 @@ change, the line ends with it. When a person added a note to the entry, the
 line ends with `; note: <note>`. When the log holds no write since the record,
 the line is `who: no audit entry since the record`.
 
+For a cluster record, strata reads the log by the uid of the cluster alone, with
+no kind. Palette logs the create and the delete of a virtual cluster under the
+kind `virtualCluster`, and not `spectrocluster`. The uid finds the entries of
+both kinds.
+
 For a cluster record, the write that overwrote a version that the cluster runs
 is an entry of the profile, and not of the cluster. So strata also reads the log
 of each profile in `profilesOverwritten`. A line of a write to an object other

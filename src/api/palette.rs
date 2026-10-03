@@ -3,7 +3,7 @@
 
 use serde_json::Value;
 
-use super::{PaletteApi, RawCluster, RawProfile, mask};
+use super::{AuditKind, PaletteApi, RawCluster, RawProfile, mask};
 use crate::error::{Error, Result};
 use crate::progress::Progress;
 use crate::reference::LATEST;
@@ -21,6 +21,9 @@ const APP_PROFILE_LISTING: &str = "/v1/dashboard/appProfiles/metadata";
 const CLUSTER_SEARCH: &str = "/v1/dashboard/spectroclusters/search?limit=50";
 const CLUSTER_SEARCH_SCHEMA: &str = "/v1/dashboard/spectroclusters/search/schema";
 const TAG_FILTER_LISTING: &str = "/v1/filters/metadata?filterType=tag";
+/// The most entries that Palette serves on one page of the audit log. A larger `limit` answers
+/// `500` with the code `InvalidLimit`. The API reference gives 50, but Palette serves 100.
+const AUDIT_PAGE: u32 = 100;
 
 /// `(name, uid)` of each entry of a listing: an array, or an object with `items`.
 fn named_entries(listing: &Value) -> Vec<(String, String)> {
@@ -480,20 +483,20 @@ impl<A: PaletteApi> Palette<A> {
     }
 
     /// The entries of the audit log of Palette for one resource, `GET /v1/audits`, that it logged
-    /// at `since` or after, every page. `kind` is `clusterprofile`, `spectrocluster`, or
-    /// `edgehost`. Palette lists them newest first, and at most 100 on a page; `listmeta.continue`
-    /// names the next page, and is empty on the last one. An empty `since` reads the full log of
-    /// the resource.
-    pub fn audits(&self, kind: &str, uid: &str, since: &str) -> Result<Vec<Value>> {
-        let mut query = format!(
-            "resourceKind={}&resourceUid={}",
-            query_value(kind),
-            query_value(uid)
-        );
+    /// at `since` or after, every page. With no `kind`, Palette gives the entries of each kind
+    /// for the uid. Palette lists them newest first, and at most
+    /// 100 on a page; `listmeta.continue` names the next page, and is empty on the last one. An
+    /// empty `since` reads the full log of the resource.
+    pub fn audits(&self, kind: Option<AuditKind>, uid: &str, since: &str) -> Result<Vec<Value>> {
+        let mut query = String::new();
+        if let Some(kind) = kind {
+            query.push_str(&format!("resourceKind={}&", kind.as_str()));
+        }
+        query.push_str(&format!("resourceUid={}", query_value(uid)));
         if !since.is_empty() {
             query.push_str(&format!("&startTime={}", query_value(since)));
         }
-        query.push_str("&limit=100");
+        query.push_str(&format!("&limit={AUDIT_PAGE}"));
         self.paged(&format!("/v1/audits?{query}"))
     }
 
