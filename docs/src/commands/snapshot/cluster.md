@@ -79,6 +79,26 @@ sorts the subjects of each binding, and the bindings. When Palette answers
 HTTP 404 for the bindings or the namespaces, the field is `null`, and not an
 empty list.
 
+When Palette answers another HTTP error for the bindings or the namespaces,
+strata still writes the record, and the exit is 0. The field is `null`, and
+`errors` of the tier holds the error. Here the API key cannot read the role
+bindings of the cluster `payments`:
+
+```text
+{{#include ../../output/tiers-forbidden-record.txt}}
+```
+
+```text
+{{#include ../../output/tiers-forbidden-errors.txt}}
+```
+
+An error is not a change of the cluster. `compare` and `verify` do not compare
+a field that one of the two records could not read, and a note names it:
+
+```text
+{{#include ../../output/tiers-forbidden-verify.txt}}
+```
+
 A person can edit the subjects of a binding, or the quota of a namespace, and
 the uid stays. The hash of the tier changes, and `compare` and `verify` name
 the field. Here a person added the user `fred@example.com` to the binding of
@@ -186,7 +206,10 @@ of the cluster stays in `Deleting`. The record carries the repave in
 
 Strata reads `GET /v1/spectroclusters/{uid}/repave/status` only when a repave
 waits. That answer holds the values of the pack on each side of the change.
-The record keeps the names of the keys, and no value.
+The record keeps the names of the keys, and no value. When Palette answers that
+request with an HTTP error, strata still writes the record.
+`pendingRepaveError` then holds the error in place of `pendingRepave`, and the
+note of `compare` and `verify` gives it in place of the reasons.
 
 These fields are not part of the root: the copy that the cluster runs is the
 same. `compare` and `verify` name the repave that waits:

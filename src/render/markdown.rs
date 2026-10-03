@@ -12,9 +12,9 @@ use super::{
     record_detail, record_label, recorded_noun, registry_note, registry_sync_suffix,
     repave_pending_notes, running_behind_notes, same_content_note, second_reading_counts, short,
     show, state_suffix, subject, tier_path, tier_states, traits_suffix, unchanged_sentence,
-    unverified_sentence, updates_pending_notes, upstream_unknown_note, values_changed,
-    values_changed_suffix, variable_lines, variables_comparable, variables_unavailable_note,
-    version_display, who_entry, who_heading,
+    unread_notes, unverified_sentence, updates_pending_notes, upstream_unknown_note,
+    values_changed, values_changed_suffix, variable_lines, variables_comparable,
+    variables_unavailable_note, version_display, who_entry, who_heading,
 };
 use crate::color::Paint;
 use crate::diff::{Diff, Leaf, Op, Status, Verify, VerifyStatus};
@@ -128,6 +128,9 @@ impl Renderer for MarkdownRenderer {
             o.push_str(&format!("**Note:** {note}\n\n"));
         }
         for note in repave_pending_notes(d) {
+            o.push_str(&format!("**Note:** {note}\n\n"));
+        }
+        for note in unread_notes(d) {
             o.push_str(&format!("**Note:** {note}\n\n"));
         }
         for note in running_behind_notes(d) {

@@ -83,7 +83,8 @@ profile, or pack version.
       approval, and `false` when none waits. It is absent for an edge host, a
       cluster group, and an older record. `pendingRepave`, only when a repave
       waits: `source`, `since`, and `reasons[]` with `code`, `message`, `pack`,
-      and `keys`. See
+      and `keys`. `pendingRepaveError` is in its place when strata could not
+      read the repave. See
       [Whether a repave waits](../commands/snapshot/cluster.md#whether-a-repave-waits).
     - `macroValues`, only with `snapshot --macros`: each user macro that the
       content uses, with a digest. The digest is the `sha256:` of the value
@@ -91,7 +92,9 @@ profile, or pack version.
       `unresolved` when Palette gives no value.
     - `labels`: the labels of the cluster.
     - `tiers`: each tier that the record carries, by name, each with `hash`
-      and `fields`. The tiers are `applied`, `running`, `policy`, and, with
+      and `fields`. `errors`, only when strata could not read a field: the
+      field and the error. The field is then `null`, and `errors` is not part
+      of the hash. The tiers are `applied`, `running`, `policy`, and, with
       `snapshot --shape`, `shape`. See
       [More of the cluster than its release](../commands/snapshot/cluster.md#more-of-the-cluster-than-its-release).
       The `fields` of `shape` are `cloudType`, `cloud`, and `pools[]`, by

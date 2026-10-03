@@ -13,6 +13,9 @@
 //!
 //! The query leaves out `startTime` and `endTime`: see `without_time`.
 //!
+//! When the file `<name>.403.json` exists in place of `<name>.json`, the answer is HTTP 403 with
+//! that file as the body: Palette refuses the request.
+//!
 //! When the file does not exist, the answer is HTTP 404 with the body that Palette gives. The
 //! server reads each file at each request, so the runner can change the tenant between two
 //! commands, and a page can show what Palette does after an edit in place.
@@ -62,6 +65,7 @@ fn answer(root: &Path, mut stream: TcpStream) -> std::io::Result<()> {
             (200, searched(&fs::read(path)?, &request.body))
         }
         Some(path) if path.is_file() => (200, fs::read(path)?),
+        Some(path) if forbidden(&path).is_file() => (403, fs::read(forbidden(&path))?),
         // Palette answers an empty log for an object with no entry, and not 404
         Some(_) if request.target.starts_with("/v1/audits?") => (
             200,
@@ -77,7 +81,11 @@ fn answer(root: &Path, mut stream: TcpStream) -> std::io::Result<()> {
             .into_bytes(),
         ),
     };
-    let reason = if status == 200 { "OK" } else { "Not Found" };
+    let reason = match status {
+        200 => "OK",
+        403 => "Forbidden",
+        _ => "Not Found",
+    };
     write!(
         stream,
         "HTTP/1.1 {status} {reason}\r\nContent-Type: application/json\r\n\
@@ -86,6 +94,11 @@ fn answer(root: &Path, mut stream: TcpStream) -> std::io::Result<()> {
     )?;
     stream.write_all(&body)?;
     stream.flush()
+}
+
+/// The file whose presence makes the server refuse the request for `path` with HTTP 403.
+pub fn forbidden(path: &Path) -> PathBuf {
+    path.with_extension("403.json")
 }
 
 struct Request {
@@ -335,6 +348,20 @@ mod tests {
         assert_eq!(
             got.unwrap(),
             Path::new("/r/p1/v1/audits@resourceKind=clusterprofile&resourceUid=u1&limit=100.json")
+        );
+    }
+
+    /// The file that makes the server answer HTTP 403 is beside the file of the answer.
+    #[test]
+    fn the_file_of_a_refusal_is_beside_the_file_of_the_answer() {
+        let got = file_for(
+            Path::new("/r"),
+            Some("p1"),
+            "/v1/spectroclusters/c1/config/rbacs",
+        );
+        assert_eq!(
+            forbidden(&got.unwrap()),
+            Path::new("/r/p1/v1/spectroclusters/c1/config/rbacs.403.json")
         );
     }
 

@@ -1,0 +1,7 @@
+$ jq '.source.cluster.tiers.policy | {rbacs: .fields.rbacs, errors}' runs/payments-now.json
+{
+  "rbacs": null,
+  "errors": {
+    "rbacs": "HTTP 403: {\"code\":\"AccessDenied\",\"message\":\"cluster.get operation is not permitted, required permissions cluster.get\"}"
+  }
+}
