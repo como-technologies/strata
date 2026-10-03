@@ -641,7 +641,7 @@ impl<A: PaletteApi> Palette<A> {
             progress,
         )?;
         // the updates and the repave that wait, the bindings, and the namespaces are beside the
-        // copy, not part of it: strata records the error of a read, and still takes the record
+        // copy, not part of it. So strata records the error of a read, and still takes the record
         let (notifications, notifications_error) = or_unread(
             self.cluster_notifications(uid).map(Value::Array),
             &format!("notifications of cluster {uid}"),
@@ -1208,7 +1208,7 @@ impl<A: PaletteApi> Palette<A> {
         let what = format!("{} of cluster {uid}", part.noun());
         match self.api.get_json(&path) {
             Err(Error::Api { status: 404, .. }) => {
-                progress.note(&format!("note: the {what} are unavailable (HTTP 404)"));
+                unavailable_note(progress, &what, 404);
                 Ok((None, None))
             }
             answer => or_unread(answer, &what, progress),
@@ -1266,6 +1266,70 @@ impl<A: PaletteApi> Palette<A> {
             }
         }
     }
+}
+
+/// The answer of a read beside the profiles of a cluster, or why Palette did not give it.
+///
+/// An answer of Palette that is an error does not stop the record. The record holds `HTTP
+/// <status>: <body>` in place of the document, and a note names `what`: `notifications of
+/// cluster <uid>`.
+///
+/// # Errors
+///
+/// Each error that is not an answer of Palette, such as a refused connection.
+fn or_unread(
+    answer: Result<Value>,
+    what: &str,
+    progress: &Progress,
+) -> Result<(Option<Value>, Option<String>)> {
+    match answer {
+        Ok(doc) => Ok((Some(doc), None)),
+        Err(Error::Api { status, body, .. }) => {
+            unavailable_note(progress, what, status);
+            Ok((None, Some(format!("HTTP {status}: {}", body.trim()))))
+        }
+        Err(e) => Err(e),
+    }
+}
+
+/// Note that Palette did not give `what`, and answered with the HTTP `status`.
+fn unavailable_note(progress: &Progress, what: &str, status: u16) {
+    progress.note(&format!("note: the {what} are unavailable (HTTP {status})"));
+}
+
+/// A part of the config of a cluster that Palette serves on a route of its own.
+#[derive(Clone, Copy)]
+enum ConfigPart {
+    /// The role bindings of the cluster.
+    Rbacs,
+    /// The namespaces of the cluster, with the resources that each one can use.
+    Namespaces,
+}
+
+impl ConfigPart {
+    /// The last segment of the route of the part.
+    fn route(self) -> &'static str {
+        match self {
+            ConfigPart::Rbacs => "rbacs",
+            ConfigPart::Namespaces => "namespaces",
+        }
+    }
+
+    /// What the part holds, for a note.
+    fn noun(self) -> &'static str {
+        match self {
+            ConfigPart::Rbacs => "role bindings",
+            ConfigPart::Namespaces => "namespaces",
+        }
+    }
+}
+
+/// The object that holds its own copy of each manifest of its profiles, and the route that reads
+/// a copy by its uid.
+#[derive(Clone, Copy)]
+enum Holder {
+    EdgeHost,
+    ClusterGroup,
 }
 
 #[cfg(test)]
@@ -1345,63 +1409,4 @@ mod tests {
             .unwrap_err();
         assert!(matches!(err, Error::Api { status: 500, .. }), "{err}");
     }
-}
-
-/// The answer of a read beside the profiles of a cluster, or why Palette did not give it.
-///
-/// An answer of Palette that is an error does not stop the record. The record holds `HTTP
-/// <status>: <body>` in place of the document, and a note names `what`: `notifications of
-/// cluster <uid>`.
-///
-/// # Errors
-///
-/// Each error that is not an answer of Palette, such as a refused connection.
-fn or_unread(
-    answer: Result<Value>,
-    what: &str,
-    progress: &Progress,
-) -> Result<(Option<Value>, Option<String>)> {
-    match answer {
-        Ok(doc) => Ok((Some(doc), None)),
-        Err(Error::Api { status, body, .. }) => {
-            progress.note(&format!("note: the {what} are unavailable (HTTP {status})"));
-            Ok((None, Some(format!("HTTP {status}: {}", body.trim()))))
-        }
-        Err(e) => Err(e),
-    }
-}
-
-/// A part of the config of a cluster that Palette serves on a route of its own.
-#[derive(Clone, Copy)]
-enum ConfigPart {
-    /// The role bindings of the cluster.
-    Rbacs,
-    /// The namespaces of the cluster, with the resources that each one can use.
-    Namespaces,
-}
-
-impl ConfigPart {
-    /// The last segment of the route of the part.
-    fn route(self) -> &'static str {
-        match self {
-            ConfigPart::Rbacs => "rbacs",
-            ConfigPart::Namespaces => "namespaces",
-        }
-    }
-
-    /// What the part holds, for a note.
-    fn noun(self) -> &'static str {
-        match self {
-            ConfigPart::Rbacs => "role bindings",
-            ConfigPart::Namespaces => "namespaces",
-        }
-    }
-}
-
-/// The object that holds its own copy of each manifest of its profiles, and the route that reads
-/// a copy by its uid.
-#[derive(Clone, Copy)]
-enum Holder {
-    EdgeHost,
-    ClusterGroup,
 }

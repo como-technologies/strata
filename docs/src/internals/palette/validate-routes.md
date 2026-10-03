@@ -118,7 +118,8 @@ This route says whether a change of the profiles of a cluster replaces its
 nodes. The body is the `v1SpectroClusterPacksEntity` of `validate/packs`.
 `compare --repave` sends it. The request changes nothing.
 
-Palette builds the target cluster from the body:
+Palette builds the target cluster from the body. These facts come from the
+code of Palette, not from a live run:
 
 - A profile that the cluster runs, with no `packValues`, keeps the copy that
   the cluster holds.

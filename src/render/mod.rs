@@ -514,8 +514,10 @@ pub(crate) fn pair_detail(p: &Pair) -> String {
     }
 }
 
-/// The notes under a pair that do not change its status: each macro with another value on each
-/// side, each macro that strata does not compare, and each pack with a masked value.
+/// The notes under a pair that do not change its status.
+///
+/// A note names a macro with another value on each side, a macro that strata does not compare, or
+/// a pack with a masked value.
 pub(crate) fn pair_notes(p: &Pair) -> Vec<String> {
     macros_changed_note(&p.macros_changed)
         .into_iter()

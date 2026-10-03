@@ -54,6 +54,17 @@ These are open:
   requires a pack that the profile does not hold. No pack of the Public Repo
   lists a dependency. See
   [The validate routes](validate-routes.md#post-v1clusterprofilesvalidatepacks).
+- The route of a cluster template,
+  `POST /v1/spectroclusters/clusterTemplates/{uid}/validate/repave`, and the
+  answer of the route of the cluster for a cluster in a template. The stand-in
+  of the book models them, and no run shows them. See
+  [A cluster in a cluster template](../../commands/compare/repave.md#a-cluster-in-a-cluster-template).
+- An HTTP 403 on `config/rbacs`, `config/namespaces`, or `repave/status`. The
+  stand-in gives the body `AccessDenied`, and no run shows that body. See
+  [The policy tier](../../commands/snapshot/cluster.md#the-policy-tier).
+- `compare --repave` with `cluster:<c>@pending`: no run asks Palette about an
+  update that waits. See
+  [Ask about the update that waits](../../commands/compare/repave.md#ask-about-the-update-that-waits).
 
 ## What strata preflight does not check
 

@@ -21,8 +21,7 @@ const A100_PROD: &str = "64e1000000000000000000a1";
 const A112: &str = "64e0000000000000000000d4";
 const A113: &str = "64e0000000000000000000d5";
 const A120: &str = "64e0000000000000000000e5";
-// aws-stack@1.1.4: the content of 1.1.1, with the CSI values reading a project macro, in dev and
-// prod
+// aws-stack@1.1.4: the content of 1.1.1, whose CSI values read a project macro, in dev and prod
 const A114: &str = "64e0000000000000000000f7";
 const A114_PROD: &str = "64e1000000000000000000f7";
 // aws-stack@1.1.5: the content of 1.1.1, with no digest for the CSI pack

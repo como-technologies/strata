@@ -1,7 +1,7 @@
 //! The rules of Palette that only the create of a profile version checks.
 //!
-//! `POST /v1/clusterprofiles/validate/packs` does not check these rules, so a team learns of a
-//! fault only when the create refuses it. Strata fills each gap with a check before any request.
+//! No route that takes a candidate checks these rules, so a team learns of a fault only when the
+//! create refuses it. Strata fills each gap with a check before any request.
 //! Each message names the code that Palette gives at the create. When a route of Palette answers a
 //! rule before the create, strata removes its check. The book lists each rule in "The gaps that
 //! strata fills".
@@ -30,8 +30,9 @@ const KNOWN_CLOUDS: &[&str] = &[
 ];
 
 /// What strata says after each refusal of this module.
-pub(super) const GAP: &str = "Palette checks this only at the create, and no route of Palette answers it \
-                   before the create. Strata removes this check when a route answers it";
+pub(super) const GAP: &str = "Palette checks this only at the create, and no route that takes a \
+                   candidate answers it before the create. Strata removes this check when a route \
+                   answers it";
 
 /// A rule that Palette checks only at the create of a profile version.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -50,6 +51,8 @@ enum CreateRule {
     CoreLayers,
     /// Each pack supports the cloud of the profile.
     Cloud,
+    /// The tag of a pack that Palette makes for a registry that it does not sync is a version.
+    PackTag,
 }
 
 impl CreateRule {
@@ -63,6 +66,7 @@ impl CreateRule {
             CreateRule::TypeLayer => "ClusterProfilePackNotAllowed",
             CreateRule::CoreLayers => "ErrPackCoreLayersMissing",
             CreateRule::Cloud => "PackNotSupported",
+            CreateRule::PackTag => "InvalidPackVersion",
         }
     }
 
@@ -112,8 +116,10 @@ fn repeated<'a>(names: impl IntoIterator<Item = &'a str>) -> Vec<&'a str> {
     out
 }
 
-/// The layers that a profile of type `kind` takes: each layer for `cluster`; `os`, `k8s`, `cni`,
-/// and `csi` for `infra`; `addon`, `cni`, and `csi` for each other type. None for each layer.
+/// The layers that a profile of type `kind` takes, or None for each layer.
+///
+/// `cluster` takes each layer. `infra` takes `os`, `k8s`, `cni`, and `csi`. Each other type takes
+/// `addon`, `cni`, and `csi`.
 fn layers_of_type(kind: &str) -> Option<&'static [&'static str]> {
     match kind {
         "" | "cluster" | PACK_TYPE => None,
@@ -142,10 +148,11 @@ fn listed(items: &[&str]) -> String {
     }
 }
 
-/// Check the rules that the file alone can break, in this order: the version, a pack name twice,
-/// the name of a manifest and of a manifest pack, a manifest name twice in one pack, and the
-/// layers of the type. The layer of a pack that the file does not give comes from the registry,
-/// so [`super::resolve`] checks the layers again.
+/// Check the rules that the file alone can break.
+///
+/// The order is the version, a pack name twice, the name of a manifest and of a manifest pack, a
+/// manifest name twice in one pack, and the layers of the type. The layer of a pack that the file
+/// does not give comes from the registry, so [`super::resolve`] checks the layers again.
 pub(super) fn check_file(c: &Candidate) -> Result<(), String> {
     if !palette_version(&c.version) {
         return Err(CreateRule::Version.refuse(&format!(
@@ -231,8 +238,10 @@ pub(super) fn check_layers(c: &Candidate, layers: &[Option<&str>]) -> Result<(),
 }
 
 /// Whether a pack whose listing gives the cloud types `clouds` goes in a profile of the cloud
-/// `cloud`: the cloud `all`, a pack with no cloud type, a pack of that cloud or of `all`, and a
-/// pack of `custom` on a custom cloud.
+/// `cloud`.
+///
+/// This is true for the cloud `all`, and for a pack with no cloud type. It is also true for a pack
+/// of that cloud or of `all`, and for a pack of `custom` on a custom cloud.
 fn cloud_supported(cloud: &str, clouds: &[String]) -> bool {
     let custom = !KNOWN_CLOUDS.contains(&cloud);
     cloud == "all"
@@ -261,5 +270,48 @@ pub(super) fn check_cloud(
         l.name,
         l.version,
         listed(&clouds.iter().map(String::as_str).collect::<Vec<_>>()),
+    )))
+}
+
+/// True when Palette takes `tag` as the version of a pack that it makes. Palette takes a semantic
+/// version in a loose form (`v1`, `1.2`, `1.2.3-rc.1+b5`), or a text that holds three numbers with
+/// dots between them (`chart-1.2.3`).
+fn palette_pack_tag(tag: &str) -> bool {
+    loose_semver(tag) || has_three_numbers(tag)
+}
+
+/// Whether `text` holds three numbers with dots between them, `\d+\.\d+\.\d+`, at any place.
+fn has_three_numbers(text: &str) -> bool {
+    let b = text.as_bytes();
+    (0..b.len()).any(|start| {
+        let mut i = start;
+        for part in 0..3 {
+            let from = i;
+            while i < b.len() && b[i].is_ascii_digit() {
+                i += 1;
+            }
+            if i == from {
+                return false;
+            }
+            if part < 2 {
+                if b.get(i) != Some(&b'.') {
+                    return false;
+                }
+                i += 1;
+            }
+        }
+        true
+    })
+}
+
+/// Check `tag`, the tag of a pack from a registry that Palette does not sync. Palette makes the
+/// pack at the create, with the tag as its version.
+pub(super) fn check_pack_tag(tag: &str) -> Result<(), String> {
+    if palette_pack_tag(tag) {
+        return Ok(());
+    }
+    Err(CreateRule::PackTag.refuse(&format!(
+        "the tag {tag} is not a semantic version, and it holds no three numbers with dots \
+         between them"
     )))
 }

@@ -100,7 +100,7 @@ Five rules decide what a new item of strata can do. The review of each item,
 and of each wave, checks them.
 
 1. **Ask Palette first. Make a check only where no route answers.** The rule
-   has three parts:
+   has four parts:
    - When a route of Palette answers a check before the point where the answer
      matters, strata and `strata-preflight` call that route. They do not copy
      the rule, because a copy goes stale when Palette changes the rule.
@@ -111,6 +111,9 @@ and of each wave, checks them.
      a candidate, because the team needs it before the publish.
    - When Palette adds a route that answers the check, strata removes its own
      check. The review at the end of each wave reads the list for this.
+   - Strata also keeps a check that the root needs: a change that Palette
+     makes to the content at the create with no error. See
+     [What the create of a version checks](./internals/palette/profiles.md#what-the-create-of-a-version-checks).
 2. **Do not repeat a status that Palette shows.** Palette shows flags and
    states in its console, its notifications, and its audit log. A record holds
    one of them only when `compare`, `verify`, or `same-release` needs it to

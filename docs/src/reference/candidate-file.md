@@ -86,12 +86,11 @@ Strata reads the whole file before it sends a request:
 
   So strata reports a misspelled field such as `valuesfile`.
 - A values file or a manifest file that strata cannot read is `io`.
-
 - A candidate that breaks a rule that only the create of Palette checks is
-  `candidate-invalid`. No route of Palette answers these rules before the
-  create, so strata fills the gap. The message names the rule, the code of
-  Palette, and the layer or the manifest. Strata checks the rules in this
-  order:
+  `candidate-invalid`. No route that takes a candidate answers these rules
+  before the create, so strata fills the gap. The message names the rule, the
+  code of Palette, and the layer or the manifest. Strata checks the rules in
+  this order:
   1. The version parses as semver, as Palette parses it: `1.1` and `v1.2.3`
      pass, and `1.2.3.4` does not.
   2. Each pack name is in one layer only.
@@ -116,8 +115,8 @@ version and a type that Palette refuses:
 
 Strata does not copy the rules that the validate route of Palette checks.
 These are the YAML of the values and the manifests, and the limit of 200 packs
-and 200 manifests. A candidate that breaks one of them gives a record. To ask Palette
-before you publish, give `--validate`: see
+and 200 manifests. A candidate that breaks one of them gives a record. To ask
+Palette before you publish, give `--validate`: see
 [Ask Palette before you publish](../commands/candidate.md#ask-palette-before-you-publish).
 
 ## The registry lookups
@@ -283,8 +282,10 @@ creates the profile:
 - **The layer** `addon`. Palette drops a layer that the profile gives, so
   strata refuses another layer.
 - **The tag as the version.** Strata refuses a `tag` that is not equal to the
-  version. Palette refuses the create when the tag is not a semantic version,
-  so strata refuses that tag too. All three refusals are `candidate-invalid`.
+  version. Only the create of Palette checks the tag itself, so strata fills
+  that gap: see
+  [The gaps that strata fills](../internals/palette/profiles.md#the-gaps-that-strata-fills).
+  All three refusals are `candidate-invalid`.
 - **The values of the file.** Palette has no default values for such a pack.
 
 ```text
