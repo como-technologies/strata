@@ -38,7 +38,7 @@ variables:
 
 | Field | Required | Function |
 | --- | --- | --- |
-| `name`, `version` | yes | The profile and its version. Neither can be empty. |
+| `name`, `version` | yes | The profile and its version. Neither can be empty. The version is one that Palette takes: see [Checks before any request](#checks-before-any-request). |
 | `type` | no | `cluster`, `infra`, `add-on`, or `system`. The default is `cluster`. |
 | `cloudType` | no | The cloud of the profile. The default is empty. |
 | `registry` or `registryUid` | no | The registry for each layer that names none. It does not apply to a `manifest` layer. |
@@ -87,12 +87,38 @@ Strata reads the whole file before it sends a request:
   So strata reports a misspelled field such as `valuesfile`.
 - A values file or a manifest file that strata cannot read is `io`.
 
-Strata does not check the rules of Palette. A candidate that Palette refuses
-at the create still gives a record. To ask Palette before you publish, give
-`--validate`: see
+- A candidate that breaks a rule that only the create of Palette checks is
+  `candidate-invalid`. No route of Palette answers these rules before the
+  create, so strata fills the gap. The message names the rule, the code of
+  Palette, and the layer or the manifest. Strata checks the rules in this
+  order:
+  1. The version parses as semver, as Palette parses it: `1.1` and `v1.2.3`
+     pass, and `1.2.3.4` does not.
+  2. Each pack name is in one layer only.
+  3. The name of each manifest, and the name of a `manifest` layer, is a
+     lowercase DNS-1123 label of 32 characters at most.
+  4. Each manifest name is in its layer once.
+  5. The type takes the `layer` of each layer that gives one. `infra` takes
+     `os`, `k8s`, `cni`, and `csi`. `add-on` and `system` take `addon`, `cni`,
+     and `csi`. `cluster` takes each layer.
+  6. When each layer gives its `layer`, a `cluster` or `infra` candidate has an
+     `os`, a `k8s`, a `cni`, and a `csi` layer. On the cloud `edge-native`, it
+     needs no `csi` layer.
+
+[The gaps that strata fills](../internals/palette/profiles.md#the-gaps-that-strata-fills)
+states what Palette does for each rule. Two copies of the candidate of
+[Write one from a published version](#write-one-from-a-published-version) have a
+version and a type that Palette refuses:
+
+```text
+{{#include ../output/candidate-refused.txt}}
+```
+
+Strata does not copy the rules that the validate route of Palette checks.
+These are the YAML of the values and the manifests, and the limit of 200 packs
+and 200 manifests. A candidate that breaks one of them gives a record. To ask Palette
+before you publish, give `--validate`: see
 [Ask Palette before you publish](../commands/candidate.md#ask-palette-before-you-publish).
-The validate route does not check each rule of the create: see
-[What the create of a version checks](../internals/palette/profiles.md#what-the-create-of-a-version-checks).
 
 ## The registry lookups
 
@@ -110,16 +136,29 @@ Palette does not sync some registries. If the listing does not have a version
 from such a registry, the layer gets the pack that Palette makes at the create.
 See [A layer from a registry that Palette does not sync](#a-layer-from-a-registry-that-palette-does-not-sync).
 
-From these answers, strata checks one rule, as `candidate-invalid`: the
-`layer` of each layer that gives one is the layer of the pack in the registry.
-Palette gives each pack the layer of the registry, and drops the layer of the
-profile with no error. So another layer gives a root that the published version
-does not have. See
-[The layer of a pack](../internals/palette/packs.md#the-layer-of-a-pack).
+From these answers, strata checks the rules that need the registry, as
+`candidate-invalid`:
+
+- The `layer` of each layer that gives one is the layer of the pack in the
+  registry. Palette gives each pack the layer of the registry, and drops the
+  layer of the profile with no error. So another layer gives a root that the
+  published version does not have. See
+  [The layer of a pack](../internals/palette/packs.md#the-layer-of-a-pack).
+- The cloud types of each pack in the listing hold the `cloudType` of the
+  candidate, or `all`. `custom` also passes for a cloud that Palette does not
+  know. A pack with no cloud type, a candidate with the cloud `all`, and a
+  candidate with no `cloudType` take each pack. Only the create of Palette
+  checks this rule.
+- Rules 5 and 6 above, with the layer of each pack in the registry.
+
+The pack that Palette makes for a registry that it does not sync has the layer
+`addon` and no cloud type. So rule 5 refuses it in an `infra` candidate, and
+each cloud takes it.
 
 A copy of the candidate of
 [Write one from a published version](#write-one-from-a-published-version) gives
-`cert-manager` the layer `cni`. The registry gives `addon`:
+`cert-manager` the layer `cni`. The type `cluster` takes `cni`, so the checks
+before any request pass. The registry gives `addon`:
 
 ```text
 {{#include ../output/candidate-layer-refused.txt}}

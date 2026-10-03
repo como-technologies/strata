@@ -132,7 +132,9 @@ changes nothing, and Palette holds no profile after it. Palette checks the
 values and the manifests of each pack, a pack that Spectro Cloud disabled, the
 dependencies of each pack, and the limits.
 [The validate routes](../internals/palette/validate-routes.md#post-v1clusterprofilesvalidatepacks)
-gives each check.
+gives each check. The route does not check some rules of the create, such as
+the version and the layers. Strata checks them before any request: see
+[The gaps that strata fills](../internals/palette/profiles.md#the-gaps-that-strata-fills).
 
 When Palette refuses, strata prints one line for each error, exits `2`, and
 writes no record:

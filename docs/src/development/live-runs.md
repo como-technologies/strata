@@ -1290,8 +1290,9 @@ What differs is outside strata:
 - [What Palette does](../internals/palette/limits.md#what-no-run-covers) lists the
   behaviors that no script here establishes.
 - No script creates a profile version that breaks a rule of
-  [What the create of a version checks](../internals/palette/profiles.md#what-the-create-of-a-version-checks).
-  Each rule states what Palette does, and no live run shows it.
+  [The gaps that strata fills](../internals/palette/profiles.md#the-gaps-that-strata-fills).
+  Each rule states what Palette does, and no live run shows it. The test cases
+  of the version check come from the version pattern that Palette uses.
 - No script installs a Zarf package on a cluster: Palette gives a Zarf pack the
   values of an app profile, `{{.spectro.system.appdeployment.tiername}}`, so it
   needs an app deployment of Palette Dev Engine.

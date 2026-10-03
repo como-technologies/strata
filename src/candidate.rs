@@ -22,6 +22,7 @@ use crate::reference::LATEST;
 use crate::snapshot::{PackSource, PresetOption, Snapshot};
 
 mod export;
+mod gaps;
 
 /// The `source.template` of a snapshot built from a candidate file.
 pub const TEMPLATE: &str = "candidate";
@@ -456,6 +457,7 @@ pub fn check(candidate: Candidate, path: &Path) -> Result<LoadedCandidate> {
             manifests,
         });
     }
+    gaps::check_file(&candidate).map_err(invalid)?;
     Ok(LoadedCandidate {
         path: path.to_path_buf(),
         candidate,
@@ -1195,6 +1197,7 @@ impl<A: PaletteApi> Resolver<'_, A> {
         if let Some(t) = &how.provider {
             pack_ref["annotations"] = json!({ "ociRegistryProviderType": t });
         }
+        // the pack that Palette makes has no cloud type, so each cloud takes it
         Ok(ResolvedLayer { pack_ref, entry })
     }
 
@@ -1229,6 +1232,15 @@ impl<A: PaletteApi> Resolver<'_, A> {
                 state,
             });
         }
+        // only the create checks that the pack supports the cloud of the profile
+        let clouds: Vec<String> = summary
+            .pointer("/spec/cloudTypes")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter_map(|v| v.as_str().map(str::to_string))
+            .collect();
+        gaps::check_cloud(&c.cloud_type, i, l, &clouds).map_err(|m| self.invalid(m))?;
         let pack_uid = text(summary, "/metadata/uid").unwrap_or_default();
         let entity = self
             .palette
@@ -1378,6 +1390,12 @@ pub fn resolve<A: PaletteApi>(
         refs.push(resolved.pack_ref);
         entries.push(resolved.entry);
     }
+    // each pack reference has the layer that Palette gives the pack, so check the layers again
+    let known: Vec<Option<&str>> = refs
+        .iter()
+        .map(|r| r.get("layer").and_then(Value::as_str))
+        .collect();
+    gaps::check_layers(c, &known).map_err(|message| resolver.invalid(message))?;
     Ok(RawProfile {
         profile: json!({
             "metadata": {"name": c.name, "uid": ""},
@@ -1642,8 +1660,8 @@ variables:
         assert!(check(addon, Path::new("c.yaml")).is_ok());
     }
 
-    /// A cluster candidate with each layer given: the core layers and one add-on with one
-    /// manifest.
+    /// A cluster candidate that Palette takes, with each layer given: the core layers and one
+    /// add-on with one manifest.
     fn stack() -> Candidate {
         serde_yaml::from_str(
             "name: aws-stack\nversion: 1.1.1\ncloudType: aws\nregistryUid: r1\nlayers:\n\
@@ -1657,16 +1675,194 @@ variables:
         .unwrap()
     }
 
-    /// A registry that serves each layer of [`stack`] with the layer `layers[i]`, for the cloud
-    /// `vsphere` only.
-    fn served(layers: &[&str]) -> Palette<MemoryApi> {
+    /// The refusal of `c`, with the rule of Palette that it names, and the reason that strata
+    /// checks it.
+    fn refused(c: Candidate, rule: &str) -> String {
+        let message = refusal(c);
+        assert!(message.contains(&format!("({rule}). ")), "{message}");
+        assert!(message.ends_with(gaps::GAP), "{message}");
+        message
+    }
+
+    #[test]
+    fn the_stack_is_a_candidate_that_palette_takes() {
+        assert!(check(stack(), Path::new("c.yaml")).is_ok());
+    }
+
+    #[test]
+    fn a_version_that_semver_of_palette_does_not_parse_is_candidate_invalid() {
+        // Palette takes an optional v and one to three numbers
+        for ok in [
+            "1.1",
+            "v1.2.3",
+            "7",
+            "1.2.3-rc.1",
+            "1.2.3+build.5",
+            "1.2.3-rc-1.x+b",
+        ] {
+            let mut c = stack();
+            c.version = ok.into();
+            assert!(check(c, Path::new("c.yaml")).is_ok(), "{ok}");
+        }
+        for bad in [
+            "2.2.2.develop",
+            "1.2.3.4",
+            "chart-v1.2.3",
+            "latest",
+            "1.2.3-",
+            "1.2.3-a..b",
+            "1..2",
+            "V1.2.3",
+            "99999999999999999999.0.0",
+        ] {
+            let mut c = stack();
+            c.version = bad.into();
+            let message = refused(c, "VersionParseFailure");
+            assert!(message.contains(&format!("version {bad} ")), "{message}");
+        }
+    }
+
+    #[test]
+    fn a_pack_twice_is_candidate_invalid() {
+        let mut c = stack();
+        let again = c.layers[4].clone();
+        c.layers.push(again);
+        let message = refused(c, "DuplicatePacksForbidden");
+        assert!(message.contains("the pack cert-manager"), "{message}");
+    }
+
+    #[test]
+    fn a_manifest_name_twice_in_one_pack_is_candidate_invalid() {
+        let mut c = stack();
+        let again = c.layers[4].manifests[0].clone();
+        c.layers[4].manifests.push(again);
+        let message = refused(c, "DuplicatePackManifestsForbidden");
+        assert!(
+            message.contains("layer 5 (cert-manager)") && message.contains("namespace-labels"),
+            "{message}"
+        );
+        // the same name in two packs is not a repeat
+        let mut c = stack();
+        c.layers[1].manifests = c.layers[4].manifests.clone();
+        assert!(check(c, Path::new("c.yaml")).is_ok());
+    }
+
+    #[test]
+    fn a_name_that_is_not_a_dns_label_is_candidate_invalid() {
+        for bad in [
+            "Namespace Labels",
+            "-labels",
+            "labels-",
+            "labels_x",
+            &"a".repeat(33),
+        ] {
+            let mut c = stack();
+            c.layers[4].manifests[0].name = bad.to_string();
+            let message = refused(c, "InvalidName");
+            assert!(
+                message.contains("a manifest of layer 5 (cert-manager)"),
+                "{message}"
+            );
+        }
+        let mut c = stack();
+        c.layers[4].manifests[0].name = "a".repeat(32);
+        assert!(check(c, Path::new("c.yaml")).is_ok());
+        // the name of a manifest pack too, and not the name of a pack from a registry
+        let mut c = manifest_candidate();
+        c.layers[0].name = "Namespace-Policy".into();
+        let message = refused(c, "InvalidName");
+        assert!(
+            message.contains("layer 1 (Namespace-Policy) is a manifest layer"),
+            "{message}"
+        );
+        let mut c = stack();
+        c.layers[4].name = "Cert-Manager".into();
+        assert!(check(c, Path::new("c.yaml")).is_ok());
+    }
+
+    #[test]
+    fn a_layer_that_the_type_of_the_profile_does_not_take_is_candidate_invalid() {
+        let mut c = stack();
+        c.kind = "add-on".into();
+        let message = refused(c, "ClusterProfilePackNotAllowed");
+        assert!(
+            message.contains("layer 1 (ubuntu-aws) has the layer os")
+                && message.contains("type add-on takes only the layers addon, cni, and csi"),
+            "{message}"
+        );
+        // an add-on profile takes a cni and a csi layer
+        let mut c = stack();
+        c.kind = "add-on".into();
+        c.layers.drain(0..2);
+        assert!(check(c, Path::new("c.yaml")).is_ok());
+        let mut c = stack();
+        c.kind = "infra".into();
+        let message = refused(c, "ClusterProfilePackNotAllowed");
+        assert!(
+            message.contains("layer 5 (cert-manager) has the layer addon"),
+            "{message}"
+        );
+        // a manifest layer has the layer addon
+        let mut c = manifest_candidate();
+        c.kind = "infra".into();
+        refused(c, "ClusterProfilePackNotAllowed");
+    }
+
+    #[test]
+    fn a_cluster_or_infra_profile_with_no_core_layer_is_candidate_invalid() {
+        let mut c = stack();
+        c.layers.remove(0);
+        let message = refused(c, "ErrPackCoreLayersMissing");
+        assert!(
+            message.contains("type cluster needs the layers os, k8s, cni, and csi")
+                && message.contains("has no layer os"),
+            "{message}"
+        );
+        let mut c = stack();
+        c.kind = "infra".into();
+        c.layers.truncate(2);
+        let message = refused(c, "ErrPackCoreLayersMissing");
+        assert!(message.contains("has no layer cni and csi"), "{message}");
+        // edge-native needs no csi
+        let mut c = stack();
+        c.cloud_type = "edge-native".into();
+        c.layers.remove(3);
+        assert!(check(c, Path::new("c.yaml")).is_ok());
+        // a layer that the file does not give comes from the registry: resolve checks it
+        let mut c = stack();
+        c.layers.remove(0);
+        c.layers[0].layer = None;
+        assert!(check(c, Path::new("c.yaml")).is_ok());
+    }
+
+    #[test]
+    fn a_candidate_that_the_validate_route_checks_gives_a_record() {
+        // `--validate` asks Palette for these rules, so strata does not copy them: values and a
+        // manifest that are not YAML, more than 200 packs, and more than 200 manifests
+        let mut c = stack();
+        c.layers[1].values = Some("replicas: {{ .spectro.var.replicas }}".into());
+        c.layers[4].manifests[0].content = Some("- kind: Namespace".into());
+        assert!(check(c, Path::new("c.yaml")).is_ok());
+        let mut c = stack();
+        let addon = c.layers[4].clone();
+        c.layers.extend((0..197).map(|i| CandidateLayer {
+            name: format!("addon-{i}"),
+            ..addon.clone()
+        }));
+        assert_eq!(c.layers.len(), 202);
+        assert!(check(c, Path::new("c.yaml")).is_ok());
+    }
+
+    /// A registry that serves each layer of [`stack`] with the layer `layers[i]` and the cloud
+    /// types `clouds[i]`.
+    fn served(layers: &[&str], clouds: &[Value]) -> Palette<MemoryApi> {
         let mut api = MemoryApi::new();
         for (i, l) in stack().layers.iter().enumerate() {
             let uid = format!("pk-{i}");
             let summary = json!({"metadata": {"uid": uid},
                 "spec": {"name": l.name, "version": l.version, "registryUid": "r1",
                          "layer": layers[i], "type": "spectro", "values": "",
-                         "cloudTypes": ["vsphere"]}});
+                         "cloudTypes": clouds[i]}});
             api = api
                 .with(
                     format!("/v1/packs?filters=spec.name={}&limit=100&offset=0", l.name),
@@ -1691,41 +1887,67 @@ variables:
     }
 
     #[test]
-    fn a_candidate_that_palette_refuses_at_the_create_gives_a_record() {
-        // strata copies no rule of the create: `--validate` and the create ask Palette
+    fn a_pack_that_does_not_support_the_cloud_of_the_profile_is_candidate_invalid() {
+        let aws = json!(["aws"]);
+        let mut clouds = vec![aws.clone(); 5];
+        assert!(resolved(stack(), &served(&STACK_LAYERS, &clouds)).is_ok());
+        clouds[2] = json!(["vsphere", "edge-native"]);
+        let palette = served(&STACK_LAYERS, &clouds);
+        let err = resolved(stack(), &palette).unwrap_err();
+        let Error::CandidateInvalid { message, .. } = &err else {
+            panic!("not candidate-invalid: {err}");
+        };
+        assert!(
+            message.contains("layer 3 (cni-cilium-oss)")
+                && message.contains("the clouds vsphere and edge-native")
+                && message.contains("the cloud aws (PackNotSupported)"),
+            "{message}"
+        );
+        // the cloud all, and a candidate with no cloud, take each pack
+        for cloud in ["all", ""] {
+            let mut c = stack();
+            c.cloud_type = cloud.into();
+            assert!(resolved(c, &palette).is_ok(), "{cloud:?}");
+        }
+        // a pack of each cloud, a pack with no cloud type, and a custom pack on a custom cloud
+        clouds[2] = json!(["all"]);
+        clouds[3] = json!([]);
+        assert!(resolved(stack(), &served(&STACK_LAYERS, &clouds)).is_ok());
         let mut c = stack();
-        // a version that semver does not parse, an add-on profile with an os, a k8s, and no
-        // core layer that it takes, values that are not YAML, a manifest name that is not a DNS
-        // label, and a pack twice
-        c.version = "1.1.1.1".into();
+        c.cloud_type = "my-cloud".into();
+        assert!(resolved(c, &served(&STACK_LAYERS, &vec![json!(["custom"]); 5])).is_ok());
+    }
+
+    #[test]
+    fn resolve_checks_the_layers_that_the_registry_gives() {
+        // the file gives no layer for kubernetes, and the registry gives k8s
+        let mut c = stack();
         c.kind = "add-on".into();
-        c.layers[1].values = Some("replicas: {{ .spectro.var.replicas }}".into());
-        c.layers[4].manifests[0].name = "Namespace Labels".into();
-        let again = c.layers[4].manifests[0].clone();
-        c.layers[4].manifests.push(again);
-        // the registry serves each pack for vsphere only, and the candidate is for aws
-        let raw = resolved(c, &served(&STACK_LAYERS)).unwrap();
-        let published = &raw.profile["spec"]["published"];
-        assert_eq!(raw.profile["spec"]["version"], "1.1.1.1");
-        assert_eq!(published["type"], "add-on");
-        assert_eq!(published["packs"][0]["layer"], "os");
-        assert_eq!(published["packs"].as_array().unwrap().len(), 5);
-        // more than 200 packs, and the same pack twice
+        c.layers
+            .retain(|l| l.name == "kubernetes" || l.name == "cert-manager");
+        c.layers[0].layer = None;
+        assert!(check(c.clone(), Path::new("c.yaml")).is_ok());
+        let clouds = vec![json!(["aws"]); 5];
+        let err = resolved(c, &served(&STACK_LAYERS, &clouds)).unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("layer 1 (kubernetes) has the layer k8s"),
+            "{err}"
+        );
+        // and a core layer that is not there, which only the registry shows
         let mut c = stack();
-        let addon = c.layers[4].clone();
-        c.layers.extend((0..197).map(|i| CandidateLayer {
-            name: format!("addon-{}", i % 2),
-            manifests: Vec::new(),
-            ..addon.clone()
-        }));
-        assert_eq!(c.layers.len(), 202);
-        assert!(check(c, Path::new("c.yaml")).is_ok());
+        c.layers[0].layer = None;
+        let mut layers = STACK_LAYERS;
+        layers[0] = "addon";
+        let err = resolved(c, &served(&layers, &clouds)).unwrap_err();
+        assert!(err.to_string().contains("has no layer os"), "{err}");
     }
 
     #[test]
     fn a_layer_from_a_registry_takes_only_the_layer_of_the_registry() {
-        let palette = served(&STACK_LAYERS);
-        // kubernetes first, so that it is layer 1
+        let palette = served(&STACK_LAYERS, &vec![json!(["aws"]); 5]);
+        // kubernetes first, so that it is layer 1; with no layer on ubuntu-aws, the check of the
+        // file does not know each layer, and does not check the core layers
         let first = |layer: Option<&str>| {
             let mut c = stack();
             c.layers.swap(0, 1);
@@ -1753,7 +1975,7 @@ variables:
             assert_eq!(raw.manifests["spec"]["packs"][0]["spec"]["layer"], "k8s");
         }
         assert_eq!(records[0].profile, records[1].profile);
-        // a wrong layer that the type of the profile takes
+        // a wrong layer that the type of the profile takes, and that leaves each core layer
         let mut c = stack();
         c.layers[4].layer = Some("cni".into());
         assert!(check(c.clone(), Path::new("c.yaml")).is_ok());
