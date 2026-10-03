@@ -1,11 +1,14 @@
-//! The fields of the `policy` tier of a cluster record: the settings of the cluster in
-//! `spec.clusterConfig`, its role bindings and its namespaces, and how it takes an update.
+//! The fields of the `policy` tier of a cluster record and of a cluster group record.
+//!
+//! The tier of a cluster holds the settings of the cluster in `spec.clusterConfig`, its role
+//! bindings and its namespaces, and how it takes an update. The tier of a cluster group holds the
+//! config that the group gives each virtual cluster.
 
 use serde::Serialize;
 use serde_json::{Map, Value, json};
 
 use crate::api::RawCluster;
-use crate::canon::canonical_json;
+use crate::canon::{canon_yaml_hashed, canonical_json};
 
 /// The key of the policy fields that holds the role bindings.
 const RBACS: &str = "rbacs";
@@ -75,6 +78,41 @@ pub(crate) fn fields(raw: &RawCluster, config: &Value) -> Value {
         "applySetting": text(cluster, "/status/spcApply/actionType"),
         "agentUpgrades": AgentUpgrades::of(cluster),
     })
+}
+
+/// The fields of the policy tier of a cluster group, from its `spec.clustersConfig` in `config`:
+/// the config that the group gives each virtual cluster.
+///
+/// The group applies `values` to each virtual cluster as YAML, as a pack applies its values. So
+/// the tier holds the values in canonical form with their hash, and the host clusters sorted by
+/// uid.
+pub(crate) fn group_fields(config: &Value) -> Value {
+    let (values, values_hash, values_parse_error) = canon_yaml_hashed(text(config, "/values"));
+    let mut hosts: Vec<Value> = config
+        .get("hostClustersConfig")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .map(|h| {
+            json!({
+                "uid": text(h, "/clusterUid"),
+                "endpointConfig": h.get("endpointConfig").cloned().unwrap_or(Value::Null),
+            })
+        })
+        .collect();
+    hosts.sort_by(|a, b| text(a, "/uid").cmp(text(b, "/uid")));
+    let mut fields = json!({
+        "endpointType": text(config, "/endpointType"),
+        "kubernetesDistroType": text(config, "/kubernetesDistroType"),
+        "limitConfig": config.get("limitConfig").cloned().unwrap_or(Value::Null),
+        "values": values,
+        "valuesHash": values_hash,
+        "hostClusters": hosts,
+    });
+    if let Some(e) = values_parse_error {
+        fields["valuesParseError"] = Value::String(e);
+    }
+    fields
 }
 
 /// Each role binding in `doc`, the answer of `GET /v1/spectroclusters/{uid}/config/rbacs`: its

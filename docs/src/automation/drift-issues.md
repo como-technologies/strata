@@ -41,7 +41,7 @@ script exits `2` and touches no issue. A host call that fails ends the script
 with the status of that call.
 
 A record finds a macro that changed only when it holds the digests of the
-macro values: take it with `strata snapshot <ref> --macros`, for a version, a
+macro values. Take it with `strata snapshot <ref> --macros`, for a version, a
 cluster, or a cluster group. A record without them reports `OK` after the macro
 changes. See
 [A macro value changes](../use-cases/macros.md).

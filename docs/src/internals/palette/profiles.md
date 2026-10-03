@@ -45,8 +45,10 @@ It does not write it over an empty value, or over a value that holds a
 variable, `{{.spectro.var.NAME}}`. A record of a published version holds
 `********`, and not the secret.
 
-The document of a cluster masks the copies of its profiles in the same way, and
-so does the export of a profile. So a profile record and a cluster record hold
+The export of a profile masks the values too. The code of Palette also masks the
+copies of the profiles in the document of a cluster. No live run shows it: see
+[What the source of Palette says](limits.md#what-the-source-of-palette-says).
+So a profile record and a cluster record hold
 the same mask. The root covers the mask and not the secret: two versions that
 differ in a secret alone have one root. A record names each masked value in
 `packs[].masked`, and `same-release`, `compare`, and `verify` name the pack. See
@@ -97,22 +99,22 @@ Palette writes a profile version as one file: the export
   `providerType`, and `isSyncSupported`.
 - `spec.variables[]`: each variable, with an `order`.
 
-Palette leaves out values that are empty, and a pack with no manifest has no
+Palette omits values that are empty, and a pack with no manifest has no
 `manifests`. A manifest pack has a `registry.metadata` with an empty `uid` and
 an empty `name`. The file has no pack uid, no digest, and no `params`.
 
 Palette sends the file only to a request that accepts a file, such as
 `Accept: application/octet-stream`. To a request with `Accept:
 application/json`, it answers HTTP 200 with `{"Reader":{}}`. Palette can refuse
-an export that follows another one at once: HTTP 429, with the code
+an export that follows another one at once. It answers HTTP 429, with the code
 `TooManyRequests` and the message "only 1 request in 10 seconds is allowed". It
 does not refuse each such export. Wait 10 seconds between two exports.
 
 `snapshot --from-candidate` reads the file as a candidate: see
 [A profile export of Palette](../../reference/candidate-file.md#a-profile-export-of-palette).
 The record of the export of a version has the root of that version, in YAML
-and in JSON. A version with a manifest pack differs by the pack uid that
-Palette mints alone, as for each candidate with a manifest layer.
+and in JSON. A version with a manifest pack differs only by the pack uid
+that Palette mints, as for each candidate with a manifest layer.
 [export.sh](../../development/live-runs.md#exportsh) shows each fact of this
 section.
 
@@ -354,9 +356,9 @@ does.
 
 An older Palette with no variables route also answers 404. So after a 404 of
 the variables route, strata reads the profile document again. When that read
-fails, the version is gone: the record fails, and `verify` reports the version
-as gone. When strata can read the profile, it records no variables and sets
-`variablesUnavailable`.
+answers HTTP 404, the version is gone: the record fails, and `verify` reports
+the version as gone. Another error of that read stops the record. When strata
+can read the profile, it records no variables and sets `variablesUnavailable`.
 [`verify.sh`](../../development/live-example.md#the-checks-of-verifysh) checks
 these answers on the live tenant.
 

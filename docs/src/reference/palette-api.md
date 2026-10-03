@@ -25,8 +25,8 @@ A missing variables endpoint, HTTP 404 or 405 on an older Palette, counts as no
 variables. The record says so in `source.variablesUnavailable`: see
 [JSON documents](./documents.md#strata-snapshot1). Palette also answers HTTP 404
 when it does not have the profile. So after a 404, strata reads the profile
-document again. When that read fails, the record fails, and `verify` reports the
-version as gone. A cluster does the same with its own document. See
+document again. When that read answers HTTP 404, the record fails, and `verify`
+reports the version as gone. A cluster does the same with its own document. See
 [The variables route](../internals/palette/profiles.md#the-variables-route).
 
 ## A cluster
@@ -36,8 +36,8 @@ version as gone. A cluster does the same with its own document. See
 | `GET /v1/spectroclusters/{uid}` | `spec.clusterProfileTemplates`: one applied profile each, with its packs. The state, in `status.state`. `verify` reads `status.state`, `metadata.isDeleted`, and `metadata.deletionTimestamp`: Palette keeps the document of a deleted cluster. |
 | `GET /v1/spectroclusters/{uid}/profiles/packs/manifests` | The registry digests and manifest contents, one entry for each applied profile. |
 | `GET /v1/spectroclusters/{uid}/variables` | The variable definitions and values, one entry for each applied profile. |
-| `GET /v1/spectroclusters/{uid}/config/rbacs` | `items[]`: the role bindings of the cluster, each with `spec.bindings[]` of `namespace`, `role`, `subjects`, and `type`. A cluster record and `verify` read it for the `policy` tier. After an HTTP 404, the tier holds `null`. |
-| `GET /v1/spectroclusters/{uid}/config/namespaces` | `items[]`: the namespaces of the cluster, each with `metadata.name`, `spec.isRegex`, and `spec.resourceAllocation`. A cluster record and `verify` read it for the `policy` tier. After an HTTP 404, the tier holds `null`. |
+| `GET /v1/spectroclusters/{uid}/config/rbacs` | `items[]`: the role bindings of the cluster, each with `spec.bindings[]` of `namespace`, `role`, `subjects`, and `type`. A cluster record and `verify` read it for the `policy` tier. After an HTTP 404, `rbacs` holds `null`. |
+| `GET /v1/spectroclusters/{uid}/config/namespaces` | `items[]`: the namespaces of the cluster, each with `metadata.name`, `spec.isRegex`, and `spec.resourceAllocation`. A cluster record and `verify` read it for the `policy` tier. After an HTTP 404, `namespaces` holds `null`. |
 | `GET /v1/dashboard/spectroclusters/meta` | The listing: `list clusters`, the uid of a cluster name, and the second reading of `consumers` when the search takes no `clusterProfiles`. A cluster name goes out first as `GET /v1/spectroclusters/<name>`; strata reads the listing after that HTTP 404. |
 | `GET /v1/dashboard/spectroclusters/{uid}` | The summary: the health of the cluster, in `status.health.state`. The cluster document does not carry it. No command reads this request. [The knurl adapter](../automation/knurl.md) reads it for each cluster. |
 | `GET /v1/notifications/spectrocluster/{uid}` | Whether an update waits for the cluster, every page. A cluster record and `list clusters --applied` read it. |

@@ -1,5 +1,7 @@
-//! The fields of the `shape` tier of a cluster record: the machine pools and the cloud part of
-//! its cloud config, read by the cloud type of the cluster.
+//! The fields of the `shape` tier of a cluster record.
+//!
+//! The tier holds the machine pools and the cloud part of the cloud config of the cluster. Strata
+//! reads them by the cloud type of the cluster.
 
 use serde_json::{Map, Value, json};
 

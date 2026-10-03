@@ -271,13 +271,12 @@ pack that Palette makes at the create also gets `addon`: see
 This comes from the code of Palette, not from a live run.
 
 So a profile that gives `kubernetes` the layer `addon` has the layer `k8s` when
-Palette publishes it. A record of that profile file has `addon`. The layer is
-part of `IDENTITY`, so the two roots differ. The rules of the profile type also
-use the layer of the registry: see
+Palette publishes it. The layer is part of `IDENTITY`, so a candidate file with
+that layer has another root. So strata refuses it: a
+[candidate file](../../reference/candidate-file.md#the-registry-lookups) that
+gives a pack another layer than its registry is `candidate-invalid`. The rules
+of the profile type also use the layer of the registry: see
 [What the create of a version checks](./profiles.md#what-the-create-of-a-version-checks).
-
-A [candidate file](../../reference/candidate-file.md#the-registry-lookups) that
-gives a pack another layer than its registry is `candidate-invalid`.
 
 ## Manifest pack uids
 

@@ -894,7 +894,7 @@ impl Clock {
             // the column of the text table, the cell of the Markdown table, the field of the JSON
             // report, and the end of a verbose line
             millis: Regex::new(
-                r#"(?P<pad> {2,})\d+ ms\b|\| \d+ ms \||"elapsedMs": \d+|(?P<lead>-> |, )\d+ ms,"#,
+                r#"(?P<pad> +)\d+ ms\b|\| \d+ ms \||"elapsedMs": \d+|(?P<lead>-> |, )\d+ ms,"#,
             )
             .expect("a pattern"),
             seconds: Regex::new(r"\bafter \d+s\b").expect("a pattern"),
@@ -960,6 +960,19 @@ mod tests {
             (
                 "  WARN  floating-tag  No profile pins a tag    104 ms",
                 "  WARN  floating-tag  No profile pins a tag      1 ms",
+            ),
+            (
+                // a title of 60 characters leaves one space before a count of five digits
+                concat!(
+                    "  WARN  floating-tag  ",
+                    "No profile of the cluster pins a tag that moves to new image",
+                    " 12345 ms"
+                ),
+                concat!(
+                    "  WARN  floating-tag  ",
+                    "No profile of the cluster pins a tag that moves to new image",
+                    "     1 ms"
+                ),
             ),
             (
                 "| WARN | `floating-tag` | 7 ms | |",

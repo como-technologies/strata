@@ -35,9 +35,9 @@ of an edge host has the root of the profile bound to it.
 
 ## The config that a cluster group gives
 
-A cluster group gives each of its virtual clusters a config: the limits of
-CPU, memory, and storage, the endpoint, the Kubernetes distribution, and values
-in YAML. The record of the group keeps the config in the `policy` tier of
+A cluster group gives each of its virtual clusters a config. The config holds
+the limits of CPU, memory, and storage, the endpoint, the Kubernetes
+distribution, and values in YAML. The record of the group keeps the config in the `policy` tier of
 `source.cluster.tiers`, from `spec.clustersConfig` of the group:
 
 ```text
@@ -61,6 +61,4 @@ same. Here the group gives each virtual cluster 4 cores in place of 6:
 {{#include ../../output/group-policy-verify.txt}}
 ```
 
-The pin is the same, so the root is the same and the exit is `0`. A cluster
-group and a cluster have no tier to compare, so `compare` of a group with a
-member names no tier.
+The pin is the same, so the root is the same and the exit is `0`.

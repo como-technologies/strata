@@ -79,8 +79,8 @@ record without `--macros` reports `OK` here, as the version record does.
 A macro is a value with no version and no audit entry, and a change of it
 opens no notification. Palette gives a cluster the new value at the next read
 of its agent, in a live run 11 minutes after the change. When the macro is in
-a field that repaves the cluster, Palette holds a repave for approval, and
-refuses an update of the cluster profiles until a person approves the repave.
+a field that repaves the cluster, Palette holds a repave for approval. Until a
+person approves the repave, Palette refuses an update of the cluster profiles.
 A cluster record holds that repave, and `verify` names it: see
 [Whether a repave waits](../commands/snapshot/cluster.md#whether-a-repave-waits).
 See

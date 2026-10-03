@@ -16,6 +16,7 @@ use super::{
     variable_lines, variables_comparable, variables_unavailable_note, version_display, who_entry,
     who_heading,
 };
+use crate::api::mask::MASKED;
 use crate::color::Paint;
 use crate::diff::{
     ClusterValueChange, Diff, ImpactLevel, Leaf, Op, PackDiff, Status, Verify, VerifyStatus,
@@ -223,7 +224,7 @@ fn packdetail(pd: &PackDiff, p: &Paint, out: &mut Vec<String>) {
         out.push(format!(
             "      {}",
             p.yellow(&format!(
-                "masked: {}: Palette serves ******** in place of the secret",
+                "masked: {}: Palette serves {MASKED} in place of the secret",
                 pd.masked.join(", ")
             ))
         ));

@@ -711,10 +711,19 @@ pub fn snapshot_of(
     api: &strata::api::MemoryApi,
     text: &str,
 ) -> strata::Result<strata::snapshot::Snapshot> {
+    snapshot_of_at(api, text, "t0")
+}
+
+/// [`snapshot_of`], fetched at the time `at`.
+pub fn snapshot_of_at(
+    api: &strata::api::MemoryApi,
+    text: &str,
+    at: &str,
+) -> strata::Result<strata::snapshot::Snapshot> {
     strata::ops::snapshot_for(
         &strata::reference::Ref::parse(text),
         || Ok(strata::api::Palette::new(api)),
-        "t0",
+        at,
         &strata::progress::Progress::silent(),
     )
 }

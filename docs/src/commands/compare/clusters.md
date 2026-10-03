@@ -6,8 +6,8 @@ other questions, the notes, what to expect, and the options.
 
 ## Compare two clusters by more than the release
 
-Two cluster records of one kind that carry tiers are compared on each tier
-that both carry, and on their labels. A `cluster tiers` line names the state
+`compare` compares two cluster records of one kind on each tier that both
+carry, and on their labels. A `cluster tiers` line names the state
 of each, and a line for each field that differs, as `<tier>.<path>`:
 
 ```text

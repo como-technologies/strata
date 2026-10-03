@@ -155,10 +155,11 @@ pub struct Source {
     /// takes the packs of this content.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub palette_validation: Option<ProfileValidation>,
-    /// With `snapshot --macros` on a profile version: each user macro the recorded content uses,
-    /// and the `sha256:` of the value Palette gives it at the scope of the profile, or
-    /// `unresolved`. A record of a cluster holds them in `cluster.macroValues`. Outside the root;
-    /// `verify` reads the values again and compares.
+    /// With `snapshot --macros` on a profile version: each user macro that the recorded content
+    /// uses, with a digest. The digest is the `sha256:` of the value that Palette gives the macro
+    /// at the scope of the profile, or `unresolved` when Palette gives no value. A record of a
+    /// cluster holds them in `cluster.macroValues`. Outside the root; `verify` reads the values
+    /// again and compares.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub macro_values: Option<BTreeMap<String, String>>,
 }
@@ -367,10 +368,12 @@ impl ClusterTier {
     }
 }
 
-/// The tiers of a cluster record from the raw documents in `raw`: the document of the cluster or
-/// the cluster group, the role bindings and the namespaces of a cluster, and the cloud config when
-/// it was read. `covered` limits `running` to the profiles that the record covers. A tier is
-/// carried only when Palette gives the part of the document that it reads.
+/// The tiers of a cluster record, from the raw documents in `raw`.
+///
+/// `raw` holds the document of the cluster or the cluster group. For a cluster, it also holds the
+/// role bindings, the namespaces, and the cloud config when strata read them. `covered` limits
+/// `running` to the profiles that the record covers. The record carries a tier only when Palette
+/// gives the part of the document that the tier reads.
 pub fn cluster_tiers(
     raw: &RawCluster,
     covered: &[AppliedProfile],
@@ -402,7 +405,10 @@ pub fn cluster_tiers(
     }
     // the document of a cluster group has spec.clustersConfig, and no spec.clusterConfig
     if let Some(config) = cluster.pointer("/spec/clustersConfig") {
-        tiers.insert("policy".to_string(), group_policy_tier(config));
+        tiers.insert(
+            "policy".to_string(),
+            ClusterTier::of(crate::policy::group_fields(config)),
+        );
     }
     if let Some(cc) = &raw.cloud_config {
         tiers.insert(
@@ -423,38 +429,6 @@ fn running_tier(cluster: &Value, covered: &[AppliedProfile]) -> ClusterTier {
         .collect();
     running.sort_by_key(|p| (s(p, "/profileUid"), s(p, "/name")));
     ClusterTier::of(Value::Array(running))
-}
-
-/// The `policy` tier of a cluster group, from `spec.clustersConfig`: the config that the group
-/// gives each virtual cluster.
-///
-/// The group applies `values` to each virtual cluster as YAML, as a pack applies its values. So
-/// the tier holds the values in canonical form with their hash, and the host clusters sorted by
-/// uid.
-fn group_policy_tier(config: &Value) -> ClusterTier {
-    let (values, values_hash, values_parse_error) = canon_yaml_hashed(str_at(config, "/values"));
-    let mut hosts: Vec<Value> = arr(config, "/hostClustersConfig")
-        .iter()
-        .map(|h| {
-            json!({
-                "uid": s(h, "/clusterUid"),
-                "endpointConfig": h.get("endpointConfig").cloned().unwrap_or(Value::Null),
-            })
-        })
-        .collect();
-    hosts.sort_by_key(|h| s(h, "/uid"));
-    let mut fields = json!({
-        "endpointType": s(config, "/endpointType"),
-        "kubernetesDistroType": s(config, "/kubernetesDistroType"),
-        "limitConfig": config.get("limitConfig").cloned().unwrap_or(Value::Null),
-        "values": values,
-        "valuesHash": values_hash,
-        "hostClusters": hosts,
-    });
-    if let Some(e) = values_parse_error {
-        fields["valuesParseError"] = Value::String(e);
-    }
-    ClusterTier::of(fields)
 }
 
 /// The digest of each macro in `names` that `resolved` gives for one of `profiles`:

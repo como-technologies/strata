@@ -1,6 +1,8 @@
-//! The repaves of Palette: `compare --repave` records the answer of Palette to a repave question
-//! in the diff, and a cluster record holds the [`PendingRepave`] that waits for approval. Each
-//! holds the [`PaletteRepaveReason`] reasons that Palette gives.
+//! The repaves of Palette.
+//!
+//! `compare --repave` records the answer of Palette to a repave question in the diff. A cluster
+//! record holds the [`PendingRepave`] that waits for approval. Each holds the
+//! [`PaletteRepaveReason`] reasons that Palette gives.
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};

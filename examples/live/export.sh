@@ -6,8 +6,8 @@
 #   examples/live/export.sh [STAGE]
 #
 #   1  for each version: the record of the version, the export with format=yaml, the record of
-#      the export, and the two roots. A version with a manifest pack differs by the pack uid that
-#      Palette mints alone.
+#      the export, and the two roots. A version with a manifest pack differs only by the pack uid
+#      that Palette mints.
 #   2  the export with format=json gives the same record as the export with format=yaml
 #   3  what the export route answers: a request that accepts JSON gets no file; and three
 #      exports at once, whose refusals the run records
@@ -64,7 +64,7 @@ if [ "$stage" = all ] || [ "$stage" = 1 ]; then
     check "export-same-$name" 0 "#156: same-release passes the record of the export and the record of $ref" -- \
       "$strata" same-release "$name.export.json" "$name.version.json"
     if jq -e 'any(.packs[]; .type == "manifest")' "$name.version.json" > /dev/null; then
-      check "export-minted-$name" 0 "#156: the roots differ by the uid that Palette mints for the manifest pack alone" -- \
+      check "export-minted-$name" 0 "#156: the roots differ only by the uid that Palette mints for the manifest pack" -- \
         bash -c '"$1" same-release "$2" "$3" --json | jq -e ".pairs[0].mintedUidOnly | length > 0"' _ \
         "$strata" "$name.export.json" "$name.version.json"
     else

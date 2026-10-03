@@ -71,7 +71,8 @@ The `policy` tier holds the settings of the cluster:
 {{#include ../../output/tiers-policy.txt}}
 ```
 
-A field that Palette does not give is `null`, empty, or `false`. The bindings
+A field that Palette does not give is `null`, empty, or `false`, and
+`agentUpgrades` is `allowed`. The bindings
 and the namespaces have no uid and no time. A binding is a set of subjects, so strata
 sorts the subjects of each binding, and the bindings. When Palette answers
 HTTP 404 for the bindings or the namespaces, the field is `null`, and not an
@@ -87,8 +88,8 @@ the cluster `search`:
 ```
 
 A record that an older version of strata wrote holds `resources` and `rbac` in
-place of `rbacs` and `namespaces`: the references to the bindings and the
-namespaces, with their uids. When one of two records holds them, `compare` and
+place of `rbacs` and `namespaces`. They are the references to the bindings and
+the namespaces, with their uids. When one of two records holds them, `compare` and
 `verify` compare only `osPatch`, `lifecycle`, `machineHealth`, `timezone`, and
 `fips`. So the older record still verifies. Record the cluster again to compare
 all the fields.

@@ -56,7 +56,7 @@ library. It then writes no file.
 | `registry` or `registryUid` | yes, on the layer or at the top; no on a `manifest` layer | The registry, by name or uid. Not both. The setting on the layer has priority over the one at the top. A registry that Palette does not sync is permitted: see [A layer from a registry that Palette does not sync](#a-layer-from-a-registry-that-palette-does-not-sync). |
 | `type` | no | `manifest` for a layer of manifests that comes from no registry. See [A manifest layer](#a-manifest-layer). Leave it out for a pack from a registry: the registry gives the type. |
 | `values` or `valuesFile` | no | The values, inline or in a file. Not both. With neither, the layer gets the default values of the pack. |
-| `layer` | no | The layer. The default comes from the registry. Palette takes the layer from the registry, so a layer from a registry takes only the layer of the registry: see [The registry lookups](#the-registry-lookups). A `manifest` layer takes only `addon`: see [A manifest layer](#a-manifest-layer). |
+| `layer` | no | The layer. The default comes from the registry. Palette takes the layer from the registry, so the layer of a pack from a registry must be its layer in that registry: see [The registry lookups](#the-registry-lookups). A `manifest` layer takes only `addon`: see [A manifest layer](#a-manifest-layer). |
 | `tag` | no | The tag. The default is the tag that equals the version, else the first tag of that version, else the version itself. An explicit tag must be a tag of that version in the registry, or the version itself. A `manifest` layer takes any tag, and its default is the version. A floating tag, such as `1.0.x`, pins the build that the tag names now: see [Tag names](../internals/palette/packs.md#tag-names). |
 | `params` | no | A map that Palette carries on a pack beside its values. Strata puts it in the authored hash, so a change to it is an `AUTHORED` change. |
 | `manifests[]` | no; one or more on a `manifest` layer | Each with a `name`, and `content` inline or a `contentFile`. |
@@ -323,7 +323,7 @@ Each field of the export gives one field of the candidate:
 | `name`, `version`, `tag`, and `layer` of a pack | the same fields of the layer |
 | `type` of a pack | `type: manifest` for a pack of the type `manifest`. The registry gives each other type. |
 | `registry.metadata.uid` of a pack | `registryUid`. When the uid is empty, `registry.metadata.name` gives `registry`. A `manifest` pack names no registry. |
-| `values` of a pack | `values`. The export leaves out values that are empty, so a pack with no `values` gets empty values, and not the default values of the pack. |
+| `values` of a pack | `values`. The export omits values that are empty, so a pack with no `values` gets empty values, and not the default values of the pack. |
 | `manifests[]` of a pack, with `name` and `content` | `manifests[]`, with `name` and `content` |
 | `spec.variables[]` | `variables[]` |
 
@@ -344,7 +344,7 @@ In this example, the stand-in gives the export of `aws-stack@1.1.1` in JSON:
 
 The record of the export of a version has the root of that version, while the
 registry serves the same pack versions. A version with a manifest pack differs
-by the pack uid that Palette mints, as for a
+only by the pack uid that Palette mints, as for a
 [manifest layer](#a-manifest-layer). [The export of a version](../internals/palette/profiles.md#the-export-of-a-version)
 gives the live run.
 

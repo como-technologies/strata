@@ -6040,13 +6040,7 @@ fn verify_who_reads_the_log_of_a_cluster_group_as_clustergroup_and_of_an_app_pro
 
     // a cluster group whose pin was edited after the record
     let group_api = serve_cluster_group(MemoryApi::new(), dir.path());
-    let group = ops::snapshot_for(
-        &Ref::parse("clustergroup:g1"),
-        || Ok(Palette::new(group_api.clone())),
-        "t0",
-        &Progress::silent(),
-    )
-    .unwrap();
+    let group = common::snapshot_of(&group_api, "clustergroup:g1").unwrap();
     let mut doc = group_api.get_json("/v1/clustergroups/g1").unwrap();
     doc["spec"]["clusterProfileTemplates"][0]["packs"][0]["values"] = Value::from("edited: true\n");
     let group_log = "/v1/audits?resourceKind=clustergroup&resourceUid=g1&startTime=t0&limit=100";
@@ -6594,8 +6588,8 @@ fn list_and_compare_name_a_cluster_that_is_behind() {
 
 const REPAVE: &str = "/v1/spectroclusters/c1a5000000000000000000c1/repave/status";
 
-/// The repave of a macro change in a field that repaves, in the shape Palette gives it: each side
-/// of the reason holds the resolved values of the pack.
+/// The repave of a macro change in a field that repaves, in the shape that Palette gives it. Each
+/// side of the reason holds the resolved values of the pack.
 fn repave_status(state: &str) -> Value {
     serde_json::json!({
         "metadata": {"uid": "r1", "creationTimestamp": "2026-09-25T03:05:12Z"},
@@ -6675,6 +6669,40 @@ fn a_cluster_record_holds_the_repave_that_waits_for_approval_and_its_reasons() {
     let c = approved.source.cluster.unwrap();
     assert_eq!(c.repave_pending, Some(false));
     assert!(c.pending_repave.is_none());
+}
+
+#[test]
+fn mark_pending_and_with_kind_clear_the_pending_repave() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let waits =
+        snapshot_cluster(&serve_repave(dir.path(), "cluster-merged", "Pending"), None).unwrap();
+    assert!(
+        waits
+            .source
+            .cluster
+            .as_ref()
+            .unwrap()
+            .pending_repave
+            .is_some()
+    );
+
+    // the profiles of a pending update say nothing about a repave of the cluster as it runs
+    let pending = waits.clone().mark_pending();
+    let c = pending.source.cluster.as_ref().unwrap();
+    assert_eq!(c.repave_pending, None);
+    assert!(c.pending_repave.is_none());
+
+    // Palette repaves only a cluster
+    for kind in [
+        strata::snapshot::SubjectKind::EdgeHost,
+        strata::snapshot::SubjectKind::ClusterGroup,
+    ] {
+        let other = waits.clone().with_kind(kind);
+        let c = other.source.cluster.as_ref().unwrap();
+        assert_eq!(c.repave_pending, None, "{kind:?}");
+        assert!(c.pending_repave.is_none(), "{kind:?}");
+    }
 }
 
 #[test]
@@ -7291,7 +7319,7 @@ fn applied(uid: &str, name: &str, kind: &str) -> strata::snapshot::AppliedProfil
 }
 
 #[test]
-fn the_repave_request_names_each_profile_the_target_cluster_would_run() {
+fn the_repave_request_names_each_profile_that_the_target_cluster_gets() {
     let dir = tempfile::tempdir().unwrap();
     common::make_fixtures(dir.path());
     let a = ops::snapshot_from_dir(&dir.path().join("a"), "a", "t0").unwrap();
@@ -7655,17 +7683,6 @@ fn serve_os_image(raw_root: &Path, image: Option<&str>) -> MemoryApi {
     serve(MemoryApi::new(), raw_root, dir, UID_A)
 }
 
-/// A snapshot of `UID_A` from `api`, fetched at `at`.
-fn snapshot_uid(api: &MemoryApi, at: &str) -> Snapshot {
-    ops::snapshot_for(
-        &Ref::Uid(UID_A.into()),
-        || Ok(Palette::new(api.clone())),
-        at,
-        &Progress::silent(),
-    )
-    .unwrap()
-}
-
 #[test]
 fn a_pack_record_keeps_the_annotations_of_the_pack_ref_outside_the_root() {
     use strata::snapshot::Pack;
@@ -7704,8 +7721,10 @@ fn a_pack_record_keeps_the_annotations_of_the_pack_ref_outside_the_root() {
 fn compare_names_the_change_of_the_image_id_of_the_os_pack_when_the_roots_are_equal() {
     let dir = tempfile::tempdir().unwrap();
     common::make_fixtures(dir.path());
-    let a = snapshot_uid(&serve_os_image(dir.path(), Some("ami-0aaa")), "t0");
-    let b = snapshot_uid(&serve_os_image(dir.path(), Some("ami-0bbb")), "t1");
+    let a =
+        common::snapshot_of_at(&serve_os_image(dir.path(), Some("ami-0aaa")), UID_A, "t0").unwrap();
+    let b =
+        common::snapshot_of_at(&serve_os_image(dir.path(), Some("ami-0bbb")), UID_A, "t1").unwrap();
     let d = ops::compare(&a, &b, "t2");
     assert!(d.same, "the root does not cover the annotations");
     assert_eq!(
@@ -7738,7 +7757,7 @@ fn compare_names_the_change_of_the_image_id_of_the_os_pack_when_the_roots_are_eq
     assert!(same.image_ids_changed.is_empty() && same.nothing_differs());
     // a side that names no image is not compared: an older record, or a pack whose image
     // Palette chooses
-    let plain = snapshot_uid(&serve_os_image(dir.path(), None), "t1");
+    let plain = common::snapshot_of_at(&serve_os_image(dir.path(), None), UID_A, "t1").unwrap();
     for (x, y) in [(&a, &plain), (&plain, &a)] {
         let d = ops::compare(x, y, "t2");
         assert!(
@@ -7753,7 +7772,8 @@ fn compare_names_the_change_of_the_image_id_of_the_os_pack_when_the_roots_are_eq
 fn verify_reports_a_new_image_id_of_the_os_pack_as_drift_with_the_recorded_content() {
     let dir = tempfile::tempdir().unwrap();
     common::make_fixtures(dir.path());
-    let recorded = snapshot_uid(&serve_os_image(dir.path(), Some("ami-0aaa")), "t0");
+    let recorded =
+        common::snapshot_of_at(&serve_os_image(dir.path(), Some("ami-0aaa")), UID_A, "t0").unwrap();
     let live = serve_os_image(dir.path(), Some("ami-0bbb"));
     let v = ops::verify(
         &recorded,
@@ -7811,7 +7831,8 @@ fn verify_reports_a_new_image_id_of_the_os_pack_as_drift_with_the_recorded_conte
 fn verify_names_a_new_image_id_in_the_diff_and_not_in_the_verdict_when_the_root_moved() {
     let dir = tempfile::tempdir().unwrap();
     common::make_fixtures(dir.path());
-    let recorded = snapshot_uid(&serve_os_image(dir.path(), Some("ami-0aaa")), "t0");
+    let recorded =
+        common::snapshot_of_at(&serve_os_image(dir.path(), Some("ami-0aaa")), UID_A, "t0").unwrap();
     // a new pack build of the OS layer, with its own image
     with_os_pack(dir.path(), "upgraded", |p| {
         p["annotations"] = os_annotations(Some("ami-0bbb"));
@@ -9500,8 +9521,8 @@ fn a_cluster_group_record_with_macro_digests_reads_the_values_of_the_group() {
     );
 }
 
-/// The config that the cluster group `g1` gives each virtual cluster, with the CPU limit `cpu`
-/// in millicores, and `values` as YAML, as Palette gives it in `spec.clustersConfig`.
+/// The config that the cluster group `g1` gives each virtual cluster, as Palette gives it in
+/// `spec.clustersConfig`. `cpu` is the CPU limit in millicores, and `values` is YAML.
 fn clusters_config(cpu: u64, values: &str) -> Value {
     let endpoint = serde_json::json!({"ingressConfig": {"host": "*", "port": 6443}});
     serde_json::json!({
@@ -9537,15 +9558,7 @@ fn a_cluster_group_record_holds_the_config_of_each_virtual_cluster_in_a_policy_t
         }
         serve_cluster_group(MemoryApi::new(), dir.path()).with("/v1/clustergroups/g1", doc)
     };
-    let snap = |api: &MemoryApi| {
-        ops::snapshot_for(
-            &Ref::parse("clustergroup:g1"),
-            || Ok(Palette::new(api.clone())),
-            "t0",
-            &Progress::silent(),
-        )
-        .unwrap()
-    };
+    let snap = |api: &MemoryApi| common::snapshot_of(api, "clustergroup:g1").unwrap();
     let api = serve(Some(clusters_config(6000, GROUP_VALUES)));
     let group = snap(&api);
     let tiers = &group.source.cluster.as_ref().unwrap().tiers;
@@ -9711,14 +9724,7 @@ fn serve_app_profile(api: MemoryApi, replicas: &str) -> MemoryApi {
 #[test]
 fn an_app_profile_record_holds_each_tier_as_a_pack() {
     let api = serve_app_profile(MemoryApi::new(), "2");
-    let take = |api: &MemoryApi, text: &str| {
-        ops::snapshot_for(
-            &Ref::parse(text),
-            || Ok(Palette::new(api.clone())),
-            "t0",
-            &Progress::silent(),
-        )
-    };
+    let take = common::snapshot_of;
     let app = take(&api, "appprofile:shop@1.0.0").unwrap();
     assert_eq!(app.source.kind, "app");
     assert_eq!(
@@ -9804,13 +9810,7 @@ fn app_tiers(web_order: Option<i64>) -> Value {
 /// A record of `appprofile:ap1` from an API that gives `tiers` for its tiers.
 fn app_record(tiers: Value) -> Snapshot {
     let api = serve_app_profile(MemoryApi::new(), "2").with("/v1/appProfiles/ap1/tiers", tiers);
-    ops::snapshot_for(
-        &Ref::parse("appprofile:ap1"),
-        || Ok(Palette::new(api)),
-        "t0",
-        &Progress::silent(),
-    )
-    .unwrap()
+    common::snapshot_of(&api, "appprofile:ap1").unwrap()
 }
 
 /// The root that strata 0.16.0 gives `appprofile:ap1` of [`serve_app_profile`] with the replicas
@@ -9821,13 +9821,7 @@ const APP_ROOT_BEFORE_INSTALL_ORDER: &str =
 #[test]
 fn an_app_profile_whose_tiers_have_no_install_order_keeps_the_root_of_an_older_record() {
     let api = serve_app_profile(MemoryApi::new(), "2");
-    let app = ops::snapshot_for(
-        &Ref::parse("appprofile:ap1"),
-        || Ok(Palette::new(api)),
-        "t0",
-        &Progress::silent(),
-    )
-    .unwrap();
+    let app = common::snapshot_of(&api, "appprofile:ap1").unwrap();
     assert_eq!(app.root, APP_ROOT_BEFORE_INSTALL_ORDER);
 }
 
@@ -9977,13 +9971,7 @@ fn consumers_of_an_app_profile_are_its_app_deployments() {
 
     // a record of the app profile gives the same answer as its ref
     let dir = tempfile::tempdir().unwrap();
-    let record = ops::snapshot_for(
-        &Ref::parse("appprofile:shop@1.0.0"),
-        || Ok(Palette::new(api.clone())),
-        "t0",
-        &Progress::silent(),
-    )
-    .unwrap();
+    let record = common::snapshot_of(&api, "appprofile:shop@1.0.0").unwrap();
     let path = dir.path().join("shop.json");
     std::fs::write(&path, record.to_json(false).unwrap()).unwrap();
     let from_record = consumers(&api, &Ref::Snapshot(path));
@@ -10809,13 +10797,7 @@ fn verify_reports_a_gone_edge_host_or_cluster_group_as_drift_and_not_as_an_error
     common::make_fixtures(dir.path());
     let host = snapshot_edge_host(&serve_edge_host(MemoryApi::new(), dir.path()), "e1").unwrap();
     let group_api = serve_cluster_group(MemoryApi::new(), dir.path());
-    let group = ops::snapshot_for(
-        &Ref::parse("clustergroup:g1"),
-        || Ok(Palette::new(group_api.clone())),
-        "t0",
-        &Progress::silent(),
-    )
-    .unwrap();
+    let group = common::snapshot_of(&group_api, "clustergroup:g1").unwrap();
 
     // Palette answers 404 for each uid: the host and the group were deleted
     for (recorded, line) in [
@@ -11132,8 +11114,8 @@ fn a_record_keeps_the_invalid_flag_and_the_reason_of_palette_outside_the_root() 
 
     let dir = tempfile::tempdir().unwrap();
     common::make_fixtures(dir.path());
-    let with_flag = snapshot_uid(&serve_invalid(dir.path(), true), "t0");
-    let without = snapshot_uid(&serve_invalid(dir.path(), false), "t0");
+    let with_flag = common::snapshot_of_at(&serve_invalid(dir.path(), true), UID_A, "t0").unwrap();
+    let without = common::snapshot_of_at(&serve_invalid(dir.path(), false), UID_A, "t0").unwrap();
     assert_eq!(with_flag.root, without.root);
     assert_eq!(with_flag.content_digest(), without.content_digest());
     let os = with_flag.packs.iter().find(|p| p.layer == "os").unwrap();
@@ -11145,8 +11127,8 @@ fn a_record_keeps_the_invalid_flag_and_the_reason_of_palette_outside_the_root() 
 fn compare_marks_an_invalid_pack_on_its_line_and_counts_it_in_the_summary() {
     let dir = tempfile::tempdir().unwrap();
     common::make_fixtures(dir.path());
-    let valid = snapshot_uid(&serve_invalid(dir.path(), false), "t0");
-    let invalid = snapshot_uid(&serve_invalid(dir.path(), true), "t1");
+    let valid = common::snapshot_of_at(&serve_invalid(dir.path(), false), UID_A, "t0").unwrap();
+    let invalid = common::snapshot_of_at(&serve_invalid(dir.path(), true), UID_A, "t1").unwrap();
     let terminal = |d: &strata::diff::Diff, a: &Snapshot, b: &Snapshot| {
         render::renderer(Format::Terminal, Paint::off(), false)
             .render(d, a, b, false)
@@ -11203,7 +11185,7 @@ fn compare_marks_an_invalid_pack_on_its_line_and_counts_it_in_the_summary() {
 fn verify_reports_each_pack_that_palette_marks_invalid_now_and_keeps_the_status_of_the_content() {
     let dir = tempfile::tempdir().unwrap();
     common::make_fixtures(dir.path());
-    let recorded = snapshot_uid(&serve_invalid(dir.path(), false), "t0");
+    let recorded = common::snapshot_of_at(&serve_invalid(dir.path(), false), UID_A, "t0").unwrap();
     let live = serve_invalid(dir.path(), true);
     let v = ops::verify(
         &recorded,

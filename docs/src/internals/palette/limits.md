@@ -138,7 +138,7 @@ makes no claim that depends on them.
 - **The mask of a published pack and of a cluster copy.** Palette writes
   `********` over each value of the format `password` when it serves a
   published version, and when it serves the copies of the profiles of a
-  cluster. Strata does not depend on the schema for this: a record names each
+  cluster. Strata does not depend on the schema for this. A record names each
   value that is the text `********`. See
   [A secret changes in a pack value](../../use-cases/masked-value.md).
 - **The mask of a draft.** Palette writes `********` over each value of the

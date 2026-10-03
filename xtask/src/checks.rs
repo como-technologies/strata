@@ -235,9 +235,9 @@ fn playgrounds(repo: &Path, chapters: &BTreeMap<String, u32>) -> Vec<String> {
     files.push(repo.join("README.md"));
     files
         .iter()
-        .flat_map(|page| {
-            let text = std::fs::read_to_string(page).unwrap_or_default();
-            playground_faults(&shown(repo, page), &text, chapters)
+        .flat_map(|page| match std::fs::read_to_string(page) {
+            Ok(text) => playground_faults(&shown(repo, page), &text, chapters),
+            Err(e) => vec![format!("{}: cannot read the page: {e}", shown(repo, page))],
         })
         .collect()
 }

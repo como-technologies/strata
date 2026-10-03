@@ -166,8 +166,8 @@ fn masked_notifications(notifications: &Value) -> Value {
 }
 
 /// A copy of `repave` with the values of each pack ref of each reason masked. Palette gives the
-/// values of the pack on each side of the change, with the value of each macro in its place, and
-/// a macro value can be a secret. Strata reads none of these values.
+/// values of the pack on each side of the change, with the value of each macro in its place. A
+/// macro value can be a secret. Strata reads none of these values.
 fn masked_repave(repave: &Value) -> Value {
     let mut out = repave.clone();
     let sides = out
@@ -307,10 +307,10 @@ impl RawCluster {
     }
 
     /// The file that holds the role bindings of the cluster, when they were read.
-    pub const RBACS: &'static str = "rbacs.json";
+    pub(crate) const RBACS: &'static str = "rbacs.json";
 
     /// The file that holds the namespaces of the cluster, when they were read.
-    pub const NAMESPACES: &'static str = "namespaces.json";
+    pub(crate) const NAMESPACES: &'static str = "namespaces.json";
 
     /// The file that holds the values Palette gives the macros, when they were read.
     pub const RESOLVED_VALUES: &'static str = RESOLVED_VALUES_FILE;
@@ -322,7 +322,7 @@ impl RawCluster {
     pub const NOTIFICATIONS: &'static str = "notifications.json";
 
     /// The file that holds the repave that waits for approval, when it was read.
-    pub const REPAVE: &'static str = "repave.json";
+    pub(crate) const REPAVE: &'static str = "repave.json";
 
     /// Write the three files, each other document that strata read, and `scope.json` under
     /// `dir`, and make `dir` if it is not there. Strata masks the values of

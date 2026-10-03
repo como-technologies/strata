@@ -265,6 +265,23 @@ pub fn set_counts_line(r: &SetReport) -> String {
     )
 }
 
+/// One warning for each pack of `snap` that Palette marks invalid, with the reason when Palette
+/// gives one. The root does not cover the flag, so the record alone does not show it to a person.
+pub fn invalid_pack_warnings(snap: &Snapshot) -> Vec<String> {
+    snap.packs
+        .iter()
+        .filter(|p| p.invalid)
+        .map(|p| {
+            let reason = Some(p.invalid_reason.as_str()).filter(|r| !r.is_empty());
+            format!(
+                "Palette marks pack {} invalid{}. The record keeps the flag, outside the root",
+                p.key,
+                reason.map_or_else(String::new, |r| format!(" ({r})"))
+            )
+        })
+        .collect()
+}
+
 /// Why strata could not record a cluster of a set: the message of its error.
 pub(crate) fn set_error(r: &SetRecord) -> &str {
     entry_error(r.error.as_ref()).unwrap_or("see the error")
@@ -1071,6 +1088,7 @@ fn record_sentence(r: &crate::ops::VerifiedRecord) -> String {
             .and_then(|d| d.verify.as_ref())
             .and_then(|v| v.registry_sync.as_ref()),
     );
+    let outside_root = record_outside_root(r);
     let detail = match r.status {
         RecordStatus::Unchanged if r.diff.as_ref().is_some_and(|d| d.a.is_draft()) => format!(
             "holds the draft recorded {}{}",
@@ -1106,10 +1124,10 @@ fn record_sentence(r: &crate::ops::VerifiedRecord) -> String {
             values_changed_suffix(record_values_changed(r)),
             who_suffix(r)
         ),
-        RecordStatus::Drifted if record_outside_root(r).is_some() => format!(
+        RecordStatus::Drifted if outside_root.is_some() => format!(
             "has the content recorded {}, but {}{}{}",
             r.recorded_at,
-            record_outside_root(r).unwrap_or_default(),
+            outside_root.unwrap_or_default(),
             values_changed_suffix(record_values_changed(r)),
             who_suffix(r)
         ),

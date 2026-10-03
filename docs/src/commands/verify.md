@@ -144,9 +144,9 @@ document shape.
 | `INVALID: Palette marks pack <key> invalid now (<reason>)`, under the verdict | Palette marks a pack of the version invalid now: the registry deleted its tag. It does not change the verdict. See [A registry deletes the tag of a pack](../use-cases/invalid-pack.md). | the exit code of the verdict |
 | `UNVERIFIED: <subject> has the content recorded <time>, but pack <key> has no upstream digest, so a change of the archive does not show; --allow-no-digest accepts it` | The content is the same, and a pack from a registry has no digest: an equal root does not show an equal archive for it. Drift wins over this verdict. | `1` |
 
-A verdict of an edge host record names `<v> on edge host <h>`, and a verdict of
-a cluster group record names `<v> pinned by cluster group <g>`, where a cluster
-record names `cluster <c> running <v>`.
+A verdict of a cluster record names `cluster <c> running <v>`. A verdict of an
+edge host record names `<v> on edge host <h>`. A verdict of a cluster group
+record names `<v> pinned by cluster group <g>`.
 
 `--allow-no-digest` accepts a pack with no upstream digest: the verdict is `OK`,
 the exit is `0`, and the report still names the pack in a `note`. A manifest
@@ -154,9 +154,8 @@ pack has no archive, so it never makes a record `UNVERIFIED`. See
 [The content digest](../internals/hashes.md#the-content-digest).
 
 A pack whose values hold `********` gets a `note` and a line `masked: <path>`
-under the pack. Palette masks a value whose schema format is `password`, so the
-root covers the mask and not the secret. The note does not change the verdict
-or the exit. See [A secret changes in a pack value](../use-cases/masked-value.md).
+under the pack. The note does not change the verdict or the exit. See
+[A secret changes in a pack value](../use-cases/masked-value.md).
 
 Each verdict of a cluster record ends with `; N variable value changed` when the
 cluster gives a variable another value than the record holds.

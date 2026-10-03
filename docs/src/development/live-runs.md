@@ -338,6 +338,7 @@ version that the cluster runs.
 | `release-before` | 0 | a record of the release version before the link |
 | `template`, `template-links` | 0 | #66: the template links the release version and the add-on version |
 | `release-doc`, `release-names-template` | 0 | #66: the version names the template that uses it, and no cluster |
+| `release-record-template`, `release-record-names-template` | 0 | #109: a record of the linked release version names the template in `source.clusterTemplates`, and has the root from before the link. No run has a result yet |
 | `release-consumers`, `release-consumers-template` | 1, 0 | #147: `strata consumers` of the linked version names the template with `kind: template`, and exits `1`. |
 | `release-delete`, `release-delete-says` | 2, 0 | #147: Palette refuses the delete of the linked version, `DeletionResourceInUseError`. |
 | `lock-edit`, `lock-edit-says` | 2, 0 | #66: an edit in place of a linked version, a `PUT` of the whole version, is refused, and the refusal carries the code `ClusterProfileUpdateValidationFailure` |
@@ -595,10 +596,13 @@ asks for a refusal of a dependency.
 ## export.sh
 
 No cluster, no profile of its own, and no cost. Each request is a `GET`. It
-reads the export of three versions of the example: the release version, with
-four packs from the Public Repo; the registries version, with a Helm pack and
-an OCI pack; and the add-on version, with a manifest pack and a variable. Give
-other versions as `PROFILES="<name>@<version> ..."`.
+reads the export of three versions of the example:
+
+- the release version, with four packs from the Public Repo
+- the registries version, with a Helm pack and an OCI pack
+- the add-on version, with a manifest pack and a variable
+
+Give other versions as `PROFILES="<name>@<version> ..."`.
 [The export of a version](../internals/palette/profiles.md#the-export-of-a-version)
 states what it shows.
 
@@ -607,10 +611,10 @@ states what it shows.
 | `export-<name>` | 0 | #156: `GET /v1/clusterprofiles/{uid}/export?format=yaml` gives the file of the version |
 | `export-record-<name>`, `export-same-<name>` | 0 | #156: `snapshot --from-candidate` reads the export, and `same-release` passes it with the record of the version |
 | `export-root-<name>` | 0 | #156: the record of the export of the release version and of the registries version has the root of the version |
-| `export-minted-strata-live-addon` | 0 | #156: the root of the export of the add-on version differs by the pack uid that Palette mints for the manifest pack alone |
+| `export-minted-<name>` | 0 | #156: the export of a version with a manifest pack differs only by the pack uid that Palette mints for that pack |
 | `export-json-<name>`, `export-json-record-<name>`, `export-json-root-<name>` | 0 | #156: the export with `format=json` gives the same root |
 | `export-accepts-json`, `export-accepts-json-no-file` | 0 | #156: to a request with `Accept: application/json`, Palette sends `{"Reader":{}}`, and not the file |
-| `export-limit` | ? | #156: exports at once. In two of four runs, Palette refused one or more with HTTP 429, `TooManyRequests`, "only 1 request in 10 seconds is allowed". In the other two, it refused none |
+| `export-limit` | ? | #156: three exports at once. In two of four runs, Palette refused one or more with HTTP 429, `TooManyRequests`, "only 1 request in 10 seconds is allowed". In the other two, it refused none |
 
 ## registry-kinds.sh
 
@@ -674,9 +678,9 @@ book shows it on the stand-in.
 
 No script reads the role bindings or the namespaces of a cluster. Read-only
 requests to the tenant show the facts in
-[Cluster tiers](../internals/palette/clusters.md#cluster-tiers): a deleted
-cluster of the live example gives `{"items": []}` for each route, and a uid that
-is not a cluster of the project gives HTTP 404 `ResourceNotFound`. No run edits
+[Cluster tiers](../internals/palette/clusters.md#cluster-tiers). A deleted
+cluster of the live example gives `{"items": []}` for each route. A uid that is
+not a cluster of the project gives HTTP 404 `ResourceNotFound`. No run edits
 the subjects of a binding; the book shows the change on the stand-in.
 
 ## fleet.sh

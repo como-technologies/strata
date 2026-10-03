@@ -35,12 +35,20 @@ absent means unknown: `source.consumers`, `rootLive`, `maxImpact`,
 `source.cluster` in 0.10.0, and `strata-list/1` in the same release: absent
 means that strata could not read the notifications, and `updatesPendingError`
 says why. `repavePending` joined `source.cluster` after 0.17.0: absent means a
-record of an older release, or of an object that is not a cluster. In 0.7.0 `source.consumers` became absent on a record that no
-consumers request produced, where 0.6.3 wrote `count: 0` and stated a count
-that nothing counted. A reader that takes absent for zero reads such a record
-wrong, so this page names each field that changed this way, with the release
-that changed it. The id stays, because the root does not cover these fields and
-every record of the id still compares.
+record of an older release, or of an object that is not a cluster. In 0.7.0
+`source.consumers` became absent on a record that no consumers request
+produced, where 0.6.3 wrote `count: 0` and stated a count that nothing counted.
+A reader that takes absent for zero reads such a record wrong, so this page
+names each field that changed this way, with the release that changed it. The
+id stays, because the root does not cover these fields and every record of the
+id still compares.
+
+One root changed after 0.17.0 with no new id. A record of an app profile now
+holds the install order of each tier, and lists the tiers in that order. See
+[Edge hosts, cluster groups, and app profiles](../commands/snapshot/other-objects.md).
+So when the tiers of an app profile have an install order, its root differs
+from the root that 0.17.0 gives. `verify` of such an older record shows a
+change. An app profile whose tiers have no install order keeps its root.
 
 Roots are comparable only within one snapshot schema id. Strata refuses a
 snapshot of another id with `unsupported-schema`, which names both ids. The

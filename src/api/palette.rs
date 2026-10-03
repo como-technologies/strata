@@ -199,14 +199,16 @@ impl<A: PaletteApi> Palette<A> {
 
     /// Reads an app profile in the shape of a profile, so that a record of it has packs and a root.
     ///
-    /// The requests are `GET /v1/appProfiles/{uid}` and `GET /v1/appProfiles/{uid}/tiers`. Each
-    /// tier is a pack in the layer `app`: its type, its version as the tag, its source tier as the
-    /// pack uid, its values, and its properties as the params. The params also hold the install
-    /// order of the tier and the registry of its image, when Palette gives them. The packs are in
-    /// install order, and tiers of one order keep the order of the listing. So an app profile
-    /// whose tiers have no install order keeps the root of an older record. The content of each
-    /// manifest of a tier comes from
+    /// The requests are `GET /v1/appProfiles/{uid}` and `GET /v1/appProfiles/{uid}/tiers`. The
+    /// content of each manifest of a tier comes from
     /// `GET /v1/appProfiles/{uid}/tiers/{tierUid}/manifests/{manifestUid}`. A tier has no digest.
+    ///
+    /// Each tier is a pack in the layer `app`. Its version is the tag, its source tier is the pack
+    /// uid, and its properties are the params. The pack also holds the type and the values of the
+    /// tier. The params also hold the install order of the tier and the registry of its image, when
+    /// Palette gives them. The packs are in install order, and tiers of one order keep the order of
+    /// the listing. So an app profile whose tiers have no install order keeps the root of an older
+    /// record.
     ///
     /// # Errors
     ///
@@ -349,14 +351,16 @@ impl<A: PaletteApi> Palette<A> {
         self.api.get_json(PROJECT_LISTING)
     }
 
-    /// GET a variables endpoint; a missing endpoint (404 or 405, as on older Palette versions) is
-    /// `none`, other errors propagate.
-    /// Palette also answers 404 when it does not have the object. So after a 404, strata reads
-    /// `owner`, the document of the object, again. An error of that read returns: the object is
-    /// gone, and "no variables" is wrong.
-    /// The second value is true when the endpoint was unavailable and `none` stands in for it. A
-    /// caller must record that: "no variables" and "the variables could not be read" give the same
-    /// root, and only this flag tells them apart afterwards.
+    /// Reads a variables route, and gives `none` when the route is missing.
+    ///
+    /// An older Palette answers 404 or 405 for the route. Each other error returns. Palette also
+    /// answers 404 when it does not have the object. So after a 404, strata reads `owner`, the
+    /// document of the object, again. An error of that read returns: the object is gone, and "no
+    /// variables" is wrong.
+    ///
+    /// The second value is true when the route is missing and `none` is in its place. A caller
+    /// must record that flag. "No variables" and "strata could not read the variables" give the
+    /// same root, and only the flag shows the difference.
     fn variables_or(
         &self,
         path: &str,
@@ -385,6 +389,10 @@ impl<A: PaletteApi> Palette<A> {
     /// its manifests: see [`RawProfile::manifest_entities`].
     /// Palette serves the draft packs with each secret in clear: strata masks them first, see
     /// `mask_draft`.
+    ///
+    /// # Errors
+    ///
+    /// The error of the first request that fails.
     pub fn fetch_profile(&self, uid: &str, progress: &Progress) -> Result<RawProfile> {
         progress.note(&format!("fetching profile {uid}"));
         let mut profile = self.api.get_json(&format!("/v1/clusterprofiles/{uid}"))?;
@@ -534,6 +542,10 @@ impl<A: PaletteApi> Palette<A> {
     /// for the uid. Palette lists them newest first, and at most
     /// 100 on a page; `listmeta.continue` names the next page, and is empty on the last one. An
     /// empty `since` reads the full log of the resource.
+    ///
+    /// # Errors
+    ///
+    /// The error of the first request that fails.
     pub fn audits(&self, kind: Option<AuditKind>, uid: &str, since: &str) -> Result<Vec<Value>> {
         let mut query = String::new();
         if let Some(kind) = kind {
@@ -1051,6 +1063,11 @@ impl<A: PaletteApi> Palette<A> {
 
     /// The cloud config of a cluster, `GET /v1/cloudconfigs/{cloudType}/{configUid}`, from the
     /// `spec.cloudConfigRef` of the cluster document: its machine pools and its cloud part.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Usage`] when the cluster document names no cloud config. The error of the first
+    /// request that fails.
     pub fn cloud_config(&self, cluster: &Value) -> Result<Value> {
         let kind = RawCluster::cloud_type(cluster);
         let uid = cluster
