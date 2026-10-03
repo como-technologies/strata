@@ -1,12 +1,12 @@
-$ strata compare cluster:payments aws-stack@1.1.1 --repave
-aws-stack@1.1.1 on cluster payments (uid 64f1000000000000000000e1)  ->  aws-stack@1.1.1 (uid 64e0000000000000000000c3)
+$ strata compare cluster:payments cluster:payments@pending --repave
+aws-stack@1.1.1 on cluster payments (uid 64f1000000000000000000e1)  ->  aws-stack@1.1.1 pending for cluster payments (uid 64f1000000000000000000e1)
 root       088136c929bd -> 78a86f401545   CHANGED
 note       both sides are aws-stack@1.1.1 (uid 64e0000000000000000000c3): the version was edited in place, or changed on a cluster
 note       cluster payments is behind: Palette says an update of aws-stack waits for it, since 2026-09-18T14:02:12.107Z
 palette    no repave
-consumers  aws-stack@1.1.1 has 1 consumer; payments is one of them
 
   variables unchanged
+  cluster tiers unchanged
 
   [os   ] ubuntu-aws                 24.04              unchanged
   [k8s  ] kubernetes                 1.36.2             unchanged

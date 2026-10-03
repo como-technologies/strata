@@ -43,13 +43,26 @@ upgrade engine, and give the answer of the table each time. It costs two request
 `/v1/spectroclusters/<uid>/validate/repave`. The `POST` asks a question and
 changes nothing: the cluster keeps its instances.
 
-Two profile versions, or two clusters, are a usage error, because Palette
-answers for one cluster. So are an edge host and a cluster group: Palette
-answers for a cluster, and not for them:
+## Ask about the update that waits
+
+When an update waits for a cluster, give `cluster:<cluster>@pending` as the
+other side. Palette then says whether the cluster repaves when it takes the
+update:
 
 ```text
-{{#include ../../output/repave-usage.txt}}
+{{#include ../../output/edited-repave-lines.txt}}
 ```
+
+The update is an edit in place, so each profile keeps its uid. For each profile
+that the update changes, strata sends each pack of the update by name, with its
+values. It also sends each pack that is new to the cluster. Palette removes a
+pack of such a profile when the request does not name it. For each other
+profile, strata sends only the uid. See
+[what Palette builds from the request](../../internals/palette/validate-routes.md#post-v1spectroclustersuidvalidaterepave).
+
+When the record of the update holds a profile that the cluster does not run
+now, the record is older than the cluster. Strata stops with `usage` before the
+`POST`. Record the update again.
 
 ## A cluster in a cluster template
 
@@ -80,5 +93,21 @@ says nothing. So strata stops with a usage error, before the `POST`:
 {{#include ../../output/repave-template-usage.txt}}
 ```
 
+The same applies to an update that waits and changes a profile: the update
+keeps the uid of each profile. When the update changes nothing, strata asks
+the route of the template, and Palette says no repave.
+
 [The lock of a cluster template](../../internals/palette/profiles.md#the-lock-of-a-cluster-template)
 gives the rule of Palette.
+
+## Usage errors
+
+Two profile versions are a usage error, because Palette answers for one
+cluster. So are two clusters, other than a cluster and the update that waits
+for it. So are an edge host and a cluster group: Palette answers for a
+cluster, and not for them:
+
+```text
+{{#include ../../output/repave-usage.txt}}
+{{#include ../../output/edited-repave-usage.txt}}
+```
