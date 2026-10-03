@@ -31,7 +31,7 @@ pub(super) fn is_export(doc: &Value) -> bool {
 /// # Errors
 ///
 /// A message that names the field, when a field that holds text in an export holds another
-/// value, such as a number, or when `spec.variables` is not a list.
+/// value, such as a number, or when `spec.variables` or the `manifests` of a pack is not a list.
 pub(super) fn to_candidate(doc: &Value) -> Result<Candidate, String> {
     let packs = doc.pointer(PACKS).and_then(Value::as_array);
     let layers = packs
@@ -53,7 +53,7 @@ pub(super) fn to_candidate(doc: &Value) -> Result<Candidate, String> {
         registry: None,
         registry_uid: None,
         layers,
-        variables: list(doc, "/spec/variables")?,
+        variables: list(doc, "/spec/variables", "")?.to_vec(),
     })
 }
 
@@ -71,11 +71,8 @@ fn layer(p: &Value, at: &str) -> Result<CandidateLayer, String> {
             None => (None, nonempty(text(p, "/registry/metadata/name", at)?)),
         }
     };
-    let manifests = p
-        .get("manifests")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
+    let manifests = list(p, "/manifests", at)?
+        .iter()
         .enumerate()
         .map(|(j, m)| {
             let at = format!("{at}.manifests[{j}]");
@@ -107,30 +104,33 @@ fn text(v: &Value, ptr: &str, at: &str) -> Result<String, String> {
     match v.pointer(ptr) {
         None | Some(Value::Null) => Ok(String::new()),
         Some(Value::String(s)) => Ok(s.clone()),
-        Some(other) => {
-            let field = ptr.trim_start_matches('/').replace('/', ".");
-            let field = if at.is_empty() {
-                field
-            } else {
-                format!("{at}.{field}")
-            };
-            Err(format!(
-                "{field} is {other} in the export, and not text; quote it"
-            ))
-        }
+        Some(other) => Err(format!(
+            "{} is {other} in the export, and not text; quote it",
+            field(ptr, at)
+        )),
     }
 }
 
-/// The list at `ptr` in `doc`, and an empty list when `doc` has no value there. The export omits
-/// a list that is empty.
-fn list(doc: &Value, ptr: &str) -> Result<Vec<Value>, String> {
-    match doc.pointer(ptr) {
-        None | Some(Value::Null) => Ok(Vec::new()),
-        Some(Value::Array(items)) => Ok(items.clone()),
-        Some(other) => {
-            let field = ptr.trim_start_matches('/').replace('/', ".");
-            Err(format!("{field} is {other} in the export, and not a list"))
-        }
+/// The list at `ptr` in `v`, and an empty list when `v` has no value there: the export omits a
+/// list that is empty. `at` names `v` in the message of a value that is not a list.
+fn list<'v>(v: &'v Value, ptr: &str, at: &str) -> Result<&'v [Value], String> {
+    match v.pointer(ptr) {
+        None | Some(Value::Null) => Ok(&[]),
+        Some(Value::Array(items)) => Ok(items),
+        Some(other) => Err(format!(
+            "{} is {other} in the export, and not a list",
+            field(ptr, at)
+        )),
+    }
+}
+
+/// The name of the field at `ptr` in a message, after `at` when `at` is not empty.
+fn field(ptr: &str, at: &str) -> String {
+    let field = ptr.trim_start_matches('/').replace('/', ".");
+    if at.is_empty() {
+        field
+    } else {
+        format!("{at}.{field}")
     }
 }
 
@@ -170,6 +170,26 @@ mod tests {
             crate::Error::CandidateInvalid { message, .. } => assert_eq!(
                 message,
                 r#"spec.variables is {"name":"fred"} in the export, and not a list"#
+            ),
+            other => panic!("not candidate-invalid: {other}"),
+        }
+    }
+
+    #[test]
+    fn an_export_whose_pack_manifests_are_not_a_list_is_candidate_invalid_and_names_the_field() {
+        let dir = tempfile::tempdir().unwrap();
+        let export = dir.path().join("export.yaml");
+        std::fs::write(
+            &export,
+            "metadata:\n  name: barney\nspec:\n  version: 1.0.0\n  template:\n    packs:\n    \
+             - name: fred\n      version: 1.0.0\n      type: spectro\n      registry:\n        \
+             metadata:\n          uid: 5eecc89d0b150045ae661cef\n      manifests: wilma\n",
+        )
+        .unwrap();
+        match crate::candidate::load(&export).unwrap_err() {
+            crate::Error::CandidateInvalid { message, .. } => assert_eq!(
+                message,
+                r#"spec.template.packs[0].manifests is "wilma" in the export, and not a list"#
             ),
             other => panic!("not candidate-invalid: {other}"),
         }
