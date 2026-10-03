@@ -46,8 +46,8 @@ fn shown(repo: &Path, page: &Path) -> String {
         .to_string()
 }
 
-/// The text of the file at `path`. When strata cannot read it, None, and a message in `bad` that
-/// names the file: a page that a check cannot read must not pass.
+/// The text of the file at `path`, or None and a message in `bad` that names the file. A page that
+/// a check cannot read must not pass.
 fn read(repo: &Path, path: &Path, bad: &mut Vec<String>) -> Option<String> {
     match std::fs::read_to_string(path) {
         Ok(text) => Some(text),

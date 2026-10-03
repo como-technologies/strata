@@ -88,9 +88,9 @@ Strata reads the whole file before it sends a request:
 - A values file or a manifest file that strata cannot read is `io`.
 - A candidate that breaks a rule that only the create of Palette checks is
   `candidate-invalid`. No route that takes a candidate answers these rules
-  before the create, so strata fills the gap. The message names the rule, the code of
-  Palette, and the layer or the manifest. Strata checks the rules in this
-  order:
+  before the create, so strata fills the gap. The message names the rule, the
+  code of Palette, and the layer or the manifest. Strata checks the rules in
+  this order:
   1. The version parses as semver, as Palette parses it: `1.1` and `v1.2.3`
      pass, and `1.2.3.4` does not.
   2. Each pack name is in one layer only.
