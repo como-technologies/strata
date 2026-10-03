@@ -50,6 +50,8 @@ enum CreateRule {
     CoreLayers,
     /// Each pack supports the cloud of the profile.
     Cloud,
+    /// The tag of a pack that Palette makes for a registry that it does not sync is a version.
+    PackTag,
 }
 
 impl CreateRule {
@@ -63,6 +65,7 @@ impl CreateRule {
             CreateRule::TypeLayer => "ClusterProfilePackNotAllowed",
             CreateRule::CoreLayers => "ErrPackCoreLayersMissing",
             CreateRule::Cloud => "PackNotSupported",
+            CreateRule::PackTag => "InvalidPackVersion",
         }
     }
 
@@ -261,5 +264,48 @@ pub(super) fn check_cloud(
         l.name,
         l.version,
         listed(&clouds.iter().map(String::as_str).collect::<Vec<_>>()),
+    )))
+}
+
+/// True when Palette takes `tag` as the version of a pack that it makes. Palette takes a semantic
+/// version in a loose form (`v1`, `1.2`, `1.2.3-rc.1+b5`), or a text that holds three numbers with
+/// dots between them (`chart-1.2.3`).
+fn palette_pack_tag(tag: &str) -> bool {
+    loose_semver(tag) || has_three_numbers(tag)
+}
+
+/// Whether `text` holds three numbers with dots between them, `\d+\.\d+\.\d+`, at any place.
+fn has_three_numbers(text: &str) -> bool {
+    let b = text.as_bytes();
+    (0..b.len()).any(|start| {
+        let mut i = start;
+        for part in 0..3 {
+            let from = i;
+            while i < b.len() && b[i].is_ascii_digit() {
+                i += 1;
+            }
+            if i == from {
+                return false;
+            }
+            if part < 2 {
+                if b.get(i) != Some(&b'.') {
+                    return false;
+                }
+                i += 1;
+            }
+        }
+        true
+    })
+}
+
+/// Check `tag`, the tag of a pack from a registry that Palette does not sync. Palette makes the
+/// pack at the create, with the tag as its version.
+pub(super) fn check_pack_tag(tag: &str) -> Result<(), String> {
+    if palette_pack_tag(tag) {
+        return Ok(());
+    }
+    Err(CreateRule::PackTag.refuse(&format!(
+        "the tag {tag} is not a semantic version, and it holds no three numbers with dots \
+         between them; Palette gives the pack that it makes the tag as its version"
     )))
 }

@@ -650,38 +650,6 @@ fn unsynced<A: PaletteApi>(palette: &Palette<A>, uid: &str) -> Result<Option<Uns
     }
 }
 
-/// True when Palette takes `tag` as the version of a pack that it makes. Palette takes a semantic
-/// version in a loose form (`v1`, `1.2`, `1.2.3-rc.1+b5`), or a text that holds three numbers with
-/// dots between them (`chart-1.2.3`). When both fail, Palette refuses the create with
-/// `InvalidPackVersion`.
-fn palette_parses_version(tag: &str) -> bool {
-    loose_semver(tag) || has_three_numbers(tag)
-}
-
-/// Whether `text` holds three numbers with dots between them, `\d+\.\d+\.\d+`, at any place.
-fn has_three_numbers(text: &str) -> bool {
-    let b = text.as_bytes();
-    (0..b.len()).any(|start| {
-        let mut i = start;
-        for part in 0..3 {
-            let from = i;
-            while i < b.len() && b[i].is_ascii_digit() {
-                i += 1;
-            }
-            if i == from {
-                return false;
-            }
-            if part < 2 {
-                if b.get(i) != Some(&b'.') {
-                    return false;
-                }
-                i += 1;
-            }
-        }
-        true
-    })
-}
-
 /// The registries this key can see, name and uid, in the order Palette lists them.
 pub(crate) fn registries<A: PaletteApi>(palette: &Palette<A>) -> Result<Vec<(String, String)>> {
     let listing = palette.api().get_json("/v1/registries/metadata")?;
@@ -1170,11 +1138,7 @@ impl<A: PaletteApi> Resolver<'_, A> {
                  to {tag}, or remove tag"
             )));
         }
-        if !palette_parses_version(tag) {
-            return Err(not_synced(format!(
-                "Palette refuses the create, because the tag {tag} is not a semantic version"
-            )));
-        }
+        gaps::check_pack_tag(tag).map_err(not_synced)?;
         self.progress.note(&format!(
             "{}@{}: registry {} does not sync, so Palette makes the pack when it creates the \
              profile; the record has no pack uid and no digest",
@@ -2013,7 +1977,7 @@ variables:
             "1.2.3.4",
             "1.2.3-",
         ] {
-            assert!(palette_parses_version(tag), "{tag}");
+            assert!(gaps::check_pack_tag(tag).is_ok(), "{tag}");
         }
         for tag in [
             "",
@@ -2024,7 +1988,7 @@ variables:
             "1.2-rc..1",
             "v",
         ] {
-            assert!(!palette_parses_version(tag), "{tag}");
+            assert!(gaps::check_pack_tag(tag).is_err(), "{tag}");
         }
     }
 }
