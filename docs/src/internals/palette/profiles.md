@@ -298,8 +298,8 @@ from the code of Palette, not from a live run:
 - The cluster document names the template in `spec.clusterTemplate`, with
   `uid` and `projectUid`.
 - `POST /v1/spectroclusters/<uid>/validate/repave` compares nothing for such a
-  cluster. The answer is `200` with an empty body, and `isRepaveRequired` is
-  absent.
+  cluster. The answer is `200` with `isRepaveRequired: false` and no reason:
+  the same answer as a change that does not repave.
 - `POST /v1/spectroclusters/clusterTemplates/<uid>/validate/repave` answers
   for the template. The body is `profiles[]`, each with a `uid` only, and
   `isUpgradeNow`. Palette asks the question of one cluster of the template,

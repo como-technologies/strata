@@ -2099,8 +2099,8 @@ fn use_cases(r: &mut Runner) {
         "jq '.source.cluster | {repavePending, pendingRepave}' runs/payments-now.json",
     );
 
-    // a cluster that a cluster template governs: Palette gives an empty answer on the route of
-    // the cluster, so --repave asks the route of the template (#130)
+    // a cluster that a cluster template governs: on the route of the cluster, Palette compares
+    // nothing and answers no repave, so --repave asks the route of the template (#130)
     r.cluster_in_template(DEV, PAYMENTS, AWS_STANDARD);
     r.template_repave_answer(DEV, AWS_STANDARD, true);
     r.step(

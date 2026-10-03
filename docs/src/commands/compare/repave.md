@@ -53,11 +53,11 @@ answers for a cluster, and not for them:
 
 ## A cluster in a cluster template
 
-Palette does not answer on the route of the cluster when a cluster template
+Palette compares nothing on the route of the cluster when a cluster template
 governs the cluster. The cluster document names the template in
-`spec.clusterTemplate.uid`, and the answer of the route is empty. An empty
-answer is not "no repave", so strata does not print it. For such a cluster,
-`--repave` asks the route of the template,
+`spec.clusterTemplate.uid`. The answer of the route looks like "no repave", but
+Palette did not compare the change, so strata does not send that request. For
+such a cluster, `--repave` asks the route of the template,
 `POST /v1/spectroclusters/clusterTemplates/<uid>/validate/repave`, and a first
 `palette` line names the template:
 

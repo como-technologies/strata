@@ -7429,14 +7429,14 @@ fn compare_asks_the_template_route_for_a_cluster_that_a_cluster_template_governs
         .with(format!("/v1/spectroclusters/{CLUSTER_UID}"), doc);
     let cluster = snapshot_cluster(&cluster_api, None).unwrap();
     let target = ops::snapshot_from_dir(&dir.path().join("b"), "b", "t0").unwrap();
-    // Palette gives an empty answer on the route of a cluster in a template, and answers for the
-    // template on its own route
+    // on the route of a cluster in a template, Palette compares nothing and answers no repave; it
+    // answers for the template on the route of the template
     let template_route = "/v1/spectroclusters/clusterTemplates/tmpl-1/validate/repave";
     let api = cluster_api
         .clone()
         .with(
             format!("POST /v1/spectroclusters/{CLUSTER_UID}/validate/repave"),
-            serde_json::json!({}),
+            serde_json::json!({"isRepaveRequired": false, "reasons": []}),
         )
         .with(
             format!("POST {template_route}"),

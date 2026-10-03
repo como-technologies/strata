@@ -122,8 +122,9 @@ fn template_body(body: &Value) -> Value {
 /// order. It reads the cluster document for the profiles it runs now, and sends one POST, which
 /// changes nothing. `level` is the most severe level of the impact table, for `agrees`.
 ///
-/// Palette gives an empty answer on the route of a cluster that a cluster template governs. For
-/// such a cluster, the POST goes to the route of the template, and the answer names the template.
+/// On the route of a cluster that a cluster template governs, Palette compares nothing and
+/// answers no repave. So the cluster document, and not the answer, tells strata to send the POST
+/// to the route of the template for such a cluster. The answer then names the template.
 ///
 /// # Errors
 ///

@@ -1572,9 +1572,9 @@ impl Tenant {
 
     /// Put a cluster in the cluster template `template`, as a cluster that the template launched.
     ///
-    /// The cluster document names the template in `spec.clusterTemplate`. Palette then gives an
-    /// empty answer on `POST /v1/spectroclusters/{uid}/validate/repave` for the cluster: it
-    /// compares nothing and sends no `isRepaveRequired`.
+    /// The cluster document names the template in `spec.clusterTemplate`. On `POST
+    /// /v1/spectroclusters/{uid}/validate/repave` for the cluster, Palette then compares nothing,
+    /// and answers as for a change that does not repave: `isRepaveRequired: false` and no reason.
     pub fn cluster_in_template(&self, project: &str, cluster: &str, template: &str) {
         self.cluster_field(
             project,
@@ -1585,7 +1585,7 @@ impl Tenant {
         self.write(
             project,
             &format!("v1/spectroclusters/{cluster}/validate/repave"),
-            &json!({}),
+            &repave_answer_of(false),
         );
     }
 

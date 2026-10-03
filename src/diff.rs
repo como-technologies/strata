@@ -891,9 +891,9 @@ pub struct PaletteRepave {
     /// True when the impact table and Palette say the same: both a repave, or both no repave. A
     /// level of `may-repave` agrees with either answer.
     pub agrees: bool,
-    /// The cluster template that Palette answered for, when the cluster is in one. Palette gives
-    /// an empty answer on the route of such a cluster, and answers on the route of the template,
-    /// by profile uid.
+    /// The cluster template that Palette answered for, when the cluster is in one. On the route of
+    /// such a cluster, Palette compares nothing and answers no repave. It answers on the route of
+    /// the template, by profile uid.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cluster_template: Option<ClusterTemplateRef>,
 }
