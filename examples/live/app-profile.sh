@@ -7,7 +7,11 @@
 #      tier as a pack, with no digest; verify of it is OK
 #   2  a plain update of the manifest: the uid and the version stay, and verify of the record
 #      reports drift, with the tier AUTHORED; --who reads the log of the kind appprofile (#140)
-#   3  the app profile deleted
+#   3  two app profiles with the same two tiers, made with the install orders 2 and 5, and 5
+#      and 2: a record of each holds the orders and lists the tiers by them, and compare of the
+#      two records names installOrder (#112). An update of the order through the tier route
+#      does not change it. Then the two app profiles deleted
+#   4  the app profile deleted
 #
 # Needs the strata release binary, jq, and the key as verify.sh needs it. It needs no cluster, and
 # costs nothing. Results go under runs/<UTC time>/app-profile/, or OUT; FROM_STAGE resumes a run in
@@ -15,7 +19,7 @@
 set -uo pipefail
 script=app-profile
 from=${1:-1}
-case "$from" in 1|2|3) ;; *) sed -n '2,/^set -uo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; exit 2 ;; esac
+case "$from" in 1|2|3|4) ;; *) sed -n '2,/^set -uo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; exit 2 ;; esac
 . "$(cd "$(dirname "$0")" && pwd)/lib.sh"
 [ -x "$strata" ] || die "no strata binary at $strata"
 
@@ -75,7 +79,32 @@ if stage 2 "a plain update of the manifest"; then
     jq -e --arg at "$(jq -r .source.fetchedAt app.json)" '.verify.lastModified >= $at' edit-who.out
 fi
 
-if stage 3 "the app profile deleted"; then
+if stage 3 "the install order of the tiers"; then
+  check order-a-create 0 "#112: make $N-order-a with tier1 at the install order 2 and tier2 at 5" -- \
+    "$live/api.sh" app-profile-create "$N-order-a" 2 5
+  check order-b-create 0 "#112: make $N-order-b with the same tiers at 5 and 2" -- \
+    "$live/api.sh" app-profile-create "$N-order-b" 5 2
+  OA=$(cat order-a-create.out) OB=$(cat order-b-create.out)
+  check order-a-tiers 0 '#112: the tiers route gives the install orders of the create' -- \
+    bash -c "\"$live/api.sh\" get /v1/appProfiles/$OA/tiers | jq -e '[.spec.appTiers[] | {(.metadata.name): .spec.installOrder}] | add == {tier1: 2, tier2: 5}'"
+  check order-a-record 0 "#112: a record of $N-order-a" -- "$strata" snapshot "appprofile:$OA" -o order-a.json
+  check order-a-params 0 '#112: the record holds each order, and lists the tiers by it: tier1, tier2' -- \
+    jq -e '[.packs[] | [.key, .params.installOrder]] == [["app/tier1", 2], ["app/tier2", 5]]' order-a.json
+  check order-b-record 0 "#112: a record of $N-order-b" -- "$strata" snapshot "appprofile:$OB" -o order-b.json
+  check order-b-params 0 '#112: the record lists tier2 first, at 2, then tier1, at 5' -- \
+    jq -e '[.packs[] | [.key, .params.installOrder]] == [["app/tier2", 2], ["app/tier1", 5]]' order-b.json
+  check order-compare 1 '#112: compare of the two records: the orders differ, so the roots differ' -- \
+    "$strata" compare order-a.json order-b.json
+  check order-compare-says 0 '#112: and it names installOrder under a tier' -- \
+    grep -Eq '^ +~ param installOrder: (2 -> 5|5 -> 2)$' order-compare.out
+  check order-update 1 '#112: an update of the order of tier1 through the tier route: Palette keeps the order' -- \
+    "$live/api.sh" app-profile-order "$OA" 7
+  check order-update-verify 0 "#112: so the record of $N-order-a still verifies" -- "$strata" verify order-a.json
+  check order-a-delete 0 "delete $N-order-a" -- "$live/api.sh" app-profile-delete "$OA"
+  check order-b-delete 0 "delete $N-order-b" -- "$live/api.sh" app-profile-delete "$OB"
+fi
+
+if stage 4 "the app profile deleted"; then
   check delete 0 "delete the app profile" -- "$live/api.sh" app-profile-delete "$U"
 fi
 

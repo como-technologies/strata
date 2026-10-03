@@ -11,14 +11,19 @@
 #   3  another timezone and one more label on B, through the API: compare names the tier and the
 #      field, and a record of B from before still verifies
 #   4  B removed, and the baseline
+#   5  a role binding on cluster A, through the API, then its subjects edited: compare of a record
+#      from before with cluster A names the policy tier and the binding, with exit 0, and verify
+#      of the record reports the tier (#106); then the bindings of cluster A as before. It needs
+#      no cluster B: `tiers.sh 5` runs it alone
 #
 # Needs the live example at its baseline with cluster A (just live-up), the strata release binary,
-# jq, and the key as verify.sh needs it. Billable: cluster B for about 30 minutes. Results go under
+# jq, and the key as verify.sh needs it. Billable: cluster B for about 30 minutes; stage 5 alone
+# adds no machine. Results go under
 # runs/<UTC time>/tiers/, or OUT; FROM_STAGE resumes a run in OUT. Exit 0 only when no check fails.
 set -uo pipefail
 script=tiers
 from=${1:-1}
-case "$from" in 1|2|3|4) ;; *) sed -n '2,/^set -uo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; exit 2 ;; esac
+case "$from" in 1|2|3|4|5) ;; *) sed -n '2,/^set -uo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; exit 2 ;; esac
 . "$(cd "$(dirname "$0")" && pwd)/lib.sh"
 [ -x "$strata" ] || die "no strata binary at $strata"
 
@@ -48,6 +53,33 @@ export PALETTE_PROJECT_UID=$(out project_uid)
 
 # tier_state FILE TIER: the state of one tier in a compare --json, same or changed
 tier_state() { jq -r --arg t "$2" '.clusterTiers[] | select(.tier == $t) | if .same then "same" else "changed" end' "$1"; }
+
+# rbacs: the role bindings of cluster A, as Palette gives them. A 404 is a cluster with none.
+rbacs() {
+  local err
+  err=$(mktemp)
+  if "$live/api.sh" get "/v1/spectroclusters/$C/config/rbacs" 2> "$err"; then
+    rm -f "$err"
+  elif grep -q 'HTTP 404' "$err"; then
+    rm -f "$err"
+    echo '{"items": []}'
+  else
+    cat "$err" >&2
+    rm -f "$err"
+    return 2
+  fi
+}
+# put_rbacs [SUBJECT]: PUT the role bindings of cluster A as they were before stage 5, and, with
+# SUBJECT, one more binding of the user SUBJECT to the cluster role view. The PUT replaces each
+# binding of the cluster.
+put_rbacs() {
+  local body
+  body=$(jq -c --arg s "${1:-}" '{rbacs: ([.items[]? | {spec: {bindings: .spec.bindings}}]
+    + if $s == "" then [] else [{spec: {bindings: [{type: "ClusterRoleBinding",
+      role: {kind: "ClusterRole", name: "view"}, subjects: [{type: "User", name: $s}]}]}}] end)}' rbac-before.out) \
+    || return 2
+  "$live/api.sh" put "/v1/spectroclusters/$C/config/rbacs" "$body"
+}
 
 if stage 1 "cluster A"; then
   require_baseline
@@ -113,6 +145,33 @@ if stage 4 "cluster B removed"; then
   apply
   "$live/tenant.sh" cluster "$B" > /dev/null 2>&1 || true
   check undo-baseline 0 "the example is at its baseline" -- "$live/baseline.sh"
+fi
+
+if stage 5 "the subjects of a role binding of cluster A"; then
+  [ "$from" = 5 ] && require_baseline
+  check rbac-before 0 "#106: the role bindings of cluster A before the stage" -- rbacs
+  check rbac-add 0 "#106: cluster A gets a binding of barney@example.com to the cluster role view, through the API" -- \
+    put_rbacs barney@example.com
+  check rbac-record 0 "#106: a record of cluster A with the binding" -- "$strata" snapshot "cluster:$C" -o rbac.json
+  check rbac-in-record 0 "#106: the policy tier holds the binding, with its role and its subject" -- \
+    jq -e '.source.cluster.tiers.policy.fields.rbacs | any(.[]; .role.name == "view"
+      and any(.subjects[]; .name == "barney@example.com" and .type == "User"))' rbac.json
+  check rbac-edit 0 "#106: the subject of the binding becomes fred@example.com, through the API" -- \
+    put_rbacs fred@example.com
+  check rbac-compare 0 "#106: compare of the record with cluster A: one release, exit 0" -- \
+    "$strata" compare rbac.json "cluster:$C"
+  check rbac-compare-json 0 "the same comparison as JSON" -- "$strata" compare rbac.json "cluster:$C" --json
+  check rbac-compare-policy 0 "#106: the policy tier differs, at the subjects of the binding" -- \
+    jq -e '.clusterTiers[] | select(.tier == "policy") | .same == false
+      and any(.diff[].path; startswith("rbacs") and contains("subjects"))' rbac-compare-json.out
+  check rbac-compare-says 0 "#106: the report names the new subject of the binding" -- \
+    grep -Eq 'policy\.rbacs\[[0-9]+\]\.subjects\[name=fred@example\.com\]' rbac-compare.out
+  check rbac-verify 0 "#106: verify of the record: the verdict follows the release, exit 0" -- "$strata" verify rbac.json
+  check rbac-verify-says 0 "#106: and it reports the policy tier" -- grep -q 'policy CHANGED' rbac-verify.out
+  check rbac-undo 0 "the role bindings of cluster A as before the stage" -- put_rbacs
+  check rbac-after-read 0 "the role bindings of cluster A after the stage" -- rbacs
+  check rbac-after 0 "the bindings that Palette gives now are the bindings from before" -- \
+    bash -c "diff <(jq -S '[.items[]?.spec.bindings]' rbac-before.out) <(jq -S '[.items[]?.spec.bindings]' rbac-after-read.out)"
 fi
 
 echo

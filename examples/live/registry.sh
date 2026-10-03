@@ -12,6 +12,9 @@
 #   3  push 1.0.0 again with other bytes, and sync: the pack listing and the record of the pack;
 #      the published profile with the values of the pack follows the push some minutes later,
 #      and a profile with values of its own keeps its digest (#81)
+#   3b the profile pins 1.0.9, and the tag 1.0.9 is deleted from the registry: what the profile
+#      route of Palette gives for the pack, and what a record and verify say (#108); then the
+#      tag again, and the profile back on 1.0.0
 #   4  push 1.0.1 and sync: the profile pinned to 1.0.0 stays; and the floating tag, when the
 #      registry lists one, and who the audit log of Palette says moved the profile (#69)
 #   5  a chart in the example's own OCI Helm registry: the digest Palette lists for it, and what a
@@ -85,6 +88,20 @@ push() {
   grep -o 'sha256:[0-9a-f]\{64\}' "oras-$2.out" | tail -1
 }
 digest_of() { jq -r ".$2" "$1"; }
+# wait_invalid WANT: read the profile P until the flag isInvalid of its pack is WANT (true or
+# false), for up to INVALID_MINUTES (default 10). Exit 0 when it is, and 1 when it is not.
+wait_invalid() {
+  local i
+  for i in $(seq 1 $((${INVALID_MINUTES:-10} * 6))); do
+    is_invalid "$1" && return 0
+    sleep 10
+  done
+  is_invalid "$1"
+}
+is_invalid() {
+  "$live/api.sh" get "/v1/clusterprofiles/$P" \
+    | jq -e --argjson w "$1" 'any(.spec.published.packs[]; .isInvalid == true) == $w' > /dev/null
+}
 # wait_drift RECORD: verify the record again until it reports DRIFT, for up to ten minutes.
 # Palette moves a published profile some minutes after the push, not within the sync that the
 # script asks for, so a read right after that sync is too early. Exit 1 on DRIFT, as verify
@@ -179,6 +196,46 @@ check profile-who 1 "#81: who moved the first profile: the audit log of Palette"
 check profile-who-system 0 "#81: the log names the move: an update by the Palette service system" -- \
   grep -Eq '^  [0-9TZ:.-]+  system \(service\)  update' profile-who.out
 check delete-modified 0 "delete the profile with changed values" -- "$live/api.sh" delete "$M"
+
+# ---- 3b. a deleted tag ---------------------------------------------------------------------------
+# Palette marks the pack of a profile invalid when the registry deletes its tag, and clears the
+# flag when the tag is back. The profile pins a version of its own, 1.0.9, so step 4 finds the
+# registry as step 3 left it.
+
+echo "== 3b. the tag of $PACK 1.0.9 deleted from the registry (#108)" | tee -a steps.log
+build 1.0.9 || die "building $PACK 1.0.9 failed"
+check push-del 0 "push $PACK 1.0.9, the version whose tag the step deletes" -- push 1.0.9 deleted
+check sync-del-1 0 "Palette reads $REG_NAME again" -- "$live/api.sh" sync-oci "$REG"
+apply "${cluster_var[@]}" -var owned_pack_profile=true -var owned_pack_version=1.0.9 -var owned_pack_tag=1.0.9
+check del-record 0 "#108: a record of the profile that pins $PACK 1.0.9" -- "$strata" snapshot "$P" -o deleted-before.json
+check del-tag 0 "#108: delete the tag 1.0.9 from the repository" -- \
+  aws ecr batch-delete-image --region "$REGION" --repository-name "$repository" --image-ids imageTag=1.0.9
+check sync-del-2 0 "Palette reads $REG_NAME again" -- "$live/api.sh" sync-oci "$REG"
+check del-flag ? "#108: Palette marks the pack of the profile invalid within ten minutes (0), or does not (1)" -- \
+  wait_invalid true
+check del-doc 0 "#108: the answer of GET /v1/clusterprofiles/{uid} after the delete" -- \
+  "$live/api.sh" get "/v1/clusterprofiles/$P"
+check del-doc-fields ? "#108: the pack of the answer, with isInvalid and inValidReason" -- \
+  jq -ec '.spec.published.packs | map({name, tag, isInvalid, inValidReason})' del-doc.out
+check del-record-now 0 "#108: a record of the profile after the delete" -- "$strata" snapshot "$P" -o deleted-now.json
+check del-verify ? "#108: verify of the record from before the delete" -- "$strata" verify deleted-before.json
+if is_invalid true; then
+  check del-record-flag 0 "#108: the record holds the flag and the reason of Palette" -- \
+    jq -e '.packs[0].invalid == true and (.packs[0].invalidReason | length > 0)' deleted-now.json
+  check del-record-root 0 "#108: the flag is outside the root: the two records have one root" -- \
+    test "$(jq -r .root deleted-now.json)" = "$(jq -r .root deleted-before.json)"
+  check del-verify-says 0 "#108: the verdict names the pack that Palette marks invalid now" -- \
+    grep -q "^INVALID: Palette marks pack addon/$PACK invalid now" del-verify.out
+fi
+check push-del-again 0 "#108: push $PACK 1.0.9 again" -- push 1.0.9 deleted-again
+check sync-del-3 0 "Palette reads $REG_NAME again" -- "$live/api.sh" sync-oci "$REG"
+check del-cleared ? "#108: Palette clears the flag within ten minutes of the push (0), or does not (1)" -- \
+  wait_invalid false
+check del-doc-after 0 "#108: the answer of the profile route after the push" -- "$live/api.sh" get "/v1/clusterprofiles/$P"
+apply "${cluster_var[@]}" -var owned_pack_profile=true
+check del-tag-end 0 "the tag 1.0.9 deleted again, so the registry holds 1.0.0 alone for step 4" -- \
+  aws ecr batch-delete-image --region "$REGION" --repository-name "$repository" --image-ids imageTag=1.0.9
+check sync-del-4 0 "Palette reads $REG_NAME again, and forgets 1.0.9" -- "$live/api.sh" sync-oci "$REG"
 
 # ---- 4. a new version -----------------------------------------------------------------------------
 

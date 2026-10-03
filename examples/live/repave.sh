@@ -18,6 +18,11 @@
 #      calls may-repave and cluster-wide (#81)
 #   7  `compare --validate` at the baseline: Palette accepts the packs of the release version on
 #      cluster A, and a side that is not a cluster is a usage error (#134)
+#   8  version 1.0.1, which cluster A does not run, gets the profile variable strata_mode with the
+#      default 600, through OpenTofu, and a kubeadm command of its Kubernetes pack reads it in
+#      place of its 600. Palette is asked if 1.0.1 repaves cluster A: by strata, which sends no
+#      variables, and by tenant.sh, with no variables, with the value 600, and with the value 644
+#      as the control (#132). Then 1.0.1 back. Cluster A takes no update
 #
 # AWS and GCP run one upgrade engine, so every answer here agrees with the table. A disagreement
 # needs another engine, such as Edge, and no live run has one. Needs the live example at its baseline with
@@ -28,7 +33,7 @@
 set -uo pipefail
 script=repave
 from=${1:-1}
-case "$from" in 1|2|3|4|5|6|7) ;; *) sed -n '2,/^set -uo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; exit 2 ;; esac
+case "$from" in 1|2|3|4|5|6|7|8) ;; *) sed -n '2,/^set -uo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; exit 2 ;; esac
 . "$(cd "$(dirname "$0")" && pwd)/lib.sh"
 [ -x "$strata" ] || die "no strata binary at $strata"
 
@@ -141,6 +146,34 @@ if stage 7 "Palette's check of the packs"; then
   check validate-usage 2 "#134: two profile versions and no cluster: a usage error" -- \
     "$strata" compare "$R" "$AD" --validate
   check validate-usage-says 0 "and it says what it needs" -- grep -q '^strata: --validate needs one side that is a cluster' validate-usage.err
+fi
+
+if stage 8 "a profile variable in a repave key of a version that cluster A does not run"; then
+  [ "$from" = 8 ] && require_baseline
+  N=$(out next_profile_uid)
+  check var-record-before 0 "a record of 1.0.1 before the stage" -- "$strata" snapshot "$N" -o next-before.json
+  check var-command 0 "#132: the Kubernetes pack of 1.0.1 has the kubeadm command with 600" -- \
+    jq -e 'any(.packs[]; .layer == "k8s" and (.values | contains("chmod 600 /var/lib/kubelet/config.yaml")))' next-before.json
+  apply -var next_variable=true
+  apply -var next_variable=true -var next_variable_in_values=true
+  check var-record 0 "#132: a record of 1.0.1 with the variable" -- "$strata" snapshot "$N" -o next-variable.json
+  check var-in-values 0 "#132: the kubeadm command of 1.0.1 reads the variable strata_mode" -- \
+    jq -e 'any(.packs[]; .layer == "k8s" and (.values | contains("chmod {{.spectro.var.strata_mode}} /var/lib/kubelet/config.yaml")))' next-variable.json
+  check var-strata ? "#132: compare --repave of cluster A with 1.0.1: strata sends no variables" -- \
+    "$strata" compare "cluster:$C/$release" "$N" --repave --json
+  check var-strata-answer ? "#132: Palette says repave (0), or no repave (1), to the request of strata" -- \
+    jq -e '.paletteRepave.required' var-strata.out
+  check var-none ? "#132: tenant.sh with no variables: no repave (0), or repave (1)" -- \
+    "$live/tenant.sh" repave "$C" "$R" "$N"
+  check var-default ? "#132: tenant.sh with strata_mode 600, the default: no repave (0), or repave (1)" -- \
+    env REPAVE_VARIABLES='[{"name": "strata_mode", "value": "600"}]' "$live/tenant.sh" repave "$C" "$R" "$N"
+  check var-control 1 "#132: tenant.sh with strata_mode 644: the command changes, so Palette says repave" -- \
+    env REPAVE_VARIABLES='[{"name": "strata_mode", "value": "644"}]' "$live/tenant.sh" repave "$C" "$R" "$N"
+  check var-control-says 0 "#132: and it names the Kubernetes pack and the kubeadm key" -- \
+    grep -q 'kubeadmconfig.postKubeadmCommands' var-control.out
+  apply -var next_variable=true
+  apply
+  check var-undone 0 "1.0.1 is as before the stage: its record from before verifies" -- "$strata" verify next-before.json
 fi
 
 echo

@@ -183,6 +183,12 @@ variable "cluster_group" {
   default     = false
 }
 
+variable "group_cpu_millicore" {
+  description = "The CPU limit, in millicores, that the cluster group gives each virtual cluster. cluster-group.sh changes it."
+  type        = number
+  default     = 6000
+}
+
 variable "second_cluster" {
   description = "Create cluster B next to the cluster. Billable while it exists."
   type        = bool
@@ -197,6 +203,18 @@ variable "second_cluster_name" {
 
 variable "immutable_profiles" {
   description = "The provider's immutable-clusterprofiles feature_preview flag, with skip_destroy on every profile"
+  type        = bool
+  default     = false
+}
+
+variable "next_variable" {
+  description = "Give version 1.0.1 the profile variable strata_mode, default 600. repave.sh sets it."
+  type        = bool
+  default     = false
+}
+
+variable "next_variable_in_values" {
+  description = "A kubeadm command of the Kubernetes pack of 1.0.1 reads strata_mode. It needs next_variable."
   type        = bool
   default     = false
 }
@@ -219,9 +237,15 @@ variable "move_csi_to_oci" {
 }
 
 variable "move_registry_name" {
-  description = "An OCI pack registry that holds the CSI pack of the cloud at its version"
+  description = "An OCI pack registry that holds the CSI pack and the OS pack of the cloud at their versions"
   type        = string
   default     = "Palette Registry"
+}
+
+variable "move_os_registry" {
+  description = "Take the OS pack of version 1.0.0 from move_registry_name, at the same version and values. registry-move-nodes.sh sets it."
+  type        = bool
+  default     = false
 }
 
 # examples/live/registry.sh's variables: the example's own OCI pack registry, and the profile that

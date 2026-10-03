@@ -273,6 +273,10 @@ live-macro-repave: build
 live-repave: build
     examples/live/repave.sh
 
+# The registry move of a running cluster: the OS pack of the release moves to another registry, and cluster A takes it (#135). Needs live-up; billable: up to two repaves of cluster A.
+live-registry-move-nodes: build
+    examples/live/registry-move-nodes.sh
+
 # The scripts run in order from the baseline: verify.sh, in-place.sh off, in-place.sh on (against
 # that off run), and registry-move.sh. The recipe stops at the first script that fails. Billable:
 # about 3 to 4 hours, with cluster B two times.

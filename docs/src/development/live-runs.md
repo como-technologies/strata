@@ -302,6 +302,14 @@ shows. It then asks Palette to read the registry again after each push.
 | `profile-mod-keeps` | 0 | #81: the profile with values of its own keeps the digest it pinned: its record verifies |
 | `profile-who`, `profile-who-system` | 1, 0 | #81: the audit log names the move: an `update` by the Palette service `system` |
 | `delete-modified` | 0 | the second profile is deleted |
+| `push-del`, `sync-del-1`, `del-record` | 0 | #108: 1.0.9 is pushed, and the profile pins it. No result yet |
+| `del-tag`, `sync-del-2` | 0 | #108: the tag 1.0.9 is deleted from the repository, and Palette reads the registry again. No result yet |
+| `del-flag` | ? | #108: Palette marks the pack of the profile invalid in ten minutes, or not. No result yet |
+| `del-doc`, `del-doc-fields` | 0, ? | #108: the answer of `GET /v1/clusterprofiles/<uid>`, with `isInvalid` and `inValidReason` of the pack. No result yet |
+| `del-record-now`, `del-verify` | 0, ? | #108: a record of the profile now, and `verify` of the record from before. No result yet |
+| `del-record-flag`, `del-record-root`, `del-verify-says` | 0 | #108: when Palette sets the flag, the record holds `invalid` and `invalidReason`, the root does not move, and `verify` prints `INVALID`. No result yet |
+| `push-del-again`, `sync-del-3`, `del-cleared`, `del-doc-after` | 0, 0, ?, 0 | #108: 1.0.9 is pushed again: Palette clears the flag in ten minutes, or not. No result yet |
+| `del-tag-end`, `sync-del-4` | 0 | the profile pins 1.0.0 again, and 1.0.9 is deleted, so step 4 finds the registry as step 3 left it |
 | `profile-after`, `push-3`, `sync-3` | 0 | 1.0.1 is pushed |
 | `packs-two`, `packs-two-order` | 0 | #66: `packs` lists 1.0.1 first, then 1.0.0 |
 | `profile-stays` | 0 | #66: the profile pinned to 1.0.0 does not move to 1.0.1 |
@@ -554,7 +562,8 @@ Read-write, and it replaces no node. It needs the example at its baseline with
 cluster A, and `AWS_PROFILE` to read the EC2 instances. It edits the release
 version and the add-on version in place, asks Palette with `compare --repave`,
 and puts each edit back. Cluster A takes no update. Stage 7 asks Palette with
-`compare --validate`.
+`compare --validate`. Stage 8 changes version 1.0.1, which nothing runs,
+through OpenTofu, and puts it back.
 
 | Check | Expected exit | What it shows |
 |---|---|---|
@@ -574,10 +583,43 @@ and puts each edit back. Cluster A takes no update. Stage 7 asks Palette with
 | `csi-value` | 0 | #81: a changed value in the CSI pack: Palette says no repave. Its check reads no CNI or CSI layer, so `cluster-wide` means no repave |
 | `validate`, `validate-says`, `validate-json` | 0 | #134: at the baseline, `compare --validate` prints `palette    accepts`; `--json` gives `accepts` true and no error. |
 | `validate-usage`, `validate-usage-says` | 2, 0 | #134: two profile versions and no cluster are a usage error for `--validate`. |
+| `var-record-before`, `var-command` | 0 | #132: the Kubernetes pack of 1.0.1 has the kubeadm command `chmod 600 /var/lib/kubelet/config.yaml`. No result yet |
+| `var-record`, `var-in-values` | 0 | #132: with `next_variable` and `next_variable_in_values`, 1.0.1 has the profile variable `strata_mode`, default `600`, and the command reads it in place of `600`. No result yet |
+| `var-strata`, `var-strata-answer` | ? | #132: `compare --repave` of cluster A with 1.0.1, which sends no variables: Palette says repave, or not. No result yet |
+| `var-none`, `var-default` | ? | #132: `tenant.sh repave` with no variables, and with `strata_mode` `600`: Palette says repave, or not. No result yet |
+| `var-control`, `var-control-says` | 1, 0 | #132: with `strata_mode` `644`, the command changes, and Palette says repave for `kubeadmconfig.postKubeadmCommands`. No result yet |
+| `var-undone` | 0 | 1.0.1 is as before the stage: its record from before verifies. No result yet |
 
 Each answer agrees with the impact table, on AWS and on GCP: the two clouds run
 the kubeadm engine alone. The edit in place also opens an update notification for cluster A, and
 `compare` names it; the undo closes it.
+
+When the answers of `var-none` and `var-default` differ, Palette does not
+give the default of a variable to the target version, which the cluster does
+not run. Then #132 changes `compare --repave`, so that it sends `variables[]`.
+
+## registry-move-nodes.sh
+
+Read-write, and it can replace the nodes of cluster A two times. It needs the
+example at its baseline with cluster A. `move_os_registry` takes the OS pack of
+the release version from `move_registry_name`, at the same version and with the
+same values, in place. Cluster A takes the change, and the script watches it
+for `WATCH_MINUTES` (default 30). Then the release version goes back. When a
+repave waits for approval, Palette refuses the update, so the script stops
+before the undo, and `live-down` follows it.
+
+| Check | Expected exit | What it shows |
+|---|---|---|
+| `base-instances`, `base-record` | 0 | the machines of cluster A, and a record of the release version. No result yet |
+| `move-record`, `move-same-uid`, `move-identity` | 0 | #135: the move is in place, and the OS pack has another registry and the type `oci`, with the same version and values. No result yet |
+| `move-compare`, `move-impact`, `move-palette`, `move-reasons` | ? | #135: the level of the impact table for the OS pack, and the answer of Palette, with its reasons. No result yet |
+| `take` | 0 | #135: cluster A takes the update |
+| `replaced`, `waits` | ? | #135: the move alone replaced the nodes, or not, and a repave waits for approval, or not. No result yet |
+| `after-record`, `after-runs` | 0 | #135: cluster A runs the OS pack from the other registry. No result yet |
+| `undo-take`, `undo-baseline` | 0 | the release version back, and the example at its baseline. No result yet |
+
+The result of `replaced` decides the impact table for an identity change that
+keeps the version (#135).
 
 ## validate-packs.sh
 
@@ -656,7 +698,9 @@ states what it shows.
 ## tiers.sh
 
 Read-write: it builds cluster B, changes its timezone and its labels through the
-API, and removes it. It needs the example at its baseline with cluster A.
+API, and removes it. It needs the example at its baseline with cluster A. Stage
+5 changes the role bindings of cluster A through the API, and puts them back.
+It needs no cluster B: `tiers.sh 5` runs it alone.
 
 | Check | Expected exit | What it shows |
 |---|---|---|
@@ -670,6 +714,12 @@ API, and removes it. It needs the example at its baseline with cluster A.
 | `differ`, `differ-policy`, `differ-labels`, `differ-says` | 0 | #76: still one release; `policy` differs at `timezone`, and the labels at `team`; the report says `~ policy.timezone: "Etc/UTC" -> "America/Chicago"` |
 | `b-verify`, `b-verify-says` | 0 | #76: the record of B from before still verifies, and names `policy CHANGED` |
 | `undo-baseline` | 0 | the example is at its baseline |
+| `rbac-before`, `rbac-add` | 0 | #106: the role bindings of cluster A, then one more binding of `barney@example.com` to the cluster role `view`, through `PUT /v1/spectroclusters/<uid>/config/rbacs`. No result yet |
+| `rbac-record`, `rbac-in-record` | 0 | #106: the `policy` tier of a record of cluster A holds the binding, with its role and its subject. No result yet |
+| `rbac-edit` | 0 | #106: the subject of the binding becomes `fred@example.com`. No result yet |
+| `rbac-compare`, `rbac-compare-policy`, `rbac-compare-says` | 0 | #106: `compare` of the record with cluster A exits `0`, and names `policy.rbacs[...].subjects[name=fred@example.com]`. No result yet |
+| `rbac-verify`, `rbac-verify-says` | 0 | #106: `verify` of the record exits `0`, and names `policy CHANGED`. No result yet |
+| `rbac-undo`, `rbac-after-read`, `rbac-after` | 0 | the role bindings of cluster A are as before the stage. No result yet |
 
 `spcHash` is its own for each cluster, so `compare` now reads `spcInfraHash`
 alone between two clusters. On the two records of the run, `compare` then says
@@ -684,8 +734,8 @@ No script reads the role bindings or the namespaces of a cluster. Read-only
 requests to the tenant show the facts in
 [Cluster tiers](../internals/palette/clusters.md#cluster-tiers). A deleted
 cluster of the live example gives `{"items": []}` for each route. A uid that is
-not a cluster of the project gives HTTP 404 `ResourceNotFound`. No run edits
-the subjects of a binding; the book shows the change on the stand-in.
+not a cluster of the project gives HTTP 404 `ResourceNotFound`. Stage 5 edits
+the subjects of a binding. No run of stage 5 has a result yet.
 
 ## fleet.sh
 
@@ -764,8 +814,9 @@ An edge host with no device is `unpaired`. No run pairs a device.
 
 Read-write: it sets `cluster_group`, which builds a cluster group on cluster A
 that pins the add-on version, and a virtual cluster in it; it edits the add-on
-version in place and back, and removes the group. It needs the example at its
-baseline with cluster A.
+version in place and back, changes the CPU limit of the group through
+OpenTofu and back, and removes the group. It needs the example at its baseline
+with cluster A.
 
 | Check | Expected exit | What it shows |
 |---|---|---|
@@ -789,7 +840,12 @@ baseline with cluster A.
 | `edit-group-vs-version`, `edit-group-vs-version-says` | 1, 0 | #81: the version differs from the copy of the group, and the compare names the manifest |
 | `edit-group-own-uid` | 0 | #81: the copy has a uid of its own |
 | `edit-group-raw`, `edit-group-manifest-uid` | 0 | #78: the template of the group names the manifest by its uid, with no content. #110: the document of the group holds `spec.clustersConfig`, with each limit in two units, the values as YAML with comments, and the host cluster |
-| `edit-undo`, `gone` | 0 | the edit is put back, and the group and the member are gone |
+| `edit-undo` | 0 | the edit is put back |
+| `limit-record`, `limit-before` | 0 | #110: a record of the group holds the CPU limit `cpuMilliCore` 6000 in its `policy` tier. No result yet |
+| `limit-verify`, `limit-verify-says` | 0 | #110: after `group_cpu_millicore=4000`, `verify` of the record exits `0`, and names `policy CHANGED`. No result yet |
+| `limit-compare`, `limit-compare-says`, `limit-compare-json`, `limit-compare-tier` | 0 | #110: `compare` of the record with the group exits `0`, and names `policy.limitConfig.cpuMilliCore: 6000 -> 4000`. No result yet |
+| `limit-undone` | 0 | the limit is back: `compare` finds the same `policy` tier. No result yet |
+| `gone` | 0 | the group and the member are gone |
 | `member-audit-kind` | 0 | #188: the audit log of the member, read by its uid alone, has its create and its delete under the kind `virtualCluster` |
 | `member-audit-not-cluster` | 0 | #188: a query with the kind `spectrocluster` and the uid of the member does not find them |
 
@@ -798,7 +854,7 @@ leaves 1 GiB beside the 3.2 GiB that the agents of Palette take in it.
 
 ## app-profile.sh
 
-Read-write: it makes an app profile, updates it, and deletes it. It needs no
+Read-write: it makes app profiles, updates one, and deletes them. It needs no
 cluster, and costs nothing.
 
 | Check | Expected exit | What it shows |
@@ -813,11 +869,23 @@ cluster, and costs nothing.
 | `edit-verify`, `edit-verify-says` | 1, 0 | #78: `verify` of the record reports drift, with the tier `AUTHORED` and the manifest named |
 | `edit-who`, `edit-who-appprofile` | 1, 0 | #140: `verify --who` reads the log of the kind `appprofile`, and its entries name the app profile as their object. |
 | `edit-last-modified` | 0 | #140: the document of the app profile gives the time of the update, after the record. |
-| `delete` | 0 | the app profile is deleted |
+| `order-a-create`, `order-b-create` | 0 | #112: two app profiles with the same two tiers, made with the install orders 2 and 5, and 5 and 2. No result yet |
+| `order-a-tiers` | 0 | #112: the tiers route gives the install orders of the create. No result yet |
+| `order-a-record`, `order-a-params`, `order-b-record`, `order-b-params` | 0 | #112: each record holds the orders in `packs[].params.installOrder`, and lists the tiers by them. No result yet |
+| `order-compare`, `order-compare-says` | 1, 0 | #112: `compare` of the two records exits `1`, and names `~ param installOrder` under a tier. No result yet |
+| `order-update`, `order-update-verify` | 1, 0 | #112: an update of the order through the tier route does not change it, so the record still verifies. No result yet |
+| `order-a-delete`, `order-b-delete` | 0 | the two app profiles are deleted |
+| `delete` | 0 | the app profile of stage 1 is deleted |
 
 No run updates the properties of a tier: the tier of the run is a manifest tier,
-which has none. No run changes the install order of a tier yet:
-`api.sh app-profile-order` makes that change.
+which has none.
+
+An update of a tier cannot change its install order. Palette answers `PUT
+/v1/appProfiles/<uid>/tiers/<tier uid>` with `installOrder` with 2xx, and the
+tier keeps its order. An app profile that is made with an install order on each
+tier keeps the orders, and the tiers route gives them. The document of the app
+profile gives no order. So `api.sh app-profile-order` reads the tier again, and
+exits `1` when the order did not change.
 
 ## loop.sh
 

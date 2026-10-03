@@ -14,7 +14,7 @@ resource "spectrocloud_cluster_group" "group" {
 
   config {
     host_endpoint_type       = "LoadBalancer"
-    cpu_millicore            = 6000
+    cpu_millicore            = var.group_cpu_millicore
     memory_in_mb             = 12288
     storage_in_gb            = 10
     oversubscription_percent = 120

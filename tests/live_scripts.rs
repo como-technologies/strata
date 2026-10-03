@@ -513,7 +513,9 @@ fn tenant_sh_digest_exits_2_when_the_registry_cannot_be_read() {
 
 /// A `curl` for api.sh: FAKE_ROUTED_CURL that also logs each request as `METHOD path` to
 /// $FAKE_LOG, keeps each request body as $FAKE_ROUTES/sent/<METHOD>_<route key>, and its query and
-/// headers, without the key, as $FAKE_ROUTES/sent/<METHOD>_<route key>.request.
+/// headers, without the key, as $FAKE_ROUTES/sent/<METHOD>_<route key>.request. It also adds each
+/// body to $FAKE_ROUTES/sent/<METHOD>_<route key>.all, in the order of the requests. When an
+/// executable $FAKE_ROUTES/<route key>.sh exists, its output is the body of each answer.
 const FAKE_API_CURL: &str = r#"#!/usr/bin/env bash
 out=""; write=""; url=""; method=GET; sent=""; headers=""
 while [ $# -gt 0 ]; do
@@ -531,9 +533,10 @@ done
 path=${url#*://*/}; query=""; [ "$path" != "${path#*\?}" ] && query=${path#*\?}; path=${path%%\?*}; key=${path//\//_}
 echo "$method /$path" >> "$FAKE_LOG"
 mkdir -p "$FAKE_ROUTES/sent"
-[ -n "$sent" ] && cp "$sent" "$FAKE_ROUTES/sent/${method}_$key"
+[ -n "$sent" ] && cp "$sent" "$FAKE_ROUTES/sent/${method}_$key" && cat "$sent" >> "$FAKE_ROUTES/sent/${method}_$key.all"
 printf 'query=%s\n%s' "$query" "$headers" | grep -v '^ApiKey:' > "$FAKE_ROUTES/sent/${method}_$key.request"
 body="$FAKE_ROUTES/$key"; status=404
+[ -x "$body.sh" ] && "$body.sh" > "$body"
 [ -f "$body" ] && status=200 || body=/dev/null
 if [ -n "$out" ]; then cp "$body" "$out"; else cat "$body"; fi
 [ -n "$write" ] && printf '%s' "$status"
@@ -1233,7 +1236,7 @@ fn api_sh_retag_renames_one_pack_tag_in_place_and_keeps_everything_else() {
 }
 
 #[test]
-fn api_sh_app_profile_order_puts_the_first_tier_with_the_order_and_keeps_its_values() {
+fn api_sh_app_profile_order_puts_the_first_tier_with_the_order_and_reads_the_order_again() {
     let dir = tempfile::tempdir().unwrap();
     let (bin, routes) = (dir.path().join("bin"), dir.path().join("routes"));
     for d in [&bin, &routes] {
@@ -1244,7 +1247,7 @@ fn api_sh_app_profile_order_puts_the_first_tier_with_the_order_and_keeps_its_val
         routes.join("v1_appProfiles_ap-1_tiers"),
         r#"{"spec":{"appTiers":[
             {"metadata":{"name":"web","uid":"t-1"},"spec":{"type":"container","version":"1.0.0",
-              "values":"replicas: 2\n","containerRegistryUid":"cr-1",
+              "values":"replicas: 2\n","containerRegistryUid":"cr-1","installOrder":2,
               "properties":[{"name":"port","type":"number","value":"80"}]}},
             {"metadata":{"name":"config","uid":"t-2"},"spec":{"type":"manifest","version":"1.0.0"}}]}}"#,
     )
@@ -1277,6 +1280,15 @@ fn api_sh_app_profile_order_puts_the_first_tier_with_the_order_and_keeps_its_val
             "installOrder": 2, "manifests": [], "containerRegistryUid": "cr-1",
             "properties": [{"name": "port", "value": "80"}]}),
         "the order changes, and the values, the properties, and the registry stay"
+    );
+
+    // the tier route still gives the order 2 after the update to 3, as Palette does
+    let o = run(&["app-profile-order", "ap-1", "3"]);
+    assert_eq!(o.status.code(), Some(1), "{}", text(&o.stderr));
+    assert!(
+        text(&o.stderr).contains("tier t-1 of app profile ap-1 keeps the install order 2"),
+        "{}",
+        text(&o.stderr)
     );
 
     let o = run(&["app-profile-order", "ap-1", "first"]);
@@ -1569,4 +1581,764 @@ fn aws_cleanup_deletes_nothing_without_yes_and_names_what_it_would() {
         "no delete without --yes: {calls}"
     );
     assert!(calls.contains("describe-nat-gateways"), "{calls}");
+}
+
+// ---- the stages of the live checks -----------------------------------------------------------------
+
+/// A `tofu` for a stage: `output -json` prints $FAKE_OUTPUTS, a plan changes nothing, and each
+/// other command passes. It logs each command to $FAKE_TOFU_LOG.
+const FAKE_TOFU_STAGE: &str = r#"#!/usr/bin/env bash
+echo "$*" >> "$FAKE_TOFU_LOG"
+case "$*" in
+  *"output -json"*) cat "$FAKE_OUTPUTS" ;;
+  *"show -json"*) echo '{}' ;;
+  *plan*) echo "No changes." ;;
+  *apply*) echo "Apply complete! Resources: 0 added, 1 changed, 0 destroyed." ;;
+esac
+"#;
+
+/// A `strata` for a stage. It logs its arguments to $FAKE_STRATA/calls, and answers from
+/// $FAKE_STRATA/rules: the first line `GLOB<TAB>EXIT<TAB>FILE` whose GLOB matches the arguments
+/// prints FILE, or writes it to the file of `-o`, and exits EXIT. With no match it exits 0.
+const FAKE_STRATA_STAGE: &str = r#"#!/usr/bin/env bash
+echo "$*" >> "$FAKE_STRATA/calls"
+out=""; prev=""
+for a in "$@"; do [ "$prev" = -o ] && out=$a; prev=$a; done
+while IFS=$'\t' read -r glob code file; do
+  [[ "$*" == $glob ]] || continue
+  if [ -n "$out" ]; then cp "$FAKE_STRATA/$file" "$out"; else cat "$FAKE_STRATA/$file"; fi
+  exit "$code"
+done < "$FAKE_STRATA/rules"
+exit 0
+"#;
+
+/// One run of a stage of a live script against the stand-ins: the OpenTofu outputs, the answers
+/// of strata, and the routes of Palette that a test gives.
+struct Stage {
+    root: tempfile::TempDir,
+    answers: usize,
+    /// More variables of the environment of the script.
+    env: Vec<(String, String)>,
+}
+
+impl Stage {
+    fn new(outputs: serde_json::Value) -> Self {
+        let root = tempfile::tempdir().unwrap();
+        let bin = root.path().join("bin");
+        for d in [
+            bin.clone(),
+            root.path().join("routes"),
+            root.path().join("strata"),
+            root.path().join("aws"),
+        ] {
+            std::fs::create_dir_all(d).unwrap();
+        }
+        executable(&bin.join("tofu"), FAKE_TOFU_STAGE);
+        executable(&bin.join("fake-strata"), FAKE_STRATA_STAGE);
+        let outputs: serde_json::Map<String, serde_json::Value> = outputs
+            .as_object()
+            .unwrap()
+            .iter()
+            .map(|(k, v)| (k.clone(), serde_json::json!({ "value": v })))
+            .collect();
+        std::fs::write(
+            root.path().join("outputs.json"),
+            serde_json::Value::Object(outputs).to_string(),
+        )
+        .unwrap();
+        std::fs::write(root.path().join("strata/rules"), "").unwrap();
+        Stage {
+            root,
+            answers: 0,
+            env: Vec::new(),
+        }
+    }
+
+    /// Palette answers `path`, such as `/v1/spectroclusters/c-a`, with `body` and status 200.
+    fn route(&self, path: &str, body: &str) {
+        let key = path.trim_start_matches('/').replace('/', "_");
+        std::fs::write(self.root.path().join("routes").join(key), body).unwrap();
+    }
+
+    /// strata answers the arguments that match `glob` with `stdout` and the exit `code`.
+    fn strata(&mut self, glob: &str, code: i32, stdout: &str) {
+        self.answers += 1;
+        let file = format!("answer-{}", self.answers);
+        let dir = self.root.path().join("strata");
+        std::fs::write(dir.join(&file), stdout).unwrap();
+        let mut rules = std::fs::read_to_string(dir.join("rules")).unwrap();
+        rules.push_str(&format!("{glob}\t{code}\t{file}\n"));
+        std::fs::write(dir.join("rules"), rules).unwrap();
+    }
+
+    /// The script runs with the variable `key` set to `value`.
+    fn env(&mut self, key: &str, value: &str) {
+        self.env.push((key.to_string(), value.to_string()));
+    }
+
+    /// A file that the stage reads, under the root.
+    fn path(&self, rel: &str) -> PathBuf {
+        self.root.path().join(rel)
+    }
+
+    /// Run `script` with `args`, and the results in out/. Gives the output and steps.log.
+    fn run(&self, script: &str, args: &[&str]) -> (Output, String) {
+        let root = self.root.path();
+        let env = [
+            ("STRATA_BIN", root.join("bin/fake-strata")),
+            ("OUT", root.join("out")),
+            ("FAKE_OUTPUTS", root.join("outputs.json")),
+            ("FAKE_TOFU_LOG", root.join("tofu.log")),
+            ("FAKE_STRATA", root.join("strata")),
+            ("FAKE_AWS", root.join("aws")),
+        ]
+        .map(|(k, v)| (k, v.display().to_string()));
+        let env: Vec<(&str, &str)> = env
+            .iter()
+            .map(|(k, v)| (*k, v.as_str()))
+            .chain(self.env.iter().map(|(k, v)| (k.as_str(), v.as_str())))
+            .collect();
+        let o = run_live(script, args, root, &env);
+        let steps = std::fs::read_to_string(root.join("out/steps.log")).unwrap_or_default();
+        (o, steps)
+    }
+
+    /// Each body of `METHOD path` that the script sent, in order.
+    fn sent(&self, method: &str, path: &str) -> Vec<serde_json::Value> {
+        let key = path.trim_start_matches('/').replace('/', "_");
+        let all = self.path(&format!("routes/sent/{method}_{key}.all"));
+        serde_json::Deserializer::from_str(&std::fs::read_to_string(all).unwrap_or_default())
+            .into_iter::<serde_json::Value>()
+            .map(Result::unwrap)
+            .collect()
+    }
+
+    /// Each command that OpenTofu ran, one line each.
+    fn tofu_calls(&self) -> String {
+        std::fs::read_to_string(self.path("tofu.log")).unwrap_or_default()
+    }
+}
+
+/// Each check of `ids` passed.
+fn passed(steps: &str, ids: &[&str]) {
+    for id in ids {
+        assert!(
+            steps
+                .lines()
+                .any(|l| l.starts_with("PASS") && l.split_whitespace().nth(1) == Some(*id)),
+            "{id} passed:\n{steps}"
+        );
+    }
+}
+
+/// The outputs of the live example at its baseline, with cluster A `c-a` named fred.
+fn baseline_outputs() -> serde_json::Value {
+    serde_json::json!({
+        "project_uid": "p-1", "cluster_uid": "c-a", "cluster_b_uid": "",
+        "cluster_names": {"a": "fred", "b": "barney"},
+        "profile_name": "strata-live-profile", "release_profile_uid": "r-1",
+        "addon_profile_uid": "ad-1", "addon_profile_name": "strata-live-addon",
+    })
+}
+
+/// A stage at the baseline: cluster A is Running, and the baseline checks pass.
+fn baseline_stage() -> Stage {
+    let stage = Stage::new(baseline_outputs());
+    stage.route(
+        "/v1/spectroclusters/c-a",
+        r#"{"metadata":{"name":"fred"},"status":{"state":"Running"}}"#,
+    );
+    stage
+}
+
+#[test]
+fn tiers_sh_stage_5_edits_the_subjects_of_a_binding_of_cluster_a_and_puts_the_bindings_back() {
+    let mut stage = baseline_stage();
+    let rbacs = "/v1/spectroclusters/c-a/config/rbacs";
+    stage.route(
+        rbacs,
+        r#"{"items":[{"metadata":{"name":"ops"},"spec":{"bindings":[{"type":"RoleBinding","namespace":"ops",
+            "role":{"kind":"Role","name":"edit"},"subjects":[{"type":"Group","name":"ops"}]}]}}]}"#,
+    );
+    stage.strata(
+        "snapshot cluster:c-a -o rbac.json",
+        0,
+        r#"{"source":{"cluster":{"tiers":{"policy":{"fields":{"rbacs":[{"role":{"kind":"ClusterRole","name":"view"},
+            "subjects":[{"name":"barney@example.com","namespace":"","type":"User"}],"type":"ClusterRoleBinding"}]}}}}}}"#,
+    );
+    stage.strata(
+        "compare rbac.json cluster:c-a --json",
+        0,
+        r#"{"clusterTiers":[{"tier":"policy","same":false,"diff":[
+            {"op":"removed","path":"rbacs[0].subjects[name=barney@example.com].name"},
+            {"op":"added","path":"rbacs[0].subjects[name=fred@example.com].name"}]}]}"#,
+    );
+    stage.strata(
+        "compare rbac.json cluster:c-a",
+        0,
+        "  cluster tiers applied unchanged, policy CHANGED\n        + policy.rbacs[0].subjects[name=fred@example.com].name: \"fred@example.com\"\n",
+    );
+    stage.strata(
+        "verify rbac.json",
+        0,
+        "  cluster tiers applied unchanged, policy CHANGED\nOK: cluster fred\n",
+    );
+
+    let (o, steps) = stage.run("tiers.sh", &["5"]);
+    assert_eq!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
+    assert!(!steps.contains("FAIL"), "{steps}");
+    passed(
+        &steps,
+        &[
+            "rbac-add",
+            "rbac-in-record",
+            "rbac-edit",
+            "rbac-compare",
+            "rbac-compare-policy",
+            "rbac-compare-says",
+            "rbac-verify",
+            "rbac-verify-says",
+            "rbac-undo",
+            "rbac-after",
+        ],
+    );
+    assert!(!steps.contains("== stage 4"), "stage 5 runs alone: {steps}");
+
+    let ops = serde_json::json!({"spec": {"bindings": [{"type": "RoleBinding", "namespace": "ops",
+        "role": {"kind": "Role", "name": "edit"}, "subjects": [{"type": "Group", "name": "ops"}]}]}});
+    let view = |s: &str| {
+        serde_json::json!({"spec": {"bindings": [{"type": "ClusterRoleBinding",
+        "role": {"kind": "ClusterRole", "name": "view"}, "subjects": [{"type": "User", "name": s}]}]}})
+    };
+    assert_eq!(
+        stage.sent("PUT", rbacs),
+        vec![
+            serde_json::json!({"rbacs": [ops.clone(), view("barney@example.com")]}),
+            serde_json::json!({"rbacs": [ops.clone(), view("fred@example.com")]}),
+            serde_json::json!({"rbacs": [ops]}),
+        ],
+        "the PUTs keep the binding of the cluster, add one, edit its subject, and take it away"
+    );
+    assert!(
+        stage.tofu_calls().contains("plan"),
+        "stage 5 alone checks the baseline first: {}",
+        stage.tofu_calls()
+    );
+}
+
+#[test]
+fn tiers_sh_stage_5_reads_a_404_of_the_bindings_as_a_cluster_with_none() {
+    let mut stage = baseline_stage();
+    stage.strata(
+        "snapshot cluster:c-a -o rbac.json",
+        0,
+        r#"{"source":{"cluster":{"tiers":{"policy":{"fields":{"rbacs":[{"role":{"kind":"ClusterRole","name":"view"},
+            "subjects":[{"name":"barney@example.com","type":"User"}],"type":"ClusterRoleBinding"}]}}}}}}"#,
+    );
+    let (_, steps) = stage.run("tiers.sh", &["5"]);
+    assert!(
+        steps.contains("PASS  rbac-before") && steps.contains("PASS  rbac-after "),
+        "{steps}"
+    );
+    assert!(
+        steps.contains("FAIL  rbac-add"),
+        "no route answers the PUT here: {steps}"
+    );
+}
+
+#[test]
+fn app_profile_sh_stage_3_makes_two_app_profiles_whose_tiers_differ_in_the_install_order() {
+    let mut stage = Stage::new(serde_json::json!({"project_uid": "p-1"}));
+    // each create gives the next uid: ap-1, then ap-2
+    executable(
+        &stage.path("routes/v1_appProfiles.sh"),
+        "#!/usr/bin/env bash\nn=$(( $(cat \"$FAKE_ROUTES/n\" 2> /dev/null || echo 0) + 1 ))\necho $n > \"$FAKE_ROUTES/n\"\necho \"{\\\"uid\\\":\\\"ap-$n\\\"}\"\n",
+    );
+    stage.route(
+        "/v1/appProfiles/ap-1/tiers",
+        r#"{"spec":{"appTiers":[
+            {"metadata":{"name":"tier1","uid":"t-1"},"spec":{"type":"manifest","version":"1.0.0","installOrder":2}},
+            {"metadata":{"name":"tier2","uid":"t-2"},"spec":{"type":"manifest","version":"1.0.0","installOrder":5}}]}}"#,
+    );
+    stage.route("/v1/appProfiles/ap-1/tiers/t-1", "{}");
+    stage.route("/v1/appProfiles/ap-1", "{}");
+    stage.route("/v1/appProfiles/ap-2", "{}");
+    stage.strata(
+        "snapshot appprofile:ap-1 -o order-a.json",
+        0,
+        r#"{"packs":[{"key":"app/tier1","params":{"installOrder":2}},{"key":"app/tier2","params":{"installOrder":5}}]}"#,
+    );
+    stage.strata(
+        "snapshot appprofile:ap-2 -o order-b.json",
+        0,
+        r#"{"packs":[{"key":"app/tier2","params":{"installOrder":2}},{"key":"app/tier1","params":{"installOrder":5}}]}"#,
+    );
+    stage.strata(
+        "compare order-a.json order-b.json",
+        1,
+        "~ [app  ] tier1                      1.0.0              AUTHORED\n      ~ param installOrder: 2 -> 5\n",
+    );
+
+    let (_, steps) = stage.run("app-profile.sh", &["3"]);
+    passed(
+        &steps,
+        &[
+            "order-a-create",
+            "order-b-create",
+            "order-a-tiers",
+            "order-a-record",
+            "order-a-params",
+            "order-b-record",
+            "order-b-params",
+            "order-compare",
+            "order-compare-says",
+            "order-update",
+            "order-update-verify",
+            "order-a-delete",
+            "order-b-delete",
+        ],
+    );
+    let creates: Vec<_> = stage
+        .sent("POST", "/v1/appProfiles")
+        .iter()
+        .map(|b| {
+            b["spec"]["template"]["appTiers"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|t| (t["name"].clone(), t["installOrder"].clone()))
+                .collect::<Vec<_>>()
+        })
+        .collect();
+    assert_eq!(
+        creates,
+        [
+            [("tier1".into(), 2.into()), ("tier2".into(), 5.into())],
+            [("tier1".into(), 5.into()), ("tier2".into(), 2.into())],
+        ],
+        "the same two tiers, with the orders in the other order"
+    );
+    let bodies = stage.sent("POST", "/v1/appProfiles");
+    assert_eq!(
+        bodies[0]["spec"]["template"]["appTiers"],
+        bodies[1]["spec"]["template"]["appTiers"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .zip([2, 5])
+            .map(|(t, o)| {
+                let mut t = t.clone();
+                t["installOrder"] = o.into();
+                t
+            })
+            .collect::<serde_json::Value>(),
+        "the tiers differ in the install order alone"
+    );
+}
+
+#[test]
+fn cluster_group_sh_stage_3_changes_the_cpu_limit_of_the_group_and_puts_it_back() {
+    let mut outputs = baseline_outputs();
+    outputs["cluster_group_uid"] = "g-1".into();
+    outputs["member_cluster_uid"] = "m-1".into();
+    let mut stage = Stage::new(outputs);
+    stage.strata(
+        "snapshot clustergroup:g-1 -o limit.json",
+        0,
+        r#"{"source":{"cluster":{"tiers":{"policy":{"fields":{"limitConfig":{"cpu":6,"cpuMilliCore":6000}}}}}}}"#,
+    );
+    stage.strata(
+        "verify limit.json",
+        0,
+        "  cluster tiers policy CHANGED, labels unchanged\n",
+    );
+    stage.strata(
+        "compare limit.json clustergroup:g-1 --json",
+        0,
+        r#"{"clusterTiers":[{"tier":"policy","same":false,"diff":[
+            {"op":"changed","path":"limitConfig.cpu"},{"op":"changed","path":"limitConfig.cpuMilliCore"}]}]}"#,
+    );
+    stage.strata(
+        "compare limit.json clustergroup:g-1",
+        0,
+        "        ~ policy.limitConfig.cpuMilliCore: 6000 -> 4000\n",
+    );
+
+    let (_, steps) = stage.run("cluster-group.sh", &["3"]);
+    passed(
+        &steps,
+        &[
+            "limit-record",
+            "limit-before",
+            "limit-verify",
+            "limit-verify-says",
+            "limit-compare",
+            "limit-compare-says",
+            "limit-compare-tier",
+        ],
+    );
+    assert!(
+        steps.contains("FAIL  limit-undone"),
+        "the stand-in still gives a changed tier after the undo, and the check sees it: {steps}"
+    );
+    let applies: Vec<String> = stage
+        .tofu_calls()
+        .lines()
+        .filter(|l| l.contains("apply"))
+        .map(String::from)
+        .collect();
+    assert!(
+        applies[0].contains("-var cluster_group=true -var group_cpu_millicore=4000"),
+        "{applies:?}"
+    );
+    assert!(
+        applies[1].contains("-var cluster_group=true") && !applies[1].contains("group_cpu"),
+        "the second apply gives the default limit again: {applies:?}"
+    );
+}
+
+/// An `oras` that logs its arguments to $FAKE_AWS/oras.log, and prints a digest for a push.
+const FAKE_ORAS: &str = r#"#!/usr/bin/env bash
+echo "$*" >> "$FAKE_AWS/oras.log"
+[ "$1" = push ] && echo "Digest: sha256:$(printf '%s' "$*" | sha256sum | cut -c1-64)"
+exit 0
+"#;
+
+#[test]
+fn registry_sh_step_3b_deletes_the_tag_that_the_profile_pins_and_pushes_it_again() {
+    let mut stage = Stage::new(serde_json::json!({
+        "project_uid": "p-1", "cluster_uid": "c-a", "region": "us-east-2",
+        "aws_profile": "spectro-admin", "owned_registry_uid": "reg-1",
+        "owned_registry_name": "strata-live-registry", "owned_registry_host": "host.example",
+        "owned_repository": "host.example/strata/strata-live-pack",
+        "owned_pack_name": "strata-live-pack", "owned_profile_uid": "own-1",
+    }));
+    let bin = stage.path("bin");
+    executable(&bin.join("aws"), FAKE_AWS);
+    executable(&bin.join("oras"), FAKE_ORAS);
+    std::fs::write(stage.path("aws/list-images"), "[]\n").unwrap();
+    // the profile route of the stand-in keeps the flag, so the wait for the clear ends at once
+    stage.env("INVALID_MINUTES", "0");
+    // each read of the sync status gives a new run time, so each sync ends at once
+    stage.route("/v1/registries/oci/reg-1/ecr/sync", "{}");
+    executable(
+        &stage.path("routes/v1_registries_oci_reg-1_ecr_sync_status.sh"),
+        "#!/usr/bin/env bash\necho \"{\\\"status\\\":\\\"Completed\\\",\\\"lastRunTime\\\":\\\"$(date +%s%N)\\\"}\"\n",
+    );
+    stage.route(
+        "/v1/clusterprofiles/own-1",
+        r#"{"spec":{"published":{"packs":[{"name":"strata-live-pack","tag":"1.0.9",
+            "isInvalid":true,"inValidReason":"strata-live-pack 1.0.9 tag is deleted"}]}}}"#,
+    );
+    stage.strata("verify profile-1.json*", 1, "DRIFT\n");
+    stage.strata(
+        "snapshot own-1 -o deleted-before.json",
+        0,
+        r#"{"root":"aaa","packs":[{"key":"addon/strata-live-pack"}]}"#,
+    );
+    stage.strata(
+        "snapshot own-1 -o deleted-now.json",
+        0,
+        r#"{"root":"aaa","packs":[{"key":"addon/strata-live-pack","invalid":true,
+            "invalidReason":"strata-live-pack 1.0.9 tag is deleted"}]}"#,
+    );
+    stage.strata(
+        "verify deleted-before.json",
+        0,
+        "INVALID: Palette marks pack addon/strata-live-pack invalid now (strata-live-pack 1.0.9 tag is deleted)\n",
+    );
+
+    let (o, steps) = stage.run("registry.sh", &[]);
+    // the stand-ins give no OCI Helm registry, so the script stops at step 5
+    assert_eq!(o.status.code(), Some(2), "{steps}{}", text(&o.stderr));
+    assert!(steps.contains("== 3b."), "{steps}");
+    passed(
+        &steps,
+        &[
+            "push-del",
+            "sync-del-1",
+            "del-record",
+            "del-tag",
+            "sync-del-2",
+            "del-doc",
+            "del-record-now",
+            "del-record-flag",
+            "del-record-root",
+            "del-verify-says",
+            "push-del-again",
+            "sync-del-3",
+            "del-doc-after",
+            "del-tag-end",
+            "sync-del-4",
+        ],
+    );
+    for seen in [
+        "del-flag ",
+        "del-doc-fields ",
+        "del-verify ",
+        "del-cleared ",
+    ] {
+        assert!(steps.contains(&format!("SEEN  {seen}")), "{seen}: {steps}");
+    }
+    let fields = std::fs::read_to_string(stage.path("out/del-doc-fields.out")).unwrap();
+    assert!(
+        fields.contains(r#""isInvalid":true"#) && fields.contains("tag is deleted"),
+        "{fields}"
+    );
+
+    let aws = std::fs::read_to_string(stage.path("aws/calls.log")).unwrap();
+    let deletes: Vec<&str> = aws
+        .lines()
+        .filter(|l| l.contains("batch-delete-image"))
+        .collect();
+    assert_eq!(
+        deletes.len(),
+        2,
+        "the delete, then the delete at the end: {aws}"
+    );
+    assert!(
+        deletes
+            .iter()
+            .all(|l| l
+                .contains("--repository-name strata/strata-live-pack --image-ids imageTag=1.0.9")),
+        "{aws}"
+    );
+    let oras = std::fs::read_to_string(stage.path("aws/oras.log")).unwrap();
+    assert_eq!(
+        oras.matches("push host.example/strata/strata-live-pack:1.0.9 ")
+            .count(),
+        2,
+        "the push, then the push again: {oras}"
+    );
+    let tofu = stage.tofu_calls();
+    let pins: Vec<&str> = tofu
+        .lines()
+        .filter(|l| l.contains("owned_pack_profile=true"))
+        .collect();
+    assert!(
+        pins.iter().any(|l| l.contains(
+            "-var owned_pack_profile=true -var owned_pack_version=1.0.9 -var owned_pack_tag=1.0.9"
+        )),
+        "{tofu}"
+    );
+    let back = pins
+        .iter()
+        .rposition(|l| !l.contains("owned_pack_version"))
+        .unwrap();
+    let pin = pins
+        .iter()
+        .position(|l| l.contains("owned_pack_version=1.0.9"))
+        .unwrap();
+    assert!(
+        back > pin,
+        "the profile goes back to 1.0.0 after the step: {tofu}"
+    );
+}
+
+#[test]
+fn repave_sh_stage_8_asks_palette_about_a_variable_in_a_repave_key_with_and_without_its_value() {
+    let mut outputs = baseline_outputs();
+    outputs["next_profile_uid"] = "n-1".into();
+    let mut stage = Stage::new(outputs);
+    stage.route(
+        "/v1/spectroclusters/c-a",
+        r#"{"metadata":{"name":"fred"},"status":{"state":"Running"}}"#,
+    );
+    stage.route(
+        "/v1/clusterprofiles/n-1",
+        r#"{"metadata":{"uid":"n-1"},"spec":{"published":{"packs":[{"name":"kubernetes","tag":"1.36.2",
+            "type":"spectro","layer":"k8s","values":"- 'chmod {{.spectro.var.strata_mode}} /var/lib/kubelet/config.yaml'\n"}]}}}"#,
+    );
+    stage.route(
+        "/v1/spectroclusters/c-a/validate/repave",
+        r#"{"isRepaveRequired":true,"reasons":[{"code":"PackValuesUpdated","message":"Pack 'kubernetes' values are updated",
+            "pack":{"diffConfigKeys":["kubeadmconfig.postKubeadmCommands"]}}]}"#,
+    );
+    stage.strata(
+        "snapshot n-1 -o next-before.json",
+        0,
+        r#"{"packs":[{"layer":"k8s","values":"- 'chmod 600 /var/lib/kubelet/config.yaml'\n"}]}"#,
+    );
+    stage.strata(
+        "snapshot n-1 -o next-variable.json",
+        0,
+        r#"{"packs":[{"layer":"k8s","values":"- 'chmod {{.spectro.var.strata_mode}} /var/lib/kubelet/config.yaml'\n"}]}"#,
+    );
+    stage.strata(
+        "compare cluster:c-a/strata-live-profile n-1 --repave --json",
+        1,
+        r#"{"paletteRepave":{"required":true}}"#,
+    );
+
+    let (o, steps) = stage.run("repave.sh", &["8"]);
+    assert_eq!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
+    assert!(!steps.contains("FAIL"), "{steps}");
+    passed(
+        &steps,
+        &[
+            "var-command",
+            "var-record",
+            "var-in-values",
+            "var-control",
+            "var-control-says",
+            "var-undone",
+        ],
+    );
+    for seen in [
+        "var-strata ",
+        "var-strata-answer ",
+        "var-none ",
+        "var-default ",
+    ] {
+        assert!(steps.contains(&format!("SEEN  {seen}")), "{seen}: {steps}");
+    }
+    let variables: Vec<_> = stage
+        .sent("POST", "/v1/spectroclusters/c-a/validate/repave")
+        .iter()
+        .map(|b| b["profiles"][0]["variables"].clone())
+        .collect();
+    assert_eq!(
+        variables,
+        [
+            serde_json::json!([]),
+            serde_json::json!([{"name": "strata_mode", "value": "600"}]),
+            serde_json::json!([{"name": "strata_mode", "value": "644"}]),
+        ],
+        "no variables, the default, and the control"
+    );
+    let applies: Vec<String> = stage
+        .tofu_calls()
+        .lines()
+        .filter(|l| l.contains("apply"))
+        .map(|l| {
+            l.split(" -var ")
+                .skip(1)
+                .filter(|v| !v.starts_with("immutable_profiles"))
+                .collect::<Vec<_>>()
+                .join(" ")
+        })
+        .collect();
+    assert_eq!(
+        applies,
+        [
+            "next_variable=true",
+            "next_variable=true next_variable_in_values=true",
+            "next_variable=true",
+            "",
+        ],
+        "the variable before its use, and its use away before the variable"
+    );
+}
+
+#[test]
+fn registry_move_nodes_sh_moves_the_os_pack_of_the_release_and_cluster_a_takes_it() {
+    let mut stage = Stage::new(baseline_outputs());
+    stage.env("WATCH_MINUTES", "0");
+    stage.route(
+        "/v1/spectroclusters/c-a",
+        r#"{"metadata":{"name":"fred"},"status":{"state":"Running"},"spec":{"cloudType":"aws",
+            "cloudConfigRef":{"uid":"cc-1"},"clusterProfileTemplates":[{"uid":"r-1"}]}}"#,
+    );
+    stage.route(
+        "/v1/cloudconfigs/aws/cc-1",
+        r#"{"spec":{"machinePoolConfig":[]}}"#,
+    );
+    stage.route("/v1/spectroclusters/c-a/profiles/packs/manifests", "{}");
+    stage.route("/v1/spectroclusters/c-a/profiles", "{}");
+    stage.route(
+        "/v1/clusterprofiles/r-1",
+        r#"{"metadata":{"uid":"r-1"},"spec":{"published":{"packs":[{"name":"ubuntu-aws","tag":"24.04","type":"oci"}]}}}"#,
+    );
+    stage.route("/v1/clusterprofiles/r-1/packs/manifests", "{}");
+    std::fs::create_dir_all(stage.path("out")).unwrap();
+    std::fs::write(
+        stage.path("out/release-0.json"),
+        r#"{"packs":[{"layer":"os","version":"24.04","values":"os: values\n","registryUid":"reg-a","type":"spectro"}]}"#,
+    )
+    .unwrap();
+    stage.strata(
+        "snapshot r-1 -o release-moved.json",
+        0,
+        r#"{"source":{"uid":"r-1"},"packs":[{"layer":"os","version":"24.04","values":"os: values\n","registryUid":"reg-b","type":"oci"}]}"#,
+    );
+    stage.strata(
+        "compare cluster:c-a/strata-live-profile r-1 --repave --json",
+        1,
+        r#"{"packs":[{"key":"os/ubuntu-aws","impact":{"level":"repave"}}],"paletteRepave":{"required":false,"reasons":[]}}"#,
+    );
+    stage.strata(
+        "snapshot cluster:c-a -o cluster-moved.json",
+        0,
+        r#"{"packs":[{"layer":"os","registryUid":"reg-b"}]}"#,
+    );
+    stage.strata(
+        "snapshot cluster:c-a",
+        0,
+        r#"{"source":{"cluster":{"repavePending":false}}}"#,
+    );
+
+    let (o, steps) = stage.run("registry-move-nodes.sh", &["2"]);
+    assert_eq!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
+    assert!(!steps.contains("FAIL"), "{steps}");
+    passed(
+        &steps,
+        &[
+            "move-record",
+            "move-same-uid",
+            "move-identity",
+            "take",
+            "after-record",
+            "after-runs",
+            "undo-take",
+            "undo-baseline",
+        ],
+    );
+    for seen in [
+        "move-compare ",
+        "move-impact ",
+        "move-palette ",
+        "move-reasons ",
+        "replaced ",
+        "waits ",
+    ] {
+        assert!(steps.contains(&format!("SEEN  {seen}")), "{seen}: {steps}");
+    }
+    let applies: Vec<&str> = stage
+        .tofu_calls()
+        .lines()
+        .filter(|l| l.contains("apply"))
+        .map(|l| {
+            if l.contains("move_os_registry=true") {
+                "move"
+            } else {
+                "back"
+            }
+        })
+        .collect();
+    assert_eq!(applies, ["move", "back"], "{}", stage.tofu_calls());
+    assert_eq!(
+        stage.sent("PUT", "/v1/spectroclusters/c-a/profiles").len(),
+        2,
+        "cluster A takes the move, then the release back"
+    );
+}
+
+#[test]
+fn registry_move_nodes_sh_stops_before_the_undo_when_a_repave_waits_for_approval() {
+    let mut stage = Stage::new(baseline_outputs());
+    stage.strata(
+        "snapshot cluster:c-a",
+        0,
+        r#"{"source":{"cluster":{"repavePending":true}}}"#,
+    );
+    let (_, steps) = stage.run("registry-move-nodes.sh", &["4"]);
+    assert!(
+        steps.contains("a repave of cluster A waits for approval"),
+        "{steps}"
+    );
+    assert!(
+        !stage.tofu_calls().contains("apply"),
+        "no apply: {}",
+        stage.tofu_calls()
+    );
 }

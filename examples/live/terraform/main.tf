@@ -26,11 +26,27 @@ locals {
     for p in [data.spectrocloud_pack.os, data.spectrocloud_pack.k8s, data.spectrocloud_pack.cni, data.spectrocloud_pack.csi] :
     { name = p.name, tag = p.version, uid = p.id, values = p.values }
   ]
+  # The packs of version 1.0.0. With move_os_registry, the OS pack comes from move_registry_name
+  # at the same version, with the same values (registry-move-nodes.sh, #135).
+  release_version_packs = [
+    for p in local.release_packs :
+    var.move_os_registry && p.name == data.spectrocloud_pack.os.name
+    ? merge(p, { uid = data.spectrocloud_pack.os_moved[0].id, type = "oci", registry_uid = data.spectrocloud_registry.move[0].id })
+    : merge(p, { type = null, registry_uid = null })
+  ]
   # The one difference between the two versions.
   next_csi_values = replace(data.spectrocloud_pack.csi.values, local.cloud.csi_reclaim, local.cloud.csi_next)
+  # With next_variable_in_values, a kubeadm command of the Kubernetes pack of 1.0.1 reads the
+  # profile variable strata_mode in place of its 600 (repave.sh, stage 8). The default of the
+  # variable is 600, so the command that it gives is the command of 1.0.0.
+  next_k8s_values = var.next_variable_in_values ? replace(data.spectrocloud_pack.k8s.values,
+    "chmod 600 /var/lib/kubelet/config.yaml", "chmod {{.spectro.var.strata_mode}} /var/lib/kubelet/config.yaml"
+  ) : data.spectrocloud_pack.k8s.values
   next_packs = [
     for p in local.release_packs :
-    p.name == data.spectrocloud_pack.csi.name ? merge(p, { values = local.next_csi_values }) : p
+    p.name == data.spectrocloud_pack.csi.name ? merge(p, { values = local.next_csi_values }) : (
+      p.name == data.spectrocloud_pack.k8s.name ? merge(p, { values = local.next_k8s_values }) : p
+    )
   ]
 
   # The add-on profile's one layer: a ConfigMap, so it installs anywhere and an edit to it changes
@@ -103,12 +119,14 @@ resource "spectrocloud_cluster_profile" "release" {
   skip_destroy = var.immutable_profiles
 
   dynamic "pack" {
-    for_each = local.release_packs
+    for_each = local.release_version_packs
     content {
-      name   = pack.value.name
-      tag    = pack.value.tag
-      uid    = pack.value.uid
-      values = pack.value.values
+      name         = pack.value.name
+      tag          = pack.value.tag
+      uid          = pack.value.uid
+      type         = pack.value.type
+      registry_uid = pack.value.registry_uid
+      values       = pack.value.values
     }
   }
 
@@ -132,6 +150,21 @@ resource "spectrocloud_cluster_profile" "next" {
       tag    = pack.value.tag
       uid    = pack.value.uid
       values = pack.value.values
+    }
+  }
+
+  # The profile variable of repave.sh, stage 8, while next_variable is set.
+  dynamic "profile_variables" {
+    for_each = var.next_variable ? [1] : []
+    content {
+      variable {
+        name          = "strata_mode"
+        display_name  = "strata mode"
+        format        = "string"
+        description   = "The mode of a kubeadm command, for the repave check of a variable"
+        default_value = "600"
+        required      = false
+      }
     }
   }
 
@@ -377,8 +410,15 @@ resource "spectrocloud_cluster_profile" "owned_helm" {
 }
 
 data "spectrocloud_registry" "move" {
-  count = var.registry_move ? 1 : 0
+  count = var.registry_move || var.move_os_registry ? 1 : 0
   name  = var.move_registry_name
+}
+
+data "spectrocloud_pack" "os_moved" {
+  count        = var.move_os_registry ? 1 : 0
+  name         = local.cloud.os_pack
+  version      = local.os_version
+  registry_uid = data.spectrocloud_registry.move[0].id
 }
 
 data "spectrocloud_pack" "csi_oci" {
