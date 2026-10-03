@@ -199,8 +199,9 @@ pub struct CandidateLayer {
     /// Pack version. For a `manifest` layer, the version that Palette gives its own manifest
     /// pack: `strata candidate` copies it from the record.
     pub version: String,
-    /// Layer: os, k8s, cni, csi, addon. Defaults to the registry's. A `manifest` layer takes
-    /// only `addon`, the layer that Palette gives each manifest pack.
+    /// Layer: os, k8s, cni, csi, addon. Defaults to the registry's. Palette takes the layer
+    /// from the registry, so a layer from a registry takes only that layer. A `manifest` layer
+    /// takes only `addon`, the layer that Palette gives each manifest pack.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub layer: Option<String>,
     /// `manifest` for a layer of manifests from no registry: it names no registry, and it needs
@@ -1246,9 +1247,6 @@ struct ResolvedLayer {
     pack_ref: Value,
     /// The entry of the manifests document.
     entry: Value,
-    /// The layer that Palette gives the pack: the layer of the pack in its registry, not the
-    /// layer of the request.
-    palette_layer: String,
 }
 
 /// The pack reference and the manifests entry of the layer `l` with the fields `f`. The pack
@@ -1416,11 +1414,7 @@ impl<A: PaletteApi> Resolver<'_, A> {
             pack_ref["annotations"] = json!({ "ociRegistryProviderType": t });
         }
         // the pack that Palette makes has no cloud type, so each cloud takes it
-        Ok(ResolvedLayer {
-            pack_ref,
-            entry,
-            palette_layer: UNSYNCED_LAYER.to_string(),
-        })
+        Ok(ResolvedLayer { pack_ref, entry })
     }
 
     /// Resolve the layer `i` from `summary`, the entry of its version in the listing of the
@@ -1519,15 +1513,23 @@ impl<A: PaletteApi> Resolver<'_, A> {
             .or_else(|| text(summary, "/spec/values"))
             .or(pack_values)
             .unwrap_or_default();
-        let layer = l
-            .layer
-            .clone()
-            .or_else(|| text(summary, "/spec/layer"))
-            .or_else(|| text(&entity, "/layer"))
+        // Palette gives the pack the layer of the registry, and drops the layer of the request
+        // with no error, so another layer in the file gives a root that the published version
+        // does not have
+        let registry_layer = text(summary, "/spec/layer").or_else(|| text(&entity, "/layer"));
+        if let (Some(given), Some(theirs)) = (l.layer.as_deref(), registry_layer.as_deref())
+            && given != theirs
+        {
+            return Err(self.invalid(format!(
+                "layer {} ({}) has the layer {given}, and its registry gives the layer {theirs}; \
+                 Palette takes the layer from the registry, so remove layer or set it to {theirs}",
+                i + 1,
+                l.name
+            )));
+        }
+        let layer = registry_layer
+            .or_else(|| l.layer.clone())
             .unwrap_or_default();
-        let palette_layer = text(summary, "/spec/layer")
-            .or_else(|| text(&entity, "/layer"))
-            .unwrap_or_else(|| layer.clone());
         let kind = text(summary, "/spec/type").unwrap_or_else(|| "spectro".to_string());
         let digest = text(summary, "/spec/digest").unwrap_or_default();
         let fields = PackFields {
@@ -1556,11 +1558,7 @@ impl<A: PaletteApi> Resolver<'_, A> {
                 pack_ref["annotations"] = json!({ "ociRegistryProviderType": t });
             }
         }
-        Ok(ResolvedLayer {
-            pack_ref,
-            entry,
-            palette_layer,
-        })
+        Ok(ResolvedLayer { pack_ref, entry })
     }
 }
 
@@ -1583,11 +1581,7 @@ fn manifest_layer(
         values: &values,
     };
     let (pack_ref, entry) = pack_documents(l, &fields, manifests);
-    ResolvedLayer {
-        pack_ref,
-        entry,
-        palette_layer: MANIFEST_LAYER.to_string(),
-    }
+    ResolvedLayer { pack_ref, entry }
 }
 
 /// Look each layer's pack up in its registry and build the three documents a published profile
@@ -1617,14 +1611,16 @@ pub fn resolve<A: PaletteApi>(
     };
     let mut refs = Vec::with_capacity(c.layers.len());
     let mut entries = Vec::with_capacity(c.layers.len());
-    let mut palette_layers: Vec<String> = Vec::with_capacity(c.layers.len());
     for i in 0..c.layers.len().min(loaded.layers.len()) {
         let resolved = resolver.layer(i)?;
         refs.push(resolved.pack_ref);
         entries.push(resolved.entry);
-        palette_layers.push(resolved.palette_layer);
     }
-    let known: Vec<Option<&str>> = palette_layers.iter().map(|l| Some(l.as_str())).collect();
+    // each pack reference has the layer that Palette gives the pack
+    let known: Vec<Option<&str>> = refs
+        .iter()
+        .map(|r| r.get("layer").and_then(Value::as_str))
+        .collect();
     check_layers(c, &known).map_err(|message| resolver.invalid(message))?;
     Ok(RawProfile {
         profile: json!({
@@ -2068,19 +2064,6 @@ mod tests {
                 .contains("layer 1 (kubernetes) has the layer k8s"),
             "{err}"
         );
-        // Palette takes the layer from the registry, and not from the file
-        let mut c = stack();
-        c.kind = "add-on".into();
-        c.layers
-            .retain(|l| l.name == "kubernetes" || l.name == "cert-manager");
-        c.layers[0].layer = Some("addon".into());
-        assert!(check(c.clone(), Path::new("c.yaml")).is_ok());
-        let err = resolved(c, &served(&STACK_LAYERS, &clouds)).unwrap_err();
-        assert!(
-            err.to_string()
-                .contains("layer 1 (kubernetes) has the layer k8s"),
-            "{err}"
-        );
         // and a core layer that is not there, which only the registry shows
         let mut c = stack();
         c.layers[0].layer = None;
@@ -2088,6 +2071,51 @@ mod tests {
         layers[0] = "addon";
         let err = resolved(c, &served(&layers, &clouds)).unwrap_err();
         assert!(err.to_string().contains("has no layer os"), "{err}");
+    }
+
+    #[test]
+    fn a_layer_from_a_registry_takes_only_the_layer_of_the_registry() {
+        let palette = served(&STACK_LAYERS, &vec![json!(["aws"]); 5]);
+        // kubernetes first, so that it is layer 1; with no layer on ubuntu-aws, the check of the
+        // file does not know each layer, and does not check the core layers
+        let first = |layer: Option<&str>| {
+            let mut c = stack();
+            c.layers.swap(0, 1);
+            c.layers[0].layer = layer.map(str::to_string);
+            c.layers[1].layer = None;
+            c
+        };
+        let err = resolved(first(Some("addon")), &palette).unwrap_err();
+        let Error::CandidateInvalid { message, .. } = &err else {
+            panic!("not candidate-invalid: {err}");
+        };
+        assert!(
+            message.contains("layer 1 (kubernetes) has the layer addon")
+                && message.contains("its registry gives the layer k8s")
+                && message.contains("Palette takes the layer from the registry"),
+            "{message}"
+        );
+        // the layer of the registry, or no layer, gives the pack the layer of the registry
+        let records: Vec<RawProfile> = [Some("k8s"), None]
+            .into_iter()
+            .map(|layer| resolved(first(layer), &palette).unwrap())
+            .collect();
+        for raw in &records {
+            assert_eq!(raw.profile["spec"]["published"]["packs"][0]["layer"], "k8s");
+            assert_eq!(raw.manifests["spec"]["packs"][0]["spec"]["layer"], "k8s");
+        }
+        assert_eq!(records[0].profile, records[1].profile);
+        // a wrong layer that the type of the profile takes, and that leaves each core layer
+        let mut c = stack();
+        c.layers[4].layer = Some("cni".into());
+        assert!(check(c.clone(), Path::new("c.yaml")).is_ok());
+        let err = resolved(c, &palette).unwrap_err();
+        assert!(
+            err.to_string().contains(
+                "layer 5 (cert-manager) has the layer cni, and its registry gives the layer addon"
+            ),
+            "{err}"
+        );
     }
 
     #[test]

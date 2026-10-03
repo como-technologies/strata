@@ -260,7 +260,8 @@ rules. These rules come from the code of Palette, not from a live run.
 | A `cluster` or `infra` profile has an `os`, a `k8s`, a `cni`, and a `csi` layer. On the cloud `edge-native`, it needs no `csi` layer. | `ErrPackCoreLayersMissing` |
 
 The layer of a pack comes from the pack in its registry, and not from the
-profile. So the last two rules use the layer that the registry gives.
+profile: see [The layer of a pack](./packs.md#the-layer-of-a-pack). So the last
+two rules use the layer that the registry gives.
 
 Palette checks the version, the counts, the names, and the YAML first. It runs
 these checks at the same time, in an order that changes from one request to the

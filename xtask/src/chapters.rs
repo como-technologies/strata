@@ -633,6 +633,14 @@ fn commands(r: &mut Runner) {
         true,
         "strata snapshot --from-candidate add-on.yaml -o add-on.json",
     );
+    // Palette takes the layer of a pack from its registry, so strata refuses another layer
+    r.quiet("sed 's/^  layer: addon$/  layer: cni/' aws-stack.yaml > wrong-layer.yaml");
+    r.step(
+        "candidate-layer-refused",
+        2,
+        true,
+        "strata snapshot --from-candidate wrong-layer.yaml -o wrong-layer.json",
+    );
 
     r.chapter("compare", DEV_ENV);
     r.projects(&[("dev", DEV)]);
