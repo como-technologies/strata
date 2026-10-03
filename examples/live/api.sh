@@ -66,6 +66,10 @@
 #       Make an app profile NAME@1.0.0 with one manifest tier, and print its uid.
 #   api.sh app-profile-edit UID FROM TO
 #       Replace FROM with TO in the manifest of the app profile, by a plain update.
+#   api.sh app-profile-order UID ORDER
+#       Give the first tier of the app profile the install order ORDER, by a plain update of
+#       that tier. The update sends the values and the properties of the tier as they are, and
+#       no manifest, so the manifests of the tier stay.
 #   api.sh app-profile-delete UID
 #   api.sh sync-oci REGISTRY_UID
 #       Ask Palette to read an OCI pack registry in ECR again, and wait until that sync ends.
@@ -480,6 +484,23 @@ app_profile_edit() {
   echo "edited the manifest of tier $tier of app profile $uid"
 }
 
+# app_profile_order UID ORDER: PUT the first tier of the app profile with installOrder ORDER
+app_profile_order() {
+  local uid=${1:-} order=${2:-} tiers tier body
+  [ -n "$uid" ] && [[ "$order" =~ ^[0-9]+$ ]] || die "usage: api.sh app-profile-order UID ORDER"
+  tiers=$(call GET "/v1/appProfiles/$uid/tiers") || return 2
+  tier=$(jq -r '.spec.appTiers[0].metadata.uid // empty' <<<"$tiers")
+  [ -n "$tier" ] || die "the app profile $uid has no tier"
+  body=$(mktemp); trap 'rm -f "${body:-}"' RETURN
+  jq --argjson o "$order" '.spec.appTiers[0] | {name: .metadata.name, version: .spec.version,
+      values: (.spec.values // ""), installOrder: $o, manifests: [],
+      properties: [(.spec.properties // [])[] | {name, value}]}
+    + (if .spec.containerRegistryUid then {containerRegistryUid: .spec.containerRegistryUid} else {} end)' \
+    <<<"$tiers" > "$body"
+  call PUT "/v1/appProfiles/$uid/tiers/$tier" "$body" > /dev/null || return 2
+  echo "tier $tier of app profile $uid has the install order $order"
+}
+
 # app_profile_delete UID
 app_profile_delete() {
   local uid=${1:-}
@@ -649,6 +670,7 @@ case "${1:-}" in
   filter-create) shift; filter_create "$@" ;;
   filter-delete) shift; filter_delete "$@" ;;
   app-profile-edit) shift; app_profile_edit "$@" ;;
+  app-profile-order) shift; app_profile_order "$@" ;;
   app-profile-delete) shift; app_profile_delete "$@" ;;
   edge-host-delete) shift; edge_host_delete "$@" ;;
   sync-oci) shift; sync_oci "$@" ;;

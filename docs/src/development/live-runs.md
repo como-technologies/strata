@@ -776,7 +776,8 @@ cluster, and costs nothing.
 | `delete` | 0 | the app profile is deleted |
 
 No run updates the properties of a tier: the tier of the run is a manifest tier,
-which has none.
+which has none. No run changes the install order of a tier yet:
+`api.sh app-profile-order` makes that change.
 
 ## loop.sh
 

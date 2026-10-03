@@ -111,7 +111,10 @@ profile, or pack version.
     machine image in `imageId`. They are outside the root. A record written
     before this field has none.
   - `params`: the params of the pack on the profile, as a map. For an app tier,
-    its properties: each name and its value.
+    its properties: each name and its value. They also hold `installOrder`, the
+    install order of the tier, and `containerRegistryUid`, each only when
+    Palette gives it. See
+    [Edge hosts, cluster groups, and app profiles](../commands/snapshot/other-objects.md).
   - `values`: the raw values YAML. Palette writes `********` over each value
     whose schema format is `password`. Strata does the same for the packs of a
     draft: see [Secrets in the values](../internals/palette/profiles.md#secrets-in-the-values).
@@ -194,7 +197,7 @@ A comparison of two sides, `a` and `b`.
     version).
   - `paramChanges[]`, only when not empty: `op`, `name`, `old`, and `new` of
     each param that differs. `paramsChanged` is `true` then. For an app tier,
-    the params are its properties.
+    the params are its properties, `installOrder`, and `containerRegistryUid`.
   - `upstreamUnknown`, only when true: a pack from a registry with no upstream
     digest on either side.
 - `upstreamUnknown`, only when it is not empty: the key of each such pack. An

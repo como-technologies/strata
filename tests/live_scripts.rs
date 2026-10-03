@@ -1233,6 +1233,58 @@ fn api_sh_retag_renames_one_pack_tag_in_place_and_keeps_everything_else() {
 }
 
 #[test]
+fn api_sh_app_profile_order_puts_the_first_tier_with_the_order_and_keeps_its_values() {
+    let dir = tempfile::tempdir().unwrap();
+    let (bin, routes) = (dir.path().join("bin"), dir.path().join("routes"));
+    for d in [&bin, &routes] {
+        std::fs::create_dir(d).unwrap();
+    }
+    executable(&bin.join("curl"), FAKE_API_CURL);
+    std::fs::write(
+        routes.join("v1_appProfiles_ap-1_tiers"),
+        r#"{"spec":{"appTiers":[
+            {"metadata":{"name":"web","uid":"t-1"},"spec":{"type":"container","version":"1.0.0",
+              "values":"replicas: 2\n","containerRegistryUid":"cr-1",
+              "properties":[{"name":"port","type":"number","value":"80"}]}},
+            {"metadata":{"name":"config","uid":"t-2"},"spec":{"type":"manifest","version":"1.0.0"}}]}}"#,
+    )
+    .unwrap();
+    std::fs::write(routes.join("v1_appProfiles_ap-1_tiers_t-1"), "{}").unwrap();
+    let run = |args: &[&str]| {
+        Command::new("bash")
+            .arg(live_script("api.sh"))
+            .args(args)
+            .env(
+                "PATH",
+                format!("{}:{}", bin.display(), std::env::var("PATH").unwrap()),
+            )
+            .env("HOME", dir.path())
+            .env("PALETTE_API_KEY", "k")
+            .env("FAKE_ROUTES", &routes)
+            .env("FAKE_LOG", dir.path().join("curl.log"))
+            .output()
+            .unwrap()
+    };
+    let o = run(&["app-profile-order", "ap-1", "2"]);
+    assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
+    let put: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(routes.join("sent/PUT_v1_appProfiles_ap-1_tiers_t-1")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        put,
+        serde_json::json!({"name": "web", "version": "1.0.0", "values": "replicas: 2\n",
+            "installOrder": 2, "manifests": [], "containerRegistryUid": "cr-1",
+            "properties": [{"name": "port", "value": "80"}]}),
+        "the order changes, and the values, the properties, and the registry stay"
+    );
+
+    let o = run(&["app-profile-order", "ap-1", "first"]);
+    assert_eq!(o.status.code(), Some(2));
+    assert!(text(&o.stderr).contains("usage"), "{}", text(&o.stderr));
+}
+
+#[test]
 fn tenant_sh_repave_asks_palette_whether_a_move_to_another_profile_version_repaves() {
     let root = tempfile::tempdir().unwrap();
     let routes = root.path().join("routes");

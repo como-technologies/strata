@@ -343,8 +343,15 @@ impl Runner {
     }
 
     /// The app profile `shop`, or a plain update of it: see [`Tenant::app_profile`].
-    pub fn app_profile(&mut self, project: &str, uid: &str, version: &str, replicas: &str) {
-        self.build(|t| t.app_profile(project, uid, version, replicas));
+    pub fn app_profile(
+        &mut self,
+        project: &str,
+        uid: &str,
+        version: &str,
+        replicas: &str,
+        web_order: u32,
+    ) {
+        self.build(|t| t.app_profile(project, uid, version, replicas, web_order));
     }
 
     /// An app deployment of an app profile: see [`Tenant::app_deployment`].
