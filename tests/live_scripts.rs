@@ -1713,11 +1713,6 @@ impl Stage {
             .collect()
     }
 
-    /// Each call of strata, one line each.
-    fn strata_calls(&self) -> String {
-        std::fs::read_to_string(self.path("strata/calls")).unwrap_or_default()
-    }
-
     /// Each command that OpenTofu ran, one line each.
     fn tofu_calls(&self) -> String {
         std::fs::read_to_string(self.path("tofu.log")).unwrap_or_default()
@@ -2077,7 +2072,12 @@ fn registry_sh_step_3b_deletes_the_tag_that_the_profile_pins_and_pushes_it_again
             "sync-del-4",
         ],
     );
-    for seen in ["del-flag ", "del-doc-fields ", "del-verify ", "del-cleared "] {
+    for seen in [
+        "del-flag ",
+        "del-doc-fields ",
+        "del-verify ",
+        "del-cleared ",
+    ] {
         assert!(steps.contains(&format!("SEEN  {seen}")), "{seen}: {steps}");
     }
     let fields = std::fs::read_to_string(stage.path("out/del-doc-fields.out")).unwrap();
@@ -2091,11 +2091,16 @@ fn registry_sh_step_3b_deletes_the_tag_that_the_profile_pins_and_pushes_it_again
         .lines()
         .filter(|l| l.contains("batch-delete-image"))
         .collect();
-    assert_eq!(deletes.len(), 2, "the delete, then the delete at the end: {aws}");
+    assert_eq!(
+        deletes.len(),
+        2,
+        "the delete, then the delete at the end: {aws}"
+    );
     assert!(
-        deletes.iter().all(|l| l.contains(
-            "--repository-name strata/strata-live-pack --image-ids imageTag=1.0.9"
-        )),
+        deletes
+            .iter()
+            .all(|l| l
+                .contains("--repository-name strata/strata-live-pack --image-ids imageTag=1.0.9")),
         "{aws}"
     );
     let oras = std::fs::read_to_string(stage.path("aws/oras.log")).unwrap();
@@ -2111,8 +2116,9 @@ fn registry_sh_step_3b_deletes_the_tag_that_the_profile_pins_and_pushes_it_again
         .filter(|l| l.contains("owned_pack_profile=true"))
         .collect();
     assert!(
-        pins.iter().any(|l| l
-            .contains("-var owned_pack_profile=true -var owned_pack_version=1.0.9 -var owned_pack_tag=1.0.9")),
+        pins.iter().any(|l| l.contains(
+            "-var owned_pack_profile=true -var owned_pack_version=1.0.9 -var owned_pack_tag=1.0.9"
+        )),
         "{tofu}"
     );
     let back = pins
@@ -2123,7 +2129,10 @@ fn registry_sh_step_3b_deletes_the_tag_that_the_profile_pins_and_pushes_it_again
         .iter()
         .position(|l| l.contains("owned_pack_version=1.0.9"))
         .unwrap();
-    assert!(back > pin, "the profile goes back to 1.0.0 after the step: {tofu}");
+    assert!(
+        back > pin,
+        "the profile goes back to 1.0.0 after the step: {tofu}"
+    );
 }
 
 #[test]
@@ -2230,7 +2239,10 @@ fn registry_move_nodes_sh_moves_the_os_pack_of_the_release_and_cluster_a_takes_i
         r#"{"metadata":{"name":"fred"},"status":{"state":"Running"},"spec":{"cloudType":"aws",
             "cloudConfigRef":{"uid":"cc-1"},"clusterProfileTemplates":[{"uid":"r-1"}]}}"#,
     );
-    stage.route("/v1/cloudconfigs/aws/cc-1", r#"{"spec":{"machinePoolConfig":[]}}"#);
+    stage.route(
+        "/v1/cloudconfigs/aws/cc-1",
+        r#"{"spec":{"machinePoolConfig":[]}}"#,
+    );
     stage.route("/v1/spectroclusters/c-a/profiles/packs/manifests", "{}");
     stage.route("/v1/spectroclusters/c-a/profiles", "{}");
     stage.route(
