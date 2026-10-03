@@ -905,8 +905,24 @@ impl Tenant {
 
     /// The app profile `shop@<version>`, `uid`: a helm tier `web` with the property `replicas`,
     /// and a manifest tier `config`. A second call for the same uid is a plain update, as
-    /// Palette takes one: the uid and the version stay.
-    pub fn app_profile(&self, project: &str, uid: &str, version: &str, replicas: &str) {
+    /// Palette takes one: the uid and the version stay. `web_order` is the install order of
+    /// `web`. Palette gives no `installOrder` for a tier whose order is 0, as for `config`.
+    pub fn app_profile(
+        &self,
+        project: &str,
+        uid: &str,
+        version: &str,
+        replicas: &str,
+        web_order: u32,
+    ) {
+        let mut web = json!({"metadata": {"name": "web", "uid": format!("{uid}1")},
+            "spec": {"type": "helm", "version": "2.1.0", "registryUid": PUBLIC_REPO,
+                "sourceAppTierUid": "64ed000000000000000000a1",
+                "values": "replicaCount: 2\nimage:\n  tag: 2.1.0\n",
+                "properties": [{"name": "replicas", "type": "number", "value": replicas}]}});
+        if web_order > 0 {
+            web["spec"]["installOrder"] = web_order.into();
+        }
         self.write(
             project,
             "v1/dashboard/appProfiles/metadata",
@@ -932,11 +948,7 @@ impl Tenant {
             project,
             &format!("v1/appProfiles/{uid}/tiers"),
             &json!({"spec": {"appTiers": [
-                {"metadata": {"name": "web", "uid": format!("{uid}1")},
-                 "spec": {"type": "helm", "version": "2.1.0", "registryUid": PUBLIC_REPO,
-                    "sourceAppTierUid": "64ed000000000000000000a1",
-                    "values": "replicaCount: 2\nimage:\n  tag: 2.1.0\n",
-                    "properties": [{"name": "replicas", "type": "number", "value": replicas}]}},
+                web,
                 {"metadata": {"name": "config", "uid": format!("{uid}2")},
                  "spec": {"type": "manifest", "version": "1.0.0",
                     "manifests": [{"kind": "manifest", "name": "config",

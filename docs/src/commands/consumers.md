@@ -88,7 +88,7 @@ the consumer is `app`:
 
 The consumer list of the app profile stands alone: strata does no second
 reading, and reads no edge host. The two last lines say why. See
-[An app profile is updated in place](../use-cases/app-profiles.md#4-find-the-app-deployments-before-a-delete).
+[An app profile is updated in place](../use-cases/app-profiles.md#5-find-the-app-deployments-before-a-delete).
 
 ## A cluster that the list does not name
 

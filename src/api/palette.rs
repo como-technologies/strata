@@ -24,6 +24,18 @@ const TAG_FILTER_LISTING: &str = "/v1/filters/metadata?filterType=tag";
 /// The most entries that Palette serves on one page of the audit log. A larger `limit` answers
 /// `500` with the code `InvalidLimit`. The API reference gives 50, but Palette serves 100.
 const AUDIT_PAGE: u32 = 100;
+/// The field of a tier that gives its place in the install of the app profile. Palette installs
+/// the tiers in this order, and does not give the field for a tier whose order is 0.
+const TIER_INSTALL_ORDER: &str = "installOrder";
+/// The field of a container tier that gives the registry of its image.
+const TIER_CONTAINER_REGISTRY: &str = "containerRegistryUid";
+
+/// The install order of a tier, as Palette gives it, or `0` when Palette gives none.
+fn install_order(tier: &Value) -> Value {
+    tier.pointer(&format!("/spec/{TIER_INSTALL_ORDER}"))
+        .cloned()
+        .unwrap_or_else(|| Value::from(0))
+}
 
 /// `(name, uid)` of each entry of a listing: an array, or an object with `items`.
 fn named_entries(listing: &Value) -> Vec<(String, String)> {
@@ -187,11 +199,18 @@ impl<A: PaletteApi> Palette<A> {
         }
     }
 
-    /// An app profile, in the shape of a profile, so that a record of it has packs and a root:
-    /// `GET /v1/appProfiles/{uid}` and `GET /v1/appProfiles/{uid}/tiers`. Each tier is a pack in
-    /// the layer `app`: its type, its version as the tag, its source tier as the pack uid, its
-    /// values, and its properties as the params. The content of each manifest of a tier comes from
+    /// Reads an app profile in the shape of a profile, so that a record of it has packs and a root.
+    ///
+    /// The requests are `GET /v1/appProfiles/{uid}` and `GET /v1/appProfiles/{uid}/tiers`. Each
+    /// tier is a pack in the layer `app`: its type, its version as the tag, its source tier as the
+    /// pack uid, its values, and its properties as the params. The params also hold the install
+    /// order of the tier and the registry of its image, and the packs are in install order, then
+    /// in order of name. The content of each manifest of a tier comes from
     /// `GET /v1/appProfiles/{uid}/tiers/{tierUid}/manifests/{manifestUid}`. A tier has no digest.
+    ///
+    /// # Errors
+    ///
+    /// The error of the first request that fails.
     pub fn fetch_app_profile(&self, uid: &str, progress: &Progress) -> Result<RawProfile> {
         progress.note(&format!("fetching app profile {uid}"));
         let at = query_value(uid);
@@ -203,21 +222,31 @@ impl<A: PaletteApi> Palette<A> {
                 .unwrap_or_default()
                 .to_string()
         };
-        let (mut packs, mut mpacks) = (Vec::new(), Vec::new());
-        for tier in tiers
+        // Palette lists the tiers in the display order of the app profile, not in install order.
+        let mut ordered: Vec<(Value, &Value)> = tiers
             .pointer("/spec/appTiers")
             .and_then(Value::as_array)
             .into_iter()
             .flatten()
-        {
+            .map(|tier| (install_order(tier), tier))
+            .collect();
+        // An order that is not an integer comes first, and the record keeps it as Palette gave it.
+        ordered.sort_by_key(|(order, tier)| (order.as_i64(), text(tier, "/metadata/name")));
+        let (mut packs, mut mpacks) = (Vec::new(), Vec::new());
+        for (order, tier) in ordered {
             let name = text(tier, "/metadata/name");
-            let params: serde_json::Map<String, Value> = tier
+            let mut params: serde_json::Map<String, Value> = tier
                 .pointer("/spec/properties")
                 .and_then(Value::as_array)
                 .into_iter()
                 .flatten()
                 .map(|p| (text(p, "/name"), Value::from(text(p, "/value"))))
                 .collect();
+            params.insert(TIER_INSTALL_ORDER.to_string(), order);
+            let registry = text(tier, &format!("/spec/{TIER_CONTAINER_REGISTRY}"));
+            if !registry.is_empty() {
+                params.insert(TIER_CONTAINER_REGISTRY.to_string(), Value::from(registry));
+            }
             packs.push(serde_json::json!({
                 "name": name, "layer": "app", "type": text(tier, "/spec/type"),
                 "tag": text(tier, "/spec/version"), "version": text(tier, "/spec/version"),

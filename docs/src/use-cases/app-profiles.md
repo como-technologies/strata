@@ -20,9 +20,9 @@ In this example, `dev` has the app profile `shop@1.0.0`, with the helm tier
 of an application.
 
 **Follow along.** `just playground app-profiles-1` serves this tenant on this
-machine, with no key and no cost. A person updates the app profile in step 3,
-and a team deploys it in step 4, so this page has three seeds. Each section
-names the one it needs.
+machine, with no key and no cost. A person updates the app profile in steps 3
+and 4, and a team deploys it in step 5, so this page has four seeds. Each
+section names the one it needs.
 
 ## 1. Record the app profile
 
@@ -31,7 +31,8 @@ names the one it needs.
 ```
 
 Each tier is a pack in the layer `app`. The properties of a tier are its
-params, and the root covers them:
+params, with the install order of the tier as `installOrder`. The root covers
+the params. The record lists the tiers by `installOrder`, then by name:
 
 ```text
 {{#include ../output/app-show.txt}}
@@ -65,7 +66,21 @@ Exit `1`: `DRIFT`. Both sides are `shop@1.0.0` with one uid, so the note says
 the version was edited in place. The `param` line names the property that
 changed.
 
-## 4. Find the app deployments before a delete
+## 4. A person changes the install order of a tier
+
+**Follow along.** `just playground app-profiles-3` is the same tenant after a
+person gives the `web` tier the install order `1`, so that it installs after
+`config`.
+
+```text
+{{#include ../output/app-order-compare.txt}}
+```
+
+Exit `1`. The install order changes what a deployment of the app profile does,
+so the root covers it. The `param installOrder` line names the change, with the
+replicas of step 3.
+
+## 5. Find the app deployments before a delete
 
 Palette refuses the delete of an app profile while an app deployment uses it.
 Before the team deploys `shop@1.0.0`, no deployment uses it:
@@ -76,7 +91,7 @@ Before the team deploys `shop@1.0.0`, no deployment uses it:
 
 Exit `0`: a delete can go on.
 
-**Follow along.** `just playground app-profiles-3` is the same tenant after a
+**Follow along.** `just playground app-profiles-4` is the same tenant after a
 team deploys `shop@1.0.0` as `shop-dev`.
 
 ```text
@@ -107,7 +122,8 @@ it to another version. The record from step 1 gives the same answer as the ref:
 The live run of `just live-app-profile` updates the manifest of a tier. It shows
 that a plain update keeps the uid and the version, and that the record drifts
 with the tier `AUTHORED`. A property is part of the same tier, and the root
-covers it as it covers the manifest. Palette names the app deployments of an
-app profile, and refuses the delete of an app profile while an app deployment
-uses it. No live run shows these two rules. See
+covers it as it covers the manifest. No live run changes the install order of a
+tier. Palette names the app deployments of an app profile, and refuses the
+delete of an app profile while an app deployment uses it. No live run shows
+these two rules. See
 [Edge hosts, cluster groups, and app profiles](../internals/palette/other-objects.md#app-profiles).

@@ -2099,7 +2099,7 @@ fn use_cases(r: &mut Runner) {
     // An app profile, and a plain update of it
     r.chapter("app-profiles", DEV_ENV);
     r.projects(&[("dev", DEV)]);
-    r.app_profile(DEV, SHOP, "1.0.0", "2");
+    r.app_profile(DEV, SHOP, "1.0.0", "2", 0);
     r.serve_here(); // state 1: shop@1.0.0
     r.step(
         "app-record",
@@ -2134,7 +2134,7 @@ fn use_cases(r: &mut Runner) {
         "strata consumers appprofile:shop@1.0.0",
     );
     // a plain update: the replicas of the web tier, with the same uid and version
-    r.app_profile(DEV, SHOP, "1.0.0", "3");
+    r.app_profile(DEV, SHOP, "1.0.0", "3", 0);
     r.serve_here(); // state 2: the web tier of shop@1.0.0 has another replica count
     r.step(
         "app-verify",
@@ -2142,9 +2142,18 @@ fn use_cases(r: &mut Runner) {
         false,
         "strata verify runs/shop.json --allow-no-digest",
     );
+    // a plain update of the install order: web installs after config
+    r.app_profile(DEV, SHOP, "1.0.0", "3", 1);
+    r.serve_here(); // state 3: the web tier of shop@1.0.0 has the install order 1
+    r.step(
+        "app-order-compare",
+        1,
+        false,
+        "strata compare runs/shop.json appprofile:shop@1.0.0",
+    );
     // a team deploys the app profile, so Palette refuses its delete
     r.app_deployment(DEV, SHOP_DEV, "shop-dev", SHOP);
-    r.serve_here(); // state 3: the app deployment shop-dev uses shop@1.0.0
+    r.serve_here(); // state 4: the app deployment shop-dev uses shop@1.0.0
     r.step(
         "app-consumers",
         1,
