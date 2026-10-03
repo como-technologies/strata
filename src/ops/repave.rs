@@ -1,8 +1,8 @@
 //! `compare --repave`: ask Palette whether a change replaces the nodes of a cluster.
 //!
 //! The change goes from what the cluster runs to a profile version, or to the update that waits
-//! for the cluster. `compare
-//! --validate` sends the same body for a profile version: see the `validate` module.
+//! for the cluster. `compare --validate` sends the same body for a profile version: see the
+//! `validate` module.
 
 use std::collections::BTreeSet;
 

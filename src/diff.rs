@@ -940,11 +940,15 @@ pub(crate) fn macros_compared(a: &Snapshot, b: &Snapshot) -> bool {
 }
 
 /// Each macro whose value digest differs between two records, by name: see
-/// [`Diff::macros_changed`]. Empty unless both records hold the digests.
+/// [`Diff::macros_changed`]. Empty unless `macros_compared` is true: both records hold the
+/// digests.
 pub fn macros_changed(a: &Snapshot, b: &Snapshot) -> Vec<String> {
-    let (Some(x), Some(y)) = (a.source.macro_values(), b.source.macro_values()) else {
+    if !macros_compared(a, b) {
         return Vec::new();
-    };
+    }
+    let none = BTreeMap::new();
+    let x = a.source.macro_values().unwrap_or(&none);
+    let y = b.source.macro_values().unwrap_or(&none);
     let names: std::collections::BTreeSet<&String> = x.keys().chain(y.keys()).collect();
     names
         .into_iter()
