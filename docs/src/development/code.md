@@ -82,6 +82,30 @@ where each module goes.
   sort and filter the same list, make one function and call it from both.
 - Do not write a closure twice in one function under one name.
 
+## Comments
+
+The comments follow the conventions of the Rust standard library, in
+ASD-STE100.
+
+- The first line of a doc comment is one sentence that says what the item does.
+  Rustdoc shows it in the index of the module. Put the details in the next
+  paragraph.
+- Name each argument whose role its name and type do not show, in the prose and
+  in backticks: "`fetched_at` is the time that the record states, in RFC 3339".
+  Do not write a list of each argument.
+- A public function that returns `Result` has a `# Errors` section: the error
+  kinds that it gives, and when.
+- A function that can panic has a `# Panics` section. A panic on input from a
+  user or from Palette is a bug: see [Errors](#errors).
+- A main entry point of the library has an `# Examples` section. The example
+  runs as a test.
+- Link each type, function, and module that a comment names, as
+  `` [`Snapshot`] ``. `just lint` refuses a broken link.
+- An inline comment says why, not what. Write one above an algorithm, with its
+  steps or the rule that it keeps. Write one at a constant, a fact of Palette,
+  or a workaround. Do not write a comment that says again what the code says.
+- Do not keep code in a comment. Git keeps the history.
+
 ## Tests
 
 - Each bug fix has a test that fails without the fix.
