@@ -23,7 +23,9 @@
 #                              version TARGET_UID in place of CURRENT_UID: Palette's own check,
 #                              given TARGET_UID's pack values (not its manifests). With PACK FROM
 #                              TO, the text FROM in PACK's values is replaced by TO first, as a
-#                              control that changes what a node runs. Prints each reason; exit 0
+#                              control that changes what a node runs. REPAVE_VARIABLES, a JSON
+#                              list such as '[{"name": "x", "value": "1"}]', is the variables[]
+#                              of the request; the default is none. Prints each reason; exit 0
 #                              for no repave, 1 for a repave, 2 when the answer cannot be read
 #   tenant.sh digest KIND REGISTRY_UID NAME VERSION
 #                              the digest a helm or oci registry itself serves for one pack
@@ -135,8 +137,9 @@ repave() {
       "$tmp/profile" > /dev/null || die "pack $pack of $target has no values containing the text to replace"
     what="$what with $pack values edited"
   fi
-  jq --arg current "$current" --arg p "$pack" --arg from "$from" --arg to "$to" '
-    {profiles: [{uid: $current, replaceWithProfile: .metadata.uid, variables: [],
+  jq --arg current "$current" --arg p "$pack" --arg from "$from" --arg to "$to" \
+    --argjson vars "${REPAVE_VARIABLES:-[]}" '
+    {profiles: [{uid: $current, replaceWithProfile: .metadata.uid, variables: $vars,
       packValues: [.spec.published.packs[] | {name, tag, type, values: (.values // ""), manifests: []}
         | if $p != "" and .name == $p then .values |= (split($from) | join($to)) else . end]}]}' \
     "$tmp/profile" > "$tmp/body"

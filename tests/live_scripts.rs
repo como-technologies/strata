@@ -2085,3 +2085,98 @@ fn registry_sh_step_3b_deletes_the_tag_that_the_profile_pins_and_pushes_it_again
         .unwrap();
     assert!(back > pin, "the profile goes back to 1.0.0 after the step: {tofu}");
 }
+
+#[test]
+fn repave_sh_stage_8_asks_palette_about_a_variable_in_a_repave_key_with_and_without_its_value() {
+    let mut outputs = baseline_outputs();
+    outputs["next_profile_uid"] = "n-1".into();
+    let mut stage = Stage::new(outputs);
+    stage.route(
+        "/v1/spectroclusters/c-a",
+        r#"{"metadata":{"name":"fred"},"status":{"state":"Running"}}"#,
+    );
+    stage.route(
+        "/v1/clusterprofiles/n-1",
+        r#"{"metadata":{"uid":"n-1"},"spec":{"published":{"packs":[{"name":"kubernetes","tag":"1.36.2",
+            "type":"spectro","layer":"k8s","values":"- 'chmod {{.spectro.var.strata_mode}} /var/lib/kubelet/config.yaml'\n"}]}}}"#,
+    );
+    stage.route(
+        "/v1/spectroclusters/c-a/validate/repave",
+        r#"{"isRepaveRequired":true,"reasons":[{"code":"PackValuesUpdated","message":"Pack 'kubernetes' values are updated",
+            "pack":{"diffConfigKeys":["kubeadmconfig.postKubeadmCommands"]}}]}"#,
+    );
+    stage.strata(
+        "snapshot n-1 -o next-before.json",
+        0,
+        r#"{"packs":[{"layer":"k8s","values":"- 'chmod 600 /var/lib/kubelet/config.yaml'\n"}]}"#,
+    );
+    stage.strata(
+        "snapshot n-1 -o next-variable.json",
+        0,
+        r#"{"packs":[{"layer":"k8s","values":"- 'chmod {{.spectro.var.strata_mode}} /var/lib/kubelet/config.yaml'\n"}]}"#,
+    );
+    stage.strata(
+        "compare cluster:c-a/strata-live-profile n-1 --repave --json",
+        1,
+        r#"{"paletteRepave":{"required":true}}"#,
+    );
+
+    let (o, steps) = stage.run("repave.sh", &["8"]);
+    assert_eq!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
+    assert!(!steps.contains("FAIL"), "{steps}");
+    passed(
+        &steps,
+        &[
+            "var-command",
+            "var-record",
+            "var-in-values",
+            "var-control",
+            "var-control-says",
+            "var-undone",
+        ],
+    );
+    for seen in [
+        "var-strata ",
+        "var-strata-answer ",
+        "var-none ",
+        "var-default ",
+    ] {
+        assert!(steps.contains(&format!("SEEN  {seen}")), "{seen}: {steps}");
+    }
+    let variables: Vec<_> = stage
+        .sent("POST", "/v1/spectroclusters/c-a/validate/repave")
+        .iter()
+        .map(|b| b["profiles"][0]["variables"].clone())
+        .collect();
+    assert_eq!(
+        variables,
+        [
+            serde_json::json!([]),
+            serde_json::json!([{"name": "strata_mode", "value": "600"}]),
+            serde_json::json!([{"name": "strata_mode", "value": "644"}]),
+        ],
+        "no variables, the default, and the control"
+    );
+    let applies: Vec<String> = stage
+        .tofu_calls()
+        .lines()
+        .filter(|l| l.contains("apply"))
+        .map(|l| {
+            l.split(" -var ")
+                .skip(1)
+                .filter(|v| !v.starts_with("immutable_profiles"))
+                .collect::<Vec<_>>()
+                .join(" ")
+        })
+        .collect();
+    assert_eq!(
+        applies,
+        [
+            "next_variable=true",
+            "next_variable=true next_variable_in_values=true",
+            "next_variable=true",
+            "",
+        ],
+        "the variable before its use, and its use away before the variable"
+    );
+}

@@ -207,6 +207,18 @@ variable "immutable_profiles" {
   default     = false
 }
 
+variable "next_variable" {
+  description = "Give version 1.0.1 the profile variable strata_mode, default 600. repave.sh sets it."
+  type        = bool
+  default     = false
+}
+
+variable "next_variable_in_values" {
+  description = "A kubeadm command of the Kubernetes pack of 1.0.1 reads strata_mode. It needs next_variable."
+  type        = bool
+  default     = false
+}
+
 variable "registry_move" {
   description = "Create the registry-move profile"
   type        = bool

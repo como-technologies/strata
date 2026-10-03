@@ -28,9 +28,17 @@ locals {
   ]
   # The one difference between the two versions.
   next_csi_values = replace(data.spectrocloud_pack.csi.values, local.cloud.csi_reclaim, local.cloud.csi_next)
+  # With next_variable_in_values, a kubeadm command of the Kubernetes pack of 1.0.1 reads the
+  # profile variable strata_mode in place of its 600 (repave.sh, stage 8). The default of the
+  # variable is 600, so the command that it gives is the command of 1.0.0.
+  next_k8s_values = var.next_variable_in_values ? replace(data.spectrocloud_pack.k8s.values,
+    "chmod 600 /var/lib/kubelet/config.yaml", "chmod {{.spectro.var.strata_mode}} /var/lib/kubelet/config.yaml"
+  ) : data.spectrocloud_pack.k8s.values
   next_packs = [
     for p in local.release_packs :
-    p.name == data.spectrocloud_pack.csi.name ? merge(p, { values = local.next_csi_values }) : p
+    p.name == data.spectrocloud_pack.csi.name ? merge(p, { values = local.next_csi_values }) : (
+      p.name == data.spectrocloud_pack.k8s.name ? merge(p, { values = local.next_k8s_values }) : p
+    )
   ]
 
   # The add-on profile's one layer: a ConfigMap, so it installs anywhere and an edit to it changes
@@ -132,6 +140,21 @@ resource "spectrocloud_cluster_profile" "next" {
       tag    = pack.value.tag
       uid    = pack.value.uid
       values = pack.value.values
+    }
+  }
+
+  # The profile variable of repave.sh, stage 8, while next_variable is set.
+  dynamic "profile_variables" {
+    for_each = var.next_variable ? [1] : []
+    content {
+      variable {
+        name          = "strata_mode"
+        display_name  = "strata mode"
+        format        = "string"
+        description   = "The mode of a kubeadm command, for the repave check of a variable"
+        default_value = "600"
+        required      = false
+      }
     }
   }
 
