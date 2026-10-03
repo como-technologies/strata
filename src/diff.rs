@@ -260,11 +260,14 @@ fn tiers_diff(a: &Snapshot, b: &Snapshot) -> Vec<TierDiff> {
             let u = y.tiers.get(name)?;
             // Palette's spcHash is its own for each cluster, and equal for no two: between two
             // clusters, applied compares spcInfraHash alone
-            let (f, g) = if name == "applied" && x.uid != y.uid {
-                let infra = |v: &Value| json!({"spcInfraHash": v.get("spcInfraHash")});
-                (infra(&t.fields), infra(&u.fields))
-            } else {
-                (t.fields.clone(), u.fields.clone())
+            let (f, g) = match name.as_str() {
+                "applied" if x.uid != y.uid => {
+                    let infra = |v: &Value| json!({"spcInfraHash": v.get("spcInfraHash")});
+                    (infra(&t.fields), infra(&u.fields))
+                }
+                // a record from before strata read the shape by cloud type holds fewer fields
+                "shape" => crate::shape::comparable(&t.fields, &u.fields),
+                _ => (t.fields.clone(), u.fields.clone()),
             };
             let same = f == g;
             Some(TierDiff {

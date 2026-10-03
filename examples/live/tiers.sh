@@ -62,6 +62,9 @@ if stage 1 "cluster A"; then
   check a-shape 0 "#76: shape holds two machine pools and the region, and no subnet id" -- \
     jq -e --arg region "$(out region)" '.source.cluster.tiers.shape.fields | (.pools | length) == 2 and .cloud.region == $region
       and ([.. | objects | has("subnetIds")] | any | not)' a.json
+  check a-arch 0 "#105: shape names the cloud type, and the architecture of each machine pool" -- \
+    jq -e '.source.cluster.tiers.shape.fields | (.cloudType | length > 0)
+      and all(.pools[]; .machinePoolProperties.archType | IN("amd64", "arm64"))' a.json
   check a-behind 0 "#76: no pack of cluster A runs another version than its profile declares" -- \
     bash -c "\"$strata\" compare cluster:$C/$release $R --json | jq -e '(.runningBehind // []) == []'"
 fi

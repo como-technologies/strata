@@ -42,6 +42,8 @@ const PAYMENTS: &str = "64f1000000000000000000e1";
 const SEARCH: &str = "64f1000000000000000000e2";
 const LEDGER: &str = "64f1000000000000000000e3";
 const PAYMENTS_PROD: &str = "64f1000000000000000000f1";
+// a cluster on vSphere, for the shape tier of another cloud
+const LAB: &str = "64f1000000000000000000e6";
 // the virtual clusters of a cluster group
 const TENANT_A: &str = "64f1000000000000000000e4";
 const TENANT_B: &str = "64f1000000000000000000e5";
@@ -1961,6 +1963,27 @@ fn use_cases(r: &mut Runner) {
         "strata compare cluster:payments aws-stack@1.1.1 --json | jq -c '.runningBehind'",
     );
 
+    // The shape tier reads the fields of the cloud type of the cluster. lab runs on vSphere: its
+    // cloud config has the model of the API reference of Palette.
+    r.chapter("cluster-shape", DEV_ENV);
+    r.projects(&[("dev", DEV)]);
+    r.profile(DEV, A111, "1.1.1", "aws-stack@1.1.1", &[]);
+    r.cluster(DEV, LAB, "lab", &[A111]);
+    r.cloud(DEV, LAB, "vsphere", vsphere_spec());
+    r.serve_here();
+    r.step(
+        "shape-vsphere-record",
+        0,
+        false,
+        "strata snapshot cluster:lab --shape -o runs/lab.json",
+    );
+    r.step(
+        "shape-vsphere",
+        0,
+        false,
+        "jq '.source.cluster.tiers.shape.fields | {cloudType, cloud, pool: .pools[0]}' runs/lab.json",
+    );
+
     // Edge hosts: an add-on profile bound to two edge hosts and applied to one cluster
     r.chapter("edge-hosts", DEV_ENV);
     r.projects(&[("dev", DEV)]);
@@ -2563,4 +2586,33 @@ fn automation(r: &mut Runner) {
         false,
         "strata preflight --promotion | tail -n 2",
     );
+}
+
+/// The spec of the cloud config of a vSphere cluster, in the model of the API reference of
+/// Palette: a placement for the cluster and for each pool, each with the uid that Palette gives
+/// it, and the network of the control plane.
+fn vsphere_spec() -> serde_json::Value {
+    let network = json!({"networkName": "VM Network", "staticIp": true});
+    let placement = |uid: &str| {
+        json!({"uid": uid, "cluster": "compute-1", "datastore": "ds-fast",
+            "resourcePool": "rp-lab", "folder": "spectro/lab", "network": network})
+    };
+    json!({
+        "clusterConfig": {
+            "placement": {"uid": "64f9000000000000000000a1", "datacenter": "dc-east",
+                "folder": "spectro/lab", "network": network},
+            "ntpServers": ["pool.ntp.org"], "staticIp": true,
+            "sshKeys": ["ssh-ed25519 AAAAC3Nza lab"],
+            "controlPlaneEndpoint": {"type": "IP", "host": "10.10.0.10"}},
+        "machinePoolConfig": [
+            {"name": "cp-pool", "isControlPlane": true, "size": 1,
+                "instanceType": {"diskGiB": 60, "memoryMiB": 8192, "numCPUs": 4},
+                "placements": [placement("64f9000000000000000000a2")],
+                "machinePoolProperties": {"archType": "amd64"}, "labels": ["control-plane"]},
+            {"name": "worker-pool", "isControlPlane": false, "size": 2,
+                "instanceType": {"diskGiB": 80, "memoryMiB": 16384, "numCPUs": 8},
+                "placements": [placement("64f9000000000000000000a3")],
+                "machinePoolProperties": {"archType": "amd64"}, "labels": ["worker"]},
+        ]
+    })
 }

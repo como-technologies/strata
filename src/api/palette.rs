@@ -1007,17 +1007,11 @@ impl<A: PaletteApi> Palette<A> {
     /// The cloud config of a cluster, `GET /v1/cloudconfigs/{cloudType}/{configUid}`, from the
     /// `spec.cloudConfigRef` of the cluster document: its machine pools and its cloud part.
     pub fn cloud_config(&self, cluster: &Value) -> Result<Value> {
-        let field = |p: &str| {
-            cluster
-                .pointer(p)
-                .and_then(Value::as_str)
-                .unwrap_or_default()
-        };
-        let kind = match field("/spec/cloudConfigRef/kind") {
-            "" => field("/spec/cloudType"),
-            k => k,
-        };
-        let uid = field("/spec/cloudConfigRef/uid");
+        let kind = RawCluster::cloud_type(cluster);
+        let uid = cluster
+            .pointer("/spec/cloudConfigRef/uid")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
         if kind.is_empty() || uid.is_empty() {
             return Err(Error::Usage {
                 message: "the cluster document names no cloud config".to_string(),

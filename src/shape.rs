@@ -1,0 +1,291 @@
+//! The fields of the `shape` tier of a cluster record: the machine pools and the cloud part of
+//! its cloud config, read by the cloud type of the cluster.
+
+use serde_json::{Map, Value, json};
+
+use crate::api::RawCluster;
+
+/// The key of the shape fields that names the cloud type of the cluster. A record from before
+/// strata read the fields by cloud type does not have it.
+const CLOUD_TYPE: &str = "cloudType";
+
+/// The machine pool fields that a person chooses on each cloud. A cloud that does not give a
+/// field has no such key in the tier. The ids that Palette gives each cluster, such as its
+/// subnets and security groups, stay out.
+const POOL_FIELDS: &[&str] = &[
+    "name",
+    "isControlPlane",
+    "useControlPlaneAsWorker",
+    "instanceType",
+    "size",
+    "minSize",
+    "maxSize",
+    "azs",
+    "labels",
+    "taints",
+    "additionalLabels",
+    "additionalAnnotations",
+    "additionalTags",
+    "nodeRepaveInterval",
+    "updateStrategy",
+    "skipK8sUpgrade",
+    "overrideKubeadmConfiguration",
+    // the architecture of the nodes, `amd64` or `arm64`
+    "machinePoolProperties",
+];
+
+/// The cloud part fields that a person chooses on each cloud.
+const CLOUD_FIELDS: &[&str] = &["overrideClusterAPIConfig"];
+
+/// The key of the id that Palette gives each vSphere placement of a cluster.
+const PLACEMENT_UID: &str = "uid";
+
+/// The machine pool fields that a record from before strata read the fields by cloud type holds.
+/// Do not change this list: `compare` and `verify` read an older record through it.
+const LEGACY_POOL_FIELDS: &[&str] = &[
+    "name",
+    "isControlPlane",
+    "useControlPlaneAsWorker",
+    "instanceType",
+    "size",
+    "minSize",
+    "maxSize",
+    "azs",
+    "labels",
+    "taints",
+    "additionalLabels",
+    "additionalAnnotations",
+    "additionalTags",
+    "rootDeviceSize",
+    "capacityType",
+    "spotMarketOptions",
+    "nodeRepaveInterval",
+    "updateStrategy",
+    "skipK8sUpgrade",
+    "overrideKubeadmConfiguration",
+    "amiType",
+    "awsLaunchTemplate",
+];
+
+/// The cloud part fields that a record from before strata read the fields by cloud type holds.
+/// Do not change this list.
+const LEGACY_CLOUD_FIELDS: &[&str] = &[
+    "region",
+    "project",
+    "sshKeyName",
+    "controlPlaneLoadBalancer",
+    "bastionDisabled",
+    "endpointAccess",
+    "addons",
+    "managedClusterConfig",
+    "overrideClusterAPIConfig",
+];
+
+/// The model of a cloud config, by the cloud type of the cluster. Palette gives the cloud config
+/// of AKS in the model of Azure, and that of GKE in the model of GCP.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Cloud {
+    Aws,
+    Eks,
+    Gcp,
+    Azure,
+    Vsphere,
+    EdgeNative,
+    Maas,
+    /// A cloud type that strata does not read by name: the tier holds the shared fields alone.
+    Other,
+}
+
+impl Cloud {
+    fn of(cloud_type: &str) -> Cloud {
+        match cloud_type {
+            "aws" => Cloud::Aws,
+            "eks" => Cloud::Eks,
+            "gcp" | "gke" => Cloud::Gcp,
+            "azure" | "aks" => Cloud::Azure,
+            "vsphere" => Cloud::Vsphere,
+            "edge-native" => Cloud::EdgeNative,
+            "maas" => Cloud::Maas,
+            _ => Cloud::Other,
+        }
+    }
+
+    /// The machine pool fields of this cloud, in addition to [`POOL_FIELDS`].
+    fn pool_fields(self) -> &'static [&'static str] {
+        match self {
+            Cloud::Aws => &["rootDeviceSize", "capacityType", "spotMarketOptions"],
+            // a managed node group: also the image family and the launch template of its nodes
+            Cloud::Eks => &[
+                "rootDeviceSize",
+                "capacityType",
+                "spotMarketOptions",
+                "amiType",
+                "awsLaunchTemplate",
+            ],
+            Cloud::Gcp => &["rootDeviceSize", "subnet"],
+            Cloud::Azure => &[
+                "osDisk",
+                "osType",
+                "osSku",
+                "isSystemNodePool",
+                "spotVMOptions",
+            ],
+            // the compute cluster, datastore, folder, resource pool, and network of the pool
+            Cloud::Vsphere => &["placements"],
+            // the edge hosts of the pool
+            Cloud::EdgeNative => &["hosts", "osType"],
+            Cloud::Maas => &["network", "resourcePool", "tags", "useLxdVm"],
+            Cloud::Other => &[],
+        }
+    }
+
+    /// The cloud part fields of this cloud, in addition to [`CLOUD_FIELDS`]. The network that
+    /// Palette makes for each cluster, such as its VPC, stays out.
+    fn cloud_fields(self) -> &'static [&'static str] {
+        match self {
+            Cloud::Aws => &[
+                "region",
+                "sshKeyName",
+                "controlPlaneLoadBalancer",
+                "bastionDisabled",
+            ],
+            // a managed control plane: also who reaches its API server, its managed add-ons, and
+            // the encryption of its secrets
+            Cloud::Eks => &[
+                "region",
+                "sshKeyName",
+                "controlPlaneLoadBalancer",
+                "bastionDisabled",
+                "endpointAccess",
+                "addons",
+                "encryptionConfig",
+            ],
+            // on GKE, `managedClusterConfig` holds the settings of the managed control plane
+            Cloud::Gcp => &["region", "project", "network", "managedClusterConfig"],
+            Cloud::Azure => &[
+                "location",
+                "resourceGroup",
+                "subscriptionId",
+                "sshKey",
+                "vnetName",
+                "vnetResourceGroup",
+                "vnetCidrBlock",
+                "controlPlaneSubnet",
+                "workerSubnet",
+                "aadProfile",
+                "apiServerAccessProfile",
+                "infraLBConfig",
+                "enablePrivateCluster",
+            ],
+            Cloud::Vsphere => &[
+                "placement",
+                "ntpServers",
+                "staticIp",
+                "sshKeys",
+                "controlPlaneEndpoint",
+            ],
+            Cloud::EdgeNative => &[
+                "controlPlaneEndpoint",
+                "isTwoNodeCluster",
+                "ntpServers",
+                "overlayNetworkConfiguration",
+                "staticIp",
+                "sshKeys",
+            ],
+            Cloud::Maas => &["domain", "enableLxdVm", "ntpServers", "staticIp", "sshKeys"],
+            Cloud::Other => &[],
+        }
+    }
+}
+
+/// The fields of the shape tier: the cloud type of the cluster document `cluster`, and the fields
+/// of its cloud config `cloud_config` that a person chooses on that cloud. The pools are in name
+/// order.
+pub(crate) fn fields(cluster: &Value, cloud_config: &Value) -> Value {
+    let cloud_type = RawCluster::cloud_type(cluster);
+    let cloud = Cloud::of(cloud_type);
+    let mut pools: Vec<Value> = cloud_config
+        .pointer("/spec/machinePoolConfig")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .map(|p| pick(p, &[POOL_FIELDS, cloud.pool_fields()]))
+        .collect();
+    pools.sort_by(|a, b| name(a).cmp(name(b)));
+    let part = cloud_config
+        .pointer("/spec/clusterConfig")
+        .unwrap_or(&Value::Null);
+    json!({
+        CLOUD_TYPE: cloud_type,
+        "cloud": pick(part, &[CLOUD_FIELDS, cloud.cloud_fields()]),
+        "pools": pools,
+    })
+}
+
+/// The shape fields `a` and `b` of two records, in a form that compares. When one of them is from
+/// before strata read the fields by cloud type, each keeps only the fields of that older record.
+pub(crate) fn comparable(a: &Value, b: &Value) -> (Value, Value) {
+    let legacy = |v: &Value| v.get(CLOUD_TYPE).is_none();
+    if legacy(a) || legacy(b) {
+        (as_legacy(a), as_legacy(b))
+    } else {
+        (a.clone(), b.clone())
+    }
+}
+
+/// The shape fields `v` as a record from before strata read the fields by cloud type holds them.
+fn as_legacy(v: &Value) -> Value {
+    let pools: Vec<Value> = v
+        .get("pools")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .map(|p| pick(p, &[LEGACY_POOL_FIELDS]))
+        .collect();
+    json!({
+        "cloud": pick(v.get("cloud").unwrap_or(&Value::Null), &[LEGACY_CLOUD_FIELDS]),
+        "pools": pools,
+    })
+}
+
+fn name(pool: &Value) -> &str {
+    pool.get("name").and_then(Value::as_str).unwrap_or_default()
+}
+
+/// The keys of `v` that one of the lists `keys` names, without a null value, and without the uid
+/// of a vSphere placement.
+fn pick(v: &Value, keys: &[&[&str]]) -> Value {
+    let mut out: Map<String, Value> = keys
+        .iter()
+        .flat_map(|k| k.iter())
+        .filter_map(|k| v.get(*k).map(|x| (k.to_string(), x.clone())))
+        .filter(|(_, x)| !x.is_null())
+        .collect();
+    if let Some(Value::Array(placements)) = out.get_mut("placements") {
+        placements.iter_mut().for_each(without_placement_uid);
+    }
+    if let Some(placement) = out.get_mut("placement") {
+        without_placement_uid(placement);
+    }
+    Value::Object(out)
+}
+
+fn without_placement_uid(placement: &mut Value) {
+    if let Some(o) = placement.as_object_mut() {
+        o.remove(PLACEMENT_UID);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn each_cloud_type_names_one_model_and_an_unknown_type_reads_the_shared_fields() {
+        assert_eq!(Cloud::of("aks"), Cloud::Azure);
+        assert_eq!(Cloud::of("gke"), Cloud::Gcp);
+        assert_eq!(Cloud::of("edge-native"), Cloud::EdgeNative);
+        assert_eq!(Cloud::of("openstack"), Cloud::Other);
+        assert!(Cloud::Other.pool_fields().is_empty());
+    }
+}

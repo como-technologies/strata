@@ -72,6 +72,9 @@ profile, or pack version.
     the record carries, by name (`applied`, `running`, `policy`, and, with
     `snapshot --shape`, `shape`), each with `hash` and `fields`: see
     [More of the cluster than its release](../commands/snapshot/cluster.md#more-of-the-cluster-than-its-release).
+    The `fields` of `shape` are `cloudType`, `cloud`, and `pools[]`, by
+    [The shape on each cloud](../commands/snapshot/cluster.md#the-shape-on-each-cloud).
+    A record that an older version of strata wrote has no `cloudType`.
     `pending`, only when true: the record is of `cluster:<cluster>@pending`,
     and holds no `updatesPending`. `kind`, only for an object that is not a
     cluster: `edgeHost` or `clusterGroup`; `uid` and `name` are then those of

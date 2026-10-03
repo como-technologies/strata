@@ -77,6 +77,7 @@ pub mod ops;
 pub mod progress;
 pub mod reference;
 pub mod render;
+pub(crate) mod shape;
 pub mod snapshot;
 pub mod validation;
 pub mod version;
