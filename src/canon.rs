@@ -83,21 +83,6 @@ pub fn canon_yaml(text: &str) -> Canon {
     }
 }
 
-/// Check YAML text as Palette checks the values of a pack and the content of a manifest: it reads
-/// the first document into a map. Empty text and a null document pass. The error is the first
-/// line of the parser's message, or what the document is in place of a map.
-pub fn map_yaml(text: &str) -> Result<(), String> {
-    let Some(de) = serde_yaml::Deserializer::from_str(text).next() else {
-        return Ok(());
-    };
-    let doc = serde_yaml::Value::deserialize(de).map_err(|e| first_line(&e.to_string()))?;
-    match yaml_to_json(doc)? {
-        Value::Null | Value::Object(_) => Ok(()),
-        Value::Array(_) => Err("the document is a list, not a map".to_string()),
-        _ => Err("the document is a scalar, not a map".to_string()),
-    }
-}
-
 /// Hash YAML text canonically; unparseable text is hashed as trimmed text and the error is returned.
 pub fn hash_yaml(text: &str) -> (String, Option<String>) {
     let (_, hash, error) = canon_yaml_hashed(text);
@@ -174,41 +159,6 @@ fn yaml_to_json(v: serde_yaml::Value) -> Result<Value, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn map_yaml_takes_what_palette_reads_into_a_map() {
-        // each case as Palette reads it into a map
-        for ok in [
-            "",
-            "   \n",
-            "# only a comment",
-            "~",
-            "kind: Namespace",
-            "1: a\n2: b",
-            "true: x",
-            "a: &x 1\nb: *x",
-            "a: \"{{ .spectro.var.x }}\"",
-            // Palette reads the first document only
-            "a: 1\n---\nb: [",
-        ] {
-            assert_eq!(map_yaml(ok), Ok(()), "{ok:?}");
-        }
-        for bad in [
-            "a: [b",
-            "- a\n- b",
-            "hello",
-            "a: 1\na: 2",
-            "a: b\n\tc: d",
-            "replicas: {{ .spectro.var.replicas }}",
-            "a:\n  ? [x]\n  : y",
-        ] {
-            assert!(map_yaml(bad).is_err(), "{bad:?}");
-        }
-        assert_eq!(
-            map_yaml("- a").unwrap_err(),
-            "the document is a list, not a map"
-        );
-    }
 
     #[test]
     fn sha256_of_empty_string() {

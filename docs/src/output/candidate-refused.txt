@@ -1,4 +1,0 @@
-$ strata snapshot --from-candidate bad-version.yaml -o bad-version.json
-strata: 'bad-version.yaml': version 1.1.1.1 is not a version that Palette takes: give one to three numbers, such as 1.2.3, with an optional pre-release, such as 1.2.3-rc.1 (VersionParseFailure)
-$ strata snapshot --from-candidate add-on.yaml -o add-on.json
-strata: 'add-on.yaml': layer 1 (ubuntu-aws) has the layer os; a profile of type add-on takes only the layers addon, cni, and csi (ClusterProfilePackNotAllowed)
