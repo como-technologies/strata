@@ -3,18 +3,21 @@
 //! A rule lands here when a walk of the pages finds the same defect twice.
 //! `docs/examples/checklist.md` is the procedure; this is what stops the drift.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 use regex::Regex;
 
 /// Every rule. Returns the messages, so the caller decides what to do with them.
-pub fn check(repo: &Path) -> Vec<String> {
+///
+/// `chapters` maps the name of each chapter that the runner defined to its number of states.
+pub fn check(repo: &Path, chapters: &BTreeMap<String, u32>) -> Vec<String> {
     let mut bad = Vec::new();
     bad.extend(release_tags(repo));
     bad.extend(links_resolve(repo));
     bad.extend(follow_along_first(repo));
     bad.extend(command_flags(repo));
+    bad.extend(playgrounds(repo, chapters));
     bad
 }
 
@@ -223,4 +226,103 @@ fn command_flags(repo: &Path) -> Vec<String> {
         }
     }
     bad
+}
+
+/// Each `just playground NAME` of the book and the README names a chapter of the runner, and a
+/// state that the chapter has. A reader who copies a wrong name gets an error and no tenant.
+fn playgrounds(repo: &Path, chapters: &BTreeMap<String, u32>) -> Vec<String> {
+    let mut files = pages(&repo.join("docs/src"));
+    files.push(repo.join("README.md"));
+    files
+        .iter()
+        .flat_map(|page| {
+            let text = std::fs::read_to_string(page).unwrap_or_default();
+            playground_faults(&shown(repo, page), &text, chapters)
+        })
+        .collect()
+}
+
+/// The messages for each `just playground NAME` in `text` that the runner cannot serve. `name`
+/// is the page, for the messages.
+fn playground_faults(name: &str, text: &str, chapters: &BTreeMap<String, u32>) -> Vec<String> {
+    let command = Regex::new(r"just playground ([a-z0-9][a-z0-9-]*)").expect("a pattern");
+    let mut bad = Vec::new();
+    for (number, line) in text.lines().enumerate() {
+        for found in command.captures_iter(line) {
+            let given = &found[1];
+            let (chapter, seed) = crate::book::playground(given);
+            match chapters.get(chapter) {
+                None => bad.push(format!(
+                    "{name}:{} gives `just playground {given}`, and the runner has no chapter \
+                     '{chapter}'",
+                    number + 1
+                )),
+                Some(&states) if seed == 0 || seed > states => bad.push(format!(
+                    "{name}:{} gives `just playground {given}`, and the chapter '{chapter}' has \
+                     {states} states",
+                    number + 1
+                )),
+                Some(_) => {}
+            }
+        }
+    }
+    bad
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The chapters of a small runner: `list` with one state, and `loop` with four.
+    fn chapters() -> BTreeMap<String, u32> {
+        BTreeMap::from([("list".to_string(), 1), ("loop".to_string(), 4)])
+    }
+
+    #[test]
+    fn a_page_that_names_a_chapter_and_a_state_that_it_has_passes() {
+        let text = "Run `just playground list`, then `just playground loop-4`.\n\
+                    just playground          # the tenant of the chapter \"list\"\n\
+                    just playground CHAPTER\n";
+        assert_eq!(
+            playground_faults("page.md", text, &chapters()),
+            Vec::<String>::new()
+        );
+    }
+
+    #[test]
+    fn a_page_that_names_a_chapter_that_the_runner_does_not_define_fails() {
+        let text = "Serve it.\n\nRun `just playground os-image-1`.\n";
+        assert_eq!(
+            playground_faults("page.md", text, &chapters()),
+            vec![
+                "page.md:3 gives `just playground os-image-1`, and the runner has no chapter \
+                 'os-image'"
+            ]
+        );
+    }
+
+    #[test]
+    fn a_page_that_names_a_state_past_the_last_state_of_its_chapter_fails() {
+        let text = "just playground loop-5\njust playground loop-0\n";
+        assert_eq!(
+            playground_faults("page.md", text, &chapters()),
+            vec![
+                "page.md:1 gives `just playground loop-5`, and the chapter 'loop' has 4 states",
+                "page.md:2 gives `just playground loop-0`, and the chapter 'loop' has 4 states",
+            ]
+        );
+    }
+
+    #[test]
+    fn a_playground_name_splits_into_its_chapter_and_its_state() {
+        assert_eq!(crate::book::playground("loop"), ("loop", 1));
+        assert_eq!(crate::book::playground("loop-3"), ("loop", 3));
+        assert_eq!(crate::book::playground("os-image"), ("os-image", 1));
+        assert_eq!(crate::book::playground("os-image-2"), ("os-image", 2));
+        assert_eq!(
+            crate::book::playground("merge-gate-rollback"),
+            ("merge-gate-rollback", 1)
+        );
+        assert_eq!(crate::book::playground("loop-12"), ("loop-12", 1));
+    }
 }
