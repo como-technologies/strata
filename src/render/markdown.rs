@@ -6,8 +6,8 @@ use super::{
     consumers_sentence, count_of, counts_line, cross_kind_note, dash, draft_note, edge_hosts_line,
     edited_in_place_note, entry_error, gone_sentence, image_ids_changed_notes, invalid_mark,
     invalid_pack_sentences, last_modified_suffix, list_count, list_scope, macros_changed_note,
-    macros_note, masked_notes, masked_sentence, outside_root_sentence, overwritten_in_place_notes,
-    pack_version, pair_detail, pair_word, palette_repave_lines, palette_repave_note,
+    macros_note, masked_notes, outside_root_sentence, overwritten_in_place_notes, pack_version,
+    pair_detail, pair_notes, pair_word, palette_repave_lines, palette_repave_note,
     palette_validation_lines, plain_flags, profiles_overwritten_sentence, project_label,
     record_detail, record_label, recorded_noun, registry_note, registry_sync_suffix,
     repave_pending_notes, running_behind_notes, same_content_note, second_reading_counts, short,
@@ -142,7 +142,7 @@ impl Renderer for MarkdownRenderer {
         if let Some(note) = macros_note(d) {
             o.push_str(&format!("**Note:** {note}\n\n"));
         }
-        if let Some(note) = macros_changed_note(d) {
+        if let Some(note) = macros_changed_note(&d.macros_changed) {
             o.push_str(&format!("**Note:** {note}\n\n"));
         }
         for note in image_ids_changed_notes(d) {
@@ -412,9 +412,9 @@ impl Renderer for MarkdownRenderer {
                 detail.push_str("<br>");
                 detail.push_str(&escape(r));
             }
-            for m in &p.masked {
+            for note in pair_notes(p) {
                 detail.push_str("<br>");
-                detail.push_str(&escape(&masked_sentence(&m.key, &m.paths)));
+                detail.push_str(&escape(&note));
             }
             o.push_str(&format!(
                 "| {} | `{}` | `{}` | {} |\n",

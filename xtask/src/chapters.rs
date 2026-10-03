@@ -21,8 +21,10 @@ const A100_PROD: &str = "64e1000000000000000000a1";
 const A112: &str = "64e0000000000000000000d4";
 const A113: &str = "64e0000000000000000000d5";
 const A120: &str = "64e0000000000000000000e5";
-// aws-stack@1.1.4: the content of 1.1.1, with the CSI values reading a project macro
+// aws-stack@1.1.4: the content of 1.1.1, with the CSI values reading a project macro, in dev and
+// prod
 const A114: &str = "64e0000000000000000000f7";
+const A114_PROD: &str = "64e1000000000000000000f7";
 // aws-stack@1.1.5: the content of 1.1.1, with no digest for the CSI pack
 const A115: &str = "64e0000000000000000000f8";
 // aws-stack@1.1.6: the content of 1.1.1, with one more kubeadm command in the Kubernetes pack
@@ -921,6 +923,54 @@ fn use_cases(r: &mut Runner) {
         0,
         true,
         "PALETTE_PROJECT=prod strata consumers aws-stack@1.1.1",
+    );
+    // 1.1.4 reached prod by a promotion, and its CSI values read the macro region, which each
+    // project gives another value: one release, two configurations (#164)
+    r.profile(DEV, A114, "1.1.4", "aws-stack@1.1.1", MACRO_REGION);
+    r.profile(PROD, A114_PROD, "1.1.4", "aws-stack@1.1.1", MACRO_REGION);
+    r.set_macro(DEV, "region", "us-east-2");
+    r.set_macro(PROD, "region", "eu-west-1");
+    r.step(
+        "promote-macro-record",
+        0,
+        true,
+        "PALETTE_PROJECT=dev strata snapshot aws-stack@1.1.4 -o releases/1.1.4/dev.json",
+    );
+    r.step(
+        "promote-macro-record",
+        0,
+        true,
+        "PALETTE_PROJECT=prod strata snapshot aws-stack@1.1.4 -o releases/1.1.4/prod.json",
+    );
+    r.step(
+        "promote-macro-not-compared",
+        0,
+        false,
+        "strata same-release releases/1.1.4/dev.json releases/1.1.4/prod.json",
+    );
+    r.step(
+        "promote-macro-record-digests",
+        0,
+        true,
+        "PALETTE_PROJECT=dev strata snapshot aws-stack@1.1.4 --macros -o releases/1.1.4/dev-macros.json",
+    );
+    r.step(
+        "promote-macro-record-digests",
+        0,
+        true,
+        "PALETTE_PROJECT=prod strata snapshot aws-stack@1.1.4 --macros -o releases/1.1.4/prod-macros.json",
+    );
+    r.step(
+        "promote-macro-changed",
+        0,
+        false,
+        "strata same-release releases/1.1.4/dev-macros.json releases/1.1.4/prod-macros.json",
+    );
+    r.step(
+        "promote-macro-changed-json",
+        0,
+        false,
+        "strata same-release releases/1.1.4/dev-macros.json releases/1.1.4/prod-macros.json --json | jq -c '.pairs[] | {status, macrosChanged}'",
     );
 
     r.chapter("registry-move", &[]);

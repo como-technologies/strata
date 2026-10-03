@@ -1,0 +1,2 @@
+$ strata same-release releases/1.1.4/dev-macros.json releases/1.1.4/prod-macros.json --json | jq -c '.pairs[] | {status, macrosChanged}'
+{"status":"identical","macrosChanged":["region"]}

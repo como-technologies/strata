@@ -1,0 +1,4 @@
+$ strata same-release releases/1.1.4/dev-macros.json releases/1.1.4/prod-macros.json
+IDENTICAL      releases/1.1.4/dev-macros.json -> releases/1.1.4/prod-macros.json   root 8b03f6ed94cb
+               macro region has another value on each side: Palette applies other content, also when the roots are equal
+SAME RELEASE: 1 pair passed

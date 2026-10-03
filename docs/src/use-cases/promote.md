@@ -85,6 +85,39 @@ move those clusters to it, and delete the old copy last. See
 
 After the promotion, step 2 answers `IDENTICAL` for the `1.1.1` pair as well.
 
+## A macro has another value in each project
+
+A promotion copies the text of a version, and the text can read a macro, as
+`{{.spectro.macro.<name>}}`. Each project gives the macro its own value. Here
+`aws-stack@1.1.4` reached prod by a promotion. Its CSI values read the project
+macro `region`: `us-east-2` in dev and `eu-west-1` in prod. The text is one
+release, and the two projects run two configurations.
+
+Records without the digests of the macro values show one root. The line under
+the pair says that strata does not compare the values:
+
+```text
+{{#include ../output/promote-macro-record.txt}}
+{{#include ../output/promote-macro-not-compared.txt}}
+```
+
+Record each project with `--macros`. Each record then holds the digest of the
+value that its project gives `region`:
+
+```text
+{{#include ../output/promote-macro-record-digests.txt}}
+{{#include ../output/promote-macro-changed.txt}}
+```
+
+The pair stays `IDENTICAL`, and the exit stays `0`: the release is one text.
+The line under the pair names the macro whose value differs. A gate that reads
+the JSON finds it in `pairs[].macrosChanged`. See
+[A macro has another value in each project](../commands/same-release.md#a-macro-has-another-value-in-each-project).
+
+Make sure that the value in each project is the value that you want. When it
+is not, correct the macro in that project, not the version. Strata shows
+neither value: a macro can hold a secret.
+
 ## What to do
 
 - Publish each project from one source: a candidate file, or one Terraform
@@ -94,6 +127,8 @@ After the promotion, step 2 answers `IDENTICAL` for the `1.1.1` pair as well.
   records in promotion order, `dev.json prod.json`, and add a record for each
   project that a release passes through. To run it as a job, see
   [The promotion gate and the retire gate](../automation/gates.md).
+- Record a version whose content reads a macro with `snapshot --macros` in
+  each project, so that `same-release` compares the macro values.
 
 A pair can also differ for a reason that is not a content change:
 

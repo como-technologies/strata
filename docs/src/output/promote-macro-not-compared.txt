@@ -1,0 +1,4 @@
+$ strata same-release releases/1.1.4/dev.json releases/1.1.4/prod.json
+IDENTICAL      releases/1.1.4/dev.json -> releases/1.1.4/prod.json   root 8b03f6ed94cb
+               the content uses macro region: a record holds no digest of its value, so strata does not compare the value
+SAME RELEASE: 1 pair passed
