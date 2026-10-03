@@ -4,16 +4,16 @@ use super::{
     Renderer, VarLine, applied_ref, artifact_lines, artifacts_summary, capitalized, chain_verdict,
     cluster_count, cluster_value, consumer_count, consumer_counts, consumers_heading,
     consumers_sentence, count_of, counts_line, cross_kind_note, dash, draft_note, edge_hosts_line,
-    edited_in_place_note, entry_error, gone_sentence, last_modified_suffix, list_count, list_scope,
-    macros_changed_note, macros_changed_sentence, macros_note, overwritten_in_place_notes,
-    pack_version, pair_detail, pair_word, palette_repave_lines, palette_repave_note,
-    palette_validation_lines, plain_flags, profiles_overwritten_sentence, project_label,
-    record_detail, record_label, recorded_noun, registry_note, registry_sync_suffix,
-    running_behind_notes, same_content_note, second_reading_counts, short, show, state_suffix,
-    subject, tier_path, tier_states, traits_suffix, unchanged_sentence, unverified_sentence,
-    updates_pending_notes, upstream_unknown_note, values_changed, values_changed_suffix,
-    variable_lines, variables_comparable, variables_unavailable_note, version_display, who_entry,
-    who_heading,
+    edited_in_place_note, entry_error, gone_sentence, image_ids_changed_notes,
+    last_modified_suffix, list_count, list_scope, macros_changed_note, macros_note,
+    outside_root_sentence, overwritten_in_place_notes, pack_version, pair_detail, pair_word,
+    palette_repave_lines, palette_repave_note, palette_validation_lines, plain_flags,
+    profiles_overwritten_sentence, project_label, record_detail, record_label, recorded_noun,
+    registry_note, registry_sync_suffix, running_behind_notes, same_content_note,
+    second_reading_counts, short, show, state_suffix, subject, tier_path, tier_states,
+    traits_suffix, unchanged_sentence, unverified_sentence, updates_pending_notes,
+    upstream_unknown_note, values_changed, values_changed_suffix, variable_lines,
+    variables_comparable, variables_unavailable_note, version_display, who_entry, who_heading,
 };
 use crate::color::Paint;
 use crate::diff::{Diff, Leaf, Op, Status, Verify, VerifyStatus};
@@ -136,6 +136,9 @@ impl Renderer for MarkdownRenderer {
             o.push_str(&format!("**Note:** {note}\n\n"));
         }
         if let Some(note) = macros_changed_note(d) {
+            o.push_str(&format!("**Note:** {note}\n\n"));
+        }
+        for note in image_ids_changed_notes(d) {
             o.push_str(&format!("**Note:** {note}\n\n"));
         }
         let palette = palette_repave_lines(d);
@@ -307,6 +310,7 @@ impl Renderer for MarkdownRenderer {
 
     fn verdict(&self, v: &Verify, recorded: &Source) -> Option<String> {
         let (what, at) = (subject(recorded), &recorded.fetched_at);
+        let outside = outside_root_sentence(&v.macros_changed, &v.image_ids_changed);
         Some(match v.status {
             VerifyStatus::Unchanged => format!(
                 "\n**OK**: {what} {}{}",
@@ -336,9 +340,9 @@ impl Renderer for MarkdownRenderer {
                     "\n**DRIFT**: {what} now names {now}: the version recorded {at} was overwritten in place{}",
                     values_changed_suffix(v.cluster_values_changed)
                 ),
-                None if !v.macros_changed.is_empty() => format!(
+                None if outside.is_some() => format!(
                     "\n**DRIFT**: {what} has the content recorded {at}, but {}{}",
-                    macros_changed_sentence(&v.macros_changed),
+                    outside.as_deref().unwrap_or_default(),
                     values_changed_suffix(v.cluster_values_changed)
                 ),
                 None => format!(

@@ -4,15 +4,16 @@ use super::{
     Renderer, VarLine, applied_ref, artifact_lines, artifacts_summary, chain_verdict,
     cluster_count, cluster_value, consumer_count, consumer_counts, consumers_heading,
     consumers_sentence, count_of, counts_line, cross_kind_note, dash, draft_note, edge_hosts_line,
-    edited_in_place_note, entry_error, gone_sentence, last_modified_suffix, list_count, list_scope,
-    macros_changed_note, macros_changed_sentence, macros_note, overwritten_in_place_notes,
-    pack_version, pair_detail, pair_word, palette_repave_lines, palette_repave_note,
-    palette_validation_lines, profiles_overwritten_sentence, project_label, record_detail,
-    record_label, recorded_noun, registry_note, registry_sync_suffix, running_behind_notes,
-    same_content_note, second_reading_counts, short, show, state_suffix, subject, tag_rename,
-    tier_path, tier_states, traits_suffix, unchanged_sentence, unverified_sentence,
-    updates_pending_notes, upstream_unknown_note, values_changed_suffix, variable_lines,
-    variables_comparable, variables_unavailable_note, version_display, who_entry, who_heading,
+    edited_in_place_note, entry_error, gone_sentence, image_ids_changed_notes,
+    last_modified_suffix, list_count, list_scope, macros_changed_note, macros_note,
+    outside_root_sentence, overwritten_in_place_notes, pack_version, pair_detail, pair_word,
+    palette_repave_lines, palette_repave_note, palette_validation_lines,
+    profiles_overwritten_sentence, project_label, record_detail, record_label, recorded_noun,
+    registry_note, registry_sync_suffix, running_behind_notes, same_content_note,
+    second_reading_counts, short, show, state_suffix, subject, tag_rename, tier_path, tier_states,
+    traits_suffix, unchanged_sentence, unverified_sentence, updates_pending_notes,
+    upstream_unknown_note, values_changed_suffix, variable_lines, variables_comparable,
+    variables_unavailable_note, version_display, who_entry, who_heading,
 };
 use crate::color::Paint;
 use crate::diff::{
@@ -298,6 +299,9 @@ impl Renderer for TerminalRenderer {
         if let Some(note) = macros_changed_note(d) {
             out.push(format!("note       {}", p.byellow(&note)));
         }
+        for note in image_ids_changed_notes(d) {
+            out.push(format!("note       {}", p.byellow(&note)));
+        }
         for line in palette_repave_lines(d) {
             out.push(format!("palette    {line}"));
         }
@@ -392,6 +396,7 @@ impl Renderer for TerminalRenderer {
     fn verdict(&self, v: &Verify, recorded: &Source) -> Option<String> {
         let p = &self.paint;
         let (what, at) = (subject(recorded), &recorded.fetched_at);
+        let outside = outside_root_sentence(&v.macros_changed, &v.image_ids_changed);
         Some(match v.status {
             VerifyStatus::Unchanged => format!(
                 "{}: {what} {}{}",
@@ -427,10 +432,10 @@ impl Renderer for TerminalRenderer {
                     p.bred("DRIFT"),
                     values_changed_suffix(v.cluster_values_changed)
                 ),
-                None if !v.macros_changed.is_empty() => format!(
+                None if outside.is_some() => format!(
                     "{}: {what} has the content recorded {at}, but {}{}",
                     p.bred("DRIFT"),
-                    macros_changed_sentence(&v.macros_changed),
+                    outside.as_deref().unwrap_or_default(),
                     values_changed_suffix(v.cluster_values_changed)
                 ),
                 None => format!(

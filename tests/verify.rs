@@ -7124,6 +7124,201 @@ fn a_record_of_a_pack_from_an_oci_registry_names_its_provider_type() {
     assert_eq!(spectro.packs[0].registry_provider_type, None);
 }
 
+// ---- the machine image of the OS pack (#189) ----------------------------------------------------
+
+/// The annotations of the OS pack of fixture A, with `imageId` set to `image` when it is given.
+fn os_annotations(image: Option<&str>) -> Value {
+    let mut a = serde_json::json!({"osName": "ubuntu", "os_version": "u-2204"});
+    if let Some(image) = image {
+        a[strata::snapshot::IMAGE_ID_ANNOTATION] = Value::from(image);
+    }
+    a
+}
+
+/// An API that serves fixture A under `UID_A`, with `imageId` of its OS pack set to `image`.
+fn serve_os_image(raw_root: &Path, image: Option<&str>) -> MemoryApi {
+    let dir = image.unwrap_or("no-image");
+    with_os_pack(raw_root, dir, |p| p["annotations"] = os_annotations(image));
+    serve(MemoryApi::new(), raw_root, dir, UID_A)
+}
+
+/// A snapshot of `UID_A` from `api`, fetched at `at`.
+fn snapshot_uid(api: &MemoryApi, at: &str) -> Snapshot {
+    ops::snapshot_for(
+        &Ref::Uid(UID_A.into()),
+        || Ok(Palette::new(api.clone())),
+        at,
+        &Progress::silent(),
+    )
+    .unwrap()
+}
+
+#[test]
+fn a_pack_record_keeps_the_annotations_of_the_pack_ref_outside_the_root() {
+    use strata::snapshot::Pack;
+    let pack = |annotations: Value| {
+        serde_json::json!({"name": "ubuntu-aws", "type": "spectro", "layer": "os", "tag": "22.04",
+            "packUid": "p1", "registryUid": "r1", "values": "a: 1", "annotations": annotations})
+    };
+    let byoi = Pack::from_api(&pack(os_annotations(Some("ami-0aaa"))), &[]);
+    assert_eq!(byoi.image_id(), Some("ami-0aaa"));
+    assert_eq!(byoi.annotations["osName"], "ubuntu");
+    let doc = serde_json::to_value(&byoi).unwrap();
+    assert_eq!(doc["annotations"]["imageId"], "ami-0aaa");
+    // the annotations are outside the root: a new image keeps the node hash
+    let other = Pack::from_api(&pack(os_annotations(Some("ami-0bbb"))), &[]);
+    let none = Pack::from_api(&pack(Value::Null), &[]);
+    assert_eq!(byoi.hash.node, other.hash.node);
+    assert_eq!(byoi.hash.node, none.hash.node);
+    // a pack ref with no annotations writes none, and an empty imageId names no image
+    assert_eq!(none.image_id(), None);
+    assert!(
+        serde_json::to_value(&none)
+            .unwrap()
+            .get("annotations")
+            .is_none()
+    );
+    let empty = Pack::from_api(&pack(serde_json::json!({"imageId": ""})), &[]);
+    assert_eq!(empty.image_id(), None);
+    // a record written before the field reads as one with no annotations
+    let mut old = doc.clone();
+    old.as_object_mut().unwrap().remove("annotations");
+    let read: Pack = serde_json::from_value(old).unwrap();
+    assert!(read.annotations.is_empty());
+}
+
+#[test]
+fn compare_names_the_change_of_the_image_id_of_the_os_pack_when_the_roots_are_equal() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let a = snapshot_uid(&serve_os_image(dir.path(), Some("ami-0aaa")), "t0");
+    let b = snapshot_uid(&serve_os_image(dir.path(), Some("ami-0bbb")), "t1");
+    let d = ops::compare(&a, &b, "t2");
+    assert!(d.same, "the root does not cover the annotations");
+    assert_eq!(
+        d.image_ids_changed,
+        vec![strata::diff::ImageIdChange {
+            key: "os/ubuntu-aws".into(),
+            a: "ami-0aaa".into(),
+            b: "ami-0bbb".into(),
+        }]
+    );
+    assert!(!d.nothing_differs(), "compare exits 1 for it");
+    let note = "pack os/ubuntu-aws names image ami-0aaa on one side and ami-0bbb on the other: \
+                the root does not cover the annotations";
+    let text = render::renderer(Format::Terminal, Paint::off(), false)
+        .render(&d, &a, &b, false)
+        .unwrap();
+    assert!(text.contains(&format!("note       {note}")), "{text}");
+    let md = render::renderer(Format::Markdown, Paint::off(), false)
+        .render(&d, &a, &b, false)
+        .unwrap();
+    assert!(md.contains(&format!("**Note:** {note}")), "{md}");
+    let json = serde_json::to_value(&d).unwrap();
+    assert_eq!(
+        json["imageIdsChanged"],
+        serde_json::json!([{"key": "os/ubuntu-aws", "a": "ami-0aaa", "b": "ami-0bbb"}])
+    );
+
+    // one image on each side: nothing to name
+    let same = ops::compare(&a, &a, "t2");
+    assert!(same.image_ids_changed.is_empty() && same.nothing_differs());
+    // a side that names no image is not compared: an older record, or a pack whose image
+    // Palette chooses
+    let plain = snapshot_uid(&serve_os_image(dir.path(), None), "t1");
+    for (x, y) in [(&a, &plain), (&plain, &a)] {
+        let d = ops::compare(x, y, "t2");
+        assert!(
+            d.image_ids_changed.is_empty() && d.nothing_differs(),
+            "{:?}",
+            d.image_ids_changed
+        );
+    }
+}
+
+#[test]
+fn verify_reports_a_new_image_id_of_the_os_pack_as_drift_with_the_recorded_content() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let recorded = snapshot_uid(&serve_os_image(dir.path(), Some("ami-0aaa")), "t0");
+    let live = serve_os_image(dir.path(), Some("ami-0bbb"));
+    let v = ops::verify(
+        &recorded,
+        &Palette::new(live.clone()),
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert!(!v.unchanged);
+    assert!(v.diff.same);
+    let ver = v.diff.verify.as_ref().unwrap();
+    assert_eq!(ver.status, VerifyStatus::Drifted);
+    assert_eq!(ver.image_ids_changed, v.diff.image_ids_changed);
+    let why = "has the content recorded t0, but pack os/ubuntu-aws names image ami-0bbb now, not ami-0aaa";
+    for format in [Format::Terminal, Format::Markdown] {
+        let verdict = render::renderer(format, Paint::off(), false)
+            .verdict(ver, &recorded.source)
+            .unwrap();
+        assert!(
+            verdict.contains("DRIFT") && verdict.contains(why),
+            "{verdict}"
+        );
+    }
+    let path = dir.path().join("ami.json");
+    fs::write(&path, recorded.to_json(true).unwrap()).unwrap();
+    let s = ops::verify_many(
+        &[path],
+        None,
+        |_| Ok(Palette::new(live.clone())),
+        "t1",
+        &ops::VerifyOptions::default(),
+        &Progress::silent(),
+    );
+    assert_eq!(
+        (s.records[0].status, s.exit_code()),
+        (RecordStatus::Drifted, 1)
+    );
+    let lines = render::renderer(Format::Terminal, Paint::off(), false)
+        .render_verify_summary(&s)
+        .unwrap();
+    assert!(lines.contains(why), "{lines}");
+
+    // the same image: unchanged
+    let v = ops::verify(
+        &recorded,
+        &Palette::new(serve_os_image(dir.path(), Some("ami-0aaa"))),
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert!(v.unchanged, "{:?}", v.diff.image_ids_changed);
+}
+
+#[test]
+fn verify_names_a_new_image_id_in_the_diff_and_not_in_the_verdict_when_the_root_moved() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let recorded = snapshot_uid(&serve_os_image(dir.path(), Some("ami-0aaa")), "t0");
+    // a new pack build of the OS layer, with its own image
+    with_os_pack(dir.path(), "upgraded", |p| {
+        p["annotations"] = os_annotations(Some("ami-0bbb"));
+        p["packUid"] = Value::from("os-pack-2");
+    });
+    let live = serve(MemoryApi::new(), dir.path(), "upgraded", UID_A);
+    let v = ops::verify(&recorded, &Palette::new(live), "t1", &Progress::silent()).unwrap();
+    assert!(!v.diff.same);
+    assert_eq!(v.diff.image_ids_changed.len(), 1);
+    let ver = v.diff.verify.as_ref().unwrap();
+    assert!(ver.image_ids_changed.is_empty());
+    let verdict = render::renderer(Format::Terminal, Paint::off(), false)
+        .verdict(ver, &recorded.source)
+        .unwrap();
+    assert!(
+        verdict.starts_with("DRIFT: ") && verdict.contains("differs from"),
+        "{verdict}"
+    );
+}
+
 // ---- the tiers of a cluster record (#76) ---------------------------------------------------------
 
 /// cluster-a, with what Palette reports of a running cluster beside its profiles: its hashes of

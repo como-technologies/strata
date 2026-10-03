@@ -66,6 +66,14 @@ pub enum Edit {
         /// The macro name, and the key of the new line.
         name: &'static str,
     },
+    /// Name a machine image in the annotation `imageId` of a pack ref, as a
+    /// bring-your-own-image OS pack does. The values and the pack build stay.
+    ImageId {
+        /// The pack that names the image.
+        pack: &'static str,
+        /// The id of the image, such as an AMI.
+        id: &'static str,
+    },
 }
 
 impl Edit {
@@ -155,6 +163,13 @@ impl Edit {
                 for pack in packs_mut(doc) {
                     if pack["name"] == *name {
                         pack["digest"] = json!("");
+                    }
+                }
+            }
+            Edit::ImageId { pack: name, id } => {
+                for pack in packs_mut(doc) {
+                    if pack["name"] == *name {
+                        pack["annotations"]["imageId"] = json!(id);
                     }
                 }
             }

@@ -1,0 +1,2 @@
+$ strata compare releases/1.1.8/dev.json aws-stack@1.1.8 --json | jq -c '{same, imageIdsChanged}'
+{"same":true,"imageIdsChanged":[{"key":"os/ubuntu-aws","a":"ami-0a1b2c3d4e5f60001","b":"ami-0a1b2c3d4e5f60002"}]}

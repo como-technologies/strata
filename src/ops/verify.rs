@@ -10,8 +10,8 @@ use serde_json::Value;
 
 use crate::api::{AuditKind, Palette, PaletteApi};
 use crate::diff::{
-    self, AuditEntry, AuditResource, ClusterProfileOverwritten, Diff, ImpactLevel, Verify,
-    VerifyStatus,
+    self, AuditEntry, AuditResource, ClusterProfileOverwritten, Diff, ImageIdChange, ImpactLevel,
+    Verify, VerifyStatus,
 };
 use crate::error::{Error, Result};
 use crate::progress::Progress;
@@ -41,6 +41,16 @@ pub struct VerifyOptions {
     /// Accept a pack with no upstream digest: the record is `unchanged` and not `unverified`. The
     /// report still names the pack.
     pub allow_no_digest: bool,
+}
+
+/// Each pack that names another machine image now, when the root is the recorded root: the
+/// verdict then says that only the image moved. The diff names a new image in each case.
+fn images_moved_alone(recorded: &Snapshot, live: &Snapshot) -> Vec<ImageIdChange> {
+    if recorded.root == live.root {
+        diff::image_ids_changed(recorded, live)
+    } else {
+        Vec::new()
+    }
 }
 
 /// The outcome of one record, from whether its content is unchanged and which of its packs have
@@ -261,7 +271,8 @@ pub fn verify_with<A: PaletteApi>(
                 }
                 Err(e) => return Err(e),
             };
-        let unchanged = recorded.root == live.root;
+        let image_ids_changed = images_moved_alone(recorded, &live);
+        let unchanged = recorded.root == live.root && image_ids_changed.is_empty();
         let verify = Verify {
             status: if unchanged {
                 VerifyStatus::Unchanged
@@ -282,6 +293,7 @@ pub fn verify_with<A: PaletteApi>(
             last_modified,
             upstream_unknown: Vec::new(),
             macros_changed: Vec::new(),
+            image_ids_changed,
             registry_sync,
             registry_sync_error,
         };
@@ -373,12 +385,14 @@ pub fn verify_with<A: PaletteApi>(
         _ => Vec::new(),
     };
     let macros_changed = crate::diff::macros_changed(recorded, &live);
+    let image_ids_changed = images_moved_alone(recorded, &live);
     let unchanged = !gone
         && recorded.root == live.root
         && overwritten_by.is_none()
         && renamed_to.is_none()
         && profiles_overwritten.is_empty()
-        && macros_changed.is_empty();
+        && macros_changed.is_empty()
+        && image_ids_changed.is_empty();
     let verify = Verify {
         status: if unchanged {
             VerifyStatus::Unchanged
@@ -400,6 +414,7 @@ pub fn verify_with<A: PaletteApi>(
         last_modified: last_modified.filter(|_| !gone),
         upstream_unknown: Vec::new(),
         macros_changed: macros_changed.clone(),
+        image_ids_changed,
         registry_sync: None,
         registry_sync_error: None,
     };

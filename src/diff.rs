@@ -92,6 +92,10 @@ pub struct Diff {
     /// equal: the content names the macro, and Palette gives it another value.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub macros_changed: Vec<String>,
+    /// Each pack that names a machine image in the annotation `imageId` on both sides, with two
+    /// different images. The root does not cover the annotations, so the roots can be equal.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub image_ids_changed: Vec<ImageIdChange>,
     /// With `compare --repave`: what Palette answers when strata asks whether the change repaves
     /// the cluster side, beside the level of the impact table.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -100,6 +104,14 @@ pub struct Diff {
     /// packs of the change on the cluster side.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub palette_validation: Option<PaletteValidation>,
+}
+
+impl Diff {
+    /// True when the roots are equal, no macro has another value, and no pack names another
+    /// machine image. `compare` exits `0` only then.
+    pub fn nothing_differs(&self) -> bool {
+        self.same && self.macros_changed.is_empty() && self.image_ids_changed.is_empty()
+    }
 }
 
 /// Plain-language meaning of every flag and enum value, for readers without the docs.
@@ -869,6 +881,40 @@ pub fn macros_changed(a: &Snapshot, b: &Snapshot) -> Vec<String> {
         .collect()
 }
 
+/// One pack whose two sides name another machine image: see [`Diff::image_ids_changed`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ImageIdChange {
+    /// `<layer>/<name>` of the pack.
+    pub key: String,
+    /// The `imageId` of side A.
+    pub a: String,
+    /// The `imageId` of side B.
+    pub b: String,
+}
+
+/// Each pack on both sides whose `imageId` differs, in the pack order of A. A side with no
+/// `imageId` is not compared: a record written before the annotations holds none, and a pack
+/// with none leaves the choice of the image to Palette.
+pub fn image_ids_changed(a: &Snapshot, b: &Snapshot) -> Vec<ImageIdChange> {
+    let images: BTreeMap<&str, &str> = b
+        .packs
+        .iter()
+        .filter_map(|p| Some((p.key.as_str(), p.image_id()?)))
+        .collect();
+    a.packs
+        .iter()
+        .filter_map(|p| {
+            let (x, y) = (p.image_id()?, *images.get(p.key.as_str())?);
+            (x != y).then(|| ImageIdChange {
+                key: p.key.clone(),
+                a: x.to_string(),
+                b: y.to_string(),
+            })
+        })
+        .collect()
+}
+
 /// One manifest across the two sides.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
@@ -950,6 +996,10 @@ pub struct Verify {
     /// another one now. The status is `drifted`, also when the roots are equal.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub macros_changed: Vec<String>,
+    /// When the roots are equal: each pack that names another machine image now, in the
+    /// annotation `imageId`. The status is `drifted`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub image_ids_changed: Vec<ImageIdChange>,
     /// For a pack record: the last sync of the registry, as Palette gives it. Palette holds a copy
     /// of each registry, and the verdict states that copy. Absent when the registry does not sync,
     /// or when Palette does not answer.
@@ -1615,6 +1665,7 @@ pub fn compute(a: &Snapshot, b: &Snapshot, generated_at: &str, verify: Option<Ve
             names
         },
         macros_changed: macros_changed(a, b),
+        image_ids_changed: image_ids_changed(a, b),
         palette_repave: None,
         palette_validation: None,
         upstream_unknown: packs

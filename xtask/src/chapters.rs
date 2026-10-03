@@ -29,6 +29,8 @@ const A115: &str = "64e0000000000000000000f8";
 const A116: &str = "64e0000000000000000000f9";
 // aws-stack@1.1.7: the content of 1.1.1, with Kubernetes 1.36.3 in place of 1.36.2
 const A117: &str = "64e0000000000000000000fa";
+// aws-stack@1.1.8: the content of 1.1.1, with an OS pack that names its machine image
+const A118: &str = "64e0000000000000000000fb";
 const ADDONS_DEV: &str = "64e2000000000000000000a1";
 const ADDONS_PROD: &str = "64e3000000000000000000a1";
 const ADDONS_PROD2: &str = "64e3000000000000000000a2";
@@ -64,6 +66,14 @@ const TAG_LTS2404: &[Edit] = &[Edit::Tag {
     tag: "LTS__24.04",
 }];
 const OCI_CSI: &[Edit] = &[Edit::OciCsi];
+const IMAGE_1: &[Edit] = &[Edit::ImageId {
+    pack: "ubuntu-aws",
+    id: "ami-0a1b2c3d4e5f60001",
+}];
+const IMAGE_2: &[Edit] = &[Edit::ImageId {
+    pack: "ubuntu-aws",
+    id: "ami-0a1b2c3d4e5f60002",
+}];
 const MACRO_REGION: &[Edit] = &[Edit::Macro {
     pack: "csi-aws-ebs",
     name: "region",
@@ -1587,6 +1597,43 @@ fn use_cases(r: &mut Runner) {
         "macros-verify-cluster",
         "macros-verify-cluster-full",
         r"^(aws-stack|root |note |DRIFT)",
+    );
+
+    // an OS pack that names its machine image in the annotation imageId: the root does not
+    // cover the annotations, and compare and verify name a new image (#189)
+    r.chapter("os-image", DEV_ENV);
+    r.projects(&[("dev", DEV)]);
+    r.profile(DEV, A118, "1.1.8", "aws-stack@1.1.1", IMAGE_1);
+    r.step(
+        "os-image-record",
+        0,
+        true,
+        "strata snapshot aws-stack@1.1.8 -o releases/1.1.8/dev.json",
+    );
+    r.step(
+        "os-image-annotations",
+        0,
+        false,
+        r#"jq '.packs[] | select(.layer == "os") | .annotations' releases/1.1.8/dev.json"#,
+    );
+    r.serve_here(); // state 1: the record is taken, and the OS pack names its first image
+    r.edit(DEV, A118, IMAGE_2);
+    r.step(
+        "os-image-verify-full",
+        1,
+        false,
+        "strata verify releases/1.1.8/dev.json",
+    );
+    r.excerpt(
+        "os-image-verify",
+        "os-image-verify-full",
+        r"^(aws-stack|root |note |DRIFT)",
+    );
+    r.step(
+        "os-image-compare-json",
+        1,
+        false,
+        "strata compare releases/1.1.8/dev.json aws-stack@1.1.8 --json | jq -c '{same, imageIdsChanged}'",
     );
 
     // a pack with no upstream digest, as a registry that Palette does not sync gives it

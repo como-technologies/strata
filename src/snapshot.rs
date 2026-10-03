@@ -32,6 +32,10 @@ const SNAPSHOT_FAMILY: &str = "strata-snapshot/";
 /// a digest of another. A tool that pins a version by content digest depends on this tag.
 pub const CONTENT_DIGEST: &str = "content/1";
 
+/// The annotation of a pack ref that names the machine image of an OS pack, such as an AMI. A
+/// bring-your-own-image OS pack holds it. The OS pack `ubuntu-aws` of the Public Repo does not.
+pub const IMAGE_ID_ANNOTATION: &str = "imageId";
+
 /// One published profile version: its root, per-pack hashes, canonical values, and raw contents.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
@@ -685,6 +689,10 @@ pub struct Pack {
     /// digest in a different way for each. Outside the root: the registry uid is in it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub registry_provider_type: Option<String>,
+    /// The annotations of the pack ref, as Palette gives them, sorted by name. Outside the root:
+    /// a record written before this field has none. [`Pack::image_id`] reads one of them.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub annotations: BTreeMap<String, String>,
     /// Pack params as set on the profile.
     pub params: Value,
     /// Raw values YAML as returned by the API
@@ -940,6 +948,14 @@ impl Pack {
         self.hash.upstream_source == "none" && self.kind != "manifest"
     }
 
+    /// The machine image that the pack names in its annotation `imageId`, when it names one.
+    pub fn image_id(&self) -> Option<&str> {
+        self.annotations
+            .get(IMAGE_ID_ANNOTATION)
+            .map(String::as_str)
+            .filter(|id| !id.is_empty())
+    }
+
     /// Build one pack from its ref on the profile template and the matching entry of the
     /// packs/manifests response (matched by name; missing entries leave those fields empty).
     pub fn from_api(pk: &Value, manifests_packs: &[Value]) -> Pack {
@@ -971,6 +987,14 @@ impl Pack {
         let registry_digest = s(&mm, "/spec/digest");
         let registry_provider_type =
             Some(s(pk, "/annotations/ociRegistryProviderType")).filter(|t| !t.is_empty());
+        // Palette gives each annotation as text; a value of another type is not an annotation
+        let annotations: BTreeMap<String, String> = pk
+            .get("annotations")
+            .and_then(Value::as_object)
+            .into_iter()
+            .flatten()
+            .filter_map(|(k, v)| v.as_str().map(|v| (k.clone(), v.to_string())))
+            .collect();
         // a key of strata on the pack ref of a candidate: a pack ref of Palette has none
         let preset_options: Vec<PresetOption> = pk
             .get("presetOptions")
@@ -1040,6 +1064,7 @@ impl Pack {
             ref_digest,
             registry_digest,
             registry_provider_type,
+            annotations,
             params,
             values,
             values_canon,

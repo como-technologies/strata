@@ -1,0 +1,14 @@
+$ strata verify releases/1.1.8/dev.json
+aws-stack@1.1.8 (uid 64e0000000000000000000fb)  ->  aws-stack@1.1.8 (uid 64e0000000000000000000fb)
+root       088136c929bd -> 088136c929bd   IDENTICAL
+note       pack os/ubuntu-aws names image ami-0a1b2c3d4e5f60001 on one side and ami-0a1b2c3d4e5f60002 on the other: the root does not cover the annotations
+consumers  0 -> 0 clusters
+
+  variables unchanged
+
+  [os   ] ubuntu-aws                 24.04              unchanged
+  [k8s  ] kubernetes                 1.36.2             unchanged
+  [cni  ] cni-cilium-oss             1.20.1             unchanged
+  [csi  ] csi-aws-ebs                1.65.0             unchanged
+  [addon] cert-manager               1.21.1             unchanged
+DRIFT: published version aws-stack@1.1.8 has the content recorded 2026-09-17T09:30:00Z, but pack os/ubuntu-aws names image ami-0a1b2c3d4e5f60002 now, not ami-0a1b2c3d4e5f60001; Palette last changed it 2026-09-18T14:02:11.482Z

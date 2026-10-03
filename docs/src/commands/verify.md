@@ -140,6 +140,7 @@ document shape.
 | `OK: pack <name>@<version> in registry <r> is unchanged since <time>` | A pack record: the registry holds the recorded copy. | `0` |
 | `DRIFT: pack <name>@<version> in registry <r> differs from the copy recorded <time>` | A pack record: the registry holds other content now. | `1` |
 | `DRIFT: cluster <c> running <v> has the content recorded <time>, but macro <m> has another value now` | A cluster record with the digests of its macro values (`snapshot --macros`): Palette gives a macro another value now. The root is the same. | `1` |
+| `DRIFT: <subject> has the content recorded <time>, but pack <key> names image <b> now, not <a>` | A pack names another machine image in `imageId` now. The root is the same. See [The OS pack names a new machine image](../use-cases/os-image.md). | `1` |
 | `UNVERIFIED: <subject> has the content recorded <time>, but pack <key> has no upstream digest, so a change of the archive does not show; --allow-no-digest accepts it` | The content is the same, and a pack from a registry has no digest: an equal root does not show an equal archive for it. Drift wins over this verdict. | `1` |
 
 `--allow-no-digest` accepts a pack with no upstream digest: the verdict is `OK`,

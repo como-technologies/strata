@@ -42,6 +42,7 @@ A `note` line follows `root` in these cases:
 | `<ref>@draft is the draft of <name>@<version> (uid <uid>): its publish makes this change` | One side is the draft of the version on the other side, and the roots differ. | [Review a draft before its publish](../use-cases/draft.md) |
 | `the content uses macro <m>: the root covers its name and not its value, so an edit of a macro does not show` | The values or the manifests of either side name a user macro. | [Macros](snapshot/cluster.md#macros) |
 | `macro <m> has another value on each side: ...` | Two cluster records with the digests of their macro values, and a macro that differs. `compare` exits `1`, also when the roots are equal. | [Macros](snapshot/cluster.md#macros) |
+| `pack <key> names image <a> on one side and <b> on the other: the root does not cover the annotations` | A pack names its machine image in `imageId` on both sides, and the two differ. `compare` exits `1`, also when the roots are equal. | [The OS pack names a new machine image](../use-cases/os-image.md) |
 | `pack <key> has no upstream digest: Palette gives none, so a change of the archive does not show` | A pack from a registry with `upstreamSource: none`, on either side. A line under the pack says it too. | [The content digest](../internals/hashes.md#the-content-digest) |
 | `the impact table says <level>, and Palette says <repave or no repave> for this cluster: the table does not describe its upgrade engine` | `--repave`, and the level and Palette's answer disagree. | [Ask Palette if the change repaves](compare/repave.md) |
 | `cluster <c> is behind: Palette says an update of <profile> waits for it, since <time>` | A cluster side whose record says that an update waits. The copy is not the profile. | [Whether an update waits](snapshot/cluster.md#whether-an-update-waits) |
@@ -63,8 +64,8 @@ The markdown report writes the same line as a quotation.
 
 | Exit | Meaning |
 | --- | --- |
-| `0` | The roots are equal. |
-| `1` | The roots differ. `SAME CONTENT` also exits `1`. |
+| `0` | The roots are equal, and no macro value or `imageId` differs. |
+| `1` | The roots differ, or a macro value or an `imageId` differs. `SAME CONTENT` also exits `1`. |
 | `2` | Strata could not answer. |
 
 ## Options

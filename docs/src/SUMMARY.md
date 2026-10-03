@@ -63,6 +63,7 @@
 - [Review a draft before its publish](./use-cases/draft.md)
 - [A version bump overwrites a version](./use-cases/overwritten.md)
 - [A macro value changes](./use-cases/macros.md)
+- [The OS pack names a new machine image](./use-cases/os-image.md)
 - [An app profile is updated in place](./use-cases/app-profiles.md)
 - [A team pins each environment](./use-cases/fan-out.md)
 - [A publish fans out to what pins it](./use-cases/publish-fan-out.md)
