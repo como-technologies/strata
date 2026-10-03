@@ -1,0 +1,8 @@
+$ PALETTE_PROJECT=dev strata snapshot aws-stack@1.1.4 -o releases/1.1.4/dev.json
+strata: looking up project dev
+strata: fetching profile 64e0000000000000000000f7
+strata: wrote releases/1.1.4/dev.json (root 8b03f6ed94cb)
+$ PALETTE_PROJECT=prod strata snapshot aws-stack@1.1.4 -o releases/1.1.4/prod.json
+strata: looking up project prod
+strata: fetching profile 64e1000000000000000000f7
+strata: wrote releases/1.1.4/prod.json (root 8b03f6ed94cb)

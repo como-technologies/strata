@@ -637,6 +637,72 @@ fn same_release_checks_consecutive_records_with_an_optional_registry_move_policy
 }
 
 #[test]
+fn same_release_names_a_macro_with_another_value_on_each_side_and_keeps_the_status() {
+    let fx = fixtures();
+    // A record whose content reads the macro region, as a promotion copies it to each project.
+    // `digest` is the digest of the value that the project gives, or none for a record taken
+    // without --macros.
+    let record = |name: &str, digest: Option<&str>| -> String {
+        let mut doc = json(&fx.a);
+        let pack = &mut doc["packs"][0];
+        let values = pack["values"].as_str().unwrap_or_default();
+        pack["values"] = format!("{values}\nregion: \"{{{{.spectro.macro.region}}}}\"\n").into();
+        if let Some(d) = digest {
+            doc["source"]["macroValues"] = serde_json::json!({ "region": d });
+        }
+        let path = format!("{}.{name}.json", fx.a);
+        std::fs::write(&path, serde_json::to_string(&doc).unwrap()).unwrap();
+        path
+    };
+    let dev = record("dev", Some("sha256:1111"));
+    let prod = record("prod", Some("sha256:2222"));
+    let dev_again = record("dev-again", Some("sha256:1111"));
+    let (dev_plain, prod_plain) = (record("dev-plain", None), record("prod-plain", None));
+    let other_value = "macro region has another value on each side";
+    let not_compared = "the content uses macro region: a record holds no digest of its value";
+
+    // two values: the line under the pair, and the status and the exit stay
+    let r = run(&["same-release", &dev, &prod]);
+    assert_eq!(r.code, 0, "{}{}", r.out, r.err);
+    assert!(r.out.starts_with("IDENTICAL"), "{}", r.out);
+    assert!(has_line(&r.out, other_value), "{}", r.out);
+    assert!(!r.out.contains(not_compared), "{}", r.out);
+    let r = run(&["same-release", &dev, &prod, "--json"]);
+    let d: serde_json::Value = serde_json::from_str(&r.out).unwrap();
+    assert_eq!(d["pairs"][0]["status"], "identical");
+    assert_eq!(
+        d["pairs"][0]["macrosChanged"],
+        serde_json::json!(["region"])
+    );
+    assert!(d["pairs"][0].get("macrosNotCompared").is_none(), "{d}");
+    let r = run(&["same-release", &dev, &prod, "--format", "markdown"]);
+    assert!(r.out.contains(other_value), "{}", r.out);
+
+    // one value: no line, and no field
+    let r = run(&["same-release", &dev, &dev_again, "--json"]);
+    let d: serde_json::Value = serde_json::from_str(&r.out).unwrap();
+    assert!(d["pairs"][0].get("macrosChanged").is_none(), "{d}");
+    assert!(d["pairs"][0].get("macrosNotCompared").is_none(), "{d}");
+
+    // no digests on one side or on both: the report names the macro that it cannot compare
+    for (a, b) in [(&dev_plain, &prod_plain), (&dev, &prod_plain)] {
+        let r = run(&["same-release", a, b]);
+        assert_eq!(r.code, 0, "{}{}", r.out, r.err);
+        assert!(has_line(&r.out, not_compared), "{}", r.out);
+        assert!(!r.out.contains(other_value), "{}", r.out);
+        let r = run(&["same-release", a, b, "--json"]);
+        let d: serde_json::Value = serde_json::from_str(&r.out).unwrap();
+        assert_eq!(
+            d["pairs"][0]["macrosNotCompared"],
+            serde_json::json!(["region"])
+        );
+        assert!(d["pairs"][0].get("macrosChanged").is_none(), "{d}");
+        let r = run(&["same-release", a, b, "--format", "markdown"]);
+        assert!(r.out.contains(not_compared), "{}", r.out);
+    }
+}
+
+#[test]
 fn a_cluster_snapshot_from_raw_compares_against_profile_records() {
     let fx = fixtures();
     let dir = std::path::Path::new(&fx.a).parent().unwrap();

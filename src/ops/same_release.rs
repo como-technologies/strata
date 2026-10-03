@@ -101,6 +101,15 @@ pub struct Pair {
     /// `status`: the mask is what Palette serves.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub masked: Vec<MaskedPack>,
+    /// When both records hold the digests of their macro values: each macro whose value differs,
+    /// as [`Diff::macros_changed`]. It does not change `status`: the release is the text, and
+    /// each project gives the macro its own value.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub macros_changed: Vec<String>,
+    /// When a record holds no digests of its macro values: each user macro that the content of
+    /// either record uses. Strata does not compare their values.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub macros_not_compared: Vec<String>,
 }
 
 /// Counts over the pairs.
@@ -320,6 +329,8 @@ pub fn same_release_with(
                     status = PairStatus::UnknownUpstream;
                 }
             }
+            // the diff compares the macro values only when both records hold their digests
+            let compared = a.source.macro_values().is_some() && b.source.macro_values().is_some();
             Pair {
                 a: la.clone(),
                 b: lb.clone(),
@@ -337,6 +348,8 @@ pub fn same_release_with(
                     .collect(),
                 masked: d.masked_packs(),
                 upstream_unknown: d.upstream_unknown,
+                macros_changed: d.macros_changed,
+                macros_not_compared: if compared { Vec::new() } else { d.macros },
             }
         })
         .collect();

@@ -514,6 +514,16 @@ pub(crate) fn pair_detail(p: &Pair) -> String {
     }
 }
 
+/// The notes under a pair that do not change its status: each macro with another value on each
+/// side, each macro that strata does not compare, and each pack with a masked value.
+pub(crate) fn pair_notes(p: &Pair) -> Vec<String> {
+    macros_changed_note(&p.macros_changed)
+        .into_iter()
+        .chain(macros_not_compared_note(&p.macros_not_compared))
+        .chain(p.masked.iter().map(|m| masked_sentence(&m.key, &m.paths)))
+        .collect()
+}
+
 /// `SAME RELEASE: 2 pairs passed`, or `NOT THE SAME RELEASE: 1 of 2 pairs failed`. One pair is
 /// a pair, not `1 pairs`: the reports count in the singular for one.
 pub(crate) fn chain_verdict(c: &Chain) -> String {
@@ -688,17 +698,35 @@ pub(crate) fn outside_root_sentence(macros: &[String], images: &[ImageIdChange])
     (!parts.is_empty()).then(|| parts.join(", and "))
 }
 
-/// The note for two records whose macro values differ.
-pub(crate) fn macros_changed_note(d: &Diff) -> Option<String> {
-    (!d.macros_changed.is_empty()).then(|| {
-        format!(
-            "{}: Palette applies other content, also when the roots are equal",
-            match d.macros_changed.as_slice() {
-                [one] => format!("macro {one} has another value on each side"),
-                many => format!("macros {} have other values on each side", many.join(", ")),
-            }
-        )
-    })
+/// The note for two records whose macro values differ: `macros` names each macro, as
+/// [`Diff::macros_changed`] does. None when it is empty.
+pub(crate) fn macros_changed_note(macros: &[String]) -> Option<String> {
+    let names = match macros {
+        [] => return None,
+        [one] => format!("macro {one} has another value on each side"),
+        many => format!("macros {} have other values on each side", many.join(", ")),
+    };
+    Some(format!(
+        "{names}: Palette applies other content, also when the roots are equal"
+    ))
+}
+
+/// The note for a pair of records that use macros, when a record holds no digests of the macro
+/// values: `the content uses macro region: a record holds no digest of its value, so strata does
+/// not compare the value`. None when `macros` is empty.
+pub(crate) fn macros_not_compared_note(macros: &[String]) -> Option<String> {
+    let (names, digest, value) = match macros {
+        [] => return None,
+        [one] => (format!("macro {one}"), "digest of its value", "the value"),
+        many => (
+            format!("macros {}", many.join(", ")),
+            "digests of their values",
+            "the values",
+        ),
+    };
+    Some(format!(
+        "the content uses {names}: a record holds no {digest}, so strata does not compare {value}"
+    ))
 }
 
 /// One note for each pack whose two sides name another machine image: `pack os/ubuntu-aws names
