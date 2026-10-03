@@ -9,8 +9,8 @@ names another image, and the root does not move: the root does not cover the
 annotations. See
 [What the root does not cover](../internals/hashes.md#what-the-root-does-not-cover).
 
-A record keeps the annotations of each pack. `compare` and `verify` name a pack
-whose `imageId` differs.
+A record keeps the annotations of each pack. `compare`, `verify`, and
+`same-release` name a pack whose `imageId` differs.
 
 In this example, `dev` has `aws-stack@1.1.8`, the content of 1.1.1 with an OS
 pack that names its image.
@@ -46,6 +46,12 @@ this one prints. Keep the record from step 1.
 
 ```text
 {{#include ../output/os-image-compare-json.txt}}
+```
+
+`same-release` does not accept the pair, also with one root:
+
+```text
+{{#include ../output/os-image-same-release.txt}}
 ```
 
 ## What to do

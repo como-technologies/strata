@@ -29,7 +29,7 @@ names the first changed value. See
 
 | Result | Cause | Passes |
 | --- | --- | --- |
-| `IDENTICAL` | The roots are equal. | yes |
+| `IDENTICAL` | The roots are equal, and no pack names another machine image. | yes |
 | `SAME CONTENT` | The roots differ only by the tag name of a pack build, or by a pack uid that Palette mints. Palette mints the uid of each manifest pack, and the uid of a pack from a registry that it does not sync. A candidate does not have these uids. `mintedUidOnly` in the JSON names each such pack. | yes |
 | `REGISTRY MOVE` | The roots differ only by packs from another registry, with the same tag, version, values, manifests, and params. The digest of each moved pack can differ. | only with `--allow registry-move` |
 | `DIFFERENT` | Any other difference. | no |
@@ -52,6 +52,24 @@ what the root can show. A pair that differs for another reason stays
 `DIFFERENT`, and its reasons name each pack with no digest too. `--allow` takes
 more than one value: `--allow registry-move --allow no-digest`. See
 [The content digest](../internals/hashes.md#the-content-digest).
+
+## A pack names another machine image
+
+The root does not cover the annotations of a pack. So two records can have one
+root, and their OS pack can name two machine images in `imageId`. Strata
+compares the `imageId` of each pack that the two records hold. When the two
+images differ, the pair is `DIFFERENT` under each policy, also when the roots
+are equal. The reason names the pack and the two images:
+
+```text
+{{#include ../output/os-image-same-release.txt}}
+```
+
+A side with no `imageId` is not compared. A record written before strata kept
+the annotations has none. See
+[The OS pack names a new machine image](../use-cases/os-image.md).
+
+## A masked value
 
 A pack whose values hold `********` gets a line under its pair: `pack <key> has
 a masked value at <path>: an equal root does not show an equal secret`. The line

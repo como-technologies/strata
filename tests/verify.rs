@@ -7769,6 +7769,63 @@ fn compare_names_the_change_of_the_image_id_of_the_os_pack_when_the_roots_are_eq
 }
 
 #[test]
+fn same_release_refuses_two_records_whose_os_pack_names_two_machine_images() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let record =
+        |image| common::snapshot_of_at(&serve_os_image(dir.path(), image), UID_A, "t0").unwrap();
+    let (a, b, plain) = (
+        record(Some("ami-0aaa")),
+        record(Some("ami-0bbb")),
+        record(None),
+    );
+    let pair = |x: &Snapshot, y: &Snapshot, policy, allow_no_digest| {
+        let records = [
+            ("a.json".to_string(), x.clone()),
+            ("b.json".to_string(), y.clone()),
+        ];
+        ops::same_release_with(&records, policy, allow_no_digest, "t1")
+    };
+    assert_eq!(a.root, b.root, "the root does not cover the annotations");
+    let reason = "pack os/ubuntu-aws names image ami-0aaa on one side and ami-0bbb on the \
+                  other: the root does not cover the annotations";
+    for policy in [Policy::Exact, Policy::RegistryMove] {
+        for allow_no_digest in [false, true] {
+            let c = pair(&a, &b, policy, allow_no_digest);
+            assert_eq!((c.same, c.exit_code()), (false, 1));
+            assert_eq!(c.pairs[0].status, PairStatus::Different);
+            assert!(
+                c.pairs[0].reasons.iter().any(|r| r == reason),
+                "{:?}",
+                c.pairs[0].reasons
+            );
+        }
+    }
+    let c = pair(&a, &b, Policy::Exact, true);
+    let text = render::renderer(Format::Terminal, Paint::off(), false)
+        .render_chain(&c)
+        .unwrap();
+    assert!(
+        text.starts_with("DIFFERENT") && text.contains(reason),
+        "{text}"
+    );
+
+    // a side that names no image is not compared: the answer is that of one image on both sides
+    for policy in [Policy::Exact, Policy::RegistryMove] {
+        for allow_no_digest in [false, true] {
+            let same = pair(&a, &a, policy, allow_no_digest);
+            for (x, y) in [(&a, &plain), (&plain, &a), (&plain, &plain)] {
+                let c = pair(x, y, policy, allow_no_digest);
+                assert_eq!(
+                    (c.same, c.pairs[0].status, &c.pairs[0].reasons),
+                    (same.same, same.pairs[0].status, &same.pairs[0].reasons)
+                );
+            }
+        }
+    }
+}
+
+#[test]
 fn verify_reports_a_new_image_id_of_the_os_pack_as_drift_with_the_recorded_content() {
     let dir = tempfile::tempdir().unwrap();
     common::make_fixtures(dir.path());

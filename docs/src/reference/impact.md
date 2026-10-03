@@ -46,8 +46,8 @@ A bring-your-own-image OS pack names its machine image in the annotation
 flag and gives no impact level. The pack line stays `unchanged`.
 
 When both sides name an image, and the two differ, a `note` names the pack and
-the two images. `compare` exits `1`, also when the roots are equal, and
-`verify` reports `DRIFT`. No live run shows if Palette replaces the nodes for a
+the two images. `compare` exits `1`, also when the roots are equal,
+`verify` reports `DRIFT`, and `same-release` says `DIFFERENT`. No live run shows if Palette replaces the nodes for a
 new `imageId`. See
 [The OS pack names a new machine image](../use-cases/os-image.md).
 

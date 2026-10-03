@@ -1,0 +1,4 @@
+$ strata same-release releases/1.1.8/dev.json aws-stack@1.1.8
+DIFFERENT      releases/1.1.8/dev.json -> aws-stack@1.1.8   root 088136c929bd -> 088136c929bd
+               pack os/ubuntu-aws names image ami-0a1b2c3d4e5f60001 on one side and ami-0a1b2c3d4e5f60002 on the other: the root does not cover the annotations
+NOT THE SAME RELEASE: 1 of 1 pair failed
