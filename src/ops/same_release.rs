@@ -5,7 +5,7 @@ use std::collections::{BTreeMap, HashMap};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::diff::{self, Diff, PackDiff, Status};
+use crate::diff::{self, Diff, MaskedPack, PackDiff, Status};
 use crate::snapshot::{Pack, Snapshot, Tool};
 
 /// Schema id of the document `same-release` writes.
@@ -96,6 +96,11 @@ pub struct Pair {
     /// it as `packs[].mintedUidOnly`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub minted_uid_only: Vec<String>,
+    /// Each pack, on either side, with a value that Palette masks. The root covers the mask and
+    /// not the secret, so an equal root does not show an equal secret. It does not change
+    /// `status`: the mask is what Palette serves.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub masked: Vec<MaskedPack>,
 }
 
 /// Counts over the pairs.
@@ -325,6 +330,7 @@ pub fn same_release_with(
                     .filter(|p| p.minted_uid_only)
                     .map(|p| p.key.clone())
                     .collect(),
+                masked: d.masked_packs(),
                 upstream_unknown: d.upstream_unknown,
             }
         })

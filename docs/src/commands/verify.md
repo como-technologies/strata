@@ -149,6 +149,11 @@ the exit is `0`, and the report still names the pack in a `note`. A manifest
 pack has no archive, so it never makes a record `UNVERIFIED`. See
 [The content digest](../internals/hashes.md#the-content-digest).
 
+A pack whose values hold `********` gets a `note` and a line `masked: <path>`
+under the pack. Palette masks a value whose schema format is `password`, so the
+root covers the mask and not the secret. The note does not change the verdict
+or the exit. See [A secret changes in a pack value](../use-cases/masked-value.md).
+
 Each verdict of a cluster record ends with `; N variable value changed` when the
 cluster gives a variable another value than the record holds.
 

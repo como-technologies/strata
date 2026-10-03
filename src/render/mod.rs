@@ -792,6 +792,24 @@ pub(crate) fn upstream_unknown_note(d: &Diff) -> Option<String> {
     ))
 }
 
+/// `pack addon/x has a masked value at <path>: an equal root does not show an equal secret`, for
+/// the pack `key` and its masked `paths`.
+pub(crate) fn masked_sentence(key: &str, paths: &[String]) -> String {
+    let at = match paths {
+        [one] => format!("a masked value at {one}"),
+        many => format!("masked values at {}", many.join(", ")),
+    };
+    format!("pack {key} has {at}: an equal root does not show an equal secret")
+}
+
+/// One note for each pack with a value that Palette masks: see [`masked_sentence`].
+pub(crate) fn masked_notes(d: &Diff) -> Vec<String> {
+    d.masked_packs()
+        .iter()
+        .map(|m| masked_sentence(&m.key, &m.paths))
+        .collect()
+}
+
 /// One note for each cluster side that Palette says is behind its profile: `cluster fred is
 /// behind: an update of strata-live-addon waits, since <time>`. A side read when nothing waited,
 /// or whose notifications were not read, gets none.

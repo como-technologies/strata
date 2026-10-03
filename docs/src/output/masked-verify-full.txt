@@ -1,0 +1,15 @@
+$ strata verify releases/1.1.10/dev.json
+aws-stack@1.1.10 (uid 64e0000000000000000000fd)  ->  aws-stack@1.1.10 (uid 64e0000000000000000000fd)
+root       7dbf0976d17a -> 7dbf0976d17a   IDENTICAL
+note       pack addon/cert-manager has a masked value at registryPassword: an equal root does not show an equal secret
+consumers  0 -> 0 clusters
+
+  variables unchanged
+
+  [os   ] ubuntu-aws                 24.04              unchanged
+  [k8s  ] kubernetes                 1.36.2             unchanged
+  [cni  ] cni-cilium-oss             1.20.1             unchanged
+  [csi  ] csi-aws-ebs                1.65.0             unchanged
+  [addon] cert-manager               1.21.1             unchanged
+      masked: registryPassword: Palette serves ******** in place of the secret
+OK: published version aws-stack@1.1.10 is unchanged since 2026-09-17T09:30:00Z

@@ -118,7 +118,7 @@ can give different roots, and how strata says so.
 - [A registry deletes the tag of a pack](./invalid-pack.md): a record verifies,
   and Palette marks a pack of the version invalid.
 
-**6. A version that changes after you record it.** These six are what a team
+**6. A version that changes after you record it.** These seven are what a team
 must not do, and what to do when somebody already did. This is why a record
 is worth keeping, and what `verify` is for.
 
@@ -132,6 +132,8 @@ is worth keeping, and what `verify` is for.
   changed with no change to any record.
 - [The OS pack names a new machine image](./os-image.md): an OS pack names
   another `imageId`, and the root does not move.
+- [A secret changes in a pack value](./masked-value.md): a pack value holds a
+  secret, and Palette serves `********` in its place, so the root does not move.
 - [An app profile is updated in place](./app-profiles.md): an app profile has no
   publish step, and `verify` reports `DRIFT` on a version whose number did not
   change.

@@ -45,6 +45,13 @@ It does not write it over an empty value, or over a value that holds a
 variable, `{{.spectro.var.NAME}}`. A record of a published version holds
 `********`, and not the secret.
 
+The document of a cluster masks the copies of its profiles in the same way, and
+so does the export of a profile. So a profile record and a cluster record hold
+the same mask. The root covers the mask and not the secret: two versions that
+differ in a secret alone have one root. A record names each masked value in
+`packs[].masked`, and `same-release`, `compare`, and `verify` name the pack. See
+[A secret changes in a pack value](../../use-cases/masked-value.md).
+
 Palette does not do this for the packs of a draft. A draft is the content of a
 `PUT` with no publish. A profile that was never published has only a draft.
 `GET /v1/clusterprofiles/{uid}` gives `spec.draft.packs` with each secret in

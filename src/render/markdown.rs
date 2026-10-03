@@ -6,14 +6,15 @@ use super::{
     consumers_sentence, count_of, counts_line, cross_kind_note, dash, draft_note, edge_hosts_line,
     edited_in_place_note, entry_error, gone_sentence, image_ids_changed_notes, invalid_mark,
     invalid_pack_sentences, last_modified_suffix, list_count, list_scope, macros_changed_note,
-    macros_note, outside_root_sentence, overwritten_in_place_notes, pack_version, pair_detail,
-    pair_word, palette_repave_lines, palette_repave_note, palette_validation_lines, plain_flags,
-    profiles_overwritten_sentence, project_label, record_detail, record_label, recorded_noun,
-    registry_note, registry_sync_suffix, repave_pending_notes, running_behind_notes,
-    same_content_note, second_reading_counts, short, show, state_suffix, subject, tier_path,
-    tier_states, traits_suffix, unchanged_sentence, unverified_sentence, updates_pending_notes,
-    upstream_unknown_note, values_changed, values_changed_suffix, variable_lines,
-    variables_comparable, variables_unavailable_note, version_display, who_entry, who_heading,
+    macros_note, masked_notes, masked_sentence, outside_root_sentence, overwritten_in_place_notes,
+    pack_version, pair_detail, pair_word, palette_repave_lines, palette_repave_note,
+    palette_validation_lines, plain_flags, profiles_overwritten_sentence, project_label,
+    record_detail, record_label, recorded_noun, registry_note, registry_sync_suffix,
+    repave_pending_notes, running_behind_notes, same_content_note, second_reading_counts, short,
+    show, state_suffix, subject, tier_path, tier_states, traits_suffix, unchanged_sentence,
+    unverified_sentence, updates_pending_notes, upstream_unknown_note, values_changed,
+    values_changed_suffix, variable_lines, variables_comparable, variables_unavailable_note,
+    version_display, who_entry, who_heading,
 };
 use crate::color::Paint;
 use crate::diff::{Diff, Leaf, Op, Status, Verify, VerifyStatus};
@@ -133,6 +134,9 @@ impl Renderer for MarkdownRenderer {
             o.push_str(&format!("**Note:** {note}\n\n"));
         }
         if let Some(note) = upstream_unknown_note(d) {
+            o.push_str(&format!("**Note:** {note}\n\n"));
+        }
+        for note in masked_notes(d) {
             o.push_str(&format!("**Note:** {note}\n\n"));
         }
         if let Some(note) = macros_note(d) {
@@ -407,6 +411,10 @@ impl Renderer for MarkdownRenderer {
             for r in &p.reasons {
                 detail.push_str("<br>");
                 detail.push_str(&escape(r));
+            }
+            for m in &p.masked {
+                detail.push_str("<br>");
+                detail.push_str(&escape(&masked_sentence(&m.key, &m.paths)));
             }
             o.push_str(&format!(
                 "| {} | `{}` | `{}` | {} |\n",

@@ -33,6 +33,10 @@ const A117: &str = "64e0000000000000000000fa";
 const A118: &str = "64e0000000000000000000fb";
 // aws-stack@1.1.9: the content of 1.1.1, whose cert-manager tag the registry deletes
 const A119: &str = "64e0000000000000000000fc";
+// aws-stack@1.1.10: the content of 1.1.1, with a secret in the cert-manager values, in dev and
+// prod
+const A1110: &str = "64e0000000000000000000fd";
+const A1110_PROD: &str = "64e1000000000000000000fd";
 const ADDONS_DEV: &str = "64e2000000000000000000a1";
 const ADDONS_PROD: &str = "64e3000000000000000000a1";
 const ADDONS_PROD2: &str = "64e3000000000000000000a2";
@@ -81,6 +85,10 @@ const IMAGE_2: &[Edit] = &[Edit::ImageId {
 const CERT_MANAGER_TAG_DELETED: &[Edit] = &[Edit::Invalid {
     pack: "cert-manager",
     reason: "Cert Manager 1.21.1 tag is deleted",
+}];
+const SECRET_VALUE: &[Edit] = &[Edit::Masked {
+    pack: "cert-manager",
+    key: "registryPassword",
 }];
 const MACRO_REGION: &[Edit] = &[Edit::Macro {
     pack: "csi-aws-ebs",
@@ -146,6 +154,7 @@ pub fn names() -> Vec<&'static str> {
         "macros",
         "invalid-pack",
         "no-digest",
+        "masked-value",
         "repave",
         "cluster-tiers",
         "edge-hosts",
@@ -1786,6 +1795,61 @@ fn use_cases(r: &mut Runner) {
         0,
         false,
         "strata same-release charts/candidate.json charts/published.json --allow no-digest --json | jq -c '.pairs[] | {status, mintedUidOnly}'",
+    );
+
+    // a pack value whose schema format is password: Palette serves the mask in place of the
+    // secret, so an equal root does not show an equal secret (#163)
+    r.chapter("masked-value", DEV_ENV);
+    r.projects(&[("dev", DEV), ("prod", PROD)]);
+    r.profile(DEV, A1110, "1.1.10", "aws-stack@1.1.1", SECRET_VALUE);
+    r.profile(PROD, A1110_PROD, "1.1.10", "aws-stack@1.1.1", SECRET_VALUE);
+    r.step(
+        "masked-record",
+        0,
+        true,
+        "strata snapshot aws-stack@1.1.10 -o releases/1.1.10/dev.json",
+    );
+    r.step(
+        "masked-paths",
+        0,
+        false,
+        r#"jq -c '.packs[] | select(.masked) | {key, masked}' releases/1.1.10/dev.json"#,
+    );
+    r.quiet("PALETTE_PROJECT=prod strata snapshot aws-stack@1.1.10 -o releases/1.1.10/prod.json");
+    r.serve_here(); // state 1: the two records are taken, and each one holds the mask
+    r.step(
+        "masked-same-release",
+        0,
+        false,
+        "strata same-release releases/1.1.10/dev.json releases/1.1.10/prod.json",
+    );
+    r.step(
+        "masked-compare-full",
+        0,
+        false,
+        "strata compare releases/1.1.10/dev.json releases/1.1.10/prod.json",
+    );
+    r.excerpt(
+        "masked-compare",
+        "masked-compare-full",
+        r"^(aws-stack|root |note )",
+    );
+    r.step(
+        "masked-verify-full",
+        0,
+        false,
+        "strata verify releases/1.1.10/dev.json",
+    );
+    r.excerpt(
+        "masked-verify",
+        "masked-verify-full",
+        r"^(aws-stack|root |note |  \[addon\] cert|      masked|OK)",
+    );
+    r.step(
+        "masked-same-release-json",
+        0,
+        false,
+        "strata same-release releases/1.1.10/dev.json releases/1.1.10/prod.json --json | jq -c '.pairs[] | {status, masked}'",
     );
 
     // Palette's own answer beside the impact table: a change that repaves, and one that does not

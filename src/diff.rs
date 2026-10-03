@@ -607,6 +607,11 @@ pub struct PackDiff {
     /// not show. A manifest pack has no archive, so it is never true for one.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub upstream_unknown: bool,
+    /// The path of each value that Palette masks on either side, sorted: see [`Pack::masked`].
+    /// The root covers the mask and not the secret, so an equal root does not show an equal
+    /// secret.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub masked: Vec<String>,
     /// True when the image list that the values declare differs: a detail of `AUTHORED`.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub images: bool,
@@ -675,6 +680,30 @@ pub(crate) fn invalid_packs(s: &Snapshot) -> Vec<InvalidPack> {
             reason: p.invalid_reason.clone(),
         })
         .collect()
+}
+
+/// One pack with a value that Palette masks: see [`Pack::masked`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct MaskedPack {
+    /// `<layer>/<name>` of the pack.
+    pub key: String,
+    /// The path of each value that Palette masks, on either side, sorted.
+    pub paths: Vec<String>,
+}
+
+impl Diff {
+    /// Each pack with a value that Palette masks on either side, in pack order.
+    pub(crate) fn masked_packs(&self) -> Vec<MaskedPack> {
+        self.packs
+            .iter()
+            .filter(|p| !p.masked.is_empty())
+            .map(|p| MaskedPack {
+                key: p.key.clone(),
+                paths: p.masked.clone(),
+            })
+            .collect()
+    }
 }
 
 /// One param of a pack, compared.
@@ -1256,6 +1285,18 @@ fn flatten(v: &Value, path: &mut Vec<Seg>, out: &mut Leaves) {
     }
 }
 
+/// The path of each leaf of `v` that is the text `text`, sorted, in the form of [`leaf_diff`].
+/// A document that is the text itself has no path, so it gives none.
+pub(crate) fn paths_of_text(v: &Value, text: &str) -> Vec<String> {
+    let mut leaves = Leaves::new();
+    flatten(v, &mut Vec::new(), &mut leaves);
+    leaves
+        .into_iter()
+        .filter(|(path, (_, x))| !path.is_empty() && x.as_str() == Some(text))
+        .map(|(path, _)| path)
+        .collect()
+}
+
 /// Every scalar or empty container that differs between two JSON documents, sorted by path.
 pub fn leaf_diff(a: &Value, b: &Value) -> Vec<Leaf> {
     let (mut la, mut lb) = (Leaves::new(), Leaves::new());
@@ -1302,6 +1343,14 @@ pub fn leaf_diff(a: &Value, b: &Value) -> Vec<Leaf> {
         }
     }
     out
+}
+
+/// The masked paths of the two sides of one pack, sorted, each one time.
+fn masked_union(x: &Pack, y: &Pack) -> Vec<String> {
+    let mut paths: Vec<String> = x.masked.iter().chain(&y.masked).cloned().collect();
+    paths.sort();
+    paths.dedup();
+    paths
 }
 
 /// True when the two sides of one pack have a different `packUid` that Palette mints, and are
@@ -1518,6 +1567,7 @@ pub fn compute(a: &Snapshot, b: &Snapshot, generated_at: &str, verify: Option<Ve
                     values: ValuesDiff::default(),
                     manifests: Vec::new(),
                     upstream_unknown: y.upstream_unknown(),
+                    masked: y.masked.clone(),
                     images: false,
                     charts: false,
                     image_changes: Vec::new(),
@@ -1548,6 +1598,7 @@ pub fn compute(a: &Snapshot, b: &Snapshot, generated_at: &str, verify: Option<Ve
                     values: ValuesDiff::default(),
                     manifests: Vec::new(),
                     upstream_unknown: x.upstream_unknown(),
+                    masked: x.masked.clone(),
                     images: false,
                     charts: false,
                     image_changes: Vec::new(),
@@ -1627,6 +1678,7 @@ pub fn compute(a: &Snapshot, b: &Snapshot, generated_at: &str, verify: Option<Ve
                     values: values_diff(x, y),
                     manifests: manifests_diff(x, y),
                     upstream_unknown: x.upstream_unknown() || y.upstream_unknown(),
+                    masked: masked_union(x, y),
                     images: !image_changes.is_empty(),
                     charts: !chart_changes.is_empty(),
                     image_changes,
@@ -1740,6 +1792,22 @@ pub fn compute(a: &Snapshot, b: &Snapshot, generated_at: &str, verify: Option<Ve
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn paths_of_text_gives_each_leaf_that_is_the_text_in_the_form_of_leaf_diff() {
+        let v = json!({
+            "auth": {"password": "********", "user": "fred"},
+            "users": [{"name": "barney", "token": "********"}],
+            "keys": ["********", "*********"],
+            "count": 8
+        });
+        assert_eq!(
+            paths_of_text(&v, "********"),
+            ["auth.password", "keys[0]", "users[name=barney].token"]
+        );
+        assert!(paths_of_text(&json!("********"), "********").is_empty());
+        assert!(paths_of_text(&Value::Null, "********").is_empty());
+    }
 
     #[test]
     fn leaf_diff_reports_changed_added_removed_and_keeps_false_and_null() {

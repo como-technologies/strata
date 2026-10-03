@@ -128,6 +128,12 @@ makes no claim that depends on them.
   `index.yaml` from the endpoint over HTTP, so such a registry lists nothing. An
   `oci://` chart URL inside an index is read. An OCI Helm registry is its own
   kind: see [The digest of each registry kind](packs.md#the-digest-of-each-registry-kind).
+- **The mask of a published pack and of a cluster copy.** Palette writes
+  `********` over each value of the format `password` when it serves a
+  published version, and when it serves the copies of the profiles of a
+  cluster. Strata does not depend on the schema for this: a record names each
+  value that is the text `********`. See
+  [A secret changes in a pack value](../../use-cases/masked-value.md).
 - **The mask of a draft.** Palette writes `********` over each value of the
   format `password` in the published packs only. It serves the packs of a
   draft in clear. Strata writes the mask over the draft itself: see

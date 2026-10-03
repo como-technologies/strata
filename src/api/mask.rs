@@ -12,7 +12,7 @@ use serde_yaml::Value as Yaml;
 use crate::error::{Error, Result};
 
 /// The text that Palette writes over a secret.
-pub(super) const MASKED: &str = "********";
+pub(crate) const MASKED: &str = "********";
 
 /// True when a format of the pack schema marks a secret: one of its `${...}` parts starts with
 /// `password`, as Palette finds it. `${password}` and `${password:/.{8,}/}` are
