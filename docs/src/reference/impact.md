@@ -39,6 +39,18 @@ that moved:
 | `~ chart <name>: <old> -> <new>`, `+ chart ...`, `- chart ...` | A chart of `pack.content.charts` moved, was added, or was removed. |
 | `~ param <name>: <old> -> <new>`, `+ param ...`, `- param ...` | A param moved, was added, or was removed. It comes with `AUTHORED`. For an app tier, a param is a property of the tier. |
 
+## A new machine image
+
+A bring-your-own-image OS pack names its machine image in the annotation
+`imageId`. The root does not cover the annotations, so a new `imageId` moves no
+flag and gives no impact level. The pack line stays `unchanged`.
+
+When both sides name an image, and the two differ, a `note` names the pack and
+the two images. `compare` exits `1`, also when the roots are equal, and
+`verify` reports `DRIFT`. No live run shows if Palette replaces the nodes for a
+new `imageId`. See
+[The OS pack names a new machine image](../use-cases/os-image.md).
+
 ## The impact levels
 
 Strata calculates an impact for each changed pack, from its layer and flags. The

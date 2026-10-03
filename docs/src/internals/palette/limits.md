@@ -30,6 +30,10 @@ These are open:
   other than ECR and the Docker registry: ACR, GHCR, Harbor, and JFrog
   Artifactory are named on the public page, and no run uses one.
 - The variables of a cluster template while the template applies.
+- A bring-your-own-image OS pack, and a new `imageId` under one version: no run
+  gives an OS pack an `imageId`. So no run shows if Palette replaces the nodes
+  for a new image, or which `imageId` a cluster copy holds. See
+  [The OS pack names a new machine image](../../use-cases/os-image.md).
 - The answer of `POST /v1/clusterprofiles/validate/packs` to a pack that
   requires a pack that the profile does not hold. No pack of the Public Repo
   lists a dependency. See

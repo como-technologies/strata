@@ -678,8 +678,7 @@ fn cmd_compare(a: &CompareArgs) -> Result<ExitCode> {
         }
     }
     print!("{}", a.out.renderer().render(&d, &sa, &sb, a.full)?);
-    // two clusters whose macros resolve two ways run other content, also where the roots are equal
-    Ok(exit_for(d.same && d.macros_changed.is_empty()))
+    Ok(exit_for(d.nothing_differs()))
 }
 
 fn cmd_snapshot(a: &SnapshotArgs) -> Result<ExitCode> {

@@ -371,3 +371,21 @@ Registry`, and `Bitnami` serves it. Strata reads the state from the listing:
 
 Palette applies a pack constraint when a profile is created, and not through this
 answer: see [A pack that requires another pack](#a-pack-that-requires-another-pack).
+
+## The annotations of a pack reference
+
+Each pack reference of a profile has `annotations`, a map of text. Palette
+copies them from the pack version in the registry: `GET /v1/packs/<uid>` gives
+the same map in `packValues[].annotations`. The OS pack `ubuntu-aws` 24.04 of
+the Public Repo has `airgap`, `architecture`, `osName`, `os_spectro_version`,
+`os_version`, `revision`, `skipK8sInstall`, and `sshUsername`. It has no
+`imageId`.
+
+A bring-your-own-image OS pack names its machine image in `imageId`, from the
+`annotations` of its `pack.json`
+([Add a custom pack](https://docs.spectrocloud.com/registries-and-packs/add-custom-packs/)).
+A record keeps the annotations outside the root, and `compare` and `verify`
+name a new `imageId`: see
+[The OS pack names a new machine image](../../use-cases/os-image.md).
+
+[The live example checks the annotations of the OS pack](../../development/live-runs.md#packssh).

@@ -8,7 +8,9 @@ mod unified;
 use serde_json::Value;
 
 use crate::color::Paint;
-use crate::diff::{Diff, Leaf, PackDiff, Status, VariableSummary, VariablesByName, Verify};
+use crate::diff::{
+    Diff, ImageIdChange, Leaf, PackDiff, Status, VariableSummary, VariablesByName, Verify,
+};
 use crate::error::Result;
 use crate::ops::{Chain, ConsumersReport, Listing, PackListing, Pair, PairStatus, VerifySummary};
 use crate::snapshot::{Snapshot, Source};
@@ -623,12 +625,21 @@ pub(crate) fn macros_note(d: &Diff) -> Option<String> {
     ))
 }
 
-/// Why a record drifted when only macro values moved: `macro region has another value now`.
-pub(crate) fn macros_changed_sentence(names: &[String]) -> String {
-    match names {
-        [one] => format!("macro {one} has another value now"),
-        many => format!("macros {} have other values now", many.join(", ")),
-    }
+/// Why a record with the recorded content drifted: `macro region has another value now`, and
+/// `pack os/ubuntu-aws names image ami-2 now, not ami-1`. None when no macro value and no image
+/// moved.
+pub(crate) fn outside_root_sentence(macros: &[String], images: &[ImageIdChange]) -> Option<String> {
+    let mut parts = match macros {
+        [] => Vec::new(),
+        [one] => vec![format!("macro {one} has another value now")],
+        many => vec![format!("macros {} have other values now", many.join(", "))],
+    };
+    parts.extend(
+        images
+            .iter()
+            .map(|c| format!("pack {} names image {} now, not {}", c.key, c.b, c.a)),
+    );
+    (!parts.is_empty()).then(|| parts.join(", and "))
 }
 
 /// The note for two cluster records whose macro values differ.
@@ -642,6 +653,20 @@ pub(crate) fn macros_changed_note(d: &Diff) -> Option<String> {
             }
         )
     })
+}
+
+/// One note for each pack whose two sides name another machine image: `pack os/ubuntu-aws names
+/// image ami-1 on one side and ami-2 on the other: the root does not cover the annotations`.
+pub(crate) fn image_ids_changed_notes(d: &Diff) -> Vec<String> {
+    d.image_ids_changed
+        .iter()
+        .map(|c| {
+            format!(
+                "pack {} names image {} on one side and {} on the other: the root does not cover the annotations",
+                c.key, c.a, c.b
+            )
+        })
+        .collect()
 }
 
 /// Palette's answer to `--repave`, one line for each reason: `repave: PackValuesUpdated
@@ -903,14 +928,14 @@ fn who_suffix(r: &crate::ops::VerifiedRecord) -> String {
     }
 }
 
-/// The macros of a drifted record whose values moved; empty when none did, or the root moved.
-fn record_macros_changed(r: &crate::ops::VerifiedRecord) -> Vec<String> {
+/// Why a drifted record with the recorded content drifted: see [`outside_root_sentence`]. None
+/// when no macro value and no image moved, or when the root moved.
+fn record_outside_root(r: &crate::ops::VerifiedRecord) -> Option<String> {
     r.diff
         .as_ref()
         .filter(|d| d.same)
         .and_then(|d| d.verify.as_ref())
-        .map(|v| v.macros_changed.clone())
-        .unwrap_or_default()
+        .and_then(|v| outside_root_sentence(&v.macros_changed, &v.image_ids_changed))
 }
 
 /// The sentence after a record's status, and the state of its object when it is not the state
@@ -968,10 +993,10 @@ fn record_sentence(r: &crate::ops::VerifiedRecord) -> String {
             values_changed_suffix(record_values_changed(r)),
             who_suffix(r)
         ),
-        RecordStatus::Drifted if !record_macros_changed(r).is_empty() => format!(
+        RecordStatus::Drifted if record_outside_root(r).is_some() => format!(
             "has the content recorded {}, but {}{}{}",
             r.recorded_at,
-            macros_changed_sentence(&record_macros_changed(r)),
+            record_outside_root(r).unwrap_or_default(),
             values_changed_suffix(record_values_changed(r)),
             who_suffix(r)
         ),

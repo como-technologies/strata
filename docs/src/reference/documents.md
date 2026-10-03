@@ -97,6 +97,10 @@ profile, or pack version.
     the pack reference. Palette follows a new digest in a different way for each:
     see [The digest of each registry kind](../internals/palette/packs.md#the-digest-of-each-registry-kind).
     It is outside the root.
+  - `annotations`, only when the pack reference has some: each annotation, as
+    Palette gives it, sorted by name. A bring-your-own-image OS pack names its
+    machine image in `imageId`. They are outside the root. A record written
+    before this field has none.
   - `params`: the params of the pack on the profile, as a map. For an app tier,
     its properties: each name and its value.
   - `values`: the raw values YAML. Palette writes `********` over each value
@@ -189,6 +193,9 @@ A comparison of two sides, `a` and `b`.
 - `macros`, only when it is not empty: each user macro that either side uses.
 - `macrosChanged`, only when it is not empty: between two cluster records with
   `macroValues`, each macro whose value differs.
+- `imageIdsChanged`, only when it is not empty: each pack that names an image
+  in `imageId` on both sides, with two different images. Each entry has `key`,
+  `a`, and `b`. `compare` exits `1` for it, also when `same` is `true`.
 - `clusterTiers`, only between two cluster records that carry tiers: for each
   tier that both carry, and for `labels`, `tier`, `same`, and `diff[]` with the
   fields that differ. A difference here does not change `same`.
@@ -208,6 +215,8 @@ A comparison of two sides, `a` and `b`.
   - `upstreamUnknown`: for an `unverified` record, the packs that make it so.
   - `macrosChanged`: for a cluster record with `macroValues`, each macro whose
     value moved. The status is `drifted`, also when the roots are equal.
+  - `imageIdsChanged`: when the roots are equal, each pack that names another
+    image in `imageId` now, with `key`, `a`, and `b`. The status is `drifted`.
   - `overwrittenBy`: for a profile record, the `name@version` that the uid names
     now. The status is `drifted`, also when the roots are equal.
   - `renamedTo`: for a profile record, the `name@version` that the uid names

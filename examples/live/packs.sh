@@ -10,6 +10,7 @@
 #   3  the refs that name a registry or a tag, and the errors for a version and a registry that
 #      the tenant does not have
 #   4  the options of a pack template, and a candidate whose values select one (#151)
+#   5  the annotations of the OS pack in a record of the release profile (#189)
 #
 # The CSI versions are the one the live profiles pin and an older one, from the file of the cloud
 # in terraform/. On AWS they are the two that the offline examples also use. Results go under runs/<UTC time>/packs/, or OUT. Exit 0 only when no
@@ -150,6 +151,20 @@ check preset-warning-says 0 '#151: the warning names the pack, the option, the p
   grep -qF "warning: headlamp: the values select the option public of access ($preset_key)" preset-warning.err
 check preset-recorded 0 '#151: the record has packs[].presetOptions[] with that selection' -- \
   jq -e --arg k "$preset_key" '.packs[0].presetOptions == [{"parameter": "access", "targetKey": $k, "option": "public"}]' preset-candidate.json
+
+# A record keeps the annotations of each pack reference, outside the root. Palette copies them
+# from the pack version in the registry, and the OS pack of the Public Repo names no imageId.
+echo "== the annotations of the OS pack (#189)" | tee -a steps.log
+check os-record 0 "#189: a record of the release profile, with its $(out os_pack_name) OS pack" -- \
+  "$strata" snapshot "$(out release_profile_uid)" -o release.json
+check os-annotations 0 '#189: the record keeps the annotations of the OS pack, and they hold no imageId' -- \
+  jq -e '[.packs[] | select(.layer == "os") | .annotations] | length == 1 and (.[0] | length > 0 and (has("imageId") | not))' release.json
+os_uid=$(jq -r '.packs[] | select(.layer == "os") | .packUid' release.json)
+check os-pack-registry 0 '#189: the pack version of the OS pack in the registry' -- \
+  "$live/api.sh" get "/v1/packs/$os_uid"
+check os-annotations-registry 0 '#189: the annotations of the pack reference are those of the pack version in the registry' -- \
+  jq -e --slurpfile r os-pack-registry.out --arg u "$os_uid" \
+  '[$r[0].packValues[] | select(.packUid == $u) | .annotations] == [.packs[] | select(.layer == "os") | .annotations]' release.json
 
 echo
 echo "$script: $(grep -c PASS steps.log) passed, $failures failed; results in $run"

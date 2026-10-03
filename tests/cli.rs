@@ -176,6 +176,36 @@ fn identical_profiles_exit_zero() {
 }
 
 #[test]
+fn two_records_whose_os_pack_names_two_images_exit_one_with_identical_roots() {
+    let fx = fixtures();
+    let with_image = |image: &str| -> String {
+        let mut doc = json(&fx.a);
+        for pack in doc["packs"].as_array_mut().unwrap() {
+            if pack["layer"] == "os" {
+                pack["annotations"] = serde_json::json!({"imageId": image});
+            }
+        }
+        let path = format!("{}.{image}.json", fx.a);
+        std::fs::write(&path, serde_json::to_string(&doc).unwrap()).unwrap();
+        path
+    };
+    let (x, y) = (with_image("ami-0aaa"), with_image("ami-0bbb"));
+    let r = run(&["compare", &x, &y]);
+    assert_eq!(r.code, 1, "{}{}", r.out, r.err);
+    assert!(has_line(&r.out, "IDENTICAL"), "{}", r.out);
+    assert!(
+        has_line(
+            &r.out,
+            "names image ami-0aaa on one side and ami-0bbb on the other"
+        ),
+        "{}",
+        r.out
+    );
+    let r = run(&["compare", &x, &x]);
+    assert_eq!(r.code, 0, "{}{}", r.out, r.err);
+}
+
+#[test]
 fn changed_profiles_report_every_kind_of_change() {
     let fx = fixtures();
     let r = run(&[&fx.a, &fx.b]); // default subcommand
