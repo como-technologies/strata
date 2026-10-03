@@ -2,7 +2,7 @@ $ strata verify runs/payments.json
 aws-stack@1.1.4 on cluster payments (uid 64f1000000000000000000e1)  ->  aws-stack@1.1.4 on cluster payments (uid 64f1000000000000000000e1)
 root       8b03f6ed94cb -> 8b03f6ed94cb   IDENTICAL
 note       the content uses macro region: the root covers its name and not its value, so an edit of a macro does not show
-note       macro region has another value on each side: the clusters run other content, also where the roots are equal
+note       macro region has another value on each side: Palette applies other content, also when the roots are equal
 
   variables unchanged
   cluster tiers unchanged

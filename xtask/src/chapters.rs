@@ -1567,13 +1567,23 @@ fn use_cases(r: &mut Runner) {
         r#"strata verify 'runs/*.json' --format json | jq '.records[] | {path, clusterVariables}'"#,
     );
 
-    // a project macro that the values of a pack read: the root covers its name, and a cluster
-    // record with --macros holds the digest of its value
+    // a project macro that the values of a pack read: the root covers its name, and a record
+    // with --macros holds the digest of its value. The add-on profile that the cluster group pins
+    // reads a second macro in its manifest.
     r.chapter("macros", DEV_ENV);
     r.projects(&[("dev", DEV)]);
     r.profile(DEV, A114, "1.1.4", "aws-stack@1.1.1", MACRO_REGION);
+    r.addons(
+        DEV,
+        ADDONS_DEV,
+        "64e2000000000000000000d1",
+        "\"{{.spectro.macro.podSecurity}}\"",
+        "1.0.0",
+    );
     r.set_macro(DEV, "region", "us-east-2");
+    r.set_macro(DEV, "podSecurity", "baseline");
     r.cluster(DEV, PAYMENTS, "payments", &[A114]);
+    r.cluster_group(DEV, DEV_GROUP, "dev-group", &[ADDONS_DEV], &[]);
     r.step(
         "macros-record",
         0,
@@ -1592,8 +1602,33 @@ fn use_cases(r: &mut Runner) {
         false,
         "jq .source.cluster.macroValues runs/payments.json",
     );
-    r.serve_here(); // state 1: the records are taken, and the macro has its first value
+    r.step(
+        "macros-record-version",
+        0,
+        true,
+        "strata snapshot aws-stack@1.1.4 --macros -o releases/1.1.4/dev-macros.json",
+    );
+    r.step(
+        "macros-digests-version",
+        0,
+        false,
+        "jq .source.macroValues releases/1.1.4/dev-macros.json",
+    );
+    r.step(
+        "macros-record-group",
+        0,
+        true,
+        "strata snapshot clustergroup:dev-group --macros -o runs/dev-group.json",
+    );
+    r.step(
+        "macros-digests-group",
+        0,
+        false,
+        "jq .source.cluster.macroValues runs/dev-group.json",
+    );
+    r.serve_here(); // state 1: the records are taken, and each macro has its first value
     r.set_macro(DEV, "region", "eu-west-1");
+    r.set_macro(DEV, "podSecurity", "restricted");
     r.step(
         "macros-verify-release-full",
         0,
@@ -1615,6 +1650,28 @@ fn use_cases(r: &mut Runner) {
         "macros-verify-cluster",
         "macros-verify-cluster-full",
         r"^(aws-stack|root |note |DRIFT)",
+    );
+    r.step(
+        "macros-verify-version-full",
+        1,
+        false,
+        "strata verify releases/1.1.4/dev-macros.json",
+    );
+    r.excerpt(
+        "macros-verify-version",
+        "macros-verify-version-full",
+        r"^(aws-stack|root |note |DRIFT)",
+    );
+    r.step(
+        "macros-verify-group-full",
+        1,
+        false,
+        "strata verify runs/dev-group.json",
+    );
+    r.excerpt(
+        "macros-verify-group",
+        "macros-verify-group-full",
+        r"^(platform-addons|root |note |DRIFT)",
     );
 
     // an OS pack that names its machine image in the annotation imageId: the root does not

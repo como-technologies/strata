@@ -478,11 +478,15 @@ it keeps in a temporary file. It puts each change back, and deletes the macro.
 | Check | Expected exit | What it shows |
 |---|---|---|
 | `base-flag`, `base-record`, `base-no-note` | 0, 0, 1 | #72: at the baseline, Palette says the add-on version has no user macros, and a report names none |
+| `base-profile-resolved` | 0 | #111: Palette resolves the macros of the version with no cluster, in one `resolved` map, and the system macro of the cluster name is empty there |
 | `macro-set`, `macro-edit`, `macro-flag` | 0 | #72: with the manifest reading a project macro, Palette says `hasUserMacros: true` |
 | `macro-record`, `macro-names` | 0 | #72: a report of the record names the macro, and says the root covers its name and not its value |
 | `macro-accept`, `macro-settled`, `macro-cluster`, `macro-cluster-plain`, `macro-digest` | 0 | #72: cluster A takes the update; a record with `--macros` holds `sha256:` of the value, and not the value |
 | `macro-resolved-1` | 0 | #72: `resolvedValues` gives the value of the macro |
+| `macro-version`, `macro-version-digest`, `macro-profile-resolved-1` | 0 | #111: a record of the version with `--macros` holds `sha256:` of the value at the scope of the version in `source.macroValues`; `resolvedValues` of the version gives the value of the project macro |
 | `change`, `change-resolved` | 0 | #72: the macro gets another value, and `resolvedValues` gives it at once |
+| `change-profile-resolved` | 0 | #111: `resolvedValues` of the version gives the new value at once |
+| `change-version-macros`, `change-version-macros-says` | 1, 0 | #111: the record of the version with the digests reports `DRIFT`, and the verdict names the macro |
 | `change-version`, `change-plain` | 0 | #72: the record of the version, and a cluster record without the digests, still verify |
 | `change-cluster`, `change-cluster-says` | 1, 0 | #72: the cluster record with the digests reports `DRIFT`, and the verdict names the macro |
 | `change-compare`, `change-compare-says` | 1, 0 | #72: `compare` of the two cluster records exits `1` with equal roots, and names the macro |
@@ -738,6 +742,7 @@ baseline with cluster A.
 | `group-compare`, `group-compare-record` | 0 | #78: `compare` of the group, or of its record, with the virtual cluster reads the pinned profile of the member: `IDENTICAL` |
 | `group-compare-no-values` | 0 | #78: a group gives no variable values, so the compare states no cluster value |
 | `group-verify` | 0 | #78: `verify` of the record of the group |
+| `group-macros`, `group-macro-values`, `group-macros-verify` | 0 | #111: a record of `clustergroup:<uid>` with `--macros` holds `cluster.macroValues`, and `verify` of it reads the values of the group again |
 | `member-consumer`, `member-consumer-listed` | 1, 0 | #78: `consumers` of the add-on version names the virtual cluster, from the consumer list of Palette |
 | `member-not-in-listing` | 0 | #78: the cluster listing does not name the virtual cluster |
 | `search-profile`, `search-profile-runs` | 0 | #181: the cluster search with `clusterProfiles eq <add-on name>` answers cluster A, which runs the add-on version, and not the virtual cluster |

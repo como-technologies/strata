@@ -43,6 +43,8 @@ version as gone. A cluster does the same with its own document. See
 | `GET /v1/spectroclusters/{uid}/profileUpdates` | `profiles[]`: each profile of the cluster as the update that waits gives it, in the shape of `spec.clusterProfileTemplates`. `cluster:<cluster>@pending` reads it. |
 | `GET /v1/clusterprofiles/{uid}/packs/manifests` | For `@pending`: the manifests of each profile in `profiles[]`. The cluster holds no copy of them yet. |
 | `GET /v1/spectroclusters/{uid}/packs/resolvedValues` | The value that Palette gives each macro, for `snapshot --macros`, and `verify` of a record that holds macro digests. |
+| `GET /v1/clustergroups/{uid}/packs/resolvedValues` | The value that Palette gives each macro for a cluster group, in the shape of the answer for a cluster: `snapshot clustergroup:<group> --macros`, and `verify` of its record. |
+| `GET /v1/clusterprofiles/{uid}/packs/resolvedValues` | The value that Palette gives each macro at the scope of a profile version, with no cluster, in one `resolved` map: `snapshot <name>@<version> --macros`, and `verify` of its record. |
 | `GET /v1/cloudconfigs/{cloudType}/{configUid}` | The machine pools and the cloud part of the cluster, for `snapshot --shape`, and `verify` of a record that holds the `shape` tier. |
 | `POST /v1/spectroclusters/{uid}/validate/repave` | Whether a change of the profiles of the cluster replaces its nodes, for `compare --repave`. The request changes nothing. |
 | `POST /v1/spectroclusters/{uid}/validate/packs` | Whether Palette accepts the packs of a change of the profiles of the cluster, for `compare --validate`. It takes the body of `validate/repave`, and changes nothing. |

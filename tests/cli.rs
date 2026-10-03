@@ -1158,6 +1158,40 @@ fn snapshot_of_a_set_with_json_prints_an_error_of_the_query_as_one_json_line() {
 }
 
 #[test]
+fn snapshot_macros_names_the_refs_it_takes_and_refuses_another_before_any_request() {
+    let home = tempfile::tempdir().unwrap();
+    let home = home.path().to_str().unwrap();
+    for reference in [
+        "edgehost:store-1",
+        "appprofile:shop@1.0.0",
+        "pack:kubernetes@1.36.2",
+        "aws-stack@1.1.1@draft",
+    ] {
+        // no key: a usage error comes before strata needs one
+        let r = run_in(
+            &["snapshot", reference, "--macros"],
+            &[("HOME", home)],
+            &["PALETTE_API_KEY", "SPECTROCLOUD_APIKEY"],
+        );
+        assert_eq!(r.code, 2, "{reference}: {}", r.err);
+        assert_eq!(
+            r.err.trim_end(),
+            "strata: --macros takes <name>@<version>, a profile uid, cluster:<cluster>, or \
+             clustergroup:<group>",
+            "{reference}"
+        );
+    }
+    let help = run(&["snapshot", "--help"]);
+    assert!(
+        help.out.contains(
+            "It takes <name>@<version>, a profile uid, cluster:<cluster>, or clustergroup:<group>"
+        ),
+        "{}",
+        help.out
+    );
+}
+
+#[test]
 fn snapshot_validate_with_no_profile_to_ask_about_is_a_usage_error_before_any_request() {
     let home = tempfile::tempdir().unwrap();
     let home = home.path().to_str().unwrap();

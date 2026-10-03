@@ -139,10 +139,14 @@ document shape.
 | `DRIFT: edge host <h> no longer exists: uid <uid> is gone from Palette since the record of <time>` | A record of an edge host that Palette no longer has. A cluster group, or a cluster whose document is gone, gets the same verdict. | `1` |
 | `OK: pack <name>@<version> in registry <r> is unchanged since <time>` | A pack record: the registry holds the recorded copy. | `0` |
 | `DRIFT: pack <name>@<version> in registry <r> differs from the copy recorded <time>` | A pack record: the registry holds other content now. | `1` |
-| `DRIFT: cluster <c> running <v> has the content recorded <time>, but macro <m> has another value now` | A cluster record with the digests of its macro values (`snapshot --macros`): Palette gives a macro another value now. The root is the same. | `1` |
+| `DRIFT: <subject> has the content recorded <time>, but macro <m> has another value now` | A record of a version, a cluster, or a cluster group with the digests of its macro values (`snapshot --macros`): Palette gives a macro another value now. The root is the same. | `1` |
 | `DRIFT: <subject> has the content recorded <time>, but pack <key> names image <b> now, not <a>` | A pack names another machine image in `imageId` now. The root is the same. See [The OS pack names a new machine image](../use-cases/os-image.md). | `1` |
 | `INVALID: Palette marks pack <key> invalid now (<reason>)`, under the verdict | Palette marks a pack of the version invalid now: the registry deleted its tag. It does not change the verdict. See [A registry deletes the tag of a pack](../use-cases/invalid-pack.md). | the exit code of the verdict |
 | `UNVERIFIED: <subject> has the content recorded <time>, but pack <key> has no upstream digest, so a change of the archive does not show; --allow-no-digest accepts it` | The content is the same, and a pack from a registry has no digest: an equal root does not show an equal archive for it. Drift wins over this verdict. | `1` |
+
+A verdict of an edge host record names `<v> on edge host <h>`, and a verdict of
+a cluster group record names `<v> pinned by cluster group <g>`, where a cluster
+record names `cluster <c> running <v>`.
 
 `--allow-no-digest` accepts a pack with no upstream digest: the verdict is `OK`,
 the exit is `0`, and the report still names the pack in a `note`. A manifest

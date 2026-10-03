@@ -33,6 +33,9 @@ pub struct RawProfile {
     /// profile with no draft, where `manifests` holds the content, and for a directory that an
     /// older build saved.
     pub manifest_entities: Option<Value>,
+    /// `GET /v1/clusterprofiles/{uid}/packs/resolvedValues`: the value Palette gives each macro
+    /// at the scope of the profile. `None` unless asked for, with `snapshot --macros`.
+    pub resolved_values: Option<Value>,
 }
 
 /// The file of a raw directory that holds [`RawProfile::manifest_entities`].
@@ -49,6 +52,10 @@ pub fn has_draft(profile: &Value) -> bool {
 
 /// The file that records the project a raw directory's responses came from.
 const SCOPE_FILE: &str = "scope.json";
+
+/// The file of a raw directory that holds the values Palette gives the macros, when they were
+/// read.
+const RESOLVED_VALUES_FILE: &str = "resolved-values.json";
 
 /// The project saved in `dir`, or `None` when it has no scope file or names no project.
 fn read_scope(dir: &Path) -> Result<Option<String>> {
@@ -103,6 +110,16 @@ fn scope_document(
         "fetchedAt": fetched_at,
         "variablesUnavailable": variables_unavailable,
     })
+}
+
+/// Read the JSON file `name` from `dir` when it is there. `None` is a file that the build which
+/// saved the directory did not write.
+fn read_optional(dir: &Path, name: &str) -> Result<Option<Value>> {
+    if dir.join(name).is_file() {
+        read_json_file(dir, name).map(Some)
+    } else {
+        Ok(None)
+    }
 }
 
 /// Read one JSON file from `dir`; an empty file is an error of its own.
@@ -196,16 +213,14 @@ impl RawProfile {
             variables_unavailable: read_scope_variables_unavailable(dir)?,
             project_uid: read_scope(dir)?,
             fetched_at: read_scope_fetched_at(dir)?,
-            manifest_entities: if dir.join(MANIFEST_ENTITIES_FILE).is_file() {
-                Some(read_json_file(dir, MANIFEST_ENTITIES_FILE)?)
-            } else {
-                None
-            },
+            manifest_entities: read_optional(dir, MANIFEST_ENTITIES_FILE)?,
+            resolved_values: read_optional(dir, RESOLVED_VALUES_FILE)?,
         })
     }
 
     /// Write the three files and `scope.json` under `dir`, and make `dir` if it is not there. For
-    /// a profile that has a draft, also write its manifests.
+    /// a profile that has a draft, also write its manifests, and with `--macros`, the values of
+    /// the macros.
     pub fn save_dir(&self, dir: &Path, fetched_at: &str) -> Result<()> {
         let scope = scope_document(&self.project_uid, fetched_at, self.variables_unavailable);
         let mut files = vec![
@@ -216,6 +231,9 @@ impl RawProfile {
         ];
         if let Some(entities) = &self.manifest_entities {
             files.push((MANIFEST_ENTITIES_FILE, entities));
+        }
+        if let Some(r) = &self.resolved_values {
+            files.push((RESOLVED_VALUES_FILE, r));
         }
         write_json_files(dir, &files)
     }
@@ -271,32 +289,16 @@ impl RawCluster {
             variables_unavailable: read_scope_variables_unavailable(dir)?,
             project_uid: read_scope(dir)?,
             fetched_at: read_scope_fetched_at(dir)?,
-            notifications: if dir.join(Self::NOTIFICATIONS).is_file() {
-                Some(read_json_file(dir, Self::NOTIFICATIONS)?)
-            } else {
-                None
-            },
+            notifications: read_optional(dir, Self::NOTIFICATIONS)?,
             notifications_error: None,
-            repave: if dir.join(Self::REPAVE).is_file() {
-                Some(read_json_file(dir, Self::REPAVE)?)
-            } else {
-                None
-            },
-            resolved_values: if dir.join(Self::RESOLVED_VALUES).is_file() {
-                Some(read_json_file(dir, Self::RESOLVED_VALUES)?)
-            } else {
-                None
-            },
-            cloud_config: if dir.join(Self::CLOUD_CONFIG).is_file() {
-                Some(read_json_file(dir, Self::CLOUD_CONFIG)?)
-            } else {
-                None
-            },
+            repave: read_optional(dir, Self::REPAVE)?,
+            resolved_values: read_optional(dir, Self::RESOLVED_VALUES)?,
+            cloud_config: read_optional(dir, Self::CLOUD_CONFIG)?,
         })
     }
 
     /// The file that holds the values Palette gives the macros, when they were read.
-    pub const RESOLVED_VALUES: &'static str = "resolved-values.json";
+    pub const RESOLVED_VALUES: &'static str = RESOLVED_VALUES_FILE;
 
     /// The file that holds the cloud config of the cluster, when it was read.
     pub const CLOUD_CONFIG: &'static str = "cloud-config.json";
@@ -413,6 +415,8 @@ impl RawCluster {
             project_uid: self.project_uid.clone(),
             fetched_at: self.fetched_at.clone(),
             manifest_entities: None,
+            // the macros of a cluster resolve for the cluster, in RawCluster::resolved_values
+            resolved_values: None,
         }
     }
 }
@@ -433,12 +437,14 @@ mod tests {
             project_uid: Some("p1".into()),
             fetched_at: None,
             manifest_entities: Some(json!({"m1": {"spec": {"draft": {"content": "c"}}}})),
+            resolved_values: Some(json!({"resolved": {"{{.spectro.macro.region}}": "us-east-2"}})),
         };
         raw.save_dir(dir.path(), "t0").unwrap();
         let back = RawProfile::load_dir(dir.path()).unwrap();
         assert_eq!(back.profile, raw.profile);
         assert_eq!(back.project_uid.as_deref(), Some("p1"));
         assert_eq!(back.manifest_entities, raw.manifest_entities);
+        assert_eq!(back.resolved_values, raw.resolved_values);
         fs::write(dir.path().join("variables.json"), "").unwrap();
         assert!(matches!(
             RawProfile::load_dir(dir.path()).unwrap_err(),

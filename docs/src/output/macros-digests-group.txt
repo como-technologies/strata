@@ -1,0 +1,4 @@
+$ jq .source.cluster.macroValues runs/dev-group.json
+{
+  "podSecurity": "sha256:8ba8496a2525ae171ffd104d632dede6ef418d9b95962a9d88e2fcdbc8d48d24"
+}

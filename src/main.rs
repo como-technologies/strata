@@ -202,7 +202,8 @@ struct SnapshotArgs {
     /// Write the JSON on one line
     #[arg(long)]
     compact: bool,
-    /// For a cluster: record the digest of the value Palette gives each macro the content uses
+    /// Record the digest of the value Palette gives each macro the content uses. It takes
+    /// <name>@<version>, a profile uid, cluster:<cluster>, or clustergroup:<group>
     #[arg(long, conflicts_with_all = ["from_raw", "from_candidate"])]
     macros: bool,
     /// For a cluster: record the shape tier, the machine pools and the cloud part, with one more
@@ -764,10 +765,18 @@ fn cmd_snapshot(a: &SnapshotArgs) -> Result<ExitCode> {
                 message: "snapshot needs a profile ref or --from-raw DIR".to_string(),
             })?;
             let reference = Ref::parse(text);
-            if a.macros && !matches!(reference, Ref::Cluster { .. }) {
+            if a.macros
+                && !matches!(
+                    reference,
+                    Ref::Cluster { .. }
+                        | Ref::ClusterGroup { .. }
+                        | Ref::Uid(_)
+                        | Ref::NameVersion { .. }
+                )
+            {
                 return Err(Error::Usage {
-                    message: "--macros needs a cluster ref: a cluster resolves the macros, and \
-                              a profile does not"
+                    message: "--macros takes <name>@<version>, a profile uid, cluster:<cluster>, \
+                              or clustergroup:<group>"
                         .to_string(),
                 });
             }
@@ -828,7 +837,10 @@ fn cmd_snapshot(a: &SnapshotArgs) -> Result<ExitCode> {
                             .and_then(serde_json::Value::as_str)
                             .unwrap_or(uid)
                             .to_string();
-                        raw.resolved_values = Some(palette.resolved_values(&uid)?);
+                        raw.resolved_values = Some(
+                            palette
+                                .resolved_values(strata::snapshot::SubjectKind::Cluster, &uid)?,
+                        );
                     }
                     if a.shape {
                         raw.cloud_config = Some(palette.cloud_config(&raw.cluster)?);
@@ -840,7 +852,7 @@ fn cmd_snapshot(a: &SnapshotArgs) -> Result<ExitCode> {
                     if *pending { snap.mark_pending() } else { snap }
                 }
                 Ref::ClusterGroup { uid } => {
-                    ops::cluster_group_snapshot(&palette, uid, text, &now, &progress)?
+                    ops::cluster_group_snapshot(&palette, uid, a.macros, text, &now, &progress)?
                 }
                 Ref::ClusterSet { .. } => unreachable!("a set of clusters returned above"),
                 Ref::AppProfile { id, version } => ops::app_profile_snapshot(
@@ -884,7 +896,10 @@ fn cmd_snapshot(a: &SnapshotArgs) -> Result<ExitCode> {
                         Ref::NameVersion { name, version } => palette.resolve(name, version)?,
                         _ => text.to_string(),
                     };
-                    let raw = palette.fetch_profile(&uid, &progress)?;
+                    let mut raw = palette.fetch_profile(&uid, &progress)?;
+                    if a.macros {
+                        raw.resolved_values = Some(palette.profile_resolved_values(&uid)?);
+                    }
                     if let Some(dir) = &a.raw_dir {
                         raw.save_dir(dir, &now)?;
                     }

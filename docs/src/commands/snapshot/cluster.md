@@ -181,31 +181,61 @@ with the name, so the root covers the name and not the value: an edit of a
 macro does not move the root. Each report names the macros that the content
 uses.
 
-`--macros` records the value that Palette gives each of them, for one cluster.
-It costs one request, and it needs a cluster ref:
+`--macros` records the value that Palette gives each of them. It costs one
+request. For a cluster, the value is the one that the cluster gets:
 
 ```text
 {{#include ../../output/macros-record.txt}}
 {{#include ../../output/macros-digests.txt}}
 ```
 
+For a profile version, the value is the one that Palette gives at the scope of
+the version, with no cluster. The record holds the digests in
+`source.macroValues`:
+
+```text
+{{#include ../../output/macros-record-version.txt}}
+{{#include ../../output/macros-digests-version.txt}}
+```
+
+For a cluster group, the value is the one that Palette gives for the group. The
+record holds the digests in `source.cluster.macroValues`, as a cluster record
+does:
+
+```text
+{{#include ../../output/macros-record-group.txt}}
+{{#include ../../output/macros-digests-group.txt}}
+```
+
 The record holds `sha256:` of each value, and not the value: a macro can hold
 a secret. `unresolved` is a macro that Palette gives no value. The digests are
-not part of the root. When the macro gets another value, the record of the
-version still verifies, and names the macro:
+not part of the root. When the macro gets another value, a record of the
+version without the digests still verifies, and names the macro:
 
 ```text
 {{#include ../../output/macros-verify-release.txt}}
 ```
 
-`verify` on the cluster record reads the values again, and reports each macro
-that has another value now:
+`verify` on a record with the digests reads the values again, and reports each
+macro that has another value now. A cluster record:
 
 ```text
 {{#include ../../output/macros-verify-cluster.txt}}
 ```
 
-`compare` of two cluster records with the digests names each macro that
-differs, and exits `1`, also when the roots are equal. What Palette does with a
+A record of the version:
+
+```text
+{{#include ../../output/macros-verify-version.txt}}
+```
+
+A record of the cluster group:
+
+```text
+{{#include ../../output/macros-verify-group.txt}}
+```
+
+`compare` of two records with the digests names each macro that differs, and
+exits `1`, also when the roots are equal. What Palette does with a
 running cluster when a macro changes is in
 [Macros](../../internals/palette/profiles.md#macros).

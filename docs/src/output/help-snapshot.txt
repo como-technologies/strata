@@ -20,7 +20,7 @@ Options:
       --compact
           Write the JSON on one line
       --macros
-          For a cluster: record the digest of the value Palette gives each macro the content uses
+          Record the digest of the value Palette gives each macro the content uses. It takes <name>@<version>, a profile uid, cluster:<cluster>, or clustergroup:<group>
       --shape
           For a cluster: record the shape tier, the machine pools and the cloud part, with one more request
       --dir <DIR>

@@ -6,7 +6,8 @@
 #
 #   1  a cluster group on cluster A that pins the add-on version, and one virtual cluster in it: a
 #      record of clustergroup:<uid> holds the pin and names the member; compare of the group with
-#      the member reads only the pinned profile of the member, and is IDENTICAL
+#      the member reads only the pinned profile of the member, and is IDENTICAL; with --macros,
+#      the record holds the digests of the macro values of the group
 #   2  an edit in place of a manifest of the add-on version: the group and the member each keep
 #      their own copy of the manifest, under a uid of its own, and the version differs; then the
 #      undo
@@ -70,6 +71,11 @@ if stage 1 "a cluster group, and a virtual cluster in it"; then
   check group-compare-no-values 0 '#78: a group gives no variable values, so the compare states no cluster value' -- \
     bash -c "! grep -q 'cluster values' group-compare.out"
   check group-verify 0 '#78: verify of the record of the group' -- "$strata" verify group.json
+  check group-macros 0 '#111: record clustergroup:<uid> with the digests of its macro values' -- \
+    "$strata" snapshot "clustergroup:$G" --macros -o group-macros.json
+  check group-macro-values 0 '#111: the record holds cluster.macroValues' -- \
+    jq -e '.source.cluster.macroValues | type == "object"' group-macros.json
+  check group-macros-verify 0 '#111: verify of that record reads the values of the group again' -- "$strata" verify group-macros.json
   check member-consumer 1 '#78: consumers of the add-on version' -- "$strata" consumers "$AD" --json
   check member-consumer-listed 0 '#78: the consumer list of Palette names the virtual cluster' -- \
     jq -e --arg m "$M" '.consumers[] | select(.uid == $m and (.unlisted | not))' member-consumer.out

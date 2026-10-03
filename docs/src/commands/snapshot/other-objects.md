@@ -13,8 +13,9 @@ Three more objects of Palette hold profiles, and strata records each:
   [A profile runs on edge hosts](../../use-cases/edge-hosts.md).
 - `clustergroup:<group>` records the profiles that a cluster group pins for its
   virtual clusters, and names the virtual clusters in `members[]`. The record
-  says `kind: clusterGroup`. See
-  [A cluster group pins a profile](../../use-cases/cluster-groups.md).
+  says `kind: clusterGroup`. With `--macros`, it also holds the digests of the
+  macro values that Palette gives for the group: see [Macros](cluster.md#macros).
+  See [A cluster group pins a profile](../../use-cases/cluster-groups.md).
 - `appprofile:<name>@<version>` records an app profile: each tier is a pack in
   the layer `app`, and the properties of a tier are its params. `source.type`
   is `app`. A tier has no digest. See

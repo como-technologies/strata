@@ -1,0 +1,10 @@
+$ strata verify runs/dev-group.json
+platform-addons@1.0.0 pinned by cluster group dev-group (uid 64f5000000000000000000a1)  ->  platform-addons@1.0.0 pinned by cluster group dev-group (uid 64f5000000000000000000a1)
+root       bf0781d98254 -> bf0781d98254   IDENTICAL
+note       the content uses macro podSecurity: the root covers its name and not its value, so an edit of a macro does not show
+note       macro podSecurity has another value on each side: Palette applies other content, also when the roots are equal
+
+  variables unchanged
+
+  [addon] namespace-policy           1.0.0              unchanged
+DRIFT: platform-addons@1.0.0 pinned by cluster group dev-group has the content recorded 2026-09-17T09:30:00Z, but macro podSecurity has another value now

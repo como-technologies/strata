@@ -514,6 +514,7 @@ impl Tenant {
             &format!("v1/clusterprofiles/{uid}/variables"),
             &variables,
         );
+        self.resolve_profile_macros(project, uid);
         self.listings();
     }
 
@@ -936,6 +937,7 @@ impl Tenant {
             &format!("v1/dashboard/clustergroups/{uid}/virtualClusters@limit=50"),
             &json!({"items": items, "listmeta": {"continue": ""}}),
         );
+        self.resolve_group_macros(project, uid);
     }
 
     /// The app profile `shop@<version>`, `uid`: a helm tier `web` with the property `replicas`,
@@ -1543,8 +1545,8 @@ impl Tenant {
     }
 
     /// Give a project macro a value, as `PATCH /v1/projects/{uid}/macros` does, and let each
-    /// cluster of the project resolve it again: Palette answers `packs/resolvedValues` with the
-    /// value the macro has now.
+    /// cluster, profile version, and cluster group of the project resolve it again: Palette
+    /// answers `packs/resolvedValues` with the value the macro has now.
     pub fn set_macro(&self, project: &str, name: &str, value: &str) {
         let path = format!("v1/projects/{project}/macros");
         let mut doc = if self.doc(project, &path).is_file() {
@@ -1563,12 +1565,23 @@ impl Tenant {
                 self.resolve_macros(project, uid);
             }
         }
+        for kind in ["v1/clusterprofiles", "v1/clustergroups"] {
+            for doc in self.documents_in(project, kind) {
+                let Some(uid) = doc["metadata"]["uid"].as_str() else {
+                    continue;
+                };
+                if kind == "v1/clusterprofiles" {
+                    self.resolve_profile_macros(project, uid);
+                } else {
+                    self.resolve_group_macros(project, uid);
+                }
+            }
+        }
     }
 
-    /// The `packs/resolvedValues` answer of one cluster: for each profile it runs, each project
-    /// macro and its value, and the system macro of the cluster name, as Palette gives them.
-    fn resolve_macros(&self, project: &str, cluster: &str) {
-        let doc = self.read(project, &format!("v1/spectroclusters/{cluster}"));
+    /// The user macros of `project`, by placeholder: each `{{.spectro.macro.<name>}}` and its
+    /// value.
+    fn user_macros(&self, project: &str) -> Map<String, Value> {
         let macros_path = format!("v1/projects/{project}/macros");
         let macros = if self.doc(project, &macros_path).is_file() {
             self.read(project, &macros_path)["macros"].clone()
@@ -1580,6 +1593,50 @@ impl Tenant {
             let name = m["name"].as_str().unwrap_or_default();
             resolved.insert(format!("{{{{.spectro.macro.{name}}}}}"), m["value"].clone());
         }
+        resolved
+    }
+
+    /// The `packs/resolvedValues` answer of one profile version, with no cluster: one `resolved`
+    /// map with each project macro and the system macro of the profile name. The system macro of
+    /// the cluster name has an empty value, as Palette gives it for a profile.
+    fn resolve_profile_macros(&self, project: &str, profile: &str) {
+        let doc = self.read(project, &format!("v1/clusterprofiles/{profile}"));
+        let mut resolved = self.user_macros(project);
+        resolved.insert(
+            "{{.spectro.system.clusterprofile.name}}".to_string(),
+            doc["metadata"]["name"].clone(),
+        );
+        resolved.insert("{{.spectro.system.cluster.name}}".to_string(), json!(""));
+        self.write(
+            project,
+            &format!("v1/clusterprofiles/{profile}/packs/resolvedValues"),
+            &json!({ "resolved": resolved }),
+        );
+    }
+
+    /// The `packs/resolvedValues` answer of one cluster group: for each profile it pins, each
+    /// project macro, in the shape of the answer for a cluster.
+    fn resolve_group_macros(&self, project: &str, group: &str) {
+        let doc = self.read(project, &format!("v1/clustergroups/{group}"));
+        let resolved = self.user_macros(project);
+        let profiles: Vec<Value> = doc["spec"]["clusterProfileTemplates"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .map(|t| json!({"uid": t["uid"], "resolved": resolved}))
+            .collect();
+        self.write(
+            project,
+            &format!("v1/clustergroups/{group}/packs/resolvedValues"),
+            &json!({ "profiles": profiles }),
+        );
+    }
+
+    /// The `packs/resolvedValues` answer of one cluster: for each profile it runs, each project
+    /// macro and its value, and the system macro of the cluster name, as Palette gives them.
+    fn resolve_macros(&self, project: &str, cluster: &str) {
+        let doc = self.read(project, &format!("v1/spectroclusters/{cluster}"));
+        let mut resolved = self.user_macros(project);
         resolved.insert(
             "{{.spectro.system.cluster.name}}".to_string(),
             doc["metadata"]["name"].clone(),
