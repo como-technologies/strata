@@ -513,7 +513,8 @@ fn tenant_sh_digest_exits_2_when_the_registry_cannot_be_read() {
 
 /// A `curl` for api.sh: FAKE_ROUTED_CURL that also logs each request as `METHOD path` to
 /// $FAKE_LOG, keeps each request body as $FAKE_ROUTES/sent/<METHOD>_<route key>, and its query and
-/// headers, without the key, as $FAKE_ROUTES/sent/<METHOD>_<route key>.request.
+/// headers, without the key, as $FAKE_ROUTES/sent/<METHOD>_<route key>.request. It also adds each
+/// body to $FAKE_ROUTES/sent/<METHOD>_<route key>.all, in the order of the requests.
 const FAKE_API_CURL: &str = r#"#!/usr/bin/env bash
 out=""; write=""; url=""; method=GET; sent=""; headers=""
 while [ $# -gt 0 ]; do
@@ -531,7 +532,7 @@ done
 path=${url#*://*/}; query=""; [ "$path" != "${path#*\?}" ] && query=${path#*\?}; path=${path%%\?*}; key=${path//\//_}
 echo "$method /$path" >> "$FAKE_LOG"
 mkdir -p "$FAKE_ROUTES/sent"
-[ -n "$sent" ] && cp "$sent" "$FAKE_ROUTES/sent/${method}_$key"
+[ -n "$sent" ] && cp "$sent" "$FAKE_ROUTES/sent/${method}_$key" && cat "$sent" >> "$FAKE_ROUTES/sent/${method}_$key.all"
 printf 'query=%s\n%s' "$query" "$headers" | grep -v '^ApiKey:' > "$FAKE_ROUTES/sent/${method}_$key.request"
 body="$FAKE_ROUTES/$key"; status=404
 [ -f "$body" ] && status=200 || body=/dev/null
@@ -1569,4 +1570,255 @@ fn aws_cleanup_deletes_nothing_without_yes_and_names_what_it_would() {
         "no delete without --yes: {calls}"
     );
     assert!(calls.contains("describe-nat-gateways"), "{calls}");
+}
+
+// ---- the stages of the live checks -----------------------------------------------------------------
+
+/// A `tofu` for a stage: `output -json` prints $FAKE_OUTPUTS, a plan changes nothing, and each
+/// other command passes. It logs each command to $FAKE_TOFU_LOG.
+const FAKE_TOFU_STAGE: &str = r#"#!/usr/bin/env bash
+echo "$*" >> "$FAKE_TOFU_LOG"
+case "$*" in
+  *"output -json"*) cat "$FAKE_OUTPUTS" ;;
+  *"show -json"*) echo '{}' ;;
+  *plan*) echo "No changes." ;;
+  *apply*) echo "Apply complete! Resources: 0 added, 1 changed, 0 destroyed." ;;
+esac
+"#;
+
+/// A `strata` for a stage. It logs its arguments to $FAKE_STRATA/calls, and answers from
+/// $FAKE_STRATA/rules: the first line `GLOB<TAB>EXIT<TAB>FILE` whose GLOB matches the arguments
+/// prints FILE, or writes it to the file of `-o`, and exits EXIT. With no match it exits 0.
+const FAKE_STRATA_STAGE: &str = r#"#!/usr/bin/env bash
+echo "$*" >> "$FAKE_STRATA/calls"
+out=""; prev=""
+for a in "$@"; do [ "$prev" = -o ] && out=$a; prev=$a; done
+while IFS=$'\t' read -r glob code file; do
+  [[ "$*" == $glob ]] || continue
+  if [ -n "$out" ]; then cp "$FAKE_STRATA/$file" "$out"; else cat "$FAKE_STRATA/$file"; fi
+  exit "$code"
+done < "$FAKE_STRATA/rules"
+exit 0
+"#;
+
+/// One run of a stage of a live script against the stand-ins: the OpenTofu outputs, the answers
+/// of strata, and the routes of Palette that a test gives.
+struct Stage {
+    root: tempfile::TempDir,
+    answers: usize,
+}
+
+impl Stage {
+    fn new(outputs: serde_json::Value) -> Self {
+        let root = tempfile::tempdir().unwrap();
+        let bin = root.path().join("bin");
+        for d in [
+            bin.clone(),
+            root.path().join("routes"),
+            root.path().join("strata"),
+        ] {
+            std::fs::create_dir_all(d).unwrap();
+        }
+        executable(&bin.join("tofu"), FAKE_TOFU_STAGE);
+        executable(&bin.join("fake-strata"), FAKE_STRATA_STAGE);
+        let outputs: serde_json::Map<String, serde_json::Value> = outputs
+            .as_object()
+            .unwrap()
+            .iter()
+            .map(|(k, v)| (k.clone(), serde_json::json!({ "value": v })))
+            .collect();
+        std::fs::write(
+            root.path().join("outputs.json"),
+            serde_json::Value::Object(outputs).to_string(),
+        )
+        .unwrap();
+        std::fs::write(root.path().join("strata/rules"), "").unwrap();
+        Stage { root, answers: 0 }
+    }
+
+    /// Palette answers `path`, such as `/v1/spectroclusters/c-a`, with `body` and status 200.
+    fn route(&self, path: &str, body: &str) {
+        let key = path.trim_start_matches('/').replace('/', "_");
+        std::fs::write(self.root.path().join("routes").join(key), body).unwrap();
+    }
+
+    /// strata answers the arguments that match `glob` with `stdout` and the exit `code`.
+    fn strata(&mut self, glob: &str, code: i32, stdout: &str) {
+        self.answers += 1;
+        let file = format!("answer-{}", self.answers);
+        let dir = self.root.path().join("strata");
+        std::fs::write(dir.join(&file), stdout).unwrap();
+        let mut rules = std::fs::read_to_string(dir.join("rules")).unwrap();
+        rules.push_str(&format!("{glob}\t{code}\t{file}\n"));
+        std::fs::write(dir.join("rules"), rules).unwrap();
+    }
+
+    /// A file that the stage reads, under the root.
+    fn path(&self, rel: &str) -> PathBuf {
+        self.root.path().join(rel)
+    }
+
+    /// Run `script` with `args`, and the results in out/. Gives the output and steps.log.
+    fn run(&self, script: &str, args: &[&str]) -> (Output, String) {
+        let root = self.root.path();
+        let env = [
+            ("STRATA_BIN", root.join("bin/fake-strata")),
+            ("OUT", root.join("out")),
+            ("FAKE_OUTPUTS", root.join("outputs.json")),
+            ("FAKE_TOFU_LOG", root.join("tofu.log")),
+            ("FAKE_STRATA", root.join("strata")),
+        ]
+        .map(|(k, v)| (k, v.display().to_string()));
+        let env: Vec<(&str, &str)> = env.iter().map(|(k, v)| (*k, v.as_str())).collect();
+        let o = run_live(script, args, root, &env);
+        let steps = std::fs::read_to_string(root.join("out/steps.log")).unwrap_or_default();
+        (o, steps)
+    }
+
+    /// Each body of `METHOD path` that the script sent, in order.
+    fn sent(&self, method: &str, path: &str) -> Vec<serde_json::Value> {
+        let key = path.trim_start_matches('/').replace('/', "_");
+        let all = self.path(&format!("routes/sent/{method}_{key}.all"));
+        serde_json::Deserializer::from_str(&std::fs::read_to_string(all).unwrap_or_default())
+            .into_iter::<serde_json::Value>()
+            .map(Result::unwrap)
+            .collect()
+    }
+
+    /// Each call of strata, one line each.
+    fn strata_calls(&self) -> String {
+        std::fs::read_to_string(self.path("strata/calls")).unwrap_or_default()
+    }
+
+    /// Each command that OpenTofu ran, one line each.
+    fn tofu_calls(&self) -> String {
+        std::fs::read_to_string(self.path("tofu.log")).unwrap_or_default()
+    }
+}
+
+/// Each check of `ids` passed, and no check failed.
+fn passed(steps: &str, ids: &[&str]) {
+    assert!(!steps.contains("FAIL "), "a check failed:\n{steps}");
+    for id in ids {
+        assert!(
+            steps
+                .lines()
+                .any(|l| l.starts_with("PASS") && l.split_whitespace().nth(1) == Some(*id)),
+            "{id} passed:\n{steps}"
+        );
+    }
+}
+
+/// The outputs of the live example at its baseline, with cluster A `c-a` named fred.
+fn baseline_outputs() -> serde_json::Value {
+    serde_json::json!({
+        "project_uid": "p-1", "cluster_uid": "c-a", "cluster_b_uid": "",
+        "cluster_names": {"a": "fred", "b": "barney"},
+        "profile_name": "strata-live-profile", "release_profile_uid": "r-1",
+        "addon_profile_uid": "ad-1", "addon_profile_name": "strata-live-addon",
+    })
+}
+
+/// A stage at the baseline: cluster A is Running, and the baseline checks pass.
+fn baseline_stage() -> Stage {
+    let stage = Stage::new(baseline_outputs());
+    stage.route(
+        "/v1/spectroclusters/c-a",
+        r#"{"metadata":{"name":"fred"},"status":{"state":"Running"}}"#,
+    );
+    stage
+}
+
+#[test]
+fn tiers_sh_stage_5_edits_the_subjects_of_a_binding_of_cluster_a_and_puts_the_bindings_back() {
+    let mut stage = baseline_stage();
+    let rbacs = "/v1/spectroclusters/c-a/config/rbacs";
+    stage.route(
+        rbacs,
+        r#"{"items":[{"metadata":{"name":"ops"},"spec":{"bindings":[{"type":"RoleBinding","namespace":"ops",
+            "role":{"kind":"Role","name":"edit"},"subjects":[{"type":"Group","name":"ops"}]}]}}]}"#,
+    );
+    stage.strata(
+        "snapshot cluster:c-a -o rbac.json",
+        0,
+        r#"{"source":{"cluster":{"tiers":{"policy":{"fields":{"rbacs":[{"role":{"kind":"ClusterRole","name":"view"},
+            "subjects":[{"name":"barney@example.com","namespace":"","type":"User"}],"type":"ClusterRoleBinding"}]}}}}}}"#,
+    );
+    stage.strata(
+        "compare rbac.json cluster:c-a --json",
+        0,
+        r#"{"clusterTiers":[{"tier":"policy","same":false,"diff":[
+            {"op":"removed","path":"rbacs[0].subjects[name=barney@example.com].name"},
+            {"op":"added","path":"rbacs[0].subjects[name=fred@example.com].name"}]}]}"#,
+    );
+    stage.strata(
+        "compare rbac.json cluster:c-a",
+        0,
+        "  cluster tiers applied unchanged, policy CHANGED\n        + policy.rbacs[0].subjects[name=fred@example.com].name: \"fred@example.com\"\n",
+    );
+    stage.strata(
+        "verify rbac.json",
+        0,
+        "  cluster tiers applied unchanged, policy CHANGED\nOK: cluster fred\n",
+    );
+
+    let (o, steps) = stage.run("tiers.sh", &["5"]);
+    assert_eq!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
+    passed(
+        &steps,
+        &[
+            "rbac-add",
+            "rbac-in-record",
+            "rbac-edit",
+            "rbac-compare",
+            "rbac-compare-policy",
+            "rbac-compare-says",
+            "rbac-verify",
+            "rbac-verify-says",
+            "rbac-undo",
+            "rbac-after",
+        ],
+    );
+    assert!(!steps.contains("== stage 4"), "stage 5 runs alone: {steps}");
+
+    let ops = serde_json::json!({"spec": {"bindings": [{"type": "RoleBinding", "namespace": "ops",
+        "role": {"kind": "Role", "name": "edit"}, "subjects": [{"type": "Group", "name": "ops"}]}]}});
+    let view = |s: &str| {
+        serde_json::json!({"spec": {"bindings": [{"type": "ClusterRoleBinding",
+        "role": {"kind": "ClusterRole", "name": "view"}, "subjects": [{"type": "User", "name": s}]}]}})
+    };
+    assert_eq!(
+        stage.sent("PUT", rbacs),
+        vec![
+            serde_json::json!({"rbacs": [ops.clone(), view("barney@example.com")]}),
+            serde_json::json!({"rbacs": [ops.clone(), view("fred@example.com")]}),
+            serde_json::json!({"rbacs": [ops]}),
+        ],
+        "the PUTs keep the binding of the cluster, add one, edit its subject, and take it away"
+    );
+    assert!(
+        stage.tofu_calls().contains("plan"),
+        "stage 5 alone checks the baseline first: {}",
+        stage.tofu_calls()
+    );
+}
+
+#[test]
+fn tiers_sh_stage_5_reads_a_404_of_the_bindings_as_a_cluster_with_none() {
+    let mut stage = baseline_stage();
+    stage.strata(
+        "snapshot cluster:c-a -o rbac.json",
+        0,
+        r#"{"source":{"cluster":{"tiers":{"policy":{"fields":{"rbacs":[{"role":{"kind":"ClusterRole","name":"view"},
+            "subjects":[{"name":"barney@example.com","type":"User"}],"type":"ClusterRoleBinding"}]}}}}}}"#,
+    );
+    let (_, steps) = stage.run("tiers.sh", &["5"]);
+    assert!(
+        steps.contains("PASS  rbac-before") && steps.contains("PASS  rbac-after "),
+        "{steps}"
+    );
+    assert!(
+        steps.contains("FAIL  rbac-add"),
+        "no route answers the PUT here: {steps}"
+    );
 }

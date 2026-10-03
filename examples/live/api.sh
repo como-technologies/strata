@@ -88,6 +88,9 @@
 #   api.sh patch PATH JSON
 #       PATCH one document of the API with the body JSON, such as
 #       /v1/spectroclusters/<uid>/clusterConfig/timezone '{"timezone": "America/Chicago"}'.
+#   api.sh put PATH JSON
+#       PUT the body JSON to one document of the API, such as /v1/spectroclusters/<uid>/config/rbacs
+#       '{"rbacs": []}'. The body replaces the document.
 #   api.sh post PATH JSON
 #       POST the body JSON to a search of the API, such as /v1/dashboard/edgehosts/search, or to
 #       a validate route, such as /v1/clusterprofiles/validate/packs, and print the answer. A
@@ -605,6 +608,16 @@ patch() {
   echo "patched $path"
 }
 
+# put PATH JSON: PUT the body JSON to one document of the API, which it replaces
+put() {
+  local path=${1:-} json=${2:-} body
+  [ -n "$json" ] || die "usage: api.sh put PATH JSON"
+  body=$(mktemp); trap 'rm -f "${body:-}"' RETURN
+  jq -e . <<<"$json" > "$body" || die "the body is not JSON: $json"
+  call PUT "$path" "$body" > /dev/null || return 2
+  echo "put $path"
+}
+
 # post PATH JSON: print the answer. For a search that Palette takes as a POST.
 post() {
   local path=${1:-} json=${2:-} body
@@ -691,6 +704,7 @@ case "${1:-}" in
   export) shift; [ -n "${1:-}" ] || die "usage: api.sh export PROFILE_UID [yaml|json]"
     ACCEPT=application/octet-stream call GET "/v1/clusterprofiles/$1/export?format=${2:-yaml}" ;;
   patch) shift; patch "$@" ;;
+  put) shift; put "$@" ;;
   post) shift; post "$@" ;;
   *) sed -n '2,/^set -uo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; exit 2 ;;
 esac
