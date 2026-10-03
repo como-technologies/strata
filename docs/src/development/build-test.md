@@ -20,9 +20,10 @@ The crate is edition 2024 and needs Rust 1.88 or later. `rust-version` in
 | --- | --- |
 | `src/main.rs` | The command line: the arguments, the output, and the exit codes. Nothing else. |
 | `src/api/` | Palette. `mod.rs` is the `PaletteApi` trait; `http.rs` sends it over HTTP, `retry.rs` tries it again, and `memory.rs` answers it from canned responses in tests. `palette.rs` holds the reads of profiles, clusters, listings, the audit log, notifications, and macro values. `raw.rs` holds the responses a snapshot is built from, and their directory on disk. |
-| `src/ops/` | One module for each command: `verify.rs`, `same_release.rs`, `consumers.rs`, `behind.rs`, `list.rs`, and `packs.rs`. `fleet.rs` finds the clusters of a query of labels and writes a record of each; `repave.rs` asks Palette if a change repaves. Neither is a command of its own. `mod.rs` takes a snapshot and compares two. |
+| `src/ops/` | One module for each command: `verify.rs`, `same_release.rs`, `consumers.rs`, `behind.rs`, `list.rs`, and `packs.rs`. `fleet.rs` finds the clusters of a query of labels and writes a record of each; `repave.rs` asks Palette if a change repaves, and `validate.rs` asks Palette if it takes the packs. None is a command of its own. `mod.rs` takes a snapshot and compares two. |
 | `src/snapshot.rs` | A record, and how it is built from the responses. |
 | `src/diff.rs` | The comparison of two snapshots. |
+| `src/validation.rs` | The answer of Palette to a validate route, which a record and a comparison share. |
 | `src/impact.rs` | The impact of a change to a pack: the rules table and its levels. |
 | `src/render/` | The output: `terminal.rs`, `markdown.rs`, and `json.rs`, with the shared lines in `mod.rs` and the unified diffs of `--full` in `unified.rs`. |
 | `src/candidate.rs` | The candidate file: its rules, and the snapshot it gives. |

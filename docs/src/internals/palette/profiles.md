@@ -45,12 +45,12 @@ It does not write it over an empty value, or over a value that holds a
 variable, `{{.spectro.var.NAME}}`. A record of a published version holds
 `********`, and not the secret.
 
-The source of Palette shows that Palette does not do this for the packs of a
-draft. A draft is the content of a `PUT` with no publish. A profile that was
-never published has only a draft. `GET /v1/clusterprofiles/{uid}` gives
-`spec.draft.packs` with each secret in clear, and
-`GET /v1/clusterprofiles/{uid}/packs/manifests` serves the packs of the draft
-when the profile has one. No live run checks this: see
+Palette does not do this for the packs of a draft. A draft is the content of a
+`PUT` with no publish. A profile that was never published has only a draft.
+`GET /v1/clusterprofiles/{uid}` gives `spec.draft.packs` with each secret in
+clear. When the profile has a draft,
+`GET /v1/clusterprofiles/{uid}/packs/manifests` serves the packs of the draft.
+These facts come from the code of Palette. No live run checks them: see
 [What the source of Palette says](limits.md#what-the-source-of-palette-says).
 
 So strata writes the mask itself. When a profile has a draft, strata reads the
@@ -65,12 +65,13 @@ the secret.
 
 Strata changes only the line of each secret, so the rest of the values text
 stays. When a value takes more than one line, strata writes the values again
-from the parsed YAML, with no comments. The digest of the values does not
-change with the layout: a masked draft has the values digest of the same
-version that Palette masks after the publish.
+from the parsed YAML, with no comments. The layout does not change the digest
+of the values. A masked draft has the values digest of the same version that
+Palette masks after the publish.
 
-A pack that Palette no longer has answers HTTP 404. Palette has no schema for
-it, so it masks nothing, and strata masks nothing. Each other failure of that
+When Palette no longer has a pack, `GET /v1/packs/{uid}` answers HTTP 404.
+Palette has no schema for the pack, so it masks nothing, and strata masks
+nothing. Each other failure of that
 read stops the record, so that strata never writes a secret that it could not
 check.
 
@@ -152,7 +153,7 @@ Palette lists.
 With the flag on, set `skip_destroy` on each profile **before** the first bump.
 A flag-on bump replaces the profile resource, and the provider deletes the
 replaced version with the `skip_destroy` value already in its state, not the new
-value (provider 0.30.1, `resourceClusterProfileDelete`). Without it, the bump asks Palette to delete the version that a cluster runs.
+value (provider 0.30.1). Without it, the bump asks Palette to delete the version that a cluster runs.
 
 Each version in a state of its own is the other way to keep a version, with no
 flag. A new version is a new resource with a uid of its own, and the state of
@@ -179,7 +180,7 @@ console, and a pipeline that updates and publishes in two steps, make a draft
 that waits. A cluster runs the published template, and a new cluster gets the
 published template too.
 
-The source of Palette gives these facts (hubble):
+Palette serves the two templates as follows:
 
 - The profile document gives both templates. Palette masks a secret only in
   the published template. Palette gives no `status.hasDraft`. A version has a
@@ -234,7 +235,7 @@ what the lock covers:
 | The same edit, after the template is removed | Accepted. A record from before reports `DRIFT`. |
 
 So the lock belongs to the template, and it covers the route of the whole
-version: the `PUT` of the whole version checks it. In the Spectro Cloud source,
+version: the `PUT` of the whole version checks it. In the code of Palette,
 the routes of one pack and of one manifest do not check it, and the live run
 changes a linked version through the route of one manifest. `verify` finds an
 edit through such a route. The lock holds against a new cluster: it keeps every
@@ -244,33 +245,28 @@ linked version is a cluster the template applies.
 ## What the create of a version checks
 
 Palette refuses a profile version at the create when it breaks one of these
-rules. The paths are in the `hubble` source. In them,
-`service/` is `services/service/spectrocluster/internal/service/`, and
-`models/` is `services/service/spectrocluster/internal/models/`.
+rules. These rules come from the code of Palette, not from a live run.
 
-| Rule | Code | Source |
-| --- | --- | --- |
-| The version parses as semver. Palette gives it to `NewVersion` of `github.com/Masterminds/semver` v1.5.0: an optional `v`, one to three numbers, an optional pre-release after `-`, and optional build data after `+`. So `1.1` and `v1.2.3` pass, and `2.2.2.develop` and `1.2.3.4` do not. | `VersionParseFailure` | `service/clusterprofile/clusterprofile_validate.go:763-779`, `util/semver/semver.go:95-103` |
-| The profile has at most 200 packs, and at most 200 manifests. A manifest pack counts as one manifest more. The limit is the same in each tenant. | `SubResourceLimitValidationFailure` | `domain/clusterprofile.go:786-797`, `hubs/tenant/internal/resource_limit_service.go:106-128`, `models/param/clusterprofiles_param.go:210-222` |
-| Each pack name is in the profile once. Palette compares the names as they are. | `DuplicatePacksForbidden` | `service/clusterprofile/clusterprofile_validate.go:1164-1174`, `util/list/list_utils.go:150-164` |
-| The name of each manifest, and the name of each manifest pack, is a DNS-1123 label of 32 characters at most: lowercase letters, digits, and `-`, with a letter or a digit at the start and at the end. | `InvalidName` | `service/clusterprofile/clusterprofile_validate.go:1213-1226`, `domain/validator/validate_k8s.go:70-88` |
-| Each manifest name is in its pack once. | `DuplicatePackManifestsForbidden` | `service/clusterprofile/clusterprofile_validate.go:1195-1211` |
-| The values of each pack, and the content of each manifest, are YAML whose first document is a map, or is empty. An unquoted template, such as `{{ .spectro.var.x }}`, is a map key that is a map, so it is not. Palette reads only the first document. | `PackValuesYamlInvalid`, `PackManifestYamlInvalid` | `service/pack/pack_validate.go:112-123`, `util/yaml/yaml.go:960-966` |
-| Each pack supports the cloud of the profile: the cloud is `all`, the pack has no cloud type, or the cloud types of the pack hold the cloud, `all`, or `custom` for a cloud that Palette does not know. | `PackNotSupported` | `service/pack/pack_service.go:424-426`, `domain/pack.go:1345-1356` |
-| The type of the profile takes the layer of each pack. An `infra` profile takes `os`, `k8s`, `cni`, and `csi`. A `cluster` profile takes each layer. Each other type takes `addon`, `cni`, and `csi`. | `ClusterProfilePackNotAllowed` | `service/clusterprofile/clusterprofile_validate.go:811-819`, `:849-874`, `domain/pack.go:213-224` |
-| A `cluster` or `infra` profile has an `os`, a `k8s`, a `cni`, and a `csi` layer. On the cloud `edge-native`, it needs no `csi` layer. | `ErrPackCoreLayersMissing` | `service/pack/pack_validate.go:19-42`, `domain/pack.go:1143-1150`, `service/clusterprofile/clusterprofile_service.go:550-557` |
+| Rule | Code |
+| --- | --- |
+| The version parses as semver: an optional `v`, one to three numbers, an optional pre-release after `-`, and optional build data after `+`. So `1.1` and `v1.2.3` pass, and `2.2.2.develop` and `1.2.3.4` do not. | `VersionParseFailure` |
+| The profile has at most 200 packs, and at most 200 manifests. A manifest pack counts as one manifest more. The limit is the same in each tenant. | `SubResourceLimitValidationFailure` |
+| Each pack name is in the profile once. Palette compares the names as they are. | `DuplicatePacksForbidden` |
+| The name of each manifest, and of each manifest pack, is a DNS-1123 label of 32 characters at most. It holds lowercase letters, digits, and `-`, and it starts and ends with a letter or a digit. | `InvalidName` |
+| Each manifest name is in its pack once. | `DuplicatePackManifestsForbidden` |
+| The values of each pack, and the content of each manifest, are YAML whose first document is a map, or is empty. An unquoted template, such as `{{ .spectro.var.x }}`, is a map key that is a map, so the check fails. Palette reads only the first document. | `PackValuesYamlInvalid`, `PackManifestYamlInvalid` |
+| Each pack supports the cloud of the profile. This is true when the cloud is `all`, or when the pack has no cloud type. It is also true when the cloud types of the pack hold the cloud, `all`, or `custom` for a cloud that Palette does not know. | `PackNotSupported` |
+| The type of the profile takes the layer of each pack. An `infra` profile takes `os`, `k8s`, `cni`, and `csi`. A `cluster` profile takes each layer. Each other type takes `addon`, `cni`, and `csi`. | `ClusterProfilePackNotAllowed` |
+| A `cluster` or `infra` profile has an `os`, a `k8s`, a `cni`, and a `csi` layer. On the cloud `edge-native`, it needs no `csi` layer. | `ErrPackCoreLayersMissing` |
 
 The layer of a pack comes from the pack in its registry, and not from the
-profile (`ToPackRef`, `service/pack/pack_service.go:722-747`). So the last two rules
-use the layer that the registry gives.
+profile. So the last two rules use the layer that the registry gives.
 
-Palette checks the version, the counts, the names, and the YAML first, in the
-stages of `ValidateCreate`
-(`service/clusterprofile/clusterprofile_validate.go:94-113`). It runs these
-stages at the same time, in the order of a Go map, which changes from one
-request to the next (`hulib/pipeline/pipeline.go:84-89`, `:220-245`). So when a
-version breaks two of these rules, the code of the refusal can change from one
-request to the next. Palette checks the cloud and the layers after these stages.
+Palette checks the version, the counts, the names, and the YAML first. It runs
+these checks at the same time, in an order that changes from one request to the
+next. So when a version breaks two of these rules, the code of the refusal can
+change from one request to the next. Palette checks the cloud and the layers
+after these checks.
 
 [The candidate file](../../reference/candidate-file.md#checks-before-any-request)
 lists the same rules: strata refuses such a candidate before Palette does.

@@ -123,8 +123,8 @@ check packs-unknown-registry 2 '#54: an unknown registry is an error that lists 
 check packs-unknown-pack 2 '#54: a pack no registry has is pack-not-found' -- \
   "$strata" packs no-such-pack-anywhere
 
-# headlamp 0.45.0 has the template parameter access, and the pack source gives its option public
-# the preset charts.headlamp.service.type: LoadBalancer. No route of Palette gives the presets.
+# headlamp 0.45.0 has the template parameter access, and its option public has the preset
+# charts.headlamp.service.type: LoadBalancer. No route of Palette gives the presets.
 echo "== the presets of a template option (#151)" | tee -a steps.log
 preset_key=pack.palette.config.headlamp.access
 check preset-listing 0 '#151: the listing gives each option of the access parameter of headlamp 0.45.0, and no option has presets' -- \

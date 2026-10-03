@@ -30,7 +30,7 @@ names the first changed value. See
 | Result | Cause | Passes |
 | --- | --- | --- |
 | `IDENTICAL` | The roots are equal. | yes |
-| `SAME CONTENT` | The roots differ only by the tag name of a pack build, or by a pack uid that Palette mints: the uid of each manifest pack, and the uid of a pack from a registry that Palette does not sync, which a candidate does not have. `mintedUidOnly` in the JSON names each such pack. | yes |
+| `SAME CONTENT` | The roots differ only by the tag name of a pack build, or by a pack uid that Palette mints. Palette mints the uid of each manifest pack, and the uid of a pack from a registry that it does not sync. A candidate does not have these uids. `mintedUidOnly` in the JSON names each such pack. | yes |
 | `REGISTRY MOVE` | The roots differ only by packs from another registry, with the same tag, version, values, manifests, and params. The digest of each moved pack can differ. | only with `--allow registry-move` |
 | `DIFFERENT` | Any other difference. | no |
 | `NO DIGEST` | The pair passes on its roots, and a pack from a registry has no upstream digest on one side, so an equal root does not show an equal archive. | only with `--allow no-digest` |

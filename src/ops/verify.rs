@@ -156,8 +156,7 @@ fn live_holder<A: PaletteApi>(
     Ok(live.with_kind(c.kind))
 }
 
-/// The kind of the object of a record in the audit log of Palette: each kind of object has its
-/// own (hubble `domain/kind.go`).
+/// The kind of the object of a record in the audit log of Palette.
 fn audit_kind(recorded: &Snapshot) -> &'static str {
     match &recorded.source.cluster {
         Some(c) => match c.kind {

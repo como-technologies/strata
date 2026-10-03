@@ -1,0 +1,101 @@
+# Write the code
+
+These rules apply to each change to the Rust code. A reviewer refuses a change
+that breaks one. [Build and test](./build-test.md#where-the-code-goes) tells
+where each module goes.
+
+## The layers
+
+- `main.rs` parses the arguments, prints, and gives the exit code. It holds no
+  rule and builds no error kind for a decision of a command. Put that decision in
+  `ops/`.
+- `ops/` holds the work of each command. It is generic over `A: PaletteApi`,
+  and it takes the connection as `connect: impl FnOnce() -> Result<Palette<A>>`,
+  so that a ref to a file never connects.
+- `api/` is the only code that talks to Palette. A new request is a method of
+  `Palette<A>` in `api/palette.rs`. Escape each path segment with
+  `query_value`. A pure change of a document, such as a mask, goes in its own
+  module of `api/` and has unit tests. The methods of `Palette` fetch, and do
+  not rewrite.
+- `render/` prints through the `Renderer` trait. A line that two renderers show
+  is one function in `render/mod.rs`. Do not write that line again in
+  `main.rs`.
+- A type that two modules share goes in a module of its own. It does not go in
+  the module of one of its users. Re-export it where the public path must not
+  change.
+
+## Visibility
+
+- `pub` is the library API. Give it only to what `examples/library`, the tests,
+  or another crate use.
+- Use `pub(crate)` or `pub(super)` for each other item. Do not re-export a
+  helper from `mod.rs` to make a call shorter.
+- One entry point for one operation. A flag is an argument or a field of an
+  options struct, not a second public function.
+
+## Types and data
+
+- Make a value that can be wrong impossible to write. Use an enum for a closed
+  set of values, not a `String` or a `&'static str`. Use a struct with named
+  fields, not a tuple of four values.
+- Do not store a field that comes from another field. Calculate it with a
+  method.
+- Palette documents stay `serde_json::Value`, read with the pointer helpers.
+  The records of strata are typed structs with
+  `#[serde(rename_all = "camelCase")]`, `skip_serializing_if` for an empty
+  field, `#[serde(default)]` for a field that an older record does not have,
+  and `JsonSchema`.
+- Do not put a field of strata into a document of Palette to carry it to
+  another function. Return a struct that holds both.
+- Give each limit, code, and fixed text of Palette a named `const`, in one
+  place. Its comment says what Palette does. It does not cite the code of
+  Palette: see [rule 7](./documentation.md#rules).
+
+## Errors
+
+- Use one error type, `crate::error::Error`, with `Result<T>`. A new variant
+  has a `kind()`, a `to_json()`, a `class()`, and a sample in the tests of
+  `error.rs`.
+- Do not use `unwrap`, `expect`, or a slice index that can panic on input from
+  a user or from Palette. Slice text at a `char` boundary only.
+- Do not discard an error. `unwrap_or_default()`, `.ok()`, and `let _ =` are
+  correct only when the empty value is the correct answer. A comment says why.
+  An error must never become an empty value that strata records or hashes.
+- A wrong use of the flags is `Error::Usage`, before any request.
+
+## Ownership
+
+- Borrow. Take `&str`, `&[T]`, and `&Value`, not `String`, `Vec<T>`, or
+  `&&Value`. Do not clone a document to read it.
+- Use the `entry` API, not `contains_key` and then `insert`.
+- Use a `BTreeSet` or a `BTreeMap` for a test of membership in a loop. The
+  `BTree` types keep the output order stable.
+- strata runs on one thread. Do not add a thread, a lock, or `async` without a
+  measured need.
+
+## Functions and repetition
+
+- A function does one thing. When a function has more than about 80 lines, or
+  has branches that build the same document, divide it into one function for
+  each branch and one function for the shared part.
+- Write a rule once. When two commands parse the same answer, or two functions
+  sort and filter the same list, make one function and call it from both.
+- Do not write a closure twice in one function under one name.
+
+## Tests
+
+- Each bug fix has a test that fails without the fix.
+- Each panic that input can cause has a case in `tests/fuzz.rs` or a unit test.
+- Put a helper that two test files use in `tests/common/mod.rs`. Compare
+  against the `const` of the crate, not against a copy of its text.
+- The name of a test is a full sentence that states the behavior.
+
+## Before the review
+
+```bash
+just lint && just test     # fmt, clippy -D warnings, rustdoc -D warnings, and the tests
+```
+
+Then read the diff against each section of this page, and against
+[The style rules](./documentation.md#the-style-rules) for each comment and each
+message.

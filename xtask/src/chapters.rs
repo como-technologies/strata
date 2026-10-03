@@ -4,7 +4,7 @@
 //! where the page describes one. `serve_here` marks a state the playground can hand over.
 
 use crate::book::Runner;
-use crate::tenant::Edit;
+use crate::tenant::{Edit, PackRefusal};
 use serde_json::json;
 
 const DEV: &str = "64f20000000000000000a0d1";
@@ -1757,7 +1757,12 @@ fn use_cases(r: &mut Runner) {
     r.packs_answer(
         DEV,
         PAYMENTS,
-        Some((A117, "kubernetes", "cni-cilium-oss", "1.21.0")),
+        Some(PackRefusal {
+            profile: A117,
+            pack: "kubernetes",
+            required: "cni-cilium-oss",
+            version: "1.21.0",
+        }),
     );
     r.step(
         "validate-refuses",

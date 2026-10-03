@@ -105,9 +105,9 @@ Strata reads the whole file before it sends a request:
      needs no `csi` layer.
 
 [What the create of a version checks](../internals/palette/profiles.md#what-the-create-of-a-version-checks)
-gives the source of each rule in Palette. A version and a type that Palette
-refuses, in two copies of the candidate of
-[Write one from a published version](#write-one-from-a-published-version):
+states what Palette does for each rule. Two copies of the candidate of
+[Write one from a published version](#write-one-from-a-published-version) have a
+version and a type that Palette refuses:
 
 ```text
 {{#include ../output/candidate-refused.txt}}
@@ -125,15 +125,16 @@ is not a `manifest` layer:
 2. `GET /v1/packs/<name>/registries/<uid>`: the tags of that version, and the
    default values and the layer when the listing gives none.
 
-When the listing does not have the version, and the registry is one that
-Palette does not sync, the layer gets the pack that Palette makes at the create.
+Palette does not sync some registries. If the listing does not have a version
+from such a registry, the layer gets the pack that Palette makes at the create.
 See [A layer from a registry that Palette does not sync](#a-layer-from-a-registry-that-palette-does-not-sync).
 
 From these answers, strata checks the two rules that need the registry, as
 `candidate-invalid`:
 
 - The cloud types of each pack in the listing hold the `cloudType` of the
-  candidate, or `all`, or `custom` for a cloud that Palette does not know. A
+  candidate, or `all`. `custom` also passes for a cloud that Palette does not
+  know. A
   pack with no cloud type, a candidate with the cloud `all`, and a candidate
   with no `cloudType` take each pack.
 - Rules 7 and 8 above, with the layer of each pack in the registry. Palette
@@ -180,8 +181,8 @@ Strata does not change the values. So the root of the candidate can differ from
 the root of the version that Palette publishes from the same file. For
 example, the `headlamp` 0.45.0 template has the parameter `access`, at
 `pack.palette.config.headlamp.access`. The value `public` selects the option
-`public`, with the label `Direct`. In the pack source, the presets of that
-option set `charts.headlamp.service.type` to `LoadBalancer`.
+`public`, with the label `Direct`. The presets of that option set
+`charts.headlamp.service.type` to `LoadBalancer`.
 
 In this example, the stand-in gives `cert-manager` 1.21.1 a template with one
 parameter, `access` at `pack.access`, and one option, `public`:
@@ -193,7 +194,7 @@ parameter, `access` at `pack.access`, and one option, `public`:
 ```
 
 A value that names no option, or values with no such key, give no warning and
-no field. After a warning, record the version when Palette publishes it, and
+no field. After a warning, record the version when Palette publishes it. Then
 compare that record with the candidate.
 
 ## A manifest layer
@@ -211,7 +212,7 @@ registry. Give its layer `type: manifest`, its version, and its manifests:
 ```
 
 Strata sends no request for a `manifest` layer. The pack that it builds has the
-type `manifest`, no registry uid, no digest, and no pack uid: Palette gives the
+type `manifest`, no registry uid, no digest, and no pack uid. Palette gives the
 manifest pack of each profile a new pack uid when it creates the profile. The
 values and the manifests come from the file.
 
@@ -229,7 +230,7 @@ Palette builds the pack of a manifest layer from its own manifest pack:
   published version.
 - **The layer** comes from the manifest pack of Palette too, and is `addon`.
   Palette drops a layer that the profile gives. So strata refuses another
-  layer on a `manifest` layer: the published version would not have it.
+  layer on a `manifest` layer: the published version does not have it.
 
 ## A layer from a registry that Palette does not sync
 

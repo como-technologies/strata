@@ -86,7 +86,7 @@ if [ "$stage" = all ] || [ "$stage" = 2 ]; then
     "$live/api.sh" post /v1/clusterprofiles/validate/packs "$body"
   check validate-not-yaml-status-says 0 '#152: HTTP 500 with the code PackValuesYamlInvalid' -- \
     grep -q 'answered HTTP 500: {"code":"PackValuesYamlInvalid"' validate-not-yaml-status.err
-  # a body with no pack: the converter of the route refuses it before the checks of the packs
+  # a body with no pack: Palette refuses it before it checks the packs
   check validate-no-pack 2 '#152: Palette refuses a body with no pack' -- \
     "$live/api.sh" post /v1/clusterprofiles/validate/packs '{"cloudType": "all", "type": "add-on", "packs": []}'
   check validate-no-pack-says 0 '#152: HTTP 400 with the code ShouldNotBeEmpty' -- \

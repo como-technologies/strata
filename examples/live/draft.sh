@@ -5,10 +5,10 @@
 #
 #   examples/live/draft.sh
 #
-# It records the add-on version, edits its manifest through the API with no publish, records
-# `<uid>@draft` and the version again, compares the two, and reads what each route of Palette
-# gives while the draft waits. Then it publishes the draft, verifies the record of the draft
-# against the version, and puts the edit back with a publish.
+# It records the add-on version, and edits its manifest through the API with no publish. It
+# records `<uid>@draft` and the version again, and compares the two. It reads what each route
+# of Palette gives while the draft waits. Then it publishes the draft, verifies the record of
+# the draft against the version, and puts the edit back with a publish.
 #
 # Needs the profiles (just live-profiles) and no cluster: no cost. It leaves the add-on version
 # with the content it found. Needs the strata release binary, jq, and the key as verify.sh needs

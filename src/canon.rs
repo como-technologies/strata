@@ -84,9 +84,8 @@ pub fn canon_yaml(text: &str) -> Canon {
 }
 
 /// Check YAML text as Palette checks the values of a pack and the content of a manifest: it reads
-/// the first document into a map (`ValidateFormat`, `hubble/util/yaml/yaml.go:960-966`). Empty
-/// text and a null document pass. The error is the first line of the parser's message, or what the
-/// document is in place of a map.
+/// the first document into a map. Empty text and a null document pass. The error is the first
+/// line of the parser's message, or what the document is in place of a map.
 pub fn map_yaml(text: &str) -> Result<(), String> {
     let Some(de) = serde_yaml::Deserializer::from_str(text).next() else {
         return Ok(());
@@ -168,7 +167,7 @@ mod tests {
 
     #[test]
     fn map_yaml_takes_what_palette_reads_into_a_map() {
-        // each case as gopkg.in/yaml.v3 v3.0.1 gives it to `Unmarshal` into a map, as Palette does
+        // each case as Palette reads it into a map
         for ok in [
             "",
             "   \n",

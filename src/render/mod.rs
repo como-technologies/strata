@@ -593,8 +593,8 @@ pub(crate) fn same_content_note(d: &Diff) -> Option<String> {
         (true, false) => {
             "the roots differ only by the tag name a pack is pinned under: the same pack build"
         }
-        (true, true) => "the roots differ only by the tag name a pack is pinned under and the packUid that Palette mints for a manifest pack or for a pack from a registry that it does not sync: the same content",
-        _ => "the roots differ only by the packUid that Palette mints for a manifest pack or for a pack from a registry that it does not sync: the same content",
+        (true, true) => "the roots differ only by the tag name of a pack and the packUid that Palette mints: the same content",
+        _ => "the roots differ only by the packUid that Palette mints: the same content",
     }.to_string())
 }
 
@@ -672,16 +672,10 @@ pub(crate) fn palette_repave_lines(d: &Diff) -> Vec<String> {
 /// Palette's answer to `--validate`: `accepts`, or one line for each error, `refuses:
 /// PackDependencyNotFound strata-live-pack: <message>`. Empty without the option.
 pub(crate) fn palette_validation_lines(d: &Diff) -> Vec<String> {
-    let Some(v) = &d.palette_validation else {
-        return Vec::new();
-    };
-    if v.errors.is_empty() {
-        return vec!["accepts".to_string()];
-    }
-    v.errors
-        .iter()
-        .map(|e| format!("refuses: {}", e.line()))
-        .collect()
+    d.palette_validation
+        .as_ref()
+        .map(|v| crate::validation::answer_lines(&v.errors))
+        .unwrap_or_default()
 }
 
 /// The note when the impact table and Palette disagree about a repave.

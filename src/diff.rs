@@ -12,6 +12,7 @@ use crate::canon::canonical_json;
 pub use crate::impact::{Flags, Impact, ImpactLevel, impact, presence_impact};
 use crate::layer::Layer;
 use crate::snapshot::{ClusterVariable, Pack, Snapshot, Source, Tool};
+pub use crate::validation::{PaletteRefusal, PaletteValidation};
 
 /// Schema id written into every diff document.
 pub const DIFF_SCHEMA: &str = "strata-diff/1";
@@ -36,14 +37,13 @@ pub struct Diff {
     /// True when the roots are equal: same release
     pub same: bool,
     /// True when the roots are equal, or differ only by the `packUid`s that Palette mints
-    /// (`packs[].mintedUidOnly`) and the tag names packs are pinned under
-    /// for the same build (`packs[].tagRenamed`): the same content. `same-release` accepts such a
-    /// pair.
+    /// (`packs[].mintedUidOnly`) and by the tag name of a pack for the same build
+    /// (`packs[].tagRenamed`): the same content. `same-release` accepts such a pair.
     #[serde(default)]
     pub same_content: bool,
-    /// True when both sides name the same profile uid and version but their roots differ: the
-    /// version was edited in place, or, between two clusters, changed on one of them. A version
-    /// and a record of its draft are not.
+    /// True when both sides name the same profile uid and version but their roots differ: an edit
+    /// in place changed the version, or, between two clusters, one cluster changed. It is false
+    /// for a version and a record of its draft.
     #[serde(default)]
     pub edited_in_place: bool,
     /// Each profile uid that the two sides name under different versions: the version was
@@ -92,12 +92,12 @@ pub struct Diff {
     /// equal: the content names the macro, and Palette gives it another value.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub macros_changed: Vec<String>,
-    /// With `compare --repave`: what Palette answers when asked if the change repaves the
-    /// cluster side, beside the level of the impact table.
+    /// With `compare --repave`: what Palette answers when strata asks whether the change repaves
+    /// the cluster side, beside the level of the impact table.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub palette_repave: Option<PaletteRepave>,
-    /// With `compare --validate`: what Palette answers when asked if it accepts the packs of the
-    /// change on the cluster side.
+    /// With `compare --validate`: what Palette answers when strata asks whether it accepts the
+    /// packs of the change on the cluster side.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub palette_validation: Option<PaletteValidation>,
 }
@@ -559,7 +559,7 @@ pub struct PackDiff {
     pub params_changed: bool,
     /// True when the only difference is a `packUid` that Palette mints. A manifest pack comes
     /// from no registry, and Palette mints its uid for each profile it creates, so two profiles
-    /// with the same manifests carry different ones. A pack from a registry that Palette does not
+    /// with the same manifests have different uids. A pack from a registry that Palette does not
     /// sync gets its uid at the create, so the record of a candidate has none. The content is the
     /// same.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
@@ -769,7 +769,7 @@ pub struct ValuesDiff {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct PaletteRepave {
-    /// The cluster that Palette was asked about.
+    /// The cluster that strata asked Palette about.
     pub cluster_uid: String,
     /// `isRepaveRequired`: Palette would replace the nodes.
     pub required: bool,
@@ -845,103 +845,6 @@ impl PaletteRepave {
             required,
             reasons,
             agrees,
-        }
-    }
-}
-
-/// Palette's answer to `POST /v1/spectroclusters/{uid}/validate/packs`, for a change from what a
-/// cluster runs to a profile version.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct PaletteValidation {
-    /// The cluster that Palette was asked about.
-    pub cluster_uid: String,
-    /// True when Palette gives no error.
-    pub accepts: bool,
-    /// Each error that Palette gives, sorted by pack, code, and message: Palette sorts the
-    /// profiles in no fixed order.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub errors: Vec<PaletteRefusal>,
-}
-
-/// One error that Palette gives for a pack.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct PaletteRefusal {
-    /// The pack that the error is about. Empty when Palette refuses the whole request.
-    #[serde(default, skip_serializing_if = "String::is_empty")]
-    pub pack: String,
-    /// For example `PackDependencyNotFound`.
-    pub code: String,
-    /// Palette's sentence.
-    pub message: String,
-}
-
-impl PaletteRefusal {
-    /// `<code> <pack>: <message>`, with no pack for a refusal of the whole request.
-    pub fn line(&self) -> String {
-        if self.pack.is_empty() {
-            format!("{}: {}", self.code, self.message)
-        } else {
-            format!("{} {}: {}", self.code, self.pack, self.message)
-        }
-    }
-
-    /// The errors of a `v1ConstraintValidatorResponse`: `results[]`, each with the `name` of its
-    /// pack and `errors[]` of `code` and `message`.
-    pub fn from_constraints(answer: &Value) -> Vec<PaletteRefusal> {
-        let text = |v: &Value, key: &str| {
-            v.get(key)
-                .and_then(Value::as_str)
-                .unwrap_or_default()
-                .to_string()
-        };
-        answer
-            .get("results")
-            .and_then(Value::as_array)
-            .into_iter()
-            .flatten()
-            .flat_map(|r| {
-                let pack = text(r, "name");
-                r.get("errors")
-                    .and_then(Value::as_array)
-                    .into_iter()
-                    .flatten()
-                    .map(move |e| PaletteRefusal {
-                        pack: pack.clone(),
-                        code: text(e, "code"),
-                        message: text(e, "message"),
-                    })
-            })
-            .collect()
-    }
-}
-
-impl PaletteValidation {
-    /// Read Palette's answer: the errors under `profiles[].packs` and under `machinePools`.
-    /// Palette gives the error of a pack under each profile that holds a pack of that name, so
-    /// strata keeps one copy.
-    pub fn from_palette(cluster_uid: &str, answer: &Value) -> PaletteValidation {
-        let errors = answer
-            .get("profiles")
-            .and_then(Value::as_array)
-            .into_iter()
-            .flatten()
-            .filter_map(|p| p.get("packs"))
-            .chain(answer.get("machinePools"))
-            .flat_map(PaletteRefusal::from_constraints)
-            .collect();
-        PaletteValidation::refused(cluster_uid, errors)
-    }
-
-    /// The answer with these errors, sorted and with no copy. It accepts when there is none.
-    pub fn refused(cluster_uid: &str, mut errors: Vec<PaletteRefusal>) -> PaletteValidation {
-        errors.sort();
-        errors.dedup();
-        PaletteValidation {
-            cluster_uid: cluster_uid.to_string(),
-            accepts: errors.is_empty(),
-            errors,
         }
     }
 }

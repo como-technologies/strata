@@ -1,27 +1,28 @@
 # How a change lands
 
 A change goes to `main` through a pull request, and a second person checks it
-before it merges. The merge is the work of GitHub, not of a person: it comes when
-the checks pass and the second person has said so. This page states the steps,
-and what each one needs.
+before it merges. GitHub does the merge, not a person. GitHub merges when the
+checks pass and the second person approves. This page states the steps, and what
+each one needs.
 
 ## The issue
 
 Each change starts from an issue. The issue states the problem, a plan, and a
-`Done when:` line. Each item of that line names what to run or what to read,
-and what the result must be, so that a second person can test it. An issue with
-no such line gets one before any work starts. The person who writes the line
-does not do the work: a second person reads the line before the work, too.
+`Done when:` line. Each item of that line names a command to run or a file to
+read, and the result that it must give. A second person can then test it. If an
+issue has no such line, write one before the work starts. The person who writes
+the line does not do the work. A second person also reads the line before the
+work starts.
 
 ## The work
 
 1. Start from a fresh `main`: `git fetch`, then a branch from `origin/main`.
-2. Make the change, and the change of the book that goes with it: see
+2. Make the change, and the related change to the book: see
    [Write the documentation](./documentation.md). Each new output of the book
    comes from `just docs-examples`.
 3. Give each item of the `Done when:` line a test, when a test can show it.
-   Remove the new code for a moment, and make sure that the test fails. Then put
-   the code back.
+   Remove the new code temporarily. Make sure that the test fails. Then restore
+   the code.
 4. Run each check of CI in a clean worktree of the commit, not only in the tree
    you work in:
 
@@ -29,7 +30,7 @@ does not do the work: a second person reads the line before the work, too.
    just lint && just test && just library-example && just examples && just docs-check && just docs-lint && just docs && cargo test -p xtask
    ```
 
-5. Rebase on a fresh `origin/main`, and push the branch.
+5. Rebase on a fresh `origin/main`. Then push the branch.
 6. Open the pull request with auto-merge on, and with a squash:
 
    ```bash
@@ -46,7 +47,7 @@ A second person, not the author, checks the pull request against the
 `Done when:` line of the issue:
 
 - each item, with the command that shows it and its output;
-- each new test: remove the new code, see the test fail, and put it back;
+- each new test: remove the new code, see the test fail, and restore the code;
 - each statement about Palette, against the Spectro Cloud source or a live read;
 - the book, against [the style rules](./documentation.md#the-style-rules).
 
@@ -56,7 +57,7 @@ commit only. A new push needs a new verify.
 
 ## The merge
 
-A ruleset on `main` holds each change to these rules:
+A ruleset on `main` applies these rules to each change:
 
 | Rule | What it needs |
 | --- | --- |
@@ -69,24 +70,25 @@ With auto-merge on, GitHub merges the pull request when the checks pass and the
 verify status is success, and deletes the branch. A verify that fails stops the
 merge: the author fixes the change, pushes, and asks for a new verify.
 
-An admin of the repository can go around each rule of the ruleset: for example,
-push to `main` with no pull request, for the commit of a release (see
-[Release](./release.md)). The rules do not stop an admin, so an admin keeps to
+An admin of the repository can bypass each rule of the ruleset. For example, an
+admin pushes the commit of a release to `main` with no pull request (see
+[Release](./release.md)). The rules do not stop an admin, so an admin follows
 the steps of this page for each other change.
 
 ## The evidence
 
 After the merge, the author puts one comment on the issue: the evidence. It
 starts with `Evidence for the acceptance criteria: the commands run, from the
-repo root, and the output they printed.`, names the merge commit, and gives one
+repo root, and the output they printed.` It names the merge commit. It gives one
 heading for each item of the `Done when:` line, with the commands and the output
-they printed. Then the author ticks each item that the evidence shows. An item
-that needs a build in the live example, which costs money, is named in the pull
-request and left for a person who runs it. The owner of the issue closes it.
+that they printed. Then the author ticks each item that the evidence shows. If
+an item needs a build in the live example, which costs money, the author names
+the item in the pull request. A person who runs the live example does that item.
+The owner of the issue closes it.
 
 ## A fault of Palette
 
-When the work shows that Palette itself is wrong, or could do better, the fault
-goes into a report kept outside this repository, with the source line and the
-evidence. It is not an issue of this repository. A gap of strata gets an issue
-of its own.
+When the work shows a fault of Palette, or a possible improvement to Palette,
+the author writes it in a report outside this repository. The report gives the
+source line and the evidence. It is not an issue of this repository. A fault of
+strata gets an issue of its own.

@@ -574,7 +574,7 @@ in the project of the key: give it as `PROFILE=<name>@<version>`.
 | `validate-accepts`, `validate-accepts-says`, `validate-accepts-record` | 0 | #152: Palette takes the packs of the candidate; `snapshot --validate` prints `palette    accepts` and writes the record with `source.paletteValidation` `{"accepts": true}` |
 | `validate-not-yaml`, `validate-not-yaml-says`, `validate-not-yaml-no-record` | 2, 0, 1 | #153: strata refuses values that are not YAML before any request, as `candidate-invalid` with the code of Palette, `PackValuesYamlInvalid`; it exits `2` and writes no record |
 | `validate-not-yaml-status`, `validate-not-yaml-status-says` | 2, 0 | #152: Palette refuses the same body as the whole request, `PackValuesYamlInvalid` with no pack, and sends the refusal as HTTP 500 |
-| `validate-no-pack`, `validate-no-pack-says` | 2, 0 | #152: a body with no pack gets HTTP 400 with `ShouldNotBeEmpty`, from the converter of the route |
+| `validate-no-pack`, `validate-no-pack-says` | 2, 0 | #152: Palette refuses a body with no pack before it checks the packs: HTTP 400 with `ShouldNotBeEmpty` |
 | `validate-version`, `validate-version-says` | 0 | #152: `snapshot <ref> --validate` asks the route of an update, and Palette takes the version as it is |
 
 No pack of the Public Repo lists a dependency in its tags route, so no stage
@@ -602,7 +602,7 @@ states what it shows.
 | `auth-candidate`, `auth-candidate-minted` | 0 | #154: a candidate with the chart builds a record before any profile pins it: no pack uid, no digest, the layer `addon`, the type `helm`, and the tag as the version |
 | `auth-pin`, `auth-record` | 0 | a profile that pins the chart by name, and a record of it |
 | `auth-candidate-same`, `auth-candidate-minted-only` | 0 | #154: `same-release` with `--allow no-digest` passes the candidate and the published version, and `mintedUidOnly` names the chart |
-| `auth-candidate-again`, `auth-candidate-listed` | 0, 0 | #154: a record of the candidate after the create has the published root, as the listing now has the chart |
+| `auth-candidate-again`, `auth-candidate-listed` | 0, 0 | #154: a record of the candidate after the create has the published root, because the listing now has the chart |
 | `auth-no-digest` | 0 | #75 #71: the pack reference carries no digest, and Palette made a pack uid |
 | `auth-verify`, `auth-verify-says`, `auth-verify-allowed` | 1, 0, 0 | #71: `verify` reports `UNVERIFIED`, and `--allow-no-digest` accepts it |
 | `auth-same-release`, `auth-same-release-allowed` | 1, 0 | #71: `same-release` refuses it, and `--allow no-digest` accepts it |
@@ -1098,8 +1098,8 @@ plan now waits for `Running` before it deletes. The delete did not end by itself
 gateways were still in AWS, with the cluster `Deleting` and
 `CloudInfrastructureCleanedUp: DeletingInfrastructure`. The recovery was the
 one of the book: `eks-nodegroups.sh --delete`, `aws-cleanup.sh fred us-east-2 --yes`,
-the inventory at 0, then a second plain delete, which the findings report of
-2026-09-26 on the pivot webhook gives as the step that ends the wait. It did
+the inventory at 0, then a second plain delete, which the findings report on
+the pivot webhook gives as the step that ends the wait. It did
 not end it here: from then on each reconcile of the delete failed with "failed
 to delete additional resources: failed to get existing aws managed control
 plane: AWSManagedControlPlane fred-cp not found", every five minutes, with the
@@ -1243,10 +1243,9 @@ What differs is outside strata:
   behaviors that no script here establishes.
 - No script creates a profile version that breaks a rule of
   [What the create of a version checks](../internals/palette/profiles.md#what-the-create-of-a-version-checks).
-  The rules come from the source of Palette. A run of the YAML parser of
-  Palette, `gopkg.in/yaml.v3` v3.0.1, gives the cases in the test of
-  `map_yaml`. The cases of the version test come from the regular expression
-  of `NewVersion` in `github.com/Masterminds/semver` v1.5.0.
+  Each rule states what Palette does, and no live run shows it. The test cases
+  of the YAML check and of the version check come from the YAML parser and the
+  version pattern that Palette uses.
 - No script installs a Zarf package on a cluster: Palette gives a Zarf pack the
   values of an app profile, `{{.spectro.system.appdeployment.tiername}}`, so it
   needs an app deployment of Palette Dev Engine.

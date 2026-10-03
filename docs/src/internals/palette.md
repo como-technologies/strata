@@ -4,9 +4,9 @@ Strata is built around the behavior of the Palette API. These pages state that
 behavior, and what strata does with each part of it. The public documentation
 describes each feature, and the behavior of the API under each change comes
 from a live tenant: see
-[The live example](../development/live-example.md). Where a page gives the rule
-behind an answer from the Spectro Cloud source, it says so. A rule from the
-source that no run checks is in
+[The live example](../development/live-example.md). When a rule comes from the
+code of Palette and not from a live run, the page says so. Each such rule that
+no run checks is in
 [What no run covers](palette/limits.md#what-the-source-of-palette-says).
 
 Read these pages when you want to know why strata reports something the way it

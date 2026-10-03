@@ -6,10 +6,12 @@ use std::fs;
 use std::path::Path;
 
 use serde_json::{Value, json};
-use strata::api::{MemoryApi, Palette};
+use strata::api::MemoryApi;
 use strata::error::Error;
 use strata::ops::{self, PairStatus, Policy};
-use strata::progress::Progress;
+
+mod common;
+use common::candidate_snapshot;
 
 const CHART: &str = "strata-live-chart";
 const PRIVATE: &str = "reg-charts-auth";
@@ -58,20 +60,11 @@ fn candidate(dir: &Path, registry: &str, layer: Value) -> std::path::PathBuf {
     file
 }
 
-fn snapshot(file: &Path, api: MemoryApi) -> strata::Result<strata::snapshot::Snapshot> {
-    ops::snapshot_from_candidate(
-        file,
-        || Ok(Palette::new(api.clone())),
-        "t0",
-        &Progress::silent(),
-    )
-}
-
 #[test]
 fn a_layer_from_a_private_helm_registry_gives_the_pack_that_palette_makes_at_the_create() {
     let dir = tempfile::tempdir().unwrap();
     let file = candidate(dir.path(), "charts-auth", json!({}));
-    let snap = snapshot(&file, tenant()).unwrap();
+    let snap = candidate_snapshot(&file, &tenant()).unwrap();
     let p = &snap.packs[0];
     assert_eq!(p.hash.upstream_source, "none");
     assert_eq!(p.pack_uid, "");
@@ -87,7 +80,7 @@ fn a_layer_from_a_private_helm_registry_gives_the_pack_that_palette_makes_at_the
 fn a_layer_from_an_oci_registry_with_sync_off_names_its_provider_type() {
     let dir = tempfile::tempdir().unwrap();
     let file = candidate(dir.path(), "zarf", json!({}));
-    let snap = snapshot(&file, tenant()).unwrap();
+    let snap = candidate_snapshot(&file, &tenant()).unwrap();
     let p = &snap.packs[0];
     assert_eq!((p.kind.as_str(), p.pack_uid.as_str()), ("oci", ""));
     assert_eq!(p.registry_provider_type.as_deref(), Some("zarf"));
@@ -98,7 +91,7 @@ fn a_layer_from_an_oci_registry_with_sync_off_names_its_provider_type() {
 fn a_layer_from_a_registry_that_syncs_is_still_pack_not_found() {
     let dir = tempfile::tempdir().unwrap();
     let file = candidate(dir.path(), "charts", json!({}));
-    let err = snapshot(&file, tenant()).unwrap_err();
+    let err = candidate_snapshot(&file, &tenant()).unwrap_err();
     assert!(matches!(err, Error::PackNotFound { .. }), "{err}");
 
     // an OCI registry of the provider type pack syncs, whatever the flag says
@@ -113,7 +106,7 @@ fn a_layer_from_a_registry_that_syncs_is_still_pack_not_found() {
                 "status": {"sync": {"isSyncSupported": false}}}]}),
         );
     let file = candidate(dir.path(), "zarf", json!({}));
-    let err = snapshot(&file, api).unwrap_err();
+    let err = candidate_snapshot(&file, &api).unwrap_err();
     assert!(matches!(err, Error::PackNotFound { .. }), "{err}");
 }
 
@@ -131,7 +124,7 @@ fn a_version_that_the_listing_has_goes_through_the_listing_also_in_a_private_reg
         json!({"tags": [{"tag": "1.0.0", "packUid": "pk-minted", "version": "1.0.0"}]}),
     );
     let file = candidate(dir.path(), "charts-auth", json!({}));
-    let snap = snapshot(&file, api).unwrap();
+    let snap = candidate_snapshot(&file, &api).unwrap();
     assert_eq!(snap.packs[0].pack_uid, "pk-minted");
 }
 
@@ -147,7 +140,7 @@ fn a_layer_that_palette_would_make_otherwise_is_candidate_invalid() {
         ),
     ] {
         let file = candidate(dir.path(), "charts-auth", layer);
-        let err = snapshot(&file, tenant()).unwrap_err();
+        let err = candidate_snapshot(&file, &tenant()).unwrap_err();
         assert!(matches!(err, Error::CandidateInvalid { .. }), "{err}");
         let text = err.to_string();
         assert!(
@@ -161,7 +154,7 @@ fn a_layer_that_palette_would_make_otherwise_is_candidate_invalid() {
         "charts-auth",
         json!({"layer": "addon", "tag": "1.0.0"}),
     );
-    snapshot(&file, tenant()).unwrap();
+    candidate_snapshot(&file, &tenant()).unwrap();
 }
 
 /// The record of a published version that pins the chart with the pack uid `uid` and, from a
@@ -197,7 +190,7 @@ fn published(dir: &Path, uid: &str, digest: &str) -> strata::snapshot::Snapshot 
 fn same_release_passes_the_candidate_and_the_published_version_with_the_minted_uid_only() {
     let dir = tempfile::tempdir().unwrap();
     let file = candidate(dir.path(), "charts-auth", json!({}));
-    let snap = snapshot(&file, tenant()).unwrap();
+    let snap = candidate_snapshot(&file, &tenant()).unwrap();
     let published = published(dir.path(), "pk-minted", "");
     assert_ne!(snap.root, published.root, "the candidate has no pack uid");
 
@@ -231,7 +224,7 @@ fn the_pack_that_palette_makes_has_the_layer_addon_for_the_rules_of_the_profile_
     let file = candidate(dir.path(), "charts-auth", json!({}));
     let text = fs::read_to_string(&file).unwrap();
     fs::write(&file, text.replace("type: add-on", "type: infra")).unwrap();
-    let err = snapshot(&file, tenant()).unwrap_err();
+    let err = candidate_snapshot(&file, &tenant()).unwrap_err();
     assert!(matches!(err, Error::CandidateInvalid { .. }), "{err}");
     assert!(
         err.to_string()

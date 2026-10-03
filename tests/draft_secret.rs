@@ -6,9 +6,11 @@ use serde_json::{Value, json};
 
 use strata::api::{MemoryApi, Palette};
 use strata::error::Error;
-use strata::ops;
 use strata::progress::Progress;
-use strata::reference::Ref;
+use strata::snapshot::DRAFT_TEMPLATE;
+
+mod common;
+use common::snapshot_of;
 
 const PROFILE: &str = "64f0000000000000000000d1";
 const PACK: &str = "64f0000000000000000000e1";
@@ -52,20 +54,11 @@ fn draft_only() -> MemoryApi {
         )
 }
 
-fn snapshot(api: &MemoryApi) -> strata::error::Result<strata::snapshot::Snapshot> {
-    ops::snapshot_for(
-        &Ref::Uid(PROFILE.to_string()),
-        || Ok(Palette::new(api)),
-        "t0",
-        &Progress::silent(),
-    )
-}
-
 #[test]
 fn a_record_of_a_draft_holds_no_clear_secret() {
     let api = draft_only().with(format!("/v1/packs/{PACK}"), pack_doc());
-    let snap = snapshot(&api).unwrap();
-    assert_eq!(snap.source.template, "draft");
+    let snap = snapshot_of(&api, PROFILE).unwrap();
+    assert_eq!(snap.source.template, DRAFT_TEMPLATE);
     let record = snap.to_json(false).unwrap();
     assert!(!record.contains(SECRET), "{record}");
     let pack = &snap.packs[0];
@@ -116,11 +109,11 @@ fn a_masked_draft_has_the_values_digest_of_the_version_that_palette_masks() {
             format!("/v1/clusterprofiles/{PROFILE}/variables"),
             json!({"variables": []}),
         );
-    let a = snapshot(&draft).unwrap();
-    let b = snapshot(&published).unwrap();
+    let a = snapshot_of(&draft, PROFILE).unwrap();
+    let b = snapshot_of(&published, PROFILE).unwrap();
     assert_eq!(a.packs[0].values_hash, b.packs[0].values_hash);
     assert_eq!(a.content_digest(), b.content_digest());
-    // a published profile is masked by Palette: strata reads no schema for it
+    // Palette masks a published profile: strata reads no schema for it
     assert_eq!(published.calls(&format!("/v1/packs/{PACK}")), 0);
 }
 
@@ -141,13 +134,41 @@ fn a_published_profile_with_a_draft_saves_no_clear_secret_of_the_draft() {
 #[test]
 fn a_pack_that_palette_no_longer_has_is_not_masked_as_in_palette() {
     // with no pack, Palette has no schema and masks nothing; the memory client answers 404
-    let snap = snapshot(&draft_only()).unwrap();
+    let snap = snapshot_of(&draft_only(), PROFILE).unwrap();
     assert!(snap.packs[0].values.contains(SECRET));
 }
 
 #[test]
 fn a_failed_read_of_the_schema_stops_the_record() {
     let api = draft_only().failing(format!("/v1/packs/{PACK}"), 403, "forbidden");
-    let err = snapshot(&api).unwrap_err();
+    let err = snapshot_of(&api, PROFILE).unwrap_err();
     assert!(matches!(err, Error::Api { status: 403, .. }), "{err}");
+}
+
+#[test]
+fn a_pack_uid_with_a_character_that_is_not_alphanumeric_is_masked() {
+    let uid = "64f0-barney+e1";
+    let mut profile = profile_doc("draft", VALUES);
+    profile["spec"]["draft"]["packs"][0]["packUid"] = json!(uid);
+    let mut pack = pack_doc();
+    pack["packValues"][0]["packUid"] = json!(uid);
+    let api = MemoryApi::new()
+        .with(format!("/v1/clusterprofiles/{PROFILE}"), profile)
+        .with(
+            format!("/v1/clusterprofiles/{PROFILE}/packs/manifests"),
+            json!({"spec": {"packs": [{"metadata": {"name": "grafana", "uid": uid},
+                "spec": {"name": "grafana", "version": "1.0.0", "values": VALUES}}]}}),
+        )
+        .with(
+            format!("/v1/clusterprofiles/{PROFILE}/variables"),
+            json!({"variables": []}),
+        )
+        // strata escapes the uid in the path, as for each other uid
+        .with("/v1/packs/64f0-barney%2Be1", pack);
+    let raw = Palette::new(&api)
+        .fetch_profile(PROFILE, &Progress::silent())
+        .unwrap();
+    assert!(!raw.profile.to_string().contains(SECRET));
+    assert!(!raw.manifests.to_string().contains(SECRET));
+    assert_eq!(api.calls("/v1/packs/64f0-barney%2Be1"), 1);
 }

@@ -29,8 +29,8 @@ pub enum Policy {
 pub enum PairStatus {
     /// Equal roots.
     Identical,
-    /// Roots differ only by the `packUid`s that Palette mints, and by the tag name a pack is
-    /// pinned under for the same build: the same content, under either policy.
+    /// Roots differ only by the `packUid`s that Palette mints, and by the tag name of a pack for
+    /// the same build: the same content, under either policy.
     SameContent,
     /// Roots differ only because packs were re-pinned from another registry; accepted by policy.
     RegistryMove,
@@ -348,7 +348,7 @@ pub fn same_release_with(
                 ),
                 (
                     "same-content",
-                    "The roots differ only by the packUid that Palette mints for a manifest pack or for a pack from a registry that it does not sync, or by the tag name a pack is pinned under for the same build: the same content, so the same release under either policy.",
+                    "The roots differ only by the packUid that Palette mints, or by the tag name of a pack for the same build. Palette mints the packUid of a manifest pack and of a pack from a registry that it does not sync. The content is the same, so the release is the same under either policy.",
                 ),
                 (
                     "registry-move",

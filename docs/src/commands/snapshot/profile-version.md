@@ -79,10 +79,10 @@ A record holds each pack's values, params, and manifests in full. Palette
 writes `********` over each value whose schema format is `password`, and
 strata does the same for a profile with a draft: see
 [Secrets in the values](../../internals/palette/profiles.md#secrets-in-the-values).
-The value of a sensitive profile variable is left out. Each other secret stays:
-a secret in a value that the schema does not mark, or in a manifest. So a
-record of a profile whose pack values or manifests hold such a secret carries
-that secret. Keep that record in the object store, and not in the repository.
+A record does not hold the value of a sensitive profile variable. Each other
+secret stays: a secret in a value that the schema does not mark, or in a
+manifest. So a record of a profile whose pack values or manifests hold such a
+secret carries that secret. Keep that record in the object store, and not in the repository.
 
 The book uses two layouts. The use cases keep one record for each version, at
 `releases/<version>/<project>.json`, and one for each cluster, at

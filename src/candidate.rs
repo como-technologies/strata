@@ -1,11 +1,11 @@
 //! A profile version that does not exist in Palette yet, described by a file.
 //!
-//! The file names each layer's pack by name, version, and registry, and carries the values and
-//! manifests the profile will have. Strata looks each pack up in the registry for what Palette
-//! fills in on publication (the pack uid, the tag, the digest, and the default values) and builds
-//! the same documents a published profile returns, so the candidate hashes exactly as the
-//! published version will. A `manifest` layer holds manifests from no registry: strata makes
-//! no request for it, and its pack has no uid until Palette mints one at the create.
+//! The file names the pack of each layer by name, version, and registry, and holds the values
+//! and manifests that the profile will have. Strata reads each pack from the registry for what
+//! Palette adds at the publish: the pack uid, the tag, the digest, and the default values. It
+//! builds the same documents that a published profile gives, so the candidate has the same root
+//! as the published version. A `manifest` layer holds manifests from no registry. Strata makes no
+//! request for it, and its pack has no uid until Palette mints one at the create.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -271,44 +271,52 @@ const MANIFEST_LAYER: &str = "addon";
 /// The layer of the pack that Palette makes for a layer from a registry that it does not sync.
 const UNSYNCED_LAYER: &str = "addon";
 
-/// The most packs, and the most manifests, that Palette takes in one profile
-/// (`GetClusterProfileResourceLimits`, `hubble/domain/clusterprofile.go:786-797`). A manifest
-/// layer counts as one manifest more.
+/// The most packs, and the most manifests, that Palette takes in one profile. A manifest layer
+/// counts as one manifest more.
 const PROFILE_LIMIT: usize = 200;
 
-/// The longest name that Palette takes for a manifest or a manifest pack
-/// (`DNS1123LabelMaxLength`, `hubble/domain/validator/validate_k8s.go:70`).
+/// The longest name that Palette takes for a manifest or a manifest pack.
 const NAME_LIMIT: usize = 32;
 
-/// Whether Palette takes `v` as the version of a profile. `semver.ParseStrict` gives it to
-/// `NewVersion` of `github.com/Masterminds/semver` v1.5.0, which takes an optional `v`, one to
-/// three numbers, a pre-release, and build data: so `1.1` and `v1.2.3` pass, and
-/// `2.2.2.develop` does not (`hubble/util/semver/semver.go:95-103`).
-fn palette_version(v: &str) -> bool {
-    let ident = |s: &str| {
+/// Whether `v` is a semantic version in the loose form that Palette parses: an optional `v`,
+/// one to three numbers with dots between them, an optional pre-release after `-`, and optional
+/// build data after `+`. Each identifier of the pre-release and of the build data has letters,
+/// digits, and `-` only.
+fn loose_semver(v: &str) -> bool {
+    let ids = |s: &str| {
         s.split('.')
-            .all(|i| !i.is_empty() && i.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-'))
+            .all(|id| !id.is_empty() && id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-'))
     };
     let v = v.strip_prefix('v').unwrap_or(v);
-    let (v, build) = match v.split_once('+') {
-        Some((v, b)) => (v, Some(b)),
-        None => (v, None),
-    };
-    let (core, pre) = match v.split_once('-') {
-        Some((c, p)) => (c, Some(p)),
-        None => (v, None),
-    };
+    let (v, build) = v.split_once('+').map_or((v, None), |(a, b)| (a, Some(b)));
+    let (core, pre) = v.split_once('-').map_or((v, None), |(a, b)| (a, Some(b)));
     let numbers: Vec<&str> = core.split('.').collect();
     numbers.len() <= 3
-        && numbers.iter().all(|n| {
-            !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()) && n.parse::<i64>().is_ok()
-        })
-        && pre.is_none_or(ident)
-        && build.is_none_or(ident)
+        && numbers
+            .iter()
+            .all(|n| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()))
+        && pre.is_none_or(ids)
+        && build.is_none_or(ids)
+}
+
+/// The numbers of the core of a loose semantic version: the text before `-` and `+`, with no
+/// `v` at the start.
+fn core_numbers(v: &str) -> impl Iterator<Item = &str> {
+    let v = v.strip_prefix('v').unwrap_or(v);
+    let v = v.split_once('+').map_or(v, |(a, _)| a);
+    let core = v.split_once('-').map_or(v, |(a, _)| a);
+    core.split('.')
+}
+
+/// Whether Palette takes `v` as the version of a profile. Palette takes an optional `v`, one to
+/// three numbers, a pre-release, and build data. So `1.1` and `v1.2.3` pass, and
+/// `2.2.2.develop` does not. Each number must also fit in a 64-bit integer.
+fn palette_version(v: &str) -> bool {
+    loose_semver(v) && core_numbers(v).all(|n| n.parse::<i64>().is_ok())
 }
 
 /// Whether Palette takes `name` as the name of a manifest or of a manifest pack: a DNS-1123
-/// label of 32 characters at most (`IsValidName`, `hubble/domain/validator/validate_k8s.go:79-88`).
+/// label of 32 characters at most.
 fn palette_name(name: &str) -> bool {
     let b = name.as_bytes();
     let inner = |c: &u8| c.is_ascii_lowercase() || c.is_ascii_digit() || *c == b'-';
@@ -319,8 +327,7 @@ fn palette_name(name: &str) -> bool {
 }
 
 /// The names that are in `names` more than once, each one time, in the order of their first
-/// repeat. Palette compares the names as they are (`FindDuplicates`,
-/// `hubble/util/list/list_utils.go:150-164`).
+/// repeat. Palette compares the names as they are.
 fn repeated<'a>(names: impl IntoIterator<Item = &'a str>) -> Vec<&'a str> {
     let mut seen = std::collections::BTreeSet::new();
     let mut out = Vec::new();
@@ -332,9 +339,8 @@ fn repeated<'a>(names: impl IntoIterator<Item = &'a str>) -> Vec<&'a str> {
     out
 }
 
-/// The layers that a profile of type `kind` takes (`validatePackLayersByType`,
-/// `clusterprofile_validate.go:811-874`): each layer for `cluster`; `os`, `k8s`, `cni`, and `csi`
-/// for `infra`; `addon`, `cni`, and `csi` for each other type. None for each layer.
+/// The layers that a profile of type `kind` takes: each layer for `cluster`; `os`, `k8s`, `cni`,
+/// and `csi` for `infra`; `addon`, `cni`, and `csi` for each other type. None for each layer.
 fn layers_of_type(kind: &str) -> Option<&'static [&'static str]> {
     match kind {
         "" | "cluster" | PACK_TYPE => None,
@@ -343,9 +349,8 @@ fn layers_of_type(kind: &str) -> Option<&'static [&'static str]> {
     }
 }
 
-/// The layers that a `cluster` or `infra` profile must have (`GetMandatoryInfraPackLayers`,
-/// `hubble/domain/pack.go:1143-1150`): `os`, `k8s`, and `cni` on the cloud `edge-native`, and
-/// `csi` too on each other cloud. None for each other type.
+/// The layers that a `cluster` or `infra` profile must have: `os`, `k8s`, and `cni` on the cloud
+/// `edge-native`, and `csi` too on each other cloud. None for each other type.
 fn core_layers(kind: &str, cloud: &str) -> Option<&'static [&'static str]> {
     match (kind, cloud) {
         ("cluster" | "infra", "edge-native") => Some(&["os", "k8s", "cni"]),
@@ -403,8 +408,7 @@ fn check_layers(c: &Candidate, layers: &[Option<&str>]) -> std::result::Result<(
     Ok(())
 }
 
-/// The cloud types that Palette knows (`toCloudType`, `hubble/cloudtypes/cloudtypes.go:44-59`).
-/// Each other cloud type is a custom cloud.
+/// The cloud types that Palette knows. Each other cloud type is a custom cloud.
 const KNOWN_CLOUDS: &[&str] = &[
     "all",
     "baremetal",
@@ -423,8 +427,8 @@ const KNOWN_CLOUDS: &[&str] = &[
 ];
 
 /// Whether a pack whose listing gives the cloud types `clouds` goes in a profile of the cloud
-/// `cloud` (`IsCloudSupported`, `hubble/domain/pack.go:1345-1356`): the cloud `all`, a pack with
-/// no cloud type, a pack of that cloud or of `all`, and a pack of `custom` on a custom cloud.
+/// `cloud`: the cloud `all`, a pack with no cloud type, a pack of that cloud or of `all`, and a
+/// pack of `custom` on a custom cloud.
 fn cloud_supported(cloud: &str, clouds: &[String]) -> bool {
     let custom = !KNOWN_CLOUDS.contains(&cloud);
     cloud == "all"
@@ -552,8 +556,8 @@ pub fn check(candidate: Candidate, path: &Path) -> Result<LoadedCandidate> {
             }
             Some(other) => {
                 return Err(invalid(format!(
-                    "{whom} has type {other}; only manifest is allowed, and the registry gives \
-                     the type of each other pack"
+                    "{whom} has type {other}; a layer can give only the type manifest, and the \
+                     registry gives the type of each other pack"
                 )));
             }
         };
@@ -779,22 +783,40 @@ pub(crate) fn registry_sync<A: PaletteApi>(
     Ok(None)
 }
 
+/// The type of the pack that Palette makes for a layer from a registry that it does not sync.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum UnsyncedKind {
+    /// A pack from a private Helm registry.
+    Helm,
+    /// A pack from an OCI registry.
+    Oci,
+}
+
+impl UnsyncedKind {
+    /// The pack type as Palette writes it: `helm` or `oci`.
+    fn as_str(self) -> &'static str {
+        match self {
+            UnsyncedKind::Helm => "helm",
+            UnsyncedKind::Oci => "oci",
+        }
+    }
+}
+
 /// How Palette makes the pack of a layer from a registry that it does not sync.
 #[derive(Debug, Clone)]
 struct Unsynced {
-    /// The pack type: `helm` or `oci`.
-    kind: &'static str,
+    /// The pack type.
+    kind: UnsyncedKind,
     /// The provider type of an OCI registry: `helm` or `zarf`.
     provider: Option<String>,
 }
 
 /// Whether Palette syncs the registry `uid`. It does not sync a Helm registry that is private,
 /// or an OCI registry of the provider type `helm` or `zarf` with sync off, so the pack listing
-/// has no pack of it. Palette makes the pack of such a layer when it creates the profile
-/// (`isPackCreationRequired` in hubble `pack_service.go`). `GET /v1/registries/metadata` gives
-/// the kind and `isPrivate`, and `GET /v1/registries/oci/summary` gives the provider type and
-/// `status.sync.isSyncSupported`. None for a registry that syncs, and when Palette answers either
-/// listing with a 4xx.
+/// has no pack of it. Palette makes the pack of such a layer when it creates the profile.
+/// `GET /v1/registries/metadata` gives the kind and `isPrivate`, and
+/// `GET /v1/registries/oci/summary` gives the provider type and `status.sync.isSyncSupported`.
+/// None for a registry that syncs, and when Palette answers either listing with a 4xx.
 fn unsynced<A: PaletteApi>(palette: &Palette<A>, uid: &str) -> Result<Option<Unsynced>> {
     // the entry of the registry in a listing; none when Palette answers the listing with a 4xx
     let find = |path: &str, ptr: &str| -> Result<Option<Value>> {
@@ -820,7 +842,7 @@ fn unsynced<A: PaletteApi>(palette: &Palette<A>, uid: &str) -> Result<Option<Uns
             .and_then(Value::as_bool)
             .unwrap_or(false)
             .then_some(Unsynced {
-                kind: "helm",
+                kind: UnsyncedKind::Helm,
                 provider: None,
             })),
         Some("oci") => {
@@ -835,7 +857,7 @@ fn unsynced<A: PaletteApi>(palette: &Palette<A>, uid: &str) -> Result<Option<Uns
                     .and_then(Value::as_bool)
                     == Some(true);
             Ok((!syncs).then_some(Unsynced {
-                kind: "oci",
+                kind: UnsyncedKind::Oci,
                 provider: Some(provider).filter(|p| !p.is_empty()),
             }))
         }
@@ -843,52 +865,36 @@ fn unsynced<A: PaletteApi>(palette: &Palette<A>, uid: &str) -> Result<Option<Uns
     }
 }
 
-/// True when Palette takes `tag` as the version of a pack that it makes: a semantic version in
-/// the loose form of Masterminds semver 1.5 (`v1`, `1.2`, `1.2.3-rc.1+b5`), or a text that holds
-/// three numbers with dots between them (`chart-1.2.3`). hubble `util/semver` `Parse` tries the
-/// first, then the second; `createPackDoc` refuses the create with `InvalidPackVersion` when
-/// both fail.
+/// True when Palette takes `tag` as the version of a pack that it makes. Palette takes a semantic
+/// version in a loose form (`v1`, `1.2`, `1.2.3-rc.1+b5`), or a text that holds three numbers with
+/// dots between them (`chart-1.2.3`). When both fail, Palette refuses the create with
+/// `InvalidPackVersion`.
 fn palette_parses_version(tag: &str) -> bool {
-    let ids = |s: &str| {
-        s.split('.')
-            .all(|id| !id.is_empty() && id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-'))
-    };
-    let loose = || {
-        let v = tag.strip_prefix('v').unwrap_or(tag);
-        let (v, build) = v.split_once('+').map_or((v, None), |(a, b)| (a, Some(b)));
-        let (core, pre) = v.split_once('-').map_or((v, None), |(a, b)| (a, Some(b)));
-        let parts: Vec<&str> = core.split('.').collect();
-        parts.len() <= 3
-            && parts
-                .iter()
-                .all(|p| !p.is_empty() && p.bytes().all(|b| b.is_ascii_digit()))
-            && pre.is_none_or(ids)
-            && build.is_none_or(ids)
-    };
-    // `\d+\.\d+\.\d+` at any place in the text
-    let three = || {
-        let b = tag.as_bytes();
-        (0..b.len()).any(|start| {
-            let mut i = start;
-            for part in 0..3 {
-                let from = i;
-                while i < b.len() && b[i].is_ascii_digit() {
-                    i += 1;
-                }
-                if i == from {
+    loose_semver(tag) || has_three_numbers(tag)
+}
+
+/// Whether `text` holds three numbers with dots between them, `\d+\.\d+\.\d+`, at any place.
+fn has_three_numbers(text: &str) -> bool {
+    let b = text.as_bytes();
+    (0..b.len()).any(|start| {
+        let mut i = start;
+        for part in 0..3 {
+            let from = i;
+            while i < b.len() && b[i].is_ascii_digit() {
+                i += 1;
+            }
+            if i == from {
+                return false;
+            }
+            if part < 2 {
+                if b.get(i) != Some(&b'.') {
                     return false;
                 }
-                if part < 2 {
-                    if b.get(i) != Some(&b'.') {
-                        return false;
-                    }
-                    i += 1;
-                }
+                i += 1;
             }
-            true
-        })
-    };
-    loose() || three()
+        }
+        true
+    })
 }
 
 /// The registries this key can see, name and uid, in the order Palette lists them.
@@ -1083,9 +1089,8 @@ fn text(v: &Value, ptr: &str) -> Option<String> {
 /// entry of the pack version in the listing, which gives the template in
 /// `spec.template.parameters.inputParameters`. On a create and an update of a profile, Palette
 /// reads the value at the `targetKey` of each input parameter as text, and when the text names
-/// one of its `options`, writes the presets of that option into the values
-/// (`doutil.AddPackParameterPresets`). The listing gives each option with no presets, so strata
-/// records the selection and does not change the values.
+/// one of its `options`, writes the presets of that option into the values. The listing gives
+/// each option with no presets, so strata records the selection and does not change the values.
 pub(crate) fn preset_options(summary: &Value, values: &str) -> Vec<PresetOption> {
     let params = summary
         .pointer("/spec/template/parameters/inputParameters")
@@ -1110,7 +1115,11 @@ pub(crate) fn preset_options(summary: &Value, values: &str) -> Vec<PresetOption>
         ) else {
             continue;
         };
-        let at = flat.get(key.as_str()).map(as_text).unwrap_or_default();
+        let at = flat
+            .get(key.as_str())
+            .copied()
+            .map(as_text)
+            .unwrap_or_default();
         if options.contains_key(&at) {
             selected.insert(
                 name.clone(),
@@ -1157,7 +1166,7 @@ fn flatten<'v>(map: &'v Map<String, Value>, prefix: &str, out: &mut BTreeMap<Str
 
 /// A value as Palette reads it for an option: a string as it is, a number or a boolean as its
 /// text, and nothing for null, a list, or a map.
-fn as_text(v: &&Value) -> String {
+fn as_text(v: &Value) -> String {
     match v {
         Value::String(s) => s.clone(),
         Value::Bool(b) => b.to_string(),
@@ -1178,9 +1187,9 @@ pub fn warn_preset_options(snap: &Snapshot, progress: &Progress) {
     for p in &snap.packs {
         for o in &p.preset_options {
             progress.warn(&format!(
-                "{}: the values select the option {} of {} ({}); Palette can write the presets of \
-                 that option into the values, and no route of Palette shows them, so the root can \
-                 differ from the version that Palette publishes",
+                "{}: the values select the option {} of {} ({}). Palette can write the presets of \
+                 that option into the values, and no route of Palette shows them. So the root \
+                 can differ from the version that Palette publishes",
                 p.name, o.option, o.parameter, o.target_key
             ));
         }
@@ -1218,73 +1227,87 @@ fn find_version<A: PaletteApi>(
     Ok(found)
 }
 
-/// Look each layer's pack up in its registry and build the three documents a published profile
-/// with this content returns: `GET /v1/registries/metadata` for registry names,
-/// `GET /v1/packs?filters=spec.name=<name>` for the pack uid, digest, layer, type, and default
-/// values, and `GET /v1/packs/<name>/registries/<uid>` for the tags. A `manifest` layer needs
-/// none of these. When the listing does not have the version, and the registry is one that
-/// Palette does not sync, the pack is the one that Palette makes at the create: no pack uid, no
-/// digest, the layer `addon`, and the tag as the version.
-pub fn resolve<A: PaletteApi>(
-    loaded: &LoadedCandidate,
-    palette: &Palette<A>,
-    progress: &Progress,
-) -> Result<RawProfile> {
-    let c = &loaded.candidate;
-    progress.note(&format!(
-        "resolving {}@{} against the registry",
-        c.name, c.version
-    ));
-    // registry names to uids, in the order Palette lists them; fetched once, and only when needed
-    let mut names: Option<Vec<(String, String)>> = None;
-    // the provider type of each OCI registry; fetched once, and only for an OCI pack
-    let mut oci_types: Option<BTreeMap<String, String>> = None;
-    // whether Palette syncs each registry; read only for a layer that the listing does not have
-    let mut unsynced_of: BTreeMap<String, Option<Unsynced>> = BTreeMap::new();
-    let mut refs = Vec::with_capacity(c.layers.len());
-    let mut entries = Vec::with_capacity(c.layers.len());
-    // the layer that Palette gives each pack: the layer of the pack in its registry, not the
-    // layer of the request (`ToPackRef`, `pack_service.go:722-747`)
-    let mut palette_layers: Vec<String> = Vec::with_capacity(c.layers.len());
-    let invalid = |message: String| Error::CandidateInvalid {
-        path: loaded.path.clone(),
-        message,
-    };
-    for (i, (l, loaded_layer)) in c.layers.iter().zip(&loaded.layers).enumerate() {
-        let manifests: Vec<Value> = loaded_layer
-            .manifests
-            .iter()
-            .map(|(name, content)| json!({"name": name, "uid": "", "digest": "", "content": content}))
-            .collect();
-        let Some(registry_ref) = &loaded_layer.registry else {
-            // A manifest layer: no registry holds it, so no request. Palette mints its pack uid at
-            // the create, so the candidate has none, and it has no digest.
-            let layer = l.layer.as_deref().unwrap_or(MANIFEST_LAYER);
-            palette_layers.push(MANIFEST_LAYER.to_string());
-            let tag = l.tag.as_deref().unwrap_or(&l.version);
-            let values = loaded_layer.values.clone().unwrap_or_default();
-            refs.push(json!({
-                "name": l.name, "layer": layer, "type": MANIFEST, "tag": tag,
-                "version": l.version, "packUid": "", "registryUid": "", "values": values,
-                "manifests": [], "params": l.params, "presets": [],
-            }));
-            entries.push(json!({
-                "metadata": {"name": l.name, "uid": ""},
-                "spec": {
-                    "name": l.name, "layer": layer, "version": l.version, "digest": "",
-                    "registryUid": "", "values": values, "manifests": manifests,
-                },
-                "status": {},
-            }));
-            continue;
-        };
-        let registry = match registry_ref {
-            RegistryRef::Uid(u) => u.clone(),
+/// The fields of one pack that a published profile gives in two documents: the pack reference
+/// of the profile and the entry of the manifests document.
+struct PackFields<'a> {
+    layer: &'a str,
+    kind: &'a str,
+    tag: &'a str,
+    version: &'a str,
+    pack_uid: &'a str,
+    registry_uid: &'a str,
+    digest: &'a str,
+    values: &'a str,
+}
+
+/// One layer as a published profile gives it.
+struct ResolvedLayer {
+    /// The pack reference of the profile.
+    pack_ref: Value,
+    /// The entry of the manifests document.
+    entry: Value,
+    /// The layer that Palette gives the pack: the layer of the pack in its registry, not the
+    /// layer of the request.
+    palette_layer: String,
+}
+
+/// The pack reference and the manifests entry of the layer `l` with the fields `f`. The pack
+/// reference has the digest only when it is not empty. The entry holds `manifests`.
+fn pack_documents(l: &CandidateLayer, f: &PackFields, manifests: Vec<Value>) -> (Value, Value) {
+    let mut pack_ref = json!({
+        "name": l.name, "layer": f.layer, "type": f.kind, "tag": f.tag, "version": f.version,
+        "packUid": f.pack_uid, "registryUid": f.registry_uid, "values": f.values,
+        "manifests": [], "params": l.params, "presets": [],
+    });
+    if !f.digest.is_empty() {
+        pack_ref["digest"] = json!(f.digest);
+    }
+    let entry = json!({
+        "metadata": {"name": l.name, "uid": f.pack_uid},
+        "spec": {
+            "name": l.name, "layer": f.layer, "version": f.version, "digest": f.digest,
+            "registryUid": f.registry_uid, "values": f.values, "manifests": manifests,
+        },
+        "status": {},
+    });
+    (pack_ref, entry)
+}
+
+/// The state of one resolve: the candidate, the client, and the answers of Palette that strata
+/// reads one time and uses again for each layer.
+struct Resolver<'r, A: PaletteApi> {
+    loaded: &'r LoadedCandidate,
+    palette: &'r Palette<A>,
+    progress: &'r Progress,
+    /// Registry names to uids, in the order Palette lists them. Strata reads them one time, and
+    /// only when a layer names a registry.
+    names: Option<Vec<(String, String)>>,
+    /// The provider type of each OCI registry. Strata reads them one time, and only for an OCI
+    /// pack.
+    oci_types: Option<BTreeMap<String, String>>,
+    /// Whether Palette syncs each registry. Strata reads it only for a layer that the listing
+    /// does not have.
+    unsynced_of: BTreeMap<String, Option<Unsynced>>,
+}
+
+impl<A: PaletteApi> Resolver<'_, A> {
+    /// A `CandidateInvalid` error for the candidate file with `message`.
+    fn invalid(&self, message: String) -> Error {
+        Error::CandidateInvalid {
+            path: self.loaded.path.clone(),
+            message,
+        }
+    }
+
+    /// The uid of the registry that `registry_ref` names.
+    fn registry_uid(&mut self, registry_ref: &RegistryRef) -> Result<String> {
+        match registry_ref {
+            RegistryRef::Uid(u) => Ok(u.clone()),
             RegistryRef::Name(n) => {
-                if names.is_none() {
-                    names = Some(registries(palette)?);
+                if self.names.is_none() {
+                    self.names = Some(registries(self.palette)?);
                 }
-                let visible = names.as_deref().unwrap_or_default();
+                let visible = self.names.as_deref().unwrap_or_default();
                 visible
                     .iter()
                     .find(|(name, _)| name == n)
@@ -1292,90 +1315,134 @@ pub fn resolve<A: PaletteApi>(
                     .ok_or_else(|| Error::RegistryNotFound {
                         registry: n.clone(),
                         available: visible.iter().map(|(name, _)| name.clone()).collect(),
-                    })?
+                    })
+            }
+        }
+    }
+
+    /// Resolve the layer `i` of the candidate.
+    fn layer(&mut self, i: usize) -> Result<ResolvedLayer> {
+        let l = &self.loaded.candidate.layers[i];
+        let loaded_layer = &self.loaded.layers[i];
+        let manifests: Vec<Value> = loaded_layer
+            .manifests
+            .iter()
+            .map(|(name, content)| json!({"name": name, "uid": "", "digest": "", "content": content}))
+            .collect();
+        let Some(registry_ref) = &loaded_layer.registry else {
+            return Ok(manifest_layer(l, loaded_layer, manifests));
+        };
+        let registry = self.registry_uid(registry_ref)?;
+        match find_version(self.palette, &l.name, &l.version, &registry)? {
+            Some(summary) => self.registry_layer(i, registry_ref, &registry, &summary, manifests),
+            None => self.unsynced_layer(i, registry_ref, &registry, manifests),
+        }
+    }
+
+    /// Resolve the layer `i`, which the listing of the registry does not have. Palette lists no
+    /// pack of a registry that it does not sync, and makes the pack at the create. A registry
+    /// that syncs and lists no such version does not have it.
+    fn unsynced_layer(
+        &mut self,
+        i: usize,
+        registry_ref: &RegistryRef,
+        registry: &str,
+        manifests: Vec<Value>,
+    ) -> Result<ResolvedLayer> {
+        let l = &self.loaded.candidate.layers[i];
+        let loaded_layer = &self.loaded.layers[i];
+        let how = match self.unsynced_of.entry(registry.to_string()) {
+            std::collections::btree_map::Entry::Occupied(e) => e.get().clone(),
+            std::collections::btree_map::Entry::Vacant(e) => {
+                e.insert(unsynced(self.palette, registry)?).clone()
             }
         };
-        let not_found = |tag: Option<String>| Error::PackNotFound {
-            name: l.name.clone(),
-            version: l.version.clone(),
-            tag,
-            registry: registry_ref.text().to_string(),
-        };
-        let Some(summary) = find_version(palette, &l.name, &l.version, &registry)? else {
-            // Palette lists no pack of a registry that it does not sync, and makes the pack at
-            // the create. A registry that syncs and lists no such version does not have it.
-            if !unsynced_of.contains_key(&registry) {
-                unsynced_of.insert(registry.clone(), unsynced(palette, &registry)?);
-            }
-            let Some(how) = unsynced_of[&registry].clone() else {
-                return Err(not_found(None));
-            };
-            let invalid = |message: String| Error::CandidateInvalid {
-                path: loaded.path.clone(),
-                message: format!(
-                    "layer {} ({}) is from registry {}, which Palette does not sync; {message}",
-                    i + 1,
-                    l.name,
-                    registry_ref.text()
-                ),
-            };
-            // the pack that Palette makes has the layer addon and the tag as its version
-            // (`createPackDoc`), and a profile takes both from it (`ToPackRef`)
-            if let Some(layer) = l.layer.as_deref().filter(|&x| x != UNSYNCED_LAYER) {
-                return Err(invalid(format!(
-                    "Palette gives the pack that it makes the layer {UNSYNCED_LAYER}, not \
-                     {layer}, so remove layer or set it to {UNSYNCED_LAYER}"
-                )));
-            }
-            let tag = l.tag.as_deref().unwrap_or(&l.version);
-            if tag != l.version {
-                return Err(invalid(format!(
-                    "Palette gives the pack that it makes the tag as its version, so set version \
-                     to {tag}, or remove tag"
-                )));
-            }
-            if !palette_parses_version(tag) {
-                return Err(invalid(format!(
-                    "Palette refuses the create, because the tag {tag} is not a semantic version"
-                )));
-            }
-            progress.note(&format!(
-                "{}@{}: registry {} does not sync, so Palette makes the pack when it creates the \
-                 profile; the record has no pack uid and no digest",
-                l.name,
-                l.version,
-                registry_ref.text()
-            ));
-            let values = loaded_layer.values.clone().unwrap_or_default();
-            let mut pack_ref = json!({
-                "name": l.name, "layer": UNSYNCED_LAYER, "type": how.kind, "tag": tag,
-                "version": tag, "packUid": "", "registryUid": registry, "values": values,
-                "manifests": [], "params": l.params, "presets": [],
+        let Some(how) = how else {
+            return Err(Error::PackNotFound {
+                name: l.name.clone(),
+                version: l.version.clone(),
+                tag: None,
+                registry: registry_ref.text().to_string(),
             });
-            if let Some(t) = &how.provider {
-                pack_ref["annotations"] = json!({ "ociRegistryProviderType": t });
-            }
-            // the pack that Palette makes has no cloud type, so each cloud takes it
-            // (`createPackDoc`, `pack_service.go:570-585`)
-            palette_layers.push(UNSYNCED_LAYER.to_string());
-            refs.push(pack_ref);
-            entries.push(json!({
-                "metadata": {"name": l.name, "uid": ""},
-                "spec": {
-                    "name": l.name, "layer": UNSYNCED_LAYER, "version": tag, "digest": "",
-                    "registryUid": registry, "values": values, "manifests": manifests,
-                },
-                "status": {},
-            }));
-            continue;
         };
+        let not_synced = |message: String| {
+            self.invalid(format!(
+                "layer {} ({}) is from registry {}, which Palette does not sync; {message}",
+                i + 1,
+                l.name,
+                registry_ref.text()
+            ))
+        };
+        // the pack that Palette makes has the layer addon and the tag as its version, and a
+        // profile takes both from it
+        if let Some(layer) = l.layer.as_deref().filter(|&x| x != UNSYNCED_LAYER) {
+            return Err(not_synced(format!(
+                "Palette gives the pack that it makes the layer {UNSYNCED_LAYER}, not \
+                 {layer}, so remove layer or set it to {UNSYNCED_LAYER}"
+            )));
+        }
+        let tag = l.tag.as_deref().unwrap_or(&l.version);
+        if tag != l.version {
+            return Err(not_synced(format!(
+                "Palette gives the pack that it makes the tag as its version, so set version \
+                 to {tag}, or remove tag"
+            )));
+        }
+        if !palette_parses_version(tag) {
+            return Err(not_synced(format!(
+                "Palette refuses the create, because the tag {tag} is not a semantic version"
+            )));
+        }
+        self.progress.note(&format!(
+            "{}@{}: registry {} does not sync, so Palette makes the pack when it creates the \
+             profile; the record has no pack uid and no digest",
+            l.name,
+            l.version,
+            registry_ref.text()
+        ));
+        let values = loaded_layer.values.clone().unwrap_or_default();
+        let fields = PackFields {
+            layer: UNSYNCED_LAYER,
+            kind: how.kind.as_str(),
+            tag,
+            version: tag,
+            pack_uid: "",
+            registry_uid: registry,
+            digest: "",
+            values: &values,
+        };
+        let (mut pack_ref, entry) = pack_documents(l, &fields, manifests);
+        if let Some(t) = &how.provider {
+            pack_ref["annotations"] = json!({ "ociRegistryProviderType": t });
+        }
+        // the pack that Palette makes has no cloud type, so each cloud takes it
+        Ok(ResolvedLayer {
+            pack_ref,
+            entry,
+            palette_layer: UNSYNCED_LAYER.to_string(),
+        })
+    }
+
+    /// Resolve the layer `i` from `summary`, the entry of its version in the listing of the
+    /// registry, and from the tags and the values that the registry gives for the pack.
+    fn registry_layer(
+        &mut self,
+        i: usize,
+        registry_ref: &RegistryRef,
+        registry: &str,
+        summary: &Value,
+        manifests: Vec<Value>,
+    ) -> Result<ResolvedLayer> {
+        let c = &self.loaded.candidate;
+        let l = &c.layers[i];
+        let loaded_layer = &self.loaded.layers[i];
         // Palette serves no disabled or deleted pack: the registry answers 404 for it, and a
         // profile that pins one is refused. Say so before that read.
-        if let Some(state) = retired_state(&summary) {
+        if let Some(state) = retired_state(summary) {
             // a `pack:` ref comes here with the uid of the registry; the error gives its name
             let registry = match registry_ref {
                 RegistryRef::Name(n) => n.clone(),
-                RegistryRef::Uid(u) => registries(palette)?
+                RegistryRef::Uid(u) => registries(self.palette)?
                     .into_iter()
                     .find(|(_, uid)| uid == u)
                     .map_or_else(|| u.clone(), |(name, _)| name),
@@ -1388,7 +1455,6 @@ pub fn resolve<A: PaletteApi>(
             });
         }
         // Palette refuses a pack that does not support the cloud of the profile
-        // (`ConstructPackRefs`, `pack_service.go:424-426`)
         let clouds: Vec<String> = summary
             .pointer("/spec/cloudTypes")
             .and_then(Value::as_array)
@@ -1397,7 +1463,7 @@ pub fn resolve<A: PaletteApi>(
             .filter_map(|v| v.as_str().map(str::to_string))
             .collect();
         if !c.cloud_type.is_empty() && !cloud_supported(&c.cloud_type, &clouds) {
-            return Err(invalid(format!(
+            return Err(self.invalid(format!(
                 "layer {} ({}) is the version {} of a pack for the clouds {}; Palette refuses it \
                  in a profile of the cloud {} (PackNotSupported)",
                 i + 1,
@@ -1407,8 +1473,9 @@ pub fn resolve<A: PaletteApi>(
                 c.cloud_type
             )));
         }
-        let pack_uid = text(&summary, "/metadata/uid").unwrap_or_default();
-        let entity = palette
+        let pack_uid = text(summary, "/metadata/uid").unwrap_or_default();
+        let entity = self
+            .palette
             .api()
             .get_json(&format!("/v1/packs/{}/registries/{registry}", l.name))?;
         let tags: Vec<String> = entity
@@ -1424,7 +1491,14 @@ pub fn resolve<A: PaletteApi>(
         // where the registry says `LTS__24.x`). Accept both; anything else is a typo.
         let tag = match &l.tag {
             Some(t) if tags.contains(t) || *t == l.version => t.clone(),
-            Some(t) => return Err(not_found(Some(t.clone()))),
+            Some(t) => {
+                return Err(Error::PackNotFound {
+                    name: l.name.clone(),
+                    version: l.version.clone(),
+                    tag: Some(t.clone()),
+                    registry: registry_ref.text().to_string(),
+                });
+            }
             None => tags
                 .iter()
                 .find(|t| **t == l.version)
@@ -1442,55 +1516,116 @@ pub fn resolve<A: PaletteApi>(
         let values = loaded_layer
             .values
             .clone()
-            .or_else(|| text(&summary, "/spec/values"))
+            .or_else(|| text(summary, "/spec/values"))
             .or(pack_values)
             .unwrap_or_default();
         let layer = l
             .layer
             .clone()
-            .or_else(|| text(&summary, "/spec/layer"))
+            .or_else(|| text(summary, "/spec/layer"))
             .or_else(|| text(&entity, "/layer"))
             .unwrap_or_default();
-        palette_layers.push(
-            text(&summary, "/spec/layer")
-                .or_else(|| text(&entity, "/layer"))
-                .unwrap_or_else(|| layer.clone()),
-        );
-        let kind = text(&summary, "/spec/type").unwrap_or_else(|| "spectro".to_string());
-        let digest = text(&summary, "/spec/digest").unwrap_or_default();
-
-        let mut pack_ref = json!({
-            "name": l.name, "layer": layer, "type": kind, "tag": tag, "version": l.version,
-            "packUid": pack_uid, "registryUid": registry, "values": values,
-            "manifests": [], "params": l.params, "presets": [],
-        });
-        if !digest.is_empty() {
-            pack_ref["digest"] = json!(digest);
-        }
-        let selected = preset_options(&summary, &values);
+        let palette_layer = text(summary, "/spec/layer")
+            .or_else(|| text(&entity, "/layer"))
+            .unwrap_or_else(|| layer.clone());
+        let kind = text(summary, "/spec/type").unwrap_or_else(|| "spectro".to_string());
+        let digest = text(summary, "/spec/digest").unwrap_or_default();
+        let fields = PackFields {
+            layer: &layer,
+            kind: &kind,
+            tag: &tag,
+            version: &l.version,
+            pack_uid: &pack_uid,
+            registry_uid: registry,
+            digest: &digest,
+            values: &values,
+        };
+        let (mut pack_ref, entry) = pack_documents(l, &fields, manifests);
+        let selected = preset_options(summary, &values);
         if !selected.is_empty() {
             pack_ref["presetOptions"] = json!(selected);
         }
         // the provider type of an OCI registry, as a published profile carries it on the pack
         // reference
         if kind == "oci" {
-            let types = oci_types.get_or_insert_with(|| oci_provider_types(palette));
-            if let Some(t) = types.get(&registry) {
+            let palette = self.palette;
+            let types = self
+                .oci_types
+                .get_or_insert_with(|| oci_provider_types(palette));
+            if let Some(t) = types.get(registry) {
                 pack_ref["annotations"] = json!({ "ociRegistryProviderType": t });
             }
         }
-        refs.push(pack_ref);
-        entries.push(json!({
-            "metadata": {"name": l.name, "uid": pack_uid},
-            "spec": {
-                "name": l.name, "layer": layer, "version": l.version, "digest": digest,
-                "registryUid": registry, "values": values, "manifests": manifests,
-            },
-            "status": {},
-        }));
+        Ok(ResolvedLayer {
+            pack_ref,
+            entry,
+            palette_layer,
+        })
+    }
+}
+
+/// Resolve a manifest layer. No registry holds it, so it needs no request. Palette mints its
+/// pack uid at the create, so the candidate has none, and it has no digest.
+fn manifest_layer(
+    l: &CandidateLayer,
+    loaded_layer: &LoadedLayer,
+    manifests: Vec<Value>,
+) -> ResolvedLayer {
+    let values = loaded_layer.values.clone().unwrap_or_default();
+    let fields = PackFields {
+        layer: l.layer.as_deref().unwrap_or(MANIFEST_LAYER),
+        kind: MANIFEST,
+        tag: l.tag.as_deref().unwrap_or(&l.version),
+        version: &l.version,
+        pack_uid: "",
+        registry_uid: "",
+        digest: "",
+        values: &values,
+    };
+    let (pack_ref, entry) = pack_documents(l, &fields, manifests);
+    ResolvedLayer {
+        pack_ref,
+        entry,
+        palette_layer: MANIFEST_LAYER.to_string(),
+    }
+}
+
+/// Look each layer's pack up in its registry and build the three documents a published profile
+/// with this content returns: `GET /v1/registries/metadata` for registry names,
+/// `GET /v1/packs?filters=spec.name=<name>` for the pack uid, digest, layer, type, and default
+/// values, and `GET /v1/packs/<name>/registries/<uid>` for the tags. A `manifest` layer needs
+/// none of these. When the listing does not have the version, and the registry is one that
+/// Palette does not sync, the pack is the one that Palette makes at the create: no pack uid, no
+/// digest, the layer `addon`, and the tag as the version.
+pub fn resolve<A: PaletteApi>(
+    loaded: &LoadedCandidate,
+    palette: &Palette<A>,
+    progress: &Progress,
+) -> Result<RawProfile> {
+    let c = &loaded.candidate;
+    progress.note(&format!(
+        "resolving {}@{} against the registry",
+        c.name, c.version
+    ));
+    let mut resolver = Resolver {
+        loaded,
+        palette,
+        progress,
+        names: None,
+        oci_types: None,
+        unsynced_of: BTreeMap::new(),
+    };
+    let mut refs = Vec::with_capacity(c.layers.len());
+    let mut entries = Vec::with_capacity(c.layers.len());
+    let mut palette_layers: Vec<String> = Vec::with_capacity(c.layers.len());
+    for i in 0..c.layers.len().min(loaded.layers.len()) {
+        let resolved = resolver.layer(i)?;
+        refs.push(resolved.pack_ref);
+        entries.push(resolved.entry);
+        palette_layers.push(resolved.palette_layer);
     }
     let known: Vec<Option<&str>> = palette_layers.iter().map(|l| Some(l.as_str())).collect();
-    check_layers(c, &known).map_err(invalid)?;
+    check_layers(c, &known).map_err(|message| resolver.invalid(message))?;
     Ok(RawProfile {
         profile: json!({
             "metadata": {"name": c.name, "uid": ""},
@@ -1560,7 +1695,7 @@ mod tests {
         let mut c = manifest_candidate();
         c.registry = Some("Public Repo".into());
         let loaded = check(c, Path::new("c.yaml")).unwrap();
-        // the API knows no path: each request would fail
+        // the API knows no path: each request fails
         let raw = resolve(
             &loaded,
             &Palette::new(MemoryApi::new()),
@@ -1659,7 +1794,7 @@ mod tests {
 
     #[test]
     fn a_version_that_semver_of_palette_does_not_parse_is_candidate_invalid() {
-        // Masterminds/semver v1.5.0 takes an optional v and one to three numbers
+        // Palette takes an optional v and one to three numbers
         for ok in [
             "1.1",
             "v1.2.3",
@@ -1946,7 +2081,7 @@ mod tests {
                 .contains("layer 1 (kubernetes) has the layer k8s"),
             "{err}"
         );
-        // and a missing core layer that only the registry shows
+        // and a core layer that is not there, which only the registry shows
         let mut c = stack();
         c.layers[0].layer = None;
         let mut layers = STACK_LAYERS;

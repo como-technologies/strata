@@ -18,7 +18,6 @@ use serde_json::Value;
 use crate::error::{Error, Result};
 
 pub use http::HttpApi;
-pub use mask::{MASKED, is_password_format, mask_values, password_fields};
 pub use memory::MemoryApi;
 pub use palette::Palette;
 pub use raw::{RawCluster, RawProfile, has_draft};

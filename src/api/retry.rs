@@ -58,7 +58,8 @@ impl RetryPolicy {
 }
 
 /// Retries transient failures of any [`PaletteApi`]: HTTP 5xx, 429, and transport errors. A 5xx
-/// that is a refusal of Palette ([`crate::error::REFUSAL_CODES`]) and other errors return at once. Every retry is announced on [`Progress`].
+/// that is a refusal of Palette ([`crate::error::REFUSAL_CODES`]) and other errors return at
+/// once. [`Progress`] announces each retry.
 pub struct Retry<A> {
     inner: A,
     policy: RetryPolicy,

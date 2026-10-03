@@ -161,7 +161,7 @@ packs against the clusters that run the version:
 {{#include ../output/snapshot-validate-version.txt}}
 ```
 
-`--validate` needs the network, so it does not go with `--from-raw`:
+`--validate` needs the network, so strata refuses it with `--from-raw`:
 
 ```text
 {{#include ../output/snapshot-validate-usage.txt}}

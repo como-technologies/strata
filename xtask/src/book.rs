@@ -10,7 +10,7 @@ use std::process::{Child, Command, Stdio};
 
 use regex::Regex;
 
-use crate::tenant::{Edit, Tenant};
+use crate::tenant::{Edit, PackRefusal, Tenant};
 
 /// What the run is for.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -173,13 +173,19 @@ impl Runner {
         self.mutated = 1;
     }
 
-    /// The projects the key can see.
-    pub fn projects(&mut self, pairs: &[(&str, &str)]) {
+    /// Run the tenant helper `f` when this run builds the chapter, and mark the change. A served
+    /// run that does not build this chapter does nothing.
+    fn build(&mut self, f: impl FnOnce(&Tenant)) {
         if !self.building() {
             return;
         }
         self.changed();
-        self.tenant.projects(pairs);
+        f(&self.tenant);
+    }
+
+    /// The projects the key can see.
+    pub fn projects(&mut self, pairs: &[(&str, &str)]) {
+        self.build(|t| t.projects(pairs));
     }
 
     /// Publish a copy of an example profile.
@@ -229,11 +235,7 @@ impl Runner {
     }
 
     fn publish(&mut self, project: &str, uid: &str, version: &str, example: &str, edits: &[Edit]) {
-        if !self.building() {
-            return;
-        }
-        self.changed();
-        self.tenant.profile(project, uid, version, example, edits);
+        self.build(|t| t.profile(project, uid, version, example, edits));
     }
 
     /// [`Runner::addons`] under another profile name.
@@ -246,67 +248,38 @@ impl Runner {
         label: &str,
         version: &str,
     ) {
-        if !self.building() {
-            return;
-        }
-        self.changed();
-        self.tenant
-            .addons_named(project, uid, name, pack, label, version);
+        self.build(|t| t.addons_named(project, uid, name, pack, label, version));
     }
 
     /// Publish the add-on profile with one manifest pack.
     pub fn addons(&mut self, project: &str, uid: &str, pack: &str, label: &str, version: &str) {
-        if !self.building() {
-            return;
-        }
-        self.changed();
-        self.tenant.addons(project, uid, pack, label, version);
+        self.build(|t| t.addons(project, uid, pack, label, version));
     }
 
     /// A private Helm registry: see [`Tenant::private_charts`].
     pub fn private_charts(&mut self, project: &str) {
-        if !self.building() {
-            return;
-        }
-        self.changed();
-        self.tenant.private_charts(project);
+        self.build(|t| t.private_charts(project));
     }
 
     /// A profile that pins a chart of the private Helm registry: see [`Tenant::chart_profile`].
     pub fn chart_profile(&mut self, project: &str, uid: &str, pack: &str, version: &str) {
-        if !self.building() {
-            return;
-        }
-        self.changed();
-        self.tenant.chart_profile(project, uid, pack, version);
+        self.build(|t| t.chart_profile(project, uid, pack, version));
     }
 
     /// Change a published profile in place, as an edit through the API does.
     pub fn edit(&mut self, project: &str, uid: &str, edits: &[Edit]) {
-        if !self.building() {
-            return;
-        }
-        self.changed();
-        self.tenant.edit(project, uid, edits);
+        self.build(|t| t.edit(project, uid, edits));
     }
 
     /// Edit a published profile with no publish, as a PUT of the version does: the edits go to
     /// its draft.
     pub fn draft(&mut self, project: &str, uid: &str, edits: &[Edit]) {
-        if !self.building() {
-            return;
-        }
-        self.changed();
-        self.tenant.draft(project, uid, edits);
+        self.build(|t| t.draft(project, uid, edits));
     }
 
     /// Publish the draft of a profile version.
     pub fn publish_draft(&mut self, project: &str, uid: &str) {
-        if !self.building() {
-            return;
-        }
-        self.changed();
-        self.tenant.publish(project, uid);
+        self.build(|t| t.publish(project, uid));
     }
 
     /// Create a cluster, or apply the update that waits for one that exists.
@@ -323,29 +296,17 @@ impl Runner {
         profiles: &[&str],
         values: &[(&str, &str)],
     ) {
-        if !self.building() {
-            return;
-        }
-        self.changed();
-        self.tenant.cluster(project, uid, name, profiles, values);
+        self.build(|t| t.cluster(project, uid, name, profiles, values));
     }
 
     /// A saved tag filter of the tenant: see [`Tenant::tag_filter`].
     pub fn tag_filter(&mut self, name: &str, uid: &str, key: &str, value: &str) {
-        if !self.building() {
-            return;
-        }
-        self.changed();
-        self.tenant.tag_filter(name, uid, key, value);
+        self.build(|t| t.tag_filter(name, uid, key, value));
     }
 
     /// The registry before it published one version: see [`Tenant::hide_pack_version`].
     pub fn hide_pack_version(&mut self, project: &str, name: &str, version: &str) {
-        if !self.building() {
-            return;
-        }
-        self.changed();
-        self.tenant.hide_pack_version(project, name, version);
+        self.build(|t| t.hide_pack_version(project, name, version));
     }
 
     /// A template on one version of a pack: see [`Tenant::pack_template`].
@@ -356,29 +317,17 @@ impl Runner {
         version: &str,
         template: &serde_json::Value,
     ) {
-        if !self.building() {
-            return;
-        }
-        self.changed();
-        self.tenant.pack_template(project, name, version, template);
+        self.build(|t| t.pack_template(project, name, version, template));
     }
 
     /// An edge host with profiles bound to it: see [`Tenant::edge_host`].
     pub fn edge_host(&mut self, project: &str, uid: &str, name: &str, profiles: &[&str]) {
-        if !self.building() {
-            return;
-        }
-        self.changed();
-        self.tenant.edge_host(project, uid, name, profiles);
+        self.build(|t| t.edge_host(project, uid, name, profiles));
     }
 
     /// A cluster template that links profiles: see [`Tenant::cluster_template`].
     pub fn cluster_template(&mut self, project: &str, uid: &str, name: &str, profiles: &[&str]) {
-        if !self.building() {
-            return;
-        }
-        self.changed();
-        self.tenant.cluster_template(project, uid, name, profiles);
+        self.build(|t| t.cluster_template(project, uid, name, profiles));
     }
 
     /// A cluster group and its virtual clusters: see [`Tenant::cluster_group`].
@@ -390,62 +339,32 @@ impl Runner {
         profiles: &[&str],
         members: &[&str],
     ) {
-        if !self.building() {
-            return;
-        }
-        self.changed();
-        self.tenant
-            .cluster_group(project, uid, name, profiles, members);
+        self.build(|t| t.cluster_group(project, uid, name, profiles, members));
     }
 
     /// The app profile `shop`, or a plain update of it: see [`Tenant::app_profile`].
     pub fn app_profile(&mut self, project: &str, uid: &str, version: &str, replicas: &str) {
-        if !self.building() {
-            return;
-        }
-        self.changed();
-        self.tenant.app_profile(project, uid, version, replicas);
+        self.build(|t| t.app_profile(project, uid, version, replicas));
     }
 
     /// An app deployment of an app profile: see [`Tenant::app_deployment`].
     pub fn app_deployment(&mut self, project: &str, uid: &str, name: &str, profile: &str) {
-        if !self.building() {
-            return;
-        }
-        self.changed();
-        self.tenant.app_deployment(project, uid, name, profile);
+        self.build(|t| t.app_deployment(project, uid, name, profile));
     }
 
     /// Change the pack values on a cluster, and not on its profile.
     pub fn on_cluster_reclaim(&mut self, project: &str, uid: &str, policy: &str) {
-        if !self.building() {
-            return;
-        }
-        self.changed();
-        self.tenant.on_cluster_reclaim(project, uid, policy);
+        self.build(|t| t.on_cluster_reclaim(project, uid, policy));
     }
 
     /// The answer that Palette gives when asked if a change repaves a cluster.
     pub fn repave_answer(&mut self, project: &str, cluster: &str, required: bool) {
-        if !self.building() {
-            return;
-        }
-        self.changed();
-        self.tenant.repave_answer(project, cluster, required);
+        self.build(|t| t.repave_answer(project, cluster, required));
     }
 
     /// Set the answer of `validate/packs` for a cluster: see [`Tenant::packs_answer`].
-    pub fn packs_answer(
-        &mut self,
-        project: &str,
-        cluster: &str,
-        refusal: Option<(&str, &str, &str, &str)>,
-    ) {
-        if !self.building() {
-            return;
-        }
-        self.changed();
-        self.tenant.packs_answer(project, cluster, refusal);
+    pub fn packs_answer(&mut self, project: &str, cluster: &str, refusal: Option<PackRefusal>) {
+        self.build(|t| t.packs_answer(project, cluster, refusal));
     }
 
     /// Set the answer of `validate/packs` for a profile: see [`Tenant::profile_packs_answer`].
@@ -455,20 +374,12 @@ impl Runner {
         profile: Option<&str>,
         refusal: Option<(&str, &str, &str)>,
     ) {
-        if !self.building() {
-            return;
-        }
-        self.changed();
-        self.tenant.profile_packs_answer(project, profile, refusal);
+        self.build(|t| t.profile_packs_answer(project, profile, refusal));
     }
 
     /// Delete a cluster at the time `at`: see [`Tenant::delete_cluster`].
     pub fn delete_cluster(&mut self, project: &str, uid: &str, at: &str) {
-        if !self.building() {
-            return;
-        }
-        self.changed();
-        self.tenant.delete_cluster(project, uid, at);
+        self.build(|t| t.delete_cluster(project, uid, at));
     }
 
     /// Change one field of what Palette reports for a cluster, or its cloud config: see
@@ -480,47 +391,27 @@ impl Runner {
         pointer: &str,
         value: serde_json::Value,
     ) {
-        if !self.building() {
-            return;
-        }
-        self.changed();
-        self.tenant.cluster_field(project, uid, pointer, value);
+        self.build(|t| t.cluster_field(project, uid, pointer, value));
     }
 
     /// Take a cluster out of the consumer list of a profile: see [`Tenant::drop_consumer`].
     pub fn drop_consumer(&mut self, project: &str, profile: &str, cluster: &str) {
-        if !self.building() {
-            return;
-        }
-        self.changed();
-        self.tenant.drop_consumer(project, profile, cluster);
+        self.build(|t| t.drop_consumer(project, profile, cluster));
     }
 
     /// Give a project macro a value, and let each cluster of the project resolve it again.
     pub fn set_macro(&mut self, project: &str, name: &str, value: &str) {
-        if !self.building() {
-            return;
-        }
-        self.changed();
-        self.tenant.set_macro(project, name, value);
+        self.build(|t| t.set_macro(project, name, value));
     }
 
     /// Give a cluster variable a new value.
     pub fn set_value(&mut self, project: &str, uid: &str, variable: &str, value: &str) {
-        if !self.building() {
-            return;
-        }
-        self.changed();
-        self.tenant.set_value(project, uid, variable, value);
+        self.build(|t| t.set_value(project, uid, variable, value));
     }
 
     /// The pack registries and their versions.
     pub fn registries(&mut self, project: &str) {
-        if !self.building() {
-            return;
-        }
-        self.changed();
-        self.tenant.registries(project);
+        self.build(|t| t.registries(project));
     }
 
     /// Write the answer of one request of the tenant, for a route no other helper writes.

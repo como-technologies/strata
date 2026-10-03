@@ -19,7 +19,7 @@ takes:
 | [Two versions](compare/versions.md) | What changed between two profile versions, and the impact: how to read the report, `--full`, the images and the charts of a pack, and a version that replaces nodes. |
 | [Two clusters](compare/clusters.md) | The tiers of two clusters, a cluster against the update that waits for it, and a cluster group against a member. |
 | [Ask Palette if the change repaves](compare/repave.md) | `--repave`: the answer of Palette for one cluster, beside the level of the table. |
-| [Ask Palette if it accepts the packs](compare/validate.md) | `--validate`: the check of Palette of the packs of the change, on one cluster. |
+| [Ask Palette if it accepts the packs](compare/validate.md) | `--validate`: Palette checks the packs of the change on one cluster. |
 | [A pull request comment and a script](compare/scripts.md) | `--format markdown` for a pull request, and `--json` for a job. |
 
 ## Compare two identical refs

@@ -702,3 +702,34 @@ pub fn executable(path: &Path, body: &str) {
         std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755)).unwrap();
     }
 }
+
+// ---- the snapshot helpers ----------------------------------------------------------------------
+
+/// A snapshot of the reference `text` from the in-memory Palette `api`, fetched at `t0`, with no
+/// progress output.
+pub fn snapshot_of(
+    api: &strata::api::MemoryApi,
+    text: &str,
+) -> strata::Result<strata::snapshot::Snapshot> {
+    strata::ops::snapshot_for(
+        &strata::reference::Ref::parse(text),
+        || Ok(strata::api::Palette::new(api)),
+        "t0",
+        &strata::progress::Progress::silent(),
+    )
+}
+
+/// A snapshot of the candidate file `file`, resolved against the in-memory Palette `api` and
+/// fetched at `t0`, with no validation and no progress output.
+pub fn candidate_snapshot(
+    file: &Path,
+    api: &strata::api::MemoryApi,
+) -> strata::Result<strata::snapshot::Snapshot> {
+    strata::ops::snapshot_from_candidate(
+        file,
+        false,
+        || Ok(strata::api::Palette::new(api)),
+        "t0",
+        &strata::progress::Progress::silent(),
+    )
+}

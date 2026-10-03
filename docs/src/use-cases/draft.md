@@ -8,8 +8,8 @@ change waits in the draft of the version. The version keeps its published
 content, and each cluster keeps what it runs.
 
 The publish changes the version in place, with no new number. So the team must
-see what the publish changes before it occurs, and must know after it that the
-version holds the draft that the reviewer approved.
+see what the publish changes before it occurs. After the publish, the team must
+know that the version holds the draft that the reviewer approved.
 
 In this example, `dev` has `aws-stack@1.1.1`, and a release record of it is in
 the repository.
@@ -20,7 +20,7 @@ request. The reviewer reads the comparison.
 **Follow along.** `just playground draft-1` serves this tenant on this machine,
 with no key and no cost. The draft and the publish change the tenant, so this
 page has three seeds. Each section names the one it needs, and each seed serves
-on its own port.
+on a different port.
 
 ## 1. The version has no draft
 
@@ -40,7 +40,7 @@ with the error `no-draft`:
 ## 2. A person edits the version, and does not publish
 
 **Follow along.** `just playground draft-2` is the same tenant with the draft.
-Stop the first seed, and export what this one prints.
+Stop the first seed. Then export what this one prints.
 
 A person sets the reclaim policy of the CSI pack to `Retain`, and does not
 publish. Compare the version with its draft:
@@ -86,7 +86,7 @@ The file holds the values and the manifests of the draft. See
 ## 4. After the publish, the version holds the draft
 
 **Follow along.** `just playground draft-3` is the same tenant after the
-publish. Stop the second seed, and export what this one prints.
+publish. Stop the second seed. Then export what this one prints.
 
 The record of the draft verifies against the version:
 
@@ -115,7 +115,7 @@ The publish empties the draft:
 - Before the publish, run `compare <ref> <ref>@draft`, and put the result in
   the review.
 - Record the draft that the reviewer approves. After the publish, `verify` of
-  that record proves that the version holds it.
+  that record shows that the version holds it.
 - After the publish, record the version again as the new release record. The
   version keeps its number, so the old release record reports `DRIFT`.
 - A publish is an edit in place. To keep each version fixed, publish a new

@@ -31,7 +31,7 @@ These are open:
   Artifactory are named on the public page, and no run uses one.
 - The variables of a cluster template while the template applies.
 - The answer of `POST /v1/clusterprofiles/validate/packs` to a pack that
-  requires a pack that the profile does not hold: no pack of the Public Repo
+  requires a pack that the profile does not hold. No pack of the Public Repo
   lists a dependency. See
   [The validate routes](validate-routes.md#post-v1clusterprofilesvalidatepacks).
 
@@ -89,7 +89,7 @@ is in the catalog.
 
 ## What the source of Palette says
 
-The Spectro Cloud source settles these. No live run checks them, so strata
+The code of Palette gives these rules. No live run checks them, so strata
 makes no claim that depends on them.
 
 - **The install order of the packs of two add-on profiles.** Palette sorts
@@ -110,14 +110,13 @@ makes no claim that depends on them.
   a new cluster from it only for a deleted pack: a disabled pack still builds
   clusters. A tag that the registry deletes marks the profile invalid.
 - **The presets of a template option.** Palette writes them into the values of
-  a pack on a create and on an update of a profile, and no route gives them:
-  see [The presets of a template option](packs.md#the-presets-of-a-template-option).
+  a pack on a create and on an update of a profile. No route gives them: see [The presets of a template option](packs.md#the-presets-of-a-template-option).
 - **A Helm registry of type `helm` whose endpoint is `oci://`.** Palette reads
   `index.yaml` from the endpoint over HTTP, so such a registry lists nothing. An
   `oci://` chart URL inside an index is read. An OCI Helm registry is its own
   kind: see [The digest of each registry kind](packs.md#the-digest-of-each-registry-kind).
 - **The mask of a draft.** Palette writes `********` over each value of the
-  format `password` in the published packs only, and serves the packs of a
+  format `password` in the published packs only. It serves the packs of a
   draft in clear. Strata writes the mask over the draft itself: see
   [Secrets in the values](profiles.md#secrets-in-the-values). When Palette
   masks the draft too, the values hold `********` already, and the mask of
@@ -128,8 +127,8 @@ makes no claim that depends on them.
   the lists: they can change with each release of Palette, and
   `compare --repave` asks Palette for its answer for a cluster.
 - **The values in a notification event.** An event of the values of a pack
-  holds the full values in `packValues`, and the names of the password fields in
-  `passwordFields`. Palette serves the event with no mask, and masks the values
+  holds the full values in `packValues`. It holds the names of the password
+  fields in `passwordFields`. Palette serves the event with no mask, and masks the values
   only in its own log. So `--raw-dir` masks the values before it saves the
   notifications: see
   [The saved answers of Palette](../../commands/snapshot/no-network.md#the-saved-answers-of-palette).

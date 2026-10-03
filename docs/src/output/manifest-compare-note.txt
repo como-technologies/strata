@@ -1,7 +1,7 @@
 $ strata compare addons/1.0.0/dev.json addons/1.0.0/prod.json
 platform-addons@1.0.0 (uid 64e2000000000000000000a1)  ->  platform-addons@1.0.0 (uid 64e3000000000000000000a1)
 root       b49f91f9df85 -> 24c6d1b1de2e   SAME CONTENT
-note       the roots differ only by the packUid that Palette mints for a manifest pack or for a pack from a registry that it does not sync: the same content
+note       the roots differ only by the packUid that Palette mints: the same content
 ...
 ~ [addon] namespace-policy           1.0.0              IDENTITY
       impact: in-place addon upgrade
