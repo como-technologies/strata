@@ -7683,7 +7683,6 @@ fn serve_os_image(raw_root: &Path, image: Option<&str>) -> MemoryApi {
     serve(MemoryApi::new(), raw_root, dir, UID_A)
 }
 
-/// A snapshot of `UID_A` from `api`, fetched at `at`.
 #[test]
 fn a_pack_record_keeps_the_annotations_of_the_pack_ref_outside_the_root() {
     use strata::snapshot::Pack;
