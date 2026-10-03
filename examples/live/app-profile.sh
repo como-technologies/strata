@@ -7,7 +7,10 @@
 #      tier as a pack, with no digest; verify of it is OK
 #   2  a plain update of the manifest: the uid and the version stay, and verify of the record
 #      reports drift, with the tier AUTHORED; --who reads the log of the kind appprofile (#140)
-#   3  the app profile deleted
+#   3  the install order of the tier changes, through the API: verify of a record from before
+#      reports the tier, and compare of the records from before and after names installOrder
+#      (#112); then the order back
+#   4  the app profile deleted
 #
 # Needs the strata release binary, jq, and the key as verify.sh needs it. It needs no cluster, and
 # costs nothing. Results go under runs/<UTC time>/app-profile/, or OUT; FROM_STAGE resumes a run in
@@ -15,7 +18,7 @@
 set -uo pipefail
 script=app-profile
 from=${1:-1}
-case "$from" in 1|2|3) ;; *) sed -n '2,/^set -uo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; exit 2 ;; esac
+case "$from" in 1|2|3|4) ;; *) sed -n '2,/^set -uo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; exit 2 ;; esac
 . "$(cd "$(dirname "$0")" && pwd)/lib.sh"
 [ -x "$strata" ] || die "no strata binary at $strata"
 
@@ -75,7 +78,25 @@ if stage 2 "a plain update of the manifest"; then
     jq -e --arg at "$(jq -r .source.fetchedAt app.json)" '.verify.lastModified >= $at' edit-who.out
 fi
 
-if stage 3 "the app profile deleted"; then
+if stage 3 "the install order of the tier"; then
+  check order-record 0 '#112: a record of the app profile before the change' -- \
+    "$strata" snapshot "appprofile:$U" -o order-before.json
+  order=$(jq -r '.packs[0].params.installOrder // 0' order-before.json)
+  check order-edit 0 "#112: the tier gets the install order $((order + 1)), through the API" -- \
+    "$live/api.sh" app-profile-order "$U" "$((order + 1))"
+  check order-verify 1 '#112: verify of the record reports drift: the install order is in the root' -- \
+    "$strata" verify order-before.json
+  check order-verify-says 0 '#112: and names the tier' -- grep -Eq '^~ \[app +\] config ' order-verify.out
+  check order-after 0 '#112: a record of the app profile after the change' -- \
+    "$strata" snapshot "appprofile:$U" -o order-after.json
+  check order-compare 1 '#112: compare of the two records: CHANGED' -- "$strata" compare order-before.json order-after.json
+  check order-compare-says 0 '#112: and it names installOrder under the tier' -- \
+    grep -Eq '^ +[~+] param installOrder: ' order-compare.out
+  check order-undo 0 "the install order $order back" -- "$live/api.sh" app-profile-order "$U" "$order"
+  check order-undone 0 'the record from before verifies again' -- "$strata" verify order-before.json
+fi
+
+if stage 4 "the app profile deleted"; then
   check delete 0 "delete the app profile" -- "$live/api.sh" app-profile-delete "$U"
 fi
 

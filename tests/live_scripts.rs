@@ -1696,9 +1696,8 @@ impl Stage {
     }
 }
 
-/// Each check of `ids` passed, and no check failed.
+/// Each check of `ids` passed.
 fn passed(steps: &str, ids: &[&str]) {
-    assert!(!steps.contains("FAIL "), "a check failed:\n{steps}");
     for id in ids {
         assert!(
             steps
@@ -1764,6 +1763,7 @@ fn tiers_sh_stage_5_edits_the_subjects_of_a_binding_of_cluster_a_and_puts_the_bi
 
     let (o, steps) = stage.run("tiers.sh", &["5"]);
     assert_eq!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
+    assert!(!steps.contains("FAIL"), "{steps}");
     passed(
         &steps,
         &[
@@ -1820,5 +1820,64 @@ fn tiers_sh_stage_5_reads_a_404_of_the_bindings_as_a_cluster_with_none() {
     assert!(
         steps.contains("FAIL  rbac-add"),
         "no route answers the PUT here: {steps}"
+    );
+}
+
+#[test]
+fn app_profile_sh_stage_3_changes_the_install_order_of_the_tier_and_puts_it_back() {
+    let mut stage = Stage::new(serde_json::json!({"project_uid": "p-1"}));
+    std::fs::create_dir_all(stage.path("out")).unwrap();
+    std::fs::write(stage.path("out/uid"), "ap-1\n").unwrap();
+    stage.route(
+        "/v1/appProfiles/ap-1/tiers",
+        r#"{"spec":{"appTiers":[{"metadata":{"name":"config","uid":"t-1"},
+            "spec":{"type":"manifest","version":"1.0.0","installOrder":2}}]}}"#,
+    );
+    stage.route("/v1/appProfiles/ap-1/tiers/t-1", "{}");
+    stage.route("/v1/appProfiles/ap-1", "{}");
+    stage.strata(
+        "snapshot appprofile:ap-1 -o order-before.json",
+        0,
+        r#"{"packs":[{"key":"app/config","params":{"installOrder":2}}]}"#,
+    );
+    stage.strata("snapshot appprofile:ap-1 -o order-after.json", 0, "{}");
+    stage.strata(
+        "verify order-before.json",
+        1,
+        "~ [app  ] config                     1.0.0              AUTHORED\n",
+    );
+    stage.strata(
+        "compare order-before.json order-after.json",
+        1,
+        "~ [app  ] config                     1.0.0              AUTHORED\n      ~ param installOrder: 2 -> 3\n",
+    );
+
+    let (_, steps) = stage.run("app-profile.sh", &["3"]);
+    passed(
+        &steps,
+        &[
+            "order-record",
+            "order-edit",
+            "order-verify",
+            "order-verify-says",
+            "order-compare",
+            "order-compare-says",
+            "order-undo",
+            "delete",
+        ],
+    );
+    assert!(
+        steps.contains("FAIL  order-undone"),
+        "the stand-in reports drift after the undo too, and the check sees it: {steps}"
+    );
+    let orders: Vec<_> = stage
+        .sent("PUT", "/v1/appProfiles/ap-1/tiers/t-1")
+        .iter()
+        .map(|b| b["installOrder"].clone())
+        .collect();
+    assert_eq!(
+        orders,
+        [serde_json::json!(3), serde_json::json!(2)],
+        "one more than the order of the record, then the order back"
     );
 }
