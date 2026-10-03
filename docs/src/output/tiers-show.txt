@@ -5,7 +5,7 @@ $ jq '.source.cluster | {labels, tiers: (.tiers | map_values(.hash[0:12]))}' run
   },
   "tiers": {
     "applied": "611db1f6f454",
-    "policy": "d5e171eab170",
+    "policy": "91ca2c47be8f",
     "running": "de508fcb8463",
     "shape": "d9cb0f24cada"
   }

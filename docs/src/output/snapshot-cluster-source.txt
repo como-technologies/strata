@@ -32,9 +32,8 @@ $ jq .source.cluster runs/payments.json
       }
     },
     "policy": {
-      "hash": "d5e171eab1702aa5e86b627eaafccfaad320c9afd5cf5b16aac79830d0fff9bb",
+      "hash": "91ca2c47be8ff5a91f48ab46e402e7ff1fe796ba10d6f459bce3a1f225967d41",
       "fields": {
-        "agentUpgrades": "allowed",
         "applySetting": "DownloadAndInstall",
         "clusterMetaAttribute": "",
         "controlPlaneHealthCheckTimeout": "",

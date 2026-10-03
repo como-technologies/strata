@@ -100,7 +100,9 @@ profile, or pack version.
     - The `fields` of `policy` are in
       [The policy tier](../commands/snapshot/cluster.md#the-policy-tier). A
       record that an older version of strata wrote holds `resources` and `rbac`
-      there, in place of `rbacs` and `namespaces`.
+      there, in place of `rbacs` and `namespaces`. A record that strata 0.18
+      wrote holds `agentUpgrades` there, in place of
+      `spectroComponentsUpgradeForbidden`.
     - A cluster group carries `policy` alone. Its `fields` are `endpointType`,
       `kubernetesDistroType`, `limitConfig`, `values`, `valuesHash`,
       `valuesParseError` when the values are not YAML, and `hostClusters[]`

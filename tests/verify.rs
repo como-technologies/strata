@@ -1798,6 +1798,11 @@ fn policy_of(s: &Snapshot) -> Value {
         .clone()
 }
 
+/// The comparison of the policy tiers in `d`.
+fn policy_diff(d: &strata::diff::Diff) -> &strata::diff::TierDiff {
+    d.cluster_tiers.iter().find(|t| t.tier == "policy").unwrap()
+}
+
 #[test]
 fn a_cluster_record_holds_the_bindings_the_namespaces_and_the_five_settings_in_the_policy_tier() {
     let dir = tempfile::tempdir().unwrap();
@@ -1819,7 +1824,11 @@ fn a_cluster_record_holds_the_bindings_the_namespaces_and_the_five_settings_in_t
     assert_eq!(p["controlPlaneHealthCheckTimeout"], "10m");
     assert_eq!(p["clusterMetaAttribute"], "team=payments");
     assert_eq!(p["applySetting"], "DownloadAndInstallLater");
-    assert_eq!(p["agentUpgrades"], "paused");
+    assert_eq!(
+        p["spectroComponentsUpgradeForbidden"], "true",
+        "the annotation as Palette gives it"
+    );
+    assert!(p.get("agentUpgrades").is_none());
     assert!(
         p.get("resources").is_none() && p.get("rbac").is_none(),
         "the bindings and the namespaces take the place of their references"
@@ -1845,14 +1854,7 @@ fn an_edit_of_the_subjects_of_a_binding_changes_the_policy_tier_and_verify_and_c
     )
     .unwrap();
     assert!(v.unchanged, "the verdict follows the release");
-    let policy = |d: &strata::diff::Diff| {
-        d.cluster_tiers
-            .iter()
-            .find(|t| t.tier == "policy")
-            .cloned()
-            .unwrap()
-    };
-    let tier = policy(&v.diff);
+    let tier = policy_diff(&v.diff);
     assert!(!tier.same);
     let paths: Vec<&str> = tier.diff.iter().map(|l| l.path.as_str()).collect();
     assert_eq!(
@@ -1865,7 +1867,7 @@ fn an_edit_of_the_subjects_of_a_binding_changes_the_policy_tier_and_verify_and_c
 
     let live = snapshot_cluster(&edited, None).unwrap();
     let d = ops::compare(&recorded, &live, "t1");
-    assert!(!policy(&d).same, "compare names the policy tier");
+    assert!(!policy_diff(&d).same, "compare names the policy tier");
     assert!(
         d.nothing_differs(),
         "a tier does not change the exit of compare"
@@ -1898,17 +1900,52 @@ fn a_policy_tier_from_before_the_bindings_were_read_still_verifies() {
 
     let v = ops::verify(&older, &Palette::new(api), "t1", &Progress::silent()).unwrap();
     assert!(v.unchanged);
-    let tier = v
-        .diff
-        .cluster_tiers
-        .iter()
-        .find(|t| t.tier == "policy")
-        .unwrap();
+    let tier = policy_diff(&v.diff);
     assert!(
         tier.same,
         "only the fields that the two forms share: {:?}",
         tier.diff
     );
+}
+
+#[test]
+fn a_policy_tier_of_strata_0_18_with_agent_upgrades_still_verifies() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let api = serve_policy(dir.path(), barney());
+    let mut older = serde_json::to_value(snapshot_cluster(&api, None).unwrap()).unwrap();
+    // the policy tier as strata 0.18 wrote it: a state in place of the annotation
+    let fields = &mut older["source"]["cluster"]["tiers"]["policy"]["fields"];
+    let annotation = fields
+        .as_object_mut()
+        .unwrap()
+        .remove("spectroComponentsUpgradeForbidden");
+    assert_eq!(annotation, Some(Value::from("true")));
+    fields["agentUpgrades"] = Value::from("paused");
+    let older: Snapshot = serde_json::from_value(older).unwrap();
+
+    let v = ops::verify(
+        &older,
+        &Palette::new(api.clone()),
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert!(v.unchanged);
+    let tier = policy_diff(&v.diff);
+    assert!(
+        tier.same,
+        "each field less the agent upgrades: {:?}",
+        tier.diff
+    );
+
+    // a change of another field still shows
+    let edited = serve_policy(
+        dir.path(),
+        serde_json::json!([{"type": "User", "name": "barney"}, {"type": "User", "name": "fred"}]),
+    );
+    let live = snapshot_cluster(&edited, None).unwrap();
+    assert!(!policy_diff(&ops::compare(&older, &live, "t1")).same);
 }
 
 #[test]
