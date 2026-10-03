@@ -110,6 +110,12 @@ profile, or pack version.
     Palette gives it, sorted by name. A bring-your-own-image OS pack names its
     machine image in `imageId`. They are outside the root. A record written
     before this field has none.
+  - `invalid` and `invalidReason`, only when Palette marks the pack reference
+    invalid: `true`, and the reason, as Palette gives it in `isInvalid` and
+    `inValidReason`. Palette sets the flag when the registry deletes the tag of
+    the pack. They are outside the root, and `snapshot` writes a warning on
+    standard error for each such pack. A record written before these fields has
+    neither.
   - `params`: the params of the pack on the profile, as a map. For an app tier,
     its properties: each name and its value.
   - `values`: the raw values YAML. Palette writes `********` over each value
@@ -164,7 +170,8 @@ A comparison of two sides, `a` and `b`.
 - `summary`: `packsAdded`, `packsRemoved`, `packsChanged`, `packsUnchanged`,
   `identityChanges`, `upstreamChanges`, `authoredChanges`, `variablesChanged`,
   `imagesChanged` and `chartsChanged` (each image and chart added, removed, or
-  moved, across the packs), and `maxImpact`.
+  moved, across the packs), `packsInvalid` (the packs that Palette marks invalid
+  on one side or on the two sides), and `maxImpact`.
 - `variables`: `changed`, the two hashes, `diff[]` with paths
   `<variable>.<field>`, and `byName` with `added[]`, `removed[]`, and
   `changed[]`. An added or removed variable has `name`, `required`,
@@ -184,7 +191,8 @@ A comparison of two sides, `a` and `b`.
     manifest pack, or for a pack from a registry that Palette does not sync.
   - `impact`: `level` and `text`.
   - `a` and `b`: `tag`, `version`, `packUid`, `registryUid`, `upstream`,
-    `upstreamSource`, `valuesHash`, and `node`.
+    `upstreamSource`, `valuesHash`, and `node`. `invalid` and `invalidReason`,
+    only when Palette marks the pack of that side invalid.
   - `values`: `changed`, `parseable`, `changedCount`, `addedCount`,
     `removedCount`, and `diff[]`.
   - `manifests[]`: `op`, `name`, `hashA`, and `hashB`.
@@ -226,6 +234,9 @@ A comparison of two sides, `a` and `b`.
     value moved. The status is `drifted`, also when the roots are equal.
   - `imageIdsChanged`: when the roots are equal, each pack that names another
     image in `imageId` now, with `key`, `a`, and `b`. The status is `drifted`.
+  - `invalidPacks`, only when it is not empty: each pack that Palette marks
+    invalid now, with `key` and `reason`. It does not change `status`: the
+    content is the recorded content.
   - `overwrittenBy`: for a profile record, the `name@version` that the uid names
     now. The status is `drifted`, also when the roots are equal.
   - `renamedTo`: for a profile record, the `name@version` that the uid names
@@ -296,6 +307,8 @@ is the path as a list: strings for keys, numbers for indexes, and
   - A record of a cluster, an edge host, or a cluster group adds `state`, as
     in `verify.state`, whatever its status.
   - A record adds `lastModified`, as in `verify.lastModified`, whatever its
+    status.
+  - A record adds `invalidPacks`, as in `verify.invalidPacks`, whatever its
     status.
   - A failed record adds `error`. See [Errors](./errors.md).
 

@@ -38,6 +38,11 @@ These are open:
   record. A run read the route by hand, and no run takes a record of a cluster
   while its repave waits. See
   [macro-repave.sh](../../development/live-runs.md#macro-repavesh).
+- A tag that a registry deletes: no run deletes a tag from a registry. So no
+  run shows `isInvalid` and `inValidReason` on a pack reference, or what
+  Palette answers to a cluster create from that version. The stand-in of the
+  book follows the API documentation of the field. See
+  [A registry deletes the tag of a pack](../../use-cases/invalid-pack.md).
 - The answer of `POST /v1/clusterprofiles/validate/packs` to a pack that
   requires a pack that the profile does not hold. No pack of the Public Repo
   lists a dependency. See

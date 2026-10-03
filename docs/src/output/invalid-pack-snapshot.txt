@@ -1,0 +1,5 @@
+$ strata snapshot aws-stack@1.1.9 -o releases/1.1.9/dev-now.json
+strata: looking up project dev
+strata: fetching profile 64e0000000000000000000fc
+strata: warning: Palette marks pack addon/cert-manager invalid (Cert Manager 1.21.1 tag is deleted). The record keeps the flag, outside the root
+strata: wrote releases/1.1.9/dev-now.json (root 088136c929bd)

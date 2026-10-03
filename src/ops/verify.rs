@@ -11,7 +11,7 @@ use serde_json::Value;
 use crate::api::{AuditKind, Palette, PaletteApi};
 use crate::diff::{
     self, AuditEntry, AuditResource, ClusterProfileOverwritten, Diff, ImageIdChange, ImpactLevel,
-    Verify, VerifyStatus,
+    InvalidPack, Verify, VerifyStatus,
 };
 use crate::error::{Error, Result};
 use crate::progress::Progress;
@@ -294,6 +294,7 @@ pub fn verify_with<A: PaletteApi>(
             upstream_unknown: Vec::new(),
             macros_changed: Vec::new(),
             image_ids_changed,
+            invalid_packs: diff::invalid_packs(&live),
             registry_sync,
             registry_sync_error,
         };
@@ -415,6 +416,7 @@ pub fn verify_with<A: PaletteApi>(
         upstream_unknown: Vec::new(),
         macros_changed: macros_changed.clone(),
         image_ids_changed,
+        invalid_packs: diff::invalid_packs(&live),
         registry_sync: None,
         registry_sync_error: None,
     };
@@ -576,6 +578,10 @@ pub struct VerifiedRecord {
     /// the status.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_modified: Option<String>,
+    /// Each pack that Palette marks invalid now, as in `verify.invalidPacks`, whatever the
+    /// status.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub invalid_packs: Vec<InvalidPack>,
     /// The error object, for records that could not be checked.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<Value>,
@@ -603,6 +609,7 @@ impl VerifiedRecord {
             cluster_variables: None,
             state: None,
             last_modified: None,
+            invalid_packs: Vec::new(),
             error: Some(e.to_json()),
         }
     }
@@ -702,6 +709,12 @@ where
                     cluster_variables: v.diff.cluster_variables.clone().filter(|c| c.changed),
                     state: v.diff.verify.as_ref().and_then(|x| x.state.clone()),
                     last_modified: v.diff.verify.as_ref().and_then(|x| x.last_modified.clone()),
+                    invalid_packs: v
+                        .diff
+                        .verify
+                        .as_ref()
+                        .map(|x| x.invalid_packs.clone())
+                        .unwrap_or_default(),
                     // an unverified record keeps its diff too: it names the packs
                     diff: (v.status != VerifyStatus::Unchanged).then_some(v.diff),
                     error: None,

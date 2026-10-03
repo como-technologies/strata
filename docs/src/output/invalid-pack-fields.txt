@@ -1,0 +1,2 @@
+$ jq -c '.packs[] | select(.invalid) | {key, invalid, invalidReason}' releases/1.1.9/dev-now.json
+{"key":"addon/cert-manager","invalid":true,"invalidReason":"Cert Manager 1.21.1 tag is deleted"}
