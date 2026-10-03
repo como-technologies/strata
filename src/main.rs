@@ -783,6 +783,15 @@ fn cmd_snapshot(a: &SnapshotArgs) -> Result<ExitCode> {
                         .to_string(),
                 });
             }
+            if a.validate && matches!(reference, Ref::Draft { .. }) {
+                return Err(Error::Usage {
+                    message: format!(
+                        "--validate takes a profile version or --from-candidate, not a draft \
+                         ({reference}): give the candidate of the draft, from `strata candidate \
+                         {reference}`, to --from-candidate"
+                    ),
+                });
+            }
             if a.validate && !matches!(reference, Ref::Uid(_) | Ref::NameVersion { .. }) {
                 return Err(Error::Usage {
                     message: "--validate takes a profile version or --from-candidate: Palette \

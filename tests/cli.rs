@@ -1066,6 +1066,26 @@ fn a_quiet_run_skips_the_scope_conflict_lookup() {
 }
 
 #[test]
+fn snapshot_validate_of_a_draft_is_a_usage_error_that_names_the_draft_and_the_candidate() {
+    let home = tempfile::tempdir().unwrap();
+    let home = home.path().to_str().unwrap();
+    // no key: a usage error comes before strata needs one
+    let r = run_in(
+        &["snapshot", "aws-stack@1.1.1@draft", "--validate"],
+        &[("HOME", home)],
+        &["PALETTE_API_KEY", "SPECTROCLOUD_APIKEY"],
+    );
+    assert_eq!(r.code, 2, "{}", r.err);
+    assert!(r.err.starts_with("strata: --validate "), "{}", r.err);
+    assert!(r.err.contains("(aws-stack@1.1.1@draft)"), "{}", r.err);
+    assert!(
+        r.err.contains("`strata candidate aws-stack@1.1.1@draft`"),
+        "{}",
+        r.err
+    );
+}
+
+#[test]
 fn snapshot_validate_with_no_profile_to_ask_about_is_a_usage_error_before_any_request() {
     let home = tempfile::tempdir().unwrap();
     let home = home.path().to_str().unwrap();
