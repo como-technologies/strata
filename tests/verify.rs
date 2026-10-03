@@ -9879,10 +9879,12 @@ fn a_saved_tag_filter_is_translated_into_a_search_and_a_tenant_without_a_search_
     );
 }
 
-#[test]
-fn snapshot_of_a_set_writes_a_record_for_each_cluster_and_prune_removes_the_ones_that_left() {
-    let dir = tempfile::tempdir().unwrap();
-    common::make_fixtures(dir.path());
+/// `snapshot tag:env=prod --dir fleet --prune` over two clusters: `lab-cluster`, which strata
+/// records, and `gone`, which Palette cannot serve. The directory holds a record of a cluster
+/// that left the set, and a file that is not a record. Gives the report, the directory, and the
+/// record of `lab-cluster`.
+fn snapshot_prod_set(dir: &Path) -> (ops::SetReport, std::path::PathBuf, Snapshot) {
+    common::make_fixtures(dir);
     let lab = fleet_row(
         CLUSTER_UID,
         "lab-cluster",
@@ -9890,22 +9892,18 @@ fn snapshot_of_a_set_writes_a_record_for_each_cluster_and_prune_removes_the_ones
         serde_json::json!({"env": "prod"}),
     );
     let gone = fleet_row("c-gone", "gone", "", serde_json::json!({"env": "prod"}));
-    let mut doc = read(&dir.path().join("cluster-a").join("cluster.json"));
+    let mut doc = read(&dir.join("cluster-a").join("cluster.json"));
     doc["metadata"]["labels"] = serde_json::json!({"env": "prod"});
     let api = serve_fleet(
-        serve_cluster(MemoryApi::new(), dir.path(), "cluster-a"),
+        serve_cluster(MemoryApi::new(), dir, "cluster-a"),
         vec![lab, gone],
         vec![],
     )
     .with(format!("/v1/spectroclusters/{CLUSTER_UID}"), doc);
-    let out = dir.path().join("fleet");
+    let out = dir.join("fleet");
     fs::create_dir_all(&out).unwrap();
     // a record of a cluster that left the set, and a file that is not a record
-    let old = snapshot_cluster(
-        &serve_cluster(MemoryApi::new(), dir.path(), "cluster-a"),
-        None,
-    )
-    .unwrap();
+    let old = snapshot_cluster(&serve_cluster(MemoryApi::new(), dir, "cluster-a"), None).unwrap();
     fs::write(out.join("left.json"), old.to_json(false).unwrap()).unwrap();
     fs::write(out.join("notes.json"), "{\"a\": 1}").unwrap();
     let report = ops::snapshot_set(
@@ -9920,6 +9918,13 @@ fn snapshot_of_a_set_writes_a_record_for_each_cluster_and_prune_removes_the_ones
         &Progress::silent(),
     )
     .unwrap();
+    (report, out, old)
+}
+
+#[test]
+fn snapshot_of_a_set_writes_a_record_for_each_cluster_and_prune_removes_the_ones_that_left() {
+    let dir = tempfile::tempdir().unwrap();
+    let (report, out, old) = snapshot_prod_set(dir.path());
     assert_eq!(report.records.len(), 2);
     let lab = &report.records[1];
     assert_eq!(lab.path, out.join("lab-cluster.json"));
@@ -9941,6 +9946,86 @@ fn snapshot_of_a_set_writes_a_record_for_each_cluster_and_prune_removes_the_ones
         out.join("notes.json").exists(),
         "a file that is not a record stays"
     );
+}
+
+#[test]
+fn snapshot_of_a_set_is_a_strata_set_document_with_each_cluster_its_root_or_error_and_each_removed_file()
+ {
+    let dir = tempfile::tempdir().unwrap();
+    let (report, out, old) = snapshot_prod_set(dir.path());
+    let doc = serde_json::to_value(&report).unwrap();
+    assert_eq!(doc["schema"], ops::SET_SCHEMA);
+    assert_eq!(doc["tool"]["name"], strata::TOOL_NAME);
+    assert_eq!(doc["generatedAt"], "t1");
+    assert_eq!(doc["query"], serde_json::json!({"tags": ["env=prod"]}));
+    assert_eq!(doc["resolved"], "search");
+    assert_eq!(
+        doc["summary"],
+        serde_json::json!({"clusters": 2, "recorded": 1, "failed": 1, "removed": 1})
+    );
+    let lab = &doc["records"][1];
+    assert_eq!(
+        (&lab["cluster"]["name"], &lab["cluster"]["uid"]),
+        (&Value::from("lab-cluster"), &Value::from(CLUSTER_UID))
+    );
+    assert_eq!(
+        lab["path"],
+        out.join("lab-cluster.json").display().to_string()
+    );
+    assert_eq!(lab["root"], old.root.as_str());
+    assert!(lab.get("error").is_none(), "{lab}");
+    let gone = &doc["records"][0];
+    assert_eq!(gone["cluster"]["name"], "gone");
+    assert!(gone.get("root").is_none(), "{gone}");
+    assert_eq!(gone["error"]["kind"], "cluster-not-found", "{gone}");
+    assert_eq!(
+        doc["removed"],
+        serde_json::json!([out.join("left.json").display().to_string()])
+    );
+    let back: ops::SetReport = serde_json::from_value(doc).unwrap();
+    assert_eq!(back.exit_code(), 2);
+
+    // the JSON format writes the document, and the terminal format keeps the lines
+    let json = render::renderer(Format::Json, Paint::off(), true)
+        .render_set(&report)
+        .unwrap();
+    assert_eq!(
+        serde_json::from_str::<Value>(&json).unwrap()["schema"],
+        ops::SET_SCHEMA
+    );
+    let text = render::renderer(Format::Terminal, Paint::off(), false)
+        .render_set(&report)
+        .unwrap();
+    let lines: Vec<&str> = text.lines().collect();
+    assert_eq!(lines.len(), 3, "{text}");
+    assert!(
+        lines[0].starts_with("could not record cluster gone (uid c-gone): "),
+        "{text}"
+    );
+    assert_eq!(
+        lines[1],
+        format!(
+            "wrote {}  cluster lab-cluster (uid {CLUSTER_UID})  root {}",
+            out.join("lab-cluster.json").display(),
+            &old.root[..12]
+        )
+    );
+    assert_eq!(
+        lines[2],
+        format!("removed {}", out.join("left.json").display())
+    );
+    assert_eq!(
+        render::set_counts_line(&report),
+        "1 of 2 clusters recorded, 1 removed; found by the search of Palette"
+    );
+    let md = render::renderer(Format::Markdown, Paint::off(), false)
+        .render_set(&report)
+        .unwrap();
+    assert!(
+        md.starts_with("### snapshot: 1 of 2 clusters recorded, 1 removed;"),
+        "{md}"
+    );
+    assert!(md.contains("| gone | `c-gone` |"), "{md}");
 }
 
 // ---- what happened to the object of a record --------------------------------------------------

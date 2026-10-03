@@ -13,10 +13,13 @@ use crate::api::{Palette, PaletteApi};
 use crate::error::{Error, Result};
 use crate::progress::Progress;
 use crate::reference::Ref;
-use crate::snapshot::Snapshot;
+use crate::snapshot::{Snapshot, Tool};
 
 use super::list::{ListedCluster, TENANT_SCOPE, list_clusters, name_projects_of};
 use super::text;
+
+/// Schema id of the document that `snapshot` writes for a set of clusters.
+pub const SET_SCHEMA: &str = "strata-set/1";
 
 /// The value that the provider gives the label of a tag with no value, such as `prod`.
 pub const TAG_WITHOUT_VALUE: &str = "spectro__tag";
@@ -364,12 +367,37 @@ pub struct SetRecord {
     pub error: Option<Value>,
 }
 
-/// What `snapshot_set` did.
+/// The counts of a set: the clusters of the query, the records written, the clusters that strata
+/// could not record, and the files removed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct SetCounts {
+    /// The clusters that the query selects.
+    pub clusters: usize,
+    /// The records that strata wrote.
+    pub recorded: usize,
+    /// The clusters that strata could not record.
+    pub failed: usize,
+    /// The records that `prune` removed.
+    pub removed: usize,
+}
+
+/// The document that `snapshot` writes for a set of clusters: `strata-set/1`.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct SetReport {
+    /// The schema id of this document
+    #[schemars(extend("const" = SET_SCHEMA))]
+    pub schema: String,
+    /// Which tool wrote the document.
+    pub tool: Tool,
+    /// When, RFC 3339 UTC.
+    pub generated_at: String,
+    /// The query of the clusters: the labels, the saved tag filter, or both.
+    pub query: ClusterQuery,
     /// How strata found the clusters.
     pub resolved: Resolved,
+    /// The counts.
+    pub summary: SetCounts,
     /// One entry for each cluster that the query selects.
     pub records: Vec<SetRecord>,
     /// With `prune`: each record of the directory whose cluster the query no longer selects,
@@ -380,11 +408,7 @@ pub struct SetReport {
 impl SetReport {
     /// 2 when a cluster could not be recorded, else 0.
     pub fn exit_code(&self) -> u8 {
-        if self.records.iter().any(|r| r.error.is_some()) {
-            2
-        } else {
-            0
-        }
+        if self.summary.failed > 0 { 2 } else { 0 }
     }
 }
 
@@ -488,8 +512,19 @@ where
             removed.push(path);
         }
     }
+    let failed = records.iter().filter(|r| r.error.is_some()).count();
     Ok(SetReport {
+        schema: SET_SCHEMA.to_string(),
+        tool: Tool::current(),
+        generated_at: fetched_at.to_string(),
+        query: query.clone(),
         resolved: selection.resolved,
+        summary: SetCounts {
+            clusters: records.len(),
+            recorded: records.len() - failed,
+            failed,
+            removed: removed.len(),
+        },
         records,
         removed,
     })

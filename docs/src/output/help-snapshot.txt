@@ -27,6 +27,10 @@ Options:
           For tag:KEY=VALUE or filter:NAME: write one record for each cluster into this directory, as <cluster name>.json
       --prune
           With --dir: remove each cluster record of the directory whose cluster the query no longer selects
+      --format <FORMAT>
+          With --dir: the report format: terminal, markdown, or json
+      --json
+          With --dir: the same as --format json
   -q, --quiet
           No progress messages
   -h, --help

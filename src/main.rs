@@ -68,7 +68,8 @@ impl Cli {
                         .windows(2)
                         .any(|w| w[0] == "--format" && w[1] == "json")
             }
-            Cmd::Snapshot(_) | Cmd::Candidate(_) | Cmd::Schema { .. } => false,
+            Cmd::Snapshot(a) => a.format() == Format::Json,
+            Cmd::Candidate(_) | Cmd::Schema { .. } => false,
         }
     }
 }
@@ -216,9 +217,26 @@ struct SnapshotArgs {
     /// longer selects
     #[arg(long, requires = "dir")]
     prune: bool,
+    /// With --dir: the report format: terminal, markdown, or json
+    #[arg(long, value_enum, requires = "dir", hide_possible_values = true)]
+    format: Option<FormatArg>,
+    /// With --dir: the same as --format json
+    #[arg(long, conflicts_with = "format", requires = "dir")]
+    json: bool,
     /// No progress messages
     #[arg(short, long)]
     quiet: bool,
+}
+
+impl SnapshotArgs {
+    /// The format of the report of a set. A record is always JSON.
+    fn format(&self) -> Format {
+        if self.json {
+            Format::Json
+        } else {
+            self.format.map_or(Format::Terminal, Format::from)
+        }
+    }
 }
 
 #[derive(Args)]
@@ -431,6 +449,7 @@ enum SchemaKind {
     Consumers,
     List,
     Packs,
+    Set,
     Candidate,
 }
 
@@ -707,40 +726,10 @@ fn cmd_snapshot(a: &SnapshotArgs) -> Result<ExitCode> {
                 &now,
                 &progress,
             )?;
-            for r in &report.records {
-                match (&r.root, &r.error) {
-                    (Some(root), _) => println!(
-                        "wrote {}  cluster {} (uid {})  root {}",
-                        r.path.display(),
-                        r.cluster.name,
-                        r.cluster.uid,
-                        &root[..12.min(root.len())]
-                    ),
-                    (None, error) => println!(
-                        "could not record cluster {} (uid {}): {}",
-                        r.cluster.name,
-                        r.cluster.uid,
-                        error
-                            .as_ref()
-                            .and_then(|e| e.get("message"))
-                            .and_then(serde_json::Value::as_str)
-                            .unwrap_or("see the error")
-                    ),
-                }
-            }
-            for path in &report.removed {
-                println!("removed {}", path.display());
-            }
-            progress.note(&format!(
-                "{} of {} clusters recorded, {} removed; found by the {}",
-                report.records.iter().filter(|r| r.root.is_some()).count(),
-                report.records.len(),
-                report.removed.len(),
-                match report.resolved {
-                    ops::Resolved::Search => "search of Palette",
-                    ops::Resolved::Listing => "cluster listing",
-                }
-            ));
+            // the lines of a set have no color, so the report takes no --color
+            let renderer = render::renderer(a.format(), Paint::off(), a.compact);
+            print!("{}", renderer.render_set(&report)?);
+            progress.note(&render::set_counts_line(&report));
             return Ok(ExitCode::from(report.exit_code()));
         }
         (Some(Ref::ClusterSet { .. }), None) => {
@@ -1173,6 +1162,7 @@ fn cmd_schema(kind: SchemaKind) -> Result<ExitCode> {
         SchemaKind::Chain => schemars::schema_for!(ops::Chain),
         SchemaKind::Consumers => schemars::schema_for!(ops::ConsumersReport),
         SchemaKind::Behind => schemars::schema_for!(ops::BehindReport),
+        SchemaKind::Set => schemars::schema_for!(ops::SetReport),
         SchemaKind::List => schemars::schema_for!(ops::Listing),
         SchemaKind::Packs => schemars::schema_for!(ops::PackListing),
         SchemaKind::Candidate => schemars::schema_for!(strata::candidate::Candidate),

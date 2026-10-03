@@ -17,6 +17,7 @@ document.
 | `strata-list/1` | `list --json` | `list` |
 | `strata-packs/1` | `packs --json` | `packs` |
 | `strata-behind/1` | `behind --json` | `behind` |
+| `strata-set/1` | `snapshot --dir --json` for a `tag:` or `filter:` set | `set` |
 | `strata-preflight/1` | `preflight --json` | `preflight --schema report` |
 | `strata-preflight-rules/1` | `preflight --rules --json` | `preflight --schema rules` (one section) |
 | `strata-preflight-ledger/1` | the ledger of runs | `preflight --schema ledger` |
@@ -424,6 +425,23 @@ is the path as a list: strings for keys, numbers for indexes, and
     that registry.
   - `error`, when strata could not check the pin.
 - `summary`: `pins`, `behind`, `floating`, `errors`, and `arrived`.
+
+## strata-set/1
+
+The report of `snapshot tag:<key>=<value> --dir DIR` or
+`snapshot filter:<name> --dir DIR`. See
+[A set of clusters](../commands/snapshot/set.md).
+
+- `query`: `tags[]` and `filter`, as `strata-list/1` gives them. `resolved`:
+  `search` or `listing`, as in `strata-list/1`.
+- `summary`: `clusters`, the clusters that the query selects, `recorded`,
+  `failed`, and `removed`. The exit code is `2` when `failed` is not `0`.
+- `records[]`: one entry for each cluster of the set, by name.
+  - `cluster`: the cluster, as a cluster of `strata-list/1`.
+  - `path`: the file of its record.
+  - `root`: the root of the record that strata wrote. `error`, in place of
+    `root`: why strata could not record the cluster. See [Errors](./errors.md).
+- `removed[]`: with `--prune`, each record file that strata removed.
 
 
 ## strata-preflight/1

@@ -20,3 +20,20 @@ selects, and leaves every other file:
 Exit `0`, or `2` when strata could not record a cluster: the line of that
 cluster says why, and the other records are written. See
 [Find the fleet from Palette](../../use-cases/fleet.md).
+
+## The report as JSON
+
+`--json` writes the report to standard output as a
+[`strata-set/1`](../../reference/documents.md#strata-set1) document. It has one
+entry for each cluster of the set, with its file and its root or its error, and
+each removed file:
+
+```text
+{{#include ../../output/fleet-set-json.txt}}
+```
+
+`--format markdown` writes a table for a pull request comment, and `--compact`
+writes the JSON on one line. The exit code is the same in each format. An
+error of the query itself, such as a filter that does not exist, writes no
+document. With `--json --quiet`, standard error then gets one JSON line: see
+[Errors](../../reference/errors.md).

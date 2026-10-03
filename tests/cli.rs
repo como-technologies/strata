@@ -776,6 +776,7 @@ fn schema_subcommand_prints_json_schema() {
         ("consumers", "strata-consumers/1"),
         ("list", "strata-list/1"),
         ("packs", "strata-packs/1"),
+        ("set", "strata-set/1"),
         ("candidate", ""),
     ] {
         let r = run(&["schema", kind]);
@@ -1113,6 +1114,47 @@ fn snapshot_validate_of_a_draft_is_a_usage_error_that_names_the_draft_and_the_ca
         "{}",
         r.err
     );
+}
+
+#[test]
+fn snapshot_of_a_set_with_json_prints_an_error_of_the_query_as_one_json_line() {
+    let home = tempfile::tempdir().unwrap();
+    let dir = home.path().join("fleet");
+    let dir = dir.to_str().unwrap();
+    for args in [
+        &[
+            "snapshot",
+            "filter:production",
+            "--dir",
+            dir,
+            "--json",
+            "-q",
+        ][..],
+        &[
+            "snapshot",
+            "tag:env=prod",
+            "--dir",
+            dir,
+            "--format",
+            "json",
+            "-q",
+        ][..],
+    ] {
+        let r = run_in(
+            args,
+            &[("HOME", home.path().to_str().unwrap())],
+            &["PALETTE_API_KEY", "SPECTROCLOUD_APIKEY"],
+        );
+        assert_eq!(r.code, 2, "{args:?}: {}", r.err);
+        assert_eq!(r.out, "", "{args:?}: no document when the query fails");
+        let e: serde_json::Value = serde_json::from_str(r.err.trim()).unwrap();
+        assert_eq!(e["error"]["kind"], "missing-credential", "{args:?}");
+    }
+
+    // the format is the report of a set, so it needs --dir: a record is always JSON
+    let r = run(&["snapshot", "aws-stack@1.1.1", "--json"]);
+    assert_eq!(r.code, 2);
+    assert!(r.err.contains("--dir"), "{}", r.err);
 }
 
 #[test]
