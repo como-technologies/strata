@@ -32,23 +32,50 @@ $ jq .source.cluster runs/payments.json
       }
     },
     "policy": {
-      "hash": "a99f6ce98e80567eaf6d31b13f47c666977ba0f0c40799b6c2271c012ef78235",
+      "hash": "d5e171eab1702aa5e86b627eaafccfaad320c9afd5cf5b16aac79830d0fff9bb",
       "fields": {
+        "agentUpgrades": "allowed",
+        "applySetting": "DownloadAndInstall",
+        "clusterMetaAttribute": "",
+        "controlPlaneHealthCheckTimeout": "",
         "fips": "none",
         "lifecycle": {
           "pause": false
         },
         "machineHealth": {},
+        "namespaces": [
+          {
+            "isRegex": false,
+            "name": "apps",
+            "resourceAllocation": {
+              "cpuCores": 2,
+              "memoryMiB": 4096
+            }
+          }
+        ],
         "osPatch": {
           "patchOnBoot": false,
           "rebootIfRequired": false
         },
-        "rbac": null,
-        "resources": {
-          "namespaces": [],
-          "rbacs": []
-        },
-        "timezone": "Etc/UTC"
+        "rbacs": [
+          {
+            "namespace": "",
+            "role": {
+              "kind": "ClusterRole",
+              "name": "view"
+            },
+            "subjects": [
+              {
+                "name": "platform",
+                "namespace": "",
+                "type": "Group"
+              }
+            ],
+            "type": "ClusterRoleBinding"
+          }
+        ],
+        "timezone": "Etc/UTC",
+        "updateWorkerPoolsInParallel": false
       }
     },
     "running": {

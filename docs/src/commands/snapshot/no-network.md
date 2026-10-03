@@ -35,6 +35,10 @@ save, strata writes `********` in place of each value that is not empty. Strata
 reads only the code, the message, the pack name, and the keys, so `--from-raw`
 builds the same record.
 
+`rbacs.json` and `namespaces.json` keep the role bindings and the namespaces
+of a cluster. A directory that an older version of strata saved has neither.
+The `policy` tier of its record then holds `null` for them.
+
 ## A version before you publish it
 
 `--from-candidate` builds a snapshot from a candidate file, or from a profile

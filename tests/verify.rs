@@ -1741,6 +1741,219 @@ fn verify_refetches_the_cluster_for_a_cluster_record() {
     );
 }
 
+// ---- the policy tier -------------------------------------------------------------------------
+
+/// The route of the role bindings of the fixture cluster.
+fn rbacs_route() -> String {
+    format!("/v1/spectroclusters/{CLUSTER_UID}/config/rbacs")
+}
+
+/// The route of the namespaces of the fixture cluster.
+fn namespaces_route() -> String {
+    format!("/v1/spectroclusters/{CLUSTER_UID}/config/namespaces")
+}
+
+/// Cluster b with the five settings of the policy tier, and one role binding to `subjects` and
+/// one namespace on their own routes, as Palette gives them.
+fn serve_policy(dir: &Path, subjects: Value) -> MemoryApi {
+    let mut cluster = read(&dir.join("cluster-b").join("cluster.json"));
+    cluster["metadata"]["annotations"] =
+        serde_json::json!({"spectroComponentsUpgradeForbidden": "true"});
+    cluster["spec"]["clusterConfig"] = serde_json::json!({
+        "timezone": "Etc/UTC",
+        "updateWorkerPoolsInParallel": true,
+        "controlPlaneHealthCheckTimeout": "10m",
+        "clusterMetaAttribute": "team=payments",
+        "clusterResources": {"rbacs": [{"uid": "r1", "name": "editors"}],
+            "namespaces": [{"uid": "n1", "name": "payments"}]},
+    });
+    cluster["status"]["spcApply"] = serde_json::json!({
+        "actionType": "DownloadAndInstallLater", "spcHash": "a1", "spcInfraHash": "b1"});
+    serve_cluster(MemoryApi::new(), dir, "cluster-b")
+        .with(format!("/v1/spectroclusters/{CLUSTER_UID}"), cluster)
+        .with(
+            rbacs_route(),
+            serde_json::json!({"items": [{
+                "metadata": {"uid": "r1", "name": "editors", "creationTimestamp": "t0"},
+                "spec": {"isSystem": false, "bindings": [{"type": "RoleBinding",
+                    "namespace": "payments", "role": {"kind": "Role", "name": "editor"},
+                    "subjects": subjects}]}}]}),
+        )
+        .with(
+            namespaces_route(),
+            serde_json::json!({"items": [{
+                "metadata": {"uid": "n1", "name": "payments", "creationTimestamp": "t0"},
+                "spec": {"isRegex": false,
+                    "resourceAllocation": {"cpuCores": 2, "memoryMiB": 4096}}}]}),
+        )
+}
+
+fn barney() -> Value {
+    serde_json::json!([{"type": "User", "name": "barney"}])
+}
+
+fn policy_of(s: &Snapshot) -> Value {
+    s.source.cluster.as_ref().unwrap().tiers["policy"]
+        .fields
+        .clone()
+}
+
+#[test]
+fn a_cluster_record_holds_the_bindings_the_namespaces_and_the_five_settings_in_the_policy_tier() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let s = snapshot_cluster(&serve_policy(dir.path(), barney()), None).unwrap();
+    let p = policy_of(&s);
+    assert_eq!(
+        p["rbacs"],
+        serde_json::json!([{"namespace": "payments", "role": {"kind": "Role", "name": "editor"},
+            "subjects": [{"name": "barney", "type": "User"}], "type": "RoleBinding"}]),
+        "each binding without its uid and its time"
+    );
+    assert_eq!(
+        p["namespaces"],
+        serde_json::json!([{"name": "payments", "isRegex": false,
+            "resourceAllocation": {"cpuCores": 2, "memoryMiB": 4096}}])
+    );
+    assert_eq!(p["updateWorkerPoolsInParallel"], true);
+    assert_eq!(p["controlPlaneHealthCheckTimeout"], "10m");
+    assert_eq!(p["clusterMetaAttribute"], "team=payments");
+    assert_eq!(p["applySetting"], "DownloadAndInstallLater");
+    assert_eq!(p["agentUpgrades"], "paused");
+    assert!(
+        p.get("resources").is_none() && p.get("rbac").is_none(),
+        "the bindings and the namespaces take the place of their references"
+    );
+}
+
+#[test]
+fn an_edit_of_the_subjects_of_a_binding_changes_the_policy_tier_and_verify_and_compare_name_it() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let recorded = snapshot_cluster(&serve_policy(dir.path(), barney()), None).unwrap();
+    // the binding keeps its uid in Palette, and gets one more subject
+    let edited = serve_policy(
+        dir.path(),
+        serde_json::json!([{"type": "User", "name": "barney"}, {"type": "User", "name": "fred"}]),
+    );
+
+    let v = ops::verify(
+        &recorded,
+        &Palette::new(edited.clone()),
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert!(v.unchanged, "the verdict follows the release");
+    let policy = |d: &strata::diff::Diff| {
+        d.cluster_tiers
+            .iter()
+            .find(|t| t.tier == "policy")
+            .cloned()
+            .unwrap()
+    };
+    let tier = policy(&v.diff);
+    assert!(!tier.same);
+    let paths: Vec<&str> = tier.diff.iter().map(|l| l.path.as_str()).collect();
+    assert_eq!(
+        paths,
+        [
+            "rbacs[0].subjects[name=fred].name",
+            "rbacs[0].subjects[name=fred].type"
+        ]
+    );
+
+    let live = snapshot_cluster(&edited, None).unwrap();
+    let d = ops::compare(&recorded, &live, "t1");
+    assert!(!policy(&d).same, "compare names the policy tier");
+    assert!(
+        d.nothing_differs(),
+        "a tier does not change the exit of compare"
+    );
+}
+
+#[test]
+fn a_policy_tier_from_before_the_bindings_were_read_still_verifies() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let api = serve_policy(dir.path(), barney());
+    let mut older = snapshot_cluster(&api, None).unwrap();
+    // the policy tier as an older version of strata wrote it: the references, with their uids
+    let fields = serde_json::json!({
+        "osPatch": null, "lifecycle": null, "machineHealth": null, "timezone": "Etc/UTC",
+        "resources": {"rbacs": [{"uid": "r1", "name": "editors"}], "namespaces": []},
+        "rbac": null, "fips": "",
+    });
+    let tier = serde_json::json!({"hash": "0", "fields": fields});
+    older
+        .source
+        .cluster
+        .as_mut()
+        .unwrap()
+        .tiers
+        .insert("policy".to_string(), serde_json::from_value(tier).unwrap());
+    let saved = dir.path().join("older.json");
+    fs::write(&saved, older.to_json(true).unwrap()).unwrap();
+    let older = Snapshot::load(&saved).unwrap();
+
+    let v = ops::verify(&older, &Palette::new(api), "t1", &Progress::silent()).unwrap();
+    assert!(v.unchanged);
+    let tier = v
+        .diff
+        .cluster_tiers
+        .iter()
+        .find(|t| t.tier == "policy")
+        .unwrap();
+    assert!(
+        tier.same,
+        "only the fields that the two forms share: {:?}",
+        tier.diff
+    );
+}
+
+#[test]
+fn a_404_of_the_route_of_the_bindings_records_null_and_another_error_stops_the_record() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    // the route of the role bindings answers 404, and the cluster has no namespace
+    let mut cluster = read(&dir.path().join("cluster-b").join("cluster.json"));
+    cluster["spec"]["clusterConfig"] = serde_json::json!({"timezone": "Etc/UTC"});
+    let no_route = serve_cluster(MemoryApi::new(), dir.path(), "cluster-b")
+        .with(format!("/v1/spectroclusters/{CLUSTER_UID}"), cluster)
+        .with(namespaces_route(), serde_json::json!({"items": []}));
+    let p = policy_of(&snapshot_cluster(&no_route, None).unwrap());
+    assert_eq!(p["rbacs"], Value::Null, "not read, and not an empty list");
+    assert_eq!(p["namespaces"], serde_json::json!([]));
+
+    let forbidden = serve_policy(dir.path(), barney()).failing(rbacs_route(), 403, "forbidden");
+    let err = snapshot_cluster(&forbidden, None).unwrap_err();
+    assert!(matches!(err, Error::Api { status: 403, .. }), "{err}");
+}
+
+#[test]
+fn a_raw_directory_keeps_the_bindings_and_the_namespaces_so_the_record_is_the_same() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let silent = Progress::silent();
+    let palette = Palette::new(serve_policy(dir.path(), barney()));
+    let saved = dir.path().join("raw-policy");
+    palette
+        .fetch_cluster(CLUSTER_UID, &silent)
+        .unwrap()
+        .save_dir(&saved, "t0")
+        .unwrap();
+    assert!(saved.join("rbacs.json").is_file() && saved.join("namespaces.json").is_file());
+    let reference = format!("cluster:{CLUSTER_UID}");
+    let rebuilt = ops::snapshot_from_dir(&saved, &reference, "t0").unwrap();
+    let fetched = snapshot_cluster(&serve_policy(dir.path(), barney()), None).unwrap();
+    assert_eq!(policy_of(&rebuilt), policy_of(&fetched));
+
+    // a directory that an older build saved has neither file
+    fs::remove_file(saved.join("rbacs.json")).unwrap();
+    let older = ops::snapshot_from_dir(&saved, &reference, "t0").unwrap();
+    assert_eq!(policy_of(&older)["rbacs"], Value::Null);
+}
+
 // ---- consumers -------------------------------------------------------------------------------
 
 use strata::color::Paint;

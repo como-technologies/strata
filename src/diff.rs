@@ -274,6 +274,8 @@ fn tiers_diff(a: &Snapshot, b: &Snapshot) -> Vec<TierDiff> {
                 }
                 // a record from before strata read the shape by cloud type holds fewer fields
                 "shape" => crate::shape::comparable(&t.fields, &u.fields),
+                // and one from before strata read the role bindings holds their references
+                "policy" => crate::policy::comparable(&t.fields, &u.fields),
                 _ => (t.fields.clone(), u.fields.clone()),
             };
             let same = f == g;

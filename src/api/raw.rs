@@ -274,6 +274,13 @@ pub struct RawCluster {
     /// `GET /v1/cloudconfigs/{cloudType}/{configUid}`: the machine pools and the cloud part of
     /// the cluster. `None` unless asked for, with `snapshot --shape`.
     pub cloud_config: Option<Value>,
+    /// `GET /v1/spectroclusters/{uid}/config/rbacs`: the role bindings of the cluster. `None`
+    /// when Palette answered 404, for an edge host and a cluster group, and for a directory that
+    /// an older build saved.
+    pub rbacs: Option<Value>,
+    /// `GET /v1/spectroclusters/{uid}/config/namespaces`: the namespaces of the cluster, with the
+    /// resources that each one can use. `None` in the same cases as `rbacs`.
+    pub namespaces: Option<Value>,
 }
 
 impl RawCluster {
@@ -294,8 +301,16 @@ impl RawCluster {
             repave: read_optional(dir, Self::REPAVE)?,
             resolved_values: read_optional(dir, Self::RESOLVED_VALUES)?,
             cloud_config: read_optional(dir, Self::CLOUD_CONFIG)?,
+            rbacs: read_optional(dir, Self::RBACS)?,
+            namespaces: read_optional(dir, Self::NAMESPACES)?,
         })
     }
+
+    /// The file that holds the role bindings of the cluster, when they were read.
+    pub const RBACS: &'static str = "rbacs.json";
+
+    /// The file that holds the namespaces of the cluster, when they were read.
+    pub const NAMESPACES: &'static str = "namespaces.json";
 
     /// The file that holds the values Palette gives the macros, when they were read.
     pub const RESOLVED_VALUES: &'static str = RESOLVED_VALUES_FILE;
@@ -309,8 +324,8 @@ impl RawCluster {
     /// The file that holds the repave that waits for approval, when it was read.
     pub const REPAVE: &'static str = "repave.json";
 
-    /// Write the three files, the notifications and the repave when they were read, and
-    /// `scope.json` under `dir`, and make `dir` if it is not there. Strata masks the values of
+    /// Write the three files, each other document that strata read, and `scope.json` under
+    /// `dir`, and make `dir` if it is not there. Strata masks the values of
     /// each pack in the saved notifications and in the saved repave.
     pub fn save_dir(&self, dir: &Path, fetched_at: &str) -> Result<()> {
         let scope = scope_document(&self.project_uid, fetched_at, self.variables_unavailable);
@@ -333,6 +348,12 @@ impl RawCluster {
         }
         if let Some(c) = &self.cloud_config {
             files.push((Self::CLOUD_CONFIG, c));
+        }
+        if let Some(r) = &self.rbacs {
+            files.push((Self::RBACS, r));
+        }
+        if let Some(n) = &self.namespaces {
+            files.push((Self::NAMESPACES, n));
         }
         write_json_files(dir, &files)
     }

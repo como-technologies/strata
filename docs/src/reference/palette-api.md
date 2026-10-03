@@ -36,6 +36,8 @@ version as gone. A cluster does the same with its own document. See
 | `GET /v1/spectroclusters/{uid}` | `spec.clusterProfileTemplates`: one applied profile each, with its packs. The state, in `status.state`. `verify` reads `status.state`, `metadata.isDeleted`, and `metadata.deletionTimestamp`: Palette keeps the document of a deleted cluster. |
 | `GET /v1/spectroclusters/{uid}/profiles/packs/manifests` | The registry digests and manifest contents, one entry for each applied profile. |
 | `GET /v1/spectroclusters/{uid}/variables` | The variable definitions and values, one entry for each applied profile. |
+| `GET /v1/spectroclusters/{uid}/config/rbacs` | `items[]`: the role bindings of the cluster, each with `spec.bindings[]` of `namespace`, `role`, `subjects`, and `type`. A cluster record and `verify` read it for the `policy` tier. After an HTTP 404, the tier holds `null`. |
+| `GET /v1/spectroclusters/{uid}/config/namespaces` | `items[]`: the namespaces of the cluster, each with `metadata.name`, `spec.isRegex`, and `spec.resourceAllocation`. A cluster record and `verify` read it for the `policy` tier. After an HTTP 404, the tier holds `null`. |
 | `GET /v1/dashboard/spectroclusters/meta` | The listing: `list clusters`, the uid of a cluster name, and the second reading of `consumers` when the search takes no `clusterProfiles`. A cluster name goes out first as `GET /v1/spectroclusters/<name>`; strata reads the listing after that HTTP 404. |
 | `GET /v1/dashboard/spectroclusters/{uid}` | The summary: the health of the cluster, in `status.health.state`. The cluster document does not carry it. No command reads this request. [The knurl adapter](../automation/knurl.md) reads it for each cluster. |
 | `GET /v1/notifications/spectrocluster/{uid}` | Whether an update waits for the cluster, every page. A cluster record and `list clusters --applied` read it. |
@@ -116,5 +118,6 @@ entries it got, until a page is short or `offset` reaches `listmeta.count`.
 `scope.json`. `scope.json` holds the project, the time of the read, and
 `variablesUnavailable`. So `--from-raw` rebuilds the same record, with the same
 fetch time and the same flag. For a cluster, it also saves the notifications,
-with the values of each pack masked: see
+with the values of each pack masked, and the role bindings and the namespaces:
+see
 [The saved answers of Palette](../commands/snapshot/no-network.md#the-saved-answers-of-palette).

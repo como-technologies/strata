@@ -658,6 +658,8 @@ impl<A: PaletteApi> Palette<A> {
             repave,
             resolved_values: None,
             cloud_config: None,
+            rbacs: self.cluster_config(uid, ConfigPart::Rbacs, progress)?,
+            namespaces: self.cluster_config(uid, ConfigPart::Namespaces, progress)?,
         })
     }
 
@@ -926,6 +928,8 @@ impl<A: PaletteApi> Palette<A> {
             repave: None,
             resolved_values: None,
             cloud_config: None,
+            rbacs: None,
+            namespaces: None,
         })
     }
 
@@ -1137,6 +1141,38 @@ impl<A: PaletteApi> Palette<A> {
         self.api.post_json(&path, body)
     }
 
+    /// One part of the config of the cluster `uid`, `GET
+    /// /v1/spectroclusters/{uid}/config/{part}`: its role bindings or its namespaces. Palette
+    /// gives `items`, one entry for each. A 404 gives `None`, so the record holds null for the
+    /// part, and not an empty list.
+    ///
+    /// # Errors
+    ///
+    /// Each error of the request other than a 404.
+    fn cluster_config(
+        &self,
+        uid: &str,
+        part: ConfigPart,
+        progress: &Progress,
+    ) -> Result<Option<Value>> {
+        let path = format!(
+            "/v1/spectroclusters/{}/config/{}",
+            query_value(uid),
+            part.route()
+        );
+        match self.api.get_json(&path) {
+            Ok(v) => Ok(Some(v)),
+            Err(Error::Api { status: 404, .. }) => {
+                progress.note(&format!(
+                    "note: the {} of cluster {uid} are unavailable (HTTP 404)",
+                    part.noun()
+                ));
+                Ok(None)
+            }
+            Err(e) => Err(e),
+        }
+    }
+
     /// The last repave of one cluster, `GET /v1/spectroclusters/{uid}/repave/status`: its source,
     /// its reasons, and its state. The pack ref on each side of a reason holds the values of the
     /// pack, with the value of each macro in its place.
@@ -1266,6 +1302,33 @@ mod tests {
             .fetch_profile("u1", &Progress::silent())
             .unwrap_err();
         assert!(matches!(err, Error::Api { status: 500, .. }), "{err}");
+    }
+}
+
+/// A part of the config of a cluster that Palette serves on a route of its own.
+#[derive(Clone, Copy)]
+enum ConfigPart {
+    /// The role bindings of the cluster.
+    Rbacs,
+    /// The namespaces of the cluster, with the resources that each one can use.
+    Namespaces,
+}
+
+impl ConfigPart {
+    /// The last segment of the route of the part.
+    fn route(self) -> &'static str {
+        match self {
+            ConfigPart::Rbacs => "rbacs",
+            ConfigPart::Namespaces => "namespaces",
+        }
+    }
+
+    /// What the part holds, for a note.
+    fn noun(self) -> &'static str {
+        match self {
+            ConfigPart::Rbacs => "role bindings",
+            ConfigPart::Namespaces => "namespaces",
+        }
     }
 }
 

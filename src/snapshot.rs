@@ -367,14 +367,15 @@ impl ClusterTier {
     }
 }
 
-/// The tiers of a cluster record from the document of the cluster or the cluster group, and from
-/// its cloud config when it was read. `covered` limits `running` to the profiles that the record
-/// covers. A tier is carried only when Palette gives the part of the document that it reads.
+/// The tiers of a cluster record from the raw documents in `raw`: the document of the cluster or
+/// the cluster group, the role bindings and the namespaces of a cluster, and the cloud config when
+/// it was read. `covered` limits `running` to the profiles that the record covers. A tier is
+/// carried only when Palette gives the part of the document that it reads.
 pub fn cluster_tiers(
-    cluster: &Value,
-    cloud_config: Option<&Value>,
+    raw: &RawCluster,
     covered: &[AppliedProfile],
 ) -> BTreeMap<String, ClusterTier> {
+    let cluster = &raw.cluster;
     let mut tiers = BTreeMap::new();
     // Palette's own hashes of the spec that it applied to the cluster
     if let Some(apply) = cluster.pointer("/status/spcApply") {
@@ -394,13 +395,16 @@ pub fn cluster_tiers(
         tiers.insert("running".to_string(), running_tier(cluster, covered));
     }
     if let Some(config) = cluster.pointer("/spec/clusterConfig") {
-        tiers.insert("policy".to_string(), policy_tier(cluster, config));
+        tiers.insert(
+            "policy".to_string(),
+            ClusterTier::of(crate::policy::fields(raw, config)),
+        );
     }
     // the document of a cluster group has spec.clustersConfig, and no spec.clusterConfig
     if let Some(config) = cluster.pointer("/spec/clustersConfig") {
         tiers.insert("policy".to_string(), group_policy_tier(config));
     }
-    if let Some(cc) = cloud_config {
+    if let Some(cc) = &raw.cloud_config {
         tiers.insert(
             "shape".to_string(),
             ClusterTier::of(crate::shape::fields(cluster, cc)),
@@ -419,22 +423,6 @@ fn running_tier(cluster: &Value, covered: &[AppliedProfile]) -> ClusterTier {
         .collect();
     running.sort_by_key(|p| (s(p, "/profileUid"), s(p, "/name")));
     ClusterTier::of(Value::Array(running))
-}
-
-fn policy_tier(cluster: &Value, config: &Value) -> ClusterTier {
-    let field = |k: &str| config.get(k).cloned().unwrap_or(Value::Null);
-    ClusterTier::of(json!({
-        "osPatch": config
-            .pointer("/machineManagementConfig/osPatchConfig")
-            .cloned()
-            .unwrap_or(Value::Null),
-        "lifecycle": field("lifecycleConfig"),
-        "machineHealth": field("machineHealthConfig"),
-        "timezone": s(config, "/timezone"),
-        "resources": field("clusterResources"),
-        "rbac": field("clusterRbac"),
-        "fips": s(cluster, "/status/fips/mode"),
-    }))
 }
 
 /// The `policy` tier of a cluster group, from `spec.clustersConfig`: the config that the group
@@ -1468,7 +1456,7 @@ impl Snapshot {
                                 .collect()
                         })
                         .unwrap_or_default(),
-                    tiers: cluster_tiers(&raw.cluster, raw.cloud_config.as_ref(), &covered),
+                    tiers: cluster_tiers(raw, &covered),
                     pending: false,
                     kind: SubjectKind::Cluster,
                     members: Vec::new(),
