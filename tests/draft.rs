@@ -10,9 +10,11 @@ use strata::diff::VerifyStatus;
 use strata::error::Error;
 use strata::ops;
 use strata::progress::Progress;
-use strata::reference::Ref;
 use strata::render::{self, Format};
-use strata::snapshot::Snapshot;
+use strata::snapshot::{DRAFT_TEMPLATE, PUBLISHED_TEMPLATE, Snapshot};
+
+mod common;
+use common::snapshot_of;
 
 const UID: &str = "64f0000000000000000000d1";
 const RULES: &str = "64f00000000000000000a0e1";
@@ -137,15 +139,6 @@ fn serve(published: Value, draft: Value, content: impl Fn(&str) -> &'static str)
         )
 }
 
-fn snapshot(api: &MemoryApi, text: &str) -> strata::error::Result<Snapshot> {
-    ops::snapshot_for(
-        &Ref::parse(text),
-        || Ok(Palette::new(api)),
-        "t0",
-        &Progress::silent(),
-    )
-}
-
 fn manifest<'a>(snap: &'a Snapshot, name: &str) -> Option<&'a str> {
     snap.packs
         .iter()
@@ -161,11 +154,11 @@ fn values<'a>(snap: &'a Snapshot, pack: &str) -> &'a str {
 #[test]
 fn a_draft_records_apart_from_its_version_and_compare_names_the_layer_that_the_publish_changes() {
     let api = palette_with_draft();
-    let version = snapshot(&api, UID).unwrap();
-    let draft = snapshot(&api, &format!("{UID}@draft")).unwrap();
+    let version = snapshot_of(&api, UID).unwrap();
+    let draft = snapshot_of(&api, &format!("{UID}@draft")).unwrap();
 
-    assert_eq!(version.source.template, "published");
-    assert_eq!(draft.source.template, "draft");
+    assert_eq!(version.source.template, PUBLISHED_TEMPLATE);
+    assert_eq!(draft.source.template, DRAFT_TEMPLATE);
     assert_eq!(draft.source.reference, format!("{UID}@draft"));
     assert_eq!(draft.source.uid, UID);
     assert_ne!(version.root, draft.root, "the draft is another content");
@@ -192,11 +185,11 @@ fn a_draft_records_apart_from_its_version_and_compare_names_the_layer_that_the_p
 #[test]
 fn a_draft_by_name_and_version_reads_the_same_draft() {
     let api = palette_with_draft();
-    let by_uid = snapshot(&api, &format!("{UID}@draft")).unwrap();
-    let by_name = snapshot(&api, "lab-profile@1.0.0@draft").unwrap();
+    let by_uid = snapshot_of(&api, &format!("{UID}@draft")).unwrap();
+    let by_name = snapshot_of(&api, "lab-profile@1.0.0@draft").unwrap();
     assert_eq!(by_name.root, by_uid.root);
     assert_eq!(by_name.source.reference, "lab-profile@1.0.0@draft");
-    assert_eq!(by_name.source.template, "draft");
+    assert_eq!(by_name.source.template, DRAFT_TEMPLATE);
 }
 
 #[test]
@@ -207,7 +200,7 @@ fn a_version_with_no_draft_is_the_error_no_draft_and_reads_no_manifest_by_uid() 
     );
     let empty = json!({"cloudType": "", "type": "", "packs": []});
     let api = serve(published, empty, |_| PUBLISHED_RULES);
-    let err = snapshot(&api, &format!("{UID}@draft")).unwrap_err();
+    let err = snapshot_of(&api, &format!("{UID}@draft")).unwrap_err();
     assert!(
         matches!(&err, Error::NoDraft { uid, .. } if uid == UID),
         "{err}"
@@ -216,7 +209,7 @@ fn a_version_with_no_draft_is_the_error_no_draft_and_reads_no_manifest_by_uid() 
     assert!(err.to_string().contains("has no draft"), "{err}");
 
     // the record of the version needs no more requests than before
-    let version = snapshot(&api, UID).unwrap();
+    let version = snapshot_of(&api, UID).unwrap();
     assert_eq!(manifest(&version, "rules"), Some(PUBLISHED_RULES));
     let path = format!("/v1/clusterprofiles/{UID}/packs/team-rules/manifests/{RULES}");
     assert_eq!(api.calls(&path), 0);
@@ -235,17 +228,17 @@ fn a_version_that_was_never_published_records_the_manifest_content_of_its_draft(
         format!("/v1/clusterprofiles/{UID}/packs/team-rules/manifests/{RULES}"),
         entity(RULES, "rules", "", DRAFT_RULES),
     );
-    let snap = snapshot(&api, UID).unwrap();
-    assert_eq!(snap.source.template, "draft");
+    let snap = snapshot_of(&api, UID).unwrap();
+    assert_eq!(snap.source.template, DRAFT_TEMPLATE);
     assert_eq!(manifest(&snap, "rules"), Some(DRAFT_RULES));
-    let draft = snapshot(&api, &format!("{UID}@draft")).unwrap();
+    let draft = snapshot_of(&api, &format!("{UID}@draft")).unwrap();
     assert_eq!(draft.root, snap.root, "the draft is the only template");
 }
 
 #[test]
 fn the_candidate_of_a_draft_holds_the_content_of_the_draft() {
     let api = palette_with_draft();
-    let draft = snapshot(&api, &format!("{UID}@draft")).unwrap();
+    let draft = snapshot_of(&api, &format!("{UID}@draft")).unwrap();
     let c = Candidate::from_snapshot(&draft).unwrap();
     let text = strata::candidate::to_yaml(&c).unwrap();
     assert!(text.contains("audit-log-maxage: \"90\""), "{text}");
@@ -257,8 +250,8 @@ fn the_candidate_of_a_draft_holds_the_content_of_the_draft() {
 #[test]
 fn a_record_of_the_draft_verifies_against_the_version_once_the_draft_is_published() {
     let api = palette_with_draft();
-    let version = snapshot(&api, UID).unwrap();
-    let draft = snapshot(&api, &format!("{UID}@draft")).unwrap();
+    let version = snapshot_of(&api, UID).unwrap();
+    let draft = snapshot_of(&api, &format!("{UID}@draft")).unwrap();
     let r = render::renderer(Format::Terminal, Paint::off(), false);
 
     // a version and its draft: not an edit in place
@@ -314,7 +307,7 @@ fn a_record_of_the_draft_verifies_against_the_version_once_the_draft_is_publishe
         "the record of the version from before the publish drifts"
     );
     assert!(matches!(
-        snapshot(&after, &format!("{UID}@draft")),
+        snapshot_of(&after, &format!("{UID}@draft")),
         Err(Error::NoDraft { .. })
     ));
 }
@@ -333,7 +326,7 @@ fn a_record_of_the_version_takes_nothing_from_a_pack_that_only_the_draft_has() {
     draft["packs"][0]["tag"] = json!("1.30.7");
     draft["packs"][0]["digest"] = json!("sha256:k8s1307");
     let api = serve(published, draft, |_| "");
-    let version = snapshot(&api, UID).unwrap();
+    let version = snapshot_of(&api, UID).unwrap();
     let k8s = version
         .packs
         .iter()
@@ -344,7 +337,7 @@ fn a_record_of_the_version_takes_nothing_from_a_pack_that_only_the_draft_has() {
         k8s.hash.upstream_source, "none",
         "packs/manifests lists the 1.30.7 of the draft, and its digest is not the digest of 1.30.6"
     );
-    let draft = snapshot(&api, &format!("{UID}@draft")).unwrap();
+    let draft = snapshot_of(&api, &format!("{UID}@draft")).unwrap();
     let k8s = draft.packs.iter().find(|p| p.name == "kubernetes").unwrap();
     assert_eq!(k8s.version, "1.30.7");
     assert_eq!(k8s.hash.upstream_source, "packRef.digest");

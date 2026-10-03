@@ -5,6 +5,7 @@ use std::path::Path;
 
 use serde_json::Value;
 
+use super::mask::MASKED;
 use crate::error::{Error, Result};
 
 /// The three raw API responses a snapshot is built from, and the project they were fetched in.
@@ -120,9 +121,6 @@ fn read_json_file(dir: &Path, name: &str) -> Result<Value> {
 /// The fields of a notification event that hold the full values of a pack or an app tier. Palette
 /// serves them with no mask, also the fields that `passwordFields` names.
 const EVENT_VALUE_FIELDS: [&str; 3] = ["packValues", "appTierValues", "appTierProperties"];
-
-/// The text that stands in for a masked value, the same text that Palette writes in its log.
-const MASKED: &str = "********";
 
 /// A copy of `notifications` with each value field of each event masked, so a raw directory holds
 /// no secret of a pack. The mask covers all of the values, not only the fields that

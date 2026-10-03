@@ -760,15 +760,13 @@ fn cmd_snapshot(a: &SnapshotArgs) -> Result<ExitCode> {
         _ => {}
     }
     let snap = match (&a.from_candidate, &a.from_raw) {
-        (Some(file), _) if a.validate => ops::snapshot_from_candidate_validated(
+        (Some(file), _) => ops::snapshot_from_candidate(
             file,
+            a.validate,
             || connect(progress, None),
             &now,
             &progress,
         )?,
-        (Some(file), _) => {
-            ops::snapshot_from_candidate(file, || connect(progress, None), &now, &progress)?
-        }
         (None, Some(dir)) => {
             let reference = a.r#ref.clone().unwrap_or_else(|| dir.display().to_string());
             ops::snapshot_from_dir(dir, &reference, &now)?
@@ -882,12 +880,7 @@ fn cmd_snapshot(a: &SnapshotArgs) -> Result<ExitCode> {
                     });
                 }
                 Ref::Draft { id, version } => {
-                    let uid = match version {
-                        Some(version) => palette.resolve(id, version)?,
-                        None => id.clone(),
-                    };
-                    let raw = palette.fetch_profile(&uid, &progress)?;
-                    Snapshot::from_raw_draft(&raw, text, &now)?
+                    ops::draft_snapshot(&palette, id, version.as_deref(), text, &now, &progress)?
                 }
                 Ref::Uid(_) | Ref::NameVersion { .. } => {
                     let uid = match &reference {
@@ -912,19 +905,11 @@ fn cmd_snapshot(a: &SnapshotArgs) -> Result<ExitCode> {
     // the answer of Palette is what --validate asks for, so -q does not hide it; it goes to
     // standard error, beside the record on standard output
     if let Some(v) = &snap.source.palette_validation {
-        if v.accepts {
-            eprintln!("palette    accepts");
-        }
-        for e in &v.errors {
-            eprintln!("palette    refuses: {}", e.line());
-        }
-        if !v.accepts {
-            return Err(Error::PaletteRefuses {
-                reference: snap.source.reference.clone(),
-                errors: v.errors.clone(),
-            });
+        for line in strata::validation::answer_lines(&v.errors) {
+            eprintln!("palette    {line}");
         }
     }
+    ops::require_acceptance(&snap)?;
     let text = snap.to_json(a.compact)?;
     match &a.output {
         Some(path) => {

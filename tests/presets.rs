@@ -5,10 +5,11 @@ use std::fs;
 use std::path::Path;
 
 use serde_json::{Value, json};
-use strata::api::{MemoryApi, Palette};
-use strata::ops;
-use strata::progress::Progress;
+use strata::api::MemoryApi;
 use strata::snapshot::{PresetOption, Snapshot};
+
+mod common;
+use common::candidate_snapshot;
 
 const REGISTRY: &str = "reg-public";
 
@@ -46,27 +47,21 @@ fn template() -> Value {
     }]}})
 }
 
-fn snapshot(dir: &Path, values: &str, api: &MemoryApi) -> Snapshot {
+fn snapshot_with(dir: &Path, values: &str, api: &MemoryApi) -> Snapshot {
     let file = dir.join("fred.yaml");
     let candidate = json!({
         "name": "fred", "version": "1.0.0", "type": "add-on", "registryUid": REGISTRY,
         "layers": [{"name": "barney", "version": "1.0.0", "values": values}],
     });
     fs::write(&file, serde_yaml::to_string(&candidate).unwrap()).unwrap();
-    ops::snapshot_from_candidate(
-        &file,
-        || Ok(Palette::new(api.clone())),
-        "t0",
-        &Progress::silent(),
-    )
-    .unwrap()
+    candidate_snapshot(&file, api).unwrap()
 }
 
 #[test]
 fn values_that_select_a_template_option_record_the_selection_and_keep_the_root() {
     let dir = tempfile::tempdir().unwrap();
     let with = registry(Some(template()));
-    let selects = snapshot(dir.path(), "a:\n  b: x\n", &with);
+    let selects = snapshot_with(dir.path(), "a:\n  b: x\n", &with);
     assert_eq!(
         selects.packs[0].preset_options,
         vec![PresetOption {
@@ -82,7 +77,7 @@ fn values_that_select_a_template_option_record_the_selection_and_keep_the_root()
     );
 
     // the selection is outside the root: the same values with no template give the same root
-    let without = snapshot(dir.path(), "a:\n  b: x\n", &registry(None));
+    let without = snapshot_with(dir.path(), "a:\n  b: x\n", &registry(None));
     assert!(without.packs[0].preset_options.is_empty());
     assert_eq!(selects.root, without.root);
     assert_eq!(selects.content_digest(), without.content_digest());
@@ -93,7 +88,7 @@ fn values_that_name_no_option_or_have_no_target_key_record_nothing() {
     let dir = tempfile::tempdir().unwrap();
     let with = registry(Some(template()));
     for values in ["a:\n  b: z\n", "c: 1\n"] {
-        let snap = snapshot(dir.path(), values, &with);
+        let snap = snapshot_with(dir.path(), values, &with);
         assert!(
             snap.packs[0].preset_options.is_empty(),
             "{values:?} selects no option"
@@ -114,7 +109,7 @@ fn a_number_or_a_list_item_at_the_target_key_is_read_as_text() {
         {"name": "first", "targetKey": "a.list.0.mode", "options": {"open": {"label": "Open"}}},
         {"name": "flag", "targetKey": "a.flag", "options": {"true": {"label": "On"}}},
     ]}});
-    let snap = snapshot(
+    let snap = snapshot_with(
         dir.path(),
         "a:\n  n: 3\n  flag: true\n  list:\n    - mode: open\n",
         &registry(Some(template)),

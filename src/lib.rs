@@ -17,6 +17,7 @@
 //! - [`candidate`]: a profile version described by a file, before it exists in Palette.
 //! - [`snapshot`]: the `strata-snapshot/1` document and how it is built from raw API responses.
 //! - [`diff`]: the `strata-diff/1` document, the leaf diff, and the impact rules.
+//! - [`validation`]: the answers of Palette when strata asks whether it takes the packs.
 //! - [`render`]: the terminal, markdown, and JSON renderers behind one trait.
 //! - [`ops`]: the operations the CLI exposes, free of argument parsing and exit codes.
 //! - [`error`], [`progress`], [`color`], and [`layer`]: the error type with its exit codes and
@@ -77,6 +78,7 @@ pub mod progress;
 pub mod reference;
 pub mod render;
 pub mod snapshot;
+pub mod validation;
 pub mod version;
 
 pub use error::{Error, Result};

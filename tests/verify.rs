@@ -3466,6 +3466,7 @@ fn a_candidate_built_from_real_registry_responses_has_the_root_of_the_published_
 
         let snap = ops::snapshot_from_candidate(
             &file,
+            false,
             || Ok(Palette::new(api.clone())),
             "t0",
             &Progress::silent(),
@@ -3582,6 +3583,7 @@ fn a_candidate_carries_values_and_manifests_inline_or_from_files_next_to_it() {
     let api = serve_registry_for_b(dir.path());
     let snap = ops::snapshot_from_candidate(
         &file,
+        false,
         || Ok(Palette::new(api.clone())),
         "t0",
         &Progress::silent(),
@@ -3610,6 +3612,7 @@ fn a_candidate_carries_values_and_manifests_inline_or_from_files_next_to_it() {
     write_yaml(&defaults, &doc);
     let snap = ops::snapshot_from_candidate(
         &defaults,
+        false,
         || Ok(Palette::new(api.clone())),
         "t0",
         &Progress::silent(),
@@ -3661,8 +3664,8 @@ fn candidate_errors_name_what_is_wrong() {
         "missing-values.yaml",
         k8s(serde_json::json!({"valuesFile": "values/nope.yaml"})),
     );
-    let err =
-        ops::snapshot_from_candidate(&f, never_connect, "t0", &Progress::silent()).unwrap_err();
+    let err = ops::snapshot_from_candidate(&f, false, never_connect, "t0", &Progress::silent())
+        .unwrap_err();
     assert!(
         matches!(&err, Error::Io { path, .. } if path.ends_with("values/nope.yaml")),
         "{err}"
@@ -3673,8 +3676,8 @@ fn candidate_errors_name_what_is_wrong() {
         "both.yaml",
         k8s(serde_json::json!({"values": "a: 1", "valuesFile": "v.yaml"})),
     );
-    let err =
-        ops::snapshot_from_candidate(&f, never_connect, "t0", &Progress::silent()).unwrap_err();
+    let err = ops::snapshot_from_candidate(&f, false, never_connect, "t0", &Progress::silent())
+        .unwrap_err();
     assert!(matches!(err, Error::CandidateInvalid { .. }), "{err}");
     assert!(err.to_string().contains("kubernetes"), "{err}");
 
@@ -3682,8 +3685,8 @@ fn candidate_errors_name_what_is_wrong() {
         "typo.yaml",
         k8s(serde_json::json!({"valuesfile": "v.yaml"})),
     );
-    let err =
-        ops::snapshot_from_candidate(&f, never_connect, "t0", &Progress::silent()).unwrap_err();
+    let err = ops::snapshot_from_candidate(&f, false, never_connect, "t0", &Progress::silent())
+        .unwrap_err();
     assert!(matches!(err, Error::CandidateInvalid { .. }), "{err}");
     assert!(err.to_string().contains("valuesfile"), "{err}");
 
@@ -3691,8 +3694,8 @@ fn candidate_errors_name_what_is_wrong() {
         "no-registry.yaml",
         serde_json::json!({"name": "p", "version": "1", "layers": [{"name": "kubernetes", "version": "1.30.2"}]}),
     );
-    let err =
-        ops::snapshot_from_candidate(&f, never_connect, "t0", &Progress::silent()).unwrap_err();
+    let err = ops::snapshot_from_candidate(&f, false, never_connect, "t0", &Progress::silent())
+        .unwrap_err();
     assert!(matches!(err, Error::CandidateInvalid { .. }), "{err}");
 
     // registry problems need the registry
@@ -3702,6 +3705,7 @@ fn candidate_errors_name_what_is_wrong() {
     );
     let err = ops::snapshot_from_candidate(
         &f,
+        false,
         || Ok(Palette::new(api.clone())),
         "t0",
         &Progress::silent(),
@@ -3726,6 +3730,7 @@ fn candidate_errors_name_what_is_wrong() {
     let f = write("unknown-tag.yaml", k8s(serde_json::json!({"tag": "2.x"})));
     let err = ops::snapshot_from_candidate(
         &f,
+        false,
         || Ok(Palette::new(api.clone())),
         "t0",
         &Progress::silent(),
@@ -3744,6 +3749,7 @@ fn candidate_errors_name_what_is_wrong() {
     );
     let err = ops::snapshot_from_candidate(
         &f,
+        false,
         || Ok(Palette::new(named.clone())),
         "t0",
         &Progress::silent(),
@@ -3759,6 +3765,7 @@ fn candidate_errors_name_what_is_wrong() {
     );
     let snap = ops::snapshot_from_candidate(
         &f,
+        false,
         || Ok(Palette::new(api.clone())),
         "t0",
         &Progress::silent(),
@@ -3819,6 +3826,7 @@ fn an_explicit_tag_equal_to_the_version_is_accepted_as_palette_does() {
         );
         ops::snapshot_from_candidate(
             &file,
+            false,
             || Ok(Palette::new(api.clone())),
             "t0",
             &Progress::silent(),
@@ -4234,6 +4242,7 @@ fn a_candidate_written_from_a_record_reproduces_its_root_inline_or_with_files() 
     for file in [&inline, &with_files] {
         let snap = ops::snapshot_from_candidate(
             file,
+            false,
             || Ok(Palette::new(api.clone())),
             "t1",
             &Progress::silent(),
@@ -4295,6 +4304,7 @@ fn a_candidate_of_a_manifest_pack_is_the_published_version_but_for_the_minted_ui
     // the API knows no path: a manifest layer asks the registry nothing
     let snap = ops::snapshot_from_candidate(
         &file,
+        false,
         || Ok(Palette::new(MemoryApi::new())),
         "t1",
         &Progress::silent(),
@@ -4361,6 +4371,7 @@ fn a_candidate_stops_matching_a_version_edited_in_place_and_same_release_names_t
     candidate::write(&Candidate::from_snapshot(&recorded_b).unwrap(), &file, None).unwrap();
     let from_candidate = ops::snapshot_from_candidate(
         &file,
+        false,
         || Ok(Palette::new(serve_registry_for_b(dir.path()))),
         "t1",
         &Progress::silent(),
@@ -9234,8 +9245,9 @@ fn snapshot_validate_asks_palette_whether_it_takes_the_packs_of_a_candidate() {
         "displayName": "kubernetes",
         "errors": [{"code": "DependencyPackWithMinVersionRequired", "message": message}]}]}});
     let api = registry.clone().with(path, answer);
-    let snap = ops::snapshot_from_candidate_validated(
+    let snap = ops::snapshot_from_candidate(
         &file,
+        true,
         || Ok(Palette::new(&api)),
         "t1",
         &Progress::silent(),
@@ -9295,8 +9307,9 @@ fn snapshot_validate_asks_palette_whether_it_takes_the_packs_of_a_candidate() {
     let api = registry
         .clone()
         .with(path, serde_json::json!({"packs": {"results": []}}));
-    let snap = ops::snapshot_from_candidate_validated(
+    let snap = ops::snapshot_from_candidate(
         &file,
+        true,
         || Ok(Palette::new(api.clone())),
         "t1",
         &Progress::silent(),
@@ -9311,6 +9324,7 @@ fn snapshot_validate_asks_palette_whether_it_takes_the_packs_of_a_candidate() {
     // without --validate, the record has no such field
     let plain = ops::snapshot_from_candidate(
         &file,
+        false,
         || Ok(Palette::new(registry.clone())),
         "t1",
         &Progress::silent(),

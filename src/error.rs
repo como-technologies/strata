@@ -253,7 +253,7 @@ pub enum Error {
         /// The ref or the candidate file, as given.
         reference: String,
         /// Each error that Palette gave, sorted.
-        errors: Vec<crate::diff::PaletteRefusal>,
+        errors: Vec<crate::validation::PaletteRefusal>,
     },
     /// A candidate file does not parse or breaks a rule of the format.
     #[error("'{}': {message}", path.display())]
@@ -812,7 +812,7 @@ mod tests {
             },
             Error::PaletteRefuses {
                 reference: "aws-stack.yaml".into(),
-                errors: vec![crate::diff::PaletteRefusal {
+                errors: vec![crate::validation::PaletteRefusal {
                     pack: "kubernetes".into(),
                     code: "DependencyPackWithMinVersionRequired".into(),
                     message: "Pack 'cni-cilium-oss' is required with minimum compatible version \

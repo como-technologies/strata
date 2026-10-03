@@ -672,16 +672,10 @@ pub(crate) fn palette_repave_lines(d: &Diff) -> Vec<String> {
 /// Palette's answer to `--validate`: `accepts`, or one line for each error, `refuses:
 /// PackDependencyNotFound strata-live-pack: <message>`. Empty without the option.
 pub(crate) fn palette_validation_lines(d: &Diff) -> Vec<String> {
-    let Some(v) = &d.palette_validation else {
-        return Vec::new();
-    };
-    if v.errors.is_empty() {
-        return vec!["accepts".to_string()];
-    }
-    v.errors
-        .iter()
-        .map(|e| format!("refuses: {}", e.line()))
-        .collect()
+    d.palette_validation
+        .as_ref()
+        .map(|v| crate::validation::answer_lines(&v.errors))
+        .unwrap_or_default()
 }
 
 /// The note when the impact table and Palette disagree about a repave.

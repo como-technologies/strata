@@ -67,15 +67,15 @@ where
         }
         Ref::Draft { id, version } => {
             let palette = connect()?;
-            let uid = match version {
-                Some(version) => palette.resolve(id, version)?,
-                None => id.clone(),
-            };
-            let raw = palette.fetch_profile(&uid, progress)?;
-            Ok(
-                Snapshot::from_raw_draft(&raw, &reference.to_string(), fetched_at)?
-                    .with_project(palette.project_uid()),
-            )
+            Ok(draft_snapshot(
+                &palette,
+                id,
+                version.as_deref(),
+                &reference.to_string(),
+                fetched_at,
+                progress,
+            )?
+            .with_project(palette.project_uid()))
         }
         Ref::Pack {
             registry,
@@ -262,11 +262,30 @@ fn narrowed(r: &Ref, other: &Snapshot) -> Ref {
     }
 }
 
+/// Build a snapshot of the draft of a profile version, for `<ref>@draft`. `id` is a uid when
+/// there is no `version`, and else a name at `version`. The snapshot has no project: the caller
+/// sets it.
+pub fn draft_snapshot<A: PaletteApi>(
+    palette: &Palette<A>,
+    id: &str,
+    version: Option<&str>,
+    reference: &str,
+    fetched_at: &str,
+    progress: &Progress,
+) -> Result<Snapshot> {
+    let uid = palette.profile_uid(id, version)?;
+    let raw = palette.fetch_profile(&uid, progress)?;
+    Snapshot::from_raw_draft(&raw, reference, fetched_at)
+}
+
 /// Build a snapshot of a candidate file: read and check it (no network), then resolve its packs
 /// through the [`Palette`] that `connect` returns. The snapshot has `source.template` `candidate`
-/// and no uid.
+/// and no uid. With `validate`, strata then asks Palette whether it takes the packs of the
+/// candidate, as [`profile_validation`] does. `source.paletteValidation` of the record holds the
+/// answer: the caller decides what a refusal does.
 pub fn snapshot_from_candidate<A, F>(
     path: &Path,
+    validate: bool,
     connect: F,
     fetched_at: &str,
     progress: &Progress,
@@ -275,12 +294,13 @@ where
     A: PaletteApi,
     F: FnOnce() -> Result<Palette<A>>,
 {
-    snapshot_from_loaded(
-        &crate::candidate::load(path)?,
-        connect,
-        fetched_at,
-        progress,
-    )
+    let loaded = crate::candidate::load(path)?;
+    let palette = connect()?;
+    let mut snap = candidate_snapshot(&loaded, &palette, fetched_at, progress)?;
+    if validate {
+        snap.source.palette_validation = Some(profile_validation(&palette, &snap)?);
+    }
+    Ok(snap)
 }
 
 /// Build a snapshot of a candidate that is checked and in memory: resolve its packs through the
@@ -298,26 +318,6 @@ where
     F: FnOnce() -> Result<Palette<A>>,
 {
     candidate_snapshot(loaded, &connect()?, fetched_at, progress)
-}
-
-/// [`snapshot_from_candidate`], and then ask Palette whether it takes the packs of the candidate,
-/// as [`profile_validation`] does. `source.paletteValidation` of the record holds the answer: the
-/// caller decides what a refusal does.
-pub fn snapshot_from_candidate_validated<A, F>(
-    path: &Path,
-    connect: F,
-    fetched_at: &str,
-    progress: &Progress,
-) -> Result<Snapshot>
-where
-    A: PaletteApi,
-    F: FnOnce() -> Result<Palette<A>>,
-{
-    let loaded = crate::candidate::load(path)?;
-    let palette = connect()?;
-    let mut snap = candidate_snapshot(&loaded, &palette, fetched_at, progress)?;
-    snap.source.palette_validation = Some(profile_validation(&palette, &snap)?);
-    Ok(snap)
 }
 
 fn candidate_snapshot<A: PaletteApi>(

@@ -184,6 +184,20 @@ fn packs_mut(doc: &mut Value) -> impl Iterator<Item = &mut Value> {
         .flatten()
 }
 
+/// A refusal in the answer of `validate/packs` for a cluster: the pack `pack` of the profile
+/// `profile` requires the pack `required` at `version` or newer.
+#[derive(Debug, Clone, Copy)]
+pub struct PackRefusal<'a> {
+    /// The uid of the profile that holds the pack.
+    pub profile: &'a str,
+    /// The name of the pack that has the requirement.
+    pub pack: &'a str,
+    /// The name of the pack that it requires.
+    pub required: &'a str,
+    /// The minimum version of the required pack.
+    pub version: &'a str,
+}
+
 /// The tenant directory, and the repository that holds the example pack data.
 pub struct Tenant {
     root: PathBuf,
@@ -1334,27 +1348,22 @@ impl Tenant {
         );
     }
 
-    /// The answer of `POST /v1/spectroclusters/{uid}/validate/packs` for a cluster. A refusal is
-    /// `(profile, pack, required, version)`: `pack` of `profile` requires `required` at `version`
-    /// or newer, and the cluster runs an older one. Palette gives the error, with its code and
+    /// The answer of `POST /v1/spectroclusters/{uid}/validate/packs` for a cluster. A
+    /// [`PackRefusal`] says that a pack of a profile requires another pack at a minimum version,
+    /// and the cluster runs an older one. Palette gives the error, with its code and
     /// its message, under the profile, and gives no profile when it accepts. The stand-in gives
     /// one answer for every request; it does not check anything.
-    pub fn packs_answer(
-        &self,
-        project: &str,
-        cluster: &str,
-        refusal: Option<(&str, &str, &str, &str)>,
-    ) {
+    pub fn packs_answer(&self, project: &str, cluster: &str, refusal: Option<PackRefusal>) {
         let profiles: Vec<Value> = refusal
-            .map(|(profile, pack, required, version)| {
-                json!({"uid": profile, "packs": {"results": [{
-                    "name": pack,
-                    "displayName": pack,
+            .map(|r| {
+                json!({"uid": r.profile, "packs": {"results": [{
+                    "name": r.pack,
+                    "displayName": r.pack,
                     "errors": [{
                         "code": "DependencyPackWithMinVersionRequired",
                         "message": format!(
-                            "Pack '{required}' is required with minimum compatible version \
-                             '{version}'"
+                            "Pack '{}' is required with minimum compatible version '{}'",
+                            r.required, r.version
                         ),
                     }],
                 }]}})

@@ -2,7 +2,7 @@
 //! per-pack hashes, canonical values and raw contents. Byte-compatible with the snapshots
 //! written by the bash reference implementation.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
 use schemars::JsonSchema;
@@ -12,6 +12,7 @@ use serde_json::{Map, Value, json};
 use crate::api::{RawCluster, RawProfile};
 use crate::canon::{Canon, canon_yaml, canonical_json, hash_yaml, sha256_hex};
 use crate::error::{Error, Result};
+pub use crate::validation::ProfileValidation;
 
 /// Schema id written into every snapshot.
 pub const SNAPSHOT_SCHEMA: &str = "strata-snapshot/1";
@@ -141,30 +142,6 @@ pub struct Source {
     /// takes the packs of this content.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub palette_validation: Option<ProfileValidation>,
-}
-
-/// Palette's answer to `POST /v1/clusterprofiles/validate/packs` for a candidate, or to `POST
-/// /v1/clusterprofiles/{uid}/validate/packs` for a version that Palette holds.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct ProfileValidation {
-    /// True when Palette gives no error.
-    pub accepts: bool,
-    /// Each error that Palette gives, sorted by pack, code, and message.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub errors: Vec<crate::diff::PaletteRefusal>,
-}
-
-impl ProfileValidation {
-    /// The answer with these errors, sorted and with no copy. It accepts when there is none.
-    pub fn refused(mut errors: Vec<crate::diff::PaletteRefusal>) -> ProfileValidation {
-        errors.sort();
-        errors.dedup();
-        ProfileValidation {
-            accepts: errors.is_empty(),
-            errors,
-        }
-    }
 }
 
 /// The registry pack a snapshot was taken from.
@@ -858,10 +835,12 @@ fn root_of(variables_hash: &str, packs: &[Pack]) -> String {
 }
 
 fn s(v: &Value, ptr: &str) -> String {
-    v.pointer(ptr)
-        .and_then(Value::as_str)
-        .unwrap_or("")
-        .to_string()
+    str_at(v, ptr).to_string()
+}
+
+/// The string at `ptr` in `v`, or empty when there is none.
+fn str_at<'a>(v: &'a Value, ptr: &str) -> &'a str {
+    v.pointer(ptr).and_then(Value::as_str).unwrap_or("")
 }
 
 fn arr(v: &Value, ptr: &str) -> Vec<Value> {
@@ -939,14 +918,14 @@ fn manifests_of_template(pk: &Value, entities: &Value, template: &str) -> Vec<Va
         .iter()
         .map(|m| {
             let uid = s(m, "/uid");
-            let entity = entities.get(&uid).cloned().unwrap_or(Value::Null);
-            let edited = !s(&entity, &format!("/spec/{template}/content")).is_empty();
+            let entity = entities.get(&uid).unwrap_or(&Value::Null);
+            let edited = !s(entity, &format!("/spec/{template}/content")).is_empty();
             let from = if edited { template } else { PUBLISHED_TEMPLATE };
-            let content = s(&entity, &format!("/spec/{from}/content"));
+            let content = s(entity, &format!("/spec/{from}/content"));
             json!({
-                "name": or(s(m, "/name"), &s(&entity, "/metadata/name")),
+                "name": or(s(m, "/name"), &s(entity, "/metadata/name")),
                 "uid": uid,
-                "digest": s(&entity, &format!("/spec/{from}/digest")),
+                "digest": s(entity, &format!("/spec/{from}/digest")),
                 "content": content,
             })
         })
@@ -1176,8 +1155,8 @@ impl Snapshot {
         if crate::api::has_draft(prof) && template == PUBLISHED_TEMPLATE {
             // packs/manifests holds the packs of the draft: keep only the entries of the packs
             // that the published template holds, by pack uid
-            let uids: Vec<String> = tpl_packs.iter().map(|pk| s(pk, "/packUid")).collect();
-            mpacks.retain(|m| uids.contains(&s(m, "/metadata/uid")));
+            let uids: BTreeSet<&str> = tpl_packs.iter().map(|pk| str_at(pk, "/packUid")).collect();
+            mpacks.retain(|m| uids.contains(str_at(m, "/metadata/uid")));
         }
 
         let tags: BTreeMap<String, String> = prof

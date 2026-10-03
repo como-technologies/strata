@@ -107,6 +107,15 @@ impl<A: PaletteApi> Palette<A> {
             })
     }
 
+    /// The uid of a profile that a ref names: `id` is a uid when there is no `version`, and else
+    /// a name that [`Palette::resolve`] finds at `version`.
+    pub(crate) fn profile_uid(&self, id: &str, version: Option<&str>) -> Result<String> {
+        match version {
+            Some(version) => self.resolve(id, version),
+            None => Ok(id.to_string()),
+        }
+    }
+
     /// Find the uid of the highest version of `name` in the current scope, by
     /// [`version::compare`]. A name with no versions is [`Error::ProfileNotFound`].
     pub fn resolve_latest(&self, name: &str) -> Result<String> {
@@ -364,28 +373,15 @@ impl<A: PaletteApi> Palette<A> {
         manifests: &mut Value,
         progress: &Progress,
     ) -> Result<()> {
-        let pack_uid = |pk: &Value| {
-            pk.get("packUid")
-                .and_then(Value::as_str)
-                .filter(|u| !u.is_empty() && u.bytes().all(|b| b.is_ascii_alphanumeric()))
-                .map(str::to_string)
-        };
-        let mut uids: Vec<String> = profile
-            .pointer("/spec/draft/packs")
-            .and_then(Value::as_array)
-            .into_iter()
-            .flatten()
-            .filter(|pk| pk.get("type").and_then(Value::as_str) != Some("manifest"))
-            .filter_map(pack_uid)
-            .collect();
-        uids.sort();
-        uids.dedup();
-        let mut secrets: std::collections::BTreeMap<String, Vec<String>> = Default::default();
-        for uid in uids {
+        let mut secrets = std::collections::BTreeMap::new();
+        for uid in mask::draft_pack_uids(profile) {
             progress.note(&format!(
                 "reading the schema of pack {uid} to mask the draft"
             ));
-            match self.api.get_json(&format!("/v1/packs/{uid}")) {
+            match self
+                .api
+                .get_json(&format!("/v1/packs/{}", query_value(&uid)))
+            {
                 Ok(pack) => {
                     let fields = mask::password_fields(&pack, &uid);
                     if !fields.is_empty() {
@@ -396,40 +392,7 @@ impl<A: PaletteApi> Palette<A> {
                 Err(e) => return Err(e),
             }
         }
-        if secrets.is_empty() {
-            return Ok(());
-        }
-        let mask_at = |v: &mut Value, fields: &[String]| {
-            if let Some(text) = v.as_str().filter(|t| !t.is_empty()) {
-                *v = Value::String(mask::mask_values(text, fields));
-            }
-        };
-        if let Some(packs) = profile
-            .pointer_mut("/spec/draft/packs")
-            .and_then(Value::as_array_mut)
-        {
-            for pk in packs {
-                if let Some(fields) = pack_uid(pk).and_then(|u| secrets.get(&u))
-                    && let Some(v) = pk.get_mut("values")
-                {
-                    mask_at(v, fields);
-                }
-            }
-        }
-        if let Some(packs) = manifests
-            .pointer_mut("/spec/packs")
-            .and_then(Value::as_array_mut)
-        {
-            for pk in packs {
-                let uid = pk.pointer("/metadata/uid").and_then(Value::as_str);
-                if let Some(fields) = uid.and_then(|u| secrets.get(u))
-                    && let Some(v) = pk.pointer_mut("/spec/values")
-                {
-                    mask_at(v, fields);
-                }
-            }
-        }
-        Ok(())
+        mask::mask_draft_packs(profile, manifests, &secrets)
     }
 
     /// Each manifest of the two templates of a profile that has a draft, by manifest uid:
