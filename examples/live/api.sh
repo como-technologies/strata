@@ -62,14 +62,18 @@
 #       Make a saved tag filter NAME of the tenant that selects the label KEY=VALUE, and print its
 #       uid.
 #   api.sh filter-delete UID
-#   api.sh app-profile-create NAME
-#       Make an app profile NAME@1.0.0 with one manifest tier, and print its uid.
+#   api.sh app-profile-create NAME [ORDER...]
+#       Make an app profile NAME@1.0.0 with one manifest tier, and print its uid. With ORDERs,
+#       make one manifest tier for each ORDER in its place: tier1 with the install order of the
+#       first ORDER, tier2 with the second, and so on. The content of a tier does not name the
+#       app profile, so two app profiles with the same number of ORDERs have the same tiers.
 #   api.sh app-profile-edit UID FROM TO
 #       Replace FROM with TO in the manifest of the app profile, by a plain update.
 #   api.sh app-profile-order UID ORDER
 #       Give the first tier of the app profile the install order ORDER, by a plain update of
 #       that tier. The update sends the values and the properties of the tier as they are, and
-#       no manifest, so the manifests of the tier stay.
+#       no manifest, so the manifests of the tier stay. Then read the tier again: exit 1 when
+#       its order is not ORDER. Palette answers the update with 2xx and keeps the order.
 #   api.sh app-profile-delete UID
 #   api.sh sync-oci REGISTRY_UID
 #       Ask Palette to read an OCI pack registry in ECR again, and wait until that sync ends.
@@ -467,12 +471,19 @@ filter_delete() {
 # app_profile_create NAME: an app profile NAME@1.0.0 with one manifest tier, `config`, whose
 # manifest is a ConfigMap with `edited: "no"`. Prints its uid.
 app_profile_create() {
-  local name=${1:-} body
-  [ -n "$name" ] || die "usage: api.sh app-profile-create NAME"
+  local name=${1:-} body o
+  [ -n "$name" ] || die "usage: api.sh app-profile-create NAME [ORDER...]"
+  shift
+  for o in "$@"; do [[ "$o" =~ ^[0-9]+$ ]] || die "usage: api.sh app-profile-create NAME [ORDER...]"; done
   body=$(mktemp); trap 'rm -f "${body:-}"' RETURN
-  jq -n --arg n "$name" '{metadata: {name: $n}, spec: {version: "1.0.0", template: {appTiers: [
-      {name: "config", type: "manifest", manifests: [{name: "config",
-        content: ("apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: " + $n + "\ndata:\n  edited: \"no\"\n")}]}]}}}' > "$body"
+  # tier(NAME; CONFIGMAP): a manifest tier NAME whose ConfigMap is CONFIGMAP
+  jq -n --arg n "$name" '
+    def tier($t; $c): {name: $t, type: "manifest", manifests: [{name: $t,
+      content: ("apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: " + $c + "\ndata:\n  edited: \"no\"\n")}]};
+    {metadata: {name: $n}, spec: {version: "1.0.0", template: {appTiers:
+      (if $ARGS.positional == [] then [tier("config"; $n)]
+       else [$ARGS.positional | to_entries[] | tier("tier\(.key + 1)"; "strata-tier\(.key + 1)")
+         + {installOrder: (.value | tonumber)}] end)}}}' --args "$@" > "$body"
   call POST /v1/appProfiles "$body" | jq -r '.uid'
 }
 
@@ -494,7 +505,7 @@ app_profile_edit() {
 
 # app_profile_order UID ORDER: PUT the first tier of the app profile with installOrder ORDER
 app_profile_order() {
-  local uid=${1:-} order=${2:-} tiers tier body
+  local uid=${1:-} order=${2:-} tiers tier body now
   [ -n "$uid" ] && [[ "$order" =~ ^[0-9]+$ ]] || die "usage: api.sh app-profile-order UID ORDER"
   tiers=$(call GET "/v1/appProfiles/$uid/tiers") || return 2
   tier=$(jq -r '.spec.appTiers[0].metadata.uid // empty' <<<"$tiers")
@@ -506,6 +517,12 @@ app_profile_order() {
     + (if .spec.containerRegistryUid then {containerRegistryUid: .spec.containerRegistryUid} else {} end)' \
     <<<"$tiers" > "$body"
   call PUT "/v1/appProfiles/$uid/tiers/$tier" "$body" > /dev/null || return 2
+  now=$(call GET "/v1/appProfiles/$uid/tiers" | jq -r --arg t "$tier" \
+    '.spec.appTiers[] | select(.metadata.uid == $t) | .spec.installOrder // 0') || return 2
+  if [ "$now" != "$order" ]; then
+    echo "Palette answered the update, and tier $tier of app profile $uid keeps the install order $now" >&2
+    return 1
+  fi
   echo "tier $tier of app profile $uid has the install order $order"
 }
 

@@ -1236,7 +1236,7 @@ fn api_sh_retag_renames_one_pack_tag_in_place_and_keeps_everything_else() {
 }
 
 #[test]
-fn api_sh_app_profile_order_puts_the_first_tier_with_the_order_and_keeps_its_values() {
+fn api_sh_app_profile_order_puts_the_first_tier_with_the_order_and_reads_the_order_again() {
     let dir = tempfile::tempdir().unwrap();
     let (bin, routes) = (dir.path().join("bin"), dir.path().join("routes"));
     for d in [&bin, &routes] {
@@ -1247,7 +1247,7 @@ fn api_sh_app_profile_order_puts_the_first_tier_with_the_order_and_keeps_its_val
         routes.join("v1_appProfiles_ap-1_tiers"),
         r#"{"spec":{"appTiers":[
             {"metadata":{"name":"web","uid":"t-1"},"spec":{"type":"container","version":"1.0.0",
-              "values":"replicas: 2\n","containerRegistryUid":"cr-1",
+              "values":"replicas: 2\n","containerRegistryUid":"cr-1","installOrder":2,
               "properties":[{"name":"port","type":"number","value":"80"}]}},
             {"metadata":{"name":"config","uid":"t-2"},"spec":{"type":"manifest","version":"1.0.0"}}]}}"#,
     )
@@ -1280,6 +1280,15 @@ fn api_sh_app_profile_order_puts_the_first_tier_with_the_order_and_keeps_its_val
             "installOrder": 2, "manifests": [], "containerRegistryUid": "cr-1",
             "properties": [{"name": "port", "value": "80"}]}),
         "the order changes, and the values, the properties, and the registry stay"
+    );
+
+    // the tier route still gives the order 2 after the update to 3, as Palette does
+    let o = run(&["app-profile-order", "ap-1", "3"]);
+    assert_eq!(o.status.code(), Some(1), "{}", text(&o.stderr));
+    assert!(
+        text(&o.stderr).contains("tier t-1 of app profile ap-1 keeps the install order 2"),
+        "{}",
+        text(&o.stderr)
     );
 
     let o = run(&["app-profile-order", "ap-1", "first"]);
@@ -1843,61 +1852,92 @@ fn tiers_sh_stage_5_reads_a_404_of_the_bindings_as_a_cluster_with_none() {
 }
 
 #[test]
-fn app_profile_sh_stage_3_changes_the_install_order_of_the_tier_and_puts_it_back() {
+fn app_profile_sh_stage_3_makes_two_app_profiles_whose_tiers_differ_in_the_install_order() {
     let mut stage = Stage::new(serde_json::json!({"project_uid": "p-1"}));
-    std::fs::create_dir_all(stage.path("out")).unwrap();
-    std::fs::write(stage.path("out/uid"), "ap-1\n").unwrap();
+    // each create gives the next uid: ap-1, then ap-2
+    executable(
+        &stage.path("routes/v1_appProfiles.sh"),
+        "#!/usr/bin/env bash\nn=$(( $(cat \"$FAKE_ROUTES/n\" 2> /dev/null || echo 0) + 1 ))\necho $n > \"$FAKE_ROUTES/n\"\necho \"{\\\"uid\\\":\\\"ap-$n\\\"}\"\n",
+    );
     stage.route(
         "/v1/appProfiles/ap-1/tiers",
-        r#"{"spec":{"appTiers":[{"metadata":{"name":"config","uid":"t-1"},
-            "spec":{"type":"manifest","version":"1.0.0","installOrder":2}}]}}"#,
+        r#"{"spec":{"appTiers":[
+            {"metadata":{"name":"tier1","uid":"t-1"},"spec":{"type":"manifest","version":"1.0.0","installOrder":2}},
+            {"metadata":{"name":"tier2","uid":"t-2"},"spec":{"type":"manifest","version":"1.0.0","installOrder":5}}]}}"#,
     );
     stage.route("/v1/appProfiles/ap-1/tiers/t-1", "{}");
     stage.route("/v1/appProfiles/ap-1", "{}");
+    stage.route("/v1/appProfiles/ap-2", "{}");
     stage.strata(
-        "snapshot appprofile:ap-1 -o order-before.json",
+        "snapshot appprofile:ap-1 -o order-a.json",
         0,
-        r#"{"packs":[{"key":"app/config","params":{"installOrder":2}}]}"#,
-    );
-    stage.strata("snapshot appprofile:ap-1 -o order-after.json", 0, "{}");
-    stage.strata(
-        "verify order-before.json",
-        1,
-        "~ [app  ] config                     1.0.0              AUTHORED\n",
+        r#"{"packs":[{"key":"app/tier1","params":{"installOrder":2}},{"key":"app/tier2","params":{"installOrder":5}}]}"#,
     );
     stage.strata(
-        "compare order-before.json order-after.json",
+        "snapshot appprofile:ap-2 -o order-b.json",
+        0,
+        r#"{"packs":[{"key":"app/tier2","params":{"installOrder":2}},{"key":"app/tier1","params":{"installOrder":5}}]}"#,
+    );
+    stage.strata(
+        "compare order-a.json order-b.json",
         1,
-        "~ [app  ] config                     1.0.0              AUTHORED\n      ~ param installOrder: 2 -> 3\n",
+        "~ [app  ] tier1                      1.0.0              AUTHORED\n      ~ param installOrder: 2 -> 5\n",
     );
 
     let (_, steps) = stage.run("app-profile.sh", &["3"]);
     passed(
         &steps,
         &[
-            "order-record",
-            "order-edit",
-            "order-verify",
-            "order-verify-says",
+            "order-a-create",
+            "order-b-create",
+            "order-a-tiers",
+            "order-a-record",
+            "order-a-params",
+            "order-b-record",
+            "order-b-params",
             "order-compare",
             "order-compare-says",
-            "order-undo",
-            "delete",
+            "order-update",
+            "order-update-verify",
+            "order-a-delete",
+            "order-b-delete",
         ],
     );
-    assert!(
-        steps.contains("FAIL  order-undone"),
-        "the stand-in reports drift after the undo too, and the check sees it: {steps}"
-    );
-    let orders: Vec<_> = stage
-        .sent("PUT", "/v1/appProfiles/ap-1/tiers/t-1")
+    let creates: Vec<_> = stage
+        .sent("POST", "/v1/appProfiles")
         .iter()
-        .map(|b| b["installOrder"].clone())
+        .map(|b| {
+            b["spec"]["template"]["appTiers"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|t| (t["name"].clone(), t["installOrder"].clone()))
+                .collect::<Vec<_>>()
+        })
         .collect();
     assert_eq!(
-        orders,
-        [serde_json::json!(3), serde_json::json!(2)],
-        "one more than the order of the record, then the order back"
+        creates,
+        [
+            [("tier1".into(), 2.into()), ("tier2".into(), 5.into())],
+            [("tier1".into(), 5.into()), ("tier2".into(), 2.into())],
+        ],
+        "the same two tiers, with the orders in the other order"
+    );
+    let bodies = stage.sent("POST", "/v1/appProfiles");
+    assert_eq!(
+        bodies[0]["spec"]["template"]["appTiers"],
+        bodies[1]["spec"]["template"]["appTiers"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .zip([2, 5])
+            .map(|(t, o)| {
+                let mut t = t.clone();
+                t["installOrder"] = o.into();
+                t
+            })
+            .collect::<serde_json::Value>(),
+        "the tiers differ in the install order alone"
     );
 }
 
