@@ -6379,6 +6379,186 @@ fn list_and_compare_name_a_cluster_that_is_behind() {
     assert!(!text.contains("is behind"), "{text}");
 }
 
+const REPAVE: &str = "/v1/spectroclusters/c1a5000000000000000000c1/repave/status";
+
+/// The repave of a macro change in a field that repaves, in the shape Palette gives it: each side
+/// of the reason holds the resolved values of the pack.
+fn repave_status(state: &str) -> Value {
+    serde_json::json!({
+        "metadata": {"uid": "r1", "creationTimestamp": "2026-09-25T03:05:12Z"},
+        "spec": {
+            "spectroClusterUid": CLUSTER_UID,
+            "source": "hubble",
+            "reasons": [{
+                "code": "PackValuesUpdated",
+                "message": "Pack 'kubernetes' values are updated",
+                "pack": {
+                    "current": {"name": "kubernetes", "values": "postKubeadmCommands:\n- echo barney-one"},
+                    "target": {"name": "kubernetes", "values": "postKubeadmCommands:\n- echo barney-two"},
+                    "diffConfigKeys": ["kubeadmconfig.postKubeadmCommands"],
+                },
+            }],
+        },
+        "status": {"state": state, "repaveTransitionTime": "2026-09-25T03:20:10Z"},
+    })
+}
+
+/// The cluster of `dir` with a repave in `state`, the route of that repave, and no notification.
+fn serve_repave(raw_root: &Path, dir: &str, state: &str) -> MemoryApi {
+    let mut cluster = read(&raw_root.join(dir).join("cluster.json"));
+    cluster["status"]["repave"] = serde_json::json!({"state": state});
+    serve_cluster(MemoryApi::new(), raw_root, dir)
+        .with(format!("/v1/spectroclusters/{CLUSTER_UID}"), cluster)
+        .with(REPAVE, repave_status(state))
+        .with(NOTIFICATIONS, notifications_page(vec![], ""))
+}
+
+#[test]
+fn a_cluster_record_holds_the_repave_that_waits_for_approval_and_its_reasons() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let quiet = snapshot_cluster(
+        &serve_cluster(MemoryApi::new(), dir.path(), "cluster-merged"),
+        None,
+    )
+    .unwrap();
+    let waits =
+        snapshot_cluster(&serve_repave(dir.path(), "cluster-merged", "Pending"), None).unwrap();
+    // outside the root: the copy that the cluster runs is the same
+    assert_eq!(waits.root, quiet.root);
+
+    let c = waits.source.cluster.as_ref().unwrap();
+    assert_eq!(c.repave_pending, Some(true));
+    let r = c.pending_repave.as_ref().unwrap();
+    assert_eq!(
+        (r.source.as_str(), r.since.as_str()),
+        ("hubble", "2026-09-25T03:20:10Z")
+    );
+    assert_eq!(r.reasons.len(), 1);
+    assert_eq!(r.reasons[0].code, "PackValuesUpdated");
+    assert_eq!(r.reasons[0].pack, "kubernetes");
+    assert_eq!(r.reasons[0].keys, ["kubeadmconfig.postKubeadmCommands"]);
+    // the record names the keys, and holds no value of either side
+    let text = serde_json::to_string(&waits).unwrap();
+    assert!(
+        !text.contains("barney-one") && !text.contains("barney-two"),
+        "{text}"
+    );
+
+    // no repave waits: false, and no repave in the record
+    let c = quiet.source.cluster.as_ref().unwrap();
+    assert_eq!(c.repave_pending, Some(false));
+    assert!(c.pending_repave.is_none());
+    let json = serde_json::to_value(&quiet).unwrap();
+    assert_eq!(json["source"]["cluster"]["repavePending"], false);
+    assert!(json["source"]["cluster"].get("pendingRepave").is_none());
+
+    // an approved repave waits for nothing, and strata does not read its route
+    let approved = snapshot_cluster(
+        &serve_repave(dir.path(), "cluster-merged", "Approved"),
+        None,
+    )
+    .unwrap();
+    let c = approved.source.cluster.unwrap();
+    assert_eq!(c.repave_pending, Some(false));
+    assert!(c.pending_repave.is_none());
+}
+
+#[test]
+fn compare_and_verify_name_the_repave_that_waits_for_approval() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let before = snapshot_cluster(
+        &serve_cluster(MemoryApi::new(), dir.path(), "cluster-merged"),
+        None,
+    )
+    .unwrap();
+    let api = serve_repave(dir.path(), "cluster-merged", "Pending");
+    let now = snapshot_cluster(&api, None).unwrap();
+    let note = "a repave of cluster lab-cluster waits for approval, since 2026-09-25T03:20:10Z: \
+                PackValuesUpdated kubernetes (kubeadmconfig.postKubeadmCommands). Palette \
+                refuses an update of its profiles until a person approves it";
+
+    let d = ops::compare(&before, &now, "t1");
+    assert!(d.same);
+    let text = render::renderer(Format::Terminal, Paint::off(), false)
+        .render(&d, &before, &now, false)
+        .unwrap();
+    assert!(text.contains(&format!("note       {note}\n")), "{text}");
+    let md = render::renderer(Format::Markdown, Paint::off(), false)
+        .render(&d, &before, &now, false)
+        .unwrap();
+    assert!(md.contains(&format!("**Note:** {note}\n")), "{md}");
+    let json = render::renderer(Format::Json, Paint::off(), false)
+        .render(&d, &before, &now, false)
+        .unwrap();
+    let json: Value = serde_json::from_str(&json).unwrap();
+    assert_eq!(json["b"]["cluster"]["repavePending"], true);
+    assert_eq!(
+        json["b"]["cluster"]["pendingRepave"]["reasons"][0]["pack"],
+        "kubernetes"
+    );
+
+    // verify of the record taken before the repave: the content is the same, and the report
+    // names the repave
+    let v = ops::verify(&before, &Palette::new(api), "t1", &Progress::silent()).unwrap();
+    assert_eq!(v.status, VerifyStatus::Unchanged);
+    let text = render::renderer(Format::Terminal, Paint::off(), false)
+        .render(&v.diff, &before, &v.live, false)
+        .unwrap();
+    assert!(text.contains(&format!("note       {note}\n")), "{text}");
+
+    // a side with no repave that waits gets no note, and two sides that say the same get one
+    let d = ops::compare(&before, &before, "t1");
+    let text = render::renderer(Format::Terminal, Paint::off(), false)
+        .render(&d, &before, &before, false)
+        .unwrap();
+    assert!(!text.contains("a repave of"), "{text}");
+    let d = ops::compare(&now, &now, "t1");
+    let text = render::renderer(Format::Terminal, Paint::off(), false)
+        .render(&d, &now, &now, false)
+        .unwrap();
+    assert_eq!(text.matches("a repave of").count(), 1, "{text}");
+}
+
+#[test]
+fn a_raw_directory_keeps_the_repave_with_no_value_and_gives_the_record_of_the_fetch() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let fetched = Palette::new(serve_repave(dir.path(), "cluster-merged", "Pending"))
+        .fetch_cluster(CLUSTER_UID, &Progress::silent())
+        .unwrap();
+    let saved = dir.path().join("raw");
+    fetched.save_dir(&saved, "t0").unwrap();
+    let text = fs::read_to_string(saved.join("repave.json")).unwrap();
+    assert!(
+        !text.contains("barney-one") && !text.contains("barney-two"),
+        "{text}"
+    );
+    let saved_doc: Value = serde_json::from_str(&text).unwrap();
+    assert_eq!(
+        saved_doc["spec"]["reasons"][0]["pack"]["current"]["values"],
+        "********"
+    );
+    let direct = Snapshot::from_cluster(&fetched, None, "raw", "t0").unwrap();
+    let from_raw = ops::snapshot_from_dir(&saved, "raw", "t1").unwrap();
+    assert_eq!(
+        serde_json::to_value(&from_raw).unwrap(),
+        serde_json::to_value(&direct).unwrap()
+    );
+    assert_eq!(
+        from_raw
+            .source
+            .cluster
+            .unwrap()
+            .pending_repave
+            .unwrap()
+            .reasons[0]
+            .pack,
+        "kubernetes"
+    );
+}
+
 // ---- a pack with no upstream digest ------------------------------------------------------------
 
 /// Fixture `a` as `dir`, with no digest for the OS pack anywhere: not on its pack reference, and

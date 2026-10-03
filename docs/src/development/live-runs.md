@@ -514,6 +514,8 @@ follows it.
 | `undo-edit` | 0 | the Kubernetes pack back |
 | `undo-accept`, `undo-accept-says` | 2, 0 | #72: while the repave waits for approval, Palette refuses the update of cluster A: `Cluster update failure as cluster repave is pending for approval` |
 | `undo-macro` | 2 | #72: Palette refuses to delete a macro that cluster A reads |
+| `repave-record`, `repave-names` | 0 | #107: a record of cluster A says `repavePending: true`, and `pendingRepave.reasons[]` names `kubernetes` and `PackValuesUpdated` |
+| `repave-verify`, `repave-verify-says` | 0 | #107: `verify` of the record without the digest names the repave that waits |
 
 The recorded run reads the repave state of cluster A in a second log, once a
 minute: it became `Pending` 14 minutes 58 seconds after the change of the value,
@@ -522,6 +524,9 @@ gives the record: source `hubble`, reason `PackValuesUpdated` with the message
 `Pack 'kubernetes' values are updated`, `diffConfigKeys`
 `kubeadmconfig.postKubeadmCommands`, and the resolved values on each side, `echo
 one` and `echo two`. The record names no macro.
+
+The checks of #107 came after the recorded run. No run shows them yet: a run
+needs cluster A, and the repave replaces its nodes.
 
 The run expected `undo-accept` to exit `0`, and it got `2`; the script now
 expects the refusal. It stopped at `undo-accept`, so

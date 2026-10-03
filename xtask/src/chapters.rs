@@ -1857,6 +1857,39 @@ fn use_cases(r: &mut Runner) {
         "strata compare aws-stack@1.1.1 aws-stack@1.1.7 --validate",
     );
 
+    // a repave that waits for approval: the cluster record holds it outside the root, and verify
+    // names it (#107)
+    r.step(
+        "repave-waits-record",
+        0,
+        true,
+        "strata snapshot cluster:payments -o runs/payments.json",
+    );
+    r.repave_waits(DEV, PAYMENTS, "2026-09-10T10:15:00Z");
+    r.step(
+        "repave-waits-verify",
+        0,
+        false,
+        "strata verify runs/payments.json",
+    );
+    r.excerpt(
+        "repave-waits-verify-lines",
+        "repave-waits-verify",
+        r"^(aws-stack|root |note |OK)",
+    );
+    r.step(
+        "repave-waits-json",
+        0,
+        true,
+        "strata snapshot cluster:payments -o runs/payments-now.json",
+    );
+    r.step(
+        "repave-waits-json",
+        0,
+        false,
+        "jq '.source.cluster | {repavePending, pendingRepave}' runs/payments-now.json",
+    );
+
     // More of a cluster than its release: the tiers that Palette reports of the cluster
     r.chapter("cluster-tiers", DEV_ENV);
     r.projects(&[("dev", DEV)]);

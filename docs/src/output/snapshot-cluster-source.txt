@@ -19,6 +19,7 @@ $ jq .source.cluster runs/payments.json
     }
   ],
   "updatesPending": false,
+  "repavePending": false,
   "labels": {
     "managed-by": "opentofu"
   },

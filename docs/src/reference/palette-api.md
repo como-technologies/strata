@@ -39,6 +39,7 @@ version as gone. A cluster does the same with its own document. See
 | `GET /v1/dashboard/spectroclusters/meta` | The listing: `list clusters`, the uid of a cluster name, and the second reading of `consumers` when the search takes no `clusterProfiles`. A cluster name goes out first as `GET /v1/spectroclusters/<name>`; strata reads the listing after that HTTP 404. |
 | `GET /v1/dashboard/spectroclusters/{uid}` | The summary: the health of the cluster, in `status.health.state`. The cluster document does not carry it. No command reads this request. [The knurl adapter](../automation/knurl.md) reads it for each cluster. |
 | `GET /v1/notifications/spectrocluster/{uid}` | Whether an update waits for the cluster, every page. A cluster record and `list clusters --applied` read it. |
+| `GET /v1/spectroclusters/{uid}/repave/status` | The repave that waits for approval: its `source`, its reasons, and the time of its state. A cluster record reads it only when the cluster document says `status.repave.state: Pending`. |
 | `GET /v1/spectroclusters/{uid}/profileUpdates` | `profiles[]`: each profile of the cluster as the update that waits gives it, in the shape of `spec.clusterProfileTemplates`. `cluster:<cluster>@pending` reads it. |
 | `GET /v1/clusterprofiles/{uid}/packs/manifests` | For `@pending`: the manifests of each profile in `profiles[]`. The cluster holds no copy of them yet. |
 | `GET /v1/spectroclusters/{uid}/packs/resolvedValues` | The value that Palette gives each macro, for `snapshot --macros`, and `verify` of a record that holds macro digests. |

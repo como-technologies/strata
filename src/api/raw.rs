@@ -148,6 +148,30 @@ fn masked_notifications(notifications: &Value) -> Value {
     out
 }
 
+/// A copy of `repave` with the values of each pack ref of each reason masked. Palette gives the
+/// values of the pack on each side of the change, with the value of each macro in its place, and
+/// a macro value can be a secret. Strata reads none of these values.
+fn masked_repave(repave: &Value) -> Value {
+    let mut out = repave.clone();
+    let sides = out
+        .pointer_mut("/spec/reasons")
+        .and_then(Value::as_array_mut)
+        .into_iter()
+        .flatten()
+        .filter_map(|r| r.get_mut("pack"))
+        .filter_map(Value::as_object_mut)
+        .flat_map(|p| p.values_mut());
+    for side in sides {
+        if let Some(v) = side
+            .get_mut("values")
+            .filter(|v| !v.is_null() && v.as_str() != Some(""))
+        {
+            *v = Value::String(MASKED.to_string());
+        }
+    }
+    out
+}
+
 /// Write each named document under `dir`, creating it.
 fn write_json_files(dir: &Path, files: &[(&str, &Value)]) -> Result<()> {
     fs::create_dir_all(dir).map_err(|source| Error::Io {
@@ -223,6 +247,9 @@ pub struct RawCluster {
     pub notifications: Option<Value>,
     /// Why Palette did not give the notifications, when it did not
     pub notifications_error: Option<String>,
+    /// `GET /v1/spectroclusters/{uid}/repave/status`: the repave that waits for approval. `None`
+    /// when no repave waits, and for a directory that an older build saved.
+    pub repave: Option<Value>,
     /// `GET /v1/spectroclusters/{uid}/packs/resolvedValues`: for each applied profile, the value
     /// Palette gives each macro. `None` unless asked for, with `snapshot --macros`.
     pub resolved_values: Option<Value>,
@@ -250,6 +277,11 @@ impl RawCluster {
                 None
             },
             notifications_error: None,
+            repave: if dir.join(Self::REPAVE).is_file() {
+                Some(read_json_file(dir, Self::REPAVE)?)
+            } else {
+                None
+            },
             resolved_values: if dir.join(Self::RESOLVED_VALUES).is_file() {
                 Some(read_json_file(dir, Self::RESOLVED_VALUES)?)
             } else {
@@ -272,9 +304,12 @@ impl RawCluster {
     /// The file that holds the notifications of the cluster, when they were read.
     pub const NOTIFICATIONS: &'static str = "notifications.json";
 
-    /// Write the three files, the notifications when they were read, and `scope.json` under
-    /// `dir`, and make `dir` if it is not there. Strata masks the values of each pack in the saved
-    /// notifications.
+    /// The file that holds the repave that waits for approval, when it was read.
+    pub const REPAVE: &'static str = "repave.json";
+
+    /// Write the three files, the notifications and the repave when they were read, and
+    /// `scope.json` under `dir`, and make `dir` if it is not there. Strata masks the values of
+    /// each pack in the saved notifications and in the saved repave.
     pub fn save_dir(&self, dir: &Path, fetched_at: &str) -> Result<()> {
         let scope = scope_document(&self.project_uid, fetched_at, self.variables_unavailable);
         let mut files: Vec<(&str, &Value)> = vec![
@@ -286,6 +321,10 @@ impl RawCluster {
         let notifications = self.notifications.as_ref().map(masked_notifications);
         if let Some(n) = &notifications {
             files.push((Self::NOTIFICATIONS, n));
+        }
+        let repave = self.repave.as_ref().map(masked_repave);
+        if let Some(r) = &repave {
+            files.push((Self::REPAVE, r));
         }
         if let Some(r) = &self.resolved_values {
             files.push((Self::RESOLVED_VALUES, r));

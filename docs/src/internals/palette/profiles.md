@@ -392,3 +392,7 @@ waits: in a live run, the cluster stayed in `Deleting` for 37 minutes, its EC2
 instances kept running, and `tofu destroy` failed with `context deadline
 exceeded`. After an approval of the repave, the instances were gone in four
 minutes. The approval writes no audit entry.
+
+A cluster record holds the repave that waits, with the reasons of Palette, and
+`compare` and `verify` name it. See
+[Whether a repave waits](../../commands/snapshot/cluster.md#whether-a-repave-waits).

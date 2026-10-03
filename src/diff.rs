@@ -11,6 +11,7 @@ use serde_json::{Value, json};
 use crate::canon::canonical_json;
 pub use crate::impact::{Flags, Impact, ImpactLevel, impact, presence_impact};
 use crate::layer::Layer;
+pub use crate::repave::PaletteRepaveReason;
 use crate::snapshot::{ClusterVariable, Pack, Snapshot, Source, Tool};
 pub use crate::validation::{PaletteRefusal, PaletteValidation};
 
@@ -796,22 +797,6 @@ pub struct PaletteRepave {
     pub agrees: bool,
 }
 
-/// One reason Palette gives for a repave.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct PaletteRepaveReason {
-    /// For example `PackValuesUpdated`.
-    pub code: String,
-    /// Palette's sentence.
-    pub message: String,
-    /// The pack the reason is about.
-    #[serde(default, skip_serializing_if = "String::is_empty")]
-    pub pack: String,
-    /// The config keys that differ, such as `kubeadmconfig.postKubeadmCommands`.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub keys: Vec<String>,
-}
-
 impl PaletteRepave {
     /// Read Palette's answer, and set `agrees` from the most severe level of the impact table.
     pub fn from_palette(cluster_uid: &str, answer: &Value, level: ImpactLevel) -> PaletteRepave {
@@ -819,37 +804,7 @@ impl PaletteRepave {
             .get("isRepaveRequired")
             .and_then(Value::as_bool)
             .unwrap_or(false);
-        let reasons = answer
-            .get("reasons")
-            .and_then(Value::as_array)
-            .into_iter()
-            .flatten()
-            .map(|r| PaletteRepaveReason {
-                code: r
-                    .get("code")
-                    .and_then(Value::as_str)
-                    .unwrap_or_default()
-                    .to_string(),
-                message: r
-                    .get("message")
-                    .and_then(Value::as_str)
-                    .unwrap_or_default()
-                    .to_string(),
-                pack: r
-                    .pointer("/pack/current/name")
-                    .or_else(|| r.pointer("/pack/target/name"))
-                    .and_then(Value::as_str)
-                    .unwrap_or_default()
-                    .to_string(),
-                keys: r
-                    .pointer("/pack/diffConfigKeys")
-                    .and_then(Value::as_array)
-                    .into_iter()
-                    .flatten()
-                    .filter_map(|k| k.as_str().map(str::to_string))
-                    .collect(),
-            })
-            .collect();
+        let reasons = PaletteRepaveReason::read_all(answer.get("reasons"));
         let agrees = match level {
             ImpactLevel::Repave => required,
             ImpactLevel::MayRepave => true,

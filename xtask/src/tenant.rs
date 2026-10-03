@@ -1390,6 +1390,47 @@ impl Tenant {
         );
     }
 
+    /// Hold a repave of a cluster for approval, as Palette does at the next read of the agent
+    /// after a macro in `kubeadmconfig.postKubeadmCommands` gets a new value: the cluster
+    /// document says `status.repave.state: Pending`, and `GET
+    /// /v1/spectroclusters/{uid}/repave/status` gives the source `hubble` and one reason, with the
+    /// resolved values on each side. `since` is the time of the state.
+    pub fn repave_waits(&self, project: &str, cluster: &str, since: &str) {
+        self.cluster_field(
+            project,
+            cluster,
+            "/status/repave",
+            json!({"state": "Pending"}),
+        );
+        let side = |command: &str| {
+            json!({
+                "name": "kubernetes",
+                "values": format!("kubeadmconfig:\n  postKubeadmCommands:\n  - {command}\n"),
+            })
+        };
+        self.write(
+            project,
+            &format!("v1/spectroclusters/{cluster}/repave/status"),
+            &json!({
+                "metadata": {"uid": format!("{cluster}r"), "creationTimestamp": since},
+                "spec": {
+                    "spectroClusterUid": cluster,
+                    "source": "hubble",
+                    "reasons": [{
+                        "code": "PackValuesUpdated",
+                        "message": "Pack 'kubernetes' values are updated",
+                        "pack": {
+                            "current": side("echo one"),
+                            "target": side("echo two"),
+                            "diffConfigKeys": ["kubeadmconfig.postKubeadmCommands"],
+                        },
+                    }],
+                },
+                "status": {"state": "Pending", "repaveTransitionTime": since},
+            }),
+        );
+    }
+
     /// The answer of `POST /v1/spectroclusters/{uid}/validate/packs` for a cluster. A
     /// [`PackRefusal`] says that a pack of a profile requires another pack at a minimum version,
     /// and the cluster runs an older one. Palette gives the error, with its code and

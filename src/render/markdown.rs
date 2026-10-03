@@ -9,9 +9,9 @@ use super::{
     outside_root_sentence, overwritten_in_place_notes, pack_version, pair_detail, pair_word,
     palette_repave_lines, palette_repave_note, palette_validation_lines, plain_flags,
     profiles_overwritten_sentence, project_label, record_detail, record_label, recorded_noun,
-    registry_note, registry_sync_suffix, running_behind_notes, same_content_note,
-    second_reading_counts, short, show, state_suffix, subject, tier_path, tier_states,
-    traits_suffix, unchanged_sentence, unverified_sentence, updates_pending_notes,
+    registry_note, registry_sync_suffix, repave_pending_notes, running_behind_notes,
+    same_content_note, second_reading_counts, short, show, state_suffix, subject, tier_path,
+    tier_states, traits_suffix, unchanged_sentence, unverified_sentence, updates_pending_notes,
     upstream_unknown_note, values_changed, values_changed_suffix, variable_lines,
     variables_comparable, variables_unavailable_note, version_display, who_entry, who_heading,
 };
@@ -124,6 +124,9 @@ impl Renderer for MarkdownRenderer {
             o.push_str(&format!("**Note:** {note}\n\n"));
         }
         for note in updates_pending_notes(d) {
+            o.push_str(&format!("**Note:** {note}\n\n"));
+        }
+        for note in repave_pending_notes(d) {
             o.push_str(&format!("**Note:** {note}\n\n"));
         }
         for note in running_behind_notes(d) {

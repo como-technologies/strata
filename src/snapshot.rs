@@ -12,6 +12,8 @@ use serde_json::{Map, Value, json};
 use crate::api::{RawCluster, RawProfile};
 use crate::canon::{Canon, canon_yaml, canonical_json, hash_yaml, sha256_hex};
 use crate::error::{Error, Result};
+pub use crate::repave::PendingRepave;
+use crate::repave::is_pending;
 pub use crate::validation::ProfileValidation;
 
 /// Schema id written into every snapshot.
@@ -285,6 +287,15 @@ pub struct ClusterSource {
     /// Each change that waits, as the open notifications name it.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub pending_updates: Vec<PendingUpdate>,
+    /// Whether Palette says that a repave of the cluster waits for approval: `status.repave.state`
+    /// is `Pending`. Absent for an edge host and a cluster group, and in an older record. Outside
+    /// the root: it is a statement of Palette about the cluster, not the copy.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub repave_pending: Option<bool>,
+    /// The repave that waits, with the reasons that Palette gives for it. Absent when no repave
+    /// waits.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pending_repave: Option<PendingRepave>,
     /// With `snapshot --macros`: each user macro the recorded content uses, and the `sha256:` of
     /// the value Palette gives it for this cluster, or `unresolved`. A value can be a secret, so
     /// the record holds its digest and not the value. Outside the root; `verify` reads the values
@@ -1330,6 +1341,8 @@ impl Snapshot {
                         .map(|_| !pending_updates.is_empty()),
                     updates_pending_error: raw.notifications_error.clone(),
                     pending_updates,
+                    repave_pending: Some(is_pending(&raw.cluster)),
+                    pending_repave: raw.repave.as_ref().map(PendingRepave::read),
                     macro_values: raw
                         .resolved_values
                         .as_ref()
@@ -1387,26 +1400,31 @@ impl Snapshot {
     }
 
     /// Mark a record of a cluster as the profiles of the update that waits for it. Whether an
-    /// update waits is a statement about the copy that the cluster runs, and not about these
-    /// profiles, so the record does not carry it.
+    /// update or a repave waits is a statement about the cluster as it runs now, and not about
+    /// these profiles, so the record does not carry it.
     pub fn mark_pending(mut self) -> Snapshot {
         if let Some(c) = self.source.cluster.as_mut() {
             c.pending = true;
             c.updates_pending = None;
             c.updates_pending_error = None;
             c.pending_updates.clear();
+            c.repave_pending = None;
+            c.pending_repave = None;
         }
         self
     }
 
     /// Mark a record of a cluster as a record of another kind of object that holds profiles. Such
     /// an object gives no values to the variables, so the record holds no cluster values: a
-    /// definition with no value is not the value `""`.
+    /// definition with no value is not the value `""`. Palette repaves only a cluster, so the
+    /// record holds no repave either.
     pub fn with_kind(mut self, kind: SubjectKind) -> Snapshot {
         if let Some(c) = self.source.cluster.as_mut() {
             c.kind = kind;
             if !kind.is_cluster() {
                 c.variables.clear();
+                c.repave_pending = None;
+                c.pending_repave = None;
             }
         }
         self

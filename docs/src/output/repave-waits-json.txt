@@ -1,0 +1,23 @@
+$ strata snapshot cluster:payments -o runs/payments-now.json
+strata: looking up project dev
+strata: fetching cluster payments
+strata: cluster 'payments' is 64f1000000000000000000e1
+strata: wrote runs/payments-now.json (root 088136c929bd)
+$ jq '.source.cluster | {repavePending, pendingRepave}' runs/payments-now.json
+{
+  "repavePending": true,
+  "pendingRepave": {
+    "source": "hubble",
+    "since": "2026-09-17T09:30:00Z",
+    "reasons": [
+      {
+        "code": "PackValuesUpdated",
+        "message": "Pack 'kubernetes' values are updated",
+        "pack": "kubernetes",
+        "keys": [
+          "kubeadmconfig.postKubeadmCommands"
+        ]
+      }
+    ]
+  }
+}
