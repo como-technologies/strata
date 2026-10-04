@@ -159,8 +159,8 @@ impl Legend {
                 ("may-repave", "Node or control plane configuration changed on the OS or Kubernetes layer; Palette may repave."),
                 ("cluster-wide", "CNI or CSI layer changed; affects every node and may repave."),
                 ("in-place", "Add-on pack upgraded or reconfigured in place."),
-                ("sync", "Only the upstream digest changed; applied on the next profile sync."),
-                ("none", "No change, or only the tag name of a pack changed for the same build."),
+                ("sync", "Only the upstream digest changed, or an OS, Kubernetes, or kernel pack moved to another pack reference at the same version and its digest changed. Applied on the next profile sync."),
+                ("none", "No change, only the tag name of a pack changed for the same build, or an OS, Kubernetes, or kernel pack moved to another pack reference at the same version."),
             ]),
             status: m(&[
                 ("unchanged", "Same node hash on both sides."),

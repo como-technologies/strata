@@ -12,10 +12,12 @@ use crate::layer::Layer;
 )]
 #[serde(rename_all = "kebab-case")]
 pub enum ImpactLevel {
-    /// No change.
+    /// No change, a renamed tag of the same build, or an OS, Kubernetes, or kernel pack that moved
+    /// to another pack reference at the same version.
     #[default]
     None,
-    /// Only the upstream digest changed; applied on the next profile sync.
+    /// Only the upstream digest changed, or an OS, Kubernetes, or kernel pack moved to another pack
+    /// reference at the same version and its digest changed. Applied on the next profile sync.
     Sync,
     /// Add-on upgraded or reconfigured in place.
     InPlace,
