@@ -128,7 +128,7 @@ version and the values stay. The registry uid and the pack uid change.
 | Question | Answer |
 | --- | --- |
 | Does Palette repave the cluster? (`POST /v1/spectroclusters/<uid>/validate/repave`) | No, with no reason. |
-| What level does the impact table give the OS pack? | `repave`, from the identity change of the OS layer. So `compare --repave` prints that strata and Palette do not agree. |
+| What level does the impact table give the OS pack? | `sync`. The version stays, so the identity change gives no repave, and the digest moved. So the table and Palette agree. |
 | What happens to the nodes when the cluster takes the update? | The same three EC2 instances for 33 minutes. The cluster stays `Running`, and no repave waits for approval. |
 | What does the cluster run after the update? | The OS pack from the OCI registry: a record of the cluster holds its registry uid. |
 

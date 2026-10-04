@@ -83,12 +83,21 @@ the level, and says when the two disagree. See
 
 | Level | Condition | Meaning |
 | --- | --- | --- |
-| `repave` | OS, Kubernetes, or kernel layer with `IDENTITY`, other than a renamed tag, or OS layer with `AUTHORED` | On a cluster of the engine above, Palette replaces the nodes. It checks every value of the OS pack. |
+| `repave` | OS, Kubernetes, or kernel layer with `IDENTITY` and a new version, or OS layer with `AUTHORED` | On a cluster of the engine above, Palette replaces the nodes. It checks every value of the OS pack. |
 | `may-repave` | Kubernetes or kernel layer with `AUTHORED` | Node or control plane configuration changed. Palette can replace the nodes: it does for a key on its list, such as `kubeadmconfig.postKubeadmCommands`, and not for another. |
 | `cluster-wide` | CNI or CSI layer with `IDENTITY` or `AUTHORED` | Each node gets the change. Palette does not replace the nodes for it: its repave check reads no CNI or CSI layer. |
 | `in-place` | any other layer with `IDENTITY` or `AUTHORED` | Palette upgrades or configures the pack in place. |
-| `sync` | only `UPSTREAM`, on any layer | Palette applies the change at the next profile sync. |
-| `none` | no change, or only a tag renamed for the same build | The clusters run the same build. |
+| `sync` | only `UPSTREAM`, on any layer, or `UPSTREAM` with `IDENTITY` at the same version on the OS, Kubernetes, or kernel layer | Palette applies the change at the next profile sync. |
+| `none` | no change, only a tag renamed for the same build, or `IDENTITY` alone at the same version on the OS, Kubernetes, or kernel layer | No node changes. |
+
+**A new version repaves, and another pack reference does not.** On the OS,
+Kubernetes, and kernel layers, `IDENTITY` gives `repave` only for a new
+version. When the version stays and the type, the registry uid, or the pack uid
+changes, the pack takes the level of its other flags. The impact text then says
+`the same version from another pack reference`. A live run moved the OS pack of
+a running cluster to another registry at one version. Palette said no repave,
+and the cluster kept its nodes. See
+[A pack that moves between registries](../internals/palette/packs.md#a-pack-that-moves-between-registries).
 
 A pack key is `<layer>/<name>`. So a release that exchanges one pack for a pack
 of another name gives one `ADDED` line and one `REMOVED` line, and no `IDENTITY`

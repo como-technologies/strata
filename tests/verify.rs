@@ -1214,6 +1214,51 @@ fn two_profiles_that_pin_one_pack_build_under_different_tag_names_are_the_same_c
 }
 
 #[test]
+fn an_os_pack_from_another_registry_at_the_same_version_is_no_node_repave() {
+    use strata::diff::ImpactLevel;
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let a = ops::snapshot_from_dir(&dir.path().join("a"), "a", "t0").unwrap();
+
+    // the registry uid alone moved
+    let moved = with_os_pack(dir.path(), "registry-only", |p| {
+        p["registryUid"] = Value::from("reg-oci");
+    });
+    let d = ops::compare(&a, &moved, "t1");
+    let os = d.packs.iter().find(|p| p.name == "ubuntu-aws").unwrap();
+    assert!(os.identity && !os.upstream && !os.authored, "{os:?}");
+    assert_eq!(os.impact.level, ImpactLevel::None);
+    assert_eq!(
+        os.impact.text,
+        "none (the same version from another pack reference)"
+    );
+    assert_eq!(d.summary.max_impact, ImpactLevel::None);
+
+    // a move between two kinds of registry: the type, the uids, and the digest move
+    let moved = with_os_pack(dir.path(), "registry-kind", |p| {
+        p["type"] = Value::from("oci");
+        p["registryUid"] = Value::from("reg-oci");
+        p["packUid"] = Value::from("pk-os-oci");
+        p["digest"] = Value::from("sha256:e5982cf2");
+    });
+    let d = ops::compare(&a, &moved, "t1");
+    let os = d.packs.iter().find(|p| p.name == "ubuntu-aws").unwrap();
+    assert!(os.identity && os.upstream && !os.authored, "{os:?}");
+    assert_eq!(os.impact.level, ImpactLevel::Sync);
+    assert_eq!(d.summary.max_impact, ImpactLevel::Sync);
+    let text = render::renderer(Format::Terminal, Paint::off(), false)
+        .render(&d, &a, &moved, false)
+        .unwrap();
+    assert!(
+        text.contains(
+            "impact: the same version from another pack reference, applied on next profile sync"
+        ),
+        "{text}"
+    );
+    assert!(!text.contains("repave"), "{text}");
+}
+
+#[test]
 fn verify_reports_a_tag_renamed_in_place_as_drift_with_no_node_impact() {
     use strata::diff::ImpactLevel;
     let dir = tempfile::tempdir().unwrap();
