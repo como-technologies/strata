@@ -214,11 +214,11 @@ where
 
     let mut registries = Vec::new();
     let mut had_the_pack = false;
-    for (registry, uid) in wanted {
+    for (registry, uid) in &wanted {
         let mut versions: Vec<PackBuild> = Vec::new();
         let mine: Vec<&Value> = entries
             .iter()
-            .filter(|e| text(e, "/spec/registryUid") == uid)
+            .filter(|e| text(e, "/spec/registryUid") == *uid)
             .collect();
         if mine.is_empty() {
             continue;
@@ -335,8 +335,8 @@ where
         }
         if !versions.is_empty() {
             registries.push(PackRegistry {
-                registry,
-                registry_uid: uid,
+                registry: registry.clone(),
+                registry_uid: uid.clone(),
                 layer,
                 versions,
                 versions_offered,
@@ -347,18 +347,23 @@ where
         }
     }
     // no registry has the pack at all: strata cannot answer. A cloud that keeps nothing is an
-    // answer, and an empty one.
+    // answer, and an empty one. Palette lists a pack of a registry that it does not sync only
+    // while a profile pins the pack. So the error names each such registry: it says why the
+    // listing has nothing
     if !had_the_pack {
+        let unsynced = crate::candidate::unsynced_names(&palette, &wanted)?;
         if options.registry.is_none() {
             return Err(Error::PackNameNotFound {
                 name: name.to_string(),
+                unsynced,
             });
         }
         return Err(Error::PackNotFound {
             name: name.to_string(),
             version: String::new(),
             tag: None,
-            registry: options.registry.clone().unwrap_or_default(),
+            registry: wanted.first().map(|(n, _)| n.clone()).unwrap_or_default(),
+            unsynced,
         });
     }
     Ok(PackListing {

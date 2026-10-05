@@ -220,6 +220,15 @@ check auth-candidate 0 "#154: a candidate with the chart builds a record, before
   "$strata" snapshot --from-candidate auth-candidate.yaml -o auth-candidate.json
 check auth-candidate-minted 0 "#154: its pack has no uid, no digest, the layer addon, and the tag as the version" -- \
   jq -e '.packs[0] | .packUid == "" and .hash.upstreamSource == "none" and .layer == "addon" and .type == "helm" and .version == "1.0.0"' auth-candidate.json
+# the listing has no chart of the registry, and the error says why (#123)
+check auth-packs 2 "#123: packs of the chart in the Helm registry Palette does not synchronize is pack-not-found" -- \
+  "$strata" packs "$CHART" --registry "$(regf charts-auth name)"
+check auth-packs-says 0 "#123: and the error names the registry that Palette does not sync" -- \
+  grep -q "Palette does not sync the registry '$(regf charts-auth name)'" auth-packs.err
+check auth-behind 2 "#123: behind cannot check the pin of the candidate record: the listing has no chart of the registry" -- \
+  "$strata" behind auth-candidate.json
+check auth-behind-says 0 "#123: and the line under the pin names the registry that Palette does not sync" -- \
+  grep -q "Palette does not sync the registry '$(regf charts-auth name)'" auth-behind.out
 check auth-pin 0 "a profile that pins $CHART 1.0.0 from it by name, made and published through the API" -- \
   "$live/api.sh" pin-profile "strata-live-probe-auth" "$(regf charts-auth uid)" helm "$CHART" 1.0.0
 PINNED=$(tail -1 auth-pin.out)

@@ -6,9 +6,13 @@ use std::fs;
 use std::path::Path;
 
 use serde_json::{Value, json};
-use strata::api::MemoryApi;
+use strata::api::{MemoryApi, Palette};
+use strata::color::Paint;
 use strata::error::Error;
 use strata::ops::{self, PairStatus, Policy};
+use strata::progress::Progress;
+use strata::reference::Ref;
+use strata::render::{self, Format};
 
 mod common;
 use common::candidate_snapshot;
@@ -230,5 +234,104 @@ fn the_pack_that_palette_makes_has_the_layer_addon_for_the_rules_of_the_profile_
         err.to_string()
             .contains(&format!("layer 1 ({CHART}) has the layer addon")),
         "{err}"
+    );
+}
+
+/// A pack ref against the tenant, as `snapshot pack:...` reads it.
+fn pack_record(api: &MemoryApi, reference: &str) -> strata::Result<strata::snapshot::Snapshot> {
+    ops::snapshot_for(
+        &Ref::parse_with(reference, |_| false),
+        || Ok(Palette::new(api.clone())),
+        "t0",
+        &Progress::silent(),
+    )
+}
+
+#[test]
+fn packs_and_behind_name_the_registries_that_palette_does_not_sync_when_none_has_the_pack() {
+    let api = tenant();
+    let packs = |registry: Option<&str>| {
+        ops::registry_packs(
+            CHART,
+            &ops::PackOptions {
+                registry: registry.map(str::to_string),
+                ..Default::default()
+            },
+            |_| Ok(Palette::new(api.clone())),
+            "t0",
+            &Progress::silent(),
+        )
+    };
+    // no registry has the chart: the error names the private Helm registry and the OCI registry
+    // with sync off, and not the Helm registry that syncs
+    let err = packs(None).unwrap_err();
+    assert_eq!(err.kind(), "pack-name-not-found");
+    assert_eq!(err.to_json()["unsynced"], json!(["charts-auth", "zarf"]));
+    assert!(
+        err.to_string()
+            .contains("; Palette does not sync the registries 'charts-auth' and 'zarf', and lists a pack of them only while a profile pins the pack; "),
+        "{err}"
+    );
+
+    // one registry that Palette does not sync: the error names it, with no blank version
+    let err = packs(Some("charts-auth")).unwrap_err();
+    assert_eq!(err.kind(), "pack-not-found");
+    assert_eq!(
+        err.to_string(),
+        "no pack 'strata-live-chart' in registry 'charts-auth'; Palette does not sync the \
+         registry 'charts-auth', and lists a pack of it only while a profile pins the pack"
+    );
+    // asked by its uid, the error still names the registry
+    let err = packs(Some(PRIVATE)).unwrap_err();
+    assert_eq!(err.to_json()["registry"], "charts-auth");
+    assert_eq!(err.to_json()["unsynced"], json!(["charts-auth"]));
+    // a registry that syncs gets no reason
+    let err = packs(Some("charts")).unwrap_err();
+    assert_eq!(
+        err.to_string(),
+        "no pack 'strata-live-chart' in registry 'charts'"
+    );
+    assert!(err.to_json().get("unsynced").is_none(), "{err}");
+
+    // a pack ref of that registry, and one with no registry
+    let err = pack_record(&api, "pack:charts-auth/strata-live-chart@1.0.0").unwrap_err();
+    assert_eq!(err.kind(), "pack-not-found");
+    assert_eq!(err.to_json()["unsynced"], json!(["charts-auth"]));
+    assert!(
+        err.to_string().starts_with(
+            "no pack 'strata-live-chart' at version '1.0.0' in registry 'charts-auth'; Palette does not sync the registry 'charts-auth'"
+        ),
+        "{err}"
+    );
+    let err = pack_record(&api, "pack:strata-live-chart@1.0.0").unwrap_err();
+    assert_eq!(err.to_json()["unsynced"], json!(["charts-auth", "zarf"]));
+
+    // behind cannot check the pin of a candidate record from that registry, and says why
+    let dir = tempfile::tempdir().unwrap();
+    let file = candidate(dir.path(), "charts-auth", json!({}));
+    let snap = candidate_snapshot(&file, &api).unwrap();
+    let record = dir.path().join("candidate.json");
+    fs::write(&record, snap.to_json(false).unwrap()).unwrap();
+    let r = ops::behind(
+        &[record],
+        &ops::BehindOptions::default(),
+        |_| Ok(Palette::new(api.clone())),
+        "t0",
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert_eq!((r.exit_code(), r.pins.len(), r.summary.errors), (2, 1, 1));
+    let error = r.pins[0].error.as_ref().unwrap();
+    assert_eq!(error["kind"], "pack-not-found");
+    assert_eq!(error["unsynced"], json!(["charts-auth"]));
+    let text = render::renderer(Format::Terminal, Paint::off(), false)
+        .render_behind(&r)
+        .unwrap();
+    assert!(text.contains("not checked"), "{text}");
+    assert!(
+        text.contains(
+            "(no pack 'strata-live-chart' in registry 'charts-auth'; Palette does not sync the registry 'charts-auth', and lists a pack of it only while a profile pins the pack)"
+        ),
+        "{text}"
     );
 }

@@ -667,6 +667,23 @@ fn unsynced<A: PaletteApi>(palette: &Palette<A>, uid: &str) -> Result<Option<Uns
     }
 }
 
+/// The names of the registries of `registries` (name and uid) that Palette does not sync.
+///
+/// An error that finds no pack names them: Palette lists a pack of such a registry only while a
+/// profile pins the pack. The rule of `unsynced` decides for each registry.
+pub(crate) fn unsynced_names<'a, A: PaletteApi>(
+    palette: &Palette<A>,
+    registries: impl IntoIterator<Item = &'a (String, String)>,
+) -> Result<Vec<String>> {
+    let mut names = Vec::new();
+    for (name, uid) in registries {
+        if unsynced(palette, uid)?.is_some() {
+            names.push(name.clone());
+        }
+    }
+    Ok(names)
+}
+
 /// The registries this key can see, name and uid, in the order Palette lists them.
 pub(crate) fn registries<A: PaletteApi>(palette: &Palette<A>) -> Result<Vec<(String, String)>> {
     let listing = palette.api().get_json("/v1/registries/metadata")?;
@@ -698,11 +715,12 @@ pub fn pack_snapshot<A: PaletteApi>(
 ) -> Result<Snapshot> {
     let visible = registries(palette)?;
     let entries = versions_of(palette, name)?;
-    let not_found = |registry: String| Error::PackNotFound {
+    let not_found = |registry: String, unsynced: Vec<String>| Error::PackNotFound {
         name: name.to_string(),
         version: version.to_string(),
         tag: None,
         registry,
+        unsynced,
     };
     let of = |e: &Value, ptr: &str| text(e, ptr).unwrap_or_default();
 
@@ -728,7 +746,12 @@ pub fn pack_snapshot<A: PaletteApi>(
                 .collect();
             match holders.as_slice() {
                 [(_, uid)] => uid.clone(),
-                [] => return Err(not_found("any visible registry".to_string())),
+                [] => {
+                    return Err(not_found(
+                        "any visible registry".to_string(),
+                        unsynced_names(palette, &visible)?,
+                    ));
+                }
                 several => {
                     // by name, so the message reads the same on every run: Palette lists the
                     // registries in the order it likes, and a live run saw both orders
@@ -766,11 +789,15 @@ pub fn pack_snapshot<A: PaletteApi>(
         here.iter()
             .max_by(|a, b| crate::version::compare(a, b))
             .cloned()
-            .ok_or_else(|| not_found(named(&registry_uid)))?
-    } else if here.iter().any(|v| v == version) {
-        version.to_string()
     } else {
-        return Err(not_found(named(&registry_uid)));
+        here.iter().find(|v| *v == version).cloned()
+    };
+    let Some(resolved) = resolved else {
+        let asked = visible.iter().filter(|(_, u)| *u == registry_uid);
+        return Err(not_found(
+            named(&registry_uid),
+            unsynced_names(palette, asked)?,
+        ));
     };
     progress.note(&format!(
         "recording pack {name}@{resolved} from registry {}",
@@ -1125,6 +1152,7 @@ impl<A: PaletteApi> Resolver<'_, A> {
                 version: l.version.clone(),
                 tag: None,
                 registry: registry_ref.text().to_string(),
+                unsynced: Vec::new(),
             });
         };
         let not_synced = |message: String| {
@@ -1241,6 +1269,7 @@ impl<A: PaletteApi> Resolver<'_, A> {
                     version: l.version.clone(),
                     tag: Some(t.clone()),
                     registry: registry_ref.text().to_string(),
+                    unsynced: Vec::new(),
                 });
             }
             None => tags

@@ -264,16 +264,19 @@ pub enum Error {
         message: String,
     },
     /// A candidate layer names a pack version, or a tag, that its registry does not have.
-    #[error("no pack '{name}' at version '{version}'{} in registry '{registry}'", tag.as_ref().map(|t| format!(" with tag '{t}'")).unwrap_or_default())]
+    #[error("no pack '{name}'{}{} in registry '{registry}'{}", at_version(version), with_tag(tag.as_deref()), unsynced_sentence(unsynced))]
     PackNotFound {
         /// Pack name.
         name: String,
-        /// Pack version.
+        /// Pack version. Empty when no version was asked for, as with `packs --registry`.
         version: String,
         /// The tag asked for, when one was.
         tag: Option<String>,
-        /// The registry, as the candidate names it.
+        /// The registry: its name, or the text that the candidate or the ref gave.
         registry: String,
+        /// The registries that Palette does not sync, among the ones that strata asked. Palette
+        /// lists a pack of such a registry only while a profile pins the pack.
+        unsynced: Vec<String>,
     },
     /// The registry lists a pack version that Spectro Cloud disabled or deleted. Palette serves no
     /// such pack, and refuses a profile that pins one.
@@ -293,11 +296,15 @@ pub enum Error {
     /// `packs <name>` found the name in no visible registry. It asked for every version, so no
     /// version and no registry was ever in play, and `PackNotFound` would state both as blanks.
     #[error(
-        "no registry that this key can see offers a pack named '{name}'; `strata list --pack {name}` finds the profiles that carry one"
+        "no registry that this key can see offers a pack named '{name}'{}; `strata list --pack {name}` finds the profiles that carry one",
+        unsynced_sentence(unsynced)
     )]
     PackNameNotFound {
         /// Pack name.
         name: String,
+        /// The visible registries that Palette does not sync. Palette lists a pack of such a
+        /// registry only while a profile pins the pack.
+        unsynced: Vec<String>,
     },
     /// A pack version is in more than one visible registry, and the ref named none.
     #[error("pack '{name}' at version '{version}' is in several registries: {}; name one, as in pack:<registry>/{name}@{version}", registries.join(", "))]
@@ -469,6 +476,45 @@ fn profile_not_found_hint(name: &str, tenant_scope: bool) -> String {
     }
 }
 
+/// ` at version '1.2.3'`, or nothing when no version was asked for.
+fn at_version(version: &str) -> String {
+    if version.is_empty() {
+        String::new()
+    } else {
+        format!(" at version '{version}'")
+    }
+}
+
+/// ` with tag '2.x'`, or nothing when no tag was asked for.
+fn with_tag(tag: Option<&str>) -> String {
+    tag.map(|t| format!(" with tag '{t}'")).unwrap_or_default()
+}
+
+/// Why the registries of `registries` have no pack of a name, for the message of an error:
+/// `; Palette does not sync the registry 'charts-auth', and lists a pack of it only while a
+/// profile pins the pack`. Nothing when there is no such registry.
+fn unsynced_sentence(registries: &[String]) -> String {
+    let quoted: Vec<String> = registries.iter().map(|r| format!("'{r}'")).collect();
+    match quoted.as_slice() {
+        [] => String::new(),
+        [one] => format!(
+            "; Palette does not sync the registry {one}, and lists a pack of it only while a profile pins the pack"
+        ),
+        [first @ .., last] => format!(
+            "; Palette does not sync the registries {} and {last}, and lists a pack of them only while a profile pins the pack",
+            first.join(", ")
+        ),
+    }
+}
+
+/// Put the registries that Palette does not sync into the document of an error, when there are
+/// any.
+fn put_unsynced(m: &mut serde_json::Map<String, Value>, unsynced: &[String]) {
+    if !unsynced.is_empty() {
+        m.insert("unsynced".into(), Value::from(unsynced.to_vec()));
+    }
+}
+
 impl Error {
     /// The process exit status the CLI uses for this error. Every error is 2 today; the method
     /// exists so a future distinction (for example, 3 for "cannot reach Palette") lands in one place.
@@ -619,6 +665,7 @@ impl Error {
                 version,
                 tag,
                 registry,
+                unsynced,
             } => {
                 m.insert("name".into(), Value::from(name.as_str()));
                 m.insert("version".into(), Value::from(version.as_str()));
@@ -626,6 +673,7 @@ impl Error {
                     m.insert("tag".into(), Value::from(t.as_str()));
                 }
                 m.insert("registry".into(), Value::from(registry.as_str()));
+                put_unsynced(&mut m, unsynced);
             }
             Error::PackUnavailable {
                 name,
@@ -639,8 +687,9 @@ impl Error {
                 m.insert("state".into(), Value::from(state.as_str()));
             }
             // no version and no registry was asked for, so the document names neither
-            Error::PackNameNotFound { name } => {
+            Error::PackNameNotFound { name, unsynced } => {
                 m.insert("name".into(), Value::from(name.as_str()));
+                put_unsynced(&mut m, unsynced);
             }
             Error::PackInSeveralRegistries {
                 name,
@@ -796,6 +845,7 @@ mod tests {
             },
             Error::PackNameNotFound {
                 name: "no-such-pack".into(),
+                unsynced: vec!["charts-auth".into()],
             },
             Error::ClusterProfileNotFound {
                 cluster: "c1".into(),
@@ -829,6 +879,7 @@ mod tests {
                 version: "9.9.9".into(),
                 tag: Some("2.x".into()),
                 registry: "Public Repo".into(),
+                unsynced: Vec::new(),
             },
             Error::PackUnavailable {
                 name: "nginx".into(),
@@ -909,6 +960,49 @@ mod tests {
             },
             Error::Serialize(bad_json()),
         ]
+    }
+
+    #[test]
+    fn a_pack_that_is_not_found_names_the_registries_that_palette_does_not_sync() {
+        let e = Error::PackNameNotFound {
+            name: "podinfo".into(),
+            unsynced: vec!["charts-auth".into(), "zarf".into()],
+        };
+        assert_eq!(
+            e.to_string(),
+            "no registry that this key can see offers a pack named 'podinfo'; Palette does not \
+             sync the registries 'charts-auth' and 'zarf', and lists a pack of them only while a \
+             profile pins the pack; `strata list --pack podinfo` finds the profiles that carry one"
+        );
+        assert_eq!(
+            e.to_json()["unsynced"],
+            serde_json::json!(["charts-auth", "zarf"])
+        );
+        // no version was asked for, so the message names none
+        let e = Error::PackNotFound {
+            name: "podinfo".into(),
+            version: String::new(),
+            tag: None,
+            registry: "charts-auth".into(),
+            unsynced: vec!["charts-auth".into()],
+        };
+        assert_eq!(
+            e.to_string(),
+            "no pack 'podinfo' in registry 'charts-auth'; Palette does not sync the registry \
+             'charts-auth', and lists a pack of it only while a profile pins the pack"
+        );
+        let e = Error::PackNotFound {
+            name: "podinfo".into(),
+            version: "1.0.0".into(),
+            tag: Some("1.x".into()),
+            registry: "charts".into(),
+            unsynced: Vec::new(),
+        };
+        assert_eq!(
+            e.to_string(),
+            "no pack 'podinfo' at version '1.0.0' with tag '1.x' in registry 'charts'"
+        );
+        assert!(e.to_json().get("unsynced").is_none());
     }
 
     #[test]

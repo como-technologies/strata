@@ -405,6 +405,11 @@ chart while a profile pins it: see
 OCI registry. So a client can know, before the create, which registry Palette
 does not sync.
 
+When no registry has a pack of a name, `strata packs`, `strata behind`, and a
+`pack:` ref name each such registry in their error. See
+[strata packs](../../commands/packs.md#one-registry-or-one-cloud) and
+[A pin that strata cannot check](../../commands/behind.md#a-pin-that-strata-cannot-check).
+
 A [candidate file](../../reference/candidate-file.md#a-layer-from-a-registry-that-palette-does-not-sync)
 builds the same pack, with no uid. The check on a live tenant is
 `registry-kinds.sh` stage 2: see [Live runs](../../development/live-runs.md).

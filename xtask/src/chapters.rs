@@ -1867,11 +1867,20 @@ fn use_cases(r: &mut Runner) {
         "name: charts-probe\nversion: 1.0.0\ntype: add-on\ncloudType: all\nlayers:\n  - name: podinfo\n    version: 6.7.1\n    registry: charts-auth\n    values: |\n      replicaCount: 2\n",
     );
     r.step("nodigest-chart-file", 0, false, "cat charts-probe.yaml");
+    // no registry has the chart in the listing: the error names the registry that Palette does
+    // not sync (#123)
+    r.step("nodigest-chart-unsynced", 2, true, "strata packs podinfo");
     r.step(
         "nodigest-chart-record",
         0,
         true,
         "strata snapshot --from-candidate charts-probe.yaml -o charts/candidate.json",
+    );
+    r.step(
+        "nodigest-chart-behind",
+        2,
+        false,
+        "strata behind charts/candidate.json",
     );
     r.step(
         "nodigest-chart-pack",
