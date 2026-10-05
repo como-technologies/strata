@@ -11009,7 +11009,7 @@ fn behind_names_the_newer_versions_of_each_pin_and_the_impact_of_the_bump() {
 }
 
 #[test]
-fn a_floating_pin_is_behind_only_what_its_tag_cannot_reach_and_a_pin_that_cannot_be_read_is_an_error()
+fn a_floating_pin_is_behind_the_version_its_tag_names_and_a_pin_that_cannot_be_read_is_an_error()
  {
     let dir = tempfile::tempdir().unwrap();
     let api = serve_behind();
@@ -11017,12 +11017,15 @@ fn a_floating_pin_is_behind_only_what_its_tag_cannot_reach_and_a_pin_that_cannot
     floating.packs[0].tag = "1.x".into();
     let mut narrow = snapshot_pack(&api, "pack:csi-aws-ebs@1.63.1").unwrap();
     narrow.packs[0].tag = "1.63.x".into();
+    let mut moved = snapshot_pack(&api, "pack:csi-aws-ebs@1.65.0").unwrap();
+    moved.packs[0].tag = "1.x".into();
     let mut lost = snapshot_pack(&api, "pack:csi-aws-ebs@1.63.1").unwrap();
     lost.packs[0].registry_uid = "reg-gone".into();
     let mut records = Vec::new();
     for (name, snap) in [
         ("floating.json", &floating),
         ("narrow.json", &narrow),
+        ("moved.json", &moved),
         ("lost.json", &lost),
     ] {
         let path = dir.path().join(name);
@@ -11030,13 +11033,24 @@ fn a_floating_pin_is_behind_only_what_its_tag_cannot_reach_and_a_pin_that_cannot
         records.push(path);
     }
     let r = behind_of(&api, &records, &ops::BehindOptions::default());
-    // 1.x names 1.65.0 now: the tag reaches each newer version for AWS, so it is not behind
-    let float = r.pins.iter().find(|p| p.tag == "1.x").unwrap();
-    assert!(
-        float.floating && !float.behind && float.newer.is_empty(),
-        "{float:?}"
-    );
+    // 1.x names 1.65.0 now, and the record pins 1.63.1: a profile with values of its own stays
+    // there until a person applies the update, so the pin is behind
+    let float = r
+        .pins
+        .iter()
+        .find(|p| p.tag == "1.x" && p.version == "1.63.1")
+        .unwrap();
+    assert!(float.floating && float.behind, "{float:?}");
     assert_eq!(float.resolved.as_deref(), Some("1.65.0"));
+    let newer: Vec<&str> = float.newer.iter().map(|n| n.version.as_str()).collect();
+    assert_eq!(newer, ["1.65.0", "1.64.0"]);
+    // a pin of the version that the tag names now is current
+    let at = r
+        .pins
+        .iter()
+        .find(|p| p.tag == "1.x" && p.version == "1.65.0")
+        .unwrap();
+    assert!(at.floating && !at.behind && at.newer.is_empty(), "{at:?}");
     // 1.63.x names 1.63.1, and cannot reach 1.64.0 or 1.65.0: it is behind them
     let narrow = r.pins.iter().find(|p| p.tag == "1.63.x").unwrap();
     assert!(narrow.floating && narrow.behind, "{narrow:?}");
@@ -11048,7 +11062,21 @@ fn a_floating_pin_is_behind_only_what_its_tag_cannot_reach_and_a_pin_that_cannot
         .find(|p| p.registry_uid == "reg-gone")
         .unwrap();
     assert!(gone.error.is_some());
-    assert_eq!((r.summary.floating, r.summary.errors), (2, 1));
+    assert_eq!((r.summary.floating, r.summary.errors), (3, 1));
+    // the terminal names the version that the tag names now beside each one
+    let text = render::renderer(Format::Terminal, Paint::off(), false)
+        .render_behind(&r)
+        .unwrap();
+    assert!(
+        text.contains(
+            "1.63.1  Public Repo  behind: 1.65.0, 1.64.0 (deprecated) (floating tag 1.x, now 1.65.0)"
+        ),
+        "{text}"
+    );
+    assert!(
+        text.contains("1.65.0  Public Repo  current (floating tag 1.x, now 1.65.0)"),
+        "{text}"
+    );
     assert_eq!(r.exit_code(), 2, "a pin that strata could not check");
     assert!(ops::is_floating("LTS__24.x") && ops::is_floating("1.30.x"));
     assert!(!ops::is_floating("1.30.6") && !ops::is_floating("LTS__24.04"));

@@ -62,8 +62,8 @@ pub struct BehindSummary {
     pub pins: usize,
     /// The pins with a newer version to move to.
     pub behind: usize,
-    /// The pins with a floating tag. Each one moves on its own within the range of its tag, and is
-    /// behind only a version outside that range.
+    /// The pins with a floating tag. Each one is behind when its tag names a version above the
+    /// pinned one, or when a version outside the range of its tag is newer.
     pub floating: usize,
     /// The pins that strata could not check.
     pub errors: usize,
@@ -87,12 +87,13 @@ pub struct Pin {
     pub version: String,
     /// The pinned tag.
     pub tag: String,
-    /// True when the tag is a floating tag, such as `1.x`: the pin moves on its own within the
-    /// range of the tag, and `verify` sees it move.
+    /// True when the tag is a floating tag, such as `1.x`. Palette moves a profile that keeps the
+    /// values of the pack to the version that the tag names. A profile with values of its own
+    /// stays on the pinned version until a person applies the update.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub floating: bool,
     /// For a floating tag: the version that the tag names now, from the tags of the registry.
-    /// The newer versions are the ones above it, which the tag cannot reach.
+    /// When it is above the pinned version, the pin is behind it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub resolved: Option<String>,
     /// The state that the registry gives the pinned version: `deprecated`, `disabled`, or
@@ -274,14 +275,14 @@ where
             Some(b) => b.state.clone(),
             None => Some("absent".to_string()),
         };
-        // a floating tag reaches each version up to the one it names now, and no further
+        // the version that a floating tag names now: a profile with values of its own does not
+        // move to it until a person applies the update, so it is newer as each other version is
         if pin.floating {
             pin.resolved = builds
                 .iter()
                 .find(|b| b.tags.iter().any(|t| t == &pin.tag))
                 .map(|b| b.version.clone());
         }
-        let base = pin.resolved.clone().unwrap_or_else(|| pin.version.clone());
         let clouds: Vec<String> = pinned.map(|b| b.cloud_types.clone()).unwrap_or_default();
         let fits = |b: &PackBuild| {
             clouds.is_empty()
@@ -291,7 +292,7 @@ where
         };
         pin.newer = builds
             .iter()
-            .filter(|b| version::compare(&b.version, &base) == std::cmp::Ordering::Greater)
+            .filter(|b| version::compare(&b.version, &pin.version) == std::cmp::Ordering::Greater)
             .filter(|b| !matches!(b.state.as_deref(), Some("disabled" | "deleted")))
             .filter(|b| fits(b))
             .map(|b| Newer {

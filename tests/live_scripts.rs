@@ -2203,6 +2203,68 @@ fn registry_sh_step_3b_deletes_the_tag_that_the_profile_pins_and_pushes_it_again
     );
 }
 
+#[test]
+fn registry_sh_step_4b_pins_a_profile_with_values_of_its_own_under_the_floating_tag_and_runs_behind()
+{
+    let mut stage = registry_stage(serde_json::json!({}));
+    stage.route("/v1/clusterprofiles", r#"{"uid":"fm-1"}"#);
+    stage.route("/v1/clusterprofiles/fm-1/publish", "{}");
+    stage.route(
+        "/v1/packs",
+        r#"{"items":[{"metadata":{"uid":"pk-101"},"spec":{"registryUid":"reg-1","version":"1.0.1"}}]}"#,
+    );
+    stage.strata(
+        "packs strata-live-pack --json",
+        0,
+        r#"{"registries":[{"registry":"strata-live-registry","versions":[
+            {"version":"1.0.1","tags":["1.0.1","1.0.x","1.x"]},{"version":"1.0.0","tags":["1.0.0"]}]}]}"#,
+    );
+    stage.strata("verify profile-3.json*", 1, "DRIFT\n");
+    stage.strata(
+        "behind floating-mod-1.json --no-impact --json",
+        1,
+        r#"{"pins":[{"version":"1.0.1","tag":"1.0.x","floating":true,"resolved":"1.0.2",
+            "newer":[{"version":"1.0.2"}],"behind":true}]}"#,
+    );
+
+    let (_, steps) = stage.run("registry.sh", &[]);
+    assert!(steps.contains("== 4b. the floating tag 1.0.x"), "{steps}");
+    passed(
+        &steps,
+        &[
+            "pin-floating-modified",
+            "floating-mod",
+            "floating-mod-keeps",
+            "floating-mod-behind",
+            "floating-mod-behind-names",
+            "delete-floating-modified",
+        ],
+    );
+    // the profile pins the build of 1.0.1 under the floating tag, with the changed values
+    let sent: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(stage.path("routes/sent/POST_v1_clusterprofiles")).unwrap(),
+    )
+    .unwrap();
+    let pack = &sent["spec"]["template"]["packs"][0];
+    assert_eq!(pack["tag"], "1.0.x", "{sent}");
+    assert_eq!(pack["uid"], "pk-101", "{sent}");
+    assert_eq!(pack["layer"], "addon", "{sent}");
+    assert!(
+        pack["values"]
+            .as_str()
+            .unwrap()
+            .contains("strataModified: true"),
+        "{sent}"
+    );
+    let calls = std::fs::read_to_string(stage.path("strata/calls")).unwrap();
+    let kept = calls.lines().position(|l| l == "verify floating-mod-1.json");
+    let moved = calls.lines().position(|l| l == "verify profile-3.json");
+    assert!(
+        moved.is_some() && kept > moved,
+        "the check of the profile with changed values comes after the wait for the move: {calls}"
+    );
+}
+
 /// A `helm` that passes each command, and prints a digest for a push.
 const FAKE_HELM_PUSH: &str = r#"#!/usr/bin/env bash
 [ "$1" = push ] && echo "Digest: sha256:$(printf '%s' "$*" | sha256sum | cut -c1-64)"
