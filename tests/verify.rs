@@ -5681,9 +5681,8 @@ fn packs_lists_only_the_retired_versions_of_a_registry_that_answers_404_and_stop
  {
     // the Mirror answers 404 with and without the states query: it serves no version. Its
     // disabled and deleted versions differ in state
-    let mirror = |uid: &str, version: &str| {
-        pack_summary(uid, version, "reg-mirror", "sha256:mmm", CSI_63)
-    };
+    let mirror =
+        |uid: &str, version: &str| pack_summary(uid, version, "reg-mirror", "sha256:mmm", CSI_63);
     let api = serve_registry(
         vec![
             mirror("pk-m4", "1.64.0"),

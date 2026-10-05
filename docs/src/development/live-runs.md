@@ -1439,8 +1439,10 @@ What differs is outside strata:
   of the version check come from the version pattern that Palette uses.
 - No script uses a Palette that runs in FIPS mode. The live tenant has
   `fipsPackConfig.mode` `none`, and no listed version has the annotation
-  `fips`. So the live run shows only that `packs` gives the same rows as
-  before: see [The FIPS rule](../internals/palette/packs.md#the-fips-rule).
+  `fips`. A read of the live tenant shows only that `packs` gives the same
+  versions, tags, and states as before for `csi-aws-ebs`, `kubernetes`,
+  `nginx`, `ubuntu-aws`, and `cni-calico`: see
+  [The FIPS rule](../internals/palette/packs.md#the-fips-rule).
 - No script installs a Zarf package on a cluster: Palette gives a Zarf pack the
   values of an app profile, `{{.spectro.system.appdeployment.tiername}}`, so it
   needs an app deployment of Palette Dev Engine.
