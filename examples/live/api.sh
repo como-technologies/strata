@@ -81,7 +81,9 @@
 #   api.sh app-profile-delete UID
 #   api.sh sync-oci REGISTRY_UID
 #       Ask Palette to read an OCI pack registry in ECR again, and wait until that sync ends.
-#       Prints the sync status. Exit 2 when the sync does not end in five minutes.
+#       Prints the sync status. While a sync of the registry runs, Palette refuses the request
+#       with OciSyncInProgress: then wait, and ask again. Exit 2 when Palette refuses the request
+#       for five minutes, or when the sync does not end in five minutes.
 #   api.sh sync KIND REGISTRY_UID
 #       The same for a registry of KIND: oci-ecr, oci-basic (an OCI registry with basic auth),
 #       helm, or pack (a Spectro pack registry).
@@ -556,6 +558,9 @@ sync_oci() {
   sync_registry oci-ecr "$1"
 }
 
+# The seconds between two requests about a sync. A test sets it to 0.
+SYNC_WAIT=${SYNC_WAIT:-5}
+
 # sync_registry KIND UID: POST the sync of a registry of KIND (oci-ecr, oci-basic, helm, or pack),
 # then wait until a run newer than the last one has ended
 sync_registry() {
@@ -569,7 +574,7 @@ sync_registry() {
   esac
   [ -n "$uid" ] || die "usage: api.sh sync KIND REGISTRY_UID"
   before=$(call GET "$base/sync/status" | jq -r '.lastRunTime // ""') || return 2
-  call POST "$base/sync" > /dev/null || return 2
+  sync_start "$base" "$uid" || return 2
   for _ in $(seq 1 60); do
     status=$(call GET "$base/sync/status") || return 2
     after=$(jq -r '.lastRunTime // ""' <<<"$status")
@@ -577,9 +582,22 @@ sync_registry() {
       echo "$status"
       return 0
     fi
-    sleep 5
+    sleep "$SYNC_WAIT"
   done
   die "the sync of registry $uid did not end in five minutes"
+}
+
+# sync_start BASE UID: POST the sync of the registry at BASE. While a sync of the registry runs,
+# Palette refuses the request with HTTP 500 and OciSyncInProgress. Then wait, and ask again, for
+# up to five minutes. Each other refusal is an error.
+sync_start() {
+  local base=$1 uid=$2 refusal
+  for _ in $(seq 1 60); do
+    refusal=$(call POST "$base/sync" 2>&1 > /dev/null) && return 0
+    grep -q OciSyncInProgress <<<"$refusal" || { echo "$refusal" >&2; return 2; }
+    sleep "$SYNC_WAIT"
+  done
+  die "a sync of registry $uid is in progress, and Palette refused a new sync for five minutes"
 }
 
 # pack_registry_create NAME ENDPOINT USER: a Spectro pack registry over ENDPOINT, with basic auth;

@@ -35,13 +35,6 @@ These are open:
 - The variables of a cluster template while the template applies.
 - A Palette that runs in FIPS mode: no run uses one. See
   [The FIPS rule](packs.md#the-fips-rule).
-- The record of a version that a cluster template links:
-  [template.sh](../../development/live-runs.md#templatesh) checks that its root
-  is the root before the link, and no run of that check has a result yet.
-- A profile with values of its own under a floating tag that moves:
-  [registry.sh](../../development/live-runs.md#registrysh) checks that the
-  profile stays on its version, and no run of that check has a result yet. See
-  [Tag names](packs.md#tag-names).
 - A bring-your-own-image OS pack, and a new `imageId` under one version: no run
   gives an OS pack an `imageId`. So no run shows if Palette replaces the nodes
   for a new image, or which `imageId` a cluster copy holds. See
@@ -57,10 +50,6 @@ These are open:
   requires a pack that the profile does not hold. No pack of the Public Repo
   lists a dependency. See
   [The validate routes](validate-routes.md#post-v1clusterprofilesvalidatepacks).
-- The answer of `GET /v1/clusterprofiles/validate/name` and of
-  `POST /v1/clusterprofiles/import/validate` to a name and a version that the
-  project holds. Stage 3 of `validate-packs.sh` asks it, with a profile. See
-  [The validate routes](validate-routes.md#get-v1clusterprofilesvalidatename).
 - The route of a cluster template,
   `POST /v1/spectroclusters/clusterTemplates/{uid}/validate/repave`, and the
   answer of the route of the cluster for a cluster in a template. The stand-in

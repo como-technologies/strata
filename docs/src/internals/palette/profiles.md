@@ -241,9 +241,8 @@ Palette serves the two templates as follows:
   gives the packs in `spec.draft`, no pack in `spec.published`, and
   `status.isPublished` false. A published version gives `status.isPublished`
   true, also while a draft waits. The profile listing names a version that
-  nobody published, with the cloud type of its draft. The code of Palette gives
-  these rules, and
-  [draft.sh](../../development/live-runs.md#draftsh) checks them.
+  nobody published, with the cloud type of its draft. A live run shows these
+  rules: see [draft.sh](../../development/live-runs.md#draftsh).
 - A manifest is one object, with a published content and a draft content. The
   `PUT` writes the draft content of each manifest that it names by uid, and
   the published content stays. A manifest that the `PUT` adds has a draft
@@ -301,7 +300,10 @@ the routes of one pack and of one manifest do not check it, and the live run
 changes a linked version through the route of one manifest. `verify` finds an
 edit through such a route. The lock holds against a new cluster: it keeps every
 cluster outside the template away from a linked version. A cluster that runs a
-linked version is a cluster the template applies.
+linked version is a cluster the template applies. A record of a linked version
+keeps no template, and has the root from before the link. Palette shows the
+templates, and `strata consumers` counts them. See
+[The cluster templates of a version](../../commands/snapshot/profile-version.md#the-cluster-templates-of-a-version).
 
 The template also takes the repave question of its clusters. These facts come
 from the code of Palette, not from a live run:

@@ -238,7 +238,10 @@ with no body.
 
 A live run shows it: the route takes the version `1.1` and a name that the
 project does not hold with `204`. It refuses the version `2.2.2.develop` with
-HTTP 500 and `VersionParseFailure`. See
+HTTP 500 and `VersionParseFailure`. It refuses the name and the version of a
+profile that the project holds with `ClusterProfileAlreadyExists`.
+`snapshot --validate` of such a candidate prints the refusal, exits `2`, and
+writes no record. See
 [validate-packs.sh](../../development/live-runs.md#validate-packssh).
 
 ## POST /v1/clusterprofiles/import/validate

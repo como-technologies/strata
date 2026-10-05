@@ -71,6 +71,11 @@ and
   the copy of the last sync that completed.
 - Palette writes `0001-01-01T00:00:00.000Z` for a registry that never
   completed a sync.
+- Palette refuses a sync while a sync of the registry runs. The sync route of
+  an OCI registry, `POST /v1/registries/oci/{uid}/ecr/sync`, answers HTTP 500
+  with the code `OciSyncInProgress`. The message is "another sync process is
+  already in progress". The sync of the live example waits and asks again: see
+  [registry.sh](../../development/live-runs.md#registrysh).
 
 ## A pack that requires another pack
 
@@ -341,10 +346,11 @@ A profile with values of its own does not move with the tag. Palette shows the
 ([Update a cluster profile](https://docs.spectrocloud.com/profiles/cluster-profiles/modify-cluster-profiles/update-cluster-profile/#accept-updates-to-a-cluster-profile)).
 This is the rule of a push again too: see
 [A pack version pushed again](#a-pack-version-pushed-again). Step 4b of
-`registry.sh` checks it, and no run of that check has a result yet. Until a
-person applies the update, a record of the profile verifies, and
-[`strata behind`](../../commands/behind.md) names the version that the tag
-names now.
+`registry.sh` shows it. A second profile pins 1.0.1 under `1.0.x` with values
+of its own. After the push of 1.0.2 and the sync, the first profile moves, and
+the second stays on 1.0.1. Until a person applies the update, a record of the
+profile verifies. [`strata behind`](../../commands/behind.md) says that the
+pin is behind 1.0.2, the version that the tag names now.
 
 ## The layer of a pack
 
@@ -353,10 +359,12 @@ registry. It drops the layer that the profile gives, with no error. The manifest
 pack of a profile gets the layer `addon` from the manifest pack of Palette. A
 pack that Palette makes at the create also gets `addon`: see
 [A pack that Palette makes at the create](#a-pack-that-palette-makes-at-the-create).
-The code of Palette gives this rule. Stage 4 of
-[validate-packs.sh](../../development/live-runs.md#validate-packssh) makes a
-profile with another layer than the registry, and checks the layer that Palette
-publishes. That check has no result yet.
+Stage 4 of
+[validate-packs.sh](../../development/live-runs.md#validate-packssh) shows it.
+Palette makes and publishes a profile that gives `cert-manager` the layer
+`csi`, with no error. The published pack has the layer `addon` of its
+registry. A record of the version holds the pack as `addon/cert-manager`, and
+has the root of the candidate that gives no layer.
 
 So a profile that gives `kubernetes` the layer `addon` has the layer `k8s` when
 Palette publishes it. The layer is part of `IDENTITY`, so a candidate file with
@@ -477,8 +485,10 @@ see [The gaps that strata fills](profiles.md#the-gaps-that-strata-fills).
 
 So `strata packs --cloud aws` keeps a version whose cloud types hold `aws` or
 `all`, and `strata behind` does the same. The example's own packs have
-`cloudTypes: ["all"]`. The check on a live tenant is `registry.sh` stage 6:
-see [Live runs](../../development/live-runs.md#registrysh).
+`cloudTypes: ["all"]` in their `pack.json`. The listing gives such a version
+`all` and each cloud of Palette beside it, from `apache-cloudstack` to
+`vsphere`. So `--cloud aws` keeps it by `aws` too. `registry.sh` stage 6 shows
+it: see [Live runs](../../development/live-runs.md#registrysh).
 
 ## The architectures of a version
 
@@ -545,7 +555,10 @@ Spectro Cloud also marks a version that a profile must not hold. The listing
 gives it the annotation `disabled: "true"`, and no `system_state`. In
 `Public Repo`, `gloo` 1.2.18 carries the mark. Palette serves such a version:
 the registry route gives its tags and its values with no query, and the
-`states` query does not include it. Palette refuses a profile that holds it,
+`states` query does not include it. `strata packs` lists `gloo` 1.2.18 with
+its tags, and says `disabled` in the heading and in the row: see
+[pack-states.sh](../../development/live-runs.md#pack-statessh). Palette
+refuses a profile that holds it,
 at the create and on the validate routes: HTTP 500, `DisabledPacksForbidden`,
 `Disabled packs 'gloo' are forbidden`. See
 [The validate routes](validate-routes.md#post-v1clusterprofilesvalidatepacks)
@@ -618,4 +631,7 @@ A record keeps `imageId` alone, outside the root, and `compare` and `verify`
 name a new `imageId`: see
 [The OS pack names a new machine image](../../use-cases/os-image.md).
 
-[The live example checks the annotations of the OS pack](../../development/live-runs.md#packssh).
+A live run shows it. The pack reference of `ubuntu-aws` 24.04 in a profile has
+the eight annotations and no `imageId`. They are the annotations of the pack
+version in the registry. A record of the profile keeps no annotation of the
+pack. See [packs.sh](../../development/live-runs.md#packssh).

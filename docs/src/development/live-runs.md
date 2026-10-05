@@ -220,16 +220,16 @@ registries the tenant can see, including one pack that two registries hold.
 | `preset-listing` | 0 | #151: the listing gives each option of the `access` parameter of `headlamp` 0.45.0 with no presets: see [The presets of a template option](../internals/palette/packs.md#the-presets-of-a-template-option) |
 | `preset-warning`, `preset-warning-says`, `preset-recorded` | 0 | #151: a candidate whose values select the option `public` warns, and records `packs[].presetOptions[]` |
 | `os-record` | 0 | #189: a record of the release profile |
-| `os-annotations` | 0 | #253: the record keeps no annotation of the OS pack, because `ubuntu-aws` has no `imageId`. No run has a result yet |
-| `os-profile`, `os-annotations-ref` | 0 | #189: the pack reference of the OS pack has annotations, and no `imageId`. A run of #189 read them from the record. No run has a result yet from the document of the profile |
-| `os-pack-registry`, `os-annotations-registry` | 0 | #189: the annotations of the pack reference are those of the pack version in the registry: see [The annotations of a pack reference](../internals/palette/packs.md#the-annotations-of-a-pack-reference). A run of #189 read the pack reference from the record. No run has a result yet from the document of the profile |
+| `os-annotations` | 0 | #253: the record keeps no annotation of the OS pack, because `ubuntu-aws` has no `imageId` |
+| `os-profile`, `os-annotations-ref` | 0 | #189: the document of the release profile gives the pack reference of the OS pack eight annotations, and no `imageId` |
+| `os-pack-registry`, `os-annotations-registry` | 0 | #189: the pack version in the registry, `GET /v1/packs/<uid>`, gives the same annotations as the pack reference: see [The annotations of a pack reference](../internals/palette/packs.md#the-annotations-of-a-pack-reference) |
 | `pack-time-listing` | 0 | #191: the listing gives each version of the CSI pack a `lastModifiedTimestamp` that is the same as its `creationTimestamp`: see [What a registry answers about a pack](../internals/palette/packs.md#what-a-registry-answers-about-a-pack) |
 | `verify-no-time` | 0 | #191: `verify --json` gives no `verify.lastModified` for a pack record |
 | `arch-listing` | 0 | #126: the listing names the architectures of `loki` 2.10.2 as `amd64,arm64`, and of 3.6.7 as `amd64`: see [The architectures of a version](../internals/palette/packs.md#the-architectures-of-a-version) |
 | `arch-record`, `arch-behind`, `arch-behind-says`, `arch-behind-json` | 0, 1, 0, 0 | #126: a record of `loki` 2.10.2 is behind 3.6.7, and `behind` says that the move drops `arm64`, in the line and in `newer[].drops` |
-| `bitnami-sync` | 0 | #122: the Helm summary listing gives the sync of the Bitnami registry, whose sync stays `InProgress`. No result yet |
-| `stale-record`, `stale-current` | 0 | #122: a record of the newest `nginx` of Bitnami, and `behind` says that the pin is current. No result yet |
-| `stale-note`, `stale-json` | 0 | #122: the line of the pin names the sync of the registry, because the last sync did not complete. `--json` gives `pins[].registrySync` with the status of Palette: see [A pin that is current against an older copy](../commands/behind.md#a-pin-that-is-current-against-an-older-copy). When the last sync completed, `stale-no-note` checks that the pin has no note in its place. No result yet |
+| `bitnami-sync` | 0 | #122: the Helm summary listing gives the sync of the Bitnami registry: `InProgress`, with `syncRecovery` `Recovering` and `sync interrupted` |
+| `stale-record`, `stale-current` | 0 | #122: a record of the newest `nginx` of Bitnami, and `behind` says that the pin is current |
+| `stale-note`, `stale-json` | 0 | #122: the last sync did not complete, so the line of the pin names the sync that runs, the last complete sync, and the recovery. `--json` gives `pins[].registrySync` with the status of Palette: see [A pin that is current against an older copy](../commands/behind.md#a-pin-that-is-current-against-an-older-copy). When the last sync completed, `stale-no-note` checks that the pin has no note in its place. The sync of Bitnami stays `InProgress`, so no run shows `stale-no-note` |
 
 Palette lists the registries of a tenant in no fixed order, so strata sorts them
 and the ambiguous-ref message reads the same every time:
@@ -253,7 +253,7 @@ which carries the mark `disabled` of Spectro Cloud and no state.
 | `states-disabled`, `states-disabled-says` | 0 | #68, #120: `packs` lists a disabled registry, and the heading says `disabled`. The `states` query gives the tags: `0.26.1` has `0.26.1 0.26.x` |
 | `states-deleted`, `states-deleted-says` | 0 | #68, #120: the same for a deleted registry: the heading says `deleted`, and `1.0.6` has `1.0.6 1.0.x 1.x` |
 | `states-deprecated`, `states-deprecated-says` | 0 | #68: a deprecated version keeps its tags, and the heading and the row say `deprecated` |
-| `states-mark`, `states-mark-says` | 0 | #125: `packs` lists `gloo` 1.2.18 with its tags, and the heading and the row say `disabled`, from the mark with no `system_state`. A read of the tenant with the command shows it. No run of the script has a result yet |
+| `states-mark`, `states-mark-says` | 0 | #125: `packs` lists `gloo` 1.2.18 with its tags `1.2.18 1.2.x 1.x`, and the heading and the row say `disabled`, from the mark with no `system_state` |
 | `snapshot-disabled`, `snapshot-disabled-says` | 2, 0 | #68: a disabled version is `pack-unavailable`, and the error names the state and the registry |
 | `snapshot-deleted` | 2 | #68: a deleted version is `pack-unavailable` |
 | `snapshot-deprecated` | 0 | #68: a deprecated version records as usual |
@@ -327,11 +327,11 @@ shows. It then asks Palette to read the registry again after each push.
 | `packs-two`, `packs-two-order` | 0 | #66: `packs` lists 1.0.1 first, then 1.0.0 |
 | `profile-stays` | 0 | #66: the profile pinned to 1.0.0 does not move to 1.0.1 |
 | `profile-floating`, `push-4`, `sync-4` | 0 | a profile pins the pack under `1.0.x`, and 1.0.2 is pushed, which the tag now names |
-| `pin-floating-modified`, `floating-mod` | 0 | #165: before the push, a second profile pins 1.0.1 under `1.0.x`, with values that differ from those of the pack. No result yet |
+| `pin-floating-modified`, `floating-mod` | 0 | #165: before the push, a second profile pins 1.0.1 under `1.0.x`, with values that differ from those of the pack |
 | `floating-moves` | 1 | #66: the profile pinned under the floating tag moves with it. The script verifies its record again until it reports `DRIFT`, for up to ten minutes |
 | `floating-who`, `floating-who-system`, `floating-who-versions` | 1, 0, 0 | #69: `verify --who` on the same record reads the audit log of the profile: updates by the Palette service `system`, one of which names the two versions, `1.0.1 > 1.0.2` |
-| `floating-mod-keeps` | 0 | #165: the profile with values of its own stays on 1.0.1 under the tag: its record verifies. No result yet |
-| `floating-mod-behind`, `floating-mod-behind-names` | 1, 0 | #165: `behind` on its record says that the pin is behind, and names 1.0.2 as newer and as the version that the tag names now. No result yet |
+| `floating-mod-keeps` | 0 | #165: the profile with values of its own stays on 1.0.1 under the tag: its record verifies after the sync that moved the first profile |
+| `floating-mod-behind`, `floating-mod-behind-names` | 1, 0 | #165: `behind` on its record says that the pin is behind. It names 1.0.2 as newer, as the version that the tag names now, and as the latest of Palette |
 | `delete-floating-modified` | 0 | the profile with values of its own is deleted |
 | `chart-empty` | 0 | the chart repository starts empty, and two applies remove the Palette registry over it and make it again, so Palette reads the chart for the first time |
 | `chart-push-1`, `chart-sync-1`, `chart-packs`, `chart-leaf` | 0 | `strata-live-chart` 1.0.0 is pushed with `helm push` into the example's OCI Helm registry, Palette reads it, and `packs` and `snapshot` read the chart as a pack of type `oci` |
@@ -342,7 +342,7 @@ shows. It then asks Palette to read the registry again after each push.
 | `chart-leaf-verify`, `chart-profile-verify` | 0 | #66: the record of the chart from before the push verifies, and so does the profile that pins it: Palette lists what it listed |
 | `chart-push-3`, `chart-sync-3`, `chart-packs-two`, `chart-packs-two-versions` | 0 | #66: 1.0.1 is pushed, and the sync reads it: `packs` lists 1.0.1 first, then 1.0.0. A sync reads new versions, and keeps the digest of a known one |
 | `dep-push`, `dep-push-requiring`, `dep-sync`, `dep-packs` | 0 | `strata-live-dep` 1.0.0 is pushed, then `strata-live-pack` 1.1.0, whose `pack.json` requires `strata-live-dep` 1.0.0 or newer; Palette reads both |
-| `dep-packs-cloud`, `dep-packs-cloud-version` | 0 | #118: `packs strata-live-dep --registry strata-live-registry --cloud aws` lists `1.0.0`, whose cloud type is `all`. No result yet |
+| `dep-packs-cloud`, `dep-packs-cloud-version` | 0 | #118: `packs strata-live-dep --registry strata-live-registry --cloud aws` lists `1.0.0`. Its `pack.json` gives the cloud type `all` alone, and the listing gives it `all` and each cloud of Palette: see [The cloud type `all`](../internals/palette/packs.md#the-cloud-type-all) |
 | `dep-profile-alone`, `dep-profile-alone-says` | 1, 0 | #66: a profile with the requiring pack and not the required one is refused at creation, and the refusal names the required pack |
 | `dep-profile-both` | 0 | #66: a profile with both packs is accepted |
 | `dep-record`, `dep-record-packs` | 0 | a record of that profile lists the two packs, the requiring one first, as authored |
@@ -352,6 +352,15 @@ In step 3b, the document of the profile also gets the annotations `isInValid`
 pack tags are deleted from the registry`. Ten minutes after the push again, the
 pack still has the flag, and the digest of the deleted push. This is the source
 for [A tag that a registry deletes](../internals/palette/packs.md#a-tag-that-a-registry-deletes).
+
+Palette refuses a sync while a sync of the registry runs. The sync route of an
+OCI registry answers HTTP 500 with the code `OciSyncInProgress` and the message
+"another sync process is already in progress". A run got that answer on
+`chart-sync-1`, right after the apply that made the Palette registry over the
+chart repository. Each check after it passed. So `api.sh sync` waits and asks
+again until Palette takes the request, for up to five minutes, and then waits
+until the sync ends. See
+[The sync of a registry](../internals/palette/packs.md#the-sync-of-a-registry).
 
 The script ends with an apply of the baseline, which removes the profiles it
 made. The pushed versions stay in the registry until `live-down`.
@@ -370,7 +379,7 @@ version that the cluster runs.
 | `release-before` | 0 | a record of the release version before the link |
 | `template`, `template-links` | 0 | #66: the template links the release version and the add-on version |
 | `release-doc`, `release-names-template` | 0 | #66: the version names the template that uses it, and no cluster |
-| `release-record-template`, `release-record-root` | 0 | #260: a record of the linked release version has no `source.clusterTemplates`, and has the root from before the link. No run has a result yet |
+| `release-record-template`, `release-record-root` | 0 | #260: a record of the linked release version has no `source.clusterTemplates`, and has the root from before the link |
 | `release-consumers`, `release-consumers-template` | 1, 0 | #147: `strata consumers` of the linked version names the template with `kind: template`, and exits `1`. |
 | `release-delete`, `release-delete-says` | 2, 0 | #147: Palette refuses the delete of the linked version, `DeletionResourceInUseError`. |
 | `lock-edit`, `lock-edit-says` | 2, 0 | #66: an edit in place of a linked version, a `PUT` of the whole version, is refused, and the refusal carries the code `ClusterProfileUpdateValidationFailure` |
@@ -464,7 +473,7 @@ version with no publish, lists it, and deletes it. This is the source for
 | `record` | 0 | record the add-on version |
 | `no-draft`, `no-draft-says` | 2, 0 | #155: a version with no draft: `<uid>@draft` exits `2`, and says that the version has no draft |
 | `api-draft` | 0 | #155: a `PUT` of the version with no publish |
-| `list-published` | 0 | #114: `list --packs` gives `published` true for the version while its draft waits. No run has a result yet |
+| `list-published` | 0 | #114: `list --packs` gives `published` true for the version while its draft waits |
 | `version-holds` | 0 | #155: the version keeps its content while the draft waits: its record verifies |
 | `draft-record`, `draft-template` | 0 | #155: `<uid>@draft` records the draft: `source.template` `draft`, and the edit in the manifest |
 | `version-record` | 0 | #155: a record of the version, read while the draft waits, holds the published manifest |
@@ -478,8 +487,8 @@ version with no publish, lists it, and deletes it. This is the source for
 | `version-after-publish` | 1 | #155: the record of the version from before the publish reports `DRIFT` |
 | `no-draft-after-publish` | 2 | #155: the publish empties the draft |
 | `restored` | 0 | the edit is put back, and the first record verifies again |
-| `unpublished-create` | 0 | #114: a create of `strata-live-unpublished` with the packs of the add-on version, and no publish. No run has a result yet |
-| `unpublished-listed`, `unpublished-mark` | 0 | #114: the profile listing names the version, and `list --packs` gives `published` false, the packs of its draft, and the mark `draft`. No run has a result yet |
+| `unpublished-create` | 0 | #114: a create of `strata-live-unpublished` with the packs of the add-on version, and no publish |
+| `unpublished-listed`, `unpublished-mark` | 0 | #114: the profile listing names the version. `list --packs` gives `published` false, the packs of its draft, and the mark `draft` at the end of its row |
 | `unpublished-delete` | 0 | #114: the delete of `strata-live-unpublished` |
 
 ## pending.sh
@@ -664,11 +673,13 @@ this result. This is the source for
 No cluster and no cost. In stages 1, 2, 3, and 5, each request to Palette is a
 read or a request to a validate route, which writes nothing. It uses `cert-manager`
 1.21.1 from the Public Repo, in an add-on candidate, and `gloo` 1.2.18 for the
-mark `disabled`. Stage 3 needs a profile
-version in the project of the key: give it as `PROFILE=<name>@<version>`.
-Stage 4 makes the profile `strata-live-layer` and deletes it. It runs only when
-you give its number: `validate-packs.sh 4`. Stage 5 asks the name route and the
-import validate route.
+mark `disabled`. Stage 3 runs only with a profile version of the project: give
+it as `PROFILE=<name>@<version>`. With the add-on version of the live example,
+Palette takes the version on the route of an update. It refuses a candidate
+with that name and version on the name route. Stage 4 makes the profile
+`strata-live-layer` and deletes it. It runs only when you give its number:
+`validate-packs.sh 4`. Stage 5 asks the name route and the import validate
+route.
 
 | Check | Expected exit | What it shows |
 |---|---|---|
@@ -678,15 +689,15 @@ import validate route.
 | `validate-no-pack`, `validate-no-pack-says` | 2, 0 | #152: Palette refuses a body with no pack before it checks the packs: HTTP 400 with `ShouldNotBeEmpty` |
 | `validate-disabled-mark`, `validate-disabled-mark-says` | 2, 0 | #125: Palette refuses a candidate with `gloo` 1.2.18, which carries the mark `disabled` and no `system_state`: `DisabledPacksForbidden`, `Disabled packs 'gloo' are forbidden`, of the whole request. Strata exits `2` and writes no record |
 | `validate-version`, `validate-version-says` | 0 | #152: `snapshot <ref> --validate` asks the route of an update, and Palette takes the version as it is |
-| `validate-exists`, `validate-exists-says` | 2, 0 | #273: a candidate with the name and the version of `PROFILE` gets `ClusterProfileAlreadyExists`. No result yet |
+| `validate-exists`, `validate-exists-says` | 2, 0 | #273: a candidate with the name and the version of `PROFILE` gets `ClusterProfileAlreadyExists`, "Cluster Profile with name '<name>' and version '<version>' already exists". Strata prints `palette    refuses`, exits `2`, and writes no record |
 | `layer-registry` | 0 | #210: the registry gives `cert-manager` the layer `addon` |
 | `layer-refused`, `layer-refused-says` | 2, 0 | #210: strata refuses a candidate that gives `cert-manager` the layer `csi`. The message names the layer, `csi`, `addon`, and the rule of Palette |
 | `layer-validate`, `layer-validate-says` | 0 | #254: the validate route takes the pack with the layer `csi`, and gives no result for it |
-| `layer-create` | 0 | #254: Palette makes and publishes `strata-live-layer` 1.0.0, with `cert-manager` in the layer `csi`, with no error. No result yet |
-| `layer-profile`, `layer-published` | 0 | #254: the published pack has the layer `addon` of the registry, not `csi`. No result yet |
-| `layer-record`, `layer-record-key` | 0 | #254: a record of the version holds the pack as `addon/cert-manager`. No result yet |
-| `layer-root` | 0 | #254: `compare` of the candidate with no layer and the version finds the same root. No result yet |
-| `layer-delete` | 0 | the profile `strata-live-layer` is deleted. No result yet |
+| `layer-create` | 0 | #254: Palette makes and publishes `strata-live-layer` 1.0.0, with `cert-manager` in the layer `csi`, with no error |
+| `layer-profile`, `layer-published` | 0 | #254: the published pack has the layer `addon` of the registry, not `csi` |
+| `layer-record`, `layer-record-key` | 0 | #254: a record of the version holds the pack as `addon/cert-manager` |
+| `layer-root` | 0 | #254: `compare` of the candidate with no layer and the version finds the same root, `IDENTICAL` |
+| `layer-delete` | 0 | the profile `strata-live-layer` is deleted |
 | `validate-name-free`, `validate-name-short` | 0 | #273: the name route takes a name that the project does not hold, and the version `1.1`, with `204` |
 | `validate-name-version`, `validate-name-version-says` | 2, 0 | #273: the name route refuses the version `2.2.2.develop` with HTTP 500 and `VersionParseFailure` |
 | `validate-bad-version`, `-says`, `-no-record` | 2, 0, 1 | #273: `snapshot --validate` prints `VersionParseFailure` once, from the two routes, and writes no record |
@@ -742,13 +753,13 @@ states what it shows.
 | `charts-digest` | 0 | #75: the Helm repository: the sha256 of the chart archive, bare hex |
 | `oci-pack-digest`, `oci-helm-digest` | 0 | #75: OCI `pack` and `helm`: the manifest digest of the push |
 | `oci-zarf-digest` | 0 | #75: OCI `zarf`: no digest |
-| `packs-zarf`, `packs-zarf-says` | 0 | #128: `strata packs` of the Zarf pack says `no digest` on the row of `1.0.0`, and `no digests` in the heading. No run has a result yet |
+| `packs-zarf`, `packs-zarf-says` | 0 | #128: `strata packs` of the Zarf pack says `no digest` on the row of `1.0.0`, and `no digests` in the heading |
 | `provider-types` | 0 | #75: each record of an OCI pack names `pack`, `helm`, or `zarf`, and the Helm record and the Spectro pack record name none |
 | `packs-digest` | 0 | #75: the Spectro pack registry: the digest of the push |
 | `auth-listed` | ? | #75: Palette lists no chart of the Helm repository with credentials while no profile pins one (recorded 2) |
 | `auth-candidate`, `auth-candidate-minted` | 0 | #154: a candidate with the chart builds a record before any profile pins it: no pack uid, no digest, the layer `addon`, the type `helm`, and the tag as the version |
-| `auth-packs`, `auth-packs-says` | 2, 0 | #123: `packs --registry` of the Helm repository with credentials is `pack-not-found`, and the error names the registry that Palette does not sync. No result yet |
-| `auth-behind`, `auth-behind-says` | 2, 0 | #123: `behind` on the candidate record cannot check the pin, and the line under the pin names the registry that Palette does not sync. No result yet |
+| `auth-packs`, `auth-packs-says` | 2, 0 | #123: `packs --registry` of the Helm repository with credentials is `pack-not-found`. The error says that Palette does not sync the registry, and lists a pack of such a registry only while a profile pins the pack |
+| `auth-behind`, `auth-behind-says` | 2, 0 | #123: `behind` on the candidate record cannot check the pin, `not checked`. The line under the pin names the registry that Palette does not sync |
 | `auth-pin`, `auth-record` | 0 | a profile that pins the chart by name, and a record of it |
 | `auth-candidate-same`, `auth-candidate-minted-only` | 0 | #154: `same-release` with `--allow no-digest` passes the candidate and the published version, and `mintedUidOnly` names the chart |
 | `auth-candidate-again`, `auth-candidate-listed` | 0, 0 | #154: a record of the candidate after the create has the published root, because the listing now has the chart |
