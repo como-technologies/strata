@@ -300,6 +300,19 @@ impl Runner {
         self.build(|t| t.publish(project, uid));
     }
 
+    /// Create a profile version with no publish: see [`Tenant::unpublish`].
+    pub fn unpublished(
+        &mut self,
+        project: &str,
+        uid: &str,
+        version: &str,
+        example: &str,
+        edits: &[Edit],
+    ) {
+        self.profile(project, uid, version, example, edits);
+        self.build(|t| t.unpublish(project, uid));
+    }
+
     /// Create a cluster, or apply the update that waits for one that exists.
     pub fn cluster(&mut self, project: &str, uid: &str, name: &str, profiles: &[&str]) {
         self.cluster_with(project, uid, name, profiles, &[]);
