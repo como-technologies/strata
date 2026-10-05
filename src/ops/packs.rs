@@ -48,12 +48,12 @@ pub struct PackRegistry {
     pub layer: String,
     /// The versions, newest first. `--latest` keeps one of them.
     pub versions: Vec<PackBuild>,
-    /// How many versions of the pack the registry holds, before `--latest` or `--cloud` cut the
+    /// How many versions of the pack the registry offers, before `--latest` or `--cloud` cut the
     /// list. A heading states the registry's inventory, and not the count of rows a flag left.
     pub versions_offered: usize,
     /// True when Palette listed the pack under this registry and then answered 404 for the tags
-    /// of the registry, also with the states query: the versions come from the listing alone,
-    /// with no tags.
+    /// of the registry, also with the states query: the disabled and the deleted versions come
+    /// from the listing alone, with no tags.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub tags_unavailable: bool,
     /// The state that every version of the pack in this registry has, when they all have the
@@ -181,8 +181,10 @@ fn merged_tags(answers: &[Value]) -> Vec<Value> {
 /// List what the registries offer for one pack.
 ///
 /// Reads the paged listing for the versions, their digests and their types, and each registry's
-/// own answer for the tags that point at a version. A registry that does not have the pack is not
-/// in the answer; no registry with it at all is `pack-not-found`.
+/// own answer for the tags that point at a version. Palette does not serve a version that has no
+/// tag in the registry answer, so the listing of strata leaves it out, unless Spectro Cloud
+/// retired it as disabled or deleted. A registry with no version left is not in the listing; no
+/// registry with the pack at all is `pack-not-found`.
 pub fn registry_packs<A, F>(
     name: &str,
     options: &PackOptions,
@@ -224,28 +226,11 @@ where
             continue;
         }
         had_the_pack = true;
-        // every version of this pack that the registry holds, counted before --cloud and --latest
-        // cut the list: the heading states the inventory, not the rows that survived a flag
-        let versions_offered = mine
-            .iter()
-            .filter_map(|e| Some(text(e, "/spec/version")).filter(|v| !v.is_empty()))
-            .collect::<std::collections::BTreeSet<_>>()
-            .len();
-        // one state for the registry, when every version of the pack in it has the same one
-        let states: std::collections::BTreeSet<Option<String>> = mine
-            .iter()
-            .map(|e| crate::candidate::pack_state(e))
-            .collect();
-        let state = match states.into_iter().collect::<Vec<_>>().as_slice() {
-            [Some(one)] => Some(one.clone()),
-            _ => None,
-        };
-        let no_digests = mine.iter().all(|e| text(e, "/spec/digest").is_empty());
         // the registry's own answer holds the tags, which the listing does not. With no query,
         // the answer does not include the disabled and the deleted versions, and Palette answers
         // 404 when it has no version. So a registry with a retired version gets a second request
-        // with the states query. A registry that answers 404 to both keeps the versions of the
-        // listing, with no tags, and the other registries still answer
+        // with the states query. A registry that answers 404 to both keeps only the disabled and
+        // the deleted versions of the listing, with no tags. The other registries still answer
         progress.note(&format!("reading the tags of {name} in {registry}"));
         let path = format!("/v1/packs/{name}/registries/{uid}");
         let mut answers = vec![tags_answer(&palette, &path)?];
@@ -266,6 +251,33 @@ where
             .find(|l| !l.is_empty())
             .unwrap_or_else(|| text(mine[0], "/spec/layer"));
         let tags = merged_tags(&answers);
+        // Palette applies the FIPS rule of the tenant to its registry route, and not to the
+        // listing. So a version with no tag in the answer is a version that Palette does not
+        // serve. Leave it out, unless Spectro Cloud retired it as disabled or deleted. A 404 is
+        // the same answer: the route serves no version, for example when no version of the pack
+        // is FIPS compliant
+        let mine: Vec<&Value> = mine
+            .into_iter()
+            .filter(|e| has_tag(&tags, e) || crate::candidate::retired_state(e).is_some())
+            .collect();
+        // every version of this pack that the registry offers, counted before --cloud and
+        // --latest cut the list: the heading states the inventory, not the rows that survived a
+        // flag
+        let versions_offered = mine
+            .iter()
+            .filter_map(|e| Some(text(e, "/spec/version")).filter(|v| !v.is_empty()))
+            .collect::<std::collections::BTreeSet<_>>()
+            .len();
+        // one state for the registry, when every version of the pack in it has the same one
+        let states: std::collections::BTreeSet<Option<String>> = mine
+            .iter()
+            .map(|e| crate::candidate::pack_state(e))
+            .collect();
+        let state = match states.into_iter().collect::<Vec<_>>().as_slice() {
+            [Some(one)] => Some(one.clone()),
+            _ => None,
+        };
+        let no_digests = mine.iter().all(|e| text(e, "/spec/digest").is_empty());
 
         for e in mine {
             let version = text(e, "/spec/version");
@@ -286,19 +298,9 @@ where
             {
                 continue;
             }
-            // a tag row names its version, and names the build it points at; match on either,
-            // because a registry that answers with one and not the other still says enough
             let pack_uid = text(e, "/metadata/uid");
-            let mut rows: Vec<(usize, String)> = tags
-                .iter()
-                .filter(|t| {
-                    let v = text(t, "/version");
-                    if v.is_empty() {
-                        text(t, "/packUid") == pack_uid
-                    } else {
-                        v == version
-                    }
-                })
+            let mut rows: Vec<(usize, String)> = tag_rows(&tags, e)
+                .into_iter()
                 .map(|t| {
                     let above = t
                         .pointer("/parentTags")
@@ -376,6 +378,28 @@ where
     })
 }
 
+/// The tag rows of the registry answer that point at the listing entry `e`.
+fn tag_rows<'a>(tags: &'a [Value], e: &Value) -> Vec<&'a Value> {
+    tags.iter().filter(|t| points_at(t, e)).collect()
+}
+
+/// True when a tag row of the registry answer points at the listing entry `e`.
+fn has_tag(tags: &[Value], e: &Value) -> bool {
+    tags.iter().any(|t| points_at(t, e))
+}
+
+/// True when the tag row `t` points at the listing entry `e`. A tag row names its version and the
+/// build that it points at. Match on either: a registry that answers with one of the two still
+/// says enough.
+fn points_at(t: &Value, e: &Value) -> bool {
+    let v = text(t, "/version");
+    if v.is_empty() {
+        text(t, "/packUid") == text(e, "/metadata/uid")
+    } else {
+        v == text(e, "/spec/version")
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -400,6 +424,11 @@ mod tests {
 
     /// `packs strata-live-dep` with `options`, from a listing of `versions`.
     fn packs_with(options: &PackOptions, versions: Vec<Value>) -> PackListing {
+        // Palette gives a tag row to each version that it serves
+        let tags: Vec<Value> = versions
+            .iter()
+            .map(|v| serde_json::json!({"tag": v["spec"]["version"], "packUid": v["metadata"]["uid"]}))
+            .collect();
         let api = MemoryApi::new()
             .with(
                 "/v1/registries/metadata",
@@ -413,7 +442,7 @@ mod tests {
             )
             .with(
                 "/v1/packs/strata-live-dep/registries/reg-own",
-                serde_json::json!({"layer": "addon", "tags": []}),
+                serde_json::json!({"layer": "addon", "tags": tags}),
             );
         registry_packs(
             "strata-live-dep",

@@ -464,7 +464,8 @@ record.
 
 The listing can name a registry that then answers 404 for the pack. It does so
 for a pack that Spectro Cloud disabled or deleted: see
-[Pack states](#pack-states).
+[Pack states](#pack-states). In a FIPS tenant, the answer also leaves out each
+version that is not FIPS compliant: see [The FIPS rule](#the-fips-rule).
 
 ## The cloud type `all`
 
@@ -556,7 +557,7 @@ Strata reads the state from the listing:
   `disabled` for a version with the mark. When the listing shows a disabled or
   a deleted `system_state` in a registry, strata also sends the `states`
   query, and joins the two answers. A registry that answers 404 to both shows
-  the versions of the listing, with no tags. See
+  only the disabled and the deleted versions of the listing, with no tags. See
   [strata packs](../../commands/packs.md#what-to-expect).
 - `strata behind` does not offer a disabled or a deleted version as a move:
   see [strata behind](../../commands/behind.md#the-pins-that-are-behind).
@@ -572,6 +573,34 @@ Strata reads the state from the listing:
 
 Palette applies a pack constraint when a profile is created, and not through this
 answer: see [A pack that requires another pack](#a-pack-that-requires-another-pack).
+
+## The FIPS rule
+
+A Palette that runs in FIPS mode applies a FIPS rule to the packs of a tenant.
+The setting is `fipsPackConfig.mode` in
+`GET /v1/tenants/<uid>/preferences/fips`. With the mode `nonFipsEnabled`, the
+tenant can use each pack. With each other mode, Palette serves only a version
+whose annotation `fips` is `true` or `unknown`:
+
+| Request | The FIPS rule |
+| --- | --- |
+| `GET /v1/packs?filters=spec.name=<name>`, the listing | not applied: the listing holds each version |
+| `GET /v1/packs/<name>/registries/<uid>` | applied: no tag and no `packValues` row for another version, and 404 `ResourceNotFound` when no version is left |
+| `POST /v1/packs/search` | applied, but the answer has one row for each pack name, and no list of versions |
+| A new profile that pins another version | Palette refuses it with `PackForbidden` |
+
+Strata uses the registry answer, and does not copy the rule. `strata packs` and
+`strata behind` leave out a listed version that has no tag in the registry
+answer. A version that Spectro Cloud retired as `disabled` or `deleted` stays.
+A 404 is an answer with no version, so a pack with no FIPS compliant version
+has no version to offer. Then `behind` says that the pinned version is absent.
+See [strata packs](../../commands/packs.md#what-to-expect).
+
+The live tenant has the mode `none`, and its Palette does not run in FIPS mode.
+No listed version has the annotation `fips`, and the registry answer gives each
+version its tags, except a disabled or a deleted version. So no live run shows
+the rule. A test with the memory client shows `packs` and `behind` in a FIPS
+tenant.
 
 ## The annotations of a pack reference
 
