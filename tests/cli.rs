@@ -884,25 +884,28 @@ fn schema_subcommand_prints_json_schema() {
 fn a_record_that_is_not_there_names_the_file_and_asks_palette_nothing() {
     let fx = fixtures();
     let missing = fx._dir.path().join("releases/dev.json");
-    let r = run(&["compare", missing.to_str().unwrap(), &fx.b]);
+    // Palette is a port that refuses connections, so a request is a transport error that names
+    // its route. The temporary path can hold any number, so the test looks for no status number.
+    let r = closed_port(&["compare", missing.to_str().unwrap(), &fx.b], &[]);
     assert_eq!(r.code, 2, "stderr: {}", r.err);
     assert!(
-        r.err.contains("releases/dev.json") && r.err.contains("No such file"),
-        "the error names the file that is not there: {}",
+        !r.err.contains("GET /v1/") && !r.err.contains("failed with HTTP"),
+        "nothing was asked of Palette: {}",
         r.err
     );
     assert!(
-        !r.err.contains("clusterprofiles") && !r.err.contains("404"),
-        "and nothing was asked of Palette: {}",
+        r.err.contains("releases/dev.json") && r.err.contains("No such file"),
+        "and the error names the file that is not there: {}",
         r.err
     );
 
-    // the same in JSON mode, as an io error with the path
-    let r = run(&["compare", "--json", missing.to_str().unwrap(), &fx.b]);
-    assert_eq!(r.code, 2);
-    let e: serde_json::Value = serde_json::from_str(r.err.trim()).unwrap();
-    assert_eq!(e["error"]["kind"], "io");
-    assert!(e["error"]["path"].as_str().unwrap().ends_with("dev.json"));
+    // the same in JSON mode, as an io error with the path, not a transport error
+    let (code, e) = first_request(
+        &["compare", "--json", missing.to_str().unwrap(), &fx.b],
+        &[],
+    );
+    assert_eq!((code, e["kind"].as_str()), (2, Some("io")), "{e}");
+    assert!(e["path"].as_str().unwrap().ends_with("dev.json"));
 }
 
 #[test]
@@ -963,8 +966,8 @@ fn json_mode_writes_one_structured_error_line_on_stderr() {
 }
 
 /// Run against an address that refuses connections, with no retries and a clean environment, so
-/// the path in the transport error is the first request strata made.
-fn first_request(args: &[&str], envs: &[(&str, &str)]) -> (i32, serde_json::Value) {
+/// the path in a transport error is the first request strata made.
+fn closed_port(args: &[&str], envs: &[(&str, &str)]) -> Run {
     let home = tempfile::tempdir().unwrap();
     let mut all = vec![
         ("HOME", home.path().to_str().unwrap()),
@@ -973,7 +976,7 @@ fn first_request(args: &[&str], envs: &[(&str, &str)]) -> (i32, serde_json::Valu
         ("STRATA_RETRIES", "0"),
     ];
     all.extend_from_slice(envs);
-    let r = run_in(
+    run_in(
         args,
         &all,
         &[
@@ -982,7 +985,12 @@ fn first_request(args: &[&str], envs: &[(&str, &str)]) -> (i32, serde_json::Valu
             "SPECTROCLOUD_APIKEY",
             "SPECTROCLOUD_HOST",
         ],
-    );
+    )
+}
+
+/// [`closed_port`] in JSON mode: the exit status and the error object.
+fn first_request(args: &[&str], envs: &[(&str, &str)]) -> (i32, serde_json::Value) {
+    let r = closed_port(args, envs);
     let e: serde_json::Value = serde_json::from_str(r.err.trim())
         .unwrap_or_else(|_| serde_json::json!({"error": {"raw": r.err}}));
     (r.code, e["error"].clone())

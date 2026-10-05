@@ -198,7 +198,7 @@ fn tenant_sh_listing_prints_the_cluster_listing_palette_answers() {
         Some(2),
         "a refusal is an error, not an empty listing"
     );
-    assert!(text(&o.stderr).contains("403"), "{}", text(&o.stderr));
+    assert!(text(&o.stderr).contains("HTTP 403"), "{}", text(&o.stderr));
 }
 
 #[test]
