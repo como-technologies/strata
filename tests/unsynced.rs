@@ -268,8 +268,10 @@ fn packs_and_behind_name_the_registries_that_palette_does_not_sync_when_none_has
     assert_eq!(err.kind(), "pack-name-not-found");
     assert_eq!(err.to_json()["unsynced"], json!(["charts-auth", "zarf"]));
     assert!(
-        err.to_string()
-            .contains("; Palette does not sync the registries 'charts-auth' and 'zarf', and lists a pack of them only while a profile pins the pack; "),
+        err.to_string().contains(&format!(
+            "; Palette does not sync the registries 'charts-auth' and 'zarf', and {}. ",
+            strata::error::UNSYNCED_LISTS
+        )),
         "{err}"
     );
 
@@ -278,8 +280,11 @@ fn packs_and_behind_name_the_registries_that_palette_does_not_sync_when_none_has
     assert_eq!(err.kind(), "pack-not-found");
     assert_eq!(
         err.to_string(),
-        "no pack 'strata-live-chart' in registry 'charts-auth'; Palette does not sync the \
-         registry 'charts-auth', and lists a pack of it only while a profile pins the pack"
+        format!(
+            "no pack 'strata-live-chart' in registry 'charts-auth'; Palette does not sync the \
+             registry 'charts-auth', and {}",
+            strata::error::UNSYNCED_LISTS
+        )
     );
     // asked by its uid, the error still names the registry
     let err = packs(Some(PRIVATE)).unwrap_err();
@@ -329,9 +334,29 @@ fn packs_and_behind_name_the_registries_that_palette_does_not_sync_when_none_has
         .unwrap();
     assert!(text.contains("not checked"), "{text}");
     assert!(
-        text.contains(
-            "(no pack 'strata-live-chart' in registry 'charts-auth'; Palette does not sync the registry 'charts-auth', and lists a pack of it only while a profile pins the pack)"
-        ),
+        text.contains(&format!(
+            "(no pack 'strata-live-chart' in registry 'charts-auth'; Palette does not sync the \
+             registry 'charts-auth', and {})",
+            strata::error::UNSYNCED_LISTS
+        )),
         "{text}"
     );
+}
+
+#[test]
+fn packs_reads_the_registry_listing_and_the_oci_summary_one_time_when_no_registry_has_the_pack() {
+    // the error names each registry that Palette does not sync. The rule reads the registry
+    // listing and the OCI summary one time each, and not one time for each registry
+    let api = tenant();
+    let err = ops::registry_packs(
+        CHART,
+        &ops::PackOptions::default(),
+        |_| Ok(Palette::new(&api)),
+        "t0",
+        &Progress::silent(),
+    )
+    .unwrap_err();
+    assert_eq!(err.to_json()["unsynced"], json!(["charts-auth", "zarf"]));
+    assert_eq!(api.calls("/v1/registries/metadata"), 1, "{err}");
+    assert_eq!(api.calls("/v1/registries/oci/summary"), 1, "{err}");
 }

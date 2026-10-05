@@ -243,7 +243,7 @@ pub(crate) fn version_note(v: &crate::ops::PackBuild) -> Option<String> {
     ])
 }
 
-/// The parts of a packs note that are there, joined with commas; none when no part is there.
+/// The parts of a packs note that are there, joined with commas. None when no part is there.
 fn joined_note<const N: usize>(parts: [Option<&str>; N]) -> Option<String> {
     let parts: Vec<&str> = parts.into_iter().flatten().collect();
     (!parts.is_empty()).then(|| parts.join(", "))
@@ -1482,10 +1482,10 @@ pub(crate) fn variable_lines(g: &VariablesByName) -> Vec<VarLine<'_>> {
     lines.into_iter().map(|(_, l)| l).collect()
 }
 
-/// The end of the verdict of a pack record, and of a pin of `behind` that is current: when the
-/// last complete sync of the registry started, that a sync runs now, or that the last sync
-/// failed, and a recovery of a sync that stopped. Palette holds a copy of each registry, and the
-/// answer states that copy. Nothing when Palette gives no sync.
+/// The end of the verdict of a pack record, and of a pin of `behind` that is current. It says
+/// when the last complete sync of the registry started, that a sync runs now, or that the last
+/// sync failed. It also names a recovery of a sync that stopped. Palette holds a copy of each
+/// registry, and the answer states that copy. Nothing when Palette gives no sync.
 pub(crate) fn registry_sync_suffix(sync: Option<&crate::diff::RegistrySync>) -> String {
     let Some(s) = sync else {
         return String::new();

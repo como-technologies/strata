@@ -46,17 +46,29 @@ fn name_refusal(status: u16, code: &str) -> bool {
     }
 }
 
-/// Whether the import validate route refuses the profile with `status` and `code`. Palette checks
-/// the body of each route against the API schema first. It refuses a list with two equal items
-/// with HTTP 422 and a number as the code.
+/// Whether the import validate route refuses the profile with `status` and `code`.
 fn import_refusal(status: u16, code: &str) -> bool {
     match status {
         500 => PROFILE_IMPORT_REFUSAL_CODES.contains(&code),
         409 => code == PROFILE_EXISTS_CODE,
         404 => code == PACK_MACRO_UNDEFINED_CODE,
-        422 => true,
-        _ => false,
+        _ => schema_refusal(status),
     }
+}
+
+/// Whether the packs route refuses the packs with `status` and `code`.
+fn packs_refusal(status: u16, code: &str) -> bool {
+    match status {
+        500 => PROFILE_PACK_REFUSAL_CODES.contains(&code),
+        _ => schema_refusal(status),
+    }
+}
+
+/// Whether the API schema refuses the body of a route with `status`. Palette checks the body of
+/// each route against the schema first. It refuses a list with two equal items with HTTP 422 and
+/// a number as the code.
+fn schema_refusal(status: u16) -> bool {
+    status == 422
 }
 
 /// The body of `POST /v1/clusterprofiles/import/validate`, a `v1ClusterProfileImportEntity`:
@@ -143,24 +155,27 @@ pub fn profile_validate_body(snap: &Snapshot) -> Value {
     })
 }
 
-/// Ask Palette whether it takes the packs of a profile record. A record with no uid, of a
-/// candidate, goes to `POST /v1/clusterprofiles/validate/packs`, the check of a create. A record
-/// of a version that Palette holds goes to `POST /v1/clusterprofiles/{uid}/validate/packs`, the
-/// check of an update of that version, which also checks the packs against the clusters that run
-/// it. A record of a cluster or of a pack is a usage error.
+/// Ask Palette whether it takes the name, the version, and the packs of a profile record.
 ///
-/// A candidate also goes to two routes that the create has and that the packs route does not:
-/// `GET /v1/clusterprofiles/validate/name` checks the name and the version, and `POST
-/// /v1/clusterprofiles/import/validate` checks the names of the packs and the manifests and a
-/// repeat of each. The answer holds the refusals of the three routes. No request changes
-/// anything.
+/// A record with no uid, of a candidate, goes to the three routes that check a create. `GET
+/// /v1/clusterprofiles/validate/name` checks the name and the version. `POST
+/// /v1/clusterprofiles/import/validate` checks the names of the packs and the manifests, and a
+/// repeat of each. `POST /v1/clusterprofiles/validate/packs` checks the packs. A record of a
+/// version that Palette holds goes to `POST /v1/clusterprofiles/{uid}/validate/packs`, the check
+/// of an update of that version. That check also reads the clusters that run the version. The
+/// answer holds the refusals of each route. No request changes anything.
 ///
-/// Palette answers `200` with an error for each pack that it refuses. It refuses the whole
-/// request with an HTTP error and a code of [`PROFILE_NAME_REFUSAL_CODES`],
-/// [`PROFILE_IMPORT_REFUSAL_CODES`], [`PROFILE_PACK_REFUSAL_CODES`], [`PROFILE_EXISTS_CODE`], or
-/// [`PACK_MACRO_UNDEFINED_CODE`], or with the HTTP 422 of the API schema. Such a refusal
-/// is an answer too, and the retry does not send it again. Each other error is an error of
-/// strata.
+/// Palette answers `200` with an error for each pack that it refuses. It refuses the whole request
+/// with an HTTP error and a code of `PROFILE_NAME_REFUSAL_CODES`, [`PROFILE_IMPORT_REFUSAL_CODES`],
+/// [`PROFILE_PACK_REFUSAL_CODES`], `PROFILE_EXISTS_CODE`, or `PACK_MACRO_UNDEFINED_CODE`, or with
+/// the HTTP 422 of the API schema. Such a refusal is an answer too, and the retry does not send
+/// it again.
+///
+/// # Errors
+///
+/// [`Error::Usage`] for a record of a cluster or of a pack, before any request. Each error of a
+/// request that is not a refusal: an answer of Palette with another status or code, and a
+/// request that did not complete.
 pub fn profile_validation<A: PaletteApi>(
     palette: &Palette<A>,
     snap: &Snapshot,
@@ -190,14 +205,7 @@ pub fn profile_validation<A: PaletteApi>(
                 .map(PaletteRefusal::from_constraints)
                 .unwrap_or_default(),
         ),
-        Err(e) => errors.push(
-            whole_request_refusal(&e, |status, code| match status {
-                500 => PROFILE_PACK_REFUSAL_CODES.contains(&code),
-                422 => true,
-                _ => false,
-            })
-            .ok_or(e)?,
-        ),
+        Err(e) => errors.push(whole_request_refusal(&e, packs_refusal).ok_or(e)?),
     }
     Ok(ProfileValidation::refused(errors))
 }

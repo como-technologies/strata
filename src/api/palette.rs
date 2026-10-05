@@ -74,6 +74,39 @@ fn sorted_names(entries: &[(String, String)]) -> Vec<String> {
     names
 }
 
+/// A kind of registry, as the routes of Palette name it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum RegistryKind {
+    /// A pack registry. It holds the packs of the type `spectro`.
+    Pack,
+    /// A Helm registry.
+    Helm,
+    /// An OCI registry.
+    Oci,
+}
+
+impl RegistryKind {
+    /// The kind of the registry that holds a pack of the type `pack_type`: a pack registry holds
+    /// the type `spectro`. None for a type with no registry of its own, such as `manifest`.
+    pub(crate) fn of_pack_type(pack_type: &str) -> Option<Self> {
+        match pack_type {
+            "spectro" => Some(Self::Pack),
+            "helm" => Some(Self::Helm),
+            "oci" => Some(Self::Oci),
+            _ => None,
+        }
+    }
+
+    /// The segment of the kind in a route: `pack`, `helm`, or `oci`.
+    fn route(self) -> &'static str {
+        match self {
+            Self::Pack => "pack",
+            Self::Helm => "helm",
+            Self::Oci => "oci",
+        }
+    }
+}
+
 /// Profile-level operations over any [`PaletteApi`].
 pub struct Palette<A: PaletteApi> {
     api: A,
@@ -1255,6 +1288,55 @@ impl<A: PaletteApi> Palette<A> {
         ))
     }
 
+    /// One page of the pack listing of `name`,
+    /// `GET /v1/packs?filters=spec.name={name}&limit=100&offset={offset}`: each version of the
+    /// pack in each registry, 100 on a page, with `listmeta.count` for the whole listing.
+    pub(crate) fn pack_listing_page(&self, name: &str, offset: usize) -> Result<Value> {
+        self.api.get_json(&format!(
+            "/v1/packs?filters=spec.name={}&limit=100&offset={offset}",
+            query_value(name)
+        ))
+    }
+
+    /// The tags of the pack `name` in the registry `registry_uid`,
+    /// `GET /v1/packs/{name}/registries/{uid}`: each tag with the version that it names, the
+    /// values of the pack, and its layer. Palette answers 404 when the registry serves no
+    /// version of the pack.
+    ///
+    /// With `states`, a list such as `deprecated,disabled,deleted`, the request adds the query
+    /// `states=<states>`, and Palette gives the versions in those states only. The crate gives
+    /// the list, as the route reads it, so it goes in with no escape.
+    pub(crate) fn pack_tags(
+        &self,
+        name: &str,
+        registry_uid: &str,
+        states: Option<&str>,
+    ) -> Result<Value> {
+        let path = format!(
+            "/v1/packs/{}/registries/{}",
+            query_value(name),
+            query_value(registry_uid)
+        );
+        match states {
+            Some(states) => self.api.get_json(&format!("{path}?states={states}")),
+            None => self.api.get_json(&path),
+        }
+    }
+
+    /// The registries that the key can see, `GET /v1/registries/metadata`: the `uid`, the
+    /// `name`, the `kind`, and `isPrivate` of each, as `items`.
+    pub(crate) fn registry_metadata(&self) -> Result<Value> {
+        self.api.get_json("/v1/registries/metadata")
+    }
+
+    /// The summary listing of the registries of one `kind`, `GET /v1/registries/{kind}/summary`:
+    /// each registry as `items`, with its last sync in `status.sync`, and with the provider type
+    /// of an OCI registry in `spec.providerType`.
+    pub(crate) fn registry_summary(&self, kind: RegistryKind) -> Result<Value> {
+        self.api
+            .get_json(&format!("/v1/registries/{}/summary", kind.route()))
+    }
+
     /// Every item of a paged listing at `path`, which may carry a query already: each page's
     /// `items`, in order. `listmeta.continue` names the next page, and is empty on the last one;
     /// a page with no items ends the listing too, and `items: null` is such a page.
@@ -1363,6 +1445,65 @@ mod tests {
             {"metadata": {"name": "aws-stack", "uid": "u1"}, "spec": {"version": "1.0.0"}},
             {"metadata": {"name": "aws-stack", "uid": "u2"}, "spec": {"version": "1.1.0"}},
         ]})
+    }
+
+    #[test]
+    fn a_pack_name_and_a_registry_uid_go_into_the_path_of_the_tags_escaped() {
+        // a name with `/` or `?` would end the segment, or start a query, with no escape
+        let p = Palette::new(
+            MemoryApi::new()
+                .with(
+                    "/v1/packs/a%2Fb%3Fc/registries/r%201",
+                    json!({"tags": [{"tag": "1.x"}]}),
+                )
+                .with(
+                    "/v1/packs/a%2Fb%3Fc/registries/r%201?states=disabled",
+                    json!({"tags": []}),
+                )
+                .with(
+                    "/v1/packs?filters=spec.name=a%2Fb%3Fc&limit=100&offset=100",
+                    json!({"items": [1]}),
+                ),
+        );
+        assert_eq!(
+            p.pack_tags("a/b?c", "r 1", None).unwrap()["tags"][0]["tag"],
+            "1.x"
+        );
+        assert_eq!(
+            p.pack_tags("a/b?c", "r 1", Some("disabled")).unwrap()["tags"],
+            json!([])
+        );
+        assert_eq!(
+            p.pack_listing_page("a/b?c", 100).unwrap()["items"],
+            json!([1])
+        );
+        let err = p.pack_tags("a/b?c", "r 2", None).unwrap_err();
+        assert!(matches!(err, Error::Api { status: 404, .. }), "{err}");
+    }
+
+    #[test]
+    fn the_registry_listings_read_the_metadata_and_the_summary_of_a_kind() {
+        let p = Palette::new(
+            MemoryApi::new()
+                .with("/v1/registries/metadata", json!({"items": [1]}))
+                .with("/v1/registries/pack/summary", json!({"items": [2]}))
+                .with("/v1/registries/oci/summary", json!({"items": [3]})),
+        );
+        assert_eq!(p.registry_metadata().unwrap()["items"], json!([1]));
+        assert_eq!(
+            p.registry_summary(RegistryKind::Pack).unwrap()["items"],
+            json!([2])
+        );
+        assert_eq!(
+            p.registry_summary(RegistryKind::Oci).unwrap()["items"],
+            json!([3])
+        );
+        assert_eq!(
+            RegistryKind::of_pack_type("spectro"),
+            Some(RegistryKind::Pack)
+        );
+        assert_eq!(RegistryKind::of_pack_type("helm"), Some(RegistryKind::Helm));
+        assert_eq!(RegistryKind::of_pack_type("manifest"), None);
     }
 
     #[test]

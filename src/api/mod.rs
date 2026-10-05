@@ -22,6 +22,7 @@ pub use audit::AuditKind;
 pub use http::HttpApi;
 pub use memory::MemoryApi;
 pub use palette::Palette;
+pub(crate) use palette::RegistryKind;
 pub use raw::{RawCluster, RawProfile, ReadErrors, has_draft};
 pub use retry::{Retry, RetryPolicy};
 

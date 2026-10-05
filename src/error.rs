@@ -269,7 +269,8 @@ pub enum Error {
     PackNotFound {
         /// Pack name.
         name: String,
-        /// Pack version. Empty when no version was asked for, as with `packs --registry`.
+        /// Pack version. Empty when the ref and the flags give no version, as with
+        /// `packs --registry`.
         version: String,
         /// The tag asked for, when one was.
         tag: Option<String>,
@@ -297,7 +298,7 @@ pub enum Error {
     /// `packs <name>` found the name in no visible registry. It asked for every version, so no
     /// version and no registry was ever in play, and `PackNotFound` would state both as blanks.
     #[error(
-        "no registry that this key can see offers a pack named '{name}'{}; `strata list --pack {name}` finds the profiles that carry one",
+        "no registry that this key can see offers a pack named '{name}'{}. `strata list --pack {name}` finds the profiles that carry one",
         unsynced_sentence(unsynced)
     )]
     PackNameNotFound {
@@ -431,11 +432,12 @@ pub const PROFILE_PACK_REFUSAL_CODES: [&str; 6] = [
 /// The codes of the refusals that `GET /v1/clusterprofiles/validate/name` answers with HTTP 500:
 /// an empty name, and a version that Palette does not parse. `snapshot --validate` reads them as
 /// the answer of Palette. A retry gets the same refusal.
-pub const PROFILE_NAME_REFUSAL_CODES: [&str; 2] = ["ResourceNameEmpty", "VersionParseFailure"];
+pub(crate) const PROFILE_NAME_REFUSAL_CODES: [&str; 2] =
+    ["ResourceNameEmpty", "VersionParseFailure"];
 
 /// The code of the refusal of a profile name and version that the project already holds. The
 /// name route and the import validate route answer it with HTTP 409.
-pub const PROFILE_EXISTS_CODE: &str = "ClusterProfileAlreadyExists";
+pub(crate) const PROFILE_EXISTS_CODE: &str = "ClusterProfileAlreadyExists";
 
 /// The codes of the refusals of the whole request that `POST /v1/clusterprofiles/import/validate`
 /// answers with HTTP 500. The route checks the limits, the cloud type, the metadata of the packs,
@@ -461,12 +463,12 @@ pub const PROFILE_IMPORT_REFUSAL_CODES: [&str; 15] = [
 
 /// The code of the refusal of a macro that a pack uses and that Palette does not define. The
 /// import validate route answers it with HTTP 404.
-pub const PACK_MACRO_UNDEFINED_CODE: &str = "PackMacroUndefined";
+pub(crate) const PACK_MACRO_UNDEFINED_CODE: &str = "PackMacroUndefined";
 
 /// The codes of the errors that the import validate route gives with HTTP 500 when it cannot
 /// match a pack of the body to a registry. The route then checks nothing, so strata reads them as
 /// errors and not as an answer. A retry gets the same error.
-pub const PROFILE_IMPORT_MATCH_CODES: [&str; 4] = [
+pub(crate) const PROFILE_IMPORT_MATCH_CODES: [&str; 4] = [
     "ClusterProfileImportRegistriesNotFound",
     "ClusterProfileImportOciRegistriesNotFound",
     "ClusterProfileImportPrivateHelmRegistriesNotFound",
@@ -526,7 +528,7 @@ fn profile_not_found_hint(name: &str, tenant_scope: bool) -> String {
     }
 }
 
-/// ` at version '1.2.3'`, or nothing when no version was asked for.
+/// ` at version '1.2.3'`, or nothing when the ref and the flags give no version.
 fn at_version(version: &str) -> String {
     if version.is_empty() {
         String::new()
@@ -535,23 +537,27 @@ fn at_version(version: &str) -> String {
     }
 }
 
-/// ` with tag '2.x'`, or nothing when no tag was asked for.
+/// ` with tag '2.x'`, or nothing when the ref and the flags give no tag.
 fn with_tag(tag: Option<&str>) -> String {
     tag.map(|t| format!(" with tag '{t}'")).unwrap_or_default()
 }
 
+/// Why a registry that Palette does not sync has no pack, in the message of
+/// [`Error::PackNotFound`] and [`Error::PackNameNotFound`]. Palette makes the pack of such a
+/// registry when it creates the profile, so its listing has the pack for that profile only.
+pub const UNSYNCED_LISTS: &str =
+    "lists a pack of such a registry only while a profile pins the pack";
+
 /// Why the registries of `registries` have no pack of a name, for the message of an error:
-/// `; Palette does not sync the registry 'charts-auth', and lists a pack of it only while a
-/// profile pins the pack`. Nothing when there is no such registry.
+/// `; Palette does not sync the registry 'charts-auth', and lists a pack of such a registry only
+/// while a profile pins the pack`. Nothing when there is no such registry.
 fn unsynced_sentence(registries: &[String]) -> String {
     let quoted: Vec<String> = registries.iter().map(|r| format!("'{r}'")).collect();
     match quoted.as_slice() {
         [] => String::new(),
-        [one] => format!(
-            "; Palette does not sync the registry {one}, and lists a pack of it only while a profile pins the pack"
-        ),
+        [one] => format!("; Palette does not sync the registry {one}, and {UNSYNCED_LISTS}"),
         [first @ .., last] => format!(
-            "; Palette does not sync the registries {} and {last}, and lists a pack of them only while a profile pins the pack",
+            "; Palette does not sync the registries {} and {last}, and {UNSYNCED_LISTS}",
             first.join(", ")
         ),
     }
@@ -1020,9 +1026,11 @@ mod tests {
         };
         assert_eq!(
             e.to_string(),
-            "no registry that this key can see offers a pack named 'podinfo'; Palette does not \
-             sync the registries 'charts-auth' and 'zarf', and lists a pack of them only while a \
-             profile pins the pack; `strata list --pack podinfo` finds the profiles that carry one"
+            format!(
+                "no registry that this key can see offers a pack named 'podinfo'; Palette does \
+                 not sync the registries 'charts-auth' and 'zarf', and {UNSYNCED_LISTS}. `strata \
+                 list --pack podinfo` finds the profiles that carry one"
+            )
         );
         assert_eq!(
             e.to_json()["unsynced"],
@@ -1038,8 +1046,10 @@ mod tests {
         };
         assert_eq!(
             e.to_string(),
-            "no pack 'podinfo' in registry 'charts-auth'; Palette does not sync the registry \
-             'charts-auth', and lists a pack of it only while a profile pins the pack"
+            format!(
+                "no pack 'podinfo' in registry 'charts-auth'; Palette does not sync the registry \
+                 'charts-auth', and {UNSYNCED_LISTS}"
+            )
         );
         let e = Error::PackNotFound {
             name: "podinfo".into(),
