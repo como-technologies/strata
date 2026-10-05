@@ -59,8 +59,10 @@ fn answer(root: &Path, mut stream: TcpStream) -> std::io::Result<()> {
     let Some(request) = read_request(&mut stream)? else {
         return Ok(());
     };
-    let (status, body) = match file_for(root, request.project.as_deref(), &request.target) {
-        Some(path)
+    let path = file_for(root, request.project.as_deref(), &request.target);
+    let refusal = path.as_deref().and_then(refusal_of);
+    let (status, body) = match (path, refusal) {
+        (Some(path), _)
             if path.is_file()
                 && request
                     .target
@@ -68,15 +70,13 @@ fn answer(root: &Path, mut stream: TcpStream) -> std::io::Result<()> {
         {
             (200, searched(&fs::read(path)?, &request.body))
         }
-        Some(path) if path.is_file() => match fs::read(path)? {
+        (Some(path), _) if path.is_file() => match fs::read(path)? {
             body if body.is_empty() => (204, body),
             body => (200, body),
         },
-        Some(path) if let Some(status) = refusal_of(&path) => {
-            (status, fs::read(refused(&path, status))?)
-        }
+        (Some(path), Some(status)) => (status, fs::read(refused(&path, status))?),
         // Palette answers an empty log for an object with no entry, and not 404
-        Some(_) if request.target.starts_with("/v1/audits?") => (
+        (Some(_), None) if request.target.starts_with("/v1/audits?") => (
             200,
             br#"{"items":[],"listmeta":{"continue":"","limit":100}}"#.to_vec(),
         ),
