@@ -311,7 +311,7 @@ pub struct ReadErrors {
 }
 
 impl ReadErrors {
-    /// True when Palette gave each document that strata asked for.
+    /// True when it holds no error.
     fn is_empty(&self) -> bool {
         *self == ReadErrors::default()
     }
@@ -342,7 +342,7 @@ impl RawCluster {
         })
     }
 
-    /// The file that holds the read errors of the cluster, when Palette gave one.
+    /// The file that holds the read errors of the cluster, when Palette answered with an error.
     pub(crate) const ERRORS: &'static str = "errors.json";
 
     /// The file that holds the role bindings of the cluster, when they were read.
@@ -394,9 +394,11 @@ impl RawCluster {
         if let Some(n) = &self.namespaces {
             files.push((Self::NAMESPACES, n));
         }
-        let errors = serde_json::to_value(&self.errors)?;
-        if !self.errors.is_empty() {
-            files.push((Self::ERRORS, &errors));
+        let errors = (!self.errors.is_empty())
+            .then(|| serde_json::to_value(&self.errors))
+            .transpose()?;
+        if let Some(e) = &errors {
+            files.push((Self::ERRORS, e));
         }
         write_json_files(dir, &files)
     }
