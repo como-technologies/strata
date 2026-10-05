@@ -1869,7 +1869,7 @@ fn use_cases(r: &mut Runner) {
     r.step("nodigest-chart-file", 0, false, "cat charts-probe.yaml");
     // no registry has the chart in the listing: the error names the registry that Palette does
     // not sync (#123)
-    r.step("nodigest-chart-packs", 2, true, "strata packs podinfo");
+    r.step("nodigest-chart-unsynced", 2, true, "strata packs podinfo");
     r.step(
         "nodigest-chart-record",
         0,

@@ -74,7 +74,7 @@ a profile pins the pack: see
 [A pack that Palette makes at the create](../internals/palette/packs.md#a-pack-that-palette-makes-at-the-create).
 
 ```text
-{{#include ../output/nodigest-chart-packs.txt}}
+{{#include ../output/nodigest-chart-unsynced.txt}}
 ```
 
 ## For a script
