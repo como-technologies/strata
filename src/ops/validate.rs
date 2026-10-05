@@ -9,9 +9,8 @@ use serde_json::{Value, json};
 use super::repave::{cluster_and_target, validate_body};
 use crate::api::{Palette, PaletteApi};
 use crate::error::{
-    Error, PACK_FORBIDDEN_CODE, PACK_MACRO_UNDEFINED_CODE, PACK_REFUSAL_CODES,
-    PROFILE_EXISTS_CODE, PROFILE_IMPORT_REFUSAL_CODES, PROFILE_NAME_REFUSAL_CODES,
-    PROFILE_PACK_REFUSAL_CODES, Result,
+    Error, PACK_FORBIDDEN_CODE, PACK_MACRO_UNDEFINED_CODE, PACK_REFUSAL_CODES, PROFILE_EXISTS_CODE,
+    PROFILE_IMPORT_REFUSAL_CODES, PROFILE_NAME_REFUSAL_CODES, PROFILE_PACK_REFUSAL_CODES, Result,
 };
 use crate::snapshot::{AppliedProfile, Snapshot};
 use crate::validation::{PaletteRefusal, PaletteValidation, ProfileValidation};

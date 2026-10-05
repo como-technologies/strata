@@ -573,7 +573,45 @@ fn commands(r: &mut Runner) {
         false,
         "strata same-release from-export.json published.json",
     );
-    // Palette's own check of the packs before a create: a refusal, then an accept
+    // Palette's own checks before a create (#273). The candidate comes from aws-stack@1.1.1, which
+    // the project holds, so the name route and the import validate route refuse it
+    r.profile_packs_answer(DEV, None, None);
+    let exists = (
+        409,
+        "ClusterProfileAlreadyExists",
+        "Cluster Profile with name 'aws-stack' and version '1.1.1' already exists",
+    );
+    r.profile_create_checks(DEV, ("aws-stack", "1.1.1"), Some(exists), Some(exists));
+    r.step(
+        "candidate-validate-exists",
+        2,
+        true,
+        "strata snapshot --from-candidate aws-stack.yaml --validate -o validated.json",
+    );
+    // a version that Palette does not parse: both routes refuse it, and strata prints it once
+    r.quiet("sed 's/^version: 1.1.1$/version: 1.1.1.1/' aws-stack.yaml > bad-version.yaml");
+    let unparsed = (
+        500,
+        "VersionParseFailure",
+        "Unable to parse the version '1.1.1.1'",
+    );
+    r.profile_create_checks(
+        DEV,
+        ("aws-stack", "1.1.1.1"),
+        Some(unparsed),
+        Some(unparsed),
+    );
+    r.step(
+        "candidate-validate-version",
+        2,
+        true,
+        "strata snapshot --from-candidate bad-version.yaml --validate -o bad-version.json",
+    );
+    // a new version: Palette takes the name, and the check of the packs refuses, then accepts
+    r.quiet(
+        "sed 's/^version: 1.1.1$/version: 1.2.0/' aws-stack.yaml > next.yaml && mv next.yaml aws-stack.yaml",
+    );
+    r.profile_create_checks(DEV, ("aws-stack", "1.2.0"), None, None);
     r.profile_packs_answer(DEV, None, Some(("cni-cilium-oss", "kubernetes", "1.37.0")));
     r.step(
         "candidate-validate-refuses",
@@ -640,15 +678,8 @@ fn commands(r: &mut Runner) {
         false,
         "jq -c '.packs[0].presetOptions' certs.json",
     );
-    // Palette refuses a version that semver does not parse, and an os layer in an add-on
-    // profile; strata refuses both before any request
-    r.quiet("sed 's/^version: 1.1.1$/version: 1.1.1.1/' aws-stack.yaml > bad-version.yaml");
-    r.step(
-        "candidate-refused",
-        2,
-        true,
-        "strata snapshot --from-candidate bad-version.yaml -o bad-version.json",
-    );
+    // Palette refuses an os layer in an add-on profile only at the create, so strata refuses it
+    // before any request
     r.quiet("sed 's/^type: cluster$/type: add-on/' aws-stack.yaml > add-on.yaml");
     r.step(
         "candidate-refused",

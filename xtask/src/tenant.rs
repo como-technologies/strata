@@ -1738,6 +1738,47 @@ impl Tenant {
         self.write(project, &path, &json!({ "packs": { "results": results } }));
     }
 
+    /// The answers of the two routes that check a new profile version before its create, and that
+    /// the validate route of the packs does not: `GET /v1/clusterprofiles/validate/name` for
+    /// `name` and `version`, and `POST /v1/clusterprofiles/import/validate`. Palette answers the
+    /// name route with `204` and no body, and the import route with the profile that it takes. A
+    /// refusal is `(status, code, message)`, in the body that Palette gives. The stand-in gives
+    /// one answer for every request; it does not check anything.
+    pub fn profile_create_checks(
+        &self,
+        project: &str,
+        (name, version): (&str, &str),
+        name_refusal: Option<(u16, &str, &str)>,
+        import_refusal: Option<(u16, &str, &str)>,
+    ) {
+        let name_route = format!("v1/clusterprofiles/validate/name@name={name}&version={version}");
+        let taken = json!({"metadata": {"name": name}, "spec": {"version": version}});
+        for (path, refusal, body) in [
+            (name_route.as_str(), name_refusal, None),
+            (
+                "v1/clusterprofiles/import/validate",
+                import_refusal,
+                Some(taken),
+            ),
+        ] {
+            let file = self.doc(project, path);
+            for status in [None, Some(403), Some(409), Some(422), Some(500)] {
+                let old = status.map_or(file.clone(), |s| crate::palette::refused(&file, s));
+                if old.is_file() {
+                    std::fs::remove_file(&old).unwrap_or_else(|e| panic!("{}: {e}", old.display()));
+                }
+            }
+            let (target, text) = match refusal {
+                Some((status, code, message)) => (
+                    crate::palette::refused(&file, status),
+                    json!({"code": code, "message": message}).to_string() + "\n",
+                ),
+                None => (file, body.map_or(String::new(), |b| b.to_string() + "\n")),
+            };
+            std::fs::write(&target, text).unwrap_or_else(|e| panic!("{}: {e}", target.display()));
+        }
+    }
+
     /// Give a project macro a value, as `PATCH /v1/projects/{uid}/macros` does, and let each
     /// cluster, profile version, and cluster group of the project resolve it again: Palette
     /// answers `packs/resolvedValues` with the value the macro has now.

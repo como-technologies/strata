@@ -12227,6 +12227,32 @@ fn verify_reports_a_renamed_version_as_renamed_and_not_as_overwritten() {
 
 // ---- snapshot --validate ---------------------------------------------------------------
 
+/// The route of the check of the name and the version of `snap`.
+fn name_route(snap: &strata::snapshot::Snapshot) -> String {
+    format!(
+        "/v1/clusterprofiles/validate/name?name={}&version={}",
+        snap.source.name, snap.source.version
+    )
+}
+
+/// The import validate route.
+const IMPORT_ROUTE: &str = "/v1/clusterprofiles/import/validate";
+
+/// The registry listing that `snapshot --validate` reads for the body of the import validate
+/// route: the registry of the packs of fixture B.
+fn registry_listing() -> Value {
+    serde_json::json!({"items": [{"uid": "reg-public", "name": "Public Repo", "kind": "pack",
+        "isPrivate": false, "isDefault": true, "scope": "cluster"}]})
+}
+
+/// `api` with the two routes that `snapshot --validate` asks for a candidate before the packs
+/// route: the name route and the import validate route take `snap`.
+fn serve_candidate_checks(api: MemoryApi, snap: &strata::snapshot::Snapshot) -> MemoryApi {
+    api.with(name_route(snap), Value::Null)
+        .with(format!("POST {IMPORT_ROUTE}"), serde_json::json!({}))
+        .with("/v1/registries/metadata", registry_listing())
+}
+
 #[test]
 fn snapshot_validate_asks_palette_whether_it_takes_the_packs_of_a_candidate() {
     let dir = tempfile::tempdir().unwrap();
@@ -12240,6 +12266,7 @@ fn snapshot_validate_asks_palette_whether_it_takes_the_packs_of_a_candidate() {
     let answer = serde_json::json!({"packs": {"results": [{"name": "kubernetes",
         "displayName": "kubernetes",
         "errors": [{"code": "DependencyPackWithMinVersionRequired", "message": message}]}]}});
+    let registry = serve_candidate_checks(registry, &recorded_b);
     let api = registry.clone().with(path, answer);
     let snap = ops::snapshot_from_candidate(
         &file,
@@ -12256,12 +12283,36 @@ fn snapshot_validate_asks_palette_whether_it_takes_the_packs_of_a_candidate() {
         v.errors[0].line(),
         format!("DependencyPackWithMinVersionRequired kubernetes: {message}")
     );
-    // one POST to the route of a create, with the packs of the candidate in profile order
+    // one GET of the name and the version
+    assert_eq!(api.calls(&name_route(&snap)), 1);
+    // one POST to the import validate route, and one to the route of a create, with the packs
+    // of the candidate in profile order
     let posted = api.posted();
-    assert_eq!(posted.len(), 1);
-    assert_eq!(posted[0].0, "/v1/clusterprofiles/validate/packs");
-    assert_eq!(posted[0].1, ops::profile_validate_body(&snap));
-    let body = &posted[0].1;
+    assert_eq!(posted.len(), 2);
+    assert_eq!(posted[0].0, IMPORT_ROUTE);
+    let entries = registry_listing()["items"].as_array().unwrap().clone();
+    assert_eq!(posted[0].1, ops::profile_import_body(&snap, &entries));
+    let import = &posted[0].1;
+    assert_eq!(import["metadata"]["name"], snap.source.name.as_str());
+    assert_eq!(import["spec"]["version"], snap.source.version.as_str());
+    for (sent, pack) in import["spec"]["template"]["packs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .zip(&recorded_b.packs)
+    {
+        assert_eq!(sent["name"], pack.name.as_str());
+        assert_eq!(sent["version"], pack.version.as_str());
+        assert!(sent.get("uid").is_none(), "{sent}");
+        assert_eq!(
+            sent["registry"]["metadata"],
+            serde_json::json!({"uid": "reg-public", "name": "Public Repo", "kind": "pack",
+                "isPrivate": false})
+        );
+    }
+    assert_eq!(posted[1].0, "/v1/clusterprofiles/validate/packs");
+    assert_eq!(posted[1].1, ops::profile_validate_body(&snap));
+    let body = &posted[1].1;
     assert_eq!(body["cloudType"], recorded_b.source.cloud_type.as_str());
     assert_eq!(body["type"], recorded_b.source.kind.as_str());
     let names: Vec<&str> = body["packs"]
@@ -12353,7 +12404,7 @@ fn snapshot_validate_takes_a_refusal_of_the_whole_request_as_an_answer() {
             retry_after: None,
         };
         assert_eq!(error.class(), FailureClass::Terminal, "{code}");
-        let api = MemoryApi::new().failing(path, 500, body);
+        let api = serve_candidate_checks(MemoryApi::new(), &candidate).failing(path, 500, body);
         let v = ops::profile_validation(&Palette::new(&api), &candidate).unwrap();
         assert!(!v.accepts, "{code}");
         assert_eq!(v.errors.len(), 1);
@@ -12368,7 +12419,7 @@ fn snapshot_validate_takes_a_refusal_of_the_whole_request_as_an_answer() {
         (400, "InvalidPayload"),
     ] {
         let body = format!(r#"{{"code":"{code}"}}"#);
-        let api = MemoryApi::new().failing(path, status, body);
+        let api = serve_candidate_checks(MemoryApi::new(), &candidate).failing(path, status, body);
         let err = ops::profile_validation(&Palette::new(&api), &candidate).unwrap_err();
         assert!(
             matches!(err, Error::Api { status: s, .. } if s == status),
@@ -12399,6 +12450,176 @@ fn snapshot_validate_of_a_version_asks_the_route_of_an_update_of_that_version() 
     let err = ops::profile_validation(&Palette::new(&api), &cluster).unwrap_err();
     assert!(matches!(err, Error::Usage { .. }), "{err}");
     assert!(api.posted().is_empty());
+}
+
+#[test]
+fn snapshot_validate_of_a_candidate_takes_a_refusal_of_the_name_route_or_the_import_route() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let b = ops::snapshot_from_dir(&dir.path().join("b"), "b", "t0").unwrap();
+    let mut candidate = b.clone();
+    candidate.source.uid = String::new();
+    let accepting = || {
+        serve_candidate_checks(MemoryApi::new(), &candidate).with(
+            "POST /v1/clusterprofiles/validate/packs",
+            serde_json::json!({"packs": {"results": []}}),
+        )
+    };
+    let import = format!("POST {IMPORT_ROUTE}");
+    let refusal = |api: MemoryApi| ops::profile_validation(&Palette::new(&api), &candidate);
+    let body_of = |code: &str| format!(r#"{{"code":"{code}","message":"refused"}}"#);
+    let class_of = |status: u16, code: &str| {
+        Error::Api {
+            method: "GET".into(),
+            path: "/".into(),
+            status,
+            body: body_of(code),
+            retry_after: None,
+        }
+        .class()
+    };
+    assert!(refusal(accepting()).unwrap().accepts);
+
+    // the name route: a version that Palette does not parse, an empty name, and a version that
+    // the project holds. The retry does not send them again
+    for (status, code) in [
+        (500, "VersionParseFailure"),
+        (500, "ResourceNameEmpty"),
+        (409, "ClusterProfileAlreadyExists"),
+    ] {
+        assert_eq!(class_of(status, code), FailureClass::Terminal, "{code}");
+        let v =
+            refusal(accepting().failing(name_route(&candidate), status, body_of(code))).unwrap();
+        assert!(!v.accepts, "{code}");
+        assert_eq!(v.errors.len(), 1, "{code}");
+        assert_eq!(v.errors[0].line(), format!("{code}: refused"));
+    }
+
+    // the import route: each code of a check, a version that the project holds, and a macro
+    // that Palette does not define
+    let mut refusals: Vec<(u16, &str)> = strata::error::PROFILE_IMPORT_REFUSAL_CODES
+        .iter()
+        .map(|c| (500, *c))
+        .collect();
+    refusals.push((409, "ClusterProfileAlreadyExists"));
+    refusals.push((404, "PackMacroUndefined"));
+    for (status, code) in refusals {
+        assert_eq!(class_of(status, code), FailureClass::Terminal, "{code}");
+        let v = refusal(accepting().failing(&import, status, body_of(code))).unwrap();
+        assert!(!v.accepts, "{code}");
+        assert_eq!(v.errors[0].line(), format!("{code}: refused"));
+    }
+    // the API schema refuses a list with two equal items, with a number as the code
+    let body = r#"{"code":610,"message":"packs in body shouldn't contain duplicates"}"#;
+    let v = refusal(accepting().failing(&import, 422, body)).unwrap();
+    assert_eq!(
+        v.errors[0].line(),
+        "610: packs in body shouldn't contain duplicates"
+    );
+
+    // the two routes give the same refusal of a version: the answer holds it once
+    let body =
+        r#"{"code":"VersionParseFailure","message":"Unable to parse the version '1.2.3.4'"}"#;
+    let api = accepting()
+        .failing(name_route(&candidate), 500, body)
+        .failing(&import, 500, body);
+    assert_eq!(refusal(api).unwrap().errors.len(), 1);
+
+    // the import route did not match a pack to a registry, so it checked nothing: an error of
+    // strata, which the retry does not send again. A 403 and a 500 with another code are errors
+    assert_eq!(
+        class_of(500, "ClusterProfileImportPackNotFound"),
+        FailureClass::Terminal
+    );
+    for (status, code) in [
+        (500, "ClusterProfileImportPackNotFound"),
+        (403, "Forbidden"),
+        (500, "InternalError"),
+    ] {
+        let err = refusal(accepting().failing(&import, status, body_of(code))).unwrap_err();
+        assert!(
+            matches!(err, Error::Api { status: s, .. } if s == status),
+            "{err}"
+        );
+    }
+    // a 400 of the name route is an error
+    let err = refusal(accepting().failing(name_route(&candidate), 400, body_of("x"))).unwrap_err();
+    assert!(matches!(err, Error::Api { status: 400, .. }), "{err}");
+
+    // a version that Palette holds goes only to the route of an update
+    let route = format!("POST /v1/clusterprofiles/{}/validate/packs", b.source.uid);
+    let api = MemoryApi::new().with(route, serde_json::json!({}));
+    assert!(
+        ops::profile_validation(&Palette::new(&api), &b)
+            .unwrap()
+            .accepts
+    );
+    assert_eq!(api.posted().len(), 1);
+    assert_eq!(api.calls(&name_route(&b)), 0);
+}
+
+#[test]
+fn a_candidate_with_a_fault_that_only_a_route_answers_gives_a_record_with_the_same_root() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let recorded_b = ops::snapshot_from_dir(&dir.path().join("b"), "b", "t0").unwrap();
+    let registry = serve_registry_for_b(dir.path());
+    let mut c = Candidate::from_snapshot(&recorded_b).unwrap();
+    c.version = "2.2.2.develop".into();
+    let file = dir.path().join("c.yaml");
+    candidate::write(&c, &file, None).unwrap();
+    let snap = ops::snapshot_from_candidate(
+        &file,
+        false,
+        || Ok(Palette::new(registry.clone())),
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert_eq!(snap.source.version, "2.2.2.develop");
+    assert_eq!(snap.root, recorded_b.root);
+    // a pack twice gives a record with each layer of the candidate
+    let mut twice = Candidate::from_snapshot(&recorded_b).unwrap();
+    twice.layers.push(twice.layers[0].clone());
+    let twice_file = dir.path().join("twice.yaml");
+    candidate::write(&twice, &twice_file, None).unwrap();
+    let snap_twice = ops::snapshot_from_candidate(
+        &twice_file,
+        false,
+        || Ok(Palette::new(registry.clone())),
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert_eq!(snap_twice.packs.len(), recorded_b.packs.len() + 1);
+
+    // with --validate, Palette refuses the version, and the record holds the refusal
+    let body =
+        r#"{"code":"VersionParseFailure","message":"Unable to parse the version '2.2.2.develop'"}"#;
+    let api = serve_candidate_checks(registry, &snap)
+        .failing(name_route(&snap), 500, body)
+        .with(
+            "POST /v1/clusterprofiles/validate/packs",
+            serde_json::json!({"packs": {"results": []}}),
+        );
+    let refused = ops::snapshot_from_candidate(
+        &file,
+        true,
+        || Ok(Palette::new(&api)),
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert_eq!(refused.root, recorded_b.root);
+    let v = refused.source.palette_validation.clone().unwrap();
+    assert_eq!(
+        strata::validation::answer_lines(&v.errors),
+        ["refuses: VersionParseFailure: Unable to parse the version '2.2.2.develop'"]
+    );
+    assert!(matches!(
+        ops::require_acceptance(&refused),
+        Err(Error::PaletteRefuses { .. })
+    ));
 }
 
 // ---- a pack that Palette marks invalid (#108) ---------------------------------------------------

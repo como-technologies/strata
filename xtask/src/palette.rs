@@ -13,8 +13,12 @@
 //!
 //! The query leaves out `startTime` and `endTime`: see `without_time`.
 //!
-//! When the file `<name>.403.json` exists in place of `<name>.json`, the answer is HTTP 403 with
-//! that file as the body: Palette refuses the request.
+//! When the file `<name>.json` is empty, the answer is HTTP 204 with no body, as Palette answers
+//! some validate routes.
+//!
+//! When the file `<name>.<status>.json` exists in place of `<name>.json`, for a status of
+//! [`REFUSALS`], the answer is that status with that file as the body: Palette refuses the
+//! request.
 //!
 //! When the file does not exist, the answer is HTTP 404 with the body that Palette gives. The
 //! server reads each file at each request, so the runner can change the tenant between two
@@ -64,8 +68,13 @@ fn answer(root: &Path, mut stream: TcpStream) -> std::io::Result<()> {
         {
             (200, searched(&fs::read(path)?, &request.body))
         }
-        Some(path) if path.is_file() => (200, fs::read(path)?),
-        Some(path) if forbidden(&path).is_file() => (403, fs::read(forbidden(&path))?),
+        Some(path) if path.is_file() => match fs::read(path)? {
+            body if body.is_empty() => (204, body),
+            body => (200, body),
+        },
+        Some(path) if let Some(status) = refusal_of(&path) => {
+            (status, fs::read(refused(&path, status))?)
+        }
         // Palette answers an empty log for an object with no entry, and not 404
         Some(_) if request.target.starts_with("/v1/audits?") => (
             200,
@@ -83,7 +92,11 @@ fn answer(root: &Path, mut stream: TcpStream) -> std::io::Result<()> {
     };
     let reason = match status {
         200 => "OK",
+        204 => "No Content",
         403 => "Forbidden",
+        409 => "Conflict",
+        422 => "Unprocessable Entity",
+        500 => "Internal Server Error",
         _ => "Not Found",
     };
     write!(
@@ -96,9 +109,26 @@ fn answer(root: &Path, mut stream: TcpStream) -> std::io::Result<()> {
     stream.flush()
 }
 
+/// The statuses of a refusal that a file beside the file of the answer gives: a key that cannot
+/// read, a resource that exists, a body that the API schema refuses, and a refusal that Palette
+/// gives the type of a server fault.
+const REFUSALS: [u16; 4] = [403, 409, 422, 500];
+
 /// The file whose presence makes the server refuse the request for `path` with HTTP 403.
 pub fn forbidden(path: &Path) -> PathBuf {
-    path.with_extension("403.json")
+    refused(path, 403)
+}
+
+/// The file whose presence makes the server refuse the request for `path` with `status`.
+pub fn refused(path: &Path, status: u16) -> PathBuf {
+    path.with_extension(format!("{status}.json"))
+}
+
+/// The status of the refusal of the request for `path`, when a file of [`REFUSALS`] is there.
+fn refusal_of(path: &Path) -> Option<u16> {
+    REFUSALS
+        .into_iter()
+        .find(|status| refused(path, *status).is_file())
 }
 
 struct Request {

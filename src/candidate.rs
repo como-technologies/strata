@@ -1782,7 +1782,13 @@ variables:
         manifest_name.layers[4].manifests[0].name = "Namespace_Labels".into();
         let mut pack_name = manifest_candidate();
         pack_name.layers[0].name = "a".repeat(33);
-        for c in [version, pack_twice, manifest_twice, manifest_name, pack_name] {
+        for c in [
+            version,
+            pack_twice,
+            manifest_twice,
+            manifest_name,
+            pack_name,
+        ] {
             assert!(check(c.clone(), Path::new("c.yaml")).is_ok(), "{c:?}");
         }
     }
