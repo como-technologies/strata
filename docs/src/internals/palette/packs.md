@@ -549,7 +549,7 @@ Strata reads the state from the listing:
   `disabled` for a version with the mark. When the listing shows a disabled or
   a deleted `system_state` in a registry, strata also sends the `states`
   query, and joins the two answers. A registry that answers 404 to both shows
-  the versions of the listing, with no tags. See
+  only the disabled and the deleted versions of the listing, with no tags. See
   [strata packs](../../commands/packs.md#what-to-expect).
 - `strata behind` does not offer a disabled or a deleted version as a move:
   see [strata behind](../../commands/behind.md#the-pins-that-are-behind).
@@ -577,13 +577,15 @@ whose annotation `fips` is `true` or `unknown`:
 | Request | The FIPS rule |
 | --- | --- |
 | `GET /v1/packs?filters=spec.name=<name>`, the listing | not applied: the listing holds each version |
-| `GET /v1/packs/<name>/registries/<uid>` | applied: no tag and no `packValues` row for another version |
+| `GET /v1/packs/<name>/registries/<uid>` | applied: no tag and no `packValues` row for another version, and 404 `ResourceNotFound` when no version is left |
 | `POST /v1/packs/search` | applied, but the answer has one row for each pack name, and no list of versions |
 | A new profile that pins another version | Palette refuses it with `PackForbidden` |
 
 Strata uses the registry answer, and does not copy the rule. `strata packs` and
 `strata behind` leave out a listed version that has no tag in the registry
-answer. A version with the state `disabled` or `deleted` stays.
+answer. A version with the state `disabled` or `deleted` stays. A 404 is an
+answer with no version, so a pack with no FIPS compliant version has no version
+to offer. Then `behind` says that the pinned version is absent.
 See [strata packs](../../commands/packs.md#what-to-expect).
 
 The live tenant has the mode `none`, and its Palette does not run in FIPS mode.

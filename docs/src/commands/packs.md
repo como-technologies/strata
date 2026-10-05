@@ -95,11 +95,12 @@ Spectro Cloud, also says `disabled`. Palette serves its tags, so strata asks
 nothing more for it. A profile cannot hold a disabled or a deleted version: see
 [Pack states](../internals/palette/packs.md#pack-states).
 
-A registry can answer 404 for the tags with and without the query. Strata then
-lists the versions from the listing with no tags. The heading says the state
-and `no tags`, or `no tags: the registry answered 404` when the versions have no
-state. The other registries show as usual, and any other failure of that read
-stops the command. The live example
+A registry can answer 404 for the tags with and without the query. That answer
+has no version. So strata lists only the disabled and the deleted versions of
+the listing, with no tags. The heading says the state and `no tags`, or
+`no tags: the registry answered 404` when the versions differ in state. The
+other registries show as usual, and any other failure of that read stops the
+command. The live example
 [checks each state](../development/live-runs.md#pack-statessh).
 
 Some registries give no digest for a pack: a Helm registry with
@@ -121,8 +122,10 @@ Palette applies the FIPS rule of the tenant to the answer of the registry, and
 not to the listing. So in a FIPS tenant, the listing holds a version that
 Palette refuses in a profile, and the registry gives that version no tag.
 Strata leaves out each version that has no tag in the answer of the registry,
-unless its state is `disabled` or `deleted`. The count of versions in the
-heading does not include it. See
+unless its state is `disabled` or `deleted`. When no version of the pack is
+FIPS compliant, the registry answers 404, and strata shows no version of that
+registry. The count of versions in the heading does not include a version that
+strata leaves out. See
 [The FIPS rule](../internals/palette/packs.md#the-fips-rule).
 
 | Exit | Meaning |

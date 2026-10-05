@@ -5677,26 +5677,40 @@ fn packs_gives_the_state_disabled_to_a_version_with_the_mark_and_reads_its_tags_
 }
 
 #[test]
-fn packs_lists_a_registry_that_answers_404_with_no_state_and_stops_on_any_other_failure() {
+fn packs_lists_only_the_retired_versions_of_a_registry_that_answers_404_and_stops_on_any_other_failure()
+ {
+    // the Mirror answers 404 with and without the states query: it serves no version. Its
+    // disabled and deleted versions differ in state
+    let mirror = |uid: &str, version: &str| {
+        pack_summary(uid, version, "reg-mirror", "sha256:mmm", CSI_63)
+    };
     let api = serve_registry(
-        vec![pack_summary(
-            "pk-m",
-            "1.64.0",
-            "reg-mirror",
-            "sha256:mmm",
-            CSI_63,
-        )],
+        vec![
+            mirror("pk-m4", "1.64.0"),
+            in_state(mirror("pk-m2", "1.62.0"), "disabled"),
+            in_state(mirror("pk-m1", "1.61.0"), "deleted"),
+        ],
         &[("reg-public", public_entity())],
     );
     let l = packs_of(&api, "csi-aws-ebs", ops::PackOptions::default()).unwrap();
     let mirror = &l.registries[1];
     assert!(mirror.tags_unavailable);
     assert_eq!(mirror.state, None);
+    assert_eq!(
+        mirror
+            .versions
+            .iter()
+            .map(|v| v.version.as_str())
+            .collect::<Vec<_>>(),
+        ["1.62.0", "1.61.0"],
+        "the version that Palette does not serve is not in the listing"
+    );
+    assert_eq!(mirror.versions_offered, 2);
     let text = render::renderer(Format::Terminal, Paint::off(), false)
         .render_packs(&l)
         .unwrap();
     assert!(
-        text.contains("csi-aws-ebs in Mirror (1 version, no tags: the registry answered 404)"),
+        text.contains("csi-aws-ebs in Mirror (2 versions, no tags: the registry answered 404)"),
         "{text}"
     );
 
@@ -11232,6 +11246,45 @@ fn in_a_fips_tenant_packs_and_behind_leave_out_a_version_that_palette_does_not_s
         "behind offers no version that Palette refuses in a profile"
     );
     assert_eq!(newer(&open), ["1.68.0", "1.65.0"]);
+}
+
+#[test]
+fn in_a_fips_tenant_packs_and_behind_offer_no_version_of_a_pack_with_no_fips_version() {
+    // No version is FIPS compliant. So in a FIPS tenant, the registry route of Palette serves no
+    // version, and answers 404. The listing still holds each version.
+    let not_fips = |uid: &str, version: &str| {
+        let mut s = pack_summary(uid, version, "reg-public", "sha256:ccc", CSI_63);
+        s["spec"]["annotations"] = serde_json::json!({"fips": "false"});
+        s
+    };
+    let fips = serve_summaries(
+        vec![not_fips("pk-63", "1.63.1"), not_fips("pk-65", "1.65.0")],
+        &[],
+    );
+    let l = packs_of(&fips, "csi-aws-ebs", ops::PackOptions::default()).unwrap();
+    assert!(
+        l.registries.is_empty(),
+        "packs offers no version: {:?}",
+        l.registries
+    );
+
+    // a record that another tenant made pins 1.63.1
+    let dir = tempfile::tempdir().unwrap();
+    let record = dir.path().join("dev.json");
+    let old = snapshot_pack(
+        &serve_registry(vec![], &[("reg-public", public_entity())]),
+        "pack:csi-aws-ebs@1.63.1",
+    )
+    .unwrap();
+    fs::write(&record, old.to_json(false).unwrap()).unwrap();
+    let report = behind_of(
+        &fips,
+        std::slice::from_ref(&record),
+        &ops::BehindOptions::default(),
+    );
+    let pin = &report.pins[0];
+    assert!(pin.newer.is_empty(), "{:?}", pin.newer);
+    assert_eq!(pin.pinned_state.as_deref(), Some("absent"));
 }
 
 #[test]

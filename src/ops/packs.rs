@@ -52,8 +52,8 @@ pub struct PackRegistry {
     /// list. A heading states the registry's inventory, and not the count of rows a flag left.
     pub versions_offered: usize,
     /// True when Palette listed the pack under this registry and then answered 404 for the tags
-    /// of the registry, also with the states query: the versions come from the listing alone,
-    /// with no tags.
+    /// of the registry, also with the states query: the disabled and the deleted versions come
+    /// from the listing alone, with no tags.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub tags_unavailable: bool,
     /// The state that every version of the pack in this registry has, when they all have the
@@ -182,9 +182,9 @@ fn merged_tags(answers: &[Value]) -> Vec<Value> {
 ///
 /// Reads the paged listing for the versions, their digests and their types, and each registry's
 /// own answer for the tags that point at a version. Palette does not serve a version that has no
-/// tag in that answer, so it is not in the answer, unless it is disabled or deleted. A registry
-/// that does not have the pack is not in the answer; no registry with it at all is
-/// `pack-not-found`.
+/// tag in the registry answer, so the listing of strata leaves it out, unless it is disabled or
+/// deleted. A registry with no version left is not in the listing; no registry with the pack at
+/// all is `pack-not-found`.
 pub fn registry_packs<A, F>(
     name: &str,
     options: &PackOptions,
@@ -229,8 +229,9 @@ where
         // the registry's own answer holds the tags, which the listing does not. With no query,
         // the answer does not include the disabled and the deleted versions, and Palette answers
         // 404 when it has no version. So a registry with a retired version gets a second request
-        // with the states query. A registry that answers 404 to both keeps the versions of the
-        // listing, with no tags, and the other registries still answer
+        // with the states query. A registry that answers 404 to both keeps only the disabled and
+        // the deleted versions of the listing, with no tags, and the other registries still
+        // answer
         progress.note(&format!("reading the tags of {name} in {registry}"));
         let path = format!("/v1/packs/{name}/registries/{uid}");
         let mut answers = vec![tags_answer(&palette, &path)?];
@@ -253,15 +254,11 @@ where
         let tags = merged_tags(&answers);
         // Palette applies the FIPS rule of the tenant to its registry route, and not to the
         // listing. So a version with no tag in the answer is a version that Palette does not
-        // serve. Leave it out, unless it is disabled or deleted. A 404 gives no tags at all, so
-        // that registry keeps each version of the listing.
+        // serve. Leave it out, unless it is disabled or deleted. A 404 is the same answer: the
+        // route serves no version, for example when no version of the pack is FIPS compliant
         let mine: Vec<&Value> = mine
             .into_iter()
-            .filter(|e| {
-                tags_unavailable
-                    || !tag_rows(&tags, e).is_empty()
-                    || crate::candidate::retired_state(e).is_some()
-            })
+            .filter(|e| has_tag(&tags, e) || crate::candidate::retired_state(e).is_some())
             .collect();
         // every version of this pack that the registry offers, counted before --cloud and
         // --latest cut the list: the heading states the inventory, not the rows that survived a
@@ -376,22 +373,26 @@ where
     })
 }
 
-/// The tag rows of the registry answer that point at the listing entry `e`. A tag row names its
-/// version and the build that it points at. Match on either: a registry that answers with one of
-/// the two still says enough.
+/// The tag rows of the registry answer that point at the listing entry `e`.
 fn tag_rows<'a>(tags: &'a [Value], e: &Value) -> Vec<&'a Value> {
-    let version = text(e, "/spec/version");
-    let pack_uid = text(e, "/metadata/uid");
-    tags.iter()
-        .filter(|t| {
-            let v = text(t, "/version");
-            if v.is_empty() {
-                text(t, "/packUid") == pack_uid
-            } else {
-                v == version
-            }
-        })
-        .collect()
+    tags.iter().filter(|t| points_at(t, e)).collect()
+}
+
+/// True when a tag row of the registry answer points at the listing entry `e`.
+fn has_tag(tags: &[Value], e: &Value) -> bool {
+    tags.iter().any(|t| points_at(t, e))
+}
+
+/// True when the tag row `t` points at the listing entry `e`. A tag row names its version and the
+/// build that it points at. Match on either: a registry that answers with one of the two still
+/// says enough.
+fn points_at(t: &Value, e: &Value) -> bool {
+    let v = text(t, "/version");
+    if v.is_empty() {
+        text(t, "/packUid") == text(e, "/metadata/uid")
+    } else {
+        v == text(e, "/spec/version")
+    }
 }
 
 #[cfg(test)]
