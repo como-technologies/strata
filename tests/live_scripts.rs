@@ -1774,8 +1774,7 @@ fn packs_os_stage(annotations: &str, record: &str) -> Stage {
 }
 
 #[test]
-fn packs_sh_stage_5_finds_no_annotation_of_the_os_pack_in_a_record_and_each_one_on_the_pack_ref()
-{
+fn packs_sh_stage_5_finds_no_annotation_of_the_os_pack_in_a_record_and_each_one_on_the_pack_ref() {
     let annotations = r#"{"osName":"ubuntu","os_version":"24.04"}"#;
     let ids = [
         "os-record",

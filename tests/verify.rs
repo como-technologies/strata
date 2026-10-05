@@ -8269,10 +8269,16 @@ fn a_pack_record_keeps_only_the_image_id_annotation_outside_the_root() {
     assert_eq!(byoi.image_id(), Some("ami-0aaa"));
     // another annotation can hold a secret: the record keeps only `imageId`
     let doc = serde_json::to_value(&byoi).unwrap();
-    assert_eq!(doc["annotations"], serde_json::json!({"imageId": "ami-0aaa"}));
+    assert_eq!(
+        doc["annotations"],
+        serde_json::json!({"imageId": "ami-0aaa"})
+    );
     let secret = serde_json::json!({"imageId": "ami-0aaa", "registryToken": "s3cr3t"});
     let doc = serde_json::to_value(Pack::from_api(&pack(secret), &[])).unwrap();
-    assert_eq!(doc["annotations"], serde_json::json!({"imageId": "ami-0aaa"}));
+    assert_eq!(
+        doc["annotations"],
+        serde_json::json!({"imageId": "ami-0aaa"})
+    );
     let doc = serde_json::to_value(Pack::from_api(&pack(os_annotations(None)), &[])).unwrap();
     assert!(doc.get("annotations").is_none(), "{doc}");
     // the annotations are outside the root: a new image keeps the node hash
