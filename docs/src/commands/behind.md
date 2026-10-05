@@ -76,7 +76,7 @@ under a pin that is behind, and `newer[].listed` in the JSON.
 Exit `2`: strata could not check a pin, and the line under the pin says why.
 Here the record is a candidate with a chart from a registry that Palette does
 not sync. Palette lists a pack of such a registry only while a profile pins the
-pack, so the registry has no version to compare with: see
+pack, so the registry has no version to compare with. See
 [A pack that Palette makes at the create](../internals/palette/packs.md#a-pack-that-palette-makes-at-the-create).
 The JSON keeps the error on the pin, with `unsynced`: see
 [Errors](../reference/errors.md).

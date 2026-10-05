@@ -348,7 +348,7 @@ where
     }
     // no registry has the pack at all: strata cannot answer. A cloud that keeps nothing is an
     // answer, and an empty one. Palette lists a pack of a registry that it does not sync only
-    // while a profile pins the pack, so the error names each such registry: it says why the
+    // while a profile pins the pack. So the error names each such registry: it says why the
     // listing has nothing
     if !had_the_pack {
         let unsynced = crate::candidate::unsynced_names(&palette, &wanted)?;

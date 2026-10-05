@@ -296,7 +296,8 @@ pub enum Error {
     /// `packs <name>` found the name in no visible registry. It asked for every version, so no
     /// version and no registry was ever in play, and `PackNotFound` would state both as blanks.
     #[error(
-        "no registry that this key can see offers a pack named '{name}'{}; `strata list --pack {name}` finds the profiles that carry one", unsynced_sentence(unsynced)
+        "no registry that this key can see offers a pack named '{name}'{}; `strata list --pack {name}` finds the profiles that carry one",
+        unsynced_sentence(unsynced)
     )]
     PackNameNotFound {
         /// Pack name.
