@@ -80,9 +80,9 @@ HTTP 404 for the bindings or the namespaces, the field is `null`, and not an
 empty list.
 
 When Palette answers another HTTP error for the bindings or the namespaces,
-strata still writes the record, and the exit is 0. The field is `null`, and
-`errors` of the tier holds the error. Here the API key cannot read the role
-bindings of the cluster `payments`:
+strata still writes the record, and the exit is 0. The tier does not hold the
+field, so its hash does not cover it. `errors` of the tier holds the error.
+Here the API key cannot read the role bindings of the cluster `payments`:
 
 ```text
 {{#include ../../output/tiers-forbidden-record.txt}}

@@ -2282,7 +2282,8 @@ fn use_cases(r: &mut Runner) {
         "strata compare cluster:payments aws-stack@1.1.1 --json | jq -c '.runningBehind'",
     );
     // the key loses the permission to read the role bindings of payments: the record holds the
-    // error in the policy tier, and verify does not compare the field (#251)
+    // error in the policy tier and no value for the field, and verify does not compare the field
+    // (#251, #274)
     r.forbid(DEV, &format!("v1/spectroclusters/{PAYMENTS}/config/rbacs"));
     r.serve_here(); // state 3: Palette refuses the role bindings of payments
     r.step(
@@ -2295,7 +2296,8 @@ fn use_cases(r: &mut Runner) {
         "tiers-forbidden-errors",
         0,
         false,
-        "jq '.source.cluster.tiers.policy | {rbacs: .fields.rbacs, errors}' runs/payments-now.json",
+        "jq '.source.cluster.tiers.policy | {rbacsInFields: (.fields | has(\"rbacs\")), errors}' \
+         runs/payments-now.json",
     );
     r.step(
         "tiers-forbidden-verify",
