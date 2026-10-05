@@ -126,14 +126,14 @@ pub(crate) fn group_fields(config: &Value) -> Value {
     if let Some(e) = values_parse_error {
         fields["valuesParseError"] = Value::String(e);
     }
-    mask_group_values(&mut fields);
+    mask_group_fields(&mut fields);
     fields
 }
 
 /// Write `********` over each password in `values` of the policy fields `fields` of a cluster
 /// group, and make `valuesHash` the hash of the masked values. Fields with no values, or with
 /// values that did not parse, do not change.
-fn mask_group_values(fields: &mut Value) {
+fn mask_group_fields(fields: &mut Value) {
     let Some(values) = fields.get_mut("values").filter(|v| !v.is_null()) else {
         return;
     };
@@ -226,7 +226,7 @@ pub(crate) fn comparable(a: &Value, b: &Value) -> (Value, Value) {
     } else {
         let masked = |v: &Value| {
             let mut v = v.clone();
-            mask_group_values(&mut v);
+            mask_group_fields(&mut v);
             v
         };
         (masked(a), masked(b))

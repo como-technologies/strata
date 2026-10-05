@@ -300,7 +300,7 @@ where
             None => Some("absent".to_string()),
         };
         // the version that a floating tag names now. A profile with values of its own stays on
-        // the pinned version until a person applies the update, so each version above the pin
+        // the pinned version until a person applies the update. So each version above the pin
         // is newer, also the one that the tag names
         if pin.floating {
             pin.resolved = builds
@@ -320,7 +320,7 @@ where
         pin.newer = builds
             .iter()
             .filter(|b| version::compare(&b.version, &pin.version) == std::cmp::Ordering::Greater)
-            .filter(|b| !matches!(b.state.as_deref(), Some("disabled" | "deleted")))
+            .filter(|b| !b.retired())
             .filter(|b| fits(b))
             .map(|b| Newer {
                 version: b.version.clone(),
@@ -334,24 +334,25 @@ where
         // a pin that is current is current against the copy of the registry in Palette. When
         // the last sync did not complete, the copy is the copy of an earlier sync, and the pin
         // says so. A pin that is behind needs no note: a newer version in the copy is a newer
-        // version in the registry
-        if !pin.behind {
-            let kind = builds.first().map(|b| b.kind.as_str()).unwrap_or_default();
+        // version in the registry. The first build gives the kind of the registry. A registry
+        // with no build of the pack is not in the listing, so it gets no note
+        if !pin.behind
+            && let Some(first) = builds.first()
+        {
             let note = match syncs.entry(registry_uid.clone()) {
-                Entry::Occupied(e) => e.get().clone(),
+                Entry::Occupied(e) => e.into_mut(),
                 Entry::Vacant(v) => {
                     let palette = connect(scope)?;
-                    let note = crate::candidate::registry_sync_note(
+                    v.insert(crate::candidate::registry_sync_note(
                         &palette,
                         &registry_uid,
-                        kind,
+                        &first.kind,
                         progress,
-                    )?;
-                    v.insert(note).clone()
+                    )?)
                 }
             };
-            pin.registry_sync = note.sync.filter(|s| !s.completed());
-            pin.registry_sync_error = note.error;
+            pin.registry_sync = note.sync.as_ref().filter(|s| !s.completed()).cloned();
+            pin.registry_sync_error = note.error.clone();
         }
         out.push((pin, project));
     }

@@ -48,10 +48,11 @@ of a cluster. A directory that an older version of strata saved has neither.
 The `policy` tier of its record then holds `null` for them.
 
 `errors.json` keeps why Palette did not give the notifications, the repave,
-the role bindings, or the namespaces of a cluster, when it answered with an
-error. Strata writes the file only when it holds an error. So `--from-raw`
-gives the record of the fetch, with the same errors. A directory that an older
-version of strata saved has no `errors.json`, so its record holds no error.
+the role bindings, or the namespaces of a cluster. It holds each answer of
+Palette that is an error. Strata writes the file only when it holds an error.
+So `--from-raw` gives the record of the fetch, with the same errors. A
+directory that an older version of strata saved has no `errors.json`, so its
+record holds no error.
 
 ## A version before you publish it
 

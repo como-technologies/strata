@@ -1762,7 +1762,7 @@ impl Tenant {
             ),
         ] {
             let file = self.doc(project, path);
-            for status in [None, Some(403), Some(409), Some(422), Some(500)] {
+            for status in std::iter::once(None).chain(crate::palette::REFUSALS.map(Some)) {
                 let old = status.map_or(file.clone(), |s| crate::palette::refused(&file, s));
                 if old.is_file() {
                     std::fs::remove_file(&old).unwrap_or_else(|e| panic!("{}: {e}", old.display()));

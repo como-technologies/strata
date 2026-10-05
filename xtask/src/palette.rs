@@ -115,7 +115,7 @@ fn answer(root: &Path, mut stream: TcpStream) -> std::io::Result<()> {
 /// - 409: the resource exists.
 /// - 422: the API schema refuses the body.
 /// - 500: Palette gives the refusal the type of a server fault.
-const REFUSALS: [u16; 4] = [403, 409, 422, 500];
+pub(crate) const REFUSALS: [u16; 4] = [403, 409, 422, 500];
 
 /// The file whose presence makes the server refuse the request for `path` with HTTP 403.
 pub fn forbidden(path: &Path) -> PathBuf {

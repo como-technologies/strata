@@ -39,7 +39,7 @@ under a pin name each record that pins it.
   older version is behind the version that the tag names. `LTS__20.4.x` names
   20.04, so a pin of 20.04 under it is behind only 22.04 and 24.04.
 - **Palette moves a profile under a floating tag only when the profile keeps
-  the values of the pack.** A profile with values of its own stays on its
+  the values of the pack**. A profile with values of its own stays on its
   version, and Palette shows the update to a person. Until the person applies
   it, the record pins the older version, and `behind` names the version that
   the tag names now. See [Tag names](../internals/palette/packs.md#tag-names).
@@ -144,7 +144,7 @@ A scheduled job that keeps one issue open for each pack that is behind is
   first record that pins it. It reads the paged listing of the versions, and the
   tags of the pack in the registry.
 - For each registry with a pin that is current, strata also reads the sync of
-  the registry one time, from the summary listing of its kind.
+  the registry one time. It comes from the summary listing of its kind.
 - Behind is a decision, and not an error, so run `behind` apart from `verify`:
   the two fail for different reasons, and need different people.
 

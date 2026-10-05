@@ -2865,8 +2865,8 @@ fn packs_sh_stage_7_says_that_the_move_to_the_newer_version_drops_arm64() {
     assert!(steps.contains("FAIL  arch-behind-json"), "{steps}");
 }
 
-/// A run of `registry-kinds.sh` against the stand-ins: the tools of the registries do nothing,
-/// and strata answers `packs` of the Zarf pack with `packs`.
+/// A run of `registry-kinds.sh` against the stand-ins. The tools of the registries do nothing.
+/// The fake strata prints the text `packs` for `strata packs strata-live-zarf`.
 fn registry_kinds(packs: &str) -> (Stage, String) {
     let mut stage = Stage::new(serde_json::json!({
         "aws_profile": "p", "project_uid": "p-1", "cluster_uid": "",

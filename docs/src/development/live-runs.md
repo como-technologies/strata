@@ -229,7 +229,7 @@ registries the tenant can see, including one pack that two registries hold.
 | `arch-record`, `arch-behind`, `arch-behind-says`, `arch-behind-json` | 0, 1, 0, 0 | #126: a record of `loki` 2.10.2 is behind 3.6.7, and `behind` says that the move drops `arm64`, in the line and in `newer[].drops` |
 | `bitnami-sync` | 0 | #122: the Helm summary listing gives the sync of the Bitnami registry, whose sync stays `InProgress`. No result yet |
 | `stale-record`, `stale-current` | 0 | #122: a record of the newest `nginx` of Bitnami, and `behind` says that the pin is current. No result yet |
-| `stale-note`, `stale-json` | 0 | #122: the line of the pin names the sync of the registry, because the last sync did not complete, and `--json` gives `pins[].registrySync` with the status of Palette: see [A pin that is current against an older copy](../commands/behind.md#a-pin-that-is-current-against-an-older-copy). When the last sync completed, `stale-no-note` checks that the pin has no note in its place. No result yet |
+| `stale-note`, `stale-json` | 0 | #122: the line of the pin names the sync of the registry, because the last sync did not complete. `--json` gives `pins[].registrySync` with the status of Palette: see [A pin that is current against an older copy](../commands/behind.md#a-pin-that-is-current-against-an-older-copy). When the last sync completed, `stale-no-note` checks that the pin has no note in its place. No result yet |
 
 Palette lists the registries of a tenant in no fixed order, so strata sorts them
 and the ambiguous-ref message reads the same every time:
@@ -1377,10 +1377,11 @@ each install, by `chartVersion` `1.0.0`. See
 
 ## The sync of each registry
 
-A read by hand, with no write: `status.sync` of each registry of the tenant,
-from `GET /v1/registries/pack/summary`, `GET /v1/registries/helm/summary`, and
-`GET /v1/registries/oci/summary`, and from
-`GET /v1/registries/{kind}/{uid}/sync/status` for each pack and Helm registry.
+A read by hand, with no write: `status.sync` of each registry of the tenant.
+It comes from `GET /v1/registries/pack/summary`,
+`GET /v1/registries/helm/summary`, and `GET /v1/registries/oci/summary`. It
+also comes from `GET /v1/registries/{kind}/{uid}/sync/status` for each pack and
+Helm registry.
 `packs.sh` reads the Helm summary listing in its check `bitnami-sync`, and no
 script holds the other reads.
 

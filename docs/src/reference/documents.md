@@ -311,14 +311,16 @@ A comparison of two sides, `a` and `b`.
     `name`, `clusterVersion`, and `profileVersion` (empty for a uid that is
     gone). The status is `drifted`.
   - `registrySync`: for a pack record, the last sync of the registry in
-    Palette: `lastSyncedTime`, the start of the last sync that completed
-    (empty when no sync completed); `lastRunTime`, the start of the last sync;
-    `status` (`Completed`, `InProgress`, or `Failed`); `message` when Palette
-    gives one; and `syncRecovery`, with `syncRecoveryState` (`Interrupted` or
-    `Recovering`) and `message`, when a sync waits for a recovery. The verdict
-    states the copy of the registry in Palette, and this field tells how old
-    that copy is. It is absent when the registry does not sync,
-    or when Palette does not answer.
+    Palette. The verdict states the copy of the registry in Palette, and this
+    field tells how old that copy is. It is absent when the registry does not
+    sync, or when Palette does not answer. It has:
+    - `lastSyncedTime`, the start of the last sync that completed. Empty when
+      no sync completed.
+    - `lastRunTime`, the start of the last sync.
+    - `status`: `Completed`, `InProgress`, or `Failed`.
+    - `message`, when Palette gives one.
+    - `syncRecovery`, when a sync waits for a recovery: `syncRecoveryState`
+      (`Interrupted` or `Recovering`) and `message`.
   - `registrySyncError`: for a pack record, why strata could not read the last
     sync of the registry: Palette answered with a 5xx, or the request did not
     complete. `registrySync` is then absent. It does not change `status`.
@@ -332,10 +334,11 @@ A comparison of two sides, `a` and `b`.
     the `uid` of the object of the write, when Palette gives it), and
     `auditUid`. An empty list means the log holds no write since the record.
   - `lastModified`: when Palette last changed the object of the record, from
-    `metadata.lastModifiedTimestamp` of its document: the profile, the app
-    profile, the cluster, the edge host, or the cluster group. It is absent
-    when Palette gives no time, and for a gone object. It is also absent for a
-    pack record: the pack listing gives the create time of the pack there. See
+    `metadata.lastModifiedTimestamp` of its document. The document is the
+    profile, the app profile, the cluster, the edge host, or the cluster group.
+    It is absent when Palette gives no time, and for a gone object. It is also
+    absent for a pack record: the pack listing gives the create time of the
+    pack there. See
     [What a registry answers about a pack](../internals/palette/packs.md#what-a-registry-answers-about-a-pack).
 
 Each changed value is a leaf with `op`, `path`, `segments`, `old`, and `new`. A
@@ -461,8 +464,8 @@ is the path as a list: strings for keys, numbers for indexes, and
 - `registries[]`: one entry per registry that has the pack, with `registry`,
   `registryUid`, `layer`, and `versions[]`. Palette does not serve a version
   that has no tag in the answer of the registry. That version is not in
-  `versions[]`, unless it is disabled or deleted. See
-  [The FIPS rule](../internals/palette/packs.md#the-fips-rule).
+  `versions[]`, unless Spectro Cloud retired it as `disabled` or `deleted`.
+  See [The FIPS rule](../internals/palette/packs.md#the-fips-rule).
   - A version: `version`, `packUid`, `digest`, `type`, `cloudTypes[]`, `tags[]`
     with the exact tag first, and `latest`, which is true for the newest version
     the command listed. With `--cloud`, that is the newest version for that
@@ -480,8 +483,8 @@ is the path as a list: strings for keys, numbers for indexes, and
     `--latest` or `--cloud` cut the list.
   - `tagsUnavailable`: `true` when Palette lists the pack under the registry and
     then answers 404 for its tags, also with the `states` query. Only the
-    disabled and the deleted versions come from the listing, with no tags. When
-    it is `false`, strata leaves out the field.
+    versions that Spectro Cloud retired as `disabled` or `deleted` come from
+    the listing, with no tags. When it is `false`, strata leaves out the field.
   - `state`: the state that every version in the registry has, when they all
     have the same one. Strata leaves out the field otherwise.
   - `noDigests`: `true` when the registry gives no digest for each version of
@@ -499,13 +502,17 @@ is the path as a list: strings for keys, numbers for indexes, and
     version that the tag names now. When it is above `version`, it is in
     `newer`, and the pin is behind.
   - `pinnedState`: `deprecated`, `disabled`, or `deleted`, as `state` of
-    `strata-packs/1`, or `absent` when the registry no longer lists the pinned
-    version, or does not serve it in this tenant.
+    `strata-packs/1`. It is `absent` when the registry no longer lists the
+    pinned version, or does not serve it in this tenant.
   - `pinnedBy[]`: `path` and `subject` of each record that pins it.
-  - `newer[]`: the newer versions that a person can move to, newest first, each
-    with `version`, `state` when the registry gives one, `paletteLatest` when
-    Palette calls it the latest, `listed`, and `drops[]`, the architectures of
-    the pinned version that it does not support.
+  - `newer[]`: the newer versions that a person can move to, newest first.
+    Each has:
+    - `version`.
+    - `state`, when the registry gives one.
+    - `paletteLatest`, when Palette calls it the latest.
+    - `listed`.
+    - `drops[]`, the architectures of the pinned version that it does not
+      support.
   - `behind`: `true` when `newer` is not empty.
   - `bump`, for a pin that is behind, unless `--no-impact`: `to`, the newest
     version, `impact`, the impact level, and `flags[]`.

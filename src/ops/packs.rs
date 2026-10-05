@@ -51,9 +51,9 @@ pub struct PackRegistry {
     /// How many versions of the pack the registry offers, before `--latest` or `--cloud` cut the
     /// list. A heading states the registry's inventory, and not the count of rows a flag left.
     pub versions_offered: usize,
-    /// True when Palette listed the pack under this registry and then answered 404 for the tags
-    /// of the registry, also with the states query: the disabled and the deleted versions come
-    /// from the listing alone, with no tags.
+    /// True when Palette listed the pack under this registry, and then answered 404 for its tags,
+    /// also with the states query. The disabled and the deleted versions then come from the
+    /// listing alone, with no tags.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub tags_unavailable: bool,
     /// The state that every version of the pack in this registry has, when they all have the
@@ -106,6 +106,17 @@ pub struct PackBuild {
     pub listed: String,
 }
 
+impl PackBuild {
+    /// True when the state of this version is `disabled` or `deleted`: Spectro Cloud retired it,
+    /// or marked it `disabled`, and a profile cannot hold it. The rule is
+    /// [`is_retired`](crate::candidate::is_retired).
+    pub(crate) fn retired(&self) -> bool {
+        self.state
+            .as_deref()
+            .is_some_and(crate::candidate::is_retired)
+    }
+}
+
 /// What `packs` was asked for.
 #[derive(Debug, Clone, Default)]
 pub struct PackOptions {
@@ -154,9 +165,9 @@ fn architectures(entry: &Value) -> Vec<String> {
 /// pack. With it, Palette answers with the versions in these states only.
 const RETIRED_STATES: &str = "deprecated,disabled,deleted";
 
-/// Read one answer of a registry for the tags of a pack: none when Palette answers 404.
-fn tags_answer<A: PaletteApi>(palette: &Palette<A>, path: &str) -> Result<Option<Value>> {
-    match palette.api().get_json(path) {
+/// `answer`, one answer of a registry for the tags of a pack: none when Palette answered 404.
+fn tags_answer(answer: Result<Value>) -> Result<Option<Value>> {
+    match answer {
         Ok(answer) => Ok(Some(answer)),
         Err(Error::Api { status: 404, .. }) => Ok(None),
         Err(e) => Err(e),
@@ -180,11 +191,16 @@ fn merged_tags(answers: &[Value]) -> Vec<Value> {
 
 /// List what the registries offer for one pack.
 ///
-/// Reads the paged listing for the versions, their digests and their types, and each registry's
-/// own answer for the tags that point at a version. Palette does not serve a version that has no
-/// tag in the registry answer, so the listing of strata leaves it out, unless Spectro Cloud
-/// retired it as disabled or deleted. A registry with no version left is not in the listing; no
-/// registry with the pack at all is `pack-not-found`.
+/// Reads the paged listing for the versions, their digests, and their types. Then it reads the
+/// answer of each registry for the tags that point at a version. Palette does not serve a version
+/// that has no tag in that answer. So the listing of strata leaves it out, unless Spectro Cloud
+/// retired it as disabled or deleted. A registry with no version left is not in the listing.
+///
+/// # Errors
+///
+/// [`Error::RegistryNotFound`] when `--registry` names no registry that the key can see.
+/// [`Error::PackNameNotFound`] when no registry has the pack, and [`Error::PackNotFound`] when
+/// the one registry of `--registry` has none. Each error of `connect`, and of a request.
 pub fn registry_packs<A, F>(
     name: &str,
     options: &PackOptions,
@@ -197,7 +213,9 @@ where
     F: FnMut(Option<&str>) -> Result<Palette<A>>,
 {
     let palette = connect(None)?;
-    let visible = crate::candidate::registries(&palette)?;
+    // the registry listing gives the names, and the reason of an error that finds no pack
+    let listed = crate::candidate::registry_entries(&palette)?;
+    let visible = crate::candidate::registry_names(&listed);
     let wanted = match &options.registry {
         Some(r) => {
             let found = visible
@@ -232,16 +250,16 @@ where
         // with the states query. A registry that answers 404 to both keeps only the disabled and
         // the deleted versions of the listing, with no tags. The other registries still answer
         progress.note(&format!("reading the tags of {name} in {registry}"));
-        let path = format!("/v1/packs/{name}/registries/{uid}");
-        let mut answers = vec![tags_answer(&palette, &path)?];
+        let mut answers = vec![tags_answer(palette.pack_tags(name, uid, None))?];
         if mine
             .iter()
             .any(|e| crate::candidate::retired_state(e).is_some())
         {
-            answers.push(tags_answer(
-                &palette,
-                &format!("{path}?states={RETIRED_STATES}"),
-            )?);
+            answers.push(tags_answer(palette.pack_tags(
+                name,
+                uid,
+                Some(RETIRED_STATES),
+            ))?);
         }
         let answers: Vec<Value> = answers.into_iter().flatten().collect();
         let tags_unavailable = answers.is_empty();
@@ -353,19 +371,20 @@ where
     // while a profile pins the pack. So the error names each such registry: it says why the
     // listing has nothing
     if !had_the_pack {
-        let unsynced = crate::candidate::unsynced_names(&palette, &wanted)?;
-        if options.registry.is_none() {
-            return Err(Error::PackNameNotFound {
+        let unsynced = crate::candidate::unsynced_names(&palette, listed, &wanted)?;
+        return Err(match (&options.registry, wanted.as_slice()) {
+            // --registry named one registry, and wanted holds only that one
+            (Some(_), [(registry, _)]) => Error::PackNotFound {
+                name: name.to_string(),
+                version: String::new(),
+                tag: None,
+                registry: registry.clone(),
+                unsynced,
+            },
+            _ => Error::PackNameNotFound {
                 name: name.to_string(),
                 unsynced,
-            });
-        }
-        return Err(Error::PackNotFound {
-            name: name.to_string(),
-            version: String::new(),
-            tag: None,
-            registry: wanted.first().map(|(n, _)| n.clone()).unwrap_or_default(),
-            unsynced,
+            },
         });
     }
     Ok(PackListing {

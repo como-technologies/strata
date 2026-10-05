@@ -1,5 +1,5 @@
 $ strata behind charts/candidate.json
 1 pin from 1 record: 0 behind, 1 not checked
   [addon] podinfo  6.7.1  -  not checked
-      (no pack 'podinfo' in registry 'charts-auth'; Palette does not sync the registry 'charts-auth', and lists a pack of it only while a profile pins the pack)
+      (no pack 'podinfo' in registry 'charts-auth'; Palette does not sync the registry 'charts-auth', and lists a pack of such a registry only while a profile pins the pack)
       pinned by charts/candidate.json (charts-probe@1.0.0)

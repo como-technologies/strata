@@ -41,8 +41,8 @@ summary listing of each kind of registry gives the last sync of each registry
 in `status.sync`: `GET /v1/registries/pack/summary`,
 `GET /v1/registries/helm/summary`, and `GET /v1/registries/oci/summary`. The
 route `GET /v1/registries/{kind}/{uid}/sync/status` gives the same fields for
-one registry. `verify` of a pack record and `behind` read the summary listing:
-see
+one registry. `verify` of a pack record and `behind` read the summary listing.
+See
 [The sync of the registry of a pack record](../../commands/verify.md#the-sync-of-the-registry-of-a-pack-record)
 and
 [A pin that is current against an older copy](../../commands/behind.md#a-pin-that-is-current-against-an-older-copy).
@@ -445,8 +445,8 @@ one request gives every version, every tag, and no repeats. The paged listing
 answer does not, and it repeats a version across pages. It gives an entry for
 each version in each registry that holds the pack, and 100 entries on a page.
 So the listing of a pack in two registries can pass one page when each registry
-holds fewer than 100 versions (`packs-paged-listing` in
-[the live runs](../../development/live-runs.md#packssh)).
+holds fewer than 100 versions. The check `packs-paged-listing` in
+[the live runs](../../development/live-runs.md#packssh) shows it.
 
 **When a version arrived.** The tags answer gives no time. The listing gives
 `metadata.creationTimestamp` for each version: the time Palette first listed it.

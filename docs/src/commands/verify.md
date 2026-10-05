@@ -221,20 +221,25 @@ verdict do not change: an unchanged pack is `OK` and exits `0`.
 
 With many records, the line of a pack record ends with the same note. `behind`
 ends the line of a pin that is current with the same note, when the last sync
-of the registry did not complete: see
+of the registry did not complete. See
 [A pin that is current against an older copy](./behind.md#a-pin-that-is-current-against-an-older-copy).
 
 ```text
 {{#include ../output/pack-verify-json.txt}}
 ```
 
-`--json` puts the same in `verify.registrySync`: `lastSyncedTime` (the start
-of the last complete sync), `lastRunTime` (the start of the last sync), `status`
-(`Completed`, `InProgress`, or `Failed`), `message` when Palette gives one, and
-`syncRecovery` when a recovery is not `Recovered`. When strata cannot read the
-sync status, `verify.registrySync` is absent, and `verify.registrySyncError`
-gives the reason, such as `HTTP 500: <body>`. Strata sends one request for each
-pack record: the summary listing of the registries of the type of the pack. See
+`--json` puts the same in `verify.registrySync`:
+
+- `lastSyncedTime`, the start of the last complete sync.
+- `lastRunTime`, the start of the last sync.
+- `status`: `Completed`, `InProgress`, or `Failed`.
+- `message`, when Palette gives one.
+- `syncRecovery`, when a recovery is not `Recovered`.
+
+When strata cannot read the sync status, `verify.registrySync` is absent, and
+`verify.registrySyncError` gives the reason, such as `HTTP 500: <body>`. Strata
+sends one request for each pack record: the summary listing of the registries
+of the type of the pack. See
 [Other reads](../reference/palette-api.md#other-reads).
 
 ## The object of the record

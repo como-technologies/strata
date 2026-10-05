@@ -109,12 +109,12 @@ type that Palette refuses:
 
 Strata does not copy the rules that a validate route of Palette checks:
 
-- the version,
-- a pack name in two layers,
-- the name of a manifest, or of a `manifest` layer,
-- a manifest name two times in a layer,
-- the YAML of the values and the manifests,
-- the limit of 200 packs and 200 manifests.
+- The version.
+- A pack name in two layers.
+- The name of a manifest, or of a `manifest` layer.
+- A manifest name two times in a layer.
+- The YAML of the values and the manifests.
+- The limit of 200 packs and 200 manifests.
 
 A candidate that breaks one of them gives a record. To ask Palette before you publish, give
 `--validate`: see

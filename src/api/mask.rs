@@ -180,8 +180,8 @@ fn is_secret_text(text: &str) -> bool {
     !text.is_empty() && !holds_variable(text)
 }
 
-/// True when the key of a value of a cluster group names a secret: the key ends with
-/// `password`, in capitals or not, such as `password` or `adminPassword`.
+/// True when the key of a value of a cluster group names a secret. Such a key ends with
+/// `password`, in capitals or not: `password` or `adminPassword`.
 fn is_password_key(key: &str) -> bool {
     key.to_ascii_lowercase().ends_with("password")
 }
