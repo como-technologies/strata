@@ -230,8 +230,7 @@ where
         // the answer does not include the disabled and the deleted versions, and Palette answers
         // 404 when it has no version. So a registry with a retired version gets a second request
         // with the states query. A registry that answers 404 to both keeps only the disabled and
-        // the deleted versions of the listing, with no tags, and the other registries still
-        // answer
+        // the deleted versions of the listing, with no tags. The other registries still answer
         progress.note(&format!("reading the tags of {name} in {registry}"));
         let path = format!("/v1/packs/{name}/registries/{uid}");
         let mut answers = vec![tags_answer(&palette, &path)?];
