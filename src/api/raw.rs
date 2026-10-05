@@ -7,7 +7,7 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use super::mask::MASKED;
+use super::mask::{MASKED, mask_group_values};
 use crate::error::{Error, Result};
 
 /// The three raw API responses a snapshot is built from, and the project they were fetched in.
@@ -191,6 +191,19 @@ fn masked_repave(repave: &Value) -> Value {
     out
 }
 
+/// A copy of `cluster` with `********` over each password in the values of a cluster group, as
+/// the record masks them. Palette gives the values of a group with no mask. The document of a
+/// cluster has no such values, and stays as it is.
+fn masked_group(cluster: &Value) -> Result<Value> {
+    let mut out = cluster.clone();
+    if let Some(v) = out.pointer_mut("/spec/clustersConfig/values")
+        && let Some(text) = v.as_str()
+    {
+        *v = Value::String(mask_group_values(text)?);
+    }
+    Ok(out)
+}
+
 /// Write each named document under `dir`, creating it.
 fn write_json_files(dir: &Path, files: &[(&str, &Value)]) -> Result<()> {
     fs::create_dir_all(dir).map_err(|source| Error::Io {
@@ -365,11 +378,18 @@ impl RawCluster {
 
     /// Write the three files, each other document that strata read, and `scope.json` under
     /// `dir`, and make `dir` if it is not there. Strata masks the values of
-    /// each pack in the saved notifications and in the saved repave.
+    /// each pack in the saved notifications and in the saved repave, and each password in the
+    /// values of a cluster group.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Io`] when strata cannot write a file, and [`Error::Serialize`] when it cannot
+    /// write a document or the masked values of a cluster group.
     pub fn save_dir(&self, dir: &Path, fetched_at: &str) -> Result<()> {
         let scope = scope_document(&self.project_uid, fetched_at, self.variables_unavailable);
+        let cluster = masked_group(&self.cluster)?;
         let mut files: Vec<(&str, &Value)> = vec![
-            (Self::MARKER, &self.cluster),
+            (Self::MARKER, &cluster),
             ("manifests.json", &self.manifests),
             ("variables.json", &self.variables),
             (SCOPE_FILE, &scope),

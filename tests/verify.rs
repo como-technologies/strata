@@ -10535,6 +10535,45 @@ fn a_cluster_group_record_holds_the_config_of_each_virtual_cluster_in_a_policy_t
     assert!(v.diff.cluster_tiers.is_empty());
 }
 
+#[test]
+fn a_raw_directory_of_a_cluster_group_masks_each_password_and_gives_the_record_of_the_fetch() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let values = "# the admin\nsync:\n  adminPassword: barney-clear-secret\n  replicas: 1\n\
+                  users:\n- name: fred\n  password: pebbles-clear-secret\n";
+    let mut doc = group_doc(dir.path());
+    doc["spec"]["clustersConfig"] = clusters_config(6000, values);
+    let api = serve_cluster_group(MemoryApi::new(), dir.path()).with("/v1/clustergroups/g1", doc);
+    let fetched = Palette::new(api)
+        .fetch_cluster_group("g1", &Progress::silent())
+        .unwrap();
+    let saved = dir.path().join("raw");
+    fetched.save_dir(&saved, "t0").unwrap();
+    let text = fs::read_to_string(saved.join("cluster.json")).unwrap();
+    assert!(!text.contains("clear-secret"), "{text}");
+    assert_eq!(text.matches("********").count(), 2, "{text}");
+    // each other value stays
+    let saved_doc: Value = serde_json::from_str(&text).unwrap();
+    let saved_values = saved_doc["spec"]["clustersConfig"]["values"]
+        .as_str()
+        .unwrap();
+    assert!(saved_values.contains("replicas: 1"), "{saved_values}");
+    assert!(saved_values.contains("name: fred"), "{saved_values}");
+
+    // the record of the directory is the record of the fetch, and holds the mask too
+    let direct = Snapshot::from_cluster(&fetched, None, "raw", "t0").unwrap();
+    let from_raw = ops::snapshot_from_dir(&saved, "raw", "t1").unwrap();
+    assert_eq!(
+        serde_json::to_value(&from_raw).unwrap(),
+        serde_json::to_value(&direct).unwrap()
+    );
+    assert_eq!(
+        from_raw.source.cluster.unwrap().tiers["policy"].fields["values"],
+        serde_json::json!({"sync": {"adminPassword": "********", "replicas": 1},
+            "users": [{"name": "fred", "password": "********"}]})
+    );
+}
+
 // ---- app profiles -----------------------------------------------------------------------------
 
 /// An app profile `shop@1.0.0`, `ap1`, with a helm tier and a manifest tier, the tier with the

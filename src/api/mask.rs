@@ -3,13 +3,15 @@
 //! Palette writes `********` over each pack value whose schema format is `password` when it
 //! serves the published packs of a profile. It serves the draft packs with no mask. Strata writes
 //! the same mask over the draft, so that a record and a saved answer hold no clear secret. Strata
-//! also writes the mask over each password in the values of a cluster group that a record keeps.
+//! also writes the mask over each password in the values of a cluster group that a record or a
+//! saved answer keeps.
 
 use std::collections::BTreeMap;
 
 use serde_json::Value;
 use serde_yaml::Value as Yaml;
 
+use crate::canon::{Canon, canon_yaml};
 use crate::error::{Error, Result};
 
 /// The text that Palette writes over a secret.
@@ -144,12 +146,17 @@ pub(super) fn mask_values(values: &str, fields: &[String]) -> Result<String> {
     match (changed, text) {
         (false, _) => Ok(values.to_string()),
         (true, Some(t)) => Ok(t),
-        (true, None) => serde_yaml::to_string(&doc).map_err(|e| {
-            Error::Serialize(<serde_json::Error as serde::ser::Error>::custom(format!(
-                "the masked values of a pack: {e}"
-            )))
-        }),
+        (true, None) => to_yaml(&doc, "the masked values of a pack"),
     }
+}
+
+/// `value` as YAML text. `what` names the value in the error.
+fn to_yaml(value: &impl serde::Serialize, what: &str) -> Result<String> {
+    serde_yaml::to_string(value).map_err(|e| {
+        Error::Serialize(<serde_json::Error as serde::ser::Error>::custom(format!(
+            "{what}: {e}"
+        )))
+    })
 }
 
 /// The value at `path` in `doc`, through maps only.
@@ -203,6 +210,25 @@ pub(crate) fn mask_password_keys(values: &mut Value) {
         Value::Array(items) => items.iter_mut().for_each(mask_password_keys),
         _ => {}
     }
+}
+
+/// `values`, the YAML text of the values of a cluster group, with `********` over each password,
+/// as a record keeps them.
+///
+/// The rule of a password is the rule of [`mask_password_keys`]. When strata masks a value, it
+/// writes the values again from their canonical form, with no comments. So a record of the saved
+/// document is the record of the fetch. Values with no password stay as they are. Values that are
+/// not YAML also stay as they are, as for a pack: strata cannot find a key in them.
+pub(super) fn mask_group_values(values: &str) -> Result<String> {
+    let Canon::Parsed(parsed) = canon_yaml(values) else {
+        return Ok(values.to_string());
+    };
+    let mut masked = parsed.clone();
+    mask_password_keys(&mut masked);
+    if masked == parsed {
+        return Ok(values.to_string());
+    }
+    to_yaml(&masked, "the masked values of a cluster group")
 }
 
 /// True when `text` holds a variable of a profile, `{{ .spectro.var.NAME }}`.
@@ -317,6 +343,33 @@ mod tests {
         let once = values.clone();
         mask_password_keys(&mut values);
         assert_eq!(values, once);
+    }
+
+    #[test]
+    fn the_values_of_a_group_get_the_mask_of_the_record_and_keep_each_other_value() {
+        let values = "# the admin\nsync:\n  adminPassword: s3cr3t\n  replicas: 1\n\
+                      users:\n- name: fred\n  password: pebbles\n";
+        let masked = mask_group_values(values).unwrap();
+        assert!(
+            !masked.contains("s3cr3t") && !masked.contains("pebbles"),
+            "{masked}"
+        );
+        let Canon::Parsed(got) = canon_yaml(&masked) else {
+            panic!("the masked values are YAML: {masked}");
+        };
+        let Canon::Parsed(mut want) = canon_yaml(values) else {
+            panic!("the values are YAML");
+        };
+        mask_password_keys(&mut want);
+        assert_eq!(got, want);
+        // a second mask changes nothing
+        assert_eq!(mask_group_values(&masked).unwrap(), masked);
+        // values with no password, and values that are not YAML, keep their text
+        let plain = "# a comment\nsync:\n  replicas: 1\n";
+        assert_eq!(mask_group_values(plain).unwrap(), plain);
+        let broken = "password: [s3cr3t\n";
+        assert_eq!(mask_group_values(broken).unwrap(), broken);
+        assert_eq!(mask_group_values("").unwrap(), "");
     }
 
     #[test]
