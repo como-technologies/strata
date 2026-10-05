@@ -2176,9 +2176,9 @@ fn registry_sh_step_6_lists_the_required_pack_with_the_cloud_type_all_for_the_cl
     passed(&steps, &["dep-packs-cloud", "dep-packs-cloud-version"]);
     let calls = std::fs::read_to_string(stage.path("strata/calls")).unwrap();
     assert!(
-        calls
-            .lines()
-            .any(|l| l == "packs strata-live-dep --registry strata-live-registry --cloud aws --json"),
+        calls.lines().any(
+            |l| l == "packs strata-live-dep --registry strata-live-registry --cloud aws --json"
+        ),
         "{calls}"
     );
 }
