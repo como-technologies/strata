@@ -396,6 +396,7 @@ fn dropped(pinned: &[String], newer: &[String]) -> Vec<String> {
     if pinned.is_empty() || newer.is_empty() {
         return Vec::new();
     }
+    let newer: BTreeSet<&String> = newer.iter().collect();
     pinned
         .iter()
         .filter(|a| !newer.contains(a))
