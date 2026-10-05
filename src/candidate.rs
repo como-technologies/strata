@@ -536,8 +536,8 @@ const SYNC_RECOVERED: &str = "Recovered";
 /// `status.sync` of the registry in the summary listing of its kind: `spectro` reads
 /// `GET /v1/registries/pack/summary`, `helm` the same route under `helm`, and `oci` the same
 /// route under `oci`. A summary listing gives the sync as Palette stores it. None for a registry
-/// that does not sync, for another pack type, for a registry that the listing does not have, and when
-/// Palette answers the listing with a 4xx.
+/// that does not sync, for another pack type, for a registry that the listing does not have, and
+/// when Palette answers the listing with a 4xx.
 pub(crate) fn registry_sync<A: PaletteApi>(
     palette: &Palette<A>,
     uid: &str,
