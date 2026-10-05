@@ -1072,8 +1072,8 @@ pub struct Verify {
     pub who: Option<Vec<AuditEntry>>,
     /// When Palette last changed the object of the record, from `metadata.lastModifiedTimestamp`
     /// of the document that `verify` reads: the profile, the app profile, the cluster, the edge
-    /// host, the cluster group, or the pack in its registry. It costs no request. Absent when
-    /// Palette gives no time, or when the object is gone.
+    /// host, or the cluster group. It costs no request. Absent when Palette gives no time, when
+    /// the object is gone, and for a pack record: the pack listing gives the create time there.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_modified: Option<String>,
     /// For an `unverified` record: the key of each pack with no upstream digest.

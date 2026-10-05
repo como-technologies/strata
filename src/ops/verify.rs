@@ -237,7 +237,7 @@ pub fn verify_with<A: PaletteApi>(
             recorded.source.title(),
             recorded.source.fetched_at
         ));
-        let (live, last_modified) = crate::candidate::pack_snapshot_modified(
+        let live = crate::candidate::pack_snapshot(
             palette,
             Some(&p.registry_uid),
             &p.name,
@@ -290,7 +290,9 @@ pub fn verify_with<A: PaletteApi>(
             profiles_overwritten: Vec::new(),
             cluster_values_changed: 0,
             who: None,
-            last_modified,
+            // the listing gives the create time of a pack as its last change: Palette does not
+            // change the time when the content under the version moves
+            last_modified: None,
             upstream_unknown: Vec::new(),
             macros_changed: Vec::new(),
             image_ids_changed,
