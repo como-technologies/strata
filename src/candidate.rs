@@ -943,15 +943,32 @@ pub fn warn_preset_options(snap: &Snapshot, progress: &Progress) {
     }
 }
 
-/// The state that the registry listing gives a pack version: `deprecated`, `disabled`, or
-/// `deleted`, and nothing for a pack in use.
+/// The annotation of a pack version that Palette refuses in a profile, with the value `true`.
+/// Spectro Cloud sets it on a version that it no longer offers, and the version keeps no
+/// `system_state`. Palette refuses a profile that holds such a version with
+/// `DisabledPacksForbidden`, also on its validate route.
+const DISABLED_MARK: &str = "/spec/annotations/disabled";
+
+/// The state that the listing gives a pack version: `deprecated`, `disabled`, or `deleted` in
+/// `system_state`, or `disabled` for a version with the [`DISABLED_MARK`], and nothing for a
+/// pack in use.
 pub(crate) fn pack_state(summary: &Value) -> Option<String> {
+    system_state(summary).or_else(|| {
+        (text(summary, DISABLED_MARK).as_deref() == Some("true")).then(|| "disabled".to_string())
+    })
+}
+
+/// The state that Spectro Cloud gives a version that it retired: `deprecated`, `disabled`, or
+/// `deleted`.
+fn system_state(summary: &Value) -> Option<String> {
     text(summary, "/spec/annotations/system_state").filter(|s| !s.is_empty())
 }
 
-/// The state of a pack version that Palette no longer serves: `disabled` or `deleted`.
+/// The state of a pack version that Palette no longer serves: `disabled` or `deleted` in
+/// `system_state`. Palette serves a version with the [`DISABLED_MARK`] alone, and its validate
+/// route refuses a profile that holds it. So strata does not refuse that version itself.
 pub(crate) fn retired_state(summary: &Value) -> Option<String> {
-    pack_state(summary).filter(|s| s == "disabled" || s == "deleted")
+    system_state(summary).filter(|s| s == "disabled" || s == "deleted")
 }
 
 /// The registry's summary of `name` at `version` in `registry`, paging through the listing.
@@ -2028,5 +2045,29 @@ variables:
         let message = gaps::check_pack_tag("stable").unwrap_err();
         assert!(message.contains("(InvalidPackVersion). "), "{message}");
         assert!(message.ends_with(gaps::GAP), "{message}");
+    }
+
+    #[test]
+    fn a_version_with_the_disabled_mark_and_no_system_state_is_disabled_and_not_retired() {
+        let marked = json!({"spec": {"annotations": {"disabled": "true"}}});
+        assert_eq!(pack_state(&marked).as_deref(), Some("disabled"));
+        assert_eq!(
+            retired_state(&marked),
+            None,
+            "Palette serves the version, and its validate route refuses the profile"
+        );
+        let deleted =
+            json!({"spec": {"annotations": {"disabled": "true", "system_state": "deleted"}}});
+        assert_eq!(pack_state(&deleted).as_deref(), Some("deleted"));
+        assert_eq!(retired_state(&deleted).as_deref(), Some("deleted"));
+        for summary in [
+            json!({"spec": {"annotations": {"disabled": "false"}}}),
+            json!({"spec": {"annotations": {"disabled": true}}}),
+            json!({"spec": {"annotations": {"system_state": ""}}}),
+            json!({"spec": {}}),
+        ] {
+            assert_eq!(pack_state(&summary), None, "{summary}");
+            assert_eq!(retired_state(&summary), None, "{summary}");
+        }
     }
 }

@@ -5576,6 +5576,94 @@ fn packs_lists_a_disabled_registry_from_the_listing_and_marks_each_retired_versi
     assert!(md.contains("`1.65.0` deprecated"), "{md}");
 }
 
+/// A listing row with the mark of a version that Palette refuses in a profile. Spectro Cloud sets
+/// the mark with no `system_state`.
+fn marked(mut summary: Value) -> Value {
+    summary["spec"]["annotations"] = serde_json::json!({"disabled": "true"});
+    summary
+}
+
+#[test]
+fn packs_gives_the_state_disabled_to_a_version_with_the_mark_and_reads_its_tags_with_no_states_query()
+ {
+    // Palette serves the tags of a marked version, so the plain answer has them, and strata
+    // sends no states query. A record of the version still writes: the validate route of Palette
+    // refuses the profile, and strata does not copy that rule
+    let api = serve_summaries(
+        vec![
+            pack_summary("pk-63", "1.63.1", "reg-public", "sha256:aaa", CSI_63),
+            marked(pack_summary(
+                "pk-65",
+                "1.65.0",
+                "reg-public",
+                "sha256:bbb",
+                CSI_65,
+            )),
+            marked(pack_summary(
+                "pk-m",
+                "1.64.0",
+                "reg-mirror",
+                "sha256:mmm",
+                CSI_63,
+            )),
+        ],
+        &[
+            ("reg-public", public_entity()),
+            (
+                "reg-mirror",
+                serde_json::json!({"layer": "csi", "tags": [{"tag": "1.64.0", "packUid": "pk-m"}]}),
+            ),
+        ],
+    );
+    let l = packs_of(&api, "csi-aws-ebs", ops::PackOptions::default()).unwrap();
+    let public = &l.registries[0];
+    assert_eq!(
+        public.state, None,
+        "the versions of Public Repo differ in state"
+    );
+    assert_eq!(public.versions[0].version, "1.65.0");
+    assert_eq!(public.versions[0].state.as_deref(), Some("disabled"));
+    assert_eq!(
+        public.versions[0].tags,
+        vec!["1.65.0", "1.x"],
+        "the plain answer gives the tags of a marked version"
+    );
+    assert_eq!(public.versions[1].state, None);
+    let mirror = &l.registries[1];
+    assert_eq!(
+        mirror.state.as_deref(),
+        Some("disabled"),
+        "every version of the Mirror has the mark"
+    );
+    assert!(!mirror.tags_unavailable);
+    assert_eq!(mirror.versions[0].tags, vec!["1.64.0"]);
+    for registry in ["reg-public", "reg-mirror"] {
+        assert_eq!(
+            api.calls(&format!(
+                "/v1/packs/csi-aws-ebs/registries/{registry}?states=deprecated,disabled,deleted"
+            )),
+            0,
+            "{registry}: no states query for a version that Palette serves"
+        );
+    }
+
+    let text = render::renderer(Format::Terminal, Paint::off(), false)
+        .render_packs(&l)
+        .unwrap();
+    assert!(
+        text.contains("csi-aws-ebs in Mirror (1 version, disabled)"),
+        "{text}"
+    );
+    assert!(
+        text.lines()
+            .any(|l| l.contains("1.65.0") && l.trim_end().ends_with("disabled")),
+        "{text}"
+    );
+
+    let snap = snapshot_pack(&api, "pack:Public Repo/csi-aws-ebs@1.65.0").unwrap();
+    assert_eq!(snap.packs[0].version, "1.65.0");
+}
+
 #[test]
 fn packs_lists_a_registry_that_answers_404_with_no_state_and_stops_on_any_other_failure() {
     let api = serve_registry(
@@ -11191,6 +11279,73 @@ fn behind_names_the_newer_versions_of_each_pin_and_the_impact_of_the_bump() {
     assert_eq!(next.since.as_deref(), Some("2026-09-26T00:00:00Z"));
     let json = serde_json::to_value(&next).unwrap();
     assert_eq!(json["pins"][0]["arrived"], serde_json::json!(["1.64.0"]));
+}
+
+#[test]
+fn behind_does_not_offer_a_version_with_the_mark_and_says_so_of_a_pinned_one() {
+    // 1.66.0 carries the mark, as 1.64.0 of serve_behind carries the state deprecated. Palette
+    // refuses a profile that holds 1.66.0, so it is not a version to move to. A pin of 1.66.0
+    // itself says that the pinned version is disabled
+    let dir = tempfile::tempdir().unwrap();
+    let api = serve_registry(
+        vec![
+            marked(pack_summary_with("1.66.0", None, &["aws"])),
+            pack_summary_with("1.67.0", None, &["aws"]),
+        ],
+        &[(
+            "reg-public",
+            serde_json::json!({"layer": "csi", "tags": [
+                {"tag": "1.63.1", "packUid": "pk-63"},
+                {"tag": "1.65.0", "packUid": "pk-65"},
+                {"tag": "1.66.0", "packUid": "pk-1.66.0"},
+                {"tag": "1.67.0", "packUid": "pk-1.67.0"},
+            ]}),
+        )],
+    );
+    let write = |name: &str, snap: &Snapshot| {
+        let path = dir.path().join(name);
+        fs::write(&path, snap.to_json(false).unwrap()).unwrap();
+        path
+    };
+    let records = vec![
+        write(
+            "dev.json",
+            &snapshot_pack(&api, "pack:csi-aws-ebs@1.63.1").unwrap(),
+        ),
+        write(
+            "marked.json",
+            &snapshot_pack(&api, "pack:csi-aws-ebs@1.66.0").unwrap(),
+        ),
+    ];
+    let r = behind_of(&api, &records, &ops::BehindOptions::default());
+    let pin = &r.pins[0];
+    assert_eq!(pin.version, "1.63.1");
+    assert_eq!(
+        pin.newer
+            .iter()
+            .map(|n| n.version.as_str())
+            .collect::<Vec<_>>(),
+        ["1.67.0", "1.65.0"],
+        "a marked version is not one to move to"
+    );
+    let marked_pin = &r.pins[1];
+    assert_eq!(marked_pin.version, "1.66.0");
+    assert_eq!(marked_pin.pinned_state.as_deref(), Some("disabled"));
+    assert_eq!(
+        marked_pin
+            .newer
+            .iter()
+            .map(|n| n.version.as_str())
+            .collect::<Vec<_>>(),
+        ["1.67.0"]
+    );
+    let text = render::renderer(Format::Terminal, Paint::off(), false)
+        .render_behind(&r)
+        .unwrap();
+    assert!(
+        text.contains("1.66.0") && text.contains("; the pinned version is disabled"),
+        "{text}"
+    );
 }
 
 #[test]
