@@ -22,7 +22,7 @@
 # merge request settings, so the merge button waits for strata-merge-gate.
 
 variables:
-  STRATA_VERSION: v0.19.0
+  STRATA_VERSION: v0.20.0
   STRATA_REPO: como-technologies/strata
   STRATA_LABEL: repave
   STRATA_THRESHOLD: repave
