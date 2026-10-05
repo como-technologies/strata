@@ -529,6 +529,29 @@ fn oci_provider_types<A: PaletteApi>(palette: &Palette<A>) -> BTreeMap<String, S
         .collect()
 }
 
+/// The entry of the registry `uid` in the registry listing at `path`, where `ptr` points to the
+/// uid of each entry. None when the listing does not have the registry, and when Palette answers
+/// the listing with a 4xx.
+fn registry_entry<A: PaletteApi>(
+    palette: &Palette<A>,
+    path: &str,
+    ptr: &str,
+    uid: &str,
+) -> Result<Option<Value>> {
+    let listing = match palette.api().get_json(path) {
+        Ok(l) => l,
+        Err(Error::Api { status, .. }) if (400..500).contains(&status) => return Ok(None),
+        Err(e) => return Err(e),
+    };
+    Ok(listing
+        .get("items")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .find(|it| text(it, ptr).as_deref() == Some(uid))
+        .cloned())
+}
+
 /// The state that Palette gives to the recovery of a sync when no sync waits for a recovery.
 const SYNC_RECOVERED: &str = "Recovered";
 
@@ -548,22 +571,11 @@ pub(crate) fn registry_sync<A: PaletteApi>(
         "helm" | "oci" => pack_type,
         _ => return Ok(None),
     };
-    let listing = match palette
-        .api()
-        .get_json(&format!("/v1/registries/{kind}/summary"))
-    {
-        Ok(l) => l,
-        Err(Error::Api { status, .. }) if (400..500).contains(&status) => return Ok(None),
-        Err(e) => return Err(e),
+    let path = format!("/v1/registries/{kind}/summary");
+    let Some(entry) = registry_entry(palette, &path, "/metadata/uid", uid)? else {
+        return Ok(None);
     };
-    let Some(status) = listing
-        .get("items")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .find(|it| text(it, "/metadata/uid").as_deref() == Some(uid))
-        .and_then(|it| it.pointer("/status/sync"))
-    else {
+    let Some(status) = entry.pointer("/status/sync") else {
         return Ok(None);
     };
     if status.get("isSyncSupported").and_then(Value::as_bool) != Some(true) {
@@ -621,22 +633,7 @@ struct Unsynced {
 /// `GET /v1/registries/oci/summary` gives the provider type and `status.sync.isSyncSupported`.
 /// None for a registry that syncs, and when Palette answers either listing with a 4xx.
 fn unsynced<A: PaletteApi>(palette: &Palette<A>, uid: &str) -> Result<Option<Unsynced>> {
-    // the entry of the registry in a listing; none when Palette answers the listing with a 4xx
-    let find = |path: &str, ptr: &str| -> Result<Option<Value>> {
-        let listing = match palette.api().get_json(path) {
-            Ok(l) => l,
-            Err(Error::Api { status, .. }) if (400..500).contains(&status) => return Ok(None),
-            Err(e) => return Err(e),
-        };
-        Ok(listing
-            .get("items")
-            .and_then(Value::as_array)
-            .into_iter()
-            .flatten()
-            .find(|it| text(it, ptr).as_deref() == Some(uid))
-            .cloned())
-    };
-    let Some(meta) = find("/v1/registries/metadata", "/uid")? else {
+    let Some(meta) = registry_entry(palette, "/v1/registries/metadata", "/uid", uid)? else {
         return Ok(None);
     };
     match text(&meta, "/kind").as_deref() {
@@ -649,7 +646,9 @@ fn unsynced<A: PaletteApi>(palette: &Palette<A>, uid: &str) -> Result<Option<Uns
                 provider: None,
             })),
         Some("oci") => {
-            let Some(reg) = find("/v1/registries/oci/summary", "/metadata/uid")? else {
+            let Some(reg) =
+                registry_entry(palette, "/v1/registries/oci/summary", "/metadata/uid", uid)?
+            else {
                 return Ok(None);
             };
             // Palette syncs each OCI registry of the provider type pack

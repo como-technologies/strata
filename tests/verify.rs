@@ -5966,8 +5966,8 @@ fn verify_pack_on<A: PaletteApi>(recorded: &Snapshot, api: A) -> (String, Value)
     (verdict, serde_json::to_value(&v.diff).unwrap())
 }
 
-/// Answers the summary listing of the pack registries with a dropped connection, and delegates each other
-/// request. The in-memory API cannot produce a transport error.
+/// Answers the summary listing of the pack registries with a dropped connection, and delegates
+/// each other request. The in-memory API cannot produce a transport error.
 struct SyncDropped(MemoryApi);
 
 impl PaletteApi for SyncDropped {
