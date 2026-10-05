@@ -9,7 +9,8 @@ use std::collections::BTreeMap;
 use serde_json::{Map, Value, json};
 
 use crate::api::RawCluster;
-use crate::canon::{canon_yaml_hashed, canonical_json};
+use crate::api::mask::mask_password_keys;
+use crate::canon::{canon_yaml_hashed, canonical_json, sha256_hex};
 
 /// The key of the policy fields that holds the role bindings.
 const RBACS: &str = "rbacs";
@@ -98,7 +99,7 @@ pub(crate) fn errors(raw: &RawCluster) -> BTreeMap<String, String> {
 ///
 /// The group applies `values` to each virtual cluster as YAML, as a pack applies its values. So
 /// the tier holds the values in canonical form with their hash, and the host clusters sorted by
-/// uid.
+/// uid. The values hold `********` over each password, and the hash covers the masked values.
 pub(crate) fn group_fields(config: &Value) -> Value {
     let (values, values_hash, values_parse_error) = canon_yaml_hashed(text(config, "/values"));
     let mut hosts: Vec<Value> = config
@@ -125,7 +126,20 @@ pub(crate) fn group_fields(config: &Value) -> Value {
     if let Some(e) = values_parse_error {
         fields["valuesParseError"] = Value::String(e);
     }
+    mask_group_values(&mut fields);
     fields
+}
+
+/// Write `********` over each password in `values` of the policy fields `fields` of a cluster
+/// group, and make `valuesHash` the hash of the masked values. Fields with no values, or with
+/// values that did not parse, do not change.
+fn mask_group_values(fields: &mut Value) {
+    let Some(values) = fields.get_mut("values").filter(|v| !v.is_null()) else {
+        return;
+    };
+    mask_password_keys(values);
+    let hash = sha256_hex(&canonical_json(values));
+    fields["valuesHash"] = Value::String(hash);
 }
 
 /// Each role binding in `doc`, the answer of `GET /v1/spectroclusters/{uid}/config/rbacs`: its
@@ -199,7 +213,8 @@ fn sort_canonical(values: &mut [Value]) {
 /// The policy fields `a` and `b` of two records, in a form that compares. When one of them is
 /// from before strata read the bindings, each keeps only the fields that the two forms share. When
 /// only one of them is from strata 0.18, each keeps all the fields less the two forms of the
-/// upgrades of the agent.
+/// upgrades of the agent. The values of a cluster group get the mask on each side, because a
+/// record of strata 0.19 or before holds each password in clear.
 pub(crate) fn comparable(a: &Value, b: &Value) -> (Value, Value) {
     let legacy = |v: &Value| v.get(LEGACY_RESOURCES).is_some();
     let legacy_agent = |v: &Value| v.get(LEGACY_AGENT_UPGRADES).is_some();
@@ -209,7 +224,12 @@ pub(crate) fn comparable(a: &Value, b: &Value) -> (Value, Value) {
     } else if legacy_agent(a) != legacy_agent(b) {
         (without_agent_upgrades(a), without_agent_upgrades(b))
     } else {
-        (a.clone(), b.clone())
+        let masked = |v: &Value| {
+            let mut v = v.clone();
+            mask_group_values(&mut v);
+            v
+        };
+        (masked(a), masked(b))
     }
 }
 

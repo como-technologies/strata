@@ -692,8 +692,10 @@ pub struct Pack {
     /// digest in a different way for each. Outside the root: the registry uid is in it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub registry_provider_type: Option<String>,
-    /// The annotations of the pack ref, as Palette gives them, sorted by name. Outside the root:
-    /// a record written before this field has none. [`Pack::image_id`] reads one of them.
+    /// The annotation `imageId` of the pack ref, when Palette gives it. A record keeps no other
+    /// annotation, because an annotation can hold a secret. Outside the root: a record written
+    /// before this field has none, and a record of strata 0.17 to 0.19 holds each annotation.
+    /// [`Pack::image_id`] reads `imageId`.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub annotations: BTreeMap<String, String>,
     /// True when Palette marks the pack ref invalid, from `isInvalid`: the registry deleted the
@@ -1011,13 +1013,14 @@ impl Pack {
         let registry_digest = s(&mm, "/spec/digest");
         let registry_provider_type =
             Some(s(pk, "/annotations/ociRegistryProviderType")).filter(|t| !t.is_empty());
+        // only `imageId`: another annotation can hold a secret, and strata reads no other one.
         // Palette gives each annotation as text; a value of another type is not an annotation
         let annotations: BTreeMap<String, String> = pk
-            .get("annotations")
-            .and_then(Value::as_object)
+            .pointer("/annotations")
+            .and_then(|a| a.get(IMAGE_ID_ANNOTATION))
+            .and_then(Value::as_str)
+            .map(|id| (IMAGE_ID_ANNOTATION.to_string(), id.to_string()))
             .into_iter()
-            .flatten()
-            .filter_map(|(k, v)| v.as_str().map(|v| (k.clone(), v.to_string())))
             .collect();
         // a reason without the flag is not a reason: Palette clears the flag when the tag is back
         let invalid = pk.get("isInvalid").and_then(Value::as_bool) == Some(true);
