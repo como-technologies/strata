@@ -137,8 +137,8 @@ makes no claim that depends on them.
 - **The tiers of an app profile with no install order, and the order of the
   tiers route.** Palette does not give `installOrder` for a tier at 0, and does
   not list the tiers in install order. Strata sorts the tiers by the order
-  itself, and a tier with no order is at 0. That Palette keeps the order of
-  the create is a live result: see
+  itself, and a tier with no order is at 0. A live run shows that Palette
+  keeps the order of the create: see
   [App profiles](other-objects.md#app-profiles).
 - **A version bump with the `immutable-clusterprofiles` flag on and
   `skip_destroy` off.** The provider refuses the plan: a version change needs
