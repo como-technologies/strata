@@ -68,6 +68,15 @@ registries. A pack that no registry has is `pack-name-not-found`. With
 `--registry`, a pack that this registry does not have is `pack-not-found`. Each
 exits `2`.
 
+When one of the registries that strata asked is a registry that Palette does
+not sync, the error names it. Palette lists a pack of such a registry only while
+a profile pins the pack: see
+[A pack that Palette makes at the create](../internals/palette/packs.md#a-pack-that-palette-makes-at-the-create).
+
+```text
+{{#include ../output/nodigest-chart-packs.txt}}
+```
+
 ## For a script
 
 ```text

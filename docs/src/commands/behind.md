@@ -67,6 +67,20 @@ arrival.
 The registry also says when Palette first listed each version: `listed since`
 under a pin that is behind, and `newer[].listed` in the JSON.
 
+## A pin that strata cannot check
+
+```text
+{{#include ../output/nodigest-chart-behind.txt}}
+```
+
+Exit `2`: strata could not check a pin, and the line under the pin says why.
+Here the record is a candidate with a chart from a registry that Palette does
+not sync. Palette lists a pack of such a registry only while a profile pins the
+pack, so the registry has no version to compare with: see
+[A pack that Palette makes at the create](../internals/palette/packs.md#a-pack-that-palette-makes-at-the-create).
+The JSON keeps the error on the pin, with `unsynced`: see
+[Errors](../reference/errors.md).
+
 ## In a script
 
 ```text
