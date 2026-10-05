@@ -288,6 +288,38 @@ mod tests {
     }
 
     #[test]
+    fn each_value_whose_key_names_a_password_gets_the_mask_at_each_depth() {
+        let mut values = json!({
+            "password": "plain",
+            "sync": {"adminPassword": "s3cr3t", "user": "barney", "pin": 1234},
+            "users": [{"name": "fred", "PASSWORD": "pebbles"}],
+            "passwordSecretName": "vc-admin",
+            "rootPassword": "",
+            "dbPassword": "{{ .spectro.var.db_password }}",
+            "tlsPassword": {"from": "secret"},
+            "keyPassword": ["a"],
+        });
+        mask_password_keys(&mut values);
+        assert_eq!(
+            values,
+            json!({
+                "password": MASKED,
+                "sync": {"adminPassword": MASKED, "user": "barney", "pin": 1234},
+                "users": [{"name": "fred", "PASSWORD": MASKED}],
+                "passwordSecretName": "vc-admin",
+                "rootPassword": "",
+                "dbPassword": "{{ .spectro.var.db_password }}",
+                "tlsPassword": {"from": "secret"},
+                "keyPassword": ["a"],
+            })
+        );
+        // a second mask changes nothing
+        let once = values.clone();
+        mask_password_keys(&mut values);
+        assert_eq!(values, once);
+    }
+
+    #[test]
     fn a_password_format_is_a_secret() {
         assert!(is_password_format("${password}"));
         assert!(is_password_format("${password:/^.{8,}$/}"));

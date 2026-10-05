@@ -278,6 +278,49 @@ mod tests {
     }
 
     #[test]
+    fn the_policy_tier_of_a_group_masks_each_password_and_hashes_the_masked_values() {
+        let config = |password: &str| {
+            json!({"endpointType": "LoadBalancer",
+                "values": format!("# the admin\nsync:\n  adminPassword: {password}\n  replicas: 1\n")})
+        };
+        let fields = group_fields(&config("s3cr3t"));
+        let masked = json!({"sync": {"adminPassword": "********", "replicas": 1}});
+        assert_eq!(fields["values"], masked);
+        assert_eq!(
+            fields["valuesHash"],
+            Value::String(sha256_hex(&canonical_json(&masked)))
+        );
+        assert!(!canonical_json(&fields).contains("s3cr3t"));
+        // the hash does not show a new password: the record holds no trace of it
+        assert_eq!(fields, group_fields(&config("an0ther")));
+        // values that do not parse keep no values
+        let broken = group_fields(&json!({"values": "a: [1"}));
+        assert_eq!(broken["values"], Value::Null);
+        assert!(broken.get("valuesParseError").is_some());
+    }
+
+    #[test]
+    fn an_older_group_tier_with_a_password_in_clear_compares_with_a_masked_one() {
+        let config = json!({"endpointType": "LoadBalancer",
+            "values": "sync:\n  adminPassword: s3cr3t\n  replicas: 1\n"});
+        let newer = group_fields(&config);
+        // a record of strata 0.19 or before kept the values in clear, with their hash
+        let clear = json!({"sync": {"adminPassword": "s3cr3t", "replicas": 1}});
+        let mut older = newer.clone();
+        older["values"] = clear.clone();
+        older["valuesHash"] = Value::String(sha256_hex(&canonical_json(&clear)));
+        assert_ne!(older, newer);
+        let (a, b) = comparable(&older, &newer);
+        assert_eq!(a, b);
+        assert!(!canonical_json(&a).contains("s3cr3t"));
+        // each other value still compares
+        let mut more = config.clone();
+        more["values"] = json!("sync:\n  adminPassword: s3cr3t\n  replicas: 2\n");
+        let (a, b) = comparable(&older, &group_fields(&more));
+        assert_ne!(a, b);
+    }
+
+    #[test]
     fn the_bindings_drop_the_uids_and_have_one_order_whatever_order_palette_gives() {
         let doc = |subjects: Value| {
             json!({"items": [{"metadata": {"uid": "r1", "creationTimestamp": "t"},
