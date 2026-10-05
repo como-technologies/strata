@@ -166,10 +166,10 @@ pub fn profile_validate_body(snap: &Snapshot) -> Value {
 /// answer holds the refusals of each route. No request changes anything.
 ///
 /// Palette answers `200` with an error for each pack that it refuses. It refuses the whole request
-/// with an HTTP error and a code of `PROFILE_NAME_REFUSAL_CODES`, [`PROFILE_IMPORT_REFUSAL_CODES`],
-/// [`PROFILE_PACK_REFUSAL_CODES`], `PROFILE_EXISTS_CODE`, or `PACK_MACRO_UNDEFINED_CODE`, or with
-/// the HTTP 422 of the API schema. Such a refusal is an answer too, and the retry does not send
-/// it again.
+/// with the HTTP 422 of the API schema, or with an HTTP error and a code. The codes are
+/// `PROFILE_NAME_REFUSAL_CODES`, [`PROFILE_IMPORT_REFUSAL_CODES`], [`PROFILE_PACK_REFUSAL_CODES`],
+/// `PROFILE_EXISTS_CODE`, and `PACK_MACRO_UNDEFINED_CODE`. Such a refusal is an answer too, and
+/// the retry does not send it again.
 ///
 /// # Errors
 ///

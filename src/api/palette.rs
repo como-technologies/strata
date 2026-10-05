@@ -1289,8 +1289,8 @@ impl<A: PaletteApi> Palette<A> {
     }
 
     /// One page of the pack listing of `name`,
-    /// `GET /v1/packs?filters=spec.name={name}&limit=100&offset={offset}`: each version of the
-    /// pack in each registry, 100 on a page, with `listmeta.count` for the whole listing.
+    /// `GET /v1/packs?filters=spec.name={name}&limit=100&offset={offset}`. It gives each version
+    /// of the pack in each registry, 100 on a page. `listmeta.count` counts the whole listing.
     pub(crate) fn pack_listing_page(&self, name: &str, offset: usize) -> Result<Value> {
         self.api.get_json(&format!(
             "/v1/packs?filters=spec.name={}&limit=100&offset={offset}",
@@ -1299,9 +1299,9 @@ impl<A: PaletteApi> Palette<A> {
     }
 
     /// The tags of the pack `name` in the registry `registry_uid`,
-    /// `GET /v1/packs/{name}/registries/{uid}`: each tag with the version that it names, the
-    /// values of the pack, and its layer. Palette answers 404 when the registry serves no
-    /// version of the pack.
+    /// `GET /v1/packs/{name}/registries/{uid}`. Each tag names its version. The answer also
+    /// holds the values of the pack, and its layer. Palette answers 404 when the registry serves
+    /// no version of the pack.
     ///
     /// With `states`, a list such as `deprecated,disabled,deleted`, the request adds the query
     /// `states=<states>`, and Palette gives the versions in those states only. The crate gives
@@ -1329,9 +1329,9 @@ impl<A: PaletteApi> Palette<A> {
         self.api.get_json("/v1/registries/metadata")
     }
 
-    /// The summary listing of the registries of one `kind`, `GET /v1/registries/{kind}/summary`:
-    /// each registry as `items`, with its last sync in `status.sync`, and with the provider type
-    /// of an OCI registry in `spec.providerType`.
+    /// The summary listing of the registries of one `kind`, `GET /v1/registries/{kind}/summary`.
+    /// Each registry is an entry of `items`, with its last sync in `status.sync`. An OCI registry
+    /// also has its provider type in `spec.providerType`.
     pub(crate) fn registry_summary(&self, kind: RegistryKind) -> Result<Value> {
         self.api
             .get_json(&format!("/v1/registries/{}/summary", kind.route()))
@@ -1449,7 +1449,7 @@ mod tests {
 
     #[test]
     fn a_pack_name_and_a_registry_uid_go_into_the_path_of_the_tags_escaped() {
-        // a name with `/` or `?` would end the segment, or start a query, with no escape
+        // with no escape, a `/` in the name ends the segment, and a `?` starts the query
         let p = Palette::new(
             MemoryApi::new()
                 .with(

@@ -334,7 +334,7 @@ where
         // a pin that is current is current against the copy of the registry in Palette. When
         // the last sync did not complete, the copy is the copy of an earlier sync, and the pin
         // says so. A pin that is behind needs no note: a newer version in the copy is a newer
-        // version in the registry. The first build gives the kind of the registry: a registry
+        // version in the registry. The first build gives the kind of the registry. A registry
         // with no build of the pack is not in the listing, so it gets no note
         if !pin.behind
             && let Some(first) = builds.first()

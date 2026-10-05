@@ -712,11 +712,11 @@ impl RegistryListings {
     }
 
     /// Whether Palette syncs the registry `uid`. It does not sync a Helm registry that is
-    /// private, or an OCI registry of the provider type `helm` or `zarf` with sync off, so the
-    /// pack listing has no pack of it. Palette makes the pack of such a layer when it creates the
-    /// profile. The metadata gives the kind and `isPrivate`, and the OCI summary gives the
-    /// provider type and `status.sync.isSyncSupported`. None for a registry that syncs, and when
-    /// Palette answers either listing with a 4xx.
+    /// private, or an OCI registry of the provider type `helm` or `zarf` with sync off. So the
+    /// pack listing has no pack of it, and Palette makes the pack of such a layer when it
+    /// creates the profile. The metadata gives the kind and `isPrivate`, and the OCI summary
+    /// gives the provider type and `status.sync.isSyncSupported`. None for a registry that
+    /// syncs, and when Palette answers either listing with a 4xx.
     fn unsynced<A: PaletteApi>(
         &mut self,
         palette: &Palette<A>,
