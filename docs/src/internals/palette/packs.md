@@ -532,16 +532,32 @@ example `0.26.1` and `0.26.x` on `0.26.1`. `kubernetes` in `Public Repo` has
 deleted versions too. The answer with no query does not include them, and the
 answer with the query gives their tags.
 
+Spectro Cloud also marks a version that a profile must not hold. The listing
+gives it the annotation `disabled: "true"`, and no `system_state`. In
+`Public Repo`, `gloo` 1.2.18 carries the mark. Palette serves such a version:
+the registry route gives its tags and its values with no query, and the
+`states` query does not include it. Palette refuses a profile that holds it,
+at the create and on the validate routes: HTTP 500, `DisabledPacksForbidden`,
+`Disabled packs 'gloo' are forbidden`. See
+[The validate routes](validate-routes.md#post-v1clusterprofilesvalidatepacks)
+and [validate-packs.sh](../../development/live-runs.md#validate-packssh).
+
 Strata reads the state from the listing:
 
-- `strata packs` gives the state of each version. When the listing shows a
-  disabled or a deleted version in a registry, strata also sends the `states`
+- `strata packs` gives the state of each version: the `system_state`, or
+  `disabled` for a version with the mark. When the listing shows a disabled or
+  a deleted `system_state` in a registry, strata also sends the `states`
   query, and joins the two answers. A registry that answers 404 to both shows
   the versions of the listing, with no tags. See
   [strata packs](../../commands/packs.md#what-to-expect).
+- `strata behind` does not offer a disabled or a deleted version as a move:
+  see [strata behind](../../commands/behind.md#the-pins-that-are-behind).
 - `strata snapshot pack:` and a candidate stop with `pack-unavailable` on a
-  disabled or a deleted version, because Palette refuses a profile that pins
-  it.
+  disabled or a deleted `system_state`. Palette does not serve the version,
+  and refuses a profile that pins it.
+- A version with the mark records: Palette serves it. Palette is the owner of
+  the refusal, and `snapshot --validate` asks Palette, which refuses the
+  profile with `DisabledPacksForbidden`.
 - A deprecated version records as usual.
 
 [The live example checks each state](../../development/live-runs.md#pack-statessh).

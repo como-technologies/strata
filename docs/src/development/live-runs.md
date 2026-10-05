@@ -242,13 +242,15 @@ public registries, one for each state: `nginx` 1.15.1 (disabled) and
 `generic-vm-libvirt` 1.0.0 (deleted) in `Public Repo`, and `argo-cd` 3.26.7
 (deprecated) in `Palette Community Registry`. None of them requires another
 pack. It asks Palette for a profile that pins each one, and deletes the profile
-that Palette creates at once.
+that Palette creates at once. It also lists `gloo` 1.2.18 in `Public Repo`,
+which carries the mark `disabled` of Spectro Cloud and no state.
 
 | Check | Expected exit | What it shows |
 |---|---|---|
 | `states-disabled`, `states-disabled-says` | 0 | #68, #120: `packs` lists a disabled registry, and the heading says `disabled`. The `states` query gives the tags: `0.26.1` has `0.26.1 0.26.x` |
 | `states-deleted`, `states-deleted-says` | 0 | #68, #120: the same for a deleted registry: the heading says `deleted`, and `1.0.6` has `1.0.6 1.0.x 1.x` |
 | `states-deprecated`, `states-deprecated-says` | 0 | #68: a deprecated version keeps its tags, and the heading and the row say `deprecated` |
+| `states-mark`, `states-mark-says` | 0 | #125: `packs` lists `gloo` 1.2.18 with its tags, and the heading and the row say `disabled`, from the mark with no `system_state`. A read of the tenant with the command shows it. No run of the script has a result yet |
 | `snapshot-disabled`, `snapshot-disabled-says` | 2, 0 | #68: a disabled version is `pack-unavailable`, and the error names the state and the registry |
 | `snapshot-deleted` | 2 | #68: a deleted version is `pack-unavailable` |
 | `snapshot-deprecated` | 0 | #68: a deprecated version records as usual |
@@ -658,7 +660,8 @@ this result. This is the source for
 
 No cluster and no cost. In stages 1 to 3, each request to Palette is a read or
 a `POST` to a validate route, which writes nothing. It uses `cert-manager`
-1.21.1 from the Public Repo, in an add-on candidate. Stage 3 needs a profile
+1.21.1 from the Public Repo, in an add-on candidate, and `gloo` 1.2.18 for the
+mark `disabled`. Stage 3 needs a profile
 version in the project of the key: give it as `PROFILE=<name>@<version>`.
 Stage 4 makes the profile `strata-live-layer` and deletes it. It runs only when
 you give its number: `validate-packs.sh 4`.
@@ -669,6 +672,7 @@ you give its number: `validate-packs.sh 4`.
 | `validate-not-yaml`, `validate-not-yaml-says`, `validate-not-yaml-no-record` | 2, 0, 1 | #152, #242: strata sends values that are not YAML to Palette. Palette refuses the whole request, `PackValuesYamlInvalid`, with no pack. Strata exits `2` and writes no record |
 | `validate-not-yaml-status`, `validate-not-yaml-status-says` | 2, 0 | #152: Palette refuses the same body as the whole request, `PackValuesYamlInvalid` with no pack, and sends the refusal as HTTP 500 |
 | `validate-no-pack`, `validate-no-pack-says` | 2, 0 | #152: Palette refuses a body with no pack before it checks the packs: HTTP 400 with `ShouldNotBeEmpty` |
+| `validate-disabled-mark`, `validate-disabled-mark-says` | 2, 0 | #125: Palette refuses a candidate with `gloo` 1.2.18, which carries the mark `disabled` and no `system_state`: `DisabledPacksForbidden`, `Disabled packs 'gloo' are forbidden`, of the whole request. Strata exits `2` and writes no record |
 | `validate-version`, `validate-version-says` | 0 | #152: `snapshot <ref> --validate` asks the route of an update, and Palette takes the version as it is |
 | `layer-registry` | 0 | #210: the registry gives `cert-manager` the layer `addon` |
 | `layer-refused`, `layer-refused-says` | 2, 0 | #210: strata refuses a candidate that gives `cert-manager` the layer `csi`. The message names the layer, `csi`, `addon`, and the rule of Palette |
