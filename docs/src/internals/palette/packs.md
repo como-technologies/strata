@@ -307,13 +307,18 @@ registry. It drops the layer that the profile gives, with no error. The manifest
 pack of a profile gets the layer `addon` from the manifest pack of Palette. A
 pack that Palette makes at the create also gets `addon`: see
 [A pack that Palette makes at the create](#a-pack-that-palette-makes-at-the-create).
-This comes from the code of Palette, not from a live run.
+The code of Palette gives this rule. Stage 4 of
+[validate-packs.sh](../../development/live-runs.md#validate-packssh) makes a
+profile with another layer than the registry, and checks the layer that Palette
+publishes. That check has no result yet.
 
 So a profile that gives `kubernetes` the layer `addon` has the layer `k8s` when
 Palette publishes it. The layer is part of `IDENTITY`, so a candidate file with
 that layer has another root. So strata refuses it: a
 [candidate file](../../reference/candidate-file.md#the-registry-lookups) that
-gives a pack another layer than its registry is `candidate-invalid`. The rules
+gives a pack another layer than its registry is `candidate-invalid`. The
+validate route does not answer this check. It takes a pack with another layer
+than its registry, and gives no result for the pack. The rules
 of the profile type also use the layer of the registry. No route that takes a
 candidate answers them before the create, so strata checks them: see
 [The gaps that strata fills](./profiles.md#the-gaps-that-strata-fills).

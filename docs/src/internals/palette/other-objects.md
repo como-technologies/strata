@@ -115,7 +115,8 @@ manifests. The content of a manifest comes from
 - `spec.installOrder` of a tier is the order in which Palette installs the
   tiers. Palette does not give the field for a tier whose order is 0, and it
   does not list the tiers in install order. The code of Palette gives these
-  two rules.
+  two rules, and no run shows them. Strata does not depend on them: it sorts
+  the tiers by the order itself, and a tier with no order is at 0.
 - An app profile that is made with an install order on each tier keeps the
   orders, and the tiers route gives them. The document of the app profile gives
   no order. A plain update of a tier with another order,

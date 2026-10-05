@@ -7,8 +7,8 @@ its checks establishes, so you can see the coverage without running anything.
 `verify.sh` is the read-only script over the cluster, and
 [its checks are on the live example page](./live-example.md#the-checks-of-verifysh).
 `packs.sh` and `knurl.sh` read too. The other scripts below write to the tenant;
-`pack-states.sh` keeps nothing that it writes, and `validate-packs.sh` writes
-nothing.
+`pack-states.sh` keeps nothing that it writes. `validate-packs.sh` writes only
+in stage 4, which deletes the profile that it makes.
 
 Each check names its expected exit code. A run that gets another code fails, and
 prints both. The issue numbers name what the check was written for.
@@ -646,10 +646,12 @@ this result. This is the source for
 
 ## validate-packs.sh
 
-No cluster, no profile, and no cost. Each request to Palette is a read or a
-`POST` to a validate route, which writes nothing. It uses `cert-manager` 1.21.1
-from the Public Repo, in an add-on candidate. Stage 3 needs a profile version
-in the project of the key: give it as `PROFILE=<name>@<version>`.
+No cluster and no cost. In stages 1 to 3, each request to Palette is a read or
+a `POST` to a validate route, which writes nothing. It uses `cert-manager`
+1.21.1 from the Public Repo, in an add-on candidate. Stage 3 needs a profile
+version in the project of the key: give it as `PROFILE=<name>@<version>`.
+Stage 4 makes the profile `strata-live-layer` and deletes it. It runs only when
+you give its number: `validate-packs.sh 4`.
 
 | Check | Expected exit | What it shows |
 |---|---|---|
@@ -658,9 +660,22 @@ in the project of the key: give it as `PROFILE=<name>@<version>`.
 | `validate-not-yaml-status`, `validate-not-yaml-status-says` | 2, 0 | #152: Palette refuses the same body as the whole request, `PackValuesYamlInvalid` with no pack, and sends the refusal as HTTP 500 |
 | `validate-no-pack`, `validate-no-pack-says` | 2, 0 | #152: Palette refuses a body with no pack before it checks the packs: HTTP 400 with `ShouldNotBeEmpty` |
 | `validate-version`, `validate-version-says` | 0 | #152: `snapshot <ref> --validate` asks the route of an update, and Palette takes the version as it is |
+| `layer-registry` | 0 | #210: the registry gives `cert-manager` the layer `addon` |
+| `layer-refused`, `layer-refused-says` | 2, 0 | #210: strata refuses a candidate that gives `cert-manager` the layer `csi`. The message names the layer, `csi`, `addon`, and the rule of Palette |
+| `layer-validate`, `layer-validate-says` | 0 | #254: the validate route takes the pack with the layer `csi`, and gives no result for it |
+| `layer-create` | 0 | #254: Palette makes and publishes `strata-live-layer` 1.0.0, with `cert-manager` in the layer `csi`, with no error. No result yet |
+| `layer-profile`, `layer-published` | 0 | #254: the published pack has the layer `addon` of the registry, not `csi`. No result yet |
+| `layer-record`, `layer-record-key` | 0 | #254: a record of the version holds the pack as `addon/cert-manager`. No result yet |
+| `layer-root` | 0 | #254: `compare` of the candidate with no layer and the version finds the same root. No result yet |
+| `layer-delete` | 0 | the profile `strata-live-layer` is deleted. No result yet |
 
 No pack of the Public Repo lists a dependency in its tags route, so no stage
 asks for a refusal of a dependency.
+
+The validate route does not check the layer of a pack. Palette answers a pack
+with another layer than its registry with `{"packs":{"results":[]}}`, the
+answer of a body that it takes. So strata refuses the candidate itself: see
+[The layer of a pack](../internals/palette/packs.md#the-layer-of-a-pack).
 
 ## export.sh
 

@@ -2184,6 +2184,92 @@ fn registry_sh_step_6_lists_the_required_pack_with_the_cloud_type_all_for_the_cl
 }
 
 #[test]
+fn validate_packs_sh_stage_4_makes_a_profile_whose_pack_has_another_layer_than_its_registry() {
+    let mut stage = Stage::new(serde_json::json!({}));
+    stage.route(
+        "/v1/clusterprofiles/validate/packs",
+        r#"{"packs":{"results":[]}}"#,
+    );
+    stage.route(
+        "/v1/packs",
+        r#"{"items":[{"metadata":{"uid":"pk-1"},"spec":{"registryUid":"reg-pub","version":"1.21.1"}}]}"#,
+    );
+    stage.route("/v1/dashboard/clusterprofiles/metadata", r#"{"items":[]}"#);
+    stage.route("/v1/clusterprofiles", r#"{"uid":"lp-1"}"#);
+    stage.route("/v1/clusterprofiles/lp-1/publish", "{}");
+    stage.route(
+        "/v1/clusterprofiles/lp-1",
+        r#"{"spec":{"published":{"packs":[{"name":"cert-manager","layer":"addon"}]}}}"#,
+    );
+    let record = r#"{"packs":[{"key":"addon/cert-manager","registryUid":"reg-pub",
+        "type":"spectro","packUid":"pk-1","tag":"1.21.1","values":"installCRDs: true"}]}"#;
+    stage.strata(
+        "snapshot --from-candidate strata-live-layer.yaml*",
+        0,
+        record,
+    );
+    stage.strata(
+        "snapshot --from-candidate strata-validate-wilma.yaml*",
+        2,
+        "",
+    );
+    stage.strata("snapshot lp-1 -o layer.json", 0, record);
+
+    let (_, steps) = stage.run("validate-packs.sh", &["4"]);
+    passed(
+        &steps,
+        &[
+            "layer-registry",
+            "layer-refused",
+            "layer-validate",
+            "layer-validate-says",
+            "layer-create",
+            "layer-profile",
+            "layer-published",
+            "layer-record",
+            "layer-record-key",
+            "layer-root",
+            "layer-delete",
+        ],
+    );
+    let wilma = std::fs::read_to_string(stage.path("out/strata-validate-wilma.yaml")).unwrap();
+    assert!(wilma.contains("    layer: csi\n"), "{wilma}");
+    let validate = &stage.sent("POST", "/v1/clusterprofiles/validate/packs")[0];
+    assert_eq!(validate["packs"][0]["layer"], "csi", "{validate}");
+    let create = &stage.sent("POST", "/v1/clusterprofiles")[0]["spec"]["template"]["packs"][0];
+    assert_eq!(
+        (
+            &create["name"],
+            &create["layer"],
+            &create["uid"],
+            &create["values"]
+        ),
+        (
+            &"cert-manager".into(),
+            &"csi".into(),
+            &"pk-1".into(),
+            &"installCRDs: true".into()
+        ),
+        "the pack of the candidate, with the values of the candidate and the layer csi"
+    );
+    let log = std::fs::read_to_string(stage.path("curl.log")).unwrap();
+    assert!(
+        log.lines().any(|l| l == "DELETE /v1/clusterprofiles/lp-1"),
+        "{log}"
+    );
+}
+
+#[test]
+fn validate_packs_sh_creates_no_profile_unless_stage_4_is_given() {
+    let stage = Stage::new(serde_json::json!({}));
+    stage.route("/v1/clusterprofiles", r#"{"uid":"lp-1"}"#);
+
+    let (_, steps) = stage.run("validate-packs.sh", &[]);
+    assert!(!steps.contains("layer"), "{steps}");
+    assert!(stage.sent("POST", "/v1/clusterprofiles").is_empty());
+}
+
+#[test]
 fn repave_sh_stage_8_asks_palette_about_a_variable_in_a_repave_key_with_and_without_its_value() {
     let mut outputs = baseline_outputs();
     outputs["next_profile_uid"] = "n-1".into();

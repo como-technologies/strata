@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # The profile validate test (#152): what Palette answers when strata asks whether it takes the
-# packs of a profile, and what `snapshot --validate` reports. It builds no cluster, creates no
-# profile, and needs no OpenTofu: each request is a POST to a validate route, which changes
-# nothing. So it runs whenever the key works.
+# packs of a profile, and what `snapshot --validate` reports. It builds no cluster, and needs no
+# OpenTofu. Stages 1 to 3 create no profile: each request is a POST to a validate route, which
+# changes nothing. So they run whenever the key works.
 #
 #   examples/live/validate-packs.sh [STAGE]
 #
@@ -13,6 +13,10 @@
 #      /v1/clusterprofiles/{uid}/validate/packs. It needs PROFILE=<name>@<version>, a version in
 #      the project of the key, for example one that `just live-up` publishes; with no PROFILE it
 #      is skipped.
+#   4  a pack with another layer than its registry (#210, #254): strata refuses the candidate,
+#      and the validate route takes the packs. Then a profile with that layer, made and published
+#      through the API, gets the layer of the registry. This stage creates a profile and deletes
+#      it, with no cluster and no cost. It runs only when you give its number.
 #
 # Results go under runs/<UTC time>/validate-packs/, or OUT. Exit 0 only when no check fails.
 set -uo pipefail
@@ -39,7 +43,8 @@ summary() {
 }
 trap summary EXIT
 
-# candidate NAME VALUES: an add-on candidate with the one pack, and VALUES when it is not empty
+# candidate NAME VALUES [LAYER]: an add-on candidate with the one pack, and VALUES and LAYER when
+# they are not empty
 candidate() {
   {
     echo "name: $1"
@@ -51,6 +56,7 @@ candidate() {
     echo "  - name: $pack"
     echo "    version: $version"
     [ -n "$2" ] && echo "    values: $(jq -Rn --arg v "$2" '$v')"
+    [ -n "${3:-}" ] && echo "    layer: $3"
   } > "$1.yaml"
 }
 
@@ -102,6 +108,43 @@ if [ "$stage" = all ] || [ "$stage" = 3 ]; then
     check validate-version-says 0 '#152: it prints palette accepts' -- \
       grep -qx 'palette    accepts' validate-version.err
   fi
+fi
+
+if [ "$stage" = 4 ]; then
+  echo "== a pack with another layer than its registry (#210, #254)" | tee -a steps.log
+  layered=strata-live-layer
+  candidate "$layered" ""
+  "$strata" snapshot --from-candidate "$layered.yaml" -o layer-candidate.json 2> /dev/null ||
+    die "no record of the candidate $layered"
+  check layer-registry 0 "#210: the registry gives $pack the layer addon" -- \
+    jq -e --arg k "addon/$pack" '[.packs[].key] == [$k]' layer-candidate.json
+  candidate strata-validate-wilma "" csi
+  check layer-refused 2 '#210: strata refuses a candidate that gives the pack the layer csi' -- \
+    "$strata" snapshot --from-candidate strata-validate-wilma.yaml -o wilma.json
+  check layer-refused-says 0 '#210: the message names the layer, csi, addon, and the rule of Palette' -- \
+    grep -qF "layer 1 ($pack) has the layer csi, and its registry gives the layer addon; Palette takes the layer from the registry" layer-refused.err
+  body=$(jq -c '{cloudType: "all", type: "add-on",
+    packs: [.packs[] | {name, tag, uid: .packUid, registryUid, type, layer: "csi", values}]}' layer-candidate.json)
+  check layer-validate 0 '#254: the validate route takes the pack with the layer csi' -- \
+    "$live/api.sh" post /v1/clusterprofiles/validate/packs "$body"
+  check layer-validate-says 0 '#254: the answer holds no result for the pack' -- \
+    jq -e '.packs.results == []' layer-validate.out
+  # the profile gets the values of the candidate, so that the two roots can be equal
+  jq -j '.packs[0].values' layer-candidate.json > layer-values.yaml
+  "$live/api.sh" delete-named "$layered" > /dev/null
+  check layer-create 0 "#254: Palette makes and publishes $layered@1.0.0 with the pack in the layer csi, with no error" -- \
+    "$live/api.sh" pin-profile "$layered" "$(jq -r '.packs[0].registryUid' layer-candidate.json)" \
+    "$(jq -r '.packs[0].type' layer-candidate.json)" "$pack" "$version" layer-values.yaml csi
+  uid=$(cat layer-create.out)
+  check layer-profile 0 "#254: read the version $uid" -- "$live/api.sh" get "/v1/clusterprofiles/$uid"
+  check layer-published 0 '#254: the published pack has the layer addon of the registry, not csi' -- \
+    jq -e --arg p "$pack" '[.spec.published.packs[] | select(.name == $p) | .layer] == ["addon"]' layer-profile.out
+  check layer-record 0 "#254: a record of $layered@1.0.0" -- "$strata" snapshot "$uid" -o layer.json
+  check layer-record-key 0 '#254: the record holds the pack in the layer addon' -- \
+    jq -e --arg k "addon/$pack" '[.packs[].key] == [$k]' layer.json
+  check layer-root 0 '#254: the version has the root of the candidate with the layer of the registry' -- \
+    "$strata" compare layer-candidate.json layer.json
+  check layer-delete 0 "the profile $layered is deleted" -- "$live/api.sh" delete "$uid"
 fi
 
 echo
