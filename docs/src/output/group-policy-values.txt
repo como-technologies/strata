@@ -1,0 +1,2 @@
+$ jq -c '.source.cluster.tiers.policy.fields.values' runs/dev-group.json
+{"database":{"password":"********","user":"vcluster"},"sync":{"toHost":{"ingresses":{"enabled":false},"services":{"enabled":true}}}}

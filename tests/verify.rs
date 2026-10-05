@@ -8415,7 +8415,7 @@ fn serve_os_image(raw_root: &Path, image: Option<&str>) -> MemoryApi {
 }
 
 #[test]
-fn a_pack_record_keeps_the_annotations_of_the_pack_ref_outside_the_root() {
+fn a_pack_record_keeps_only_the_image_id_annotation_outside_the_root() {
     use strata::snapshot::Pack;
     let pack = |annotations: Value| {
         serde_json::json!({"name": "ubuntu-aws", "type": "spectro", "layer": "os", "tag": "22.04",
@@ -8423,9 +8423,20 @@ fn a_pack_record_keeps_the_annotations_of_the_pack_ref_outside_the_root() {
     };
     let byoi = Pack::from_api(&pack(os_annotations(Some("ami-0aaa"))), &[]);
     assert_eq!(byoi.image_id(), Some("ami-0aaa"));
-    assert_eq!(byoi.annotations["osName"], "ubuntu");
+    // another annotation can hold a secret: the record keeps only `imageId`
     let doc = serde_json::to_value(&byoi).unwrap();
-    assert_eq!(doc["annotations"]["imageId"], "ami-0aaa");
+    assert_eq!(
+        doc["annotations"],
+        serde_json::json!({"imageId": "ami-0aaa"})
+    );
+    let secret = serde_json::json!({"imageId": "ami-0aaa", "registryToken": "s3cr3t"});
+    let doc = serde_json::to_value(Pack::from_api(&pack(secret), &[])).unwrap();
+    assert_eq!(
+        doc["annotations"],
+        serde_json::json!({"imageId": "ami-0aaa"})
+    );
+    let doc = serde_json::to_value(Pack::from_api(&pack(os_annotations(None)), &[])).unwrap();
+    assert!(doc.get("annotations").is_none(), "{doc}");
     // the annotations are outside the root: a new image keeps the node hash
     let other = Pack::from_api(&pack(os_annotations(Some("ami-0bbb"))), &[]);
     let none = Pack::from_api(&pack(Value::Null), &[]);
@@ -8442,10 +8453,36 @@ fn a_pack_record_keeps_the_annotations_of_the_pack_ref_outside_the_root() {
     let empty = Pack::from_api(&pack(serde_json::json!({"imageId": ""})), &[]);
     assert_eq!(empty.image_id(), None);
     // a record written before the field reads as one with no annotations
-    let mut old = doc.clone();
+    let mut old = serde_json::to_value(&byoi).unwrap();
     old.as_object_mut().unwrap().remove("annotations");
-    let read: Pack = serde_json::from_value(old).unwrap();
+    let read: Pack = serde_json::from_value(old.clone()).unwrap();
     assert!(read.annotations.is_empty());
+    // and a record of strata 0.17 to 0.19, with each annotation, reads its image
+    old["annotations"] = os_annotations(Some("ami-0aaa"));
+    let read: Pack = serde_json::from_value(old).unwrap();
+    assert_eq!(read.image_id(), Some("ami-0aaa"));
+}
+
+#[test]
+fn an_older_record_that_holds_each_annotation_of_the_os_pack_verifies() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let api = serve_os_image(dir.path(), Some("ami-0aaa"));
+    let new = common::snapshot_of_at(&api, UID_A, "t0").unwrap();
+    // a record of strata 0.17 to 0.19 kept each annotation of the pack ref
+    let mut doc = serde_json::to_value(&new).unwrap();
+    for pack in doc["packs"].as_array_mut().unwrap() {
+        if pack["layer"] == "os" {
+            pack["annotations"] = os_annotations(Some("ami-0aaa"));
+        }
+    }
+    let older: Snapshot = serde_json::from_value(doc).unwrap();
+    let os = older.packs.iter().find(|p| p.layer == "os").unwrap();
+    assert_eq!(os.annotations["osName"], "ubuntu");
+    let v = ops::verify(&older, &Palette::new(api), "t1", &Progress::silent()).unwrap();
+    assert!(v.unchanged, "{:?}", v.diff.image_ids_changed);
+    let d = ops::compare(&older, &new, "t2");
+    assert!(d.nothing_differs(), "{:?}", d.image_ids_changed);
 }
 
 #[test]

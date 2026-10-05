@@ -107,7 +107,9 @@ profile, or pack version.
     - A cluster group carries `policy` alone. Its `fields` are `endpointType`,
       `kubernetesDistroType`, `limitConfig`, `values`, `valuesHash`,
       `valuesParseError` when the values are not YAML, and `hostClusters[]`
-      with `uid` and `endpointConfig`. See
+      with `uid` and `endpointConfig`. `values` holds `********` over each
+      value whose key ends with `password`, and `valuesHash` is the hash of
+      the masked values. See
       [The config that a cluster group gives](../commands/snapshot/other-objects.md#the-config-that-a-cluster-group-gives).
     - `pending`, only when true: the record is of `cluster:<cluster>@pending`,
       and holds no `updatesPending` and no `repavePending`.
@@ -136,10 +138,12 @@ profile, or pack version.
     the pack reference. Palette follows a new digest in a different way for each:
     see [The digest of each registry kind](../internals/palette/packs.md#the-digest-of-each-registry-kind).
     It is outside the root.
-  - `annotations`, only when the pack reference has some: each annotation, as
-    Palette gives it, sorted by name. A bring-your-own-image OS pack names its
-    machine image in `imageId`. They are outside the root. A record written
-    before this field has none.
+  - `annotations`, only when the pack reference has the annotation `imageId`:
+    that annotation alone, as Palette gives it. A bring-your-own-image OS pack
+    names its machine image in `imageId`. A record keeps no other annotation,
+    because an annotation can hold a secret. It is outside the root. A record
+    written before this field has none. A record of strata 0.17 to 0.19 holds
+    each annotation, and strata reads only `imageId` from it.
   - `invalid` and `invalidReason`, only when Palette marks the pack reference
     invalid: `true`, and the reason, as Palette gives it in `isInvalid` and
     `inValidReason`. Palette sets the flag when the registry deletes the tag of

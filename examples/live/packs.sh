@@ -10,7 +10,7 @@
 #   3  the refs that name a registry or a tag, and the errors for a version and a registry that
 #      the tenant does not have
 #   4  the options of a pack template, and a candidate whose values select one (#151)
-#   5  the annotations of the OS pack in a record of the release profile (#189)
+#   5  the annotations of the OS pack: the pack ref, the registry, and a record (#189, #253)
 #   6  the time of a pack in the listing, and no such time in verify (#191)
 #
 # The CSI versions are the one the live profiles pin and an older one, from the file of the cloud
@@ -153,19 +153,24 @@ check preset-warning-says 0 '#151: the warning names the pack, the option, the p
 check preset-recorded 0 '#151: the record has packs[].presetOptions[] with that selection' -- \
   jq -e --arg k "$preset_key" '.packs[0].presetOptions == [{"parameter": "access", "targetKey": $k, "option": "public"}]' preset-candidate.json
 
-# A record keeps the annotations of each pack reference, outside the root. Palette copies them
-# from the pack version in the registry, and the OS pack of the Public Repo names no imageId.
-echo "== the annotations of the OS pack (#189)" | tee -a steps.log
+# A record keeps only the annotation imageId of a pack reference, outside the root (#253). Palette
+# copies the annotations from the pack version in the registry, and the OS pack of the Public Repo
+# names no imageId, so its record keeps none.
+echo "== the annotations of the OS pack (#189, #253)" | tee -a steps.log
 check os-record 0 "#189: a record of the release profile, with its $(out os_pack_name) OS pack" -- \
   "$strata" snapshot "$(out release_profile_uid)" -o release.json
-check os-annotations 0 '#189: the record keeps the annotations of the OS pack, and they hold no imageId' -- \
-  jq -e '[.packs[] | select(.layer == "os") | .annotations] | length == 1 and (.[0] | length > 0 and (has("imageId") | not))' release.json
+check os-annotations 0 '#253: the record keeps no annotation of the OS pack, because the pack ref has no imageId' -- \
+  jq -e '[.packs[] | select(.layer == "os")] | length == 1 and (.[0] | has("annotations") | not)' release.json
 os_uid=$(jq -r '.packs[] | select(.layer == "os") | .packUid' release.json)
+check os-profile 0 '#189: the document of the release profile, with the pack ref of the OS pack' -- \
+  "$live/api.sh" get "/v1/clusterprofiles/$(out release_profile_uid)"
+check os-annotations-ref 0 '#189: the pack ref of the OS pack has annotations, and no imageId' -- \
+  jq -e '[.spec.published.packs[] | select(.layer == "os") | .annotations] | length == 1 and (.[0] | length > 0 and (has("imageId") | not))' os-profile.out
 check os-pack-registry 0 '#189: the pack version of the OS pack in the registry' -- \
   "$live/api.sh" get "/v1/packs/$os_uid"
 check os-annotations-registry 0 '#189: the annotations of the pack reference are those of the pack version in the registry' -- \
   jq -e --slurpfile r os-pack-registry.out --arg u "$os_uid" \
-  '[$r[0].packValues[] | select(.packUid == $u) | .annotations] == [.packs[] | select(.layer == "os") | .annotations]' release.json
+  '[$r[0].packValues[] | select(.packUid == $u) | .annotations] == [.spec.published.packs[] | select(.layer == "os") | .annotations]' os-profile.out
 
 # The listing gives each pack version a lastModifiedTimestamp. It is the create time of the
 # version, so verify gives no time of the last change for a pack record.

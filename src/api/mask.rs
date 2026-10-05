@@ -1,8 +1,9 @@
-//! The mask of a secret in the values of a pack.
+//! The mask of a secret in the values of a pack or of a cluster group.
 //!
 //! Palette writes `********` over each pack value whose schema format is `password` when it
 //! serves the published packs of a profile. It serves the draft packs with no mask. Strata writes
-//! the same mask over the draft, so that a record and a saved answer hold no clear secret.
+//! the same mask over the draft, so that a record and a saved answer hold no clear secret. Strata
+//! also writes the mask over each password in the values of a cluster group that a record keeps.
 
 use std::collections::BTreeMap;
 
@@ -159,13 +160,49 @@ fn lookup_mut<'a>(doc: &'a mut Yaml, path: &[&str]) -> Option<&'a mut Yaml> {
 
 /// True when Palette masks this value: a scalar with text, and no variable in it.
 fn holds_secret(v: &Yaml) -> bool {
-    let text = match v {
-        Yaml::String(s) => s.clone(),
-        Yaml::Number(n) => n.to_string(),
-        Yaml::Bool(b) => b.to_string(),
-        _ => return false,
-    };
-    !text.is_empty() && !holds_variable(&text)
+    match v {
+        Yaml::String(s) => is_secret_text(s),
+        Yaml::Number(n) => is_secret_text(&n.to_string()),
+        Yaml::Bool(b) => is_secret_text(&b.to_string()),
+        _ => false,
+    }
+}
+
+/// True when a scalar with the text `text` gets the mask: it has text, and no variable in it.
+fn is_secret_text(text: &str) -> bool {
+    !text.is_empty() && !holds_variable(text)
+}
+
+/// True when the key of a value of a cluster group names a secret: the key ends with
+/// `password`, in capitals or not, such as `password` or `adminPassword`.
+fn is_password_key(key: &str) -> bool {
+    key.to_ascii_lowercase().ends_with("password")
+}
+
+/// Write `********` over each secret in `values`, the canonical values of a cluster group, at each
+/// depth. Palette serves the values of a group with no mask, and the values have no schema. So a
+/// secret is a value whose key names a password. As for a pack, strata does not mask an empty
+/// value, a map, a list, or a value that holds a variable.
+pub(crate) fn mask_password_keys(values: &mut Value) {
+    match values {
+        Value::Object(map) => {
+            for (key, v) in map.iter_mut() {
+                let secret = match &*v {
+                    Value::String(s) => is_secret_text(s),
+                    Value::Number(n) => is_secret_text(&n.to_string()),
+                    Value::Bool(b) => is_secret_text(&b.to_string()),
+                    _ => false,
+                };
+                if secret && is_password_key(key) {
+                    *v = Value::String(MASKED.to_string());
+                } else {
+                    mask_password_keys(v);
+                }
+            }
+        }
+        Value::Array(items) => items.iter_mut().for_each(mask_password_keys),
+        _ => {}
+    }
 }
 
 /// True when `text` holds a variable of a profile, `{{ .spectro.var.NAME }}`.
@@ -248,6 +285,38 @@ mod tests {
 
     fn fields(names: &[&str]) -> Vec<String> {
         names.iter().map(|n| n.to_string()).collect()
+    }
+
+    #[test]
+    fn each_value_whose_key_names_a_password_gets_the_mask_at_each_depth() {
+        let mut values = json!({
+            "password": "plain",
+            "sync": {"adminPassword": "s3cr3t", "user": "barney", "pin": 1234},
+            "users": [{"name": "fred", "PASSWORD": "pebbles"}],
+            "passwordSecretName": "vc-admin",
+            "rootPassword": "",
+            "dbPassword": "{{ .spectro.var.db_password }}",
+            "tlsPassword": {"from": "secret"},
+            "keyPassword": ["a"],
+        });
+        mask_password_keys(&mut values);
+        assert_eq!(
+            values,
+            json!({
+                "password": MASKED,
+                "sync": {"adminPassword": MASKED, "user": "barney", "pin": 1234},
+                "users": [{"name": "fred", "PASSWORD": MASKED}],
+                "passwordSecretName": "vc-admin",
+                "rootPassword": "",
+                "dbPassword": "{{ .spectro.var.db_password }}",
+                "tlsPassword": {"from": "secret"},
+                "keyPassword": ["a"],
+            })
+        );
+        // a second mask changes nothing
+        let once = values.clone();
+        mask_password_keys(&mut values);
+        assert_eq!(values, once);
     }
 
     #[test]

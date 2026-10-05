@@ -478,7 +478,7 @@ the Public Repo has `airgap`, `architecture`, `osName`, `os_spectro_version`,
 A bring-your-own-image OS pack names its machine image in `imageId`, from the
 `annotations` of its `pack.json`
 ([Add a custom pack](https://docs.spectrocloud.com/registries-and-packs/add-custom-packs/)).
-A record keeps the annotations outside the root, and `compare` and `verify`
+A record keeps `imageId` alone, outside the root, and `compare` and `verify`
 name a new `imageId`: see
 [The OS pack names a new machine image](../../use-cases/os-image.md).
 

@@ -1751,6 +1751,62 @@ fn baseline_stage() -> Stage {
     stage
 }
 
+/// A stage of `packs.sh` whose release profile has an OS pack ref with `annotations`, and whose
+/// record of that profile is `record`.
+fn packs_os_stage(annotations: &str, record: &str) -> Stage {
+    let mut stage = Stage::new(serde_json::json!({
+        "csi_pack_name": "csi-aws-ebs", "csi_previous_version": "1.63.0",
+        "csi_version": "1.64.0", "release_profile_uid": "r-1", "os_pack_name": "ubuntu-aws",
+    }));
+    stage.route(
+        "/v1/clusterprofiles/r-1",
+        &format!(
+            r#"{{"spec":{{"published":{{"packs":[{{"name":"ubuntu-aws","layer":"os",
+                "packUid":"os-1","annotations":{annotations}}}]}}}}}}"#
+        ),
+    );
+    stage.route(
+        "/v1/packs/os-1",
+        &format!(r#"{{"packValues":[{{"packUid":"os-1","annotations":{annotations}}}]}}"#),
+    );
+    stage.strata("snapshot r-1 -o release.json", 0, record);
+    stage
+}
+
+#[test]
+fn packs_sh_stage_5_finds_no_annotation_of_the_os_pack_in_a_record_and_each_one_on_the_pack_ref() {
+    let annotations = r#"{"osName":"ubuntu","os_version":"24.04"}"#;
+    let ids = [
+        "os-record",
+        "os-annotations",
+        "os-profile",
+        "os-annotations-ref",
+        "os-pack-registry",
+        "os-annotations-registry",
+    ];
+    let stage = packs_os_stage(
+        annotations,
+        r#"{"packs":[{"layer":"os","name":"ubuntu-aws","packUid":"os-1"}]}"#,
+    );
+    let (_, steps) = stage.run("packs.sh", &[]);
+    passed(&steps, &ids);
+
+    // a record that keeps each annotation, as strata 0.19 wrote it, fails the check
+    let stage = packs_os_stage(
+        annotations,
+        &format!(
+            r#"{{"packs":[{{"layer":"os","name":"ubuntu-aws","packUid":"os-1","annotations":{annotations}}}]}}"#
+        ),
+    );
+    let (_, steps) = stage.run("packs.sh", &[]);
+    assert!(
+        steps
+            .lines()
+            .any(|l| l.starts_with("FAIL") && l.split_whitespace().nth(1) == Some("os-annotations")),
+        "{steps}"
+    );
+}
+
 #[test]
 fn tiers_sh_stage_5_edits_the_subjects_of_a_binding_of_cluster_a_and_puts_the_bindings_back() {
     let mut stage = baseline_stage();

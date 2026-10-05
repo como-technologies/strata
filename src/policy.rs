@@ -9,7 +9,8 @@ use std::collections::BTreeMap;
 use serde_json::{Map, Value, json};
 
 use crate::api::RawCluster;
-use crate::canon::{canon_yaml_hashed, canonical_json};
+use crate::api::mask::mask_password_keys;
+use crate::canon::{canon_yaml_hashed, canonical_json, sha256_hex};
 
 /// The key of the policy fields that holds the role bindings.
 const RBACS: &str = "rbacs";
@@ -98,7 +99,7 @@ pub(crate) fn errors(raw: &RawCluster) -> BTreeMap<String, String> {
 ///
 /// The group applies `values` to each virtual cluster as YAML, as a pack applies its values. So
 /// the tier holds the values in canonical form with their hash, and the host clusters sorted by
-/// uid.
+/// uid. The values hold `********` over each password, and the hash covers the masked values.
 pub(crate) fn group_fields(config: &Value) -> Value {
     let (values, values_hash, values_parse_error) = canon_yaml_hashed(text(config, "/values"));
     let mut hosts: Vec<Value> = config
@@ -125,7 +126,20 @@ pub(crate) fn group_fields(config: &Value) -> Value {
     if let Some(e) = values_parse_error {
         fields["valuesParseError"] = Value::String(e);
     }
+    mask_group_values(&mut fields);
     fields
+}
+
+/// Write `********` over each password in `values` of the policy fields `fields` of a cluster
+/// group, and make `valuesHash` the hash of the masked values. Fields with no values, or with
+/// values that did not parse, do not change.
+fn mask_group_values(fields: &mut Value) {
+    let Some(values) = fields.get_mut("values").filter(|v| !v.is_null()) else {
+        return;
+    };
+    mask_password_keys(values);
+    let hash = sha256_hex(&canonical_json(values));
+    fields["valuesHash"] = Value::String(hash);
 }
 
 /// Each role binding in `doc`, the answer of `GET /v1/spectroclusters/{uid}/config/rbacs`: its
@@ -199,7 +213,8 @@ fn sort_canonical(values: &mut [Value]) {
 /// The policy fields `a` and `b` of two records, in a form that compares. When one of them is
 /// from before strata read the bindings, each keeps only the fields that the two forms share. When
 /// only one of them is from strata 0.18, each keeps all the fields less the two forms of the
-/// upgrades of the agent.
+/// upgrades of the agent. The values of a cluster group get the mask on each side, because a
+/// record of strata 0.19 or before holds each password in clear.
 pub(crate) fn comparable(a: &Value, b: &Value) -> (Value, Value) {
     let legacy = |v: &Value| v.get(LEGACY_RESOURCES).is_some();
     let legacy_agent = |v: &Value| v.get(LEGACY_AGENT_UPGRADES).is_some();
@@ -209,7 +224,12 @@ pub(crate) fn comparable(a: &Value, b: &Value) -> (Value, Value) {
     } else if legacy_agent(a) != legacy_agent(b) {
         (without_agent_upgrades(a), without_agent_upgrades(b))
     } else {
-        (a.clone(), b.clone())
+        let masked = |v: &Value| {
+            let mut v = v.clone();
+            mask_group_values(&mut v);
+            v
+        };
+        (masked(a), masked(b))
     }
 }
 
@@ -254,6 +274,49 @@ mod tests {
         // two records of strata 0.18 compare on each field
         let allowed = json!({"timezone": "Etc/UTC", RBACS: [], LEGACY_AGENT_UPGRADES: "allowed"});
         let (a, b) = comparable(&older, &allowed);
+        assert_ne!(a, b);
+    }
+
+    #[test]
+    fn the_policy_tier_of_a_group_masks_each_password_and_hashes_the_masked_values() {
+        let config = |password: &str| {
+            json!({"endpointType": "LoadBalancer",
+                "values": format!("# the admin\nsync:\n  adminPassword: {password}\n  replicas: 1\n")})
+        };
+        let fields = group_fields(&config("s3cr3t"));
+        let masked = json!({"sync": {"adminPassword": "********", "replicas": 1}});
+        assert_eq!(fields["values"], masked);
+        assert_eq!(
+            fields["valuesHash"],
+            Value::String(sha256_hex(&canonical_json(&masked)))
+        );
+        assert!(!canonical_json(&fields).contains("s3cr3t"));
+        // the hash does not show a new password: the record holds no trace of it
+        assert_eq!(fields, group_fields(&config("an0ther")));
+        // values that do not parse keep no values
+        let broken = group_fields(&json!({"values": "a: [1"}));
+        assert_eq!(broken["values"], Value::Null);
+        assert!(broken.get("valuesParseError").is_some());
+    }
+
+    #[test]
+    fn an_older_group_tier_with_a_password_in_clear_compares_with_a_masked_one() {
+        let config = json!({"endpointType": "LoadBalancer",
+            "values": "sync:\n  adminPassword: s3cr3t\n  replicas: 1\n"});
+        let newer = group_fields(&config);
+        // a record of strata 0.19 or before kept the values in clear, with their hash
+        let clear = json!({"sync": {"adminPassword": "s3cr3t", "replicas": 1}});
+        let mut older = newer.clone();
+        older["values"] = clear.clone();
+        older["valuesHash"] = Value::String(sha256_hex(&canonical_json(&clear)));
+        assert_ne!(older, newer);
+        let (a, b) = comparable(&older, &newer);
+        assert_eq!(a, b);
+        assert!(!canonical_json(&a).contains("s3cr3t"));
+        // each other value still compares
+        let mut more = config.clone();
+        more["values"] = json!("sync:\n  adminPassword: s3cr3t\n  replicas: 2\n");
+        let (a, b) = comparable(&older, &group_fields(&more));
         assert_ne!(a, b);
     }
 
