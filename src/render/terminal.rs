@@ -14,7 +14,8 @@ use super::{
     same_content_note, second_reading_counts, short, show, state_suffix, subject, tag_rename,
     tier_path, tier_states, traits_suffix, unchanged_sentence, unread_notes, unverified_sentence,
     updates_pending_notes, upstream_unknown_note, values_changed_suffix, variable_lines,
-    variables_comparable, variables_unavailable_note, version_display, who_entry, who_heading,
+    variables_comparable, variables_unavailable_note, version_display, version_note, who_entry,
+    who_heading,
 };
 use crate::api::mask::MASKED;
 use crate::color::Paint;
@@ -733,12 +734,14 @@ impl Renderer for TerminalRenderer {
                     .map(|n| format!(", {n}"))
                     .unwrap_or_default()
             ));
-            // the state column only where a version has a state, so a registry in use reads as before
-            let any_state = r.versions.iter().any(|v| v.state.is_some());
+            // the note column only where a version has a note, so a registry in use reads as before
+            let notes: Vec<Option<String>> = r.versions.iter().map(version_note).collect();
+            let any_note = notes.iter().any(Option::is_some);
             let rows: Vec<Vec<String>> = r
                 .versions
                 .iter()
-                .map(|v| {
+                .zip(&notes)
+                .map(|(v, note)| {
                     let mut row = vec![
                         v.version.clone(),
                         v.pack_uid.clone(),
@@ -754,8 +757,8 @@ impl Renderer for TerminalRenderer {
                             v.tags.join(" ")
                         },
                     ];
-                    if any_state {
-                        row.push(v.state.clone().unwrap_or_default());
+                    if any_note {
+                        row.push(note.clone().unwrap_or_default());
                     }
                     row
                 })
@@ -767,7 +770,7 @@ impl Renderer for TerminalRenderer {
                     1 => p.dim(cell),
                     _ => cell.to_string(),
                 });
-                // a version with no state leaves the state column empty: no spaces at the end
+                // a version with no note leaves the note column empty: no spaces at the end
                 out.push_str(line.trim_end());
                 out.push('\n');
             }

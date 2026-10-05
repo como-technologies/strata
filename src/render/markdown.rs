@@ -14,8 +14,8 @@ use super::{
     same_content_note, second_reading_counts, short, show, state_suffix, subject, tier_path,
     tier_states, traits_suffix, unchanged_sentence, unread_notes, unverified_sentence,
     updates_pending_notes, upstream_unknown_note, values_changed, values_changed_suffix,
-    variable_lines, variables_comparable, variables_unavailable_note, version_display, who_entry,
-    who_heading,
+    variable_lines, variables_comparable, variables_unavailable_note, version_display,
+    version_note, who_entry, who_heading,
 };
 use crate::color::Paint;
 use crate::diff::{Diff, Leaf, Op, Status, Verify, VerifyStatus};
@@ -580,10 +580,7 @@ impl Renderer for MarkdownRenderer {
                 out.push_str(&format!(
                     "| `{}`{} | {} | {} | {} | `{}` |\n",
                     v.version,
-                    v.state
-                        .as_ref()
-                        .map(|s| format!(" {s}"))
-                        .unwrap_or_default(),
+                    version_note(v).map(|n| format!(" {n}")).unwrap_or_default(),
                     if v.tags.is_empty() {
                         "-".to_string()
                     } else {

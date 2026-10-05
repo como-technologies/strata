@@ -170,12 +170,21 @@ pub(crate) fn pin_status(pin: &crate::ops::Pin) -> String {
     text
 }
 
-/// `bump to 1.65.0: in-place IDENTITY UPSTREAM AUTHORED`, for a pin with a bump.
+/// `bump to 1.65.0: in-place IDENTITY UPSTREAM AUTHORED`, for a pin with a bump. When Palette
+/// calls a different newer version the latest, the line ends with `; Palette calls 1.30.0 the
+/// latest`.
 pub(crate) fn bump_line(pin: &crate::ops::Pin) -> Option<String> {
     let b = pin.bump.as_ref()?;
     let mut line = format!("bump to {}: {}", b.to, impact_word(b.impact));
     if !b.flags.is_empty() {
         line.push_str(&format!(" {}", b.flags.join(" ")));
+    }
+    if let Some(n) = pin
+        .newer
+        .iter()
+        .find(|n| n.palette_latest && n.version != b.to)
+    {
+        line.push_str(&format!("; Palette calls {} the latest", n.version));
     }
     Some(line)
 }
@@ -208,6 +217,17 @@ pub(crate) fn registry_note(r: &crate::ops::PackRegistry) -> Option<String> {
         (Some(state), false) => Some(state.clone()),
         (None, true) => Some("no tags: the registry answered 404".to_string()),
         (None, false) => None,
+    }
+}
+
+/// What a packs row adds for a version: its state, and `latest in Palette` when Palette calls
+/// it the latest and strata does not. A version that both call the latest needs no mark.
+pub(crate) fn version_note(v: &crate::ops::PackBuild) -> Option<String> {
+    let mark = (v.palette_latest && !v.latest).then_some("latest in Palette");
+    match (v.state.as_deref(), mark) {
+        (Some(state), Some(mark)) => Some(format!("{state}, {mark}")),
+        (Some(one), None) | (None, Some(one)) => Some(one.to_string()),
+        (None, None) => None,
     }
 }
 

@@ -140,6 +140,9 @@ pub struct Newer {
     /// `deprecated`, when the registry says so.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub state: Option<String>,
+    /// True for the version that Palette calls the latest: see [`PackBuild::palette_latest`].
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub palette_latest: bool,
     /// When Palette first listed the version; empty when the listing gives no time.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub listed: String,
@@ -297,6 +300,7 @@ where
             .map(|b| Newer {
                 version: b.version.clone(),
                 state: b.state.clone(),
+                palette_latest: b.palette_latest,
                 listed: b.listed.clone(),
             })
             .collect();
