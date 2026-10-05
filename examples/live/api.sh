@@ -13,6 +13,10 @@
 #       change to the draft of the version, and the published template stays.
 #   api.sh publish PROFILE_UID
 #       Publish the draft of a version: PATCH /v1/clusterprofiles/{uid}/publish.
+#   api.sh create-unpublished PROFILE_UID NAME
+#       Create the profile NAME with the version, packs, values, and manifests of a published
+#       version, with no publish: POST /v1/clusterprofiles only. Print the uid of the new profile.
+#       Each manifest goes with no uid, so the new profile gets its own manifests.
 #   api.sh edit-manifest PROFILE_UID FROM TO
 #       The same change of one manifest, through the route of that manifest: PUT
 #       /v1/clusterprofiles/{uid}/packs/{pack}/manifests/{manifest uid}, then publish. Exit 2
@@ -249,6 +253,16 @@ publish() {
   [ -n "$uid" ] || die "usage: api.sh publish PROFILE_UID"
   call PATCH "/v1/clusterprofiles/$uid/publish" > /dev/null || exit 2
   echo "published the draft of $uid"
+}
+
+create_unpublished() {
+  local uid=${1:-} name=${2:-} tmp
+  [ -n "$uid" ] && [ -n "$name" ] || die "usage: api.sh create-unpublished PROFILE_UID NAME"
+  tmp=$(mktemp -d); trap 'rm -rf "${tmp:-}"' RETURN EXIT
+  fetch_published "$uid" "$tmp"
+  body "$tmp" '.manifests |= map({name, content})' \
+    | jq --arg n "$name" '.metadata = {name: $n}' > "$tmp/body"
+  call POST /v1/clusterprofiles "$tmp/body" | jq -er '.uid' || exit 2
 }
 
 edit_manifest() {
@@ -689,6 +703,7 @@ case "${1:-}" in
   edit) shift; edit "$@" ;;
   draft) shift; draft "$@" ;;
   publish) shift; publish "$@" ;;
+  create-unpublished) shift; create_unpublished "$@" ;;
   reorder) shift; reorder "$@" ;;
   reorder-cluster) shift; reorder_cluster "$@" ;;
   retag) shift; retag "$@" ;;
