@@ -3,6 +3,8 @@
 use std::fs;
 use std::path::Path;
 
+use serde::de::DeserializeOwned;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use super::mask::MASKED;
@@ -75,7 +77,7 @@ fn read_scope_variables_unavailable(dir: &Path) -> Result<bool> {
     if !dir.join(SCOPE_FILE).is_file() {
         return Ok(false);
     }
-    let scope = read_json_file(dir, SCOPE_FILE)?;
+    let scope: Value = read_json_file(dir, SCOPE_FILE)?;
     Ok(scope
         .get("variablesUnavailable")
         .and_then(Value::as_bool)
@@ -86,7 +88,7 @@ fn scope_field(dir: &Path, key: &str) -> Result<Option<String>> {
     if !dir.join(SCOPE_FILE).is_file() {
         return Ok(None);
     }
-    let scope = read_json_file(dir, SCOPE_FILE)?;
+    let scope: Value = read_json_file(dir, SCOPE_FILE)?;
     Ok(scope
         .get(key)
         .and_then(Value::as_str)
@@ -114,7 +116,7 @@ fn scope_document(
 
 /// Read the JSON file `name` from `dir` when it is there. `None` is a file that the build which
 /// saved the directory did not write.
-fn read_optional(dir: &Path, name: &str) -> Result<Option<Value>> {
+fn read_optional<T: DeserializeOwned>(dir: &Path, name: &str) -> Result<Option<T>> {
     if dir.join(name).is_file() {
         read_json_file(dir, name).map(Some)
     } else {
@@ -123,7 +125,7 @@ fn read_optional(dir: &Path, name: &str) -> Result<Option<Value>> {
 }
 
 /// Read one JSON file from `dir`; an empty file is an error of its own.
-fn read_json_file(dir: &Path, name: &str) -> Result<Value> {
+fn read_json_file<T: DeserializeOwned>(dir: &Path, name: &str) -> Result<T> {
     let path = dir.join(name);
     let text = fs::read_to_string(&path).map_err(|source| Error::Io {
         path: path.clone(),
@@ -263,14 +265,10 @@ pub struct RawCluster {
     /// `GET /v1/notifications/spectrocluster/{uid}`, every page, as one array of its items;
     /// `None` when they were not read, and for a directory that an older build saved
     pub notifications: Option<Value>,
-    /// Why Palette did not give the notifications, when it did not
-    pub notifications_error: Option<String>,
     /// `GET /v1/spectroclusters/{uid}/repave/status`: the repave that waits for approval. `None`
     /// when no repave waits, when Palette did not give it, and for a directory that an older build
     /// saved.
     pub repave: Option<Value>,
-    /// Why Palette did not give the repave that waits, when it did not
-    pub repave_error: Option<String>,
     /// `GET /v1/spectroclusters/{uid}/packs/resolvedValues`: for each applied profile, the value
     /// Palette gives each macro. `None` unless asked for, with `snapshot --macros`.
     pub resolved_values: Option<Value>,
@@ -281,13 +279,42 @@ pub struct RawCluster {
     /// when Palette did not give them, for an edge host and a cluster group, and for a directory
     /// that an older build saved.
     pub rbacs: Option<Value>,
-    /// Why Palette did not give the role bindings, when it answered with an error other than 404
-    pub rbacs_error: Option<String>,
     /// `GET /v1/spectroclusters/{uid}/config/namespaces`: the namespaces of the cluster, with the
     /// resources that each one can use. `None` in the same cases as `rbacs`.
     pub namespaces: Option<Value>,
-    /// Why Palette did not give the namespaces, when it answered with an error other than 404
-    pub namespaces_error: Option<String>,
+    /// Why Palette did not give a document of the cluster that is beside the copy, when it
+    /// answered with an error.
+    pub errors: ReadErrors,
+}
+
+/// Why Palette did not give each document of a cluster that is beside the copy, when it answered
+/// with an error.
+///
+/// The notifications, the repave that waits, the role bindings, and the namespaces are not part
+/// of the copy. So strata takes the record when it cannot read one of them, and records why.
+/// Saved as `errors.json` when it holds an error, so `--from-raw` gives the record of the fetch.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReadErrors {
+    /// Why Palette did not give the notifications.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub notifications: Option<String>,
+    /// Why Palette did not give the repave that waits.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub repave: Option<String>,
+    /// Why Palette did not give the role bindings, when it answered with an error other than 404.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rbacs: Option<String>,
+    /// Why Palette did not give the namespaces, when it answered with an error other than 404.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub namespaces: Option<String>,
+}
+
+impl ReadErrors {
+    /// True when Palette gave each document that strata asked for.
+    fn is_empty(&self) -> bool {
+        *self == ReadErrors::default()
+    }
 }
 
 impl RawCluster {
@@ -304,17 +331,19 @@ impl RawCluster {
             project_uid: read_scope(dir)?,
             fetched_at: read_scope_fetched_at(dir)?,
             notifications: read_optional(dir, Self::NOTIFICATIONS)?,
-            notifications_error: None,
             repave: read_optional(dir, Self::REPAVE)?,
-            repave_error: None,
             resolved_values: read_optional(dir, Self::RESOLVED_VALUES)?,
             cloud_config: read_optional(dir, Self::CLOUD_CONFIG)?,
             rbacs: read_optional(dir, Self::RBACS)?,
-            rbacs_error: None,
             namespaces: read_optional(dir, Self::NAMESPACES)?,
-            namespaces_error: None,
+            // a directory with no errors file is one where Palette gave each document, or one
+            // that an older build saved, which did not save the errors
+            errors: read_optional(dir, Self::ERRORS)?.unwrap_or_default(),
         })
     }
+
+    /// The file that holds the read errors of the cluster, when Palette gave one.
+    pub(crate) const ERRORS: &'static str = "errors.json";
 
     /// The file that holds the role bindings of the cluster, when they were read.
     pub(crate) const RBACS: &'static str = "rbacs.json";
@@ -364,6 +393,10 @@ impl RawCluster {
         }
         if let Some(n) = &self.namespaces {
             files.push((Self::NAMESPACES, n));
+        }
+        let errors = serde_json::to_value(&self.errors)?;
+        if !self.errors.is_empty() {
+            files.push((Self::ERRORS, &errors));
         }
         write_json_files(dir, &files)
     }

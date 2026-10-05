@@ -39,8 +39,9 @@ const LEGACY_AGENT_UPGRADES: &str = "agentUpgrades";
 
 /// The fields of the policy tier of the cluster in `raw`, whose `spec.clusterConfig` is `config`.
 /// The bindings and the namespaces come from their own routes, without the uids and the times.
-/// Each one is null when strata did not read its route. The tier holds the annotation
-/// `spectroComponentsUpgradeForbidden` only when the cluster has it.
+/// Each one is null when strata did not read its route, and [`errors`] names each one that
+/// Palette refused. The tier holds the annotation `spectroComponentsUpgradeForbidden` only when
+/// the cluster has it.
 pub(crate) fn fields(raw: &RawCluster, config: &Value) -> Value {
     let cluster = &raw.cluster;
     let field = |k: &str| config.get(k).cloned().unwrap_or(Value::Null);
@@ -84,8 +85,8 @@ fn agent_upgrades_forbidden(cluster: &Value) -> Option<&Value> {
 /// error other than 404.
 pub(crate) fn errors(raw: &RawCluster) -> BTreeMap<String, String> {
     [
-        (RBACS, &raw.rbacs_error),
-        (NAMESPACES, &raw.namespaces_error),
+        (RBACS, &raw.errors.rbacs),
+        (NAMESPACES, &raw.errors.namespaces),
     ]
     .into_iter()
     .filter_map(|(key, error)| Some((key.to_string(), error.clone()?)))

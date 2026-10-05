@@ -7055,6 +7055,52 @@ fn a_raw_directory_keeps_the_repave_with_no_value_and_gives_the_record_of_the_fe
     );
 }
 
+#[test]
+fn a_raw_directory_keeps_each_read_error_so_the_record_is_the_record_of_the_fetch() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let mut cluster = read(&dir.path().join("cluster-merged").join("cluster.json"));
+    cluster["status"]["repave"] = serde_json::json!({"state": "Pending"});
+    cluster["spec"]["clusterConfig"] = serde_json::json!({"timezone": "Etc/UTC"});
+    // Palette refuses each document beside the copy, and the record still comes
+    let api = serve_repave(dir.path(), "cluster-merged", "Pending")
+        .with(format!("/v1/spectroclusters/{CLUSTER_UID}"), cluster)
+        .failing(REPAVE, 403, "forbidden")
+        .failing(NOTIFICATIONS, 403, "forbidden")
+        .failing(rbacs_route(), 403, "forbidden")
+        .failing(namespaces_route(), 403, "forbidden");
+    let fetched = Palette::new(api)
+        .fetch_cluster(CLUSTER_UID, &Progress::silent())
+        .unwrap();
+    let saved = dir.path().join("raw");
+    fetched.save_dir(&saved, "t0").unwrap();
+    assert!(saved.join("errors.json").is_file());
+    let direct = Snapshot::from_cluster(&fetched, None, "raw", "t0").unwrap();
+    let from_raw = ops::snapshot_from_dir(&saved, "raw", "t1").unwrap();
+    assert_eq!(
+        serde_json::to_value(&from_raw).unwrap(),
+        serde_json::to_value(&direct).unwrap()
+    );
+    let c = from_raw.source.cluster.unwrap();
+    assert_eq!(c.updates_pending_error.as_deref(), Some("HTTP 403: forbidden"));
+    assert_eq!(c.pending_repave_error.as_deref(), Some("HTTP 403: forbidden"));
+    let policy = &c.tiers["policy"];
+    assert_eq!(
+        policy.errors.keys().collect::<Vec<_>>(),
+        ["namespaces", "rbacs"]
+    );
+    // the tier holds no value for a field that strata could not read
+    assert!(policy.fields.get("rbacs").is_none() && policy.fields.get("namespaces").is_none());
+
+    // a fetch with no error saves no errors file
+    let clean = Palette::new(serve_repave(dir.path(), "cluster-merged", "Pending"))
+        .fetch_cluster(CLUSTER_UID, &Progress::silent())
+        .unwrap();
+    let saved = dir.path().join("raw-clean");
+    clean.save_dir(&saved, "t0").unwrap();
+    assert!(!saved.join("errors.json").exists());
+}
+
 // ---- a pack with no upstream digest ------------------------------------------------------------
 
 /// Fixture `a` as `dir`, with no digest for the OS pack anywhere: not on its pack reference, and
