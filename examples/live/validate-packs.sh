@@ -7,8 +7,8 @@
 #   examples/live/validate-packs.sh [STAGE]
 #
 #   1  a candidate whose packs Palette takes: POST /v1/clusterprofiles/validate/packs
-#   2  a candidate whose values are not YAML, a body with no pack, and a candidate with a pack
-#      that carries the mark `disabled` of Spectro Cloud (#125): Palette refuses the whole request
+#   2  values that are not YAML, a body with no pack, and a pack with the mark `disabled` of
+#      Spectro Cloud (#125): Palette refuses the whole request
 #   3  a version that Palette holds, as an update of itself: POST
 #      /v1/clusterprofiles/{uid}/validate/packs. It needs PROFILE=<name>@<version>, a version in
 #      the project of the key, for example one that `just live-up` publishes; with no PROFILE it

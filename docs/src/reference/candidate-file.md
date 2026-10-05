@@ -167,7 +167,7 @@ A version or a tag that the registry does not have is `pack-not-found`. A
 registry name that the key cannot see is `registry-not-found`. A `registryUid`
 that the key cannot see goes out as given, so its packs are `pack-not-found`,
 and the error names the uid. A version that Spectro Cloud retired, with the
-`system_state` `disabled` or `deleted`, is `pack-unavailable`: Palette does not
+`system_state` `disabled` or `deleted`, is `pack-unavailable`. Palette does not
 serve it, and refuses a profile that pins it. A version with the mark
 `disabled` is not: Palette serves it, and refuses the profile on its validate
 route, so give `--validate`. See

@@ -949,9 +949,10 @@ pub fn warn_preset_options(snap: &Snapshot, progress: &Progress) {
 /// `DisabledPacksForbidden`, also on its validate route.
 const DISABLED_MARK: &str = "/spec/annotations/disabled";
 
-/// The state that the listing gives a pack version: `deprecated`, `disabled`, or `deleted` in
-/// `system_state`, or `disabled` for a version with the [`DISABLED_MARK`], and nothing for a
-/// pack in use.
+/// The state that the listing gives a pack version, and nothing for a pack in use.
+///
+/// The state is the `system_state`: `deprecated`, `disabled`, or `deleted`. It is `disabled` for
+/// a version with the [`DISABLED_MARK`] and no `system_state`.
 pub(crate) fn pack_state(summary: &Value) -> Option<String> {
     system_state(summary).or_else(|| {
         (text(summary, DISABLED_MARK).as_deref() == Some("true")).then(|| "disabled".to_string())

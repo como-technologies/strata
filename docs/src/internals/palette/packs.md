@@ -553,8 +553,8 @@ Strata reads the state from the listing:
 - `strata behind` does not offer a disabled or a deleted version as a move:
   see [strata behind](../../commands/behind.md#the-pins-that-are-behind).
 - `strata snapshot pack:` and a candidate stop with `pack-unavailable` on a
-  disabled or a deleted `system_state`, because Palette does not serve the
-  version and refuses a profile that pins it.
+  disabled or a deleted `system_state`. Palette does not serve the version,
+  and refuses a profile that pins it.
 - A version with the mark records: Palette serves it. Palette is the owner of
   the refusal, and `snapshot --validate` asks Palette, which refuses the
   profile with `DisabledPacksForbidden`.

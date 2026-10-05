@@ -464,7 +464,7 @@ is the path as a list: strings for keys, numbers for indexes, and
     the command listed. With `--cloud`, that is the newest version for that
     cloud, and not the newest the registry holds. `state` is `deprecated`,
     `disabled`, or `deleted` from `system_state` of the listing, or `disabled`
-    for a version with the mark `disabled` of Spectro Cloud: see
+    for a version with the mark of Spectro Cloud. See
     [Pack states](../internals/palette/packs.md#pack-states). Strata leaves out
     the field when the listing gives none. `paletteLatest`, only when true: the
     version that Palette calls the latest, from

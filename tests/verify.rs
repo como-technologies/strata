@@ -11283,9 +11283,8 @@ fn behind_names_the_newer_versions_of_each_pin_and_the_impact_of_the_bump() {
 
 #[test]
 fn behind_does_not_offer_a_version_with_the_mark_and_says_so_of_a_pinned_one() {
-    // 1.66.0 carries the mark, as 1.64.0 of serve_behind carries the state deprecated. Palette
-    // refuses a profile that holds 1.66.0, so it is not a version to move to. A pin of 1.66.0
-    // itself says that the pinned version is disabled
+    // 1.66.0 carries the mark. Palette refuses a profile that holds it, so it is not a version to
+    // move to. A pin of 1.66.0 itself says that the pinned version is disabled
     let dir = tempfile::tempdir().unwrap();
     let api = serve_registry(
         vec![
