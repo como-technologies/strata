@@ -63,7 +63,7 @@ if [ -z "${OFFLINE:-}" ]; then
       log "WARN: pack '$name' not found in Public Repo, skipping"; rm -rf "$d"; continue
     fi
     jq 'del(.packValues[]?.readme)' "$d/_entity.raw.json" > "$d/_entity.json"; rm -f "$d/_entity.raw.json"
-    # The answer above leaves out the disabled and the deleted versions. The states query gives
+    # The answer above does not include the disabled and the deleted versions. The states query gives
     # the retired versions, and a 404 when the registry has none.
     if api_get "/v1/packs/${name}/registries/${reg}?states=deprecated,disabled,deleted" > "$d/_entity_retired.raw.json" 2>/dev/null; then
       jq 'del(.packValues[]?.readme)' "$d/_entity_retired.raw.json" > "$d/_entity_retired.json"

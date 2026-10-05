@@ -433,15 +433,15 @@ state in `spec.annotations.system_state`, with the time in
 | `disabled` | not in the answer | the tags and the values | Palette refuses it: HTTP 500, `ClusterProfileInvalidPackState`, "pack `<name>:<version>` is disabled" |
 | `deleted` | not in the answer | the tags and the values | Palette refuses it: HTTP 500, `ClusterProfileInvalidPackState`, "pack `<name>:<version>` is deleted" |
 
-With no query, Palette answers 404 with `ResourceNotFound` when no version is
-left in the answer. So a 404 for a pack that the listing names is a fact about
+With no query, Palette answers 404 with `ResourceNotFound` when the answer has
+no version. So a 404 for a pack that the listing names is a fact about
 one registry, and not about the pack: `nginx` is disabled in `Public Repo` and
 in `Palette Registry`, and `Bitnami` serves it.
 
 The `states` query gives only the versions in the states that it names. With
 it, `nginx` in `Public Repo` gives the tags of its 30 disabled versions, for
 example `0.26.1` and `0.26.x` on `0.26.1`. `kubernetes` in `Public Repo` has
-deleted versions too. The answer with no query leaves them out, and the
+deleted versions too. The answer with no query does not include them, and the
 answer with the query gives their tags.
 
 Strata reads the state from the listing:

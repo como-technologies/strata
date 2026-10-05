@@ -201,8 +201,8 @@ where
             _ => None,
         };
         // the registry's own answer holds the tags, which the listing does not. With no query,
-        // Palette leaves the disabled and the deleted versions out of it, and answers 404 when
-        // no other version is left. So a registry with a retired version gets a second request
+        // the answer does not include the disabled and the deleted versions, and Palette answers
+        // 404 when it has no version. So a registry with a retired version gets a second request
         // with the states query. A registry that answers 404 to both keeps the versions of the
         // listing, with no tags, and the other registries still answer
         progress.note(&format!("reading the tags of {name} in {registry}"));

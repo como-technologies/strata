@@ -65,8 +65,8 @@ versions, which [the live example checks](../development/live-runs.md#packssh).
 
 A version that Spectro Cloud retired has its state in the last column:
 `deprecated`, `disabled`, or `deleted`. When every version in a registry has the
-same state, the heading says it too. Palette leaves the disabled and the
-deleted versions out of the answer for the tags. So when the listing shows such
+same state, the heading says it too. The answer for the tags does not include
+the disabled and the deleted versions. So when the listing shows such
 a version, strata asks again with the `states` query, and each version gets its
 tags. A profile cannot pin a disabled or a deleted version: see
 [Pack states](../internals/palette/packs.md#pack-states).

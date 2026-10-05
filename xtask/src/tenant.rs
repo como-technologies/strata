@@ -1896,7 +1896,7 @@ impl Tenant {
                 &entity,
             );
             // The answer with the states query: the tags of the retired versions, which the
-            // answer above leaves out. A pack with no disabled or deleted version has no file.
+            // answer above does not include. A pack with no disabled or deleted version has no file.
             let retired = dir.join("_entity_retired.json");
             if retired.exists() {
                 self.write(
