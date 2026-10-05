@@ -11189,8 +11189,8 @@ fn behind_says_what_a_move_to_a_newer_version_drops_when_it_supports_fewer_archi
 #[test]
 fn in_a_fips_tenant_packs_and_behind_leave_out_a_version_that_palette_does_not_serve() {
     // 1.68.0 is not FIPS compliant. The listing applies no FIPS rule, so it holds 1.68.0 in each
-    // tenant. The registry route applies the FIPS rule of the tenant: in a FIPS tenant it gives
-    // no tag for 1.68.0, and in another tenant it does.
+    // tenant. The registry route applies the FIPS rule of the tenant. In a FIPS tenant, it gives
+    // no tag for 1.68.0. In another tenant, it gives the tag.
     let mut not_fips = pack_summary_with("1.68.0", None, &["aws"]);
     not_fips["spec"]["annotations"] = serde_json::json!({"fips": "false"});
     let serve = |entity: Value| serve_registry(vec![not_fips.clone()], &[("reg-public", entity)]);

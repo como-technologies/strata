@@ -582,8 +582,8 @@ whose annotation `fips` is `true` or `unknown`:
 | A new profile that pins another version | Palette refuses it with `PackForbidden` |
 
 Strata uses the registry answer, and does not copy the rule. `strata packs` and
-`strata behind` leave out a version of the listing that has no tag in the
-registry answer, unless the listing gives it the state `disabled` or `deleted`.
+`strata behind` leave out a listed version that has no tag in the registry
+answer. A version with the state `disabled` or `deleted` stays.
 See [strata packs](../../commands/packs.md#what-to-expect).
 
 The live tenant has the mode `none`, and its Palette does not run in FIPS mode.

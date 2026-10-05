@@ -377,8 +377,8 @@ where
 }
 
 /// The tag rows of the registry answer that point at the listing entry `e`. A tag row names its
-/// version, and names the build it points at; match on either, because a registry that answers
-/// with one and not the other still says enough.
+/// version and the build that it points at. Match on either: a registry that answers with one of
+/// the two still says enough.
 fn tag_rows<'a>(tags: &'a [Value], e: &Value) -> Vec<&'a Value> {
     let version = text(e, "/spec/version");
     let pack_uid = text(e, "/metadata/uid");

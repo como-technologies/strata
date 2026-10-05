@@ -458,9 +458,9 @@ is the path as a list: strings for keys, numbers for indexes, and
 
 - `name`: the pack that was asked for, and `cloud` when `--cloud` was given.
 - `registries[]`: one entry per registry that has the pack, with `registry`,
-  `registryUid`, `layer`, and `versions[]`. A version that has no tag in the
-  answer of the registry is not in `versions[]`, unless it is disabled or
-  deleted: Palette does not serve it in this tenant. See
+  `registryUid`, `layer`, and `versions[]`. Palette does not serve a version
+  that has no tag in the answer of the registry. That version is not in
+  `versions[]`, unless it is disabled or deleted. See
   [The FIPS rule](../internals/palette/packs.md#the-fips-rule).
   - A version: `version`, `packUid`, `digest`, `type`, `cloudTypes[]`, `tags[]`
     with the exact tag first, and `latest`, which is true for the newest version
