@@ -214,6 +214,8 @@ registries the tenant can see, including one pack that two registries hold.
 | `packs-cloud` | 0 | #54: `--cloud` keeps the versions of one cloud |
 | `packs-cloud-none`, `packs-cloud-none-says` | 0 | #54: a cloud no version supports is an empty answer, not an error, and it says so |
 | `packs-json` | 0 | #54: `--json` writes `strata-packs/1` |
+| `packs-palette-latest` | 0 | #124: the listing marks one version of `kubernetes` in the registry as the latest of Palette, and `--latest --json` gives it `paletteLatest`: see [The version that Palette calls the latest](../internals/palette/packs.md#the-version-that-palette-calls-the-latest) |
+| `packs-rev-floating-tag` | 0 | #124: the floating tag `1.19.x` of `cert-manager` names `1.19.3`, and not the rebuild `1.19.3-rev1` |
 | `packs-unknown-registry`, `packs-unknown-pack` | 2 | #54: an unknown registry lists the visible ones; a pack no registry has is an error |
 | `preset-listing` | 0 | #151: the listing gives each option of the `access` parameter of `headlamp` 0.45.0 with no presets: see [The presets of a template option](../internals/palette/packs.md#the-presets-of-a-template-option) |
 | `preset-warning`, `preset-warning-says`, `preset-recorded` | 0 | #151: a candidate whose values select the option `public` warns, and records `packs[].presetOptions[]` |

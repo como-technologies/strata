@@ -2783,6 +2783,24 @@ fn use_cases(r: &mut Runner) {
     );
     r.step("packs-json", 0, false, r#"strata packs csi-aws-ebs --registry 'Public Repo' --latest --json | jq '.registries[0].versions[0]'"#);
 
+    // A rebuild of the newest version: strata orders it above its base, and Palette below
+    r.chapter("palette-latest", DEV_ENV);
+    r.projects(&[("dev", DEV)]);
+    r.registries(DEV);
+    r.rebuild_pack_version(DEV, "cert-manager", "1.21.1");
+    r.step(
+        "packs-palette-latest",
+        0,
+        false,
+        "strata packs cert-manager --latest",
+    );
+    r.step(
+        "packs-palette-latest-json",
+        0,
+        false,
+        "strata packs cert-manager --latest --json | jq -c '.registries[0].versions[] | {version, latest, paletteLatest}'",
+    );
+
     r.chapter("retire", DEV_ENV);
     r.projects(&[("dev", DEV)]);
     r.profile(DEV, A100, "1.0.0", "aws-stack@1.0.0", &[]);

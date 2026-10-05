@@ -340,6 +340,11 @@ impl Runner {
         self.build(|t| t.hide_pack_version(project, name, version));
     }
 
+    /// A rebuild of one version of a pack: see [`Tenant::rebuild_pack_version`].
+    pub fn rebuild_pack_version(&mut self, project: &str, name: &str, version: &str) {
+        self.build(|t| t.rebuild_pack_version(project, name, version));
+    }
+
     /// A template on one version of a pack: see [`Tenant::pack_template`].
     pub fn pack_template(
         &mut self,

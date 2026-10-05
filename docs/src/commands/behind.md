@@ -17,8 +17,11 @@ Exit `1`: a pin is behind. Each line is one pack version that the records pin
 from one registry. A pin that is behind names the newer versions, newest first,
 and `bump to` names what a move to the newest version does: the impact level and
 the change flags of `compare pack:<name>@<pinned> pack:<name>@<newest>`. See
-[Change flags and impact](../reference/impact.md). The lines under a pin name
-each record that pins it.
+[Change flags and impact](../reference/impact.md). When Palette calls a
+different newer version the latest, the line ends with
+`; Palette calls <version> the latest`: see
+[Which version is the newest](./packs.md#which-version-is-the-newest). The lines
+under a pin name each record that pins it.
 
 - **A newer version** is one that a person can move to. A version that the
   registry has disabled or deleted is not, and a version for none of the clouds

@@ -125,6 +125,10 @@ check packs-cloud-none-says 0 '#54: and it says so' -- \
   grep -q 'no version of kubernetes supports no-such-cloud' packs-cloud-none.out
 check packs-json 0 '#54: --json writes strata-packs/1' -- \
   bash -c "\"$strata\" packs $pack --registry '$reg' --latest --json | jq -e '.schema == \"strata-packs/1\" and (.registries[0].versions[0].tags | length > 0)'"
+check packs-palette-latest 0 '#124: the listing marks one version of the registry as the latest of Palette, and --latest --json gives it paletteLatest' -- \
+  bash -c "\"$strata\" packs kubernetes --registry '$reg' --latest --json | jq -e '[.registries[0].versions[] | select(.paletteLatest)] | length == 1'"
+check packs-rev-floating-tag 0 '#124: the floating tag 1.19.x of cert-manager names 1.19.3, and not the rebuild 1.19.3-rev1' -- \
+  bash -c "\"$strata\" packs cert-manager --registry '$reg' --json | jq -e '[.registries[0].versions[] | select(.tags | index(\"1.19.x\")) | .version] == [\"1.19.3\"]'"
 check packs-unknown-registry 2 '#54: an unknown registry is an error that lists the visible ones' -- \
   "$strata" packs "$pack" --registry "No Such Registry"
 check packs-unknown-pack 2 '#54: a pack no registry has is pack-not-found' -- \

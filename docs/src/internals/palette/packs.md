@@ -428,6 +428,25 @@ So `strata packs --cloud aws` keeps a version whose cloud types hold `aws` or
 `cloudTypes: ["all"]`. The check on a live tenant is `registry.sh` stage 6:
 see [Live runs](../../development/live-runs.md#registrysh).
 
+## The version that Palette calls the latest
+
+The listing `/v1/packs?filters=spec.name=<name>` gives each version the
+annotation `metadata.annotations.latestVersion`. Palette sets it at the sync of
+the registry. It is `"true"` on one version of each pack in each registry, and
+`"false"` on each other version. Palette picks that version by semantic
+version, so a suffix such as `-rc.1` or `-rev1` puts a version below its base.
+
+The floating tags follow the same order. In `Public Repo`, the tag `1.19.x` of
+`cert-manager` names `1.19.3`, and not the rebuild `1.19.3-rev1`.
+
+Strata orders by the numbers and the text, and puts `1.19.3-rev1` above
+`1.19.3`. So `strata packs` gives the mark of Palette as `paletteLatest`, and
+`strata behind` gives it on each newer version: see
+[Which version is the newest](../../commands/packs.md#which-version-is-the-newest).
+On the live tenant, `kubernetes` in `Public Repo` has one marked version, and
+strata calls it the newest too. The live example
+[checks both facts](../../development/live-runs.md#packssh).
+
 ## Pack states
 
 Spectro Cloud retires a pack version in the registries it owns. The listing

@@ -461,7 +461,9 @@ is the path as a list: strings for keys, numbers for indexes, and
     the command listed. With `--cloud`, that is the newest version for that
     cloud, and not the newest the registry holds. `state` is `deprecated`,
     `disabled`, or `deleted` when the listing gives one, and strata leaves out
-    the field when it gives none. `listed`: when Palette first listed the
+    the field when it gives none. `paletteLatest`, only when true: the version
+    that Palette calls the latest, from `metadata.annotations.latestVersion` of
+    the listing. `--latest` keeps it too. `listed`: when Palette first listed the
     version, from `metadata.creationTimestamp` of the listing; absent when the
     listing gives no time.
   - `versionsOffered`: how many versions of the pack the registry holds, before
@@ -486,7 +488,8 @@ is the path as a list: strings for keys, numbers for indexes, and
     `absent` when the registry no longer lists the pinned version.
   - `pinnedBy[]`: `path` and `subject` of each record that pins it.
   - `newer[]`: the newer versions that a person can move to, newest first, each
-    with `version`, `state` when the registry gives one, and `listed`.
+    with `version`, `state` when the registry gives one, `paletteLatest` when
+    Palette calls it the latest, and `listed`.
   - `behind`: `true` when `newer` is not empty.
   - `bump`, for a pin that is behind, unless `--no-impact`: `to`, the newest
     version, `impact`, the impact level, and `flags[]`.

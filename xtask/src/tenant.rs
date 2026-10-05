@@ -1956,6 +1956,51 @@ impl Tenant {
         self.write(project, &path, &listing);
     }
 
+    /// Publish a rebuild of one version of a pack in the Public Repo as `<version>-rev1`, as
+    /// Spectro Cloud publishes `1.19.3-rev1` of cert-manager. Palette orders the versions by
+    /// semantic version, so the rebuild sorts below its base: the mark `latestVersion` and the
+    /// floating tags stay on the base, and the rebuild gets only its exact tag.
+    pub fn rebuild_pack_version(&self, project: &str, name: &str, version: &str) {
+        let rebuild = format!("{version}-rev1");
+        let path = format!("v1/packs@filters=spec.name={name}&limit=100&offset=0");
+        let mut listing = self.read(project, &path);
+        let Some(items) = listing["items"].as_array_mut() else {
+            return;
+        };
+        let Some(mut copy) = items
+            .iter()
+            .find(|i| i["spec"]["version"] == version && i["spec"]["registryUid"] == PUBLIC_REPO)
+            .cloned()
+        else {
+            return;
+        };
+        // a pack uid of Palette is 24 hex digits: the rebuild changes the last one
+        let base = copy["metadata"]["uid"].as_str().unwrap_or_default();
+        let uid = format!("{}f", &base[..base.len().saturating_sub(1)]);
+        copy["metadata"]["uid"] = json!(uid);
+        copy["metadata"]["annotations"]["latestVersion"] = json!("false");
+        copy["spec"]["version"] = json!(rebuild);
+        items.push(copy);
+        let count = items.len();
+        listing["listmeta"]["count"] = json!(count);
+        self.write(project, &path, &listing);
+
+        let path = format!("v1/packs/{name}/registries/{PUBLIC_REPO}");
+        let mut entity = self.read(project, &path);
+        let above = entity["tags"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .find(|t| t["tag"] == version)
+            .map(|t| t["parentTags"].clone())
+            .unwrap_or(Value::Null);
+        if let Some(tags) = entity["tags"].as_array_mut() {
+            tags.push(json!({"packUid": uid, "parentTags": above, "tag": rebuild,
+                             "version": rebuild}));
+        }
+        self.write(project, &path, &entity);
+    }
+
     /// Give one version of a pack in the listing of the Public Repo a template, as
     /// `spec.template` of `v1PackSummarySpec`. Palette gives each option of an input parameter
     /// with its label and dependencies, and with no presets.

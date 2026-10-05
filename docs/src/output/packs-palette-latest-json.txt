@@ -1,0 +1,3 @@
+$ strata packs cert-manager --latest --json | jq -c '.registries[0].versions[] | {version, latest, paletteLatest}'
+{"version":"1.21.1-rev1","latest":true,"paletteLatest":null}
+{"version":"1.21.1","latest":false,"paletteLatest":true}
