@@ -11092,7 +11092,10 @@ fn behind_marks_the_newer_version_that_palette_calls_the_latest_and_names_it_on_
             release,
             pack_summary_with("1.65.0-rev1", None, &["aws"]),
         ],
-        &[("reg-public", public_entity())],
+        &[(
+            "reg-public",
+            with_tag(public_entity(), "1.65.0-rev1", "pk-1.65.0-rev1"),
+        )],
     );
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("dev.json");
