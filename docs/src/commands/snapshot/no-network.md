@@ -35,6 +35,14 @@ save, strata writes `********` in place of each value that is not empty. Strata
 reads only the code, the message, the pack name, and the keys, so `--from-raw`
 builds the same record.
 
+`cluster.json` keeps the document of the cluster. `--raw-dir` takes no cluster
+group, but a program can save a group with `RawCluster::save_dir`. Palette
+gives the values of a group with no mask, and they can hold a password. Before
+the save, strata writes `********` over each password, with the rule of the
+[record](other-objects.md#the-config-that-a-cluster-group-gives). When strata
+masks a value, it writes the values again from their canonical form, with no
+comments. So the record of the directory is the record of the fetch.
+
 `rbacs.json` and `namespaces.json` keep the role bindings and the namespaces
 of a cluster. A directory that an older version of strata saved has neither.
 The `policy` tier of its record then holds `null` for them.

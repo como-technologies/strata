@@ -216,9 +216,9 @@ pub(crate) fn mask_password_keys(values: &mut Value) {
 /// as a record keeps them.
 ///
 /// The rule of a password is the rule of [`mask_password_keys`]. When strata masks a value, it
-/// writes the values again from their canonical form, with no comments. So `--from-raw` gives the
-/// record of the fetch. Values with no password stay as they are. Values that are not YAML also
-/// stay as they are, as for a pack: strata cannot find a key in them.
+/// writes the values again from their canonical form, with no comments. So a record of the saved
+/// document is the record of the fetch. Values with no password stay as they are. Values that are
+/// not YAML also stay as they are, as for a pack: strata cannot find a key in them.
 pub(super) fn mask_group_values(values: &str) -> Result<String> {
     let Canon::Parsed(parsed) = canon_yaml(values) else {
         return Ok(values.to_string());
