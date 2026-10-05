@@ -43,8 +43,11 @@ under a pin name each record that pins it.
   version, and Palette shows the update to a person. Until the person applies
   it, the record pins the older version, and `behind` names the version that
   the tag names now. See [Tag names](../internals/palette/packs.md#tag-names).
-- **A pinned version that the registry no longer lists** says so, as
-  `the pinned version is absent`.
+- **A version that Palette does not serve in the tenant** is not a newer
+  version. In a FIPS tenant, it is a version that is not FIPS compliant. See
+  [The FIPS rule](../internals/palette/packs.md#the-fips-rule).
+- **A pinned version that the registry no longer lists**, or does not serve in
+  the tenant, says so, as `the pinned version is absent`.
 - A pack with no registry, such as a manifest pack, has no pins.
 
 `--no-impact` skips the comparison of each bump: it costs two pack reads for each

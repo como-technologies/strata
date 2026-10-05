@@ -117,6 +117,14 @@ a record of it as `UNVERIFIED`, and `same-release` refuses it without
 live example
 [checks a pack of a Zarf registry](../development/live-runs.md#registry-kindssh).
 
+Palette applies the FIPS rule of the tenant to the answer of the registry, and
+not to the listing. So in a FIPS tenant, the listing holds a version that
+Palette refuses in a profile, and the registry gives that version no tag.
+Strata leaves out each version that has no tag in the answer of the registry,
+unless its state is `disabled` or `deleted`. The count of versions in the
+heading does not include it. See
+[The FIPS rule](../internals/palette/packs.md#the-fips-rule).
+
 | Exit | Meaning |
 | --- | --- |
 | `0` | The listing, which can be empty when `--cloud` keeps nothing. |

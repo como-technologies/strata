@@ -33,6 +33,8 @@ These are open:
   other than ECR and the Docker registry: ACR, GHCR, Harbor, and JFrog
   Artifactory are named on the public page, and no run uses one.
 - The variables of a cluster template while the template applies.
+- A Palette that runs in FIPS mode: no run uses one. See
+  [The FIPS rule](packs.md#the-fips-rule).
 - The record of a version that a cluster template links:
   [template.sh](../../development/live-runs.md#templatesh) checks that its root
   is the root before the link, and no run of that check has a result yet.

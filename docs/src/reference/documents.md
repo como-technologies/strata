@@ -458,7 +458,10 @@ is the path as a list: strings for keys, numbers for indexes, and
 
 - `name`: the pack that was asked for, and `cloud` when `--cloud` was given.
 - `registries[]`: one entry per registry that has the pack, with `registry`,
-  `registryUid`, `layer`, and `versions[]`.
+  `registryUid`, `layer`, and `versions[]`. A version that has no tag in the
+  answer of the registry is not in `versions[]`, unless it is disabled or
+  deleted: Palette does not serve it in this tenant. See
+  [The FIPS rule](../internals/palette/packs.md#the-fips-rule).
   - A version: `version`, `packUid`, `digest`, `type`, `cloudTypes[]`, `tags[]`
     with the exact tag first, and `latest`, which is true for the newest version
     the command listed. With `--cloud`, that is the newest version for that
@@ -472,7 +475,7 @@ is the path as a list: strings for keys, numbers for indexes, and
     `--latest` keeps it too. `listed`: when Palette first listed the
     version, from `metadata.creationTimestamp` of the listing; absent when the
     listing gives no time.
-  - `versionsOffered`: how many versions of the pack the registry holds, before
+  - `versionsOffered`: how many versions of the pack the registry offers, before
     `--latest` or `--cloud` cut the list.
   - `tagsUnavailable`: `true` when Palette lists the pack under the registry and
     then answers 404 for its tags, also with the `states` query. The versions
@@ -496,7 +499,7 @@ is the path as a list: strings for keys, numbers for indexes, and
     `newer`, and the pin is behind.
   - `pinnedState`: `deprecated`, `disabled`, or `deleted`, as `state` of
     `strata-packs/1`, or `absent` when the registry no longer lists the pinned
-    version.
+    version, or does not serve it in this tenant.
   - `pinnedBy[]`: `path` and `subject` of each record that pins it.
   - `newer[]`: the newer versions that a person can move to, newest first, each
     with `version`, `state` when the registry gives one, `paletteLatest` when

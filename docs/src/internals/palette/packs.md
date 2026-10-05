@@ -456,7 +456,8 @@ record.
 
 The listing can name a registry that then answers 404 for the pack. It does so
 for a pack that Spectro Cloud disabled or deleted: see
-[Pack states](#pack-states).
+[Pack states](#pack-states). In a FIPS tenant, the answer also leaves out each
+version that is not FIPS compliant: see [The FIPS rule](#the-fips-rule).
 
 ## The cloud type `all`
 
@@ -564,6 +565,32 @@ Strata reads the state from the listing:
 
 Palette applies a pack constraint when a profile is created, and not through this
 answer: see [A pack that requires another pack](#a-pack-that-requires-another-pack).
+
+## The FIPS rule
+
+A Palette that runs in FIPS mode applies a FIPS rule to the packs of a tenant.
+The setting is `fipsPackConfig.mode` in
+`GET /v1/tenants/<uid>/preferences/fips`. With the mode `nonFipsEnabled`, the
+tenant can use each pack. With each other mode, Palette serves only a version
+whose annotation `fips` is `true` or `unknown`:
+
+| Request | The FIPS rule |
+| --- | --- |
+| `GET /v1/packs?filters=spec.name=<name>`, the listing | not applied: the listing holds each version |
+| `GET /v1/packs/<name>/registries/<uid>` | applied: no tag and no `packValues` row for another version |
+| `POST /v1/packs/search` | applied, but the answer has one row for each pack name, and no list of versions |
+| A new profile that pins another version | Palette refuses it with `PackForbidden` |
+
+Strata asks the registry answer, and does not copy the rule. `strata packs` and
+`strata behind` leave out a version of the listing that has no tag in the
+registry answer, unless the listing gives it the state `disabled` or `deleted`.
+See [strata packs](../../commands/packs.md#what-to-expect).
+
+The live tenant has the mode `none`, and its Palette does not run in FIPS mode.
+No listed version has the annotation `fips`, and the registry answer gives each
+version its tags, except a disabled or a deleted version. So no live run shows
+the rule. A test with the memory client shows `packs` and `behind` in a FIPS
+tenant.
 
 ## The annotations of a pack reference
 

@@ -48,7 +48,7 @@ pub struct PackRegistry {
     pub layer: String,
     /// The versions, newest first. `--latest` keeps one of them.
     pub versions: Vec<PackBuild>,
-    /// How many versions of the pack the registry holds, before `--latest` or `--cloud` cut the
+    /// How many versions of the pack the registry offers, before `--latest` or `--cloud` cut the
     /// list. A heading states the registry's inventory, and not the count of rows a flag left.
     pub versions_offered: usize,
     /// True when Palette listed the pack under this registry and then answered 404 for the tags
@@ -181,8 +181,10 @@ fn merged_tags(answers: &[Value]) -> Vec<Value> {
 /// List what the registries offer for one pack.
 ///
 /// Reads the paged listing for the versions, their digests and their types, and each registry's
-/// own answer for the tags that point at a version. A registry that does not have the pack is not
-/// in the answer; no registry with it at all is `pack-not-found`.
+/// own answer for the tags that point at a version. A version with no tag in that answer, and no
+/// disabled or deleted state, is not in the answer: Palette does not serve it in the tenant. A
+/// registry that does not have the pack is not in the answer; no registry with it at all is
+/// `pack-not-found`.
 pub fn registry_packs<A, F>(
     name: &str,
     options: &PackOptions,
