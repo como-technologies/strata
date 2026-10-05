@@ -266,23 +266,23 @@ The checks, in order:
 4. The checks of a create that the route has. Palette runs them at the same
    time, and gives the first error in an order that is not fixed. So when two
    checks fail, a request can give either error. The checks are:
-   - the limits of 200 packs and 200 manifests,
-     `SubResourceLimitValidationFailure`,
-   - the cloud type, `UnSupportedCloudType`,
-   - two dashboard packs that cannot go together,
-     `ClusterDashboardPacksMutuallyExclusive`,
-   - the name of each manifest, and of each manifest pack, as a DNS-1123 label
-     of 32 characters at most, `InvalidName`,
-   - one pack name two times, `DuplicatePacksForbidden`,
-   - one manifest name two times in a pack, `DuplicatePackManifestsForbidden`,
-   - two versions of one pack, `MultiPackVersionsForbidden`,
-   - the YAML of the values and the manifests, `PackValuesYamlInvalid` and
-     `PackManifestYamlInvalid`,
-   - the integration packs, `PackSpectroIntegrationNotSupported`,
-   - the name and the version, as the name route checks them,
-   - a macro that the values use and that Palette does not define,
-     `PackMacroUndefined`, HTTP 404,
-   - the variables, and the values and the dependencies of each pack,
+   - The limits of 200 packs and 200 manifests:
+     `SubResourceLimitValidationFailure`.
+   - The cloud type: `UnSupportedCloudType`.
+   - Two dashboard packs that cannot go together:
+     `ClusterDashboardPacksMutuallyExclusive`.
+   - The name of each manifest, and of each manifest pack, as a DNS-1123 label
+     of 32 characters at most: `InvalidName`.
+   - One pack name two times: `DuplicatePacksForbidden`.
+   - One manifest name two times in a pack: `DuplicatePackManifestsForbidden`.
+   - Two versions of one pack: `MultiPackVersionsForbidden`.
+   - The YAML of the values and the manifests: `PackValuesYamlInvalid` and
+     `PackManifestYamlInvalid`.
+   - The integration packs: `PackSpectroIntegrationNotSupported`.
+   - The name and the version, as the name route checks them.
+   - A macro that the values use and that Palette does not define:
+     `PackMacroUndefined`, HTTP 404.
+   - The variables, and the values and the dependencies of each pack:
      `ClusterProfileCreationValidationFailure`.
 
 The answer is `200` with the body that Palette takes, and the registry of each
@@ -297,11 +297,11 @@ Palette makes. Only the create checks them: see
 
 A live run shows that the route refuses each of these faults:
 
-- a pack name two times: `DuplicatePacksForbidden`,
-- two equal packs: HTTP 422 and `610`,
-- a manifest name that is not a DNS label: `InvalidName`,
-- a manifest name two times in a pack: `DuplicatePackManifestsForbidden`,
-- the version `2.2.2.develop`: `VersionParseFailure`.
+- A pack name two times: `DuplicatePacksForbidden`.
+- Two equal packs: HTTP 422 and `610`.
+- A manifest name that is not a DNS label: `InvalidName`.
+- A manifest name two times in a pack: `DuplicatePackManifestsForbidden`.
+- The version `2.2.2.develop`: `VersionParseFailure`.
 
 It takes a candidate of `cert-manager` 1.21.1 from the Public Repo. See
 [validate-packs.sh](../../development/live-runs.md#validate-packssh).

@@ -94,12 +94,14 @@ version across pages, and `packs` counts it once. A pack with more than a
 hundred versions lists completely: `kubernetes` in `Public Repo` had 133
 versions, which [the live example checks](../development/live-runs.md#packssh).
 
-A version that Spectro Cloud retired has its state in the last column:
-`deprecated`, `disabled`, or `deleted`. When every version in a registry has the
-same state, the heading says it too. The answer for the tags does not include
-the disabled and the deleted versions. So when the listing shows such
-a version, strata asks again with the `states` query, and each version gets its
-tags. A version that Palette refuses in a profile, with the mark `disabled` of
+A version that Spectro Cloud retired has its state in the last column of the
+terminal, and after the version in markdown: `deprecated`, `disabled`, or
+`deleted`. When every version in a registry has the same state, the heading
+says it too. The answer for the tags does not include the disabled and the
+deleted versions. So when the listing shows such a version, strata asks again
+with the `states` query, and each version gets its tags.
+
+A version that Palette refuses in a profile, with the mark `disabled` of
 Spectro Cloud, also says `disabled`. Palette serves its tags, so strata asks
 nothing more for it. A profile cannot hold a disabled or a deleted version: see
 [Pack states](../internals/palette/packs.md#pack-states).
@@ -114,8 +116,9 @@ command. The live example
 
 Some registries give no digest for a pack: a Helm registry with
 synchronization off, and an OCI registry with the provider type `zarf`. A
-version with no digest has `no digest` in the last column. When no version in
-the registry has a digest, the heading says `no digests` too:
+version with no digest has `no digest` in the last column of the terminal, and
+after the version in markdown. When no version in the registry has a digest,
+the heading says `no digests` too:
 
 ```text
 {{#include ../output/nodigest-chart-packs.txt}}

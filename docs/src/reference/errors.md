@@ -120,9 +120,9 @@ code is the number `610`. `snapshot --validate` prints it as the answer of
 Palette too.
 
 For a candidate, `snapshot --validate` also asks
-`GET /v1/clusterprofiles/validate/name`. It refuses the name or the version
-with HTTP `500` and one of these codes, or with HTTP `409` and
-`ClusterProfileAlreadyExists`, a name and a version that the project holds:
+`GET /v1/clusterprofiles/validate/name`. It refuses a name and a version that
+the project holds with HTTP `409` and `ClusterProfileAlreadyExists`. It refuses
+the name or the version with HTTP `500` and one of these codes:
 
 | Code | Palette refuses |
 | --- | --- |
@@ -130,9 +130,10 @@ with HTTP `500` and one of these codes, or with HTTP `409` and
 | `VersionParseFailure` | A version that does not parse as semver. |
 
 It also asks `POST /v1/clusterprofiles/import/validate`. It refuses the whole
-request with HTTP `500` and one of these codes, with HTTP `409` and
-`ClusterProfileAlreadyExists`, with HTTP `404` and `PackMacroUndefined`, a
-macro that Palette does not define, or with the HTTP `422` of the API schema:
+request with HTTP `409` and `ClusterProfileAlreadyExists`, or with HTTP `404`
+and `PackMacroUndefined`, a macro that Palette does not define. It refuses a
+body that the API schema does not take with HTTP `422`. It refuses the whole
+request with HTTP `500` and one of these codes:
 
 | Code | Palette refuses |
 | --- | --- |
@@ -153,7 +154,7 @@ macro that Palette does not define, or with the HTTP `422` of the API schema:
 | `ClusterProfileCreationValidationFailure` | The variables, or the values and the dependencies of a pack. |
 
 When the import validate route finds no registry that holds a pack of the body,
-it checks nothing, and gives HTTP `500` with one of these codes. Strata does not
+it checks nothing. It gives HTTP `500` with one of these codes. Strata does not
 send it again, and the error is `api`, because Palette gave no answer about the
 candidate: `ClusterProfileImportRegistriesNotFound`,
 `ClusterProfileImportOciRegistriesNotFound`,
