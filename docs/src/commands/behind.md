@@ -26,6 +26,12 @@ under a pin name each record that pins it.
 - **A newer version** is one that a person can move to. A version that the
   registry has disabled or deleted is not, and a version for none of the clouds
   of the pinned version is not either. A deprecated version is, and it says so.
+- **A newer version that drops an architecture** says so: `1.36.2 (drops arm64)`.
+  The registry names the processor architectures of most versions, `amd64` or
+  `amd64,arm64`, and a newer version can support fewer than the pinned one.
+  Strata says nothing when the listing names the architectures of only one of
+  the two. See
+  [The architectures of a version](../internals/palette/packs.md#the-architectures-of-a-version).
 - **A floating tag**, such as `LTS__24.x`, names a version that changes.
   Strata reads the version that the tag names now, and shows it as `now`. It
   also reads a tag that names a disabled or a deleted version. A pin of an

@@ -225,6 +225,8 @@ registries the tenant can see, including one pack that two registries hold.
 | `os-pack-registry`, `os-annotations-registry` | 0 | #189: the annotations of the pack reference are those of the pack version in the registry: see [The annotations of a pack reference](../internals/palette/packs.md#the-annotations-of-a-pack-reference). A run of #189 read the pack reference from the record. No run has a result yet from the document of the profile |
 | `pack-time-listing` | 0 | #191: the listing gives each version of the CSI pack a `lastModifiedTimestamp` that is the same as its `creationTimestamp`: see [What a registry answers about a pack](../internals/palette/packs.md#what-a-registry-answers-about-a-pack) |
 | `verify-no-time` | 0 | #191: `verify --json` gives no `verify.lastModified` for a pack record |
+| `arch-listing` | 0 | #126: the listing names the architectures of `loki` 2.10.2 as `amd64,arm64`, and of 3.6.7 as `amd64`: see [The architectures of a version](../internals/palette/packs.md#the-architectures-of-a-version) |
+| `arch-record`, `arch-behind`, `arch-behind-says`, `arch-behind-json` | 0, 1, 0, 0 | #126: a record of `loki` 2.10.2 is behind 3.6.7, and `behind` says that the move drops `arm64`, in the line and in `newer[].drops` |
 
 Palette lists the registries of a tenant in no fixed order, so strata sorts them
 and the ambiguous-ref message reads the same every time:

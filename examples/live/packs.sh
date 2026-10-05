@@ -12,6 +12,7 @@
 #   4  the options of a pack template, and a candidate whose values select one (#151)
 #   5  the annotations of the OS pack: the pack ref, the registry, and a record (#189, #253)
 #   6  the time of a pack in the listing, and no such time in verify (#191)
+#   7  the architectures of a version, and what a move to a newer version drops (#126)
 #
 # The CSI versions are the one the live profiles pin and an older one, from the file of the cloud
 # in terraform/. On AWS they are the two that the offline examples also use. Results go under runs/<UTC time>/packs/, or OUT. Exit 0 only when no
@@ -188,6 +189,20 @@ check pack-time-listing 0 "#191: the listing gives each version of $pack a lastM
   bash -c "\"$live/api.sh\" get '/v1/packs?filters=spec.name=$pack&limit=100' | jq -e '[.items[].metadata] | length > 0 and all(.lastModifiedTimestamp == .creationTimestamp)'"
 check verify-no-time 0 '#191: verify --json gives no verify.lastModified for a pack record' -- \
   bash -c "\"$strata\" verify pack.json --json | jq -e '.verify | has(\"lastModified\") | not'"
+
+# The listing names the architectures of a version. In the Public Repo, loki 2.10.2 supports
+# amd64 and arm64, and 3.6.7 supports amd64 alone, so behind says what the move drops.
+echo "== the architectures of a version, and what a move drops (#126)" | tee -a steps.log
+check arch-listing 0 '#126: the listing names the architectures of loki 2.10.2 as amd64,arm64, and of 3.6.7 as amd64' -- \
+  bash -c "\"$live/api.sh\" get '/v1/packs?filters=spec.name=loki&limit=100' | jq -e '.items | (map(select(.spec.version == \"2.10.2\") | .spec.annotations.architecture) | index(\"amd64,arm64\") != null) and (map(select(.spec.version == \"3.6.7\") | .spec.annotations.architecture) | index(\"amd64\") != null)'"
+check arch-record 0 '#126: a record of loki 2.10.2 from the Public Repo' -- \
+  "$strata" snapshot "pack:$reg/loki@2.10.2" -o loki.json
+check arch-behind 1 '#126: the record is behind 3.6.7' -- \
+  "$strata" behind loki.json --no-impact
+check arch-behind-says 0 '#126: the line says that the move to 3.6.7 drops arm64' -- \
+  grep -Eq '^~ \[addon\] loki +2\.10\.2 +Public Repo +behind: .*3\.6\.7 \(drops arm64\)' arch-behind.out
+check arch-behind-json 0 '#126: --json gives newer[].drops on 3.6.7' -- \
+  bash -c "\"$strata\" behind loki.json --no-impact --json | jq -e '[.pins[0].newer[] | select(.version == \"3.6.7\") | .drops] == [[\"arm64\"]]'"
 
 echo
 echo "$script: $(grep -c PASS steps.log) passed, $failures failed; results in $run"
