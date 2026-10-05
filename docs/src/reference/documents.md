@@ -509,6 +509,15 @@ is the path as a list: strings for keys, numbers for indexes, and
     did not know. Absent when the previous report had no pin of the pack in
     that registry.
   - `error`, when strata could not check the pin.
+  - `registrySync`, for a pin that is current whose registry did not complete
+    its last sync: the last sync, with the fields of `verify.registrySync` in
+    [strata-diff/1](#strata-diff1). The copy of the registry in Palette is
+    then the copy of an earlier sync, and `current` is against that copy.
+    Absent for a pin that is behind, when the last sync completed, when the
+    registry does not sync, and when Palette does not answer.
+  - `registrySyncError`, for a pin that is current: why strata could not read
+    the last sync of the registry. `registrySync` is then absent, and the pin
+    stays current.
 - `summary`: `pins`, `behind`, `floating`, `errors`, and `arrived`.
 
 ## strata-set/1

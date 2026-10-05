@@ -2341,6 +2341,82 @@ fn packs_sh_counts_the_versions_of_all_registries_against_the_100_of_one_page() 
     assert!(steps.contains("FAIL  packs-paged-count"), "{steps}");
 }
 
+/// A run of packs.sh whose Helm summary listing gives the Bitnami registry the sync `sync`, and
+/// whose `strata behind` on the record of the newest nginx of Bitnami prints `line` and `json`.
+/// Gives steps.log.
+fn packs_stale(sync: &str, line: &str, json: &str) -> String {
+    let mut stage = Stage::new(serde_json::json!({
+        "csi_pack_name": "csi-aws-ebs", "csi_previous_version": "1.63.1",
+        "csi_version": "1.65.0", "cloud": "aws",
+    }));
+    stage.route(
+        "/v1/registries/helm/summary",
+        &format!(
+            r#"{{"items":[{{"metadata":{{"name":"Bitnami","uid":"reg-bitnami"}},"status":{{"sync":{sync}}}}}]}}"#
+        ),
+    );
+    stage.strata(
+        "packs nginx --registry Bitnami --latest --json",
+        0,
+        r#"{"registries":[{"versions":[{"version":"25.1.5"}]}]}"#,
+    );
+    stage.strata("snapshot pack:Bitnami/nginx@25.1.5 -o nginx.json", 0, "{}");
+    stage.strata("behind nginx.json --no-impact", 0, line);
+    stage.strata("behind nginx.json --no-impact --json", 0, json);
+    let (_, steps) = stage.run("packs.sh", &[]);
+    steps
+}
+
+#[test]
+fn packs_sh_stage_8_checks_the_sync_note_of_a_pin_that_is_current_against_an_older_copy() {
+    // the sync of Bitnami stays in progress: the line names the sync, and the JSON carries it
+    let steps = packs_stale(
+        r#"{"status":"InProgress","lastSyncedTime":"2026-08-29T00:00:11.032Z","lastRunTime":"2026-10-05T18:04:27.776Z","isSyncSupported":true}"#,
+        "1 pin from 1 record: 0 behind\n  [addon] nginx  25.1.5  Bitnami  current; a sync of the \
+         registry is in progress since 2026-10-05T18:04:27.776Z, and the last complete sync of \
+         the registry started 2026-08-29T00:00:11.032Z\n",
+        r#"{"pins":[{"registrySync":{"status":"InProgress"}}]}"#,
+    );
+    passed(
+        &steps,
+        &[
+            "bitnami-sync",
+            "stale-record",
+            "stale-current",
+            "stale-note",
+            "stale-json",
+        ],
+    );
+    assert!(!steps.contains("stale-no-note"), "{steps}");
+
+    // the last sync failed: the line names the last complete sync and the failure
+    let steps = packs_stale(
+        r#"{"status":"Failed","lastSyncedTime":"2025-10-16T00:00:11.742Z","message":"invalid helm registry http status 404","isSyncSupported":true}"#,
+        "1 pin from 1 record: 0 behind\n  [addon] nginx  25.1.5  Bitnami  current; the last \
+         complete sync of the registry started 2025-10-16T00:00:11.742Z; the last sync of the \
+         registry failed: invalid helm registry http status 404\n",
+        r#"{"pins":[{"registrySync":{"status":"Failed"}}]}"#,
+    );
+    passed(&steps, &["stale-note", "stale-json"]);
+
+    // the last sync completed: the pin has no note
+    let steps = packs_stale(
+        r#"{"status":"Completed","lastSyncedTime":"2026-10-05T00:00:14.200Z","lastRunTime":"2026-10-05T00:00:14.200Z","isSyncSupported":true}"#,
+        "1 pin from 1 record: 0 behind\n  [addon] nginx  25.1.5  Bitnami  current\n",
+        r#"{"pins":[{}]}"#,
+    );
+    passed(&steps, &["stale-current", "stale-no-note"]);
+    assert!(!steps.contains("stale-note"), "{steps}");
+
+    // a line with no note while the last sync did not complete fails the check
+    let steps = packs_stale(
+        r#"{"status":"Failed","lastSyncedTime":"2025-10-16T00:00:11.742Z","isSyncSupported":true}"#,
+        "1 pin from 1 record: 0 behind\n  [addon] nginx  25.1.5  Bitnami  current\n",
+        r#"{"pins":[{}]}"#,
+    );
+    assert!(steps.contains("FAIL  stale-note"), "{steps}");
+}
+
 #[test]
 fn validate_packs_sh_stage_4_makes_a_profile_whose_pack_has_another_layer_than_its_registry() {
     let mut stage = Stage::new(serde_json::json!({}));

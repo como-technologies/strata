@@ -1,0 +1,4 @@
+$ strata behind csi-oci.json
+1 pin from 1 record: 0 behind
+  [csi  ] csi-aws-ebs  1.65.0  Palette Registry  current; a sync of the registry is in progress since 2026-09-17T09:00:00.000Z, and the last complete sync of the registry started 2026-08-29T00:00:11.032Z; the recovery of the sync is Recovering: sync interrupted
+      pinned by csi-oci.json (pack csi-aws-ebs@1.65.0)

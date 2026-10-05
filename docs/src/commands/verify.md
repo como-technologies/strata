@@ -201,9 +201,10 @@ record ends with the last sync of the registry:
 - `; a sync of the registry is in progress since <time>, and the last complete
   sync of the registry started <time>`: a sync runs now. The copy is the copy
   of the last complete sync until the sync that runs completes.
-- `; the last sync of the registry failed: <message>`: the last sync failed,
-  and the message is from Palette. The copy can be old, so `OK` says only that
-  the copy did not change.
+- `; the last complete sync of the registry started <time>; the last sync of
+  the registry failed: <message>`: the last sync failed, and the message is
+  from Palette. The copy is the copy of the last complete sync, so `OK` says
+  only that the copy did not change.
 - `; the recovery of the sync is <state>: <message>`: a sync stopped before
   its end, and Palette recovers it. The state is `Interrupted` or
   `Recovering`. This note can follow each of the notes above.
@@ -218,7 +219,10 @@ request with a 5xx, or the request does not complete, strata writes a note to
 stderr and gives the verdict with no sync note. The status and the exit of the
 verdict do not change: an unchanged pack is `OK` and exits `0`.
 
-With many records, the line of a pack record ends with the same note.
+With many records, the line of a pack record ends with the same note. `behind`
+ends the line of a pin that is current with the same note, when the last sync
+of the registry did not complete: see
+[A pin that is current against an older copy](./behind.md#a-pin-that-is-current-against-an-older-copy).
 
 ```text
 {{#include ../output/pack-verify-json.txt}}

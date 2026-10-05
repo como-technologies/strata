@@ -13,6 +13,7 @@
 #   5  the annotations of the OS pack: the pack ref, the registry, and a record (#189, #253)
 #   6  the time of a pack in the listing, and no such time in verify (#191)
 #   7  the architectures of a version, and what a move to a newer version drops (#126)
+#   8  a pin that is current against the copy of a registry whose last sync did not complete (#122)
 #
 # The CSI versions are the one the live profiles pin and an older one, from the file of the cloud
 # in terraform/. On AWS they are the two that the offline examples also use. Results go under runs/<UTC time>/packs/, or OUT. Exit 0 only when no
@@ -203,6 +204,29 @@ check arch-behind-says 0 '#126: the line says that the move to 3.6.7 drops arm64
   grep -Eq '^~ \[addon\] loki +2\.10\.2 +Public Repo +behind: .*3\.6\.7 \(drops arm64\)' arch-behind.out
 check arch-behind-json 0 '#126: --json gives newer[].drops on 3.6.7' -- \
   bash -c "\"$strata\" behind loki.json --no-impact --json | jq -e '[.pins[0].newer[] | select(.version == \"3.6.7\") | .drops] == [[\"arm64\"]]'"
+
+# A pin that is current is current against the copy of its registry in Palette. When the last sync
+# of the registry did not complete, the copy is the copy of an earlier sync, and the pin names that
+# sync (#122). The Bitnami registry of the tenant is the case: its sync stays InProgress. The check
+# reads the state of the sync first, so it holds when the sync completes one day.
+echo "== a pin that is current against the copy of an older sync (#122)" | tee -a steps.log
+check bitnami-sync 0 '#122: the Helm summary listing gives the sync of the Bitnami registry' -- \
+  "$live/api.sh" get /v1/registries/helm/summary
+bitnami_sync=$(jq -r '.items[] | select(.metadata.name == "Bitnami") | .status.sync.status' bitnami-sync.out)
+nginx=$("$strata" packs nginx --registry Bitnami --latest --json | jq -r '.registries[0].versions[0].version')
+check stale-record 0 "#122: a record of nginx@$nginx from Bitnami, whose last sync is $bitnami_sync" -- \
+  "$strata" snapshot "pack:Bitnami/nginx@$nginx" -o nginx.json
+check stale-current 0 '#122: the newest version of the copy is current' -- \
+  "$strata" behind nginx.json --no-impact
+if [ "$bitnami_sync" = Completed ]; then
+  check stale-no-note 0 '#122: the last sync completed, so the pin has no sync note' -- \
+    bash -c "! grep -q 'sync of the registry' stale-current.out"
+else
+  check stale-note 0 '#122: the pin is current against the copy of an older sync, and its line names that sync' -- \
+    grep -qE 'current.*(a sync of the registry is in progress since .*, and the last complete sync of the registry started|the last complete sync of the registry started .*; the last sync of the registry failed)' stale-current.out
+  check stale-json 0 '#122: --json gives pins[0].registrySync with the status that Palette gives' -- \
+    bash -c "\"$strata\" behind nginx.json --no-impact --json | jq -e --arg s \"$bitnami_sync\" '.pins[0].registrySync.status == \$s'"
+fi
 
 echo
 echo "$script: $(grep -c PASS steps.log) passed, $failures failed; results in $run"

@@ -1103,6 +1103,8 @@ pub struct Verify {
     pub registry_sync_error: Option<String>,
 }
 
+/// The status that Palette gives to a sync of a registry that completed.
+const SYNC_COMPLETED: &str = "Completed";
 /// The status that Palette gives to a sync of a registry that runs.
 const SYNC_IN_PROGRESS: &str = "InProgress";
 /// The status that Palette gives to a sync of a registry that failed.
@@ -1133,6 +1135,12 @@ pub struct RegistrySync {
 }
 
 impl RegistrySync {
+    /// Whether the last sync of the registry completed: the copy of the registry in Palette is
+    /// then the copy of the last run.
+    pub fn completed(&self) -> bool {
+        self.status == SYNC_COMPLETED
+    }
+
     /// Whether a sync of the registry runs now.
     pub fn in_progress(&self) -> bool {
         self.status == SYNC_IN_PROGRESS
