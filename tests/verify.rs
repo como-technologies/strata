@@ -1994,7 +1994,7 @@ fn a_policy_tier_of_strata_0_18_with_agent_upgrades_still_verifies() {
 }
 
 #[test]
-fn a_404_of_the_route_of_the_bindings_records_null_and_another_error_is_a_field_of_the_tier() {
+fn a_404_of_the_route_of_the_bindings_records_null_and_another_error_leaves_out_the_field() {
     let dir = tempfile::tempdir().unwrap();
     common::make_fixtures(dir.path());
     // the route of the role bindings answers 404, and the cluster has no namespace
@@ -2011,7 +2011,10 @@ fn a_404_of_the_route_of_the_bindings_records_null_and_another_error_is_a_field_
     let forbidden = serve_policy(dir.path(), barney()).failing(rbacs_route(), 403, "forbidden\n");
     let s = snapshot_cluster(&forbidden, None).unwrap();
     let tier = &s.source.cluster.as_ref().unwrap().tiers["policy"];
-    assert_eq!(tier.fields["rbacs"], Value::Null);
+    assert!(
+        tier.fields.get("rbacs").is_none(),
+        "an error is not a value"
+    );
     assert_eq!(
         tier.fields["timezone"], "Etc/UTC",
         "the other fields are read"
@@ -2028,11 +2031,12 @@ fn a_404_of_the_route_of_the_bindings_records_null_and_another_error_is_a_field_
         json["source"]["cluster"]["tiers"]["policy"]["errors"]["rbacs"],
         "HTTP 403: forbidden"
     );
-    // the error is not part of the hash: a 404 gives the same fields, and no error
+    // a 404 records null and no error, and the hash of a 403 does not cover that null
     let missing = serve_policy(dir.path(), barney()).failing(rbacs_route(), 404, "not found");
     let m = snapshot_cluster(&missing, None).unwrap();
     let missing_tier = &m.source.cluster.as_ref().unwrap().tiers["policy"];
-    assert_eq!(missing_tier.hash, tier.hash);
+    assert_eq!(missing_tier.fields["rbacs"], Value::Null);
+    assert_ne!(missing_tier.hash, tier.hash);
     assert!(missing_tier.errors.is_empty());
     assert!(
         serde_json::to_value(&m).unwrap()["source"]["cluster"]["tiers"]["policy"]
@@ -2045,7 +2049,7 @@ fn a_404_of_the_route_of_the_bindings_records_null_and_another_error_is_a_field_
         serve_policy(dir.path(), barney()).failing(namespaces_route(), 403, "forbidden");
     let s = snapshot_cluster(&forbidden, None).unwrap();
     let tier = &s.source.cluster.as_ref().unwrap().tiers["policy"];
-    assert_eq!(tier.fields["namespaces"], Value::Null);
+    assert!(tier.fields.get("namespaces").is_none());
     assert_ne!(tier.fields["rbacs"], Value::Null);
     assert_eq!(
         tier.errors,
@@ -7052,6 +7056,58 @@ fn a_raw_directory_keeps_the_repave_with_no_value_and_gives_the_record_of_the_fe
             .pack,
         "kubernetes"
     );
+}
+
+#[test]
+fn a_raw_directory_keeps_each_read_error_so_the_record_is_the_record_of_the_fetch() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let mut cluster = read(&dir.path().join("cluster-merged").join("cluster.json"));
+    cluster["status"]["repave"] = serde_json::json!({"state": "Pending"});
+    cluster["spec"]["clusterConfig"] = serde_json::json!({"timezone": "Etc/UTC"});
+    // Palette refuses each document beside the copy, and the record still comes
+    let api = serve_repave(dir.path(), "cluster-merged", "Pending")
+        .with(format!("/v1/spectroclusters/{CLUSTER_UID}"), cluster)
+        .failing(REPAVE, 403, "forbidden")
+        .failing(NOTIFICATIONS, 403, "forbidden")
+        .failing(rbacs_route(), 403, "forbidden")
+        .failing(namespaces_route(), 403, "forbidden");
+    let fetched = Palette::new(api)
+        .fetch_cluster(CLUSTER_UID, &Progress::silent())
+        .unwrap();
+    let saved = dir.path().join("raw");
+    fetched.save_dir(&saved, "t0").unwrap();
+    assert!(saved.join("errors.json").is_file());
+    let direct = Snapshot::from_cluster(&fetched, None, "raw", "t0").unwrap();
+    let from_raw = ops::snapshot_from_dir(&saved, "raw", "t1").unwrap();
+    assert_eq!(
+        serde_json::to_value(&from_raw).unwrap(),
+        serde_json::to_value(&direct).unwrap()
+    );
+    let c = from_raw.source.cluster.unwrap();
+    assert_eq!(
+        c.updates_pending_error.as_deref(),
+        Some("HTTP 403: forbidden")
+    );
+    assert_eq!(
+        c.pending_repave_error.as_deref(),
+        Some("HTTP 403: forbidden")
+    );
+    let policy = &c.tiers["policy"];
+    assert_eq!(
+        policy.errors.keys().collect::<Vec<_>>(),
+        ["namespaces", "rbacs"]
+    );
+    // the tier holds no value for a field that strata could not read
+    assert!(policy.fields.get("rbacs").is_none() && policy.fields.get("namespaces").is_none());
+
+    // a fetch with no error saves no errors file
+    let clean = Palette::new(serve_repave(dir.path(), "cluster-merged", "Pending"))
+        .fetch_cluster(CLUSTER_UID, &Progress::silent())
+        .unwrap();
+    let saved = dir.path().join("raw-clean");
+    clean.save_dir(&saved, "t0").unwrap();
+    assert!(!saved.join("errors.json").exists());
 }
 
 // ---- a pack with no upstream digest ------------------------------------------------------------

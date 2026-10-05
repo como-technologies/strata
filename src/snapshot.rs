@@ -355,18 +355,34 @@ pub struct ClusterTier {
     pub hash: String,
     /// What the tier covers, as Palette gives it.
     pub fields: Value,
-    /// Each field that strata could not read, with why: `rbacs` and `HTTP 403: <body>`. The field
-    /// is null in `fields`, and `compare` and `verify` do not compare it. Not part of the hash.
+    /// Each field that strata could not read, with why: `rbacs` and `HTTP 403: <body>`. `fields`
+    /// does not hold such a field, and `compare` and `verify` do not compare it. The errors are
+    /// not part of the hash either. A record of strata 0.19 holds the field as null.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub errors: BTreeMap<String, String>,
 }
 
 impl ClusterTier {
+    /// A tier of `fields` that strata read in full.
     fn of(fields: Value) -> ClusterTier {
+        ClusterTier::with_errors(fields, BTreeMap::new())
+    }
+
+    /// A tier of `fields` less each field that `errors` names: a field that strata could not
+    /// read, with why.
+    ///
+    /// An error is not a value of the cluster, so the record does not hold the field, and the
+    /// hash does not cover it.
+    fn with_errors(mut fields: Value, errors: BTreeMap<String, String>) -> ClusterTier {
+        if let Some(m) = fields.as_object_mut() {
+            for key in errors.keys() {
+                m.remove(key);
+            }
+        }
         ClusterTier {
             hash: sha256_hex(&canonical_json(&fields)),
             fields,
-            errors: BTreeMap::new(),
+            errors,
         }
     }
 }
@@ -403,10 +419,10 @@ pub fn cluster_tiers(
     if let Some(config) = cluster.pointer("/spec/clusterConfig") {
         tiers.insert(
             "policy".to_string(),
-            ClusterTier {
-                errors: crate::policy::errors(raw),
-                ..ClusterTier::of(crate::policy::fields(raw, config))
-            },
+            ClusterTier::with_errors(
+                crate::policy::fields(raw, config),
+                crate::policy::errors(raw),
+            ),
         );
     }
     // the document of a cluster group has spec.clustersConfig, and no spec.clusterConfig
@@ -1414,11 +1430,11 @@ impl Snapshot {
                         .notifications
                         .as_ref()
                         .map(|_| !pending_updates.is_empty()),
-                    updates_pending_error: raw.notifications_error.clone(),
+                    updates_pending_error: raw.errors.notifications.clone(),
                     pending_updates,
                     repave_pending: Some(is_pending(&raw.cluster)),
                     pending_repave: raw.repave.as_ref().map(PendingRepave::read),
-                    pending_repave_error: raw.repave_error.clone(),
+                    pending_repave_error: raw.errors.repave.clone(),
                     macro_values: raw
                         .resolved_values
                         .as_ref()
@@ -1559,5 +1575,23 @@ impl Snapshot {
         };
         s.push('\n');
         Ok(s)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_tier_leaves_a_field_that_strata_could_not_read_out_of_its_fields_and_its_hash() {
+        let errors = BTreeMap::from([("rbacs".to_string(), "HTTP 403: forbidden".to_string())]);
+        let unread = ClusterTier::with_errors(
+            json!({"timezone": "Etc/UTC", "rbacs": null}),
+            errors.clone(),
+        );
+        let read = ClusterTier::of(json!({"timezone": "Etc/UTC"}));
+        assert_eq!(unread.fields, read.fields);
+        assert_eq!(unread.hash, read.hash);
+        assert_eq!(unread.errors, errors);
     }
 }

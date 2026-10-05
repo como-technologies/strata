@@ -90,9 +90,10 @@ profile, or pack version.
     - `labels`: the labels of the cluster.
     - `tiers`: each tier that the record carries, by name, each with `hash`
       and `fields`. `errors`, only when strata could not read a field: the
-      field and the error. The field is then `null`, and `errors` is not part
-      of the hash. The tiers are `applied`, `running`, `policy`, and, with
-      `snapshot --shape`, `shape`. See
+      field and the error. `fields` then does not hold the field, so the hash
+      does not cover it. `errors` is not part of the hash either. A record of
+      strata 0.19 holds `null` for the field. The tiers are `applied`,
+      `running`, `policy`, and, with `snapshot --shape`, `shape`. See
       [More of the cluster than its release](../commands/snapshot/cluster.md#more-of-the-cluster-than-its-release).
       The `fields` of `shape` are `cloudType`, `cloud`, and `pools[]`, by
       [The shape on each cloud](../commands/snapshot/cluster.md#the-shape-on-each-cloud).

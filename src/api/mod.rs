@@ -22,7 +22,7 @@ pub use audit::AuditKind;
 pub use http::HttpApi;
 pub use memory::MemoryApi;
 pub use palette::Palette;
-pub use raw::{RawCluster, RawProfile, has_draft};
+pub use raw::{RawCluster, RawProfile, ReadErrors, has_draft};
 pub use retry::{Retry, RetryPolicy};
 
 /// One GET of a JSON document from Palette. Implementations add authentication and scoping.

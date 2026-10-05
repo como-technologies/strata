@@ -3,7 +3,7 @@
 
 use serde_json::Value;
 
-use super::{AuditKind, PaletteApi, RawCluster, RawProfile, mask};
+use super::{AuditKind, PaletteApi, RawCluster, RawProfile, ReadErrors, mask};
 use crate::error::{Error, Result};
 use crate::progress::Progress;
 use crate::reference::LATEST;
@@ -668,15 +668,17 @@ impl<A: PaletteApi> Palette<A> {
             project_uid: self.project_uid().map(str::to_string),
             fetched_at: None,
             notifications,
-            notifications_error,
             repave,
-            repave_error,
             resolved_values: None,
             cloud_config: None,
             rbacs,
-            rbacs_error,
             namespaces,
-            namespaces_error,
+            errors: ReadErrors {
+                notifications: notifications_error,
+                repave: repave_error,
+                rbacs: rbacs_error,
+                namespaces: namespaces_error,
+            },
         })
     }
 
@@ -941,15 +943,12 @@ impl<A: PaletteApi> Palette<A> {
             project_uid: self.project_uid().map(str::to_string),
             fetched_at: None,
             notifications: None,
-            notifications_error: None,
             repave: None,
-            repave_error: None,
             resolved_values: None,
             cloud_config: None,
             rbacs: None,
-            rbacs_error: None,
             namespaces: None,
-            namespaces_error: None,
+            errors: ReadErrors::default(),
         })
     }
 
