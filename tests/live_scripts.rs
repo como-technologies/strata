@@ -2724,3 +2724,53 @@ fn draft_sh_fails_the_check_when_list_says_that_the_copy_is_published() {
     assert!(steps.contains("FAIL  unpublished-listed"), "{steps}");
     assert_ne!(o.status.code(), Some(0));
 }
+
+/// Stage 7 of `packs.sh` against a listing of `loki` whose 2.10.2 names `amd64,arm64` and whose
+/// 3.6.7 names `amd64`, with `behind` of the record of 2.10.2 answering `line` and `json`.
+fn packs_arch_stage(line: &str, json: &str) -> String {
+    let mut stage = Stage::new(serde_json::json!({
+        "csi_pack_name": "csi-aws-ebs", "csi_previous_version": "1.63.1",
+        "csi_version": "1.65.0", "cloud": "aws",
+    }));
+    stage.route(
+        "/v1/packs",
+        r#"{"items":[{"spec":{"version":"2.10.2","annotations":{"architecture":"amd64,arm64"}}},
+            {"spec":{"version":"3.6.7","annotations":{"architecture":"amd64"}}}]}"#,
+    );
+    stage.strata(
+        "snapshot pack:Public Repo/loki@2.10.2 -o loki.json",
+        0,
+        "{}",
+    );
+    stage.strata("behind loki.json --no-impact --json", 1, json);
+    stage.strata("behind loki.json --no-impact", 1, line);
+    let (_, steps) = stage.run("packs.sh", &[]);
+    steps
+}
+
+#[test]
+fn packs_sh_stage_7_says_that_the_move_to_the_newer_version_drops_arm64() {
+    let steps = packs_arch_stage(
+        "1 pin from 1 record: 1 behind\n~ [addon] loki  2.10.2  Public Repo  behind: 3.6.7 (drops arm64)\n",
+        r#"{"pins":[{"version":"2.10.2","newer":[{"version":"3.6.7","drops":["arm64"]}]}]}"#,
+    );
+    passed(
+        &steps,
+        &[
+            "arch-listing",
+            "arch-record",
+            "arch-behind",
+            "arch-behind-says",
+            "arch-behind-json",
+        ],
+    );
+
+    // a behind that says nothing of the architectures fails the two checks that read it
+    let steps = packs_arch_stage(
+        "1 pin from 1 record: 1 behind\n~ [addon] loki  2.10.2  Public Repo  behind: 3.6.7\n",
+        r#"{"pins":[{"version":"2.10.2","newer":[{"version":"3.6.7"}]}]}"#,
+    );
+    passed(&steps, &["arch-listing", "arch-record", "arch-behind"]);
+    assert!(steps.contains("FAIL  arch-behind-says"), "{steps}");
+    assert!(steps.contains("FAIL  arch-behind-json"), "{steps}");
+}
