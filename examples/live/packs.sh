@@ -108,9 +108,9 @@ check packs-latest 0 '#54: --latest gives one line for each registry that has th
   "$strata" packs "$pack" --latest
 check packs-two-registries 0 '#54: both registries of this tenant answer' -- \
   bash -c "grep -c '^$pack in ' packs-latest.out | grep -qx 2"
-# Palette serves /v1/packs 100 entries at a time. strata reads each entry of the name in each
-# registry, and then puts it under its registry. So the sum of all registries passes one page,
-# also when no single registry holds more than 100 versions of the pack.
+# Palette serves /v1/packs 100 entries at a time. strata reads each entry of the name in all
+# registries, and then sorts the entries by registry. So the sum of all registries passes one
+# page, also when no single registry holds more than 100 versions of the pack.
 check packs-paged-listing 0 '#180: the listing of kubernetes holds more entries than one page' -- \
   bash -c "\"$live/api.sh\" get '/v1/packs?filters=spec.name=kubernetes&limit=1' | jq -e '.listmeta.count > 100'"
 check packs-paged 0 '#54: a pack with more than 100 entries in the listing lists completely' -- \
