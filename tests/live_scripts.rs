@@ -544,6 +544,104 @@ if [ -n "$out" ]; then cp "$body" "$out"; else cat "$body"; fi
 exit 0
 "#;
 
+/// The sync route of `reg-1` for FAKE_API_CURL: Palette refuses the first $SYNC_REFUSALS
+/// requests with HTTP 500 and `OciSyncInProgress`, and takes each request after them.
+const FAKE_SYNC_ROUTE: &str = r#"#!/usr/bin/env bash
+key=v1_registries_oci_reg-1_ecr_sync
+n=$(cat "$FAKE_ROUTES/$key.calls" 2>/dev/null || echo 0); n=$((n + 1)); echo "$n" > "$FAKE_ROUTES/$key.calls"
+if [ "$n" -le "${SYNC_REFUSALS:-0}" ]; then
+  echo 500 > "$FAKE_ROUTES/$key.status"
+  echo '{"code":"OciSyncInProgress","message":"another sync process is already in progress"}'
+else
+  rm -f "$FAKE_ROUTES/$key.status"
+  echo '{}'
+fi
+"#;
+
+#[test]
+fn api_sh_sync_waits_while_a_sync_of_the_registry_runs_and_asks_again() {
+    let dir = tempfile::tempdir().unwrap();
+    let (bin, routes) = (dir.path().join("bin"), dir.path().join("routes"));
+    for d in [&bin, &routes] {
+        std::fs::create_dir(d).unwrap();
+    }
+    executable(&bin.join("curl"), FAKE_API_CURL);
+    executable(
+        &routes.join("v1_registries_oci_reg-1_ecr_sync.sh"),
+        FAKE_SYNC_ROUTE,
+    );
+    // each read of the sync status gives a new run time, so the sync ends at once
+    executable(
+        &routes.join("v1_registries_oci_reg-1_ecr_sync_status.sh"),
+        "#!/usr/bin/env bash\necho \"{\\\"status\\\":\\\"Completed\\\",\\\"lastRunTime\\\":\\\"$(date +%s%N)\\\"}\"\n",
+    );
+    let log = dir.path().join("curl.log");
+    let sync = |refusals: &str| {
+        std::fs::write(&log, "").unwrap();
+        let _ = std::fs::remove_file(routes.join("v1_registries_oci_reg-1_ecr_sync.calls"));
+        Command::new("bash")
+            .arg(live_script("api.sh"))
+            .args(["sync-oci", "reg-1"])
+            .env(
+                "PATH",
+                format!("{}:{}", bin.display(), std::env::var("PATH").unwrap()),
+            )
+            .env("HOME", dir.path())
+            .env("PALETTE_API_KEY", "k")
+            .env("PALETTE_PROJECT_UID", "p-1")
+            .env("FAKE_ROUTES", &routes)
+            .env("FAKE_LOG", &log)
+            .env("SYNC_WAIT", "0")
+            .env("SYNC_REFUSALS", refusals)
+            .output()
+            .unwrap()
+    };
+    let posts = || {
+        std::fs::read_to_string(&log)
+            .unwrap()
+            .lines()
+            .filter(|l| *l == "POST /v1/registries/oci/reg-1/ecr/sync")
+            .count()
+    };
+
+    // two refusals: the third request is taken, and the sync ends
+    let o = sync("2");
+    assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
+    assert_eq!(posts(), 3, "{}", std::fs::read_to_string(&log).unwrap());
+    assert!(
+        text(&o.stdout).contains(r#""status":"Completed""#),
+        "{}",
+        text(&o.stdout)
+    );
+
+    // Palette refuses each request for five minutes: exit 2, and the reason
+    let o = sync("61");
+    assert_eq!(o.status.code(), Some(2), "{}", text(&o.stderr));
+    assert_eq!(posts(), 60);
+    assert!(
+        text(&o.stderr).contains("a sync of registry reg-1 is in progress"),
+        "{}",
+        text(&o.stderr)
+    );
+
+    // each other refusal is an error at once
+    std::fs::remove_file(routes.join("v1_registries_oci_reg-1_ecr_sync.sh")).unwrap();
+    std::fs::write(
+        routes.join("v1_registries_oci_reg-1_ecr_sync"),
+        r#"{"code":"OciRegistryNotFound"}"#,
+    )
+    .unwrap();
+    std::fs::write(routes.join("v1_registries_oci_reg-1_ecr_sync.status"), "500").unwrap();
+    let o = sync("0");
+    assert_eq!(o.status.code(), Some(2), "{}", text(&o.stderr));
+    assert_eq!(posts(), 1);
+    assert!(
+        text(&o.stderr).contains("answered HTTP 500"),
+        "{}",
+        text(&o.stderr)
+    );
+}
+
 #[test]
 fn api_sh_edit_keeps_each_manifest_uid_so_clusters_keep_their_copies() {
     let dir = tempfile::tempdir().unwrap();

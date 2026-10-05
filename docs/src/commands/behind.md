@@ -42,7 +42,8 @@ under a pin name each record that pins it.
   the values of the pack**. A profile with values of its own stays on its
   version, and Palette shows the update to a person. Until the person applies
   it, the record pins the older version, and `behind` names the version that
-  the tag names now. See [Tag names](../internals/palette/packs.md#tag-names).
+  the tag names now. A live run shows it: see
+  [Tag names](../internals/palette/packs.md#tag-names).
 - **A version that Palette does not serve in the tenant** is not a newer
   version. In a FIPS tenant, it is a version that is not FIPS compliant. See
   [The FIPS rule](../internals/palette/packs.md#the-fips-rule).
@@ -77,6 +78,8 @@ and its line names the sync:
 
 A sync can stay in progress for a long time: see
 [The sync of a registry](../internals/palette/packs.md#the-sync-of-a-registry).
+A live run shows the note with the Bitnami registry of the tenant, whose sync
+stays in progress: see [packs.sh](../development/live-runs.md#packssh).
 A pin whose registry completed its last sync has no note. Palette shows the
 sync of each registry, and the copy is the copy of the last run. A pin that is
 behind has no note either: a newer version in the copy is a newer version in

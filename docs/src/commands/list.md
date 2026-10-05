@@ -170,7 +170,9 @@ The JSON gives `published` for each version that strata read:
 With `--format markdown`, the ref cell of the version ends with `draft`. A
 published version with a draft that waits shows its published packs, with no
 mark. A record of a version that nobody published holds content that a person
-can change before the publish. See
+can change before the publish. A live run shows the row, the JSON, and the
+published version with a draft that waits: see
+[draft.sh](../development/live-runs.md#draftsh). See also
 [Drafts](../internals/palette/profiles.md#drafts).
 
 ## What to expect
