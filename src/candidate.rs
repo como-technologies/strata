@@ -933,7 +933,7 @@ pub(crate) fn pack_state(summary: &Value) -> Option<String> {
 }
 
 /// The state of a pack version that Palette no longer serves: `disabled` or `deleted`.
-fn retired_state(summary: &Value) -> Option<String> {
+pub(crate) fn retired_state(summary: &Value) -> Option<String> {
     pack_state(summary).filter(|s| s == "disabled" || s == "deleted")
 }
 

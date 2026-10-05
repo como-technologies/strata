@@ -463,8 +463,9 @@ is the path as a list: strings for keys, numbers for indexes, and
   - `versionsOffered`: how many versions of the pack the registry holds, before
     `--latest` or `--cloud` cut the list.
   - `tagsUnavailable`: `true` when Palette lists the pack under the registry and
-    then answers 404 for it. The versions come from the listing, with no tags.
-    When it is `false`, strata leaves out the field.
+    then answers 404 for its tags, also with the `states` query. The versions
+    come from the listing, with no tags. When it is `false`, strata leaves out
+    the field.
   - `state`: the state that every version in the registry has, when they all
     have the same one. Strata leaves out the field otherwise.
 

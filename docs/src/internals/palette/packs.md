@@ -426,19 +426,30 @@ Spectro Cloud retires a pack version in the registries it owns. The listing
 state in `spec.annotations.system_state`, with the time in
 `system_deprecatedTimestamp` or `system_disabledTimestamp`:
 
-| State | `GET /v1/packs/<name>/registries/<uid>` | A new profile that pins it |
-| --- | --- | --- |
-| none | the tags and the values | Palette creates it |
-| `deprecated` | the tags and the values | Palette creates it |
-| `disabled` | 404, `ResourceNotFound` | Palette refuses it: HTTP 500, `ClusterProfileInvalidPackState`, "pack `<name>:<version>` is disabled" |
-| `deleted` | 404, `ResourceNotFound` | Palette refuses it: HTTP 500, `ClusterProfileInvalidPackState`, "pack `<name>:<version>` is deleted" |
+| State | `GET /v1/packs/<name>/registries/<uid>` | The same with `?states=deprecated,disabled,deleted` | A new profile that pins it |
+| --- | --- | --- | --- |
+| none | the tags and the values | not in the answer | Palette creates it |
+| `deprecated` | the tags and the values | the tags and the values | Palette creates it |
+| `disabled` | not in the answer | the tags and the values | Palette refuses it: HTTP 500, `ClusterProfileInvalidPackState`, "pack `<name>:<version>` is disabled" |
+| `deleted` | not in the answer | the tags and the values | Palette refuses it: HTTP 500, `ClusterProfileInvalidPackState`, "pack `<name>:<version>` is deleted" |
 
-So a 404 for a pack that the listing names is a fact about one registry, and
-not about the pack: `nginx` is disabled in `Public Repo` and in `Palette
-Registry`, and `Bitnami` serves it. Strata reads the state from the listing:
+With no query, Palette answers 404 with `ResourceNotFound` when the answer has
+no version. So a 404 for a pack that the listing names is a fact about
+one registry, and not about the pack: `nginx` is disabled in `Public Repo` and
+in `Palette Registry`, and `Bitnami` serves it.
 
-- `strata packs` gives the state of each version, and lists a registry that
-  answers 404 from the listing, with no tags. See
+The `states` query gives only the versions in the states that it names. With
+it, `nginx` in `Public Repo` gives the tags of its 30 disabled versions, for
+example `0.26.1` and `0.26.x` on `0.26.1`. `kubernetes` in `Public Repo` has
+deleted versions too. The answer with no query does not include them, and the
+answer with the query gives their tags.
+
+Strata reads the state from the listing:
+
+- `strata packs` gives the state of each version. When the listing shows a
+  disabled or a deleted version in a registry, strata also sends the `states`
+  query, and joins the two answers. A registry that answers 404 to both shows
+  the versions of the listing, with no tags. See
   [strata packs](../../commands/packs.md#what-to-expect).
 - `strata snapshot pack:` and a candidate stop with `pack-unavailable` on a
   disabled or a deleted version, because Palette refuses a profile that pins

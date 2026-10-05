@@ -41,6 +41,7 @@ examples/live/runs/
 examples/INDEX.md
 examples/packs/*/*
 !examples/packs/*/_entity.json
+!examples/packs/*/_entity_retired.json
 !examples/packs/*/_summaries.json
 examples/profiles/
 examples/clusters/

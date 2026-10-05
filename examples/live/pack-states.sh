@@ -6,7 +6,7 @@
 #
 #   examples/live/pack-states.sh
 #
-#   1  packs: each state in the heading and on the version, and no tags where Palette answers 404
+#   1  packs: each state in the heading and on the version, and the tags of each version
 #   2  snapshot of a pack version in each state
 #   3  a new profile that pins a pack version in each state
 #
@@ -53,13 +53,13 @@ trap summary EXIT
 
 echo "== packs shows the state of each version (#68)" | tee -a steps.log
 check states-disabled 0 '#68: packs lists a registry whose versions are all disabled' -- \
-  "$strata" packs "$disabled" --registry "$disabled_reg" --latest
-check states-disabled-says 0 '#68: the heading says disabled, with no tags, because Palette answers 404 for it' -- \
-  grep -q 'disabled, no tags)' states-disabled.out
+  "$strata" packs "$disabled" --registry "$disabled_reg"
+check states-disabled-says 0 '#120: the heading says disabled, and the states query gives the tags of 0.26.1' -- \
+  bash -c "head -1 states-disabled.out | grep -q 'disabled)\$' && grep -qE '^ *0\.26\.1 .* 0\.26\.1 0\.26\.x +disabled *\$' states-disabled.out"
 check states-deleted 0 '#68: packs lists a registry whose versions are all deleted' -- \
   "$strata" packs "$deleted" --registry "$disabled_reg"
-check states-deleted-says 0 '#68: the heading says deleted, with no tags' -- \
-  grep -q 'deleted, no tags)' states-deleted.out
+check states-deleted-says 0 '#120: the heading says deleted, and 1.0.6 has the tags 1.0.6 1.0.x 1.x' -- \
+  bash -c "head -1 states-deleted.out | grep -q 'deleted)\$' && grep -qE '^ *1\.0\.6 .* 1\.0\.6 1\.0\.x 1\.x +deleted *\$' states-deleted.out"
 check states-deprecated 0 '#68: packs lists a registry whose versions are all deprecated' -- \
   "$strata" packs "$deprecated" --registry "$community"
 check states-deprecated-says 0 '#68: the heading says deprecated, and the version keeps its tags and says deprecated' -- \

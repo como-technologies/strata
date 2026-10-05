@@ -51,8 +51,9 @@ pub struct PackRegistry {
     /// How many versions of the pack the registry holds, before `--latest` or `--cloud` cut the
     /// list. A heading states the registry's inventory, and not the count of rows a flag left.
     pub versions_offered: usize,
-    /// True when Palette listed the pack under this registry and then answered 404 for the
-    /// registry's entity: the versions come from the listing alone, with no tags.
+    /// True when Palette listed the pack under this registry and then answered 404 for the tags
+    /// of the registry, also with the states query: the versions come from the listing alone,
+    /// with no tags.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub tags_unavailable: bool,
     /// The state that every version of the pack in this registry has, when they all have the
@@ -107,6 +108,34 @@ pub struct PackOptions {
 /// one cloud keeps that pack.
 pub(super) fn supports(cloud_types: &[String], cloud: &str) -> bool {
     cloud_types.iter().any(|c| c == cloud || c == "all")
+}
+
+/// The value of the `states` query that asks Palette for the tags of the retired versions of a
+/// pack. With it, Palette answers with the versions in these states only.
+const RETIRED_STATES: &str = "deprecated,disabled,deleted";
+
+/// Read one answer of a registry for the tags of a pack: none when Palette answers 404.
+fn tags_answer<A: PaletteApi>(palette: &Palette<A>, path: &str) -> Result<Option<Value>> {
+    match palette.api().get_json(path) {
+        Ok(answer) => Ok(Some(answer)),
+        Err(Error::Api { status: 404, .. }) => Ok(None),
+        Err(e) => Err(e),
+    }
+}
+
+/// Join the tag rows of the `answers` of one registry, and keep each row one time.
+///
+/// A deprecated version is in the answer with no query and in the answer with the states query,
+/// so its rows come two times.
+fn merged_tags(answers: &[Value]) -> Vec<Value> {
+    let mut seen = std::collections::BTreeSet::new();
+    answers
+        .iter()
+        .filter_map(|a| a.get("tags").and_then(Value::as_array))
+        .flatten()
+        .filter(|t| seen.insert((text(t, "/packUid"), text(t, "/version"), text(t, "/tag"))))
+        .cloned()
+        .collect()
 }
 
 /// List what the registries offer for one pack.
@@ -171,27 +200,31 @@ where
             [Some(one)] => Some(one.clone()),
             _ => None,
         };
-        // the registry's own answer holds the tags, which the listing does not. Palette serves no
-        // disabled or deleted pack, so it can list a pack under a registry and then answer 404
-        // for it; that registry keeps the versions of the listing, with no tags, and the other
-        // registries still answer
+        // the registry's own answer holds the tags, which the listing does not. With no query,
+        // the answer does not include the disabled and the deleted versions, and Palette answers
+        // 404 when it has no version. So a registry with a retired version gets a second request
+        // with the states query. A registry that answers 404 to both keeps the versions of the
+        // listing, with no tags, and the other registries still answer
         progress.note(&format!("reading the tags of {name} in {registry}"));
-        let (entity, tags_unavailable) = match palette
-            .api()
-            .get_json(&format!("/v1/packs/{name}/registries/{uid}"))
+        let path = format!("/v1/packs/{name}/registries/{uid}");
+        let mut answers = vec![tags_answer(&palette, &path)?];
+        if mine
+            .iter()
+            .any(|e| crate::candidate::retired_state(e).is_some())
         {
-            Ok(entity) => (entity, false),
-            Err(Error::Api { status: 404, .. }) => (Value::Null, true),
-            Err(e) => return Err(e),
-        };
-        let layer = Some(text(&entity, "/layer"))
-            .filter(|l| !l.is_empty())
+            answers.push(tags_answer(
+                &palette,
+                &format!("{path}?states={RETIRED_STATES}"),
+            )?);
+        }
+        let answers: Vec<Value> = answers.into_iter().flatten().collect();
+        let tags_unavailable = answers.is_empty();
+        let layer = answers
+            .iter()
+            .map(|a| text(a, "/layer"))
+            .find(|l| !l.is_empty())
             .unwrap_or_else(|| text(mine[0], "/spec/layer"));
-        let tags = entity
-            .get("tags")
-            .and_then(Value::as_array)
-            .cloned()
-            .unwrap_or_default();
+        let tags = merged_tags(&answers);
 
         for e in mine {
             let version = text(e, "/spec/version");
@@ -356,5 +389,147 @@ mod tests {
         assert_eq!(kept, vec![("1.0.0", true), ("0.9.0", false)]);
         // the document keeps the cloud types as Palette gives them
         assert_eq!(listing.registries[0].versions[0].cloud_types, vec!["all"]);
+    }
+
+    /// The path of the tags request with the states query, for `nginx` in the Public Repo.
+    const RETIRED_PATH: &str =
+        "/v1/packs/nginx/registries/reg-public?states=deprecated,disabled,deleted";
+
+    /// A version of `nginx` in the Public Repo, in `state` when it is not empty.
+    fn nginx(uid: &str, version: &str, state: &str) -> Value {
+        let mut summary = serde_json::json!({
+            "metadata": {"uid": uid},
+            "spec": {"name": "nginx", "version": version, "registryUid": "reg-public",
+                     "layer": "addon", "type": "spectro", "cloudTypes": ["all"]},
+        });
+        if !state.is_empty() {
+            summary["spec"]["annotations"] = serde_json::json!({"system_state": state});
+        }
+        summary
+    }
+
+    /// One tag row of a tags answer.
+    fn tag(uid: &str, version: &str, tag: &str) -> Value {
+        serde_json::json!({"packUid": uid, "version": version, "tag": tag})
+    }
+
+    /// An API with the `versions` of `nginx` in its listing, and the two tags answers of the
+    /// Public Repo: `plain` with no query, and `retired` with the states query. An empty answer
+    /// is a 404.
+    fn nginx_api(versions: Vec<Value>, plain: &[Value], retired: &[Value]) -> MemoryApi {
+        let mut api = MemoryApi::new()
+            .with(
+                "/v1/registries/metadata",
+                serde_json::json!({"items": [
+                    {"name": "Public Repo", "uid": "reg-public", "kind": "pack"},
+                ]}),
+            )
+            .with(
+                "/v1/packs?filters=spec.name=nginx&limit=100&offset=0",
+                serde_json::json!({"items": versions}),
+            );
+        if !plain.is_empty() {
+            api = api.with(
+                "/v1/packs/nginx/registries/reg-public",
+                serde_json::json!({"layer": "addon", "tags": plain}),
+            );
+        }
+        if !retired.is_empty() {
+            api = api.with(
+                RETIRED_PATH,
+                serde_json::json!({"layer": "addon", "tags": retired}),
+            );
+        }
+        api
+    }
+
+    /// The one registry that `packs nginx` lists from `api`.
+    fn nginx_packs(api: &MemoryApi) -> PackRegistry {
+        let listing = registry_packs(
+            "nginx",
+            &PackOptions::default(),
+            |_| Ok(Palette::new(api)),
+            "2026-10-05T00:00:00Z",
+            &Progress::silent(),
+        )
+        .unwrap();
+        listing.registries.into_iter().next().unwrap()
+    }
+
+    /// The tags of `version` in `registry`, in their order.
+    fn tags_of<'a>(registry: &'a PackRegistry, version: &str) -> Vec<&'a str> {
+        registry
+            .versions
+            .iter()
+            .find(|v| v.version == version)
+            .map(|v| v.tags.iter().map(String::as_str).collect())
+            .unwrap_or_default()
+    }
+
+    #[test]
+    fn a_registry_whose_versions_are_all_disabled_gets_its_tags_from_the_states_query() {
+        let api = nginx_api(
+            vec![
+                nginx("pk-43", "0.43.0", "disabled"),
+                nginx("pk-26", "0.26.1", "disabled"),
+            ],
+            &[],
+            &[
+                tag("pk-43", "0.43.0", "0.43.0"),
+                tag("pk-43", "0.43.0", "0.43.x"),
+                tag("pk-26", "0.26.1", "0.26.1"),
+                tag("pk-26", "0.26.1", "0.26.x"),
+            ],
+        );
+        let registry = nginx_packs(&api);
+        assert_eq!(api.calls(RETIRED_PATH), 1);
+        assert!(!registry.tags_unavailable);
+        assert_eq!(registry.state.as_deref(), Some("disabled"));
+        assert_eq!(tags_of(&registry, "0.26.1"), ["0.26.1", "0.26.x"]);
+        assert_eq!(tags_of(&registry, "0.43.0"), ["0.43.0", "0.43.x"]);
+    }
+
+    #[test]
+    fn a_registry_with_a_deleted_version_joins_both_answers_and_keeps_each_tag_row_one_time() {
+        // the answer with no query holds the active and the deprecated versions; the answer with
+        // the states query holds the deprecated and the deleted versions
+        let api = nginx_api(
+            vec![
+                nginx("pk-3", "1.3.0", ""),
+                nginx("pk-2", "1.2.0", "deprecated"),
+                nginx("pk-1", "1.1.0", "deleted"),
+            ],
+            &[tag("pk-3", "1.3.0", "1.3.0"), tag("pk-2", "1.2.0", "1.2.0")],
+            &[tag("pk-2", "1.2.0", "1.2.0"), tag("pk-1", "1.1.0", "1.1.0")],
+        );
+        let registry = nginx_packs(&api);
+        assert_eq!(api.calls(RETIRED_PATH), 1);
+        assert_eq!(tags_of(&registry, "1.3.0"), ["1.3.0"]);
+        assert_eq!(tags_of(&registry, "1.2.0"), ["1.2.0"]);
+        assert_eq!(tags_of(&registry, "1.1.0"), ["1.1.0"]);
+    }
+
+    #[test]
+    fn a_registry_with_no_disabled_or_deleted_version_sends_no_states_query() {
+        let api = nginx_api(
+            vec![
+                nginx("pk-3", "1.3.0", ""),
+                nginx("pk-2", "1.2.0", "deprecated"),
+            ],
+            &[tag("pk-3", "1.3.0", "1.3.0"), tag("pk-2", "1.2.0", "1.2.0")],
+            &[],
+        );
+        let registry = nginx_packs(&api);
+        assert_eq!(api.calls(RETIRED_PATH), 0);
+        assert_eq!(tags_of(&registry, "1.2.0"), ["1.2.0"]);
+    }
+
+    #[test]
+    fn a_registry_that_answers_404_with_and_without_the_states_query_has_no_tags() {
+        let api = nginx_api(vec![nginx("pk-26", "0.26.1", "disabled")], &[], &[]);
+        let registry = nginx_packs(&api);
+        assert_eq!(api.calls(RETIRED_PATH), 1);
+        assert!(registry.tags_unavailable);
+        assert!(tags_of(&registry, "0.26.1").is_empty());
     }
 }

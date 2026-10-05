@@ -240,8 +240,8 @@ that Palette creates at once.
 
 | Check | Expected exit | What it shows |
 |---|---|---|
-| `states-disabled`, `states-disabled-says` | 0 | #68: `packs` lists a disabled registry from the listing, and the heading says `disabled, no tags` |
-| `states-deleted`, `states-deleted-says` | 0 | #68: the same for a deleted registry: `deleted, no tags` |
+| `states-disabled`, `states-disabled-says` | 0 | #68, #120: `packs` lists a disabled registry, and the heading says `disabled`. The `states` query gives the tags: `0.26.1` has `0.26.1 0.26.x` |
+| `states-deleted`, `states-deleted-says` | 0 | #68, #120: the same for a deleted registry: the heading says `deleted`, and `1.0.6` has `1.0.6 1.0.x 1.x` |
 | `states-deprecated`, `states-deprecated-says` | 0 | #68: a deprecated version keeps its tags, and the heading and the row say `deprecated` |
 | `snapshot-disabled`, `snapshot-disabled-says` | 2, 0 | #68: a disabled version is `pack-unavailable`, and the error names the state and the registry |
 | `snapshot-deleted` | 2 | #68: a deleted version is `pack-unavailable` |

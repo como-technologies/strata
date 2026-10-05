@@ -5503,8 +5503,8 @@ fn in_state(mut summary: Value, state: &str) -> Value {
 
 #[test]
 fn packs_lists_a_disabled_registry_from_the_listing_and_marks_each_retired_version() {
-    // Palette lists the Mirror's disabled version, and then answers 404 for the Mirror: it serves
-    // no disabled or deleted pack. A deprecated version it still serves, with its tags.
+    // Palette lists the Mirror's disabled version, and then answers 404 for its tags, with and
+    // without the states query. A deprecated version it still serves, with its tags.
     let api = serve_summaries(
         vec![
             pack_summary("pk-63", "1.63.1", "reg-public", "sha256:aaa", CSI_63),
