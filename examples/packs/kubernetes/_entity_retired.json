@@ -1,0 +1,906 @@
+{
+  "cloudTypes": [
+    "aws",
+    "azure",
+    "vsphere",
+    "gcp",
+    "openstack",
+    "maas"
+  ],
+  "layer": "k8s",
+  "logoUrl": "https://registry.spectrocloud.com/v1/kubernetes/blobs/sha256:f7f2e8d6a6d22890524a0e6f327e2c7684ffe9b9ed6dc8b798d7b68f343d4367?type=image/png",
+  "name": "kubernetes",
+  "packValues": [],
+  "registryUid": "5eecc89d0b150045ae661cef",
+  "tags": [
+    {
+      "packUid": "670bf1063deb3ad4d5a1dc5e",
+      "parentTags": [
+        "1.29.x",
+        "1.x"
+      ],
+      "tag": "1.29.9",
+      "version": "1.29.9"
+    },
+    {
+      "packUid": "66e5b3920aa1ff971584aa49",
+      "parentTags": [
+        "1.29.x",
+        "1.x"
+      ],
+      "tag": "1.29.8",
+      "version": "1.29.8"
+    },
+    {
+      "packUid": "66c0c36fcd3c68232494e0c2",
+      "parentTags": [
+        "1.29.x",
+        "1.x"
+      ],
+      "tag": "1.29.7",
+      "version": "1.29.7"
+    },
+    {
+      "packUid": "669be6ff55ed407c8f516fe0",
+      "parentTags": [
+        "1.29.x",
+        "1.x"
+      ],
+      "tag": "1.29.6",
+      "version": "1.29.6"
+    },
+    {
+      "packUid": "666e812486330a630062f5d1",
+      "parentTags": [
+        "1.29.x",
+        "1.x"
+      ],
+      "tag": "1.29.4",
+      "version": "1.29.4"
+    },
+    {
+      "packUid": "67d5a2a05a30d541df7e4030",
+      "parentTags": [
+        "1.x"
+      ],
+      "tag": "1.29.x",
+      "version": "1.29.14"
+    },
+    {
+      "packUid": "67d5a2a05a30d541df7e4030",
+      "parentTags": [
+        "1.29.x",
+        "1.x"
+      ],
+      "tag": "1.29.14",
+      "version": "1.29.14"
+    },
+    {
+      "packUid": "67b224bf8ab50a5ee7a8ed53",
+      "parentTags": [
+        "1.29.x",
+        "1.x"
+      ],
+      "tag": "1.29.13",
+      "version": "1.29.13"
+    },
+    {
+      "packUid": "678d28c9e2561ecc88a49f86",
+      "parentTags": [
+        "1.29.x",
+        "1.x"
+      ],
+      "tag": "1.29.12",
+      "version": "1.29.12"
+    },
+    {
+      "packUid": "675f0d2984c223de22b66954",
+      "parentTags": [
+        "1.29.x",
+        "1.x"
+      ],
+      "tag": "1.29.10",
+      "version": "1.29.10"
+    },
+    {
+      "packUid": "661cc50b0aa79b77ade281f9",
+      "parentTags": [
+        "1.29.x",
+        "1.x"
+      ],
+      "tag": "1.29.0",
+      "version": "1.29.0"
+    },
+    {
+      "packUid": "666e812586330a6307065c01",
+      "parentTags": [
+        "1.28.x",
+        "1.x"
+      ],
+      "tag": "1.28.9",
+      "version": "1.28.9"
+    },
+    {
+      "packUid": "659a47b28b7673a7dff73658",
+      "parentTags": [
+        "1.28.x",
+        "1.x"
+      ],
+      "tag": "1.28.3",
+      "version": "1.28.3"
+    },
+    {
+      "packUid": "653812d30a0e0a379faef1a4",
+      "parentTags": [
+        "1.28.x",
+        "1.x"
+      ],
+      "tag": "1.28.2",
+      "version": "1.28.2"
+    },
+    {
+      "packUid": "675f0d2a84c223de2a849ebe",
+      "parentTags": [
+        "1.x"
+      ],
+      "tag": "1.28.x",
+      "version": "1.28.15"
+    },
+    {
+      "packUid": "675f0d2a84c223de2a849ebe",
+      "parentTags": [
+        "1.28.x",
+        "1.x"
+      ],
+      "tag": "1.28.15",
+      "version": "1.28.15"
+    },
+    {
+      "packUid": "670bf1063deb3ad4d99bc16d",
+      "parentTags": [
+        "1.28.x",
+        "1.x"
+      ],
+      "tag": "1.28.14",
+      "version": "1.28.14"
+    },
+    {
+      "packUid": "66e5b3920aa1ff972016071c",
+      "parentTags": [
+        "1.28.x",
+        "1.x"
+      ],
+      "tag": "1.28.13",
+      "version": "1.28.13"
+    },
+    {
+      "packUid": "66c0c370cd3c6823260e5531",
+      "parentTags": [
+        "1.28.x",
+        "1.x"
+      ],
+      "tag": "1.28.12",
+      "version": "1.28.12"
+    },
+    {
+      "packUid": "669be6ff55ed407c939bbc55",
+      "parentTags": [
+        "1.28.x",
+        "1.x"
+      ],
+      "tag": "1.28.11",
+      "version": "1.28.11"
+    },
+    {
+      "packUid": "659a47b28b7673a7e36076aa",
+      "parentTags": [
+        "1.27.x",
+        "1.x"
+      ],
+      "tag": "1.27.7",
+      "version": "1.27.7"
+    },
+    {
+      "packUid": "651c1484f55d6318cada0f6d",
+      "parentTags": [
+        "1.27.x",
+        "1.x"
+      ],
+      "tag": "1.27.5",
+      "version": "1.27.5"
+    },
+    {
+      "packUid": "66c0c370cd3c68232a68e32e",
+      "parentTags": [
+        "1.x"
+      ],
+      "tag": "1.27.x",
+      "version": "1.27.16"
+    },
+    {
+      "packUid": "66c0c370cd3c68232a68e32e",
+      "parentTags": [
+        "1.27.x",
+        "1.x"
+      ],
+      "tag": "1.27.16",
+      "version": "1.27.16"
+    },
+    {
+      "packUid": "669be6ff55ed407c91fa4259",
+      "parentTags": [
+        "1.27.x",
+        "1.x"
+      ],
+      "tag": "1.27.15",
+      "version": "1.27.15"
+    },
+    {
+      "packUid": "666e812586330a630aa9d7de",
+      "parentTags": [
+        "1.27.x",
+        "1.x"
+      ],
+      "tag": "1.27.13",
+      "version": "1.27.13"
+    },
+    {
+      "packUid": "661cc5100aa79b7823099ba6",
+      "parentTags": [
+        "1.27.x",
+        "1.x"
+      ],
+      "tag": "1.27.11",
+      "version": "1.27.11"
+    },
+    {
+      "packUid": "64ac0da2a40b9397c1b17459",
+      "parentTags": [
+        "1.27.x",
+        "1.x"
+      ],
+      "tag": "1.27.1",
+      "version": "1.27.1"
+    },
+    {
+      "packUid": "651c1484f55d6318cfd73ed2",
+      "parentTags": [
+        "1.26.x",
+        "1.x"
+      ],
+      "tag": "1.26.8",
+      "version": "1.26.8"
+    },
+    {
+      "packUid": "64eaf1161a2af696faee3858",
+      "parentTags": [
+        "1.26.x",
+        "1.x"
+      ],
+      "tag": "1.26.5",
+      "version": "1.26.5"
+    },
+    {
+      "packUid": "646c66c4aadf34e48c77dc38",
+      "parentTags": [
+        "1.26.x",
+        "1.x"
+      ],
+      "tag": "1.26.4",
+      "version": "1.26.4"
+    },
+    {
+      "packUid": "646c66c4aadf34e4c5131482",
+      "parentTags": [
+        "1.26.x",
+        "1.x"
+      ],
+      "tag": "1.26.3",
+      "version": "1.26.3"
+    },
+    {
+      "packUid": "661cc50f0aa79b780d404307",
+      "parentTags": [
+        "1.x"
+      ],
+      "tag": "1.26.x",
+      "version": "1.26.15"
+    },
+    {
+      "packUid": "661cc50f0aa79b780d404307",
+      "parentTags": [
+        "1.26.x",
+        "1.x"
+      ],
+      "tag": "1.26.15",
+      "version": "1.26.15"
+    },
+    {
+      "packUid": "661cc50d0aa79b77e129000a",
+      "parentTags": [
+        "1.26.x",
+        "1.x"
+      ],
+      "tag": "1.26.12",
+      "version": "1.26.12"
+    },
+    {
+      "packUid": "659a47b28b7673a7e56225d6",
+      "parentTags": [
+        "1.26.x",
+        "1.x"
+      ],
+      "tag": "1.26.10",
+      "version": "1.26.10"
+    },
+    {
+      "packUid": "63fdd104199bafb6536cba4f",
+      "parentTags": [
+        "1.26.x",
+        "1.x"
+      ],
+      "tag": "1.26.1",
+      "version": "1.26.1"
+    },
+    {
+      "packUid": "646c66c4aadf34e49a7c6c67",
+      "parentTags": [
+        "1.25.x",
+        "1.x"
+      ],
+      "tag": "1.25.9",
+      "version": "1.25.9"
+    },
+    {
+      "packUid": "646c66c4aadf34e493e653e0",
+      "parentTags": [
+        "1.25.x",
+        "1.x"
+      ],
+      "tag": "1.25.8",
+      "version": "1.25.8"
+    },
+    {
+      "packUid": "63fdd101199bafb648a066aa",
+      "parentTags": [
+        "1.25.x",
+        "1.x"
+      ],
+      "tag": "1.25.6",
+      "version": "1.25.6"
+    },
+    {
+      "packUid": "63bd0372764141c65b5bd057",
+      "parentTags": [
+        "1.25.x",
+        "1.x"
+      ],
+      "tag": "1.25.4",
+      "version": "1.25.4"
+    },
+    {
+      "packUid": "661cc50d0aa79b77d41dd4b9",
+      "parentTags": [
+        "1.x"
+      ],
+      "tag": "1.25.x",
+      "version": "1.25.16"
+    },
+    {
+      "packUid": "661cc50d0aa79b77d41dd4b9",
+      "parentTags": [
+        "1.25.x",
+        "1.x"
+      ],
+      "tag": "1.25.16",
+      "version": "1.25.16"
+    },
+    {
+      "packUid": "659a47b38b7673a7e973b9b2",
+      "parentTags": [
+        "1.25.x",
+        "1.x"
+      ],
+      "tag": "1.25.15",
+      "version": "1.25.15"
+    },
+    {
+      "packUid": "651c1484f55d6318cceae520",
+      "parentTags": [
+        "1.25.x",
+        "1.x"
+      ],
+      "tag": "1.25.13",
+      "version": "1.25.13"
+    },
+    {
+      "packUid": "64eaf1161a2af69701cb4e72",
+      "parentTags": [
+        "1.25.x",
+        "1.x"
+      ],
+      "tag": "1.25.10",
+      "version": "1.25.10"
+    },
+    {
+      "packUid": "6332ad8c281de30d29bae12b",
+      "parentTags": [
+        "1.24.x",
+        "1.x"
+      ],
+      "tag": "1.24.3",
+      "version": "1.24.3"
+    },
+    {
+      "packUid": "661cc5100aa79b7833f49227",
+      "parentTags": [
+        "1.x"
+      ],
+      "tag": "1.24.x",
+      "version": "1.24.17"
+    },
+    {
+      "packUid": "661cc5100aa79b7833f49227",
+      "parentTags": [
+        "1.24.x",
+        "1.x"
+      ],
+      "tag": "1.24.17",
+      "version": "1.24.17"
+    },
+    {
+      "packUid": "672f93fdcbb7e6d8fdf66a75",
+      "parentTags": [
+        "1.24.x",
+        "1.x"
+      ],
+      "tag": "1.24.16",
+      "version": "1.24.16"
+    },
+    {
+      "packUid": "64eaf1161a2af69722802fce",
+      "parentTags": [
+        "1.24.x",
+        "1.x"
+      ],
+      "tag": "1.24.14",
+      "version": "1.24.14"
+    },
+    {
+      "packUid": "646c66c4aadf34e498ea72c9",
+      "parentTags": [
+        "1.24.x",
+        "1.x"
+      ],
+      "tag": "1.24.13",
+      "version": "1.24.13"
+    },
+    {
+      "packUid": "63fdd100199bafb646ba1a9e",
+      "parentTags": [
+        "1.24.x",
+        "1.x"
+      ],
+      "tag": "1.24.10",
+      "version": "1.24.10"
+    },
+    {
+      "packUid": "63218a1ee1b7b08d0871b8c2",
+      "parentTags": [
+        "1.23.x",
+        "1.x"
+      ],
+      "tag": "1.23.9",
+      "version": "1.23.9"
+    },
+    {
+      "packUid": "626808fed9c586781ef320a8",
+      "parentTags": [
+        "1.23.x",
+        "1.x"
+      ],
+      "tag": "1.23.4",
+      "version": "1.23.4"
+    },
+    {
+      "packUid": "646c66c4aadf34e49116867c",
+      "parentTags": [
+        "1.x"
+      ],
+      "tag": "1.23.x",
+      "version": "1.23.17"
+    },
+    {
+      "packUid": "646c66c4aadf34e49116867c",
+      "parentTags": [
+        "1.23.x",
+        "1.x"
+      ],
+      "tag": "1.23.17",
+      "version": "1.23.17"
+    },
+    {
+      "packUid": "63fdd103199bafb64fc74a2c",
+      "parentTags": [
+        "1.23.x",
+        "1.x"
+      ],
+      "tag": "1.23.16",
+      "version": "1.23.16"
+    },
+    {
+      "packUid": "626808fed9c5867834d8b784",
+      "parentTags": [
+        "1.22.x",
+        "1.x"
+      ],
+      "tag": "1.22.7",
+      "version": "1.22.7"
+    },
+    {
+      "packUid": "63218a1ee1b7b08d0e2f43bd",
+      "parentTags": [
+        "1.x"
+      ],
+      "tag": "1.22.x",
+      "version": "1.22.12"
+    },
+    {
+      "packUid": "63218a1ee1b7b08d0e2f43bd",
+      "parentTags": [
+        "1.22.x",
+        "1.x"
+      ],
+      "tag": "1.22.12",
+      "version": "1.22.12"
+    },
+    {
+      "packUid": "61e978fbc2adc2050d25ffed",
+      "parentTags": [
+        "1.21.x",
+        "1.x"
+      ],
+      "tag": "1.21.8",
+      "version": "1.21.8"
+    },
+    {
+      "packUid": "61955a675ff821e341c1821e",
+      "parentTags": [
+        "1.21.x",
+        "1.x"
+      ],
+      "tag": "1.21.6",
+      "version": "1.21.6"
+    },
+    {
+      "packUid": "617e692b5bb2534c2d636674",
+      "parentTags": [
+        "1.21.x",
+        "1.x"
+      ],
+      "tag": "1.21.5",
+      "version": "1.21.5"
+    },
+    {
+      "packUid": "614119ff2853c5ce40d7de22",
+      "parentTags": [
+        "1.21.x",
+        "1.x"
+      ],
+      "tag": "1.21.3",
+      "version": "1.21.3"
+    },
+    {
+      "packUid": "60fed75f19487c455950e28a",
+      "parentTags": [
+        "1.21.x",
+        "1.x"
+      ],
+      "tag": "1.21.2",
+      "version": "1.21.2"
+    },
+    {
+      "packUid": "63218a1ee1b7b08d0a26cceb",
+      "parentTags": [
+        "1.x"
+      ],
+      "tag": "1.21.x",
+      "version": "1.21.14"
+    },
+    {
+      "packUid": "63218a1ee1b7b08d0a26cceb",
+      "parentTags": [
+        "1.21.x",
+        "1.x"
+      ],
+      "tag": "1.21.14",
+      "version": "1.21.14"
+    },
+    {
+      "packUid": "626808fed9c5867832070c15",
+      "parentTags": [
+        "1.21.x",
+        "1.x"
+      ],
+      "tag": "1.21.10",
+      "version": "1.21.10"
+    },
+    {
+      "packUid": "60b7939f9b4d66ad7b3a7676",
+      "parentTags": [
+        "1.21.x",
+        "1.x"
+      ],
+      "tag": "1.21.1",
+      "version": "1.21.1"
+    },
+    {
+      "packUid": "60b7939f9b4d66ad77691f8d",
+      "parentTags": [
+        "1.21.x",
+        "1.x"
+      ],
+      "tag": "1.21.0",
+      "version": "1.21.0"
+    },
+    {
+      "packUid": "61411a002853c5ce44696986",
+      "parentTags": [
+        "1.20.x",
+        "1.x"
+      ],
+      "tag": "1.20.9",
+      "version": "1.20.9"
+    },
+    {
+      "packUid": "60fed76019487c455cd11fa6",
+      "parentTags": [
+        "1.20.x",
+        "1.x"
+      ],
+      "tag": "1.20.8",
+      "version": "1.20.8"
+    },
+    {
+      "packUid": "60b7939f9b4d66ad7ef94c41",
+      "parentTags": [
+        "1.20.x",
+        "1.x"
+      ],
+      "tag": "1.20.7",
+      "version": "1.20.7"
+    },
+    {
+      "packUid": "609111cab52edfd693ed93fd",
+      "parentTags": [
+        "1.20.x",
+        "1.x"
+      ],
+      "tag": "1.20.6",
+      "version": "1.20.6"
+    },
+    {
+      "packUid": "609111cab52edfd6958b6c86",
+      "parentTags": [
+        "1.20.x",
+        "1.x"
+      ],
+      "tag": "1.20.5",
+      "version": "1.20.5"
+    },
+    {
+      "packUid": "60618dbe7819a97352108735",
+      "parentTags": [
+        "1.20.x",
+        "1.x"
+      ],
+      "tag": "1.20.4",
+      "version": "1.20.4"
+    },
+    {
+      "packUid": "601ecea78735339a5e19f34d",
+      "parentTags": [
+        "1.20.x",
+        "1.x"
+      ],
+      "tag": "1.20.2",
+      "version": "1.20.2"
+    },
+    {
+      "packUid": "61e978fbc2adc20516401d42",
+      "parentTags": [
+        "1.x"
+      ],
+      "tag": "1.20.x",
+      "version": "1.20.14"
+    },
+    {
+      "packUid": "61e978fbc2adc20516401d42",
+      "parentTags": [
+        "1.20.x",
+        "1.x"
+      ],
+      "tag": "1.20.14",
+      "version": "1.20.14"
+    },
+    {
+      "packUid": "61891f5942ec23f941437204",
+      "parentTags": [
+        "1.20.x",
+        "1.x"
+      ],
+      "tag": "1.20.12",
+      "version": "1.20.12"
+    },
+    {
+      "packUid": "617e692b5bb2534c3057b36f",
+      "parentTags": [
+        "1.20.x",
+        "1.x"
+      ],
+      "tag": "1.20.11",
+      "version": "1.20.11"
+    },
+    {
+      "packUid": "614119fe2853c5ce37646119",
+      "parentTags": [
+        "1.20.x",
+        "1.x"
+      ],
+      "tag": "1.20.10",
+      "version": "1.20.10"
+    },
+    {
+      "packUid": "601ecea78735339a623032d7",
+      "parentTags": [
+        "1.20.x",
+        "1.x"
+      ],
+      "tag": "1.20.1",
+      "version": "1.20.1"
+    },
+    {
+      "packUid": "601ecea78735339a6617c129",
+      "parentTags": [
+        "1.20.x",
+        "1.x"
+      ],
+      "tag": "1.20.0",
+      "version": "1.20.0"
+    },
+    {
+      "packUid": "609111cab52edfd69aad5749",
+      "parentTags": [
+        "1.19.x",
+        "1.x"
+      ],
+      "tag": "1.19.9",
+      "version": "1.19.9"
+    },
+    {
+      "packUid": "60618dbe7819a97354f94abb",
+      "parentTags": [
+        "1.19.x",
+        "1.x"
+      ],
+      "tag": "1.19.8",
+      "version": "1.19.8"
+    },
+    {
+      "packUid": "601ecea78735339a5548b9a0",
+      "parentTags": [
+        "1.19.x",
+        "1.x"
+      ],
+      "tag": "1.19.7",
+      "version": "1.19.7"
+    },
+    {
+      "packUid": "601ecea78735339a59044232",
+      "parentTags": [
+        "1.19.x",
+        "1.x"
+      ],
+      "tag": "1.19.6",
+      "version": "1.19.6"
+    },
+    {
+      "packUid": "5fd5bbff049a15f18085d673",
+      "parentTags": [
+        "1.19.x",
+        "1.x"
+      ],
+      "tag": "1.19.5",
+      "version": "1.19.5"
+    },
+    {
+      "packUid": "5fd5bbff049a15f17e2386bd",
+      "parentTags": [
+        "1.19.x",
+        "1.x"
+      ],
+      "tag": "1.19.4",
+      "version": "1.19.4"
+    },
+    {
+      "packUid": "61891f5942ec23f93b5e4aa6",
+      "parentTags": [
+        "1.x"
+      ],
+      "tag": "1.19.x",
+      "version": "1.19.16"
+    },
+    {
+      "packUid": "61891f5942ec23f93b5e4aa6",
+      "parentTags": [
+        "1.19.x",
+        "1.x"
+      ],
+      "tag": "1.19.16",
+      "version": "1.19.16"
+    },
+    {
+      "packUid": "617e692b5bb2534c2b4d36b3",
+      "parentTags": [
+        "1.19.x",
+        "1.x"
+      ],
+      "tag": "1.19.15",
+      "version": "1.19.15"
+    },
+    {
+      "packUid": "614119fe2853c5ce35a95750",
+      "parentTags": [
+        "1.19.x",
+        "1.x"
+      ],
+      "tag": "1.19.14",
+      "version": "1.19.14"
+    },
+    {
+      "packUid": "614119ff2853c5ce3a576a71",
+      "parentTags": [
+        "1.19.x",
+        "1.x"
+      ],
+      "tag": "1.19.13",
+      "version": "1.19.13"
+    },
+    {
+      "packUid": "60fed75f19487c455645ff30",
+      "parentTags": [
+        "1.19.x",
+        "1.x"
+      ],
+      "tag": "1.19.12",
+      "version": "1.19.12"
+    },
+    {
+      "packUid": "60b7939f9b4d66ad758fe1fc",
+      "parentTags": [
+        "1.19.x",
+        "1.x"
+      ],
+      "tag": "1.19.11",
+      "version": "1.19.11"
+    },
+    {
+      "packUid": "609111cab52edfd68c206d28",
+      "parentTags": [
+        "1.19.x",
+        "1.x"
+      ],
+      "tag": "1.19.10",
+      "version": "1.19.10"
+    },
+    {
+      "packUid": "5f95af1b2f149370f2716bec",
+      "parentTags": [
+        "1.19.x",
+        "1.x"
+      ],
+      "tag": "1.19.0",
+      "version": "1.19.0"
+    }
+  ]
+}

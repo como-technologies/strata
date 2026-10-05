@@ -1895,6 +1895,18 @@ impl Tenant {
                 &format!("v1/packs/{name}/registries/{PUBLIC_REPO}"),
                 &entity,
             );
+            // The answer with the states query: the tags of the retired versions, which the
+            // answer above leaves out. A pack with no disabled or deleted version has no file.
+            let retired = dir.join("_entity_retired.json");
+            if retired.exists() {
+                self.write(
+                    project,
+                    &format!(
+                        "v1/packs/{name}/registries/{PUBLIC_REPO}@states=deprecated,disabled,deleted"
+                    ),
+                    &read_json(&retired),
+                );
+            }
             // The CSI pack is in the OCI registry too, as the live run of 20260917T150025Z found.
             // A pack ref that names no registry then has to say so.
             if name == "csi-aws-ebs" {

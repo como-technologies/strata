@@ -63,6 +63,14 @@ if [ -z "${OFFLINE:-}" ]; then
       log "WARN: pack '$name' not found in Public Repo, skipping"; rm -rf "$d"; continue
     fi
     jq 'del(.packValues[]?.readme)' "$d/_entity.raw.json" > "$d/_entity.json"; rm -f "$d/_entity.raw.json"
+    # The answer above leaves out the disabled and the deleted versions. The states query gives
+    # the retired versions, and a 404 when the registry has none.
+    if api_get "/v1/packs/${name}/registries/${reg}?states=deprecated,disabled,deleted" > "$d/_entity_retired.raw.json" 2>/dev/null; then
+      jq 'del(.packValues[]?.readme)' "$d/_entity_retired.raw.json" > "$d/_entity_retired.json"
+    else
+      rm -f "$d/_entity_retired.json"
+    fi
+    rm -f "$d/_entity_retired.raw.json"
     # /v1/packs caps limit at 100; page by offset until listmeta.count is reached
     : > "$d/_summaries.jsonl"; off=0
     while :; do
@@ -123,8 +131,11 @@ for d in "$out"/packs/*/; do
   jq --argjson kept "$kept" 'map(if (.spec.version as $v | $kept | index($v)) then . else del(.spec.values, .spec.schema, .spec.template, .spec.presets) end)' \
     "$d/_summaries.json" > "$d/_summaries.tmp" && mv "$d/_summaries.tmp" "$d/_summaries.json"
   keptuids=$(jq -c '[.[] | select(.spec.values != null) | .metadata.uid]' "$d/_summaries.json")
-  jq --argjson u "$keptuids" '.packValues |= map(select(.packUid as $p | $u | index($p)))' \
-    "$d/_entity.json" > "$d/_entity.tmp" && mv "$d/_entity.tmp" "$d/_entity.json"
+  for e in "$d/_entity.json" "$d/_entity_retired.json"; do
+    [ -s "$e" ] || continue
+    jq --argjson u "$keptuids" '.packValues |= map(select(.packUid as $p | $u | index($p)))' \
+      "$e" > "$e.tmp" && mv "$e.tmp" "$e"
+  done
 done
 
 # ------------------------------------------------------------------ 3. synthesize profiles

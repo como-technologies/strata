@@ -26,7 +26,8 @@ each record that pins it.
 - **A floating tag**, such as `LTS__24.x`, moves on its own within its range,
   and `verify` sees it move. Strata reads the version that the tag names now,
   and names only the versions above it, which the tag cannot reach:
-  `LTS__20.4.x` names 20.04, and 22.04 and 24.04 are out of its reach.
+  `LTS__20.4.x` names 20.04, and 22.04 and 24.04 are out of its reach. It also
+  reads a tag that names a disabled or a deleted version.
 - **A pinned version that the registry no longer lists** says so, as
   `the pinned version is absent`.
 - A pack with no registry, such as a manifest pack, has no pins.
