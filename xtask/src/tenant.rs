@@ -1877,15 +1877,22 @@ impl Tenant {
                 {"name": "Palette Registry", "uid": PALETTE_REGISTRY, "kind": "oci"}]}),
         );
         // the last sync of each registry, as v1RegistrySyncStatus gives it in the summary listing
-        // of its kind
+        // of its kind. The sync of the OCI registry stopped before its end and recovers, as the
+        // Bitnami registry of the tenant gives it: its copy is the copy of the last complete sync
         let synced = json!({"isSyncSupported": true, "status": "Completed",
             "lastRunTime": "2026-09-17T09:00:00.000Z", "lastSyncedTime": "2026-09-17T09:00:00.000Z",
             "syncRecovery": {"syncRecoveryState": "Recovered"}});
-        for (kind, uid) in [("pack", PUBLIC_REPO), ("oci", PALETTE_REGISTRY)] {
+        let stopped = json!({"isSyncSupported": true, "status": "InProgress",
+            "lastRunTime": "2026-09-17T09:00:00.000Z", "lastSyncedTime": "2026-08-29T00:00:11.032Z",
+            "syncRecovery": {"syncRecoveryState": "Recovering", "message": "sync interrupted"}});
+        for (kind, uid, sync) in [
+            ("pack", PUBLIC_REPO, &synced),
+            ("oci", PALETTE_REGISTRY, &stopped),
+        ] {
             self.write(
                 project,
                 &format!("v1/registries/{kind}/summary"),
-                &json!({"items": [{"metadata": {"uid": uid}, "status": {"sync": synced}}]}),
+                &json!({"items": [{"metadata": {"uid": uid}, "status": {"sync": sync}}]}),
             );
         }
         let packs = self.repo.join("examples/packs");

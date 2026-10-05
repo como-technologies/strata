@@ -1,6 +1,7 @@
 //! `behind`: the pack versions that a set of records pins, against the newer versions that the
 //! registries offer.
 
+use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 
@@ -9,6 +10,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::api::{Palette, PaletteApi};
+use crate::candidate::RegistrySyncNote;
+use crate::diff::RegistrySync;
 use crate::error::{Error, Result};
 use crate::impact::ImpactLevel;
 use crate::progress::Progress;
@@ -120,6 +123,16 @@ pub struct Pin {
     /// Why strata could not check the pin, when it could not.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<Value>,
+    /// For a pin that is current: the last sync of its registry, when that sync did not
+    /// complete. The copy of the registry in Palette is then the copy of an earlier sync, and
+    /// `current` is against that copy. Absent for a pin that is behind, when the last sync
+    /// completed, when the registry does not sync, and when Palette does not answer.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub registry_sync: Option<RegistrySync>,
+    /// For a pin that is current: why strata could not read the last sync of its registry.
+    /// Palette answered with a 5xx, or the request did not complete. The pin stays current.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub registry_sync_error: Option<String>,
 }
 
 /// A record that pins a pack version.
@@ -229,6 +242,8 @@ where
                         bump: None,
                         arrived: None,
                         error: None,
+                        registry_sync: None,
+                        registry_sync_error: None,
                     },
                     snap.source.project_uid.clone(),
                 )
@@ -243,8 +258,9 @@ where
         }
     }
 
-    // each pack of each registry, read one time
+    // each pack of each registry, read one time; the last sync of each registry, read one time
     let mut offers: BTreeMap<(String, String), Result<Offered>> = BTreeMap::new();
+    let mut syncs: BTreeMap<String, RegistrySyncNote> = BTreeMap::new();
     let mut out: Vec<(Pin, String)> = Vec::with_capacity(pins.len());
     for ((name, registry_uid, _, _), (mut pin, project)) in pins {
         let scope = Some(project.as_str()).filter(|p| !p.is_empty());
@@ -315,6 +331,28 @@ where
             })
             .collect();
         pin.behind = !pin.newer.is_empty();
+        // a pin that is current is current against the copy of the registry in Palette. When
+        // the last sync did not complete, the copy is the copy of an earlier sync, and the pin
+        // says so. A pin that is behind needs no note: a newer version in the copy is a newer
+        // version in the registry
+        if !pin.behind {
+            let kind = builds.first().map(|b| b.kind.as_str()).unwrap_or_default();
+            let note = match syncs.entry(registry_uid.clone()) {
+                Entry::Occupied(e) => e.get().clone(),
+                Entry::Vacant(v) => {
+                    let palette = connect(scope)?;
+                    let note = crate::candidate::registry_sync_note(
+                        &palette,
+                        &registry_uid,
+                        kind,
+                        progress,
+                    )?;
+                    v.insert(note).clone()
+                }
+            };
+            pin.registry_sync = note.sync.filter(|s| !s.completed());
+            pin.registry_sync_error = note.error;
+        }
         out.push((pin, project));
     }
 

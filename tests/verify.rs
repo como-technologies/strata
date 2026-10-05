@@ -6007,12 +6007,11 @@ fn verify_of_a_pack_record_names_a_failed_sync_of_the_registry_with_its_message(
         "isSyncSupported": true, "lastSyncedTime": "2025-10-16T08:00:00.000Z",
         "status": "Failed", "message": "invalid helm registry http status 404",
     })));
-    assert!(
-        verdict.ends_with(
-            "is unchanged since t0; the last sync of the registry failed: \
-             invalid helm registry http status 404"
-        ),
-        "{verdict}"
+    assert_eq!(
+        verdict,
+        "OK: pack csi-aws-ebs@1.65.0 in registry Public Repo is unchanged since t0; the last \
+         complete sync of the registry started 2025-10-16T08:00:00.000Z; the last sync of the \
+         registry failed: invalid helm registry http status 404"
     );
     assert_eq!(json["verify"]["registrySync"]["status"], "Failed");
     assert_eq!(
@@ -11046,6 +11045,140 @@ fn behind_of(
         &Progress::silent(),
     )
     .unwrap()
+}
+
+/// Behind on a record of csi-aws-ebs@1.65.0, which is current, against `api`: the report, and
+/// its terminal text.
+fn behind_current_on(api: &MemoryApi) -> (ops::BehindReport, String) {
+    let dir = tempfile::tempdir().unwrap();
+    let current = snapshot_pack(api, "pack:csi-aws-ebs@1.65.0").unwrap();
+    let path = dir.path().join("current.json");
+    fs::write(&path, current.to_json(false).unwrap()).unwrap();
+    let r = behind_of(api, &[path], &ops::BehindOptions::default());
+    let text = render::renderer(Format::Terminal, Paint::off(), false)
+        .render_behind(&r)
+        .unwrap();
+    (r, text)
+}
+
+#[test]
+fn a_pin_that_is_current_names_the_last_sync_of_its_registry_when_that_sync_did_not_complete() {
+    // the last sync failed: the copy of the registry in Palette is the copy of the last
+    // complete sync, and the pin is current against that copy
+    let api = serve_behind().with(
+        PACK_REGISTRY_SUMMARY,
+        public_repo_summary(serde_json::json!({
+            "isSyncSupported": true, "lastSyncedTime": "2025-10-16T08:00:00.000Z",
+            "lastRunTime": "2026-10-05T00:00:08.683Z", "status": "Failed",
+            "message": "invalid helm registry http status 404",
+        })),
+    );
+    let (r, text) = behind_current_on(&api);
+    let pin = &r.pins[0];
+    assert!(!pin.behind && pin.error.is_none(), "{pin:?}");
+    assert_eq!(
+        pin.registry_sync.as_ref().map(|s| s.status.as_str()),
+        Some("Failed")
+    );
+    assert!(pin.registry_sync_error.is_none());
+    assert_eq!(r.exit_code(), 0);
+    let note = "current; the last complete sync of the registry started \
+                2025-10-16T08:00:00.000Z; the last sync of the registry failed: invalid helm \
+                registry http status 404";
+    assert!(
+        text.contains(&format!("  [csi  ] csi-aws-ebs  1.65.0  Public Repo  {note}\n")),
+        "{text}"
+    );
+    let md = render::renderer(Format::Markdown, Paint::off(), false)
+        .render_behind(&r)
+        .unwrap();
+    assert!(
+        md.contains(&format!("| `csi-aws-ebs` | `1.65.0` | Public Repo | {note} |")),
+        "{md}"
+    );
+    let json = serde_json::to_value(&r).unwrap();
+    assert_eq!(
+        json["pins"][0]["registrySync"],
+        serde_json::json!({"lastSyncedTime": "2025-10-16T08:00:00.000Z",
+            "lastRunTime": "2026-10-05T00:00:08.683Z", "status": "Failed",
+            "message": "invalid helm registry http status 404"})
+    );
+    assert!(json["pins"][0].get("registrySyncError").is_none(), "{json}");
+
+    // a sync runs now, after a sync that stopped: the copy is the copy of the last complete sync
+    let api = serve_behind().with(
+        PACK_REGISTRY_SUMMARY,
+        public_repo_summary(serde_json::json!({
+            "isSyncSupported": true, "lastRunTime": "2026-10-05T18:04:27.776Z",
+            "lastSyncedTime": "2026-08-29T00:00:11.032Z", "status": "InProgress",
+            "syncRecovery": {"message": "sync interrupted", "syncRecoveryState": "Recovering"},
+        })),
+    );
+    let (r, text) = behind_current_on(&api);
+    assert!(
+        text.contains(
+            "current; a sync of the registry is in progress since 2026-10-05T18:04:27.776Z, \
+             and the last complete sync of the registry started 2026-08-29T00:00:11.032Z; the \
+             recovery of the sync is Recovering: sync interrupted\n"
+        ),
+        "{text}"
+    );
+    assert!(r.pins[0].registry_sync.as_ref().is_some_and(|s| s.in_progress()));
+}
+
+#[test]
+fn a_pin_has_no_sync_note_when_the_last_sync_completed_when_palette_gives_no_sync_or_when_it_is_behind()
+{
+    // the last sync completed: Palette shows the sync, and the copy is the copy of the last run
+    let completed = serde_json::json!({
+        "isSyncSupported": true, "lastRunTime": "2026-09-30T00:00:11.000Z",
+        "lastSyncedTime": "2026-09-30T00:00:11.000Z", "status": "Completed",
+    });
+    let api = serve_behind().with(PACK_REGISTRY_SUMMARY, public_repo_summary(completed));
+    let (r, text) = behind_current_on(&api);
+    assert!(r.pins[0].registry_sync.is_none() && r.pins[0].registry_sync_error.is_none());
+    assert!(text.contains("  Public Repo  current\n"), "{text}");
+    let json = serde_json::to_value(&r).unwrap();
+    assert!(json["pins"][0].get("registrySync").is_none(), "{json}");
+
+    // Palette does not serve the summary listing: no note, and no error
+    let (r, text) = behind_current_on(&serve_behind());
+    assert!(r.pins[0].registry_sync.is_none() && r.pins[0].registry_sync_error.is_none());
+    assert!(text.contains("  Public Repo  current\n"), "{text}");
+
+    // Palette answers the summary listing with a 5xx: the pin stays current, and the report
+    // names the reason
+    let api = serve_behind().failing(PACK_REGISTRY_SUMMARY, 500, r#"{"code":"InternalError"}"#);
+    let (r, text) = behind_current_on(&api);
+    assert!(!r.pins[0].behind && r.pins[0].registry_sync.is_none());
+    assert_eq!(
+        r.pins[0].registry_sync_error.as_deref(),
+        Some(r#"HTTP 500: {"code":"InternalError"}"#)
+    );
+    assert_eq!(r.exit_code(), 0);
+    assert!(text.contains("  Public Repo  current\n"), "{text}");
+    let json = serde_json::to_value(&r).unwrap();
+    assert_eq!(
+        json["pins"][0]["registrySyncError"],
+        r#"HTTP 500: {"code":"InternalError"}"#
+    );
+
+    // a pin that is behind: a newer version in the copy is a newer version in the registry
+    let failed = serde_json::json!({
+        "isSyncSupported": true, "lastSyncedTime": "2025-10-16T08:00:00.000Z",
+        "status": "Failed", "message": "invalid helm registry http status 404",
+    });
+    let api = serve_behind().with(PACK_REGISTRY_SUMMARY, public_repo_summary(failed));
+    let dir = tempfile::tempdir().unwrap();
+    let old = snapshot_pack(&api, "pack:csi-aws-ebs@1.63.1").unwrap();
+    let path = dir.path().join("old.json");
+    fs::write(&path, old.to_json(false).unwrap()).unwrap();
+    let r = behind_of(&api, &[path], &ops::BehindOptions::default());
+    assert!(r.pins[0].behind && r.pins[0].registry_sync.is_none(), "{:?}", r.pins[0]);
+    let text = render::renderer(Format::Terminal, Paint::off(), false)
+        .render_behind(&r)
+        .unwrap();
+    assert!(!text.contains("sync"), "{text}");
 }
 
 #[test]

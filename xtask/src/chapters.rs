@@ -2567,6 +2567,9 @@ fn use_cases(r: &mut Runner) {
     r.serve_here(); // state 2: the registry publishes csi-aws-ebs 1.65.0
     r.quiet("strata snapshot aws-stack@1.1.1 -o releases/1.1.1/dev.json");
     r.step("behind", 1, false, "strata behind 'releases/*/dev.json'");
+    // a pin that is current against the copy of a registry whose sync stopped before its end
+    r.quiet("strata snapshot 'pack:Palette Registry/csi-aws-ebs@1.65.0' -o csi-oci.json");
+    r.step("behind-stale", 0, false, "strata behind csi-oci.json");
     r.step(
         "behind-since",
         1,

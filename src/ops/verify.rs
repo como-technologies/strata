@@ -255,22 +255,8 @@ pub fn verify_with<A: PaletteApi>(
             .unwrap_or_default();
         // the sync is a note beside the verdict: a failed read of it is named, and the verdict
         // stands
-        let (registry_sync, registry_sync_error) =
-            match crate::candidate::registry_sync(palette, &p.registry_uid, pack_type) {
-                Ok(sync) => (sync, None),
-                Err(e @ (Error::Api { .. } | Error::Transport { .. })) => {
-                    let reason = match &e {
-                        Error::Api { status, body, .. } => format!("HTTP {status}: {body}"),
-                        _ => e.to_string(),
-                    };
-                    progress.note(&format!(
-                        "note: the sync status of registry {} is unavailable ({reason})",
-                        p.registry_uid
-                    ));
-                    (None, Some(reason))
-                }
-                Err(e) => return Err(e),
-            };
+        let sync =
+            crate::candidate::registry_sync_note(palette, &p.registry_uid, pack_type, progress)?;
         let image_ids_changed = images_moved_alone(recorded, &live);
         let unchanged = recorded.root == live.root && image_ids_changed.is_empty();
         let verify = Verify {
@@ -296,8 +282,8 @@ pub fn verify_with<A: PaletteApi>(
             macros_changed: Vec::new(),
             image_ids_changed,
             invalid_packs: diff::invalid_packs(&live),
-            registry_sync,
-            registry_sync_error,
+            registry_sync: sync.sync,
+            registry_sync_error: sync.error,
         };
         let mut diff = diff::compute(recorded, &live, checked_at, Some(verify));
         let status = settle(unchanged, &mut diff, options);

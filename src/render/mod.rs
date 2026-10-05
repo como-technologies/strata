@@ -139,9 +139,9 @@ pub(crate) fn impact_word(level: crate::impact::ImpactLevel) -> String {
 }
 
 /// What a pin is: `behind: 1.65.0, 1.64.0`, `current`, or `not checked`, with its floating tag and
-/// the version the tag names now, and the state of the pinned version when the registry gives one.
-/// Each newer version names its state and what a move to it drops: `1.64.0 (deprecated, drops
-/// arm64)`.
+/// the version the tag names now, the state of the pinned version when the registry gives one,
+/// and the last sync of the registry when that sync did not complete. Each newer version names
+/// its state and what a move to it drops: `1.64.0 (deprecated, drops arm64)`.
 pub(crate) fn pin_status(pin: &crate::ops::Pin) -> String {
     let mut text = if pin.error.is_some() {
         "not checked".to_string()
@@ -162,6 +162,7 @@ pub(crate) fn pin_status(pin: &crate::ops::Pin) -> String {
     if let Some(state) = &pin.pinned_state {
         text.push_str(&format!("; the pinned version is {state}"));
     }
+    text.push_str(&registry_sync_suffix(pin.registry_sync.as_ref()));
     text
 }
 
@@ -1481,10 +1482,10 @@ pub(crate) fn variable_lines(g: &VariablesByName) -> Vec<VarLine<'_>> {
     lines.into_iter().map(|(_, l)| l).collect()
 }
 
-/// For a pack record, the end of the verdict: when the last complete sync of the registry
-/// started, that a sync runs now, or that the last sync failed, and a recovery of a sync that
-/// stopped. Palette holds a copy of each registry, and the verdict states that copy. Nothing
-/// when Palette gives no sync.
+/// The end of the verdict of a pack record, and of a pin of `behind` that is current: when the
+/// last complete sync of the registry started, that a sync runs now, or that the last sync
+/// failed, and a recovery of a sync that stopped. Palette holds a copy of each registry, and the
+/// answer states that copy. Nothing when Palette gives no sync.
 pub(crate) fn registry_sync_suffix(sync: Option<&crate::diff::RegistrySync>) -> String {
     let Some(s) = sync else {
         return String::new();
@@ -1496,9 +1497,13 @@ pub(crate) fn registry_sync_suffix(sync: Option<&crate::diff::RegistrySync>) -> 
         )
     });
     let mut out = if s.failed() {
-        match s.message.as_str() {
-            "" => "; the last sync of the registry failed".to_string(),
-            message => format!("; the last sync of the registry failed: {message}"),
+        let failed = match s.message.as_str() {
+            "" => "the last sync of the registry failed".to_string(),
+            message => format!("the last sync of the registry failed: {message}"),
+        };
+        match last_complete {
+            Some(complete) => format!("; {complete}; {failed}"),
+            None => format!("; {failed}"),
         }
     } else if s.in_progress() {
         let since = match s.last_run_time.as_str() {

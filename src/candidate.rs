@@ -598,6 +598,45 @@ pub(crate) fn registry_sync<A: PaletteApi>(
     }))
 }
 
+/// The last sync of a registry, read as a note beside an answer.
+#[derive(Debug, Clone, Default)]
+pub(crate) struct RegistrySyncNote {
+    /// The sync, when Palette gives one: see [`registry_sync`].
+    pub sync: Option<crate::diff::RegistrySync>,
+    /// Why strata could not read the sync: Palette answered with a 5xx, or the request did not
+    /// complete. `sync` is then `None`.
+    pub error: Option<String>,
+}
+
+/// The last sync of the registry `uid`, which holds a pack of type `pack_type`, as a note beside
+/// an answer that stands on its own: the verdict of a pack record, or a pin of `behind`. A 5xx
+/// of Palette and a request that does not complete do not stop the answer: the note names the
+/// reason, and `progress` gets a line. Each other error is an error of the run.
+pub(crate) fn registry_sync_note<A: PaletteApi>(
+    palette: &Palette<A>,
+    uid: &str,
+    pack_type: &str,
+    progress: &Progress,
+) -> Result<RegistrySyncNote> {
+    match registry_sync(palette, uid, pack_type) {
+        Ok(sync) => Ok(RegistrySyncNote { sync, error: None }),
+        Err(e @ (Error::Api { .. } | Error::Transport { .. })) => {
+            let reason = match &e {
+                Error::Api { status, body, .. } => format!("HTTP {status}: {body}"),
+                _ => e.to_string(),
+            };
+            progress.note(&format!(
+                "note: the sync status of registry {uid} is unavailable ({reason})"
+            ));
+            Ok(RegistrySyncNote {
+                sync: None,
+                error: Some(reason),
+            })
+        }
+        Err(e) => Err(e),
+    }
+}
+
 /// The type of the pack that Palette makes for a layer from a registry that it does not sync.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum UnsyncedKind {
