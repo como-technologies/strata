@@ -11215,7 +11215,11 @@ fn in_a_fips_tenant_packs_and_behind_leave_out_a_version_that_palette_does_not_s
     let old = snapshot_pack(&fips, "pack:csi-aws-ebs@1.63.1").unwrap();
     fs::write(&record, old.to_json(false).unwrap()).unwrap();
     let newer = |api: &MemoryApi| {
-        let r = behind_of(api, std::slice::from_ref(&record), &ops::BehindOptions::default());
+        let r = behind_of(
+            api,
+            std::slice::from_ref(&record),
+            &ops::BehindOptions::default(),
+        );
         r.pins[0]
             .newer
             .iter()
