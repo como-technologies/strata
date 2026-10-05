@@ -1994,7 +1994,7 @@ fn a_policy_tier_of_strata_0_18_with_agent_upgrades_still_verifies() {
 }
 
 #[test]
-fn a_404_of_the_route_of_the_bindings_records_null_and_another_error_leaves_the_field_out_of_the_tier() {
+fn a_404_of_the_route_of_the_bindings_records_null_and_another_error_leaves_out_the_field() {
     let dir = tempfile::tempdir().unwrap();
     common::make_fixtures(dir.path());
     // the route of the role bindings answers 404, and the cluster has no namespace
@@ -2011,7 +2011,10 @@ fn a_404_of_the_route_of_the_bindings_records_null_and_another_error_leaves_the_
     let forbidden = serve_policy(dir.path(), barney()).failing(rbacs_route(), 403, "forbidden\n");
     let s = snapshot_cluster(&forbidden, None).unwrap();
     let tier = &s.source.cluster.as_ref().unwrap().tiers["policy"];
-    assert!(tier.fields.get("rbacs").is_none(), "an error is not a value");
+    assert!(
+        tier.fields.get("rbacs").is_none(),
+        "an error is not a value"
+    );
     assert_eq!(
         tier.fields["timezone"], "Etc/UTC",
         "the other fields are read"
@@ -7083,8 +7086,14 @@ fn a_raw_directory_keeps_each_read_error_so_the_record_is_the_record_of_the_fetc
         serde_json::to_value(&direct).unwrap()
     );
     let c = from_raw.source.cluster.unwrap();
-    assert_eq!(c.updates_pending_error.as_deref(), Some("HTTP 403: forbidden"));
-    assert_eq!(c.pending_repave_error.as_deref(), Some("HTTP 403: forbidden"));
+    assert_eq!(
+        c.updates_pending_error.as_deref(),
+        Some("HTTP 403: forbidden")
+    );
+    assert_eq!(
+        c.pending_repave_error.as_deref(),
+        Some("HTTP 403: forbidden")
+    );
     let policy = &c.tiers["policy"];
     assert_eq!(
         policy.errors.keys().collect::<Vec<_>>(),

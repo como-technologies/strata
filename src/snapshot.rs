@@ -1593,8 +1593,10 @@ mod tests {
     #[test]
     fn a_tier_leaves_a_field_that_strata_could_not_read_out_of_its_fields_and_its_hash() {
         let errors = BTreeMap::from([("rbacs".to_string(), "HTTP 403: forbidden".to_string())]);
-        let unread =
-            ClusterTier::with_errors(json!({"timezone": "Etc/UTC", "rbacs": null}), errors.clone());
+        let unread = ClusterTier::with_errors(
+            json!({"timezone": "Etc/UTC", "rbacs": null}),
+            errors.clone(),
+        );
         let read = ClusterTier::of(json!({"timezone": "Etc/UTC"}));
         assert_eq!(unread.fields, read.fields);
         assert_eq!(unread.hash, read.hash);
