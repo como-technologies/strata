@@ -2368,7 +2368,7 @@ fn packs_stale(sync: &str, line: &str, json: &str) -> String {
 }
 
 #[test]
-fn packs_sh_stage_7_checks_the_sync_note_of_a_pin_that_is_current_against_an_older_copy() {
+fn packs_sh_stage_8_checks_the_sync_note_of_a_pin_that_is_current_against_an_older_copy() {
     // the sync of Bitnami stays in progress: the line names the sync, and the JSON carries it
     let steps = packs_stale(
         r#"{"status":"InProgress","lastSyncedTime":"2026-08-29T00:00:11.032Z","lastRunTime":"2026-10-05T18:04:27.776Z","isSyncSupported":true}"#,
