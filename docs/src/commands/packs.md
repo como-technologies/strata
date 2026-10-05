@@ -35,8 +35,8 @@ question a bump asks: the pin is current when it names the version that
 | `--latest` | Only the newest version of each registry. |
 
 A version with the cloud type `all` supports every cloud, so `--cloud aws` keeps
-it. Palette gives `all` to a pack for each cloud, and its own filter on one
-cloud keeps that pack: see
+it. Palette gives `all` to a pack that supports every cloud, and its own filter
+on one cloud keeps that pack: see
 [The cloud type `all`](../internals/palette/packs.md#the-cloud-type-all). The
 JSON keeps `cloudTypes` as Palette gives it.
 

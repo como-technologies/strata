@@ -8,7 +8,7 @@ Arguments:
 
 Options:
       --registry <NAME>  Only this registry, by name or uid
-      --cloud <TYPE>     Keep the versions of this cloud, such as aws
+      --cloud <TYPE>     Keep the versions of this cloud, such as aws, and the versions of the cloud type all
       --latest           Only the newest version of each registry
       --format <FORMAT>  The report format: terminal, markdown, or json [default: terminal]
       --json             The same as --format json
