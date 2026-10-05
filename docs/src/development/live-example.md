@@ -15,7 +15,7 @@ show.
 | `drift-report.sh off`, `drift-report.sh on` | `scripts/ci/verify-report.sh` around an edit in place and a version bump (#25). |
 | `packs.sh` | `pack:` refs against the tenant's own registries (#55). Read-only, and it needs no cluster. |
 | `pack-states.sh` | Pack versions that Spectro Cloud deprecated, disabled, or deleted: what `packs` and `snapshot` report, and which profiles Palette refuses (#68). It needs no cluster. |
-| `validate-packs.sh` | What Palette answers when `snapshot --validate` asks whether it takes the packs of a candidate, and of a version (#152). It needs no cluster and no profile. |
+| `validate-packs.sh` | What Palette answers when `snapshot --validate` asks whether it takes the packs of a candidate, and of a version (#152). Stage 4: the layer that Palette gives a pack whose profile gives another layer than its registry (#210, #254). It needs no cluster and no profile. |
 | `export.sh` | The export of each version of the example, read with `snapshot --from-candidate`, and what the export route answers (#156). It needs the profiles, and no cluster. |
 | `registry.sh` | The example's own OCI pack registry: a push, a push again of one version with other bytes, and a new version, and what Palette does after each (#66); a tag that the registry deletes while a profile pins it (#108). It needs the profiles, and no cluster. |
 | `template.sh` | The lock of a cluster template on the versions it links, and the order in which a cluster installs the packs of two add-on profiles (#66). It needs the profiles and no cluster, and it ends with the removal of the example. |
@@ -158,6 +158,7 @@ it:
 they found it. `packs.sh` and `knurl.sh` read the profiles and change nothing.
 `pack-states.sh` asks for three profiles, and deletes the one that Palette
 creates at once. `validate-packs.sh` asks validate routes, which change nothing.
+Its stage 4 makes one profile, and deletes it.
 `export.sh` reads the export of each version, and changes nothing.
 `merge-gate.sh` makes one edit in place, and puts it back.
 `who.sh` makes one edit in place at a time, and puts each back.
@@ -180,7 +181,7 @@ each.
 | `tag-only.sh` | the tag name of the OS pack, and which of two such versions cluster A runs | the pack uid, each other pack, the values, the flag (off), the baseline |
 | `packs.sh` | nothing; it only reads | the baseline |
 | `pack-states.sh` | nothing that stays: a probe profile, deleted at once | the baseline |
-| `validate-packs.sh` | nothing; it only reads and asks validate routes | the baseline |
+| `validate-packs.sh` | nothing that stays: stage 4 makes one profile, and deletes it | the baseline |
 | `export.sh` | nothing; it only reads | the baseline |
 | `merge-gate.sh` | the add-on version, which stage 4 edits in place and stage 5 puts back | the profiles, the clusters, the baseline |
 | `knurl.sh` | nothing; it only reads | the baseline |

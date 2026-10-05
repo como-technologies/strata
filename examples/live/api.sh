@@ -85,10 +85,11 @@
 #       Make a Spectro pack registry over ENDPOINT with basic auth, and print its uid.
 #   api.sh pack-registry-delete REGISTRY_UID
 #       Remove a Spectro pack registry.
-#   api.sh pin-profile NAME REGISTRY_UID TYPE PACK VERSION [VALUES_FILE]
+#   api.sh pin-profile NAME REGISTRY_UID TYPE PACK VERSION [VALUES_FILE [LAYER]]
 #       Make and publish an add-on profile NAME@1.0.0 that pins PACK at VERSION by name, with no
 #       pack uid, as the console does for a registry that Palette does not synchronize, and with
-#       the values of VALUES_FILE, or none. Prints its uid.
+#       the values of VALUES_FILE, or none. An empty VALUES_FILE gives no values. The pack has
+#       the layer LAYER, or addon. Prints its uid.
 #   api.sh patch PATH JSON
 #       PATCH one document of the API with the body JSON, such as
 #       /v1/spectroclusters/<uid>/clusterConfig/timezone '{"timezone": "America/Chicago"}'.
@@ -592,23 +593,25 @@ pack_registry_delete() {
   fi
 }
 
-# pin_profile NAME REGISTRY_UID TYPE PACK VERSION [VALUES_FILE]: create and publish an add-on
-# profile NAME@1.0.0 that pins PACK at VERSION by name, with no pack uid, as the console does for a
-# registry that Palette does not synchronize, and with the values of VALUES_FILE, or none. When
-# the registry lists the pack, the pack uid goes too: Palette needs it for such a registry. Prints
-# the uid of the profile.
+# pin_profile NAME REGISTRY_UID TYPE PACK VERSION [VALUES_FILE [LAYER]]: create and publish an
+# add-on profile NAME@1.0.0 that pins PACK at VERSION by name, with no pack uid, as the console does
+# for a registry that Palette does not synchronize, and with the values of VALUES_FILE, or none.
+# The pack has the layer LAYER, or addon. When the registry lists the pack, the pack uid goes too:
+# Palette needs it for such a registry. Prints the uid of the profile.
 pin_profile() {
-  local name=${1:-} registry=${2:-} kind=${3:-} pack=${4:-} version=${5:-} values=${6:-} body uid pack_uid
-  [ -n "$version" ] || die "usage: api.sh pin-profile NAME REGISTRY_UID TYPE PACK VERSION [VALUES_FILE]"
+  local name=${1:-} registry=${2:-} kind=${3:-} pack=${4:-} version=${5:-} values=${6:-}
+  local layer=${7:-addon} body uid pack_uid
+  [ -n "$version" ] ||
+    die "usage: api.sh pin-profile NAME REGISTRY_UID TYPE PACK VERSION [VALUES_FILE [LAYER]]"
   body=$(mktemp); trap 'rm -f "${body:-}"' RETURN
   # the pack uid, when the registry lists the pack: a synchronized registry needs it
   pack_uid=$(call GET "/v1/packs?filters=spec.name=$pack&limit=100&offset=0" \
     | jq -r --arg r "$registry" --arg v "$version" \
       '[.items[]? | select(.spec.registryUid == $r and .spec.version == $v) | .metadata.uid][0] // ""')
   jq -n --arg n "$name" --arg r "$registry" --arg t "$kind" --arg p "$pack" --arg v "$version" \
-    --arg u "$pack_uid" --rawfile values "${values:-/dev/null}" \
+    --arg u "$pack_uid" --arg l "$layer" --rawfile values "${values:-/dev/null}" \
     '{metadata: {name: $n}, spec: {version: "1.0.0", template: {type: "add-on", cloudType: "all",
-      packs: [{name: $p, tag: $v, registryUid: $r, type: $t, layer: "addon", values: $values}
+      packs: [{name: $p, tag: $v, registryUid: $r, type: $t, layer: $l, values: $values}
         + (if $u == "" then {} else {uid: $u} end)]}}}' > "$body"
   uid=$(call POST /v1/clusterprofiles "$body" | jq -r '.uid') || return 2
   call PATCH "/v1/clusterprofiles/$uid/publish" > /dev/null || return 2
