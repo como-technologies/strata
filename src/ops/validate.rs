@@ -174,8 +174,8 @@ pub fn profile_validate_body(snap: &Snapshot) -> Value {
 /// # Errors
 ///
 /// [`Error::Usage`] for a record of a cluster or of a pack, before any request. Each error of a
-/// request that is not a refusal: an answer of Palette with another status or code, and a
-/// request that did not complete.
+/// request that is not a refusal. That is an answer of Palette with another status or code, or
+/// a request that did not complete.
 pub fn profile_validation<A: PaletteApi>(
     palette: &Palette<A>,
     snap: &Snapshot,
