@@ -1,0 +1,4 @@
+$ strata packs podinfo
+strata: looking up project dev
+strata: reading the versions of podinfo
+strata: no registry that this key can see offers a pack named 'podinfo'; Palette does not sync the registry 'charts-auth', and lists a pack of it only while a profile pins the pack; `strata list --pack podinfo` finds the profiles that carry one
