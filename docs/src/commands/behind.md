@@ -50,6 +50,39 @@ under a pin name each record that pins it.
 `--no-impact` skips the comparison of each bump: it costs two pack reads for each
 pin that is behind.
 
+## A pin that is current against an older copy
+
+Palette keeps a copy of each registry, and a sync job refreshes the copy.
+`behind` compares each pin with that copy, as `verify` of a pack record does.
+When the last sync of a registry did not complete, the copy is the copy of an
+earlier sync. A pin that is `current` is then current against that older copy,
+and its line names the sync:
+
+```text
+{{#include ../output/behind-stale.txt}}
+```
+
+- `; a sync of the registry is in progress since <time>, and the last complete
+  sync of the registry started <time>`: a sync runs now. The copy is the copy
+  of the last complete sync until the sync that runs completes.
+- `; the last complete sync of the registry started <time>; the last sync of
+  the registry failed: <message>`: the last sync failed, and the message is
+  from Palette. The copy is the copy of the last complete sync.
+- `; the recovery of the sync is <state>: <message>`: a sync stopped before
+  its end, and Palette recovers it. This note can follow each of the notes
+  above.
+
+A sync can stay in progress for a long time: see
+[The sync of a registry](../internals/palette/packs.md#the-sync-of-a-registry).
+A pin whose registry completed its last sync has no note. Palette shows the
+sync of each registry, and the copy is the copy of the last run. A pin that is
+behind has no note either: a newer version in the copy is a newer version in
+the registry. `--json` gives the sync in `pins[].registrySync`, with the fields
+of `verify.registrySync`: see
+[The sync of the registry of a pack record](./verify.md#the-sync-of-the-registry-of-a-pack-record).
+When strata cannot read the sync, the pin stays current, and
+`pins[].registrySyncError` gives the reason.
+
 ## What arrived since the last run
 
 Keep the JSON of a run, and give it to the next run with `--since`. Each pin then
@@ -93,6 +126,8 @@ A scheduled job that keeps one issue open for each pack that is behind is
 - Strata reads each pack of each registry one time, in the project of the
   first record that pins it. It reads the paged listing of the versions, and the
   tags of the pack in the registry.
+- For each registry with a pin that is current, strata also reads the sync of
+  the registry one time, from the summary listing of its kind.
 - Behind is a decision, and not an error, so run `behind` apart from `verify`:
   the two fail for different reasons, and need different people.
 

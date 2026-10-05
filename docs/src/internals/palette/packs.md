@@ -41,8 +41,11 @@ summary listing of each kind of registry gives the last sync of each registry
 in `status.sync`: `GET /v1/registries/pack/summary`,
 `GET /v1/registries/helm/summary`, and `GET /v1/registries/oci/summary`. The
 route `GET /v1/registries/{kind}/{uid}/sync/status` gives the same fields for
-one registry. `verify` of a pack record reads the summary listing: see
-[The sync of the registry of a pack record](../../commands/verify.md#the-sync-of-the-registry-of-a-pack-record).
+one registry. `verify` of a pack record and `behind` read the summary listing:
+see
+[The sync of the registry of a pack record](../../commands/verify.md#the-sync-of-the-registry-of-a-pack-record)
+and
+[A pin that is current against an older copy](../../commands/behind.md#a-pin-that-is-current-against-an-older-copy).
 
 | Field | What it is |
 | --- | --- |

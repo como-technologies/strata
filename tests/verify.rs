@@ -11086,14 +11086,18 @@ fn a_pin_that_is_current_names_the_last_sync_of_its_registry_when_that_sync_did_
                 2025-10-16T08:00:00.000Z; the last sync of the registry failed: invalid helm \
                 registry http status 404";
     assert!(
-        text.contains(&format!("  [csi  ] csi-aws-ebs  1.65.0  Public Repo  {note}\n")),
+        text.contains(&format!(
+            "  [csi  ] csi-aws-ebs  1.65.0  Public Repo  {note}\n"
+        )),
         "{text}"
     );
     let md = render::renderer(Format::Markdown, Paint::off(), false)
         .render_behind(&r)
         .unwrap();
     assert!(
-        md.contains(&format!("| `csi-aws-ebs` | `1.65.0` | Public Repo | {note} |")),
+        md.contains(&format!(
+            "| `csi-aws-ebs` | `1.65.0` | Public Repo | {note} |"
+        )),
         "{md}"
     );
     let json = serde_json::to_value(&r).unwrap();
@@ -11123,12 +11127,17 @@ fn a_pin_that_is_current_names_the_last_sync_of_its_registry_when_that_sync_did_
         ),
         "{text}"
     );
-    assert!(r.pins[0].registry_sync.as_ref().is_some_and(|s| s.in_progress()));
+    assert!(
+        r.pins[0]
+            .registry_sync
+            .as_ref()
+            .is_some_and(|s| s.in_progress())
+    );
 }
 
 #[test]
 fn a_pin_has_no_sync_note_when_the_last_sync_completed_when_palette_gives_no_sync_or_when_it_is_behind()
-{
+ {
     // the last sync completed: Palette shows the sync, and the copy is the copy of the last run
     let completed = serde_json::json!({
         "isSyncSupported": true, "lastRunTime": "2026-09-30T00:00:11.000Z",
@@ -11174,7 +11183,11 @@ fn a_pin_has_no_sync_note_when_the_last_sync_completed_when_palette_gives_no_syn
     let path = dir.path().join("old.json");
     fs::write(&path, old.to_json(false).unwrap()).unwrap();
     let r = behind_of(&api, &[path], &ops::BehindOptions::default());
-    assert!(r.pins[0].behind && r.pins[0].registry_sync.is_none(), "{:?}", r.pins[0]);
+    assert!(
+        r.pins[0].behind && r.pins[0].registry_sync.is_none(),
+        "{:?}",
+        r.pins[0]
+    );
     let text = render::renderer(Format::Terminal, Paint::off(), false)
         .render_behind(&r)
         .unwrap();
