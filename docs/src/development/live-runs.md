@@ -202,7 +202,7 @@ registries the tenant can see, including one pack that two registries hold.
 | `compare-same` | 0 | #55: a pack version against itself is identical |
 | `record`, `record-title` | 0 | #55: `snapshot` writes a record of a pack version, which names the pack and not a profile |
 | `verify-record` | 0 | #55: the record verifies against the registry it came from |
-| `verify-sync`, `verify-sync-json` | 0 | #141: the verdict ends with the last sync of the registry, and `--json` gives `verify.registrySync` |
+| `verify-sync`, `verify-sync-json` | 0 | #141, #192: the verdict ends with the last sync of the registry (the start of the last complete sync, a sync in progress, or a failure), and `--json` gives `verify.registrySync` |
 | `record-images`, `old-record` | 0 | #77: the record carries the image list; a record without the list gets it from its values, and verifies |
 | `latest`, `latest-is-newest` | 0 | #55: `@latest` resolves to the newest version the registry offers |
 | `two-registries`, `two-registries-says` | 2, 0 | #55: a bare ref for a pack in two registries is an error that names both, and the ref that fixes it |
@@ -1347,6 +1347,24 @@ template that adds `pushed: "again"`, and each registry is synced.
 The log of the controller on the cluster shows a `helm pull` of each chart, at
 each install, by `chartVersion` `1.0.0`. See
 [What a cluster installs of a Helm pack](../internals/palette/packs.md#what-a-cluster-installs-of-a-helm-pack).
+
+## The sync of each registry
+
+A read by hand, with no write: `status.sync` of each registry of the tenant,
+from `GET /v1/registries/pack/summary`, `GET /v1/registries/helm/summary`, and
+`GET /v1/registries/oci/summary`, and from
+`GET /v1/registries/{kind}/{uid}/sync/status` for each pack and Helm registry.
+No script holds it yet.
+
+- The two routes give the same fields and the same values for each registry.
+- Two or three registries give the same `lastSyncedTime` or `lastRunTime` to
+  the millisecond: the time is the start of the sync job, not its end.
+- The Bitnami registry is `InProgress`, with `syncRecovery` `Recovering` and
+  `sync interrupted`. Its `lastSyncedTime` is more than a month older than its
+  `lastRunTime`.
+- A registry whose sync failed gives `Failed` and the cause in `message`.
+
+See [The sync of a registry](../internals/palette/packs.md#the-sync-of-a-registry).
 
 ## A second cloud: GCP
 

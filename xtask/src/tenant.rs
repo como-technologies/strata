@@ -1876,19 +1876,18 @@ impl Tenant {
                 {"name": "Public Repo", "uid": PUBLIC_REPO, "kind": "pack"},
                 {"name": "Palette Registry", "uid": PALETTE_REGISTRY, "kind": "oci"}]}),
         );
-        // the last sync of each registry, as v1RegistrySyncStatus gives it
+        // the last sync of each registry, as v1RegistrySyncStatus gives it in the summary listing
+        // of its kind
         let synced = json!({"isSyncSupported": true, "status": "Completed",
-            "lastRunTime": "2026-09-17T09:00:00.000Z", "lastSyncedTime": "2026-09-17T09:00:00.000Z"});
-        self.write(
-            project,
-            &format!("v1/registries/pack/{PUBLIC_REPO}/sync/status"),
-            &synced,
-        );
-        self.write(
-            project,
-            &format!("v1/registries/oci/{PALETTE_REGISTRY}/basic/sync/status"),
-            &synced,
-        );
+            "lastRunTime": "2026-09-17T09:00:00.000Z", "lastSyncedTime": "2026-09-17T09:00:00.000Z",
+            "syncRecovery": {"syncRecoveryState": "Recovered"}});
+        for (kind, uid) in [("pack", PUBLIC_REPO), ("oci", PALETTE_REGISTRY)] {
+            self.write(
+                project,
+                &format!("v1/registries/{kind}/summary"),
+                &json!({"items": [{"metadata": {"uid": uid}, "status": {"sync": synced}}]}),
+            );
+        }
         let packs = self.repo.join("examples/packs");
         let mut dirs: Vec<PathBuf> = std::fs::read_dir(&packs)
             .into_iter()

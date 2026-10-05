@@ -310,10 +310,13 @@ A comparison of two sides, `a` and `b`.
     `name`, `clusterVersion`, and `profileVersion` (empty for a uid that is
     gone). The status is `drifted`.
   - `registrySync`: for a pack record, the last sync of the registry in
-    Palette: `lastSyncedTime` (empty when no sync completed), `status`
-    (`Completed`, `InProgress`, or `Failed`), and `message` when Palette gives
-    one. The verdict states the copy of the registry in Palette, and this field
-    tells how old that copy is. It is absent when the registry does not sync,
+    Palette: `lastSyncedTime`, the start of the last sync that completed
+    (empty when no sync completed); `lastRunTime`, the start of the last sync;
+    `status` (`Completed`, `InProgress`, or `Failed`); `message` when Palette
+    gives one; and `syncRecovery`, with `syncRecoveryState` (`Interrupted` or
+    `Recovering`) and `message`, when a sync waits for a recovery. The verdict
+    states the copy of the registry in Palette, and this field tells how old
+    that copy is. It is absent when the registry does not sync,
     or when Palette does not answer.
   - `registrySyncError`: for a pack record, why strata could not read the last
     sync of the registry: Palette answered with a 5xx, or the request did not

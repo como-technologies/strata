@@ -196,12 +196,22 @@ record ends with the last sync of the registry:
 {{#include ../output/pack-verify.txt}}
 ```
 
-- `; Palette synced the registry <time>`: the time when the last sync
-  completed.
+- `; the last complete sync of the registry started <time>`: the last sync
+  completed. The time is when that sync started, not when it completed.
+- `; a sync of the registry is in progress since <time>, and the last complete
+  sync of the registry started <time>`: a sync runs now. The copy is the copy
+  of the last complete sync until the sync that runs completes.
 - `; the last sync of the registry failed: <message>`: the last sync failed,
   and the message is from Palette. The copy can be old, so `OK` says only that
   the copy did not change.
+- `; the recovery of the sync is <state>: <message>`: a sync stopped before
+  its end, and Palette recovers it. The state is `Interrupted` or
+  `Recovering`. This note can follow each of the notes above.
 - No note: the registry does not sync, or Palette does not give the sync status.
+
+A sync can stay in progress for a long time. Then the copy can be much older
+than the time of the sync that runs. See
+[The sync of a registry](../internals/palette/packs.md#the-sync-of-a-registry).
 
 The sync status is a note beside the verdict. When Palette answers the sync
 request with a 5xx, or the request does not complete, strata writes a note to
@@ -214,12 +224,13 @@ With many records, the line of a pack record ends with the same note.
 {{#include ../output/pack-verify-json.txt}}
 ```
 
-`--json` puts the same in `verify.registrySync`: `lastSyncedTime`, `status`
-(`Completed`, `InProgress`, or `Failed`), and `message` when Palette gives one.
-When strata cannot read the sync status, `verify.registrySync` is absent, and
-`verify.registrySyncError` gives the reason, such as `HTTP 500: <body>`.
-Strata sends one request for each pack record, by the type of the pack, and two
-for a pack in an ECR registry: see
+`--json` puts the same in `verify.registrySync`: `lastSyncedTime` (the start
+of the last complete sync), `lastRunTime` (the start of the last sync), `status`
+(`Completed`, `InProgress`, or `Failed`), `message` when Palette gives one, and
+`syncRecovery` when a recovery is not `Recovered`. When strata cannot read the
+sync status, `verify.registrySync` is absent, and `verify.registrySyncError`
+gives the reason, such as `HTTP 500: <body>`. Strata sends one request for each
+pack record: the summary listing of the registries of the type of the pack. See
 [Other reads](../reference/palette-api.md#other-reads).
 
 ## The object of the record

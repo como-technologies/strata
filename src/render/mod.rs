@@ -1443,22 +1443,47 @@ pub(crate) fn variable_lines(g: &VariablesByName) -> Vec<VarLine<'_>> {
     lines.into_iter().map(|(_, l)| l).collect()
 }
 
-/// For a pack record, the end of the verdict: when Palette last synced the registry, or that its
-/// last sync failed. Palette holds a copy of each registry, and the verdict states that copy.
-/// Nothing when Palette gives no sync.
+/// For a pack record, the end of the verdict: when the last complete sync of the registry
+/// started, that a sync runs now, or that the last sync failed, and a recovery of a sync that
+/// stopped. Palette holds a copy of each registry, and the verdict states that copy. Nothing
+/// when Palette gives no sync.
 pub(crate) fn registry_sync_suffix(sync: Option<&crate::diff::RegistrySync>) -> String {
-    match sync {
-        Some(s) if s.status == "Failed" && s.message.is_empty() => {
-            "; the last sync of the registry failed".to_string()
+    let Some(s) = sync else {
+        return String::new();
+    };
+    let last_complete = (!s.last_synced_time.is_empty()).then(|| {
+        format!(
+            "the last complete sync of the registry started {}",
+            s.last_synced_time
+        )
+    });
+    let mut out = if s.failed() {
+        match s.message.as_str() {
+            "" => "; the last sync of the registry failed".to_string(),
+            message => format!("; the last sync of the registry failed: {message}"),
         }
-        Some(s) if s.status == "Failed" => {
-            format!("; the last sync of the registry failed: {}", s.message)
+    } else if s.in_progress() {
+        let since = match s.last_run_time.as_str() {
+            "" => String::new(),
+            run => format!(" since {run}"),
+        };
+        let complete = last_complete
+            .map(|c| format!(", and {c}"))
+            .unwrap_or_default();
+        format!("; a sync of the registry is in progress{since}{complete}")
+    } else {
+        last_complete.map(|c| format!("; {c}")).unwrap_or_default()
+    };
+    if let Some(r) = &s.sync_recovery {
+        out.push_str(&format!(
+            "; the recovery of the sync is {}",
+            r.sync_recovery_state
+        ));
+        if !r.message.is_empty() {
+            out.push_str(&format!(": {}", r.message));
         }
-        Some(s) if !s.last_synced_time.is_empty() => {
-            format!("; Palette synced the registry {}", s.last_synced_time)
-        }
-        _ => String::new(),
     }
+    out
 }
 
 /// `1 variable value changed`, `2 variable values changed`.

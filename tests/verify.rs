@@ -5847,13 +5847,21 @@ fn verify_rechecks_a_pack_version_against_its_registry() {
     assert!(json["verify"].get("lastModified").is_none(), "{json}");
 }
 
-/// Verify a record of csi-aws-ebs@1.65.0 in the Public Repo, whose registry answers `sync` for
+/// The summary listing of the pack registries, which gives the sync of each registry.
+const PACK_REGISTRY_SUMMARY: &str = "/v1/registries/pack/summary";
+
+/// The summary listing of the pack registries with the Public Repo, whose sync is `sync`.
+fn public_repo_summary(sync: Value) -> Value {
+    serde_json::json!({"items": [{"metadata": {"uid": "reg-public"}, "status": {"sync": sync}}]})
+}
+
+/// Verify a record of csi-aws-ebs@1.65.0 in the Public Repo, whose registry has `sync` for
 /// its sync status: the verdict line, and the diff as `--json` writes it.
 fn verify_pack_with_sync(sync: Option<Value>) -> (String, Value) {
     let api = serve_registry(vec![], &[("reg-public", public_entity())]);
     let recorded = snapshot_pack(&api, "pack:csi-aws-ebs@1.65.0").unwrap();
     let api = match sync {
-        Some(s) => api.with("/v1/registries/pack/reg-public/sync/status", s),
+        Some(s) => api.with(PACK_REGISTRY_SUMMARY, public_repo_summary(s)),
         None => api,
     };
     let v = ops::verify(&recorded, &Palette::new(api), "t1", &Progress::silent()).unwrap();
@@ -5873,11 +5881,35 @@ fn verify_of_a_pack_record_ends_the_verdict_with_the_last_sync_of_the_registry()
     assert_eq!(
         verdict,
         "OK: pack csi-aws-ebs@1.65.0 in registry Public Repo is unchanged since t0; \
-         Palette synced the registry 2026-09-30T00:00:11.000Z"
+         the last complete sync of the registry started 2026-09-30T00:00:11.000Z"
     );
     assert_eq!(
         json["verify"]["registrySync"],
-        serde_json::json!({"lastSyncedTime": "2026-09-30T00:00:11.000Z", "status": "Completed"})
+        serde_json::json!({"lastSyncedTime": "2026-09-30T00:00:11.000Z",
+            "lastRunTime": "2026-09-30T00:10:00.000Z", "status": "Completed"})
+    );
+}
+
+#[test]
+fn verify_of_a_pack_record_says_that_a_sync_of_the_registry_is_in_progress_and_not_that_it_synced()
+{
+    let (verdict, json) = verify_pack_with_sync(Some(serde_json::json!({
+        "isSyncSupported": true, "lastRunTime": "2026-10-05T16:03:58.598Z",
+        "lastSyncedTime": "2026-08-29T00:00:11.032Z", "status": "InProgress",
+        "syncRecovery": {"message": "sync interrupted", "syncRecoveryState": "Recovering"},
+    })));
+    assert_eq!(
+        verdict,
+        "OK: pack csi-aws-ebs@1.65.0 in registry Public Repo is unchanged since t0; \
+         a sync of the registry is in progress since 2026-10-05T16:03:58.598Z, and the last \
+         complete sync of the registry started 2026-08-29T00:00:11.032Z; the recovery of the \
+         sync is Recovering: sync interrupted"
+    );
+    assert!(!verdict.contains("synced"), "{verdict}");
+    assert_eq!(json["verify"]["registrySync"]["status"], "InProgress");
+    assert_eq!(
+        json["verify"]["registrySync"]["syncRecovery"],
+        serde_json::json!({"syncRecoveryState": "Recovering", "message": "sync interrupted"})
     );
 }
 
@@ -5934,13 +5966,13 @@ fn verify_pack_on<A: PaletteApi>(recorded: &Snapshot, api: A) -> (String, Value)
     (verdict, serde_json::to_value(&v.diff).unwrap())
 }
 
-/// Answers the sync route of the Public Repo with a dropped connection, and delegates each other
-/// request. The in-memory API cannot produce a transport error.
+/// Answers the summary listing of the pack registries with a dropped connection, and delegates
+/// each other request. The in-memory API cannot produce a transport error.
 struct SyncDropped(MemoryApi);
 
 impl PaletteApi for SyncDropped {
     fn get_json(&self, path: &str) -> strata::Result<Value> {
-        if path == "/v1/registries/pack/reg-public/sync/status" {
+        if path == PACK_REGISTRY_SUMMARY {
             return Err(Error::Transport {
                 path: path.to_string(),
                 message: "connection reset".into(),
@@ -5951,14 +5983,10 @@ impl PaletteApi for SyncDropped {
 }
 
 #[test]
-fn verify_of_a_pack_record_gives_the_verdict_when_the_sync_route_answers_500() {
+fn verify_of_a_pack_record_gives_the_verdict_when_the_registry_summary_answers_500() {
     let api = serve_registry(vec![], &[("reg-public", public_entity())]);
     let recorded = snapshot_pack(&api, "pack:csi-aws-ebs@1.65.0").unwrap();
-    let api = api.failing(
-        "/v1/registries/pack/reg-public/sync/status",
-        500,
-        r#"{"code":"InternalError"}"#,
-    );
+    let api = api.failing(PACK_REGISTRY_SUMMARY, 500, r#"{"code":"InternalError"}"#);
     let (verdict, json) = verify_pack_on(&recorded, api);
     assert_eq!(
         verdict,
@@ -5984,7 +6012,7 @@ fn verify_of_a_pack_record_gives_the_verdict_when_the_sync_request_does_not_comp
     assert!(json["verify"].get("registrySync").is_none(), "{json}");
     assert_eq!(
         json["verify"]["registrySyncError"],
-        "GET /v1/registries/pack/reg-public/sync/status: connection reset"
+        "GET /v1/registries/pack/summary: connection reset"
     );
     assert_eq!(json["verify"]["status"], "unchanged");
 }

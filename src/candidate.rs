@@ -529,43 +529,73 @@ fn oci_provider_types<A: PaletteApi>(palette: &Palette<A>) -> BTreeMap<String, S
         .collect()
 }
 
-/// The last sync of the registry `uid`, which holds a pack of type `pack_type`: `spectro` reads
-/// `GET /v1/registries/pack/{uid}/sync/status`, `helm` the same route under `helm`, and `oci` the
-/// route under `oci/{uid}/basic`, then under `oci/{uid}/ecr` when Palette does not answer. None
-/// for a registry that does not sync, for another pack type, and when Palette answers no route
-/// with a 4xx.
+/// The entry of the registry `uid` in the registry listing at `path`, where `ptr` points to the
+/// uid of each entry. None when the listing does not have the registry, and when Palette answers
+/// the listing with a 4xx.
+fn registry_entry<A: PaletteApi>(
+    palette: &Palette<A>,
+    path: &str,
+    ptr: &str,
+    uid: &str,
+) -> Result<Option<Value>> {
+    let listing = match palette.api().get_json(path) {
+        Ok(l) => l,
+        Err(Error::Api { status, .. }) if (400..500).contains(&status) => return Ok(None),
+        Err(e) => return Err(e),
+    };
+    Ok(listing
+        .get("items")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .find(|it| text(it, ptr).as_deref() == Some(uid))
+        .cloned())
+}
+
+/// The state that Palette gives to the recovery of a sync when no sync waits for a recovery.
+const SYNC_RECOVERED: &str = "Recovered";
+
+/// The last sync of the registry `uid`, which holds a pack of type `pack_type`, from
+/// `status.sync` of the registry in the summary listing of its kind: `spectro` reads
+/// `GET /v1/registries/pack/summary`, `helm` the same route under `helm`, and `oci` the same
+/// route under `oci`. A summary listing gives the sync as Palette stores it. None for a registry
+/// that does not sync, for another pack type, for a registry that the listing does not have, and
+/// when Palette answers the listing with a 4xx.
 pub(crate) fn registry_sync<A: PaletteApi>(
     palette: &Palette<A>,
     uid: &str,
     pack_type: &str,
 ) -> Result<Option<crate::diff::RegistrySync>> {
-    let routes = match pack_type {
-        "spectro" => vec![format!("/v1/registries/pack/{uid}/sync/status")],
-        "helm" => vec![format!("/v1/registries/helm/{uid}/sync/status")],
-        "oci" => vec![
-            format!("/v1/registries/oci/{uid}/basic/sync/status"),
-            format!("/v1/registries/oci/{uid}/ecr/sync/status"),
-        ],
-        _ => Vec::new(),
+    let kind = match pack_type {
+        "spectro" => "pack",
+        "helm" | "oci" => pack_type,
+        _ => return Ok(None),
     };
-    for route in routes {
-        let status = match palette.api().get_json(&route) {
-            Ok(s) => s,
-            Err(Error::Api { status, .. }) if (400..500).contains(&status) => continue,
-            Err(e) => return Err(e),
-        };
-        if status.get("isSyncSupported").and_then(Value::as_bool) != Some(true) {
-            return Ok(None);
-        }
-        // Palette writes the zero time for a registry that never completed a sync
-        let last = text(&status, "/lastSyncedTime").filter(|t| !t.starts_with("0001-"));
-        return Ok(Some(crate::diff::RegistrySync {
-            last_synced_time: last.unwrap_or_default(),
-            status: text(&status, "/status").unwrap_or_default(),
-            message: text(&status, "/message").unwrap_or_default(),
-        }));
+    let path = format!("/v1/registries/{kind}/summary");
+    let Some(entry) = registry_entry(palette, &path, "/metadata/uid", uid)? else {
+        return Ok(None);
+    };
+    let Some(status) = entry.pointer("/status/sync") else {
+        return Ok(None);
+    };
+    if status.get("isSyncSupported").and_then(Value::as_bool) != Some(true) {
+        return Ok(None);
     }
-    Ok(None)
+    // Palette writes the zero time for a registry that never completed a sync
+    let time = |ptr: &str| text(status, ptr).filter(|t| !t.starts_with("0001-"));
+    let sync_recovery = text(status, "/syncRecovery/syncRecoveryState")
+        .filter(|s| s != SYNC_RECOVERED)
+        .map(|state| crate::diff::SyncRecovery {
+            sync_recovery_state: state,
+            message: text(status, "/syncRecovery/message").unwrap_or_default(),
+        });
+    Ok(Some(crate::diff::RegistrySync {
+        last_synced_time: time("/lastSyncedTime").unwrap_or_default(),
+        last_run_time: time("/lastRunTime").unwrap_or_default(),
+        status: text(status, "/status").unwrap_or_default(),
+        message: text(status, "/message").unwrap_or_default(),
+        sync_recovery,
+    }))
 }
 
 /// The type of the pack that Palette makes for a layer from a registry that it does not sync.
@@ -603,22 +633,7 @@ struct Unsynced {
 /// `GET /v1/registries/oci/summary` gives the provider type and `status.sync.isSyncSupported`.
 /// None for a registry that syncs, and when Palette answers either listing with a 4xx.
 fn unsynced<A: PaletteApi>(palette: &Palette<A>, uid: &str) -> Result<Option<Unsynced>> {
-    // the entry of the registry in a listing; none when Palette answers the listing with a 4xx
-    let find = |path: &str, ptr: &str| -> Result<Option<Value>> {
-        let listing = match palette.api().get_json(path) {
-            Ok(l) => l,
-            Err(Error::Api { status, .. }) if (400..500).contains(&status) => return Ok(None),
-            Err(e) => return Err(e),
-        };
-        Ok(listing
-            .get("items")
-            .and_then(Value::as_array)
-            .into_iter()
-            .flatten()
-            .find(|it| text(it, ptr).as_deref() == Some(uid))
-            .cloned())
-    };
-    let Some(meta) = find("/v1/registries/metadata", "/uid")? else {
+    let Some(meta) = registry_entry(palette, "/v1/registries/metadata", "/uid", uid)? else {
         return Ok(None);
     };
     match text(&meta, "/kind").as_deref() {
@@ -631,7 +646,9 @@ fn unsynced<A: PaletteApi>(palette: &Palette<A>, uid: &str) -> Result<Option<Uns
                 provider: None,
             })),
         Some("oci") => {
-            let Some(reg) = find("/v1/registries/oci/summary", "/metadata/uid")? else {
+            let Some(reg) =
+                registry_entry(palette, "/v1/registries/oci/summary", "/metadata/uid", uid)?
+            else {
                 return Ok(None);
             };
             // Palette syncs each OCI registry of the provider type pack
@@ -1361,27 +1378,53 @@ mod tests {
     use super::*;
     use crate::api::MemoryApi;
 
+    /// A summary listing of registries that holds the one registry `uid` with the sync `sync`.
+    fn summary(uid: &str, sync: Value) -> Value {
+        json!({"items": [{"metadata": {"uid": uid}, "status": {"sync": sync}}]})
+    }
+
     #[test]
-    fn the_sync_of_an_oci_registry_is_read_from_the_basic_route_then_from_the_ecr_route() {
+    fn the_sync_of_a_registry_is_read_from_the_summary_listing_of_its_kind() {
         let completed = json!({"isSyncSupported": true, "status": "Completed",
-            "lastSyncedTime": "2026-09-30T00:00:11.000Z"});
-        let ecr = Palette::new(MemoryApi::new().with(
-            "/v1/registries/oci/reg-ecr/ecr/sync/status",
-            completed.clone(),
-        ));
-        let sync = registry_sync(&ecr, "reg-ecr", "oci").unwrap().unwrap();
-        assert_eq!(sync.last_synced_time, "2026-09-30T00:00:11.000Z");
-        let basic = Palette::new(
-            MemoryApi::new().with("/v1/registries/oci/reg-oci/basic/sync/status", completed),
-        );
-        assert!(registry_sync(&basic, "reg-oci", "oci").unwrap().is_some());
-        // a manifest pack has no registry, and Palette answers no route
+            "lastSyncedTime": "2026-09-30T00:00:11.000Z",
+            "syncRecovery": {"syncRecoveryState": "Recovered"}});
+        let api = MemoryApi::new()
+            .with(
+                "/v1/registries/pack/summary",
+                summary("reg-pack", completed.clone()),
+            )
+            .with(
+                "/v1/registries/helm/summary",
+                summary("reg-helm", completed.clone()),
+            )
+            .with("/v1/registries/oci/summary", summary("reg-oci", completed))
+            // the route of one registry is not read
+            .failing("/v1/registries/oci/reg-oci/basic/sync/status", 500, "{}");
+        let palette = Palette::new(api);
+        for (uid, pack_type) in [
+            ("reg-pack", "spectro"),
+            ("reg-helm", "helm"),
+            ("reg-oci", "oci"),
+        ] {
+            let sync = registry_sync(&palette, uid, pack_type).unwrap().unwrap();
+            assert_eq!(sync.last_synced_time, "2026-09-30T00:00:11.000Z");
+            // a recovery that is Recovered is no recovery that waits
+            assert_eq!(sync.sync_recovery, None);
+        }
+        // a manifest pack has no registry; the listing of the kind does not have the registry
         assert!(
-            registry_sync(&basic, "reg-oci", "manifest")
+            registry_sync(&palette, "reg-oci", "manifest")
                 .unwrap()
                 .is_none()
         );
-        assert!(registry_sync(&basic, "reg-none", "oci").unwrap().is_none());
+        assert!(
+            registry_sync(&palette, "reg-pack", "oci")
+                .unwrap()
+                .is_none()
+        );
+        // Palette answers no listing
+        let none = Palette::new(MemoryApi::new());
+        assert!(registry_sync(&none, "reg-oci", "oci").unwrap().is_none());
     }
 
     /// The profile `platform-addons` as the export of Palette writes it: a pack from the Public
@@ -1932,13 +1975,27 @@ variables:
     #[test]
     fn a_registry_that_never_completed_a_sync_gives_no_time() {
         let never = Palette::new(MemoryApi::new().with(
-            "/v1/registries/helm/reg-helm/sync/status",
-            json!({"isSyncSupported": true, "status": "InProgress",
-                "lastSyncedTime": "0001-01-01T00:00:00.000Z"}),
+            "/v1/registries/helm/summary",
+            summary(
+                "reg-helm",
+                json!({"isSyncSupported": true, "status": "InProgress",
+                    "lastRunTime": "2026-10-05T16:03:58.598Z",
+                    "lastSyncedTime": "0001-01-01T00:00:00.000Z",
+                    "syncRecovery": {"syncRecoveryState": "Recovering",
+                        "message": "sync interrupted"}}),
+            ),
         ));
         let sync = registry_sync(&never, "reg-helm", "helm").unwrap().unwrap();
         assert_eq!(sync.last_synced_time, "");
-        assert_eq!(sync.status, "InProgress");
+        assert_eq!(sync.last_run_time, "2026-10-05T16:03:58.598Z");
+        assert!(sync.in_progress());
+        assert_eq!(
+            sync.sync_recovery,
+            Some(crate::diff::SyncRecovery {
+                sync_recovery_state: "Recovering".into(),
+                message: "sync interrupted".into(),
+            })
+        );
     }
 
     #[test]

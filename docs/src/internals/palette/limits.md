@@ -113,7 +113,7 @@ is in the catalog.
 | compute | The SSH key pair on EKS with a dynamic VPC | `aws ec2 describe-key-pairs`; the property route runs with a `vpcId` alone |
 | kubernetes | An EKS version in extended support | the `status` of `aws eks describe-cluster-versions` |
 | storage | A `kmsKeyId` in the parameters of a StorageClass | `aws kms describe-key` |
-| images | The sync status of the registry of each pack, before a build | `GET /v1/registries/pack/{uid}/sync/status` |
+| images | The sync status of the registry of each pack, before a build | `status.sync` of `GET /v1/registries/pack/summary` |
 | profiles | A version with no published template | `status.isPublished` of the profile |
 | lifecycle | A pool renamed, which is a delete and a create; a `size` outside `minSize` and `maxSize` | a static diff of the change |
 | platform | The version of the agent against the release of Palette | no route gives the release to a tenant key |
