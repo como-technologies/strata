@@ -2000,6 +2000,27 @@ impl Tenant {
         self.write(project, &path, &entity);
     }
 
+    /// Give one version of a pack in the listing of the Public Repo the architectures
+    /// `architectures`, as the annotation `architecture` of the listing names them: `amd64`, or
+    /// `amd64,arm64`. The Public Repo names them on most versions, and a newer version can name
+    /// fewer than an older one, as `loki` 3.6.7 names `amd64` below 2.10.2 with `amd64,arm64`.
+    pub fn pack_architectures(
+        &self,
+        project: &str,
+        name: &str,
+        version: &str,
+        architectures: &str,
+    ) {
+        let path = format!("v1/packs@filters=spec.name={name}&limit=100&offset=0");
+        let mut listing = self.read(project, &path);
+        for item in listing["items"].as_array_mut().into_iter().flatten() {
+            if item["spec"]["version"] == version && item["spec"]["registryUid"] == PUBLIC_REPO {
+                item["spec"]["annotations"]["architecture"] = json!(architectures);
+            }
+        }
+        self.write(project, &path, &listing);
+    }
+
     /// Give one version of a pack in the listing of the Public Repo a template, as
     /// `spec.template` of `v1PackSummarySpec`. Palette gives each option of an input parameter
     /// with its label and dependencies, and with no presets.
