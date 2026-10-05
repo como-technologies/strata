@@ -8,7 +8,8 @@
 # It records the add-on version, and edits its manifest through the API with no publish. It
 # records `<uid>@draft` and the version again, and compares the two. It reads what each route
 # of Palette gives while the draft waits. Then it publishes the draft, verifies the record of
-# the draft against the version, and puts the edit back with a publish.
+# the draft against the version, and puts the edit back with a publish. Last, it creates a
+# copy of the add-on with no publish, lists it, and deletes it (#114).
 #
 # Needs the profiles (just live-profiles) and no cluster: no cost. It leaves the add-on version
 # with the content it found. Needs the strata release binary, jq, and the key as verify.sh needs
@@ -22,6 +23,7 @@ case "${1:-}" in "") ;; *) sed -n '2,/^set -uo/p' "$0" | sed '$d' | sed 's/^# \{
 addon=strata-live-addon
 edit_from='edited: "no"'
 edit_to='edited: "yes"'
+unpublished=strata-live-unpublished
 
 run=${OUT:-$live/runs/$(date -u +%Y%m%dT%H%M%SZ)/draft}
 mkdir -p "$run" && cd "$run" || exit 2
@@ -57,6 +59,8 @@ check no-draft-says 0 '#155: the error says that the version has no draft' -- \
   grep -q 'has no draft' no-draft.err
 check api-draft 0 "#155: edit the manifest of $addon@1.0.0 through the API, with no publish" -- \
   "$live/api.sh" draft "$AD" "$edit_from" "$edit_to"
+check list-published 0 '#114: list --packs gives published true for a published version while its draft waits' -- \
+  bash -c "\"$strata\" list --packs --json | jq -e --arg u '$AD' '[.profiles[] | select(.uid == \$u)][0].published == true'"
 check version-holds 0 '#155: the version keeps its content while the draft waits: its record verifies' -- \
   "$strata" verify addon.json
 check draft-record 0 '#155: <uid>@draft records the draft' -- "$strata" snapshot "$AD@draft" -o draft.json
@@ -93,6 +97,18 @@ check no-draft-after-publish 2 '#155: the publish empties the draft: <uid>@draft
   "$strata" snapshot "$AD@draft"
 undo
 check restored 0 'the edit is put back, and the first record verifies again' -- "$strata" verify addon.json
+
+# a version that nobody published (#114): a create with no publish
+"$live/api.sh" delete-named "$unpublished" >> steps.log 2>&1
+check unpublished-create 0 "#114: create $unpublished with the packs of the add-on, and no publish" -- \
+  "$live/api.sh" create-unpublished "$AD" "$unpublished"
+UN=$(cat unpublished-create.out)
+check unpublished-listed 0 '#114: list --packs gives published false for the version, with the packs of its draft' -- \
+  bash -c "\"$strata\" list --packs --json | jq -e --arg u '$UN' \
+    '[.profiles[] | select(.uid == \$u and .published == false and (.packs | length) > 0)] | length == 1'"
+check unpublished-mark 0 '#114: the terminal row of the version says draft' -- \
+  bash -c "\"$strata\" list --packs --no-color | grep -qE '^  $unpublished@1\.0\.0 .* draft\$'"
+check unpublished-delete 0 "#114: delete $unpublished" -- "$live/api.sh" delete-named "$unpublished"
 
 echo
 echo "$script: $(grep -c '^PASS' steps.log) passed, $failures failed; results in $run"

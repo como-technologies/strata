@@ -38,6 +38,8 @@ const A119: &str = "64e0000000000000000000fc";
 // prod
 const A1110: &str = "64e0000000000000000000fd";
 const A1110_PROD: &str = "64e1000000000000000000fd";
+// aws-stack@1.3.0: the content of 1.1.1, made with no publish
+const A130: &str = "64e0000000000000000000fe";
 const ADDONS_DEV: &str = "64e2000000000000000000a1";
 const ADDONS_PROD: &str = "64e3000000000000000000a1";
 const ADDONS_PROD2: &str = "64e3000000000000000000a2";
@@ -443,6 +445,15 @@ fn commands(r: &mut Runner) {
         "PALETTE_PROJECT_UID= PALETTE_PROJECT=prod strata consumers aws-stack@1.1.1",
     );
     r.step("list-pack-json", 0, false, r#"strata list --pack cilium --json | jq -r '.profiles[] | .ref as $ref | .packs[] | select(.name | contains("cilium")) | "\($ref) \(.name) \(.version)"'"#);
+    // a version that nobody published: its packs are the packs of its draft
+    r.unpublished(DEV, A130, "1.3.0", "aws-stack@1.1.1", &[]);
+    r.step("list-draft", 0, false, "strata list profiles --packs");
+    r.step(
+        "list-draft-json",
+        0,
+        false,
+        r#"strata list profiles --packs --json | jq -r '.profiles[] | "\(.ref) published=\(.published)"'"#,
+    );
 
     r.chapter("snapshot", DEV_ENV);
     r.projects(&[("dev", DEV)]);

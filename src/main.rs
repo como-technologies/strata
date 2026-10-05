@@ -355,7 +355,7 @@ struct ListArgs {
     /// The same, by project name
     #[arg(long, conflicts_with = "project")]
     project_name: Option<String>,
-    /// Also read each version for its packs and consumers
+    /// Also read each version for its packs, its consumers, and whether it is published
     #[arg(long)]
     packs: bool,
     /// Keep the versions with a pack whose name holds TEXT; sets --packs

@@ -2390,3 +2390,93 @@ fn registry_move_nodes_sh_stops_before_the_undo_when_a_repave_waits_for_approval
         stage.tofu_calls()
     );
 }
+
+/// A stage of draft.sh where Palette has the add-on `ad-1`, and the create of the copy with no
+/// publish answers the uid `un-1`. strata says `published` for `un-1` in the JSON of the list.
+fn unpublished_stage(un_published: bool) -> Stage {
+    let mut stage = baseline_stage();
+    stage.strata(
+        "list --json",
+        0,
+        r#"{"profiles":[{"name":"strata-live-addon","version":"1.0.0","uid":"ad-1"}]}"#,
+    );
+    stage.strata(
+        "list --packs --json",
+        0,
+        &serde_json::json!({"profiles": [
+            {"uid": "ad-1", "published": true, "packs": [{"name": "config"}]},
+            {"uid": "un-1", "published": un_published, "packs": [{"name": "config"}]},
+        ]})
+        .to_string(),
+    );
+    stage.strata(
+        "list --packs --no-color",
+        0,
+        "  strata-live-addon@1.0.0        ad-1  all  add-on  no consumers\n  \
+         strata-live-unpublished@1.0.0  un-1  all  add-on  no consumers  draft\n",
+    );
+    stage.route(
+        "/v1/clusterprofiles/ad-1",
+        r#"{"metadata":{"name":"strata-live-addon","uid":"ad-1"},"spec":{"version":"1.0.0",
+            "published":{"type":"add-on","cloudType":"all","packs":[{"name":"config",
+            "tag":"1.0.0","type":"manifest","layer":"addon","packUid":"pk-1","values":""}]}}}"#,
+    );
+    stage.route(
+        "/v1/clusterprofiles/ad-1/packs/manifests",
+        r#"{"metadata":{},"spec":{"packs":[{"metadata":{},"spec":{"name":"config","manifests":[
+            {"name":"config","uid":"m-1","digest":"d","content":"edited: \"no\"\n"}]}}]}}"#,
+    );
+    stage.route("/v1/clusterprofiles", r#"{"uid":"un-1"}"#);
+    stage.route(
+        "/v1/dashboard/clusterprofiles/metadata",
+        r#"{"items":[{"metadata":{"name":"strata-live-unpublished","uid":"un-1"}}]}"#,
+    );
+    stage.route("/v1/clusterprofiles/un-1", "{}");
+    stage
+}
+
+#[test]
+fn draft_sh_creates_a_version_with_no_publish_lists_it_as_a_draft_and_deletes_it() {
+    let stage = unpublished_stage(false);
+    let (_, steps) = stage.run("draft.sh", &[]);
+    passed(
+        &steps,
+        &[
+            "list-published",
+            "unpublished-create",
+            "unpublished-listed",
+            "unpublished-mark",
+            "unpublished-delete",
+        ],
+    );
+    let posts = stage.sent("POST", "/v1/clusterprofiles");
+    assert_eq!(posts.len(), 1, "one create: {posts:?}");
+    let post = &posts[0];
+    assert_eq!(
+        post["metadata"],
+        serde_json::json!({"name": "strata-live-unpublished"})
+    );
+    assert_eq!(post["spec"]["version"], "1.0.0");
+    assert_eq!(
+        post["spec"]["template"]["packs"][0]["manifests"],
+        serde_json::json!([{"name": "config", "content": "edited: \"no\"\n"}]),
+        "a manifest goes with no uid, so the copy gets its own manifest"
+    );
+    let calls = std::fs::read_to_string(stage.path("curl.log")).unwrap();
+    assert!(
+        !calls.contains("/v1/clusterprofiles/un-1/publish"),
+        "nobody publishes the copy: {calls}"
+    );
+    assert!(
+        calls.ends_with("DELETE /v1/clusterprofiles/un-1\n"),
+        "the last request deletes the copy: {calls}"
+    );
+}
+
+#[test]
+fn draft_sh_fails_the_check_when_list_says_that_the_copy_is_published() {
+    let stage = unpublished_stage(true);
+    let (o, steps) = stage.run("draft.sh", &[]);
+    assert!(steps.contains("FAIL  unpublished-listed"), "{steps}");
+    assert_ne!(o.status.code(), Some(0));
+}

@@ -440,7 +440,8 @@ API, reads what `verify --who` says, and puts the edit back.
 
 Read-write. It needs the profiles and no cluster. It edits the manifest of the
 add-on version through the API with no publish, records the draft, publishes
-it, and puts the edit back with a publish. This is the source for
+it, and puts the edit back with a publish. Then it makes a copy of the add-on
+version with no publish, lists it, and deletes it. This is the source for
 [Drafts](../internals/palette/profiles.md#drafts).
 
 | Check | Expected exit | What it shows |
@@ -448,6 +449,7 @@ it, and puts the edit back with a publish. This is the source for
 | `record` | 0 | record the add-on version |
 | `no-draft`, `no-draft-says` | 2, 0 | #155: a version with no draft: `<uid>@draft` exits `2`, and says that the version has no draft |
 | `api-draft` | 0 | #155: a `PUT` of the version with no publish |
+| `list-published` | 0 | #114: `list --packs` gives `published` true for the version while its draft waits. No run has a result yet |
 | `version-holds` | 0 | #155: the version keeps its content while the draft waits: its record verifies |
 | `draft-record`, `draft-template` | 0 | #155: `<uid>@draft` records the draft: `source.template` `draft`, and the edit in the manifest |
 | `version-record` | 0 | #155: a record of the version, read while the draft waits, holds the published manifest |
@@ -461,6 +463,9 @@ it, and puts the edit back with a publish. This is the source for
 | `version-after-publish` | 1 | #155: the record of the version from before the publish reports `DRIFT` |
 | `no-draft-after-publish` | 2 | #155: the publish empties the draft |
 | `restored` | 0 | the edit is put back, and the first record verifies again |
+| `unpublished-create` | 0 | #114: a create of `strata-live-unpublished` with the packs of the add-on version, and no publish. No run has a result yet |
+| `unpublished-listed`, `unpublished-mark` | 0 | #114: the profile listing names the version, and `list --packs` gives `published` false, the packs of its draft, and the mark `draft`. No run has a result yet |
+| `unpublished-delete` | 0 | #114: the delete of `strata-live-unpublished` |
 
 ## pending.sh
 

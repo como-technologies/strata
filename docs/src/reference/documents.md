@@ -430,8 +430,10 @@ is the path as a list: strings for keys, numbers for indexes, and
   A kind that was listed and holds nothing is `[]`. Profiles come by name and
   then by version, clusters by name, and projects by name.
   - A profile: `ref`, `name`, `version`, `uid`, and `cloudType`. With `--packs`,
-    also `type`, `consumers`, and `packs[]` with `layer`, `name`, `tag`, and
-    `version`, or `error`.
+    also `type`, `consumers`, `published`, and `packs[]` with `layer`, `name`,
+    `tag`, and `version`, or `error`. `published` is the `status.isPublished` of
+    the version. When it is `false`, nobody published the version, and `packs[]`
+    holds the packs of its draft.
   - A cluster: `ref`, `name`, `uid`, `state`, `cloudType`, and `projectUid`.
     `projectName` joins them when strata could read the project listing.
     `labels`: the labels of the cluster, as a map; a tag with no value has the

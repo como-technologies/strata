@@ -237,6 +237,13 @@ Palette serves the two templates as follows:
 - The profile document gives both templates. Palette masks a secret only in
   the published template. Palette gives no `status.hasDraft`. A version has a
   draft when `spec.draft.packs` holds a pack.
+- A create with no publish makes a version that nobody published. Its document
+  gives the packs in `spec.draft`, no pack in `spec.published`, and
+  `status.isPublished` false. A published version gives `status.isPublished`
+  true, also while a draft waits. The profile listing names a version that
+  nobody published, with the cloud type of its draft. The code of Palette gives
+  these rules, and
+  [draft.sh](../../development/live-runs.md#draftsh) checks them.
 - A manifest is one object, with a published content and a draft content. The
   `PUT` writes the draft content of each manifest that it names by uid, and
   the published content stays. A manifest that the `PUT` adds has a draft
@@ -258,6 +265,8 @@ What strata does with this:
 - A record of a version reads the published template. When the version has a
   draft, strata reads each manifest by its uid, and takes its published
   content. When the version was never published, the record reads the draft.
+- `list --packs` reads the draft of a version that nobody published, and marks
+  its row `draft`. See [strata list](../../commands/list.md#a-version-that-nobody-published).
 - `<ref>@draft` records the draft: the values of the draft, and the draft
   content of each manifest that the draft changed. A version with no draft is
   the error `no-draft`. See [Refs](../../reference/refs.md).

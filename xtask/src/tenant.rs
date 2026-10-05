@@ -796,6 +796,19 @@ impl Tenant {
         self.listings();
     }
 
+    /// Make profile `uid` a version that nobody published, as a create with no publish leaves
+    /// it: the packs are in `spec.draft`, `spec.published` holds no pack, and
+    /// `status.isPublished` is false. The profile listing still names the version.
+    pub fn unpublish(&self, project: &str, uid: &str) {
+        let path = format!("v1/clusterprofiles/{uid}");
+        let mut doc = self.read(project, &path);
+        doc["spec"]["draft"] = doc["spec"]["published"].clone();
+        doc["spec"]["published"] = json!({"packs": []});
+        doc["status"]["isPublished"] = json!(false);
+        self.write(project, &path, &doc);
+        self.listings();
+    }
+
     /// Publish the draft of a profile, as `PATCH /v1/clusterprofiles/{uid}/publish` does: the
     /// draft becomes the published template, and the draft is empty again. The version keeps its
     /// uid and its number, so each cluster that runs it learns of an update, as after an edit in
@@ -805,6 +818,7 @@ impl Tenant {
         let mut doc = self.read(project, &path);
         doc["spec"]["published"] = doc["spec"]["draft"].clone();
         doc["spec"]["draft"] = json!({"packs": []});
+        doc["status"]["isPublished"] = json!(true);
         let at = self.log_write(project, "clusterprofile", uid, &doc);
         doc["metadata"]["lastModifiedTimestamp"] = json!(at);
         self.write(project, &path, &doc);
@@ -1950,11 +1964,18 @@ fn read_json(path: &Path) -> Value {
     serde_json::from_str(&text).unwrap_or_else(|e| panic!("{}: {e}", path.display()))
 }
 
+/// The row of a profile version in the profile listing. The listing gives the cloud type also
+/// for a version that nobody published: the cloud type of its draft.
 fn profile_row(doc: &Value) -> Value {
+    let cloud = ["published", "draft"]
+        .iter()
+        .map(|t| &doc["spec"][t]["cloudType"])
+        .find(|c| !c.is_null())
+        .cloned()
+        .unwrap_or(Value::Null);
     json!({
         "metadata": {"name": doc["metadata"]["name"], "uid": doc["metadata"]["uid"]},
-        "spec": {"version": doc["spec"]["version"],
-                 "cloudType": doc["spec"]["published"]["cloudType"]}
+        "spec": {"version": doc["spec"]["version"], "cloudType": cloud}
     })
 }
 

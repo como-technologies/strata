@@ -3292,6 +3292,162 @@ fn list_with_a_pack_reads_each_profile_and_keeps_those_that_carry_it() {
     assert!(md.contains("addon/cert-manager 1.14.0"), "{md}");
 }
 
+/// The profile document of `lab-profile@<version>` with one CNI pack at `cni`. A version that
+/// nobody published has its packs in `spec.draft`, an empty `spec.published`, and
+/// `status.isPublished` false, as Palette gives it after a create with no publish.
+fn draft_or_published(uid: &str, version: &str, cni: &str, published: bool) -> Value {
+    let template = serde_json::json!({"cloudType": "aws", "type": "cluster", "packs": [
+        {"name": "cni-cilium-oss", "layer": "cni", "type": "spectro", "tag": cni, "version": cni}
+    ]});
+    let empty = serde_json::json!({"packs": []});
+    let (published_template, draft) = if published {
+        (template, empty)
+    } else {
+        (empty, template)
+    };
+    serde_json::json!({
+        "metadata": {"name": "lab-profile", "uid": uid},
+        "spec": {"version": version, "published": published_template, "draft": draft},
+        "status": {"isPublished": published, "inUseClusterUids": []},
+    })
+}
+
+/// A project with `lab-profile@1.0.0`, which is published, and `lab-profile@1.1.0`, which
+/// nobody published.
+fn a_published_and_a_draft_version() -> MemoryApi {
+    MemoryApi::new()
+        .with(
+            "/v1/dashboard/clusterprofiles/metadata",
+            serde_json::json!({"items": [
+                listed_profile("lab-profile", "1.1.0", "u-d1"),
+                listed_profile("lab-profile", "1.0.0", "u-p1"),
+            ]}),
+        )
+        .with(
+            "/v1/clusterprofiles/u-p1",
+            draft_or_published("u-p1", "1.0.0", "1.19.6", true),
+        )
+        .with(
+            "/v1/clusterprofiles/u-d1",
+            draft_or_published("u-d1", "1.1.0", "1.20.1", false),
+        )
+}
+
+#[test]
+fn list_with_packs_says_for_each_version_whether_it_is_published_and_marks_a_draft() {
+    let api = a_published_and_a_draft_version();
+    let list = |options: &ListOptions| {
+        ops::list(
+            options,
+            |_| Ok(Palette::new(api.clone())),
+            "t1",
+            &Progress::silent(),
+        )
+        .unwrap()
+    };
+    let plain = list(&ListOptions {
+        kinds: vec![ListKind::Profiles],
+        ..ListOptions::default()
+    });
+    assert!(
+        plain
+            .profiles
+            .unwrap()
+            .iter()
+            .all(|p| p.published.is_none()),
+        "with no --packs, strata reads no profile document and does not know"
+    );
+
+    let l = list(&ListOptions {
+        kinds: vec![ListKind::Profiles],
+        packs: true,
+        ..ListOptions::default()
+    });
+    let profiles = l.profiles.as_ref().unwrap();
+    assert_eq!(
+        profiles
+            .iter()
+            .map(|p| (p.reference.as_str(), p.published, p.is_draft()))
+            .collect::<Vec<_>>(),
+        [
+            ("lab-profile@1.0.0", Some(true), false),
+            ("lab-profile@1.1.0", Some(false), true),
+        ]
+    );
+    assert_eq!(
+        profiles[1].packs.as_ref().unwrap()[0].version,
+        "1.20.1",
+        "the packs of a version that nobody published come from its draft"
+    );
+
+    let json: Value = serde_json::from_str(
+        &render::renderer(Format::Json, Paint::off(), true)
+            .render_list(&l)
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(json["profiles"][0]["published"], true, "{json}");
+    assert_eq!(json["profiles"][1]["published"], false, "{json}");
+
+    let text = render::renderer(Format::Terminal, Paint::off(), false)
+        .render_list(&l)
+        .unwrap();
+    assert!(
+        text.contains("  lab-profile@1.0.0  u-p1  aws  cluster  no consumers\n"),
+        "{text}"
+    );
+    assert!(
+        text.contains("  lab-profile@1.1.0  u-d1  aws  cluster  no consumers  draft\n"),
+        "{text}"
+    );
+    let md = render::renderer(Format::Markdown, Paint::off(), false)
+        .render_list(&l)
+        .unwrap();
+    assert!(
+        md.contains("| `lab-profile@1.0.0` | `u-p1` | aws |"),
+        "{md}"
+    );
+    assert!(
+        md.contains("| `lab-profile@1.1.0` draft | `u-d1` | aws |"),
+        "{md}"
+    );
+}
+
+#[test]
+fn list_with_a_pack_keeps_a_draft_version_that_carries_the_pack_with_its_mark() {
+    let api = a_published_and_a_draft_version();
+    let l = ops::list(
+        &ListOptions {
+            pack: Some("cilium".into()),
+            ..ListOptions::default()
+        },
+        |_| Ok(Palette::new(api.clone())),
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    let profiles = l.profiles.as_ref().unwrap();
+    assert_eq!(
+        profiles
+            .iter()
+            .map(|p| (p.reference.as_str(), p.is_draft()))
+            .collect::<Vec<_>>(),
+        [("lab-profile@1.0.0", false), ("lab-profile@1.1.0", true)],
+        "the draft carries the pack, so it stays"
+    );
+    let text = render::renderer(Format::Terminal, Paint::off(), false)
+        .render_list(&l)
+        .unwrap();
+    assert!(
+        text.contains("\n2 profiles with a pack matching 'cilium'\n"),
+        "{text}"
+    );
+    assert!(
+        text.contains("  lab-profile@1.1.0  u-d1  aws  cluster  no consumers  draft\n"),
+        "{text}"
+    );
+}
+
 #[test]
 fn list_projects_reads_at_tenant_scope_and_a_project_override_scopes_the_rest() {
     let in_p2 = MemoryApi::new()

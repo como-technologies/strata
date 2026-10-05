@@ -113,9 +113,23 @@ pub struct ListedProfile {
     /// With packs: the packs in the order the profile holds them.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub packs: Option<Vec<ListedPack>>,
+    /// With packs: whether the version is published, from `status.isPublished`. The packs of a
+    /// version that nobody published are the packs of its draft.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub published: Option<bool>,
     /// With packs: why the profile document could not be read, when it could not.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<Value>,
+}
+
+impl ListedProfile {
+    /// Returns true when the profile document says that nobody published the version.
+    ///
+    /// When strata did not read the profile document, it returns false, because strata does not
+    /// know.
+    pub fn is_draft(&self) -> bool {
+        self.published == Some(false)
+    }
 }
 
 /// One cluster.
@@ -348,6 +362,7 @@ fn list_profiles<A: PaletteApi>(
                 profile_type: None,
                 consumers: None,
                 packs: None,
+                published: None,
                 error: None,
             }
         })
@@ -396,6 +411,7 @@ fn list_profiles<A: PaletteApi>(
         p.profile_type = template.map(|t| text(t, "/type")).filter(|t| !t.is_empty());
         p.consumers = Some(consumer_uids(&doc).len());
         p.packs = Some(packs);
+        p.published = doc.pointer("/status/isPublished").and_then(Value::as_bool);
     }
     if let Some(needle) = &options.pack {
         let needle = needle.to_lowercase();
