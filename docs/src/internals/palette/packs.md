@@ -581,7 +581,7 @@ whose annotation `fips` is `true` or `unknown`:
 | `POST /v1/packs/search` | applied, but the answer has one row for each pack name, and no list of versions |
 | A new profile that pins another version | Palette refuses it with `PackForbidden` |
 
-Strata asks the registry answer, and does not copy the rule. `strata packs` and
+Strata uses the registry answer, and does not copy the rule. `strata packs` and
 `strata behind` leave out a version of the listing that has no tag in the
 registry answer, unless the listing gives it the state `disabled` or `deleted`.
 See [strata packs](../../commands/packs.md#what-to-expect).
