@@ -12,8 +12,10 @@
 #
 # The pack registry listing gives each version `spec.annotations.system_state`. The three packs
 # below are ones Spectro Cloud retired in the public registries, one for each state, and none of
-# them requires another pack, so Palette refuses a profile only for the state. Results go
-# under runs/<UTC time>/pack-states/, or OUT. Exit 0 only when no check fails.
+# them requires another pack, so Palette refuses a profile only for the state. The fourth pack
+# carries the mark `disabled: "true"` of Spectro Cloud and no state (#125): Palette serves it, and
+# `packs` says `disabled`. Results go under runs/<UTC time>/pack-states/, or OUT. Exit 0 only when
+# no check fails.
 set -uo pipefail
 script=pack-states
 . "$(cd "$(dirname "$0")" && pwd)/lib.sh"
@@ -27,6 +29,8 @@ deprecated=argo-cd
 deprecated_version=3.26.7
 deleted=generic-vm-libvirt
 deleted_version=1.0.0
+marked=gloo
+marked_version=1.2.18
 
 run=${OUT:-$live/runs/$(date -u +%Y%m%dT%H%M%SZ)/pack-states}
 mkdir -p "$run" && cd "$run" || exit 2
@@ -64,6 +68,10 @@ check states-deprecated 0 '#68: packs lists a registry whose versions are all de
   "$strata" packs "$deprecated" --registry "$community"
 check states-deprecated-says 0 '#68: the heading says deprecated, and the version keeps its tags and says deprecated' -- \
   bash -c "head -1 states-deprecated.out | grep -q 'deprecated)' && grep -qE '^ *$deprecated_version .* $deprecated_version .*deprecated *\$' states-deprecated.out"
+check states-mark 0 '#125: packs lists a version with the mark disabled and no system_state' -- \
+  "$strata" packs "$marked" --registry "$disabled_reg"
+check states-mark-says 0 '#125: the heading says disabled, and the row keeps its tags and says disabled' -- \
+  bash -c "head -1 states-mark.out | grep -q 'disabled)\$' && grep -qE '^ *$marked_version .* $marked_version .*disabled *\$' states-mark.out"
 
 echo "== snapshot of a pack version in each state (#68)" | tee -a steps.log
 check snapshot-disabled 2 '#68: a disabled version is pack-unavailable' -- \

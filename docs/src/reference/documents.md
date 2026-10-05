@@ -463,10 +463,13 @@ is the path as a list: strings for keys, numbers for indexes, and
     with the exact tag first, and `latest`, which is true for the newest version
     the command listed. With `--cloud`, that is the newest version for that
     cloud, and not the newest the registry holds. `state` is `deprecated`,
-    `disabled`, or `deleted` when the listing gives one, and strata leaves out
-    the field when it gives none. `paletteLatest`, only when true: the version
-    that Palette calls the latest, from `metadata.annotations.latestVersion` of
-    the listing. `--latest` keeps it too. `listed`: when Palette first listed the
+    `disabled`, or `deleted` from `system_state` of the listing, or `disabled`
+    for a version with the mark `disabled` of Spectro Cloud: see
+    [Pack states](../internals/palette/packs.md#pack-states). Strata leaves out
+    the field when the listing gives none. `paletteLatest`, only when true: the
+    version that Palette calls the latest, from
+    `metadata.annotations.latestVersion` of the listing. `--latest` keeps it
+    too. `listed`: when Palette first listed the
     version, from `metadata.creationTimestamp` of the listing; absent when the
     listing gives no time.
   - `versionsOffered`: how many versions of the pack the registry holds, before
@@ -488,8 +491,9 @@ is the path as a list: strings for keys, numbers for indexes, and
   - `floating`, only when true: the tag is a floating tag. `resolved`: the
     version that the tag names now. When it is above `version`, it is in
     `newer`, and the pin is behind.
-  - `pinnedState`: `deprecated`, `disabled`, or `deleted` from the registry, or
-    `absent` when the registry no longer lists the pinned version.
+  - `pinnedState`: `deprecated`, `disabled`, or `deleted`, as `state` of
+    `strata-packs/1`, or `absent` when the registry no longer lists the pinned
+    version.
   - `pinnedBy[]`: `path` and `subject` of each record that pins it.
   - `newer[]`: the newer versions that a person can move to, newest first, each
     with `version`, `state` when the registry gives one, `paletteLatest` when

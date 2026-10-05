@@ -31,7 +31,7 @@ the kind.
 | `candidate-invalid` | The candidate file has a problem, or it gives a value that Palette changes at the create. A rule that only the create of Palette checks also gives this kind, and the message names the code of Palette. For the rules of the validate route, `snapshot --validate` asks Palette. See [Checks before any request](candidate-file.md#checks-before-any-request). | `path` |
 | `pack-not-found` | The registry has no such pack version or tag. | `name`, `version`, `registry`, `tag` when given |
 | `pack-name-not-found` | No visible registry offers a pack of that name. | `name` |
-| `pack-unavailable` | The registry lists the version as `disabled` or `deleted`. Palette does not serve it, and refuses a profile that pins it. | `name`, `version`, `registry`, `state` |
+| `pack-unavailable` | Spectro Cloud retired the version: its `system_state` in the listing is `disabled` or `deleted`. Palette does not serve it, and refuses a profile that pins it. A version with the mark `disabled` is not this error: Palette serves it, and `--validate` asks Palette. | `name`, `version`, `registry`, `state` |
 | `registry-not-found` | No visible registry has this name. | `registry`, `available` |
 | `pack-in-several-registries` | A `pack:` ref named no registry, and more than one has the version. | `name`, `version`, `registries` |
 | `project-not-found` | No visible project has this name. | `name`, `available` |

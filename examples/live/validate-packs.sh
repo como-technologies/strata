@@ -7,8 +7,8 @@
 #   examples/live/validate-packs.sh [STAGE]
 #
 #   1  a candidate whose packs Palette takes: POST /v1/clusterprofiles/validate/packs
-#   2  a candidate whose values are not YAML, and a body with no pack: Palette refuses the whole
-#      request
+#   2  a candidate whose values are not YAML, a body with no pack, and a candidate with a pack
+#      that carries the mark `disabled` of Spectro Cloud (#125): Palette refuses the whole request
 #   3  a version that Palette holds, as an update of itself: POST
 #      /v1/clusterprofiles/{uid}/validate/packs. It needs PROFILE=<name>@<version>, a version in
 #      the project of the key, for example one that `just live-up` publishes; with no PROFILE it
@@ -96,6 +96,24 @@ if [ "$stage" = all ] || [ "$stage" = 2 ]; then
     "$live/api.sh" post /v1/clusterprofiles/validate/packs '{"cloudType": "all", "type": "add-on", "packs": []}'
   check validate-no-pack-says 0 '#152: HTTP 400 with the code ShouldNotBeEmpty' -- \
     grep -q 'answered HTTP 400: {"code":"ShouldNotBeEmpty"' validate-no-pack.err
+  # a pack with the mark `disabled: "true"` and no system_state: Palette serves it, and refuses
+  # a profile that holds it. Strata does not copy the rule, and the route answers it
+  marked=gloo
+  marked_version=1.2.18
+  {
+    echo "name: strata-validate-$marked"
+    echo "version: 1.0.0"
+    echo "type: add-on"
+    echo "cloudType: all"
+    echo "registry: $registry"
+    echo "layers:"
+    echo "  - name: $marked"
+    echo "    version: $marked_version"
+  } > "strata-validate-$marked.yaml"
+  check validate-disabled-mark 2 "#125: Palette refuses a candidate with $marked $marked_version, which carries the mark disabled" -- \
+    "$strata" snapshot --from-candidate "strata-validate-$marked.yaml" --validate -o "$marked.json"
+  check validate-disabled-mark-says 0 "#125: the refusal is DisabledPacksForbidden, of the whole request, and names the pack" -- \
+    grep -q "^palette    refuses: DisabledPacksForbidden: Disabled packs '$marked' are forbidden" validate-disabled-mark.err
 fi
 
 if [ "$stage" = all ] || [ "$stage" = 3 ]; then
