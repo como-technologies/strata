@@ -6930,8 +6930,10 @@ fn a_cluster_record_holds_the_error_of_the_route_of_the_repave_and_verify_names_
     assert!(host.source.cluster.unwrap().pending_repave_error.is_none());
 }
 
+/// Palette shows the templates that link a version, and `consumers` reads them live. So a record
+/// does not keep them, and an older record that keeps them still loads and verifies.
 #[test]
-fn a_profile_record_names_each_cluster_template_that_links_the_version_outside_the_root() {
+fn a_profile_record_keeps_no_cluster_template_and_an_older_record_with_one_still_verifies() {
     let dir = tempfile::tempdir().unwrap();
     common::make_fixtures(dir.path());
     let plain =
@@ -6945,19 +6947,20 @@ fn a_profile_record_names_each_cluster_template_that_links_the_version_outside_t
         .with(format!("/v1/clusterprofiles/{UID_A}"), profile);
     let linked = common::snapshot_of(&api, UID_A).unwrap();
     assert_eq!(linked.root, plain.root);
-    let json = serde_json::to_value(&linked).unwrap();
-    assert_eq!(
-        json["source"]["clusterTemplates"],
-        serde_json::json!([
-            {"uid": "tmpl-1", "name": "barney-template", "projectUid": "p1"},
-            {"uid": "tmpl-2", "name": "fred-template", "projectUid": "p1"}
-        ])
-    );
-    assert!(
-        serde_json::to_value(&plain).unwrap()["source"]
-            .get("clusterTemplates")
-            .is_none()
-    );
+    let mut older = serde_json::to_value(&linked).unwrap();
+    assert!(older["source"].get("clusterTemplates").is_none());
+
+    // the record as strata 0.18 and 0.19 wrote it
+    older["source"]["clusterTemplates"] = serde_json::json!([
+        {"uid": "tmpl-1", "name": "barney-template", "projectUid": "p1"},
+        {"uid": "tmpl-2", "name": "fred-template", "projectUid": "p1"}
+    ]);
+    let saved = dir.path().join("older.json");
+    fs::write(&saved, serde_json::to_string_pretty(&older).unwrap()).unwrap();
+    let older = Snapshot::load(&saved).unwrap();
+    assert_eq!(older.root, linked.root);
+    let v = ops::verify(&older, &Palette::new(api), "t1", &Progress::silent()).unwrap();
+    assert!(v.unchanged);
 }
 
 #[test]

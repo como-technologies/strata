@@ -68,9 +68,9 @@ check release-doc 0 "the release version, as Palette holds it" -- "$live/api.sh"
 check release-names-template 0 "#66: the version names the template that uses it, and no cluster" -- \
   jq -e --arg t "$T" '([.status.inUseClusterTemplates[]?.uid] | index($t) != null) and ((.status.inUseClusters // []) | length == 0)' release-doc.out
 check release-record-template 0 "#109: a record of the linked release version" -- "$strata" snapshot "$P" -o release-linked.json
-check release-record-names-template 0 "#109: the record names the template in source.clusterTemplates, with its name, and its root is the root before the link" -- \
-  jq -e --arg t "$T" --slurpfile before release.json \
-    '([.source.clusterTemplates[]? | select(.uid == $t and .name != "")] | length == 1) and (.root == $before[0].root)' release-linked.json
+check release-record-root 0 "#260: the record keeps no template, and its root is the root before the link" -- \
+  jq -e --slurpfile before release.json \
+    '(.source | has("clusterTemplates") | not) and (.root == $before[0].root)' release-linked.json
 check release-consumers 1 "#147: strata consumers of the linked version counts the template, and exits 1" -- \
   "$strata" consumers "$P" --json
 check release-consumers-template 0 "#147: the consumer is the template, with kind template" -- \
