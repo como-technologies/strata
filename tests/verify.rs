@@ -11149,7 +11149,10 @@ fn behind_says_what_a_move_to_a_newer_version_drops_when_it_supports_fewer_archi
             one,
             pack_summary_with("1.64.0", Some("deprecated"), &["aws"]),
         ],
-        &[("reg-public", public_entity())],
+        &[(
+            "reg-public",
+            with_tag(public_entity(), "1.64.0", "pk-1.64.0"),
+        )],
     );
     let dir = tempfile::tempdir().unwrap();
     let write = |name: &str, r: &str| {

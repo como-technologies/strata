@@ -182,9 +182,9 @@ fn merged_tags(answers: &[Value]) -> Vec<Value> {
 ///
 /// Reads the paged listing for the versions, their digests and their types, and each registry's
 /// own answer for the tags that point at a version. Palette does not serve a version that has no
-/// tag in the registry answer, so the listing of strata leaves it out, unless it is disabled or
-/// deleted. A registry with no version left is not in the listing; no registry with the pack at
-/// all is `pack-not-found`.
+/// tag in the registry answer, so the listing of strata leaves it out, unless Spectro Cloud
+/// retired it as disabled or deleted. A registry with no version left is not in the listing; no
+/// registry with the pack at all is `pack-not-found`.
 pub fn registry_packs<A, F>(
     name: &str,
     options: &PackOptions,
@@ -253,8 +253,9 @@ where
         let tags = merged_tags(&answers);
         // Palette applies the FIPS rule of the tenant to its registry route, and not to the
         // listing. So a version with no tag in the answer is a version that Palette does not
-        // serve. Leave it out, unless it is disabled or deleted. A 404 is the same answer: the
-        // route serves no version, for example when no version of the pack is FIPS compliant
+        // serve. Leave it out, unless Spectro Cloud retired it as disabled or deleted. A 404 is
+        // the same answer: the route serves no version, for example when no version of the pack
+        // is FIPS compliant
         let mine: Vec<&Value> = mine
             .into_iter()
             .filter(|e| has_tag(&tags, e) || crate::candidate::retired_state(e).is_some())
