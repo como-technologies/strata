@@ -12411,6 +12411,14 @@ fn snapshot_validate_takes_a_refusal_of_the_whole_request_as_an_answer() {
         assert_eq!(v.errors[0].pack, "");
         assert_eq!(v.errors[0].line(), format!("{code}: refused"));
     }
+    // the API schema refuses a list with two equal packs with HTTP 422, before the route
+    let body = r#"{"code":610,"message":"packs in body shouldn't contain duplicates"}"#;
+    let api = serve_candidate_checks(MemoryApi::new(), &candidate).failing(path, 422, body);
+    let v = ops::profile_validation(&Palette::new(&api), &candidate).unwrap();
+    assert_eq!(
+        v.errors[0].line(),
+        "610: packs in body shouldn't contain duplicates"
+    );
     // a 500 with another code is a fault of Palette, a 403 is the key, and a 400 is a body with
     // an error of strata: errors of strata
     for (status, code) in [

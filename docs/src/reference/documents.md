@@ -56,7 +56,8 @@ profile, or pack version.
   - `fetchedAt`: the time of the read.
   - `paletteValidation`, only with `snapshot --validate`: `accepts`, and
     `errors[]` of `pack`, `code`, and `message`, only when it is not empty.
-    Strata writes a record only when Palette takes the packs, so a record holds
+    Strata writes a record only when Palette takes the candidate or the packs,
+    so a record holds
     `{"accepts": true}`. A library caller gets the errors too. The field is not
     part of the root. See
     [The validate routes](../internals/palette/validate-routes.md#post-v1clusterprofilesvalidatepacks).

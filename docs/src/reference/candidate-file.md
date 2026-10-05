@@ -91,32 +91,28 @@ Strata reads the whole file before it sends a request:
   before the create, so strata fills the gap. The message names the rule, the
   code of Palette, and the layer or the manifest. Strata checks the rules in
   this order:
-  1. The version parses as semver, as Palette parses it: `1.1` and `v1.2.3`
-     pass, and `1.2.3.4` does not.
-  2. Each pack name is in one layer only.
-  3. The name of each manifest, and the name of a `manifest` layer, is a
-     lowercase DNS-1123 label of 32 characters at most.
-  4. Each manifest name is in its layer once.
-  5. The type takes the `layer` of each layer that gives one. `infra` takes
+  1. The type takes the `layer` of each layer that gives one. `infra` takes
      `os`, `k8s`, `cni`, and `csi`. `add-on` and `system` take `addon`, `cni`,
      and `csi`. `cluster` takes each layer.
-  6. When each layer gives its `layer`, a `cluster` or `infra` candidate has an
+  2. When each layer gives its `layer`, a `cluster` or `infra` candidate has an
      `os`, a `k8s`, a `cni`, and a `csi` layer. On the cloud `edge-native`, it
      needs no `csi` layer.
 
 [The gaps that strata fills](../internals/palette/profiles.md#the-gaps-that-strata-fills)
-states what Palette does for each rule. Two copies of the candidate of
-[Write one from a published version](#write-one-from-a-published-version) have a
-version and a type that Palette refuses:
+states what Palette does for each rule. A copy of the candidate of
+[Write one from a published version](#write-one-from-a-published-version) has a
+type that Palette refuses:
 
 ```text
 {{#include ../output/candidate-refused.txt}}
 ```
 
-Strata does not copy the rules that the validate route of Palette checks.
-These are the YAML of the values and the manifests, and the limit of 200 packs
-and 200 manifests. A candidate that breaks one of them gives a record. To ask
-Palette before you publish, give `--validate`: see
+Strata does not copy the rules that a validate route of Palette checks. These
+are the version, a pack name in two layers, the name of a manifest or of a
+`manifest` layer, a manifest name two times in a layer, the YAML of the values
+and the manifests, and the limit of 200 packs and 200 manifests. A candidate
+that breaks one of them gives a record. To ask Palette before you publish, give
+`--validate`: see
 [Ask Palette before you publish](../commands/candidate.md#ask-palette-before-you-publish).
 
 ## The registry lookups
@@ -148,10 +144,10 @@ From these answers, strata checks the rules that need the registry, as
   know. A pack with no cloud type, a candidate with the cloud `all`, and a
   candidate with no `cloudType` take each pack. Only the create of Palette
   checks this rule.
-- Rules 5 and 6 above, with the layer of each pack in the registry.
+- Rules 1 and 2 above, with the layer of each pack in the registry.
 
 The pack that Palette makes for a registry that it does not sync has the layer
-`addon` and no cloud type. So rule 5 refuses it in an `infra` candidate, and
+`addon` and no cloud type. So rule 1 refuses it in an `infra` candidate, and
 each cloud takes it.
 
 A copy of the candidate of

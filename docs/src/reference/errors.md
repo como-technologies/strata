@@ -115,6 +115,51 @@ HTTP `500` and one of these codes. Strata does not send it again, and
 | `SubResourceLimitValidationFailure` | More than 200 packs, or more than 200 manifests. |
 | `ClusterProfilePacksInConflict` | For the route of an update: a pack name that is also in another profile of a cluster that runs the version. |
 
+The API schema of both routes refuses two equal packs with HTTP `422`, and the
+code is the number `610`. `snapshot --validate` prints it as the answer of
+Palette too.
+
+For a candidate, `snapshot --validate` also asks
+`GET /v1/clusterprofiles/validate/name`. It refuses the name or the version
+with HTTP `500` and one of these codes, or with HTTP `409` and
+`ClusterProfileAlreadyExists`, a name and a version that the project holds:
+
+| Code | Palette refuses |
+| --- | --- |
+| `ResourceNameEmpty` | An empty name. |
+| `VersionParseFailure` | A version that does not parse as semver. |
+
+It also asks `POST /v1/clusterprofiles/import/validate`. It refuses the whole
+request with HTTP `500` and one of these codes, with HTTP `409` and
+`ClusterProfileAlreadyExists`, with HTTP `404` and `PackMacroUndefined`, a
+macro that Palette does not define, or with the HTTP `422` of the API schema:
+
+| Code | Palette refuses |
+| --- | --- |
+| `ResourceLimitValidationFailure` | A new profile in a tenant that holds the most profiles that its limit takes. |
+| `SubResourceLimitValidationFailure` | More than 200 packs, or more than 200 manifests. |
+| `UnSupportedCloudType` | A cloud type that Palette does not support. |
+| `ClusterDashboardPacksMutuallyExclusive` | Two dashboard packs that exclude each other. |
+| `InvalidName` | A manifest, or a manifest pack, with a name that is not a DNS-1123 label of 32 characters at most. |
+| `DuplicatePacksForbidden` | One pack name two times in a profile. |
+| `DuplicatePackManifestsForbidden` | One manifest name two times in a pack. |
+| `MultiPackVersionsForbidden` | Two versions of one pack. |
+| `PackValuesYamlInvalid` | Pack values that are not YAML. |
+| `PackManifestYamlInvalid` | A manifest of a pack that is not YAML. |
+| `PackSpectroIntegrationNotSupported` | An integration pack that the cloud does not support. |
+| `ClusterProfileOidcNotConfigured` | An integration pack that needs an OIDC identity provider that no pack or organization gives. |
+| `ResourceNameEmpty` | An empty name. |
+| `VersionParseFailure` | A version that does not parse as semver. |
+| `ClusterProfileCreationValidationFailure` | The variables, or the values and the dependencies of a pack. |
+
+When the import validate route finds no registry that holds a pack of the body,
+it checks nothing, and gives HTTP `500` with one of these codes. Strata does not
+send it again, and the error is `api`, because Palette gave no answer about the
+candidate: `ClusterProfileImportRegistriesNotFound`,
+`ClusterProfileImportOciRegistriesNotFound`,
+`ClusterProfileImportPrivateHelmRegistriesNotFound`, and
+`ClusterProfileImportPackNotFound`.
+
 Strata does not copy these checks. A candidate that breaks one of them gives a
 record without `--validate`, and this refusal with `--validate`.
 

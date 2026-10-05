@@ -381,6 +381,22 @@ mod tests {
         );
     }
 
+    /// A file of a refusal gives its status, and the first status of [`REFUSALS`] wins.
+    #[test]
+    fn the_file_of_a_refusal_gives_its_status() {
+        let dir = std::env::temp_dir().join(format!("strata-refusals-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let answer = dir.join("name@name=barney&version=1.1.1.1.json");
+        assert_eq!(refusal_of(&answer), None);
+        let file = refused(&answer, 500);
+        assert_eq!(file, dir.join("name@name=barney&version=1.1.1.1.500.json"));
+        fs::write(&file, "{}").unwrap();
+        assert_eq!(refusal_of(&answer), Some(500));
+        fs::write(refused(&answer, 409), "{}").unwrap();
+        assert_eq!(refusal_of(&answer), Some(409));
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
     /// The file that makes the server answer HTTP 403 is beside the file of the answer.
     #[test]
     fn the_file_of_a_refusal_is_beside_the_file_of_the_answer() {

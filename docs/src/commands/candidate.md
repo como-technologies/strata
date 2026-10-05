@@ -127,17 +127,41 @@ the candidate and the version fails and names the edited value.
 
 The roots tell you what the version will be. They do not tell you whether
 Palette takes it. `snapshot --from-candidate --validate` asks Palette with
-`POST /v1/clusterprofiles/validate/packs`, the check of a create. The request
-changes nothing, and Palette holds no profile after it. Palette checks the
-values and the manifests of each pack, a pack that Spectro Cloud disabled, the
-dependencies of each pack, and the limits.
-[The validate routes](../internals/palette/validate-routes.md#post-v1clusterprofilesvalidatepacks)
-gives each check. The route does not check some rules of the create, such as
-the version and the layers. Strata checks them before any request: see
+three routes of the create. No request changes anything, and Palette holds no
+profile after them:
+
+1. `GET /v1/clusterprofiles/validate/name` checks the name and the version.
+2. `POST /v1/clusterprofiles/import/validate` checks the names of the packs and
+   the manifests, and a repeat of each. Strata sends the candidate in the
+   shape of a profile export, with the registry of each pack from
+   `GET /v1/registries/metadata`.
+3. `POST /v1/clusterprofiles/validate/packs` checks the values and the
+   manifests of each pack, a pack that Spectro Cloud disabled, the
+   dependencies of each pack, and the limits.
+
+[The validate routes](../internals/palette/validate-routes.md#get-v1clusterprofilesvalidatename)
+gives each check. No route checks the layers of the type, the core layers, the
+cloud of each pack, or the tag of a pack that Palette makes. Strata checks them
+before any request: see
 [The gaps that strata fills](../internals/palette/profiles.md#the-gaps-that-strata-fills).
 
 When Palette refuses, strata prints one line for each error, exits `2`, and
-writes no record:
+writes no record. The candidate here comes from the published 1.1.1, and the
+project holds that version:
+
+```text
+{{#include ../output/candidate-validate-exists.txt}}
+```
+
+A version that Palette does not parse gets a refusal from the name route and
+from the import validate route. Strata prints it once:
+
+```text
+{{#include ../output/candidate-validate-version.txt}}
+```
+
+With the new version 1.2.0, Palette takes the name, and the check of the packs
+refuses a dependency:
 
 ```text
 {{#include ../output/candidate-validate-refuses.txt}}
@@ -145,7 +169,8 @@ writes no record:
 
 A line names the code of Palette, the pack, and the message of Palette. A
 refusal of the whole request, for example values that are not YAML, names no
-pack. Fix the candidate, and ask again.
+pack. The API schema refuses two equal layers with HTTP 422, and the code is
+the number `610`. Fix the candidate, and ask again.
 
 When Palette takes the packs, strata prints `palette    accepts` and writes the
 record. The record holds the answer in `source.paletteValidation`:
@@ -182,7 +207,9 @@ packs against the clusters that run the version:
   cluster holds a copy of one, and an app profile has tiers and no packs.
 - `--files-dir` needs `-o`.
 - `snapshot --from-candidate --validate` exits `2` with `palette-refuses` when
-  Palette refuses the packs, and then writes no record.
+  Palette refuses the name, the version, or the packs, and then writes no
+  record. The key needs the permission to create a profile: the import validate
+  route checks it.
 - Exit `0`, or `2` on an error.
 
 [The candidate file](../reference/candidate-file.md) describes each field,

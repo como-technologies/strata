@@ -8,7 +8,9 @@ from the code of Palette. Each fact that names a live run comes from that run.
 `strata preflight` calls each route that takes the body of a create. One more
 route checks the packs of a cluster before an update of its profiles:
 `compare --validate` calls it. Two routes check the packs of a profile before a
-create or an update: `snapshot --validate` calls them.
+create or an update: `snapshot --validate` calls them. Two more routes check
+the name, the version, and the names of the packs and the manifests of a new
+profile: `snapshot --from-candidate --validate` calls them too.
 
 ## POST /v1/spectroclusters/{cloudType}/validate
 
@@ -143,7 +145,10 @@ This route checks the packs of a profile before a create. The body is a
 `v1ClusterProfileTemplateDraft`: `cloudType`, `type`, and `packs[]`. Each pack
 is a `v1PackManifestEntity` with `name`, `tag`, `uid`, `registryUid`, `type`,
 `layer`, `values`, and `manifests[]` of `name` and `content`. The route writes
-nothing, and does not check the name or the version of the profile.
+nothing. It does not check the name or the version of the profile, or the
+names of the packs and the manifests: the
+[name route](#get-v1clusterprofilesvalidatename) and the
+[import validate route](#post-v1clusterprofilesimportvalidate) check them.
 `snapshot --from-candidate --validate` sends it.
 
 The checks, in order:
@@ -151,7 +156,9 @@ The checks, in order:
 1. The body holds one pack or more. Palette refuses an empty `packs` with
    HTTP 400 and the code `ShouldNotBeEmpty`, before the checks below. A live
    request shows it:
-   `Parameter 'Packs' should not be empty`.
+   `Parameter 'Packs' should not be empty`. The API schema also refuses two
+   equal packs with HTTP 422 and the code `610`, as the import validate route
+   does. A live run shows it.
 2. The body holds no more than one dashboard pack:
    `ClusterDashboardPacksMutuallyExclusive`.
 3. The values and the manifests of each pack are YAML:
@@ -205,6 +212,96 @@ The answer has the shape of the route above. A live run shows that the route
 takes a published version of a cluster profile that no cluster runs, as an
 update of itself. Stage 3 of `validate-packs.sh` asks it for a version that you
 name.
+
+## GET /v1/clusterprofiles/validate/name
+
+This route checks the name and the version of a new profile version. It takes
+the query parameters `name` and `version`, and writes nothing.
+`snapshot --from-candidate --validate` sends it.
+
+The checks, in order:
+
+1. The name is not empty. An empty name is HTTP 500 with the code
+   `ResourceNameEmpty`. An empty version becomes `1.0.0`.
+2. The project does not hold a version with this name and this version. Palette
+   compares the name with no case, and the version as text, so `v1.0.0` is not
+   `1.0.0`. A match is HTTP 409 with the code `ClusterProfileAlreadyExists`, and
+   the message
+   `Cluster Profile with name '<name>' and version '<version>' already exists`.
+3. The version parses as semver: an optional `v`, one to three numbers, and an
+   optional pre-release and build data. A version that does not parse is
+   HTTP 500 with the code `VersionParseFailure`, and the message
+   `Unable to parse the version '<version>'`.
+
+The route does not check the form of the name. On success, the answer is `204`
+with no body.
+
+A live run shows it: the route takes the version `1.1` and a name that the
+project does not hold with `204`. It refuses the version `2.2.2.develop` with
+HTTP 500 and `VersionParseFailure`. See
+[validate-packs.sh](../../development/live-runs.md#validate-packssh).
+
+## POST /v1/clusterprofiles/import/validate
+
+This route checks a profile as an import, before the import writes it. The body
+is a `v1ClusterProfileImportEntity`, the shape of a profile export:
+`metadata.name`, `spec.version`, `spec.variables`, and `spec.template` with
+`type`, `cloudType`, and `packs[]`. Each pack has `name`, `type`, `layer`,
+`version`, `tag`, `values`, `manifests[]` of `name` and `content`, and
+`registry.metadata`. The body holds no pack uid. The route writes nothing.
+`snapshot --from-candidate --validate` sends it.
+
+The checks, in order:
+
+1. The API schema of the body. A list with two equal items is HTTP 422, with
+   the number `610` as the code, and the message
+   `packs in body shouldn't contain duplicates`.
+2. Each pack is in a registry. Palette finds a pack by its name, its `version`,
+   and the registries of its type. It uses the name, the kind, `isPrivate`, and
+   `providerType` of `registry.metadata` to choose the registries. When no
+   registry holds the pack, the route stops with HTTP 500 and a code such as
+   `ClusterProfileImportPackNotFound`, and checks nothing more.
+3. The key can create a profile, and the tenant holds fewer profiles than its
+   limit.
+4. The checks of a create that the route has. Palette runs them at the same
+   time, and gives the first error in an order that is not fixed. So when two
+   checks fail, a request can give either error. The checks are:
+   - the limits of 200 packs and 200 manifests,
+     `SubResourceLimitValidationFailure`,
+   - the cloud type, `UnSupportedCloudType`,
+   - two dashboard packs that cannot go together,
+     `ClusterDashboardPacksMutuallyExclusive`,
+   - the name of each manifest, and of each manifest pack, as a DNS-1123 label
+     of 32 characters at most, `InvalidName`,
+   - one pack name two times, `DuplicatePacksForbidden`,
+   - one manifest name two times in a pack, `DuplicatePackManifestsForbidden`,
+   - two versions of one pack, `MultiPackVersionsForbidden`,
+   - the YAML of the values and the manifests, `PackValuesYamlInvalid` and
+     `PackManifestYamlInvalid`,
+   - the integration packs, `PackSpectroIntegrationNotSupported`,
+   - the name and the version, as the name route checks them,
+   - a macro that the values use and that Palette does not define,
+     `PackMacroUndefined`, HTTP 404,
+   - the variables, and the values and the dependencies of each pack,
+     `ClusterProfileCreationValidationFailure`.
+
+The answer is `200` with the body that Palette takes, and the registry of each
+pack filled in. Each refusal is HTTP 500 with `code` and `message`, except
+`ClusterProfileAlreadyExists` (409) and `PackMacroUndefined` (404). The route
+gives one error only.
+
+The route does not check the layers of the type, the core layers, the cloud of
+each pack, or the tag of a pack that Palette makes. Only the create checks
+them: see
+[The gaps that strata fills](./profiles.md#the-gaps-that-strata-fills).
+
+A live run shows that the route refuses a pack name two times
+(`DuplicatePacksForbidden`), two equal packs (HTTP 422, `610`), a manifest name
+that is not a DNS label (`InvalidName`), a manifest name two times in a pack
+(`DuplicatePackManifestsForbidden`), and the version `2.2.2.develop`
+(`VersionParseFailure`). It takes a candidate of `cert-manager` 1.21.1 from the
+Public Repo. See
+[validate-packs.sh](../../development/live-runs.md#validate-packssh).
 
 ## The property routes
 
