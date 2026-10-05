@@ -50,16 +50,16 @@ A cluster template links profile versions and applies them to the clusters
 that it governs. While a template links a version, Palette refuses a `PUT` of
 the whole version and refuses its delete. See
 [The lock of a cluster template](../../internals/palette/profiles.md#the-lock-of-a-cluster-template).
-The record names each template that links the version in
-`source.clusterTemplates`, with its uid, its name, and its project:
+Palette shows each template that links the version, so a record does not keep
+the templates. A template that links the version does not change the root.
+`strata consumers` reads the templates from Palette and counts each one:
 
 ```text
-{{#include ../../output/snapshot-profile-templates.txt}}
+{{#include ../../output/retire-template.txt}}
 ```
 
-The templates are not part of the root. Here the root is the root of the record
-before the link. `strata consumers` counts each template: see
-[strata consumers](../consumers.md).
+See [strata consumers](../consumers.md). A record of strata 0.18 or 0.19 can
+hold `source.clusterTemplates`. Strata reads that record and ignores the field.
 
 ## The draft of a version
 

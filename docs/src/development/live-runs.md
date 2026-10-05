@@ -352,7 +352,7 @@ version that the cluster runs.
 | `release-before` | 0 | a record of the release version before the link |
 | `template`, `template-links` | 0 | #66: the template links the release version and the add-on version |
 | `release-doc`, `release-names-template` | 0 | #66: the version names the template that uses it, and no cluster |
-| `release-record-template`, `release-record-names-template` | 0 | #109: a record of the linked release version names the template in `source.clusterTemplates`, and has the root from before the link. No run has a result yet |
+| `release-record-template`, `release-record-root` | 0 | #260: a record of the linked release version has no `source.clusterTemplates`, and has the root from before the link. No run has a result yet |
 | `release-consumers`, `release-consumers-template` | 1, 0 | #147: `strata consumers` of the linked version names the template with `kind: template`, and exits `1`. |
 | `release-delete`, `release-delete-says` | 2, 0 | #147: Palette refuses the delete of the linked version, `DeletionResourceInUseError`. |
 | `lock-edit`, `lock-edit-says` | 2, 0 | #66: an edit in place of a linked version, a `PUT` of the whole version, is refused, and the refusal carries the code `ClusterProfileUpdateValidationFailure` |

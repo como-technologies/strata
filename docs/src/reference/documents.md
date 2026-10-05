@@ -47,11 +47,8 @@ profile, or pack version.
     the clusters that used the version, and `count`. A candidate, a cluster
     record, a pack record, and an app profile record have no `consumers`. The
     consumers of an app profile are app deployments, and not clusters.
-  - `clusterTemplates[]`, for a published or a draft version, only when it is
-    not empty: `uid`, `name`, and `projectUid` of each cluster template that
-    links the version, from `status.inUseClusterTemplates` of the profile.
-    Palette refuses a `PUT` of the whole linked version, and its delete. It is
-    not part of the root. See
+  - A record of strata 0.18 or 0.19 can hold `clusterTemplates[]`. Strata
+    ignores it. See
     [The cluster templates of a version](../commands/snapshot/profile-version.md#the-cluster-templates-of-a-version).
   - `variablesUnavailable`, only when true: Palette did not serve the variables
     endpoint, so the root is the root of a version with no variables. See
