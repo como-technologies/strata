@@ -181,9 +181,9 @@ fn merged_tags(answers: &[Value]) -> Vec<Value> {
 /// List what the registries offer for one pack.
 ///
 /// Reads the paged listing for the versions, their digests and their types, and each registry's
-/// own answer for the tags that point at a version. A version with no tag in that answer, and no
-/// disabled or deleted state, is not in the answer: Palette does not serve it in the tenant. A
-/// registry that does not have the pack is not in the answer; no registry with it at all is
+/// own answer for the tags that point at a version. Palette does not serve a version that has no
+/// tag in that answer, so it is not in the answer, unless it is disabled or deleted. A registry
+/// that does not have the pack is not in the answer; no registry with it at all is
 /// `pack-not-found`.
 pub fn registry_packs<A, F>(
     name: &str,
