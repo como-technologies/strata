@@ -730,6 +730,7 @@ states what it shows.
 | `charts-digest` | 0 | #75: the Helm repository: the sha256 of the chart archive, bare hex |
 | `oci-pack-digest`, `oci-helm-digest` | 0 | #75: OCI `pack` and `helm`: the manifest digest of the push |
 | `oci-zarf-digest` | 0 | #75: OCI `zarf`: no digest |
+| `packs-zarf`, `packs-zarf-says` | 0 | #128: `strata packs` of the Zarf pack says `no digest` on the row of `1.0.0`, and `no digests` in the heading. No run has a result yet |
 | `provider-types` | 0 | #75: each record of an OCI pack names `pack`, `helm`, or `zarf`, and the Helm record and the Spectro pack record name none |
 | `packs-digest` | 0 | #75: the Spectro pack registry: the digest of the push |
 | `auth-listed` | ? | #75: Palette lists no chart of the Helm repository with credentials while no profile pins one (recorded 2) |

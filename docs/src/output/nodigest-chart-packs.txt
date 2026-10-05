@@ -1,0 +1,4 @@
+$ strata packs podinfo --registry charts-auth
+podinfo in charts-auth (1 version, no digests)
+  6.7.1  64ed000000000000000000b1  helm  -  6.7.1  no digest
+

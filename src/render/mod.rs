@@ -215,8 +215,9 @@ pub(crate) fn project_label(uid: &str, name: &str) -> String {
     }
 }
 
-/// What a packs heading adds for a registry: the state that all its versions share, that it
-/// has no tags when Palette answered 404 for it, and that it reports no digest for any version.
+/// What a packs heading adds for a registry. It names the state that all its versions share.
+/// It says `no tags` when Palette answered 404 for the tags, and `no digests` when no version
+/// has a digest.
 pub(crate) fn registry_note(r: &crate::ops::PackRegistry) -> Option<String> {
     let tags = match (&r.state, r.tags_unavailable) {
         (_, false) => None,
@@ -230,9 +231,9 @@ pub(crate) fn registry_note(r: &crate::ops::PackRegistry) -> Option<String> {
     ])
 }
 
-/// What a packs row adds for a version: its state, `no digest` when the registry reports none,
-/// and `latest in Palette` when Palette calls it the latest and strata does not. A version that
-/// both call the latest needs no mark.
+/// What a packs row adds for a version. It names the state, and says `no digest` when the
+/// registry reports none. It says `latest in Palette` when Palette calls the version the latest
+/// and strata does not. A version that both call the latest needs no mark.
 pub(crate) fn version_note(v: &crate::ops::PackBuild) -> Option<String> {
     joined_note([
         v.state.as_deref(),

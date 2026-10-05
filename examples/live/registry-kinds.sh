@@ -185,6 +185,15 @@ check oci-helm-digest 0 "#75: OCI helm: the digest is the manifest digest of the
   test "$(upstream oci-helm-first.json)" = "$M1_HELM"
 check oci-zarf-digest 0 "#75: OCI zarf: Palette gives no digest" -- \
   test "$(field oci-zarf-first.json hash.upstreamSource)" = none
+# no_digest_says FILE: the output of strata packs of the Zarf pack says no digest on the row of
+# 1.0.0, and no digests in the heading
+no_digest_says() {
+  grep -qE "^$ZARF in .*, no digests\)$" "$1" && grep -qE '^  1\.0\.0 .*no digest$' "$1"
+}
+check packs-zarf 0 "#128: strata packs of the Zarf pack" -- \
+  "$strata" packs "$ZARF" --registry "$(name_of oci-zarf)"
+check packs-zarf-says 0 "#128: the row of 1.0.0 says no digest, and the heading says no digests" -- \
+  no_digest_says packs-zarf.out
 check packs-digest 0 "#75: the Spectro pack registry: the digest of the push" -- \
   test "$(upstream packs-first.json)" = "$(spectro_digest push-packs.out)"
 check provider-types 0 "#75: each record of an OCI pack names the provider type of its registry, and no other names one" -- \
