@@ -290,8 +290,7 @@ pub fn verify_with<A: PaletteApi>(
             profiles_overwritten: Vec::new(),
             cluster_values_changed: 0,
             who: None,
-            // the listing gives the create time of a pack as its last change: Palette does not
-            // change the time when the content under the version moves
+            // the time of a pack in the listing is its create time, so it is not a change
             last_modified: None,
             upstream_unknown: Vec::new(),
             macros_changed: Vec::new(),

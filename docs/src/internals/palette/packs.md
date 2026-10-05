@@ -395,6 +395,13 @@ For a pack pushed into an OCI registry, that time comes after the push.
 between two runs with `--since`: see
 [strata behind](../../commands/behind.md).
 
+The listing also gives `metadata.lastModifiedTimestamp` for each version. On
+each version, it is the same as `creationTimestamp`. A push again under the
+same version changes the digest of the version in place, and the time stays:
+see [A pack version pushed again](#a-pack-version-pushed-again). So it is not
+the time of a change, and `verify` gives no time of the last change for a pack
+record.
+
 The listing can name a registry that then answers 404 for the pack. It does so
 for a pack that Spectro Cloud disabled or deleted: see
 [Pack states](#pack-states).
