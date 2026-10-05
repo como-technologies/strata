@@ -49,9 +49,25 @@ distribution, and values in YAML. The record of the group keeps the config in th
 | `endpointType` | how a person reaches each virtual cluster: `LoadBalancer` or `Ingress` |
 | `kubernetesDistroType` | the Kubernetes distribution of each virtual cluster |
 | `limitConfig` | the upper limits of each virtual cluster, as Palette gives them: `cpuMilliCore`, `memoryMiB`, `storageGiB`, and `overSubscription`, and `cpu` and `memory` in the older units |
-| `values` | the values that the group applies to each virtual cluster, in canonical form, as a pack keeps its values |
-| `valuesHash` | the hash of `values`. A comment or a change of the key order does not change it |
+| `values` | the values that the group applies to each virtual cluster, in canonical form, as a pack keeps its values. Each password holds `********` |
+| `valuesHash` | the hash of `values`, with the mask. A comment or a change of the key order does not change it |
 | `hostClusters[]` | the `uid` and the `endpointConfig` of each host cluster of the group, sorted by uid |
+
+Palette gives the values as a person writes them, with no mask, and the values
+have no schema. So strata finds a secret by its key. Strata writes `********`
+over each value whose key ends with `password`, in capitals or not, at each
+depth. Strata does not mask an empty value, a map, a list, or a value that holds
+a variable. Here the values of the group hold `database.password`:
+
+```text
+{{#include ../../output/group-policy-values.txt}}
+```
+
+The hash covers the mask, so a new password does not change the tier. A record
+of strata 0.19 or before holds each password in clear. `compare` and `verify`
+write the mask over its values before they compare, so the record still
+compares. A secret under another key, such as a password in a URL, stays in
+clear.
 
 The tier is not part of the root. `verify` of the record reads the group again
 and names each field that changed. `compare` of two records of a group does the

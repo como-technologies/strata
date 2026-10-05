@@ -9,8 +9,8 @@ names another image, and the root does not move: the root does not cover the
 annotations. See
 [What the root does not cover](../internals/hashes.md#what-the-root-does-not-cover).
 
-A record keeps the annotations of each pack. `compare`, `verify`, and
-`same-release` name a pack whose `imageId` differs.
+A record keeps the annotation `imageId` of each pack, and no other annotation.
+`compare`, `verify`, and `same-release` name a pack whose `imageId` differs.
 
 In this example, `dev` has `aws-stack@1.1.8`, the content of 1.1.1 with an OS
 pack that names its image.
@@ -29,7 +29,8 @@ the edit of the image.
 {{#include ../output/os-image-annotations.txt}}
 ```
 
-The record keeps the annotations of the OS pack, with `imageId`.
+The record keeps the annotation `imageId` of the OS pack. It keeps no other
+annotation, because an annotation can hold a secret.
 
 ## 2. A person gives the OS pack another image
 
