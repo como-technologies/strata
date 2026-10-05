@@ -588,7 +588,7 @@ sync_registry() {
 }
 
 # sync_start BASE UID: POST the sync of the registry at BASE. While a sync of the registry runs,
-# Palette refuses the request with HTTP 500 and OciSyncInProgress: then wait, and ask again, for
+# Palette refuses the request with HTTP 500 and OciSyncInProgress. Then wait, and ask again, for
 # up to five minutes. Each other refusal is an error.
 sync_start() {
   local base=$1 uid=$2 refusal

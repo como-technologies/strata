@@ -222,14 +222,14 @@ registries the tenant can see, including one pack that two registries hold.
 | `os-record` | 0 | #189: a record of the release profile |
 | `os-annotations` | 0 | #253: the record keeps no annotation of the OS pack, because `ubuntu-aws` has no `imageId` |
 | `os-profile`, `os-annotations-ref` | 0 | #189: the document of the release profile gives the pack reference of the OS pack eight annotations, and no `imageId` |
-| `os-pack-registry`, `os-annotations-registry` | 0 | #189: the annotations of the pack reference are those of the pack version in the registry, from `GET /v1/packs/<uid>`: see [The annotations of a pack reference](../internals/palette/packs.md#the-annotations-of-a-pack-reference) |
+| `os-pack-registry`, `os-annotations-registry` | 0 | #189: the pack version in the registry, `GET /v1/packs/<uid>`, gives the same annotations as the pack reference: see [The annotations of a pack reference](../internals/palette/packs.md#the-annotations-of-a-pack-reference) |
 | `pack-time-listing` | 0 | #191: the listing gives each version of the CSI pack a `lastModifiedTimestamp` that is the same as its `creationTimestamp`: see [What a registry answers about a pack](../internals/palette/packs.md#what-a-registry-answers-about-a-pack) |
 | `verify-no-time` | 0 | #191: `verify --json` gives no `verify.lastModified` for a pack record |
 | `arch-listing` | 0 | #126: the listing names the architectures of `loki` 2.10.2 as `amd64,arm64`, and of 3.6.7 as `amd64`: see [The architectures of a version](../internals/palette/packs.md#the-architectures-of-a-version) |
 | `arch-record`, `arch-behind`, `arch-behind-says`, `arch-behind-json` | 0, 1, 0, 0 | #126: a record of `loki` 2.10.2 is behind 3.6.7, and `behind` says that the move drops `arm64`, in the line and in `newer[].drops` |
 | `bitnami-sync` | 0 | #122: the Helm summary listing gives the sync of the Bitnami registry: `InProgress`, with `syncRecovery` `Recovering` and `sync interrupted` |
 | `stale-record`, `stale-current` | 0 | #122: a record of the newest `nginx` of Bitnami, and `behind` says that the pin is current |
-| `stale-note`, `stale-json` | 0 | #122: the line of the pin names the sync that runs, the last complete sync, and the recovery, because the last sync did not complete. `--json` gives `pins[].registrySync` with the status of Palette: see [A pin that is current against an older copy](../commands/behind.md#a-pin-that-is-current-against-an-older-copy). When the last sync completed, `stale-no-note` checks that the pin has no note in its place. The sync of Bitnami stays `InProgress`, so no run shows `stale-no-note` |
+| `stale-note`, `stale-json` | 0 | #122: the last sync did not complete, so the line of the pin names the sync that runs, the last complete sync, and the recovery. `--json` gives `pins[].registrySync` with the status of Palette: see [A pin that is current against an older copy](../commands/behind.md#a-pin-that-is-current-against-an-older-copy). When the last sync completed, `stale-no-note` checks that the pin has no note in its place. The sync of Bitnami stays `InProgress`, so no run shows `stale-no-note` |
 
 Palette lists the registries of a tenant in no fixed order, so strata sorts them
 and the ambiguous-ref message reads the same every time:
@@ -331,7 +331,7 @@ shows. It then asks Palette to read the registry again after each push.
 | `floating-moves` | 1 | #66: the profile pinned under the floating tag moves with it. The script verifies its record again until it reports `DRIFT`, for up to ten minutes |
 | `floating-who`, `floating-who-system`, `floating-who-versions` | 1, 0, 0 | #69: `verify --who` on the same record reads the audit log of the profile: updates by the Palette service `system`, one of which names the two versions, `1.0.1 > 1.0.2` |
 | `floating-mod-keeps` | 0 | #165: the profile with values of its own stays on 1.0.1 under the tag: its record verifies after the sync that moved the first profile |
-| `floating-mod-behind`, `floating-mod-behind-names` | 1, 0 | #165: `behind` on its record says that the pin is behind, and names 1.0.2 as newer, as the version that the tag names now, and as the latest of Palette |
+| `floating-mod-behind`, `floating-mod-behind-names` | 1, 0 | #165: `behind` on its record says that the pin is behind. It names 1.0.2 as newer, as the version that the tag names now, and as the latest of Palette |
 | `delete-floating-modified` | 0 | the profile with values of its own is deleted |
 | `chart-empty` | 0 | the chart repository starts empty, and two applies remove the Palette registry over it and make it again, so Palette reads the chart for the first time |
 | `chart-push-1`, `chart-sync-1`, `chart-packs`, `chart-leaf` | 0 | `strata-live-chart` 1.0.0 is pushed with `helm push` into the example's OCI Helm registry, Palette reads it, and `packs` and `snapshot` read the chart as a pack of type `oci` |
@@ -357,9 +357,9 @@ Palette refuses a sync while a sync of the registry runs. The sync route of an
 OCI registry answers HTTP 500 with the code `OciSyncInProgress` and the message
 "another sync process is already in progress". A run got that answer on
 `chart-sync-1`, right after the apply that made the Palette registry over the
-chart repository, and each check after it passed. So `api.sh sync` waits and
-asks again until Palette takes the request, for up to five minutes, and then
-waits until the sync ends. See
+chart repository. Each check after it passed. So `api.sh sync` waits and asks
+again until Palette takes the request, for up to five minutes, and then waits
+until the sync ends. See
 [The sync of a registry](../internals/palette/packs.md#the-sync-of-a-registry).
 
 The script ends with an apply of the baseline, which removes the profiles it
@@ -488,7 +488,7 @@ version with no publish, lists it, and deletes it. This is the source for
 | `no-draft-after-publish` | 2 | #155: the publish empties the draft |
 | `restored` | 0 | the edit is put back, and the first record verifies again |
 | `unpublished-create` | 0 | #114: a create of `strata-live-unpublished` with the packs of the add-on version, and no publish |
-| `unpublished-listed`, `unpublished-mark` | 0 | #114: the profile listing names the version, and `list --packs` gives `published` false, the packs of its draft, and the mark `draft` at the end of its row |
+| `unpublished-listed`, `unpublished-mark` | 0 | #114: the profile listing names the version. `list --packs` gives `published` false, the packs of its draft, and the mark `draft` at the end of its row |
 | `unpublished-delete` | 0 | #114: the delete of `strata-live-unpublished` |
 
 ## pending.sh
@@ -675,8 +675,8 @@ read or a request to a validate route, which writes nothing. It uses `cert-manag
 1.21.1 from the Public Repo, in an add-on candidate, and `gloo` 1.2.18 for the
 mark `disabled`. Stage 3 runs only with a profile version of the project: give
 it as `PROFILE=<name>@<version>`. With the add-on version of the live example,
-Palette takes the version on the route of an update, and refuses a candidate
-with its name and its version on the name route. Stage 4 makes the profile
+Palette takes the version on the route of an update. It refuses a candidate
+with that name and version on the name route. Stage 4 makes the profile
 `strata-live-layer` and deletes it. It runs only when you give its number:
 `validate-packs.sh 4`. Stage 5 asks the name route and the import validate
 route.
@@ -758,8 +758,8 @@ states what it shows.
 | `packs-digest` | 0 | #75: the Spectro pack registry: the digest of the push |
 | `auth-listed` | ? | #75: Palette lists no chart of the Helm repository with credentials while no profile pins one (recorded 2) |
 | `auth-candidate`, `auth-candidate-minted` | 0 | #154: a candidate with the chart builds a record before any profile pins it: no pack uid, no digest, the layer `addon`, the type `helm`, and the tag as the version |
-| `auth-packs`, `auth-packs-says` | 2, 0 | #123: `packs --registry` of the Helm repository with credentials is `pack-not-found`, and the error says that Palette does not sync the registry, and lists a pack of it only while a profile pins the pack |
-| `auth-behind`, `auth-behind-says` | 2, 0 | #123: `behind` on the candidate record cannot check the pin, `not checked`, and the line under the pin names the registry that Palette does not sync |
+| `auth-packs`, `auth-packs-says` | 2, 0 | #123: `packs --registry` of the Helm repository with credentials is `pack-not-found`. The error says that Palette does not sync the registry, and lists a pack of it only while a profile pins the pack |
+| `auth-behind`, `auth-behind-says` | 2, 0 | #123: `behind` on the candidate record cannot check the pin, `not checked`. The line under the pin names the registry that Palette does not sync |
 | `auth-pin`, `auth-record` | 0 | a profile that pins the chart by name, and a record of it |
 | `auth-candidate-same`, `auth-candidate-minted-only` | 0 | #154: `same-release` with `--allow no-digest` passes the candidate and the published version, and `mintedUidOnly` names the chart |
 | `auth-candidate-again`, `auth-candidate-listed` | 0, 0 | #154: a record of the candidate after the create has the published root, because the listing now has the chart |

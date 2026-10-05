@@ -73,7 +73,7 @@ and
   completed a sync.
 - Palette refuses a sync while a sync of the registry runs. The sync route of
   an OCI registry, `POST /v1/registries/oci/{uid}/ecr/sync`, answers HTTP 500
-  with the code `OciSyncInProgress` and the message "another sync process is
+  with the code `OciSyncInProgress`. The message is "another sync process is
   already in progress". The sync of the live example waits and asks again: see
   [registry.sh](../../development/live-runs.md#registrysh).
 
@@ -346,11 +346,11 @@ A profile with values of its own does not move with the tag. Palette shows the
 ([Update a cluster profile](https://docs.spectrocloud.com/profiles/cluster-profiles/modify-cluster-profiles/update-cluster-profile/#accept-updates-to-a-cluster-profile)).
 This is the rule of a push again too: see
 [A pack version pushed again](#a-pack-version-pushed-again). Step 4b of
-`registry.sh` shows it: a second profile pins 1.0.1 under `1.0.x` with values
-of its own, and stays on 1.0.1 after the push of 1.0.2 and the sync that moves
-the first profile. Until a person applies the update, a record of the profile
-verifies, and [`strata behind`](../../commands/behind.md) says that the pin is
-behind 1.0.2, the version that the tag names now.
+`registry.sh` shows it. A second profile pins 1.0.1 under `1.0.x` with values
+of its own. After the push of 1.0.2 and the sync, the first profile moves, and
+the second stays on 1.0.1. Until a person applies the update, a record of the
+profile verifies. [`strata behind`](../../commands/behind.md) says that the
+pin is behind 1.0.2, the version that the tag names now.
 
 ## The layer of a pack
 
@@ -360,9 +360,9 @@ pack of a profile gets the layer `addon` from the manifest pack of Palette. A
 pack that Palette makes at the create also gets `addon`: see
 [A pack that Palette makes at the create](#a-pack-that-palette-makes-at-the-create).
 Stage 4 of
-[validate-packs.sh](../../development/live-runs.md#validate-packssh) shows it:
+[validate-packs.sh](../../development/live-runs.md#validate-packssh) shows it.
 Palette makes and publishes a profile that gives `cert-manager` the layer
-`csi`, with no error, and the published pack has the layer `addon` of its
+`csi`, with no error. The published pack has the layer `addon` of its
 registry. A record of the version holds the pack as `addon/cert-manager`, and
 has the root of the candidate that gives no layer.
 
@@ -487,7 +487,7 @@ So `strata packs --cloud aws` keeps a version whose cloud types hold `aws` or
 `all`, and `strata behind` does the same. The example's own packs have
 `cloudTypes: ["all"]` in their `pack.json`. The listing gives such a version
 `all` and each cloud of Palette beside it, from `apache-cloudstack` to
-`vsphere`, so `--cloud aws` keeps it by `aws` too. `registry.sh` stage 6 shows
+`vsphere`. So `--cloud aws` keeps it by `aws` too. `registry.sh` stage 6 shows
 it: see [Live runs](../../development/live-runs.md#registrysh).
 
 ## The architectures of a version
@@ -631,7 +631,7 @@ A record keeps `imageId` alone, outside the root, and `compare` and `verify`
 name a new `imageId`: see
 [The OS pack names a new machine image](../../use-cases/os-image.md).
 
-A live run shows it: the pack reference of `ubuntu-aws` 24.04 in a profile has
-the eight annotations and no `imageId`, they are the annotations of the pack
-version in the registry, and a record of the profile keeps no annotation of
-the pack. See [packs.sh](../../development/live-runs.md#packssh).
+A live run shows it. The pack reference of `ubuntu-aws` 24.04 in a profile has
+the eight annotations and no `imageId`. They are the annotations of the pack
+version in the registry. A record of the profile keeps no annotation of the
+pack. See [packs.sh](../../development/live-runs.md#packssh).

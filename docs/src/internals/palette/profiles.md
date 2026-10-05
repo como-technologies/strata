@@ -301,7 +301,7 @@ changes a linked version through the route of one manifest. `verify` finds an
 edit through such a route. The lock holds against a new cluster: it keeps every
 cluster outside the template away from a linked version. A cluster that runs a
 linked version is a cluster the template applies. A record of a linked version
-keeps no template, and has the root from before the link: Palette shows the
+keeps no template, and has the root from before the link. Palette shows the
 templates, and `strata consumers` counts them. See
 [The cluster templates of a version](../../commands/snapshot/profile-version.md#the-cluster-templates-of-a-version).
 
