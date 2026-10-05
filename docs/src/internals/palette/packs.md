@@ -31,12 +31,43 @@ it needs.**
   [A pack version pushed again](#a-pack-version-pushed-again).
 - Palette takes the digest from its own copy of the registry, which a sync
   refreshes. `@latest` is the newest version of that copy.
-- Palette gives the last sync of each registry:
-  `GET /v1/registries/pack/{uid}/sync/status`, the same route under `helm`,
-  and under `oci/{uid}/basic` or `oci/{uid}/ecr`. The answer has
-  `isSyncSupported`, `lastSyncedTime`, `status` (`Completed`, `InProgress`, or
-  `Failed`), and `message`. `verify` of a pack record reads it: see
-  [The sync of the registry of a pack record](../../commands/verify.md#the-sync-of-the-registry-of-a-pack-record).
+- Palette gives the last sync of each registry: see
+  [The sync of a registry](#the-sync-of-a-registry).
+
+## The sync of a registry
+
+Palette keeps a copy of each registry, and a sync job refreshes the copy. The
+summary listing of each kind of registry gives the last sync of each registry
+in `status.sync`: `GET /v1/registries/pack/summary`,
+`GET /v1/registries/helm/summary`, and `GET /v1/registries/oci/summary`. The
+route `GET /v1/registries/{kind}/{uid}/sync/status` gives the same fields for
+one registry. `verify` of a pack record reads the summary listing: see
+[The sync of the registry of a pack record](../../commands/verify.md#the-sync-of-the-registry-of-a-pack-record).
+
+| Field | What it is |
+| --- | --- |
+| `isSyncSupported` | Whether Palette syncs the registry. |
+| `status` | The state of the last sync: `Completed`, `InProgress`, or `Failed`. |
+| `lastSyncedTime` | When the last sync that completed started. Not when it completed. |
+| `lastRunTime` | When the last sync started, also a sync that runs or that failed. |
+| `message` | The cause of a failed sync. |
+| `syncRecovery` | `syncRecoveryState` (`Interrupted`, `Recovering`, or `Recovered`) and `message`: the recovery of a sync that stopped before its end. |
+
+- `lastSyncedTime` is the start of the sync, not its end. The daily sync of
+  the tenant starts at 00:00 UTC. Two or three registries of the tenant give
+  the same `lastSyncedTime` or `lastRunTime`, to the millisecond, such as
+  `00:00:08.683Z`. The syncs of two registries do not end at the same
+  millisecond.
+- When the last sync completed, `lastSyncedTime` is equal to `lastRunTime`, or
+  older. It is older when a later run did not refresh the copy, and
+  `status` stays `Completed`.
+- A sync can stay `InProgress` for a long time. The Bitnami registry of the
+  tenant stays `InProgress` for more than a month, with `syncRecovery`
+  `Recovering` and the message `sync interrupted`. Its `lastSyncedTime` is
+  more than a month older than its `lastRunTime`. The copy of Palette is then
+  the copy of the last sync that completed.
+- Palette writes `0001-01-01T00:00:00.000Z` for a registry that never
+  completed a sync.
 
 ## A pack that requires another pack
 
