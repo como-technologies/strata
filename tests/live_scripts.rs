@@ -2190,7 +2190,10 @@ fn packs_paged(count: u32, headings: &str) -> String {
         "csi_pack_name": "csi-aws-ebs", "csi_previous_version": "1.63.1",
         "csi_version": "1.65.0", "cloud": "aws",
     }));
-    stage.route("/v1/packs", &format!(r#"{{"listmeta":{{"count":{count}}}}}"#));
+    stage.route(
+        "/v1/packs",
+        &format!(r#"{{"listmeta":{{"count":{count}}}}}"#),
+    );
     stage.strata("packs kubernetes", 0, headings);
     let (_, steps) = stage.run("packs.sh", &[]);
     let calls = std::fs::read_to_string(stage.path("strata/calls")).unwrap();
@@ -2210,7 +2213,10 @@ fn packs_sh_counts_the_versions_of_all_registries_against_the_100_of_one_page() 
         &["packs-paged-listing", "packs-paged", "packs-paged-count"],
     );
 
-    let steps = packs_paged(97, "kubernetes in Public Repo (97 versions)\n  1.36.2  1.36.x\n");
+    let steps = packs_paged(
+        97,
+        "kubernetes in Public Repo (97 versions)\n  1.36.2  1.36.x\n",
+    );
     assert!(steps.contains("FAIL  packs-paged-listing"), "{steps}");
     assert!(steps.contains("FAIL  packs-paged-count"), "{steps}");
 }
