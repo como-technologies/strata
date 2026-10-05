@@ -5673,22 +5673,18 @@ fn verify_rechecks_a_pack_version_against_its_registry() {
     // the registry now serves other content under the same version
     // the same version, with other content under it
     let mut summary = pack_summary("pk-65", "1.65.0", "reg-public", "sha256:moved", CSI_63);
-    summary["metadata"]["lastModifiedTimestamp"] = Value::from("2026-09-29T08:00:00.000Z");
+    summary["metadata"]["lastModifiedTimestamp"] = Value::from("2026-07-30T22:45:47.109Z");
     let moved = serve_summaries(vec![summary], &[("reg-public", public_entity())]);
     let v = ops::verify(&recorded, &Palette::new(moved), "t1", &Progress::silent()).unwrap();
     assert!(!v.unchanged, "a pack version whose content moved is drift");
     let ver = v.diff.verify.as_ref().unwrap();
     assert_eq!(ver.status, VerifyStatus::Drifted);
-    // the pack in the listing carries the time Palette last changed it
-    assert_eq!(
-        ver.last_modified.as_deref(),
-        Some("2026-09-29T08:00:00.000Z")
-    );
+    // the time of the listing is the create time of the pack, not the time of the move
+    assert_eq!(ver.last_modified, None);
     let line = verdict_of(&v, &recorded);
-    assert!(
-        line.ends_with("; Palette last changed it 2026-09-29T08:00:00.000Z"),
-        "{line}"
-    );
+    assert!(!line.contains("Palette last changed it"), "{line}");
+    let json = serde_json::to_value(&v.diff).unwrap();
+    assert!(json["verify"].get("lastModified").is_none(), "{json}");
 }
 
 /// Verify a record of csi-aws-ebs@1.65.0 in the Public Repo, whose registry answers `sync` for

@@ -11,6 +11,7 @@
 #      the tenant does not have
 #   4  the options of a pack template, and a candidate whose values select one (#151)
 #   5  the annotations of the OS pack in a record of the release profile (#189)
+#   6  the time of a pack in the listing, and no such time in verify (#191)
 #
 # The CSI versions are the one the live profiles pin and an older one, from the file of the cloud
 # in terraform/. On AWS they are the two that the offline examples also use. Results go under runs/<UTC time>/packs/, or OUT. Exit 0 only when no
@@ -165,6 +166,14 @@ check os-pack-registry 0 '#189: the pack version of the OS pack in the registry'
 check os-annotations-registry 0 '#189: the annotations of the pack reference are those of the pack version in the registry' -- \
   jq -e --slurpfile r os-pack-registry.out --arg u "$os_uid" \
   '[$r[0].packValues[] | select(.packUid == $u) | .annotations] == [.packs[] | select(.layer == "os") | .annotations]' release.json
+
+# The listing gives each pack version a lastModifiedTimestamp. It is the create time of the
+# version, so verify gives no time of the last change for a pack record.
+echo "== the time of a pack (#191)" | tee -a steps.log
+check pack-time-listing 0 "#191: the listing gives each version of $pack a lastModifiedTimestamp equal to its creationTimestamp" -- \
+  bash -c "\"$live/api.sh\" get '/v1/packs?filters=spec.name=$pack&limit=100' | jq -e '[.items[].metadata] | length > 0 and all(.lastModifiedTimestamp == .creationTimestamp)'"
+check verify-no-time 0 '#191: verify --json gives no verify.lastModified for a pack record' -- \
+  bash -c "\"$strata\" verify pack.json --json | jq -e '.verify | has(\"lastModified\") | not'"
 
 echo
 echo "$script: $(grep -c PASS steps.log) passed, $failures failed; results in $run"

@@ -90,7 +90,8 @@ request id.
 
 ## When it changed
 
-Each document that `verify` reads gives the time of its last change,
+The document of a profile, an app profile, a cluster, an edge host, or a
+cluster group gives the time of its last change,
 `metadata.lastModifiedTimestamp`. So a `DRIFT` verdict ends with
 `; Palette last changed it <time>`, with no more requests:
 
@@ -102,6 +103,11 @@ Each document that `verify` reads gives the time of its last change,
 its status. With many records, each entry of `records` gives it in
 `lastModified`. The time is of the last change of the document. `--who` names
 the writes.
+
+A pack record gives no time. The pack listing gives the create time of a pack
+in `metadata.lastModifiedTimestamp`, also when the content under the version
+changes. See
+[What a registry answers about a pack](../internals/palette/packs.md#what-a-registry-answers-about-a-pack).
 
 ## Check many records
 

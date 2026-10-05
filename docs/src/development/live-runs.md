@@ -219,6 +219,8 @@ registries the tenant can see, including one pack that two registries hold.
 | `preset-warning`, `preset-warning-says`, `preset-recorded` | 0 | #151: a candidate whose values select the option `public` warns, and records `packs[].presetOptions[]` |
 | `os-record`, `os-annotations` | 0 | #189: a record of the release profile keeps the annotations of the OS pack outside the root, and `ubuntu-aws` has no `imageId` |
 | `os-pack-registry`, `os-annotations-registry` | 0 | #189: the annotations of the pack reference are those of the pack version in the registry: see [The annotations of a pack reference](../internals/palette/packs.md#the-annotations-of-a-pack-reference) |
+| `pack-time-listing` | 0 | #191: the listing gives each version of the CSI pack a `lastModifiedTimestamp` that is the same as its `creationTimestamp`: see [What a registry answers about a pack](../internals/palette/packs.md#what-a-registry-answers-about-a-pack) |
+| `verify-no-time` | 0 | #191: `verify --json` gives no `verify.lastModified` for a pack record |
 
 Palette lists the registries of a tenant in no fixed order, so strata sorts them
 and the ambiguous-ref message reads the same every time:

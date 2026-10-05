@@ -173,8 +173,10 @@ A version bump that overwrites the version that a cluster runs is a write to
 the profile, and not to the cluster. The log of the cluster does not name it.
 
 Each document of an object gives the time of its last change,
-`metadata.lastModifiedTimestamp`. It is also in each pack of the pack listing.
-The time costs no request more than the document.
+`metadata.lastModifiedTimestamp`. The time costs no request more than the
+document. The pack listing gives the same field, but there it is the create
+time of the pack: see
+[What a registry answers about a pack](./packs.md#what-a-registry-answers-about-a-pack).
 
 ## Version bumps
 
