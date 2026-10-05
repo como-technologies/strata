@@ -125,7 +125,8 @@ pub struct ListedProfile {
 impl ListedProfile {
     /// Returns true when the profile document says that nobody published the version.
     ///
-    /// A version that strata did not read is not a draft: strata does not know.
+    /// When strata did not read the profile document, it returns false, because strata does not
+    /// know.
     pub fn is_draft(&self) -> bool {
         self.published == Some(false)
     }

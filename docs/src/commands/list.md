@@ -151,6 +151,28 @@ cannot tell if it carries the pack.
 [Find the profiles that carry a pack](../use-cases/find-a-pack.md) searches
 every project.
 
+## A version that nobody published
+
+A version that nobody published has its packs in its draft. `--packs` and
+`--pack` read the packs of the draft, and the row of the version ends with
+`draft`:
+
+```text
+{{#include ../output/list-draft.txt}}
+```
+
+The JSON gives `published` for each version that strata read:
+
+```text
+{{#include ../output/list-draft-json.txt}}
+```
+
+With `--format markdown`, the ref cell of the version ends with `draft`. A
+published version with a draft that waits shows its published packs, with no
+mark. A record of a version that nobody published holds content that a person
+can change before the publish. See
+[Drafts](../internals/palette/profiles.md#drafts).
+
 ## What to expect
 
 Name the kinds to list: `strata list profiles`, or `strata list clusters
