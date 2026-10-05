@@ -399,6 +399,19 @@ The listing can name a registry that then answers 404 for the pack. It does so
 for a pack that Spectro Cloud disabled or deleted: see
 [Pack states](#pack-states).
 
+## The cloud type `all`
+
+A pack that supports every cloud has the cloud type `all` in `cloudTypes`. A
+filter of Palette on one cloud keeps that pack: the request
+`GET /v1/packs/<name>/registries/<uid>?cloudType=aws` adds `all` to the
+filter. The create of a profile also accepts a pack with `all` for each cloud:
+see [The gaps that strata fills](profiles.md#the-gaps-that-strata-fills).
+
+So `strata packs --cloud aws` keeps a version whose cloud types hold `aws` or
+`all`, and `strata behind` does the same. The example's own packs have
+`cloudTypes: ["all"]`. The check on a live tenant is `registry.sh` stage 6:
+see [Live runs](../../development/live-runs.md#registrysh).
+
 ## Pack states
 
 Spectro Cloud retires a pack version in the registries it owns. The listing

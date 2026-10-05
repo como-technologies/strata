@@ -15,7 +15,7 @@ use crate::progress::Progress;
 use crate::snapshot::{Snapshot, Tool};
 use crate::version;
 
-use super::packs::{PackBuild, PackOptions, registry_packs};
+use super::packs::{PackBuild, PackOptions, registry_packs, supports};
 
 /// The schema id of the document `behind` writes.
 pub const BEHIND_SCHEMA: &str = "strata-behind/1";
@@ -287,9 +287,7 @@ where
             clouds.is_empty()
                 || clouds.iter().any(|c| c == "all")
                 || b.cloud_types.is_empty()
-                || b.cloud_types
-                    .iter()
-                    .any(|c| c == "all" || clouds.contains(c))
+                || clouds.iter().any(|c| supports(&b.cloud_types, c))
         };
         pin.newer = builds
             .iter()

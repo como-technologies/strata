@@ -20,7 +20,7 @@
 #   5  a chart in the example's own OCI Helm registry: the digest Palette lists for it, and what a
 #      push again does to the listing and to a profile that pins it
 #   6  a pack that requires another pack: whether a profile that holds the one and not the other
-#      is refused
+#      is refused; and packs --cloud aws keeps the required pack, whose cloud type is all (#118)
 #
 # Needs tofu, aws with the profile terraform.tfvars names, oras, jq, and tar. The registry exists
 # after any apply. The script leaves the example at its baseline: the profile of step 2 is gone,
@@ -421,6 +421,10 @@ build_requiring 1.1.0 || die "building $PACK 1.1.0 failed"
 check dep-push-requiring 0 "push $PACK 1.1.0, which requires $DEP 1.0.0 or newer" -- push 1.1.0 requiring
 check dep-sync 0 "Palette reads $REG_NAME again" -- "$live/api.sh" sync-oci "$REG"
 check dep-packs 0 "packs lists $DEP in $REG_NAME" -- "$strata" packs "$DEP" --json
+check dep-packs-cloud 0 "#118: packs --cloud aws keeps $DEP, whose cloud type is all" -- \
+  "$strata" packs "$DEP" --registry "$REG_NAME" --cloud aws --json
+check dep-packs-cloud-version 0 "#118: and lists 1.0.0" -- \
+  jq -e '[.registries[].versions[].version] == ["1.0.0"]' dep-packs-cloud.out
 check dep-profile-alone 1 "#66: a profile with $PACK 1.1.0 and not $DEP is refused at creation" -- \
   try_apply "${cluster_var[@]}" -var dep_profile=alone
 check dep-profile-alone-says 0 "the refusal names $DEP" -- refusal_names "$DEP" dep-profile-alone.out

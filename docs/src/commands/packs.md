@@ -34,6 +34,12 @@ question a bump asks: the pin is current when it names the version that
 | `--cloud TYPE` | Keep the versions that support this cloud, such as `aws`. |
 | `--latest` | Only the newest version of each registry. |
 
+A version with the cloud type `all` supports every cloud, so `--cloud aws` keeps
+it. Palette gives `all` to a pack that supports every cloud, and its own filter
+on one cloud keeps that pack: see
+[The cloud type `all`](../internals/palette/packs.md#the-cloud-type-all). The
+JSON keeps `cloudTypes` as Palette gives it.
+
 A cloud that no version supports is an answer, and an empty one: exit `0` and
 one line. A registry the key cannot see is an error that lists the visible
 registries. A pack that no registry has is `pack-name-not-found`. With
