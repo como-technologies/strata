@@ -16,7 +16,8 @@
 #      route of Palette gives for the pack, and what a record and verify say (#108); then the
 #      tag again, and the profile back on 1.0.0
 #   4  push 1.0.1 and sync: the profile pinned to 1.0.0 stays; and the floating tag, when the
-#      registry lists one, and who the audit log of Palette says moved the profile (#69)
+#      registry lists one, and who the audit log of Palette says moved the profile (#69); a
+#      profile with values of its own under the tag stays, and behind names the version (#165)
 #   5  a chart in the example's own OCI Helm registry: the digest Palette lists for it, and what a
 #      push again does to the listing and to a profile that pins it
 #   6  a pack that requires another pack: whether a profile that holds the one and not the other
@@ -253,6 +254,10 @@ if [ -n "$floating" ]; then
   echo "== 4b. the floating tag $floating" | tee -a steps.log
   apply "${cluster_var[@]}" -var owned_pack_profile=true -var "owned_pack_tag=$floating" -var owned_pack_version=1.0.1
   check profile-floating 0 "#66: a record of the profile pinned under the tag $floating" -- "$strata" snapshot "$P" -o profile-3.json
+  check pin-floating-modified 0 "#165: a second profile pins $PACK 1.0.1 under the tag $floating, with values changed from the defaults, through the API" -- \
+    "$live/api.sh" pin-profile strata-live-floating-modified "$REG" oci "$PACK" 1.0.1 modified-values.yaml addon "$floating"
+  FM=$(cat pin-floating-modified.out)
+  check floating-mod 0 "#165: a record of that profile" -- "$strata" snapshot "$FM" -o floating-mod-1.json
   build 1.0.2 || die "building $PACK 1.0.2 failed"
   check push-4 0 "push $PACK 1.0.2, which the tag $floating now names" -- push 1.0.2 floating
   check sync-4 0 "Palette reads $REG_NAME again" -- "$live/api.sh" sync-oci "$REG"
@@ -264,6 +269,14 @@ if [ -n "$floating" ]; then
     grep -Eq '^  [0-9TZ:.-]+  system \(service\)  update' floating-who.out
   check floating-who-versions 0 "#69: its summary names the two versions" -- \
     grep -Eq '^  [0-9TZ:.-]+  system \(service\)  update: .*1\.0\.1 > 1\.0\.2' floating-who.out
+  # the wait of floating-moves gave Palette its ten minutes to move this profile too
+  check floating-mod-keeps 0 "#165: the profile with changed values stays on 1.0.1 under the tag: its record verifies" -- \
+    "$strata" verify floating-mod-1.json
+  check floating-mod-behind 1 "#165: behind on its record: the pin of 1.0.1 is behind, because the tag names 1.0.2" -- \
+    "$strata" behind floating-mod-1.json --no-impact --json
+  check floating-mod-behind-names 0 "#165: the pin names 1.0.2 as newer and as the version that the tag names now" -- \
+    jq -e '.pins[0] | .behind and .resolved == "1.0.2" and ([.newer[].version] | index("1.0.2"))' floating-mod-behind.out
+  check delete-floating-modified 0 "delete the profile with changed values under the tag" -- "$live/api.sh" delete "$FM"
 else
   printf '%-4s  %-32s %s\n' SEEN floating "$REG_NAME lists no floating tag for $PACK, so the floating tag case does not apply to this registry kind" | tee -a steps.log
   printf '%s\t%s\n' floating "no floating tag in this registry kind; the case does not apply" >> checks.tsv

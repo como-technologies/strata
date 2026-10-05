@@ -29,7 +29,7 @@ flowchart LR
   copy["cluster copy<br/>of the version"]
   record[("record<br/>strata")]
   registry -- "a push again: the profile keeps its digest" --> version
-  registry -- "a floating tag moves: the profile moves" --> version
+  registry -- "a floating tag moves: a profile with the values of the pack moves" --> version
   version -- "an edit in place: a notification opens" --> copy
   version -. "snapshot, verify" .-> record
   copy -. "snapshot, verify" .-> record

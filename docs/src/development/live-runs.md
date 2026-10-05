@@ -318,8 +318,12 @@ shows. It then asks Palette to read the registry again after each push.
 | `packs-two`, `packs-two-order` | 0 | #66: `packs` lists 1.0.1 first, then 1.0.0 |
 | `profile-stays` | 0 | #66: the profile pinned to 1.0.0 does not move to 1.0.1 |
 | `profile-floating`, `push-4`, `sync-4` | 0 | a profile pins the pack under `1.0.x`, and 1.0.2 is pushed, which the tag now names |
+| `pin-floating-modified`, `floating-mod` | 0 | #165: before the push, a second profile pins 1.0.1 under `1.0.x`, with values that differ from those of the pack. No result yet |
 | `floating-moves` | 1 | #66: the profile pinned under the floating tag moves with it. The script verifies its record again until it reports `DRIFT`, for up to ten minutes |
 | `floating-who`, `floating-who-system`, `floating-who-versions` | 1, 0, 0 | #69: `verify --who` on the same record reads the audit log of the profile: updates by the Palette service `system`, one of which names the two versions, `1.0.1 > 1.0.2` |
+| `floating-mod-keeps` | 0 | #165: the profile with values of its own stays on 1.0.1 under the tag: its record verifies. No result yet |
+| `floating-mod-behind`, `floating-mod-behind-names` | 1, 0 | #165: `behind` on its record says that the pin is behind, and names 1.0.2 as newer and as the version that the tag names now. No result yet |
+| `delete-floating-modified` | 0 | the profile with values of its own is deleted |
 | `chart-empty` | 0 | the chart repository starts empty, and two applies remove the Palette registry over it and make it again, so Palette reads the chart for the first time |
 | `chart-push-1`, `chart-sync-1`, `chart-packs`, `chart-leaf` | 0 | `strata-live-chart` 1.0.0 is pushed with `helm push` into the example's OCI Helm registry, Palette reads it, and `packs` and `snapshot` read the chart as a pack of type `oci` |
 | `chart-digest` | 0 | #66: Palette lists the manifest digest of the push for a chart in an OCI registry, as for a pack, not the digest of the chart archive |

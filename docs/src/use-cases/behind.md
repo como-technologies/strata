@@ -32,9 +32,9 @@ The run keeps its JSON in `behind.json`.
 
 Four pins of `aws-stack@1.0.0` are behind, and each line under one says what the
 bump does. The Kubernetes bump and the OS bump are `repave`: plan them. The pins
-of `aws-stack@1.1.1` are current. The OS pins are floating tags: `LTS__24.x`
-reaches each 24 release on its own, and `LTS__20.4.x` never reaches 22.04 or
-24.04.
+of `aws-stack@1.1.1` are current. The OS pins are floating tags. Each pins the
+version that its tag names now, so the tag adds no version to move to.
+`LTS__20.4.x` never reaches 22.04 or 24.04.
 
 With last week's run, the report says what arrived since:
 

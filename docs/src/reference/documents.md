@@ -484,7 +484,8 @@ is the path as a list: strings for keys, numbers for indexes, and
   order of the pack name:
   - `name`, `layer`, `registry`, `registryUid`, `version`, and `tag`.
   - `floating`, only when true: the tag is a floating tag. `resolved`: the
-    version that the tag names now.
+    version that the tag names now. When it is above `version`, it is in
+    `newer`, and the pin is behind.
   - `pinnedState`: `deprecated`, `disabled`, or `deleted` from the registry, or
     `absent` when the registry no longer lists the pinned version.
   - `pinnedBy[]`: `path` and `subject` of each record that pins it.
