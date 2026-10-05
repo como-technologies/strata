@@ -11012,6 +11012,73 @@ fn behind_marks_the_newer_version_that_palette_calls_the_latest_and_names_it_on_
 }
 
 #[test]
+fn behind_says_what_a_move_to_a_newer_version_drops_when_it_supports_fewer_architectures() {
+    // the pinned version supports both architectures, the newest supports amd64 alone, and the
+    // deprecated one names none
+    let mut both = pack_summary("pk-63", "1.63.1", "reg-public", "sha256:aaa", CSI_63);
+    both["spec"]["annotations"] = serde_json::json!({"architecture": "arm64,amd64"});
+    let mut one = pack_summary("pk-65", "1.65.0", "reg-public", "sha256:bbb", CSI_65);
+    one["spec"]["annotations"] = serde_json::json!({"architecture": "amd64"});
+    let api = serve_summaries(
+        vec![
+            both,
+            one,
+            pack_summary_with("1.64.0", Some("deprecated"), &["aws"]),
+        ],
+        &[("reg-public", public_entity())],
+    );
+    let dir = tempfile::tempdir().unwrap();
+    let write = |name: &str, r: &str| {
+        let path = dir.path().join(name);
+        let snap = snapshot_pack(&api, r).unwrap();
+        fs::write(&path, snap.to_json(false).unwrap()).unwrap();
+        path
+    };
+    let records = vec![
+        write("dev.json", "pack:csi-aws-ebs@1.63.1"),
+        write("old.json", "pack:csi-aws-ebs@1.64.0"),
+    ];
+    let r = behind_of(&api, &records, &ops::BehindOptions::default());
+    let pin = &r.pins[0];
+    assert_eq!(pin.version, "1.63.1");
+    assert_eq!(
+        pin.newer
+            .iter()
+            .map(|n| (n.version.as_str(), n.drops.clone()))
+            .collect::<Vec<_>>(),
+        [("1.65.0", vec!["arm64".to_string()]), ("1.64.0", vec![])]
+    );
+    // a pinned version that names no architecture says nothing about a move
+    let old = &r.pins[1];
+    assert_eq!(old.version, "1.64.0");
+    assert!(
+        old.behind && old.newer.iter().all(|n| n.drops.is_empty()),
+        "{:?}",
+        old.newer
+    );
+    let json = serde_json::to_value(&r).unwrap();
+    assert_eq!(
+        json["pins"][0]["newer"][0]["drops"],
+        serde_json::json!(["arm64"])
+    );
+    assert!(json["pins"][0]["newer"][1].get("drops").is_none());
+    let text = render::renderer(Format::Terminal, Paint::off(), false)
+        .render_behind(&r)
+        .unwrap();
+    assert!(
+        text.contains("behind: 1.65.0 (drops arm64), 1.64.0 (deprecated)"),
+        "{text}"
+    );
+    let md = render::renderer(Format::Markdown, Paint::off(), false)
+        .render_behind(&r)
+        .unwrap();
+    assert!(
+        md.contains("behind: 1.65.0 (drops arm64), 1.64.0 (deprecated)"),
+        "{md}"
+    );
+}
+
+#[test]
 fn behind_names_the_newer_versions_of_each_pin_and_the_impact_of_the_bump() {
     let dir = tempfile::tempdir().unwrap();
     let api = serve_behind();

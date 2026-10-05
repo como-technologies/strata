@@ -77,6 +77,12 @@ pub struct PackBuild {
     pub kind: String,
     /// The clouds this version supports.
     pub cloud_types: Vec<String>,
+    /// The processor architectures this version supports, sorted: `amd64`, `arm64`. From the
+    /// annotation `architecture` of the listing; empty when the listing names none. `packs` is
+    /// not a catalog, so the document does not show them: `behind` reads them, and says what a
+    /// move to a newer version drops.
+    #[serde(skip)]
+    pub architectures: Vec<String>,
     /// Every tag that points at this version, the exact tag first.
     pub tags: Vec<String>,
     /// True for the newest version of the registry's copy, by the order of strata.
@@ -120,6 +126,25 @@ pub(super) fn supports(cloud_types: &[String], cloud: &str) -> bool {
 /// the sync of a registry, Palette gives `"true"` to one version of each pack, by the order of
 /// semantic versions, and `"false"` to each other version.
 const PALETTE_LATEST: &str = "/metadata/annotations/latestVersion";
+
+/// The annotation of the pack listing that names the processor architectures of a version, as
+/// one text with commas: `amd64`, `amd64,arm64`, or `arm64,amd64`. Not each version has it, and
+/// the versions of one pack can differ.
+const ARCHITECTURE: &str = "/spec/annotations/architecture";
+
+/// The architectures that the listing entry `entry` names, sorted, with no repeat. Empty when the
+/// entry names none.
+fn architectures(entry: &Value) -> Vec<String> {
+    let mut found: Vec<String> = text(entry, ARCHITECTURE)
+        .split(',')
+        .map(str::trim)
+        .filter(|a| !a.is_empty())
+        .map(str::to_string)
+        .collect();
+    found.sort();
+    found.dedup();
+    found
+}
 
 /// The value of the `states` query that asks Palette for the tags of the retired versions of a
 /// pack. With it, Palette answers with the versions in these states only.
@@ -288,6 +313,7 @@ where
                 digest: text(e, "/spec/digest"),
                 kind: text(e, "/spec/type"),
                 cloud_types,
+                architectures: architectures(e),
                 tags: for_version,
                 latest: false,
                 palette_latest: text(e, PALETTE_LATEST) == "true",
@@ -406,6 +432,30 @@ mod tests {
         assert_eq!(kept, vec![("1.0.0", true), ("0.9.0", false)]);
         // the document keeps the cloud types as Palette gives them
         assert_eq!(listing.registries[0].versions[0].cloud_types, vec!["all"]);
+    }
+
+    #[test]
+    fn a_version_keeps_the_architectures_of_the_listing_sorted_and_the_document_does_not_show_them()
+    {
+        let mut both = version("pk-2", "2.0.0", &["aws"]);
+        both["spec"]["annotations"] = serde_json::json!({"architecture": "arm64,amd64"});
+        let listing = packs_with(
+            &PackOptions::default(),
+            vec![both, version("pk-1", "1.0.0", &["aws"])],
+        );
+        let versions = &listing.registries[0].versions;
+        assert_eq!(versions[0].architectures, ["amd64", "arm64"]);
+        assert!(
+            versions[1].architectures.is_empty(),
+            "the listing names none"
+        );
+        // `packs` is not a catalog: the document leaves the architectures out
+        let json = serde_json::to_value(&listing).unwrap();
+        assert!(
+            json["registries"][0]["versions"][0]
+                .get("architectures")
+                .is_none()
+        );
     }
 
     /// A version of `strata-live-dep` with the mark of the listing that says whether Palette

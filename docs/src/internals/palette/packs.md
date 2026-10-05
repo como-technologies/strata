@@ -471,6 +471,23 @@ So `strata packs --cloud aws` keeps a version whose cloud types hold `aws` or
 `cloudTypes: ["all"]`. The check on a live tenant is `registry.sh` stage 6:
 see [Live runs](../../development/live-runs.md#registrysh).
 
+## The architectures of a version
+
+The listing `/v1/packs?filters=spec.name=<name>` names the processor
+architectures of a version in `spec.annotations.architecture`, as one text:
+`amd64`, `amd64,arm64`, or `arm64,amd64`. Not each version has it. The versions
+of one pack can differ. In `Public Repo`, `loki` 2.10.2 has `amd64,arm64` and
+3.6.7 has `amd64`. `openobserve` 0.14.7 has `amd64,arm64`, 0.60.3 to 0.70.3
+have `amd64`, and 0.91.1 has `amd64,arm64` again. `headlamp` 0.42.0 and
+0.42.0-rev1 have `amd64`, between versions that have `amd64,arm64`.
+
+The documentation of Palette lists the architectures on the page of each pack,
+so `strata packs` does not repeat them. `strata behind` reads them for its own
+answer: a newer version that supports fewer architectures than the pinned
+version says what a move drops, as `3.6.7 (drops arm64)`. See
+[strata behind](../../commands/behind.md#the-pins-that-are-behind). The live
+example [checks it](../../development/live-runs.md#packssh).
+
 ## The version that Palette calls the latest
 
 The listing `/v1/packs?filters=spec.name=<name>` gives each version the

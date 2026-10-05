@@ -2556,6 +2556,8 @@ fn use_cases(r: &mut Runner) {
         "strata behind releases/1.0.0/dev.json --no-impact --json > behind.json; jq -c '.pins[] | select(.name == \"csi-aws-ebs\") | {version, newer: [.newer[].version]}' behind.json",
     );
     r.registries(DEV);
+    // the newest kubernetes supports amd64 alone, as loki 3.6.7 does in the Public Repo
+    r.pack_architectures(DEV, "kubernetes", "1.36.2", "amd64");
     r.serve_here(); // state 2: the registry publishes csi-aws-ebs 1.65.0
     r.quiet("strata snapshot aws-stack@1.1.1 -o releases/1.1.1/dev.json");
     r.step("behind", 1, false, "strata behind 'releases/*/dev.json'");

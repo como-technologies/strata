@@ -239,7 +239,7 @@ while IFS= read -r group <&3; do
     echo "| pinned | newer | bump | arrived | pinned by |"
     echo "|---|---|---|---|---|"
     jq -r '.pins[] | "| `\(.version)`\(if .floating then " (floating tag `\(.tag)`)" else "" end) | \(
-        if .behind then [.newer[] | .version + ([(.state // empty), (.listed // "" | select(. != "") | "listed \(.[0:10])")]
+        if .behind then [.newer[] | .version + ([(.state // empty), (.drops // [] | select(length > 0) | "drops \(join(" and "))"), (.listed // "" | select(. != "") | "listed \(.[0:10])")]
           | if length > 0 then " (\(join(", ")))" else "" end)] | join(", ")
         elif .error then "not checked: \(.error.message)" else "current" end) | \(
         if .bump then "\(.bump.to): \(.bump.impact) \(.bump.flags | join(" "))" else "-" end) | \(

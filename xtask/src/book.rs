@@ -345,6 +345,17 @@ impl Runner {
         self.build(|t| t.rebuild_pack_version(project, name, version));
     }
 
+    /// The architectures of one version of a pack: see [`Tenant::pack_architectures`].
+    pub fn pack_architectures(
+        &mut self,
+        project: &str,
+        name: &str,
+        version: &str,
+        architectures: &str,
+    ) {
+        self.build(|t| t.pack_architectures(project, name, version, architectures));
+    }
+
     /// A template on one version of a pack: see [`Tenant::pack_template`].
     pub fn pack_template(
         &mut self,

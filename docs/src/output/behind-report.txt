@@ -22,12 +22,12 @@ No earlier issue holds this pack: this run is the first to find it behind.
 No earlier issue holds this pack: this run is the first to find it behind.
 
 <!-- strata-behind: kubernetes 5eecc89d0b150045ae661cef -->
-<!-- strata-behind-state: {"generatedAt":"2026-09-17T09:30:00Z","pins":[{"name":"kubernetes","layer":"k8s","registry":"Public Repo","registryUid":"5eecc89d0b150045ae661cef","version":"1.35.3","tag":"1.35.3","pinnedBy":[{"path":"releases/1.0.0/dev.json","subject":"aws-stack@1.0.0"}],"newer":[{"version":"1.36.2","paletteLatest":true,"listed":"2026-07-30T22:45:47.109Z"},{"version":"1.35.6","listed":"2026-07-30T22:45:47.372Z"}],"behind":true},{"name":"kubernetes","layer":"k8s","registry":"Public Repo","registryUid":"5eecc89d0b150045ae661cef","version":"1.36.2","tag":"1.36.2","pinnedBy":[{"path":"releases/1.1.1/dev.json","subject":"aws-stack@1.1.1"}],"newer":[],"behind":false}]} -->
+<!-- strata-behind-state: {"generatedAt":"2026-09-17T09:30:00Z","pins":[{"name":"kubernetes","layer":"k8s","registry":"Public Repo","registryUid":"5eecc89d0b150045ae661cef","version":"1.35.3","tag":"1.35.3","pinnedBy":[{"path":"releases/1.0.0/dev.json","subject":"aws-stack@1.0.0"}],"newer":[{"version":"1.36.2","paletteLatest":true,"listed":"2026-07-30T22:45:47.109Z","drops":["arm64"]},{"version":"1.35.6","listed":"2026-07-30T22:45:47.372Z"}],"behind":true},{"name":"kubernetes","layer":"k8s","registry":"Public Repo","registryUid":"5eecc89d0b150045ae661cef","version":"1.36.2","tag":"1.36.2","pinnedBy":[{"path":"releases/1.1.1/dev.json","subject":"aws-stack@1.1.1"}],"newer":[],"behind":false}]} -->
 `strata behind` finds `kubernetes` behind in Public Repo, checked 2026-09-17T09:30:00Z.
 
 | pinned | newer | bump | arrived | pinned by |
 |---|---|---|---|---|
-| `1.35.3` | 1.36.2 (listed 2026-07-30), 1.35.6 (listed 2026-07-30) | - | - | `releases/1.0.0/dev.json` (aws-stack@1.0.0) |
+| `1.35.3` | 1.36.2 (drops arm64, listed 2026-07-30), 1.35.6 (listed 2026-07-30) | - | - | `releases/1.0.0/dev.json` (aws-stack@1.0.0) |
 | `1.36.2` | current | - | - | `releases/1.1.1/dev.json` (aws-stack@1.1.1) |
 
 No earlier issue holds this pack: this run is the first to find it behind.

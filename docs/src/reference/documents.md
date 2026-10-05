@@ -493,7 +493,8 @@ is the path as a list: strings for keys, numbers for indexes, and
   - `pinnedBy[]`: `path` and `subject` of each record that pins it.
   - `newer[]`: the newer versions that a person can move to, newest first, each
     with `version`, `state` when the registry gives one, `paletteLatest` when
-    Palette calls it the latest, and `listed`.
+    Palette calls it the latest, `listed`, and `drops[]`, the architectures of
+    the pinned version that it does not support.
   - `behind`: `true` when `newer` is not empty.
   - `bump`, for a pin that is behind, unless `--no-impact`: `to`, the newest
     version, `impact`, the impact level, and `flags[]`.

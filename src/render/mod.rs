@@ -140,18 +140,13 @@ pub(crate) fn impact_word(level: crate::impact::ImpactLevel) -> String {
 
 /// What a pin is: `behind: 1.65.0, 1.64.0`, `current`, or `not checked`, with its floating tag and
 /// the version the tag names now, and the state of the pinned version when the registry gives one.
+/// Each newer version names its state and what a move to it drops: `1.64.0 (deprecated, drops
+/// arm64)`.
 pub(crate) fn pin_status(pin: &crate::ops::Pin) -> String {
     let mut text = if pin.error.is_some() {
         "not checked".to_string()
     } else if pin.behind {
-        let newer: Vec<String> = pin
-            .newer
-            .iter()
-            .map(|n| match &n.state {
-                Some(state) => format!("{} ({state})", n.version),
-                None => n.version.clone(),
-            })
-            .collect();
+        let newer: Vec<String> = pin.newer.iter().map(newer_version).collect();
         format!("behind: {}", newer.join(", "))
     } else {
         "current".to_string()
@@ -168,6 +163,18 @@ pub(crate) fn pin_status(pin: &crate::ops::Pin) -> String {
         text.push_str(&format!("; the pinned version is {state}"));
     }
     text
+}
+
+/// One newer version of a pin, with its notes in parentheses: `1.65.0`, `1.64.0 (deprecated)`,
+/// `1.66.0 (drops arm64)`, or `1.64.0 (deprecated, drops arm64)`.
+fn newer_version(n: &crate::ops::Newer) -> String {
+    let drops = (!n.drops.is_empty()).then(|| format!("drops {}", n.drops.join(" and ")));
+    let notes: Vec<String> = n.state.iter().cloned().chain(drops).collect();
+    if notes.is_empty() {
+        n.version.clone()
+    } else {
+        format!("{} ({})", n.version, notes.join(", "))
+    }
 }
 
 /// `bump to 1.65.0: in-place IDENTITY UPSTREAM AUTHORED`, for a pin with a bump. When Palette

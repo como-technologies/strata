@@ -104,7 +104,8 @@ pub struct Pin {
     pub pinned_by: Vec<PinnedBy>,
     /// The newer versions that the registry offers, newest first. A version that the registry
     /// has disabled or deleted is not one to move to, and a version for none of the clouds of the
-    /// pinned version is not either.
+    /// pinned version is not either. A version that supports fewer architectures than the pinned
+    /// version is one, and it names what it drops.
     pub newer: Vec<Newer>,
     /// True when `newer` is not empty.
     pub behind: bool,
@@ -147,6 +148,10 @@ pub struct Newer {
     /// When Palette first listed the version; empty when the listing gives no time.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub listed: String,
+    /// The architectures of the pinned version that this version does not support: a move to it
+    /// drops them. Empty when the listing names the architectures of only one of the two.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub drops: Vec<String>,
 }
 
 /// What a move from the pinned version to the newest one does.
@@ -288,6 +293,8 @@ where
                 .map(|b| b.version.clone());
         }
         let clouds: Vec<String> = pinned.map(|b| b.cloud_types.clone()).unwrap_or_default();
+        let architectures: Vec<String> =
+            pinned.map(|b| b.architectures.clone()).unwrap_or_default();
         let fits = |b: &PackBuild| {
             clouds.is_empty()
                 || clouds.iter().any(|c| c == "all")
@@ -304,6 +311,7 @@ where
                 state: b.state.clone(),
                 palette_latest: b.palette_latest,
                 listed: b.listed.clone(),
+                drops: dropped(&architectures, &b.architectures),
             })
             .collect();
         pin.behind = !pin.newer.is_empty();
@@ -379,6 +387,21 @@ where
         pins: out,
         summary,
     })
+}
+
+/// The architectures of `pinned` that `newer` does not support: what a move drops. When the
+/// listing names the architectures of only one of the two versions, strata cannot say what a
+/// move drops, and the answer is empty.
+fn dropped(pinned: &[String], newer: &[String]) -> Vec<String> {
+    if pinned.is_empty() || newer.is_empty() {
+        return Vec::new();
+    }
+    let newer: BTreeSet<&String> = newer.iter().collect();
+    pinned
+        .iter()
+        .filter(|a| !newer.contains(a))
+        .cloned()
+        .collect()
 }
 
 /// What a move from `from` to `to` of one pack in one registry does: `compare` of the two pack
