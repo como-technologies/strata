@@ -337,7 +337,8 @@ struct PacksArgs {
     /// Keep the versions of this cloud, such as aws, and the versions of the cloud type all
     #[arg(long, value_name = "TYPE")]
     cloud: Option<String>,
-    /// Only the newest version of each registry
+    /// Only the newest version of each registry, and the version Palette calls the latest when it
+    /// differs
     #[arg(long)]
     latest: bool,
     #[command(flatten)]

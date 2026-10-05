@@ -20,7 +20,29 @@ then the floating tags above it: `1.65.0`, then `1.65.x`, then `1.x`.
 
 `--latest` keeps one line for each registry that has the pack. This is the
 question a bump asks: the pin is current when it names the version that
-`--latest` prints.
+`--latest` prints first.
+
+Palette marks one version of each pack in each registry as the latest. Palette
+orders by semantic version, and strata orders by the numbers and the text. The
+two orders differ on a suffix: strata puts `1.21.1-rev1` above `1.21.1`, and
+Palette puts it below. When the two differ, `--latest` also keeps the version
+of Palette, with the mark `latest in Palette`:
+
+```text
+{{#include ../output/packs-palette-latest.txt}}
+```
+
+The JSON gives `paletteLatest: true` on the version that Palette marks, also
+when strata calls it the newest. Strata leaves out the field on each other
+version:
+
+```text
+{{#include ../output/packs-palette-latest-json.txt}}
+```
+
+`strata behind` names the version of Palette on its bump line: see
+[The pins that are behind](./behind.md#the-pins-that-are-behind). See
+[The version that Palette calls the latest](../internals/palette/packs.md#the-version-that-palette-calls-the-latest).
 
 ## One registry, or one cloud
 
@@ -32,7 +54,7 @@ question a bump asks: the pin is current when it names the version that
 | --- | --- |
 | `--registry NAME` | Only this registry, by its name or its uid. |
 | `--cloud TYPE` | Keep the versions that support this cloud, such as `aws`. |
-| `--latest` | Only the newest version of each registry. |
+| `--latest` | Only the newest version of each registry, and the version that Palette calls the latest when it is a different one. |
 
 A version with the cloud type `all` supports every cloud, so `--cloud aws` keeps
 it. Palette gives `all` to a pack that supports every cloud, and its own filter

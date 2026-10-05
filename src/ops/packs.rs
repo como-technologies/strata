@@ -79,8 +79,13 @@ pub struct PackBuild {
     pub cloud_types: Vec<String>,
     /// Every tag that points at this version, the exact tag first.
     pub tags: Vec<String>,
-    /// True for the newest version of the registry's copy.
+    /// True for the newest version of the registry's copy, by the order of strata.
     pub latest: bool,
+    /// True for the version that Palette calls the latest of the registry's copy. Palette orders
+    /// by semantic version, so it can mark a version below the newest: `1.30.0` below
+    /// `1.30.0-rc.1`.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub palette_latest: bool,
     /// The state that the registry listing gives this version: `deprecated`, `disabled`, or
     /// `deleted`. Palette serves no disabled or deleted pack, and refuses a profile that pins one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -99,7 +104,8 @@ pub struct PackOptions {
     /// Only the versions that support this cloud. A version with the cloud type `all` supports
     /// each cloud.
     pub cloud: Option<String>,
-    /// Only the newest version of each registry.
+    /// Only the newest version of each registry, and the version that Palette calls the latest
+    /// when it is a different one.
     pub latest: bool,
 }
 
@@ -109,6 +115,11 @@ pub struct PackOptions {
 pub(super) fn supports(cloud_types: &[String], cloud: &str) -> bool {
     cloud_types.iter().any(|c| c == cloud || c == "all")
 }
+
+/// The annotation of the pack listing that marks the version that Palette calls the latest. At
+/// the sync of a registry, Palette gives `"true"` to one version of each pack, by the order of
+/// semantic versions, and `"false"` to each other version.
+const PALETTE_LATEST: &str = "/metadata/annotations/latestVersion";
 
 /// The value of the `states` query that asks Palette for the tags of the retired versions of a
 /// pack. With it, Palette answers with the versions in these states only.
@@ -279,6 +290,7 @@ where
                 cloud_types,
                 tags: for_version,
                 latest: false,
+                palette_latest: text(e, PALETTE_LATEST) == "true",
                 state: crate::candidate::pack_state(e),
                 listed: text(e, "/metadata/creationTimestamp"),
             });
@@ -288,7 +300,7 @@ where
             first.latest = true;
         }
         if options.latest {
-            versions.truncate(1);
+            versions.retain(|v| v.latest || v.palette_latest);
         }
         if !versions.is_empty() {
             registries.push(PackRegistry {
@@ -341,6 +353,15 @@ mod tests {
     }
 
     fn packs_for(cloud: &str, versions: Vec<Value>) -> PackListing {
+        let options = PackOptions {
+            cloud: Some(cloud.to_string()),
+            ..Default::default()
+        };
+        packs_with(&options, versions)
+    }
+
+    /// `packs strata-live-dep` with `options`, from a listing of `versions`.
+    fn packs_with(options: &PackOptions, versions: Vec<Value>) -> PackListing {
         let api = MemoryApi::new()
             .with(
                 "/v1/registries/metadata",
@@ -356,13 +377,9 @@ mod tests {
                 "/v1/packs/strata-live-dep/registries/reg-own",
                 serde_json::json!({"layer": "addon", "tags": []}),
             );
-        let options = PackOptions {
-            cloud: Some(cloud.to_string()),
-            ..Default::default()
-        };
         registry_packs(
             "strata-live-dep",
-            &options,
+            options,
             |_| Ok(Palette::new(api.clone())),
             "2026-10-05T00:00:00Z",
             &Progress::silent(),
@@ -389,6 +406,94 @@ mod tests {
         assert_eq!(kept, vec![("1.0.0", true), ("0.9.0", false)]);
         // the document keeps the cloud types as Palette gives them
         assert_eq!(listing.registries[0].versions[0].cloud_types, vec!["all"]);
+    }
+
+    /// A version of `strata-live-dep` with the mark of the listing that says whether Palette
+    /// calls it the latest.
+    fn marked(uid: &str, version_text: &str, palette_latest: bool) -> Value {
+        let mut summary = version(uid, version_text, &["aws"]);
+        summary["metadata"]["annotations"] =
+            serde_json::json!({"latestVersion": palette_latest.to_string()});
+        summary
+    }
+
+    #[test]
+    fn a_pre_release_is_the_newest_and_latest_keeps_the_release_that_palette_calls_the_latest() {
+        let options = PackOptions {
+            latest: true,
+            ..Default::default()
+        };
+        let listing = packs_with(
+            &options,
+            vec![
+                marked("pk-29", "1.29.0", false),
+                marked("pk-30", "1.30.0", true),
+                marked("pk-rc", "1.30.0-rc.1", false),
+            ],
+        );
+        let kept: Vec<(&str, bool, bool)> = listing.registries[0]
+            .versions
+            .iter()
+            .map(|v| (v.version.as_str(), v.latest, v.palette_latest))
+            .collect();
+        assert_eq!(
+            kept,
+            vec![("1.30.0-rc.1", true, false), ("1.30.0", false, true)]
+        );
+        let json = serde_json::to_value(&listing).unwrap();
+        assert_eq!(json["registries"][0]["versions"][1]["paletteLatest"], true);
+        assert!(
+            json["registries"][0]["versions"][0]
+                .get("paletteLatest")
+                .is_none()
+        );
+
+        // the terminal names both: the newest first, and the mark on the version of Palette
+        let text = crate::render::renderer(
+            crate::render::Format::Terminal,
+            crate::color::Paint::off(),
+            false,
+        )
+        .render_packs(&listing)
+        .unwrap();
+        let lines: Vec<&str> = text.lines().collect();
+        assert_eq!(
+            lines[0],
+            "strata-live-dep in strata-live-registry (2 of 3 versions)"
+        );
+        assert!(
+            lines[1].starts_with("  1.30.0-rc.1 ") && !lines[1].contains("Palette"),
+            "{text}"
+        );
+        assert!(
+            lines[2].starts_with("  1.30.0 ") && lines[2].ends_with("latest in Palette"),
+            "{text}"
+        );
+    }
+
+    #[test]
+    fn a_version_that_strata_and_palette_both_call_the_latest_has_no_mark() {
+        let listing = packs_with(
+            &PackOptions {
+                latest: true,
+                ..Default::default()
+            },
+            vec![
+                marked("pk-30", "1.30.0", true),
+                marked("pk-29", "1.29.0", false),
+            ],
+        );
+        let v = &listing.registries[0].versions;
+        assert_eq!(v.len(), 1);
+        assert!(v[0].latest && v[0].palette_latest);
+        let text = crate::render::renderer(
+            crate::render::Format::Terminal,
+            crate::color::Paint::off(),
+            false,
+        )
+        .render_packs(&listing)
+        .unwrap();
+        assert!(!text.contains("Palette"), "{text}");
     }
 
     /// The path of the tags request with the states query, for `nginx` in the Public Repo.

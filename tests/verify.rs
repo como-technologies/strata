@@ -10961,6 +10961,57 @@ fn behind_of(
 }
 
 #[test]
+fn behind_marks_the_newer_version_that_palette_calls_the_latest_and_names_it_on_the_bump_line() {
+    // Palette orders by semantic version, so it calls 1.65.0 the latest, below 1.65.0-rev1
+    let mut release = pack_summary("pk-65", "1.65.0", "reg-public", "sha256:bbb", CSI_65);
+    release["metadata"]["annotations"] = serde_json::json!({"latestVersion": "true"});
+    let api = serve_summaries(
+        vec![
+            pack_summary("pk-63", "1.63.1", "reg-public", "sha256:aaa", CSI_63),
+            release,
+            pack_summary_with("1.65.0-rev1", None, &["aws"]),
+        ],
+        &[("reg-public", public_entity())],
+    );
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("dev.json");
+    let old = snapshot_pack(&api, "pack:csi-aws-ebs@1.63.1").unwrap();
+    fs::write(&path, old.to_json(false).unwrap()).unwrap();
+    let r = behind_of(
+        &api,
+        &[path],
+        &ops::BehindOptions {
+            impact: true,
+            since: None,
+        },
+    );
+    let pin = &r.pins[0];
+    assert_eq!(
+        pin.newer
+            .iter()
+            .map(|n| (n.version.as_str(), n.palette_latest))
+            .collect::<Vec<_>>(),
+        [("1.65.0-rev1", false), ("1.65.0", true)]
+    );
+    let json = serde_json::to_value(&r).unwrap();
+    assert_eq!(json["pins"][0]["newer"][1]["paletteLatest"], true);
+    assert!(json["pins"][0]["newer"][0].get("paletteLatest").is_none());
+    assert_eq!(
+        pin.bump.as_ref().map(|b| b.to.as_str()),
+        Some("1.65.0-rev1")
+    );
+    let text = render::renderer(Format::Terminal, Paint::off(), false)
+        .render_behind(&r)
+        .unwrap();
+    assert!(
+        text.lines()
+            .any(|l| l.starts_with("      bump to 1.65.0-rev1: ")
+                && l.ends_with("; Palette calls 1.65.0 the latest")),
+        "{text}"
+    );
+}
+
+#[test]
 fn behind_names_the_newer_versions_of_each_pin_and_the_impact_of_the_bump() {
     let dir = tempfile::tempdir().unwrap();
     let api = serve_behind();

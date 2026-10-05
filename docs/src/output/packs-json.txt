@@ -14,5 +14,6 @@ $ strata packs csi-aws-ebs --registry 'Public Repo' --latest --json | jq '.regis
     "1.x"
   ],
   "latest": true,
+  "paletteLatest": true,
   "listed": "2026-09-11T14:32:12.028Z"
 }
