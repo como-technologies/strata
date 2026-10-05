@@ -350,7 +350,10 @@ mod tests {
         let values = "# the admin\nsync:\n  adminPassword: s3cr3t\n  replicas: 1\n\
                       users:\n- name: fred\n  password: pebbles\n";
         let masked = mask_group_values(values).unwrap();
-        assert!(!masked.contains("s3cr3t") && !masked.contains("pebbles"), "{masked}");
+        assert!(
+            !masked.contains("s3cr3t") && !masked.contains("pebbles"),
+            "{masked}"
+        );
         let Canon::Parsed(got) = canon_yaml(&masked) else {
             panic!("the masked values are YAML: {masked}");
         };

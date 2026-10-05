@@ -10515,8 +10515,7 @@ fn a_raw_directory_of_a_cluster_group_masks_each_password_and_gives_the_record_o
                   users:\n- name: fred\n  password: pebbles-clear-secret\n";
     let mut doc = group_doc(dir.path());
     doc["spec"]["clustersConfig"] = clusters_config(6000, values);
-    let api =
-        serve_cluster_group(MemoryApi::new(), dir.path()).with("/v1/clustergroups/g1", doc);
+    let api = serve_cluster_group(MemoryApi::new(), dir.path()).with("/v1/clustergroups/g1", doc);
     let fetched = Palette::new(api)
         .fetch_cluster_group("g1", &Progress::silent())
         .unwrap();
