@@ -2430,6 +2430,12 @@ fn use_cases(r: &mut Runner) {
         false,
         "jq -c '.source.cluster.tiers.policy.fields | {endpointType, kubernetesDistroType, limitConfig, hostClusters: [.hostClusters[].uid]}' runs/dev-group.json",
     );
+    r.step(
+        "group-policy-values",
+        0,
+        false,
+        "jq -c '.source.cluster.tiers.policy.fields.values' runs/dev-group.json",
+    );
     // the group gives each virtual cluster 4 cores in place of 6
     r.cluster_group_field(
         DEV,

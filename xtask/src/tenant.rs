@@ -24,7 +24,7 @@ const CHART: &str = "podinfo";
 const GROUP_HOST: &str = "64f5000000000000000000b1";
 /// The values that a cluster group gives each virtual cluster: YAML with comments, as Palette
 /// gives it.
-const GROUP_VALUES: &str = "# Sync describes how to sync resources to the host cluster.\nsync:\n  toHost:\n    services:\n      enabled: true\n    ingresses:\n      enabled: false\n";
+const GROUP_VALUES: &str = "# Sync describes how to sync resources to the host cluster.\nsync:\n  toHost:\n    services:\n      enabled: true\n    ingresses:\n      enabled: false\n# The external database of each virtual cluster.\ndatabase:\n  user: vcluster\n  password: s3cr3t\n";
 const OCI_CSI_DIGEST: &str =
     "sha256:a746e14689085b14531566f9c9cfb2bc7716e96a394547ef50a1c52eab510c9e";
 
