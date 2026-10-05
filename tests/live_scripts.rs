@@ -631,7 +631,11 @@ fn api_sh_sync_waits_while_a_sync_of_the_registry_runs_and_asks_again() {
         r#"{"code":"OciRegistryNotFound"}"#,
     )
     .unwrap();
-    std::fs::write(routes.join("v1_registries_oci_reg-1_ecr_sync.status"), "500").unwrap();
+    std::fs::write(
+        routes.join("v1_registries_oci_reg-1_ecr_sync.status"),
+        "500",
+    )
+    .unwrap();
     let o = sync("0");
     assert_eq!(o.status.code(), Some(2), "{}", text(&o.stderr));
     assert_eq!(posts(), 1);
