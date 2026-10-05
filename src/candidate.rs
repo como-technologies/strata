@@ -943,10 +943,10 @@ pub fn warn_preset_options(snap: &Snapshot, progress: &Progress) {
     }
 }
 
-/// The annotation of a pack version that Palette refuses in a profile, with the value `true`.
-/// Spectro Cloud sets it on a version that it no longer offers, and the version keeps no
-/// `system_state`. Palette refuses a profile that holds such a version with
-/// `DisabledPacksForbidden`, also on its validate route.
+/// The annotation of a pack version that a profile must not hold, with the value `true`.
+/// Spectro Cloud sets it on a version in its registries, and the version keeps no `system_state`.
+/// Palette refuses a profile that holds such a version with `DisabledPacksForbidden`, also on
+/// its validate route.
 const DISABLED_MARK: &str = "/spec/annotations/disabled";
 
 /// The state that the listing gives a pack version, and nothing for a pack in use.
