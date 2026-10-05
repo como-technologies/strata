@@ -57,6 +57,10 @@ These are open:
   requires a pack that the profile does not hold. No pack of the Public Repo
   lists a dependency. See
   [The validate routes](validate-routes.md#post-v1clusterprofilesvalidatepacks).
+- The answer of `GET /v1/clusterprofiles/validate/name` and of
+  `POST /v1/clusterprofiles/import/validate` to a name and a version that the
+  project holds. Stage 3 of `validate-packs.sh` asks it, with a profile. See
+  [The validate routes](validate-routes.md#get-v1clusterprofilesvalidatename).
 - The route of a cluster template,
   `POST /v1/spectroclusters/clusterTemplates/{uid}/validate/repave`, and the
   answer of the route of the cluster for a cluster in a template. The stand-in

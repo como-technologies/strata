@@ -58,7 +58,7 @@ takes:
 | `--raw-dir` | Also saves the API responses and the time of the read in a directory. | [A record with no network](snapshot/no-network.md) |
 | `--from-raw` | Builds the record from the directory of `--raw-dir`, with no network and no key. | [A record with no network](snapshot/no-network.md) |
 | `--from-candidate` | Builds the record from a candidate file, or from a profile export of Palette, before the version is in Palette. | [A record with no network](snapshot/no-network.md) |
-| `--validate` | Asks Palette whether it takes the packs: of a candidate in a new profile, or of a profile version as an update of itself. A refusal exits `2` and writes no record. | [Ask Palette before you publish](candidate.md#ask-palette-before-you-publish) |
+| `--validate` | Asks Palette whether it takes a candidate or a profile version. Palette checks the name, the version, and the packs of a candidate, and the packs of a version as an update of itself. A refusal exits `2` and writes no record. | [Ask Palette before you publish](candidate.md#ask-palette-before-you-publish) |
 | `--compact` | Writes the JSON on one line: the record, or the document of a set. | |
 | `--macros` | For a profile version, a cluster, or a cluster group: records the digest of the value that Palette gives each macro that the content uses. | [Macros](snapshot/cluster.md#macros) |
 | `--shape` | For a cluster: records the `shape` tier, with one more request. | [More of the cluster than its release](snapshot/cluster.md#more-of-the-cluster-than-its-release) |

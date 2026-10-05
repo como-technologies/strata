@@ -26,7 +26,7 @@ the kind.
 | `cluster-profile-not-found` | The cluster runs no profile with this name or uid. | `cluster`, `profile`, `applied` |
 | `profile-ref-required` | The command needs a profile, and got a cluster, an edge host, a cluster group, an app profile, a pack, or a record of one. | `reference` |
 | `record-not-a-source` | `snapshot` got a record. It writes one, and does not read one. | `path` |
-| `palette-refuses` | `snapshot --validate` asked Palette whether it takes the packs, and Palette refused them. Strata prints each error as a `palette    refuses:` line first, and writes no record. | `reference`, `errors[]` of `pack`, `code`, and `message` |
+| `palette-refuses` | `snapshot --validate` asked Palette whether it takes the version, and Palette refused its name, its version, or its packs. Strata prints each error as a `palette    refuses:` line first, and writes no record. | `reference`, `errors[]` of `pack`, `code`, and `message` |
 | `usage` | The command line cannot work as given, so strata sent no request, or only read the cluster document for `compare --repave`. Examples: `snapshot` with no ref and no `--from-raw`, `snapshot --raw-dir` of a ref that is not a profile or a cluster, `compare --repave` or `compare --validate` with an edge host or a cluster group, `compare --repave` with two clusters other than `cluster:<c>` and `cluster:<c>@pending`, `snapshot --validate` with `--from-raw`, a cluster ref, or an `@draft` ref, and `behind --since` with a file that is not a `strata-behind/1` document. `compare --repave` also gives this kind after it reads the cluster document. The causes are a stale `@pending` record, and pack values to a cluster in a cluster template. `snapshot` takes `--json` only with `--dir`. Without `--dir`, this kind prints as a `strata:` line. | |
 | `candidate-invalid` | The candidate file has a problem, or it gives a value that Palette changes at the create. A rule that only the create of Palette checks also gives this kind, and the message names the code of Palette. For the rules of the validate route, `snapshot --validate` asks Palette. See [Checks before any request](candidate-file.md#checks-before-any-request). | `path` |
 | `pack-not-found` | The registry has no such pack version or tag. `unsynced` names the registries that Palette does not sync, among the ones that strata asked. Palette lists a pack of such a registry only while a profile pins the pack. | `name`, `version`, `registry`, `tag` when given, `unsynced` when it is not empty |
@@ -114,6 +114,51 @@ HTTP `500` and one of these codes. Strata does not send it again, and
 | `DisabledPacksForbidden` | A pack that is disabled. |
 | `SubResourceLimitValidationFailure` | More than 200 packs, or more than 200 manifests. |
 | `ClusterProfilePacksInConflict` | For the route of an update: a pack name that is also in another profile of a cluster that runs the version. |
+
+The API schema of both routes refuses two equal packs with HTTP `422`, and the
+code is the number `610`. `snapshot --validate` prints it as the answer of
+Palette too.
+
+For a candidate, `snapshot --validate` also asks
+`GET /v1/clusterprofiles/validate/name`. It refuses the name or the version
+with HTTP `500` and one of these codes, or with HTTP `409` and
+`ClusterProfileAlreadyExists`, a name and a version that the project holds:
+
+| Code | Palette refuses |
+| --- | --- |
+| `ResourceNameEmpty` | An empty name. |
+| `VersionParseFailure` | A version that does not parse as semver. |
+
+It also asks `POST /v1/clusterprofiles/import/validate`. It refuses the whole
+request with HTTP `500` and one of these codes, with HTTP `409` and
+`ClusterProfileAlreadyExists`, with HTTP `404` and `PackMacroUndefined`, a
+macro that Palette does not define, or with the HTTP `422` of the API schema:
+
+| Code | Palette refuses |
+| --- | --- |
+| `ResourceLimitValidationFailure` | A new profile in a tenant that holds the most profiles that its limit takes. |
+| `SubResourceLimitValidationFailure` | More than 200 packs, or more than 200 manifests. |
+| `UnSupportedCloudType` | A cloud type that Palette does not support. |
+| `ClusterDashboardPacksMutuallyExclusive` | Two dashboard packs that exclude each other. |
+| `InvalidName` | A manifest, or a manifest pack, with a name that is not a DNS-1123 label of 32 characters at most. |
+| `DuplicatePacksForbidden` | One pack name two times in a profile. |
+| `DuplicatePackManifestsForbidden` | One manifest name two times in a pack. |
+| `MultiPackVersionsForbidden` | Two versions of one pack. |
+| `PackValuesYamlInvalid` | Pack values that are not YAML. |
+| `PackManifestYamlInvalid` | A manifest of a pack that is not YAML. |
+| `PackSpectroIntegrationNotSupported` | An integration pack that the cloud does not support. |
+| `ClusterProfileOidcNotConfigured` | An integration pack that needs an OIDC identity provider that no pack or organization gives. |
+| `ResourceNameEmpty` | An empty name. |
+| `VersionParseFailure` | A version that does not parse as semver. |
+| `ClusterProfileCreationValidationFailure` | The variables, or the values and the dependencies of a pack. |
+
+When the import validate route finds no registry that holds a pack of the body,
+it checks nothing, and gives HTTP `500` with one of these codes. Strata does not
+send it again, and the error is `api`, because Palette gave no answer about the
+candidate: `ClusterProfileImportRegistriesNotFound`,
+`ClusterProfileImportOciRegistriesNotFound`,
+`ClusterProfileImportPrivateHelmRegistriesNotFound`, and
+`ClusterProfileImportPackNotFound`.
 
 Strata does not copy these checks. A candidate that breaks one of them gives a
 record without `--validate`, and this refusal with `--validate`.

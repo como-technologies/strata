@@ -246,9 +246,10 @@ pub enum Error {
         /// The path as given.
         path: String,
     },
-    /// `snapshot --validate` asked Palette whether it takes the packs, and Palette refused them.
-    /// Strata wrote no record. The CLI prints each error before this message.
-    #[error("Palette refuses the packs of '{reference}' with {} {}; strata wrote no record", errors.len(), if errors.len() == 1 { "error" } else { "errors" })]
+    /// `snapshot --validate` asked Palette whether it takes the version, and Palette refused it:
+    /// its name, its version, or its packs. Strata wrote no record. The CLI prints each error
+    /// before this message.
+    #[error("Palette refuses '{reference}' with {} {}; strata wrote no record", errors.len(), if errors.len() == 1 { "error" } else { "errors" })]
     PaletteRefuses {
         /// The ref or the candidate file, as given.
         reference: String,
@@ -427,6 +428,51 @@ pub const PROFILE_PACK_REFUSAL_CODES: [&str; 6] = [
     "ClusterProfilePacksInConflict",
 ];
 
+/// The codes of the refusals that `GET /v1/clusterprofiles/validate/name` answers with HTTP 500:
+/// an empty name, and a version that Palette does not parse. `snapshot --validate` reads them as
+/// the answer of Palette. A retry gets the same refusal.
+pub const PROFILE_NAME_REFUSAL_CODES: [&str; 2] = ["ResourceNameEmpty", "VersionParseFailure"];
+
+/// The code of the refusal of a profile name and version that the project already holds. The
+/// name route and the import validate route answer it with HTTP 409.
+pub const PROFILE_EXISTS_CODE: &str = "ClusterProfileAlreadyExists";
+
+/// The codes of the refusals of the whole request that `POST /v1/clusterprofiles/import/validate`
+/// answers with HTTP 500. The route checks the limits, the cloud type, the metadata of the packs,
+/// and the YAML. It also checks the integration packs, the name, the version, and each pack.
+/// `snapshot --validate` reads them as the answer of Palette. A retry gets the same refusal.
+pub const PROFILE_IMPORT_REFUSAL_CODES: [&str; 15] = [
+    "ResourceLimitValidationFailure",
+    "SubResourceLimitValidationFailure",
+    "UnSupportedCloudType",
+    "ClusterDashboardPacksMutuallyExclusive",
+    "InvalidName",
+    "DuplicatePacksForbidden",
+    "DuplicatePackManifestsForbidden",
+    "MultiPackVersionsForbidden",
+    "PackValuesYamlInvalid",
+    "PackManifestYamlInvalid",
+    "PackSpectroIntegrationNotSupported",
+    "ClusterProfileOidcNotConfigured",
+    "ResourceNameEmpty",
+    "VersionParseFailure",
+    "ClusterProfileCreationValidationFailure",
+];
+
+/// The code of the refusal of a macro that a pack uses and that Palette does not define. The
+/// import validate route answers it with HTTP 404.
+pub const PACK_MACRO_UNDEFINED_CODE: &str = "PackMacroUndefined";
+
+/// The codes of the errors that the import validate route gives with HTTP 500 when it cannot
+/// match a pack of the body to a registry. The route then checks nothing, so strata reads them as
+/// errors and not as an answer. A retry gets the same error.
+pub const PROFILE_IMPORT_MATCH_CODES: [&str; 4] = [
+    "ClusterProfileImportRegistriesNotFound",
+    "ClusterProfileImportOciRegistriesNotFound",
+    "ClusterProfileImportPrivateHelmRegistriesNotFound",
+    "ClusterProfileImportPackNotFound",
+];
+
 /// The code of the one refusal of `validate/packs` that Palette answers with HTTP 403 and the
 /// response type `Forbidden`, and not with 500. Palette gives it when a pack that an integration
 /// pack needs read-only has values other than its defaults. `compare --validate` reads it as the
@@ -441,13 +487,17 @@ pub fn error_code(body: &str) -> Option<String> {
 }
 
 /// True when the body of a Palette error is JSON with a `code` in [`REFUSAL_CODES`],
-/// [`PACK_REFUSAL_CODES`], or [`PROFILE_PACK_REFUSAL_CODES`].
+/// [`PACK_REFUSAL_CODES`], [`PROFILE_PACK_REFUSAL_CODES`], [`PROFILE_NAME_REFUSAL_CODES`],
+/// [`PROFILE_IMPORT_REFUSAL_CODES`], or [`PROFILE_IMPORT_MATCH_CODES`].
 fn is_refusal(body: &str) -> bool {
     error_code(body).is_some_and(|code| {
         let code = code.as_str();
         REFUSAL_CODES.contains(&code)
             || PACK_REFUSAL_CODES.contains(&code)
             || PROFILE_PACK_REFUSAL_CODES.contains(&code)
+            || PROFILE_NAME_REFUSAL_CODES.contains(&code)
+            || PROFILE_IMPORT_REFUSAL_CODES.contains(&code)
+            || PROFILE_IMPORT_MATCH_CODES.contains(&code)
     })
 }
 

@@ -661,13 +661,14 @@ this result. This is the source for
 
 ## validate-packs.sh
 
-No cluster and no cost. In stages 1 to 3, each request to Palette is a read or
-a `POST` to a validate route, which writes nothing. It uses `cert-manager`
+No cluster and no cost. In stages 1, 2, 3, and 5, each request to Palette is a
+read or a request to a validate route, which writes nothing. It uses `cert-manager`
 1.21.1 from the Public Repo, in an add-on candidate, and `gloo` 1.2.18 for the
 mark `disabled`. Stage 3 needs a profile
 version in the project of the key: give it as `PROFILE=<name>@<version>`.
 Stage 4 makes the profile `strata-live-layer` and deletes it. It runs only when
-you give its number: `validate-packs.sh 4`.
+you give its number: `validate-packs.sh 4`. Stage 5 asks the name route and the
+import validate route.
 
 | Check | Expected exit | What it shows |
 |---|---|---|
@@ -677,6 +678,7 @@ you give its number: `validate-packs.sh 4`.
 | `validate-no-pack`, `validate-no-pack-says` | 2, 0 | #152: Palette refuses a body with no pack before it checks the packs: HTTP 400 with `ShouldNotBeEmpty` |
 | `validate-disabled-mark`, `validate-disabled-mark-says` | 2, 0 | #125: Palette refuses a candidate with `gloo` 1.2.18, which carries the mark `disabled` and no `system_state`: `DisabledPacksForbidden`, `Disabled packs 'gloo' are forbidden`, of the whole request. Strata exits `2` and writes no record |
 | `validate-version`, `validate-version-says` | 0 | #152: `snapshot <ref> --validate` asks the route of an update, and Palette takes the version as it is |
+| `validate-exists`, `validate-exists-says` | 2, 0 | #273: a candidate with the name and the version of `PROFILE` gets `ClusterProfileAlreadyExists`. No result yet |
 | `layer-registry` | 0 | #210: the registry gives `cert-manager` the layer `addon` |
 | `layer-refused`, `layer-refused-says` | 2, 0 | #210: strata refuses a candidate that gives `cert-manager` the layer `csi`. The message names the layer, `csi`, `addon`, and the rule of Palette |
 | `layer-validate`, `layer-validate-says` | 0 | #254: the validate route takes the pack with the layer `csi`, and gives no result for it |
@@ -685,6 +687,13 @@ you give its number: `validate-packs.sh 4`.
 | `layer-record`, `layer-record-key` | 0 | #254: a record of the version holds the pack as `addon/cert-manager`. No result yet |
 | `layer-root` | 0 | #254: `compare` of the candidate with no layer and the version finds the same root. No result yet |
 | `layer-delete` | 0 | the profile `strata-live-layer` is deleted. No result yet |
+| `validate-name-free`, `validate-name-short` | 0 | #273: the name route takes a name that the project does not hold, and the version `1.1`, with `204` |
+| `validate-name-version`, `validate-name-version-says` | 2, 0 | #273: the name route refuses the version `2.2.2.develop` with HTTP 500 and `VersionParseFailure` |
+| `validate-bad-version`, `-says`, `-no-record` | 2, 0, 1 | #273: `snapshot --validate` prints `VersionParseFailure` once, from the two routes, and writes no record |
+| `validate-pack-twice`, `-says`, `-no-record` | 2, 0, 1 | #273: the import validate route refuses one pack name in two layers with other values: `DuplicatePacksForbidden` |
+| `validate-same-pack-twice`, `-says`, `-no-record` | 2, 0, 1 | #273: the API schema refuses two equal layers with HTTP 422 and the code `610` |
+| `validate-manifest-name`, `-says`, `-no-record` | 2, 0, 1 | #273: the import validate route refuses the manifest name `Wilma_1`: `InvalidName` |
+| `validate-manifest-twice`, `-says`, `-no-record` | 2, 0, 1 | #273: the import validate route refuses one manifest name two times in a layer: `DuplicatePackManifestsForbidden` |
 
 No pack of the Public Repo lists a dependency in its tags route, so no stage
 asks for a refusal of a dependency.

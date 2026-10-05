@@ -16,7 +16,7 @@ Options:
       --from-candidate <FROM_CANDIDATE>
           Read a candidate file, or a profile export of Palette, before the version is in Palette
       --validate
-          Ask Palette whether it takes the packs: of a candidate as a new profile, or of a profile version as an update of itself. A refusal exits 2 and writes no record
+          Ask Palette whether it takes a candidate or a profile version. Palette checks the name, the version, and the packs of a candidate, and the packs of a version as an update of itself. A refusal exits 2 and writes no record
       --compact
           Write the JSON on one line
       --macros

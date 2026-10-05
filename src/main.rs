@@ -196,8 +196,9 @@ struct SnapshotArgs {
     /// Read a candidate file, or a profile export of Palette, before the version is in Palette
     #[arg(long, conflicts_with_all = ["from_raw", "raw_dir", "ref"])]
     from_candidate: Option<PathBuf>,
-    /// Ask Palette whether it takes the packs: of a candidate as a new profile, or of a profile
-    /// version as an update of itself. A refusal exits 2 and writes no record
+    /// Ask Palette whether it takes a candidate or a profile version. Palette checks the name, the
+    /// version, and the packs of a candidate, and the packs of a version as an update of itself.
+    /// A refusal exits 2 and writes no record
     #[arg(long)]
     validate: bool,
     /// Write the JSON on one line

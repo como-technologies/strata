@@ -723,14 +723,21 @@ pub(crate) fn unsynced_names<'a, A: PaletteApi>(
     Ok(names)
 }
 
-/// The registries this key can see, name and uid, in the order Palette lists them.
-pub(crate) fn registries<A: PaletteApi>(palette: &Palette<A>) -> Result<Vec<(String, String)>> {
+/// The entries of `GET /v1/registries/metadata`: each registry this key can see, with its `uid`,
+/// `name`, `kind`, and `isPrivate`, in the order Palette lists them.
+pub(crate) fn registry_entries<A: PaletteApi>(palette: &Palette<A>) -> Result<Vec<Value>> {
     let listing = palette.api().get_json("/v1/registries/metadata")?;
     Ok(listing
         .get("items")
         .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
+        .cloned()
+        .unwrap_or_default())
+}
+
+/// The registries this key can see, name and uid, in the order Palette lists them.
+pub(crate) fn registries<A: PaletteApi>(palette: &Palette<A>) -> Result<Vec<(String, String)>> {
+    Ok(registry_entries(palette)?
+        .iter()
         .filter_map(|it| Some((text(it, "/name")?, text(it, "/uid")?)))
         .collect())
 }
@@ -1760,94 +1767,30 @@ variables:
     }
 
     #[test]
-    fn a_version_that_semver_of_palette_does_not_parse_is_candidate_invalid() {
-        // Palette takes an optional v and one to three numbers
-        for ok in [
-            "1.1",
-            "v1.2.3",
-            "7",
-            "1.2.3-rc.1",
-            "1.2.3+build.5",
-            "1.2.3-rc-1.x+b",
+    fn a_candidate_that_a_route_of_palette_checks_before_the_create_passes_the_check() {
+        // `--validate` asks the name route and the import validate route for these rules, so
+        // strata does not copy them. The rules are the version, a pack twice, a manifest name
+        // twice in one pack, and a name that is not a DNS label
+        let mut version = stack();
+        version.version = "2.2.2.develop".into();
+        let mut pack_twice = stack();
+        pack_twice.layers.push(pack_twice.layers[4].clone());
+        let mut manifest_twice = stack();
+        let again = manifest_twice.layers[4].manifests[0].clone();
+        manifest_twice.layers[4].manifests.push(again);
+        let mut manifest_name = stack();
+        manifest_name.layers[4].manifests[0].name = "Namespace_Labels".into();
+        let mut pack_name = manifest_candidate();
+        pack_name.layers[0].name = "a".repeat(33);
+        for c in [
+            version,
+            pack_twice,
+            manifest_twice,
+            manifest_name,
+            pack_name,
         ] {
-            let mut c = stack();
-            c.version = ok.into();
-            assert!(check(c, Path::new("c.yaml")).is_ok(), "{ok}");
+            assert!(check(c.clone(), Path::new("c.yaml")).is_ok(), "{c:?}");
         }
-        for bad in [
-            "2.2.2.develop",
-            "1.2.3.4",
-            "chart-v1.2.3",
-            "latest",
-            "1.2.3-",
-            "1.2.3-a..b",
-            "1..2",
-            "V1.2.3",
-            "99999999999999999999.0.0",
-        ] {
-            let mut c = stack();
-            c.version = bad.into();
-            let message = refused(c, "VersionParseFailure");
-            assert!(message.contains(&format!("version {bad} ")), "{message}");
-        }
-    }
-
-    #[test]
-    fn a_pack_twice_is_candidate_invalid() {
-        let mut c = stack();
-        let again = c.layers[4].clone();
-        c.layers.push(again);
-        let message = refused(c, "DuplicatePacksForbidden");
-        assert!(message.contains("the pack cert-manager"), "{message}");
-    }
-
-    #[test]
-    fn a_manifest_name_twice_in_one_pack_is_candidate_invalid() {
-        let mut c = stack();
-        let again = c.layers[4].manifests[0].clone();
-        c.layers[4].manifests.push(again);
-        let message = refused(c, "DuplicatePackManifestsForbidden");
-        assert!(
-            message.contains("layer 5 (cert-manager)") && message.contains("namespace-labels"),
-            "{message}"
-        );
-        // the same name in two packs is not a repeat
-        let mut c = stack();
-        c.layers[1].manifests = c.layers[4].manifests.clone();
-        assert!(check(c, Path::new("c.yaml")).is_ok());
-    }
-
-    #[test]
-    fn a_name_that_is_not_a_dns_label_is_candidate_invalid() {
-        for bad in [
-            "Namespace Labels",
-            "-labels",
-            "labels-",
-            "labels_x",
-            &"a".repeat(33),
-        ] {
-            let mut c = stack();
-            c.layers[4].manifests[0].name = bad.to_string();
-            let message = refused(c, "InvalidName");
-            assert!(
-                message.contains("a manifest of layer 5 (cert-manager)"),
-                "{message}"
-            );
-        }
-        let mut c = stack();
-        c.layers[4].manifests[0].name = "a".repeat(32);
-        assert!(check(c, Path::new("c.yaml")).is_ok());
-        // the name of a manifest pack too, and not the name of a pack from a registry
-        let mut c = manifest_candidate();
-        c.layers[0].name = "Namespace-Policy".into();
-        let message = refused(c, "InvalidName");
-        assert!(
-            message.contains("layer 1 (Namespace-Policy) is a manifest layer"),
-            "{message}"
-        );
-        let mut c = stack();
-        c.layers[4].name = "Cert-Manager".into();
-        assert!(check(c, Path::new("c.yaml")).is_ok());
     }
 
     #[test]

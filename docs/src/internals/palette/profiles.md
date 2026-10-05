@@ -336,9 +336,16 @@ dependencies of each pack. `POST /v1/clusterprofiles/validate/packs` checks
 these rules and writes nothing:
 see [The validate routes](./validate-routes.md#post-v1clusterprofilesvalidatepacks).
 
-The create also checks rules that the validate route does not check. These
-rules come from the code of Palette, not from a live run. No route that takes
-a candidate answers them before the create, so strata fills each gap: see
+Two more routes check rules of the create and write nothing.
+`GET /v1/clusterprofiles/validate/name` checks the name and the version.
+`POST /v1/clusterprofiles/import/validate` checks the names of the packs and
+the manifests, and a repeat of each. A live run shows each refusal: see
+[The validate routes](./validate-routes.md#get-v1clusterprofilesvalidatename).
+`snapshot --from-candidate --validate` asks the three routes.
+
+The create also checks rules that no route checks. These rules come from the
+code of Palette, not from a live run. No route that takes a candidate answers
+them before the create, so strata fills each gap: see
 [The gaps that strata fills](#the-gaps-that-strata-fills).
 
 Strata also keeps the rules that the root needs. At the create, Palette
@@ -359,10 +366,6 @@ create. Strata checks each rule before any request. The refusal is
 
 | Rule | Code |
 | --- | --- |
-| The version parses as semver: an optional `v`, one to three numbers, an optional pre-release after `-`, and optional build data after `+`. Each number fits in a 64-bit integer. So `1.1` and `v1.2.3` pass, and `2.2.2.develop` and `1.2.3.4` do not. | `VersionParseFailure` |
-| Each pack name is in the profile once. Palette compares the names as they are. | `DuplicatePacksForbidden` |
-| The name of each manifest, and of each manifest pack, is a DNS-1123 label of 32 characters at most. It holds lowercase letters, digits, and `-`, and it starts and ends with a letter or a digit. | `InvalidName` |
-| Each manifest name is in its pack once. | `DuplicatePackManifestsForbidden` |
 | The type of the profile takes the layer of each pack. An `infra` profile takes `os`, `k8s`, `cni`, and `csi`. A `cluster` profile takes each layer. Each other type takes `addon`, `cni`, and `csi`. | `ClusterProfilePackNotAllowed` |
 | A `cluster` or `infra` profile has an `os`, a `k8s`, a `cni`, and a `csi` layer. On the cloud `edge-native`, it needs no `csi` layer. | `ErrPackCoreLayersMissing` |
 | Each pack supports the cloud of the profile. This is true when the cloud is `all`, or when the pack has no cloud type. It is also true when the cloud types of the pack hold the cloud, `all`, or `custom` for a cloud that Palette does not know. | `PackNotSupported` |
@@ -377,7 +380,11 @@ cloud type.
 
 Palette is the owner of each rule. When a route of Palette answers a rule
 before the create, strata removes its check and asks that route. The review at
-the end of each wave reads this list.
+the end of each wave reads this list. The name route and the import validate
+route answer four rules of the create. These are the version, a pack twice, the
+name of a manifest, and a manifest twice. So strata does not check them, and
+`--validate` asks Palette. With no `--validate`, a candidate that breaks one of them gives a
+record.
 
 Strata does not copy the rules that the validate route checks: see
 [Checks before any request](../../reference/candidate-file.md#checks-before-any-request).

@@ -1,4 +1,4 @@
 $ strata snapshot --from-candidate wrong-layer.yaml -o wrong-layer.json
 strata: looking up project dev
-strata: resolving aws-stack@1.1.1 against the registry
+strata: resolving aws-stack@1.2.0 against the registry
 strata: 'wrong-layer.yaml': layer 5 (cert-manager) has the layer cni, and its registry gives the layer addon; Palette takes the layer from the registry, so remove layer or set it to addon
