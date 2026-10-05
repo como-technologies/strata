@@ -2935,7 +2935,7 @@ fi
 "#;
 
 #[test]
-fn validate_packs_sh_stage_4_asks_the_two_routes_for_each_rule_that_they_answer() {
+fn validate_packs_sh_stage_5_asks_the_two_routes_for_each_rule_that_they_answer() {
     let mut stage = Stage::new(serde_json::json!({}));
     executable(
         &stage.path("routes/v1_clusterprofiles_validate_name.sh"),
@@ -2975,7 +2975,7 @@ fn validate_packs_sh_stage_4_asks_the_two_routes_for_each_rule_that_they_answer(
         );
     }
 
-    let (o, steps) = stage.run("validate-packs.sh", &["4"]);
+    let (o, steps) = stage.run("validate-packs.sh", &["5"]);
     assert_eq!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
     assert!(!steps.contains("FAIL"), "{steps}");
     let mut ids = vec![
@@ -2998,8 +2998,8 @@ fn validate_packs_sh_stage_4_asks_the_two_routes_for_each_rule_that_they_answer(
     ids.extend(none.iter().map(String::as_str));
     passed(&steps, &ids);
     assert!(
-        !steps.contains("== a candidate whose"),
-        "stage 4 runs alone: {steps}"
+        !steps.contains("== a candidate whose") && !steps.contains("== a pack with another"),
+        "stage 5 runs alone: {steps}"
     );
 
     // each candidate has the fault that its check names
