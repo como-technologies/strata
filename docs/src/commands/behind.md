@@ -23,11 +23,16 @@ each record that pins it.
 - **A newer version** is one that a person can move to. A version that the
   registry has disabled or deleted is not, and a version for none of the clouds
   of the pinned version is not either. A deprecated version is, and it says so.
-- **A floating tag**, such as `LTS__24.x`, moves on its own within its range,
-  and `verify` sees it move. Strata reads the version that the tag names now,
-  and names only the versions above it, which the tag cannot reach:
-  `LTS__20.4.x` names 20.04, and 22.04 and 24.04 are out of its reach. It also
-  reads a tag that names a disabled or a deleted version.
+- **A floating tag**, such as `LTS__24.x`, names a version that changes.
+  Strata reads the version that the tag names now, and shows it as `now`. It
+  also reads a tag that names a disabled or a deleted version. A pin of an
+  older version is behind the version that the tag names. `LTS__20.4.x` names
+  20.04, so a pin of 20.04 under it is behind only 22.04 and 24.04.
+- **Palette moves a profile under a floating tag only when the profile keeps
+  the values of the pack.** A profile with values of its own stays on its
+  version, and Palette shows the update to a person. Until the person applies
+  it, the record pins the older version, and `behind` names the version that
+  the tag names now. See [Tag names](../internals/palette/packs.md#tag-names).
 - **A pinned version that the registry no longer lists** says so, as
   `the pinned version is absent`.
 - A pack with no registry, such as a manifest pack, has no pins.

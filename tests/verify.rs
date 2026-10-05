@@ -11009,8 +11009,7 @@ fn behind_names_the_newer_versions_of_each_pin_and_the_impact_of_the_bump() {
 }
 
 #[test]
-fn a_floating_pin_is_behind_the_version_its_tag_names_and_a_pin_that_cannot_be_read_is_an_error()
- {
+fn a_floating_pin_is_behind_the_version_its_tag_names_and_a_pin_that_cannot_be_read_is_an_error() {
     let dir = tempfile::tempdir().unwrap();
     let api = serve_behind();
     let mut floating = snapshot_pack(&api, "pack:csi-aws-ebs@1.63.1").unwrap();

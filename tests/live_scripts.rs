@@ -2205,7 +2205,7 @@ fn registry_sh_step_3b_deletes_the_tag_that_the_profile_pins_and_pushes_it_again
 
 #[test]
 fn registry_sh_step_4b_pins_a_profile_with_values_of_its_own_under_the_floating_tag_and_runs_behind()
-{
+ {
     let mut stage = registry_stage(serde_json::json!({}));
     stage.route("/v1/clusterprofiles", r#"{"uid":"fm-1"}"#);
     stage.route("/v1/clusterprofiles/fm-1/publish", "{}");
@@ -2257,7 +2257,9 @@ fn registry_sh_step_4b_pins_a_profile_with_values_of_its_own_under_the_floating_
         "{sent}"
     );
     let calls = std::fs::read_to_string(stage.path("strata/calls")).unwrap();
-    let kept = calls.lines().position(|l| l == "verify floating-mod-1.json");
+    let kept = calls
+        .lines()
+        .position(|l| l == "verify floating-mod-1.json");
     let moved = calls.lines().position(|l| l == "verify profile-3.json");
     assert!(
         moved.is_some() && kept > moved,

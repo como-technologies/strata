@@ -62,8 +62,8 @@ pub struct BehindSummary {
     pub pins: usize,
     /// The pins with a newer version to move to.
     pub behind: usize,
-    /// The pins with a floating tag. Each one is behind when its tag names a version above the
-    /// pinned one, or when a version outside the range of its tag is newer.
+    /// The pins with a floating tag. Each one is behind as an exact pin is: also when the version
+    /// that its tag names is above the pinned one.
     pub floating: usize,
     /// The pins that strata could not check.
     pub errors: usize,
@@ -275,8 +275,9 @@ where
             Some(b) => b.state.clone(),
             None => Some("absent".to_string()),
         };
-        // the version that a floating tag names now: a profile with values of its own does not
-        // move to it until a person applies the update, so it is newer as each other version is
+        // the version that a floating tag names now. A profile with values of its own stays on
+        // the pinned version until a person applies the update, so each version above the pin
+        // is newer, also the one that the tag names
         if pin.floating {
             pin.resolved = builds
                 .iter()

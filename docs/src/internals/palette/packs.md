@@ -159,7 +159,8 @@ touches only the schema, the presets, or the system annotations of the pack.
 
 A new version pushed beside the pinned one, `1.0.1` beside `1.0.0`, does not
 move a profile pinned to `1.0.0`. A profile pinned under a floating tag
-is the other case: see [Tag names](#tag-names).
+is the other case, when it keeps the values of the pack: see
+[Tag names](#tag-names).
 
 An OCI Helm registry of the example's own answers the same push differently.
 The first time Palette reads a chart version, it lists the manifest digest of
@@ -292,13 +293,24 @@ The repave check answers "no repave" for a request whose only change is the tag
 name of the OS pack, exact or floating. **A tag in the request is no control for
 that check; a change of the values is.**
 
-A floating tag moves a published profile. In an OCI pack registry of the
-example's own, Palette lists `1.0.x` and `1.x` beside the version `1.0.1`. A
-profile pins the pack under `1.0.x`. Then `1.0.2` is pushed, and the tag names
-it. Within ten minutes of the sync, the published profile moves: `verify` on a
-record of the profile from before reports `DRIFT` with `IDENTITY UPSTREAM`. The
-move follows the tag, with no request from a person and no publish. A profile
-pinned to the exact version `1.0.0` does not move when `1.0.1` arrives.
+A floating tag moves a published profile that keeps the values of the pack. In
+an OCI pack registry of the example's own, Palette lists `1.0.x` and `1.x`
+beside the version `1.0.1`. A profile pins the pack under `1.0.x`. Then `1.0.2`
+is pushed, and the tag names it. Within ten minutes of the sync, the published
+profile moves: `verify` on a record of the profile from before reports `DRIFT`
+with `IDENTITY UPSTREAM`. The move follows the tag, with no request from a
+person and no publish. A profile pinned to the exact version `1.0.0` does not
+move when `1.0.1` arrives.
+
+A profile with values of its own does not move with the tag. Palette shows the
+**Updates** button on the profile, and a person applies the update
+([Update a cluster profile](https://docs.spectrocloud.com/profiles/cluster-profiles/modify-cluster-profiles/update-cluster-profile/#accept-updates-to-a-cluster-profile)).
+This is the rule of a push again too: see
+[A pack version pushed again](#a-pack-version-pushed-again). Step 4b of
+`registry.sh` checks it, and no run of that check has a result yet. Until a
+person applies the update, a record of the profile verifies, and
+[`strata behind`](../../commands/behind.md) names the version that the tag
+names now.
 
 ## The layer of a pack
 

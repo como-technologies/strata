@@ -36,6 +36,10 @@ These are open:
 - The record of a version that a cluster template links:
   [template.sh](../../development/live-runs.md#templatesh) checks that its root
   is the root before the link, and no run of that check has a result yet.
+- A profile with values of its own under a floating tag that moves:
+  [registry.sh](../../development/live-runs.md#registrysh) checks that the
+  profile stays on its version, and no run of that check has a result yet. See
+  [Tag names](packs.md#tag-names).
 - A bring-your-own-image OS pack, and a new `imageId` under one version: no run
   gives an OS pack an `imageId`. So no run shows if Palette replaces the nodes
   for a new image, or which `imageId` a cluster copy holds. See
