@@ -1103,17 +1103,54 @@ pub struct Verify {
     pub registry_sync_error: Option<String>,
 }
 
+/// The status that Palette gives to a sync of a registry that runs.
+const SYNC_IN_PROGRESS: &str = "InProgress";
+/// The status that Palette gives to a sync of a registry that failed.
+const SYNC_FAILED: &str = "Failed";
+
 /// The last sync of a registry: `status.sync` of the registry in Palette, `v1RegistrySyncStatus`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct RegistrySync {
-    /// When the last sync that completed ended, as Palette gives it. Empty when Palette gives no
-    /// time.
+    /// When the last sync that completed started, as Palette gives it in `lastSyncedTime`. Empty
+    /// when no sync completed.
     pub last_synced_time: String,
+    /// When the last sync started, also a sync that runs or that failed, as Palette gives it in
+    /// `lastRunTime`. Empty when Palette gives no time.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub last_run_time: String,
     /// The state of the last sync: `Completed`, `InProgress`, or `Failed`, as Palette gives it.
     pub status: String,
     /// What Palette says about the last sync, such as the cause of a failure. Empty when it says
     /// nothing.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub message: String,
+    /// The recovery of a sync that stopped before its end, as Palette gives it in
+    /// `syncRecovery`. Absent when Palette gives none, and when the recovery is `Recovered`: then
+    /// no sync waits for a recovery.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sync_recovery: Option<SyncRecovery>,
+}
+
+impl RegistrySync {
+    /// Whether a sync of the registry runs now.
+    pub fn in_progress(&self) -> bool {
+        self.status == SYNC_IN_PROGRESS
+    }
+
+    /// Whether the last sync of the registry failed.
+    pub fn failed(&self) -> bool {
+        self.status == SYNC_FAILED
+    }
+}
+
+/// The recovery of a sync of a registry that stopped before its end: `v1SyncRecovery`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SyncRecovery {
+    /// The state of the recovery: `Interrupted` or `Recovering`, as Palette gives it.
+    pub sync_recovery_state: String,
+    /// What Palette says about the recovery. Empty when it says nothing.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub message: String,
 }
