@@ -822,7 +822,9 @@ pub fn pack_snapshot<A: PaletteApi>(
     fetched_at: &str,
     progress: &Progress,
 ) -> Result<Snapshot> {
-    let visible = registries(palette)?;
+    // the registry listing gives the names, and the reason of an error that finds no pack
+    let listed = registry_entries(palette)?;
+    let visible = registry_names(&listed);
     let entries = versions_of(palette, name)?;
     let not_found = |registry: String, unsynced: Vec<String>| Error::PackNotFound {
         name: name.to_string(),
@@ -858,7 +860,7 @@ pub fn pack_snapshot<A: PaletteApi>(
                 [] => {
                     return Err(not_found(
                         "any visible registry".to_string(),
-                        unsynced_names(palette, &visible)?,
+                        unsynced_names(palette, listed, &visible)?,
                     ));
                 }
                 several => {
@@ -905,7 +907,7 @@ pub fn pack_snapshot<A: PaletteApi>(
         let asked = visible.iter().filter(|(_, u)| *u == registry_uid);
         return Err(not_found(
             named(&registry_uid),
-            unsynced_names(palette, asked)?,
+            unsynced_names(palette, listed, asked)?,
         ));
     };
     progress.note(&format!(
