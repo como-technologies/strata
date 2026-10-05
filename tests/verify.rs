@@ -5325,6 +5325,16 @@ fn serve_summaries(summaries: Vec<Value>, entities: &[(&str, Value)]) -> MemoryA
     api
 }
 
+/// `entity` with a tag row for the build `uid` of `version`. Palette gives a tag row to each
+/// version that its registry route serves.
+fn with_tag(mut entity: Value, version: &str, uid: &str) -> Value {
+    entity["tags"]
+        .as_array_mut()
+        .unwrap()
+        .push(serde_json::json!({"tag": version, "packUid": uid}));
+    entity
+}
+
 fn public_entity() -> Value {
     serde_json::json!({"layer": "csi", "tags": [
         {"tag": "1.63.1", "packUid": "pk-63"},
@@ -5471,7 +5481,9 @@ fn packs_pages_past_a_hundred_versions_and_counts_a_repeated_one_once() {
         )
         .with(
             "/v1/packs/csi-aws-ebs/registries/reg-public",
-            public_entity(),
+            (0..100).fold(with_tag(public_entity(), "1.200.0", "pk-200"), |e, i| {
+                with_tag(e, &format!("1.{i}.0"), &format!("pk-{i}"))
+            }),
         );
     let l = packs_of(&api, "csi-aws-ebs", ops::PackOptions::default()).unwrap();
     let versions = &l.registries[0].versions;
@@ -11029,7 +11041,15 @@ fn serve_behind() -> MemoryApi {
             pack_summary_with("1.66.0", Some("disabled"), &["aws"]),
             pack_summary_with("1.67.0", None, &["gcp"]),
         ],
-        &[("reg-public", public_entity())],
+        // Palette serves no disabled version, so 1.66.0 has no tag
+        &[(
+            "reg-public",
+            with_tag(
+                with_tag(public_entity(), "1.64.0", "pk-1.64.0"),
+                "1.67.0",
+                "pk-1.67.0",
+            ),
+        )],
     )
 }
 
@@ -11164,6 +11184,50 @@ fn behind_says_what_a_move_to_a_newer_version_drops_when_it_supports_fewer_archi
         md.contains("behind: 1.65.0 (drops arm64), 1.64.0 (deprecated)"),
         "{md}"
     );
+}
+
+#[test]
+fn in_a_fips_tenant_packs_and_behind_leave_out_a_version_that_palette_does_not_serve() {
+    // 1.68.0 is not FIPS compliant. The listing applies no FIPS rule, so it holds 1.68.0 in each
+    // tenant. The registry route applies the FIPS rule of the tenant: in a FIPS tenant it gives
+    // no tag for 1.68.0, and in another tenant it does.
+    let mut not_fips = pack_summary_with("1.68.0", None, &["aws"]);
+    not_fips["spec"]["annotations"] = serde_json::json!({"fips": "false"});
+    let serve = |entity: Value| serve_registry(vec![not_fips.clone()], &[("reg-public", entity)]);
+    let fips = serve(public_entity());
+    let open = serve(with_tag(public_entity(), "1.68.0", "pk-1.68.0"));
+
+    let versions = |api: &MemoryApi| {
+        let l = packs_of(api, "csi-aws-ebs", ops::PackOptions::default()).unwrap();
+        let r = &l.registries[0];
+        let v: Vec<String> = r.versions.iter().map(|v| v.version.clone()).collect();
+        (v, r.versions_offered)
+    };
+    assert_eq!(
+        versions(&fips),
+        (vec!["1.65.0".to_string(), "1.63.1".to_string()], 2),
+        "packs leaves out the version that the registry route does not serve"
+    );
+    assert_eq!(versions(&open).0[0], "1.68.0", "another tenant offers it");
+
+    let dir = tempfile::tempdir().unwrap();
+    let record = dir.path().join("dev.json");
+    let old = snapshot_pack(&fips, "pack:csi-aws-ebs@1.63.1").unwrap();
+    fs::write(&record, old.to_json(false).unwrap()).unwrap();
+    let newer = |api: &MemoryApi| {
+        let r = behind_of(api, std::slice::from_ref(&record), &ops::BehindOptions::default());
+        r.pins[0]
+            .newer
+            .iter()
+            .map(|n| n.version.clone())
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(
+        newer(&fips),
+        ["1.65.0"],
+        "behind offers no version that Palette refuses in a profile"
+    );
+    assert_eq!(newer(&open), ["1.68.0", "1.65.0"]);
 }
 
 #[test]
