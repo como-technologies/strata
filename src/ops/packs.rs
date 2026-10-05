@@ -60,6 +60,10 @@ pub struct PackRegistry {
     /// same one: `deprecated`, `disabled`, or `deleted`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub state: Option<String>,
+    /// True when the registry reports no digest for each version of the pack in it, before
+    /// `--latest` or `--cloud` cut the list. A record of such a version is `UNVERIFIED`.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub no_digests: bool,
 }
 
 /// One version of a pack in one registry.
@@ -236,6 +240,7 @@ where
             [Some(one)] => Some(one.clone()),
             _ => None,
         };
+        let no_digests = mine.iter().all(|e| text(e, "/spec/digest").is_empty());
         // the registry's own answer holds the tags, which the listing does not. With no query,
         // the answer does not include the disabled and the deleted versions, and Palette answers
         // 404 when it has no version. So a registry with a retired version gets a second request
@@ -337,6 +342,7 @@ where
                 versions_offered,
                 tags_unavailable,
                 state,
+                no_digests,
             });
         }
     }
@@ -374,7 +380,8 @@ mod tests {
         serde_json::json!({
             "metadata": {"uid": uid},
             "spec": {"name": "strata-live-dep", "version": version, "registryUid": "reg-own",
-                     "layer": "addon", "type": "oci", "cloudTypes": clouds},
+                     "layer": "addon", "type": "oci", "cloudTypes": clouds,
+                     "digest": format!("sha256:{uid}")},
         })
     }
 
@@ -544,6 +551,86 @@ mod tests {
         .render_packs(&listing)
         .unwrap();
         assert!(!text.contains("Palette"), "{text}");
+    }
+
+    /// A version of `strata-live-dep` for which the registry reports no digest.
+    fn no_digest(uid: &str, version_text: &str) -> Value {
+        let mut summary = version(uid, version_text, &["aws"]);
+        summary["spec"]["digest"] = serde_json::json!("");
+        summary
+    }
+
+    /// `packs` of `listing` in the terminal and in markdown, with no color.
+    fn rendered(listing: &PackListing) -> (String, String) {
+        let render = |format| {
+            crate::render::renderer(format, crate::color::Paint::off(), false)
+                .render_packs(listing)
+                .unwrap()
+        };
+        (
+            render(crate::render::Format::Terminal),
+            render(crate::render::Format::Markdown),
+        )
+    }
+
+    #[test]
+    fn a_version_with_no_digest_says_so_on_its_row_and_the_heading_does_not() {
+        let listing = packs_with(
+            &PackOptions::default(),
+            vec![
+                version("pk-2", "1.0.2", &["aws"]),
+                no_digest("pk-1", "1.0.1"),
+            ],
+        );
+        assert!(!listing.registries[0].no_digests);
+        let (terminal, markdown) = rendered(&listing);
+        let lines: Vec<&str> = terminal.lines().collect();
+        assert_eq!(
+            lines[0],
+            "strata-live-dep in strata-live-registry (2 versions)"
+        );
+        assert!(
+            lines[1].starts_with("  1.0.2 ") && !lines[1].contains("digest"),
+            "{terminal}"
+        );
+        assert!(
+            lines[2].starts_with("  1.0.1 ") && lines[2].ends_with("no digest"),
+            "{terminal}"
+        );
+        assert!(
+            markdown.starts_with("### strata-live-dep in strata-live-registry\n"),
+            "{markdown}"
+        );
+        assert!(markdown.contains("| `1.0.1` no digest |"), "{markdown}");
+        assert!(!markdown.contains("| `1.0.2` no digest"), "{markdown}");
+    }
+
+    #[test]
+    fn a_registry_with_no_digest_for_each_version_says_no_digests_in_the_heading_also_with_latest()
+    {
+        let listing = packs_with(
+            &PackOptions {
+                latest: true,
+                ..Default::default()
+            },
+            vec![no_digest("pk-2", "1.0.2"), no_digest("pk-1", "1.0.1")],
+        );
+        let json = serde_json::to_value(&listing).unwrap();
+        assert_eq!(json["registries"][0]["noDigests"], true);
+        let (terminal, markdown) = rendered(&listing);
+        let lines: Vec<&str> = terminal.lines().collect();
+        assert_eq!(
+            lines[0],
+            "strata-live-dep in strata-live-registry (1 of 2 versions, no digests)"
+        );
+        assert!(
+            lines[1].starts_with("  1.0.2 ") && lines[1].ends_with("no digest"),
+            "{terminal}"
+        );
+        assert!(
+            markdown.starts_with("### strata-live-dep in strata-live-registry (no digests)\n"),
+            "{markdown}"
+        );
     }
 
     /// The path of the tags request with the states query, for `nginx` in the Public Repo.
