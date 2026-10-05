@@ -2239,6 +2239,44 @@ fn registry_sh_step_6_lists_the_required_pack_with_the_cloud_type_all_for_the_cl
     );
 }
 
+/// A run of packs.sh whose listing of kubernetes holds `count` entries, and whose
+/// `strata packs kubernetes` prints `headings`. Gives steps.log.
+fn packs_paged(count: u32, headings: &str) -> String {
+    let mut stage = Stage::new(serde_json::json!({
+        "csi_pack_name": "csi-aws-ebs", "csi_previous_version": "1.63.1",
+        "csi_version": "1.65.0", "cloud": "aws",
+    }));
+    stage.route(
+        "/v1/packs",
+        &format!(r#"{{"listmeta":{{"count":{count}}}}}"#),
+    );
+    stage.strata("packs kubernetes", 0, headings);
+    let (_, steps) = stage.run("packs.sh", &[]);
+    let calls = std::fs::read_to_string(stage.path("strata/calls")).unwrap();
+    assert!(calls.lines().any(|l| l == "packs kubernetes"), "{calls}");
+    steps
+}
+
+#[test]
+fn packs_sh_counts_the_versions_of_all_registries_against_the_100_of_one_page() {
+    let steps = packs_paged(
+        266,
+        "kubernetes in Palette Registry (169 versions)\n  1.36.2  1.36.x\n\
+         kubernetes in Public Repo (97 versions)\n  1.36.2  1.36.x\n",
+    );
+    passed(
+        &steps,
+        &["packs-paged-listing", "packs-paged", "packs-paged-count"],
+    );
+
+    let steps = packs_paged(
+        97,
+        "kubernetes in Public Repo (97 versions)\n  1.36.2  1.36.x\n",
+    );
+    assert!(steps.contains("FAIL  packs-paged-listing"), "{steps}");
+    assert!(steps.contains("FAIL  packs-paged-count"), "{steps}");
+}
+
 #[test]
 fn validate_packs_sh_stage_4_makes_a_profile_whose_pack_has_another_layer_than_its_registry() {
     let mut stage = Stage::new(serde_json::json!({}));

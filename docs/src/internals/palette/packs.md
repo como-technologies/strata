@@ -391,7 +391,11 @@ above that one
 So the newest version of a line is the version that the floating tag names, and
 one request gives every version, every tag, and no repeats. The paged listing
 `/v1/packs?filters=spec.name=<name>` holds the digest of each build, which this
-answer does not, and it repeats a version across pages.
+answer does not, and it repeats a version across pages. It gives an entry for
+each version in each registry that holds the pack, and 100 entries on a page.
+So the listing of a pack in two registries can pass one page when each registry
+holds fewer than 100 versions (`packs-paged-listing` in
+[the live runs](../../development/live-runs.md#packssh)).
 
 **When a version arrived.** The tags answer gives no time. The listing gives
 `metadata.creationTimestamp` for each version: the time Palette first listed it.

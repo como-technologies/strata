@@ -210,7 +210,7 @@ registries the tenant can see, including one pack that two registries hold.
 | `unknown-version`, `unknown-registry` | 2 | #55: a version or a registry the tenant does not have is an error |
 | `packs-one`, `packs-newest` | 0 | #54: `packs` lists a registry's versions newest first, and the newest carries the floating tag |
 | `packs-latest`, `packs-two-registries` | 0 | #54: `--latest` gives one line for each registry that has the pack |
-| `packs-paged`, `packs-paged-count` | 0 | #54: a pack with more than 100 versions lists completely, past the 100 of one page |
+| `packs-paged-listing`, `packs-paged`, `packs-paged-count` | 0 | #54, #180: the check reads `kubernetes` in all registries, because the listing `/v1/packs?filters=spec.name=kubernetes` gives an entry for each version in each registry. The listing holds more than 100 entries, and the versions of all registries in `strata packs kubernetes` are more than 100. So strata reads past the first page. One registry alone can hold fewer than 100 versions. |
 | `packs-cloud` | 0 | #54: `--cloud` keeps the versions of one cloud |
 | `packs-cloud-none`, `packs-cloud-none-says` | 0 | #54: a cloud no version supports is an empty answer, not an error, and it says so |
 | `packs-json` | 0 | #54: `--json` writes `strata-packs/1` |
