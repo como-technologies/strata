@@ -108,10 +108,15 @@ check packs-latest 0 '#54: --latest gives one line for each registry that has th
   "$strata" packs "$pack" --latest
 check packs-two-registries 0 '#54: both registries of this tenant answer' -- \
   bash -c "grep -c '^$pack in ' packs-latest.out | grep -qx 2"
-check packs-paged 0 '#54: a pack with more than 100 versions lists completely' -- \
-  "$strata" packs kubernetes --registry "$reg"
-check packs-paged-count 0 '#54: the listing passes the 100 of one page' -- \
-  bash -c "head -1 packs-paged.out | grep -oE '[0-9]+ versions' | grep -oE '^[0-9]+' | awk '{exit !(\$1 > 100)}'"
+# Palette serves /v1/packs 100 entries at a time. strata reads each entry of the name in each
+# registry, and then puts it under its registry. So the sum of all registries passes one page,
+# also when no single registry holds more than 100 versions of the pack.
+check packs-paged-listing 0 '#180: the listing of kubernetes holds more entries than one page' -- \
+  bash -c "\"$live/api.sh\" get '/v1/packs?filters=spec.name=kubernetes&limit=1' | jq -e '.listmeta.count > 100'"
+check packs-paged 0 '#54: a pack with more than 100 entries in the listing lists completely' -- \
+  "$strata" packs kubernetes
+check packs-paged-count 0 '#180: the versions of all registries pass the 100 of one page' -- \
+  bash -c "grep -oE '^kubernetes in .* \([0-9]+ versions?' packs-paged.out | grep -oE '[0-9]+ versions?\$' | awk '{s += \$1} END {exit !(s > 100)}'"
 check packs-cloud 0 '#54: --cloud keeps the versions of one cloud' -- \
   "$strata" packs kubernetes --registry "$reg" --cloud "$(out cloud)" --latest
 check packs-cloud-none 0 '#54: a cloud no version supports is an empty answer, not an error' -- \
