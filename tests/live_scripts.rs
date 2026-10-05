@@ -2922,8 +2922,8 @@ fn registry_kinds_sh_checks_that_packs_says_no_digest_on_the_row_and_in_the_head
     assert!(failed(&steps), "{steps}");
 }
 
-/// The hook of the fake name route: HTTP 500 and `VersionParseFailure` for the version
-/// 2.2.2.develop, as Palette answers it, and an empty answer for each other version.
+/// The hook of the fake name route. It gives HTTP 500 and `VersionParseFailure` for the version
+/// 2.2.2.develop, as Palette does, and an empty answer for each other version.
 const NAME_ROUTE_HOOK: &str = r#"#!/usr/bin/env bash
 route="$FAKE_ROUTES/v1_clusterprofiles_validate_name"
 if grep -q 'version=2.2.2.develop' "$FAKE_ROUTES/sent/GET_v1_clusterprofiles_validate_name.request"; then

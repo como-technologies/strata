@@ -146,7 +146,7 @@ This route checks the packs of a profile before a create. The body is a
 is a `v1PackManifestEntity` with `name`, `tag`, `uid`, `registryUid`, `type`,
 `layer`, `values`, and `manifests[]` of `name` and `content`. The route writes
 nothing. It does not check the name or the version of the profile, or the
-names of the packs and the manifests: the
+names of the packs and the manifests. The
 [name route](#get-v1clusterprofilesvalidatename) and the
 [import validate route](#post-v1clusterprofilesimportvalidate) check them.
 `snapshot --from-candidate --validate` sends it.
@@ -290,17 +290,20 @@ pack filled in. Each refusal is HTTP 500 with `code` and `message`, except
 `ClusterProfileAlreadyExists` (409) and `PackMacroUndefined` (404). The route
 gives one error only.
 
-The route does not check the layers of the type, the core layers, the cloud of
-each pack, or the tag of a pack that Palette makes. Only the create checks
-them: see
+The route does not check four rules of the create. These are the layers of
+the type, the core layers, the cloud of each pack, and the tag of a pack that
+Palette makes. Only the create checks them: see
 [The gaps that strata fills](./profiles.md#the-gaps-that-strata-fills).
 
-A live run shows that the route refuses a pack name two times
-(`DuplicatePacksForbidden`), two equal packs (HTTP 422, `610`), a manifest name
-that is not a DNS label (`InvalidName`), a manifest name two times in a pack
-(`DuplicatePackManifestsForbidden`), and the version `2.2.2.develop`
-(`VersionParseFailure`). It takes a candidate of `cert-manager` 1.21.1 from the
-Public Repo. See
+A live run shows that the route refuses each of these faults:
+
+- a pack name two times: `DuplicatePacksForbidden`,
+- two equal packs: HTTP 422 and `610`,
+- a manifest name that is not a DNS label: `InvalidName`,
+- a manifest name two times in a pack: `DuplicatePackManifestsForbidden`,
+- the version `2.2.2.develop`: `VersionParseFailure`.
+
+It takes a candidate of `cert-manager` 1.21.1 from the Public Repo. See
 [validate-packs.sh](../../development/live-runs.md#validate-packssh).
 
 ## The property routes

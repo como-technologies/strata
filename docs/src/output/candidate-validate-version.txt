@@ -2,4 +2,4 @@ $ strata snapshot --from-candidate bad-version.yaml --validate -o bad-version.js
 strata: looking up project dev
 strata: resolving aws-stack@1.1.1.1 against the registry
 palette    refuses: VersionParseFailure: Unable to parse the version '1.1.1.1'
-strata: Palette refuses the packs of 'bad-version.yaml' with 1 error; strata wrote no record
+strata: Palette refuses 'bad-version.yaml' with 1 error; strata wrote no record

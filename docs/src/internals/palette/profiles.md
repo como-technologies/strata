@@ -381,9 +381,9 @@ cloud type.
 Palette is the owner of each rule. When a route of Palette answers a rule
 before the create, strata removes its check and asks that route. The review at
 the end of each wave reads this list. The name route and the import validate
-route answer four rules of the create: the version, a pack twice, the name of a
-manifest, and a manifest twice. So strata does not check them, and `--validate`
-asks Palette. With no `--validate`, a candidate that breaks one of them gives a
+route answer four rules of the create. These are the version, a pack twice, the
+name of a manifest, and a manifest twice. So strata does not check them, and
+`--validate` asks Palette. With no `--validate`, a candidate that breaks one of them gives a
 record.
 
 Strata does not copy the rules that the validate route checks: see

@@ -2,4 +2,4 @@ $ strata snapshot --from-candidate aws-stack.yaml --validate -o validated.json
 strata: looking up project dev
 strata: resolving aws-stack@1.1.1 against the registry
 palette    refuses: ClusterProfileAlreadyExists: Cluster Profile with name 'aws-stack' and version '1.1.1' already exists
-strata: Palette refuses the packs of 'aws-stack.yaml' with 1 error; strata wrote no record
+strata: Palette refuses 'aws-stack.yaml' with 1 error; strata wrote no record

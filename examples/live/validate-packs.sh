@@ -19,8 +19,8 @@
 #      through the API, gets the layer of the registry. This stage creates a profile and deletes
 #      it, with no cluster and no cost. It runs only when you give its number.
 #   5  the name route and the import validate route (#273): GET /v1/clusterprofiles/validate/name
-#      and POST /v1/clusterprofiles/import/validate refuse a version that Palette does not parse,
-#      a pack twice, a manifest name that is not a DNS label, and a manifest name twice
+#      and POST /v1/clusterprofiles/import/validate. Each candidate has one fault that the routes
+#      refuse: the version, a pack twice, the name of a manifest, or a manifest twice
 #
 # Results go under runs/<UTC time>/validate-packs/, or OUT. Exit 0 only when no check fails.
 set -uo pipefail

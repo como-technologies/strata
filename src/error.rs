@@ -438,10 +438,9 @@ pub const PROFILE_NAME_REFUSAL_CODES: [&str; 2] = ["ResourceNameEmpty", "Version
 pub const PROFILE_EXISTS_CODE: &str = "ClusterProfileAlreadyExists";
 
 /// The codes of the refusals of the whole request that `POST /v1/clusterprofiles/import/validate`
-/// answers with HTTP 500: the limits of the tenant and of the profile, the cloud type, the
-/// metadata of the packs, the YAML, the integration packs, the name and the version, and the
-/// check of each pack. `snapshot --validate` reads them as the answer of Palette. A retry gets the
-/// same refusal.
+/// answers with HTTP 500. The route checks the limits, the cloud type, the metadata of the packs,
+/// and the YAML. It also checks the integration packs, the name, the version, and each pack.
+/// `snapshot --validate` reads them as the answer of Palette. A retry gets the same refusal.
 pub const PROFILE_IMPORT_REFUSAL_CODES: [&str; 15] = [
     "ResourceLimitValidationFailure",
     "SubResourceLimitValidationFailure",

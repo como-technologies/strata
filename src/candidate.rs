@@ -1769,8 +1769,8 @@ variables:
     #[test]
     fn a_candidate_that_a_route_of_palette_checks_before_the_create_passes_the_check() {
         // `--validate` asks the name route and the import validate route for these rules, so
-        // strata does not copy them: a version that Palette does not parse, a pack twice, a
-        // manifest name twice in one pack, and a name that is not a DNS label
+        // strata does not copy them. The rules are the version, a pack twice, a manifest name
+        // twice in one pack, and a name that is not a DNS label
         let mut version = stack();
         version.version = "2.2.2.develop".into();
         let mut pack_twice = stack();

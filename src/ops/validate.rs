@@ -47,7 +47,7 @@ fn name_refusal(status: u16, code: &str) -> bool {
 }
 
 /// Whether the import validate route refuses the profile with `status` and `code`. Palette checks
-/// the body of each route against the API schema first, and refuses a list with two equal items
+/// the body of each route against the API schema first. It refuses a list with two equal items
 /// with HTTP 422 and a number as the code.
 fn import_refusal(status: u16, code: &str) -> bool {
     match status {
@@ -157,8 +157,9 @@ pub fn profile_validate_body(snap: &Snapshot) -> Value {
 ///
 /// Palette answers `200` with an error for each pack that it refuses. It refuses the whole
 /// request with an HTTP error and a code that [`name_refusal`], [`import_refusal`], or
-/// [`PROFILE_PACK_REFUSAL_CODES`] takes, or with the HTTP 422 of the API schema: that is an
-/// answer too, and the retry does not send it again. Each other error is an error of strata.
+/// [`PROFILE_PACK_REFUSAL_CODES`] takes, or with the HTTP 422 of the API schema. Such a refusal
+/// is an answer too, and the retry does not send it again. Each other error is an error of
+/// strata.
 pub fn profile_validation<A: PaletteApi>(
     palette: &Palette<A>,
     snap: &Snapshot,

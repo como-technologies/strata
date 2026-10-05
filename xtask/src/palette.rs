@@ -109,9 +109,12 @@ fn answer(root: &Path, mut stream: TcpStream) -> std::io::Result<()> {
     stream.flush()
 }
 
-/// The statuses of a refusal that a file beside the file of the answer gives: a key that cannot
-/// read, a resource that exists, a body that the API schema refuses, and a refusal that Palette
-/// gives the type of a server fault.
+/// The statuses of a refusal that a file beside the file of the answer gives:
+///
+/// - 403: the key cannot read the resource.
+/// - 409: the resource exists.
+/// - 422: the API schema refuses the body.
+/// - 500: Palette gives the refusal the type of a server fault.
 const REFUSALS: [u16; 4] = [403, 409, 422, 500];
 
 /// The file whose presence makes the server refuse the request for `path` with HTTP 403.

@@ -107,11 +107,16 @@ type that Palette refuses:
 {{#include ../output/candidate-refused.txt}}
 ```
 
-Strata does not copy the rules that a validate route of Palette checks. These
-are the version, a pack name in two layers, the name of a manifest or of a
-`manifest` layer, a manifest name two times in a layer, the YAML of the values
-and the manifests, and the limit of 200 packs and 200 manifests. A candidate
-that breaks one of them gives a record. To ask Palette before you publish, give
+Strata does not copy the rules that a validate route of Palette checks:
+
+- the version,
+- a pack name in two layers,
+- the name of a manifest, or of a `manifest` layer,
+- a manifest name two times in a layer,
+- the YAML of the values and the manifests,
+- the limit of 200 packs and 200 manifests.
+
+A candidate that breaks one of them gives a record. To ask Palette before you publish, give
 `--validate`: see
 [Ask Palette before you publish](../commands/candidate.md#ask-palette-before-you-publish).
 

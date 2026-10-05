@@ -12245,8 +12245,8 @@ fn registry_listing() -> Value {
         "isPrivate": false, "isDefault": true, "scope": "cluster"}]})
 }
 
-/// `api` with the two routes that `snapshot --validate` asks for a candidate before the packs
-/// route: the name route and the import validate route take `snap`.
+/// `api` with the name route and the import validate route, which `snapshot --validate` asks
+/// for a candidate before the packs route. Both take `snap`.
 fn serve_candidate_checks(api: MemoryApi, snap: &strata::snapshot::Snapshot) -> MemoryApi {
     api.with(name_route(snap), Value::Null)
         .with(format!("POST {IMPORT_ROUTE}"), serde_json::json!({}))
