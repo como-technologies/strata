@@ -330,7 +330,7 @@ A comparison of two sides, `a` and `b`.
     profile, the cluster, the edge host, or the cluster group. It is absent
     when Palette gives no time, and for a gone object. It is also absent for a
     pack record: the pack listing gives the create time of the pack there. See
-    [When a version arrived](../internals/palette/packs.md#what-a-registry-answers-about-a-pack).
+    [What a registry answers about a pack](../internals/palette/packs.md#what-a-registry-answers-about-a-pack).
 
 Each changed value is a leaf with `op`, `path`, `segments`, `old`, and `new`. A
 leaf is a scalar or an empty container. The path joins keys with a dot. A list

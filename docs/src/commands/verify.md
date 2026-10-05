@@ -107,7 +107,7 @@ the writes.
 A pack record gives no time. The pack listing gives the create time of a pack
 in `metadata.lastModifiedTimestamp`, also when the content under the version
 changes. See
-[When a version arrived](../internals/palette/packs.md#what-a-registry-answers-about-a-pack).
+[What a registry answers about a pack](../internals/palette/packs.md#what-a-registry-answers-about-a-pack).
 
 ## Check many records
 

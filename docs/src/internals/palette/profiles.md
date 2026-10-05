@@ -176,7 +176,7 @@ Each document of an object gives the time of its last change,
 `metadata.lastModifiedTimestamp`. The time costs no request more than the
 document. The pack listing gives the same field, but there it is the create
 time of the pack: see
-[When a version arrived](./packs.md#what-a-registry-answers-about-a-pack).
+[What a registry answers about a pack](./packs.md#what-a-registry-answers-about-a-pack).
 
 ## Version bumps
 
