@@ -1218,6 +1218,12 @@ impl<A: PaletteApi> Palette<A> {
     /// Palette's answer to whether it takes `name` and `version` for a new profile version: `GET
     /// /v1/clusterprofiles/validate/name`. Palette answers `204` with no body when it takes them.
     /// The request changes nothing.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Api`] for each answer of Palette that is an error. A refusal of the name or the
+    /// version is one: HTTP 500 with a code of `PROFILE_NAME_REFUSAL_CODES`, or HTTP 409 with
+    /// `PROFILE_EXISTS_CODE`. Each other error of the request, such as a refused connection.
     pub fn validate_profile_name(&self, name: &str, version: &str) -> Result<()> {
         self.api
             .get_json(&format!(
@@ -1231,6 +1237,13 @@ impl<A: PaletteApi> Palette<A> {
     /// Palette's answer to whether it takes a profile as an import: `POST
     /// /v1/clusterprofiles/import/validate`. The body is a `v1ClusterProfileImportEntity`, the
     /// shape of a profile export. The request changes nothing.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Api`] for each answer of Palette that is an error. A refusal of the profile is
+    /// one: HTTP 500 with a code of [`PROFILE_IMPORT_REFUSAL_CODES`], HTTP 409 with
+    /// `PROFILE_EXISTS_CODE`, HTTP 404 with `PACK_MACRO_UNDEFINED_CODE`, or the HTTP 422 of the
+    /// API schema. Each other error of the request, such as a refused connection.
     pub fn validate_profile_import(&self, body: &Value) -> Result<Value> {
         self.api
             .post_json("/v1/clusterprofiles/import/validate", body)
