@@ -2203,8 +2203,16 @@ fn validate_packs_sh_stage_4_makes_a_profile_whose_pack_has_another_layer_than_i
     );
     let record = r#"{"packs":[{"key":"addon/cert-manager","registryUid":"reg-pub",
         "type":"spectro","packUid":"pk-1","tag":"1.21.1","values":"installCRDs: true"}]}"#;
-    stage.strata("snapshot --from-candidate strata-live-layer.yaml*", 0, record);
-    stage.strata("snapshot --from-candidate strata-validate-wilma.yaml*", 2, "");
+    stage.strata(
+        "snapshot --from-candidate strata-live-layer.yaml*",
+        0,
+        record,
+    );
+    stage.strata(
+        "snapshot --from-candidate strata-validate-wilma.yaml*",
+        2,
+        "",
+    );
     stage.strata("snapshot lp-1 -o layer.json", 0, record);
 
     let (_, steps) = stage.run("validate-packs.sh", &["4"]);
