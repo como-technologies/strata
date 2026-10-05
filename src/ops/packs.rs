@@ -95,10 +95,18 @@ pub struct PackBuild {
 pub struct PackOptions {
     /// Only this registry, by name or uid.
     pub registry: Option<String>,
-    /// Only the versions that support this cloud.
+    /// Only the versions that support this cloud. A version with the cloud type `all` supports
+    /// each cloud.
     pub cloud: Option<String>,
     /// Only the newest version of each registry.
     pub latest: bool,
+}
+
+/// True when a version with the cloud types `cloud_types` supports `cloud`: its cloud types hold
+/// that cloud, or `all`. Palette gives `all` to a pack that supports each cloud, and its filter on
+/// one cloud keeps that pack.
+pub(super) fn supports(cloud_types: &[String], cloud: &str) -> bool {
+    cloud_types.iter().any(|c| c == cloud || c == "all")
 }
 
 /// List what the registries offer for one pack.
@@ -200,7 +208,7 @@ where
                 })
                 .unwrap_or_default();
             if let Some(cloud) = &options.cloud
-                && !cloud_types.iter().any(|c| c == cloud)
+                && !supports(&cloud_types, cloud)
             {
                 continue;
             }
@@ -284,4 +292,69 @@ where
         cloud: options.cloud.clone(),
         registries,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::api::MemoryApi;
+
+    fn version(uid: &str, version: &str, clouds: &[&str]) -> Value {
+        serde_json::json!({
+            "metadata": {"uid": uid},
+            "spec": {"name": "strata-live-dep", "version": version, "registryUid": "reg-own",
+                     "layer": "addon", "type": "oci", "cloudTypes": clouds},
+        })
+    }
+
+    fn packs_for(cloud: &str, versions: Vec<Value>) -> PackListing {
+        let api = MemoryApi::new()
+            .with(
+                "/v1/registries/metadata",
+                serde_json::json!({"items": [
+                    {"name": "strata-live-registry", "uid": "reg-own", "kind": "oci"},
+                ]}),
+            )
+            .with(
+                "/v1/packs?filters=spec.name=strata-live-dep&limit=100&offset=0",
+                serde_json::json!({"items": versions}),
+            )
+            .with(
+                "/v1/packs/strata-live-dep/registries/reg-own",
+                serde_json::json!({"layer": "addon", "tags": []}),
+            );
+        let options = PackOptions {
+            cloud: Some(cloud.to_string()),
+            ..Default::default()
+        };
+        registry_packs(
+            "strata-live-dep",
+            &options,
+            |_| Ok(Palette::new(api.clone())),
+            "2026-10-05T00:00:00Z",
+            &Progress::silent(),
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn a_version_with_the_cloud_type_all_supports_each_cloud_and_is_the_latest_when_it_is_the_newest()
+     {
+        let listing = packs_for(
+            "aws",
+            vec![
+                version("pk-1", "1.0.0", &["all"]),
+                version("pk-0", "0.9.0", &["aws"]),
+                version("pk-e", "1.1.0", &["edge-native"]),
+            ],
+        );
+        let kept: Vec<(&str, bool)> = listing.registries[0]
+            .versions
+            .iter()
+            .map(|v| (v.version.as_str(), v.latest))
+            .collect();
+        assert_eq!(kept, vec![("1.0.0", true), ("0.9.0", false)]);
+        // the document keeps the cloud types as Palette gives them
+        assert_eq!(listing.registries[0].versions[0].cloud_types, vec!["all"]);
+    }
 }

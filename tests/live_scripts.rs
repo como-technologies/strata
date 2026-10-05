@@ -2004,15 +2004,21 @@ echo "$*" >> "$FAKE_AWS/oras.log"
 exit 0
 "#;
 
-#[test]
-fn registry_sh_step_3b_deletes_the_tag_that_the_profile_pins_and_pushes_it_again() {
-    let mut stage = Stage::new(serde_json::json!({
+/// A stage of `registry.sh`: the outputs of the example's own registry and pack, and `more`. Each
+/// sync ends at once, the wait for the clear of the flag ends at once, and the profile that pins
+/// the pack under a floating tag moves at once.
+fn registry_stage(more: serde_json::Value) -> Stage {
+    let mut outputs = serde_json::json!({
         "project_uid": "p-1", "cluster_uid": "c-a", "region": "us-east-2",
         "aws_profile": "spectro-admin", "owned_registry_uid": "reg-1",
         "owned_registry_name": "strata-live-registry", "owned_registry_host": "host.example",
         "owned_repository": "host.example/strata/strata-live-pack",
         "owned_pack_name": "strata-live-pack", "owned_profile_uid": "own-1",
-    }));
+    });
+    for (k, v) in more.as_object().unwrap() {
+        outputs[k] = v.clone();
+    }
+    let mut stage = Stage::new(outputs);
     let bin = stage.path("bin");
     executable(&bin.join("aws"), FAKE_AWS);
     executable(&bin.join("oras"), FAKE_ORAS);
@@ -2031,6 +2037,12 @@ fn registry_sh_step_3b_deletes_the_tag_that_the_profile_pins_and_pushes_it_again
             "isInvalid":true,"inValidReason":"strata-live-pack 1.0.9 tag is deleted"}]}}}"#,
     );
     stage.strata("verify profile-1.json*", 1, "DRIFT\n");
+    stage
+}
+
+#[test]
+fn registry_sh_step_3b_deletes_the_tag_that_the_profile_pins_and_pushes_it_again() {
+    let mut stage = registry_stage(serde_json::json!({}));
     stage.strata(
         "snapshot own-1 -o deleted-before.json",
         0,
@@ -2132,6 +2144,42 @@ fn registry_sh_step_3b_deletes_the_tag_that_the_profile_pins_and_pushes_it_again
     assert!(
         back > pin,
         "the profile goes back to 1.0.0 after the step: {tofu}"
+    );
+}
+
+/// A `helm` that passes each command, and prints a digest for a push.
+const FAKE_HELM_PUSH: &str = r#"#!/usr/bin/env bash
+[ "$1" = push ] && echo "Digest: sha256:$(printf '%s' "$*" | sha256sum | cut -c1-64)"
+exit 0
+"#;
+
+#[test]
+fn registry_sh_step_6_lists_the_required_pack_with_the_cloud_type_all_for_the_cloud_aws() {
+    let mut stage = registry_stage(serde_json::json!({
+        "owned_helm_registry_uid": "reg-helm", "owned_helm_registry_name": "strata-live-charts",
+        "owned_chart_repository": "host.example/strata/charts/strata-live-chart",
+        "owned_chart_name": "strata-live-chart", "owned_helm_profile_uid": "hp-1",
+        "dep_pack_name": "strata-live-dep",
+        "owned_dep_repository": "host.example/strata/strata-live-dep",
+        "dep_profile_uid": "dp-1",
+    }));
+    executable(&stage.path("bin/helm"), FAKE_HELM_PUSH);
+    stage.strata(
+        "packs strata-live-dep --registry strata-live-registry --cloud aws --json",
+        0,
+        r#"{"cloud":"aws","registries":[{"registry":"strata-live-registry",
+            "versions":[{"version":"1.0.0","cloudTypes":["all"]}]}]}"#,
+    );
+
+    let (_, steps) = stage.run("registry.sh", &[]);
+    assert!(steps.contains("== 6."), "{steps}");
+    passed(&steps, &["dep-packs-cloud", "dep-packs-cloud-version"]);
+    let calls = std::fs::read_to_string(stage.path("strata/calls")).unwrap();
+    assert!(
+        calls
+            .lines()
+            .any(|l| l == "packs strata-live-dep --registry strata-live-registry --cloud aws --json"),
+        "{calls}"
     );
 }
 

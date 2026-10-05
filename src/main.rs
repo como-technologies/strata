@@ -334,7 +334,7 @@ struct PacksArgs {
     /// Only this registry, by name or uid
     #[arg(long, value_name = "NAME")]
     registry: Option<String>,
-    /// Keep the versions of this cloud, such as aws
+    /// Keep the versions of this cloud, such as aws, and the versions of the cloud type all
     #[arg(long, value_name = "TYPE")]
     cloud: Option<String>,
     /// Only the newest version of each registry
