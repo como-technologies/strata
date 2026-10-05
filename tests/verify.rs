@@ -1994,7 +1994,7 @@ fn a_policy_tier_of_strata_0_18_with_agent_upgrades_still_verifies() {
 }
 
 #[test]
-fn a_404_of_the_route_of_the_bindings_records_null_and_another_error_is_a_field_of_the_tier() {
+fn a_404_of_the_route_of_the_bindings_records_null_and_another_error_leaves_the_field_out_of_the_tier() {
     let dir = tempfile::tempdir().unwrap();
     common::make_fixtures(dir.path());
     // the route of the role bindings answers 404, and the cluster has no namespace
@@ -2011,7 +2011,7 @@ fn a_404_of_the_route_of_the_bindings_records_null_and_another_error_is_a_field_
     let forbidden = serve_policy(dir.path(), barney()).failing(rbacs_route(), 403, "forbidden\n");
     let s = snapshot_cluster(&forbidden, None).unwrap();
     let tier = &s.source.cluster.as_ref().unwrap().tiers["policy"];
-    assert_eq!(tier.fields["rbacs"], Value::Null);
+    assert!(tier.fields.get("rbacs").is_none(), "an error is not a value");
     assert_eq!(
         tier.fields["timezone"], "Etc/UTC",
         "the other fields are read"
@@ -2028,11 +2028,12 @@ fn a_404_of_the_route_of_the_bindings_records_null_and_another_error_is_a_field_
         json["source"]["cluster"]["tiers"]["policy"]["errors"]["rbacs"],
         "HTTP 403: forbidden"
     );
-    // the error is not part of the hash: a 404 gives the same fields, and no error
+    // a 404 records null and no error, and the hash of a 403 does not cover that null
     let missing = serve_policy(dir.path(), barney()).failing(rbacs_route(), 404, "not found");
     let m = snapshot_cluster(&missing, None).unwrap();
     let missing_tier = &m.source.cluster.as_ref().unwrap().tiers["policy"];
-    assert_eq!(missing_tier.hash, tier.hash);
+    assert_eq!(missing_tier.fields["rbacs"], Value::Null);
+    assert_ne!(missing_tier.hash, tier.hash);
     assert!(missing_tier.errors.is_empty());
     assert!(
         serde_json::to_value(&m).unwrap()["source"]["cluster"]["tiers"]["policy"]
@@ -2045,7 +2046,7 @@ fn a_404_of_the_route_of_the_bindings_records_null_and_another_error_is_a_field_
         serve_policy(dir.path(), barney()).failing(namespaces_route(), 403, "forbidden");
     let s = snapshot_cluster(&forbidden, None).unwrap();
     let tier = &s.source.cluster.as_ref().unwrap().tiers["policy"];
-    assert_eq!(tier.fields["namespaces"], Value::Null);
+    assert!(tier.fields.get("namespaces").is_none());
     assert_ne!(tier.fields["rbacs"], Value::Null);
     assert_eq!(
         tier.errors,
