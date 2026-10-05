@@ -8,9 +8,6 @@
 
 use super::{Candidate, CandidateLayer, MANIFEST, MANIFEST_LAYER, PACK_TYPE, loose_semver};
 
-/// The longest name that Palette takes for a manifest or a manifest pack.
-const NAME_LIMIT: usize = 32;
-
 /// The cloud types that Palette knows. Each other cloud type is a custom cloud.
 const KNOWN_CLOUDS: &[&str] = &[
     "all",
@@ -37,14 +34,6 @@ pub(super) const GAP: &str = "Palette checks this only at the create, and no rou
 /// A rule that Palette checks only at the create of a profile version.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum CreateRule {
-    /// The version parses as semver.
-    Version,
-    /// Each manifest, and each manifest pack, has a DNS-1123 name of 32 characters at most.
-    Name,
-    /// Each pack name is in the profile once.
-    PackTwice,
-    /// Each manifest name is in its pack once.
-    ManifestTwice,
     /// The type of the profile takes the layer of each pack.
     TypeLayer,
     /// A `cluster` or `infra` profile has its core layers.
@@ -59,10 +48,6 @@ impl CreateRule {
     /// The code of the error that Palette gives at the create.
     fn code(self) -> &'static str {
         match self {
-            CreateRule::Version => "VersionParseFailure",
-            CreateRule::Name => "InvalidName",
-            CreateRule::PackTwice => "DuplicatePacksForbidden",
-            CreateRule::ManifestTwice => "DuplicatePackManifestsForbidden",
             CreateRule::TypeLayer => "ClusterProfilePackNotAllowed",
             CreateRule::CoreLayers => "ErrPackCoreLayersMissing",
             CreateRule::Cloud => "PackNotSupported",
@@ -74,46 +59,6 @@ impl CreateRule {
     fn refuse(self, problem: &str) -> String {
         format!("{problem} ({}). {GAP}", self.code())
     }
-}
-
-/// The numbers of the core of a loose semantic version: the text before `-` and `+`, with no
-/// `v` at the start.
-fn core_numbers(v: &str) -> impl Iterator<Item = &str> {
-    let v = v.strip_prefix('v').unwrap_or(v);
-    let v = v.split_once('+').map_or(v, |(a, _)| a);
-    let core = v.split_once('-').map_or(v, |(a, _)| a);
-    core.split('.')
-}
-
-/// Whether Palette takes `v` as the version of a profile. Palette takes an optional `v`, one to
-/// three numbers, a pre-release, and build data. So `1.1` and `v1.2.3` pass, and
-/// `2.2.2.develop` does not. Each number must also fit in a 64-bit integer.
-fn palette_version(v: &str) -> bool {
-    loose_semver(v) && core_numbers(v).all(|n| n.parse::<i64>().is_ok())
-}
-
-/// Whether Palette takes `name` as the name of a manifest or of a manifest pack: a DNS-1123
-/// label of 32 characters at most.
-fn palette_name(name: &str) -> bool {
-    let b = name.as_bytes();
-    let inner = |c: &u8| c.is_ascii_lowercase() || c.is_ascii_digit() || *c == b'-';
-    name.len() <= NAME_LIMIT
-        && b.first().is_some_and(|c| *c != b'-' && inner(c))
-        && b.last().is_some_and(|c| *c != b'-' && inner(c))
-        && b.iter().all(inner)
-}
-
-/// The names that are in `names` more than once, each one time, in the order of their first
-/// repeat. Palette compares the names as they are.
-fn repeated<'a>(names: impl IntoIterator<Item = &'a str>) -> Vec<&'a str> {
-    let mut seen = std::collections::BTreeSet::new();
-    let mut out = Vec::new();
-    for n in names {
-        if !seen.insert(n) && !out.contains(&n) {
-            out.push(n);
-        }
-    }
-    out
 }
 
 /// The layers that a profile of type `kind` takes, or None for each layer.
@@ -148,46 +93,9 @@ fn listed(items: &[&str]) -> String {
     }
 }
 
-/// Check the rules that the file alone can break.
-///
-/// The order is the version, a pack name twice, the name of a manifest and of a manifest pack, a
-/// manifest name twice in one pack, and the layers of the type. The layer of a pack that the file
-/// does not give comes from the registry, so [`super::resolve`] checks the layers again.
+/// Check the layers of the type with the layers that the file gives. The layer of a pack that the
+/// file does not give comes from the registry, so [`super::resolve`] checks the layers again.
 pub(super) fn check_file(c: &Candidate) -> Result<(), String> {
-    if !palette_version(&c.version) {
-        return Err(CreateRule::Version.refuse(&format!(
-            "version {} is not a version that Palette takes: give one to three numbers, such as \
-             1.2.3, with an optional pre-release, such as 1.2.3-rc.1",
-            c.version
-        )));
-    }
-    if let [first, ..] = repeated(c.layers.iter().map(|l| l.name.as_str()))[..] {
-        return Err(CreateRule::PackTwice.refuse(&format!(
-            "the pack {first} is in more than one layer; Palette takes each pack once in a profile"
-        )));
-    }
-    let named = |what: String, name: &str| {
-        CreateRule::Name.refuse(&format!(
-            "{what} has the name {name:?}; Palette takes only a name of {NAME_LIMIT} characters \
-             at most, of lowercase letters, digits, and '-', that starts and ends with a letter or \
-             a digit"
-        ))
-    };
-    for (i, l) in c.layers.iter().enumerate() {
-        let whom = format!("layer {} ({})", i + 1, l.name);
-        if l.kind.as_deref() == Some(MANIFEST) && !palette_name(&l.name) {
-            return Err(named(format!("{whom} is a manifest layer and"), &l.name));
-        }
-        if let Some(m) = l.manifests.iter().find(|m| !palette_name(&m.name)) {
-            return Err(named(format!("a manifest of {whom}"), &m.name));
-        }
-        if let [first, ..] = repeated(l.manifests.iter().map(|m| m.name.as_str()))[..] {
-            return Err(CreateRule::ManifestTwice.refuse(&format!(
-                "{whom} has more than one manifest named {first}; Palette takes each name once \
-                 in a pack"
-            )));
-        }
-    }
     let known: Vec<Option<&str>> = c
         .layers
         .iter()

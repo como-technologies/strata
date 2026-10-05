@@ -1182,6 +1182,27 @@ impl<A: PaletteApi> Palette<A> {
         self.api.post_json(&path, body)
     }
 
+    /// Palette's answer to whether it takes `name` and `version` for a new profile version: `GET
+    /// /v1/clusterprofiles/validate/name`. Palette answers `204` with no body when it takes them.
+    /// The request changes nothing.
+    pub fn validate_profile_name(&self, name: &str, version: &str) -> Result<()> {
+        self.api
+            .get_json(&format!(
+                "/v1/clusterprofiles/validate/name?name={}&version={}",
+                query_value(name),
+                query_value(version)
+            ))
+            .map(drop)
+    }
+
+    /// Palette's answer to whether it takes a profile as an import: `POST
+    /// /v1/clusterprofiles/import/validate`. The body is a `v1ClusterProfileImportEntity`, the
+    /// shape of a profile export. The request changes nothing.
+    pub fn validate_profile_import(&self, body: &Value) -> Result<Value> {
+        self.api
+            .post_json("/v1/clusterprofiles/import/validate", body)
+    }
+
     /// One part of the config of the cluster `uid`, `GET
     /// /v1/spectroclusters/{uid}/config/{part}`: its role bindings or its namespaces, and why
     /// Palette did not give them.
