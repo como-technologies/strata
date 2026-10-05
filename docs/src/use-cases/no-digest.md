@@ -100,9 +100,18 @@ After the create, the listing has the chart with its pack uid. A record of the
 same file then gets that uid, and the root of the published version. The
 playground serves the tenant after the create.
 
+`strata packs` shows that the chart has no digest, before a team pins the
+version:
+
+```text
+{{#include ../output/nodigest-chart-packs.txt}}
+```
+
 ## What to do
 
 - Take packs from a registry that Palette syncs, so each pack has a digest.
+- Before you pin a version, read `strata packs`. A row with `no digest` is a
+  version that a record cannot verify.
 - Where a pack has none, decide it one time, and pass `--allow-no-digest` to
   `verify` and to `verify-report.sh`, and `--allow no-digest` to `same-release`.
 - Give a chart from a registry that Palette does not sync in a candidate file,

@@ -466,10 +466,10 @@ is the path as a list: strings for keys, numbers for indexes, and
     `disabled`, or `deleted` from `system_state` of the listing, or `disabled`
     for a version with the mark of Spectro Cloud. See
     [Pack states](../internals/palette/packs.md#pack-states). Strata leaves out
-    the field when the listing gives none. `paletteLatest`, only when true: the
-    version that Palette calls the latest, from
-    `metadata.annotations.latestVersion` of the listing. `--latest` keeps it
-    too. `listed`: when Palette first listed the
+    the field when the listing gives none. `digest` is empty when the registry
+    gives none. `paletteLatest`, only when true: the version that Palette calls
+    the latest, from `metadata.annotations.latestVersion` of the listing.
+    `--latest` keeps it too. `listed`: when Palette first listed the
     version, from `metadata.creationTimestamp` of the listing; absent when the
     listing gives no time.
   - `versionsOffered`: how many versions of the pack the registry holds, before
@@ -480,6 +480,9 @@ is the path as a list: strings for keys, numbers for indexes, and
     the field.
   - `state`: the state that every version in the registry has, when they all
     have the same one. Strata leaves out the field otherwise.
+  - `noDigests`: `true` when the registry gives no digest for each version of
+    the pack, before `--latest` or `--cloud` cut the list. When it is `false`,
+    strata leaves out the field.
 
 ## strata-behind/1
 

@@ -215,29 +215,40 @@ pub(crate) fn project_label(uid: &str, name: &str) -> String {
     }
 }
 
-/// `2 profiles`, `1 profile`, or `no profiles`.
-/// What a packs heading adds for a registry: the state that all its versions share, and that it
-/// has no tags when Palette answered 404 for it.
+/// What a packs heading adds for a registry. It names the state that all its versions share.
+/// It says `no tags` when Palette answered 404 for the tags, and `no digests` when no version
+/// has a digest.
 pub(crate) fn registry_note(r: &crate::ops::PackRegistry) -> Option<String> {
-    match (&r.state, r.tags_unavailable) {
-        (Some(state), true) => Some(format!("{state}, no tags")),
-        (Some(state), false) => Some(state.clone()),
-        (None, true) => Some("no tags: the registry answered 404".to_string()),
-        (None, false) => None,
-    }
+    let tags = match (&r.state, r.tags_unavailable) {
+        (_, false) => None,
+        (Some(_), true) => Some("no tags"),
+        (None, true) => Some("no tags: the registry answered 404"),
+    };
+    joined_note([
+        r.state.as_deref(),
+        tags,
+        r.no_digests.then_some("no digests"),
+    ])
 }
 
-/// What a packs row adds for a version: its state, and `latest in Palette` when Palette calls
-/// it the latest and strata does not. A version that both call the latest needs no mark.
+/// What a packs row adds for a version. It names the state, and says `no digest` when the
+/// registry reports none. It says `latest in Palette` when Palette calls the version the latest
+/// and strata does not. A version that both call the latest needs no mark.
 pub(crate) fn version_note(v: &crate::ops::PackBuild) -> Option<String> {
-    let mark = (v.palette_latest && !v.latest).then_some("latest in Palette");
-    match (v.state.as_deref(), mark) {
-        (Some(state), Some(mark)) => Some(format!("{state}, {mark}")),
-        (Some(one), None) | (None, Some(one)) => Some(one.to_string()),
-        (None, None) => None,
-    }
+    joined_note([
+        v.state.as_deref(),
+        v.digest.is_empty().then_some("no digest"),
+        (v.palette_latest && !v.latest).then_some("latest in Palette"),
+    ])
 }
 
+/// The parts of a packs note that are there, joined with commas; none when no part is there.
+fn joined_note<const N: usize>(parts: [Option<&str>; N]) -> Option<String> {
+    let parts: Vec<&str> = parts.into_iter().flatten().collect();
+    (!parts.is_empty()).then(|| parts.join(", "))
+}
+
+/// `2 profiles`, `1 profile`, or `no profiles`.
 pub(crate) fn count_of(n: usize, singular: &str) -> String {
     match n {
         0 => format!("no {singular}s"),

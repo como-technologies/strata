@@ -1893,6 +1893,12 @@ fn use_cases(r: &mut Runner) {
         "jq -c '.packs[] | {name, type, layer, version, packUid, upstreamSource: .hash.upstreamSource}' charts/published.json",
     );
     r.step(
+        "nodigest-chart-packs",
+        0,
+        false,
+        "strata packs podinfo --registry charts-auth",
+    );
+    r.step(
         "nodigest-chart-same",
         1,
         false,

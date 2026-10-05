@@ -102,6 +102,21 @@ state. The other registries show as usual, and any other failure of that read
 stops the command. The live example
 [checks each state](../development/live-runs.md#pack-statessh).
 
+Some registries give no digest for a pack: a Helm registry with
+synchronization off, and an OCI registry with the provider type `zarf`. A
+version with no digest has `no digest` in the last column. When no version in
+the registry has a digest, the heading says `no digests` too:
+
+```text
+{{#include ../output/nodigest-chart-packs.txt}}
+```
+
+Strata cannot see a change of the archive of such a version. `verify` reports
+a record of it as `UNVERIFIED`, and `same-release` refuses it without
+`--allow no-digest`. See [A pack has no digest](../use-cases/no-digest.md). The
+live example
+[checks a pack of a Zarf registry](../development/live-runs.md#registry-kindssh).
+
 | Exit | Meaning |
 | --- | --- |
 | `0` | The listing, which can be empty when `--cloud` keeps nothing. |

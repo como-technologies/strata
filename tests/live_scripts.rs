@@ -2774,3 +2774,60 @@ fn packs_sh_stage_7_says_that_the_move_to_the_newer_version_drops_arm64() {
     assert!(steps.contains("FAIL  arch-behind-says"), "{steps}");
     assert!(steps.contains("FAIL  arch-behind-json"), "{steps}");
 }
+
+/// A run of `registry-kinds.sh` against the stand-ins: the tools of the registries do nothing,
+/// and strata answers `packs` of the Zarf pack with `packs`.
+fn registry_kinds(packs: &str) -> (Stage, String) {
+    let mut stage = Stage::new(serde_json::json!({
+        "aws_profile": "p", "project_uid": "p-1", "cluster_uid": "",
+        "kinds_host": "kinds.example", "kinds_user": "barney",
+        "kinds_registries": {"oci-zarf": {"uid": "reg-zarf", "name": "strata-live-oci"}},
+    }));
+    let bin = stage.path("bin");
+    executable(
+        &bin.join("tofu"),
+        &FAKE_TOFU_STAGE.replace(
+            "case \"$*\" in\n",
+            "case \"$*\" in\n  *\"output -raw kinds_password\"*) echo pw ;;\n",
+        ),
+    );
+    for tool in ["oras", "helm", "zarf", "spectro"] {
+        executable(&bin.join(tool), "#!/usr/bin/env bash\nexit 0\n");
+    }
+    stage.route("/v1/registries/pack", r#"{"uid":"reg-packs"}"#);
+    stage.strata("packs strata-live-zarf *", 0, packs);
+    let (_, steps) = stage.run("registry-kinds.sh", &[]);
+    (stage, steps)
+}
+
+#[test]
+fn registry_kinds_sh_checks_that_packs_says_no_digest_on_the_row_and_in_the_heading_of_the_zarf_pack()
+ {
+    let row = "  1.0.0  pk-z  oci  all  1.0.0  no digest\n";
+    let (stage, steps) = registry_kinds(&format!(
+        "strata-live-zarf in strata-live-oci (1 version, no digests)\n{row}"
+    ));
+    passed(&steps, &["packs-zarf", "packs-zarf-says"]);
+    let calls = std::fs::read_to_string(stage.path("strata/calls")).unwrap();
+    assert!(
+        calls
+            .lines()
+            .any(|l| l == "packs strata-live-zarf --registry strata-live-oci"),
+        "{calls}"
+    );
+
+    // a heading with no mark, or a row with no mark, fails the check
+    let failed = |steps: &str| {
+        steps.lines().any(|l| {
+            l.starts_with("FAIL") && l.split_whitespace().nth(1) == Some("packs-zarf-says")
+        })
+    };
+    let (_, steps) = registry_kinds(&format!(
+        "strata-live-zarf in strata-live-oci (1 version)\n{row}"
+    ));
+    assert!(failed(&steps), "{steps}");
+    let (_, steps) = registry_kinds(
+        "strata-live-zarf in strata-live-oci (1 version, no digests)\n  1.0.0  pk-z  oci  all  1.0.0\n",
+    );
+    assert!(failed(&steps), "{steps}");
+}
