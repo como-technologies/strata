@@ -246,9 +246,10 @@ pub enum Error {
         /// The path as given.
         path: String,
     },
-    /// `snapshot --validate` asked Palette whether it takes the packs, and Palette refused them.
-    /// Strata wrote no record. The CLI prints each error before this message.
-    #[error("Palette refuses the packs of '{reference}' with {} {}; strata wrote no record", errors.len(), if errors.len() == 1 { "error" } else { "errors" })]
+    /// `snapshot --validate` asked Palette whether it takes the version, and Palette refused it:
+    /// its name, its version, or its packs. Strata wrote no record. The CLI prints each error
+    /// before this message.
+    #[error("Palette refuses '{reference}' with {} {}; strata wrote no record", errors.len(), if errors.len() == 1 { "error" } else { "errors" })]
     PaletteRefuses {
         /// The ref or the candidate file, as given.
         reference: String,

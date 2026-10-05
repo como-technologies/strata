@@ -47,8 +47,8 @@ fn name_refusal(status: u16, code: &str) -> bool {
 }
 
 /// Whether the import validate route refuses the profile with `status` and `code`. Palette checks
-/// the body against the API schema first, and refuses a list with two equal items with HTTP 422
-/// and a number as the code.
+/// the body of each route against the API schema first, and refuses a list with two equal items
+/// with HTTP 422 and a number as the code.
 fn import_refusal(status: u16, code: &str) -> bool {
     match status {
         500 => PROFILE_IMPORT_REFUSAL_CODES.contains(&code),
@@ -157,8 +157,8 @@ pub fn profile_validate_body(snap: &Snapshot) -> Value {
 ///
 /// Palette answers `200` with an error for each pack that it refuses. It refuses the whole
 /// request with an HTTP error and a code that [`name_refusal`], [`import_refusal`], or
-/// [`PROFILE_PACK_REFUSAL_CODES`] takes: that is an answer too, and the retry does not send it
-/// again. Each other error is an error of strata.
+/// [`PROFILE_PACK_REFUSAL_CODES`] takes, or with the HTTP 422 of the API schema: that is an
+/// answer too, and the retry does not send it again. Each other error is an error of strata.
 pub fn profile_validation<A: PaletteApi>(
     palette: &Palette<A>,
     snap: &Snapshot,
@@ -189,8 +189,10 @@ pub fn profile_validation<A: PaletteApi>(
                 .unwrap_or_default(),
         ),
         Err(e) => errors.push(
-            whole_request_refusal(&e, |status, code| {
-                status == 500 && PROFILE_PACK_REFUSAL_CODES.contains(&code)
+            whole_request_refusal(&e, |status, code| match status {
+                500 => PROFILE_PACK_REFUSAL_CODES.contains(&code),
+                422 => true,
+                _ => false,
             })
             .ok_or(e)?,
         ),
@@ -223,9 +225,9 @@ pub fn palette_validation<A: PaletteApi>(
     }
 }
 
-/// The error of `snapshot --validate` when Palette refuses the packs of the record:
+/// The error of `snapshot --validate` when Palette refuses the record:
 /// [`Error::PaletteRefuses`] with each error. `Ok` when the record has no answer of Palette, or
-/// when Palette accepts the packs.
+/// when Palette accepts it.
 pub fn require_acceptance(snap: &Snapshot) -> Result<()> {
     match &snap.source.palette_validation {
         Some(v) if !v.accepts => Err(Error::PaletteRefuses {

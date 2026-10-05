@@ -538,6 +538,7 @@ printf 'query=%s\n%s' "$query" "$headers" | grep -v '^ApiKey:' > "$FAKE_ROUTES/s
 body="$FAKE_ROUTES/$key"; status=404
 [ -x "$body.sh" ] && "$body.sh" > "$body"
 [ -f "$body" ] && status=200 || body=/dev/null
+[ -f "$FAKE_ROUTES/$key.status" ] && status=$(cat "$FAKE_ROUTES/$key.status")
 if [ -n "$out" ]; then cp "$body" "$out"; else cat "$body"; fi
 [ -n "$write" ] && printf '%s' "$status"
 exit 0
@@ -1599,14 +1600,16 @@ esac
 
 /// A `strata` for a stage. It logs its arguments to $FAKE_STRATA/calls, and answers from
 /// $FAKE_STRATA/rules: the first line `GLOB<TAB>EXIT<TAB>FILE` whose GLOB matches the arguments
-/// prints FILE, or writes it to the file of `-o`, and exits EXIT. With no match it exits 0.
+/// prints FILE, or writes it to the file of `-o`, and exits EXIT. A fourth field `err` prints FILE
+/// to standard error and writes no file. With no match it exits 0.
 const FAKE_STRATA_STAGE: &str = r#"#!/usr/bin/env bash
 echo "$*" >> "$FAKE_STRATA/calls"
 out=""; prev=""
 for a in "$@"; do [ "$prev" = -o ] && out=$a; prev=$a; done
-while IFS=$'\t' read -r glob code file; do
+while IFS=$'\t' read -r glob code file stream; do
   [[ "$*" == $glob ]] || continue
-  if [ -n "$out" ]; then cp "$FAKE_STRATA/$file" "$out"; else cat "$FAKE_STRATA/$file"; fi
+  if [ "$stream" = err ]; then cat "$FAKE_STRATA/$file" >&2
+  elif [ -n "$out" ]; then cp "$FAKE_STRATA/$file" "$out"; else cat "$FAKE_STRATA/$file"; fi
   exit "$code"
 done < "$FAKE_STRATA/rules"
 exit 0
@@ -1669,6 +1672,17 @@ impl Stage {
         let mut rules = std::fs::read_to_string(dir.join("rules")).unwrap();
         rules.push_str(&format!("{glob}\t{code}\t{file}\n"));
         std::fs::write(dir.join("rules"), rules).unwrap();
+    }
+
+    /// strata answers the arguments that match `glob` with `stderr`, no record, and the exit
+    /// `code`.
+    fn strata_err(&mut self, glob: &str, code: i32, stderr: &str) {
+        self.strata(glob, code, stderr);
+        // the rule that `strata` added is the last line
+        let rules = self.path("strata/rules");
+        let text = std::fs::read_to_string(&rules).unwrap();
+        let text = format!("{}\terr\n", text.trim_end_matches('\n'));
+        std::fs::write(&rules, text).unwrap();
     }
 
     /// The script runs with the variable `key` set to `value`.
@@ -2906,4 +2920,139 @@ fn registry_kinds_sh_checks_that_packs_says_no_digest_on_the_row_and_in_the_head
         "strata-live-zarf in strata-live-oci (1 version, no digests)\n  1.0.0  pk-z  oci  all  1.0.0\n",
     );
     assert!(failed(&steps), "{steps}");
+}
+
+/// The hook of the fake name route: HTTP 500 and `VersionParseFailure` for the version
+/// 2.2.2.develop, as Palette answers it, and an empty answer for each other version.
+const NAME_ROUTE_HOOK: &str = r#"#!/usr/bin/env bash
+route="$FAKE_ROUTES/v1_clusterprofiles_validate_name"
+if grep -q 'version=2.2.2.develop' "$FAKE_ROUTES/sent/GET_v1_clusterprofiles_validate_name.request"; then
+  echo 500 > "$route.status"
+  printf '%s' '{"code":"VersionParseFailure","message":"Unable to parse the version '"'"'2.2.2.develop'"'"'"}'
+else
+  rm -f "$route.status"
+fi
+"#;
+
+#[test]
+fn validate_packs_sh_stage_4_asks_the_two_routes_for_each_rule_that_they_answer() {
+    let mut stage = Stage::new(serde_json::json!({}));
+    executable(
+        &stage.path("routes/v1_clusterprofiles_validate_name.sh"),
+        NAME_ROUTE_HOOK,
+    );
+    for (file, code, message) in [
+        (
+            "validate-bad-version",
+            "VersionParseFailure",
+            "Unable to parse the version '2.2.2.develop'",
+        ),
+        (
+            "validate-pack-twice",
+            "DuplicatePacksForbidden",
+            "Duplicate packs 'cert-manager' are forbidden",
+        ),
+        (
+            "validate-same-pack-twice",
+            "610",
+            "packs in body shouldn't contain duplicates",
+        ),
+        (
+            "validate-manifest-name",
+            "InvalidName",
+            "Invalid name 'Wilma_1'",
+        ),
+        (
+            "validate-manifest-twice",
+            "DuplicatePackManifestsForbidden",
+            "Pack 'cert-manager' contains duplicate manifests 'wilma'",
+        ),
+    ] {
+        stage.strata_err(
+            &format!("snapshot --from-candidate {file}.yaml --validate *"),
+            2,
+            &format!("palette    refuses: {code}: {message}\n"),
+        );
+    }
+
+    let (o, steps) = stage.run("validate-packs.sh", &["4"]);
+    assert_eq!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
+    assert!(!steps.contains("FAIL"), "{steps}");
+    let mut ids = vec![
+        "validate-name-free",
+        "validate-name-short",
+        "validate-name-version",
+        "validate-name-version-says",
+    ];
+    let files = [
+        "validate-bad-version",
+        "validate-pack-twice",
+        "validate-same-pack-twice",
+        "validate-manifest-name",
+        "validate-manifest-twice",
+    ];
+    let says: Vec<String> = files.iter().map(|f| format!("{f}-says")).collect();
+    let none: Vec<String> = files.iter().map(|f| format!("{f}-no-record")).collect();
+    ids.extend(files);
+    ids.extend(says.iter().map(String::as_str));
+    ids.extend(none.iter().map(String::as_str));
+    passed(&steps, &ids);
+    assert!(
+        !steps.contains("== a candidate whose"),
+        "stage 4 runs alone: {steps}"
+    );
+
+    // each candidate has the fault that its check names
+    let candidate = |f: &str| -> serde_json::Value {
+        let text = std::fs::read_to_string(stage.path(&format!("out/{f}.yaml"))).unwrap();
+        serde_yaml::from_str(&text).unwrap()
+    };
+    assert_eq!(
+        candidate("validate-bad-version")["version"],
+        "2.2.2.develop"
+    );
+    let twice = candidate("validate-pack-twice");
+    assert_eq!(twice["layers"][0]["name"], twice["layers"][1]["name"]);
+    assert_ne!(twice["layers"][0]["values"], twice["layers"][1]["values"]);
+    let same = candidate("validate-same-pack-twice");
+    assert_eq!(same["layers"][0], same["layers"][1]);
+    assert_eq!(
+        candidate("validate-manifest-name")["layers"][0]["manifests"][0]["name"],
+        "Wilma_1"
+    );
+    let manifests = &candidate("validate-manifest-twice")["layers"][0]["manifests"];
+    assert_eq!(manifests[0]["name"], manifests[1]["name"]);
+}
+
+#[test]
+fn validate_packs_sh_stage_3_asks_for_a_candidate_with_the_name_and_the_version_of_profile() {
+    let mut stage = Stage::new(serde_json::json!({}));
+    stage.env("PROFILE", "strata-live-profile@1.0.0");
+    stage.strata_err(
+        "snapshot strata-live-profile@1.0.0 --validate *",
+        0,
+        "palette    accepts\n",
+    );
+    stage.strata_err(
+        "snapshot --from-candidate exists.yaml --validate *",
+        2,
+        "palette    refuses: ClusterProfileAlreadyExists: Cluster Profile with name \
+         'strata-live-profile' and version '1.0.0' already exists\n",
+    );
+
+    let (o, steps) = stage.run("validate-packs.sh", &["3"]);
+    assert_eq!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
+    passed(
+        &steps,
+        &[
+            "validate-version",
+            "validate-version-says",
+            "validate-exists",
+            "validate-exists-says",
+        ],
+    );
+    let text = std::fs::read_to_string(stage.path("out/exists.yaml")).unwrap();
+    let exists: serde_json::Value = serde_yaml::from_str(&text).unwrap();
+    assert_eq!(exists["name"], "strata-live-profile");
+    assert_eq!(exists["version"], "1.0.0");
 }

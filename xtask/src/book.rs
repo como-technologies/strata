@@ -452,6 +452,18 @@ impl Runner {
         self.build(|t| t.profile_packs_answer(project, profile, refusal));
     }
 
+    /// Set the answers of the name route and the import validate route for a new profile
+    /// version: see [`Tenant::profile_create_checks`].
+    pub fn profile_create_checks(
+        &mut self,
+        project: &str,
+        profile: (&str, &str),
+        name_refusal: Option<(u16, &str, &str)>,
+        import_refusal: Option<(u16, &str, &str)>,
+    ) {
+        self.build(|t| t.profile_create_checks(project, profile, name_refusal, import_refusal));
+    }
+
     /// Delete a cluster at the time `at`: see [`Tenant::delete_cluster`].
     pub fn delete_cluster(&mut self, project: &str, uid: &str, at: &str) {
         self.build(|t| t.delete_cluster(project, uid, at));

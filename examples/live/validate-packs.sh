@@ -12,11 +12,15 @@
 #   3  a version that Palette holds, as an update of itself: POST
 #      /v1/clusterprofiles/{uid}/validate/packs. It needs PROFILE=<name>@<version>, a version in
 #      the project of the key, for example one that `just live-up` publishes; with no PROFILE it
-#      is skipped.
+#      is skipped. A candidate with the name and the version of PROFILE: the name route refuses it
+#      (#273)
 #   4  a pack with another layer than its registry (#210, #254): strata refuses the candidate,
 #      and the validate route takes the packs. Then a profile with that layer, made and published
 #      through the API, gets the layer of the registry. This stage creates a profile and deletes
 #      it, with no cluster and no cost. It runs only when you give its number.
+#   5  the name route and the import validate route (#273): GET /v1/clusterprofiles/validate/name
+#      and POST /v1/clusterprofiles/import/validate refuse a version that Palette does not parse,
+#      a pack twice, a manifest name that is not a DNS label, and a manifest name twice
 #
 # Results go under runs/<UTC time>/validate-packs/, or OUT. Exit 0 only when no check fails.
 set -uo pipefail
@@ -125,6 +129,21 @@ if [ "$stage" = all ] || [ "$stage" = 3 ]; then
       "$strata" snapshot "$PROFILE" --validate -o version.json
     check validate-version-says 0 '#152: it prints palette accepts' -- \
       grep -qx 'palette    accepts' validate-version.err
+    echo "== a candidate with the name and the version of $PROFILE (#273)" | tee -a steps.log
+    {
+      echo "name: ${PROFILE%@*}"
+      echo "version: ${PROFILE#*@}"
+      echo "type: add-on"
+      echo "cloudType: all"
+      echo "registry: $registry"
+      echo "layers:"
+      echo "  - name: $pack"
+      echo "    version: $version"
+    } > exists.yaml
+    check validate-exists 2 "#273: the name route refuses the name and the version of $PROFILE, so strata exits 2" -- \
+      "$strata" snapshot --from-candidate exists.yaml --validate -o exists.json
+    check validate-exists-says 0 '#273: the refusal is ClusterProfileAlreadyExists' -- \
+      grep -q '^palette    refuses: ClusterProfileAlreadyExists: ' validate-exists.err
   fi
 fi
 
@@ -163,6 +182,59 @@ if [ "$stage" = 4 ]; then
   check layer-root 0 '#254: the version has the root of the candidate with the layer of the registry' -- \
     "$strata" compare layer-candidate.json layer.json
   check layer-delete 0 "the profile $layered is deleted" -- "$live/api.sh" delete "$uid"
+fi
+
+# create_check ID WHAT CODE: snapshot --validate of ID.yaml exits 2, prints the refusal CODE, and
+# writes no record
+create_check() {
+  check "$1" 2 "#273: $2: strata exits 2" -- \
+    "$strata" snapshot --from-candidate "$1.yaml" --validate -o "$1.json"
+  check "$1-says" 0 "#273: the refusal is $3" -- \
+    grep -q "^palette    refuses: $3: " "$1.err"
+  check "$1-no-record" 1 '#273: strata wrote no record' -- \
+    test -e "$1.json"
+}
+
+# layers_yaml NAME VERSION LAYERS: an add-on candidate with the layers LAYERS, in YAML
+layers_yaml() {
+  printf 'name: %s\nversion: %s\ntype: add-on\ncloudType: all\nregistry: %s\nlayers:\n%s\n' \
+    "$1" "$2" "$registry" "$3"
+}
+
+if [ "$stage" = all ] || [ "$stage" = 5 ]; then
+  echo "== the name route and the import validate route (#273)" | tee -a steps.log
+  one="  - name: $pack
+    version: $version"
+  check validate-name-free 0 '#273: the name route takes a name and a version that the project does not hold, with HTTP 204' -- \
+    "$live/api.sh" get "/v1/clusterprofiles/validate/name?name=strata-validate-barney&version=1.0.0"
+  check validate-name-short 0 '#273: the name route takes the version 1.1' -- \
+    "$live/api.sh" get "/v1/clusterprofiles/validate/name?name=strata-validate-barney&version=1.1"
+  check validate-name-version 2 '#273: the name route refuses the version 2.2.2.develop' -- \
+    "$live/api.sh" get "/v1/clusterprofiles/validate/name?name=strata-validate-barney&version=2.2.2.develop"
+  check validate-name-version-says 0 '#273: HTTP 500 with the code VersionParseFailure' -- \
+    grep -q 'answered HTTP 500: {"code":"VersionParseFailure"' validate-name-version.err
+  layers_yaml strata-validate-barney 2.2.2.develop "$one" > validate-bad-version.yaml
+  create_check validate-bad-version 'Palette refuses the version 2.2.2.develop' VersionParseFailure
+  layers_yaml strata-validate-barney 1.0.0 "$one
+    values: 'a: 1'
+$one
+    values: 'a: 2'" > validate-pack-twice.yaml
+  create_check validate-pack-twice 'the import validate route refuses a pack twice' DuplicatePacksForbidden
+  layers_yaml strata-validate-barney 1.0.0 "$one
+$one" > validate-same-pack-twice.yaml
+  create_check validate-same-pack-twice 'the API schema refuses two equal packs with HTTP 422' 610
+  layers_yaml strata-validate-barney 1.0.0 "$one
+    manifests:
+      - name: Wilma_1
+        content: 'a: 1'" > validate-manifest-name.yaml
+  create_check validate-manifest-name 'the import validate route refuses a manifest name that is not a DNS label' InvalidName
+  layers_yaml strata-validate-barney 1.0.0 "$one
+    manifests:
+      - name: wilma
+        content: 'a: 1'
+      - name: wilma
+        content: 'a: 2'" > validate-manifest-twice.yaml
+  create_check validate-manifest-twice 'the import validate route refuses a manifest name twice in a pack' DuplicatePackManifestsForbidden
 fi
 
 echo

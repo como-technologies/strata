@@ -1,6 +1,6 @@
 $ strata snapshot --from-candidate aws-stack.yaml --validate -o validated.json
 strata: looking up project dev
-strata: resolving aws-stack@1.1.1 against the registry
+strata: resolving aws-stack@1.2.0 against the registry
 palette    refuses: DependencyPackWithMinVersionRequired cni-cilium-oss: Pack 'kubernetes' is required with minimum compatible version '1.37.0'
 strata: Palette refuses the packs of 'aws-stack.yaml' with 1 error; strata wrote no record
 $ test -e validated.json || echo no record
