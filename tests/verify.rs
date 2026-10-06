@@ -3277,6 +3277,7 @@ fn consumers_takes_a_profile_and_refuses_a_cluster() {
 // ---- list ------------------------------------------------------------------------------------
 
 use strata::ops::{ListKind, ListOptions};
+use strata::scope::ProfileScope;
 
 /// A profile listing entry, as `GET /v1/dashboard/clusterprofiles/metadata` returns it.
 fn listed_profile(name: &str, version: &str, uid: &str) -> Value {
@@ -3611,6 +3612,378 @@ fn list_with_packs_says_for_each_version_whether_it_is_published_and_marks_a_dra
         md.contains("| `lab-profile@1.1.0` draft | `u-d1` | aws |"),
         "{md}"
     );
+}
+
+/// The body of the profile search for one scope, as strata sends it.
+fn profile_search_body(scope: &str) -> Value {
+    serde_json::json!({
+        "filter": {"scope": scope},
+        "sort": [{"field": "profileName", "order": "asc"}],
+    })
+}
+
+/// An answer of the profile search: one profile name with the versions `(version, uid)`.
+fn profile_search_answer(name: &str, scope: &str, versions: &[(&str, &str)]) -> Value {
+    let versions: Vec<Value> = versions
+        .iter()
+        .map(|(v, uid)| serde_json::json!({"version": v, "uid": uid}))
+        .collect();
+    serde_json::json!({
+        "items": [{"metadata": {"name": name, "annotations": {"scope": scope}},
+                   "specSummary": {"versions": versions}}],
+        "listmeta": {"count": 1, "limit": 50, "offset": 0},
+    })
+}
+
+/// A profile document of `aws-stack@1.1.1` under `uid`, with one pack, published or a draft, and
+/// with `metadata.annotations.scope` when `scope` names one.
+fn scoped_document(uid: &str, scope: Option<&str>, published: bool) -> Value {
+    let packs = serde_json::json!([{
+        "name": "kubernetes", "layer": "k8s", "type": "spectro", "tag": "1.19.6",
+        "version": "1.19.6", "packUid": "pk-1", "registryUid": "r1", "digest": "sha256:0123",
+        "values": "a: 1",
+    }]);
+    let (in_published, in_draft) = if published {
+        (packs, serde_json::json!([]))
+    } else {
+        (serde_json::json!([]), packs)
+    };
+    let mut doc = serde_json::json!({
+        "metadata": {"uid": uid, "name": "aws-stack"},
+        "spec": {
+            "version": "1.1.1",
+            "published": {"type": "cluster", "cloudType": "aws", "packs": in_published},
+            "draft": {"type": "cluster", "cloudType": "aws", "packs": in_draft},
+        },
+        "status": {"isPublished": published, "inUseClusterUids": []},
+    });
+    if let Some(scope) = scope {
+        doc["metadata"]["annotations"]["scope"] = Value::from(scope);
+    }
+    doc
+}
+
+/// A listing in the project `p1` with a profile of the tenant and a profile of the project, both
+/// `aws-stack@1.1.1`, and `addons@2.0.0` of the project. The profile search names the tenant
+/// version. The document of each version of `aws-stack` gives its scope; the document of `addons`
+/// gives none.
+fn a_tenant_and_a_project_version() -> MemoryApi {
+    let search = "/v1/dashboard/clusterprofiles?limit=50";
+    let empty =
+        serde_json::json!({"items": [], "listmeta": {"count": 0, "limit": 50, "offset": 0}});
+    MemoryApi::new()
+        .in_project("p1")
+        .with(
+            "/v1/dashboard/clusterprofiles/metadata",
+            serde_json::json!({"items": [
+                listed_profile("aws-stack", "1.1.1", "u-tenant"),
+                listed_profile("addons", "2.0.0", "u-addons"),
+                listed_profile("aws-stack", "1.1.1", "u-project"),
+            ]}),
+        )
+        .with(
+            "/v1/dashboard/projects/metadata",
+            projects(&[("lab", "p1")]),
+        )
+        .with_post(
+            search,
+            &profile_search_body("tenant"),
+            profile_search_answer("aws-stack", "tenant", &[("1.1.1", "u-tenant")]),
+        )
+        .with_post(search, &profile_search_body("system"), empty)
+        .with(
+            "/v1/clusterprofiles/u-tenant",
+            scoped_document("u-tenant", Some("tenant"), false),
+        )
+        .with(
+            "/v1/clusterprofiles/u-tenant/packs/manifests",
+            serde_json::json!({"spec": {"packs": []}}),
+        )
+        .with(
+            "/v1/clusterprofiles/u-tenant/variables",
+            serde_json::json!({"variables": []}),
+        )
+        .with(
+            "/v1/clusterprofiles/u-project",
+            scoped_document("u-project", Some("project"), true),
+        )
+        .with(
+            "/v1/clusterprofiles/u-addons",
+            scoped_document("u-addons", None, true),
+        )
+}
+
+#[test]
+fn list_gives_each_version_its_scope_from_the_profile_search_and_marks_a_version_of_another_scope()
+{
+    let api = a_tenant_and_a_project_version();
+    let l = ops::list(
+        &ListOptions {
+            kinds: vec![ListKind::Profiles],
+            ..ListOptions::default()
+        },
+        |_| Ok(Palette::new(api.clone())),
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    let profiles = l.profiles.as_ref().unwrap();
+    assert_eq!(
+        profiles
+            .iter()
+            .map(|p| (p.reference.as_str(), p.uid.as_str(), p.scope))
+            .collect::<Vec<_>>(),
+        [
+            ("addons@2.0.0", "u-addons", Some(ProfileScope::Project)),
+            ("aws-stack@1.1.1", "u-project", Some(ProfileScope::Project)),
+            ("aws-stack@1.1.1", "u-tenant", Some(ProfileScope::Tenant)),
+        ],
+        "the search names the tenant version; each other version is of the project"
+    );
+    assert_eq!(
+        api.posted()
+            .iter()
+            .map(|(_, body)| body["filter"]["scope"].clone())
+            .collect::<Vec<_>>(),
+        ["tenant", "system"],
+        "in a project, one search for the tenant versions and one for the system versions"
+    );
+    assert_eq!(
+        api.calls("/v1/clusterprofiles/u-tenant"),
+        0,
+        "no profile document without --packs"
+    );
+
+    let json: Value = serde_json::from_str(
+        &render::renderer(Format::Json, Paint::off(), true)
+            .render_list(&l)
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(json["profiles"][0]["scope"], "project", "{json}");
+    assert_eq!(json["profiles"][1]["scope"], "project", "{json}");
+    assert_eq!(json["profiles"][2]["scope"], "tenant", "{json}");
+
+    let text = render::renderer(Format::Terminal, Paint::off(), false)
+        .render_list(&l)
+        .unwrap();
+    assert!(
+        text.contains("  aws-stack@1.1.1  u-project  aws\n"),
+        "a version of the scope of the listing has no mark: {text}"
+    );
+    assert!(
+        text.contains("  aws-stack@1.1.1  u-tenant   aws  tenant\n"),
+        "the row of the tenant version ends with its scope: {text}"
+    );
+    let md = render::renderer(Format::Markdown, Paint::off(), false)
+        .render_list(&l)
+        .unwrap();
+    assert!(
+        md.contains("| `aws-stack@1.1.1` | `u-project` | aws |"),
+        "{md}"
+    );
+    assert!(
+        md.contains("| `aws-stack@1.1.1` tenant | `u-tenant` | aws |"),
+        "{md}"
+    );
+}
+
+#[test]
+fn list_with_packs_reads_the_scope_in_each_document_and_joins_the_marks_of_a_tenant_draft() {
+    let api = a_tenant_and_a_project_version();
+    let l = ops::list(
+        &ListOptions {
+            kinds: vec![ListKind::Profiles],
+            packs: true,
+            ..ListOptions::default()
+        },
+        |_| Ok(Palette::new(api.clone())),
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    let profiles = l.profiles.as_ref().unwrap();
+    assert_eq!(
+        profiles
+            .iter()
+            .map(|p| (p.uid.as_str(), p.scope, p.is_draft()))
+            .collect::<Vec<_>>(),
+        [
+            ("u-addons", None, false),
+            ("u-project", Some(ProfileScope::Project), false),
+            ("u-tenant", Some(ProfileScope::Tenant), true),
+        ],
+        "the scope comes from the annotation of each document, and a document with none gives none"
+    );
+    assert!(
+        api.posted().is_empty(),
+        "with --packs, strata sends no search"
+    );
+    let text = render::renderer(Format::Terminal, Paint::off(), false)
+        .render_list(&l)
+        .unwrap();
+    assert!(
+        text.contains("  aws-stack@1.1.1  u-project  aws  cluster  no consumers\n"),
+        "{text}"
+    );
+    assert!(
+        text.contains("  aws-stack@1.1.1  u-tenant   aws  cluster  no consumers  tenant, draft\n"),
+        "the marks end the row, after the consumers: {text}"
+    );
+    let md = render::renderer(Format::Markdown, Paint::off(), false)
+        .render_list(&l)
+        .unwrap();
+    assert!(
+        md.contains("| `aws-stack@1.1.1` tenant, draft | `u-tenant` | aws |"),
+        "{md}"
+    );
+    let json: Value = serde_json::from_str(
+        &render::renderer(Format::Json, Paint::off(), true)
+            .render_list(&l)
+            .unwrap(),
+    )
+    .unwrap();
+    assert!(
+        json["profiles"][0].get("scope").is_none(),
+        "no scope when the document gives none: {json}"
+    );
+    assert_eq!(json["profiles"][2]["scope"], "tenant", "{json}");
+}
+
+#[test]
+fn list_keeps_the_listing_alone_when_palette_has_no_profile_search() {
+    let api = MemoryApi::new()
+        .in_project("p1")
+        .with(
+            "/v1/dashboard/clusterprofiles/metadata",
+            serde_json::json!({"items": [
+                listed_profile("aws-stack", "1.1.1", "u-tenant"),
+                listed_profile("aws-stack", "1.1.1", "u-project"),
+            ]}),
+        )
+        .with(
+            "/v1/dashboard/projects/metadata",
+            projects(&[("lab", "p1")]),
+        );
+    let l = ops::list(
+        &ListOptions {
+            kinds: vec![ListKind::Profiles],
+            ..ListOptions::default()
+        },
+        |_| Ok(Palette::new(api.clone())),
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    let profiles = l.profiles.as_ref().unwrap();
+    assert_eq!(profiles.len(), 2);
+    assert!(
+        profiles.iter().all(|p| p.scope.is_none()),
+        "the search answered 404, so the scopes stay unknown"
+    );
+    assert_eq!(
+        api.posted().len(),
+        1,
+        "the 404 of the first search ends the question"
+    );
+    let json: Value = serde_json::from_str(
+        &render::renderer(Format::Json, Paint::off(), true)
+            .render_list(&l)
+            .unwrap(),
+    )
+    .unwrap();
+    assert!(json["profiles"][0].get("scope").is_none(), "{json}");
+    let text = render::renderer(Format::Terminal, Paint::off(), false)
+        .render_list(&l)
+        .unwrap();
+    assert!(!text.contains("tenant"), "no mark without a scope: {text}");
+}
+
+#[test]
+fn list_at_tenant_scope_asks_for_the_system_versions_and_marks_no_tenant_version() {
+    let api = MemoryApi::new()
+        .with(
+            "/v1/dashboard/clusterprofiles/metadata",
+            serde_json::json!({"items": [listed_profile("aws-stack", "1.1.1", "u-tenant")]}),
+        )
+        .with_post(
+            "/v1/dashboard/clusterprofiles?limit=50",
+            &profile_search_body("system"),
+            serde_json::json!({"items": [], "listmeta": {"count": 0, "limit": 50, "offset": 0}}),
+        );
+    let l = ops::list(
+        &ListOptions {
+            kinds: vec![ListKind::Profiles],
+            project: Some(String::new()),
+            ..ListOptions::default()
+        },
+        |_| Ok(Palette::new(api.clone())),
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert_eq!(
+        l.profiles.as_ref().unwrap()[0].scope,
+        Some(ProfileScope::Tenant),
+        "at tenant scope, a version that the system search does not name is of the tenant"
+    );
+    assert_eq!(
+        api.posted()
+            .iter()
+            .map(|(_, body)| body["filter"]["scope"].clone())
+            .collect::<Vec<_>>(),
+        ["system"],
+        "tenant scope lists no profile of a project, so strata searches the system versions alone"
+    );
+    let text = render::renderer(Format::Terminal, Paint::off(), false)
+        .render_list(&l)
+        .unwrap();
+    assert!(
+        text.contains("  aws-stack@1.1.1  u-tenant  aws\n"),
+        "a tenant version has no mark at tenant scope: {text}"
+    );
+}
+
+#[test]
+fn snapshot_of_a_name_and_version_that_a_tenant_and_a_project_profile_share_names_both_uids() {
+    let api = a_tenant_and_a_project_version();
+    let err = ops::snapshot_for(
+        &Ref::parse("aws-stack@1.1.1"),
+        || Ok(Palette::new(api.clone())),
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap_err();
+    assert_eq!(err.kind(), "profile-name-ambiguous");
+    assert_eq!(err.exit_code(), 2);
+    assert_eq!(
+        err.to_json()["profiles"],
+        serde_json::json!([
+            {"uid": "u-project", "scope": "project"},
+            {"uid": "u-tenant", "scope": "tenant"},
+        ]),
+        "{err}"
+    );
+    assert!(
+        err.to_string()
+            .contains("u-project (project), u-tenant (tenant); give the uid in place of the name"),
+        "{err}"
+    );
+    assert_eq!(
+        api.calls("/v1/dashboard/clusterprofiles?limit=50"),
+        0,
+        "the error reads the two documents, and no search"
+    );
+
+    // the uid names one version, and records it
+    let record = ops::snapshot_for(
+        &Ref::Uid("u-tenant".into()),
+        || Ok(Palette::new(api.clone())),
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert_eq!(record.source.uid, "u-tenant");
 }
 
 #[test]

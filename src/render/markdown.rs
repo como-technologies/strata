@@ -3,19 +3,19 @@
 use super::{
     Renderer, VarLine, applied_ref, artifact_lines, artifacts_summary, capitalized, chain_verdict,
     cluster_count, cluster_value, consumer_count, consumer_counts, consumers_heading,
-    consumers_sentence, count_of, counts_line, cross_kind_note, dash, draft_mark, draft_note,
-    edge_hosts_line, edited_in_place_note, entry_error, gone_sentence, image_ids_changed_notes,
-    invalid_mark, invalid_pack_sentences, last_modified_suffix, list_count, list_scope,
-    macros_changed_note, macros_note, masked_notes, outside_root_sentence,
-    overwritten_in_place_notes, pack_version, pair_detail, pair_notes, pair_word,
-    palette_repave_lines, palette_repave_note, palette_validation_lines, plain_flags,
-    profiles_overwritten_sentence, project_label, record_detail, record_label, recorded_noun,
-    registry_note, registry_sync_suffix, repave_pending_notes, running_behind_notes,
-    same_content_note, second_reading_counts, short, show, state_suffix, subject, tier_path,
-    tier_states, traits_suffix, unchanged_sentence, unread_notes, unverified_sentence,
-    updates_pending_notes, upstream_unknown_note, values_changed, values_changed_suffix,
-    variable_lines, variables_comparable, variables_unavailable_note, version_display,
-    version_note, virtual_group, virtual_line, who_entry, who_heading,
+    consumers_sentence, count_of, counts_line, cross_kind_note, dash, draft_note, edge_hosts_line,
+    edited_in_place_note, entry_error, gone_sentence, image_ids_changed_notes, invalid_mark,
+    invalid_pack_sentences, last_modified_suffix, list_count, list_scope, macros_changed_note,
+    macros_note, masked_notes, outside_root_sentence, overwritten_in_place_notes, pack_version,
+    pair_detail, pair_notes, pair_word, palette_repave_lines, palette_repave_note,
+    palette_validation_lines, plain_flags, profile_marks, profiles_overwritten_sentence,
+    project_label, record_detail, record_label, recorded_noun, registry_note, registry_sync_suffix,
+    repave_pending_notes, running_behind_notes, same_content_note, second_reading_counts, short,
+    show, state_suffix, subject, tier_path, tier_states, traits_suffix, unchanged_sentence,
+    unread_notes, unverified_sentence, updates_pending_notes, upstream_unknown_note,
+    values_changed, values_changed_suffix, variable_lines, variables_comparable,
+    variables_unavailable_note, version_display, version_note, virtual_group, virtual_line,
+    who_entry, who_heading,
 };
 use crate::color::Paint;
 use crate::diff::{Diff, Leaf, Op, Status, Verify, VerifyStatus};
@@ -620,7 +620,9 @@ impl Renderer for MarkdownRenderer {
                 o.push_str("| ref | uid | cloud |\n|---|---|---|\n");
             }
             for pr in profiles {
-                let mark = draft_mark(pr).map(|m| format!(" {m}")).unwrap_or_default();
+                let mark = profile_marks(pr, l)
+                    .map(|m| format!(" {m}"))
+                    .unwrap_or_default();
                 o.push_str(&format!(
                     "| `{}`{mark} | `{}` | {} |",
                     escape(&pr.reference),

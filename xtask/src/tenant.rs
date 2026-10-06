@@ -7,9 +7,16 @@
 //! A document here answers one request. `Tenant::doc` gives the file that answers a path, and
 //! every helper writes one or more of those files.
 
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use serde_json::{Map, Value, json};
+
+/// The directory of the documents that Palette serves at tenant scope, with no `ProjectUid`.
+const TENANT: &str = "tenant";
+/// The profile search, as the server names its file: `POST /v1/dashboard/clusterprofiles` with
+/// the `limit` of strata. One page holds every profile name of the stand-in.
+const PROFILE_SEARCH: &str = "v1/dashboard/clusterprofiles@limit=50";
 
 /// The uid of the Public Repo pack registry, as Palette gives it.
 pub const PUBLIC_REPO: &str = "5eecc89d0b150045ae661cef";
@@ -342,11 +349,27 @@ impl Tenant {
             .flatten()
             .filter(|e| e.path().is_dir())
             .map(|e| e.file_name().to_string_lossy().into_owned())
-            .filter(|name| name != "tenant")
+            .filter(|name| name != TENANT)
             .collect();
         scopes.sort();
+        // Palette lists a profile of the tenant in each project, and serves its document there.
+        // So each project gets a copy of the documents of each tenant profile, and its listing
+        // and its search name the tenant versions beside its own.
+        let tenant_profiles = self.documents_in(TENANT, "v1/clusterprofiles");
         for project in &scopes {
-            let profiles = self.documents_in(project, "v1/clusterprofiles");
+            for doc in &tenant_profiles {
+                self.copy_profile(
+                    TENANT,
+                    project,
+                    doc["metadata"]["uid"].as_str().unwrap_or(""),
+                );
+            }
+            let profiles: Vec<Value> = self
+                .documents_in(project, "v1/clusterprofiles")
+                .into_iter()
+                .filter(|d| d["metadata"]["annotations"]["scope"] != "tenant")
+                .chain(tenant_profiles.iter().cloned())
+                .collect();
             // a deleted cluster leaves the listing and the search, and keeps its document
             let clusters: Vec<Value> = self
                 .documents_in(project, "v1/spectroclusters")
@@ -360,6 +383,7 @@ impl Tenant {
                 "v1/dashboard/clusterprofiles/metadata",
                 &json!({"items": items}),
             );
+            self.write(project, PROFILE_SEARCH, &profile_search(&profiles));
             let rows: Vec<Value> = clusters
                 .iter()
                 .filter(|c| !nested(c))
@@ -367,22 +391,24 @@ impl Tenant {
                 .collect();
             self.write(project, "v1/dashboard/spectroclusters/meta", &json!(rows));
         }
+        let items: Vec<Value> = tenant_profiles.iter().map(profile_row).collect();
         self.write(
-            "tenant",
+            TENANT,
             "v1/dashboard/clusterprofiles/metadata",
-            &json!({"items": []}),
+            &json!({"items": items}),
         );
+        self.write(TENANT, PROFILE_SEARCH, &profile_search(&tenant_profiles));
         // the listing leaves out each virtual cluster; the search holds it, when a condition asks
         let rows: Vec<Value> = every_cluster
             .iter()
             .filter(|c| !nested(c))
             .map(cluster_row)
             .collect();
-        self.write("tenant", "v1/dashboard/spectroclusters/meta", &json!(rows));
+        self.write(TENANT, "v1/dashboard/spectroclusters/meta", &json!(rows));
         // the search of the tenant: every cluster, which the server filters by the body of a
         // request, and the schema that says the search takes tags
         let projects: Value =
-            std::fs::read_to_string(self.doc("tenant", "v1/dashboard/projects/metadata"))
+            std::fs::read_to_string(self.doc(TENANT, "v1/dashboard/projects/metadata"))
                 .ok()
                 .and_then(|t| serde_json::from_str(&t).ok())
                 .unwrap_or_default();
@@ -505,6 +531,21 @@ impl Tenant {
         );
     }
 
+    /// Copy the documents of the profile `uid` from the directory `from` to the directory `to`:
+    /// the profile document, and each document under its path, such as its manifests and its
+    /// variables.
+    fn copy_profile(&self, from: &str, to: &str, uid: &str) {
+        let path = format!("v1/clusterprofiles/{uid}");
+        let source = self.doc(from, &path);
+        let target = self.doc(to, &path);
+        std::fs::copy(&source, &target)
+            .unwrap_or_else(|e| panic!("{} -> {}: {e}", source.display(), target.display()));
+        copy_dir(
+            &self.root.join(from).join(&path),
+            &self.root.join(to).join(&path),
+        );
+    }
+
     /// The documents directly inside one directory of a project, in name order, so a listing does
     /// not move when a file system gives another order.
     fn documents_in(&self, project: &str, path: &str) -> Vec<Value> {
@@ -527,11 +568,33 @@ impl Tenant {
     /// Publish a copy of the example profile `example`, such as `aws-stack@1.1.1`, in `project`
     /// under `uid` and `version`, with each edit applied.
     pub fn profile(&self, project: &str, uid: &str, version: &str, example: &str, edits: &[Edit]) {
+        self.profile_of_scope(project, "project", uid, version, example, edits);
+    }
+
+    /// Publish a copy of the example profile `example` at tenant scope, under `uid` and
+    /// `version`. Palette lists a profile of the tenant in each project, beside the profiles of
+    /// the project, and serves its document there: `listings` gives each project a copy.
+    pub fn tenant_profile(&self, uid: &str, version: &str, example: &str, edits: &[Edit]) {
+        self.profile_of_scope(TENANT, "tenant", uid, version, example, edits);
+    }
+
+    /// Publish a copy of `example` in the directory `project`, with the scope `scope` in
+    /// `metadata.annotations.scope`, as Palette gives it.
+    fn profile_of_scope(
+        &self,
+        project: &str,
+        scope: &str,
+        uid: &str,
+        version: &str,
+        example: &str,
+        edits: &[Edit],
+    ) {
         let from = self.repo.join("examples/profiles/raw").join(example);
         let text = std::fs::read_to_string(from.join("profile.json"))
             .unwrap_or_else(|e| panic!("{}: {e}", from.display()));
         let mut doc: Value = serde_json::from_str(&text).expect("an example profile is JSON");
         doc["metadata"]["uid"] = json!(uid);
+        doc["metadata"]["annotations"]["scope"] = json!(scope);
         doc["spec"]["version"] = json!(version);
         doc["status"]["inUseClusterUids"] = json!([]);
         doc["status"]["inUseClusters"] = json!([]);
@@ -1009,7 +1072,7 @@ impl Tenant {
             .collect();
         let search = json!({"items": items, "listmeta": {"continue": ""}});
         self.write(project, "v1/dashboard/edgehosts/search@limit=50", &search);
-        self.write("tenant", "v1/dashboard/edgehosts/search@limit=50", &search);
+        self.write(TENANT, "v1/dashboard/edgehosts/search@limit=50", &search);
     }
 
     /// A cluster template `uid`, `name`, that links `profiles`. Palette names each template that
@@ -1321,14 +1384,14 @@ impl Tenant {
     /// `key=value`.
     pub fn tag_filter(&self, name: &str, uid: &str, key: &str, value: &str) {
         let path = "v1/filters/metadata@filterType=tag";
-        let mut items: Vec<Value> = std::fs::read_to_string(self.doc("tenant", path))
+        let mut items: Vec<Value> = std::fs::read_to_string(self.doc(TENANT, path))
             .ok()
             .and_then(|t| serde_json::from_str::<Value>(&t).ok())
             .and_then(|v| v["items"].as_array().cloned())
             .unwrap_or_default();
         items.retain(|i| i["metadata"]["uid"] != uid);
         items.push(json!({"metadata": {"name": name, "uid": uid}, "spec": {"filterType": "tag"}}));
-        self.write("tenant", path, &json!({"items": items}));
+        self.write(TENANT, path, &json!({"items": items}));
         self.write(
             "tenant",
             &format!("v1/filters/tag/{uid}"),
@@ -2145,6 +2208,56 @@ fn profile_row(doc: &Value) -> Value {
         "metadata": {"name": doc["metadata"]["name"], "uid": doc["metadata"]["uid"]},
         "spec": {"version": doc["spec"]["version"], "cloudType": cloud}
     })
+}
+
+/// The answer of the profile search, `POST /v1/dashboard/clusterprofiles`, for `profiles`, as
+/// Palette gives it before the filter of a request: one item for each profile name of each scope,
+/// with the scope in `metadata.annotations.scope` and the uid of each version in
+/// `specSummary.versions[]`. The server keeps the items of the scope that a request names.
+fn profile_search(profiles: &[Value]) -> Value {
+    let mut by_name: BTreeMap<(String, String), Vec<&Value>> = BTreeMap::new();
+    for doc in profiles {
+        let name = doc["metadata"]["name"].as_str().unwrap_or("").to_string();
+        let scope = doc["metadata"]["annotations"]["scope"]
+            .as_str()
+            .unwrap_or("project")
+            .to_string();
+        by_name.entry((name, scope)).or_default().push(doc);
+    }
+    let items: Vec<Value> = by_name
+        .iter()
+        .map(|((name, scope), docs)| {
+            let versions: Vec<Value> = docs
+                .iter()
+                .map(|d| json!({"version": d["spec"]["version"], "uid": d["metadata"]["uid"]}))
+                .collect();
+            let latest: &Value = docs.last().copied().unwrap_or(&Value::Null);
+            json!({
+                "metadata": {"name": name, "uid": latest["metadata"]["uid"],
+                             "annotations": {"scope": scope}},
+                "specSummary": {"version": latest["spec"]["version"], "versions": versions}
+            })
+        })
+        .collect();
+    json!({
+        "items": items,
+        "listmeta": {"continue": "", "count": items.len(), "limit": 50, "offset": 0}
+    })
+}
+
+/// Copy each file under `from` to the same path under `to`.
+fn copy_dir(from: &Path, to: &Path) {
+    for entry in std::fs::read_dir(from).into_iter().flatten().flatten() {
+        let path = entry.path();
+        let target = to.join(entry.file_name());
+        if path.is_dir() {
+            copy_dir(&path, &target);
+        } else {
+            std::fs::create_dir_all(to).unwrap_or_else(|e| panic!("{}: {e}", to.display()));
+            std::fs::copy(&path, &target)
+                .unwrap_or_else(|e| panic!("{} -> {}: {e}", path.display(), target.display()));
+        }
+    }
 }
 
 /// The route of the cloud config of the cluster `uid` for the cloud type `kind`. Palette serves

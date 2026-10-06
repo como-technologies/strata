@@ -447,7 +447,10 @@ is the path as a list: strings for keys, numbers for indexes, and
 - `profiles[]`, `clusters[]`, `projects[]`, and `filters[]`: only the kinds that were listed.
   A kind that was listed and holds nothing is `[]`. Profiles come by name and
   then by version, clusters by name, and projects by name.
-  - A profile: `ref`, `name`, `version`, `uid`, and `cloudType`. With `--packs`,
+  - A profile: `ref`, `name`, `version`, `uid`, `cloudType`, and `scope`:
+    `project`, `tenant`, or `system`. `scope` is absent when Palette has no
+    profile search, or when strata could not read the document of the version
+    with `--packs`. With `--packs`,
     also `type`, `consumers`, `published`, and `packs[]` with `layer`, `name`,
     `tag`, and `version`, or `error`. `consumers` is the number of consumers
     that the profile document names: its clusters, and the cluster templates

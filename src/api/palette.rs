@@ -9,10 +9,17 @@ use super::{AuditKind, PaletteApi, RawCluster, RawProfile, ReadErrors, mask};
 use crate::error::{Error, Result};
 use crate::progress::Progress;
 use crate::reference::LATEST;
+use crate::scope::{ProfileScope, ScopedUid};
 use crate::snapshot::{APP_KIND, SubjectKind};
 use crate::version;
 
 const PROFILE_LISTING: &str = "/v1/dashboard/clusterprofiles/metadata";
+/// The profile search. Palette gives at most 50 profile names on a page, and pages by `offset`.
+const PROFILE_SEARCH: &str = "/v1/dashboard/clusterprofiles?limit=50";
+/// The most profile names that Palette serves on one page of the profile search.
+const PROFILE_SEARCH_PAGE: usize = 50;
+/// The most entries that Palette serves on one page of the pack listing, `/v1/packs`.
+pub(crate) const PACK_LISTING_PAGE: usize = 100;
 const CLUSTER_LISTING: &str = "/v1/dashboard/spectroclusters/meta";
 const PROJECT_LISTING: &str = "/v1/dashboard/projects/metadata";
 /// The edge host search. Palette gives at most 50 on a page.
@@ -76,6 +83,24 @@ fn query_value(text: &str) -> String {
         }
     }
     out
+}
+
+/// `(version, uid)` of each item of the profile listing named `name`.
+fn listed_versions<'a>(
+    listing: &'a Value,
+    name: &'a str,
+) -> impl Iterator<Item = (String, String)> + 'a {
+    listing
+        .get("items")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter(move |it| it.pointer("/metadata/name").and_then(Value::as_str) == Some(name))
+        .filter_map(|it| {
+            let version = it.pointer("/spec/version")?.as_str()?;
+            let uid = it.pointer("/metadata/uid")?.as_str()?;
+            Some((version.to_string(), uid.to_string()))
+        })
 }
 
 /// The names of `entries`, sorted.
@@ -167,27 +192,52 @@ impl<A: PaletteApi> Palette<A> {
 
     /// Find the uid of `name` at `version` in the current scope. The version [`LATEST`] picks
     /// the highest version, see [`Palette::resolve_latest`].
+    ///
+    /// # Errors
+    ///
+    /// [`Error::ProfileNotFound`] when no version of the listing has the name and the version.
+    /// [`Error::ProfileNameAmbiguous`] when two or more have them: a profile of the tenant and a
+    /// profile of the project can have one name and one version.
     pub fn resolve(&self, name: &str, version: &str) -> Result<String> {
         if version == LATEST {
             return self.resolve_latest(name);
         }
         let listing = self.profile_listing()?;
-        listing
-            .get("items")
-            .and_then(Value::as_array)
-            .into_iter()
-            .flatten()
-            .find(|it| {
-                it.pointer("/metadata/name").and_then(Value::as_str) == Some(name)
-                    && it.pointer("/spec/version").and_then(Value::as_str) == Some(version)
-            })
-            .and_then(|it| it.pointer("/metadata/uid").and_then(Value::as_str))
-            .map(str::to_string)
-            .ok_or_else(|| Error::ProfileNotFound {
+        let uids = listed_versions(&listing, name)
+            .filter(|(v, _)| v == version)
+            .map(|(_, uid)| uid)
+            .collect();
+        self.one_of(name, version, uids)
+    }
+
+    /// The one uid of `uids`, the versions of `name` at `version` in the listing. None is
+    /// [`Error::ProfileNotFound`]. Two or more are [`Error::ProfileNameAmbiguous`], each with
+    /// the scope that its document gives.
+    fn one_of(&self, name: &str, version: &str, mut uids: Vec<String>) -> Result<String> {
+        uids.sort();
+        match uids.len() {
+            1 => Ok(uids.remove(0)),
+            0 => Err(Error::ProfileNotFound {
                 name: name.to_string(),
                 version: version.to_string(),
                 tenant_scope: self.project_uid().is_none(),
-            })
+            }),
+            _ => {
+                let mut profiles = Vec::with_capacity(uids.len());
+                for uid in uids {
+                    let doc = self.profile_document(&uid)?;
+                    profiles.push(ScopedUid {
+                        scope: ProfileScope::of_document(&doc),
+                        uid,
+                    });
+                }
+                Err(Error::ProfileNameAmbiguous {
+                    name: name.to_string(),
+                    version: version.to_string(),
+                    profiles,
+                })
+            }
+        }
     }
 
     /// The uid of a profile that a ref names: `id` is a uid when there is no `version`, and else
@@ -200,27 +250,102 @@ impl<A: PaletteApi> Palette<A> {
     }
 
     /// Find the uid of the highest version of `name` in the current scope, by
-    /// [`version::compare`]. A name with no versions is [`Error::ProfileNotFound`].
+    /// [`version::compare`].
+    ///
+    /// # Errors
+    ///
+    /// [`Error::ProfileNotFound`] for a name with no versions. [`Error::ProfileNameAmbiguous`]
+    /// when two or more versions of the name are the highest: a profile of the tenant and a
+    /// profile of the project with one name and one version.
     pub fn resolve_latest(&self, name: &str) -> Result<String> {
         let listing = self.profile_listing()?;
-        listing
-            .get("items")
-            .and_then(Value::as_array)
-            .into_iter()
-            .flatten()
-            .filter(|it| it.pointer("/metadata/name").and_then(Value::as_str) == Some(name))
-            .filter_map(|it| {
-                let version = it.pointer("/spec/version")?.as_str()?;
-                let uid = it.pointer("/metadata/uid")?.as_str()?;
-                Some((version, uid))
-            })
-            .max_by(|(x, _), (y, _)| version::compare(x, y))
-            .map(|(_, uid)| uid.to_string())
-            .ok_or_else(|| Error::ProfileNotFound {
+        let versions: Vec<(String, String)> = listed_versions(&listing, name).collect();
+        let Some(highest) = versions
+            .iter()
+            .map(|(v, _)| v.as_str())
+            .max_by(|x, y| version::compare(x, y))
+        else {
+            return Err(Error::ProfileNotFound {
                 name: name.to_string(),
                 version: LATEST.to_string(),
                 tenant_scope: self.project_uid().is_none(),
-            })
+            });
+        };
+        let uids = versions
+            .iter()
+            .filter(|(v, _)| version::compare(v, highest).is_eq())
+            .map(|(_, uid)| uid.clone())
+            .collect();
+        self.one_of(name, highest, uids)
+    }
+
+    /// The uid of each version of each profile of `scope` in the current scope, from the profile
+    /// search `POST /v1/dashboard/clusterprofiles?limit=50`, every page. The search gives one
+    /// item for each profile name, with the uid of each version in `specSummary.versions[]`.
+    /// `list` reads it for the scope of each version. The request changes nothing.
+    pub fn profile_uids_in_scope(&self, scope: ProfileScope) -> Result<BTreeSet<String>> {
+        let body = serde_json::json!({
+            "filter": {"scope": scope.as_str()},
+            "sort": [{"field": "profileName", "order": "asc"}],
+        });
+        let mut uids = BTreeSet::new();
+        self.each_offset_page(
+            PROFILE_SEARCH_PAGE,
+            |offset| {
+                let path = if offset == 0 {
+                    PROFILE_SEARCH.to_string()
+                } else {
+                    format!("{PROFILE_SEARCH}&offset={offset}")
+                };
+                self.api.post_json(&path, &body)
+            },
+            |item| {
+                let versions = item
+                    .pointer("/specSummary/versions")
+                    .and_then(Value::as_array)
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|v| v.get("uid").and_then(Value::as_str));
+                uids.extend(versions.map(str::to_string));
+                true
+            },
+        )?;
+        Ok(uids)
+    }
+
+    /// Give each item of a listing that Palette pages by `offset` to `each`, every page: `fetch`
+    /// reads the page at an offset, and `each` returns false to stop the walk. Palette gives at
+    /// most `page` items on a page, and `listmeta.count` the number of items. The walk ends at a
+    /// page that is short, or when the offset reaches the count.
+    pub(crate) fn each_offset_page(
+        &self,
+        page: usize,
+        fetch: impl Fn(usize) -> Result<Value>,
+        mut each: impl FnMut(Value) -> bool,
+    ) -> Result<()> {
+        let mut offset = 0;
+        loop {
+            let got = fetch(offset)?;
+            let items = got
+                .get("items")
+                .and_then(Value::as_array)
+                .cloned()
+                .unwrap_or_default();
+            let n = items.len();
+            for it in items {
+                if !each(it) {
+                    return Ok(());
+                }
+            }
+            offset += n;
+            let total = got
+                .pointer("/listmeta/count")
+                .and_then(Value::as_u64)
+                .unwrap_or(0) as usize;
+            if n < page || offset >= total {
+                return Ok(());
+            }
+        }
     }
 
     /// The uid of the app profile `name` at `version`, or at its highest version for
@@ -1388,10 +1513,11 @@ impl<A: PaletteApi> Palette<A> {
 
     /// One page of the pack listing of `name`,
     /// `GET /v1/packs?filters=spec.name={name}&limit=100&offset={offset}`. It gives each version
-    /// of the pack in each registry, 100 on a page. `listmeta.count` counts the whole listing.
+    /// of the pack in each registry, [`PACK_LISTING_PAGE`] on a page. `listmeta.count` counts the
+    /// whole listing.
     pub(crate) fn pack_listing_page(&self, name: &str, offset: usize) -> Result<Value> {
         self.api.get_json(&format!(
-            "/v1/packs?filters=spec.name={}&limit=100&offset={offset}",
+            "/v1/packs?filters=spec.name={}&limit={PACK_LISTING_PAGE}&offset={offset}",
             query_value(name)
         ))
     }
@@ -1613,7 +1739,7 @@ mod tests {
         let err = p.resolve("aws-stack", "9.9.9").unwrap_err();
         assert!(matches!(err, Error::ProfileNotFound { .. }));
         assert!(err.to_string().contains("'aws-stack' with version '9.9.9'"));
-        // at tenant scope the listing advice is a dead end: the scope holds no profiles at all
+        // at tenant scope the listing advice is a dead end: the scope holds only tenant profiles
         assert!(
             err.to_string().contains("this is tenant scope"),
             "a miss at tenant scope asks for a project first: {err}"
@@ -1630,6 +1756,126 @@ mod tests {
             err.to_string().contains("`strata list --pack aws-stack`"),
             "a miss in a project points at the listing: {err}"
         );
+    }
+
+    /// A listing in a project with a profile of the tenant and a profile of the project named
+    /// `aws-stack`, both at 1.1.1, and the document of each with its scope.
+    fn two_scopes() -> MemoryApi {
+        MemoryApi::new()
+            .in_project("p1")
+            .with(
+                "/v1/dashboard/clusterprofiles/metadata",
+                json!({"items": [
+                    {"metadata": {"name": "aws-stack", "uid": "u-tenant"}, "spec": {"version": "1.1.1"}},
+                    {"metadata": {"name": "aws-stack", "uid": "u-project"}, "spec": {"version": "1.1.1"}},
+                    {"metadata": {"name": "aws-stack", "uid": "u-old"}, "spec": {"version": "1.0.0"}},
+                ]}),
+            )
+            .with(
+                "/v1/clusterprofiles/u-tenant",
+                json!({"metadata": {"uid": "u-tenant", "annotations": {"scope": "tenant"}}}),
+            )
+            .with(
+                "/v1/clusterprofiles/u-project",
+                json!({"metadata": {"uid": "u-project", "annotations": {"scope": "project"}}}),
+            )
+    }
+
+    #[test]
+    fn a_name_and_version_that_two_scopes_answer_is_an_error_that_names_each_uid_with_its_scope() {
+        let p = Palette::new(two_scopes());
+        let err = p.resolve("aws-stack", "1.1.1").unwrap_err();
+        assert_eq!(err.kind(), "profile-name-ambiguous");
+        let Error::ProfileNameAmbiguous {
+            name,
+            version,
+            profiles,
+        } = &err
+        else {
+            panic!("{err}");
+        };
+        assert_eq!((name.as_str(), version.as_str()), ("aws-stack", "1.1.1"));
+        assert_eq!(
+            profiles
+                .iter()
+                .map(|p| (p.uid.as_str(), p.scope))
+                .collect::<Vec<_>>(),
+            [
+                ("u-project", Some(ProfileScope::Project)),
+                ("u-tenant", Some(ProfileScope::Tenant)),
+            ],
+            "by uid, each with the scope of its document"
+        );
+        assert!(
+            err.to_string()
+                .contains("u-project (project), u-tenant (tenant); give the uid"),
+            "{err}"
+        );
+        // the version that one scope holds still resolves
+        assert_eq!(p.resolve("aws-stack", "1.0.0").unwrap(), "u-old");
+    }
+
+    #[test]
+    fn latest_is_ambiguous_only_when_two_scopes_hold_the_highest_version() {
+        let p = Palette::new(two_scopes());
+        let err = p.resolve_latest("aws-stack").unwrap_err();
+        assert!(matches!(err, Error::ProfileNameAmbiguous { .. }), "{err}");
+        assert!(
+            err.to_string().contains("with version '1.1.1'"),
+            "the message names the highest version, not 'latest': {err}"
+        );
+
+        // two scopes hold an older version, and one holds the highest: no error
+        let listing = json!({"items": [
+            {"metadata": {"name": "aws-stack", "uid": "u-tenant"}, "spec": {"version": "1.0.0"}},
+            {"metadata": {"name": "aws-stack", "uid": "u-project"}, "spec": {"version": "1.0.0"}},
+            {"metadata": {"name": "aws-stack", "uid": "u-new"}, "spec": {"version": "1.1.0"}},
+        ]});
+        let p =
+            Palette::new(MemoryApi::new().with("/v1/dashboard/clusterprofiles/metadata", listing));
+        assert_eq!(p.resolve_latest("aws-stack").unwrap(), "u-new");
+    }
+
+    #[test]
+    fn the_profile_search_gives_the_uid_of_each_version_of_a_scope_over_each_page() {
+        let body = json!({
+            "filter": {"scope": "tenant"},
+            "sort": [{"field": "profileName", "order": "asc"}],
+        });
+        // a first page of 50 names, each with one version, and a second page of one name
+        let names = |from: usize, n: usize| -> Vec<Value> {
+            (from..from + n)
+                .map(|i| {
+                    json!({"metadata": {"name": format!("p{i}")},
+                           "specSummary": {"versions": [{"version": "1.0.0", "uid": format!("u{i}")}]}})
+                })
+                .collect()
+        };
+        let api = MemoryApi::new()
+            .with_post(
+                "/v1/dashboard/clusterprofiles?limit=50",
+                &body,
+                json!({"items": names(0, 50), "listmeta": {"count": 51, "limit": 50, "offset": 0}}),
+            )
+            .with_post(
+                "/v1/dashboard/clusterprofiles?limit=50&offset=50",
+                &body,
+                json!({"items": [{"metadata": {"name": "p50"}, "specSummary": {"versions": [
+                    {"version": "1.0.0", "uid": "u50"}, {"version": "2.0.0", "uid": "u50b"}]}}],
+                       "listmeta": {"count": 51, "limit": 50, "offset": 50}}),
+            );
+        let uids = Palette::new(api.clone())
+            .profile_uids_in_scope(ProfileScope::Tenant)
+            .unwrap();
+        assert_eq!(uids.len(), 52, "{uids:?}");
+        assert!(uids.contains("u0") && uids.contains("u50") && uids.contains("u50b"));
+        assert_eq!(api.posted().len(), 2, "two pages, two requests");
+
+        // a Palette with no profile search answers 404, and the caller decides
+        let err = Palette::new(MemoryApi::new())
+            .profile_uids_in_scope(ProfileScope::System)
+            .unwrap_err();
+        assert!(matches!(err, Error::Api { status: 404, .. }), "{err}");
     }
 
     #[test]

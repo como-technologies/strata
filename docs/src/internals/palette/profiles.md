@@ -279,6 +279,30 @@ What strata does with this:
 live tenant. The use case is
 [Review a draft before its publish](../../use-cases/draft.md).
 
+## The scope of a version
+
+A profile version is of one project, of the tenant, or of the system. The
+profile document gives the scope in `metadata.annotations.scope`: `project`,
+`tenant`, or `system`.
+
+The profile listing of a project holds the profiles of the project and the
+profiles of the tenant. The listing gives each version its name, its uid, its
+version, and its cloud type, and not its scope. So a tenant profile and a
+project profile with one name and one version are two rows that differ in the
+uid alone. At tenant scope, the listing holds the profiles of the tenant.
+
+The profile search, `POST /v1/dashboard/clusterprofiles`, takes the filter
+`scope`. It answers one item for each profile name of that scope, with the uid
+of each version in `specSummary.versions[]`. Palette gives at most 50 names on
+a page, and `listmeta.count` gives the number of names. In a project, the
+search with the filter `tenant` names the tenant versions that the listing
+holds. `list` asks the search for the versions of each scope that the listing
+holds beside its own, and gives each other version the scope of the listing.
+
+[`scope.sh`](../../development/live-runs.md#scopesh) checks these facts on the
+live tenant. The command page is
+[A profile of the tenant](../../commands/list.md#a-profile-of-the-tenant).
+
 ## The lock of a cluster template
 
 A cluster template links profile versions and a maintenance policy, and applies
