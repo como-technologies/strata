@@ -2459,6 +2459,155 @@ fn a_profile_without_consumers_exits_zero_and_fetches_no_cluster() {
     );
 }
 
+/// Palette gives an empty consumer list on an error too. So an empty list with a second reading
+/// that failed is not "nothing uses it". A consumer can be missing, and a delete step must not
+/// run on exit 0 (#194).
+#[test]
+fn consumers_exits_2_when_the_list_is_empty_and_the_second_reading_fails() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    // the search of Palette is not served, so the second reading reads the listing, which fails
+    let api = serve(MemoryApi::new(), dir.path(), "a", UID_A).failing(
+        "/v1/dashboard/spectroclusters/meta",
+        500,
+        "boom",
+    );
+    let r = ops::consumers(
+        &Ref::Uid(UID_A.into()),
+        |_| Ok(Palette::new(api.clone())),
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert!(r.consumers.is_empty());
+    assert!(r.clusters_read.error.is_some());
+    assert!(
+        r.edge_hosts_read.error.is_none(),
+        "no edge host search: no edge host"
+    );
+    assert!(r.incomplete());
+    assert_eq!(
+        (r.count, r.exit_code()),
+        (0, 2),
+        "a reading failed: the answer is not 'nothing uses it'"
+    );
+    let text = render::renderer(Format::Terminal, Paint::off(), false)
+        .render_consumers(&r)
+        .unwrap();
+    assert!(
+        text.starts_with(
+            "lab-profile@1.2.0 (uid 64f0000000000000000000a1): no consumer found, and a reading failed\n  second reading: not done (GET /v1/dashboard/spectroclusters/meta failed with HTTP 500: boom"
+        ),
+        "{text}"
+    );
+    let md = render::renderer(Format::Markdown, Paint::off(), false)
+        .render_consumers(&r)
+        .unwrap();
+    assert!(
+        md.starts_with(
+            "### consumers: lab-profile@1.2.0 (uid 64f0000000000000000000a1): no consumer found, and a reading failed\n"
+        ),
+        "{md}"
+    );
+}
+
+/// A cluster that the listing names and strata cannot read can be a consumer. So an empty list
+/// with such a cluster is not "nothing uses it" either (#194).
+#[test]
+fn consumers_exits_2_when_the_list_is_empty_and_a_cluster_cannot_be_read() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    // the listing names gamma, and its document is not served
+    let api = serve(MemoryApi::new(), dir.path(), "a", UID_A).with(
+        "/v1/dashboard/spectroclusters/meta",
+        serde_json::json!([{
+            "metadata": {"name": "gamma", "uid": "cluster-ccc", "annotations": {"projectUid": "p1"}},
+            "status": {"state": "Running"}
+        }]),
+    );
+    let r = ops::consumers(
+        &Ref::Uid(UID_A.into()),
+        |_| Ok(Palette::new(api.clone())),
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert!(r.consumers.is_empty());
+    assert_eq!((r.clusters_read.read, r.clusters_read.unread), (0, 1));
+    assert!(r.clusters_read.error.is_none(), "the listing was read");
+    assert_eq!((r.count, r.exit_code()), (0, 2), "gamma can be a consumer");
+    let text = render::renderer(Format::Terminal, Paint::off(), false)
+        .render_consumers(&r)
+        .unwrap();
+    assert_eq!(
+        text,
+        "lab-profile@1.2.0 (uid 64f0000000000000000000a1): no consumer found, and a reading failed\n  second reading: 0 of 1 clusters read\n  edge hosts: 0 read\n"
+    );
+}
+
+/// An edge host that the version is bound to is a consumer, so a failed search of the edge hosts
+/// leaves the answer incomplete too (#194).
+#[test]
+fn consumers_exits_2_when_the_list_is_empty_and_the_edge_hosts_cannot_be_read() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let api = serve(MemoryApi::new(), dir.path(), "a", UID_A)
+        .with("/v1/dashboard/spectroclusters/meta", serde_json::json!([]))
+        .failing("POST /v1/dashboard/edgehosts/search?limit=50", 500, "boom");
+    let r = ops::consumers(
+        &Ref::Uid(UID_A.into()),
+        |_| Ok(Palette::new(api.clone())),
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert!(r.consumers.is_empty());
+    assert!(
+        !r.clusters_read.incomplete(),
+        "the second reading read no cluster, and failed not"
+    );
+    assert!(r.edge_hosts_read.incomplete());
+    assert_eq!((r.count, r.exit_code()), (0, 2));
+    let text = render::renderer(Format::Terminal, Paint::off(), false)
+        .render_consumers(&r)
+        .unwrap();
+    assert!(
+        text.contains("  edge hosts: not read (") && text.contains("failed with HTTP 500: boom"),
+        "{text}"
+    );
+}
+
+/// A consumer that was found decides the exit, whatever else failed: the delete must not run,
+/// and exit 1 says why (#194).
+#[test]
+fn consumers_exits_1_when_a_consumer_is_found_and_the_second_reading_fails() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let api = serve_b_with_named_consumer(dir.path())
+        .with(
+            "/v1/spectroclusters/cluster-aaa",
+            cluster_doc("cluster-aaa", "alpha", "p1", "Running"),
+        )
+        .failing("/v1/dashboard/spectroclusters/meta", 500, "boom");
+    let r = ops::consumers(
+        &Ref::Uid(UID_B.into()),
+        |_| Ok(Palette::new(api.clone())),
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert!(r.incomplete());
+    // the profile names two clusters: alpha, and one that strata cannot read
+    assert_eq!((r.count, r.exit_code()), (2, 1), "alpha uses the version");
+    let text = render::renderer(Format::Terminal, Paint::off(), false)
+        .render_consumers(&r)
+        .unwrap();
+    assert!(
+        text.starts_with("lab-profile@1.3.0 (uid 64f0000000000000000000b2): 2 consumers\n"),
+        "{text}"
+    );
+}
+
 #[test]
 fn the_second_reading_finds_a_consumer_the_profile_does_not_list() {
     // Palette computes the consumer list of a profile when it is asked, in the projects the key
@@ -3005,6 +3154,8 @@ fn consumers_list_only_reads_the_list_of_palette_and_says_that_it_did_not_walk()
     assert_eq!(r.count, 0, "the list of Palette alone");
     assert!(r.clusters_read.skipped);
     assert_eq!((r.clusters_read.read, r.clusters_read.unread), (0, 0));
+    // a reading that was not done is not a failed reading: the list alone answers
+    assert_eq!(r.exit_code(), 0);
     let text = render::renderer(Format::Terminal, Paint::off(), false)
         .render_consumers(&r)
         .unwrap();
@@ -3036,6 +3187,11 @@ fn consumers_list_only_reads_the_list_of_palette_and_says_that_it_did_not_walk()
     .unwrap();
     assert!(!walked.clusters_read.skipped);
     assert_eq!(walked.clusters_read.unread, 1, "the walk tried the cluster");
+    assert_eq!(
+        walked.exit_code(),
+        2,
+        "the cluster it could not read can be a consumer"
+    );
 }
 
 #[test]

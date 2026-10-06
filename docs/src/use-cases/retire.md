@@ -34,7 +34,9 @@ Move them first.
 ```
 
 `no consumers` and exit `0`: no cluster, edge host, or cluster template uses
-the version, and Palette will accept the delete.
+the version, and Palette will accept the delete. When strata finds no consumer
+and a reading failed, the first line says so, and the exit is `2`. A consumer
+can be missing: do not delete.
 
 ## 3. A version that a cluster template links
 
