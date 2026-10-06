@@ -286,7 +286,7 @@ fn meets(groups: &[(String, Vec<TagCondition>)], labels: &BTreeMap<String, Strin
 
 /// The clusters that `query` selects. Strata reads the search schema of the tenant: when the
 /// search takes the property `tags`, the search of Palette selects the clusters, at tenant scope.
-/// The search leaves out each virtual cluster unless a condition asks for them, so strata sends
+/// The search leaves out each virtual cluster unless a condition asks for them. So strata sends
 /// it a second time with that condition, when the search takes `environment`. Else strata reads
 /// the cluster listing and matches the labels itself. `tenant` reads at tenant scope: see
 /// [`tenant_of`].

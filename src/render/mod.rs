@@ -85,7 +85,7 @@ pub(crate) fn labels_text(labels: &std::collections::BTreeMap<String, String>) -
 }
 
 /// `the list holds no virtual cluster: Palette has no search, or its search takes no
-/// environment`, for a list of clusters that strata could not ask the search for.
+/// environment`, for a list of clusters whose Palette has no search for the virtual clusters.
 pub(crate) fn virtual_line(l: &Listing) -> Option<String> {
     (l.includes_virtual == Some(false)).then(|| {
         "the list holds no virtual cluster: Palette has no search, or its search takes no \

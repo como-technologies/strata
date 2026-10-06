@@ -259,8 +259,8 @@ type `nested`, and the listing has no cluster of that cloud type. The search
 leaves them out too, unless a condition asks for the environment `nested`. Then
 it gives them, with the cluster group and the host cluster of each in
 `status.virtual`. So `list clusters` and `cluster:<name>` send the search with
-that one condition, in the scope of the listing, and a query sends it a second
-time with the condition added. The checks `member-listed`,
+that one condition, in the scope of the listing. A query sends the search a
+second time, with the condition added. The checks `member-listed`,
 `member-listed-group`, and `member-by-name` of `cluster-group.sh` test it on a
 live tenant: see [cluster-group.sh](../../development/live-runs.md#cluster-groupsh).
 
@@ -311,9 +311,9 @@ keeps the clusters that run the version. The checks `search-profile-runs`,
 
 A deleted cluster leaves this listing and keeps its document:
 `GET /v1/spectroclusters/<uid>` still answers `200`, with the state `Deleted`.
-So `cluster:<name>`, which strata resolves through the listing and the search
-of the virtual clusters, does not go ambiguous when one name is deleted and
-built again.
+Strata resolves `cluster:<name>` through the listing and the search of the
+virtual clusters. So the name does not go ambiguous when one cluster is deleted
+and built again.
 
 A deletion through the API behaves in the same way. `DELETE
 /v1/spectroclusters/<uid>` is accepted at once. While the cluster goes, the
