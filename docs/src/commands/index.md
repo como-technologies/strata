@@ -79,7 +79,7 @@ details.
 | --- | --- | --- | --- | --- | --- |
 | `0` | identical | each pair passes | each record unchanged | nothing the key can read uses it | no pin is behind |
 | `1` | different | a pair fails | a record drifted, or is unverified | a cluster or an edge host uses it | a pin is behind |
-| `2` | error | error | strata cannot check a record | error | strata cannot check a pin |
+| `2` | error | error | strata cannot check a record | nothing found, and a reading failed | strata cannot check a pin |
 
 `list`, `packs`, `snapshot`, `candidate`, and `schema` exit `0`, or `2` on an
 error.

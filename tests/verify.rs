@@ -2460,7 +2460,7 @@ fn a_profile_without_consumers_exits_zero_and_fetches_no_cluster() {
 }
 
 /// Palette gives an empty consumer list on an error too. So an empty list with a second reading
-/// that failed is not "nothing uses it": a consumer can be missing, and a delete step must not
+/// that failed is not "nothing uses it". A consumer can be missing, and a delete step must not
 /// run on exit 0 (#194).
 #[test]
 fn consumers_exits_2_when_the_list_is_empty_and_the_second_reading_fails() {
@@ -2566,7 +2566,7 @@ fn consumers_exits_2_when_the_list_is_empty_and_the_edge_hosts_cannot_be_read() 
         !r.clusters_read.incomplete(),
         "the second reading read no cluster, and failed not"
     );
-    assert!(r.edge_hosts_read.error.is_some());
+    assert!(r.edge_hosts_read.incomplete());
     assert_eq!((r.count, r.exit_code()), (0, 2));
     let text = render::renderer(Format::Terminal, Paint::off(), false)
         .render_consumers(&r)

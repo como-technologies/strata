@@ -396,7 +396,10 @@ is the path as a list: strings for keys, numbers for indexes, and
 
 - `profile`: `uid`, `name`, and `version`. `type`, only for an app profile:
   `app`.
-- `count`: the number of consumers. Exit `0` when it is `0`.
+- `count`: the number of consumers. Exit `1` when it is not `0`. Exit `0` when
+  it is `0` and each reading succeeded. Exit `2` when it is `0` and a reading
+  failed: `error`, `groupsError`, or an `unread` that is not `0` in
+  `clustersRead`, or `error` in `edgeHostsRead`.
 - `overwritten`: the number of consumers whose copy names another version.
 - `consumers[]`: `kind`, `cluster`, `edgehost`, `template`, or `app` for an app
   deployment, `uid`, `name`, `projectUid`, `state`, `version`, and `error` when

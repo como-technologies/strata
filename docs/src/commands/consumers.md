@@ -135,7 +135,9 @@ fleet:
 ```
 
 A consumer that the list does not name is then not found, and the list is
-empty when the read fails. So a gate before a delete runs without `--list-only`.
+empty when the read fails. An empty list exits `0` with `--list-only`: no
+reading failed, because strata did none. So a gate before a delete runs without
+`--list-only`.
 The edge hosts are read with it too: the consumer list names clusters alone.
 The cluster templates are in it too: the profile document names them.
 
@@ -192,6 +194,12 @@ version bump or a rename overwrote the version that the cluster runs. See
 - A cluster that Palette is deleting stays in the list with the state
   `Deleting`, and the exit is `1`. After the deletion, the list drops it. See
   [What the cluster listing answers](../internals/palette/clusters.md#what-the-cluster-listing-answers).
+- When strata finds no consumer, and a reading failed, a consumer can be
+  missing. The reading that failed is the second reading, a cluster group, a
+  cluster that the search or the listing names, or the edge host search. The
+  first line then says `no consumer found, and a reading failed`, and the exit
+  is `2`. The last lines name the reading. Palette gives an empty consumer list
+  on an error too, so an empty list alone is not "nothing uses it".
 - For an app profile, the names and the projects come from
   `status.inUseApps` of the app profile. Strata then reads each app deployment
   in its own project, for its state and the version that its copy names. An app
@@ -202,9 +210,9 @@ version bump or a rename overwrote the version that the cluster runs. See
 
 | Exit | Meaning |
 | --- | --- |
-| `0` | Nothing uses the version: the profile lists no cluster and no cluster template, the second reading finds no cluster that applies it, and no edge host is bound to it. For an app profile: the app profile lists no app deployment. |
-| `1` | A cluster, an edge host, a cluster template, or an app deployment uses the version. |
-| `2` | Strata could not answer. |
+| `0` | Nothing uses the version, and each reading succeeded. The profile lists no cluster and no cluster template, the second reading finds no cluster that applies it, and no edge host is bound to it. For an app profile: the app profile lists no app deployment. |
+| `1` | A cluster, an edge host, a cluster template, or an app deployment uses the version, whatever else failed. |
+| `2` | Strata could not answer: it found no consumer, and a reading failed. A consumer can be missing, so do not delete the version. |
 
 `--format markdown` writes a table with the version that each cluster runs, and
 marks each edge host, each cluster template, and each app deployment.

@@ -149,9 +149,9 @@ pub struct ClustersRead {
 }
 
 impl ClustersRead {
-    /// True when a reading failed, so a consumer can be missing from the answer: the search or
-    /// the listing, a cluster group or its virtual clusters, or a cluster that the search or the
-    /// listing names could not be read. A second reading that was not done, as `--list-only`
+    /// True when a reading failed, so a consumer can be missing from the answer. The reading
+    /// that failed is the search or the listing, a cluster group or its virtual clusters, or a
+    /// cluster that one of them names. A second reading that was not done, as `--list-only`
     /// asks or for an app profile, is not a failed reading.
     pub fn incomplete(&self) -> bool {
         self.error.is_some() || self.groups_error.is_some() || self.unread > 0
@@ -235,11 +235,11 @@ impl ConsumersReport {
         self.clusters_read.incomplete() || self.edge_hosts_read.incomplete()
     }
 
-    /// The exit status: 1 when something uses the profile version, whatever else failed; 0 when
-    /// nothing does and each reading succeeded, so a delete step can branch on it; and 2 when
-    /// nothing was found and a reading failed, because a consumer can be missing from the
-    /// answer. Palette gives an empty consumer list on an error too, so a failed reading with
-    /// no consumer found is not "nothing uses it".
+    /// The exit status, so that a delete step can branch on it. 1 when something uses the
+    /// profile version, whatever else failed. 0 when nothing does and each reading succeeded. 2
+    /// when nothing was found and a reading failed: a consumer can be missing from the answer.
+    /// Palette gives an empty consumer list on an error too, so a failed reading with no
+    /// consumer found is not "nothing uses it".
     pub fn exit_code(&self) -> u8 {
         if self.count > 0 {
             1

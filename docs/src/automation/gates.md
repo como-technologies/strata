@@ -67,7 +67,9 @@ strata consumers aws-stack@1.0.0 && your_delete_command
 ```
 
 `&&` runs the delete only on exit `0`. A cluster that strata cannot read counts
-as a consumer, so it exits `1` and the delete does not run.
+as a consumer, so it exits `1` and the delete does not run. When strata finds no
+consumer and a reading failed, it exits `2`, and the delete does not run either:
+a consumer can be missing.
 
 Exit `0` means that no cluster in the projects the key can read applies the
 version, and no edge host is bound to it. Do not add `--list-only` to the gate:
