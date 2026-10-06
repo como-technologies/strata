@@ -13,9 +13,10 @@ use super::text;
 
 /// The consumers that a profile document names, by kind.
 ///
-/// Palette refuses the delete of the version while one of them uses it. `list --packs` shows
-/// [`ConsumerCounts::count`] for each version. `consumers --list-only` lists each one, and the
-/// edge hosts that it searches: the profile document names no edge host.
+/// Palette refuses the delete of the version while one of them uses it. `list --packs` gives
+/// [`ConsumerCounts::count`] as `consumers`, and the kinds as `consumersByKind`.
+/// `consumers --list-only` lists each one, and the edge hosts that it searches: the profile
+/// document names no edge host.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ConsumerCounts {
@@ -27,7 +28,7 @@ pub struct ConsumerCounts {
 
 impl ConsumerCounts {
     /// Count the consumers that the profile document `doc` names, each uid one time.
-    pub fn of(doc: &Value) -> Self {
+    pub(crate) fn of(doc: &Value) -> Self {
         ConsumerCounts {
             clusters: consumer_uids(doc).len(),
             templates: ClusterTemplateRef::linked(doc).len(),

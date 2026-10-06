@@ -211,7 +211,8 @@ delete of the version while one of them uses it. Here the template
 {{#include ../output/list-consumers.txt}}
 ```
 
-`--json` gives the count by kind:
+`--json` gives the number in `consumers`, and the count of each kind in
+`consumersByKind`:
 
 ```text
 {{#include ../output/list-consumers-json.txt}}

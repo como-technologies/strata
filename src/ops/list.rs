@@ -107,10 +107,16 @@ pub struct ListedProfile {
     /// With packs: the profile type, for example `cluster` or `add-on`.
     #[serde(default, rename = "type", skip_serializing_if = "Option::is_none")]
     pub profile_type: Option<String>,
-    /// With packs: the consumers that the profile document names, by kind. The row shows
-    /// [`ConsumerCounts::count`]. `consumers` reads each one, and the edge hosts too.
+    /// With packs: the number of consumers that the profile document names, its clusters and
+    /// the cluster templates that link the version. `consumers` reads each one, and the edge
+    /// hosts too.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub consumers: Option<ConsumerCounts>,
+    pub consumers: Option<usize>,
+    /// With packs: the same consumers by kind. The document keeps `consumers` as a number for
+    /// the readers of `strata-list/1`, so the sum is stored with the kinds, and
+    /// [`ConsumerCounts::count`] gives it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub consumers_by_kind: Option<ConsumerCounts>,
     /// With packs: the packs in the order the profile holds them.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub packs: Option<Vec<ListedPack>>,
@@ -380,6 +386,7 @@ fn list_profiles<A: PaletteApi>(
                 version,
                 profile_type: None,
                 consumers: None,
+                consumers_by_kind: None,
                 packs: None,
                 published: None,
                 error: None,
@@ -428,7 +435,9 @@ fn list_profiles<A: PaletteApi>(
             })
             .collect();
         p.profile_type = template.map(|t| text(t, "/type")).filter(|t| !t.is_empty());
-        p.consumers = Some(ConsumerCounts::of(&doc));
+        let consumers = ConsumerCounts::of(&doc);
+        p.consumers = Some(consumers.count());
+        p.consumers_by_kind = Some(consumers);
         p.packs = Some(packs);
         p.published = doc.pointer("/status/isPublished").and_then(Value::as_bool);
     }

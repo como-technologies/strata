@@ -642,7 +642,7 @@ impl Renderer for MarkdownRenderer {
                         " {} | {} | {} |",
                         escape(dash(pr.profile_type.as_deref().unwrap_or(""))),
                         pr.consumers
-                            .map(|c| consumer_count(c.count()))
+                            .map(consumer_count)
                             .unwrap_or_else(|| "-".into()),
                         escape(dash(&packs))
                     ));

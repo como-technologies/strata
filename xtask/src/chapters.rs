@@ -480,7 +480,7 @@ fn commands(r: &mut Runner) {
         "list-consumers-json",
         0,
         false,
-        r#"strata list profiles --packs --json | jq -c '.profiles[] | {ref, consumers}'"#,
+        r#"strata list profiles --packs --json | jq -c '.profiles[] | {ref, consumers, consumersByKind}'"#,
     );
     r.step(
         "list-consumers-same",

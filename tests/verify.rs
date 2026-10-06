@@ -3412,7 +3412,7 @@ fn list_with_a_pack_reads_each_profile_and_keeps_those_that_carry_it() {
     assert!(denied.packs.is_none());
     let b = &profiles[1];
     assert_eq!(
-        (b.profile_type.as_deref(), b.consumers.map(|c| c.count())),
+        (b.profile_type.as_deref(), b.consumers),
         (Some("cluster"), Some(2))
     );
     let packs = b.packs.as_ref().unwrap();
@@ -3641,7 +3641,8 @@ fn a_linked_and_a_shared_version() -> MemoryApi {
 
 /// `list --packs` counts each consumer that the profile document names, and not the clusters
 /// alone. A version that a template links and no cluster runs has one consumer, because Palette
-/// refuses its delete. `--json` gives the count by kind.
+/// refuses its delete. `--json` gives the number as before, and the count by kind in
+/// `consumersByKind`.
 #[test]
 fn list_with_packs_counts_the_cluster_templates_of_a_version_with_its_clusters() {
     let api = a_linked_and_a_shared_version();
@@ -3660,11 +3661,12 @@ fn list_with_packs_counts_the_cluster_templates_of_a_version_with_its_clusters()
     assert_eq!(
         profiles
             .iter()
-            .map(|p| (p.reference.as_str(), p.consumers))
+            .map(|p| (p.reference.as_str(), p.consumers, p.consumers_by_kind))
             .collect::<Vec<_>>(),
         [
             (
                 "lab-profile@1.0.0",
+                Some(1),
                 Some(ops::ConsumerCounts {
                     clusters: 0,
                     templates: 1
@@ -3672,6 +3674,7 @@ fn list_with_packs_counts_the_cluster_templates_of_a_version_with_its_clusters()
             ),
             (
                 "lab-profile@1.1.0",
+                Some(2),
                 Some(ops::ConsumerCounts {
                     clusters: 1,
                     templates: 1
@@ -3705,13 +3708,25 @@ fn list_with_packs_counts_the_cluster_templates_of_a_version_with_its_clusters()
     )
     .unwrap();
     assert_eq!(
-        json["profiles"][0]["consumers"],
-        serde_json::json!({"clusters": 0, "templates": 1}),
+        (
+            &json["profiles"][0]["consumers"],
+            &json["profiles"][0]["consumersByKind"]
+        ),
+        (
+            &serde_json::json!(1),
+            &serde_json::json!({"clusters": 0, "templates": 1})
+        ),
         "{json}"
     );
     assert_eq!(
-        json["profiles"][1]["consumers"],
-        serde_json::json!({"clusters": 1, "templates": 1}),
+        (
+            &json["profiles"][1]["consumers"],
+            &json["profiles"][1]["consumersByKind"]
+        ),
+        (
+            &serde_json::json!(2),
+            &serde_json::json!({"clusters": 1, "templates": 1})
+        ),
         "{json}"
     );
 }
@@ -3741,10 +3756,10 @@ fn list_with_packs_gives_the_count_of_consumers_with_the_list_of_palette_alone()
             &Progress::silent(),
         )
         .unwrap();
-        let counts = p.consumers.unwrap();
+        let counts = p.consumers_by_kind.unwrap();
         assert_eq!(
-            counts.count(),
-            r.count,
+            (p.consumers, counts.count()),
+            (Some(r.count), r.count),
             "{}: list --packs and consumers --list-only differ",
             p.reference
         );

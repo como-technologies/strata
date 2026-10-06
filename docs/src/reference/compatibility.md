@@ -23,7 +23,9 @@ only when a reader of the old id reads the document wrong:
 
 A new field keeps the id. Strata ignores fields that it does not know, so it
 reads a record of its own id that a later release wrote. `source.projectUid` and
-`source.cluster` joined `strata-snapshot/1` in this way.
+`source.cluster` joined `strata-snapshot/1` in this way. After 0.20.0,
+`consumers` of `strata-list/1` counts the cluster templates with the clusters,
+and `consumersByKind` joined it with the count of each kind.
 
 A field can also become absent, and that keeps the id as well. For most fields
 absent is a value: a field that is false, empty, or zero is left out, and each
