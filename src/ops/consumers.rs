@@ -148,6 +148,16 @@ pub struct ClustersRead {
     pub groups_error: Option<Value>,
 }
 
+impl ClustersRead {
+    /// True when a reading failed, so a consumer can be missing from the answer: the search or
+    /// the listing, a cluster group or its virtual clusters, or a cluster that the search or the
+    /// listing names could not be read. A second reading that was not done, as `--list-only`
+    /// asks or for an app profile, is not a failed reading.
+    pub fn incomplete(&self) -> bool {
+        self.error.is_some() || self.groups_error.is_some() || self.unread > 0
+    }
+}
+
 fn is_zero(n: &usize) -> bool {
     *n == 0
 }
@@ -170,6 +180,15 @@ pub struct EdgeHostsRead {
     pub reason: String,
 }
 
+impl EdgeHostsRead {
+    /// True when the edge hosts could not be listed, so an edge host that the version is bound
+    /// to can be missing from the answer. A search that was not done, for an app profile, is not
+    /// a failed reading.
+    pub fn incomplete(&self) -> bool {
+        self.error.is_some()
+    }
+}
+
 /// What `consumers` reads.
 #[derive(Debug, Clone, Default)]
 pub struct ConsumersOptions {
@@ -190,8 +209,9 @@ pub struct ConsumersReport {
     pub generated_at: String,
     /// The profile version.
     pub profile: ConsumedProfile,
-    /// The number of clusters, edge hosts, and cluster templates that use it. Exit status 0 when
-    /// zero, 1 otherwise.
+    /// The number of clusters, edge hosts, and cluster templates that use it. Exit status 1 when
+    /// it is not zero. Exit status 0 when it is zero and each reading succeeded, and 2 when it
+    /// is zero and a reading failed: see [`ConsumersReport::exit_code`].
     pub count: usize,
     /// The consumers whose copy names another version than `profile.version`: the version they run
     /// was overwritten in place.
@@ -209,10 +229,25 @@ pub struct ConsumersReport {
 }
 
 impl ConsumersReport {
-    /// The exit status: 0 when nothing uses the profile version, 1 when something does, so a
-    /// delete step can branch on it.
+    /// True when a reading failed, so a consumer can be missing from the answer: see
+    /// [`ClustersRead::incomplete`] and [`EdgeHostsRead::incomplete`].
+    pub fn incomplete(&self) -> bool {
+        self.clusters_read.incomplete() || self.edge_hosts_read.incomplete()
+    }
+
+    /// The exit status: 1 when something uses the profile version, whatever else failed; 0 when
+    /// nothing does and each reading succeeded, so a delete step can branch on it; and 2 when
+    /// nothing was found and a reading failed, because a consumer can be missing from the
+    /// answer. Palette gives an empty consumer list on an error too, so a failed reading with
+    /// no consumer found is not "nothing uses it".
     pub fn exit_code(&self) -> u8 {
-        u8::from(self.count > 0)
+        if self.count > 0 {
+            1
+        } else if self.incomplete() {
+            2
+        } else {
+            0
+        }
     }
 }
 

@@ -509,9 +509,15 @@ pub(crate) fn capitalized(text: &str) -> String {
     }
 }
 
-/// `lab-profile@1.3.0 (uid <uid>): 2 consumers`, or `...: no consumers`.
+/// `lab-profile@1.3.0 (uid <uid>): 2 consumers`, or `...: no consumers`. When no consumer was
+/// found and a reading failed, the answer is not "nothing uses it", so the heading says so:
+/// `...: no consumer found, and a reading failed`. The lines after it name the reading.
 pub(crate) fn consumers_heading(r: &ConsumersReport) -> String {
-    let count = consumer_count(r.count);
+    let count = if r.count == 0 && r.incomplete() {
+        "no consumer found, and a reading failed".to_string()
+    } else {
+        consumer_count(r.count)
+    };
     format!(
         "{}@{} (uid {}): {count}",
         r.profile.name,
