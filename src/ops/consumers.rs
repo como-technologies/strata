@@ -16,7 +16,8 @@ use crate::snapshot::{Snapshot, Tool};
 
 use super::fleet::Resolved;
 use super::list::{ListedCluster, TENANT_SCOPE, list_clusters, name_projects_of};
-use super::{client_for, consumer_uids, text};
+use super::consumer_list::consumer_uids;
+use super::{client_for, text};
 
 /// Schema id of the document `consumers` writes.
 pub const CONSUMERS_SCHEMA: &str = "strata-consumers/1";

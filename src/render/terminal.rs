@@ -799,7 +799,7 @@ impl Renderer for TerminalRenderer {
                         row.push(format!("({msg})"));
                     } else if pr.packs.is_some() {
                         row.push(dash(pr.profile_type.as_deref().unwrap_or("")).to_string());
-                        row.push(consumer_count(pr.consumers.unwrap_or(0)));
+                        row.push(consumer_count(pr.consumers.map_or(0, |c| c.count())));
                         row.extend(draft_mark(pr).map(str::to_string));
                     }
                     row

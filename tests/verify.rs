@@ -3412,7 +3412,7 @@ fn list_with_a_pack_reads_each_profile_and_keeps_those_that_carry_it() {
     assert!(denied.packs.is_none());
     let b = &profiles[1];
     assert_eq!(
-        (b.profile_type.as_deref(), b.consumers),
+        (b.profile_type.as_deref(), b.consumers.map(|c| c.count())),
         (Some("cluster"), Some(2))
     );
     let packs = b.packs.as_ref().unwrap();

@@ -12,7 +12,7 @@ use crate::progress::Progress;
 use crate::snapshot::{AppliedProfile, Tool};
 use crate::version;
 
-use super::{client_for, consumer_uids, items, text};
+use super::{ConsumerCounts, client_for, items, text};
 
 /// Schema id of the document `list` writes.
 pub const LIST_SCHEMA: &str = "strata-list/1";
@@ -40,7 +40,7 @@ pub struct ListOptions {
     pub kinds: Vec<ListKind>,
     /// The project to list profiles and clusters in, in place of the configured scope.
     pub project: Option<String>,
-    /// Read each profile document for its type, consumer count, and packs: one request per
+    /// Read each profile document for its type, its consumers, and its packs: one request per
     /// profile version.
     pub packs: bool,
     /// Keep only the profiles with a pack whose name contains this text, ignoring case. Implies
@@ -107,9 +107,10 @@ pub struct ListedProfile {
     /// With packs: the profile type, for example `cluster` or `add-on`.
     #[serde(default, rename = "type", skip_serializing_if = "Option::is_none")]
     pub profile_type: Option<String>,
-    /// With packs: the number of clusters that use the version.
+    /// With packs: the consumers that the profile document names, by kind. The row shows
+    /// [`ConsumerCounts::count`]. `consumers` reads each one, and the edge hosts too.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub consumers: Option<usize>,
+    pub consumers: Option<ConsumerCounts>,
     /// With packs: the packs in the order the profile holds them.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub packs: Option<Vec<ListedPack>>,
@@ -427,7 +428,7 @@ fn list_profiles<A: PaletteApi>(
             })
             .collect();
         p.profile_type = template.map(|t| text(t, "/type")).filter(|t| !t.is_empty());
-        p.consumers = Some(consumer_uids(&doc).len());
+        p.consumers = Some(ConsumerCounts::of(&doc));
         p.packs = Some(packs);
         p.published = doc.pointer("/status/isPublished").and_then(Value::as_bool);
     }
