@@ -320,7 +320,7 @@ pub struct Listing {
 impl Listing {
     /// The scope of the listing: `project` in a project, and `tenant` at tenant scope. The
     /// reports mark a version whose scope is another one.
-    pub fn scope(&self) -> ProfileScope {
+    pub(crate) fn scope(&self) -> ProfileScope {
         ProfileScope::of_listing(&self.project_uid)
     }
 }

@@ -45,7 +45,7 @@ impl ProfileScope {
 
     /// The scope of a listing: [`ProfileScope::Project`] in a project, and
     /// [`ProfileScope::Tenant`] at tenant scope, where `project_uid` is empty.
-    pub fn of_listing(project_uid: &str) -> Self {
+    pub(crate) fn of_listing(project_uid: &str) -> Self {
         if project_uid.is_empty() {
             Self::Tenant
         } else {
@@ -55,7 +55,7 @@ impl ProfileScope {
 
     /// The scope of the profile document `doc`, from `metadata.annotations.scope`. None when the
     /// document does not give it.
-    pub fn of_document(doc: &Value) -> Option<Self> {
+    pub(crate) fn of_document(doc: &Value) -> Option<Self> {
         doc.pointer("/metadata/annotations/scope")
             .and_then(Value::as_str)
             .and_then(Self::parse)
@@ -64,7 +64,7 @@ impl ProfileScope {
     /// The scopes whose versions a listing of `self` holds beside its own. A project lists the
     /// profiles of the tenant and of the system too. Tenant scope lists the profiles of the
     /// system too. `list` asks the profile search for the versions of each one.
-    pub fn others_listed(self) -> &'static [ProfileScope] {
+    pub(crate) fn others_listed(self) -> &'static [ProfileScope] {
         match self {
             Self::Project => &[Self::Tenant, Self::System],
             Self::Tenant => &[Self::System],

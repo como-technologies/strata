@@ -283,7 +283,7 @@ impl<A: PaletteApi> Palette<A> {
     /// search `POST /v1/dashboard/clusterprofiles?limit=50`, every page. The search gives one
     /// item for each profile name, with the uid of each version in `specSummary.versions[]`.
     /// `list` reads it for the scope of each version. The request changes nothing.
-    pub fn profile_uids_in_scope(&self, scope: ProfileScope) -> Result<BTreeSet<String>> {
+    pub(crate) fn profile_uids_in_scope(&self, scope: ProfileScope) -> Result<BTreeSet<String>> {
         let body = serde_json::json!({
             "filter": {"scope": scope.as_str()},
             "sort": [{"field": "profileName", "order": "asc"}],
