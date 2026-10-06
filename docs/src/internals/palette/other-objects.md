@@ -83,7 +83,9 @@ to the host clusters of the group.
   Its second reading asks the cluster search with the environment `nested`,
   so it finds a virtual cluster that the list omits too: see
   [The search by profile](clusters.md#what-the-cluster-listing-answers).
-  `list clusters` does not show a virtual cluster.
+  `list clusters` asks the search with the same condition, so it names each
+  virtual cluster with its group, and `cluster:<name>` finds one: see
+  [The virtual clusters](../../commands/list.md#the-virtual-clusters).
 - `POST /v1/dashboard/clustergroups/<uid>/virtualClusters` lists the virtual
   clusters of a group. `GET /v1/clustergroups/hostCluster/metadata` gives the
   name and the uid of each group.

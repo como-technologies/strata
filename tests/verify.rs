@@ -2685,28 +2685,54 @@ fn the_second_reading_finds_a_consumer_the_profile_does_not_list() {
 }
 
 const CLUSTER_SEARCH: &str = "/v1/dashboard/spectroclusters/search?limit=50";
+const SEARCH_SCHEMA: &str = "/v1/dashboard/spectroclusters/search/schema";
+
+/// A condition of the cluster search, as strata sends it: the string `property` equals `value`.
+fn search_eq(property: &str, value: &str) -> Value {
+    serde_json::json!({
+        "property": property, "type": "string",
+        "condition": {"string": {"operator": "eq", "negation": false, "ignoreCase": false,
+            "match": {"conjunction": "or", "values": [value]}}},
+    })
+}
+
+/// The body of the cluster search with the filter groups `groups`, as strata sends it.
+fn search_of(groups: Vec<Value>) -> Value {
+    serde_json::json!({
+        "filter": {"conjunction": "and", "filterGroups": groups},
+        "sort": [{"field": "clusterName", "order": "asc"}],
+    })
+}
+
+/// The body of the search of the virtual clusters that `groups` select: the condition
+/// `environment eq nested` as one more group, since the search leaves out each virtual cluster
+/// unless a condition asks for it.
+fn virtual_search(mut groups: Vec<Value>) -> Value {
+    groups.push(serde_json::json!({"conjunction": "and",
+        "filters": [search_eq("environment", "nested")]}));
+    search_of(groups)
+}
+
+/// The schema of a cluster search that takes the string `properties`.
+fn search_schema(properties: &[&str]) -> Value {
+    let properties: Vec<Value> = properties
+        .iter()
+        .map(|name| serde_json::json!({"name": name, "type": "string"}))
+        .collect();
+    serde_json::json!({"schema": {"properties": properties}})
+}
 
 /// The body of the cluster search for the clusters that run a version of the profile `name`, and
 /// with `nested` for the virtual clusters that run it, as the second reading of `consumers` sends
 /// it. Palette takes the name of a profile in `clusterProfiles`, and not its uid (#181).
 fn profile_search(name: &str, nested: bool) -> Value {
-    let condition = |property: &str, value: &str| {
-        serde_json::json!({
-            "property": property, "type": "string",
-            "condition": {"string": {"operator": "eq", "negation": false, "ignoreCase": false,
-                "match": {"conjunction": "or", "values": [value]}}},
-        })
-    };
-    let mut groups = vec![serde_json::json!({"conjunction": "and",
-        "filters": [condition("clusterProfiles", name)]})];
+    let groups = vec![serde_json::json!({"conjunction": "and",
+        "filters": [search_eq("clusterProfiles", name)]})];
     if nested {
-        groups.push(serde_json::json!({"conjunction": "and",
-            "filters": [condition("environment", "nested")]}));
+        virtual_search(groups)
+    } else {
+        search_of(groups)
     }
-    serde_json::json!({
-        "filter": {"conjunction": "and", "filterGroups": groups},
-        "sort": [{"field": "clusterName", "order": "asc"}],
-    })
 }
 
 /// A cluster as the search gives it: a summary, with the project in `specSummary`.
@@ -2717,6 +2743,23 @@ fn search_item(uid: &str, name: &str, project: &str, cloud: &str) -> Value {
                         "projectMeta": {"uid": project, "name": "lab"}},
         "status": {"state": "Running"},
     })
+}
+
+/// A virtual cluster as the search gives it: the cloud type `nested`, and `status.virtual` with
+/// its cluster group and its host cluster, each `(uid, name)`.
+fn virtual_item(
+    uid: &str,
+    name: &str,
+    project: &str,
+    group: (&str, &str),
+    host: (&str, &str),
+) -> Value {
+    let mut item = search_item(uid, name, project, "nested");
+    item["status"]["virtual"] = serde_json::json!({
+        "clusterGroup": {"uid": group.0, "name": group.1, "kind": "clustergroup"},
+        "hostCluster": {"uid": host.0, "name": host.1, "kind": "spectrocluster"},
+    });
+    item
 }
 
 #[test]
@@ -3905,6 +3948,238 @@ fn list_at_tenant_scope_names_the_project_of_each_cluster() {
         text.contains("project prod (uid p2)"),
         "the line names the project: {text}"
     );
+}
+
+/// The listing of the project `p1` with two clusters, and the search schema `properties`.
+fn two_clusters_with_search(properties: &[&str]) -> MemoryApi {
+    MemoryApi::new()
+        .in_project("p1")
+        .with(
+            "/v1/dashboard/spectroclusters/meta",
+            serde_json::json!([
+                listed_cluster("workload-a", "c1", "Running"),
+                listed_cluster("workload-b", "c2", "Running"),
+            ]),
+        )
+        .with(SEARCH_SCHEMA, search_schema(properties))
+        .with(
+            "/v1/dashboard/projects/metadata",
+            projects(&[("lab", "p1")]),
+        )
+}
+
+fn clusters_listing(api: &MemoryApi) -> ops::Listing {
+    ops::list(
+        &ListOptions {
+            kinds: vec![ListKind::Clusters],
+            ..ListOptions::default()
+        },
+        |_| Ok(Palette::new(api)),
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap()
+}
+
+#[test]
+fn list_clusters_names_a_virtual_cluster_with_its_cluster_group_from_the_search() {
+    // The listing leaves out each virtual cluster, so strata asks the search for them, with the
+    // one condition environment eq nested, in the scope of the listing (#116).
+    let api = two_clusters_with_search(&["clusterName", "tags", "environment"]).with_post(
+        CLUSTER_SEARCH,
+        &virtual_search(vec![]),
+        serde_json::json!({"items": [virtual_item("c-v", "vc-1", "p1", ("g1", "dev-group"),
+            ("c1", "workload-a"))], "listmeta": {"continue": ""}}),
+    );
+    let l = clusters_listing(&api);
+    let clusters = l.clusters.as_ref().unwrap();
+    assert_eq!(
+        clusters.iter().map(|c| c.name.as_str()).collect::<Vec<_>>(),
+        ["vc-1", "workload-a", "workload-b"],
+        "the virtual cluster sorts with the others"
+    );
+    let vc = &clusters[0];
+    assert_eq!(
+        (vc.reference.as_str(), vc.cloud_type.as_str()),
+        ("cluster:c-v", "nested")
+    );
+    let v = vc
+        .virtual_cluster
+        .as_ref()
+        .expect("the virtual cluster says so");
+    let named = |o: &Option<ops::NamedObject>| o.as_ref().map(|o| (o.uid.clone(), o.name.clone()));
+    assert_eq!(
+        named(&v.cluster_group),
+        Some(("g1".to_string(), "dev-group".to_string()))
+    );
+    assert_eq!(
+        named(&v.host_cluster),
+        Some(("c1".to_string(), "workload-a".to_string()))
+    );
+    assert!(clusters[1..].iter().all(|c| c.virtual_cluster.is_none()));
+    assert_eq!(l.includes_virtual, Some(true));
+    let posted = api.posted();
+    assert_eq!(posted.len(), 1, "one search, for the virtual clusters");
+    assert_eq!(
+        posted[0].1["filter"]["filterGroups"]
+            .as_array()
+            .map(Vec::len),
+        Some(1),
+        "with the one condition: {}",
+        posted[0].1
+    );
+
+    let text = render::renderer(Format::Terminal, Paint::off(), false)
+        .render_list(&l)
+        .unwrap();
+    assert!(text.contains("\n3 clusters\n"), "{text}");
+    assert!(
+        text.contains("  cluster:c-v  vc-1        Running  nested  virtual (group dev-group)\n"),
+        "{text}"
+    );
+    assert!(
+        text.contains("  cluster:c1   workload-a  Running  aws\n"),
+        "{text}"
+    );
+    assert_eq!(text.matches("virtual").count(), 1, "{text}");
+    let md = render::renderer(Format::Markdown, Paint::off(), false)
+        .render_list(&l)
+        .unwrap();
+    assert!(
+        md.contains("| ref | name | state | cloud | virtual |\n"),
+        "{md}"
+    );
+    assert!(
+        md.contains("| `cluster:c-v` | vc-1 | Running | nested | group dev-group |\n"),
+        "{md}"
+    );
+    assert!(
+        md.contains("| `cluster:c1` | workload-a | Running | aws | - |\n"),
+        "{md}"
+    );
+    let json: Value = serde_json::from_str(
+        &render::renderer(Format::Json, Paint::off(), true)
+            .render_list(&l)
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(json["includesVirtual"], true);
+    assert_eq!(
+        json["clusters"][0]["virtual"]["clusterGroup"]["name"],
+        "dev-group"
+    );
+    assert_eq!(json["clusters"][0]["virtual"]["hostCluster"]["uid"], "c1");
+    assert!(
+        json["clusters"][1].get("virtual").is_none(),
+        "a cluster that is not virtual has no virtual: {json}"
+    );
+}
+
+#[test]
+fn list_clusters_says_that_it_holds_no_virtual_cluster_when_the_search_takes_no_environment() {
+    // An older Palette: its search takes no environment, or it has no search at all. Strata
+    // asks it for no virtual cluster, and the heading says so, as a query does (#116).
+    let older = two_clusters_with_search(&["clusterName", "tags"]);
+    let l = clusters_listing(&older);
+    assert_eq!(l.includes_virtual, Some(false));
+    assert!(older.posted().is_empty(), "no search");
+    assert_eq!(l.clusters.as_ref().unwrap().len(), 2);
+    let text = render::renderer(Format::Terminal, Paint::off(), false)
+        .render_list(&l)
+        .unwrap();
+    assert!(
+        text.contains(
+            "\n2 clusters\nthe list holds no virtual cluster: Palette has no search, or its \
+             search takes no environment\n"
+        ),
+        "{text}"
+    );
+    let md = render::renderer(Format::Markdown, Paint::off(), false)
+        .render_list(&l)
+        .unwrap();
+    assert!(
+        md.contains(
+            "The list holds no virtual cluster: Palette has no search, or its search takes no \
+             environment.\n"
+        ),
+        "{md}"
+    );
+    assert!(!md.contains("| virtual |"), "{md}");
+    let json: Value = serde_json::from_str(
+        &render::renderer(Format::Json, Paint::off(), true)
+            .render_list(&l)
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(json["includesVirtual"], false);
+
+    // no search: Palette answers 404 for the schema
+    let none = two_clusters_with_search(&[]).failing(SEARCH_SCHEMA, 404, "{}");
+    let l = clusters_listing(&none);
+    assert_eq!(l.includes_virtual, Some(false));
+    assert!(none.posted().is_empty());
+
+    // another failure of the schema is an error, as for a query
+    let broken = two_clusters_with_search(&[]).failing(SEARCH_SCHEMA, 500, "{}");
+    let err = ops::list(
+        &ListOptions {
+            kinds: vec![ListKind::Clusters],
+            ..ListOptions::default()
+        },
+        |_| Ok(Palette::new(broken.clone())),
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap_err();
+    assert!(matches!(err, Error::Api { status: 500, .. }), "{err}");
+}
+
+#[test]
+fn a_cluster_name_resolves_a_virtual_cluster_through_the_search() {
+    // cluster:<name> reads the listing, which leaves out each virtual cluster, and the search
+    // with environment eq nested too (#116)
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let api = clusters_named(dir.path(), &[("lab-cluster", CLUSTER_UID), ("other", "c2")])
+        .with(
+            SEARCH_SCHEMA,
+            search_schema(&["clusterName", "environment"]),
+        )
+        .with_post(
+            CLUSTER_SEARCH,
+            &virtual_search(vec![]),
+            serde_json::json!({"items": [virtual_item("c-v", "vc-1", "p1", ("g1", "dev-group"),
+                (CLUSTER_UID, "lab-cluster"))], "listmeta": {"continue": ""}}),
+        );
+    let palette = Palette::new(&api);
+    assert_eq!(palette.cluster_uid_named("vc-1").unwrap(), "c-v");
+    assert_eq!(
+        palette.cluster_uid_named("lab-cluster").unwrap(),
+        CLUSTER_UID
+    );
+    let err = palette.cluster_uid_named("nope").unwrap_err();
+    assert!(matches!(err, Error::ClusterNotFound { .. }), "{err}");
+    assert!(
+        err.to_string().contains("lab-cluster, other, vc-1"),
+        "the names on offer hold the virtual cluster: {err}"
+    );
+    assert_eq!(api.posted().len(), 3, "one search for each lookup");
+
+    // a virtual cluster and a cluster with one name: the name is ambiguous
+    let twins = api.clone().with(
+        "/v1/dashboard/spectroclusters/meta",
+        serde_json::json!([listed_cluster("vc-1", "c8", "Running")]),
+    );
+    let err = Palette::new(twins).cluster_uid_named("vc-1").unwrap_err();
+    assert!(matches!(err, Error::ClusterNameAmbiguous { .. }), "{err}");
+    assert!(err.to_string().contains("c-v, c8"), "{err}");
+
+    // the search takes no environment: the listing alone, and no search
+    let older = clusters_named(dir.path(), &[("lab-cluster", CLUSTER_UID)])
+        .with(SEARCH_SCHEMA, search_schema(&["clusterName"]));
+    let err = Palette::new(&older).cluster_uid_named("vc-1").unwrap_err();
+    assert!(matches!(err, Error::ClusterNotFound { .. }), "{err}");
+    assert!(older.posted().is_empty());
 }
 
 /// A cluster document, as `GET /v1/spectroclusters/{uid}` returns it. The applied profiles are in
@@ -12275,6 +12550,104 @@ fn list_clusters_with_a_tag_searches_palette_and_names_the_project_of_each() {
     );
     assert!(
         text.contains("project prod (uid p2)") && text.contains("env=prod, team=pay"),
+        "{text}"
+    );
+}
+
+#[test]
+fn list_clusters_with_a_tag_names_a_virtual_cluster_that_carries_the_label() {
+    // The search leaves out each virtual cluster unless a condition asks for it, so a query
+    // searches a second time with environment eq nested added to its groups (#116).
+    let payments = fleet_row(
+        "c-pay",
+        "payments",
+        "p2",
+        serde_json::json!({"env": "prod"}),
+    );
+    let mut vc = virtual_item(
+        "c-v",
+        "vc-prod",
+        "p2",
+        ("g1", "prod-group"),
+        ("c-pay", "payments"),
+    );
+    vc["metadata"]["labels"] = serde_json::json!({"env": "prod"});
+    let tags = vec![serde_json::json!({"conjunction": "and",
+        "filters": [search_eq("tags", "env:prod")]})];
+    let api = serve_fleet(
+        MemoryApi::new(),
+        vec![payments.clone()],
+        vec![payments.clone()],
+    )
+    .with(
+        SEARCH_SCHEMA,
+        search_schema(&["clusterName", "tags", "environment"]),
+    )
+    .with_post(
+        CLUSTER_SEARCH,
+        &virtual_search(tags),
+        serde_json::json!({"items": [vc], "listmeta": {"continue": ""}}),
+    );
+    let query = ops::ClusterQuery {
+        tags: vec!["env=prod".into()],
+        filter: None,
+    };
+    let l = fleet_listing(&api, query.clone());
+    assert_eq!(l.resolved, Some(ops::Resolved::Search));
+    assert_eq!(l.includes_virtual, Some(true));
+    let clusters = l.clusters.as_ref().unwrap();
+    assert_eq!(
+        clusters.iter().map(|c| c.name.as_str()).collect::<Vec<_>>(),
+        ["payments", "vc-prod"]
+    );
+    let vc = &clusters[1];
+    assert_eq!(vc.labels["env"], "prod");
+    assert_eq!(
+        vc.virtual_cluster
+            .as_ref()
+            .and_then(|v| v.cluster_group.as_ref())
+            .map(|g| g.name.as_str()),
+        Some("prod-group")
+    );
+    assert!(clusters[0].virtual_cluster.is_none());
+    // two searches: the query, and the query with the condition on the environment
+    let posted = api.posted();
+    assert_eq!(posted.len(), 2, "{posted:?}");
+    let groups = |i: usize| posted[i].1["filter"]["filterGroups"].clone();
+    assert_eq!(groups(0).as_array().map(Vec::len), Some(1));
+    assert_eq!(groups(1)[0], groups(0)[0], "the same query");
+    assert_eq!(groups(1)[1]["filters"][0]["property"], "environment");
+    assert_eq!(
+        groups(1)[1]["filters"][0]["condition"]["string"]["match"]["values"],
+        serde_json::json!(["nested"])
+    );
+
+    let text = render::renderer(Format::Terminal, Paint::off(), false)
+        .render_list(&l)
+        .unwrap();
+    assert!(
+        text.contains("nested  project prod (uid p2)  env=prod  virtual (group prod-group)\n"),
+        "{text}"
+    );
+    let json: Value = serde_json::from_str(
+        &render::renderer(Format::Json, Paint::off(), true)
+            .render_list(&l)
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(json["includesVirtual"], true);
+    assert_eq!(json["clusters"][1]["virtual"]["clusterGroup"]["uid"], "g1");
+
+    // the search takes tags and no environment: one search, and the list says so
+    let older = serve_fleet(MemoryApi::new(), vec![payments.clone()], vec![payments]);
+    let l = fleet_listing(&older, query);
+    assert_eq!(l.includes_virtual, Some(false));
+    assert_eq!(older.posted().len(), 1);
+    let text = render::renderer(Format::Terminal, Paint::off(), false)
+        .render_list(&l)
+        .unwrap();
+    assert!(
+        text.contains("the list holds no virtual cluster: Palette has no search"),
         "{text}"
     );
 }

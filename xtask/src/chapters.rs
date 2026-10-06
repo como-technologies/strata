@@ -2515,6 +2515,32 @@ fn use_cases(r: &mut Runner) {
         false,
         "strata consumers platform-addons@1.0.0",
     );
+    // the cluster listing leaves out the virtual cluster, so list asks the search for it (#116)
+    r.step("group-list", 0, false, "strata list clusters");
+    r.step(
+        "group-list-json",
+        0,
+        false,
+        r#"strata list clusters --json | jq -c '.includesVirtual, (.clusters[] | select(.virtual) | {name, virtual})'"#,
+    );
+    r.cluster_field(
+        DEV,
+        TENANT_B,
+        "/metadata/labels",
+        json!({"managed-by": "opentofu", "team": "b"}),
+    );
+    r.step(
+        "group-list-tag",
+        0,
+        false,
+        "strata list clusters --tag team=b",
+    );
+    r.step(
+        "group-member-by-name",
+        0,
+        false,
+        "strata compare clustergroup:dev-group cluster:tenant-b",
+    );
     r.step(
         "group-policy",
         0,

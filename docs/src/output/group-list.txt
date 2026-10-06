@@ -1,0 +1,6 @@
+$ strata list clusters
+project dev (uid 64f20000000000000000a0d1)
+
+2 clusters
+  cluster:64f1000000000000000000e4  tenant-a  Running  aws
+  cluster:64f1000000000000000000e5  tenant-b  Running  nested  virtual (group dev-group)

@@ -440,6 +440,10 @@ is the path as a list: strings for keys, numbers for indexes, and
   `resolved`: `search` when the search of Palette found the clusters, and
   `listing` when strata matched the labels of the listing itself.
   `queryFilter`, with `--filter`: the saved filter, as `filters[]` gives it.
+- `includesVirtual`, with clusters: `true` when strata asked the search of
+  Palette for the virtual clusters, so `clusters[]` holds them. `false` when
+  Palette has no search, or its search takes no `environment`: the list then
+  holds no virtual cluster.
 - `profiles[]`, `clusters[]`, `projects[]`, and `filters[]`: only the kinds that were listed.
   A kind that was listed and holds nothing is `[]`. Profiles come by name and
   then by version, clusters by name, and projects by name.
@@ -459,7 +463,10 @@ is the path as a list: strings for keys, numbers for indexes, and
     listing gave none.
     `projectName` joins them when strata could read the project listing.
     `labels`: the labels of the cluster, as a map; a tag with no value has the
-    value `spectro__tag`.
+    value `spectro__tag`. `virtual`, for a virtual cluster alone: `clusterGroup`
+    and `hostCluster`, each with `uid` and `name`, as the search names them.
+    `name` is absent when Palette gives none, and `hostCluster` is absent for a
+    group of the system.
     With `--applied`, also `profiles[]` with the `uid`, `name`, `version`, and
     `type` of each profile the cluster applies, or `error`, and
     `updatesPending` and `pendingUpdates[]` as a cluster record gives them.

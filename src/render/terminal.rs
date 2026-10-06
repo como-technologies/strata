@@ -14,8 +14,8 @@ use super::{
     same_content_note, second_reading_counts, short, show, state_suffix, subject, tag_rename,
     tier_path, tier_states, traits_suffix, unchanged_sentence, unread_notes, unverified_sentence,
     updates_pending_notes, upstream_unknown_note, values_changed_suffix, variable_lines,
-    variables_comparable, variables_unavailable_note, version_display, version_note,
-    virtual_line, virtual_note, who_entry, who_heading,
+    variables_comparable, variables_unavailable_note, version_display, version_note, virtual_line,
+    virtual_note, who_entry, who_heading,
 };
 use crate::api::mask::MASKED;
 use crate::color::Paint;

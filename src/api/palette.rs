@@ -397,7 +397,10 @@ impl<A: PaletteApi> Palette<A> {
     pub fn cluster_uid_named(&self, name: &str) -> Result<String> {
         let listing = self.cluster_listing()?;
         let mut clusters = named_entries(&listing);
-        if self.cluster_search_properties()?.contains(SEARCH_ENVIRONMENT) {
+        if self
+            .cluster_search_properties()?
+            .contains(SEARCH_ENVIRONMENT)
+        {
             let found = self.virtual_cluster_search(&Value::Null)?;
             clusters.extend(named_entries(&Value::Array(found)));
         }

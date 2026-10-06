@@ -1,0 +1,6 @@
+$ strata list clusters --tag team=b
+tenant scope
+
+1 cluster
+the clusters with team=b, from the search of Palette, at tenant scope
+  cluster:64f1000000000000000000e5  tenant-b  Running  nested  project dev (uid 64f20000000000000000a0d1)  managed-by=opentofu, team=b  virtual (group dev-group)

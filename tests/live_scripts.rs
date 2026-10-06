@@ -2108,6 +2108,67 @@ fn app_profile_sh_stage_3_makes_two_app_profiles_whose_tiers_differ_in_the_insta
     );
 }
 
+/// A stage 1 of `cluster-group.sh`: the group `g-1` with the virtual cluster `m-1`, named
+/// `fred-member`, whose record strata gives.
+fn cluster_group_stage_1() -> Stage {
+    let mut outputs = baseline_outputs();
+    outputs["cluster_group_uid"] = "g-1".into();
+    outputs["cluster_group_name"] = "fred-group".into();
+    outputs["member_cluster_uid"] = "m-1".into();
+    let mut stage = Stage::new(outputs);
+    stage.route(
+        "/v1/spectroclusters/c-a",
+        r#"{"metadata":{"name":"fred"},"status":{"state":"Running"}}"#,
+    );
+    stage.strata(
+        "snapshot cluster:m-1 -o member.json",
+        0,
+        r#"{"source":{"cluster":{"uid":"m-1","name":"fred-member"}}}"#,
+    );
+    stage
+}
+
+#[test]
+fn cluster_group_sh_stage_1_lists_the_virtual_cluster_and_resolves_its_name() {
+    let mut stage = cluster_group_stage_1();
+    stage.strata(
+        "list clusters --json",
+        0,
+        r#"{"includesVirtual":true,"clusters":[{"name":"fred","uid":"c-a"},
+            {"name":"fred-member","uid":"m-1","state":"Running","cloudType":"nested",
+             "virtual":{"clusterGroup":{"uid":"g-1","name":"fred-group"}}}]}"#,
+    );
+    stage.strata(
+        "snapshot cluster:fred-member",
+        0,
+        r#"{"source":{"cluster":{"uid":"m-1","name":"fred-member"}}}"#,
+    );
+    let (_, steps) = stage.run("cluster-group.sh", &["1"]);
+    passed(
+        &steps,
+        &["member-listed", "member-listed-group", "member-by-name"],
+    );
+    let calls = std::fs::read_to_string(stage.path("strata/calls")).unwrap();
+    assert!(
+        calls.lines().any(|l| l == "snapshot cluster:fred-member"),
+        "the name of the member, from its record: {calls}"
+    );
+
+    // a list that leaves out the virtual cluster, as before #116, fails the check
+    let mut stage = cluster_group_stage_1();
+    stage.strata(
+        "list clusters --json",
+        0,
+        r#"{"includesVirtual":false,"clusters":[{"name":"fred","uid":"c-a"}]}"#,
+    );
+    let (_, steps) = stage.run("cluster-group.sh", &["1"]);
+    passed(&steps, &["member-listed"]);
+    assert!(
+        steps.contains("FAIL  member-listed-group"),
+        "the check sees a list with no virtual cluster: {steps}"
+    );
+}
+
 #[test]
 fn cluster_group_sh_stage_3_changes_the_cpu_limit_of_the_group_and_puts_it_back() {
     let mut outputs = baseline_outputs();

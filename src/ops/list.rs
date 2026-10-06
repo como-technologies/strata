@@ -350,7 +350,10 @@ where
         let mut clusters = if options.query.is_empty() {
             let listing = home.cluster_listing()?;
             // the listing leaves out each virtual cluster, so strata asks the search for them
-            let nested = if home.cluster_search_properties()?.contains(SEARCH_ENVIRONMENT) {
+            let nested = if home
+                .cluster_search_properties()?
+                .contains(SEARCH_ENVIRONMENT)
+            {
                 progress.note("searching the virtual clusters");
                 Some(home.virtual_cluster_search(&Value::Null)?)
             } else {

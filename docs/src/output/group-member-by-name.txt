@@ -1,0 +1,7 @@
+$ strata compare clustergroup:dev-group cluster:tenant-b
+platform-addons@1.0.0 pinned by cluster group dev-group (uid 64f5000000000000000000a1)  ->  platform-addons@1.0.0 on cluster tenant-b (uid 64f1000000000000000000e5)
+root       f6312d5a2793 -> f6312d5a2793   IDENTICAL
+
+  variables unchanged
+
+  [addon] namespace-policy           1.0.0              unchanged

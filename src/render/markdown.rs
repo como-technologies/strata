@@ -673,8 +673,9 @@ impl Renderer for MarkdownRenderer {
                 ""
             };
             if !clusters.is_empty() {
-                let head =
-                    format!("| ref | name | state | cloud |{project}{labels}{virtual_column}{applied}");
+                let head = format!(
+                    "| ref | name | state | cloud |{project}{labels}{virtual_column}{applied}"
+                );
                 let rule: String = head.matches('|').skip(1).map(|_| "---|").collect();
                 o.push_str(&format!("{head}\n|{rule}\n"));
             }
@@ -704,7 +705,10 @@ impl Renderer for MarkdownRenderer {
                         .virtual_cluster
                         .as_ref()
                         .map(|v| virtual_group(v).unwrap_or_else(|| "yes".to_string()));
-                    o.push_str(&format!(" {} |", escape(dash(cell.as_deref().unwrap_or("")))));
+                    o.push_str(&format!(
+                        " {} |",
+                        escape(dash(cell.as_deref().unwrap_or("")))
+                    ));
                 }
                 if with_applied {
                     let profiles = if let Some(msg) = entry_error(c.error.as_ref()) {

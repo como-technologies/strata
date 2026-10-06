@@ -90,7 +90,8 @@ root stays, and `verify` of the record names the change:
   stays.
 - `consumers` of a pinned version names each virtual cluster that runs it: the
   consumer list of Palette names them. The cluster listing does not, so `list
-  clusters` does not show a virtual cluster.
+  clusters` asks the search of Palette for them, and the row of each ends with
+  its group: see [The virtual clusters](../commands/list.md#the-virtual-clusters).
 
 ## Palette behavior
 

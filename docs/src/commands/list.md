@@ -65,8 +65,47 @@ what it selects:
 Strata reads the search schema of the tenant first. When the search takes no
 `tags`, or Palette has no search, strata reads the cluster listing and matches
 the labels itself, with the same rules, and the heading says so. The search
-lists no virtual cluster. `strata snapshot filter:NAME --dir DIR` writes a record
-of each cluster: see [Find the fleet from Palette](../use-cases/fleet.md).
+lists no virtual cluster unless a condition asks for it: see
+[The virtual clusters](#the-virtual-clusters). `strata snapshot filter:NAME
+--dir DIR` writes a record of each cluster: see
+[Find the fleet from Palette](../use-cases/fleet.md).
+
+## The virtual clusters
+
+The cluster listing of Palette leaves out each virtual cluster. Its search
+leaves them out too, unless a condition asks for the environment `nested`, the
+cloud type of a virtual cluster. So strata asks the search for them, in the
+scope of the listing. The row of a virtual cluster ends with its cluster group:
+
+```text
+{{#include ../output/group-list.txt}}
+```
+
+The JSON gives `virtual` on each virtual cluster: its cluster group, and the
+cluster that hosts it. `includesVirtual` says that strata asked for them:
+
+```text
+{{#include ../output/group-list-json.txt}}
+```
+
+`--tag` and `--filter` send the search a second time, with the same condition
+added, so a virtual cluster that carries the label is in the answer:
+
+```text
+{{#include ../output/group-list-tag.txt}}
+```
+
+`cluster:<name>` of a virtual cluster resolves through the same search:
+
+```text
+{{#include ../output/group-member-by-name.txt}}
+```
+
+With `--format markdown`, the column `virtual` names the group. When Palette
+has no search, or its search takes no `environment`, the list holds no virtual
+cluster, and the heading says so. `consumers` names a virtual cluster from the
+consumer list of Palette and from the same search: see
+[Cluster groups](../internals/palette/other-objects.md#cluster-groups).
 
 ## Find the profiles a cluster runs
 
@@ -244,7 +283,8 @@ kind differently by scope:
 
 `--tag` and `--filter` always search at tenant scope, and list clusters alone.
 `strata list filters` reads the saved tag filters, which belong to the tenant.
-Each listed cluster carries its labels in the JSON.
+Each listed cluster carries its labels in the JSON. A list of clusters holds the
+virtual clusters of the scope, from the search of Palette: one more request.
 
 Exit `0`, or `2` when strata cannot read a listing. `--json` writes
 [`strata-list/1`](../reference/documents.md#strata-list1).

@@ -911,6 +911,8 @@ with cluster A.
 | `group-macros`, `group-macro-values`, `group-macros-verify` | 0 | #111: a record of `clustergroup:<uid>` with `--macros` holds `cluster.macroValues`, and `verify` of it reads the values of the group again |
 | `member-consumer`, `member-consumer-listed` | 1, 0 | #78: `consumers` of the add-on version names the virtual cluster, from the consumer list of Palette |
 | `member-not-in-listing` | 0 | #78: the cluster listing does not name the virtual cluster |
+| `member-listed`, `member-listed-group` | 0 | #116: `list clusters --json` names the virtual cluster, with `virtual.clusterGroup` the group, and `includesVirtual` true (no result yet) |
+| `member-by-name` | 0 | #116: `cluster:<name>` of the virtual cluster resolves to its uid (no result yet) |
 | `search-profile`, `search-profile-runs` | 0 | #181: the cluster search with `clusterProfiles eq <add-on name>` answers cluster A, which runs the add-on version, and not the virtual cluster |
 | `search-nested`, `search-nested-misses-member` | 0 | #184: the same search with `environment eq nested` does not answer the virtual cluster of the group, which runs the add-on version through its group |
 | `member-consumer-search` | 0 | #149: `consumers` does its second reading through the search |
