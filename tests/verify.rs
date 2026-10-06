@@ -3604,6 +3604,160 @@ fn list_with_a_pack_keeps_a_draft_version_that_carries_the_pack_with_its_mark() 
     );
 }
 
+/// `lab-profile@1.0.0` is linked by a cluster template and run by no cluster. `lab-profile@1.1.0`
+/// is run by the cluster `fred` and linked by the same template. Palette names both kinds in the
+/// profile document, and refuses the delete of each version.
+fn a_linked_and_a_shared_version() -> MemoryApi {
+    let template = serde_json::json!([
+        {"uid": "tmpl-1", "name": "barney-template", "projectUid": "p1", "kind": "clustertemplate"}
+    ]);
+    let mut linked = draft_or_published("u-l1", "1.0.0", "1.19.6", true);
+    linked["status"]["inUseClusters"] = serde_json::json!([]);
+    linked["status"]["inUseClusterTemplates"] = template.clone();
+    let mut shared = draft_or_published("u-s1", "1.1.0", "1.20.1", true);
+    shared["status"]["inUseClusterUids"] = serde_json::json!(["c-fred"]);
+    shared["status"]["inUseClusters"] =
+        serde_json::json!([{"uid": "c-fred", "name": "fred", "projectUid": "p1"}]);
+    shared["status"]["inUseClusterTemplates"] = template;
+    MemoryApi::new()
+        .with(
+            "/v1/dashboard/clusterprofiles/metadata",
+            serde_json::json!({"items": [
+                listed_profile("lab-profile", "1.0.0", "u-l1"),
+                listed_profile("lab-profile", "1.1.0", "u-s1"),
+            ]}),
+        )
+        .with("/v1/clusterprofiles/u-l1", linked)
+        .with("/v1/clusterprofiles/u-s1", shared)
+        .with(
+            "/v1/spectroclusters/c-fred",
+            serde_json::json!({
+                "metadata": {"name": "fred", "uid": "c-fred", "annotations": {"projectUid": "p1"}},
+                "spec": {"clusterProfileTemplates": [{"uid": "u-s1", "profileVersion": "1.1.0"}]},
+                "status": {"state": "Running"},
+            }),
+        )
+}
+
+/// `list --packs` counts each consumer that the profile document names, and not the clusters
+/// alone. A version that a template links and no cluster runs has one consumer, because Palette
+/// refuses its delete. `--json` gives the count by kind.
+#[test]
+fn list_with_packs_counts_the_cluster_templates_of_a_version_with_its_clusters() {
+    let api = a_linked_and_a_shared_version();
+    let l = ops::list(
+        &ListOptions {
+            kinds: vec![ListKind::Profiles],
+            packs: true,
+            ..ListOptions::default()
+        },
+        |_| Ok(Palette::new(api.clone())),
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    let profiles = l.profiles.as_ref().unwrap();
+    assert_eq!(
+        profiles
+            .iter()
+            .map(|p| (p.reference.as_str(), p.consumers))
+            .collect::<Vec<_>>(),
+        [
+            (
+                "lab-profile@1.0.0",
+                Some(ops::ConsumerCounts {
+                    clusters: 0,
+                    templates: 1
+                })
+            ),
+            (
+                "lab-profile@1.1.0",
+                Some(ops::ConsumerCounts {
+                    clusters: 1,
+                    templates: 1
+                })
+            ),
+        ]
+    );
+
+    let text = render::renderer(Format::Terminal, Paint::off(), false)
+        .render_list(&l)
+        .unwrap();
+    assert!(
+        text.contains("  lab-profile@1.0.0  u-l1  aws  cluster  1 consumer\n"),
+        "{text}"
+    );
+    assert!(
+        text.contains("  lab-profile@1.1.0  u-s1  aws  cluster  2 consumers\n"),
+        "{text}"
+    );
+    let md = render::renderer(Format::Markdown, Paint::off(), false)
+        .render_list(&l)
+        .unwrap();
+    assert!(
+        md.contains("| `u-l1` | aws | cluster | 1 consumer |"),
+        "{md}"
+    );
+    let json: Value = serde_json::from_str(
+        &render::renderer(Format::Json, Paint::off(), true)
+            .render_list(&l)
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        json["profiles"][0]["consumers"],
+        serde_json::json!({"clusters": 0, "templates": 1}),
+        "{json}"
+    );
+    assert_eq!(
+        json["profiles"][1]["consumers"],
+        serde_json::json!({"clusters": 1, "templates": 1}),
+        "{json}"
+    );
+}
+
+/// `list --packs` and `consumers --list-only` read one profile document, so they give one number
+/// for a version: the clusters of its consumer list and the cluster templates that link it.
+#[test]
+fn list_with_packs_gives_the_count_of_consumers_with_the_list_of_palette_alone() {
+    let api = a_linked_and_a_shared_version();
+    let l = ops::list(
+        &ListOptions {
+            kinds: vec![ListKind::Profiles],
+            packs: true,
+            ..ListOptions::default()
+        },
+        |_| Ok(Palette::new(api.clone())),
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    for p in l.profiles.unwrap() {
+        let r = ops::consumers_with(
+            &Ref::Uid(p.uid.clone()),
+            &ops::ConsumersOptions { list_only: true },
+            |_| Ok(Palette::new(api.clone())),
+            "t1",
+            &Progress::silent(),
+        )
+        .unwrap();
+        let counts = p.consumers.unwrap();
+        assert_eq!(
+            counts.count(),
+            r.count,
+            "{}: list --packs and consumers --list-only differ",
+            p.reference
+        );
+        let of_kind = |kind: &str| r.consumers.iter().filter(|c| c.kind == kind).count();
+        assert_eq!(
+            (of_kind(ops::CLUSTER_KIND), of_kind(ops::TEMPLATE_KIND)),
+            (counts.clusters, counts.templates),
+            "{}: the kinds differ",
+            p.reference
+        );
+    }
+}
+
 #[test]
 fn list_projects_reads_at_tenant_scope_and_a_project_override_scopes_the_rest() {
     let in_p2 = MemoryApi::new()

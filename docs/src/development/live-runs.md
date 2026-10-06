@@ -381,6 +381,7 @@ version that the cluster runs.
 | `release-doc`, `release-names-template` | 0 | #66: the version names the template that uses it, and no cluster |
 | `release-record-template`, `release-record-root` | 0 | #260: a record of the linked release version has no `source.clusterTemplates`, and has the root from before the link |
 | `release-consumers`, `release-consumers-template` | 1, 0 | #147: `strata consumers` of the linked version names the template with `kind: template`, and exits `1`. |
+| `release-list-consumers`, `release-list-consumers-template` | 0 | #176: `strata list --packs` counts one template and no cluster for the linked version, the count of `consumers --list-only`. No result yet |
 | `release-delete`, `release-delete-says` | 2, 0 | #147: Palette refuses the delete of the linked version, `DeletionResourceInUseError`. |
 | `lock-edit`, `lock-edit-says` | 2, 0 | #66: an edit in place of a linked version, a `PUT` of the whole version, is refused, and the refusal carries the code `ClusterProfileUpdateValidationFailure` |
 | `lock-verify` | 0 | #66: the version is unchanged |

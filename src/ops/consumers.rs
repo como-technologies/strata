@@ -14,9 +14,9 @@ use crate::progress::Progress;
 use crate::reference::Ref;
 use crate::snapshot::{Snapshot, Tool};
 
+use super::consumer_list::consumer_uids;
 use super::fleet::Resolved;
 use super::list::{ListedCluster, TENANT_SCOPE, list_clusters, name_projects_of};
-use super::consumer_list::consumer_uids;
 use super::{client_for, text};
 
 /// Schema id of the document `consumers` writes.

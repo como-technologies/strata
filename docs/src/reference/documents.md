@@ -445,9 +445,14 @@ is the path as a list: strings for keys, numbers for indexes, and
   then by version, clusters by name, and projects by name.
   - A profile: `ref`, `name`, `version`, `uid`, and `cloudType`. With `--packs`,
     also `type`, `consumers`, `published`, and `packs[]` with `layer`, `name`,
-    `tag`, and `version`, or `error`. `published` is the `status.isPublished` of
-    the version. When it is `false`, nobody published the version, and `packs[]`
-    holds the packs of its draft.
+    `tag`, and `version`, or `error`. `consumers` is the count by kind of the
+    consumers that the profile document names: `clusters`, the clusters of its
+    consumer list, and `templates`, the cluster templates that link the
+    version. The row of the version shows their sum, which is the count of
+    `consumers --list-only` before the edge hosts. In strata 0.20 and before,
+    `consumers` was the number of clusters. `published` is the
+    `status.isPublished` of the version. When it is `false`, nobody published
+    the version, and `packs[]` holds the packs of its draft.
   - A cluster: `ref`, `name`, `uid`, `state`, `cloudType`, `clusterType`, and
     `projectUid`. `clusterType` is the type as Palette lists it. `PureManage`
     is a cluster that Palette built. `AlloyMonitor`, `AlloyAssist`, and

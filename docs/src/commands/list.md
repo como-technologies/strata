@@ -199,6 +199,37 @@ published version with a draft that waits: see
 [draft.sh](../development/live-runs.md#draftsh). See also
 [Drafts](../internals/palette/profiles.md#drafts).
 
+## The consumers of a version
+
+With `--packs`, the row of a version ends with the number of its consumers.
+Strata counts what the profile document names: the clusters of its consumer
+list, and the cluster templates that link the version. Palette refuses the
+delete of the version while one of them uses it. Here the template
+`aws-standard` links `aws-stack@1.0.0`, which no cluster runs:
+
+```text
+{{#include ../output/list-consumers.txt}}
+```
+
+`--json` gives the count by kind:
+
+```text
+{{#include ../output/list-consumers-json.txt}}
+```
+
+`strata consumers --list-only` reads the same document, so it names the same
+consumers. It also searches the edge hosts:
+
+```text
+{{#include ../output/list-consumers-same.txt}}
+```
+
+`list --packs` costs one request for each version. It reads no edge host, and
+it does no second reading. So an edge host that the version is bound to, and a
+cluster that the list of Palette leaves out, are not in the count.
+`strata consumers` finds them: see [Edge hosts](./consumers.md#edge-hosts) and
+[A cluster that the list does not name](./consumers.md#a-cluster-that-the-list-does-not-name).
+
 ## What to expect
 
 Name the kinds to list: `strata list profiles`, or `strata list clusters

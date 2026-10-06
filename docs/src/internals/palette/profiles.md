@@ -415,6 +415,8 @@ The profile document names no edge host.
 
 So [`strata consumers`](../../commands/consumers.md) counts the clusters and the
 templates of the profile document, and searches the edge hosts.
+[`strata list --packs`](../../commands/list.md#the-consumers-of-a-version)
+counts the same clusters and templates.
 
 ## The variables route
 

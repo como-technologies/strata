@@ -105,7 +105,10 @@ mod tests {
         let linked = ConsumerCounts::of(&json!({"status": {
             "inUseClusters": [], "inUseClusterTemplates": [{"uid": "t1"}],
         }}));
-        assert_eq!((linked.clusters, linked.templates, linked.count()), (0, 1, 1));
+        assert_eq!(
+            (linked.clusters, linked.templates, linked.count()),
+            (0, 1, 1)
+        );
         assert_eq!(ConsumerCounts::of(&json!({})), ConsumerCounts::default());
     }
 }
