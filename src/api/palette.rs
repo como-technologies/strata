@@ -1864,7 +1864,7 @@ mod tests {
                     {"version": "1.0.0", "uid": "u50"}, {"version": "2.0.0", "uid": "u50b"}]}}],
                        "listmeta": {"count": 51, "limit": 50, "offset": 50}}),
             );
-        let uids = Palette::new(api.clone())
+        let uids = Palette::new(&api)
             .profile_uids_in_scope(ProfileScope::Tenant)
             .unwrap();
         assert_eq!(uids.len(), 52, "{uids:?}");

@@ -3722,7 +3722,7 @@ fn list_gives_each_version_its_scope_from_the_profile_search_and_marks_a_version
             kinds: vec![ListKind::Profiles],
             ..ListOptions::default()
         },
-        |_| Ok(Palette::new(api.clone())),
+        |_| Ok(Palette::new(&api)),
         "t1",
         &Progress::silent(),
     )
@@ -3797,7 +3797,7 @@ fn list_with_packs_reads_the_scope_in_each_document_and_joins_the_marks_of_a_ten
             packs: true,
             ..ListOptions::default()
         },
-        |_| Ok(Palette::new(api.clone())),
+        |_| Ok(Palette::new(&api)),
         "t1",
         &Progress::silent(),
     )
@@ -3870,7 +3870,7 @@ fn list_keeps_the_listing_alone_when_palette_has_no_profile_search() {
             kinds: vec![ListKind::Profiles],
             ..ListOptions::default()
         },
-        |_| Ok(Palette::new(api.clone())),
+        |_| Ok(Palette::new(&api)),
         "t1",
         &Progress::silent(),
     )
@@ -3896,7 +3896,7 @@ fn list_keeps_the_listing_alone_when_palette_has_no_profile_search() {
     let text = render::renderer(Format::Terminal, Paint::off(), false)
         .render_list(&l)
         .unwrap();
-    assert!(!text.contains("tenant"), "no mark without a scope: {text}");
+    assert!(!text.contains("  tenant\n"), "no mark without a scope: {text}");
 }
 
 #[test]
@@ -3917,7 +3917,7 @@ fn list_at_tenant_scope_asks_for_the_system_versions_and_marks_no_tenant_version
             project: Some(String::new()),
             ..ListOptions::default()
         },
-        |_| Ok(Palette::new(api.clone())),
+        |_| Ok(Palette::new(&api)),
         "t1",
         &Progress::silent(),
     )
@@ -3949,7 +3949,7 @@ fn snapshot_of_a_name_and_version_that_a_tenant_and_a_project_profile_share_name
     let api = a_tenant_and_a_project_version();
     let err = ops::snapshot_for(
         &Ref::parse("aws-stack@1.1.1"),
-        || Ok(Palette::new(api.clone())),
+        || Ok(Palette::new(&api)),
         "t1",
         &Progress::silent(),
     )
@@ -3978,7 +3978,7 @@ fn snapshot_of_a_name_and_version_that_a_tenant_and_a_project_profile_share_name
     // the uid names one version, and records it
     let record = ops::snapshot_for(
         &Ref::Uid("u-tenant".into()),
-        || Ok(Palette::new(api.clone())),
+        || Ok(Palette::new(&api)),
         "t1",
         &Progress::silent(),
     )

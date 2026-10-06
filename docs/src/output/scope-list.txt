@@ -1,0 +1,7 @@
+$ strata list profiles
+project dev (uid 64f20000000000000000a0d1)
+
+3 profiles
+  aws-stack@1.1.0  64e0000000000000000000b2  aws
+  aws-stack@1.1.1  64e0000000000000000000c3  aws
+  aws-stack@1.1.1  64e4000000000000000000c3  aws  tenant

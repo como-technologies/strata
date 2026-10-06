@@ -1,0 +1,4 @@
+$ strata list profiles --json | jq -r '.profiles[] | "\(.ref) \(.uid) \(.scope)"'
+aws-stack@1.1.0 64e0000000000000000000b2 project
+aws-stack@1.1.1 64e0000000000000000000c3 project
+aws-stack@1.1.1 64e4000000000000000000c3 tenant
