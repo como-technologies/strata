@@ -1450,10 +1450,15 @@ impl<A: PaletteApi> Palette<A> {
     /// # Errors
     ///
     /// [`Error::Api`] for each answer of Palette that is an error. A refusal of the profile is
-    /// one: HTTP 500 with a code of
-    /// [`PROFILE_IMPORT_REFUSAL_CODES`](crate::error::PROFILE_IMPORT_REFUSAL_CODES), HTTP 409
-    /// with `PROFILE_EXISTS_CODE`, HTTP 404 with `PACK_MACRO_UNDEFINED_CODE`, or the HTTP 422 of
-    /// the API schema. Each other error of the request, such as a refused connection.
+    /// one of these answers:
+    ///
+    /// - HTTP 500 with a code of
+    ///   [`PROFILE_IMPORT_REFUSAL_CODES`](crate::error::PROFILE_IMPORT_REFUSAL_CODES).
+    /// - HTTP 409 with `PROFILE_EXISTS_CODE`.
+    /// - HTTP 404 with `PACK_MACRO_UNDEFINED_CODE`.
+    /// - The HTTP 422 of the API schema.
+    ///
+    /// Each other error of the request, such as a refused connection.
     pub fn validate_profile_import(&self, body: &Value) -> Result<Value> {
         self.api
             .post_json("/v1/clusterprofiles/import/validate", body)

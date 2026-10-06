@@ -94,9 +94,9 @@ version across pages, and `packs` counts it once. A pack with more than a
 hundred versions lists completely: `kubernetes` in `Public Repo` had 133
 versions, which [the live example checks](../development/live-runs.md#packssh).
 
-A version that Spectro Cloud retired has its state in the last column of the
-terminal, and after the version in markdown: `deprecated`, `disabled`, or
-`deleted`. When every version in a registry has the same state, the heading
+A version that Spectro Cloud retired has its state `deprecated`, `disabled`, or
+`deleted` in the last column of the terminal. In markdown, the state is after
+the version. When every version in a registry has the same state, the heading
 says it too. The answer for the tags does not include the disabled and the
 deleted versions. So when the listing shows such a version, strata asks again
 with the `states` query, and each version gets its tags.

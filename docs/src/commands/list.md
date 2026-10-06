@@ -89,7 +89,7 @@ cluster that hosts it. `includesVirtual` says that strata asked for them:
 ```
 
 `--tag` and `--filter` send the search a second time, with the same condition
-added, so a virtual cluster that carries the label is in the answer:
+added. So a virtual cluster that carries the label is in the answer:
 
 ```text
 {{#include ../output/group-list-tag.txt}}

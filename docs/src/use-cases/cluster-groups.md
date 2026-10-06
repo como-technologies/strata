@@ -89,9 +89,10 @@ root stays, and `verify` of the record names the change:
   endpoint, or the values of the group shows in the `policy` tier. The root
   stays.
 - `consumers` of a pinned version names each virtual cluster that runs it: the
-  consumer list of Palette names them. The cluster listing does not, so `list
-  clusters` asks the search of Palette for them, and the row of each ends with
-  its group: see [The virtual clusters](../commands/list.md#the-virtual-clusters).
+  consumer list of Palette names them. The cluster listing does not name them.
+  So `list clusters` asks the search of Palette for them, and the row of each
+  ends with its group: see
+  [The virtual clusters](../commands/list.md#the-virtual-clusters).
 
 ## Palette behavior
 
