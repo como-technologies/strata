@@ -373,11 +373,11 @@ that layer has another root. So strata refuses it: a
 gives a pack another layer than its registry is `candidate-invalid`.
 
 The validate route does not answer this check. It takes a pack with another
-layer than its registry, and gives no result for the pack. Stage 4 sends
-`cert-manager` in the layer `csi`, and the route answers
-`{"packs":{"results":[]}}`. The rules of the profile type also use the layer of
-the registry. No route that takes a candidate answers them before the create,
-so strata checks them: see
+layer than its registry, and gives no result for the pack. Stage 4 of
+`validate-packs.sh` sends `cert-manager` in the layer `csi`, and the route
+answers `{"packs":{"results":[]}}`. The rules of the profile type also use
+the layer of the registry. No route that takes a candidate answers them before
+the create, so strata checks them: see
 [The gaps that strata fills](./profiles.md#the-gaps-that-strata-fills).
 
 ## Manifest pack uids
