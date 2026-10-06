@@ -336,9 +336,10 @@ pub(crate) fn draft_mark(p: &crate::ops::ListedProfile) -> Option<&'static str> 
     p.is_draft().then_some("draft")
 }
 
-/// The note of a cluster of `list --applied` that has no profile, when the listing says why: a
-/// person imported the cluster, and Palette applies no add-on profile to an imported cluster in
-/// read-only mode. `None` for a cluster with a profile, one that strata could not read, or one
+/// The note of a cluster of `list --applied` that has no profile, when the listing says why.
+///
+/// A person imported the cluster, and Palette applies no add-on profile to an imported cluster
+/// in read-only mode. `None` for a cluster with a profile, one that strata did not read, or one
 /// that Palette built.
 pub(crate) fn imported_note(c: &crate::ops::ListedCluster) -> Option<&'static str> {
     let no_profile = c.profiles.as_ref().is_some_and(Vec::is_empty);

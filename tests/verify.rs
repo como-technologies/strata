@@ -3916,7 +3916,7 @@ fn list_with_applied_says_why_an_imported_cluster_has_no_profile_and_a_built_clu
     assert!(text.contains("    lab-addons@2.0.0"), "{text}");
     let gone = line("cluster:c6");
     assert!(
-        gone.contains("(no such cluster)") && !gone.contains("imported"),
+        gone.contains("no such cluster)") && !gone.contains("imported"),
         "{text}"
     );
 
@@ -3938,7 +3938,7 @@ fn list_with_applied_says_why_an_imported_cluster_has_no_profile_and_a_built_clu
         "{md}"
     );
     assert!(
-        md.contains("| `cluster:c6` | gone | Running | aws | error: no such cluster | - |"),
+        md.contains("| `cluster:c6` | gone | Running | aws | error: GET /v1/spectroclusters/c6 failed with HTTP 404: no such cluster | - |"),
         "{md}"
     );
 

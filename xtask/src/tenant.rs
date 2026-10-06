@@ -1366,8 +1366,8 @@ impl Tenant {
             .filter(|t| t["type"] == "cluster" || t["type"] == "infra")
             .collect();
         let config_uid = format!("{uid}c");
-        // Palette gives a cluster that it built the type PureManage; an imported cluster gets an
-        // import type, by a change of the field
+        // Palette gives a cluster that it built the type PureManage. A chapter changes the field
+        // for an imported cluster.
         self.write(
             project,
             &format!("v1/spectroclusters/{uid}"),

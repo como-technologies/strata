@@ -147,8 +147,8 @@ pub struct ListedCluster {
     pub state: String,
     /// Cloud type, for example `aws`.
     pub cloud_type: String,
-    /// The cluster type, as Palette lists it: `PureManage` for a cluster that Palette built, and
-    /// `AlloyMonitor`, `AlloyAssist`, or `AlloyExtend` for a cluster that a person imported.
+    /// The cluster type, as Palette lists it. `PureManage` is a cluster that Palette built.
+    /// `AlloyMonitor`, `AlloyAssist`, and `AlloyExtend` are clusters that a person imported.
     /// Empty when the listing gave none.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub cluster_type: String,

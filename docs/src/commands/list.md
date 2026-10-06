@@ -134,9 +134,9 @@ cluster with no profile says why:
 ```
 
 With `--format markdown`, the `profiles` cell of the row holds the note. The
-JSON gives `clusterType` on each cluster, as Palette lists it: `PureManage`
-for a cluster that Palette built, and `AlloyMonitor`, `AlloyAssist`, or
-`AlloyExtend` for a cluster that a person imported:
+JSON gives `clusterType` on each cluster, as Palette lists it. `PureManage` is
+a cluster that Palette built. `AlloyMonitor`, `AlloyAssist`, and `AlloyExtend`
+are clusters that a person imported:
 
 ```text
 {{#include ../output/list-imported-json.txt}}

@@ -1,0 +1,4 @@
+$ strata list clusters --json | jq -r '.clusters[] | "\(.name) \(.clusterType)"'
+legacy AlloyMonitor
+payments PureManage
+search PureManage

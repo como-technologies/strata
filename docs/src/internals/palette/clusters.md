@@ -235,12 +235,13 @@ it so. [The knurl adapter](../../automation/knurl.md) reads it there.
 
 The listing gives each cluster a `clusterType`. `PureManage` is a cluster that
 Palette built. `AlloyMonitor`, `AlloyAssist`, and `AlloyExtend` are the types
-of a cluster that a person imported: with no cloud account, with one, and with
-the extensions of Palette. A person imports a cluster in read-only mode or in
-full permission mode. In read-only mode Palette applies no add-on profile to
-the cluster. In full permission mode it applies add-on profiles, and in no mode
-a cluster profile
+of a cluster that a person imported. They mean no cloud account, a cloud
+account, and the extensions of Palette. A person imports a cluster in
+read-only mode or in full permission mode. In read-only mode Palette applies
+no add-on profile to the cluster. In full permission mode it applies add-on
+profiles, and in no mode a cluster profile
 ([Imported clusters](https://docs.spectrocloud.com/clusters/imported-clusters/)).
+
 The listing gives no import mode: the console shows it. So the row of
 `strata list clusters --applied` says only that the cluster is imported, when it
 has no profile. No run imports a cluster: see
