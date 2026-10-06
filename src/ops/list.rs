@@ -12,7 +12,7 @@ use crate::progress::Progress;
 use crate::snapshot::{AppliedProfile, Tool};
 use crate::version;
 
-use super::{client_for, consumer_uids, items, text};
+use super::{ConsumerCounts, client_for, items, text};
 
 /// Schema id of the document `list` writes.
 pub const LIST_SCHEMA: &str = "strata-list/1";
@@ -40,7 +40,7 @@ pub struct ListOptions {
     pub kinds: Vec<ListKind>,
     /// The project to list profiles and clusters in, in place of the configured scope.
     pub project: Option<String>,
-    /// Read each profile document for its type, consumer count, and packs: one request per
+    /// Read each profile document for its type, its consumers, and its packs: one request per
     /// profile version.
     pub packs: bool,
     /// Keep only the profiles with a pack whose name contains this text, ignoring case. Implies
@@ -107,9 +107,16 @@ pub struct ListedProfile {
     /// With packs: the profile type, for example `cluster` or `add-on`.
     #[serde(default, rename = "type", skip_serializing_if = "Option::is_none")]
     pub profile_type: Option<String>,
-    /// With packs: the number of clusters that use the version.
+    /// With packs: the number of consumers that the profile document names, its clusters and
+    /// the cluster templates that link the version. `consumers` reads each one, and the edge
+    /// hosts too.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub consumers: Option<usize>,
+    /// With packs: the same consumers by kind. The document keeps `consumers` as a number for
+    /// the readers of `strata-list/1`, so the sum is stored with the kinds, and
+    /// [`ConsumerCounts::count`] gives it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub consumers_by_kind: Option<ConsumerCounts>,
     /// With packs: the packs in the order the profile holds them.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub packs: Option<Vec<ListedPack>>,
@@ -379,6 +386,7 @@ fn list_profiles<A: PaletteApi>(
                 version,
                 profile_type: None,
                 consumers: None,
+                consumers_by_kind: None,
                 packs: None,
                 published: None,
                 error: None,
@@ -427,7 +435,9 @@ fn list_profiles<A: PaletteApi>(
             })
             .collect();
         p.profile_type = template.map(|t| text(t, "/type")).filter(|t| !t.is_empty());
-        p.consumers = Some(consumer_uids(&doc).len());
+        let consumers = ConsumerCounts::of(&doc);
+        p.consumers = Some(consumers.count());
+        p.consumers_by_kind = Some(consumers);
         p.packs = Some(packs);
         p.published = doc.pointer("/status/isPublished").and_then(Value::as_bool);
     }

@@ -75,6 +75,10 @@ check release-consumers 1 "#147: strata consumers of the linked version counts t
   "$strata" consumers "$P" --json
 check release-consumers-template 0 "#147: the consumer is the template, with kind template" -- \
   jq -e --arg t "$T" '[.consumers[] | select(.kind == "template") | .uid] | index($t) != null' release-consumers.out
+check release-list-consumers 0 "#176: strata list --packs reads each version of the project" -- \
+  "$strata" list profiles --packs --json
+check release-list-consumers-template 0 "#176: the linked version counts one template and no cluster, as consumers --list-only gives" -- \
+  jq -e --arg p "$P" '.profiles[] | select(.uid == $p) | .consumers == 1 and .consumersByKind == {"clusters": 0, "templates": 1}' release-list-consumers.out
 check release-delete 2 "#147: Palette refuses the delete of a version that a template links" -- \
   "$live/api.sh" delete "$P"
 check release-delete-says 0 "the refusal says that the version is in use" -- \

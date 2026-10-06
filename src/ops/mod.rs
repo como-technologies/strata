@@ -18,6 +18,7 @@ use crate::reference::Ref;
 use crate::snapshot::{GroupMember, Snapshot, SubjectKind};
 
 mod behind;
+mod consumer_list;
 mod consumers;
 mod fleet;
 mod list;
@@ -28,6 +29,7 @@ mod validate;
 mod verify;
 
 pub use behind::*;
+pub use consumer_list::*;
 pub use consumers::*;
 pub use fleet::*;
 pub use list::*;
@@ -396,30 +398,6 @@ fn text(v: &Value, ptr: &str) -> String {
         .and_then(Value::as_str)
         .unwrap_or("")
         .to_string()
-}
-
-/// The uids of the clusters a profile document says use it: `status.inUseClusterUids`, then any
-/// uid that only `status.inUseClusters` names, in order and without repeats.
-fn consumer_uids(doc: &Value) -> Vec<String> {
-    let mut uids: Vec<String> = doc
-        .pointer("/status/inUseClusterUids")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter_map(|v| v.as_str().map(str::to_string))
-        .collect();
-    let named = doc
-        .pointer("/status/inUseClusters")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten();
-    for n in named {
-        let u = text(n, "/uid");
-        if !u.is_empty() && !uids.contains(&u) {
-            uids.push(u);
-        }
-    }
-    uids
 }
 
 /// The entries of a listing: its `items` array, or the document itself when it is the array.

@@ -467,6 +467,27 @@ fn commands(r: &mut Runner) {
         false,
         r#"strata list clusters --json | jq -r '.clusters[] | "\(.name) \(.clusterType)"'"#,
     );
+    // a cluster template links a version that no cluster runs: the version has a consumer
+    r.cluster_template(DEV, AWS_STANDARD, "aws-standard", &[A100]);
+    r.step(
+        "list-consumers-full",
+        0,
+        false,
+        "strata list profiles --packs",
+    );
+    r.excerpt("list-consumers", "list-consumers-full", r"^  aws-stack@");
+    r.step(
+        "list-consumers-json",
+        0,
+        false,
+        r#"strata list profiles --packs --json | jq -c '.profiles[] | {ref, consumers, consumersByKind}'"#,
+    );
+    r.step(
+        "list-consumers-same",
+        1,
+        false,
+        "strata consumers aws-stack@1.0.0 --list-only",
+    );
 
     r.chapter("snapshot", DEV_ENV);
     r.projects(&[("dev", DEV)]);
