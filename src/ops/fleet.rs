@@ -9,14 +9,14 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::api::{Palette, PaletteApi};
+use crate::api::{Palette, PaletteApi, SEARCH_ENVIRONMENT, SEARCH_TAGS, search_condition};
 use crate::error::{Error, Result};
 use crate::progress::Progress;
 use crate::reference::Ref;
 use crate::snapshot::{Snapshot, Tool};
 
 use super::list::{ListedCluster, TENANT_SCOPE, list_clusters, name_projects_of};
-use super::text;
+use super::{items, text};
 
 /// Schema id of the document that `snapshot` writes for a set of clusters.
 pub const SET_SCHEMA: &str = "strata-set/1";
@@ -77,11 +77,7 @@ impl TagCondition {
                 .map(|v| format!("{}:{v}", self.key))
                 .collect()
         };
-        serde_json::json!({
-            "property": "tags", "type": "string",
-            "condition": {"string": {"operator": "eq", "negation": self.negation,
-                "ignoreCase": false, "match": {"conjunction": "or", "values": values}}},
-        })
+        search_condition(SEARCH_TAGS, &values, self.negation)
     }
 }
 
@@ -165,6 +161,10 @@ pub struct Selection {
     pub clusters: Vec<ListedCluster>,
     /// How strata found them.
     pub resolved: Resolved,
+    /// Whether `clusters` holds the virtual clusters that the query selects: the search was
+    /// asked for them. False when strata read the listing, or the search takes no
+    /// `environment`.
+    pub includes_virtual: bool,
     /// The saved filter, when the query names one.
     pub filter: Option<SavedFilter>,
 }
@@ -286,8 +286,10 @@ fn meets(groups: &[(String, Vec<TagCondition>)], labels: &BTreeMap<String, Strin
 
 /// The clusters that `query` selects. Strata reads the search schema of the tenant: when the
 /// search takes the property `tags`, the search of Palette selects the clusters, at tenant scope.
-/// Else strata reads the cluster listing and matches the labels itself. `tenant` reads at tenant
-/// scope: see [`tenant_of`].
+/// The search leaves out each virtual cluster unless a condition asks for them, so strata sends
+/// it a second time with that condition, when the search takes `environment`. Else strata reads
+/// the cluster listing and matches the labels itself. `tenant` reads at tenant scope: see
+/// [`tenant_of`].
 pub fn select<A: PaletteApi>(
     query: &ClusterQuery,
     tenant: &Palette<A>,
@@ -298,20 +300,8 @@ pub fn select<A: PaletteApi>(
         None => None,
     };
     let groups = groups(query, filter.as_ref());
-    let takes_tags = match tenant.cluster_search_schema() {
-        Ok(schema) => schema
-            .pointer("/schema/properties")
-            .and_then(Value::as_array)
-            .is_some_and(|ps| {
-                ps.iter()
-                    .any(|p| text(p, "/name") == "tags" && text(p, "/type") == "string")
-            }),
-        Err(Error::Api {
-            status: 404 | 405, ..
-        }) => false,
-        Err(e) => return Err(e),
-    };
-    let (mut clusters, resolved) = if takes_tags {
+    let properties = tenant.cluster_search_properties()?;
+    let (mut clusters, resolved, includes_virtual) = if properties.contains(SEARCH_TAGS) {
         progress.note("searching the clusters of the tenant");
         let body = serde_json::json!({
             "conjunction": "and",
@@ -320,13 +310,19 @@ pub fn select<A: PaletteApi>(
                 "filters": conditions.iter().map(TagCondition::search_item).collect::<Vec<_>>(),
             })).collect::<Vec<_>>(),
         });
-        let found = tenant.cluster_search(&body)?;
-        (list_clusters(&Value::Array(found)), Resolved::Search)
+        let mut found = tenant.cluster_search(&body)?;
+        let includes_virtual = properties.contains(SEARCH_ENVIRONMENT);
+        if includes_virtual {
+            progress.note("searching the virtual clusters of the tenant");
+            found.extend(tenant.virtual_cluster_search(&body)?);
+        }
+        (list_clusters(&found), Resolved::Search, includes_virtual)
     } else {
         progress.note("listing the clusters, and matching their labels");
-        let mut all = list_clusters(&tenant.cluster_listing()?);
+        let listing = tenant.cluster_listing()?;
+        let mut all = list_clusters(items(&listing));
         all.retain(|c| meets(&groups, &c.labels));
-        (all, Resolved::Listing)
+        (all, Resolved::Listing, false)
     };
     // the search gives each project by name too; the listing does not
     name_projects_of(
@@ -338,6 +334,7 @@ pub fn select<A: PaletteApi>(
     Ok(Selection {
         clusters,
         resolved,
+        includes_virtual,
         filter,
     })
 }

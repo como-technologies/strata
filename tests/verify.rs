@@ -2697,13 +2697,14 @@ fn profile_search(name: &str, nested: bool) -> Value {
                 "match": {"conjunction": "or", "values": [value]}}},
         })
     };
-    let mut filters = vec![condition("clusterProfiles", name)];
+    let mut groups = vec![serde_json::json!({"conjunction": "and",
+        "filters": [condition("clusterProfiles", name)]})];
     if nested {
-        filters.push(condition("environment", "nested"));
+        groups.push(serde_json::json!({"conjunction": "and",
+            "filters": [condition("environment", "nested")]}));
     }
     serde_json::json!({
-        "filter": {"conjunction": "and",
-                   "filterGroups": [{"conjunction": "and", "filters": filters}]},
+        "filter": {"conjunction": "and", "filterGroups": groups},
         "sort": [{"field": "clusterName", "order": "asc"}],
     })
 }
