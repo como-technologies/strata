@@ -299,8 +299,19 @@ search with the filter `tenant` names the tenant versions that the listing
 holds. `list` asks the search for the versions of each scope that the listing
 holds beside its own. Each other version gets the scope of the listing.
 
-[`scope.sh`](../../development/live-runs.md#scopesh) checks these facts on the
-live tenant. The command page is
+[`scope.sh`](../../development/live-runs.md#scopesh) shows these facts on the
+live tenant. It makes a tenant profile with the name and the version of a
+project profile:
+
+- `annotation-tenant` and `annotation-project`: the document of each version
+  gives its scope, `tenant` or `project`.
+- `listing-both`: the profile listing of the project gives the two versions.
+- `search-tenant`: the search with the filter `tenant` names the tenant uid,
+  and not the project uid.
+- `list-scope` and `tenant-list`: `list` gives the tenant version the scope
+  `tenant`, in the project and at tenant scope.
+
+The command page is
 [A profile of the tenant](../../commands/list.md#a-profile-of-the-tenant).
 
 ## The lock of a cluster template
@@ -440,7 +451,9 @@ The profile document names no edge host.
 So [`strata consumers`](../../commands/consumers.md) counts the clusters and the
 templates of the profile document, and searches the edge hosts.
 [`strata list --packs`](../../commands/list.md#the-consumers-of-a-version)
-counts the same clusters and templates.
+counts the same clusters and templates. A live run shows it: a version that a
+template links, and that no cluster runs, counts one template and no cluster.
+See [template.sh](../../development/live-runs.md#templatesh).
 
 ## The variables route
 

@@ -236,7 +236,9 @@ it so. [The knurl adapter](../../automation/knurl.md) reads it there.
 The listing gives each cluster a `clusterType`. `PureManage` is a cluster that
 Palette built. `AlloyMonitor`, `AlloyAssist`, and `AlloyExtend` are the types
 of a cluster that a person imported. They mean no cloud account, a cloud
-account, and the extensions of Palette.
+account, and the extensions of Palette. The listing gives cluster A of the live
+example `PureManage`: see
+[The type of a cluster that Palette builds](../../development/live-runs.md#the-type-of-a-cluster-that-palette-builds).
 
 A person imports a cluster in read-only mode or in full permission mode. In
 read-only mode Palette applies no add-on profile to the cluster. In full
@@ -264,7 +266,10 @@ it gives them, with the cluster group and the host cluster of each in
 So `list clusters` and `cluster:<name>` send the search with that one
 condition, in the scope of the listing. A query sends the search a second time,
 with the condition added. The checks `member-listed`, `member-listed-group`,
-and `member-by-name` of `cluster-group.sh` test it on a live tenant: see
+and `member-by-name` of `cluster-group.sh` show it on a live tenant.
+`list clusters` names the virtual cluster beside its host cluster, with its
+group and its host in `virtual`. `cluster:<name>` of the virtual cluster
+resolves to its uid. See
 [cluster-group.sh](../../development/live-runs.md#cluster-groupsh).
 
 The listing answers a JSON array at the top level, and not an object with
@@ -307,7 +312,7 @@ version it runs: on a live tenant, `specSummary.clusterProfileTemplates` is
 empty. So strata reads the document of each cluster that the search names, and
 keeps the clusters that run the version. The checks `search-profile-runs`,
 `search-nested-misses-member`, `member-consumer-group`, and
-`group-virtual-clusters` of `cluster-group.sh` test it on a live tenant: see
+`group-virtual-clusters` of `cluster-group.sh` show it on a live tenant: see
 [cluster-group.sh](../../development/live-runs.md#cluster-groupsh).
 
 ## A deleted cluster

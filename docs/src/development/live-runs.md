@@ -381,7 +381,7 @@ version that the cluster runs.
 | `release-doc`, `release-names-template` | 0 | #66: the version names the template that uses it, and no cluster |
 | `release-record-template`, `release-record-root` | 0 | #260: a record of the linked release version has no `source.clusterTemplates`, and has the root from before the link |
 | `release-consumers`, `release-consumers-template` | 1, 0 | #147: `strata consumers` of the linked version names the template with `kind: template`, and exits `1`. |
-| `release-list-consumers`, `release-list-consumers-template` | 0 | #176: `strata list --packs` counts one template and no cluster for the linked version, the count of `consumers --list-only`. No result yet |
+| `release-list-consumers`, `release-list-consumers-template` | 0 | #176: `strata list --packs --json` gives each linked version `consumers` 1, with `consumersByKind` `{"clusters": 0, "templates": 1}`. `consumers` counts the same template |
 | `release-delete`, `release-delete-says` | 2, 0 | #147: Palette refuses the delete of the linked version, `DeletionResourceInUseError`. |
 | `lock-edit`, `lock-edit-says` | 2, 0 | #66: an edit in place of a linked version, a `PUT` of the whole version, is refused, and the refusal carries the code `ClusterProfileUpdateValidationFailure` |
 | `lock-verify` | 0 | #66: the version is unchanged |
@@ -503,12 +503,12 @@ source for
 | Check | Expected exit | What it shows |
 |---|---|---|
 | `tenant-create` | 0 | #113: a `POST /v1/clusterprofiles` with no `ProjectUid`, and its publish, make a profile of the tenant |
-| `listing-both` | 0 | #113: the profile listing of the project names the tenant version and the project version, with one name and one version |
+| `listing-both` | 0 | #113: the profile listing of the project gives two versions with that name and that version: the tenant version and the project version |
 | `search-tenant` | 0 | #113: the profile search of the project, with the filter `scope` `tenant`, names the tenant uid and not the project uid |
 | `annotation-tenant`, `annotation-project` | 0 | #113: in the project, the document of the tenant version gives `metadata.annotations.scope` `tenant`, and the document of the release version gives `project` |
 | `list-scope` | 0 | #113: `list --json` gives `scope` `tenant` for the tenant version and `project` for the release version |
 | `list-mark`, `list-packs-mark` | 0 | #113: the row of the tenant version ends with `tenant`, with and without `--packs` |
-| `ambiguous`, `ambiguous-says` | 2, 0 | #113: `snapshot <name>@<version>` exits `2` with `profile-name-ambiguous`, and the error names each uid with its scope |
+| `ambiguous`, `ambiguous-says` | 2, 0 | #113: `snapshot <name>@<version>` exits `2` with `profile-name-ambiguous`. The error names each uid with its scope, and tells you to give the uid |
 | `by-uid` | 0 | #113: `snapshot <uid>` records the tenant version |
 | `tenant-list`, `tenant-list-no-mark` | 0 | #113: at tenant scope, `list --json` gives `scope` `tenant` for the version, and its row has no mark |
 | `tenant-delete` | 0 | #113: the delete of the tenant profile, with no `ProjectUid` |
@@ -714,7 +714,7 @@ route.
 | `validate-exists`, `validate-exists-says` | 2, 0 | #273: a candidate with the name and the version of `PROFILE` gets `ClusterProfileAlreadyExists`, "Cluster Profile with name '<name>' and version '<version>' already exists". Strata prints `palette    refuses`, exits `2`, and writes no record |
 | `layer-registry` | 0 | #210: the registry gives `cert-manager` the layer `addon` |
 | `layer-refused`, `layer-refused-says` | 2, 0 | #210: strata refuses a candidate that gives `cert-manager` the layer `csi`. The message names the layer, `csi`, `addon`, and the rule of Palette |
-| `layer-validate`, `layer-validate-says` | 0 | #254: the validate route takes the pack with the layer `csi`, and gives no result for it |
+| `layer-validate`, `layer-validate-says` | 0 | #254: the validate route takes the pack with the layer `csi`. It answers `{"packs":{"results":[]}}`, with no result for the pack |
 | `layer-create` | 0 | #254: Palette makes and publishes `strata-live-layer` 1.0.0, with `cert-manager` in the layer `csi`, with no error |
 | `layer-profile`, `layer-published` | 0 | #254: the published pack has the layer `addon` of the registry, not `csi` |
 | `layer-record`, `layer-record-key` | 0 | #254: a record of the version holds the pack as `addon/cert-manager` |
@@ -932,8 +932,8 @@ with cluster A.
 | `group-macros`, `group-macro-values`, `group-macros-verify` | 0 | #111: a record of `clustergroup:<uid>` with `--macros` holds `cluster.macroValues`, and `verify` of it reads the values of the group again |
 | `member-consumer`, `member-consumer-listed` | 1, 0 | #78: `consumers` of the add-on version names the virtual cluster, from the consumer list of Palette |
 | `member-not-in-listing` | 0 | #78: the cluster listing does not name the virtual cluster |
-| `member-listed`, `member-listed-group` | 0 | #116: `list clusters --json` names the virtual cluster, with `virtual.clusterGroup` the group, and `includesVirtual` true (no result yet) |
-| `member-by-name` | 0 | #116: `cluster:<name>` of the virtual cluster resolves to its uid (no result yet) |
+| `member-listed`, `member-listed-group` | 0 | #116: `list clusters --json` names the virtual cluster beside cluster A, with the cloud type `nested`. `virtual.clusterGroup` is the group, `virtual.hostCluster` is cluster A, and `includesVirtual` is true |
+| `member-by-name` | 0 | #116: `cluster:<name>` of the virtual cluster resolves to its uid through the search |
 | `search-profile`, `search-profile-runs` | 0 | #181: the cluster search with `clusterProfiles eq <add-on name>` answers cluster A, which runs the add-on version, and not the virtual cluster |
 | `search-nested`, `search-nested-misses-member` | 0 | #184: the same search with `environment eq nested` does not answer the virtual cluster of the group, which runs the add-on version through its group |
 | `member-consumer-search` | 0 | #149: `consumers` does its second reading through the search |
@@ -1429,6 +1429,14 @@ script holds the other reads.
 - A registry whose sync failed gives `Failed` and the cause in `message`.
 
 See [The sync of a registry](../internals/palette/packs.md#the-sync-of-a-registry).
+
+## The type of a cluster that Palette builds
+
+A read by hand, with cluster A of `live-up` and no write: no script holds it.
+`strata list clusters --json` gives cluster A the `clusterType` `PureManage`.
+`strata list clusters --applied` gives the release profile and the add-on
+profile of cluster A. No run imports a cluster: see
+[An imported cluster](../internals/palette/clusters.md#an-imported-cluster).
 
 ## A second cloud: GCP
 
