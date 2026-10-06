@@ -727,7 +727,7 @@ impl Tenant {
             &format!("v1/clusterprofiles/{uid}"),
             &json!({
                 "apiVersion": "v1", "kind": "ClusterProfile",
-                "metadata": {"name": name, "uid": uid},
+                "metadata": {"name": name, "uid": uid, "annotations": {"scope": "project"}},
                 "spec": {"version": version, "published": {"cloudType": "all", "type": "add-on",
                     "packs": [{"name": "namespace-policy", "layer": "addon", "type": "manifest",
                         "tag": "1.0.0", "version": "1.0.0", "packUid": pack,
@@ -740,7 +740,7 @@ impl Tenant {
             project,
             &format!("v1/clusterprofiles/{uid}/packs/manifests"),
             &json!({
-                "metadata": {"name": name, "uid": uid},
+                "metadata": {"name": name, "uid": uid, "annotations": {"scope": "project"}},
                 "spec": {"packs": [{"metadata": {"name": "namespace-policy", "uid": pack},
                     "spec": {"name": "namespace-policy", "layer": "addon", "version": "1.0.0",
                         "manifests": [{"name": "namespace-policy", "content": content}]},
