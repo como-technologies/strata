@@ -231,6 +231,22 @@ cluster summary, `GET /v1/dashboard/spectroclusters/{uid}`, gives
 `status.health.state`: `Healthy` or `UnHealthy`, with the conditions that made
 it so. [The knurl adapter](../../automation/knurl.md) reads it there.
 
+## An imported cluster
+
+The listing gives each cluster a `clusterType`. `PureManage` is a cluster that
+Palette built. `AlloyMonitor`, `AlloyAssist`, and `AlloyExtend` are the types
+of a cluster that a person imported. They mean no cloud account, a cloud
+account, and the extensions of Palette. A person imports a cluster in
+read-only mode or in full permission mode. In read-only mode Palette applies
+no add-on profile to the cluster. In full permission mode it applies add-on
+profiles, and in no mode a cluster profile
+([Imported clusters](https://docs.spectrocloud.com/clusters/imported-clusters/)).
+
+The listing gives no import mode: the console shows it. So the row of
+`strata list clusters --applied` says only that the cluster is imported, when it
+has no profile. No run imports a cluster: see
+[What no run covers](limits.md).
+
 The consumer list of a profile version, `status.inUseClusters`, is what Palette
 computes when it is asked: in the project of the request, or in every project at
 tenant scope. It names virtual clusters, and no deleted cluster. When Palette

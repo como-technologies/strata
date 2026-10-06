@@ -3812,6 +3812,147 @@ fn list_with_applied_keeps_a_cluster_it_cannot_read_and_reads_each_project_once(
     assert!(text.contains("lab-profile@1.3.0"), "{text}");
 }
 
+/// A cluster listing entry with the cluster type `kind`: `PureManage` for a cluster that Palette
+/// built, `AlloyMonitor` for one that a person imported with no cloud account.
+fn typed_cluster(name: &str, uid: &str, kind: &str) -> Value {
+    let mut row = listed_cluster(name, uid, "Running");
+    row["spec"]["clusterType"] = serde_json::json!(kind);
+    row
+}
+
+#[test]
+fn list_clusters_gives_the_cluster_type_of_each_cluster_as_palette_lists_it() {
+    let api = MemoryApi::new().in_project("p1").with(
+        "/v1/dashboard/spectroclusters/meta",
+        serde_json::json!([
+            typed_cluster("payments", "c1", "PureManage"),
+            typed_cluster("legacy", "c3", "AlloyMonitor"),
+        ]),
+    );
+    let l = ops::list(
+        &ListOptions {
+            kinds: vec![ListKind::Clusters],
+            ..ListOptions::default()
+        },
+        |_| Ok(Palette::new(&api)),
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    let listed = l.clusters.as_ref().unwrap();
+    assert_eq!(
+        listed
+            .iter()
+            .map(|c| (c.name.as_str(), c.cluster_type.as_str()))
+            .collect::<Vec<_>>(),
+        [("legacy", "AlloyMonitor"), ("payments", "PureManage")]
+    );
+    let json: Value = serde_json::from_str(
+        &render::renderer(Format::Json, Paint::off(), true)
+            .render_list(&l)
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(json["clusters"][0]["clusterType"], "AlloyMonitor");
+    assert_eq!(json["clusters"][1]["clusterType"], "PureManage");
+    // the type is in the listing, so it costs no request
+    assert_eq!(api.calls("/v1/spectroclusters/c1"), 0);
+}
+
+#[test]
+fn list_with_applied_says_why_an_imported_cluster_has_no_profile_and_a_built_cluster_does_not() {
+    let api = MemoryApi::new()
+        .in_project("p1")
+        .with(
+            "/v1/dashboard/spectroclusters/meta",
+            serde_json::json!([
+                typed_cluster("legacy", "c3", "AlloyMonitor"),
+                typed_cluster("bare", "c4", "PureManage"),
+                typed_cluster("shared", "c5", "AlloyAssist"),
+                typed_cluster("gone", "c6", "AlloyMonitor"),
+            ]),
+        )
+        // read-only mode: an imported cluster with no profile
+        .with("/v1/spectroclusters/c3", cluster_document("c3", &[]))
+        // a cluster that Palette built, with no profile: the listing cannot say why
+        .with("/v1/spectroclusters/c4", cluster_document("c4", &[]))
+        // full permission mode: an imported cluster with an add-on profile
+        .with(
+            "/v1/spectroclusters/c5",
+            cluster_document(
+                "c5",
+                &[("lab-addons", "2.0.0", "64f0000000000000000000d4", "add-on")],
+            ),
+        )
+        .failing("/v1/spectroclusters/c6", 404, "no such cluster");
+    let l = ops::list(
+        &ListOptions {
+            kinds: vec![ListKind::Clusters],
+            applied: true,
+            ..ListOptions::default()
+        },
+        |_| Ok(Palette::new(&api)),
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    let note = "imported: Palette applies no add-on profile in read-only mode";
+
+    let text = render::renderer(Format::Terminal, Paint::off(), false)
+        .render_list(&l)
+        .unwrap();
+    let line = |uid: &str| {
+        text.lines()
+            .find(|l| l.contains(uid))
+            .unwrap_or_else(|| panic!("no line of {uid}: {text}"))
+    };
+    assert_eq!(
+        line("cluster:c3"),
+        format!("  cluster:c3  legacy  Running  aws  {note}"),
+        "{text}"
+    );
+    assert!(!line("cluster:c4").contains("imported"), "{text}");
+    assert!(!line("cluster:c5").contains("imported"), "{text}");
+    assert!(text.contains("    lab-addons@2.0.0"), "{text}");
+    let gone = line("cluster:c6");
+    assert!(
+        gone.contains("no such cluster)") && !gone.contains("imported"),
+        "{text}"
+    );
+
+    let md = render::renderer(Format::Markdown, Paint::off(), false)
+        .render_list(&l)
+        .unwrap();
+    assert!(
+        md.contains(&format!(
+            "| `cluster:c3` | legacy | Running | aws | {note} | - |"
+        )),
+        "{md}"
+    );
+    assert!(
+        md.contains("| `cluster:c4` | bare | Running | aws | - | - |"),
+        "{md}"
+    );
+    assert!(
+        md.contains("| `cluster:c5` | shared | Running | aws | lab-addons@2.0.0 (add-on) | - |"),
+        "{md}"
+    );
+    assert!(
+        md.contains("| `cluster:c6` | gone | Running | aws | error: GET /v1/spectroclusters/c6 failed with HTTP 404: no such cluster | - |"),
+        "{md}"
+    );
+
+    let json: Value = serde_json::from_str(
+        &render::renderer(Format::Json, Paint::off(), true)
+            .render_list(&l)
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(json["clusters"][2]["name"], "legacy");
+    assert_eq!(json["clusters"][2]["clusterType"], "AlloyMonitor");
+    assert_eq!(json["clusters"][2]["profiles"], serde_json::json!([]));
+}
+
 #[test]
 fn list_with_a_cluster_text_keeps_the_clusters_that_match_and_reads_only_those() {
     let mut elsewhere = listed_cluster("payments", "c7", "Running");

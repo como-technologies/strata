@@ -1366,6 +1366,8 @@ impl Tenant {
             .filter(|t| t["type"] == "cluster" || t["type"] == "infra")
             .collect();
         let config_uid = format!("{uid}c");
+        // Palette gives a cluster that it built the type PureManage. A chapter changes the field
+        // for an imported cluster.
         self.write(
             project,
             &format!("v1/spectroclusters/{uid}"),
@@ -1374,7 +1376,8 @@ impl Tenant {
                 "metadata": {"name": name, "uid": uid,
                     "annotations": {"projectUid": project, "scope": "project"},
                     "labels": {"managed-by": "opentofu"}},
-                "spec": {"cloudType": "aws", "clusterProfileTemplates": templates,
+                "spec": {"cloudType": "aws", "clusterType": "PureManage",
+                    "clusterProfileTemplates": templates,
                     "cloudConfigRef": {"kind": "aws", "uid": config_uid, "name": format!("{name}-aws-config")},
                     "clusterConfig": {
                         "timezone": "Etc/UTC",
@@ -2116,7 +2119,7 @@ fn cluster_row(doc: &Value) -> Value {
         "metadata": {"name": doc["metadata"]["name"], "uid": doc["metadata"]["uid"],
                      "annotations": doc["metadata"]["annotations"],
                      "labels": doc["metadata"]["labels"]},
-        "spec": {"cloudType": doc["spec"]["cloudType"]},
+        "spec": {"cloudType": doc["spec"]["cloudType"], "clusterType": doc["spec"]["clusterType"]},
         "status": {"state": doc["status"]["state"]}
     })
 }
@@ -2140,6 +2143,7 @@ fn search_row(doc: &Value, project_name: &str) -> Value {
                      "annotations": doc["metadata"]["annotations"],
                      "labels": doc["metadata"]["labels"]},
         "specSummary": {"cloudConfig": {"cloudType": doc["spec"]["cloudType"]},
+                        "clusterType": doc["spec"]["clusterType"],
                         "clusterProfileTemplates": profiles,
                         "projectMeta": {"name": project_name,
                                         "uid": doc["metadata"]["annotations"]["projectUid"]}},

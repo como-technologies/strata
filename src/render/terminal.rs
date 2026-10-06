@@ -861,6 +861,9 @@ impl Renderer for TerminalRenderer {
                     if let Some(msg) = entry_error(c.error.as_ref()) {
                         row.push(format!("({msg})"));
                     }
+                    if let Some(note) = super::imported_note(c) {
+                        row.push(note.to_string());
+                    }
                     row
                 })
                 .collect();

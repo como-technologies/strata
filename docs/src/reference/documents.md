@@ -445,7 +445,11 @@ is the path as a list: strings for keys, numbers for indexes, and
     `tag`, and `version`, or `error`. `published` is the `status.isPublished` of
     the version. When it is `false`, nobody published the version, and `packs[]`
     holds the packs of its draft.
-  - A cluster: `ref`, `name`, `uid`, `state`, `cloudType`, and `projectUid`.
+  - A cluster: `ref`, `name`, `uid`, `state`, `cloudType`, `clusterType`, and
+    `projectUid`. `clusterType` is the type as Palette lists it. `PureManage`
+    is a cluster that Palette built. `AlloyMonitor`, `AlloyAssist`, and
+    `AlloyExtend` are clusters that a person imported. It is absent when the
+    listing gave none.
     `projectName` joins them when strata could read the project listing.
     `labels`: the labels of the cluster, as a map; a tag with no value has the
     value `spectro__tag`.
