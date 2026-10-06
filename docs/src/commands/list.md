@@ -284,7 +284,8 @@ kind differently by scope:
 `--tag` and `--filter` always search at tenant scope, and list clusters alone.
 `strata list filters` reads the saved tag filters, which belong to the tenant.
 Each listed cluster carries its labels in the JSON. A list of clusters holds the
-virtual clusters of the scope, from the search of Palette: one more request.
+virtual clusters of the scope, from the search of Palette. That is one request
+for the schema of the search, and one for the search.
 
 Exit `0`, or `2` when strata cannot read a listing. `--json` writes
 [`strata-list/1`](../reference/documents.md#strata-list1).

@@ -140,7 +140,7 @@ impl ListedProfile {
 }
 
 /// An object of Palette that another object names: its uid and its name.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct NamedObject {
     /// Its uid.
     pub uid: String,
@@ -163,7 +163,7 @@ impl NamedObject {
 
 /// What makes a cluster virtual, as the search of Palette states it: the cluster group that it
 /// is in, and the cluster that hosts it.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct VirtualCluster {
     /// The cluster group. Absent when Palette does not name it.
@@ -314,9 +314,11 @@ pub struct Listing {
 /// List what a ref can name: profile versions and clusters in one scope, and the projects the
 /// key can see. Profiles and clusters are read through `connect(options.project)`, where `None`
 /// is the configured scope. Projects are read through `connect(Some(TENANT_SCOPE))`, because in a
-/// project Palette lists only that project. With `packs` or `pack`, each profile document is read
-/// as well; a profile that cannot be read stays in the list with its error, and a listing that
-/// cannot be read is an error.
+/// project Palette lists only that project. The cluster listing leaves out each virtual cluster,
+/// so the clusters also come from [`Palette::virtual_cluster_search`], when the search takes
+/// `environment`. With `packs` or `pack`, each profile document is read as well; a profile that
+/// cannot be read stays in the list with its error, and a listing that cannot be read is an
+/// error.
 pub fn list<A, F>(
     options: &ListOptions,
     mut connect: F,
