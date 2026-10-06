@@ -84,6 +84,38 @@ pub(crate) fn labels_text(labels: &std::collections::BTreeMap<String, String>) -
         .join(", ")
 }
 
+/// `the list holds no virtual cluster: Palette has no search, or its search takes no
+/// environment`, for a list of clusters whose Palette has no search for the virtual clusters.
+pub(crate) fn virtual_line(l: &Listing) -> Option<String> {
+    (l.includes_virtual == Some(false)).then(|| {
+        "the list holds no virtual cluster: Palette has no search, or its search takes no \
+         environment"
+            .to_string()
+    })
+}
+
+/// `group dev-group`: the cluster group of a virtual cluster, by name, or by uid when Palette
+/// gives no name. None when Palette names no group.
+pub(crate) fn virtual_group(v: &crate::ops::VirtualCluster) -> Option<String> {
+    let group = v.cluster_group.as_ref()?;
+    let name = if group.name.is_empty() {
+        &group.uid
+    } else {
+        &group.name
+    };
+    Some(format!("group {name}"))
+}
+
+/// `virtual (group dev-group)`, or `virtual` when Palette names no group: what the row of a
+/// virtual cluster ends with. None for each other cluster.
+pub(crate) fn virtual_note(c: &crate::ops::ListedCluster) -> Option<String> {
+    let v = c.virtual_cluster.as_ref()?;
+    Some(match virtual_group(v) {
+        Some(group) => format!("virtual ({group})"),
+        None => "virtual".to_string(),
+    })
+}
+
 /// `the clusters with env=prod and the saved filter prod (region=us), from the search of
 /// Palette`, for a listing with a query.
 pub(crate) fn query_line(l: &Listing) -> Option<String> {

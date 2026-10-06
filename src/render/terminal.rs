@@ -14,8 +14,8 @@ use super::{
     same_content_note, second_reading_counts, short, show, state_suffix, subject, tag_rename,
     tier_path, tier_states, traits_suffix, unchanged_sentence, unread_notes, unverified_sentence,
     updates_pending_notes, upstream_unknown_note, values_changed_suffix, variable_lines,
-    variables_comparable, variables_unavailable_note, version_display, version_note, who_entry,
-    who_heading,
+    variables_comparable, variables_unavailable_note, version_display, version_note, virtual_line,
+    virtual_note, who_entry, who_heading,
 };
 use crate::api::mask::MASKED;
 use crate::color::Paint;
@@ -836,7 +836,7 @@ impl Renderer for TerminalRenderer {
                 "\n{}\n",
                 cluster_count(clusters.len(), l.cluster.as_deref())
             ));
-            if let Some(line) = super::query_line(l) {
+            for line in super::query_line(l).into_iter().chain(virtual_line(l)) {
                 out.push_str(&format!("{}\n", p.dim(&line)));
             }
             let rows: Vec<Vec<String>> = clusters
@@ -858,6 +858,7 @@ impl Renderer for TerminalRenderer {
                     if l.query.is_some() {
                         row.push(super::labels_text(&c.labels));
                     }
+                    row.extend(virtual_note(c));
                     if let Some(msg) = entry_error(c.error.as_ref()) {
                         row.push(format!("({msg})"));
                     }

@@ -15,7 +15,7 @@ use super::{
     tier_states, traits_suffix, unchanged_sentence, unread_notes, unverified_sentence,
     updates_pending_notes, upstream_unknown_note, values_changed, values_changed_suffix,
     variable_lines, variables_comparable, variables_unavailable_note, version_display,
-    version_note, who_entry, who_heading,
+    version_note, virtual_group, virtual_line, who_entry, who_heading,
 };
 use crate::color::Paint;
 use crate::diff::{Diff, Leaf, Op, Status, Verify, VerifyStatus};
@@ -656,22 +656,26 @@ impl Renderer for MarkdownRenderer {
                 "**{}**\n\n",
                 escape(&cluster_count(clusters.len(), l.cluster.as_deref()))
             ));
-            if let Some(line) = super::query_line(l) {
+            for line in super::query_line(l).into_iter().chain(virtual_line(l)) {
                 o.push_str(&format!("{}.\n\n", escape(&super::capitalized(&line))));
             }
             let labels = if l.query.is_some() { " labels |" } else { "" };
             let elsewhere = clusters.iter().any(|c| c.project_uid != l.project_uid);
+            let with_virtual = clusters.iter().any(|c| c.virtual_cluster.is_some());
             let with_applied = clusters
                 .iter()
                 .any(|c| c.profiles.is_some() || c.error.is_some());
             let project = if elsewhere { " project |" } else { "" };
+            let virtual_column = if with_virtual { " virtual |" } else { "" };
             let applied = if with_applied {
                 " profiles | behind |"
             } else {
                 ""
             };
             if !clusters.is_empty() {
-                let head = format!("| ref | name | state | cloud |{project}{labels}{applied}");
+                let head = format!(
+                    "| ref | name | state | cloud |{project}{labels}{virtual_column}{applied}"
+                );
                 let rule: String = head.matches('|').skip(1).map(|_| "---|").collect();
                 o.push_str(&format!("{head}\n|{rule}\n"));
             }
@@ -693,6 +697,17 @@ impl Renderer for MarkdownRenderer {
                     o.push_str(&format!(
                         " {} |",
                         escape(dash(&super::labels_text(&c.labels)))
+                    ));
+                }
+                if with_virtual {
+                    // a virtual cluster whose group Palette does not name is still virtual
+                    let cell = c
+                        .virtual_cluster
+                        .as_ref()
+                        .map(|v| virtual_group(v).unwrap_or_else(|| "yes".to_string()));
+                    o.push_str(&format!(
+                        " {} |",
+                        escape(dash(cell.as_deref().unwrap_or("")))
                     ));
                 }
                 if with_applied {

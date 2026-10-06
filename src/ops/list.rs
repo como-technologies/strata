@@ -6,7 +6,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::api::{Palette, PaletteApi};
+use crate::api::{NESTED_CLOUD, Palette, PaletteApi, SEARCH_ENVIRONMENT};
 use crate::error::Result;
 use crate::progress::Progress;
 use crate::snapshot::{AppliedProfile, Tool};
@@ -139,6 +139,54 @@ impl ListedProfile {
     }
 }
 
+/// An object of Palette that another object names: its uid and its name.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct NamedObject {
+    /// Its uid.
+    pub uid: String,
+    /// Its name. Empty when Palette does not give it.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub name: String,
+}
+
+impl NamedObject {
+    /// The object that `ptr` names in `doc`, by `uid` and `name`. None when it names no uid: an
+    /// empty reference of Palette.
+    fn at(doc: &Value, ptr: &str) -> Option<Self> {
+        let uid = text(doc, &format!("{ptr}/uid"));
+        (!uid.is_empty()).then(|| NamedObject {
+            uid,
+            name: text(doc, &format!("{ptr}/name")),
+        })
+    }
+}
+
+/// What makes a cluster virtual, as the search of Palette states it: the cluster group that it
+/// is in, and the cluster that hosts it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct VirtualCluster {
+    /// The cluster group. Absent when Palette does not name it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cluster_group: Option<NamedObject>,
+    /// The cluster that hosts the virtual cluster. Absent when Palette does not name it: for a
+    /// group of the system, and in an item of the listing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub host_cluster: Option<NamedObject>,
+}
+
+impl VirtualCluster {
+    /// What an item of the listing or of the search says of a virtual cluster. Some for a
+    /// cluster of the cloud type `nested`, with the group and the host that `status.virtual`
+    /// names.
+    fn of_item(it: &Value, cloud_type: &str) -> Option<Self> {
+        (cloud_type == NESTED_CLOUD).then(|| VirtualCluster {
+            cluster_group: NamedObject::at(it, "/status/virtual/clusterGroup"),
+            host_cluster: NamedObject::at(it, "/status/virtual/hostCluster"),
+        })
+    }
+}
+
 /// One cluster.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
@@ -171,6 +219,10 @@ pub struct ListedCluster {
     /// `spectro__tag`.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub labels: BTreeMap<String, String>,
+    /// For a virtual cluster: its cluster group and its host cluster, as the search names them.
+    /// Absent for each other cluster.
+    #[serde(default, rename = "virtual", skip_serializing_if = "Option::is_none")]
+    pub virtual_cluster: Option<VirtualCluster>,
     /// With applied: the profile versions the cluster applies, in the order the cluster document
     /// lists them. That order is no install order.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -237,6 +289,11 @@ pub struct Listing {
     /// Clusters, by name.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub clusters: Option<Vec<ListedCluster>>,
+    /// With clusters: whether `clusters` holds the virtual clusters. The listing and the search
+    /// of Palette leave them out, so strata asks the search for them. False when Palette has no
+    /// search, or its search takes no `environment`: the list then holds no virtual cluster.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub includes_virtual: Option<bool>,
     /// Every project the key can see, by name.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub projects: Option<Vec<ListedProject>>,
@@ -257,9 +314,11 @@ pub struct Listing {
 /// List what a ref can name: profile versions and clusters in one scope, and the projects the
 /// key can see. Profiles and clusters are read through `connect(options.project)`, where `None`
 /// is the configured scope. Projects are read through `connect(Some(TENANT_SCOPE))`, because in a
-/// project Palette lists only that project. With `packs` or `pack`, each profile document is read
-/// as well; a profile that cannot be read stays in the list with its error, and a listing that
-/// cannot be read is an error.
+/// project Palette lists only that project. The cluster listing leaves out each virtual cluster,
+/// so the clusters also come from [`Palette::virtual_cluster_search`], when the search takes
+/// `environment`. With `packs` or `pack`, each profile document is read as well; a profile that
+/// cannot be read stays in the list with its error, and a listing that cannot be read is an
+/// error.
 pub fn list<A, F>(
     options: &ListOptions,
     mut connect: F,
@@ -287,15 +346,29 @@ where
     };
     let mut resolved = None;
     let mut query_filter = None;
+    let mut includes_virtual = None;
     let clusters = if options.wants(ListKind::Clusters) {
         progress.note("listing clusters");
         let mut clusters = if options.query.is_empty() {
-            list_clusters(&home.cluster_listing()?)
+            let listing = home.cluster_listing()?;
+            // the listing leaves out each virtual cluster, so strata asks the search for them
+            let nested = if home
+                .cluster_search_properties()?
+                .contains(SEARCH_ENVIRONMENT)
+            {
+                progress.note("searching the virtual clusters");
+                Some(home.virtual_cluster_search(&Value::Null)?)
+            } else {
+                None
+            };
+            includes_virtual = Some(nested.is_some());
+            list_clusters(items(&listing).chain(nested.iter().flatten()))
         } else {
             let tenant = super::tenant_of(&mut connect)?;
             let selection = super::select(&options.query, &tenant, progress)?;
             resolved = Some(selection.resolved);
             query_filter = selection.filter;
+            includes_virtual = Some(selection.includes_virtual);
             selection.clusters
         };
         if let Some(text) = &options.cluster {
@@ -361,6 +434,7 @@ where
         cluster: options.cluster.clone(),
         profiles,
         clusters,
+        includes_virtual,
         projects,
         query: Some(options.query.clone()).filter(|q| !q.is_empty()),
         resolved,
@@ -485,19 +559,21 @@ fn listing_or_search(it: &Value, listing: &str, search: &str) -> String {
         .unwrap_or_else(|| text(it, search))
 }
 
-pub(super) fn list_clusters(doc: &Value) -> Vec<ListedCluster> {
-    let mut clusters: Vec<ListedCluster> = items(doc)
+/// The clusters of `rows`, the entries of the listing or the items of a search, by name. A
+/// cluster that `rows` holds two times, as from two searches, is one row.
+pub(super) fn list_clusters<'a>(rows: impl IntoIterator<Item = &'a Value>) -> Vec<ListedCluster> {
+    let mut clusters: Vec<ListedCluster> = rows
+        .into_iter()
         .map(|it| {
             let uid = text(it, "/metadata/uid");
+            let cloud_type =
+                listing_or_search(it, "/spec/cloudType", "/specSummary/cloudConfig/cloudType");
             ListedCluster {
                 reference: format!("{}{uid}", crate::reference::CLUSTER_PREFIX),
                 name: text(it, "/metadata/name"),
                 state: text(it, "/status/state"),
-                cloud_type: listing_or_search(
-                    it,
-                    "/spec/cloudType",
-                    "/specSummary/cloudConfig/cloudType",
-                ),
+                virtual_cluster: VirtualCluster::of_item(it, &cloud_type),
+                cloud_type,
                 cluster_type: listing_or_search(
                     it,
                     "/spec/clusterType",
@@ -528,6 +604,7 @@ pub(super) fn list_clusters(doc: &Value) -> Vec<ListedCluster> {
         })
         .collect();
     clusters.sort_by(|a, b| a.name.cmp(&b.name).then_with(|| a.uid.cmp(&b.uid)));
+    clusters.dedup_by(|a, b| a.uid == b.uid);
     clusters
 }
 

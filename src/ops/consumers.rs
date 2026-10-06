@@ -7,7 +7,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::api::{Palette, PaletteApi};
+use crate::api::{Palette, PaletteApi, SEARCH_CLUSTER_PROFILES, search_condition};
 use crate::cluster_template::ClusterTemplateRef;
 use crate::error::{Error, Result};
 use crate::progress::Progress;
@@ -17,7 +17,7 @@ use crate::snapshot::{Snapshot, Tool};
 use super::consumer_list::consumer_uids;
 use super::fleet::Resolved;
 use super::list::{ListedCluster, TENANT_SCOPE, list_clusters, name_projects_of};
-use super::{client_for, text};
+use super::{client_for, items, text};
 
 /// Schema id of the document `consumers` writes.
 pub const CONSUMERS_SCHEMA: &str = "strata-consumers/1";
@@ -641,15 +641,6 @@ fn edge_hosts_bound<A: PaletteApi>(
     }
 }
 
-/// A condition of the cluster search: the string property `property` equals `value`.
-fn search_condition(property: &str, value: &str) -> Value {
-    serde_json::json!({
-        "property": property, "type": "string",
-        "condition": {"string": {"operator": "eq", "negation": false, "ignoreCase": false,
-            "match": {"conjunction": "or", "values": [value]}}},
-    })
-}
-
 /// The clusters that run a version of the profile `name`, from the cluster search of `palette`:
 /// one search with `clusterProfiles eq <name>`, and one with `environment eq nested` too, since the
 /// search leaves out each virtual cluster unless a condition asks for it. Palette takes the name of
@@ -662,40 +653,22 @@ fn searched_consumers<A: PaletteApi>(
     palette: &Palette<A>,
     name: &str,
 ) -> Result<Option<Vec<ListedCluster>>> {
-    if name.is_empty() {
+    if name.is_empty()
+        || !palette
+            .cluster_search_properties()?
+            .contains(SEARCH_CLUSTER_PROFILES)
+    {
         return Ok(None);
     }
-    let takes_profiles = match palette.cluster_search_schema() {
-        Ok(schema) => schema
-            .pointer("/schema/properties")
-            .and_then(Value::as_array)
-            .is_some_and(|ps| {
-                ps.iter()
-                    .any(|p| text(p, "/name") == "clusterProfiles" && text(p, "/type") == "string")
-            }),
-        Err(Error::Api {
-            status: 404 | 405, ..
-        }) => false,
-        Err(e) => return Err(e),
-    };
-    if !takes_profiles {
-        return Ok(None);
-    }
-    let mut found = Vec::new();
-    for nested in [false, true] {
-        let mut filters = vec![search_condition("clusterProfiles", name)];
-        if nested {
-            filters.push(search_condition("environment", "nested"));
-        }
-        let body = serde_json::json!({
-            "conjunction": "and",
-            "filterGroups": [{"conjunction": "and", "filters": filters}],
-        });
-        found.extend(palette.cluster_search(&body)?);
-    }
-    let mut clusters = list_clusters(&Value::Array(found));
-    clusters.dedup_by(|a, b| a.uid == b.uid);
-    Ok(Some(clusters))
+    let body = serde_json::json!({
+        "conjunction": "and",
+        "filterGroups": [{"conjunction": "and", "filters": [
+            search_condition(SEARCH_CLUSTER_PROFILES, &[name.to_string()], false)
+        ]}],
+    });
+    let mut found = palette.cluster_search(&body)?;
+    found.extend(palette.virtual_cluster_search(&body)?);
+    Ok(Some(list_clusters(&found)))
 }
 
 /// The second reading of `consumers`. Strata asks the cluster search for the clusters that run a
@@ -739,7 +712,7 @@ where
         Ok(None) => {
             progress.note("reading each cluster for the profiles it applies");
             let listing = wide.cluster_listing().or_else(|_| home.cluster_listing());
-            (listing.map(|l| list_clusters(&l)), Resolved::Listing)
+            (listing.map(|l| list_clusters(items(&l))), Resolved::Listing)
         }
         Err(e) => (Err(e), Resolved::Search),
     };
@@ -886,5 +859,5 @@ fn group_members<A: PaletteApi>(
             }
         }
     }
-    list_clusters(&Value::Array(members))
+    list_clusters(&members)
 }

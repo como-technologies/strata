@@ -9,7 +9,9 @@ the key can read. `--dir DIR` writes one record for each:
 ```
 
 Each record is `<cluster name>.json`, or `<name>.<uid>.json` when two clusters of
-the set have one name, and each cluster is read in its own project. `--prune`
+the set have one name, and each cluster is read in its own project. A virtual
+cluster that carries the label is in the set: see
+[The virtual clusters](../list.md#the-virtual-clusters). `--prune`
 removes each cluster record of the directory whose cluster the query no longer
 selects, and leaves every other file:
 

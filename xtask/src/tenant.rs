@@ -402,8 +402,10 @@ impl Tenant {
             .collect();
         // The search reads a summary of each cluster, and the summary of a virtual cluster does
         // not name the profiles that its cluster group pins, as on a live Palette (#184). So a
-        // search by profile does not find a virtual cluster through its group.
+        // search by profile does not find a virtual cluster through its group. The summary of a
+        // virtual cluster names its group and its host cluster in `status.virtual`.
         let mut group_pins: Map<String, Value> = Map::new();
+        let mut group_of: Map<String, Value> = Map::new();
         for project in &scopes {
             for group in self.documents_in(project, "v1/clustergroups") {
                 let gid = group["metadata"]["uid"].as_str().unwrap_or_default();
@@ -413,6 +415,20 @@ impl Tenant {
                     .flatten()
                     .map(|t| t["uid"].clone())
                     .collect();
+                let host = group["spec"]["clustersConfig"]["hostClustersConfig"][0]["clusterUid"]
+                    .as_str()
+                    .unwrap_or_default();
+                let host_path = format!("v1/spectroclusters/{host}");
+                let host_name = if self.doc(project, &host_path).is_file() {
+                    self.read(project, &host_path)["metadata"]["name"].clone()
+                } else {
+                    json!("")
+                };
+                let virtual_summary = json!({
+                    "clusterGroup": {"uid": gid, "name": group["metadata"]["name"],
+                                     "kind": "clustergroup"},
+                    "hostCluster": {"uid": host, "name": host_name, "kind": "spectrocluster"},
+                });
                 let members = self.read(
                     project,
                     &format!("v1/dashboard/clustergroups/{gid}/virtualClusters@limit=50"),
@@ -423,6 +439,7 @@ impl Tenant {
                     if let Some(list) = entry.as_array_mut() {
                         list.extend(pinned.iter().cloned());
                     }
+                    group_of.insert(muid.to_string(), virtual_summary.clone());
                 }
             }
         }
@@ -433,9 +450,11 @@ impl Tenant {
                     .as_str()
                     .unwrap_or_default();
                 let mut c = c.clone();
-                let pins = group_pins
-                    .get(c["metadata"]["uid"].as_str().unwrap_or_default())
-                    .cloned();
+                let uid = c["metadata"]["uid"]
+                    .as_str()
+                    .unwrap_or_default()
+                    .to_string();
+                let pins = group_pins.get(&uid).cloned();
                 if let (true, Some(pins)) = (nested(&c), pins)
                     && let Some(ts) = c["spec"]["clusterProfileTemplates"].as_array_mut()
                 {
@@ -447,9 +466,33 @@ impl Tenant {
                         .get(project)
                         .and_then(Value::as_str)
                         .unwrap_or_default(),
+                    group_of.get(&uid).filter(|_| nested(&c)),
                 )
             })
             .collect();
+        // the search of a project holds the clusters of that project, and the search of the
+        // tenant every cluster; each scope has the schema
+        let schema = json!({"schema": {"properties": [
+            {"name": "clusterName", "type": "string"}, {"name": "clusterState", "type": "string"},
+            {"name": "tags", "type": "string"}, {"name": "environment", "type": "string"},
+            {"name": "clusterProfiles", "type": "string"}]}});
+        for project in &scopes {
+            let rows: Vec<Value> = found
+                .iter()
+                .filter(|r| r["specSummary"]["projectMeta"]["uid"] == json!(project))
+                .cloned()
+                .collect();
+            self.write(
+                project,
+                "v1/dashboard/spectroclusters/search@limit=50",
+                &json!({"items": rows, "listmeta": {"continue": ""}}),
+            );
+            self.write(
+                project,
+                "v1/dashboard/spectroclusters/search/schema",
+                &schema,
+            );
+        }
         self.write(
             "tenant",
             "v1/dashboard/spectroclusters/search@limit=50",
@@ -458,10 +501,7 @@ impl Tenant {
         self.write(
             "tenant",
             "v1/dashboard/spectroclusters/search/schema",
-            &json!({"schema": {"properties": [
-                {"name": "clusterName", "type": "string"}, {"name": "clusterState", "type": "string"},
-                {"name": "tags", "type": "string"}, {"name": "environment", "type": "string"},
-                {"name": "clusterProfiles", "type": "string"}]}}),
+            &schema,
         );
     }
 
@@ -2130,14 +2170,19 @@ fn nested(cluster: &Value) -> bool {
 }
 
 /// A cluster as the search gives it: no spec, and a summary with the cloud, the project, and the
-/// uid, name, and type of each profile.
-fn search_row(doc: &Value, project_name: &str) -> Value {
+/// uid, name, and type of each profile. A virtual cluster has `status.virtual`, `virtual_summary`:
+/// its cluster group and its host cluster.
+fn search_row(doc: &Value, project_name: &str, virtual_summary: Option<&Value>) -> Value {
     let profiles: Vec<Value> = doc["spec"]["clusterProfileTemplates"]
         .as_array()
         .into_iter()
         .flatten()
         .map(|t| json!({"uid": t["uid"], "name": t["name"], "type": t["type"]}))
         .collect();
+    let mut status = json!({"state": doc["status"]["state"]});
+    if let Some(v) = virtual_summary {
+        status["virtual"] = v.clone();
+    }
     json!({
         "metadata": {"name": doc["metadata"]["name"], "uid": doc["metadata"]["uid"],
                      "annotations": doc["metadata"]["annotations"],
@@ -2147,7 +2192,7 @@ fn search_row(doc: &Value, project_name: &str) -> Value {
                         "clusterProfileTemplates": profiles,
                         "projectMeta": {"name": project_name,
                                         "uid": doc["metadata"]["annotations"]["projectUid"]}},
-        "status": {"state": doc["status"]["state"]}
+        "status": status
     })
 }
 

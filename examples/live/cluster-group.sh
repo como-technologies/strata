@@ -84,6 +84,14 @@ if stage 1 "a cluster group, and a virtual cluster in it"; then
     jq -e --arg m "$M" '.consumers[] | select(.uid == $m and (.unlisted | not))' member-consumer.out
   check member-not-in-listing 0 '#78: the cluster listing does not name the virtual cluster' -- \
     bash -c "\"$live/api.sh\" get /v1/dashboard/spectroclusters/meta | jq -e --arg m $M '[.. | objects | select(has(\"metadata\")) | .metadata.uid] | index(\$m) | not'"
+  # list clusters asks the search for the virtual clusters, with the environment nested (#116)
+  check member-listed 0 '#116: list clusters names the virtual cluster, from the search' -- \
+    "$strata" list clusters --json
+  check member-listed-group 0 '#116: the row of the virtual cluster names its group, and includesVirtual is true' -- \
+    jq -e --arg m "$M" --arg g "$G" '.includesVirtual and (.clusters[] | select(.uid == $m) | .virtual.clusterGroup.uid == $g)' member-listed.out
+  MN=$(jq -r .source.cluster.name member.json)
+  check member-by-name 0 '#116: cluster:<name> of the virtual cluster resolves to its uid' -- \
+    bash -c "\"$strata\" snapshot cluster:$MN | jq -e --arg m $M '.source.cluster.uid == \$m'"
   # the search with the name of the add-on profile, as the second reading of consumers sends it:
   # Palette changes the name into the uids of the profiles with that name, and a uid matches no
   # name (#149, #181)

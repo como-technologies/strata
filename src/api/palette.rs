@@ -1,6 +1,8 @@
 //! The operations over any [`PaletteApi`]: find a profile or a cluster, and read the documents a
 //! snapshot is built from.
 
+use std::collections::BTreeSet;
+
 use serde_json::Value;
 
 use super::{AuditKind, PaletteApi, RawCluster, RawProfile, ReadErrors, mask};
@@ -20,6 +22,15 @@ const APP_PROFILE_LISTING: &str = "/v1/dashboard/appProfiles/metadata";
 /// The cluster search. Palette gives at most 50 on a page.
 const CLUSTER_SEARCH: &str = "/v1/dashboard/spectroclusters/search?limit=50";
 const CLUSTER_SEARCH_SCHEMA: &str = "/v1/dashboard/spectroclusters/search/schema";
+/// The property of the cluster search that takes a label, as `key:value` or `key`.
+pub(crate) const SEARCH_TAGS: &str = "tags";
+/// The property of the cluster search that takes the cloud type of a cluster.
+pub(crate) const SEARCH_ENVIRONMENT: &str = "environment";
+/// The property of the cluster search that takes the name of a profile that a cluster runs.
+pub(crate) const SEARCH_CLUSTER_PROFILES: &str = "clusterProfiles";
+/// The cloud type of a virtual cluster. The cluster listing leaves out each cluster of this cloud
+/// type, and the search does too, unless a condition on `environment` asks for it.
+pub(crate) const NESTED_CLOUD: &str = "nested";
 const TAG_FILTER_LISTING: &str = "/v1/filters/metadata?filterType=tag";
 /// The most entries that Palette serves on one page of the audit log. A larger `limit` answers
 /// `500` with the code `InvalidLimit`. The API reference gives 50, but Palette serves 100.
@@ -72,6 +83,32 @@ fn sorted_names(entries: &[(String, String)]) -> Vec<String> {
     let mut names: Vec<String> = entries.iter().map(|(n, _)| n.clone()).collect();
     names.sort();
     names
+}
+
+/// A condition of the cluster search: the string property `property` equals one of `values`.
+/// With `negation`, it equals none of them.
+pub(crate) fn search_condition(property: &str, values: &[String], negation: bool) -> Value {
+    serde_json::json!({
+        "property": property, "type": "string",
+        "condition": {"string": {"operator": "eq", "negation": negation, "ignoreCase": false,
+            "match": {"conjunction": "or", "values": values}}},
+    })
+}
+
+/// `filter` with one more group, the condition that asks the search for the virtual clusters:
+/// `environment` equals [`NESTED_CLOUD`]. `filter` joins its groups with `and`; `Null` has no
+/// group, so the result selects each virtual cluster.
+fn with_nested(filter: &Value) -> Value {
+    let mut groups: Vec<Value> = filter
+        .get("filterGroups")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    groups.push(serde_json::json!({
+        "conjunction": "and",
+        "filters": [search_condition(SEARCH_ENVIRONMENT, &[NESTED_CLOUD.to_string()], false)],
+    }));
+    serde_json::json!({"conjunction": "and", "filterGroups": groups})
 }
 
 /// A kind of registry, as the routes of Palette name it.
@@ -354,10 +391,19 @@ impl<A: PaletteApi> Palette<A> {
         }
     }
 
-    /// The uid of the one cluster named `name` in the scope, from [`Palette::cluster_listing`].
+    /// The uid of the one cluster named `name` in the scope, from [`Palette::cluster_listing`]
+    /// and from [`Palette::virtual_cluster_search`]: the listing leaves out each virtual cluster,
+    /// so the search gives them, when it takes `environment`.
     pub fn cluster_uid_named(&self, name: &str) -> Result<String> {
         let listing = self.cluster_listing()?;
-        let clusters = named_entries(&listing);
+        let mut clusters = named_entries(&listing);
+        if self
+            .cluster_search_properties()?
+            .contains(SEARCH_ENVIRONMENT)
+        {
+            let found = self.virtual_cluster_search(&Value::Null)?;
+            clusters.extend(named_entries(&Value::Array(found)));
+        }
         let mut uids: Vec<String> = clusters
             .iter()
             .filter(|(n, _)| n == name)
@@ -770,7 +816,9 @@ impl<A: PaletteApi> Palette<A> {
     /// The clusters that a search filter selects, `POST /v1/dashboard/spectroclusters/search`,
     /// every page. `filter` is the `filter` of the body: groups of conditions on the properties
     /// that `cluster_search_schema` names. At tenant scope it holds the clusters of each project
-    /// the key can read, each with its labels and its project. It holds no virtual cluster.
+    /// the key can read, each with its labels and its project. It holds no virtual cluster,
+    /// unless a condition asks for the environment `nested`: see
+    /// [`Palette::virtual_cluster_search`].
     pub fn cluster_search(&self, filter: &Value) -> Result<Vec<Value>> {
         self.searched(
             CLUSTER_SEARCH,
@@ -778,10 +826,46 @@ impl<A: PaletteApi> Palette<A> {
         )
     }
 
+    /// The virtual clusters that a search filter selects: [`Palette::cluster_search`] with the
+    /// condition `environment eq nested` added to `filter` as one more group. The search leaves
+    /// out each virtual cluster unless a condition asks for that environment, the cloud type of
+    /// a virtual cluster. `filter` joins its groups with `and`, and `Null` has no condition, so
+    /// the answer then holds each virtual cluster in the scope. Each item names the host cluster
+    /// and the cluster group of the virtual cluster in `status.virtual`.
+    pub fn virtual_cluster_search(&self, filter: &Value) -> Result<Vec<Value>> {
+        self.cluster_search(&with_nested(filter))
+    }
+
     /// The properties that the cluster search takes, `GET
     /// /v1/dashboard/spectroclusters/search/schema`: `schema.properties[]` with `name` and `type`.
     pub fn cluster_search_schema(&self) -> Result<Value> {
         self.api.get_json(CLUSTER_SEARCH_SCHEMA)
+    }
+
+    /// The names of the string properties that the cluster search takes, from
+    /// [`Palette::cluster_search_schema`]. Empty when Palette has no search: it answers 404 or
+    /// 405 for the schema.
+    ///
+    /// # Errors
+    ///
+    /// Each other error of the request.
+    pub fn cluster_search_properties(&self) -> Result<BTreeSet<String>> {
+        let field = |p: &Value, k: &str| p.get(k).and_then(Value::as_str).unwrap_or("").to_string();
+        match self.cluster_search_schema() {
+            Ok(schema) => Ok(schema
+                .pointer("/schema/properties")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+                .filter(|p| field(p, "type") == "string")
+                .map(|p| field(p, "name"))
+                .filter(|name| !name.is_empty())
+                .collect()),
+            Err(Error::Api {
+                status: 404 | 405, ..
+            }) => Ok(BTreeSet::new()),
+            Err(e) => Err(e),
+        }
     }
 
     /// The saved tag filters, `GET /v1/filters/metadata?filterType=tag`: the uid and the name of

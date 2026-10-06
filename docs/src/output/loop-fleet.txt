@@ -1,5 +1,6 @@
 $ strata snapshot filter:production --dir fleet/prod --prune
 strata: searching the clusters of the tenant
+strata: searching the virtual clusters of the tenant
 strata: fetching cluster 64f1000000000000000000f1
 wrote fleet/prod/payments.json  cluster payments (uid 64f1000000000000000000f1)  root 8a8a64d3f95d
 strata: 1 of 1 clusters recorded, 0 removed; found by the search of Palette

@@ -1,0 +1,3 @@
+$ strata list clusters --json | jq -c '.includesVirtual, (.clusters[] | select(.virtual) | {name, virtual})'
+true
+{"name":"tenant-b","virtual":{"clusterGroup":{"uid":"64f5000000000000000000a1","name":"dev-group"},"hostCluster":{"uid":"64f5000000000000000000b1"}}}
