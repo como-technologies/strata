@@ -3896,7 +3896,10 @@ fn list_keeps_the_listing_alone_when_palette_has_no_profile_search() {
     let text = render::renderer(Format::Terminal, Paint::off(), false)
         .render_list(&l)
         .unwrap();
-    assert!(!text.contains("  tenant\n"), "no mark without a scope: {text}");
+    assert!(
+        !text.contains("  tenant\n"),
+        "no mark without a scope: {text}"
+    );
 }
 
 #[test]

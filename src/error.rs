@@ -89,7 +89,7 @@ pub enum Error {
     /// `name@version` matched nothing in the current scope. The message points at `strata list`,
     /// because the name is often a pack's rather than a profile's. At tenant scope it says so
     /// first: tenant scope holds only the profiles of the tenant, so a profile of a project is
-    /// not there, and the reader needs a project before any other advice helps.
+    /// not there. The reader needs a project before any other advice helps.
     #[error("no cluster profile named '{name}' with version '{version}' in this scope; {}", profile_not_found_hint(name, *tenant_scope))]
     ProfileNotFound {
         /// Profile name.
@@ -99,7 +99,7 @@ pub enum Error {
         /// True when no project was set, so the scope holds only the profiles of the tenant.
         tenant_scope: bool,
     },
-    /// `name@version` matched two or more versions in the current scope: a profile of the tenant
+    /// `name@version` matched two or more versions in the current scope. A profile of the tenant
     /// and a profile of the project can have one name and one version. The message names each
     /// uid with its scope, so that the reader can give the uid in place of the name.
     #[error(

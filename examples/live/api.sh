@@ -19,9 +19,10 @@
 #       Each manifest goes with no uid, so the new profile gets its own manifests.
 #   api.sh create-tenant-copy PROFILE_UID NAME
 #       Create and publish the profile NAME at tenant scope, with the version, the packs, the
-#       values, and the manifests of a published version of the project: POST /v1/clusterprofiles
-#       with no ProjectUid header, then PATCH /v1/clusterprofiles/{uid}/publish. Print the uid of
-#       the new profile. Palette lists a profile of the tenant in each project.
+#       values, and the manifests of a published version of the project. The create is a POST
+#       of /v1/clusterprofiles with no ProjectUid header, and the publish a PATCH of
+#       /v1/clusterprofiles/{uid}/publish. Print the uid of the new profile. Palette lists a
+#       profile of the tenant in each project.
 #   api.sh delete-tenant PROFILE_UID
 #       Delete a profile of the tenant: DELETE with no ProjectUid header. A missing one is not an
 #       error.

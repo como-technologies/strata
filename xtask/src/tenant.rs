@@ -353,8 +353,8 @@ impl Tenant {
             .collect();
         scopes.sort();
         // Palette lists a profile of the tenant in each project, and serves its document there.
-        // So each project gets a copy of the documents of each tenant profile, and its listing
-        // and its search name the tenant versions beside its own.
+        // So each project gets a copy of the documents of each tenant profile. Its listing and
+        // its search name the tenant versions beside its own.
         let tenant_profiles = self.documents_in(TENANT, "v1/clusterprofiles");
         for project in &scopes {
             for doc in &tenant_profiles {
@@ -2210,9 +2210,9 @@ fn profile_row(doc: &Value) -> Value {
     })
 }
 
-/// The answer of the profile search, `POST /v1/dashboard/clusterprofiles`, for `profiles`, as
-/// Palette gives it before the filter of a request: one item for each profile name of each scope,
-/// with the scope in `metadata.annotations.scope` and the uid of each version in
+/// The answer of the profile search, `POST /v1/dashboard/clusterprofiles`, for `profiles`,
+/// before the filter of a request. It has one item for each profile name of each scope. An item
+/// gives the scope in `metadata.annotations.scope`, and the uid of each version in
 /// `specSummary.versions[]`. The server keeps the items of the scope that a request names.
 fn profile_search(profiles: &[Value]) -> Value {
     let mut by_name: BTreeMap<(String, String), Vec<&Value>> = BTreeMap::new();

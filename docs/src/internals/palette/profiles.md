@@ -297,7 +297,7 @@ of each version in `specSummary.versions[]`. Palette gives at most 50 names on
 a page, and `listmeta.count` gives the number of names. In a project, the
 search with the filter `tenant` names the tenant versions that the listing
 holds. `list` asks the search for the versions of each scope that the listing
-holds beside its own, and gives each other version the scope of the listing.
+holds beside its own. Each other version gets the scope of the listing.
 
 [`scope.sh`](../../development/live-runs.md#scopesh) checks these facts on the
 live tenant. The command page is

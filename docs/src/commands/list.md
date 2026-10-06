@@ -288,9 +288,9 @@ for each version: `project`, `tenant`, or `system`:
 {{#include ../output/scope-list-json.txt}}
 ```
 
-Strata reads the scope from the profile search of Palette: one request for the
-tenant versions and one for the system versions, with 50 profile names on a
-page. With `--packs` or `--pack`, it reads the scope in the document of each
+Strata reads the scope from the profile search of Palette. It sends one request
+for the tenant versions and one for the system versions, with 50 profile names
+on a page. With `--packs` or `--pack`, it reads the scope in the document of each
 version, and sends no search. When Palette has no profile search, the JSON has
 no `scope`, and no row has the mark. See
 [The scope of a version](../internals/palette/profiles.md#the-scope-of-a-version).

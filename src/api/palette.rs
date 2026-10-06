@@ -255,8 +255,8 @@ impl<A: PaletteApi> Palette<A> {
     /// # Errors
     ///
     /// [`Error::ProfileNotFound`] for a name with no versions. [`Error::ProfileNameAmbiguous`]
-    /// when two or more versions of the name are the highest: a profile of the tenant and a
-    /// profile of the project with one name and one version.
+    /// when two or more versions of the name are the highest. A profile of the tenant and a
+    /// profile of the project can have one name and one version.
     pub fn resolve_latest(&self, name: &str) -> Result<String> {
         let listing = self.profile_listing()?;
         let versions: Vec<(String, String)> = listed_versions(&listing, name).collect();
@@ -313,10 +313,10 @@ impl<A: PaletteApi> Palette<A> {
         Ok(uids)
     }
 
-    /// Give each item of a listing that Palette pages by `offset` to `each`, every page: `fetch`
-    /// reads the page at an offset, and `each` returns false to stop the walk. Palette gives at
-    /// most `page` items on a page, and `listmeta.count` the number of items. The walk ends at a
-    /// page that is short, or when the offset reaches the count.
+    /// Give each item of a listing that Palette pages by `offset` to `each`, every page. `fetch`
+    /// reads the page at an offset. `each` returns false to stop the walk. Palette gives at most
+    /// `page` items on a page, and `listmeta.count` the number of items. The walk ends at a page
+    /// that is short, or when the offset reaches the count.
     pub(crate) fn each_offset_page(
         &self,
         page: usize,

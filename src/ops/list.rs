@@ -546,10 +546,10 @@ fn list_profiles<A: PaletteApi>(
 }
 
 /// Give each version its scope from the profile search. The listing names each version with no
-/// scope, so strata asks the search for the versions of each scope that the listing holds beside
+/// scope. So strata asks the search for the versions of each scope that the listing holds beside
 /// its own: the tenant and the system in a project, the system at tenant scope. Each other version
-/// is of the scope of the listing. A Palette with no profile search answers HTTP 404: the scopes
-/// then stay unknown, because the listing is still the answer, and each other error returns.
+/// is of the scope of the listing. A Palette with no profile search answers HTTP 404. The scopes
+/// then stay unknown, because the listing is still the answer. Each other error returns.
 fn scopes_from_search<A: PaletteApi>(
     profiles: &mut [ListedProfile],
     palette: &Palette<A>,

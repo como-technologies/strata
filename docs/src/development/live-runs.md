@@ -496,14 +496,15 @@ version with no publish, lists it, and deletes it. This is the source for
 
 Read-write. It needs the profiles and no cluster. It creates a profile of the
 tenant with the name, the version, and the packs of the release profile,
-through the API with no project, and deletes it at its end. This is the source
-for [The scope of a version](../internals/palette/profiles.md#the-scope-of-a-version).
+through the API with no project. It deletes the profile at its end. This is the
+source for
+[The scope of a version](../internals/palette/profiles.md#the-scope-of-a-version).
 
 | Check | Expected exit | What it shows |
 |---|---|---|
 | `tenant-create` | 0 | #113: a `POST /v1/clusterprofiles` with no `ProjectUid`, and its publish, make a profile of the tenant |
 | `listing-both` | 0 | #113: the profile listing of the project names the tenant version and the project version, with one name and one version |
-| `search-tenant` | 0 | #113: the profile search of the project with the filter `scope` `tenant` names the uid of the tenant version, and not the uid of the project version |
+| `search-tenant` | 0 | #113: the profile search of the project, with the filter `scope` `tenant`, names the tenant uid and not the project uid |
 | `annotation-tenant`, `annotation-project` | 0 | #113: in the project, the document of the tenant version gives `metadata.annotations.scope` `tenant`, and the document of the release version gives `project` |
 | `list-scope` | 0 | #113: `list --json` gives `scope` `tenant` for the tenant version and `project` for the release version |
 | `list-mark`, `list-packs-mark` | 0 | #113: the row of the tenant version ends with `tenant`, with and without `--packs` |

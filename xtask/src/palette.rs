@@ -212,9 +212,9 @@ fn searched(file: &[u8], body: &[u8]) -> Vec<u8> {
 }
 
 /// The profiles of the search file that the body of a profile search selects, as Palette reads
-/// it: with `filter.scope`, the items of that scope alone, and `listmeta.count` counts the items
-/// that stay. The search gives one item for each profile name of each scope, with the uid of
-/// each version in `specSummary.versions[]`.
+/// it. With `filter.scope`, the items of that scope alone stay, and `listmeta.count` counts them.
+/// The search gives one item for each profile name of each scope, with the uid of each version
+/// in `specSummary.versions[]`.
 fn profiles_searched(file: &[u8], body: &[u8]) -> Vec<u8> {
     let Ok(mut doc) = serde_json::from_slice::<serde_json::Value>(file) else {
         return file.to_vec();
