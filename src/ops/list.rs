@@ -147,6 +147,11 @@ pub struct ListedCluster {
     pub state: String,
     /// Cloud type, for example `aws`.
     pub cloud_type: String,
+    /// The cluster type, as Palette lists it: `PureManage` for a cluster that Palette built, and
+    /// `AlloyMonitor`, `AlloyAssist`, or `AlloyExtend` for a cluster that a person imported.
+    /// Empty when the listing gave none.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub cluster_type: String,
     /// The project the cluster is in; empty for a tenant cluster. The ref works only in this
     /// project, which a tenant-scope listing can differ from.
     pub project_uid: String,
@@ -173,6 +178,19 @@ pub struct ListedCluster {
     /// With applied: each change that waits, as a record gives it.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub pending_updates: Vec<crate::snapshot::PendingUpdate>,
+}
+
+/// The cluster types that Palette gives a cluster that a person imported: with no cloud account,
+/// with one, and with the extensions of Palette. Palette applies no add-on profile to an imported
+/// cluster in read-only mode, and no cluster profile in either mode.
+const IMPORT_TYPES: [&str; 3] = ["AlloyMonitor", "AlloyAssist", "AlloyExtend"];
+
+impl ListedCluster {
+    /// Returns true when Palette lists the cluster with an import type: a person imported it,
+    /// and Palette did not build it.
+    pub(crate) fn is_imported(&self) -> bool {
+        IMPORT_TYPES.contains(&self.cluster_type.as_str())
+    }
 }
 
 /// One project.
@@ -449,6 +467,14 @@ pub(super) fn name_projects_of<T, A: PaletteApi>(
     }
 }
 
+/// The text at `listing` of an entry of the cluster listing, or at `search` of an entry of the
+/// search: the listing gives a field in the spec, and the search in a summary.
+fn listing_or_search(it: &Value, listing: &str, search: &str) -> String {
+    Some(text(it, listing))
+        .filter(|t| !t.is_empty())
+        .unwrap_or_else(|| text(it, search))
+}
+
 pub(super) fn list_clusters(doc: &Value) -> Vec<ListedCluster> {
     let mut clusters: Vec<ListedCluster> = items(doc)
         .map(|it| {
@@ -457,14 +483,22 @@ pub(super) fn list_clusters(doc: &Value) -> Vec<ListedCluster> {
                 reference: format!("{}{uid}", crate::reference::CLUSTER_PREFIX),
                 name: text(it, "/metadata/name"),
                 state: text(it, "/status/state"),
-                // the listing gives the cloud in the spec, and the search in a summary, with the
-                // name of the project
-                cloud_type: Some(text(it, "/spec/cloudType"))
-                    .filter(|t| !t.is_empty())
-                    .unwrap_or_else(|| text(it, "/specSummary/cloudConfig/cloudType")),
-                project_uid: Some(text(it, "/metadata/annotations/projectUid"))
-                    .filter(|p| !p.is_empty())
-                    .unwrap_or_else(|| text(it, "/specSummary/projectMeta/uid")),
+                cloud_type: listing_or_search(
+                    it,
+                    "/spec/cloudType",
+                    "/specSummary/cloudConfig/cloudType",
+                ),
+                cluster_type: listing_or_search(
+                    it,
+                    "/spec/clusterType",
+                    "/specSummary/clusterType",
+                ),
+                project_uid: listing_or_search(
+                    it,
+                    "/metadata/annotations/projectUid",
+                    "/specSummary/projectMeta/uid",
+                ),
+                // the search names the project; the listing gives its uid alone
                 project_name: text(it, "/specSummary/projectMeta/name"),
                 labels: it
                     .pointer("/metadata/labels")

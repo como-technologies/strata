@@ -122,6 +122,30 @@ The two clusters have one name. A name is not an identity: two clusters with
 one name can also run one version and different content. See
 [The same names in two projects](../use-cases/same-names.md).
 
+## An imported cluster
+
+Palette builds a cluster from a cluster profile. A person can also import a
+cluster that runs elsewhere. An imported cluster runs add-on profiles alone,
+and in read-only mode it runs none. With `--applied`, the row of an imported
+cluster with no profile says why:
+
+```text
+{{#include ../output/list-imported.txt}}
+```
+
+With `--format markdown`, the `profiles` cell of the row holds the note. The
+JSON gives `clusterType` on each cluster, as Palette lists it: `PureManage`
+for a cluster that Palette built, and `AlloyMonitor`, `AlloyAssist`, or
+`AlloyExtend` for a cluster that a person imported:
+
+```text
+{{#include ../output/list-imported-json.txt}}
+```
+
+The listing gives no import mode. The console of Palette shows it, `read-only`
+or `full`, and strata does not read it. See
+[An imported cluster](../internals/palette/clusters.md#an-imported-cluster).
+
 ## Find the profile versions that carry a pack
 
 A pack is not a ref. `--pack <text>` keeps the profile versions with a pack

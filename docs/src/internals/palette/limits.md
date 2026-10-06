@@ -58,6 +58,10 @@ These are open:
 - An HTTP 403 on `config/rbacs`, `config/namespaces`, or `repave/status`. The
   stand-in gives the body `AccessDenied`, and no run shows that body. See
   [The policy tier](../../commands/snapshot/cluster.md#the-policy-tier).
+- An imported cluster: no run imports one. So no run shows the `clusterType`
+  of an import in the listing, or a read-only import with no add-on profile.
+  The stand-in of the book models them. See
+  [An imported cluster](clusters.md#an-imported-cluster).
 - `compare --repave` with `cluster:<c>@pending`: no run asks Palette about an
   update that waits. See
   [Ask about the update that waits](../../commands/compare/repave.md#ask-about-the-update-that-waits).

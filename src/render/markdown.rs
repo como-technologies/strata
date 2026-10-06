@@ -696,15 +696,17 @@ impl Renderer for MarkdownRenderer {
                     ));
                 }
                 if with_applied {
-                    let profiles = match entry_error(c.error.as_ref()) {
-                        Some(msg) => format!("error: {msg}"),
-                        None => c
-                            .profiles
+                    let profiles = if let Some(msg) = entry_error(c.error.as_ref()) {
+                        format!("error: {msg}")
+                    } else if let Some(note) = super::imported_note(c) {
+                        note.to_string()
+                    } else {
+                        c.profiles
                             .iter()
                             .flatten()
                             .map(|a| format!("{} ({})", applied_ref(a), dash(&a.kind)))
                             .collect::<Vec<_>>()
-                            .join("<br>"),
+                            .join("<br>")
                     };
                     o.push_str(&format!(" {} |", escape(dash(&profiles))));
                     let behind = match c.updates_pending {

@@ -50,6 +50,7 @@ const A112_PROD: &str = "64e1000000000000000000d4";
 const PAYMENTS: &str = "64f1000000000000000000e1";
 const SEARCH: &str = "64f1000000000000000000e2";
 const LEDGER: &str = "64f1000000000000000000e3";
+const LEGACY: &str = "64f1000000000000000000e7";
 const PAYMENTS_PROD: &str = "64f1000000000000000000f1";
 // a cluster on vSphere, for the shape tier of another cloud
 const LAB: &str = "64f1000000000000000000e6";
@@ -453,6 +454,18 @@ fn commands(r: &mut Runner) {
         0,
         false,
         r#"strata list profiles --packs --json | jq -r '.profiles[] | "\(.ref) published=\(.published)"'"#,
+    );
+    // an imported cluster in read-only mode: Palette lists it with an import type and the cloud
+    // generic, and applies no add-on profile to it
+    r.cluster(DEV, LEGACY, "legacy", &[]);
+    r.cluster_field(DEV, LEGACY, "/spec/clusterType", json!("AlloyMonitor"));
+    r.cluster_field(DEV, LEGACY, "/spec/cloudType", json!("generic"));
+    r.step("list-imported", 0, false, "strata list clusters --applied");
+    r.step(
+        "list-imported-json",
+        0,
+        false,
+        r#"strata list clusters --json | jq -r '.clusters[] | "\(.name) \(.clusterType)"'"#,
     );
 
     r.chapter("snapshot", DEV_ENV);
