@@ -573,7 +573,7 @@ impl Tenant {
 
     /// Publish a copy of the example profile `example` at tenant scope, under `uid` and
     /// `version`. Palette lists a profile of the tenant in each project, beside the profiles of
-    /// the project, and serves its document there: `listings` gives each project a copy.
+    /// the project. It serves its document there too, so `listings` gives each project a copy.
     pub fn tenant_profile(&self, uid: &str, version: &str, example: &str, edits: &[Edit]) {
         self.profile_of_scope(TENANT, "tenant", uid, version, example, edits);
     }

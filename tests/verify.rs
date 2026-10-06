@@ -3948,6 +3948,42 @@ fn list_at_tenant_scope_asks_for_the_system_versions_and_marks_no_tenant_version
 }
 
 #[test]
+fn list_sends_no_profile_search_when_the_listing_holds_no_profile() {
+    // The searches only give a scope to the versions of the listing, so an empty listing needs
+    // none of them (#317).
+    let empty =
+        serde_json::json!({"items": [], "listmeta": {"count": 0, "limit": 50, "offset": 0}});
+    let api = MemoryApi::new()
+        .in_project("p1")
+        .with(
+            "/v1/dashboard/clusterprofiles/metadata",
+            serde_json::json!({"items": []}),
+        )
+        .with_post(
+            "/v1/dashboard/clusterprofiles?limit=50",
+            &profile_search_body("tenant"),
+            empty.clone(),
+        )
+        .with_post(
+            "/v1/dashboard/clusterprofiles?limit=50",
+            &profile_search_body("system"),
+            empty,
+        );
+    let l = ops::list(
+        &ListOptions {
+            kinds: vec![ListKind::Profiles],
+            ..ListOptions::default()
+        },
+        |_| Ok(Palette::new(&api)),
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert!(l.profiles.as_ref().unwrap().is_empty());
+    assert_eq!(api.posted().len(), 0, "{:?}", api.posted());
+}
+
+#[test]
 fn snapshot_of_a_name_and_version_that_a_tenant_and_a_project_profile_share_names_both_uids() {
     let api = a_tenant_and_a_project_version();
     let err = ops::snapshot_for(
@@ -13025,6 +13061,60 @@ fn list_clusters_with_a_tag_names_a_virtual_cluster_that_carries_the_label() {
     assert!(
         text.contains("the list holds no virtual cluster: Palette has no search"),
         "{text}"
+    );
+}
+
+#[test]
+fn list_clusters_gives_one_row_to_a_cluster_that_both_searches_name() {
+    // A query sends two searches, and each answer holds the virtual cluster here. The list
+    // joins the two answers, and gives the cluster one row (#317).
+    let payments = fleet_row(
+        "c-pay",
+        "payments",
+        "p2",
+        serde_json::json!({"env": "prod"}),
+    );
+    let mut vc = virtual_item(
+        "c-v",
+        "vc-prod",
+        "p2",
+        ("g1", "prod-group"),
+        ("c-pay", "payments"),
+    );
+    vc["metadata"]["labels"] = serde_json::json!({"env": "prod"});
+    let tags = vec![serde_json::json!({"conjunction": "and",
+        "filters": [search_eq("tags", "env:prod")]})];
+    let api = serve_fleet(
+        MemoryApi::new(),
+        vec![payments.clone(), vc.clone()],
+        vec![payments],
+    )
+    .with(
+        SEARCH_SCHEMA,
+        search_schema(&["clusterName", "tags", "environment"]),
+    )
+    .with_post(
+        CLUSTER_SEARCH,
+        &virtual_search(tags),
+        serde_json::json!({"items": [vc], "listmeta": {"continue": ""}}),
+    );
+    let l = fleet_listing(
+        &api,
+        ops::ClusterQuery {
+            tags: vec!["env=prod".into()],
+            filter: None,
+        },
+    );
+    assert_eq!(api.posted().len(), 2, "two searches");
+    assert_eq!(
+        l.clusters
+            .as_ref()
+            .unwrap()
+            .iter()
+            .map(|c| c.reference.as_str())
+            .collect::<Vec<_>>(),
+        ["cluster:c-pay", "cluster:c-v"],
+        "one row for each cluster"
     );
 }
 

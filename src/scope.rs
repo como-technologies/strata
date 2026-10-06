@@ -34,7 +34,7 @@ impl ProfileScope {
     }
 
     /// The scope that Palette names `text`, or none for another text.
-    pub fn parse(text: &str) -> Option<Self> {
+    pub(crate) fn parse(text: &str) -> Option<Self> {
         match text {
             "project" => Some(Self::Project),
             "tenant" => Some(Self::Tenant),

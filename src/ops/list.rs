@@ -119,7 +119,7 @@ pub struct ListedProfile {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub consumers: Option<usize>,
     /// With packs: the same consumers by kind. The document keeps `consumers` as a number for
-    /// the readers of `strata-list/1`, so the sum is stored with the kinds, and
+    /// the readers of `strata-list/1`, so `list` stores the sum with the kinds, and
     /// [`ConsumerCounts::count`] gives it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub consumers_by_kind: Option<ConsumerCounts>,
@@ -545,16 +545,23 @@ fn list_profiles<A: PaletteApi>(
     Ok(profiles)
 }
 
-/// Give each version its scope from the profile search. The listing names each version with no
-/// scope. So strata asks the search for the versions of each scope that the listing holds beside
-/// its own: the tenant and the system in a project, the system at tenant scope. Each other version
-/// is of the scope of the listing. A Palette with no profile search answers HTTP 404. The scopes
-/// then stay unknown, because the listing is still the answer. Each other error returns.
+/// Give each version its scope from the profile search.
+///
+/// The listing names each version with no scope. So strata asks the search for the versions of
+/// each other scope that the listing holds. In a project, these are the tenant and the system. At
+/// tenant scope, it is the system. Each other version is of the scope of the listing. An empty
+/// listing needs no search.
+///
+/// A Palette with no profile search answers HTTP 404. The scopes then stay unknown, because the
+/// listing is still the answer. Each other error returns.
 fn scopes_from_search<A: PaletteApi>(
     profiles: &mut [ListedProfile],
     palette: &Palette<A>,
     progress: &Progress,
 ) -> Result<()> {
+    if profiles.is_empty() {
+        return Ok(());
+    }
     let own = ProfileScope::of_listing(palette.project_uid().unwrap_or(""));
     let mut found: BTreeMap<String, ProfileScope> = BTreeMap::new();
     for &scope in own.others_listed() {

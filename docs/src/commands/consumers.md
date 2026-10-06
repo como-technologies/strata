@@ -213,7 +213,7 @@ version bump or a rename overwrote the version that the cluster runs. See
 
 | Exit | Meaning |
 | --- | --- |
-| `0` | Nothing uses the version, and each reading succeeded. The profile lists no cluster and no cluster template, the second reading finds no cluster that applies it, and no edge host is bound to it. For an app profile: the app profile lists no app deployment. |
+| `0` | Nothing uses the version, and each reading succeeded. The profile lists no cluster and no cluster template. The second reading finds no cluster that applies it, and no edge host binds it. For an app profile: the app profile lists no app deployment. |
 | `1` | A cluster, an edge host, a cluster template, or an app deployment uses the version, whatever else failed. |
 | `2` | Strata could not answer: it found no consumer, and a reading failed. A consumer can be missing, so do not delete the version. |
 

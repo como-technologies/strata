@@ -486,9 +486,9 @@ see [The gaps that strata fills](profiles.md#the-gaps-that-strata-fills).
 So `strata packs --cloud aws` keeps a version whose cloud types hold `aws` or
 `all`, and `strata behind` does the same. The example's own packs have
 `cloudTypes: ["all"]` in their `pack.json`. The listing gives such a version
-`all` and each cloud of Palette beside it, from `apache-cloudstack` to
-`vsphere`. So `--cloud aws` keeps it by `aws` too. `registry.sh` stage 6 shows
-it: see [Live runs](../../development/live-runs.md#registrysh).
+`all` and each cloud of Palette beside it. So `--cloud aws` keeps it by `aws`
+too. `registry.sh` stage 6 shows it: see
+[Live runs](../../development/live-runs.md#registrysh).
 
 ## The architectures of a version
 
