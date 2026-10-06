@@ -1,0 +1,5 @@
+$ strata list profiles --project ''
+tenant scope
+
+1 profile
+  aws-stack@1.1.1  64e4000000000000000000c3  aws

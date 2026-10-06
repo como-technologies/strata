@@ -1,2 +1,2 @@
 $ strata snapshot aws-stack@1.1.1 -o aws-stack.json
-strata: no cluster profile named 'aws-stack' with version '1.1.1' in this scope; this is tenant scope, which holds no profiles of its own: set PALETTE_PROJECT, or give --project-name, and `strata list projects` shows the projects this key can see
+strata: no cluster profile named 'aws-stack' with version '1.1.1' in this scope; this is tenant scope, which holds only the profiles of the tenant: set PALETTE_PROJECT, or give --project-name, and `strata list projects` shows the projects this key can see

@@ -7,8 +7,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::api::{NESTED_CLOUD, Palette, PaletteApi, SEARCH_ENVIRONMENT};
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::progress::Progress;
+use crate::scope::ProfileScope;
 use crate::snapshot::{AppliedProfile, Tool};
 use crate::version;
 
@@ -104,6 +105,11 @@ pub struct ListedProfile {
     pub uid: String,
     /// Cloud type, for example `aws`.
     pub cloud_type: String,
+    /// The scope of the version: `project`, `tenant`, or `system`. With packs, from the profile
+    /// document. Without, from the profile search. Absent when strata could not learn it: Palette
+    /// has no profile search, or the document could not be read.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scope: Option<ProfileScope>,
     /// With packs: the profile type, for example `cluster` or `add-on`.
     #[serde(default, rename = "type", skip_serializing_if = "Option::is_none")]
     pub profile_type: Option<String>,
@@ -311,6 +317,14 @@ pub struct Listing {
     pub filters: Option<Vec<super::SavedFilter>>,
 }
 
+impl Listing {
+    /// The scope of the listing: `project` in a project, and `tenant` at tenant scope. The
+    /// reports mark a version whose scope is another one.
+    pub(crate) fn scope(&self) -> ProfileScope {
+        ProfileScope::of_listing(&self.project_uid)
+    }
+}
+
 /// List what a ref can name: profile versions and clusters in one scope, and the projects the
 /// key can see. Profiles and clusters are read through `connect(options.project)`, where `None`
 /// is the configured scope. Projects are read through `connect(Some(TENANT_SCOPE))`, because in a
@@ -458,6 +472,7 @@ fn list_profiles<A: PaletteApi>(
                 cloud_type: text(it, "/spec/cloudType"),
                 name,
                 version,
+                scope: None,
                 profile_type: None,
                 consumers: None,
                 consumers_by_kind: None,
@@ -474,6 +489,7 @@ fn list_profiles<A: PaletteApi>(
             .then_with(|| a.uid.cmp(&b.uid))
     });
     if !options.packs && options.pack.is_none() {
+        scopes_from_search(&mut profiles, palette, progress)?;
         return Ok(profiles);
     }
 
@@ -486,6 +502,7 @@ fn list_profiles<A: PaletteApi>(
                 continue;
             }
         };
+        p.scope = ProfileScope::of_document(&doc);
         // A profile that was never published has only a draft, as a snapshot reads it.
         let template = ["/spec/published", "/spec/draft"]
             .into_iter()
@@ -526,6 +543,32 @@ fn list_profiles<A: PaletteApi>(
         });
     }
     Ok(profiles)
+}
+
+/// Give each version its scope from the profile search. The listing names each version with no
+/// scope. So strata asks the search for the versions of each scope that the listing holds beside
+/// its own: the tenant and the system in a project, the system at tenant scope. Each other version
+/// is of the scope of the listing. A Palette with no profile search answers HTTP 404. The scopes
+/// then stay unknown, because the listing is still the answer. Each other error returns.
+fn scopes_from_search<A: PaletteApi>(
+    profiles: &mut [ListedProfile],
+    palette: &Palette<A>,
+    progress: &Progress,
+) -> Result<()> {
+    let own = ProfileScope::of_listing(palette.project_uid().unwrap_or(""));
+    let mut found: BTreeMap<String, ProfileScope> = BTreeMap::new();
+    for &scope in own.others_listed() {
+        progress.note(&format!("searching the {scope} profiles"));
+        match palette.profile_uids_in_scope(scope) {
+            Ok(uids) => found.extend(uids.into_iter().map(|uid| (uid, scope))),
+            Err(Error::Api { status: 404, .. }) => return Ok(()),
+            Err(e) => return Err(e),
+        }
+    }
+    for p in profiles {
+        p.scope = Some(found.get(&p.uid).copied().unwrap_or(own));
+    }
+    Ok(())
 }
 
 /// Fill in each row's project name from the project listing. The name is a convenience, so a

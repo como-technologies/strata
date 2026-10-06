@@ -17,6 +17,15 @@
 #       Create the profile NAME with the version, packs, values, and manifests of a published
 #       version, with no publish: POST /v1/clusterprofiles only. Print the uid of the new profile.
 #       Each manifest goes with no uid, so the new profile gets its own manifests.
+#   api.sh create-tenant-copy PROFILE_UID NAME
+#       Create and publish the profile NAME at tenant scope, with the version, the packs, the
+#       values, and the manifests of a published version of the project. The create is a POST
+#       of /v1/clusterprofiles with no ProjectUid header, and the publish a PATCH of
+#       /v1/clusterprofiles/{uid}/publish. Print the uid of the new profile. Palette lists a
+#       profile of the tenant in each project.
+#   api.sh delete-tenant PROFILE_UID
+#       Delete a profile of the tenant: DELETE with no ProjectUid header. A missing one is not an
+#       error.
 #   api.sh edit-manifest PROFILE_UID FROM TO
 #       The same change of one manifest, through the route of that manifest: PUT
 #       /v1/clusterprofiles/{uid}/packs/{pack}/manifests/{manifest uid}, then publish. Exit 2
@@ -267,6 +276,26 @@ create_unpublished() {
   body "$tmp" '.manifests |= map({name, content})' \
     | jq --arg n "$name" '.metadata = {name: $n}' > "$tmp/body"
   call POST /v1/clusterprofiles "$tmp/body" | jq -er '.uid' || exit 2
+}
+
+# create_tenant_copy UID NAME: the create of create_unpublished with no ProjectUid header, so the
+# profile is of the tenant, and then its publish. Palette lists a profile of the tenant in each
+# project.
+create_tenant_copy() {
+  local uid=${1:-} name=${2:-} tmp new
+  [ -n "$uid" ] && [ -n "$name" ] || die "usage: api.sh create-tenant-copy PROFILE_UID NAME"
+  tmp=$(mktemp -d); trap 'rm -rf "${tmp:-}"' RETURN EXIT
+  fetch_published "$uid" "$tmp"
+  body "$tmp" '.manifests |= map({name, content})' \
+    | jq --arg n "$name" '.metadata = {name: $n}' > "$tmp/body"
+  new=$(PROJECT= call POST /v1/clusterprofiles "$tmp/body" | jq -er '.uid') || exit 2
+  PROJECT= call PATCH "/v1/clusterprofiles/$new/publish" > /dev/null || exit 2
+  echo "$new"
+}
+
+# delete_tenant UID: the delete of a profile of the tenant, with no ProjectUid header
+delete_tenant() {
+  PROJECT= delete "$@"
 }
 
 edit_manifest() {
@@ -727,6 +756,8 @@ case "${1:-}" in
   draft) shift; draft "$@" ;;
   publish) shift; publish "$@" ;;
   create-unpublished) shift; create_unpublished "$@" ;;
+  create-tenant-copy) shift; create_tenant_copy "$@" ;;
+  delete-tenant) shift; delete_tenant "$@" ;;
   reorder) shift; reorder "$@" ;;
   reorder-cluster) shift; reorder_cluster "$@" ;;
   retag) shift; retag "$@" ;;

@@ -70,6 +70,11 @@ fn answer(root: &Path, mut stream: TcpStream) -> std::io::Result<()> {
         {
             (200, searched(&fs::read(path)?, &request.body))
         }
+        (Some(path), _)
+            if path.is_file() && request.target.starts_with("/v1/dashboard/clusterprofiles?") =>
+        {
+            (200, profiles_searched(&fs::read(path)?, &request.body))
+        }
         (Some(path), _) if path.is_file() => match fs::read(path)? {
             body if body.is_empty() => (204, body),
             body => (200, body),
@@ -202,6 +207,25 @@ fn searched(file: &[u8], body: &[u8]) -> Vec<u8> {
                     }
                 })
         });
+    }
+    doc.to_string().into_bytes()
+}
+
+/// The profiles of the search file that the body of a profile search selects, as Palette reads
+/// it. With `filter.scope`, the items of that scope alone stay, and `listmeta.count` counts them.
+/// The search gives one item for each profile name of each scope, with the uid of each version
+/// in `specSummary.versions[]`.
+fn profiles_searched(file: &[u8], body: &[u8]) -> Vec<u8> {
+    let Ok(mut doc) = serde_json::from_slice::<serde_json::Value>(file) else {
+        return file.to_vec();
+    };
+    let query: serde_json::Value = serde_json::from_slice(body).unwrap_or_default();
+    if let Some(scope) = query["filter"]["scope"].as_str()
+        && let Some(items) = doc["items"].as_array_mut()
+    {
+        items.retain(|p| p["metadata"]["annotations"]["scope"] == scope);
+        let count = items.len();
+        doc["listmeta"]["count"] = serde_json::json!(count);
     }
     doc.to_string().into_bytes()
 }

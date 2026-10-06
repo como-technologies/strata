@@ -88,16 +88,31 @@ pub enum Error {
     },
     /// `name@version` matched nothing in the current scope. The message points at `strata list`,
     /// because the name is often a pack's rather than a profile's. At tenant scope it says so
-    /// first: a tenant holds no profiles of its own, so `strata list` there answers nothing, and
-    /// the reader needs a project before any other advice helps.
+    /// first: tenant scope holds only the profiles of the tenant, so a profile of a project is
+    /// not there. The reader needs a project before any other advice helps.
     #[error("no cluster profile named '{name}' with version '{version}' in this scope; {}", profile_not_found_hint(name, *tenant_scope))]
     ProfileNotFound {
         /// Profile name.
         name: String,
         /// Profile version.
         version: String,
-        /// True when no project was set, so the scope holds no profiles at all.
+        /// True when no project was set, so the scope holds only the profiles of the tenant.
         tenant_scope: bool,
+    },
+    /// `name@version` matched two or more versions in the current scope. A profile of the tenant
+    /// and a profile of the project can have one name and one version. The message names each
+    /// uid with its scope, so that the reader can give the uid in place of the name.
+    #[error(
+        "several profiles in this scope are named '{name}' with version '{version}': {}; give the uid in place of the name",
+        profiles.iter().map(ToString::to_string).collect::<Vec<_>>().join(", ")
+    )]
+    ProfileNameAmbiguous {
+        /// Profile name.
+        name: String,
+        /// The version that matched: the version of the ref, or the highest version for `latest`.
+        version: String,
+        /// Each version with that name and version, by uid, with its scope.
+        profiles: Vec<crate::scope::ScopedUid>,
     },
     /// `cluster:<uid>/<profile>` named a profile the cluster does not run.
     #[error("cluster '{cluster}' has no applied profile named '{profile}'; applied: {}", applied.join(", "))]
@@ -513,12 +528,12 @@ fn list_or_none(items: &[String]) -> String {
 }
 
 /// What to try after a profile name matched nothing. At tenant scope the listing advice is a dead
-/// end: a tenant holds no profiles of its own, so `strata list` there answers nothing and the
+/// end for a profile of a project: tenant scope holds only the profiles of the tenant, so the
 /// reader needs a project first.
 fn profile_not_found_hint(name: &str, tenant_scope: bool) -> String {
     if tenant_scope {
-        "this is tenant scope, which holds no profiles of its own: set PALETTE_PROJECT, or give \
-         --project-name, and `strata list projects` shows the projects this key can see"
+        "this is tenant scope, which holds only the profiles of the tenant: set PALETTE_PROJECT, \
+         or give --project-name, and `strata list projects` shows the projects this key can see"
             .to_string()
     } else {
         format!(
@@ -613,6 +628,7 @@ impl Error {
             Error::Transport { .. } => "transport",
             Error::NotJson { .. } => "not-json",
             Error::ProfileNotFound { .. } => "profile-not-found",
+            Error::ProfileNameAmbiguous { .. } => "profile-name-ambiguous",
             Error::ClusterProfileNotFound { .. } => "cluster-profile-not-found",
             Error::ProfileRefRequired { .. } => "profile-ref-required",
             Error::NoDraft { .. } => "no-draft",
@@ -780,6 +796,18 @@ impl Error {
                 m.insert("version".into(), Value::from(version.as_str()));
                 m.insert("tenantScope".into(), Value::from(*tenant_scope));
             }
+            Error::ProfileNameAmbiguous {
+                name,
+                version,
+                profiles,
+            } => {
+                m.insert("name".into(), Value::from(name.as_str()));
+                m.insert("version".into(), Value::from(version.as_str()));
+                m.insert(
+                    "profiles".into(),
+                    serde_json::to_value(profiles).unwrap_or_default(),
+                );
+            }
             Error::NotSnapshot(p) | Error::EmptyFile(p) => path(&mut m, p),
             Error::UnsupportedSchema {
                 path: p,
@@ -898,6 +926,20 @@ mod tests {
                 name: "aws-stack".into(),
                 version: "9.9.9".into(),
                 tenant_scope: false,
+            },
+            Error::ProfileNameAmbiguous {
+                name: "aws-stack".into(),
+                version: "1.1.1".into(),
+                profiles: vec![
+                    crate::scope::ScopedUid {
+                        uid: "64e0000000000000000000c3".into(),
+                        scope: Some(crate::scope::ProfileScope::Project),
+                    },
+                    crate::scope::ScopedUid {
+                        uid: "64e4000000000000000000c3".into(),
+                        scope: Some(crate::scope::ProfileScope::Tenant),
+                    },
+                ],
             },
             Error::PackNameNotFound {
                 name: "no-such-pack".into(),
@@ -1103,6 +1145,22 @@ mod tests {
         );
         assert_eq!(by_kind("not-snapshot")["path"], "profile.json");
         assert_eq!(by_kind("profile-not-found")["name"], "aws-stack");
+        let ambiguous = by_kind("profile-name-ambiguous");
+        assert_eq!(ambiguous["version"], "1.1.1");
+        assert_eq!(
+            ambiguous["profiles"],
+            serde_json::json!([
+                {"uid": "64e0000000000000000000c3", "scope": "project"},
+                {"uid": "64e4000000000000000000c3", "scope": "tenant"},
+            ])
+        );
+        assert!(
+            ambiguous["message"].as_str().unwrap().contains(
+                "'aws-stack' with version '1.1.1': 64e0000000000000000000c3 (project), \
+                 64e4000000000000000000c3 (tenant); give the uid"
+            ),
+            "{ambiguous}"
+        );
         assert_eq!(by_kind("snapshot-schema")["schema"], "strata-snapshot/1");
         assert_eq!(by_kind("invalid-setting")["variable"], "STRATA_RETRIES");
         assert_eq!(by_kind("invalid-setting")["value"], "lots");

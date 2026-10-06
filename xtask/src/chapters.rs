@@ -40,6 +40,8 @@ const A1110: &str = "64e0000000000000000000fd";
 const A1110_PROD: &str = "64e1000000000000000000fd";
 // aws-stack@1.3.0: the content of 1.1.1, made with no publish
 const A130: &str = "64e0000000000000000000fe";
+// aws-stack@1.1.1 of the tenant: the content of 1.1.1, published at tenant scope
+const A111_TENANT: &str = "64e4000000000000000000c3";
 const ADDONS_DEV: &str = "64e2000000000000000000a1";
 const ADDONS_PROD: &str = "64e3000000000000000000a1";
 const ADDONS_PROD2: &str = "64e3000000000000000000a2";
@@ -487,6 +489,39 @@ fn commands(r: &mut Runner) {
         1,
         false,
         "strata consumers aws-stack@1.0.0 --list-only",
+    );
+
+    // a profile of the tenant with the name and the version of a profile of the project
+    r.chapter("scope", DEV_ENV);
+    r.projects(&[("dev", DEV), ("prod", PROD)]);
+    r.profile(DEV, A110, "1.1.0", "aws-stack@1.1.0", &[]);
+    r.profile(DEV, A111, "1.1.1", "aws-stack@1.1.1", &[]);
+    r.tenant_profile(A111_TENANT, "1.1.1", "aws-stack@1.1.1", &[]);
+    r.step("scope-list", 0, false, "strata list profiles");
+    r.step(
+        "scope-list-json",
+        0,
+        false,
+        r#"strata list profiles --json | jq -r '.profiles[] | "\(.ref) \(.uid) \(.scope)"'"#,
+    );
+    r.step(
+        "scope-ambiguous",
+        2,
+        true,
+        "strata snapshot aws-stack@1.1.1 -o aws-stack.json",
+    );
+    r.step(
+        "scope-by-uid",
+        0,
+        true,
+        &format!("strata snapshot {A111_TENANT} -o tenant-aws-stack.json"),
+    );
+    r.step("scope-packs", 0, false, "strata list profiles --packs");
+    r.step(
+        "scope-tenant",
+        0,
+        false,
+        "strata list profiles --project ''",
     );
 
     r.chapter("snapshot", DEV_ENV);

@@ -22,6 +22,7 @@ the kind.
 | `transport` | The request did not reach Palette, or the answer did not arrive whole. | `path` |
 | `not-json` | Palette answered with a body that is not JSON. | `path` |
 | `profile-not-found` | No profile version with this name and version in the scope. | `name`, `version`, `tenantScope` |
+| `profile-name-ambiguous` | Two or more profile versions in the scope have this name and version: a profile of the tenant and a profile of the project. Give the uid in place of the name. | `name`, `version`, `profiles[]` of `uid` and `scope` |
 | `no-draft` | A `<ref>@draft` named a profile version with no draft: Palette holds only its published template. | `name`, `version`, `uid` |
 | `cluster-profile-not-found` | The cluster runs no profile with this name or uid. | `cluster`, `profile`, `applied` |
 | `profile-ref-required` | The command needs a profile, and got a cluster, an edge host, a cluster group, an app profile, a pack, or a record of one. | `reference` |

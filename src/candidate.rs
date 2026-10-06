@@ -471,31 +471,13 @@ pub fn check(candidate: Candidate, path: &Path) -> Result<LoadedCandidate> {
 fn each_pack_named<A: PaletteApi>(
     palette: &Palette<A>,
     name: &str,
-    mut each: impl FnMut(Value) -> bool,
+    each: impl FnMut(Value) -> bool,
 ) -> Result<()> {
-    let mut offset = 0;
-    loop {
-        let page = palette.pack_listing_page(name, offset)?;
-        let items = page
-            .get("items")
-            .and_then(Value::as_array)
-            .cloned()
-            .unwrap_or_default();
-        let n = items.len();
-        for it in items {
-            if !each(it) {
-                return Ok(());
-            }
-        }
-        offset += n;
-        let total = page
-            .pointer("/listmeta/count")
-            .and_then(Value::as_u64)
-            .unwrap_or(0) as usize;
-        if n < 100 || offset >= total {
-            return Ok(());
-        }
-    }
+    palette.each_offset_page(
+        crate::api::PACK_LISTING_PAGE,
+        |offset| palette.pack_listing_page(name, offset),
+        each,
+    )
 }
 
 /// Every version of `name` the pack listing returns, across registries. The listing caps `limit`

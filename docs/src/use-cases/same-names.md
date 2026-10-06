@@ -44,7 +44,7 @@ and finds one cluster.
 {{#include ../output/names-cluster.txt}}
 ```
 
-The tenant scope holds no profiles of its own, so a profile name there matches
+This tenant holds no profiles at tenant scope, so a profile name there matches
 nothing. Exit `2`:
 
 ```text
@@ -75,10 +75,26 @@ name, in two projects, and one command answers for both.
 
 Two clusters with one name and one version run different content.
 
+## 5. The same name in the tenant and in the project
+
+A profile of the tenant is in the listing of each project. When it has the
+name and the version of a profile of the project, a ref matches two versions.
+Strata exits `2`, and names each uid with its scope:
+
+```text
+{{#include ../output/scope-ambiguous.txt}}
+```
+
+Give the uid in place of the name. `strata list` marks the tenant version: see
+[A profile of the tenant](../commands/list.md#a-profile-of-the-tenant).
+
 ## What to do
 
 - Set `PALETTE_PROJECT` for each command. `list` and `verify` also take
   `--project` and `--project-name`; the other commands do not.
+- When a profile of the tenant has the name and the version of a profile of
+  the project, give the uid. `strata list --json` gives the scope of each
+  version.
 - In a script, name the project and the uid together:
   `PALETTE_PROJECT=prod strata snapshot cluster:64f1000000000000000000f1`. A uid
   names one cluster, and it does not widen the scope: strata reads a cluster in

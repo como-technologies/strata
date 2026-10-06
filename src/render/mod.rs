@@ -364,7 +364,7 @@ pub(crate) fn entry_error(error: Option<&Value>) -> Option<&str> {
 }
 
 /// The mark of a listed version that nobody published: `draft`, or nothing.
-pub(crate) fn draft_mark(p: &crate::ops::ListedProfile) -> Option<&'static str> {
+fn draft_mark(p: &crate::ops::ListedProfile) -> Option<&'static str> {
     p.is_draft().then_some("draft")
 }
 
@@ -377,6 +377,20 @@ pub(crate) fn imported_note(c: &crate::ops::ListedCluster) -> Option<&'static st
     let no_profile = c.profiles.as_ref().is_some_and(Vec::is_empty);
     (no_profile && c.is_imported())
         .then_some("imported: Palette applies no add-on profile in read-only mode")
+}
+
+/// The marks of a listed version, joined with commas: its scope when it is not the scope of the
+/// listing, for example `tenant` in a project, and `draft` for a version that nobody published.
+/// None when the row needs no mark.
+pub(crate) fn profile_marks(
+    p: &crate::ops::ListedProfile,
+    l: &crate::ops::Listing,
+) -> Option<String> {
+    let scope = p
+        .scope
+        .filter(|scope| *scope != l.scope())
+        .map(crate::scope::ProfileScope::as_str);
+    joined_note([scope, draft_mark(p)])
 }
 
 /// `<name>@<version>` of a profile a cluster applies, as `list` and the reports print it.

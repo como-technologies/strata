@@ -492,6 +492,27 @@ version with no publish, lists it, and deletes it. This is the source for
 | `unpublished-listed`, `unpublished-mark` | 0 | #114: the profile listing names the version. `list --packs` gives `published` false, the packs of its draft, and the mark `draft` at the end of its row |
 | `unpublished-delete` | 0 | #114: the delete of `strata-live-unpublished` |
 
+## scope.sh
+
+Read-write. It needs the profiles and no cluster. It creates a profile of the
+tenant with the name, the version, and the packs of the release profile,
+through the API with no project. It deletes the profile at its end. This is the
+source for
+[The scope of a version](../internals/palette/profiles.md#the-scope-of-a-version).
+
+| Check | Expected exit | What it shows |
+|---|---|---|
+| `tenant-create` | 0 | #113: a `POST /v1/clusterprofiles` with no `ProjectUid`, and its publish, make a profile of the tenant |
+| `listing-both` | 0 | #113: the profile listing of the project names the tenant version and the project version, with one name and one version |
+| `search-tenant` | 0 | #113: the profile search of the project, with the filter `scope` `tenant`, names the tenant uid and not the project uid |
+| `annotation-tenant`, `annotation-project` | 0 | #113: in the project, the document of the tenant version gives `metadata.annotations.scope` `tenant`, and the document of the release version gives `project` |
+| `list-scope` | 0 | #113: `list --json` gives `scope` `tenant` for the tenant version and `project` for the release version |
+| `list-mark`, `list-packs-mark` | 0 | #113: the row of the tenant version ends with `tenant`, with and without `--packs` |
+| `ambiguous`, `ambiguous-says` | 2, 0 | #113: `snapshot <name>@<version>` exits `2` with `profile-name-ambiguous`, and the error names each uid with its scope |
+| `by-uid` | 0 | #113: `snapshot <uid>` records the tenant version |
+| `tenant-list`, `tenant-list-no-mark` | 0 | #113: at tenant scope, `list --json` gives `scope` `tenant` for the version, and its row has no mark |
+| `tenant-delete` | 0 | #113: the delete of the tenant profile, with no `ProjectUid` |
+
 ## pending.sh
 
 Read-write. It needs the example at its baseline with cluster A. Each stage

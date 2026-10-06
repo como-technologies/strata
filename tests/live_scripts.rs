@@ -2978,6 +2978,147 @@ fn draft_sh_fails_the_check_when_list_says_that_the_copy_is_published() {
     assert_ne!(o.status.code(), Some(0));
 }
 
+/// A stage of `scope.sh`: the release profile `r-1` of the project, and its copy `t-1` that
+/// Palette creates at tenant scope. The document of `t-1` gives the scope `tenant_scope`.
+fn scope_stage(tenant_scope: &str) -> Stage {
+    let mut stage = Stage::new(baseline_outputs());
+    stage.route(
+        "/v1/clusterprofiles/r-1",
+        r#"{"metadata":{"name":"strata-live-profile","uid":"r-1","annotations":{"scope":"project"}},
+            "spec":{"version":"1.0.0","published":{"type":"cluster","cloudType":"aws","packs":[
+            {"name":"kubernetes","tag":"1.33.0","type":"spectro","layer":"k8s","packUid":"pk-1",
+             "registryUid":"reg-1","values":""}]}}}"#,
+    );
+    stage.route(
+        "/v1/clusterprofiles/r-1/packs/manifests",
+        r#"{"metadata":{},"spec":{"packs":[]}}"#,
+    );
+    stage.route("/v1/clusterprofiles", r#"{"uid":"t-1"}"#);
+    stage.route("/v1/clusterprofiles/t-1/publish", "{}");
+    stage.route(
+        "/v1/clusterprofiles/t-1",
+        &format!(
+            r#"{{"metadata":{{"name":"strata-live-profile","uid":"t-1","annotations":{{"scope":"{tenant_scope}"}}}},
+                "spec":{{"version":"1.0.0"}}}}"#
+        ),
+    );
+    stage.route(
+        "/v1/dashboard/clusterprofiles/metadata",
+        r#"{"items":[
+            {"metadata":{"name":"strata-live-profile","uid":"r-1"},"spec":{"version":"1.0.0","cloudType":"aws"}},
+            {"metadata":{"name":"strata-live-profile","uid":"t-1"},"spec":{"version":"1.0.0","cloudType":"aws"}}]}"#,
+    );
+    stage.route(
+        "/v1/dashboard/clusterprofiles",
+        r#"{"items":[{"metadata":{"name":"strata-live-profile","annotations":{"scope":"tenant"}},
+            "specSummary":{"versions":[{"version":"1.0.0","uid":"t-1"}]}}],
+            "listmeta":{"continue":"","count":1,"limit":50,"offset":0}}"#,
+    );
+    stage.strata(
+        "list profiles --json",
+        0,
+        r#"{"profiles":[{"uid":"r-1","scope":"project"},{"uid":"t-1","scope":"tenant"}]}"#,
+    );
+    stage.strata(
+        "list profiles --no-color",
+        0,
+        "  strata-live-profile@1.0.0  r-1  aws\n  strata-live-profile@1.0.0  t-1  aws  tenant\n",
+    );
+    stage.strata(
+        "list profiles --packs --no-color",
+        0,
+        "  strata-live-profile@1.0.0  r-1  aws  cluster  no consumers\n  \
+         strata-live-profile@1.0.0  t-1  aws  cluster  no consumers  tenant\n",
+    );
+    stage.strata_err(
+        "snapshot strata-live-profile@1.0.0 -o ambiguous.json",
+        2,
+        "strata: several profiles in this scope are named 'strata-live-profile' with version \
+         '1.0.0': r-1 (project), t-1 (tenant); give the uid in place of the name\n",
+    );
+    stage.strata("snapshot t-1 -o tenant.json", 0, "{}");
+    stage.strata(
+        "list profiles --project  --json",
+        0,
+        r#"{"profiles":[{"uid":"t-1","scope":"tenant"}]}"#,
+    );
+    stage.strata(
+        "list profiles --project  --no-color",
+        0,
+        "  strata-live-profile@1.0.0  t-1  aws\n",
+    );
+    stage
+}
+
+#[test]
+fn scope_sh_makes_a_tenant_profile_with_no_project_and_checks_each_answer_about_it() {
+    let stage = scope_stage("tenant");
+    let (o, steps) = stage.run("scope.sh", &[]);
+    passed(
+        &steps,
+        &[
+            "tenant-create",
+            "listing-both",
+            "search-tenant",
+            "annotation-tenant",
+            "annotation-project",
+            "list-scope",
+            "list-mark",
+            "list-packs-mark",
+            "ambiguous",
+            "ambiguous-says",
+            "by-uid",
+            "tenant-list",
+            "tenant-list-no-mark",
+            "tenant-delete",
+        ],
+    );
+    assert_eq!(o.status.code(), Some(0), "{steps}");
+
+    // the create and the publish go to tenant scope: no ProjectUid header
+    for request in [
+        "routes/sent/POST_v1_clusterprofiles.request",
+        "routes/sent/PATCH_v1_clusterprofiles_t-1_publish.request",
+    ] {
+        let sent = std::fs::read_to_string(stage.path(request)).unwrap();
+        assert!(!sent.contains("ProjectUid"), "{request}: {sent}");
+    }
+    let posts = stage.sent("POST", "/v1/clusterprofiles");
+    assert_eq!(posts.len(), 1, "one create: {posts:?}");
+    assert_eq!(
+        posts[0]["metadata"],
+        serde_json::json!({"name": "strata-live-profile"})
+    );
+    assert_eq!(posts[0]["spec"]["version"], "1.0.0");
+    // the search asks for the tenant versions, in the project
+    let searches = stage.sent("POST", "/v1/dashboard/clusterprofiles");
+    assert_eq!(searches.len(), 1, "{searches:?}");
+    assert_eq!(searches[0]["filter"]["scope"], "tenant");
+    let request = std::fs::read_to_string(
+        stage.path("routes/sent/POST_v1_dashboard_clusterprofiles.request"),
+    )
+    .unwrap();
+    assert!(request.contains("ProjectUid: p-1"), "{request}");
+    let calls = std::fs::read_to_string(stage.path("curl.log")).unwrap();
+    assert!(
+        calls.ends_with("DELETE /v1/clusterprofiles/t-1\n"),
+        "the last request deletes the tenant profile: {calls}"
+    );
+}
+
+#[test]
+fn scope_sh_fails_the_annotation_check_when_the_document_of_the_copy_says_project() {
+    let stage = scope_stage("project");
+    let (o, steps) = stage.run("scope.sh", &[]);
+    assert!(steps.contains("FAIL  annotation-tenant"), "{steps}");
+    assert_ne!(o.status.code(), Some(0));
+    let calls = std::fs::read_to_string(stage.path("curl.log")).unwrap();
+    assert!(
+        calls.ends_with("DELETE /v1/clusterprofiles/t-1\n"),
+        "the tenant profile goes also after a failed check: {calls}"
+    );
+}
+
 /// Stage 7 of `packs.sh` against a listing of `loki` whose 2.10.2 names `amd64,arm64` and whose
 /// 3.6.7 names `amd64`, with `behind` of the record of 2.10.2 answering `line` and `json`.
 fn packs_arch_stage(line: &str, json: &str) -> String {

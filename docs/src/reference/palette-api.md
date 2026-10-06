@@ -1,7 +1,7 @@
 # Palette API requests
 
-Strata reads. Most requests are `GET` requests. Nine are `POST` requests, and
-none of them changes anything. Three are searches that Palette takes as a
+Strata reads. Most requests are `GET` requests. Ten are `POST` requests, and
+none of them changes anything. Four are searches that Palette takes as a
 `POST`. With the other six, `compare --repave`, `compare --validate`, and
 `snapshot --validate` ask Palette a question. Each request has the
 headers `ApiKey` and `Accept: application/json`. A request in a project has
@@ -13,12 +13,13 @@ of each response.
 
 | Request | Gives |
 | --- | --- |
-| `GET /v1/clusterprofiles/{uid}` | The metadata, the consumers, and the published pack references. |
+| `GET /v1/clusterprofiles/{uid}` | The metadata, the consumers, and the published pack references. `metadata.annotations.scope` gives the scope of the version: `project`, `tenant`, or `system`. |
 | `GET /v1/clusterprofiles/{uid}/packs/manifests` | The registry digests and the manifest contents. |
 | `GET /v1/clusterprofiles/{uid}/variables` | The profile variables. |
 | `GET /v1/packs/{uid}` | Only when the profile has a draft: for each pack of the draft, `packValues[].schema[]`, with the `name` and the `format` of each value. Strata writes `********` over each value whose format is `password`. See [Secrets in the values](../internals/palette/profiles.md#secrets-in-the-values). |
 | `GET /v1/clusterprofiles/{uid}/packs/{packName}/manifests/{manifestUid}` | Only for a version with a draft, once for each manifest of its two templates: `spec.published.content` and `spec.draft.content`. While a draft waits, `packs/manifests` gives the content of neither template. See [Drafts](../internals/palette/profiles.md#drafts). |
-| `GET /v1/dashboard/clusterprofiles/metadata` | The listing: `list`, and the uid of `<name>@<version>` and of `<name>@latest`. |
+| `GET /v1/dashboard/clusterprofiles/metadata` | The listing: `list`, and the uid of `<name>@<version>` and of `<name>@latest`. In a project, it holds the profiles of the project and the profiles of the tenant. |
+| `POST /v1/dashboard/clusterprofiles?limit=50` | The profile search, with the filter `scope`: one item for each profile name of that scope, with the uid of each version in `specSummary.versions[]`. `list` reads it for the scope of each version: the tenant versions and the system versions in a project, and the system versions at tenant scope. Palette gives 50 names on a page, and strata raises `offset` as for `/v1/packs`. The request changes nothing. |
 | `POST /v1/clusterprofiles/{uid}/validate/packs` | Whether Palette takes the packs of the version as an update of itself, for `snapshot <ref> --validate`. The request changes nothing. |
 
 A missing variables endpoint, HTTP 404 or 405 on an older Palette, counts as no
@@ -104,7 +105,8 @@ in [Edge hosts, cluster groups, and app profiles](../internals/palette/other-obj
 | `GET /v1/audits?resourceKind=<kind>&resourceUid=<uid>&startTime=<time>&limit=100` | `verify --who` | The writes to the object since the record, every page. The kind is `clusterprofile`, `appprofile`, `edgehost`, or `clustergroup`. For a cluster record, strata sends no `resourceKind`: the uid alone finds the entries of `spectrocluster` and of `virtualCluster`. Strata also reads the log of each profile of `profilesOverwritten`, as `clusterprofile`. A page has 100 entries, the most that Palette serves. |
 
 `list --packs`, and `list --pack`, read `GET /v1/clusterprofiles/{uid}` for each
-profile version. `list clusters --applied`, and `list --cluster`, read
+profile version. Without them, `list` reads the profile search for the scope
+of each version. `list clusters --applied`, and `list --cluster`, read
 `GET /v1/spectroclusters/{uid}` for each cluster. `consumers` reads each cluster
 that the profile lists, in its own project. Then it reads the cluster listing at
 tenant scope, and `GET /v1/spectroclusters/{uid}` for each cluster the profile

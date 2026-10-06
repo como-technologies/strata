@@ -220,6 +220,27 @@ impl Runner {
         example: &str,
         edits: &[Edit],
     ) {
+        self.seed_once(project, uid, version, example, edits);
+        self.publish(project, uid, version, example, edits);
+    }
+
+    /// Publish a copy of an example profile at tenant scope. Palette lists a profile of the
+    /// tenant in each project, beside the profiles of the project, and serves its document
+    /// there. The rule of [`Runner::profile`] on one content for one identity holds for it too.
+    pub fn tenant_profile(&mut self, uid: &str, version: &str, example: &str, edits: &[Edit]) {
+        self.seed_once("tenant", uid, version, example, edits);
+        self.build(|t| t.tenant_profile(uid, version, example, edits));
+    }
+
+    /// Stop when another chapter seeds `project` `uid` `version` from another content.
+    fn seed_once(
+        &mut self,
+        project: &str,
+        uid: &str,
+        version: &str,
+        example: &str,
+        edits: &[Edit],
+    ) {
         let key = (project.to_string(), uid.to_string(), version.to_string());
         let content = format!("{example} {edits:?}");
         match self.seeded.get(&key) {
@@ -235,7 +256,6 @@ impl Runner {
                 self.seeded.insert(key, (content, self.chapter.clone()));
             }
         }
-        self.publish(project, uid, version, example, edits);
     }
 
     /// Publish a copy that differs from the one another chapter gives the same identity, on

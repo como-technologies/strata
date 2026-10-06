@@ -21,8 +21,9 @@
 //! - [`repave`]: the reasons of Palette for a repave, and a repave that waits for approval.
 //! - [`render`]: the terminal, markdown, and JSON renderers behind one trait.
 //! - [`ops`]: the operations the CLI exposes, free of argument parsing and exit codes.
-//! - [`error`], [`progress`], [`color`], and [`layer`]: the error type with its exit codes and
-//!   machine-readable form, progress notes on stderr, the color policy, and Palette's layers.
+//! - [`error`], [`progress`], [`color`], [`layer`], and [`scope`]: the error type with its exit
+//!   codes and machine-readable form, progress notes on stderr, the color policy, Palette's
+//!   layers, and the scope of a profile version.
 //!
 //! # Example
 //!
@@ -81,6 +82,7 @@ pub mod progress;
 pub mod reference;
 pub mod render;
 pub mod repave;
+pub mod scope;
 pub(crate) mod shape;
 pub mod snapshot;
 pub mod validation;

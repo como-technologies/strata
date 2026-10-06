@@ -270,6 +270,59 @@ cluster that the list of Palette leaves out, are not in the count.
 `strata consumers` finds them: see [Edge hosts](./consumers.md#edge-hosts) and
 [A cluster that the list does not name](./consumers.md#a-cluster-that-the-list-does-not-name).
 
+## A profile of the tenant
+
+A tenant administrator publishes a profile at tenant scope. Palette lists it
+in each project, beside the profiles of the project. So a tenant profile and a
+project profile can have one name and one version:
+
+```text
+{{#include ../output/scope-list.txt}}
+```
+
+The row of a version whose scope is not the scope of the listing ends with its
+scope, here `tenant`. The two rows differ in the uid. The JSON gives `scope`
+for each version: `project`, `tenant`, or `system`:
+
+```text
+{{#include ../output/scope-list-json.txt}}
+```
+
+Strata reads the scope from the profile search of Palette. It sends one request
+for the tenant versions and one for the system versions, with 50 profile names
+on a page. With `--packs` or `--pack`, it reads the scope in the document of each
+version, and sends no search. When Palette has no profile search, the JSON has
+no `scope`, and no row has the mark. See
+[The scope of a version](../internals/palette/profiles.md#the-scope-of-a-version).
+
+A `<name>@<version>` that two scopes answer is an error. `snapshot`, and each
+other command that takes the ref, exits `2` with `profile-name-ambiguous`. The
+error names each uid with its scope:
+
+```text
+{{#include ../output/scope-ambiguous.txt}}
+```
+
+Give the uid in place of the name:
+
+```text
+{{#include ../output/scope-by-uid.txt}}
+```
+
+With `--packs`, the mark ends the row after the consumers. A tenant version
+that nobody published shows both marks: `tenant, draft`.
+
+```text
+{{#include ../output/scope-packs.txt}}
+```
+
+At tenant scope, `--project ''`, the listing holds the profiles of the tenant,
+and no row has the mark:
+
+```text
+{{#include ../output/scope-tenant.txt}}
+```
+
 ## What to expect
 
 Name the kinds to list: `strata list profiles`, or `strata list clusters
@@ -278,7 +331,7 @@ kind differently by scope:
 
 | Scope | Profiles | Clusters | Projects |
 | --- | --- | --- | --- |
-| A project | the profiles of the project | the clusters of the project | each project the key can see: strata reads the projects at tenant scope in every scope |
+| A project | the profiles of the project and the profiles of the tenant | the clusters of the project | each project the key can see: strata reads the projects at tenant scope in every scope |
 | Tenant scope | the profiles of the tenant only | the clusters of every project | each project that the key can see |
 
 `--tag` and `--filter` always search at tenant scope, and list clusters alone.

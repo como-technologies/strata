@@ -245,6 +245,10 @@ live-who: build
 live-draft: build
     examples/live/draft.sh
 
+# The scope test: a profile of the tenant beside a profile of the project with one name and one version, and the ref that two scopes answer (#113). Needs live-profiles and no cluster. Deletes the tenant profile.
+live-scope: build
+    examples/live/scope.sh
+
 # The pending update test: when Palette says an update waits for cluster A, what a record, the listing, and compare say, and what cluster:<uid>@pending holds (#70, #78). Needs live-up; undoes each change.
 live-pending: build
     examples/live/pending.sh

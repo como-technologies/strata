@@ -3,19 +3,19 @@
 use super::{
     Renderer, VarLine, applied_ref, artifact_lines, artifacts_summary, chain_verdict,
     cluster_count, cluster_value, consumer_count, consumer_counts, consumers_heading,
-    consumers_sentence, count_of, counts_line, cross_kind_note, dash, draft_mark, draft_note,
-    edge_hosts_line, edited_in_place_note, entry_error, gone_sentence, image_ids_changed_notes,
-    invalid_mark, invalid_pack_sentences, last_modified_suffix, list_count, list_scope,
-    macros_changed_note, macros_note, masked_notes, outside_root_sentence,
-    overwritten_in_place_notes, pack_version, pair_detail, pair_notes, pair_word,
-    palette_repave_lines, palette_repave_note, palette_validation_lines,
-    profiles_overwritten_sentence, project_label, record_detail, record_label, recorded_noun,
-    registry_note, registry_sync_suffix, repave_pending_notes, running_behind_notes,
-    same_content_note, second_reading_counts, short, show, state_suffix, subject, tag_rename,
-    tier_path, tier_states, traits_suffix, unchanged_sentence, unread_notes, unverified_sentence,
-    updates_pending_notes, upstream_unknown_note, values_changed_suffix, variable_lines,
-    variables_comparable, variables_unavailable_note, version_display, version_note, virtual_line,
-    virtual_note, who_entry, who_heading,
+    consumers_sentence, count_of, counts_line, cross_kind_note, dash, draft_note, edge_hosts_line,
+    edited_in_place_note, entry_error, gone_sentence, image_ids_changed_notes, invalid_mark,
+    invalid_pack_sentences, last_modified_suffix, list_count, list_scope, macros_changed_note,
+    macros_note, masked_notes, outside_root_sentence, overwritten_in_place_notes, pack_version,
+    pair_detail, pair_notes, pair_word, palette_repave_lines, palette_repave_note,
+    palette_validation_lines, profile_marks, profiles_overwritten_sentence, project_label,
+    record_detail, record_label, recorded_noun, registry_note, registry_sync_suffix,
+    repave_pending_notes, running_behind_notes, same_content_note, second_reading_counts, short,
+    show, state_suffix, subject, tag_rename, tier_path, tier_states, traits_suffix,
+    unchanged_sentence, unread_notes, unverified_sentence, updates_pending_notes,
+    upstream_unknown_note, values_changed_suffix, variable_lines, variables_comparable,
+    variables_unavailable_note, version_display, version_note, virtual_line, virtual_note,
+    who_entry, who_heading,
 };
 use crate::api::mask::MASKED;
 use crate::color::Paint;
@@ -787,7 +787,8 @@ impl Renderer for TerminalRenderer {
                 "\n{}\n",
                 list_count(profiles.len(), "profile", l.pack.as_deref())
             ));
-            let rows: Vec<Vec<String>> = profiles
+            // the marks of a version end its row, so their column moves with the columns before
+            let (rows, marked): (Vec<Vec<String>>, Vec<Option<usize>>) = profiles
                 .iter()
                 .map(|pr| {
                     let mut row = vec![
@@ -800,19 +801,21 @@ impl Renderer for TerminalRenderer {
                     } else if pr.packs.is_some() {
                         row.push(dash(pr.profile_type.as_deref().unwrap_or("")).to_string());
                         row.push(consumer_count(pr.consumers.unwrap_or(0)));
-                        row.extend(draft_mark(pr).map(str::to_string));
                     }
-                    row
+                    let marks = profile_marks(pr, l);
+                    let marked = marks.as_ref().map(|_| row.len());
+                    row.extend(marks);
+                    (row, marked)
                 })
-                .collect();
+                .unzip();
             let widths = column_widths(&rows);
-            for (pr, row) in profiles.iter().zip(&rows) {
+            for ((pr, row), marked) in profiles.iter().zip(&rows).zip(&marked) {
                 let failed = pr.error.is_some();
                 out.push_str(&table_line("  ", row, &widths, |i, cell| match i {
                     0 => p.bold(cell),
                     1 => p.dim(cell),
                     3 if failed => p.dim(cell),
-                    5 => p.yellow(cell),
+                    i if Some(i) == *marked => p.yellow(cell),
                     _ => cell.to_string(),
                 }));
                 let packs: Vec<Vec<String>> = pr
