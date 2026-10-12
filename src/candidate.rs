@@ -16,10 +16,11 @@ use serde_json::{Map, Value, json};
 
 use crate::api::{Palette, PaletteApi, RawProfile, RegistryKind};
 use crate::canon::{Canon, canon_yaml};
-use crate::error::{Error, Result, unread_reason};
-use crate::json::{arr, first_nonempty, items, opt_text, str_at, strings, take_items, text};
+use crate::error::{Error, Result};
+use crate::json::{arr, first_nonempty, opt_text, str_at, strings, text};
 use crate::progress::Progress;
 use crate::reference::LATEST;
+use crate::registry::Registries;
 use crate::snapshot::{PackSource, PresetOption, Snapshot, Template};
 
 mod export;
@@ -484,295 +485,6 @@ pub(crate) fn versions_of<A: PaletteApi>(palette: &Palette<A>, name: &str) -> Re
     Ok(out)
 }
 
-/// The provider type of each OCI registry, `pack`, `helm`, or `zarf`, by uid, from
-/// `GET /v1/registries/oci/summary`. The pack listing does not carry it. Empty when Palette does
-/// not answer: a record then names no provider type, and is otherwise the same.
-fn oci_provider_types<A: PaletteApi>(palette: &Palette<A>) -> BTreeMap<String, String> {
-    let Ok(listing) = palette.registry_summary(RegistryKind::Oci) else {
-        return BTreeMap::new();
-    };
-    items(&listing)
-        .filter_map(|it| {
-            Some((
-                opt_text(it, "/metadata/uid")?,
-                opt_text(it, "/spec/providerType")?,
-            ))
-        })
-        .collect()
-}
-
-/// A listing of registries, read one time, when a check first needs it.
-enum Listing {
-    /// Not read yet.
-    Unread,
-    /// Palette answered the listing with a 4xx: it has no entry.
-    Refused,
-    /// The `items` of the listing.
-    Entries(Vec<Value>),
-}
-
-impl Listing {
-    /// The entries of the listing. The first call reads it with `read`. None when Palette
-    /// answers the listing with a 4xx.
-    fn entries(&mut self, read: impl FnOnce() -> Result<Value>) -> Result<Option<&[Value]>> {
-        if let Listing::Unread = self {
-            *self = match read() {
-                Ok(listing) => Listing::Entries(take_items(listing)),
-                Err(Error::Api { status, .. }) if (400..500).contains(&status) => Listing::Refused,
-                Err(e) => return Err(e),
-            };
-        }
-        Ok(match &*self {
-            Listing::Entries(entries) => Some(entries.as_slice()),
-            _ => None,
-        })
-    }
-}
-
-/// The entry of the registry `uid` in `entries`, the items of a registry listing, where `ptr`
-/// points to the uid of each entry.
-fn registry_entry<'a>(entries: &'a [Value], ptr: &str, uid: &str) -> Option<&'a Value> {
-    entries.iter().find(|it| str_at(it, ptr) == uid)
-}
-
-/// The state that Palette gives to the recovery of a sync when no sync waits for a recovery.
-const SYNC_RECOVERED: &str = "Recovered";
-
-/// The last sync of the registry `uid`, which holds a pack of type `pack_type`. It comes from
-/// `status.sync` of the registry in the summary listing of its kind. The type `spectro` reads
-/// `GET /v1/registries/pack/summary`, and `helm` and `oci` read the same route under their own
-/// kind. A summary listing gives the sync as Palette stores it. None for a registry that does not
-/// sync, and for another pack type. Also None for a registry that the listing does not have, and
-/// when Palette answers the listing with a 4xx.
-pub(crate) fn registry_sync<A: PaletteApi>(
-    palette: &Palette<A>,
-    uid: &str,
-    pack_type: &str,
-) -> Result<Option<crate::diff::RegistrySync>> {
-    let Some(kind) = RegistryKind::of_pack_type(pack_type) else {
-        return Ok(None);
-    };
-    let mut listing = Listing::Unread;
-    let Some(entries) = listing.entries(|| palette.registry_summary(kind))? else {
-        return Ok(None);
-    };
-    let Some(status) =
-        registry_entry(entries, "/metadata/uid", uid).and_then(|e| e.pointer("/status/sync"))
-    else {
-        return Ok(None);
-    };
-    if status.get("isSyncSupported").and_then(Value::as_bool) != Some(true) {
-        return Ok(None);
-    }
-    // Palette writes the zero time for a registry that never completed a sync
-    let time = |ptr: &str| {
-        opt_text(status, ptr)
-            .filter(|t| !t.starts_with("0001-"))
-            .unwrap_or_default()
-    };
-    let sync_recovery = opt_text(status, "/syncRecovery/syncRecoveryState")
-        .filter(|s| s != SYNC_RECOVERED)
-        .map(|state| crate::diff::SyncRecovery {
-            sync_recovery_state: state,
-            message: text(status, "/syncRecovery/message"),
-        });
-    Ok(Some(crate::diff::RegistrySync {
-        last_synced_time: time("/lastSyncedTime"),
-        last_run_time: time("/lastRunTime"),
-        status: text(status, "/status"),
-        message: text(status, "/message"),
-        sync_recovery,
-    }))
-}
-
-/// The last sync of a registry, read as a note beside an answer.
-#[derive(Debug, Clone)]
-pub(crate) struct RegistrySyncNote {
-    /// The sync, when Palette gives one: see [`registry_sync`].
-    pub sync: Option<crate::diff::RegistrySync>,
-    /// Why strata could not read the sync: Palette answered with a 5xx, or the request did not
-    /// complete. `sync` is then `None`.
-    pub error: Option<String>,
-}
-
-/// The last sync of the registry `uid`, which holds a pack of type `pack_type`, as a note beside
-/// an answer that stands on its own. The answer is the verdict of a pack record, or a pin of
-/// `behind`. A 5xx of Palette and a request that does not complete do not stop the answer. The
-/// note then names the reason, and `progress` gets a line. Each other error is an error of the
-/// run.
-pub(crate) fn registry_sync_note<A: PaletteApi>(
-    palette: &Palette<A>,
-    uid: &str,
-    pack_type: &str,
-    progress: &Progress,
-) -> Result<RegistrySyncNote> {
-    match registry_sync(palette, uid, pack_type) {
-        Ok(sync) => Ok(RegistrySyncNote { sync, error: None }),
-        Err(e @ (Error::Api { .. } | Error::Transport { .. })) => {
-            let reason = match &e {
-                Error::Api { status, body, .. } => unread_reason(*status, body),
-                _ => e.to_string(),
-            };
-            progress.note(&format!(
-                "note: the sync status of registry {uid} is unavailable ({reason})"
-            ));
-            Ok(RegistrySyncNote {
-                sync: None,
-                error: Some(reason),
-            })
-        }
-        Err(e) => Err(e),
-    }
-}
-
-/// The type of the pack that Palette makes for a layer from a registry that it does not sync.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum UnsyncedKind {
-    /// A pack from a private Helm registry.
-    Helm,
-    /// A pack from an OCI registry.
-    Oci,
-}
-
-impl UnsyncedKind {
-    /// The pack type as Palette writes it: `helm` or `oci`.
-    fn as_str(self) -> &'static str {
-        match self {
-            UnsyncedKind::Helm => "helm",
-            UnsyncedKind::Oci => "oci",
-        }
-    }
-}
-
-/// How Palette makes the pack of a layer from a registry that it does not sync.
-#[derive(Debug, Clone)]
-struct Unsynced {
-    /// The pack type.
-    kind: UnsyncedKind,
-    /// The provider type of an OCI registry: `helm` or `zarf`.
-    provider: Option<String>,
-}
-
-/// The listings that say whether Palette syncs a registry, each read one time:
-/// `GET /v1/registries/metadata`, and `GET /v1/registries/oci/summary` for an OCI registry.
-struct RegistryListings {
-    /// The registries that the key can see, with the kind and `isPrivate` of each.
-    metadata: Listing,
-    /// The OCI registries, with the provider type and the sync of each.
-    oci: Listing,
-}
-
-impl RegistryListings {
-    /// Listings that no check has read yet.
-    fn unread() -> Self {
-        RegistryListings {
-            metadata: Listing::Unread,
-            oci: Listing::Unread,
-        }
-    }
-
-    /// Listings with `metadata`, the entries of `GET /v1/registries/metadata`, read already.
-    fn with_metadata(metadata: Vec<Value>) -> Self {
-        RegistryListings {
-            metadata: Listing::Entries(metadata),
-            oci: Listing::Unread,
-        }
-    }
-
-    /// Whether Palette syncs the registry `uid`. It does not sync a Helm registry that is
-    /// private, or an OCI registry of the provider type `helm` or `zarf` with sync off. So the
-    /// pack listing has no pack of it, and Palette makes the pack of such a layer when it
-    /// creates the profile. The metadata gives the kind and `isPrivate`, and the OCI summary
-    /// gives the provider type and `status.sync.isSyncSupported`. None for a registry that
-    /// syncs, and when Palette answers either listing with a 4xx.
-    fn unsynced<A: PaletteApi>(
-        &mut self,
-        palette: &Palette<A>,
-        uid: &str,
-    ) -> Result<Option<Unsynced>> {
-        let Some(metas) = self.metadata.entries(|| palette.registry_metadata())? else {
-            return Ok(None);
-        };
-        let Some(meta) = registry_entry(metas, "/uid", uid) else {
-            return Ok(None);
-        };
-        match str_at(meta, "/kind") {
-            "helm" => Ok(meta
-                .get("isPrivate")
-                .and_then(Value::as_bool)
-                .unwrap_or(false)
-                .then_some(Unsynced {
-                    kind: UnsyncedKind::Helm,
-                    provider: None,
-                })),
-            "oci" => {
-                let Some(regs) = self
-                    .oci
-                    .entries(|| palette.registry_summary(RegistryKind::Oci))?
-                else {
-                    return Ok(None);
-                };
-                let Some(reg) = registry_entry(regs, "/metadata/uid", uid) else {
-                    return Ok(None);
-                };
-                // Palette syncs each OCI registry of the provider type pack
-                let provider = opt_text(reg, "/spec/providerType");
-                let syncs = provider.as_deref() == Some("pack")
-                    || reg
-                        .pointer("/status/sync/isSyncSupported")
-                        .and_then(Value::as_bool)
-                        == Some(true);
-                Ok((!syncs).then_some(Unsynced {
-                    kind: UnsyncedKind::Oci,
-                    provider,
-                }))
-            }
-            _ => Ok(None),
-        }
-    }
-}
-
-/// The names of the registries of `registries` (name and uid) that Palette does not sync.
-///
-/// An error that finds no pack names them: Palette lists a pack of such a registry only while a
-/// profile pins the pack. `metadata` holds the entries of `GET /v1/registries/metadata`, read
-/// already. The rule of [`RegistryListings::unsynced`] decides for each registry. It reads the
-/// OCI summary one time, when a registry is OCI.
-pub(crate) fn unsynced_names<'a, A: PaletteApi>(
-    palette: &Palette<A>,
-    metadata: Vec<Value>,
-    registries: impl IntoIterator<Item = &'a (String, String)>,
-) -> Result<Vec<String>> {
-    let mut listings = RegistryListings::with_metadata(metadata);
-    let mut names = Vec::new();
-    for (name, uid) in registries {
-        if listings.unsynced(palette, uid)?.is_some() {
-            names.push(name.clone());
-        }
-    }
-    Ok(names)
-}
-
-/// The entries of `GET /v1/registries/metadata`: each registry this key can see, with its `uid`,
-/// `name`, `kind`, and `isPrivate`, in the order Palette lists them.
-pub(crate) fn registry_entries<A: PaletteApi>(palette: &Palette<A>) -> Result<Vec<Value>> {
-    Ok(take_items(palette.registry_metadata()?))
-}
-
-/// The name and the uid of each registry of `entries`, the entries of
-/// `GET /v1/registries/metadata`, in the order Palette lists them.
-pub(crate) fn registry_names(entries: &[Value]) -> Vec<(String, String)> {
-    entries
-        .iter()
-        .filter_map(|it| Some((opt_text(it, "/name")?, opt_text(it, "/uid")?)))
-        .collect()
-}
-
-/// The registries this key can see, name and uid, in the order Palette lists them.
-pub(crate) fn registries<A: PaletteApi>(palette: &Palette<A>) -> Result<Vec<(String, String)>> {
-    Ok(registry_names(&registry_entries(palette)?))
-}
-
 /// Record one pack version as a snapshot of a single layer, with the values the registry ships.
 /// Its pack hashes the same way as that pack inside a profile, so comparing two of these says
 /// what changed between two versions of a pack: the version and uid in `IDENTITY`, the content
@@ -791,8 +503,8 @@ pub fn pack_snapshot<A: PaletteApi>(
     progress: &Progress,
 ) -> Result<Snapshot> {
     // the registry listing gives the names, and the reason of an error that finds no pack
-    let listed = registry_entries(palette)?;
-    let visible = registry_names(&listed);
+    let mut registries = Registries::new(palette);
+    let visible = registries.names()?;
     let entries = versions_of(palette, name)?;
     let not_found = |registry: String, unsynced: Vec<String>| Error::PackNotFound {
         name: name.to_string(),
@@ -802,14 +514,7 @@ pub fn pack_snapshot<A: PaletteApi>(
         unsynced,
     };
     let registry_uid = match registry {
-        Some(r) => visible
-            .iter()
-            .find(|(n, u)| n == r || u == r)
-            .map(|(_, u)| u.clone())
-            .ok_or_else(|| Error::RegistryNotFound {
-                registry: r.to_string(),
-                available: visible.iter().map(|(n, _)| n.clone()).collect(),
-            })?,
+        Some(r) => registries.by_ref(r)?.1,
         None => {
             // the registries that have it, in the order Palette lists them
             let holders: Vec<&(String, String)> = visible
@@ -826,7 +531,7 @@ pub fn pack_snapshot<A: PaletteApi>(
                 [] => {
                     return Err(not_found(
                         "any visible registry".to_string(),
-                        unsynced_names(palette, listed, &visible)?,
+                        registries.unsynced_names(&visible)?,
                     ));
                 }
                 several => {
@@ -844,11 +549,7 @@ pub fn pack_snapshot<A: PaletteApi>(
             }
         }
     };
-    let registry_name = visible
-        .iter()
-        .find(|(_, u)| *u == registry_uid)
-        .map(|(n, _)| n.clone())
-        .unwrap_or_default();
+    let registry_name = registries.name_of(&registry_uid)?.unwrap_or_default();
     let named = |uid: &str| -> String {
         if registry_name.is_empty() {
             uid.to_string()
@@ -862,18 +563,12 @@ pub fn pack_snapshot<A: PaletteApi>(
         .filter(|e| str_at(e, "/spec/registryUid") == registry_uid)
         .map(|e| text(e, "/spec/version"))
         .collect();
-    let resolved = if version == LATEST {
-        here.iter()
-            .max_by(|a, b| crate::version::compare(a, b))
-            .cloned()
-    } else {
-        here.iter().find(|v| *v == version).cloned()
-    };
+    let resolved = crate::version::pick(here.iter(), |v| v.as_str(), version).cloned();
     let Some(resolved) = resolved else {
         let asked = visible.iter().filter(|(_, u)| *u == registry_uid);
         return Err(not_found(
             named(&registry_uid),
-            unsynced_names(palette, listed, asked)?,
+            registries.unsynced_names(asked)?,
         ));
     };
     progress.note(&format!(
@@ -912,7 +607,7 @@ pub fn pack_snapshot<A: PaletteApi>(
             manifests: Vec::new(),
         }],
     };
-    let raw = resolve(&loaded, palette, progress)?;
+    let raw = resolve_with(&loaded, &mut registries, progress)?;
     let mut snap = Snapshot::from_raw(&raw, reference, fetched_at)?;
     snap.source.kind = PACK_TYPE.to_string();
     snap.source.template = Template::Registry;
@@ -1139,24 +834,18 @@ fn pack_documents(l: &CandidateLayer, f: &PackFields, manifests: Vec<Value>) -> 
     (pack_ref, entry)
 }
 
-/// The state of one resolve: the candidate, the client, and the answers of Palette that strata
+/// The state of one resolve: the candidate, the client, and the registry listings, which strata
 /// reads one time and uses again for each layer.
-struct Resolver<'r, A: PaletteApi> {
+struct Resolver<'r, 'p, A: PaletteApi> {
     loaded: &'r LoadedCandidate,
-    palette: &'r Palette<A>,
+    palette: &'p Palette<A>,
     progress: &'r Progress,
-    /// Registry names to uids, in the order Palette lists them. Strata reads them one time, and
-    /// only when a layer names a registry.
-    names: Option<Vec<(String, String)>>,
-    /// The provider type of each OCI registry. Strata reads them one time, and only for an OCI
-    /// pack.
-    oci_types: Option<BTreeMap<String, String>>,
-    /// The listings that say whether Palette syncs a registry. Strata reads each one time, and
-    /// only for a layer that the pack listing does not have.
-    listings: RegistryListings,
+    /// The registry listings: the names, the provider types, and the sync of each registry.
+    /// Strata reads each listing one time, and only when a layer needs it.
+    registries: &'r mut Registries<'p, A>,
 }
 
-impl<A: PaletteApi> Resolver<'_, A> {
+impl<A: PaletteApi> Resolver<'_, '_, A> {
     /// A `CandidateInvalid` error for the candidate file with `message`.
     fn invalid(&self, message: String) -> Error {
         invalid_at(&self.loaded.path)(message)
@@ -1166,20 +855,7 @@ impl<A: PaletteApi> Resolver<'_, A> {
     fn registry_uid(&mut self, registry_ref: &RegistryRef) -> Result<String> {
         match registry_ref {
             RegistryRef::Uid(u) => Ok(u.clone()),
-            RegistryRef::Name(n) => {
-                if self.names.is_none() {
-                    self.names = Some(registries(self.palette)?);
-                }
-                let visible = self.names.as_deref().unwrap_or_default();
-                visible
-                    .iter()
-                    .find(|(name, _)| name == n)
-                    .map(|(_, uid)| uid.clone())
-                    .ok_or_else(|| Error::RegistryNotFound {
-                        registry: n.clone(),
-                        available: visible.iter().map(|(name, _)| name.clone()).collect(),
-                    })
-            }
+            RegistryRef::Name(n) => Ok(self.registries.by_ref(n)?.1),
         }
     }
 
@@ -1214,7 +890,7 @@ impl<A: PaletteApi> Resolver<'_, A> {
     ) -> Result<ResolvedLayer> {
         let l = &self.loaded.candidate.layers[i];
         let loaded_layer = &self.loaded.layers[i];
-        let Some(how) = self.listings.unsynced(self.palette, registry)? else {
+        let Some(how) = self.registries.unsynced(registry)? else {
             return Err(Error::PackNotFound {
                 name: l.name.clone(),
                 version: l.version.clone(),
@@ -1257,7 +933,7 @@ impl<A: PaletteApi> Resolver<'_, A> {
         let values = loaded_layer.values.clone().unwrap_or_default();
         let fields = PackFields {
             layer: UNSYNCED_LAYER,
-            kind: how.kind.as_str(),
+            kind: how.kind.pack_type(),
             tag,
             version: tag,
             pack_uid: "",
@@ -1292,10 +968,7 @@ impl<A: PaletteApi> Resolver<'_, A> {
             // a `pack:` ref comes here with the uid of the registry; the error gives its name
             let registry = match registry_ref {
                 RegistryRef::Name(n) => n.clone(),
-                RegistryRef::Uid(u) => registries(self.palette)?
-                    .into_iter()
-                    .find(|(_, uid)| uid == u)
-                    .map_or_else(|| u.clone(), |(name, _)| name),
+                RegistryRef::Uid(u) => self.registries.name_of(u)?.unwrap_or_else(|| u.clone()),
             };
             return Err(Error::PackUnavailable {
                 name: l.name.clone(),
@@ -1384,14 +1057,10 @@ impl<A: PaletteApi> Resolver<'_, A> {
         }
         // the provider type of an OCI registry, as a published profile carries it on the pack
         // reference
-        if kind == "oci" {
-            let palette = self.palette;
-            let types = self
-                .oci_types
-                .get_or_insert_with(|| oci_provider_types(palette));
-            if let Some(t) = types.get(registry) {
-                pack_ref["annotations"] = json!({ "ociRegistryProviderType": t });
-            }
+        if RegistryKind::of_pack_type(&kind) == Some(RegistryKind::Oci)
+            && let Some(t) = self.registries.oci_provider_type(registry)?
+        {
+            pack_ref["annotations"] = json!({ "ociRegistryProviderType": t });
         }
         Ok(ResolvedLayer { pack_ref, entry })
     }
@@ -1431,6 +1100,16 @@ pub fn resolve<A: PaletteApi>(
     palette: &Palette<A>,
     progress: &Progress,
 ) -> Result<RawProfile> {
+    resolve_with(loaded, &mut Registries::new(palette), progress)
+}
+
+/// [`resolve`] with `registries`, the registry listings that the caller read already, so that
+/// one command reads each listing one time.
+pub(crate) fn resolve_with<A: PaletteApi>(
+    loaded: &LoadedCandidate,
+    registries: &mut Registries<'_, A>,
+    progress: &Progress,
+) -> Result<RawProfile> {
     let c = &loaded.candidate;
     progress.note(&format!(
         "resolving {}@{} against the registry",
@@ -1438,11 +1117,9 @@ pub fn resolve<A: PaletteApi>(
     ));
     let mut resolver = Resolver {
         loaded,
-        palette,
+        palette: registries.palette(),
         progress,
-        names: None,
-        oci_types: None,
-        listings: RegistryListings::unread(),
+        registries,
     };
     let mut refs = Vec::with_capacity(c.layers.len());
     let mut entries = Vec::with_capacity(c.layers.len());
@@ -1481,55 +1158,6 @@ mod tests {
     use super::*;
     use crate::api::MemoryApi;
     use crate::cloud::{CLOUD_ALL, CLOUD_CUSTOM};
-
-    /// A summary listing of registries that holds the one registry `uid` with the sync `sync`.
-    fn summary(uid: &str, sync: Value) -> Value {
-        json!({"items": [{"metadata": {"uid": uid}, "status": {"sync": sync}}]})
-    }
-
-    #[test]
-    fn the_sync_of_a_registry_is_read_from_the_summary_listing_of_its_kind() {
-        let completed = json!({"isSyncSupported": true, "status": "Completed",
-            "lastSyncedTime": "2026-09-30T00:00:11.000Z",
-            "syncRecovery": {"syncRecoveryState": "Recovered"}});
-        let api = MemoryApi::new()
-            .with(
-                "/v1/registries/pack/summary",
-                summary("reg-pack", completed.clone()),
-            )
-            .with(
-                "/v1/registries/helm/summary",
-                summary("reg-helm", completed.clone()),
-            )
-            .with("/v1/registries/oci/summary", summary("reg-oci", completed))
-            // the route of one registry is not read
-            .failing("/v1/registries/oci/reg-oci/basic/sync/status", 500, "{}");
-        let palette = Palette::new(api);
-        for (uid, pack_type) in [
-            ("reg-pack", "spectro"),
-            ("reg-helm", "helm"),
-            ("reg-oci", "oci"),
-        ] {
-            let sync = registry_sync(&palette, uid, pack_type).unwrap().unwrap();
-            assert_eq!(sync.last_synced_time, "2026-09-30T00:00:11.000Z");
-            // a recovery that is Recovered is no recovery that waits
-            assert_eq!(sync.sync_recovery, None);
-        }
-        // a manifest pack has no registry; the listing of the kind does not have the registry
-        assert!(
-            registry_sync(&palette, "reg-oci", "manifest")
-                .unwrap()
-                .is_none()
-        );
-        assert!(
-            registry_sync(&palette, "reg-pack", "oci")
-                .unwrap()
-                .is_none()
-        );
-        // Palette answers no listing
-        let none = Palette::new(MemoryApi::new());
-        assert!(registry_sync(&none, "reg-oci", "oci").unwrap().is_none());
-    }
 
     /// The profile `platform-addons` as the export of Palette writes it: a pack from the Public
     /// Repo, and a manifest pack with an empty registry and no values.
@@ -2035,32 +1663,6 @@ variables:
                 "layer 5 (cert-manager) has the layer cni, and its registry gives the layer addon"
             ),
             "{err}"
-        );
-    }
-
-    #[test]
-    fn a_registry_that_never_completed_a_sync_gives_no_time() {
-        let never = Palette::new(MemoryApi::new().with(
-            "/v1/registries/helm/summary",
-            summary(
-                "reg-helm",
-                json!({"isSyncSupported": true, "status": "InProgress",
-                    "lastRunTime": "2026-10-05T16:03:58.598Z",
-                    "lastSyncedTime": "0001-01-01T00:00:00.000Z",
-                    "syncRecovery": {"syncRecoveryState": "Recovering",
-                        "message": "sync interrupted"}}),
-            ),
-        ));
-        let sync = registry_sync(&never, "reg-helm", "helm").unwrap().unwrap();
-        assert_eq!(sync.last_synced_time, "");
-        assert_eq!(sync.last_run_time, "2026-10-05T16:03:58.598Z");
-        assert!(sync.in_progress());
-        assert_eq!(
-            sync.sync_recovery,
-            Some(crate::diff::SyncRecovery {
-                sync_recovery_state: "Recovering".into(),
-                message: "sync interrupted".into(),
-            })
         );
     }
 

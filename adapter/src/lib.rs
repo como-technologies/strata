@@ -55,7 +55,7 @@ use strata::candidate::{self, Candidate, CandidateLayer};
 use strata::ops;
 use strata::progress::Progress;
 use strata::reference::Ref;
-use strata::snapshot::{AppliedProfile, PendingUpdate, Snapshot};
+use strata::snapshot::{AppliedProfile, PendingUpdate, Snapshot, SubjectKind};
 
 /// The parameter of a [`UnitDefinition`] that holds the strata candidate document.
 pub const CANDIDATE: &str = "candidate";
@@ -478,7 +478,7 @@ impl<A: PaletteApi + 'static, F: Connect<A> + 'static> StrataPlatform<A, F> {
         let now = now();
         let palette = (self.connect)(None).map_err(port_error)?;
         let raw = palette
-            .fetch_cluster(instance.as_str(), &Progress::silent())
+            .fetch_subject(SubjectKind::Cluster, instance.as_str(), &Progress::silent())
             .map_err(port_error)?;
         let reference = format!("cluster:{instance}");
         // Each one is the copy that the cluster holds, and not the published profile. Palette

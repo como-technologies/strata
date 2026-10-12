@@ -6,9 +6,10 @@ use serde_json::Value;
 
 use crate::api::{Palette, PaletteApi};
 use crate::cloud::supports;
-use crate::error::{Error, Result};
+use crate::error::{Error, Result, found};
 use crate::json::{arr, opt_text, strings, text};
 use crate::progress::Progress;
+use crate::registry::Registries;
 use crate::snapshot::Tool;
 use crate::version;
 
@@ -158,15 +159,6 @@ fn architectures(entry: &Value) -> Vec<String> {
 /// pack. With it, Palette answers with the versions in these states only.
 const RETIRED_STATES: &str = "deprecated,disabled,deleted";
 
-/// `answer`, one answer of a registry for the tags of a pack: none when Palette answered 404.
-fn tags_answer(answer: Result<Value>) -> Result<Option<Value>> {
-    match answer {
-        Ok(answer) => Ok(Some(answer)),
-        Err(Error::Api { status: 404, .. }) => Ok(None),
-        Err(e) => Err(e),
-    }
-}
-
 /// Join the tag rows of the `answers` of one registry, and keep each row one time.
 ///
 /// A deprecated version is in the answer with no query and in the answer with the states query,
@@ -206,20 +198,10 @@ where
 {
     let palette = connect(None)?;
     // the registry listing gives the names, and the reason of an error that finds no pack
-    let listed = crate::candidate::registry_entries(&palette)?;
-    let visible = crate::candidate::registry_names(&listed);
+    let mut listings = Registries::new(&palette);
     let wanted = match &options.registry {
-        Some(r) => {
-            let found = visible
-                .iter()
-                .find(|(n, u)| n == r || u == r)
-                .ok_or_else(|| Error::RegistryNotFound {
-                    registry: r.to_string(),
-                    available: visible.iter().map(|(n, _)| n.clone()).collect(),
-                })?;
-            vec![found.clone()]
-        }
-        None => visible.clone(),
+        Some(r) => vec![listings.by_ref(r)?],
+        None => listings.names()?,
     };
     progress.note(&format!("reading the versions of {name}"));
     let entries = crate::candidate::versions_of(&palette, name)?;
@@ -242,16 +224,12 @@ where
         // with the states query. A registry that answers 404 to both keeps only the disabled and
         // the deleted versions of the listing, with no tags. The other registries still answer
         progress.note(&format!("reading the tags of {name} in {registry}"));
-        let mut answers = vec![tags_answer(palette.pack_tags(name, uid, None))?];
+        let mut answers = vec![found(palette.pack_tags(name, uid, None))?];
         if mine
             .iter()
             .any(|e| crate::candidate::retired_state(e).is_some())
         {
-            answers.push(tags_answer(palette.pack_tags(
-                name,
-                uid,
-                Some(RETIRED_STATES),
-            ))?);
+            answers.push(found(palette.pack_tags(name, uid, Some(RETIRED_STATES)))?);
         }
         let answers: Vec<Value> = answers.into_iter().flatten().collect();
         let tags_unavailable = answers.is_empty();
@@ -349,7 +327,7 @@ where
     // while a profile pins the pack. So the error names each such registry: it says why the
     // listing has nothing
     if !had_the_pack {
-        let unsynced = crate::candidate::unsynced_names(&palette, listed, &wanted)?;
+        let unsynced = listings.unsynced_names(&wanted)?;
         return Err(match (&options.registry, wanted.as_slice()) {
             // --registry named one registry, and wanted holds only that one
             (Some(_), [(registry, _)]) => Error::PackNotFound {

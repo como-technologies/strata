@@ -3,6 +3,8 @@
 use std::fmt;
 use std::path::{Path, PathBuf};
 
+use crate::error::{Error, Result};
+
 /// The version that stands for the highest published version of a name: `<name>@latest`.
 pub const LATEST: &str = "latest";
 
@@ -295,6 +297,26 @@ impl fmt::Display for Ref {
                 None => write!(f, "{EDGE_HOST_PREFIX}{uid}"),
             },
         }
+    }
+}
+
+/// The one object that a name selects, from `hits`, the objects with the name. `uid_of` gives
+/// the uid of an object. The hits are sorted by uid, so that a message reads the same on each
+/// run: Palette lists its objects in the order it likes. One hit is the answer. None is
+/// `not_found()`. Two or more are `ambiguous(uids)`, with the sorted uids.
+pub(crate) fn one_named<T>(
+    mut hits: Vec<T>,
+    uid_of: impl Fn(&T) -> &str,
+    not_found: impl FnOnce() -> Error,
+    ambiguous: impl FnOnce(Vec<String>) -> Error,
+) -> Result<T> {
+    hits.sort_by(|a, b| uid_of(a).cmp(uid_of(b)));
+    match hits.len() {
+        1 => Ok(hits.remove(0)),
+        0 => Err(not_found()),
+        _ => Err(ambiguous(
+            hits.iter().map(|h| uid_of(h).to_string()).collect(),
+        )),
     }
 }
 
@@ -607,6 +629,23 @@ mod tests {
             Ref::Uid("tag:".into()),
             "no label, no set"
         );
+    }
+
+    #[test]
+    fn one_named_gives_the_one_hit_and_names_the_sorted_uids_of_several() {
+        let not_found = || Error::Usage {
+            message: "none".to_string(),
+        };
+        let ambiguous = |uids: Vec<String>| Error::Usage {
+            message: uids.join(","),
+        };
+        let one = one_named(vec!["u1".to_string()], String::as_str, not_found, ambiguous);
+        assert_eq!(one.unwrap(), "u1");
+        let none = one_named(Vec::<String>::new(), String::as_str, not_found, ambiguous);
+        assert_eq!(none.unwrap_err().to_string(), "none");
+        let several = vec!["u2".to_string(), "u1".to_string()];
+        let err = one_named(several, String::as_str, not_found, ambiguous).unwrap_err();
+        assert_eq!(err.to_string(), "u1,u2", "the uids are sorted");
     }
 
     #[test]

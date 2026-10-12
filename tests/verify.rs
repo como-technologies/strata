@@ -182,7 +182,7 @@ use std::time::Duration;
 
 use strata::api::{PaletteApi, Retry, RetryPolicy};
 use strata::config::Config;
-use strata::snapshot::{Snapshot, Template, Tier, UpstreamSource};
+use strata::snapshot::{Snapshot, SubjectKind, Template, Tier, UpstreamSource};
 
 /// A retrying wrapper over a borrowed API, with a recorder in place of `sleep`.
 fn retrying(api: &MemoryApi, retries: u32) -> (Retry<&MemoryApi>, Rc<RefCell<Vec<Duration>>>) {
@@ -731,7 +731,7 @@ fn a_raw_directory_keeps_the_project_a_profile_or_cluster_was_fetched_in() {
         Palette::new(serve_cluster(MemoryApi::new(), dir.path(), "cluster-a").in_project("p1"));
     let saved = dir.path().join("raw-cluster");
     cluster
-        .fetch_cluster(CLUSTER_UID, &silent)
+        .fetch_subject(SubjectKind::Cluster, CLUSTER_UID, &silent)
         .unwrap()
         .save_dir(&saved, "t0")
         .unwrap();
@@ -2083,7 +2083,7 @@ fn a_raw_directory_keeps_the_bindings_and_the_namespaces_so_the_record_is_the_sa
     let palette = Palette::new(serve_policy(dir.path(), barney()));
     let saved = dir.path().join("raw-policy");
     palette
-        .fetch_cluster(CLUSTER_UID, &silent)
+        .fetch_subject(SubjectKind::Cluster, CLUSTER_UID, &silent)
         .unwrap()
         .save_dir(&saved, "t0")
         .unwrap();
@@ -5260,10 +5260,18 @@ fn candidate_errors_name_what_is_wrong() {
         .unwrap_err();
     assert!(matches!(err, Error::CandidateInvalid { .. }), "{err}");
 
-    // registry problems need the registry
+    // registry problems need the registry. A version that the listing does not have asks whether
+    // Palette syncs the registry, and the registry listing is the first read of that check: an
+    // answer of Palette that is an error is an error of the record (#327)
     let f = write(
         "unknown-version.yaml",
         k8s(serde_json::json!({"version": "9.9.9"})),
+    );
+    let err = candidate_snapshot(&f, &api).unwrap_err();
+    assert!(matches!(err, Error::Api { status: 404, .. }), "{err}");
+    let api = api.with(
+        REGISTRY_LISTING,
+        serde_json::json!({"items": [{"name": "Public Repo", "uid": "reg-public", "kind": "pack"}]}),
     );
     let err = candidate_snapshot(&f, &api).unwrap_err();
     match &err {
@@ -5306,6 +5314,35 @@ fn candidate_errors_name_what_is_wrong() {
     );
     let snap = candidate_snapshot(&f, &api).unwrap();
     assert_eq!(snap.packs[0].tag, "floating.x");
+}
+
+#[test]
+fn the_registry_field_of_a_candidate_takes_a_name_or_a_uid() {
+    // `registry` names the registry as the listing names it, by name or by uid (#327): the three
+    // candidates give one record
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let api = serve_registry_for_b(dir.path()).with(
+        REGISTRY_LISTING,
+        serde_json::json!({"items": [{"name": "Public Repo", "uid": "reg-public", "kind": "pack"}]}),
+    );
+    let b = read_json(&dir.path().join("b").join("profile.json"));
+    let layers: Vec<Value> = b["spec"]["published"]["packs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| serde_json::json!({"name": p["name"], "version": p["version"]}))
+        .collect();
+    let root_with = |field: &str, value: &str| {
+        let mut doc = serde_json::json!({"name": "p", "version": "1", "layers": layers.clone()});
+        doc[field] = Value::String(value.to_string());
+        let f = dir.path().join(format!("{field}.yaml"));
+        write_yaml(&f, &doc);
+        candidate_snapshot(&f, &api).unwrap().root
+    };
+    let by_uid = root_with("registryUid", "reg-public");
+    assert_eq!(root_with("registry", "Public Repo"), by_uid);
+    assert_eq!(root_with("registry", "reg-public"), by_uid);
 }
 
 #[test]
@@ -7860,7 +7897,7 @@ fn a_raw_cluster_directory_keeps_the_notifications() {
     );
     let saved = dir.path().join("raw");
     Palette::new(api)
-        .fetch_cluster(CLUSTER_UID, &Progress::silent())
+        .fetch_subject(SubjectKind::Cluster, CLUSTER_UID, &Progress::silent())
         .unwrap()
         .save_dir(&saved, "t0")
         .unwrap();
@@ -7902,7 +7939,7 @@ fn a_raw_cluster_directory_masks_the_values_of_each_pack_in_the_notifications() 
     );
     let saved = dir.path().join("raw");
     Palette::new(api)
-        .fetch_cluster(CLUSTER_UID, &Progress::silent())
+        .fetch_subject(SubjectKind::Cluster, CLUSTER_UID, &Progress::silent())
         .unwrap()
         .save_dir(&saved, "t0")
         .unwrap();
@@ -7928,7 +7965,7 @@ fn a_record_from_a_raw_directory_with_masked_notifications_is_the_record_of_the_
         notifications_page(vec![values_notification(&addon)], ""),
     );
     let fetched = Palette::new(api)
-        .fetch_cluster(CLUSTER_UID, &Progress::silent())
+        .fetch_subject(SubjectKind::Cluster, CLUSTER_UID, &Progress::silent())
         .unwrap();
     let saved = dir.path().join("raw");
     fetched.save_dir(&saved, "t0").unwrap();
@@ -8282,7 +8319,7 @@ fn a_raw_directory_keeps_the_repave_with_no_value_and_gives_the_record_of_the_fe
     let dir = tempfile::tempdir().unwrap();
     common::make_fixtures(dir.path());
     let fetched = Palette::new(serve_repave(dir.path(), "cluster-merged", "Pending"))
-        .fetch_cluster(CLUSTER_UID, &Progress::silent())
+        .fetch_subject(SubjectKind::Cluster, CLUSTER_UID, &Progress::silent())
         .unwrap();
     let saved = dir.path().join("raw");
     fetched.save_dir(&saved, "t0").unwrap();
@@ -8330,7 +8367,7 @@ fn a_raw_directory_keeps_each_read_error_so_the_record_is_the_record_of_the_fetc
         .failing(rbacs_route(), 403, "forbidden")
         .failing(namespaces_route(), 403, "forbidden");
     let fetched = Palette::new(api)
-        .fetch_cluster(CLUSTER_UID, &Progress::silent())
+        .fetch_subject(SubjectKind::Cluster, CLUSTER_UID, &Progress::silent())
         .unwrap();
     let saved = dir.path().join("raw");
     fetched.save_dir(&saved, "t0").unwrap();
@@ -8360,7 +8397,7 @@ fn a_raw_directory_keeps_each_read_error_so_the_record_is_the_record_of_the_fetc
 
     // a fetch with no error saves no errors file
     let clean = Palette::new(serve_repave(dir.path(), "cluster-merged", "Pending"))
-        .fetch_cluster(CLUSTER_UID, &Progress::silent())
+        .fetch_subject(SubjectKind::Cluster, CLUSTER_UID, &Progress::silent())
         .unwrap();
     let saved = dir.path().join("raw-clean");
     clean.save_dir(&saved, "t0").unwrap();
@@ -8764,7 +8801,7 @@ fn a_cluster_record_with_macro_digests_drifts_when_a_macro_value_moves() {
 
     // the record holds the digest of the value, and not the value
     let mut raw = Palette::new(tenant("us-east-2"))
-        .fetch_cluster(CLUSTER_UID, &Progress::silent())
+        .fetch_subject(SubjectKind::Cluster, CLUSTER_UID, &Progress::silent())
         .unwrap();
     raw.resolved_values = Some(resolved("us-east-2"));
     let recorded = Snapshot::from_cluster(&raw, None, "cluster:lab", "t0").unwrap();
@@ -9155,7 +9192,7 @@ fn compare_asks_the_template_route_for_a_cluster_that_a_cluster_template_governs
     assert_eq!(posted[0].0, template_route);
     let running = strata::snapshot::AppliedProfile::of_cluster(
         &Palette::new(&cluster_api)
-            .cluster_document(CLUSTER_UID)
+            .subject_document(SubjectKind::Cluster, CLUSTER_UID)
             .unwrap(),
     );
     let uids: Vec<Value> = ops::validate_body(&running, &target)["profiles"]
@@ -9436,7 +9473,7 @@ fn compare_validate_prints_each_error_of_palette_and_keeps_the_exit_of_the_compa
     assert_eq!(posted[0].0, validate_packs_route());
     let running = strata::snapshot::AppliedProfile::of_cluster(
         &Palette::new(&cluster_api)
-            .cluster_document(CLUSTER_UID)
+            .subject_document(SubjectKind::Cluster, CLUSTER_UID)
             .unwrap(),
     );
     assert_eq!(posted[0].1, ops::validate_body(&running, &target));
@@ -9623,12 +9660,22 @@ fn a_record_of_a_pack_from_an_oci_registry_names_its_provider_type() {
         pack.packs[0].registry_provider_type.as_deref(),
         Some("helm")
     );
-    // a Palette that does not answer the listing gives a record that names no provider type
+    // a Palette that answers the listing with a 4xx gives a record that names no provider type
     let unnamed = snapshot_of(&api, "pack:Mirror/csi-aws-ebs@1.64.0").unwrap();
     assert_eq!(unnamed.packs[0].registry_provider_type, None);
     // and a pack from a pack registry names none, with no read of the listing
     let spectro = snapshot_of(&listed, "pack:Public Repo/csi-aws-ebs@1.65.0").unwrap();
     assert_eq!(spectro.packs[0].registry_provider_type, None);
+    assert_eq!(
+        listed.calls(OCI_REGISTRY_SUMMARY),
+        1,
+        "one read for the two records"
+    );
+    // a 5xx of the listing is an error of the record. The provider type is content, so a record
+    // with none in its place is wrong (#327)
+    let broken = api.failing(OCI_REGISTRY_SUMMARY, 500, r#"{"code":"InternalError"}"#);
+    let err = snapshot_of(&broken, "pack:Mirror/csi-aws-ebs@1.64.0").unwrap_err();
+    assert!(matches!(err, Error::Api { status: 500, .. }), "{err}");
 }
 
 // ---- the machine image of the OS pack (#189) ----------------------------------------------------
@@ -9986,7 +10033,7 @@ fn a_cluster_record_carries_the_tiers_that_palette_gives_and_names_them() {
             .with("/v1/cloudconfigs/aws/cc1", cloud_config(2)),
     );
     let mut raw = palette
-        .fetch_cluster(CLUSTER_UID, &Progress::silent())
+        .fetch_subject(SubjectKind::Cluster, CLUSTER_UID, &Progress::silent())
         .unwrap();
     raw.cloud_config = Some(palette.cloud_config(&raw.cluster).unwrap());
     let shaped = Snapshot::from_cluster(&raw, None, "cluster", "t0").unwrap();
@@ -10070,7 +10117,7 @@ fn compare_names_the_tier_and_the_field_that_differ_and_a_pack_behind_its_profil
             .with("/v1/cloudconfigs/aws/cc1", cloud_config(2)),
     );
     let mut raw = palette
-        .fetch_cluster(CLUSTER_UID, &Progress::silent())
+        .fetch_subject(SubjectKind::Cluster, CLUSTER_UID, &Progress::silent())
         .unwrap();
     raw.cloud_config = Some(palette.cloud_config(&raw.cluster).unwrap());
     let a = Snapshot::from_cluster(&raw, None, "a", "t0").unwrap();
@@ -10138,7 +10185,7 @@ fn between_two_clusters_the_applied_tier_compares_the_infra_hash_alone() {
     let api = serve_cluster(MemoryApi::new(), dir.path(), "cluster-a");
     let palette = Palette::new(api);
     let mut raw = palette
-        .fetch_cluster(CLUSTER_UID, &Progress::silent())
+        .fetch_subject(SubjectKind::Cluster, CLUSTER_UID, &Progress::silent())
         .unwrap();
     let a = Snapshot::from_cluster(&raw, None, "a", "t0").unwrap();
     // another cluster from the same definition: Palette gives it its own spcHash
@@ -10321,7 +10368,7 @@ fn shape_on(kind: &str, cloud_config: Value) -> Value {
         .with(format!("/v1/cloudconfigs/{kind}/cc1"), cloud_config);
     let palette = Palette::new(api);
     let mut raw = palette
-        .fetch_cluster(CLUSTER_UID, &Progress::silent())
+        .fetch_subject(SubjectKind::Cluster, CLUSTER_UID, &Progress::silent())
         .unwrap();
     raw.cluster["spec"]["cloudConfigRef"]["kind"] = Value::from(kind);
     raw.cloud_config = Some(palette.cloud_config(&raw.cluster).unwrap());
@@ -11667,7 +11714,7 @@ fn a_raw_directory_of_a_cluster_group_masks_each_password_and_gives_the_record_o
     doc["spec"]["clustersConfig"] = clusters_config(6000, values);
     let api = serve_cluster_group(MemoryApi::new(), dir.path()).with("/v1/clustergroups/g1", doc);
     let fetched = Palette::new(api)
-        .fetch_cluster_group("g1", &Progress::silent())
+        .fetch_subject(SubjectKind::ClusterGroup, "g1", &Progress::silent())
         .unwrap();
     let saved = dir.path().join("raw");
     fetched.save_dir(&saved, "t0").unwrap();

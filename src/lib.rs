@@ -82,6 +82,7 @@ pub mod ops;
 pub(crate) mod policy;
 pub mod progress;
 pub mod reference;
+pub(crate) mod registry;
 pub mod render;
 pub mod repave;
 pub mod scope;

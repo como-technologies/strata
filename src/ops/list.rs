@@ -6,12 +6,12 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::api::{Palette, PaletteApi};
+use crate::api::{Palette, PaletteApi, named_entries, profile_versions};
 use crate::cloud::Cloud;
-use crate::error::{Error, Result};
+use crate::error::{Result, found};
 use crate::progress::Progress;
 use crate::scope::ProfileScope;
-use crate::snapshot::{AppliedProfile, Tool};
+use crate::snapshot::{AppliedProfile, SubjectKind, Tool};
 use crate::version;
 
 use crate::json::{arr, first_nonempty, items, opt_text, str_at, text};
@@ -460,24 +460,20 @@ fn list_profiles<A: PaletteApi>(
     options: &ListOptions,
     progress: &Progress,
 ) -> Result<Vec<ListedProfile>> {
-    let mut profiles: Vec<ListedProfile> = items(&palette.profile_listing()?)
-        .map(|it| {
-            let name = text(it, "/metadata/name");
-            let version = text(it, "/spec/version");
-            ListedProfile {
-                reference: format!("{name}@{version}"),
-                uid: text(it, "/metadata/uid"),
-                cloud_type: text(it, "/spec/cloudType"),
-                name,
-                version,
-                scope: None,
-                profile_type: None,
-                consumers: None,
-                consumers_by_kind: None,
-                packs: None,
-                published: None,
-                error: None,
-            }
+    let mut profiles: Vec<ListedProfile> = profile_versions(&palette.profile_listing()?)
+        .map(|v| ListedProfile {
+            reference: format!("{}@{}", v.name, v.version),
+            uid: v.uid,
+            cloud_type: v.cloud_type,
+            name: v.name,
+            version: v.version,
+            scope: None,
+            profile_type: None,
+            consumers: None,
+            consumers_by_kind: None,
+            packs: None,
+            published: None,
+            error: None,
         })
         .collect();
     profiles.sort_by(|a, b| {
@@ -555,17 +551,16 @@ fn scopes_from_search<A: PaletteApi>(
         return Ok(());
     }
     let own = ProfileScope::of_listing(palette.project_uid().unwrap_or(""));
-    let mut found: BTreeMap<String, ProfileScope> = BTreeMap::new();
+    let mut scopes: BTreeMap<String, ProfileScope> = BTreeMap::new();
     for &scope in own.others_listed() {
         progress.note(&format!("searching the {scope} profiles"));
-        match palette.profile_uids_in_scope(scope) {
-            Ok(uids) => found.extend(uids.into_iter().map(|uid| (uid, scope))),
-            Err(Error::Api { status: 404, .. }) => return Ok(()),
-            Err(e) => return Err(e),
-        }
+        let Some(uids) = found(palette.profile_uids_in_scope(scope))? else {
+            return Ok(());
+        };
+        scopes.extend(uids.into_iter().map(|uid| (uid, scope)));
     }
     for p in profiles {
-        p.scope = Some(found.get(&p.uid).copied().unwrap_or(own));
+        p.scope = Some(scopes.get(&p.uid).copied().unwrap_or(own));
     }
     Ok(())
 }
@@ -670,7 +665,7 @@ fn read_applied<A, F>(
                 continue;
             }
         };
-        let profiles = match palette.cluster_document(&c.uid) {
+        let profiles = match palette.subject_document(SubjectKind::Cluster, &c.uid) {
             Ok(d) => AppliedProfile::of_cluster(&d),
             Err(e) => {
                 c.error = Some(e.to_json());
@@ -687,11 +682,9 @@ fn read_applied<A, F>(
 }
 
 fn list_projects(doc: &Value) -> Vec<ListedProject> {
-    let mut projects: Vec<ListedProject> = items(doc)
-        .map(|it| ListedProject {
-            name: text(it, "/metadata/name"),
-            uid: text(it, "/metadata/uid"),
-        })
+    let mut projects: Vec<ListedProject> = named_entries(doc)
+        .into_iter()
+        .map(|(name, uid)| ListedProject { name, uid })
         .collect();
     projects.sort_by(|a, b| a.name.cmp(&b.name).then_with(|| a.uid.cmp(&b.uid)));
     projects

@@ -7,10 +7,10 @@ use serde_json::Value;
 
 use super::{AuditKind, PaletteApi, RawCluster, RawProfile, ReadErrors, mask};
 use crate::cloud::{CLOUD_ALL, CLOUD_NESTED};
-use crate::error::{Error, Result, unread_reason};
+use crate::error::{Error, Result, found, unread_reason};
 use crate::json::{arr, items, opt_text, str_at, take_items, text};
 use crate::progress::Progress;
-use crate::reference::LATEST;
+use crate::reference::{LATEST, one_named};
 use crate::scope::{ProfileScope, ScopedUid};
 use crate::snapshot::{APP_KIND, SubjectKind};
 use crate::version;
@@ -48,10 +48,71 @@ const AUDIT_PAGE: u32 = 100;
 const TIER_INSTALL_ORDER: &str = "installOrder";
 /// The field of a container tier that gives the registry of its image.
 const TIER_CONTAINER_REGISTRY: &str = "containerRegistryUid";
+/// The collection of the profile versions. A uid names one: `/v1/clusterprofiles/{uid}`.
+const PROFILES: &str = "/v1/clusterprofiles";
+/// The collection of the clusters: `/v1/spectroclusters/{uid}`.
+const CLUSTERS: &str = "/v1/spectroclusters";
+/// The collection of the cluster groups: `/v1/clustergroups/{uid}`.
+const CLUSTER_GROUPS: &str = "/v1/clustergroups";
+/// The collection of the edge hosts: `/v1/edgehosts/{uid}`.
+const EDGE_HOSTS: &str = "/v1/edgehosts";
+/// The collection of the app profiles: `/v1/appProfiles/{uid}`.
+const APP_PROFILES: &str = "/v1/appProfiles";
+/// The collection of the app deployments: `/v1/appDeployments/{uid}`.
+const APP_DEPLOYMENTS: &str = "/v1/appDeployments";
+/// The collection of the packs: `/v1/packs/{uid}`, and the listing and the tags under it.
+const PACKS: &str = "/v1/packs";
+/// The collection of the saved tag filters: `/v1/filters/tag/{uid}`.
+const TAG_FILTERS: &str = "/v1/filters/tag";
+/// The collection of the cloud configs: `/v1/cloudconfigs/{cloudType}/{uid}`.
+const CLOUD_CONFIGS: &str = "/v1/cloudconfigs";
+/// The registries: the summary listing of a kind is under it.
+const REGISTRIES: &str = "/v1/registries";
+/// The registries that the key can see.
+const REGISTRY_METADATA: &str = "/v1/registries/metadata";
+/// The dashboard summary of a cluster: `/v1/dashboard/spectroclusters/{uid}`.
+const CLUSTER_SUMMARIES: &str = "/v1/dashboard/spectroclusters";
+/// The dashboard of a cluster group: its virtual clusters are under it.
+const CLUSTER_GROUP_DASHBOARD: &str = "/v1/dashboard/clustergroups";
+/// The notifications of a cluster: `/v1/notifications/spectrocluster/{uid}`.
+const CLUSTER_NOTIFICATIONS: &str = "/v1/notifications/spectrocluster";
+/// The audit log.
+const AUDITS: &str = "/v1/audits";
+
+/// A route of Palette: `prefix`, then each segment of `segments`, each escaped by
+/// [`query_value`]. So a `/` or a `?` in a uid or a name stays in its segment. A fixed word of a
+/// route, such as `packs`, is a segment too, and the escape leaves it as it is.
+fn route(prefix: &str, segments: &[&str]) -> String {
+    let mut path = String::from(prefix);
+    for segment in segments {
+        path.push('/');
+        path.push_str(&query_value(segment));
+    }
+    path
+}
+
+/// The collection of the objects of `kind`: the route under which a uid names one.
+fn collection(kind: SubjectKind) -> &'static str {
+    match kind {
+        SubjectKind::Cluster => CLUSTERS,
+        SubjectKind::EdgeHost => EDGE_HOSTS,
+        SubjectKind::ClusterGroup => CLUSTER_GROUPS,
+    }
+}
 
 /// The search `route` with the page size of the dashboard, [`SEARCH_PAGE`], as its `limit`.
-fn paged(route: &str) -> String {
+fn with_limit(route: &str) -> String {
     format!("{route}?limit={SEARCH_PAGE}")
+}
+
+/// `path` with `continue={next}` in its query, the page after the token `next`. `path` itself
+/// for the first page, when `next` is empty.
+fn page_after(path: &str, next: &str) -> String {
+    if next.is_empty() {
+        return path.to_string();
+    }
+    let join = if path.contains('?') { '&' } else { '?' };
+    format!("{path}{join}continue={}", query_value(next))
 }
 
 /// The install order of a tier, when Palette gives one.
@@ -60,10 +121,41 @@ fn install_order(tier: &Value) -> Option<&Value> {
 }
 
 /// `(name, uid)` of each entry of a listing: an array, or an object with `items`.
-fn named_entries(listing: &Value) -> Vec<(String, String)> {
+pub(crate) fn named_entries(listing: &Value) -> Vec<(String, String)> {
     items(listing)
         .map(|e| (text(e, "/metadata/name"), text(e, "/metadata/uid")))
         .collect()
+}
+
+/// The uid of each entry of `entries`, `(name, uid)` pairs, that is named `name`.
+fn uids_named(entries: &[(String, String)], name: &str) -> Vec<String> {
+    entries
+        .iter()
+        .filter(|(n, _)| n == name)
+        .map(|(_, uid)| uid.clone())
+        .collect()
+}
+
+/// One version of a profile, as the profile listing gives it.
+pub(crate) struct ProfileVersion {
+    /// The profile name.
+    pub name: String,
+    /// The version.
+    pub version: String,
+    /// The uid of the version.
+    pub uid: String,
+    /// The cloud type of the profile, for example `aws`.
+    pub cloud_type: String,
+}
+
+/// Each version of the profile listing, `items[]`, in the order Palette lists them.
+pub(crate) fn profile_versions(listing: &Value) -> impl Iterator<Item = ProfileVersion> + '_ {
+    items(listing).map(|it| ProfileVersion {
+        name: text(it, "/metadata/name"),
+        version: text(it, "/spec/version"),
+        uid: text(it, "/metadata/uid"),
+        cloud_type: text(it, "/spec/cloudType"),
+    })
 }
 
 /// `text` as a value in a query string: each byte that is not a letter, a digit, or one of
@@ -80,19 +172,16 @@ fn query_value(text: &str) -> String {
     out
 }
 
-/// `(version, uid)` of each item of the profile listing named `name`.
+/// `(version, uid)` of each item of the profile listing named `name`. An item with no version
+/// or no uid is not a version that a resolve can give: the resolve skips it, so a name with no
+/// other item is [`Error::ProfileNotFound`].
 fn listed_versions<'a>(
     listing: &'a Value,
     name: &'a str,
 ) -> impl Iterator<Item = (String, String)> + 'a {
-    items(listing)
-        .filter(move |it| str_at(it, "/metadata/name") == name)
-        .filter_map(|it| {
-            Some((
-                opt_text(it, "/spec/version")?,
-                opt_text(it, "/metadata/uid")?,
-            ))
-        })
+    profile_versions(listing)
+        .filter(move |v| v.name == name && !v.version.is_empty() && !v.uid.is_empty())
+        .map(|v| (v.version, v.uid))
 }
 
 /// The names of `entries`, sorted.
@@ -112,20 +201,35 @@ pub(crate) fn search_condition(property: &str, values: &[String], negation: bool
     })
 }
 
+/// A group of the filter of the cluster search: `filters`, its conditions, joined by
+/// `conjunction`, `and` or `or`.
+pub(crate) fn search_group(conjunction: &str, filters: Vec<Value>) -> Value {
+    serde_json::json!({"conjunction": conjunction, "filters": filters})
+}
+
+/// The filter of the cluster search: `groups`, each a [`search_group`], joined with `and`.
+pub(crate) fn search_filter(groups: Vec<Value>) -> Value {
+    serde_json::json!({"conjunction": "and", "filterGroups": groups})
+}
+
 /// `filter` with one more group, the condition that asks the search for the virtual clusters:
 /// `environment` equals [`CLOUD_NESTED`]. `filter` joins its groups with `and`; `Null` has no
 /// group, so the result selects each virtual cluster.
 fn with_nested(filter: &Value) -> Value {
     let mut groups = arr(filter, "/filterGroups").to_vec();
-    groups.push(serde_json::json!({
-        "conjunction": "and",
-        "filters": [search_condition(SEARCH_ENVIRONMENT, &[CLOUD_NESTED.to_string()], false)],
-    }));
-    serde_json::json!({"conjunction": "and", "filterGroups": groups})
+    groups.push(search_group(
+        "and",
+        vec![search_condition(
+            SEARCH_ENVIRONMENT,
+            &[CLOUD_NESTED.to_string()],
+            false,
+        )],
+    ));
+    search_filter(groups)
 }
 
 /// A kind of registry, as the routes of Palette name it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum RegistryKind {
     /// A pack registry. It holds the packs of the type `spectro`.
     Pack,
@@ -144,6 +248,24 @@ impl RegistryKind {
             "helm" => Some(Self::Helm),
             "oci" => Some(Self::Oci),
             _ => None,
+        }
+    }
+
+    /// The kind of a registry as the metadata listing names it in `kind`: `pack`, `helm`, or
+    /// `oci`, the words of the routes. None for another word.
+    pub(crate) fn of_kind(kind: &str) -> Option<Self> {
+        [Self::Pack, Self::Helm, Self::Oci]
+            .into_iter()
+            .find(|k| k.route() == kind)
+    }
+
+    /// The type of a pack of a registry of the kind: `spectro` for a pack registry, else the
+    /// word of the kind.
+    pub(crate) fn pack_type(self) -> &'static str {
+        match self {
+            Self::Pack => "spectro",
+            Self::Helm => "helm",
+            Self::Oci => "oci",
         }
     }
 
@@ -213,30 +335,37 @@ impl<A: PaletteApi> Palette<A> {
     /// The one uid of `uids`, the versions of `name` at `version` in the listing. None is
     /// [`Error::ProfileNotFound`]. Two or more are [`Error::ProfileNameAmbiguous`], each with
     /// the scope that its document gives.
-    fn one_of(&self, name: &str, version: &str, mut uids: Vec<String>) -> Result<String> {
-        uids.sort();
-        match uids.len() {
-            1 => Ok(uids.remove(0)),
-            0 => Err(Error::ProfileNotFound {
+    fn one_of(&self, name: &str, version: &str, uids: Vec<String>) -> Result<String> {
+        one_named(
+            uids,
+            String::as_str,
+            || Error::ProfileNotFound {
                 name: name.to_string(),
                 version: version.to_string(),
                 tenant_scope: self.project_uid().is_none(),
-            }),
-            _ => {
-                let mut profiles = Vec::with_capacity(uids.len());
-                for uid in uids {
-                    let doc = self.profile_document(&uid)?;
-                    profiles.push(ScopedUid {
-                        scope: ProfileScope::of_document(&doc),
-                        uid,
-                    });
-                }
-                Err(Error::ProfileNameAmbiguous {
-                    name: name.to_string(),
-                    version: version.to_string(),
-                    profiles,
-                })
+            },
+            |uids| self.ambiguous_profiles(name, version, uids),
+        )
+    }
+
+    /// The error for `uids`, two or more versions of `name` at `version`:
+    /// [`Error::ProfileNameAmbiguous`], with the scope that the document of each gives. A read of
+    /// a document that fails gives its own error.
+    fn ambiguous_profiles(&self, name: &str, version: &str, uids: Vec<String>) -> Error {
+        let mut profiles = Vec::with_capacity(uids.len());
+        for uid in uids {
+            match self.profile_document(&uid) {
+                Ok(doc) => profiles.push(ScopedUid {
+                    scope: ProfileScope::of_document(&doc),
+                    uid,
+                }),
+                Err(e) => return e,
             }
+        }
+        Error::ProfileNameAmbiguous {
+            name: name.to_string(),
+            version: version.to_string(),
+            profiles,
         }
     }
 
@@ -245,6 +374,15 @@ impl<A: PaletteApi> Palette<A> {
     pub(crate) fn profile_uid(&self, id: &str, version: Option<&str>) -> Result<String> {
         match version {
             Some(version) => self.resolve(id, version),
+            None => Ok(id.to_string()),
+        }
+    }
+
+    /// The uid of an app profile that a ref names. `id` is a uid when there is no `version`, and
+    /// else a name that [`Palette::resolve_app_profile`] finds at `version`.
+    pub(crate) fn app_profile_uid(&self, id: &str, version: Option<&str>) -> Result<String> {
+        match version {
+            Some(version) => self.resolve_app_profile(id, version),
             None => Ok(id.to_string()),
         }
     }
@@ -260,11 +398,7 @@ impl<A: PaletteApi> Palette<A> {
     pub fn resolve_latest(&self, name: &str) -> Result<String> {
         let listing = self.profile_listing()?;
         let versions: Vec<(String, String)> = listed_versions(&listing, name).collect();
-        let Some(highest) = versions
-            .iter()
-            .map(|(v, _)| v.as_str())
-            .max_by(|x, y| version::compare(x, y))
-        else {
+        let Some((highest, _)) = version::pick(versions.iter(), |(v, _)| v.as_str(), LATEST) else {
             return Err(Error::ProfileNotFound {
                 name: name.to_string(),
                 version: LATEST.to_string(),
@@ -293,9 +427,9 @@ impl<A: PaletteApi> Palette<A> {
             SEARCH_PAGE,
             |offset| {
                 let path = if offset == 0 {
-                    paged(PROFILE_SEARCH)
+                    with_limit(PROFILE_SEARCH)
                 } else {
-                    format!("{}&offset={offset}", paged(PROFILE_SEARCH))
+                    format!("{}&offset={offset}", with_limit(PROFILE_SEARCH))
                 };
                 self.api.post_json(&path, &body)
             },
@@ -357,12 +491,7 @@ impl<A: PaletteApi> Palette<A> {
             })
             .collect();
         let named = all.iter().filter(|(n, _, _)| n == name);
-        let found = if version == LATEST {
-            named.max_by(|(_, x, _), (_, y, _)| version::compare(x, y))
-        } else {
-            named.into_iter().find(|(_, v, _)| v == version)
-        };
-        match found {
+        match version::pick(named, |(_, v, _)| v.as_str(), version) {
             Some((_, _, uid)) => Ok(uid.clone()),
             None => {
                 let mut available: Vec<String> =
@@ -395,9 +524,8 @@ impl<A: PaletteApi> Palette<A> {
     /// The error of the first request that fails.
     pub fn fetch_app_profile(&self, uid: &str, progress: &Progress) -> Result<RawProfile> {
         progress.note(&format!("fetching app profile {uid}"));
-        let at = query_value(uid);
-        let doc = self.api.get_json(&format!("/v1/appProfiles/{at}"))?;
-        let tiers = self.api.get_json(&format!("/v1/appProfiles/{at}/tiers"))?;
+        let doc = self.app_profile_document(uid)?;
+        let tiers = self.api.get_json(&route(APP_PROFILES, &[uid, "tiers"]))?;
         // Palette lists the tiers in the display order of the app profile, not in install order.
         let mut ordered: Vec<&Value> = arr(&tiers, "/spec/appTiers").iter().collect();
         // A stable sort: tiers of one order keep the order of the listing. Palette gives no order
@@ -424,12 +552,12 @@ impl<A: PaletteApi> Palette<A> {
                 "registryUid": text(tier, "/spec/registryUid"),
                 "values": text(tier, "/spec/values"), "params": params,
             }));
-            let tier_uid = query_value(&text(tier, "/metadata/uid"));
+            let tier_uid = text(tier, "/metadata/uid");
             let mut manifests = Vec::new();
             for m in arr(tier, "/spec/manifests") {
-                let d = self.api.get_json(&format!(
-                    "/v1/appProfiles/{at}/tiers/{tier_uid}/manifests/{}",
-                    query_value(&text(m, "/uid"))
+                let d = self.api.get_json(&route(
+                    APP_PROFILES,
+                    &[uid, "tiers", &tier_uid, "manifests", &text(m, "/uid")],
                 ))?;
                 manifests.push(serde_json::json!({
                     "name": text(&d, "/metadata/name"), "uid": text(&d, "/metadata/uid"),
@@ -485,6 +613,11 @@ impl<A: PaletteApi> Palette<A> {
     /// The uid of the one cluster named `name` in the scope, from [`Palette::cluster_listing`]
     /// and from [`Palette::virtual_clusters`]: the listing leaves out each virtual cluster, so
     /// the search gives them, when it takes `environment`.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::ClusterNotFound`] when no cluster has the name, and
+    /// [`Error::ClusterNameAmbiguous`] when two or more have it.
     pub fn cluster_uid_named(&self, name: &str) -> Result<String> {
         let listing = self.cluster_listing()?;
         let mut clusters = named_entries(&listing);
@@ -492,23 +625,18 @@ impl<A: PaletteApi> Palette<A> {
         if let Some(found) = self.virtual_clusters(&properties, &Value::Null, || {})? {
             clusters.extend(named_entries(&Value::Array(found)));
         }
-        let mut uids: Vec<String> = clusters
-            .iter()
-            .filter(|(n, _)| n == name)
-            .map(|(_, uid)| uid.clone())
-            .collect();
-        uids.sort();
-        match uids.len() {
-            1 => Ok(uids.remove(0)),
-            0 => Err(Error::ClusterNotFound {
+        one_named(
+            uids_named(&clusters, name),
+            String::as_str,
+            || Error::ClusterNotFound {
                 cluster: name.to_string(),
                 available: sorted_names(&clusters),
-            }),
-            _ => Err(Error::ClusterNameAmbiguous {
+            },
+            |uids| Error::ClusterNameAmbiguous {
                 name: name.to_string(),
                 uids,
-            }),
-        }
+            },
+        )
     }
 
     /// The project listing, `GET /v1/dashboard/projects/metadata`: `items[]` with each project's
@@ -518,7 +646,8 @@ impl<A: PaletteApi> Palette<A> {
         self.api.get_json(PROJECT_LISTING)
     }
 
-    /// Reads a variables route, and gives `none` when the route is missing.
+    /// Reads the variables of the object at the route `owner`, `{owner}/variables`, and gives
+    /// `none` when the route is missing.
     ///
     /// An older Palette answers 404 or 405 for the route. Each other error returns. Palette also
     /// answers 404 when it does not have the object. So after a 404, strata reads `owner`, the
@@ -528,16 +657,11 @@ impl<A: PaletteApi> Palette<A> {
     /// The second value is true when the route is missing and `none` is in its place. A caller
     /// must record that flag. "No variables" and "strata could not read the variables" give the
     /// same root, and only the flag shows the difference.
-    fn variables_or(
-        &self,
-        path: &str,
-        owner: &str,
-        none: Value,
-        progress: &Progress,
-    ) -> Result<(Value, bool)> {
-        match self.api.get_json(path) {
+    fn variables_or(&self, owner: &str, none: Value, progress: &Progress) -> Result<(Value, bool)> {
+        let path = format!("{owner}/variables");
+        match self.api.get_json(&path) {
             Ok(v) => Ok((v, false)),
-            Err(Error::Api { status, .. }) if status == 404 || status == 405 => {
+            Err(e @ Error::Api { status, .. }) if e.is_missing_route() => {
                 if status == 404 {
                     self.api.get_json(owner)?;
                 }
@@ -562,15 +686,12 @@ impl<A: PaletteApi> Palette<A> {
     /// The error of the first request that fails.
     pub fn fetch_profile(&self, uid: &str, progress: &Progress) -> Result<RawProfile> {
         progress.note(&format!("fetching profile {uid}"));
-        let mut profile = self.api.get_json(&format!("/v1/clusterprofiles/{uid}"))?;
-        let mut manifests = self
-            .api
-            .get_json(&format!("/v1/clusterprofiles/{uid}/packs/manifests"))?;
+        let mut profile = self.profile_document(uid)?;
+        let mut manifests = self.profile_pack_manifests(uid)?;
         self.mask_draft(&mut profile, &mut manifests, progress)?;
         let manifest_entities = self.manifest_entities(uid, &profile, progress)?;
         let (variables, variables_unavailable) = self.variables_or(
-            &format!("/v1/clusterprofiles/{uid}/variables"),
-            &format!("/v1/clusterprofiles/{uid}"),
+            &route(PROFILES, &[uid]),
             serde_json::json!({ "variables": [] }),
             progress,
         )?;
@@ -603,18 +724,11 @@ impl<A: PaletteApi> Palette<A> {
             progress.note(&format!(
                 "reading the schema of pack {uid} to mask the draft"
             ));
-            match self
-                .api
-                .get_json(&format!("/v1/packs/{}", query_value(&uid)))
-            {
-                Ok(pack) => {
-                    let fields = mask::password_fields(&pack, &uid);
-                    if !fields.is_empty() {
-                        secrets.insert(uid, fields);
-                    }
+            if let Some(pack) = found(self.api.get_json(&route(PACKS, &[&uid])))? {
+                let fields = mask::password_fields(&pack, &uid);
+                if !fields.is_empty() {
+                    secrets.insert(uid, fields);
                 }
-                Err(Error::Api { status: 404, .. }) => {}
-                Err(e) => return Err(e),
             }
         }
         mask::mask_draft_packs(profile, manifests, &secrets)
@@ -649,11 +763,7 @@ impl<A: PaletteApi> Palette<A> {
                     progress.note(&format!(
                         "reading manifest {manifest} of pack {name}: the profile has a draft"
                     ));
-                    let doc = self.api.get_json(&format!(
-                        "/v1/clusterprofiles/{uid}/packs/{}/manifests/{}",
-                        query_value(&name),
-                        query_value(&manifest)
-                    ))?;
+                    let doc = self.profile_manifest(uid, &name, &manifest)?;
                     out.insert(manifest, doc);
                 }
             }
@@ -664,28 +774,45 @@ impl<A: PaletteApi> Palette<A> {
     /// The profile document alone, `GET /v1/clusterprofiles/{uid}`: metadata, versions, and the
     /// clusters that use it in `status`.
     pub fn profile_document(&self, uid: &str) -> Result<Value> {
-        self.api.get_json(&format!("/v1/clusterprofiles/{uid}"))
+        self.api.get_json(&route(PROFILES, &[uid]))
     }
 
-    /// The cluster document alone, `GET /v1/spectroclusters/{uid}`: its name, its project in the
-    /// `projectUid` annotation, and its state in `status.state`.
-    pub fn cluster_document(&self, uid: &str) -> Result<Value> {
-        self.api.get_json(&format!("/v1/spectroclusters/{uid}"))
+    /// The pack manifests of the profile version `uid`,
+    /// `GET /v1/clusterprofiles/{uid}/packs/manifests`: the manifests of each pack of the
+    /// template, with the published content of each.
+    fn profile_pack_manifests(&self, uid: &str) -> Result<Value> {
+        self.api
+            .get_json(&route(PROFILES, &[uid, "packs", "manifests"]))
+    }
+
+    /// One manifest of a pack of the profile version `uid`,
+    /// `GET /v1/clusterprofiles/{uid}/packs/{packName}/manifests/{manifestUid}`: its draft
+    /// content and its published content.
+    fn profile_manifest(&self, uid: &str, pack: &str, manifest: &str) -> Result<Value> {
+        self.api.get_json(&route(
+            PROFILES,
+            &[uid, "packs", pack, "manifests", manifest],
+        ))
+    }
+
+    /// The copy of a manifest that the edge host `uid` holds,
+    /// `GET /v1/edgehosts/{uid}/pack/manifests/{manifestUid}`.
+    fn edge_host_manifest(&self, uid: &str, manifest: &str) -> Result<Value> {
+        self.api
+            .get_json(&route(EDGE_HOSTS, &[uid, "pack", "manifests", manifest]))
     }
 
     /// The app profile document alone, `GET /v1/appProfiles/{uid}`: metadata, version, and the
     /// app deployments that use it in `status.inUseApps`.
     pub fn app_profile_document(&self, uid: &str) -> Result<Value> {
-        self.api
-            .get_json(&format!("/v1/appProfiles/{}", query_value(uid)))
+        self.api.get_json(&route(APP_PROFILES, &[uid]))
     }
 
     /// One app deployment, `GET /v1/appDeployments/{uid}`: its name, its project in the
     /// `projectUid` annotation, the app profile version its copy names in
     /// `spec.profile.metadata.version`, and its state in `status.state`.
     pub fn app_deployment_document(&self, uid: &str) -> Result<Value> {
-        self.api
-            .get_json(&format!("/v1/appDeployments/{}", query_value(uid)))
+        self.api.get_json(&route(APP_DEPLOYMENTS, &[uid]))
     }
 
     /// The entries of the audit log of Palette for one resource, `GET /v1/audits`, that it logged
@@ -698,68 +825,90 @@ impl<A: PaletteApi> Palette<A> {
     ///
     /// The error of the first request that fails.
     pub fn audits(&self, kind: Option<AuditKind>, uid: &str, since: &str) -> Result<Vec<Value>> {
-        let mut query = String::new();
+        let mut query = Vec::new();
         if let Some(kind) = kind {
-            query.push_str(&format!("resourceKind={}&", kind.as_str()));
+            query.push(format!("resourceKind={}", kind.as_str()));
         }
-        query.push_str(&format!("resourceUid={}", query_value(uid)));
+        query.push(format!("resourceUid={}", query_value(uid)));
         if !since.is_empty() {
-            query.push_str(&format!("&startTime={}", query_value(since)));
+            query.push(format!("startTime={}", query_value(since)));
         }
-        query.push_str(&format!("&limit={AUDIT_PAGE}"));
-        self.paged(&format!("/v1/audits?{query}"))
+        query.push(format!("limit={AUDIT_PAGE}"));
+        self.listed(&format!("{AUDITS}?{}", query.join("&")))
     }
 
     /// The cluster summary, `GET /v1/dashboard/spectroclusters/{uid}`: what the dashboard shows
     /// for one cluster. Its `status.health` is the health of the cluster, which the cluster
     /// document does not carry.
     pub fn fetch_cluster_summary(&self, uid: &str) -> Result<Value> {
-        self.api
-            .get_json(&format!("/v1/dashboard/spectroclusters/{uid}"))
+        self.api.get_json(&route(CLUSTER_SUMMARIES, &[uid]))
     }
 
-    /// Fetch the three documents for one cluster: the cluster with its applied profile templates,
-    /// the pack manifests of each applied profile, and each applied profile's variables. A missing
-    /// variables endpoint is treated as "no variables"; other errors propagate. `cluster` is a uid,
-    /// or, when no cluster has that uid, the name of one cluster in the scope; the documents are
-    /// always read by uid.
-    pub fn fetch_cluster(&self, cluster: &str, progress: &Progress) -> Result<RawCluster> {
-        progress.note(&format!("fetching cluster {cluster}"));
-        let (uid, cluster) = match self.cluster_document(cluster) {
-            Ok(doc) => (cluster.to_string(), doc),
-            Err(Error::Api { status: 404, .. }) => {
-                let uid = self.cluster_uid_named(cluster)?;
-                progress.note(&format!("cluster '{cluster}' is {uid}"));
-                let doc = self.cluster_document(&uid)?;
-                (uid, doc)
-            }
-            Err(e) => return Err(e),
-        };
-        self.cluster_raw(&uid, cluster, progress)
+    /// The raw documents of the cluster, edge host, or cluster group `id`, in the shape of a
+    /// cluster. `id` is a uid, or, when no object of `kind` has that uid, the name of one object
+    /// of the kind in the scope. The documents are read by uid in each case.
+    ///
+    /// A cluster: its document with its applied profile templates, the pack manifests of each
+    /// applied profile, and the variables of each. An edge host: `GET /v1/edgehosts/{uid}` gives
+    /// the bound profiles in `spec.clusterProfileTemplates`. The host holds its own copy of each
+    /// manifest, which `GET /v1/edgehosts/{uid}/pack/manifests/{manifestUid}` reads. A cluster
+    /// group: `GET /v1/clustergroups/{uid}` gives the profiles that the group pins for its
+    /// virtual clusters. The group holds its own copy of each manifest, which
+    /// `GET /v1/clusterprofiles/{uid}/packs/{pack}/manifests/{manifestUid}` reads by its uid.
+    ///
+    /// The variables and the rest of each pack of a host or a group come from its profile, and
+    /// neither has notifications. A missing variables route is "no variables". Each other error
+    /// returns.
+    ///
+    /// # Errors
+    ///
+    /// The error of the first request that fails. [`Error::ClusterNotFound`],
+    /// [`Error::EdgeHostNotFound`], or [`Error::ClusterGroupNotFound`] when `id` is no uid and no
+    /// name in the scope. The `NameAmbiguous` kind of the same object when two have the name.
+    pub fn fetch_subject(
+        &self,
+        kind: SubjectKind,
+        id: &str,
+        progress: &Progress,
+    ) -> Result<RawCluster> {
+        let doc = self.subject_by_id(kind, id, progress)?;
+        self.subject_raw(kind, doc, progress)
     }
 
     /// The document of the cluster, edge host, or cluster group with the uid `uid`, and no
     /// other: `GET /v1/spectroclusters/{uid}`, `GET /v1/edgehosts/{uid}`, or `GET
     /// /v1/clustergroups/{uid}`. A 404 is an error, and no name is tried. Palette keeps the
     /// document of a deleted cluster, with the state `Deleted`.
-    pub fn subject_document(
-        &self,
-        kind: SubjectKind,
-        uid: &str,
-        progress: &Progress,
-    ) -> Result<Value> {
-        progress.note(&format!("fetching {} {uid}", kind.noun()));
-        let base = match kind {
-            SubjectKind::Cluster => "/v1/spectroclusters",
-            SubjectKind::EdgeHost => "/v1/edgehosts",
-            SubjectKind::ClusterGroup => "/v1/clustergroups",
-        };
-        self.api.get_json(&format!("{base}/{}", query_value(uid)))
+    pub fn subject_document(&self, kind: SubjectKind, uid: &str) -> Result<Value> {
+        self.api.get_json(&route(collection(kind), &[uid]))
+    }
+
+    /// The document of the object `id` of `kind`: [`Palette::subject_document`] of the uid `id`.
+    /// When no object has that uid, it is the document of the one object named `id` in the
+    /// scope. A note names the uid of a name.
+    fn subject_by_id(&self, kind: SubjectKind, id: &str, progress: &Progress) -> Result<Value> {
+        progress.note(&format!("fetching {} {id}", kind.noun()));
+        match found(self.subject_document(kind, id))? {
+            Some(doc) => Ok(doc),
+            None => {
+                let uid = self.subject_uid_named(kind, id)?;
+                progress.note(&format!("{} '{id}' is {uid}", kind.noun()));
+                self.subject_document(kind, &uid)
+            }
+        }
+    }
+
+    /// The uid of the one object of `kind` in the scope that has the name `name`.
+    fn subject_uid_named(&self, kind: SubjectKind, name: &str) -> Result<String> {
+        match kind {
+            SubjectKind::Cluster => self.cluster_uid_named(name),
+            SubjectKind::EdgeHost => self.edge_host_uid_named(name),
+            SubjectKind::ClusterGroup => self.cluster_group_uid_named(name),
+        }
     }
 
     /// The raw documents of a cluster, an edge host, or a cluster group, from the document that
-    /// [`Palette::subject_document`] gives: the rest of what [`Palette::fetch_cluster`],
-    /// [`Palette::fetch_edge_host`], or [`Palette::fetch_cluster_group`] read.
+    /// [`Palette::subject_document`] gives: the rest of what [`Palette::fetch_subject`] reads.
     pub fn subject_raw(
         &self,
         kind: SubjectKind,
@@ -778,15 +927,11 @@ impl<A: PaletteApi> Palette<A> {
 
     /// The rest of the raw documents of the cluster `uid`, whose document is `cluster`.
     fn cluster_raw(&self, uid: &str, cluster: Value, progress: &Progress) -> Result<RawCluster> {
-        let manifests = self.api.get_json(&format!(
-            "/v1/spectroclusters/{uid}/profiles/packs/manifests"
-        ))?;
-        let (variables, variables_unavailable) = self.variables_or(
-            &format!("/v1/spectroclusters/{uid}/variables"),
-            &format!("/v1/spectroclusters/{uid}"),
-            serde_json::json!([]),
-            progress,
-        )?;
+        let manifests = self
+            .api
+            .get_json(&route(CLUSTERS, &[uid, "profiles", "packs", "manifests"]))?;
+        let (variables, variables_unavailable) =
+            self.variables_or(&route(CLUSTERS, &[uid]), serde_json::json!([]), progress)?;
         // the updates and the repave that wait, the bindings, and the namespaces are beside the
         // copy, not part of it. So strata records the error of a read, and still takes the record
         let (notifications, notifications_error) = or_unread(
@@ -836,10 +981,9 @@ impl<A: PaletteApi> Palette<A> {
     /// /v1/clusterprofiles/{uid}/packs/manifests`, since the cluster holds no copy of them yet.
     pub fn with_pending(&self, mut raw: RawCluster) -> Result<RawCluster> {
         let uid = text(&raw.cluster, "/metadata/uid");
-        let updates = self.api.get_json(&format!(
-            "/v1/spectroclusters/{}/profileUpdates",
-            query_value(&uid)
-        ))?;
+        let updates = self
+            .api
+            .get_json(&route(CLUSTERS, &[&uid, "profileUpdates"]))?;
         let profiles = arr(&updates, "/profiles").to_vec();
         raw.manifests = self.profile_manifests(&profiles)?;
         raw.cluster["spec"]["clusterProfileTemplates"] = Value::Array(profiles);
@@ -852,11 +996,7 @@ impl<A: PaletteApi> Palette<A> {
     fn profile_manifests(&self, templates: &[Value]) -> Result<Value> {
         let mut manifests = Vec::with_capacity(templates.len());
         for t in templates {
-            let puid = str_at(t, "/uid");
-            let d = self.api.get_json(&format!(
-                "/v1/clusterprofiles/{}/packs/manifests",
-                query_value(puid)
-            ))?;
+            let d = self.profile_pack_manifests(str_at(t, "/uid"))?;
             manifests.push(serde_json::json!({"metadata": d["metadata"], "spec": d["spec"]}));
         }
         Ok(serde_json::json!({ "profiles": manifests }))
@@ -867,7 +1007,7 @@ impl<A: PaletteApi> Palette<A> {
     /// summary: uid, name, and version.
     pub fn edge_hosts(&self) -> Result<Vec<Value>> {
         self.searched(
-            &paged(EDGE_HOST_SEARCH),
+            &with_limit(EDGE_HOST_SEARCH),
             &serde_json::json!({"filter": {}, "sort": []}),
         )
     }
@@ -880,7 +1020,7 @@ impl<A: PaletteApi> Palette<A> {
     /// [`Palette::virtual_cluster_search`].
     pub fn cluster_search(&self, filter: &Value) -> Result<Vec<Value>> {
         self.searched(
-            &paged(CLUSTER_SEARCH),
+            &with_limit(CLUSTER_SEARCH),
             &serde_json::json!({"filter": filter, "sort": [{"field": "clusterName", "order": "asc"}]}),
         )
     }
@@ -957,9 +1097,7 @@ impl<A: PaletteApi> Palette<A> {
                 .filter(|p| str_at(p, "/type") == "string")
                 .filter_map(|p| opt_text(p, "/name"))
                 .collect()),
-            Err(Error::Api {
-                status: 404 | 405, ..
-            }) => Ok(BTreeSet::new()),
+            Err(e) if e.is_missing_route() => Ok(BTreeSet::new()),
             Err(e) => Err(e),
         }
     }
@@ -973,22 +1111,22 @@ impl<A: PaletteApi> Palette<A> {
     /// One saved tag filter, `GET /v1/filters/tag/{uid}`: `spec.filterGroup` holds its
     /// conjunction and its conditions.
     pub fn tag_filter(&self, uid: &str) -> Result<Value> {
-        self.api
-            .get_json(&format!("/v1/filters/tag/{}", query_value(uid)))
+        self.api.get_json(&route(TAG_FILTERS, &[uid]))
     }
 
-    /// Every item of a search of the dashboard, a POST of `body`, every page: Palette gives at
-    /// most `limit` on a page, and `listmeta.continue` names the next one.
-    fn searched(&self, search: &str, body: &Value) -> Result<Vec<Value>> {
+    /// Every item of a listing that Palette pages by `continue`, every page. `path` is the first
+    /// page, with its query when it has one, and `fetch` reads one page at a path.
+    /// `listmeta.continue` names the next page, and is empty on the last one. A page with no
+    /// items ends the listing too, and `items: null` is such a page.
+    fn each_continue_page(
+        &self,
+        path: &str,
+        fetch: impl Fn(&str) -> Result<Value>,
+    ) -> Result<Vec<Value>> {
         let mut items = Vec::new();
         let mut next = String::new();
         loop {
-            let path = if next.is_empty() {
-                search.to_string()
-            } else {
-                format!("{search}&continue={}", query_value(&next))
-            };
-            let page = self.api.post_json(&path, body)?;
+            let page = fetch(&page_after(path, &next))?;
             next = text(&page, "/listmeta/continue");
             let got = take_items(page);
             let done = got.is_empty();
@@ -999,52 +1137,14 @@ impl<A: PaletteApi> Palette<A> {
         }
     }
 
-    /// The raw documents of an edge host, in the shape of a cluster: `GET /v1/edgehosts/{uid}`
-    /// gives the bound profiles in `spec.clusterProfileTemplates`. The host holds its own copy of
-    /// each manifest, which `GET /v1/edgehosts/{uid}/pack/manifests/{manifestUid}` reads; the
-    /// variables and the rest of each pack come from its profile. An edge host has no
-    /// notifications. `host` is a
-    /// uid, or, when no edge host has that uid, the name of one edge host in the scope.
-    pub fn fetch_edge_host(&self, host: &str, progress: &Progress) -> Result<RawCluster> {
-        progress.note(&format!("fetching edge host {host}"));
-        let get = |uid: &str| {
-            self.api
-                .get_json(&format!("/v1/edgehosts/{}", query_value(uid)))
-        };
-        let doc = match get(host) {
-            Ok(doc) => doc,
-            Err(Error::Api { status: 404, .. }) => {
-                let uid = self.edge_host_uid_named(host)?;
-                progress.note(&format!("edge host '{host}' is {uid}"));
-                get(&uid)?
-            }
-            Err(e) => return Err(e),
-        };
-        self.holder_raw(doc, Holder::EdgeHost, progress)
+    /// Every item of a search of the dashboard, a POST of `body` to `search`, every page.
+    fn searched(&self, search: &str, body: &Value) -> Result<Vec<Value>> {
+        self.each_continue_page(search, |path| self.api.post_json(path, body))
     }
 
-    /// The raw documents of a cluster group, in the shape of a cluster: `GET
-    /// /v1/clustergroups/{uid}` gives the profiles that the group pins for its virtual clusters
-    /// in `spec.clusterProfileTemplates`. The group holds its own copy of each manifest, which
-    /// `GET /v1/clusterprofiles/{uid}/packs/{pack}/manifests/{manifestUid}` reads by its uid; the
-    /// variables and the rest of each pack come from its profile. `group` is a uid, or, when no cluster group has that uid, the name of one
-    /// cluster group in the scope.
-    pub fn fetch_cluster_group(&self, group: &str, progress: &Progress) -> Result<RawCluster> {
-        progress.note(&format!("fetching cluster group {group}"));
-        let get = |uid: &str| {
-            self.api
-                .get_json(&format!("/v1/clustergroups/{}", query_value(uid)))
-        };
-        let doc = match get(group) {
-            Ok(doc) => doc,
-            Err(Error::Api { status: 404, .. }) => {
-                let uid = self.cluster_group_uid_named(group)?;
-                progress.note(&format!("cluster group '{group}' is {uid}"));
-                get(&uid)?
-            }
-            Err(e) => return Err(e),
-        };
-        self.holder_raw(doc, Holder::ClusterGroup, progress)
+    /// Every item of the listing at `path`, a GET, every page.
+    fn listed(&self, path: &str) -> Result<Vec<Value>> {
+        self.each_continue_page(path, |path| self.api.get_json(path))
     }
 
     /// The virtual clusters of a cluster group, `POST
@@ -1052,10 +1152,7 @@ impl<A: PaletteApi> Palette<A> {
     /// profiles that the group pins.
     pub fn cluster_group_members(&self, uid: &str) -> Result<Vec<Value>> {
         self.searched(
-            &paged(&format!(
-                "/v1/dashboard/clustergroups/{}/virtualClusters",
-                query_value(uid)
-            )),
+            &with_limit(&route(CLUSTER_GROUP_DASHBOARD, &[uid, "virtualClusters"])),
             &serde_json::json!({"filter": {}, "sort": []}),
         )
     }
@@ -1069,34 +1166,22 @@ impl<A: PaletteApi> Palette<A> {
             .collect())
     }
 
-    /// The document of the cluster group `uid`, `GET /v1/clustergroups/{uid}`: the profiles that
-    /// the group pins for its virtual clusters are in `spec.clusterProfileTemplates`.
-    pub fn cluster_group_document(&self, uid: &str) -> Result<Value> {
-        self.api
-            .get_json(&format!("/v1/clustergroups/{}", query_value(uid)))
-    }
-
     /// The uid of the one cluster group in the scope that has the name `name`, from `GET
     /// /v1/clustergroups/hostCluster/metadata`.
     fn cluster_group_uid_named(&self, name: &str) -> Result<String> {
         let groups = self.cluster_groups()?;
-        let mut uids: Vec<String> = groups
-            .iter()
-            .filter(|(n, _)| n == name)
-            .map(|(_, uid)| uid.clone())
-            .collect();
-        uids.sort();
-        match uids.len() {
-            1 => Ok(uids.remove(0)),
-            0 => Err(Error::ClusterGroupNotFound {
+        one_named(
+            uids_named(&groups, name),
+            String::as_str,
+            || Error::ClusterGroupNotFound {
                 cluster_group: name.to_string(),
                 available: sorted_names(&groups),
-            }),
-            _ => Err(Error::ClusterGroupNameAmbiguous {
+            },
+            |uids| Error::ClusterGroupNameAmbiguous {
                 name: name.to_string(),
                 uids,
-            }),
-        }
+            },
+        )
     }
 
     /// The raw documents of an object that holds profiles in `spec.clusterProfileTemplates` and
@@ -1109,10 +1194,8 @@ impl<A: PaletteApi> Palette<A> {
         let mut variables_unavailable = false;
         for t in &templates {
             let puid = str_at(t, "/uid");
-            let profile = format!("/v1/clusterprofiles/{}", query_value(puid));
             let (v, unavailable) = self.variables_or(
-                &format!("{profile}/variables"),
-                &profile,
+                &route(PROFILES, &[puid]),
                 serde_json::json!({ "variables": [] }),
                 progress,
             )?;
@@ -1162,20 +1245,10 @@ impl<A: PaletteApi> Palette<A> {
                 let mut own = Vec::with_capacity(refs.len());
                 for m in refs {
                     let muid = str_at(m, "/uid");
-                    let path = match holder {
-                        Holder::EdgeHost => format!(
-                            "/v1/edgehosts/{}/pack/manifests/{}",
-                            query_value(holder_uid),
-                            query_value(muid)
-                        ),
-                        Holder::ClusterGroup => format!(
-                            "/v1/clusterprofiles/{}/packs/{}/manifests/{}",
-                            query_value(puid),
-                            query_value(name),
-                            query_value(muid)
-                        ),
+                    let got = match holder {
+                        Holder::EdgeHost => self.edge_host_manifest(holder_uid, muid)?,
+                        Holder::ClusterGroup => self.profile_manifest(puid, name, muid)?,
                     };
-                    let got = self.api.get_json(&path)?;
                     own.push(serde_json::json!({
                         "name": got.pointer("/metadata/name").cloned()
                             .or_else(|| m.get("name").cloned()).unwrap_or(Value::Null),
@@ -1202,28 +1275,19 @@ impl<A: PaletteApi> Palette<A> {
 
     /// The uid of the one edge host in the scope that has the name `name`.
     fn edge_host_uid_named(&self, name: &str) -> Result<String> {
-        let hosts: Vec<(String, String)> = self
-            .edge_hosts()?
-            .iter()
-            .map(|h| (text(h, "/metadata/name"), text(h, "/metadata/uid")))
-            .collect();
-        let mut uids: Vec<String> = hosts
-            .iter()
-            .filter(|(n, _)| n == name)
-            .map(|(_, uid)| uid.clone())
-            .collect();
-        uids.sort();
-        match uids.len() {
-            1 => Ok(uids.remove(0)),
-            0 => Err(Error::EdgeHostNotFound {
+        let hosts = named_entries(&Value::Array(self.edge_hosts()?));
+        one_named(
+            uids_named(&hosts, name),
+            String::as_str,
+            || Error::EdgeHostNotFound {
                 edge_host: name.to_string(),
                 available: sorted_names(&hosts),
-            }),
-            _ => Err(Error::EdgeHostNameAmbiguous {
+            },
+            |uids| Error::EdgeHostNameAmbiguous {
                 name: name.to_string(),
                 uids,
-            }),
-        }
+            },
+        )
     }
 
     /// The cloud config of a cluster, `GET /v1/cloudconfigs/{cloudType}/{configUid}`, from the
@@ -1241,11 +1305,7 @@ impl<A: PaletteApi> Palette<A> {
                 message: "the cluster document names no cloud config".to_string(),
             });
         }
-        self.api.get_json(&format!(
-            "/v1/cloudconfigs/{}/{}",
-            query_value(kind),
-            query_value(uid)
-        ))
+        self.api.get_json(&route(CLOUD_CONFIGS, &[kind, uid]))
     }
 
     /// The value Palette gives each macro for the cluster or the cluster group `uid`: `GET
@@ -1260,17 +1320,13 @@ impl<A: PaletteApi> Palette<A> {
     /// [`Error::Usage`] for an edge host, before any request: strata reads no macro values for
     /// an edge host. An error of the request otherwise.
     pub fn resolved_values(&self, kind: SubjectKind, uid: &str) -> Result<Value> {
-        let base = match kind {
-            SubjectKind::Cluster => "/v1/spectroclusters",
-            SubjectKind::ClusterGroup => "/v1/clustergroups",
-            SubjectKind::EdgeHost => {
-                return Err(Error::Usage {
-                    message: "strata reads no macro values for an edge host".to_string(),
-                });
-            }
-        };
+        if kind == SubjectKind::EdgeHost {
+            return Err(Error::Usage {
+                message: "strata reads no macro values for an edge host".to_string(),
+            });
+        }
         self.api
-            .get_json(&format!("{base}/{}/packs/resolvedValues", query_value(uid)))
+            .get_json(&route(collection(kind), &[uid, "packs", "resolvedValues"]))
     }
 
     /// The value Palette gives each macro at the scope of the profile version `uid`, with no
@@ -1283,19 +1339,15 @@ impl<A: PaletteApi> Palette<A> {
     ///
     /// An error of the request, such as a 404 for a version that Palette does not have.
     pub fn profile_resolved_values(&self, uid: &str) -> Result<Value> {
-        self.api.get_json(&format!(
-            "/v1/clusterprofiles/{}/packs/resolvedValues",
-            query_value(uid)
-        ))
+        self.api
+            .get_json(&route(PROFILES, &[uid, "packs", "resolvedValues"]))
     }
 
     /// Palette's answer to whether a change of the profiles of a cluster replaces its nodes:
     /// `POST /v1/spectroclusters/{uid}/validate/repave`. The request changes nothing.
     pub fn validate_repave(&self, uid: &str, body: &Value) -> Result<Value> {
-        self.api.post_json(
-            &format!("/v1/spectroclusters/{}/validate/repave", query_value(uid)),
-            body,
-        )
+        self.api
+            .post_json(&route(CLUSTERS, &[uid, "validate", "repave"]), body)
     }
 
     /// Palette's answer to whether a change of the profiles of the cluster template `uid` replaces
@@ -1307,10 +1359,7 @@ impl<A: PaletteApi> Palette<A> {
     /// An error of the request, such as a 404 for a template that Palette does not have.
     pub fn validate_template_repave(&self, uid: &str, body: &Value) -> Result<Value> {
         self.api.post_json(
-            &format!(
-                "/v1/spectroclusters/clusterTemplates/{}/validate/repave",
-                query_value(uid)
-            ),
+            &route(CLUSTERS, &["clusterTemplates", uid, "validate", "repave"]),
             body,
         )
     }
@@ -1319,10 +1368,8 @@ impl<A: PaletteApi> Palette<A> {
     /// `POST /v1/spectroclusters/{uid}/validate/packs`, with the body of `validate/repave`. The
     /// request changes nothing.
     pub fn validate_packs(&self, uid: &str, body: &Value) -> Result<Value> {
-        self.api.post_json(
-            &format!("/v1/spectroclusters/{}/validate/packs", query_value(uid)),
-            body,
-        )
+        self.api
+            .post_json(&route(CLUSTERS, &[uid, "validate", "packs"]), body)
     }
 
     /// Palette's answer to whether it takes the packs of a profile: `POST
@@ -1331,8 +1378,8 @@ impl<A: PaletteApi> Palette<A> {
     /// a `v1ClusterProfileTemplateDraft`. The request changes nothing.
     pub fn validate_profile_packs(&self, uid: Option<&str>, body: &Value) -> Result<Value> {
         let path = match uid {
-            Some(uid) => format!("/v1/clusterprofiles/{}/validate/packs", query_value(uid)),
-            None => "/v1/clusterprofiles/validate/packs".to_string(),
+            Some(uid) => route(PROFILES, &[uid, "validate", "packs"]),
+            None => route(PROFILES, &["validate", "packs"]),
         };
         self.api.post_json(&path, body)
     }
@@ -1349,7 +1396,8 @@ impl<A: PaletteApi> Palette<A> {
     pub fn validate_profile_name(&self, name: &str, version: &str) -> Result<()> {
         self.api
             .get_json(&format!(
-                "/v1/clusterprofiles/validate/name?name={}&version={}",
+                "{}?name={}&version={}",
+                route(PROFILES, &["validate", "name"]),
                 query_value(name),
                 query_value(version)
             ))
@@ -1374,7 +1422,7 @@ impl<A: PaletteApi> Palette<A> {
     /// Each other error of the request, such as a refused connection.
     pub fn validate_profile_import(&self, body: &Value) -> Result<Value> {
         self.api
-            .post_json("/v1/clusterprofiles/import/validate", body)
+            .post_json(&route(PROFILES, &["import", "validate"]), body)
     }
 
     /// One part of the config of the cluster `uid`, `GET
@@ -1394,11 +1442,7 @@ impl<A: PaletteApi> Palette<A> {
         part: ConfigPart,
         progress: &Progress,
     ) -> Result<(Option<Value>, Option<String>)> {
-        let path = format!(
-            "/v1/spectroclusters/{}/config/{}",
-            query_value(uid),
-            part.route()
-        );
+        let path = route(CLUSTERS, &[uid, "config", part.route()]);
         let what = format!("{} of cluster {uid}", part.noun());
         match self.api.get_json(&path) {
             Err(Error::Api { status: 404, .. }) => {
@@ -1413,20 +1457,15 @@ impl<A: PaletteApi> Palette<A> {
     /// its reasons, and its state. The pack ref on each side of a reason holds the values of the
     /// pack, with the value of each macro in its place.
     pub(crate) fn cluster_repave(&self, uid: &str) -> Result<Value> {
-        self.api.get_json(&format!(
-            "/v1/spectroclusters/{}/repave/status",
-            query_value(uid)
-        ))
+        self.api
+            .get_json(&route(CLUSTERS, &[uid, "repave", "status"]))
     }
 
     /// The notifications of one cluster, `GET /v1/notifications/spectrocluster/{uid}`, every page,
     /// newest first. Palette gives `items: null` when there are none, and at most 50 on a page;
     /// `listmeta.continue` names the next page, and is empty on the last one.
     pub fn cluster_notifications(&self, uid: &str) -> Result<Vec<Value>> {
-        self.paged(&format!(
-            "/v1/notifications/spectrocluster/{}",
-            query_value(uid)
-        ))
+        self.listed(&route(CLUSTER_NOTIFICATIONS, &[uid]))
     }
 
     /// One page of the pack listing of `name`,
@@ -1435,7 +1474,7 @@ impl<A: PaletteApi> Palette<A> {
     /// whole listing.
     pub(crate) fn pack_listing_page(&self, name: &str, offset: usize) -> Result<Value> {
         self.api.get_json(&format!(
-            "/v1/packs?filters=spec.name={}&limit={PACK_LISTING_PAGE}&offset={offset}",
+            "{PACKS}?filters=spec.name={}&limit={PACK_LISTING_PAGE}&offset={offset}",
             query_value(name)
         ))
     }
@@ -1454,11 +1493,7 @@ impl<A: PaletteApi> Palette<A> {
         registry_uid: &str,
         states: Option<&str>,
     ) -> Result<Value> {
-        let path = format!(
-            "/v1/packs/{}/registries/{}",
-            query_value(name),
-            query_value(registry_uid)
-        );
+        let path = route(PACKS, &[name, "registries", registry_uid]);
         match states {
             Some(states) => self.api.get_json(&format!("{path}?states={states}")),
             None => self.api.get_json(&path),
@@ -1468,7 +1503,7 @@ impl<A: PaletteApi> Palette<A> {
     /// The registries that the key can see, `GET /v1/registries/metadata`: the `uid`, the
     /// `name`, the `kind`, and `isPrivate` of each, as `items`.
     pub(crate) fn registry_metadata(&self) -> Result<Value> {
-        self.api.get_json("/v1/registries/metadata")
+        self.api.get_json(REGISTRY_METADATA)
     }
 
     /// The summary listing of the registries of one `kind`, `GET /v1/registries/{kind}/summary`.
@@ -1476,31 +1511,7 @@ impl<A: PaletteApi> Palette<A> {
     /// also has its provider type in `spec.providerType`.
     pub(crate) fn registry_summary(&self, kind: RegistryKind) -> Result<Value> {
         self.api
-            .get_json(&format!("/v1/registries/{}/summary", kind.route()))
-    }
-
-    /// Every item of a paged listing at `path`, which may carry a query already: each page's
-    /// `items`, in order. `listmeta.continue` names the next page, and is empty on the last one;
-    /// a page with no items ends the listing too, and `items: null` is such a page.
-    fn paged(&self, path: &str) -> Result<Vec<Value>> {
-        let join = if path.contains('?') { '&' } else { '?' };
-        let mut items = Vec::new();
-        let mut next = String::new();
-        loop {
-            let page = if next.is_empty() {
-                self.api.get_json(path)?
-            } else {
-                self.api
-                    .get_json(&format!("{path}{join}continue={}", query_value(&next)))?
-            };
-            next = text(&page, "/listmeta/continue");
-            let got = take_items(page);
-            let done = got.is_empty();
-            items.extend(got);
-            if next.is_empty() || done {
-                return Ok(items);
-            }
-        }
+            .get_json(&route(REGISTRIES, &[kind.route(), "summary"]))
     }
 }
 
@@ -1638,6 +1649,11 @@ mod tests {
         );
         assert_eq!(RegistryKind::of_pack_type("helm"), Some(RegistryKind::Helm));
         assert_eq!(RegistryKind::of_pack_type("manifest"), None);
+        for kind in [RegistryKind::Pack, RegistryKind::Helm, RegistryKind::Oci] {
+            assert_eq!(RegistryKind::of_kind(kind.route()), Some(kind));
+            assert_eq!(RegistryKind::of_pack_type(kind.pack_type()), Some(kind));
+        }
+        assert_eq!(RegistryKind::of_kind("spectro"), None);
     }
 
     #[test]
@@ -1763,12 +1779,12 @@ mod tests {
         };
         let api = MemoryApi::new()
             .with_post(
-                &paged(PROFILE_SEARCH),
+                &with_limit(PROFILE_SEARCH),
                 &body,
                 json!({"items": names(0, 50), "listmeta": {"count": 51, "limit": 50, "offset": 0}}),
             )
             .with_post(
-                &format!("{}&offset=50", paged(PROFILE_SEARCH)),
+                &format!("{}&offset=50", with_limit(PROFILE_SEARCH)),
                 &body,
                 json!({"items": [{"metadata": {"name": "p50"}, "specSummary": {"versions": [
                     {"version": "1.0.0", "uid": "u50"}, {"version": "2.0.0", "uid": "u50b"}]}}],
@@ -1807,6 +1823,26 @@ mod tests {
     }
 
     #[test]
+    fn an_item_with_no_version_or_no_uid_is_not_a_version_of_the_name() {
+        // the one parse keeps each item of the listing; a resolve skips an item with no version
+        // or no uid, so a name with no other item is profile-not-found, not an empty uid
+        let listing = json!({"items": [
+            {"metadata": {"name": "x"}},
+            {"metadata": {"name": "y", "uid": "u1"}},
+            {"metadata": {"name": "y"}, "spec": {"version": "2.0.0"}},
+            {"metadata": {"name": "y", "uid": "u2"}, "spec": {"version": "1.0.0"}},
+        ]});
+        let p =
+            Palette::new(MemoryApi::new().with("/v1/dashboard/clusterprofiles/metadata", listing));
+        let err = p.resolve_latest("x").unwrap_err();
+        assert!(matches!(err, Error::ProfileNotFound { .. }), "{err}");
+        assert_eq!(p.resolve_latest("y").unwrap(), "u2");
+        assert_eq!(p.resolve("y", "1.0.0").unwrap(), "u2");
+        let err = p.resolve("y", "2.0.0").unwrap_err();
+        assert!(matches!(err, Error::ProfileNotFound { .. }), "{err}");
+    }
+
+    #[test]
     fn fetch_profile_tolerates_a_missing_variables_endpoint_only() {
         let base = MemoryApi::new()
             .with("/v1/clusterprofiles/u1", json!({"metadata": {"uid": "u1"}}))
@@ -1823,5 +1859,140 @@ mod tests {
             .fetch_profile("u1", &Progress::silent())
             .unwrap_err();
         assert!(matches!(err, Error::Api { status: 500, .. }), "{err}");
+    }
+
+    #[test]
+    fn a_uid_with_a_slash_goes_into_each_route_escaped() {
+        // with no escape, a `/` in a uid ends the segment, and a `?` starts the query
+        assert_eq!(
+            route(PROFILES, &["a/b", "packs", "x?y"]),
+            "/v1/clusterprofiles/a%2Fb/packs/x%3Fy"
+        );
+        let uid = "a/b";
+        let cluster = "/v1/spectroclusters/a%2Fb";
+        let profile = "/v1/clusterprofiles/a%2Fb";
+        let p = Palette::new(
+            MemoryApi::new()
+                .with(cluster, json!({"metadata": {"uid": uid}}))
+                .with(
+                    format!("{cluster}/packs/resolvedValues"),
+                    json!({"profiles": []}),
+                )
+                .with(
+                    "/v1/notifications/spectrocluster/a%2Fb",
+                    json!({"items": [1], "listmeta": {"continue": ""}}),
+                )
+                .with(profile, json!({"metadata": {"uid": uid}}))
+                .with(
+                    format!("{profile}/packs/manifests"),
+                    json!({"spec": {"packs": []}}),
+                )
+                .with(format!("{profile}/variables"), json!({"variables": []})),
+        );
+        let doc = p.subject_document(SubjectKind::Cluster, uid).unwrap();
+        assert_eq!(text(&doc, "/metadata/uid"), uid);
+        let values = p.resolved_values(SubjectKind::Cluster, uid).unwrap();
+        assert_eq!(values["profiles"], json!([]));
+        assert_eq!(p.cluster_notifications(uid).unwrap(), vec![json!(1)]);
+        assert_eq!(
+            text(&p.profile_document(uid).unwrap(), "/metadata/uid"),
+            uid
+        );
+        let raw = p.fetch_profile(uid, &Progress::silent()).unwrap();
+        assert_eq!(raw.variables, json!({"variables": []}));
+    }
+
+    #[test]
+    fn one_pager_walks_a_get_listing_and_a_post_search_by_continue() {
+        let notifications = "/v1/notifications/spectrocluster/c1";
+        let search = with_limit(EDGE_HOST_SEARCH);
+        let api = MemoryApi::new()
+            .with(
+                notifications,
+                json!({"items": [1, 2], "listmeta": {"continue": "t1"}}),
+            )
+            .with(
+                format!("{notifications}?continue=t1"),
+                json!({"items": [3], "listmeta": {"continue": ""}}),
+            )
+            .with(
+                format!("POST {search}"),
+                json!({"items": [4], "listmeta": {"continue": "t 2"}}),
+            )
+            .with(
+                format!("POST {search}&continue=t%202"),
+                json!({"items": null, "listmeta": {"continue": "t3"}}),
+            );
+        let p = Palette::new(&api);
+        assert_eq!(
+            p.cluster_notifications("c1").unwrap(),
+            vec![json!(1), json!(2), json!(3)]
+        );
+        // a page with no items ends the search, also with a token
+        assert_eq!(p.edge_hosts().unwrap(), vec![json!(4)]);
+        assert_eq!(api.posted().len(), 2);
+        assert_eq!(page_after("/v1/x", ""), "/v1/x");
+        assert_eq!(page_after("/v1/x", "a b"), "/v1/x?continue=a%20b");
+        assert_eq!(
+            page_after("/v1/x?limit=50", "t"),
+            "/v1/x?limit=50&continue=t"
+        );
+    }
+
+    #[test]
+    fn fetch_subject_reads_each_kind_by_uid_and_then_by_name_after_a_404() {
+        // the three kinds share one lookup: the uid first, then the one object of the name
+        let templates =
+            |uid: &str| json!({"metadata": {"uid": uid}, "spec": {"clusterProfileTemplates": []}});
+        let api = MemoryApi::new()
+            .with(
+                CLUSTER_LISTING,
+                json!([{"metadata": {"name": "lab", "uid": "c1"}}]),
+            )
+            .with(CLUSTER_SEARCH_SCHEMA, json!({"schema": {"properties": []}}))
+            .with("/v1/spectroclusters/c1", templates("c1"))
+            .with(
+                "/v1/spectroclusters/c1/profiles/packs/manifests",
+                json!({"profiles": []}),
+            )
+            .with("/v1/spectroclusters/c1/variables", json!([]))
+            .with(
+                CLUSTER_GROUP_LISTING,
+                json!({"items": [{"name": "dev", "uid": "g1"}]}),
+            )
+            .with("/v1/clustergroups/g1", templates("g1"))
+            .with(
+                format!("POST {}", with_limit(EDGE_HOST_SEARCH)),
+                json!({"items": [{"metadata": {"name": "store", "uid": "e1"}}],
+                    "listmeta": {"continue": ""}}),
+            )
+            .with("/v1/edgehosts/e1", templates("e1"));
+        let p = Palette::new(&api);
+        let quiet = Progress::silent();
+        for (kind, name, uid) in [
+            (SubjectKind::Cluster, "lab", "c1"),
+            (SubjectKind::ClusterGroup, "dev", "g1"),
+            (SubjectKind::EdgeHost, "store", "e1"),
+        ] {
+            let by_uid = p.fetch_subject(kind, uid, &quiet).unwrap();
+            assert_eq!(text(&by_uid.cluster, "/metadata/uid"), uid);
+            let by_name = p.fetch_subject(kind, name, &quiet).unwrap();
+            assert_eq!(text(&by_name.cluster, "/metadata/uid"), uid);
+            let err = p.fetch_subject(kind, "nope", &quiet).unwrap_err();
+            let expected = match kind {
+                SubjectKind::Cluster => "cluster-not-found",
+                SubjectKind::ClusterGroup => "cluster-group-not-found",
+                SubjectKind::EdgeHost => "edge-host-not-found",
+            };
+            assert_eq!(err.kind(), expected, "{err}");
+        }
+        // another error of the document by uid returns, and no name is tried
+        let lookups = api.calls(CLUSTER_LISTING);
+        let broken = api.clone().failing("/v1/spectroclusters/c9", 500, "{}");
+        let err = Palette::new(&broken)
+            .fetch_subject(SubjectKind::Cluster, "c9", &quiet)
+            .unwrap_err();
+        assert!(matches!(err, Error::Api { status: 500, .. }), "{err}");
+        assert_eq!(broken.calls(CLUSTER_LISTING), lookups);
     }
 }

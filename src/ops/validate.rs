@@ -12,8 +12,8 @@ use crate::error::{
     Error, PACK_FORBIDDEN_CODE, PACK_MACRO_UNDEFINED_CODE, PACK_REFUSAL_CODES, PROFILE_EXISTS_CODE,
     PROFILE_IMPORT_REFUSAL_CODES, PROFILE_NAME_REFUSAL_CODES, PROFILE_PACK_REFUSAL_CODES, Result,
 };
-use crate::json::str_at;
-use crate::snapshot::{AppliedProfile, Snapshot};
+use crate::registry::{Registries, registry_entry};
+use crate::snapshot::{AppliedProfile, Snapshot, SubjectKind};
 use crate::validation::{PaletteRefusal, PaletteValidation, ProfileValidation};
 
 /// The refusal of the whole request in an error of strata, when it is an HTTP error of Palette
@@ -96,10 +96,7 @@ pub fn profile_import_body(snap: &Snapshot, registries: &[Value]) -> Value {
             });
             if !p.registry_uid.is_empty() {
                 let mut metadata = json!({"uid": p.registry_uid});
-                if let Some(entry) = registries
-                    .iter()
-                    .find(|r| str_at(r, "/uid") == p.registry_uid)
-                {
+                if let Some(entry) = registry_entry(registries, "/uid", &p.registry_uid) {
                     for field in ["name", "kind", "isPrivate"] {
                         if let Some(v) = entry.get(field) {
                             metadata[field] = v.clone();
@@ -193,7 +190,7 @@ pub fn profile_validation<A: PaletteApi>(
     if uid.is_none() {
         let name = palette.validate_profile_name(&snap.source.name, &snap.source.version);
         errors.extend(refusal_in(name, name_refusal)?);
-        let body = profile_import_body(snap, &crate::candidate::registry_entries(palette)?);
+        let body = profile_import_body(snap, Registries::new(palette).metadata()?);
         errors.extend(refusal_in(
             palette.validate_profile_import(&body),
             import_refusal,
@@ -223,7 +220,8 @@ pub fn palette_validation<A: PaletteApi>(
     b: &Snapshot,
 ) -> Result<PaletteValidation> {
     let (cluster, target) = cluster_and_target(a, b, "--validate")?;
-    let running = AppliedProfile::of_cluster(&palette.cluster_document(&cluster.uid)?);
+    let running =
+        AppliedProfile::of_cluster(&palette.subject_document(SubjectKind::Cluster, &cluster.uid)?);
     match palette.validate_packs(&cluster.uid, &validate_body(&running, target)) {
         Ok(answer) => Ok(PaletteValidation::from_palette(&cluster.uid, &answer)),
         Err(e) => whole_request_refusal(&e, |status, code| match status {

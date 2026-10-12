@@ -29,6 +29,7 @@ The crate is edition 2024 and needs Rust 1.88 or later. `rust-version` in
 | `src/impact.rs` | The impact of a change to a pack: the rules table and its levels. |
 | `src/render/` | The output: `terminal.rs`, `markdown.rs`, and `json.rs`, with the shared lines in `mod.rs` and the unified diffs of `--full` in `unified.rs`. |
 | `src/candidate.rs` | The candidate file: its rules, and the snapshot it gives. |
+| `src/registry.rs` | The registries of Palette: the listings, read one time for each command. The registry that a name or a uid names, and the last sync of a registry. |
 | `src/json.rs` | The reads of a document of Palette: text, arrays, the items of a listing, and the first text that is not empty. Each module reads a document with them. |
 | `src/text.rs` | The texts that a message builds from a list of names, such as `a, b, and c`. |
 | `src/config.rs`, `src/error.rs`, `src/color.rs`, `src/progress.rs` | The settings, the error kinds and their exit codes, the color decision, and the progress notes on standard error. |
