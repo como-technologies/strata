@@ -2872,7 +2872,7 @@ fn with_pinning_group(api: MemoryApi) -> MemoryApi {
 fn the_second_reading_asks_for_no_virtual_cluster_when_the_search_takes_no_environment() {
     // an older Palette: its search takes clusterProfiles, and not environment. Strata sends the
     // one search, and not the second one with environment eq nested, as list clusters and
-    // cluster:<name> do (#321). Here the second one would get a 404, and the reading would fail
+    // cluster:<name> do (#321). Here the second one gets a 404, and the reading fails
     let dir = tempfile::tempdir().unwrap();
     common::make_fixtures(dir.path());
     let mut runs = cluster_doc("cluster-ccc", "gamma", "p1", "Running");
