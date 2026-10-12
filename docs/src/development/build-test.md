@@ -28,7 +28,7 @@ The crate is edition 2024 and needs Rust 1.88 or later. `rust-version` in
 | `src/impact.rs` | The impact of a change to a pack: the rules table and its levels. |
 | `src/render/` | The output: `terminal.rs`, `markdown.rs`, and `json.rs`, with the shared lines in `mod.rs` and the unified diffs of `--full` in `unified.rs`. |
 | `src/candidate.rs` | The candidate file: its rules, and the snapshot it gives. |
-| `src/json.rs` | The reads of a document of Palette: the text, the array, and the texts at a pointer, the items of a listing, and the first text that is not empty. Each module reads a document with them. |
+| `src/json.rs` | The reads of a document of Palette: text, arrays, the items of a listing, and the first text that is not empty. Each module reads a document with them. |
 | `src/config.rs`, `src/error.rs`, `src/color.rs`, `src/progress.rs` | The settings, the error kinds and their exit codes, the color decision, and the progress notes on standard error. |
 | `src/canon.rs`, `src/layer.rs`, `src/version.rs`, `src/reference.rs` | The canonical form, the layers, the version order, and what a ref means. |
 | `xtask/` | The development tools: the stand-in for the Palette API (`palette.rs`), the tenant of each chapter of the book (`tenant.rs`, `chapters.rs`), and the runner that writes `docs/src/output/` (`book.rs`). |

@@ -1342,7 +1342,7 @@ impl<A: PaletteApi> Resolver<'_, A> {
                 .unwrap_or_else(|| l.version.clone()),
         };
         // the default values of the version: the listing, and the tags route when the listing
-        // gives none. `values: ""` in the file is empty values, so the file is not read this way
+        // gives none. The file keeps `values: ""` as empty values, so this rule does not read it
         let pack_values = arr(&entity, "/packValues")
             .iter()
             .find(|v| str_at(v, "/packUid") == pack_uid)
@@ -1917,7 +1917,7 @@ variables:
     fn a_layer_with_no_values_takes_the_default_values_of_the_tags_route_when_the_listing_gives_none()
      {
         // the listing gives `values: ""`, so the default values of the version come from the
-        // tags route; a layer with values in the file keeps them
+        // tags route. A layer with values in the file keeps them
         let palette = served_with_values(&STACK_LAYERS, &vec![json!(["aws"]); 5], "b: 2");
         let raw = resolved(stack(), &palette).unwrap();
         let packs = &raw.profile["spec"]["published"]["packs"];

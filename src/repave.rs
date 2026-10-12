@@ -36,9 +36,9 @@ pub struct PaletteRepaveReason {
 }
 
 impl PaletteRepaveReason {
-    /// Each reason of the list at the pointer `ptr` of `doc`, in the order of Palette: `reasons`
-    /// of an answer of `validate/repave`, or `spec.reasons` of the repave of a cluster. No list
-    /// gives no reason.
+    /// Each reason of the list at the pointer `ptr` of `doc`, in the order of Palette. The list
+    /// is `reasons` of an answer of `validate/repave`, or `spec.reasons` of the repave of a
+    /// cluster. No list gives no reason.
     pub(crate) fn read_all(doc: &Value, ptr: &str) -> Vec<PaletteRepaveReason> {
         arr(doc, ptr)
             .iter()

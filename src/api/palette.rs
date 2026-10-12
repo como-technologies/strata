@@ -17,8 +17,9 @@ use crate::version;
 const PROFILE_LISTING: &str = "/v1/dashboard/clusterprofiles/metadata";
 /// The profile search. It pages by `offset`.
 const PROFILE_SEARCH: &str = "/v1/dashboard/clusterprofiles";
-/// The most entries that Palette serves on one page of a search of the dashboard: the profile
-/// search, the cluster search, the edge host search, and the virtual clusters of a cluster group.
+/// The most entries that Palette serves on one page of a search of the dashboard. The searches:
+/// the profile search, the cluster search, the edge host search, and the virtual clusters of a
+/// cluster group.
 const SEARCH_PAGE: usize = 50;
 /// The most entries that Palette serves on one page of the pack listing, `/v1/packs`.
 pub(crate) const PACK_LISTING_PAGE: usize = 100;

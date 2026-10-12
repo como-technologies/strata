@@ -1206,7 +1206,7 @@ pub struct AuditResource {
 impl AuditEntry {
     /// Read one item of `GET /v1/audits`.
     pub fn from_palette(item: &Value) -> AuditEntry {
-        // Palette pads a name of a user with spaces
+        // no space around a name or a message in the record
         let text = |ptr: &str| str_at(item, ptr).trim().to_string();
         let actor_type = text("/spec/actor/actorType");
         let full_name = format!(
