@@ -260,8 +260,8 @@ impl<'a, A: PaletteApi> Registries<'a, A> {
 }
 
 /// The entry of the registry `uid` in `entries`, the items of a registry listing, where `ptr`
-/// points to the uid of each entry.
-fn registry_entry<'e>(entries: &'e [Value], ptr: &str, uid: &str) -> Option<&'e Value> {
+/// points to the uid of each entry: `/uid` in the metadata listing, `/metadata/uid` in a summary.
+pub(crate) fn registry_entry<'e>(entries: &'e [Value], ptr: &str, uid: &str) -> Option<&'e Value> {
     entries.iter().find(|it| str_at(it, ptr) == uid)
 }
 

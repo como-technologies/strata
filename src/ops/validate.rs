@@ -12,8 +12,7 @@ use crate::error::{
     Error, PACK_FORBIDDEN_CODE, PACK_MACRO_UNDEFINED_CODE, PACK_REFUSAL_CODES, PROFILE_EXISTS_CODE,
     PROFILE_IMPORT_REFUSAL_CODES, PROFILE_NAME_REFUSAL_CODES, PROFILE_PACK_REFUSAL_CODES, Result,
 };
-use crate::json::str_at;
-use crate::registry::Registries;
+use crate::registry::{Registries, registry_entry};
 use crate::snapshot::{AppliedProfile, Snapshot, SubjectKind};
 use crate::validation::{PaletteRefusal, PaletteValidation, ProfileValidation};
 
@@ -97,10 +96,7 @@ pub fn profile_import_body(snap: &Snapshot, registries: &[Value]) -> Value {
             });
             if !p.registry_uid.is_empty() {
                 let mut metadata = json!({"uid": p.registry_uid});
-                if let Some(entry) = registries
-                    .iter()
-                    .find(|r| str_at(r, "/uid") == p.registry_uid)
-                {
+                if let Some(entry) = registry_entry(registries, "/uid", &p.registry_uid) {
                     for field in ["name", "kind", "isPrivate"] {
                         if let Some(v) = entry.get(field) {
                             metadata[field] = v.clone();
