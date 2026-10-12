@@ -6,6 +6,7 @@ use std::collections::BTreeSet;
 use serde_json::Value;
 
 use super::{AuditKind, PaletteApi, RawCluster, RawProfile, ReadErrors, mask};
+use crate::cloud::{CLOUD_ALL, CLOUD_NESTED};
 use crate::error::{Error, Result, unread_reason};
 use crate::json::{arr, items, opt_text, str_at, take_items, text};
 use crate::progress::Progress;
@@ -38,9 +39,6 @@ pub(crate) const SEARCH_TAGS: &str = "tags";
 pub(crate) const SEARCH_ENVIRONMENT: &str = "environment";
 /// The property of the cluster search that takes the name of a profile that a cluster runs.
 pub(crate) const SEARCH_CLUSTER_PROFILES: &str = "clusterProfiles";
-/// The cloud type of a virtual cluster. The cluster listing leaves out each cluster of this cloud
-/// type, and the search does too, unless a condition on `environment` asks for it.
-pub(crate) const NESTED_CLOUD: &str = "nested";
 const TAG_FILTER_LISTING: &str = "/v1/filters/metadata?filterType=tag";
 /// The most entries that Palette serves on one page of the audit log. A larger `limit` answers
 /// `500` with the code `InvalidLimit`. The API reference gives 50, but Palette serves 100.
@@ -115,13 +113,13 @@ pub(crate) fn search_condition(property: &str, values: &[String], negation: bool
 }
 
 /// `filter` with one more group, the condition that asks the search for the virtual clusters:
-/// `environment` equals [`NESTED_CLOUD`]. `filter` joins its groups with `and`; `Null` has no
+/// `environment` equals [`CLOUD_NESTED`]. `filter` joins its groups with `and`; `Null` has no
 /// group, so the result selects each virtual cluster.
 fn with_nested(filter: &Value) -> Value {
     let mut groups = arr(filter, "/filterGroups").to_vec();
     groups.push(serde_json::json!({
         "conjunction": "and",
-        "filters": [search_condition(SEARCH_ENVIRONMENT, &[NESTED_CLOUD.to_string()], false)],
+        "filters": [search_condition(SEARCH_ENVIRONMENT, &[CLOUD_NESTED.to_string()], false)],
     }));
     serde_json::json!({"conjunction": "and", "filterGroups": groups})
 }
@@ -445,7 +443,7 @@ impl<A: PaletteApi> Palette<A> {
             profile: serde_json::json!({
                 "metadata": doc["metadata"],
                 "spec": {"version": doc["spec"]["version"],
-                    "published": {"type": APP_KIND, "cloudType": "all", "packs": packs}},
+                    "published": {"type": APP_KIND, "cloudType": CLOUD_ALL, "packs": packs}},
             }),
             manifests: serde_json::json!({"spec": {"packs": mpacks}}),
             variables: serde_json::json!({ "variables": [] }),

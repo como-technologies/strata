@@ -478,19 +478,29 @@ for a pack that Spectro Cloud disabled or deleted: see
 [Pack states](#pack-states). In a FIPS tenant, the answer also leaves out each
 version that is not FIPS compliant: see [The FIPS rule](#the-fips-rule).
 
-## The cloud type `all`
+## A pack that supports a cloud
 
-A pack that supports every cloud has the cloud type `all` in `cloudTypes`. A
-filter of Palette on one cloud keeps that pack: the request
-`GET /v1/packs/<name>/registries/<uid>?cloudType=aws` adds `all` to the
-filter. The create of a profile also accepts a pack with `all` for each cloud:
-see [The gaps that strata fills](profiles.md#the-gaps-that-strata-fills).
+A pack names the clouds that it supports in `cloudTypes`. The cloud type `all`
+names each cloud. The create of a profile version refuses a pack that does not
+support the cloud of the profile, with the code `PackNotSupported`. The rule:
 
-So `strata packs --cloud aws` keeps a version whose cloud types hold `aws` or
-`all`, and `strata behind` does the same. The example's own packs have
-`cloudTypes: ["all"]` in their `pack.json`. The listing gives such a version
-`all` and each cloud of Palette beside it. So `--cloud aws` keeps it by `aws`
-too. `registry.sh` stage 6 shows it: see
+- A pack with no cloud type supports each cloud.
+- Each pack supports the cloud `all`.
+- Each other pack supports the clouds in its cloud types. When one of them is
+  `all`, it supports each cloud. When one of them is `custom`, it supports each
+  custom cloud: a cloud type that Palette does not know.
+
+Strata asks this rule in each place that needs it: `strata packs --cloud`,
+`strata behind`, and the check of a candidate. That check runs before the
+create: see [The gaps that strata fills](profiles.md#the-gaps-that-strata-fills).
+So `packs --cloud aws` keeps a version whose cloud types hold `aws` or `all`,
+and a version with no cloud type. `--cloud all` keeps each version. The filter
+of Palette on one cloud keeps a pack with `all` too: the request
+`GET /v1/packs/<name>/registries/<uid>?cloudType=aws` adds `all` to the filter.
+
+The example's own packs have `cloudTypes: ["all"]` in their `pack.json`. The
+listing gives such a version `all` and each cloud of Palette beside it. So
+`--cloud aws` keeps it by `aws` too. `registry.sh` stage 6 shows it: see
 [Live runs](../../development/live-runs.md#registrysh).
 
 ## The architectures of a version

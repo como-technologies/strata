@@ -25,7 +25,9 @@ under a pin name each record that pins it.
 
 - **A newer version** is one that a person can move to. A version that Spectro
   Cloud disabled or deleted is not, and a version for none of the clouds of the
-  pinned version is not either. A deprecated version is, and it says so. See
+  pinned version is not either: see
+  [A pack that supports a cloud](../internals/palette/packs.md#a-pack-that-supports-a-cloud).
+  A deprecated version is, and it says so. See
   [Pack states](../internals/palette/packs.md#pack-states).
 - **A newer version that drops an architecture** says so: `1.36.2 (drops arm64)`.
   The registry names the processor architectures of most versions, `amd64` or

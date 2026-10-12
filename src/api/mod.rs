@@ -22,8 +22,7 @@ pub use audit::AuditKind;
 pub use http::HttpApi;
 pub use memory::MemoryApi;
 pub(crate) use palette::{
-    NESTED_CLOUD, PACK_LISTING_PAGE, RegistryKind, SEARCH_CLUSTER_PROFILES, SEARCH_TAGS,
-    search_condition,
+    PACK_LISTING_PAGE, RegistryKind, SEARCH_CLUSTER_PROFILES, SEARCH_TAGS, search_condition,
 };
 pub use palette::{Palette, SearchedClusters};
 pub use raw::{RawCluster, RawProfile, ReadErrors, has_draft};

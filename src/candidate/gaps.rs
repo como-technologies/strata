@@ -7,25 +7,8 @@
 //! strata fills".
 
 use super::{Candidate, CandidateLayer, MANIFEST, MANIFEST_LAYER, PACK_TYPE, loose_semver};
+use crate::cloud::{Cloud, supports};
 use crate::text::and_list;
-
-/// The cloud types that Palette knows. Each other cloud type is a custom cloud.
-const KNOWN_CLOUDS: &[&str] = &[
-    "all",
-    "baremetal",
-    "maas",
-    "aws",
-    "gcp",
-    "azure",
-    "vsphere",
-    "eks",
-    "aks",
-    "apache-cloudstack",
-    "edge-native",
-    "nested",
-    "gke",
-    "generic",
-];
 
 /// What strata says after each refusal of this module.
 pub(super) const GAP: &str = "Palette checks this only at the create, and no route that takes a \
@@ -77,8 +60,8 @@ fn layers_of_type(kind: &str) -> Option<&'static [&'static str]> {
 /// The layers that a `cluster` or `infra` profile must have: `os`, `k8s`, and `cni` on the cloud
 /// `edge-native`, and `csi` too on each other cloud. None for each other type.
 fn core_layers(kind: &str, cloud: &str) -> Option<&'static [&'static str]> {
-    match (kind, cloud) {
-        ("cluster" | "infra", "edge-native") => Some(&["os", "k8s", "cni"]),
+    match (kind, Cloud::of(cloud)) {
+        ("cluster" | "infra", Cloud::EdgeNative) => Some(&["os", "k8s", "cni"]),
         ("cluster" | "infra", _) => Some(&["os", "k8s", "cni", "csi"]),
         _ => None,
     }
@@ -136,30 +119,16 @@ pub(super) fn check_layers(c: &Candidate, layers: &[Option<&str>]) -> Result<(),
     Ok(())
 }
 
-/// Whether a pack whose listing gives the cloud types `clouds` goes in a profile of the cloud
-/// `cloud`.
-///
-/// This is true for the cloud `all`, and for a pack with no cloud type. It is also true for a pack
-/// of that cloud or of `all`, and for a pack of `custom` on a custom cloud.
-fn cloud_supported(cloud: &str, clouds: &[String]) -> bool {
-    let custom = !KNOWN_CLOUDS.contains(&cloud);
-    cloud == "all"
-        || clouds.is_empty()
-        || clouds
-            .iter()
-            .any(|c| c == cloud || c == "all" || (custom && c == "custom"))
-}
-
 /// Check that `l`, the layer `i` of a profile of the cloud `cloud`, supports that cloud. `clouds`
-/// are the cloud types that the listing of the registry gives for its pack. A candidate with no
-/// cloud takes each pack.
+/// are the cloud types that the listing of the registry gives for its pack. The rule is
+/// [`supports`]. A candidate with no cloud takes each pack.
 pub(super) fn check_cloud(
     cloud: &str,
     i: usize,
     l: &CandidateLayer,
     clouds: &[String],
 ) -> Result<(), String> {
-    if cloud.is_empty() || cloud_supported(cloud, clouds) {
+    if cloud.is_empty() || supports(clouds, cloud) {
         return Ok(());
     }
     Err(CreateRule::Cloud.refuse(&format!(

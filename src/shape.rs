@@ -6,6 +6,7 @@
 use serde_json::{Map, Value, json};
 
 use crate::api::RawCluster;
+use crate::cloud::Cloud;
 use crate::json::{arr, str_at};
 
 /// The key of the shape fields that names the cloud type of the cluster. A record from before
@@ -84,146 +85,118 @@ const LEGACY_CLOUD_FIELDS: &[&str] = &[
     "overrideClusterAPIConfig",
 ];
 
-/// The model of a cloud config, by the cloud type of the cluster. Palette gives the cloud config
-/// of AKS in the model of Azure, and that of GKE in the model of GCP.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Cloud {
-    Aws,
-    Eks,
-    Gcp,
-    Azure,
-    Vsphere,
-    EdgeNative,
-    Maas,
-    Openstack,
-    Cloudstack,
-    /// A cloud type that strata does not read by name. The tier holds the fields of an older
-    /// record, so that it holds no fewer fields than before.
-    Other,
+/// The machine pool fields of the cloud `cloud`, in addition to [`POOL_FIELDS`]. Palette gives
+/// the cloud config of AKS in the model of Azure, and that of GKE in the model of GCP. A cloud
+/// whose fields strata does not read by name gets the fields of an older record. So the tier
+/// holds no fewer fields than before.
+fn pool_fields(cloud: Cloud) -> &'static [&'static str] {
+    match cloud {
+        Cloud::Aws => &["rootDeviceSize", "capacityType", "spotMarketOptions"],
+        // a managed node group: also the image family and the launch template of its nodes
+        Cloud::Eks => &[
+            "rootDeviceSize",
+            "capacityType",
+            "spotMarketOptions",
+            "amiType",
+            "awsLaunchTemplate",
+        ],
+        Cloud::Gcp | Cloud::Gke => &["rootDeviceSize", "subnet"],
+        Cloud::Azure | Cloud::Aks => &[
+            "osDisk",
+            "osType",
+            "osSku",
+            "isSystemNodePool",
+            "spotVMOptions",
+        ],
+        // the compute cluster, datastore, folder, resource pool, and network of the pool
+        Cloud::Vsphere => &["placements"],
+        // the edge hosts of the pool
+        Cloud::EdgeNative => &["hosts", "osType"],
+        Cloud::Maas => &["network", "resourcePool", "tags", "useLxdVm"],
+        // the flavor, the image, and the root volume of each node, and the subnet of the pool
+        Cloud::Openstack => &["flavorConfig", "image", "diskGiB", "subnet"],
+        // Palette gives `instanceConfig` from the offering, so it stays out
+        Cloud::Cloudstack => &["offering", "template", "networks"],
+        Cloud::All | Cloud::Baremetal | Cloud::Nested | Cloud::Generic | Cloud::Custom => {
+            LEGACY_POOL_FIELDS
+        }
+    }
 }
 
-impl Cloud {
-    fn of(cloud_type: &str) -> Cloud {
-        match cloud_type {
-            "aws" => Cloud::Aws,
-            "eks" => Cloud::Eks,
-            "gcp" | "gke" => Cloud::Gcp,
-            "azure" | "aks" => Cloud::Azure,
-            "vsphere" => Cloud::Vsphere,
-            "edge-native" => Cloud::EdgeNative,
-            "maas" => Cloud::Maas,
-            "openstack" => Cloud::Openstack,
-            "apache-cloudstack" => Cloud::Cloudstack,
-            _ => Cloud::Other,
-        }
-    }
-
-    /// The machine pool fields of this cloud, in addition to [`POOL_FIELDS`].
-    fn pool_fields(self) -> &'static [&'static str] {
-        match self {
-            Cloud::Aws => &["rootDeviceSize", "capacityType", "spotMarketOptions"],
-            // a managed node group: also the image family and the launch template of its nodes
-            Cloud::Eks => &[
-                "rootDeviceSize",
-                "capacityType",
-                "spotMarketOptions",
-                "amiType",
-                "awsLaunchTemplate",
-            ],
-            Cloud::Gcp => &["rootDeviceSize", "subnet"],
-            Cloud::Azure => &[
-                "osDisk",
-                "osType",
-                "osSku",
-                "isSystemNodePool",
-                "spotVMOptions",
-            ],
-            // the compute cluster, datastore, folder, resource pool, and network of the pool
-            Cloud::Vsphere => &["placements"],
-            // the edge hosts of the pool
-            Cloud::EdgeNative => &["hosts", "osType"],
-            Cloud::Maas => &["network", "resourcePool", "tags", "useLxdVm"],
-            // the flavor, the image, and the root volume of each node, and the subnet of the pool
-            Cloud::Openstack => &["flavorConfig", "image", "diskGiB", "subnet"],
-            // Palette gives `instanceConfig` from the offering, so it stays out
-            Cloud::Cloudstack => &["offering", "template", "networks"],
-            Cloud::Other => LEGACY_POOL_FIELDS,
-        }
-    }
-
-    /// The cloud part fields of this cloud, in addition to [`CLOUD_FIELDS`]. The network that
-    /// Palette makes for each cluster, such as its VPC, stays out.
-    fn cloud_fields(self) -> &'static [&'static str] {
-        match self {
-            Cloud::Aws => &[
-                "region",
-                "sshKeyName",
-                "controlPlaneLoadBalancer",
-                "bastionDisabled",
-            ],
-            // a managed control plane: also who reaches its API server, its managed add-ons, and
-            // the encryption of its secrets
-            Cloud::Eks => &[
-                "region",
-                "sshKeyName",
-                "controlPlaneLoadBalancer",
-                "bastionDisabled",
-                "endpointAccess",
-                "addons",
-                "encryptionConfig",
-            ],
-            // on GKE, `managedClusterConfig` holds the settings of the managed control plane
-            Cloud::Gcp => &["region", "project", "network", "managedClusterConfig"],
-            Cloud::Azure => &[
-                "location",
-                "resourceGroup",
-                "subscriptionId",
-                "sshKey",
-                "vnetName",
-                "vnetResourceGroup",
-                "vnetCidrBlock",
-                "controlPlaneSubnet",
-                "workerSubnet",
-                "aadProfile",
-                "apiServerAccessProfile",
-                "infraLBConfig",
-                "enablePrivateCluster",
-            ],
-            Cloud::Vsphere => &[
-                "placement",
-                "ntpServers",
-                "staticIp",
-                "sshKeys",
-                "controlPlaneEndpoint",
-            ],
-            Cloud::EdgeNative => &[
-                "controlPlaneEndpoint",
-                "isTwoNodeCluster",
-                "ntpServers",
-                "overlayNetworkConfiguration",
-                "staticIp",
-                "sshKeys",
-            ],
-            Cloud::Maas => &["domain", "enableLxdVm", "ntpServers", "staticIp", "sshKeys"],
-            Cloud::Openstack => &[
-                "region",
-                "project",
-                "domain",
-                "sshKeyName",
-                "bastionDisabled",
-                "network",
-                "subnet",
-                "nodeCidr",
-                "dnsNameservers",
-            ],
-            Cloud::Cloudstack => &[
-                "project",
-                "zones",
-                "sshKeyName",
-                "controlPlaneEndpoint",
-                "syncWithCKS",
-            ],
-            Cloud::Other => LEGACY_CLOUD_FIELDS,
+/// The cloud part fields of the cloud `cloud`, in addition to [`CLOUD_FIELDS`]. The network that
+/// Palette makes for each cluster, such as its VPC, stays out.
+fn cloud_fields(cloud: Cloud) -> &'static [&'static str] {
+    match cloud {
+        Cloud::Aws => &[
+            "region",
+            "sshKeyName",
+            "controlPlaneLoadBalancer",
+            "bastionDisabled",
+        ],
+        // a managed control plane: also who reaches its API server, its managed add-ons, and
+        // the encryption of its secrets
+        Cloud::Eks => &[
+            "region",
+            "sshKeyName",
+            "controlPlaneLoadBalancer",
+            "bastionDisabled",
+            "endpointAccess",
+            "addons",
+            "encryptionConfig",
+        ],
+        // on GKE, `managedClusterConfig` holds the settings of the managed control plane
+        Cloud::Gcp | Cloud::Gke => &["region", "project", "network", "managedClusterConfig"],
+        Cloud::Azure | Cloud::Aks => &[
+            "location",
+            "resourceGroup",
+            "subscriptionId",
+            "sshKey",
+            "vnetName",
+            "vnetResourceGroup",
+            "vnetCidrBlock",
+            "controlPlaneSubnet",
+            "workerSubnet",
+            "aadProfile",
+            "apiServerAccessProfile",
+            "infraLBConfig",
+            "enablePrivateCluster",
+        ],
+        Cloud::Vsphere => &[
+            "placement",
+            "ntpServers",
+            "staticIp",
+            "sshKeys",
+            "controlPlaneEndpoint",
+        ],
+        Cloud::EdgeNative => &[
+            "controlPlaneEndpoint",
+            "isTwoNodeCluster",
+            "ntpServers",
+            "overlayNetworkConfiguration",
+            "staticIp",
+            "sshKeys",
+        ],
+        Cloud::Maas => &["domain", "enableLxdVm", "ntpServers", "staticIp", "sshKeys"],
+        Cloud::Openstack => &[
+            "region",
+            "project",
+            "domain",
+            "sshKeyName",
+            "bastionDisabled",
+            "network",
+            "subnet",
+            "nodeCidr",
+            "dnsNameservers",
+        ],
+        Cloud::Cloudstack => &[
+            "project",
+            "zones",
+            "sshKeyName",
+            "controlPlaneEndpoint",
+            "syncWithCKS",
+        ],
+        Cloud::All | Cloud::Baremetal | Cloud::Nested | Cloud::Generic | Cloud::Custom => {
+            LEGACY_CLOUD_FIELDS
         }
     }
 }
@@ -236,7 +209,7 @@ pub(crate) fn fields(cluster: &Value, cloud_config: &Value) -> Value {
     let cloud = Cloud::of(cloud_type);
     let mut pools: Vec<Value> = arr(cloud_config, "/spec/machinePoolConfig")
         .iter()
-        .map(|p| pick(p, &[POOL_FIELDS, cloud.pool_fields()]))
+        .map(|p| pick(p, &[POOL_FIELDS, pool_fields(cloud)]))
         .collect();
     pools.sort_by(|a, b| str_at(a, "/name").cmp(str_at(b, "/name")));
     let part = cloud_config
@@ -244,7 +217,7 @@ pub(crate) fn fields(cluster: &Value, cloud_config: &Value) -> Value {
         .unwrap_or(&Value::Null);
     json!({
         CLOUD_TYPE: cloud_type,
-        "cloud": pick(part, &[CLOUD_FIELDS, cloud.cloud_fields()]),
+        "cloud": pick(part, &[CLOUD_FIELDS, cloud_fields(cloud)]),
         "pools": pools,
     })
 }
@@ -301,14 +274,22 @@ mod tests {
     use super::*;
 
     #[test]
-    fn each_cloud_type_names_one_model_and_an_unknown_type_reads_the_fields_of_an_older_record() {
-        assert_eq!(Cloud::of("aks"), Cloud::Azure);
-        assert_eq!(Cloud::of("gke"), Cloud::Gcp);
-        assert_eq!(Cloud::of("edge-native"), Cloud::EdgeNative);
-        assert_eq!(Cloud::of("openstack"), Cloud::Openstack);
-        assert_eq!(Cloud::of("apache-cloudstack"), Cloud::Cloudstack);
-        assert_eq!(Cloud::of("custom"), Cloud::Other);
-        assert_eq!(Cloud::Other.pool_fields(), LEGACY_POOL_FIELDS);
-        assert_eq!(Cloud::Other.cloud_fields(), LEGACY_CLOUD_FIELDS);
+    fn a_managed_cloud_reads_the_model_of_its_cloud_and_an_unknown_type_the_fields_of_an_older_record()
+     {
+        assert_eq!(pool_fields(Cloud::Aks), pool_fields(Cloud::Azure));
+        assert_eq!(cloud_fields(Cloud::Aks), cloud_fields(Cloud::Azure));
+        assert_eq!(pool_fields(Cloud::Gke), pool_fields(Cloud::Gcp));
+        assert_eq!(cloud_fields(Cloud::Gke), cloud_fields(Cloud::Gcp));
+        assert_ne!(cloud_fields(Cloud::Eks), cloud_fields(Cloud::Aws));
+        for cloud in [
+            Cloud::Custom,
+            Cloud::Baremetal,
+            Cloud::Nested,
+            Cloud::Generic,
+            Cloud::All,
+        ] {
+            assert_eq!(pool_fields(cloud), LEGACY_POOL_FIELDS, "{cloud:?}");
+            assert_eq!(cloud_fields(cloud), LEGACY_CLOUD_FIELDS, "{cloud:?}");
+        }
     }
 }

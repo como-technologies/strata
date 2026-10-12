@@ -11,6 +11,7 @@ use serde_json::Value;
 
 use crate::api::{Palette, PaletteApi};
 use crate::candidate::RegistrySyncNote;
+use crate::cloud::supports;
 use crate::diff::RegistrySync;
 use crate::error::{Error, Result};
 use crate::impact::ImpactLevel;
@@ -18,7 +19,7 @@ use crate::progress::Progress;
 use crate::snapshot::{Snapshot, Tool, load_document};
 use crate::version;
 
-use super::packs::{PackBuild, PackOptions, registry_packs, supports};
+use super::packs::{PackBuild, PackOptions, registry_packs};
 use super::scope_of;
 
 /// The schema id of the document `behind` writes.
@@ -330,12 +331,10 @@ where
         let clouds: Vec<String> = pinned.map(|b| b.cloud_types.clone()).unwrap_or_default();
         let architectures: Vec<String> =
             pinned.map(|b| b.architectures.clone()).unwrap_or_default();
-        let fits = |b: &PackBuild| {
-            clouds.is_empty()
-                || clouds.iter().any(|c| c == "all")
-                || b.cloud_types.is_empty()
-                || clouds.iter().any(|c| supports(&b.cloud_types, c))
-        };
+        // a newer version fits when it supports one cloud of the pinned version. A pinned version
+        // with no cloud type supports each cloud, so each newer version fits it
+        let fits =
+            |b: &PackBuild| clouds.is_empty() || clouds.iter().any(|c| supports(&b.cloud_types, c));
         pin.newer = builds
             .iter()
             .filter(|b| version::compare(&b.version, &pin.version) == std::cmp::Ordering::Greater)

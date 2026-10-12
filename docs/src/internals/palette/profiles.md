@@ -405,7 +405,7 @@ create. Strata checks each rule before any request. The refusal is
 | --- | --- |
 | The type of the profile takes the layer of each pack. An `infra` profile takes `os`, `k8s`, `cni`, and `csi`. A `cluster` profile takes each layer. Each other type takes `addon`, `cni`, and `csi`. | `ClusterProfilePackNotAllowed` |
 | A `cluster` or `infra` profile has an `os`, a `k8s`, a `cni`, and a `csi` layer. On the cloud `edge-native`, it needs no `csi` layer. | `ErrPackCoreLayersMissing` |
-| Each pack supports the cloud of the profile. This is true when the cloud is `all`, or when the pack has no cloud type. It is also true when the cloud types of the pack hold the cloud, `all`, or `custom` for a cloud that Palette does not know. | `PackNotSupported` |
+| Each pack supports the cloud of the profile: see [A pack that supports a cloud](./packs.md#a-pack-that-supports-a-cloud). | `PackNotSupported` |
 | The tag of a pack that Palette makes for a registry that it does not sync is a semantic version, or holds three numbers with dots between them. | `InvalidPackVersion` |
 
 The layer of a pack comes from the pack in its registry, and not from the

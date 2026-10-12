@@ -6,7 +6,8 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::api::{NESTED_CLOUD, Palette, PaletteApi};
+use crate::api::{Palette, PaletteApi};
+use crate::cloud::Cloud;
 use crate::error::{Error, Result};
 use crate::progress::Progress;
 use crate::scope::ProfileScope;
@@ -188,7 +189,7 @@ impl VirtualCluster {
     /// cluster of the cloud type `nested`, with the group and the host that `status.virtual`
     /// names.
     fn of_item(it: &Value, cloud_type: &str) -> Option<Self> {
-        (cloud_type == NESTED_CLOUD).then(|| VirtualCluster {
+        (Cloud::of(cloud_type) == Cloud::Nested).then(|| VirtualCluster {
             cluster_group: NamedObject::at(it, "/status/virtual/clusterGroup"),
             host_cluster: NamedObject::at(it, "/status/virtual/hostCluster"),
         })
