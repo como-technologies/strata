@@ -46,8 +46,8 @@ the kind.
 | `filter-name-ambiguous` | Two or more saved tag filters have this name. | `name`, `uids` |
 | `app-profile-not-found` | No app profile in the scope has this name and version. | `name`, `version`, `available` |
 | `not-snapshot` | The file is not a strata snapshot. | `path` |
-| `unsupported-schema` | The snapshot has a schema id that this strata does not read. | `path`, `found`, `supported` |
-| `snapshot-schema` | The snapshot does not match its schema. | `path`, `schema` |
+| `unsupported-schema` | The file is a record, or a report for `behind --since`, of a schema id that this strata does not read. | `path`, `found`, `supported` |
+| `snapshot-schema` | The record, or the report for `behind --since`, does not match its schema. | `path`, `schema` |
 | `no-uid` | The record has no uid, for example a candidate record. | |
 | `io` | Strata cannot read or write the file. | `path` |
 | `empty-file` | A file in a `--from-raw` directory is empty. | `path` |

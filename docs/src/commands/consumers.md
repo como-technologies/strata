@@ -101,9 +101,10 @@ names `tenant-a` alone:
 ```
 
 Exit `1`. The second reading asks the cluster search of Palette for the
-clusters that run the profile. It sends two searches: one with
-`clusterProfiles` equal to the name of the profile, and one that also has the
-environment `nested`. The search takes a name, and not a uid, so it names the
+clusters that run the profile. It sends one search with `clusterProfiles` equal
+to the name of the profile. When the search takes `environment`, it sends a
+second one that also has the environment `nested`, as `list clusters` does. The
+search takes a name, and not a uid, so it names the
 clusters that run any version of the profile. It goes to the scope of the
 profile: its project, or the tenant for a profile of the tenant. The search
 leaves out each virtual cluster unless a condition asks for it. Strata then

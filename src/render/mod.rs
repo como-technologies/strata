@@ -21,6 +21,7 @@ use crate::ops::{
 };
 use crate::repave::PaletteRepaveReason;
 use crate::snapshot::{PendingUpdate, Snapshot, Source, SubjectKind};
+use crate::text::and_list;
 
 pub use json::JsonRenderer;
 pub use markdown::MarkdownRenderer;
@@ -137,7 +138,7 @@ pub(crate) fn query_line(l: &Listing) -> Option<String> {
         Some(crate::ops::Resolved::Listing) => "from the cluster listing, labels matched by strata",
         None => "",
     };
-    Some(format!("the clusters with {}, {how}", parts.join(" and ")))
+    Some(format!("the clusters with {}, {how}", and_list(&parts)))
 }
 
 /// `4 pins from 2 records: 1 behind`, with the floating pins, the pins not checked, and the
@@ -196,7 +197,7 @@ pub(crate) fn pin_status(pin: &crate::ops::Pin) -> String {
 /// One newer version of a pin, with its notes in parentheses: `1.65.0`, `1.64.0 (deprecated)`,
 /// `1.66.0 (drops arm64)`, or `1.64.0 (deprecated, drops arm64)`.
 fn newer_version(n: &crate::ops::Newer) -> String {
-    let drops = (!n.drops.is_empty()).then(|| format!("drops {}", n.drops.join(" and ")));
+    let drops = (!n.drops.is_empty()).then(|| format!("drops {}", and_list(&n.drops)));
     let notes: Vec<String> = n.state.iter().cloned().chain(drops).collect();
     if notes.is_empty() {
         n.version.clone()

@@ -644,15 +644,17 @@ fn edge_hosts_bound<A: PaletteApi>(
 /// the scope of the request. So the answer holds each cluster in that scope that runs a version of
 /// the name, and the caller keeps the clusters that run the uid.
 /// None when the search of Palette takes no `clusterProfiles`, or when the profile has no name.
+/// The second search goes out only when the search takes `environment`: see
+/// [`Palette::cluster_search_with_virtual`].
 fn searched_consumers<A: PaletteApi>(
     palette: &Palette<A>,
     name: &str,
 ) -> Result<Option<Vec<ListedCluster>>> {
-    if name.is_empty()
-        || !palette
-            .cluster_search_properties()?
-            .contains(SEARCH_CLUSTER_PROFILES)
-    {
+    if name.is_empty() {
+        return Ok(None);
+    }
+    let properties = palette.cluster_search_properties()?;
+    if !properties.contains(SEARCH_CLUSTER_PROFILES) {
         return Ok(None);
     }
     let body = serde_json::json!({
@@ -661,9 +663,8 @@ fn searched_consumers<A: PaletteApi>(
             search_condition(SEARCH_CLUSTER_PROFILES, &[name.to_string()], false)
         ]}],
     });
-    let mut found = palette.cluster_search(&body)?;
-    found.extend(palette.virtual_cluster_search(&body)?);
-    Ok(Some(list_clusters(&found)))
+    let found = palette.cluster_search_with_virtual(&properties, &body, || {})?;
+    Ok(Some(list_clusters(&found.items)))
 }
 
 /// The second reading of `consumers`. Strata asks the cluster search for the clusters that run a

@@ -2869,6 +2869,49 @@ fn with_pinning_group(api: MemoryApi) -> MemoryApi {
 }
 
 #[test]
+fn the_second_reading_asks_for_no_virtual_cluster_when_the_search_takes_no_environment() {
+    // an older Palette: its search takes clusterProfiles, and not environment. Strata sends the
+    // one search, and not the second one with environment eq nested, as list clusters and
+    // cluster:<name> do (#321). Here the second one gets a 404, and the reading fails
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let mut runs = cluster_doc("cluster-ccc", "gamma", "p1", "Running");
+    runs["spec"] = serde_json::json!({"clusterProfileTemplates": [
+        {"uid": UID_A, "name": "lab-profile", "profileVersion": "1.2.0", "type": "cluster"}
+    ]});
+    let api = serve_fixture(MemoryApi::new(), dir.path(), "a", UID_A)
+        .with(CLUSTER_SEARCH_SCHEMA, search_schema(&["clusterProfiles"]))
+        .with_post(
+            CLUSTER_SEARCH,
+            &profile_search("lab-profile", false),
+            serde_json::json!({"items": [search_item("cluster-ccc", "gamma", "p1", "aws")],
+                               "listmeta": {"continue": ""}}),
+        )
+        .with("/v1/spectroclusters/cluster-ccc", runs);
+    let r = ops::consumers(
+        &Ref::Uid(UID_A.into()),
+        |_| Ok(Palette::new(&api)),
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert!(
+        r.clusters_read.error.is_none(),
+        "{:?}",
+        r.clusters_read.error
+    );
+    assert_eq!((r.count, r.exit_code()), (1, 1));
+    assert_eq!(r.consumers[0].uid, "cluster-ccc");
+    let searches: Vec<Value> = api
+        .posted()
+        .into_iter()
+        .filter(|(path, _)| path == CLUSTER_SEARCH)
+        .map(|(_, body)| body)
+        .collect();
+    assert_eq!(searches, vec![profile_search("lab-profile", false)]);
+}
+
+#[test]
 fn the_second_reading_finds_a_virtual_cluster_through_the_group_that_pins_the_version() {
     // the consumer list is empty, and the search names no cluster; the group g1 pins the version,
     // and its virtual cluster vc-1 runs it (#184)
@@ -6976,6 +7019,20 @@ fn verify_of_a_pack_record_gives_the_verdict_when_the_registry_summary_answers_5
         r#"HTTP 500: {"code":"InternalError"}"#
     );
     assert_eq!(json["verify"]["status"], "unchanged");
+}
+
+#[test]
+fn verify_keeps_no_newline_of_the_body_in_the_reason_of_a_sync_that_it_could_not_read() {
+    // Palette ends a body with a newline. The reason on the record has none, as the reason of an
+    // unread part of a cluster record has none (#321)
+    let api = serve_registry(vec![], &[("reg-public", public_entity())]);
+    let recorded = snapshot_of(&api, "pack:csi-aws-ebs@1.65.0").unwrap();
+    let api = api.failing(PACK_REGISTRY_SUMMARY, 500, "{\"code\":\"InternalError\"}\n");
+    let (_, json) = verify_pack_on(&recorded, api);
+    assert_eq!(
+        json["verify"]["registrySyncError"],
+        r#"HTTP 500: {"code":"InternalError"}"#
+    );
 }
 
 #[test]
@@ -12495,6 +12552,64 @@ fn behind_names_the_newer_versions_of_each_pin_and_the_impact_of_the_bump() {
     assert_eq!(next.since.as_deref(), Some("2026-09-26T00:00:00Z"));
     let json = serde_json::to_value(&next).unwrap();
     assert_eq!(json["pins"][0]["arrived"], serde_json::json!(["1.64.0"]));
+}
+
+#[test]
+fn behind_since_takes_a_report_of_its_id_and_refuses_another_version_or_another_document() {
+    // the rule of the records (#321): a strata-behind id of another version is unsupported-schema,
+    // which names both ids; a file of another document, or of none, is not a report
+    let dir = tempfile::tempdir().unwrap();
+    let report = dir.path().join("report.json");
+    fs::write(
+        &report,
+        r#"{"schema":"strata-behind/1","tool":{"name":"strata","version":"0.0.0"},
+            "generatedAt":"2026-09-26T00:00:00Z","records":[],"pins":[],
+            "summary":{"pins":0,"behind":0,"floating":0,"errors":0,"arrived":0}}"#,
+    )
+    .unwrap();
+    let previous = ops::BehindReport::load(&report).unwrap();
+    assert_eq!(previous.generated_at, "2026-09-26T00:00:00Z");
+
+    let newer = dir.path().join("newer.json");
+    fs::write(&newer, r#"{"schema":"strata-behind/2","pins":[]}"#).unwrap();
+    let err = ops::BehindReport::load(&newer).unwrap_err();
+    assert!(
+        matches!(&err, Error::UnsupportedSchema { found, supported, .. }
+            if found.as_str() == "strata-behind/2" && *supported == ops::BEHIND_SCHEMA),
+        "{err}"
+    );
+    assert_eq!(err.kind(), "unsupported-schema");
+
+    // a record is another document, so not a report: the message says what to give
+    common::make_fixtures(dir.path());
+    let record = dir.path().join("record.json");
+    let snap = ops::snapshot_from_dir(&dir.path().join("a"), "a", "t0").unwrap();
+    fs::write(&record, snap.to_json(true).unwrap()).unwrap();
+    let err = ops::BehindReport::load(&record).unwrap_err();
+    assert_eq!(err.kind(), "usage");
+    assert!(
+        err.to_string()
+            .contains("is not a strata-behind/1 document: give the JSON of a previous run"),
+        "{err}"
+    );
+
+    // no schema id, and not JSON
+    let no_id = dir.path().join("no-id.json");
+    fs::write(&no_id, "{}").unwrap();
+    assert_eq!(ops::BehindReport::load(&no_id).unwrap_err().kind(), "usage");
+    let text = dir.path().join("text.json");
+    fs::write(&text, "not json").unwrap();
+    assert_eq!(ops::BehindReport::load(&text).unwrap_err().kind(), "usage");
+
+    // the id of this strata, with fields that do not match it
+    let bad = dir.path().join("bad.json");
+    fs::write(&bad, r#"{"schema":"strata-behind/1"}"#).unwrap();
+    let err = ops::BehindReport::load(&bad).unwrap_err();
+    assert_eq!(err.kind(), "snapshot-schema");
+    assert!(
+        err.to_string().contains("does not match strata-behind/1"),
+        "{err}"
+    );
 }
 
 #[test]
