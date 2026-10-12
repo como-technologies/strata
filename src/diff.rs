@@ -10,8 +10,8 @@ use serde_json::{Value, json};
 
 use crate::canon::canonical_json;
 use crate::cluster_template::ClusterTemplateRef;
-use crate::json::{is_zero, str_at, text};
 pub use crate::impact::{Flags, Impact, ImpactLevel, impact, presence_impact};
+use crate::json::{is_zero, str_at, text};
 use crate::layer::Layer;
 pub use crate::repave::PaletteRepaveReason;
 use crate::snapshot::{ClusterTier, ClusterVariable, Pack, Snapshot, Source, Tool};

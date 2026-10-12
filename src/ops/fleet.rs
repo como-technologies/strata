@@ -433,16 +433,11 @@ where
             pending: false,
         };
         let scope = scope_of(&cluster.project_uid);
-        let snap = super::snapshot_for(
-            &reference,
-            || connect(scope),
-            fetched_at,
-            progress,
-        )
-        .and_then(|snap| {
-            super::write_file(&path, &snap.to_json(false)?)?;
-            Ok(snap)
-        });
+        let snap = super::snapshot_for(&reference, || connect(scope), fetched_at, progress)
+            .and_then(|snap| {
+                super::write_file(&path, &snap.to_json(false)?)?;
+                Ok(snap)
+            });
         match snap {
             Ok(snap) => records.push(SetRecord {
                 cluster,

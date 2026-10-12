@@ -538,9 +538,7 @@ impl Listing {
 /// The entry of the registry `uid` in `entries`, the items of a registry listing, where `ptr`
 /// points to the uid of each entry.
 fn registry_entry<'a>(entries: &'a [Value], ptr: &str, uid: &str) -> Option<&'a Value> {
-    entries
-        .iter()
-        .find(|it| str_at(it, ptr) == uid)
+    entries.iter().find(|it| str_at(it, ptr) == uid)
 }
 
 /// The state that Palette gives to the recovery of a sync when no sync waits for a recovery.
@@ -1060,9 +1058,8 @@ const DISABLED_MARK: &str = "/spec/annotations/disabled";
 /// The state is the `system_state`: `deprecated`, `disabled`, or `deleted`. It is `disabled` for
 /// a version with the [`DISABLED_MARK`] and no `system_state`.
 pub(crate) fn pack_state(summary: &Value) -> Option<String> {
-    system_state(summary).or_else(|| {
-        (str_at(summary, DISABLED_MARK) == "true").then(|| "disabled".to_string())
-    })
+    system_state(summary)
+        .or_else(|| (str_at(summary, DISABLED_MARK) == "true").then(|| "disabled".to_string()))
 }
 
 /// The state that Spectro Cloud gives a version that it retired: `deprecated`, `disabled`, or
@@ -1886,8 +1883,15 @@ variables:
     }
 
     /// A registry that serves each layer of [`stack`] with the layer `layers[i]` and the cloud
-    /// types `clouds[i]`.
+    /// types `clouds[i]`. The listing gives each version empty values, and the tags route gives
+    /// none.
     fn served(layers: &[&str], clouds: &[Value]) -> Palette<MemoryApi> {
+        served_with_values(layers, clouds, "")
+    }
+
+    /// [`served`], where the tags route gives each version the default values `values` in
+    /// `packValues[].values`.
+    fn served_with_values(layers: &[&str], clouds: &[Value], values: &str) -> Palette<MemoryApi> {
         let mut api = MemoryApi::new();
         for (i, l) in stack().layers.iter().enumerate() {
             let uid = format!("pk-{i}");
@@ -1902,10 +1906,29 @@ variables:
                 )
                 .with(
                     format!("/v1/packs/{}/registries/r1", l.name),
-                    json!({"tags": [{"tag": l.version, "packUid": uid}]}),
+                    json!({"tags": [{"tag": l.version, "packUid": uid}],
+                           "packValues": [{"packUid": uid, "values": values}]}),
                 );
         }
         Palette::new(api)
+    }
+
+    #[test]
+    fn a_layer_with_no_values_takes_the_default_values_of_the_tags_route_when_the_listing_gives_none()
+     {
+        // the listing gives `values: ""`, so the default values of the version come from the
+        // tags route; a layer with values in the file keeps them
+        let palette = served_with_values(&STACK_LAYERS, &vec![json!(["aws"]); 5], "b: 2");
+        let raw = resolved(stack(), &palette).unwrap();
+        let packs = &raw.profile["spec"]["published"]["packs"];
+        assert_eq!(
+            packs[0]["values"], "b: 2",
+            "ubuntu-aws has no values in the file"
+        );
+        assert_eq!(
+            packs[1]["values"], "a: 1",
+            "kubernetes has values in the file"
+        );
     }
 
     const STACK_LAYERS: [&str; 5] = ["os", "k8s", "cni", "csi", "addon"];

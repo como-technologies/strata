@@ -573,8 +573,8 @@ impl ClusterVariable {
                     ClusterVariable {
                         profile: p.name.clone(),
                         profile_uid: p.uid.clone(),
-                        name: text(&v, "/name"),
-                        value: (!sensitive).then(|| text(&v, "/value")),
+                        name: text(v, "/name"),
+                        value: (!sensitive).then(|| text(v, "/value")),
                         sensitive,
                     }
                 })

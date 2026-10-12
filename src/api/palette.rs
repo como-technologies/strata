@@ -88,7 +88,12 @@ fn listed_versions<'a>(
 ) -> impl Iterator<Item = (String, String)> + 'a {
     items(listing)
         .filter(move |it| str_at(it, "/metadata/name") == name)
-        .filter_map(|it| Some((opt_text(it, "/spec/version")?, opt_text(it, "/metadata/uid")?)))
+        .filter_map(|it| {
+            Some((
+                opt_text(it, "/spec/version")?,
+                opt_text(it, "/metadata/uid")?,
+            ))
+        })
 }
 
 /// The names of `entries`, sorted.

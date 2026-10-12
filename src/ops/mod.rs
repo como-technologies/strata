@@ -7,7 +7,6 @@ use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 use std::path::Path;
 
-
 use crate::api::{Palette, PaletteApi, RawCluster, RawProfile};
 use crate::candidate::LoadedCandidate;
 use crate::diff::{self, Diff};

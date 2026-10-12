@@ -6,9 +6,9 @@ use serde_json::Value;
 
 use crate::api::{Palette, PaletteApi};
 use crate::error::{Error, Result};
+use crate::json::{arr, opt_text, strings, text};
 use crate::progress::Progress;
 use crate::snapshot::Tool;
-use crate::json::{arr, opt_text, strings, text};
 use crate::version;
 
 /// The schema id of the document `packs` writes.
