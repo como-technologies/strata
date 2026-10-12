@@ -23,6 +23,7 @@ The crate is edition 2024 and needs Rust 1.88 or later. `rust-version` in
 | `src/ops/` | One module for each command: `verify.rs`, `same_release.rs`, `consumers.rs`, `behind.rs`, `list.rs`, and `packs.rs`. `fleet.rs` finds the clusters of a query of labels and writes a record of each; `repave.rs` asks Palette if a change repaves, and `validate.rs` asks Palette if it takes the packs. None is a command of its own. `mod.rs` takes a snapshot and compares two. |
 | `src/snapshot.rs` | A record, and how it is built from the responses. |
 | `src/shape.rs` | The fields of the `shape` tier of a cluster record, for each cloud type. |
+| `src/cloud.rs` | The cloud types of Palette, and the rule for a pack that supports a cloud. |
 | `src/diff.rs` | The comparison of two snapshots. |
 | `src/validation.rs` | The answer of Palette to a validate route, which a record and a comparison share. |
 | `src/impact.rs` | The impact of a change to a pack: the rules table and its levels. |

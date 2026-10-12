@@ -1480,6 +1480,7 @@ pub fn resolve<A: PaletteApi>(
 mod tests {
     use super::*;
     use crate::api::MemoryApi;
+    use crate::cloud::{CLOUD_ALL, CLOUD_CUSTOM};
 
     /// A summary listing of registries that holds the one registry `uid` with the sync `sync`.
     fn summary(uid: &str, sync: Value) -> Value {
@@ -1953,18 +1954,18 @@ variables:
             "{message}"
         );
         // the cloud all, and a candidate with no cloud, take each pack
-        for cloud in ["all", ""] {
+        for cloud in [CLOUD_ALL, ""] {
             let mut c = stack();
             c.cloud_type = cloud.into();
             assert!(resolved(c, &palette).is_ok(), "{cloud:?}");
         }
         // a pack of each cloud, a pack with no cloud type, and a custom pack on a custom cloud
-        clouds[2] = json!(["all"]);
+        clouds[2] = json!([CLOUD_ALL]);
         clouds[3] = json!([]);
         assert!(resolved(stack(), &served(&STACK_LAYERS, &clouds)).is_ok());
         let mut c = stack();
         c.cloud_type = "my-cloud".into();
-        assert!(resolved(c, &served(&STACK_LAYERS, &vec![json!(["custom"]); 5])).is_ok());
+        assert!(resolved(c, &served(&STACK_LAYERS, &vec![json!([CLOUD_CUSTOM]); 5])).is_ok());
     }
 
     #[test]

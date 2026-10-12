@@ -6,6 +6,7 @@ use std::collections::BTreeSet;
 use serde_json::Value;
 
 use super::{AuditKind, PaletteApi, RawCluster, RawProfile, ReadErrors, mask};
+use crate::cloud::CLOUD_ALL;
 use crate::error::{Error, Result, unread_reason};
 use crate::json::{arr, items, opt_text, str_at, take_items, text};
 use crate::progress::Progress;
@@ -445,7 +446,7 @@ impl<A: PaletteApi> Palette<A> {
             profile: serde_json::json!({
                 "metadata": doc["metadata"],
                 "spec": {"version": doc["spec"]["version"],
-                    "published": {"type": APP_KIND, "cloudType": "all", "packs": packs}},
+                    "published": {"type": APP_KIND, "cloudType": CLOUD_ALL, "packs": packs}},
             }),
             manifests: serde_json::json!({"spec": {"packs": mpacks}}),
             variables: serde_json::json!({ "variables": [] }),

@@ -7,6 +7,7 @@ use std::path::Path;
 
 use serde_json::Value;
 use strata::api::{MemoryApi, Palette, RawProfile};
+use strata::cloud::{CLOUD_ALL, CLOUD_CUSTOM};
 use strata::diff::VerifyStatus;
 use strata::error::{Error, FailureClass};
 use strata::ops;
@@ -12087,6 +12088,75 @@ fn behind_of(
         &Progress::silent(),
     )
     .unwrap()
+}
+
+/// What the three commands that ask if a pack supports a cloud say for the cloud `cloud`, on a
+/// registry whose csi-aws-ebs has the version 1.63.1 for the clouds `pinned` and the version
+/// 1.65.0 for the clouds `newer`: whether `packs --cloud` keeps 1.65.0, whether `behind` names
+/// 1.65.0 as newer for a record of 1.63.1, and whether a candidate of the cloud takes 1.65.0.
+fn a_pack_supports_the_cloud(pinned: &[&str], newer: &[&str], cloud: &str) -> [bool; 3] {
+    let mut old = pack_summary("pk-63", "1.63.1", "reg-public", "sha256:aaa", CSI_63);
+    old["spec"]["cloudTypes"] = serde_json::json!(pinned);
+    let mut new = pack_summary("pk-65", "1.65.0", "reg-public", "sha256:bbb", CSI_65);
+    new["spec"]["cloudTypes"] = serde_json::json!(newer);
+    let api = serve_summaries(vec![old, new], &[("reg-public", public_entity())]);
+    let listing = packs_of(
+        &api,
+        "csi-aws-ebs",
+        ops::PackOptions {
+            cloud: Some(cloud.to_string()),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let packs = listing
+        .registries
+        .iter()
+        .flat_map(|r| &r.versions)
+        .any(|v| v.version == "1.65.0");
+    let dir = tempfile::tempdir().unwrap();
+    let record = snapshot_of(&api, "pack:csi-aws-ebs@1.63.1").unwrap();
+    let path = dir.path().join("pin.json");
+    fs::write(&path, record.to_json(false).unwrap()).unwrap();
+    let report = behind_of(&api, &[path], &ops::BehindOptions::default());
+    let behind = report.pins[0].newer.iter().any(|n| n.version == "1.65.0");
+    let file = dir.path().join("c.yaml");
+    write_yaml(
+        &file,
+        &serde_json::json!({"name": "probe", "version": "1.0.0", "type": "add-on",
+            "cloudType": cloud,
+            "layers": [{"name": "csi-aws-ebs", "version": "1.65.0", "values": "a: 1\n"}]}),
+    );
+    let candidate = match candidate_snapshot(&file, &api) {
+        Ok(_) => true,
+        Err(e) => {
+            assert!(e.to_string().contains("PackNotSupported"), "{e}");
+            false
+        }
+    };
+    [packs, behind, candidate]
+}
+
+#[test]
+fn packs_behind_and_the_candidate_check_agree_on_the_clouds_that_a_pack_supports() {
+    // each row: the cloud types of the version 1.65.0, then whether it supports the cloud aws, a
+    // custom cloud, and the cloud all. The pinned version is of the cloud that is asked
+    let table: &[(&[&str], [bool; 3])] = &[
+        (&[], [true, true, true]),
+        (&[CLOUD_ALL], [true, true, true]),
+        (&["aws"], [true, false, true]),
+        (&["gcp"], [false, false, true]),
+        (&[CLOUD_CUSTOM], [false, true, true]),
+    ];
+    for (newer, expected) in table {
+        for (cloud, want) in ["aws", "my-cloud", CLOUD_ALL].into_iter().zip(expected) {
+            let got = a_pack_supports_the_cloud(&[cloud], newer, cloud);
+            assert_eq!(
+                got, [*want; 3],
+                "{newer:?} on {cloud}: packs, behind, the candidate"
+            );
+        }
+    }
 }
 
 /// Behind on a record of csi-aws-ebs@1.65.0, which is current, against `api`: the report, and

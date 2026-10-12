@@ -145,10 +145,9 @@ From these answers, strata checks the rules that need the registry, as
   layer of the profile with no error. So another layer gives a root that the
   published version does not have. See
   [The layer of a pack](../internals/palette/packs.md#the-layer-of-a-pack).
-- The cloud types of each pack in the listing hold the `cloudType` of the
-  candidate, or `all`. `custom` also passes for a cloud that Palette does not
-  know. A pack with no cloud type, a candidate with the cloud `all`, and a
-  candidate with no `cloudType` take each pack. Only the create of Palette
+- Each pack in the listing supports the `cloudType` of the candidate: see
+  [A pack that supports a cloud](../internals/palette/packs.md#a-pack-that-supports-a-cloud).
+  A candidate with no `cloudType` takes each pack. Only the create of Palette
   checks this rule.
 - Rules 1 and 2 above, with the layer of each pack in the registry.
 

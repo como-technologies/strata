@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::api::{Palette, PaletteApi};
+use crate::cloud::supports;
 use crate::error::{Error, Result};
 use crate::json::{arr, opt_text, strings, text};
 use crate::progress::Progress;
@@ -121,19 +122,12 @@ impl PackBuild {
 pub struct PackOptions {
     /// Only this registry, by name or uid.
     pub registry: Option<String>,
-    /// Only the versions that support this cloud. A version with the cloud type `all` supports
-    /// each cloud.
+    /// Only the versions that support this cloud, by the rule of [`crate::cloud`]: a version
+    /// with the cloud type `all`, or with no cloud type, supports each cloud.
     pub cloud: Option<String>,
     /// Only the newest version of each registry, and the version that Palette calls the latest
     /// when it is a different one.
     pub latest: bool,
-}
-
-/// True when a version with the cloud types `cloud_types` supports `cloud`: its cloud types hold
-/// that cloud, or `all`. Palette gives `all` to a pack that supports each cloud, and its filter on
-/// one cloud keeps that pack.
-pub(super) fn supports(cloud_types: &[String], cloud: &str) -> bool {
-    cloud_types.iter().any(|c| c == cloud || c == "all")
 }
 
 /// The annotation of the pack listing that marks the version that Palette calls the latest. At
@@ -407,6 +401,7 @@ fn points_at(t: &Value, e: &Value) -> bool {
 mod tests {
     use super::*;
     use crate::api::MemoryApi;
+    use crate::cloud::CLOUD_ALL;
 
     fn version(uid: &str, version: &str, clouds: &[&str]) -> Value {
         serde_json::json!({
@@ -463,7 +458,7 @@ mod tests {
         let listing = packs_for(
             "aws",
             vec![
-                version("pk-1", "1.0.0", &["all"]),
+                version("pk-1", "1.0.0", &[CLOUD_ALL]),
                 version("pk-0", "0.9.0", &["aws"]),
                 version("pk-e", "1.1.0", &["edge-native"]),
             ],
@@ -475,7 +470,10 @@ mod tests {
             .collect();
         assert_eq!(kept, vec![("1.0.0", true), ("0.9.0", false)]);
         // the document keeps the cloud types as Palette gives them
-        assert_eq!(listing.registries[0].versions[0].cloud_types, vec!["all"]);
+        assert_eq!(
+            listing.registries[0].versions[0].cloud_types,
+            vec![CLOUD_ALL]
+        );
     }
 
     #[test]

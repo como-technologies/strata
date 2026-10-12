@@ -56,11 +56,11 @@ version:
 | `--cloud TYPE` | Keep the versions that support this cloud, such as `aws`. |
 | `--latest` | Only the newest version of each registry, and the version that Palette calls the latest when it is a different one. |
 
-A version with the cloud type `all` supports every cloud, so `--cloud aws` keeps
-it. Palette gives `all` to a pack that supports every cloud, and its own filter
-on one cloud keeps that pack: see
-[The cloud type `all`](../internals/palette/packs.md#the-cloud-type-all). The
-JSON keeps `cloudTypes` as Palette gives it.
+A version supports a cloud by the rule of Palette for a pack in a profile: see
+[A pack that supports a cloud](../internals/palette/packs.md#a-pack-that-supports-a-cloud).
+So `--cloud aws` keeps a version with the cloud type `all`, and a version with
+no cloud type. `--cloud all` keeps each version. The JSON keeps `cloudTypes` as
+Palette gives it.
 
 A cloud that no version supports is an answer, and an empty one: exit `0` and
 one line, `no version of <name> supports <cloud>`. A pack with no version that
