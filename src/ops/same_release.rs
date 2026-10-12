@@ -318,12 +318,9 @@ pub fn same_release_with(
             };
             if !d.upstream_unknown.is_empty() && !allow_no_digest {
                 reasons.push(format!(
-                    "{} no upstream digest, so an equal root does not show an equal archive; \
-                     --allow no-digest accepts it",
-                    match d.upstream_unknown.as_slice() {
-                        [one] => format!("pack {one} has"),
-                        many => format!("packs {} have", many.join(", ")),
-                    }
+                    "{}, so an equal root does not show an equal archive; --allow no-digest \
+                     accepts it",
+                    crate::render::no_upstream_digest(&d.upstream_unknown)
                 ));
                 if status.passed() {
                     status = PairStatus::UnknownUpstream;

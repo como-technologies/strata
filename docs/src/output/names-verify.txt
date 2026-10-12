@@ -1,4 +1,4 @@
 $ strata verify dev-payments.json prod-payments.json
-OK     dev-payments.json  aws-stack@1.1.1  unchanged since 2026-09-17T09:30:00Z
-OK     prod-payments.json  aws-stack@1.1.1  unchanged since 2026-09-17T09:30:00Z
+OK     dev-payments.json  aws-stack@1.1.1  is unchanged since 2026-09-17T09:30:00Z
+OK     prod-payments.json  aws-stack@1.1.1  is unchanged since 2026-09-17T09:30:00Z
 2 records: 2 unchanged, 0 drifted, no errors

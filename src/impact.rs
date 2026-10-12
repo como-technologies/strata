@@ -29,6 +29,20 @@ pub enum ImpactLevel {
     Repave,
 }
 
+impl ImpactLevel {
+    /// The level as the documents and the reports name it: `in-place`, `may-repave`.
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::None => "none",
+            Self::Sync => "sync",
+            Self::InPlace => "in-place",
+            Self::ClusterWide => "cluster-wide",
+            Self::MayRepave => "may-repave",
+            Self::Repave => "repave",
+        }
+    }
+}
+
 /// What a change does to running clusters; a hint from the layer and the flags.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct Impact {
@@ -223,6 +237,24 @@ pub fn presence_impact(layer: &str, added: bool) -> Impact {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_text_of_an_impact_level_is_its_name_in_the_documents() {
+        for level in [
+            ImpactLevel::None,
+            ImpactLevel::Sync,
+            ImpactLevel::InPlace,
+            ImpactLevel::ClusterWide,
+            ImpactLevel::MayRepave,
+            ImpactLevel::Repave,
+        ] {
+            assert_eq!(
+                serde_json::to_value(level).unwrap(),
+                serde_json::Value::from(level.as_str()),
+                "{level:?}"
+            );
+        }
+    }
 
     #[test]
     fn impact_levels_order_by_severity() {

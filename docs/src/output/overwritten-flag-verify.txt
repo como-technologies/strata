@@ -1,4 +1,4 @@
 $ strata verify releases/1.1.1/dev.json runs/payments.json
-OK     releases/1.1.1/dev.json  aws-stack@1.1.1  unchanged since 2026-09-17T09:30:00Z
-OK     runs/payments.json  aws-stack@1.1.1  unchanged since 2026-09-17T09:30:00Z
+OK     releases/1.1.1/dev.json  aws-stack@1.1.1  is unchanged since 2026-09-17T09:30:00Z
+OK     runs/payments.json  aws-stack@1.1.1  is unchanged since 2026-09-17T09:30:00Z
 2 records: 2 unchanged, 0 drifted, no errors

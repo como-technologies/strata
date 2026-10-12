@@ -1,4 +1,4 @@
 $ strata verify 'runs/*.json'
-OK     runs/payments.json  platform-addons@1.0.0  unchanged since 2026-09-17T09:30:00Z
-OK     runs/store-1.json  platform-addons@1.0.0  unchanged since 2026-09-17T09:30:00Z; the state is ready
+OK     runs/payments.json  platform-addons@1.0.0  is unchanged since 2026-09-17T09:30:00Z
+OK     runs/store-1.json  platform-addons@1.0.0  is unchanged since 2026-09-17T09:30:00Z; the state is ready
 2 records: 2 unchanged, 0 drifted, no errors

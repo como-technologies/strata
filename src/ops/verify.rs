@@ -18,6 +18,7 @@ use crate::json::{is_zero, opt_text, str_at, text};
 use crate::progress::Progress;
 use crate::snapshot::{APP_KIND, Snapshot, SubjectKind, Tool};
 
+use super::consumers::{ACTIVE_STATE, INACTIVE_STATE};
 use super::scope_of;
 
 /// The outcome of a verification.
@@ -108,7 +109,7 @@ fn subject_state(kind: SubjectKind, doc: &Value) -> Option<String> {
         SubjectKind::ClusterGroup => doc
             .pointer("/status/isActive")
             .and_then(Value::as_bool)
-            .map(|a| if a { "active" } else { "inactive" }.to_string()),
+            .map(|a| if a { ACTIVE_STATE } else { INACTIVE_STATE }.to_string()),
         _ => opt_text(doc, "/status/state"),
     }
 }
@@ -473,6 +474,19 @@ pub enum RecordStatus {
     Error,
 }
 
+impl From<VerifyStatus> for RecordStatus {
+    /// The outcome of one record from the verdict of its check.
+    ///
+    /// A record whose check failed has no verdict, so it is never [`RecordStatus::Error`].
+    fn from(status: VerifyStatus) -> Self {
+        match status {
+            VerifyStatus::Unchanged => Self::Unchanged,
+            VerifyStatus::Drifted => Self::Drifted,
+            VerifyStatus::Unverified => Self::Unverified,
+        }
+    }
+}
+
 /// The outcome over every record; also the exit status.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "lowercase")]
@@ -670,11 +684,7 @@ where
             match verify_with(&recorded, palette, checked_at, options, progress) {
                 Ok(v) => VerifiedRecord {
                     path: path.display().to_string(),
-                    status: match v.status {
-                        VerifyStatus::Unchanged => RecordStatus::Unchanged,
-                        VerifyStatus::Drifted => RecordStatus::Drifted,
-                        VerifyStatus::Unverified => RecordStatus::Unverified,
-                    },
+                    status: RecordStatus::from(v.status),
                     name: recorded.source.name.clone(),
                     version: recorded.source.version.clone(),
                     uid: recorded.source.uid.clone(),

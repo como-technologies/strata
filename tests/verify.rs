@@ -19,8 +19,8 @@ use common::{
     SECRET_VALUE, UID_A, UID_ADDONS, UID_B, candidate_snapshot, cluster_manifests_route,
     cluster_ref, cluster_route, cluster_variables_route, listing, manifest_route, manifests_route,
     no_manifests, no_template, no_variables, pack_listing_route, post, profile_document,
-    profile_route, read_json, serve_fixture, serve_profile, snapshot_of, snapshot_of_at,
-    strata_bin, template, variables_route,
+    profile_route, read_json, resolved_values_route, serve_fixture, serve_profile, snapshot_of,
+    snapshot_of_at, strata_bin, template, variables_route,
 };
 
 #[test]
@@ -66,7 +66,7 @@ fn verify_reports_a_deleted_version_as_gone_and_not_as_an_error() {
     let r = render::renderer(Format::Terminal, Paint::off(), false);
     let text = r.render(&v.diff, &recorded, &v.live, false).unwrap();
     assert!(!text.contains("edited in place"), "{text}");
-    let verdict = r.verdict(ver, &recorded.source).unwrap();
+    let verdict = r.verdict(&v.diff).unwrap();
     assert!(
         verdict.contains(&format!(
             "no longer exists: uid {UID_A} is gone from Palette"
@@ -1229,7 +1229,7 @@ fn verify_reports_a_tag_renamed_in_place_as_drift_with_no_node_impact() {
     );
     assert!(!text.contains("repave"), "{text}");
     let verdict = render::renderer(Format::Terminal, Paint::off(), false)
-        .verdict(ver, &recorded.source)
+        .verdict(&v.diff)
         .unwrap();
     assert!(verdict.starts_with("DRIFT: "), "{verdict}");
 }
@@ -1632,7 +1632,7 @@ fn verify_reports_a_cluster_record_whose_profile_version_was_overwritten_or_dele
         .collect();
     assert_eq!(named, [(UID_A, "lab-profile", "1.2.0", "1.3.0")]);
     let verdict = render::renderer(Format::Terminal, Paint::off(), false)
-        .verdict(ver, &recorded.source)
+        .verdict(&v.diff)
         .unwrap();
     assert_eq!(
         verdict,
@@ -1663,7 +1663,7 @@ fn verify_reports_a_cluster_record_whose_profile_version_was_overwritten_or_dele
         "no version: the uid is gone"
     );
     let verdict = render::renderer(Format::Terminal, Paint::off(), false)
-        .verdict(ver, &recorded.source)
+        .verdict(&v.diff)
         .unwrap();
     assert!(
         verdict.ends_with("but uid 64f0000000000000000000a1 no longer exists"),
@@ -5613,9 +5613,7 @@ fn verify_names_a_cluster_value_changed_since_the_record_without_calling_it_drif
     assert!(v.unchanged, "a value is not part of the release");
     assert!(v.diff.cluster_variables.as_ref().unwrap().changed);
     let renderer = render::renderer(Format::Terminal, Paint::off(), false);
-    let verdict = renderer
-        .verdict(v.diff.verify.as_ref().unwrap(), &recorded.source)
-        .unwrap();
+    let verdict = renderer.verdict(&v.diff).unwrap();
     assert!(
         verdict.starts_with("OK:") && verdict.contains("1 variable value changed"),
         "{verdict}"
@@ -5905,7 +5903,7 @@ fn verify_reports_a_version_overwritten_under_the_same_uid_even_when_the_root_ma
     assert_eq!(ver.status, VerifyStatus::Drifted);
     assert_eq!(ver.overwritten_by.as_deref(), Some("lab-profile@1.2.1"));
     let verdict = render::renderer(Format::Terminal, Paint::off(), false)
-        .verdict(ver, &recorded.source)
+        .verdict(&v.diff)
         .unwrap();
     assert!(
         verdict.starts_with("DRIFT:") && verdict.contains("now names lab-profile@1.2.1"),
@@ -6611,6 +6609,47 @@ fn packs_keeps_the_versions_of_one_cloud_and_answers_with_none_when_no_version_h
 }
 
 #[test]
+fn packs_says_in_each_format_that_no_version_supports_the_cloud() {
+    let api = serve_registry(vec![], &[("reg-public", public_entity())]);
+    let none = packs_of(
+        &api,
+        "csi-aws-ebs",
+        ops::PackOptions {
+            cloud: Some("edge-native".to_string()),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    assert!(none.registries.is_empty());
+    let text = render::renderer(Format::Terminal, Paint::off(), false)
+        .render_packs(&none)
+        .unwrap();
+    assert_eq!(text, "no version of csi-aws-ebs supports edge-native\n");
+    let md = render::renderer(Format::Markdown, Paint::off(), false)
+        .render_packs(&none)
+        .unwrap();
+    assert_eq!(md, "No version of csi-aws-ebs supports edge-native.\n");
+}
+
+#[test]
+fn packs_says_in_each_format_that_palette_serves_no_version_of_the_pack() {
+    // the registry answers 404 for the tags: Palette serves no version of the pack, and the
+    // listing keeps no registry
+    let api = serve_registry(vec![], &[]);
+    let none = packs_of(&api, "csi-aws-ebs", ops::PackOptions::default()).unwrap();
+    assert!(none.registries.is_empty());
+    assert_eq!(none.cloud, None);
+    let text = render::renderer(Format::Terminal, Paint::off(), false)
+        .render_packs(&none)
+        .unwrap();
+    assert_eq!(text, "Palette serves no version of csi-aws-ebs\n");
+    let md = render::renderer(Format::Markdown, Paint::off(), false)
+        .render_packs(&none)
+        .unwrap();
+    assert_eq!(md, "Palette serves no version of csi-aws-ebs.\n");
+}
+
+#[test]
 fn packs_refuses_a_registry_that_is_not_visible_and_a_pack_no_registry_has() {
     let api = serve_registry(vec![], &[("reg-public", public_entity())]);
     let err = packs_of(
@@ -6781,7 +6820,7 @@ fn verify_rechecks_a_pack_version_against_its_registry() {
     assert_eq!(ver.status, VerifyStatus::Drifted);
     // the time of the listing is the create time of the pack, not the time of the move
     assert_eq!(ver.last_modified, None);
-    let line = verdict_of(&v, &recorded);
+    let line = verdict_of(&v);
     assert!(!line.contains("Palette last changed it"), "{line}");
     let json = serde_json::to_value(&v.diff).unwrap();
     assert!(json["verify"].get("lastModified").is_none(), "{json}");
@@ -6807,7 +6846,7 @@ fn verify_pack_with_sync(sync: Option<Value>) -> (String, Value) {
     let v = ops::verify(&recorded, &Palette::new(api), "t1", &Progress::silent()).unwrap();
     assert!(v.unchanged);
     let verdict = render::renderer(Format::Terminal, Paint::off(), false)
-        .verdict(v.diff.verify.as_ref().unwrap(), &recorded.source)
+        .verdict(&v.diff)
         .unwrap();
     (verdict, serde_json::to_value(&v.diff).unwrap())
 }
@@ -6900,7 +6939,7 @@ fn verify_pack_on<A: PaletteApi>(recorded: &Snapshot, api: A) -> (String, Value)
     assert!(v.unchanged);
     assert_eq!(v.status, VerifyStatus::Unchanged);
     let verdict = render::renderer(Format::Terminal, Paint::off(), false)
-        .verdict(v.diff.verify.as_ref().unwrap(), &recorded.source)
+        .verdict(&v.diff)
         .unwrap();
     (verdict, serde_json::to_value(&v.diff).unwrap())
 }
@@ -7117,7 +7156,7 @@ fn verify_who_reads_every_page_of_the_audit_log_and_lists_the_writes_oldest_firs
         ]
     );
     let verdict = render::renderer(Format::Terminal, Paint::off(), false)
-        .verdict(ver, &recorded.source)
+        .verdict(&v.diff)
         .unwrap();
     assert!(
         verdict.ends_with(
@@ -7154,7 +7193,7 @@ fn verify_who_says_so_when_the_log_holds_no_write_and_reads_nothing_for_an_uncha
     let ver = v.diff.verify.as_ref().unwrap();
     assert_eq!(ver.who.as_deref(), Some(&[][..]));
     let terminal = render::renderer(Format::Terminal, Paint::off(), false)
-        .verdict(ver, &recorded.source)
+        .verdict(&v.diff)
         .unwrap();
     assert!(
         terminal.ends_with("\nwho: no audit entry since the record"),
@@ -7258,7 +7297,7 @@ fn verify_who_of_a_virtual_cluster_record_names_the_create_that_palette_logs_und
         (who.len(), who[0].action.as_str(), resource.kind.as_str()),
         (1, "create", "virtualCluster")
     );
-    let line = verdict_of(&v, &recorded);
+    let line = verdict_of(&v);
     assert!(
         line.contains("John Doe (user)  create"),
         "the who line names the create: {line}"
@@ -7382,7 +7421,7 @@ fn verify_who_reads_the_log_of_a_cluster_group_as_clustergroup_and_of_an_app_pro
         0,
         "a group is not read as a cluster, by its uid alone"
     );
-    let line = verdict_of(&v, &group);
+    let line = verdict_of(&v);
     assert!(
         line.ends_with(
             "\nwho: 1 write in the audit log since the record\n  \
@@ -7425,7 +7464,7 @@ fn verify_who_reads_the_log_of_a_cluster_group_as_clustergroup_and_of_an_app_pro
         0,
         "an app profile is not a cluster profile in the log"
     );
-    let line = verdict_of(&v, &app);
+    let line = verdict_of(&v);
     assert!(
         line.ends_with(
             "\n  2026-09-18T14:03:11.482Z  John Doe (user)  update; note: CHG-42: three replicas"
@@ -7505,7 +7544,7 @@ fn verify_who_of_a_cluster_record_names_the_write_that_overwrote_the_profile_it_
     .unwrap();
     assert!(!v.unchanged);
     assert_eq!((api.calls(&cluster_log), api.calls(&profile_log)), (1, 1));
-    let line = verdict_of(&v, &recorded);
+    let line = verdict_of(&v);
     assert!(
         line.ends_with(
             "\nwho: 3 writes in the audit log since the record\n  \
@@ -7547,7 +7586,7 @@ fn verify_gives_the_time_palette_last_changed_the_object_and_a_drift_verdict_end
         ver.last_modified.as_deref(),
         Some("2026-09-18T14:02:11.482Z")
     );
-    let line = verdict_of(&v, &recorded);
+    let line = verdict_of(&v);
     assert!(
         line.ends_with("; Palette last changed it 2026-09-18T14:02:11.482Z"),
         "{line}"
@@ -7569,7 +7608,7 @@ fn verify_gives_the_time_palette_last_changed_the_object_and_a_drift_verdict_end
         ver.last_modified.as_deref(),
         Some("2026-09-18T14:02:11.482Z")
     );
-    assert!(verdict_of(&v, &recorded).ends_with("is unchanged since t0"));
+    assert!(verdict_of(&v).ends_with("is unchanged since t0"));
 
     // each record of a summary gives it
     let path = dir.path().join("rec.json");
@@ -7597,7 +7636,7 @@ fn verify_gives_the_time_palette_last_changed_the_object_and_a_drift_verdict_end
     )
     .unwrap();
     assert!(v.diff.verify.as_ref().unwrap().last_modified.is_none());
-    assert!(!verdict_of(&v, &recorded).contains("last changed"));
+    assert!(!verdict_of(&v).contains("last changed"));
 }
 
 // ---- the updates that wait for a cluster -----------------------------------------------------
@@ -8299,7 +8338,7 @@ fn a_pack_with_no_digest_makes_verify_unverified_and_names_the_pack() {
     let ver = v.diff.verify.as_ref().unwrap();
     assert_eq!(ver.upstream_unknown, ["os/ubuntu-aws"]);
     let verdict = render::renderer(Format::Terminal, Paint::off(), false)
-        .verdict(ver, &recorded.source)
+        .verdict(&v.diff)
         .unwrap();
     assert!(
         verdict.starts_with("UNVERIFIED: published version lab-profile@1.2.0 has the content recorded t0, but pack os/ubuntu-aws has no upstream digest, so a change of the archive does not show; --allow-no-digest accepts it"),
@@ -8344,6 +8383,101 @@ fn a_pack_with_no_digest_makes_verify_unverified_and_names_the_pack() {
 }
 
 #[test]
+fn each_report_states_the_verdict_of_a_record_in_the_same_words() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let base = ops::snapshot_from_dir(&dir.path().join("a"), "a", "t0").unwrap();
+    let write = |name: &str, snap: Snapshot| -> PathBuf {
+        let p = dir.path().join(name);
+        fs::write(&p, snap.to_json(true).unwrap()).unwrap();
+        p
+    };
+    let same = write("same.json", base.clone().with_project(Some("p1")));
+    let edited = write("edited.json", base.clone().with_project(Some("p2")));
+    // project p1 still serves A's content; in p2 the live object has B's content
+    let live_p1 = serve_fixture(MemoryApi::new(), dir.path(), "a", UID_A);
+    let live_p2 = serve_fixture(MemoryApi::new(), dir.path(), "b", UID_A);
+    let connect = |project: Option<&str>| {
+        Ok(Palette::new(match project {
+            Some("p1") => live_p1.clone(),
+            _ => live_p2.clone(),
+        }))
+    };
+    let s = ops::verify_many(
+        &[same, edited],
+        None,
+        connect,
+        "t1",
+        &ops::VerifyOptions::default(),
+        &Progress::silent(),
+    );
+    let statuses: Vec<RecordStatus> = s.records.iter().map(|r| r.status).collect();
+    assert_eq!(
+        statuses,
+        vec![RecordStatus::Unchanged, RecordStatus::Drifted]
+    );
+
+    let terminal = render::renderer(Format::Terminal, Paint::off(), false);
+    let markdown = render::renderer(Format::Markdown, Paint::off(), false);
+    let lines = terminal.render_verify_summary(&s).unwrap();
+    let table = markdown.render_verify_summary(&s).unwrap();
+    // a row states the verdict of its record in the words of the report of one record
+    let unchanged = "is unchanged since t0";
+    let drifted = "now names lab-profile@1.3.0: the version recorded t0 was overwritten in place";
+    assert!(
+        lines.contains(&format!(
+            "OK     {}",
+            dir.path().join("same.json").display()
+        )),
+        "{lines}"
+    );
+    assert!(lines.contains(unchanged), "{lines}");
+    assert!(lines.contains(drifted), "{lines}");
+    assert!(table.contains("| OK | "), "{table}");
+    assert!(table.contains(&format!("| {unchanged} |")), "{table}");
+    assert!(table.contains(&format!("| {drifted} |")), "{table}");
+
+    // the report of one record puts the subject before the same sentence
+    for (live, sentence) in [(&live_p1, unchanged), (&live_p2, drifted)] {
+        let v = ops::verify(
+            &base,
+            &Palette::new(live.clone()),
+            "t1",
+            &Progress::silent(),
+        )
+        .unwrap();
+        for r in [&terminal, &markdown] {
+            let verdict = r.verdict(&v.diff).unwrap();
+            assert!(
+                verdict.contains(&format!("published version lab-profile@1.2.0 {sentence}")),
+                "{verdict}"
+            );
+        }
+    }
+}
+
+#[test]
+fn each_report_says_in_the_same_words_that_the_values_did_not_parse() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let a = ops::snapshot_from_dir(&dir.path().join("a"), "a", "t0").unwrap();
+    let b = ops::snapshot_from_dir(&dir.path().join("b"), "b", "t0").unwrap();
+    let d = strata::diff::compute(&a, &b, "t1", None);
+    let metrics = d.packs.iter().find(|p| p.name == "metrics-server").unwrap();
+    assert!(metrics.values.changed && !metrics.values.parseable);
+    let sentence =
+        "values changed (not parseable as YAML on one side; use --full for a unified diff)";
+    let text = render::renderer(Format::Terminal, Paint::off(), false)
+        .render(&d, &a, &b, false)
+        .unwrap();
+    assert!(text.contains(sentence), "{text}");
+    let md = render::renderer(Format::Markdown, Paint::off(), false)
+        .render(&d, &a, &b, false)
+        .unwrap();
+    assert!(md.contains(&sentence.replace("--full", "`--full`")), "{md}");
+}
+
+#[test]
 fn many_records_count_an_unverified_one_and_exit_1() {
     let dir = tempfile::tempdir().unwrap();
     common::make_fixtures(dir.path());
@@ -8367,8 +8501,9 @@ fn many_records_count_an_unverified_one_and_exit_1() {
         .render_verify_summary(&s)
         .unwrap();
     assert!(text.contains("UNVERIFIED"), "{text}");
+    // the row states the verdict of the record in the words of its own report
     assert!(
-        text.contains("same content as recorded t0, but pack os/ubuntu-aws has no upstream digest"),
+        text.contains("has the content recorded t0, but pack os/ubuntu-aws has no upstream digest"),
         "{text}"
     );
     assert!(
@@ -8610,7 +8745,7 @@ fn a_cluster_record_with_macro_digests_drifts_when_a_macro_value_moves() {
     let ver = v.diff.verify.as_ref().unwrap();
     assert_eq!(ver.macros_changed, ["region"]);
     let verdict = render::renderer(Format::Terminal, Paint::off(), false)
-        .verdict(ver, &recorded.source)
+        .verdict(&v.diff)
         .unwrap();
     assert!(
         verdict.contains("but macro region has another value now"),
@@ -8650,7 +8785,7 @@ fn a_profile_record_with_macro_digests_drifts_when_a_macro_value_moves() {
     let dir = tempfile::tempdir().unwrap();
     common::make_fixtures(dir.path());
     with_macro(dir.path(), "macro");
-    let path = format!("/v1/clusterprofiles/{UID_A}/packs/resolvedValues");
+    let path = resolved_values_route(UID_A);
     let tenant = |answer: Value| {
         serve_fixture(MemoryApi::new(), dir.path(), "macro", UID_A).with(&path, answer)
     };
@@ -8691,7 +8826,7 @@ fn a_profile_record_with_macro_digests_drifts_when_a_macro_value_moves() {
     let ver = v.diff.verify.as_ref().unwrap();
     assert_eq!(ver.macros_changed, ["region"]);
     let verdict = render::renderer(Format::Terminal, Paint::off(), false)
-        .verdict(ver, &recorded.source)
+        .verdict(&v.diff)
         .unwrap();
     assert!(
         verdict.contains("published version lab-profile@1.2.0 has the content recorded t0, but macro region has another value now"),
@@ -8726,6 +8861,75 @@ fn a_profile_record_with_macro_digests_drifts_when_a_macro_value_moves() {
     raw.save_dir(&saved, "t0").unwrap();
     let again = ops::snapshot_from_dir(&saved, "aws-stack@1.1.1", "t0").unwrap();
     assert_eq!(again.source.macro_values, Some(digests));
+}
+
+#[test]
+fn each_report_says_that_the_root_moved_when_a_macro_value_moved_too() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    with_macro(dir.path(), "macro");
+    // the live version: the same macro, and one more line in the values of the OS pack
+    with_os_pack(dir.path(), "macro-edited", |p| {
+        let values = p["values"].as_str().unwrap_or_default();
+        p["values"] = Value::from(format!(
+            "{values}\nregion: \"{{{{.spectro.macro.region}}}}\"\nextra: 1\n"
+        ));
+    });
+    let path = resolved_values_route(UID_A);
+    let palette = Palette::new(
+        serve_fixture(MemoryApi::new(), dir.path(), "macro", UID_A)
+            .with(&path, profile_resolved("us-east-2")),
+    );
+    let mut raw = palette.fetch_profile(UID_A, &Progress::silent()).unwrap();
+    raw.resolved_values = Some(palette.profile_resolved_values(UID_A).unwrap());
+    let recorded = Snapshot::from_raw(&raw, "aws-stack@1.1.1", "t0").unwrap();
+    let live = serve_fixture(MemoryApi::new(), dir.path(), "macro-edited", UID_A)
+        .with(&path, profile_resolved("eu-west-1"));
+
+    // the root moved, and the verify names the macro too
+    let v = ops::verify(
+        &recorded,
+        &Palette::new(live.clone()),
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert!(!v.diff.same, "the values of the OS pack moved");
+    assert_eq!(v.status, VerifyStatus::Drifted);
+    assert_eq!(v.diff.verify.as_ref().unwrap().macros_changed, ["region"]);
+
+    // the verdict states the root: the book gives the macro verdict to an equal root only
+    let sentence = "published version lab-profile@1.2.0 differs from the copy recorded t0";
+    for format in [Format::Terminal, Format::Markdown] {
+        let verdict = render::renderer(format, Paint::off(), false)
+            .verdict(&v.diff)
+            .unwrap();
+        assert!(verdict.contains(sentence), "{verdict}");
+        assert!(!verdict.contains("macro region"), "{verdict}");
+    }
+
+    // the row of the summary states the same, with the impact of the diff
+    let record = dir.path().join("macro.json");
+    fs::write(&record, recorded.to_json(true).unwrap()).unwrap();
+    let s = ops::verify_many(
+        &[record],
+        None,
+        |_| Ok(Palette::new(live.clone())),
+        "t1",
+        &ops::VerifyOptions::default(),
+        &Progress::silent(),
+    );
+    let row = "differs from the copy recorded t0; max impact ";
+    let lines = render::renderer(Format::Terminal, Paint::off(), false)
+        .render_verify_summary(&s)
+        .unwrap();
+    assert!(lines.contains(row), "{lines}");
+    assert!(lines.contains(", 1 pack changed"), "{lines}");
+    assert!(!lines.contains("macro region"), "{lines}");
+    let table = render::renderer(Format::Markdown, Paint::off(), false)
+        .render_verify_summary(&s)
+        .unwrap();
+    assert!(table.contains(row), "{table}");
 }
 
 // ---- compare --repave ------------------------------------------------------------------
@@ -9585,7 +9789,7 @@ fn verify_reports_a_new_image_id_of_the_os_pack_as_drift_with_the_recorded_conte
     let why = "has the content recorded t0, but pack os/ubuntu-aws names image ami-0bbb now, not ami-0aaa";
     for format in [Format::Terminal, Format::Markdown] {
         let verdict = render::renderer(format, Paint::off(), false)
-            .verdict(ver, &recorded.source)
+            .verdict(&v.diff)
             .unwrap();
         assert!(
             verdict.contains("DRIFT") && verdict.contains(why),
@@ -9640,7 +9844,7 @@ fn verify_names_a_new_image_id_in_the_diff_and_not_in_the_verdict_when_the_root_
     let ver = v.diff.verify.as_ref().unwrap();
     assert!(ver.image_ids_changed.is_empty());
     let verdict = render::renderer(Format::Terminal, Paint::off(), false)
-        .verdict(ver, &recorded.source)
+        .verdict(&v.diff)
         .unwrap();
     assert!(
         verdict.starts_with("DRIFT: ") && verdict.contains("differs from"),
@@ -11222,7 +11426,7 @@ fn a_cluster_group_record_with_macro_digests_reads_the_values_of_the_group() {
     let ver = v.diff.verify.as_ref().unwrap();
     assert_eq!(ver.macros_changed, ["region"]);
     let verdict = render::renderer(Format::Terminal, Paint::off(), false)
-        .verdict(ver, &group.source)
+        .verdict(&v.diff)
         .unwrap();
     assert!(
         verdict.contains("pinned by cluster group group-1 has the content recorded t0, but macro region has another value now"),
@@ -12963,9 +13167,9 @@ fn cluster_in_state(dir: &Path, state: &str, extra: Value) -> MemoryApi {
 }
 
 /// The verdict line of a verify, as the terminal prints it.
-fn verdict_of(v: &ops::Verification, recorded: &Snapshot) -> String {
+fn verdict_of(v: &ops::Verification) -> String {
     render::renderer(Format::Terminal, Paint::off(), false)
-        .verdict(v.diff.verify.as_ref().unwrap(), &recorded.source)
+        .verdict(&v.diff)
         .unwrap()
 }
 
@@ -12999,7 +13203,7 @@ fn verify_reports_a_deleted_cluster_as_gone_with_the_time_of_the_delete() {
         "each pack of the record is removed"
     );
     assert_eq!(
-        verdict_of(&v, &recorded),
+        verdict_of(&v),
         "DRIFT: cluster lab-cluster no longer exists: deleted 2026-09-30T10:00:00Z"
     );
     let doc = serde_json::to_value(ver).unwrap();
@@ -13065,7 +13269,7 @@ fn verify_ends_the_verdict_of_a_cluster_record_with_a_state_other_than_running()
         Some("Running")
     );
     assert_eq!(
-        verdict_of(&v, &recorded),
+        verdict_of(&v),
         "OK: cluster lab-cluster running lab-profile@1.2.0 is unchanged since t0"
     );
 
@@ -13080,11 +13284,11 @@ fn verify_ends_the_verdict_of_a_cluster_record_with_a_state_other_than_running()
     .unwrap();
     assert!(v.unchanged, "a state alone is not a drift");
     assert_eq!(
-        verdict_of(&v, &recorded),
+        verdict_of(&v),
         "OK: cluster lab-cluster running lab-profile@1.2.0 is unchanged since t0; the cluster is Deleting"
     );
     let md = render::renderer(Format::Markdown, Paint::off(), false)
-        .verdict(v.diff.verify.as_ref().unwrap(), &recorded.source)
+        .verdict(&v.diff)
         .unwrap();
     assert!(md.ends_with("; the cluster is Deleting"), "{md}");
 
@@ -13095,7 +13299,7 @@ fn verify_ends_the_verdict_of_a_cluster_record_with_a_state_other_than_running()
         .with(cluster_route(CLUSTER_UID), moved_doc);
     let v = ops::verify(&recorded, &Palette::new(moved), "t1", &Progress::silent()).unwrap();
     assert!(!v.unchanged);
-    let line = verdict_of(&v, &recorded);
+    let line = verdict_of(&v);
     assert!(line.starts_with("DRIFT: "), "{line}");
     assert!(line.ends_with("; the cluster is Error"), "{line}");
 
@@ -13155,7 +13359,7 @@ fn verify_reports_a_gone_edge_host_or_cluster_group_as_drift_and_not_as_an_error
         let ver = v.diff.verify.as_ref().unwrap();
         assert_eq!(ver.status, VerifyStatus::Drifted);
         assert!(ver.gone && ver.deleted_at.is_none());
-        assert_eq!(verdict_of(&v, recorded), line);
+        assert_eq!(verdict_of(&v), line);
     }
 
     // a host that is not in a cluster, and a group that is not active, say their state
@@ -13167,7 +13371,7 @@ fn verify_reports_a_gone_edge_host_or_cluster_group_as_drift_and_not_as_an_error
     )
     .unwrap();
     assert!(v.unchanged);
-    let line = verdict_of(&v, &host);
+    let line = verdict_of(&v);
     assert!(line.ends_with("; the edge host is ready"), "{line}");
     for (active, suffix) in [(true, ""), (false, "; the cluster group is inactive")] {
         let api = serve_cluster_group(MemoryApi::new(), dir.path());
@@ -13176,7 +13380,7 @@ fn verify_reports_a_gone_edge_host_or_cluster_group_as_drift_and_not_as_an_error
         let api = api.with("/v1/clustergroups/g1", doc);
         let v = ops::verify(&group, &Palette::new(api), "t1", &Progress::silent()).unwrap();
         assert!(v.unchanged);
-        let line = verdict_of(&v, &group);
+        let line = verdict_of(&v);
         assert!(line.ends_with(&format!("since t0{suffix}")), "{line}");
     }
 }
@@ -13197,7 +13401,7 @@ fn verify_reports_a_renamed_version_as_renamed_and_not_as_overwritten() {
     assert_eq!(ver.status, VerifyStatus::Drifted);
     assert_eq!(ver.renamed_to.as_deref(), Some("lab-profile-renamed@1.2.0"));
     assert!(ver.overwritten_by.is_none());
-    let line = verdict_of(&v, &recorded);
+    let line = verdict_of(&v);
     assert_eq!(
         line,
         "DRIFT: published version lab-profile@1.2.0 was renamed to lab-profile-renamed@1.2.0"
@@ -13217,9 +13421,9 @@ fn verify_reports_a_renamed_version_as_renamed_and_not_as_overwritten() {
     assert_eq!(ver.overwritten_by.as_deref(), Some("lab-profile@1.3.0"));
     assert!(ver.renamed_to.is_none());
     assert!(
-        verdict_of(&v, &recorded).contains("was overwritten in place"),
+        verdict_of(&v).contains("was overwritten in place"),
         "{}",
-        verdict_of(&v, &recorded)
+        verdict_of(&v)
     );
 }
 
@@ -13780,7 +13984,7 @@ fn verify_reports_each_pack_that_palette_marks_invalid_now_and_keeps_the_status_
     );
     let sentence = format!("Palette marks pack os/ubuntu-aws invalid now ({INVALID_REASON})");
     let verdict = render::renderer(Format::Terminal, Paint::off(), false)
-        .verdict(ver, &recorded.source)
+        .verdict(&v.diff)
         .unwrap();
     assert!(verdict.starts_with("OK: "), "{verdict}");
     assert!(
@@ -13788,7 +13992,7 @@ fn verify_reports_each_pack_that_palette_marks_invalid_now_and_keeps_the_status_
         "{verdict}"
     );
     let verdict = render::renderer(Format::Markdown, Paint::off(), false)
-        .verdict(ver, &recorded.source)
+        .verdict(&v.diff)
         .unwrap();
     assert!(
         verdict.contains(&format!("**INVALID**: {sentence}")),
@@ -13838,7 +14042,7 @@ fn verify_reports_each_pack_that_palette_marks_invalid_now_and_keeps_the_status_
     let ver = v.diff.verify.as_ref().unwrap();
     assert!(ver.invalid_packs.is_empty());
     let verdict = render::renderer(Format::Terminal, Paint::off(), false)
-        .verdict(ver, &recorded.source)
+        .verdict(&v.diff)
         .unwrap();
     assert!(!verdict.contains("INVALID"), "{verdict}");
 }
