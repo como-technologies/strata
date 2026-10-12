@@ -339,7 +339,7 @@ fn candidate_snapshot<A: PaletteApi>(
     let raw = crate::candidate::resolve(loaded, palette, progress)?;
     let mut snap = Snapshot::from_raw(&raw, &loaded.path.display().to_string(), fetched_at)?;
     crate::candidate::warn_preset_options(&snap, progress);
-    snap.source.template = crate::candidate::TEMPLATE.to_string();
+    snap.source.template = crate::snapshot::Template::Candidate;
     // Palette does not hold a candidate, so no request asked which clusters use it
     snap.source.consumers = None;
     Ok(snap.with_project(palette.project_uid()))

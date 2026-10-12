@@ -11,7 +11,7 @@ use strata::error::Error;
 use strata::ops;
 use strata::progress::Progress;
 use strata::render::{self, Format};
-use strata::snapshot::{DRAFT_TEMPLATE, PUBLISHED_TEMPLATE, Snapshot};
+use strata::snapshot::{Snapshot, Template, UpstreamSource};
 
 use crate::common;
 use common::{
@@ -126,8 +126,8 @@ fn a_draft_records_apart_from_its_version_and_compare_names_the_layer_that_the_p
     let version = snapshot_of(&api, UID).unwrap();
     let draft = snapshot_of(&api, &format!("{UID}@draft")).unwrap();
 
-    assert_eq!(version.source.template, PUBLISHED_TEMPLATE);
-    assert_eq!(draft.source.template, DRAFT_TEMPLATE);
+    assert_eq!(version.source.template, Template::Published);
+    assert_eq!(draft.source.template, Template::Draft);
     assert_eq!(draft.source.reference, format!("{UID}@draft"));
     assert_eq!(draft.source.uid, UID);
     assert_ne!(version.root, draft.root, "the draft is another content");
@@ -162,7 +162,7 @@ fn a_draft_by_name_and_version_reads_the_same_draft() {
     let by_name = snapshot_of(&api, "lab-profile@1.0.0@draft").unwrap();
     assert_eq!(by_name.root, by_uid.root);
     assert_eq!(by_name.source.reference, "lab-profile@1.0.0@draft");
-    assert_eq!(by_name.source.template, DRAFT_TEMPLATE);
+    assert_eq!(by_name.source.template, Template::Draft);
 }
 
 #[test]
@@ -200,7 +200,7 @@ fn a_version_that_was_never_published_records_the_manifest_content_of_its_draft(
         manifest_entity(RULES, "rules", "", DRAFT_RULES),
     );
     let snap = snapshot_of(&api, UID).unwrap();
-    assert_eq!(snap.source.template, DRAFT_TEMPLATE);
+    assert_eq!(snap.source.template, Template::Draft);
     assert_eq!(manifest_content(&snap, "rules"), Some(DRAFT_RULES));
     let draft = snapshot_of(&api, &format!("{UID}@draft")).unwrap();
     assert_eq!(draft.root, snap.root, "the draft is the only template");
@@ -302,11 +302,12 @@ fn a_record_of_the_version_takes_nothing_from_a_pack_that_only_the_draft_has() {
         .unwrap();
     assert_eq!(k8s.version, "1.30.6");
     assert_eq!(
-        k8s.hash.upstream_source, "none",
+        k8s.hash.upstream_source,
+        UpstreamSource::NoDigest,
         "packs/manifests lists the 1.30.7 of the draft, and its digest is not the digest of 1.30.6"
     );
     let draft = snapshot_of(&api, &format!("{UID}@draft")).unwrap();
     let k8s = draft.packs.iter().find(|p| p.name == "kubernetes").unwrap();
     assert_eq!(k8s.version, "1.30.7");
-    assert_eq!(k8s.hash.upstream_source, "packRef.digest");
+    assert_eq!(k8s.hash.upstream_source, UpstreamSource::PackRef);
 }

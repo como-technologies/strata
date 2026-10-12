@@ -181,7 +181,7 @@ use std::time::Duration;
 
 use strata::api::{PaletteApi, Retry, RetryPolicy};
 use strata::config::Config;
-use strata::snapshot::Snapshot;
+use strata::snapshot::{Snapshot, Template, Tier, UpstreamSource};
 
 /// A retrying wrapper over a borrowed API, with a recorder in place of `sleep`.
 fn retrying(api: &MemoryApi, retries: u32) -> (Retry<&MemoryApi>, Rc<RefCell<Vec<Duration>>>) {
@@ -1433,7 +1433,7 @@ fn a_cluster_running_the_recorded_version_is_identical_to_the_record() {
         ("lab-profile", "1.3.0")
     );
     assert_eq!(c.profile, None);
-    assert_eq!(on_b.source.template, "applied");
+    assert_eq!(on_b.source.template, Template::Applied);
     assert_eq!(on_b.source.reference, format!("cluster:{CLUSTER_UID}"));
     assert_eq!(
         (on_b.source.name.as_str(), on_b.source.version.as_str()),
@@ -1782,14 +1782,17 @@ fn barney() -> Value {
 }
 
 fn policy_of(s: &Snapshot) -> Value {
-    s.source.cluster.as_ref().unwrap().tiers["policy"]
+    s.source.cluster.as_ref().unwrap().tiers[&Tier::Policy]
         .fields
         .clone()
 }
 
 /// The comparison of the policy tiers in `d`.
 fn policy_diff(d: &strata::diff::Diff) -> &strata::diff::TierDiff {
-    d.cluster_tiers.iter().find(|t| t.tier == "policy").unwrap()
+    d.cluster_tiers
+        .iter()
+        .find(|t| t.tier == Tier::Policy)
+        .unwrap()
 }
 
 #[test]
@@ -1882,7 +1885,7 @@ fn a_policy_tier_from_before_the_bindings_were_read_still_verifies() {
         .as_mut()
         .unwrap()
         .tiers
-        .insert("policy".to_string(), serde_json::from_value(tier).unwrap());
+        .insert(Tier::Policy, serde_json::from_value(tier).unwrap());
     let saved = dir.path().join("older.json");
     fs::write(&saved, older.to_json(true).unwrap()).unwrap();
     let older = Snapshot::load(&saved).unwrap();
@@ -1954,7 +1957,7 @@ fn a_404_of_the_route_of_the_bindings_records_null_and_another_error_leaves_out_
     // a 403 of the route of the role bindings does not stop the record
     let forbidden = serve_policy(dir.path(), barney()).failing(rbacs_route(), 403, "forbidden\n");
     let s = snapshot_cluster(&forbidden, None).unwrap();
-    let tier = &s.source.cluster.as_ref().unwrap().tiers["policy"];
+    let tier = &s.source.cluster.as_ref().unwrap().tiers[&Tier::Policy];
     assert!(
         tier.fields.get("rbacs").is_none(),
         "an error is not a value"
@@ -1978,7 +1981,7 @@ fn a_404_of_the_route_of_the_bindings_records_null_and_another_error_leaves_out_
     // a 404 records null and no error, and the hash of a 403 does not cover that null
     let missing = serve_policy(dir.path(), barney()).failing(rbacs_route(), 404, "not found");
     let m = snapshot_cluster(&missing, None).unwrap();
-    let missing_tier = &m.source.cluster.as_ref().unwrap().tiers["policy"];
+    let missing_tier = &m.source.cluster.as_ref().unwrap().tiers[&Tier::Policy];
     assert_eq!(missing_tier.fields["rbacs"], Value::Null);
     assert_ne!(missing_tier.hash, tier.hash);
     assert!(missing_tier.errors.is_empty());
@@ -1992,7 +1995,7 @@ fn a_404_of_the_route_of_the_bindings_records_null_and_another_error_leaves_out_
     let forbidden =
         serve_policy(dir.path(), barney()).failing(namespaces_route(), 403, "forbidden");
     let s = snapshot_cluster(&forbidden, None).unwrap();
-    let tier = &s.source.cluster.as_ref().unwrap().tiers["policy"];
+    let tier = &s.source.cluster.as_ref().unwrap().tiers[&Tier::Policy];
     assert!(tier.fields.get("namespaces").is_none());
     assert_ne!(tier.fields["rbacs"], Value::Null);
     assert_eq!(
@@ -5054,7 +5057,7 @@ fn a_candidate_built_from_real_registry_responses_has_the_root_of_the_published_
             published["root"].as_str().unwrap(),
             "aws-stack@{version}: the candidate is the release that gets published"
         );
-        assert_eq!(snap.source.template, "candidate");
+        assert_eq!(snap.source.template, Template::Candidate);
         assert_eq!(snap.source.uid, "");
         assert_eq!(
             (snap.source.name.as_str(), snap.source.version.as_str()),
@@ -5824,7 +5827,7 @@ fn a_candidate_in_memory_reproduces_the_root_with_no_file() {
     )
     .unwrap();
     assert_eq!(snap.root, recorded_b.root);
-    assert_eq!(snap.source.template, "candidate");
+    assert_eq!(snap.source.template, Template::Candidate);
     assert_eq!(snap.source.reference, "b@1");
 
     // The rules of a candidate file hold for a value too, and need no network.
@@ -6739,7 +6742,7 @@ fn comparing_two_pack_versions_says_what_changed_between_them() {
 
     assert_eq!(old.packs.len(), 1, "a pack snapshot holds the one pack");
     assert_eq!(old.source.title(), "pack csi-aws-ebs@1.63.1");
-    assert_eq!(old.source.template, "registry");
+    assert_eq!(old.source.template, Template::Registry);
     assert_eq!(old.source.uid, "", "a registry pack has no profile uid");
     let src = old.source.pack.as_ref().expect("a pack snapshot says so");
     assert_eq!(
@@ -8346,7 +8349,7 @@ fn a_raw_directory_keeps_each_read_error_so_the_record_is_the_record_of_the_fetc
         c.pending_repave_error.as_deref(),
         Some("HTTP 403: forbidden")
     );
-    let policy = &c.tiers["policy"];
+    let policy = &c.tiers[&Tier::Policy];
     assert_eq!(
         policy.errors.keys().collect::<Vec<_>>(),
         ["namespaces", "rbacs"]
@@ -8384,7 +8387,7 @@ fn a_pack_with_no_digest_makes_verify_unverified_and_names_the_pack() {
         .iter()
         .find(|p| p.name == "ubuntu-aws")
         .unwrap();
-    assert_eq!(os.hash.upstream_source, "none");
+    assert_eq!(os.hash.upstream_source, UpstreamSource::NoDigest);
     assert_eq!(recorded.upstream_unknown(), ["os/ubuntu-aws"]);
 
     // the same content, and the empty digest on both sides: the upstream check cannot fail
@@ -8620,7 +8623,7 @@ fn a_manifest_pack_has_no_archive_and_is_never_upstream_unknown() {
     common::make_fixtures(dir.path());
     let mut recorded = ops::snapshot_from_dir(&dir.path().join("a"), "a", "t0").unwrap();
     let pack = &mut recorded.packs[0];
-    pack.hash.upstream_source = "none".to_string();
+    pack.hash.upstream_source = UpstreamSource::NoDigest;
     pack.kind = "manifest".to_string();
     assert!(!pack.upstream_unknown());
     pack.kind = "helm".to_string();
@@ -9962,19 +9965,19 @@ fn a_cluster_record_carries_the_tiers_that_palette_gives_and_names_them() {
     // shape costs a request, so a record without --shape does not carry it
     assert_eq!(
         c.tiers.keys().collect::<Vec<_>>(),
-        ["applied", "policy", "running"]
+        [&Tier::Applied, &Tier::Policy, &Tier::Running]
     );
     assert_eq!(c.labels.get("env").map(String::as_str), Some("dev"));
-    assert_eq!(c.tiers["applied"].fields["spcHash"], "h1");
+    assert_eq!(c.tiers[&Tier::Applied].fields["spcHash"], "h1");
     // running holds the covered profile alone, without the condition
-    let running = c.tiers["running"].fields.as_array().unwrap();
+    let running = c.tiers[&Tier::Running].fields.as_array().unwrap();
     assert!(
         running
             .iter()
             .all(|r| r["name"] != "other" && r.get("condition").is_none())
     );
     assert_eq!(running.len(), snap.packs.len());
-    assert_eq!(c.tiers["policy"].fields["timezone"], "Etc/UTC");
+    assert_eq!(c.tiers[&Tier::Policy].fields["timezone"], "Etc/UTC");
 
     // --shape: the machine pools and the cloud part, without the ids of the cluster
     let palette = Palette::new(
@@ -9986,7 +9989,7 @@ fn a_cluster_record_carries_the_tiers_that_palette_gives_and_names_them() {
         .unwrap();
     raw.cloud_config = Some(palette.cloud_config(&raw.cluster).unwrap());
     let shaped = Snapshot::from_cluster(&raw, None, "cluster", "t0").unwrap();
-    let shape = &shaped.source.cluster.as_ref().unwrap().tiers["shape"].fields;
+    let shape = &shaped.source.cluster.as_ref().unwrap().tiers[&Tier::Shape].fields;
     assert_eq!(shape["cloudType"], "aws");
     assert_eq!(shape["cloud"], serde_json::json!({"region": "us-east-2"}));
     assert_eq!(shape["pools"][0]["name"], "cp-pool", "pools in name order");
@@ -10007,7 +10010,7 @@ fn a_cluster_record_carries_the_tiers_that_palette_gives_and_names_them() {
     let palette = Palette::new(api.clone().with("/v1/cloudconfigs/eks/cc1", eks));
     raw.cloud_config = Some(palette.cloud_config(&raw.cluster).unwrap());
     let shaped = Snapshot::from_cluster(&raw, None, "cluster", "t0").unwrap();
-    let shape = &shaped.source.cluster.as_ref().unwrap().tiers["shape"].fields;
+    let shape = &shaped.source.cluster.as_ref().unwrap().tiers[&Tier::Shape].fields;
     assert_eq!(shape["pools"][0]["amiType"], "AL2023_x86_64_STANDARD");
     assert_eq!(shape["pools"][0]["awsLaunchTemplate"]["ami"]["id"], "ami-1");
     assert!(shape["pools"][0].get("instanceConfig").is_none());
@@ -10024,7 +10027,7 @@ fn a_cluster_record_carries_the_tiers_that_palette_gives_and_names_them() {
             "overrideClusterAPIConfig": "gcpManagedControlPlane:\n  spec:\n    releaseChannel: regular\n"},
         "machinePoolConfig": [{"name": "worker-pool", "instanceType": "e2-standard-4", "size": 3}]}}));
     let shaped = Snapshot::from_cluster(&raw, None, "cluster", "t0").unwrap();
-    let shape = &shaped.source.cluster.as_ref().unwrap().tiers["shape"].fields;
+    let shape = &shaped.source.cluster.as_ref().unwrap().tiers[&Tier::Shape].fields;
     assert_eq!(
         shape["cloud"]["managedClusterConfig"]["location"],
         "us-east1"
@@ -10090,13 +10093,16 @@ fn compare_names_the_tier_and_the_field_that_differ_and_a_pack_behind_its_profil
 
     let d = strata::diff::compute(&a, &b, "t1", None);
     assert!(d.same, "the release is the same");
-    let tier = |name: &str| d.cluster_tiers.iter().find(|t| t.tier == name).unwrap();
-    assert!(tier("applied").same);
-    assert!(!tier("policy").same);
-    assert_eq!(tier("policy").diff[0].path, "timezone");
-    assert_eq!(tier("shape").diff[0].path, "pools[name=worker-pool].size");
-    assert!(!tier("running").same);
-    assert!(tier("labels").same);
+    let tier = |name: Tier| d.cluster_tiers.iter().find(|t| t.tier == name).unwrap();
+    assert!(tier(Tier::Applied).same);
+    assert!(!tier(Tier::Policy).same);
+    assert_eq!(tier(Tier::Policy).diff[0].path, "timezone");
+    assert_eq!(
+        tier(Tier::Shape).diff[0].path,
+        "pools[name=worker-pool].size"
+    );
+    assert!(!tier(Tier::Running).same);
+    assert!(tier(Tier::Labels).same);
     assert_eq!(d.running_behind.len(), 1);
     let behind = &d.running_behind[0];
     assert_eq!(
@@ -10142,7 +10148,7 @@ fn between_two_clusters_the_applied_tier_compares_the_infra_hash_alone() {
     let applied = d
         .cluster_tiers
         .iter()
-        .find(|t| t.tier == "applied")
+        .find(|t| t.tier == Tier::Applied)
         .unwrap();
     assert!(applied.same, "{:?}", applied.diff);
     // the same cluster with another spcHash has changed
@@ -10152,7 +10158,7 @@ fn between_two_clusters_the_applied_tier_compares_the_infra_hash_alone() {
     let applied = d
         .cluster_tiers
         .iter()
-        .find(|t| t.tier == "applied")
+        .find(|t| t.tier == Tier::Applied)
         .unwrap();
     assert!(!applied.same);
     assert_eq!(applied.diff[0].path, "spcHash");
@@ -10319,7 +10325,9 @@ fn shape_on(kind: &str, cloud_config: Value) -> Value {
     raw.cluster["spec"]["cloudConfigRef"]["kind"] = Value::from(kind);
     raw.cloud_config = Some(palette.cloud_config(&raw.cluster).unwrap());
     let snap = Snapshot::from_cluster(&raw, None, "cluster", "t0").unwrap();
-    snap.source.cluster.unwrap().tiers["shape"].fields.clone()
+    snap.source.cluster.unwrap().tiers[&Tier::Shape]
+        .fields
+        .clone()
 }
 
 #[test]
@@ -10522,10 +10530,10 @@ fn an_older_record_verifies(kind: &str, cc: Value) {
 
     let v = ops::verify(&old, &Palette::new(api.clone()), "t1", &Progress::silent()).unwrap();
     assert_eq!(v.status, VerifyStatus::Unchanged, "{kind}");
-    let shape = v.diff.cluster_tiers.iter().find(|t| t.tier == "shape");
+    let shape = v.diff.cluster_tiers.iter().find(|t| t.tier == Tier::Shape);
     assert!(shape.unwrap().same, "{kind}: {:?}", shape.unwrap().diff);
     // the live record holds the fields of its cloud, and compares with the old record
-    let live = &v.live.source.cluster.as_ref().unwrap().tiers["shape"].fields;
+    let live = &v.live.source.cluster.as_ref().unwrap().tiers[&Tier::Shape].fields;
     assert_eq!(live["cloudType"], kind);
     let d = strata::diff::compute(&old, &v.live, "t1", None);
     assert!(d.cluster_tiers.iter().all(|t| t.same), "{kind}");
@@ -10559,7 +10567,7 @@ fn a_record_of_aws_eks_or_gke_from_before_the_shape_by_cloud_type_loads_and_veri
         .diff
         .cluster_tiers
         .iter()
-        .find(|t| t.tier == "shape")
+        .find(|t| t.tier == Tier::Shape)
         .unwrap();
     assert!(!shape.same);
     assert_eq!(shape.diff.len(), 1, "{:?}", shape.diff);
@@ -11532,8 +11540,8 @@ fn a_cluster_group_record_holds_the_config_of_each_virtual_cluster_in_a_policy_t
     let api = serve(Some(clusters_config(6000, GROUP_VALUES)));
     let group = snap(&api);
     let tiers = &group.source.cluster.as_ref().unwrap().tiers;
-    assert_eq!(tiers.keys().collect::<Vec<_>>(), ["policy"]);
-    let f = &tiers["policy"].fields;
+    assert_eq!(tiers.keys().collect::<Vec<_>>(), [&Tier::Policy]);
+    let f = &tiers[&Tier::Policy].fields;
     assert_eq!(f["endpointType"], "LoadBalancer");
     assert_eq!(f["kubernetesDistroType"], "k3s");
     assert_eq!(f["limitConfig"]["cpuMilliCore"], 6000);
@@ -11569,13 +11577,13 @@ fn a_cluster_group_record_holds_the_config_of_each_virtual_cluster_in_a_policy_t
         &format!("# another comment\n{GROUP_VALUES}"),
     ))));
     assert_eq!(
-        commented.source.cluster.as_ref().unwrap().tiers["policy"].hash,
-        tiers["policy"].hash
+        commented.source.cluster.as_ref().unwrap().tiers[&Tier::Policy].hash,
+        tiers[&Tier::Policy].hash
     );
 
     // values that are not YAML are kept by the hash of their text, with the error
     let broken = snap(&serve(Some(clusters_config(6000, "sync: [\n"))));
-    let f = &broken.source.cluster.as_ref().unwrap().tiers["policy"].fields;
+    let f = &broken.source.cluster.as_ref().unwrap().tiers[&Tier::Policy].fields;
     assert_eq!(f["values"], Value::Null);
     assert_eq!(f["valuesHash"].as_str().map(str::len), Some(64));
     assert!(f["valuesParseError"].is_string(), "{f}");
@@ -11597,7 +11605,7 @@ fn a_cluster_group_record_holds_the_config_of_each_virtual_cluster_in_a_policy_t
             .as_ref()
             .unwrap()
             .tiers
-            .contains_key("policy")
+            .contains_key(&Tier::Policy)
     );
     let d = ops::compare(&sa, &sb, "t1");
     assert!(
@@ -11609,7 +11617,7 @@ fn a_cluster_group_record_holds_the_config_of_each_virtual_cluster_in_a_policy_t
     // the group gives each virtual cluster less CPU now
     let less = serve(Some(clusters_config(4000, GROUP_VALUES)));
     let named = |tiers: &[strata::diff::TierDiff]| {
-        let policy = tiers.iter().find(|t| t.tier == "policy").unwrap();
+        let policy = tiers.iter().find(|t| t.tier == Tier::Policy).unwrap();
         assert!(!policy.same);
         policy
             .diff
@@ -11681,7 +11689,7 @@ fn a_raw_directory_of_a_cluster_group_masks_each_password_and_gives_the_record_o
         serde_json::to_value(&direct).unwrap()
     );
     assert_eq!(
-        from_raw.source.cluster.unwrap().tiers["policy"].fields["values"],
+        from_raw.source.cluster.unwrap().tiers[&Tier::Policy].fields["values"],
         serde_json::json!({"sync": {"adminPassword": "********", "replicas": 1},
             "users": [{"name": "fred", "password": "********"}]})
     );
@@ -14160,4 +14168,145 @@ fn verify_reports_each_pack_that_palette_marks_invalid_now_and_keeps_the_status_
         .verdict(&v.diff)
         .unwrap();
     assert!(!verdict.contains("INVALID"), "{verdict}");
+}
+
+/// The root and the content digest that strata 0.21.0 gives each kind of record, from the
+/// fixtures of these tests, before one function built each root. A change of a root is a change
+/// of the schema id, so no release moves one.
+const ROOT_OF_EACH_KIND: [(&str, &str, &str); 8] = [
+    (
+        "published",
+        "4016d4f43ffab583718586a83a7af9e5c2e736ca810daef5655b962c91eca423",
+        "44680519d410b0a10413a10c3668323d9b30e991529eae3d4b0a0464b50a15ea",
+    ),
+    (
+        "draft",
+        "28dbbe988abc43f0a6db6dd469128941cec942a974d8fadb41cd1b6e05897c36",
+        "936a07d7141b3d4e667676807e31a2b0fc34193e97b2ccc55cc812197f98d599",
+    ),
+    (
+        "cluster",
+        "4016d4f43ffab583718586a83a7af9e5c2e736ca810daef5655b962c91eca423",
+        "44680519d410b0a10413a10c3668323d9b30e991529eae3d4b0a0464b50a15ea",
+    ),
+    (
+        "cluster group",
+        "e7cb1ae941a41a9d2c6fc956050beeb2c6a2db7b9fdf12f2aa250f48b6dc0c75",
+        "c7db0abf7eb675c7cc83bc1cac8139b67cdefad380d0ce244b34ebe68156a8b7",
+    ),
+    (
+        "app profile",
+        "0486a3007718b8c492a8fc059906794594fee3923a6f4e01b100d7e72c769972",
+        "7cae758527f7d0245c9b7c2bf1accadccdfc1c8fa34aba6d33914f21dc50f34f",
+    ),
+    (
+        "candidate",
+        "2ef663237156bd1206ca52209bc621be227c6f5f8277101ec34e45d346431b9d",
+        "e191139e603fed9251e0a65216ed073d529af255977ec797af817cba10682ef7",
+    ),
+    (
+        "registry pack",
+        "2ef663237156bd1206ca52209bc621be227c6f5f8277101ec34e45d346431b9d",
+        "e191139e603fed9251e0a65216ed073d529af255977ec797af817cba10682ef7",
+    ),
+    (
+        "gone",
+        "487f5e18aa696e54a372da998bc4f0c38c7585d302664fb03e31464769d35187",
+        "0b54e29bb56949df405262d22e4122d46d00fe2e594f5b34ad6577ea76a81020",
+    ),
+];
+
+#[test]
+fn one_function_builds_the_root_of_each_kind_of_record_and_no_root_moved() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let a = dir.path().join("a");
+    let published = ops::snapshot_from_dir(&a, "a", "t0").unwrap();
+    // the order of the variables in the answer of Palette does not change the root: the record
+    // sorts them by name
+    let reversed = {
+        let to = dir.path().join("a-variables-reversed");
+        fs::create_dir_all(&to).unwrap();
+        for f in ["profile.json", "manifests.json"] {
+            fs::copy(a.join(f), to.join(f)).unwrap();
+        }
+        let mut vars = read_json(&a.join("variables.json"));
+        vars["variables"].as_array_mut().unwrap().reverse();
+        fs::write(
+            to.join("variables.json"),
+            serde_json::to_string_pretty(&vars).unwrap(),
+        )
+        .unwrap();
+        ops::snapshot_from_dir(&to, "a", "t0").unwrap()
+    };
+    assert_eq!(reversed.variables, published.variables);
+    assert_eq!(reversed.root, published.root, "the sort of the variables");
+    // the draft of `a`: one more line in the values of its Kubernetes pack
+    let draft = {
+        let profile = read_json(&a.join("profile.json"));
+        let mut draft = profile["spec"]["published"].clone();
+        let values = draft["packs"][1]["values"].as_str().unwrap().to_string();
+        draft["packs"][1]["values"] = Value::from(format!("{values}\nextra: 1\n"));
+        let document = profile_document(
+            UID_A,
+            "lab-profile",
+            "1.2.0",
+            profile["spec"]["published"].clone(),
+            Some(draft),
+        );
+        let api = serve_profile(
+            MemoryApi::new(),
+            UID_A,
+            document,
+            read_json(&a.join("manifests.json")),
+            read_json(&a.join("variables.json")),
+        );
+        snapshot_of(&api, &format!("{UID_A}@draft")).unwrap()
+    };
+    let cluster = snapshot_cluster(
+        &serve_cluster(MemoryApi::new(), dir.path(), "cluster-a"),
+        None,
+    )
+    .unwrap();
+    let group = snapshot_of(
+        &serve_cluster_group(MemoryApi::new(), dir.path()),
+        "clustergroup:g1",
+    )
+    .unwrap();
+    let app = snapshot_of(&serve_app_profile(MemoryApi::new(), "2"), "appprofile:ap1").unwrap();
+    let registry = serve_registry(vec![], &[("reg-public", public_entity())]);
+    // a candidate of the one pack that the pack record holds, so the two share a root
+    let candidate = {
+        let file = dir.path().join("fred.yaml");
+        write_yaml(
+            &file,
+            &serde_json::json!({
+                "name": "fred", "version": "1.0.0", "type": "add-on", "registryUid": "reg-public",
+                "layers": [{"name": "csi-aws-ebs", "version": "1.63.1"}],
+            }),
+        );
+        candidate_snapshot(&file, &registry).unwrap()
+    };
+    let pack = snapshot_of(&registry, "pack:csi-aws-ebs@1.63.1").unwrap();
+    let gone = published.gone("t1");
+
+    let records = [
+        (&published, Template::Published),
+        (&draft, Template::Draft),
+        (&cluster, Template::Applied),
+        (&group, Template::Applied),
+        (&app, Template::Published),
+        (&candidate, Template::Candidate),
+        (&pack, Template::Registry),
+        (&gone, Template::Published),
+    ];
+    for ((kind, root, content), (record, template)) in ROOT_OF_EACH_KIND.iter().zip(records) {
+        assert_eq!(record.source.template, template, "{kind}");
+        assert_eq!(record.root, *root, "the root of the {kind} record");
+        assert_eq!(
+            record.content_digest(),
+            *content,
+            "the content digest of the {kind} record"
+        );
+    }
 }

@@ -815,6 +815,61 @@ fn snapshot_from_candidate_reports_local_problems_without_credentials() {
     );
 }
 
+/// The values of a closed set of a record, as `strata schema` names them under `$defs`: a `oneOf`
+/// of one constant for each value, in the order of the enum.
+fn schema_values(schema: &serde_json::Value, def: &str) -> Vec<String> {
+    schema["$defs"][def]["oneOf"]
+        .as_array()
+        .unwrap_or_else(|| panic!("{def} has no oneOf: {}", schema["$defs"][def]))
+        .iter()
+        .map(|c| c["const"].as_str().unwrap().to_string())
+        .collect()
+}
+
+#[test]
+fn the_schema_names_each_value_of_a_closed_set_of_a_record() {
+    let r = run(&["schema", "snapshot"]);
+    assert_eq!(r.code, 0, "{}", r.err);
+    let v: serde_json::Value = serde_json::from_str(&r.out).unwrap();
+    assert_eq!(
+        schema_values(&v, "Template"),
+        ["published", "draft", "applied", "candidate", "registry"]
+    );
+    assert_eq!(
+        schema_values(&v, "UpstreamSource"),
+        ["packRef.digest", "packSummary.digest", "none"]
+    );
+    let defs = &v["$defs"];
+    assert_eq!(
+        defs["Source"]["properties"]["template"]["$ref"],
+        "#/$defs/Template"
+    );
+    assert_eq!(
+        defs["PackHash"]["properties"]["upstreamSource"]["$ref"],
+        "#/$defs/UpstreamSource"
+    );
+    // the tiers of a cluster record stay a map from the name of the tier to the tier
+    let tiers = &defs["ClusterSource"]["properties"]["tiers"];
+    assert_eq!(tiers["type"], "object");
+    assert_eq!(tiers["additionalProperties"]["$ref"], "#/$defs/ClusterTier");
+
+    let r = run(&["schema", "diff"]);
+    assert_eq!(r.code, 0, "{}", r.err);
+    let v: serde_json::Value = serde_json::from_str(&r.out).unwrap();
+    assert_eq!(
+        schema_values(&v, "Tier"),
+        ["applied", "labels", "policy", "running", "shape"]
+    );
+    assert_eq!(
+        v["$defs"]["TierDiff"]["properties"]["tier"]["$ref"],
+        "#/$defs/Tier"
+    );
+    assert_eq!(
+        v["$defs"]["PackSide"]["properties"]["upstreamSource"]["$ref"],
+        "#/$defs/UpstreamSource"
+    );
+}
+
 #[test]
 fn schema_subcommand_prints_json_schema() {
     for (kind, id) in [

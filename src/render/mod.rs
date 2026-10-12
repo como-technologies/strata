@@ -20,7 +20,7 @@ use crate::ops::{
     VerifySummary,
 };
 use crate::repave::PaletteRepaveReason;
-use crate::snapshot::{PendingUpdate, Snapshot, Source, SubjectKind};
+use crate::snapshot::{PendingUpdate, Snapshot, Source, SubjectKind, Tier};
 use crate::text::and_list;
 
 pub use json::JsonRenderer;
@@ -1152,7 +1152,7 @@ fn unread_notes(d: &Diff) -> Vec<String> {
                 t.errors.iter().map(move |(field, e)| {
                     format!(
                         "strata could not read {} of cluster {} ({e}), so it does not compare it",
-                        tier_path(tier, field),
+                        tier_path(*tier, field),
                         c.name
                     )
                 })
@@ -1180,7 +1180,7 @@ fn running_behind_notes(d: &Diff) -> Vec<String> {
 
 /// The path of a leaf inside a tier: `policy.timezone`, and `running[name=kubernetes].version`
 /// for a tier that is a list.
-pub(crate) fn tier_path(tier: &str, path: &str) -> String {
+pub(crate) fn tier_path(tier: Tier, path: &str) -> String {
     if path.starts_with('[') {
         format!("{tier}{path}")
     } else {
@@ -1190,11 +1190,8 @@ pub(crate) fn tier_path(tier: &str, path: &str) -> String {
 
 /// Each tier compared between two cluster records, with a word for its state: `applied same`,
 /// `policy changed`. Empty when no tier was compared.
-pub(crate) fn tier_states(d: &Diff) -> Vec<(String, bool)> {
-    d.cluster_tiers
-        .iter()
-        .map(|t| (t.tier.clone(), t.same))
-        .collect()
+pub(crate) fn tier_states(d: &Diff) -> Vec<(Tier, bool)> {
+    d.cluster_tiers.iter().map(|t| (t.tier, t.same)).collect()
 }
 
 /// `aws-stack@1.1.1@draft is the draft of aws-stack@1.1.1 (uid u): its publish makes this

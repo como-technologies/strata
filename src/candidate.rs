@@ -20,18 +20,12 @@ use crate::error::{Error, Result, unread_reason};
 use crate::json::{arr, first_nonempty, items, opt_text, str_at, strings, take_items, text};
 use crate::progress::Progress;
 use crate::reference::LATEST;
-use crate::snapshot::{PackSource, PresetOption, Snapshot};
+use crate::snapshot::{PackSource, PresetOption, Snapshot, Template};
 
 mod export;
 mod gaps;
 
-/// The `source.template` of a snapshot built from a candidate file.
-pub const TEMPLATE: &str = "candidate";
-
-/// The `source.template` of a snapshot of one pack version from a registry.
-pub const PACK_TEMPLATE: &str = "registry";
-
-/// The `source.type` of such a snapshot.
+/// The `source.type` of a snapshot of one pack version from a registry.
 pub const PACK_TYPE: &str = "pack";
 
 /// A candidate profile version. YAML or JSON. Quote versions that YAML would read as numbers,
@@ -921,7 +915,7 @@ pub fn pack_snapshot<A: PaletteApi>(
     let raw = resolve(&loaded, palette, progress)?;
     let mut snap = Snapshot::from_raw(&raw, reference, fetched_at)?;
     snap.source.kind = PACK_TYPE.to_string();
-    snap.source.template = PACK_TEMPLATE.to_string();
+    snap.source.template = Template::Registry;
     // a pack version is not a profile version, so no cluster uses it and nothing asked
     snap.source.consumers = None;
     snap.source.pack = Some(PackSource {

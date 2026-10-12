@@ -173,7 +173,7 @@ impl Renderer for MarkdownRenderer {
                 o.push_str("<details><summary>cluster tiers that differ</summary>\n\n```diff\n");
                 for t in changed {
                     for l in &t.diff {
-                        o.push_str(&op_line(&OpLine::leaf(&tier_path(&t.tier, &l.path), l)));
+                        o.push_str(&op_line(&OpLine::leaf(&tier_path(t.tier, &l.path), l)));
                     }
                 }
                 o.push_str("```\n</details>\n\n");

@@ -7,7 +7,7 @@ use serde_json::{Value, json};
 use strata::api::{MemoryApi, Palette};
 use strata::error::Error;
 use strata::progress::Progress;
-use strata::snapshot::{DRAFT_TEMPLATE, PUBLISHED_TEMPLATE};
+use strata::snapshot::Template;
 
 use crate::common;
 use common::{
@@ -71,7 +71,7 @@ fn draft_only() -> MemoryApi {
 fn a_record_of_a_draft_holds_no_clear_secret() {
     let api = draft_only().with(pack_route(PACK), pack_doc());
     let snap = snapshot_of(&api, PROFILE).unwrap();
-    assert_eq!(snap.source.template, DRAFT_TEMPLATE);
+    assert_eq!(snap.source.template, Template::Draft);
     let record = snap.to_json(false).unwrap();
     assert!(!record.contains(SECRET), "{record}");
     let pack = &snap.packs[0];
@@ -273,7 +273,7 @@ fn a_draft_with_a_secret_and_manifests_records_no_clear_secret_and_the_content_o
     }
 
     let draft = snapshot_of(&api, &format!("{PROFILE}@draft")).unwrap();
-    assert_eq!(draft.source.template, DRAFT_TEMPLATE);
+    assert_eq!(draft.source.template, Template::Draft);
     let record = draft.to_json(false).unwrap();
     assert!(!record.contains(SECRET), "{record}");
     let grafana = draft.packs.iter().find(|p| p.name == "grafana").unwrap();
@@ -287,7 +287,7 @@ fn a_draft_with_a_secret_and_manifests_records_no_clear_secret_and_the_content_o
     assert_eq!(manifest_content(&draft, "rules"), Some(DRAFT_RULES));
 
     let version = snapshot_of(&api, PROFILE).unwrap();
-    assert_eq!(version.source.template, PUBLISHED_TEMPLATE);
+    assert_eq!(version.source.template, Template::Published);
     let record = version.to_json(false).unwrap();
     assert!(!record.contains(SECRET), "{record}");
     assert_eq!(manifest_content(&version, "dash"), Some(PUBLISHED_DASH));
