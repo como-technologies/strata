@@ -12090,10 +12090,10 @@ fn behind_of(
     .unwrap()
 }
 
-/// What the three commands that ask if a pack supports a cloud say for the cloud `cloud`, on a
-/// registry whose csi-aws-ebs has the version 1.63.1 for the clouds `pinned` and the version
-/// 1.65.0 for the clouds `newer`: whether `packs --cloud` keeps 1.65.0, whether `behind` names
-/// 1.65.0 as newer for a record of 1.63.1, and whether a candidate of the cloud takes 1.65.0.
+/// What the three commands that ask if a pack supports a cloud say for the cloud `cloud`.
+/// The registry has csi-aws-ebs at 1.63.1 for the clouds `pinned` and at 1.65.0 for the
+/// clouds `newer`. The answers, in order: `packs --cloud` keeps 1.65.0; `behind` names 1.65.0
+/// as newer for a record of 1.63.1; a candidate of the cloud takes 1.65.0.
 fn a_pack_supports_the_cloud(pinned: &[&str], newer: &[&str], cloud: &str) -> [bool; 3] {
     let mut old = pack_summary("pk-63", "1.63.1", "reg-public", "sha256:aaa", CSI_63);
     old["spec"]["cloudTypes"] = serde_json::json!(pinned);

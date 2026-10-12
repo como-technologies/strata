@@ -7,7 +7,7 @@
 //! strata fills".
 
 use super::{Candidate, CandidateLayer, MANIFEST, MANIFEST_LAYER, PACK_TYPE, loose_semver};
-use crate::cloud::supports;
+use crate::cloud::{Cloud, supports};
 use crate::text::and_list;
 
 /// What strata says after each refusal of this module.
@@ -60,8 +60,8 @@ fn layers_of_type(kind: &str) -> Option<&'static [&'static str]> {
 /// The layers that a `cluster` or `infra` profile must have: `os`, `k8s`, and `cni` on the cloud
 /// `edge-native`, and `csi` too on each other cloud. None for each other type.
 fn core_layers(kind: &str, cloud: &str) -> Option<&'static [&'static str]> {
-    match (kind, cloud) {
-        ("cluster" | "infra", "edge-native") => Some(&["os", "k8s", "cni"]),
+    match (kind, Cloud::of(cloud)) {
+        ("cluster" | "infra", Cloud::EdgeNative) => Some(&["os", "k8s", "cni"]),
         ("cluster" | "infra", _) => Some(&["os", "k8s", "cni", "csi"]),
         _ => None,
     }

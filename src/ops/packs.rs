@@ -122,7 +122,7 @@ impl PackBuild {
 pub struct PackOptions {
     /// Only this registry, by name or uid.
     pub registry: Option<String>,
-    /// Only the versions that support this cloud, by the rule of [`crate::cloud`]: a version
+    /// Only the versions that support this cloud, by the rule of [`crate::cloud`]. A version
     /// with the cloud type `all`, or with no cloud type, supports each cloud.
     pub cloud: Option<String>,
     /// Only the newest version of each registry, and the version that Palette calls the latest

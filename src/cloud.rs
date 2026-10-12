@@ -4,8 +4,9 @@
 //! tenant registers. A pack names the clouds that it supports in `spec.cloudTypes`, and a
 //! profile names its cloud in `spec.published.cloudType`. The create of a profile version
 //! refuses a pack that does not support the cloud of the profile, with the code
-//! `PackNotSupported`. The function `supports` is that rule. `packs --cloud`, `behind`, and the
-//! check of a candidate use it. The book states it in "A pack that supports a cloud".
+//! `PackNotSupported`. The function [`supports`] is that rule. `packs --cloud`, `behind`, and the
+//! check of a candidate use it. The book states it in "A pack that supports a cloud". Each
+//! name of a cloud type that the code compares or sends is in this module.
 
 /// The cloud type `all`: each cloud. A pack with it supports each cloud, and a profile of it
 /// takes each pack.
@@ -14,6 +15,10 @@ pub const CLOUD_ALL: &str = "all";
 /// The cloud type `custom`: each custom cloud. A pack with it supports each cloud that Palette
 /// does not know.
 pub const CLOUD_CUSTOM: &str = "custom";
+
+/// The cloud type of a virtual cluster. The cluster listing leaves out each cluster of this
+/// cloud type, and the search does too, unless a condition on `environment` asks for it.
+pub(crate) const CLOUD_NESTED: &str = "nested";
 
 /// A cloud type that Palette knows, or a custom cloud.
 ///
@@ -72,7 +77,7 @@ impl Cloud {
             "maas" => Cloud::Maas,
             "apache-cloudstack" => Cloud::Cloudstack,
             "baremetal" => Cloud::Baremetal,
-            "nested" => Cloud::Nested,
+            CLOUD_NESTED => Cloud::Nested,
             "generic" => Cloud::Generic,
             "openstack" => Cloud::Openstack,
             _ => Cloud::Custom,
@@ -153,7 +158,7 @@ mod tests {
             "maas",
             "apache-cloudstack",
             "baremetal",
-            "nested",
+            CLOUD_NESTED,
             "generic",
         ] {
             assert!(!Cloud::of(name).is_custom(), "{name}");
