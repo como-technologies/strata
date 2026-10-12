@@ -18,7 +18,7 @@ pub const CLOUD_CUSTOM: &str = "custom";
 /// A cloud type that Palette knows, or a custom cloud.
 ///
 /// Palette knows the cloud types of [`Cloud::All`] to [`Cloud::Generic`]. [`Cloud::Openstack`]
-/// is a cloud type that Palette knew: a record from then holds it, and the rule of a pack reads
+/// is a cloud type that Palette knew. A record from then holds it, and the rule of a pack reads
 /// it as a custom cloud. Each other cloud type is [`Cloud::Custom`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Cloud {
@@ -90,8 +90,9 @@ impl Cloud {
 ///
 /// This is the rule of the create of a profile version. Palette refuses a pack that breaks it
 /// with the code `PackNotSupported`. A pack with no cloud type supports each cloud, and each
-/// pack supports the cloud `all`. Each other pack supports the clouds of its cloud types: each
-/// cloud when one of them is `all`, and each custom cloud when one of them is `custom`.
+/// pack supports the cloud `all`. Each other pack supports the clouds of its cloud types. It
+/// supports each cloud when one of them is `all`, and each custom cloud when one of them is
+/// `custom`.
 pub(crate) fn supports(cloud_types: &[String], cloud: &str) -> bool {
     let custom = Cloud::of(cloud).is_custom();
     cloud == CLOUD_ALL

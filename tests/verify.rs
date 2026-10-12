@@ -12125,7 +12125,8 @@ fn a_pack_supports_the_cloud(pinned: &[&str], newer: &[&str], cloud: &str) -> [b
         &file,
         &serde_json::json!({"name": "probe", "version": "1.0.0", "type": "add-on",
             "cloudType": cloud,
-            "layers": [{"name": "csi-aws-ebs", "version": "1.65.0", "values": "a: 1\n"}]}),
+            "layers": [{"name": "csi-aws-ebs", "version": "1.65.0", "registry": "Public Repo",
+                "values": "a: 1\n"}]}),
     );
     let candidate = match candidate_snapshot(&file, &api) {
         Ok(_) => true,

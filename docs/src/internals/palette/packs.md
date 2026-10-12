@@ -491,11 +491,11 @@ support the cloud of the profile, with the code `PackNotSupported`. The rule:
   custom cloud: a cloud type that Palette does not know.
 
 Strata asks this rule in each place that needs it: `strata packs --cloud`,
-`strata behind`, and the check of a candidate before the create, in
-[The gaps that strata fills](profiles.md#the-gaps-that-strata-fills). So
-`packs --cloud aws` keeps a version whose cloud types hold `aws` or `all`, and
-a version with no cloud type. `--cloud all` keeps each version. The filter of
-Palette on one cloud keeps a pack with `all` too: the request
+`strata behind`, and the check of a candidate. That check runs before the
+create: see [The gaps that strata fills](profiles.md#the-gaps-that-strata-fills).
+So `packs --cloud aws` keeps a version whose cloud types hold `aws` or `all`,
+and a version with no cloud type. `--cloud all` keeps each version. The filter
+of Palette on one cloud keeps a pack with `all` too: the request
 `GET /v1/packs/<name>/registries/<uid>?cloudType=aws` adds `all` to the filter.
 
 The example's own packs have `cloudTypes: ["all"]` in their `pack.json`. The
