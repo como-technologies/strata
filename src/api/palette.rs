@@ -160,7 +160,7 @@ impl RegistryKind {
 }
 
 /// The clusters that a search found, and whether the virtual clusters are among them.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct SearchedClusters {
     /// Each cluster that the filter selects, then each virtual cluster that it selects, when
     /// `includes_virtual`.
