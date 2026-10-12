@@ -1039,8 +1039,9 @@ pub(crate) fn upstream_unknown_note(d: &Diff) -> Option<String> {
     })
 }
 
-/// `pack csi/x has no upstream digest`, or `packs csi/x, csi/y have no upstream digest`.
-fn no_upstream_digest(packs: &[String]) -> String {
+/// `pack csi/x has no upstream digest`, or `packs csi/x, csi/y have no upstream digest`: the
+/// start of each sentence about the packs whose archive a root cannot show.
+pub(crate) fn no_upstream_digest(packs: &[String]) -> String {
     let (noun, verb) = if packs.len() == 1 {
         ("pack", "has")
     } else {

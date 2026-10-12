@@ -6611,6 +6611,29 @@ fn packs_keeps_the_versions_of_one_cloud_and_answers_with_none_when_no_version_h
 }
 
 #[test]
+fn packs_says_in_each_format_that_no_version_supports_the_cloud() {
+    let api = serve_registry(vec![], &[("reg-public", public_entity())]);
+    let none = packs_of(
+        &api,
+        "csi-aws-ebs",
+        ops::PackOptions {
+            cloud: Some("edge-native".to_string()),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    assert!(none.registries.is_empty());
+    let text = render::renderer(Format::Terminal, Paint::off(), false)
+        .render_packs(&none)
+        .unwrap();
+    assert_eq!(text, "no version of csi-aws-ebs supports edge-native\n");
+    let md = render::renderer(Format::Markdown, Paint::off(), false)
+        .render_packs(&none)
+        .unwrap();
+    assert_eq!(md, "No version of csi-aws-ebs supports edge-native.\n");
+}
+
+#[test]
 fn packs_refuses_a_registry_that_is_not_visible_and_a_pack_no_registry_has() {
     let api = serve_registry(vec![], &[("reg-public", public_entity())]);
     let err = packs_of(
@@ -8341,6 +8364,102 @@ fn a_pack_with_no_digest_makes_verify_unverified_and_names_the_pack() {
     )
     .unwrap();
     assert_eq!(v.status, VerifyStatus::Drifted);
+}
+
+#[test]
+fn each_report_states_the_verdict_of_a_record_in_the_same_words() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let base = ops::snapshot_from_dir(&dir.path().join("a"), "a", "t0").unwrap();
+    let write = |name: &str, snap: Snapshot| -> PathBuf {
+        let p = dir.path().join(name);
+        fs::write(&p, snap.to_json(true).unwrap()).unwrap();
+        p
+    };
+    let same = write("same.json", base.clone().with_project(Some("p1")));
+    let edited = write("edited.json", base.clone().with_project(Some("p2")));
+    // project p1 still serves A's content; in p2 the live object has B's content
+    let live_p1 = serve(MemoryApi::new(), dir.path(), "a", UID_A);
+    let live_p2 = serve(MemoryApi::new(), dir.path(), "b", UID_A);
+    let connect = |project: Option<&str>| {
+        Ok(Palette::new(match project {
+            Some("p1") => live_p1.clone(),
+            _ => live_p2.clone(),
+        }))
+    };
+    let s = ops::verify_many(
+        &[same, edited],
+        None,
+        connect,
+        "t1",
+        &ops::VerifyOptions::default(),
+        &Progress::silent(),
+    );
+    let statuses: Vec<RecordStatus> = s.records.iter().map(|r| r.status).collect();
+    assert_eq!(
+        statuses,
+        vec![RecordStatus::Unchanged, RecordStatus::Drifted]
+    );
+
+    let terminal = render::renderer(Format::Terminal, Paint::off(), false);
+    let markdown = render::renderer(Format::Markdown, Paint::off(), false);
+    let lines = terminal.render_verify_summary(&s).unwrap();
+    let table = markdown.render_verify_summary(&s).unwrap();
+    // a row states the verdict of its record in the words of the report of one record
+    let unchanged = "is unchanged since t0";
+    let drifted = "now names lab-profile@1.3.0: the version recorded t0 was overwritten in place";
+    assert!(
+        lines.contains(&format!(
+            "OK     {}",
+            dir.path().join("same.json").display()
+        )),
+        "{lines}"
+    );
+    assert!(lines.contains(unchanged), "{lines}");
+    assert!(lines.contains(drifted), "{lines}");
+    assert!(table.contains("| OK | "), "{table}");
+    assert!(table.contains(&format!("| {unchanged} |")), "{table}");
+    assert!(table.contains(&format!("| {drifted} |")), "{table}");
+
+    // the report of one record puts the subject before the same sentence
+    for (live, sentence) in [(&live_p1, unchanged), (&live_p2, drifted)] {
+        let v = ops::verify(
+            &base,
+            &Palette::new(live.clone()),
+            "t1",
+            &Progress::silent(),
+        )
+        .unwrap();
+        let ver = v.diff.verify.as_ref().unwrap();
+        for r in [&terminal, &markdown] {
+            let verdict = r.verdict(ver, &base.source).unwrap();
+            assert!(
+                verdict.contains(&format!("published version lab-profile@1.2.0 {sentence}")),
+                "{verdict}"
+            );
+        }
+    }
+}
+
+#[test]
+fn each_report_says_in_the_same_words_that_the_values_did_not_parse() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let a = ops::snapshot_from_dir(&dir.path().join("a"), "a", "t0").unwrap();
+    let b = ops::snapshot_from_dir(&dir.path().join("b"), "b", "t0").unwrap();
+    let d = strata::diff::compute(&a, &b, "t1", None);
+    let metrics = d.packs.iter().find(|p| p.name == "metrics-server").unwrap();
+    assert!(metrics.values.changed && !metrics.values.parseable);
+    let sentence =
+        "values changed (not parseable as YAML on one side; use --full for a unified diff)";
+    let text = render::renderer(Format::Terminal, Paint::off(), false)
+        .render(&d, &a, &b, false)
+        .unwrap();
+    assert!(text.contains(sentence), "{text}");
+    let md = render::renderer(Format::Markdown, Paint::off(), false)
+        .render(&d, &a, &b, false)
+        .unwrap();
+    assert!(md.contains(&sentence.replace("--full", "`--full`")), "{md}");
 }
 
 #[test]
