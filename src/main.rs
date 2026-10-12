@@ -1085,29 +1085,7 @@ fn cmd_behind(a: &BehindArgs) -> Result<ExitCode> {
     let progress = a.out.progress();
     let paths = expand_records(&a.records)?;
     let since = match &a.since {
-        Some(path) => {
-            let text = ops::read_file(path)?;
-            let not_one = || Error::Usage {
-                message: format!(
-                    "--since {} is not a {} document: give the JSON of a previous run",
-                    path.display(),
-                    ops::BEHIND_SCHEMA
-                ),
-            };
-            let doc: serde_json::Value = serde_json::from_str(&text).map_err(|_| not_one())?;
-            match doc.get("schema").and_then(serde_json::Value::as_str) {
-                Some(ops::BEHIND_SCHEMA) => {}
-                Some(found) => {
-                    return Err(Error::UnsupportedSchema {
-                        path: path.clone(),
-                        found: found.to_string(),
-                        supported: ops::BEHIND_SCHEMA,
-                    });
-                }
-                None => return Err(not_one()),
-            }
-            Some(serde_json::from_value(doc).map_err(|_| not_one())?)
-        }
+        Some(path) => Some(ops::BehindReport::load(path)?),
         None => None,
     };
     let r = ops::behind(

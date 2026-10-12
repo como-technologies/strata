@@ -6,7 +6,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::api::{NESTED_CLOUD, Palette, PaletteApi, SEARCH_ENVIRONMENT};
+use crate::api::{NESTED_CLOUD, Palette, PaletteApi};
 use crate::error::{Error, Result};
 use crate::progress::Progress;
 use crate::scope::ProfileScope;
@@ -368,15 +368,10 @@ where
         let mut clusters = if options.query.is_empty() {
             let listing = home.cluster_listing()?;
             // the listing leaves out each virtual cluster, so strata asks the search for them
-            let nested = if home
-                .cluster_search_properties()?
-                .contains(SEARCH_ENVIRONMENT)
-            {
-                progress.note("searching the virtual clusters");
-                Some(home.virtual_cluster_search(&Value::Null)?)
-            } else {
-                None
-            };
+            let properties = home.cluster_search_properties()?;
+            let nested = home.virtual_clusters(&properties, &Value::Null, || {
+                progress.note("searching the virtual clusters")
+            })?;
             includes_virtual = Some(nested.is_some());
             list_clusters(items(&listing).chain(nested.iter().flatten()))
         } else {

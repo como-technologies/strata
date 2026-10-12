@@ -21,11 +21,11 @@ use crate::error::{Error, Result};
 pub use audit::AuditKind;
 pub use http::HttpApi;
 pub use memory::MemoryApi;
-pub use palette::Palette;
 pub(crate) use palette::{
-    NESTED_CLOUD, PACK_LISTING_PAGE, RegistryKind, SEARCH_CLUSTER_PROFILES, SEARCH_ENVIRONMENT,
-    SEARCH_TAGS, search_condition,
+    NESTED_CLOUD, PACK_LISTING_PAGE, RegistryKind, SEARCH_CLUSTER_PROFILES, SEARCH_TAGS,
+    search_condition,
 };
+pub use palette::{Palette, SearchedClusters};
 pub use raw::{RawCluster, RawProfile, ReadErrors, has_draft};
 pub use retry::{Retry, RetryPolicy};
 

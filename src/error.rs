@@ -6,7 +6,8 @@ use std::path::PathBuf;
 use serde_json::{Map, Value};
 
 use crate::config::{KEY_VARS, MAX_RETRY_AFTER_VAR};
-use crate::json::opt_text;
+use crate::text::and_list;
+use crate::validation::PaletteRefusal;
 
 /// Everything that can go wrong in the library.
 #[derive(Debug, thiserror::Error)]
@@ -509,19 +510,13 @@ pub(crate) const PROFILE_IMPORT_MATCH_CODES: [&str; 4] = [
 /// answer of Palette.
 pub const PACK_FORBIDDEN_CODE: &str = "PackValuesOverrideForbidden";
 
-/// The `code` of the body of a Palette error, when the body is JSON with one.
-pub fn error_code(body: &str) -> Option<String> {
-    serde_json::from_str::<Value>(body)
-        .ok()
-        .and_then(|v| opt_text(&v, "/code"))
-}
-
 /// True when the body of a Palette error is JSON with a `code` in [`REFUSAL_CODES`],
 /// [`PACK_REFUSAL_CODES`], [`PROFILE_PACK_REFUSAL_CODES`], [`PROFILE_NAME_REFUSAL_CODES`],
-/// [`PROFILE_IMPORT_REFUSAL_CODES`], or [`PROFILE_IMPORT_MATCH_CODES`].
+/// [`PROFILE_IMPORT_REFUSAL_CODES`], or [`PROFILE_IMPORT_MATCH_CODES`]. The code comes from
+/// [`PaletteRefusal::from_error_body`], the one read of the code of a Palette error.
 fn is_refusal(body: &str) -> bool {
-    error_code(body).is_some_and(|code| {
-        let code = code.as_str();
+    PaletteRefusal::from_error_body(body).is_some_and(|r| {
+        let code = r.code.as_str();
         REFUSAL_CODES.contains(&code)
             || PACK_REFUSAL_CODES.contains(&code)
             || PROFILE_PACK_REFUSAL_CODES.contains(&code)
@@ -529,6 +524,13 @@ fn is_refusal(body: &str) -> bool {
             || PROFILE_IMPORT_REFUSAL_CODES.contains(&code)
             || PROFILE_IMPORT_MATCH_CODES.contains(&code)
     })
+}
+
+/// The reason that a record keeps when strata could not read an answer of Palette: `HTTP
+/// <status>: <body>`. Palette ends a body with a newline, so the body comes with no blank at
+/// its ends.
+pub(crate) fn unread_reason(status: u16, body: &str) -> String {
+    format!("HTTP {status}: {}", body.trim())
 }
 
 /// `a, b, c`, or `none` for an empty list.
@@ -581,14 +583,15 @@ pub const UNSYNCED_LISTS: &str =
 /// while a profile pins the pack`. Nothing when there is no such registry.
 fn unsynced_sentence(registries: &[String]) -> String {
     let quoted: Vec<String> = registries.iter().map(|r| format!("'{r}'")).collect();
-    match quoted.as_slice() {
-        [] => String::new(),
-        [one] => format!("; Palette does not sync the registry {one}, and {UNSYNCED_LISTS}"),
-        [first @ .., last] => format!(
-            "; Palette does not sync the registries {} and {last}, and {UNSYNCED_LISTS}",
-            first.join(", ")
-        ),
-    }
+    let noun = match quoted.len() {
+        0 => return String::new(),
+        1 => "registry",
+        _ => "registries",
+    };
+    format!(
+        "; Palette does not sync the {noun} {}, and {UNSYNCED_LISTS}",
+        and_list(&quoted)
+    )
 }
 
 /// Put the registries that Palette does not sync into the document of an error, when there are
@@ -1118,6 +1121,51 @@ mod tests {
             "no pack 'podinfo' at version '1.0.0' with tag '1.x' in registry 'charts'"
         );
         assert!(e.to_json().get("unsynced").is_none());
+    }
+
+    #[test]
+    fn three_registries_that_palette_does_not_sync_are_listed_with_a_comma_before_and() {
+        let e = Error::PackNameNotFound {
+            name: "podinfo".into(),
+            unsynced: vec!["charts-auth".into(), "oci-auth".into(), "zarf".into()],
+        };
+        assert!(
+            e.to_string()
+                .contains("the registries 'charts-auth', 'oci-auth', and 'zarf', and "),
+            "{e}"
+        );
+    }
+
+    #[test]
+    fn the_class_of_a_5xx_reads_the_code_of_the_body_as_a_text_or_as_a_number() {
+        let api = |status: u16, body: &str| Error::Api {
+            method: "POST".into(),
+            path: "/v1/x".into(),
+            status,
+            body: body.into(),
+            retry_after: None,
+        };
+        // a refusal by design stays while the inputs stay
+        assert_eq!(
+            api(500, r#"{"code":"OperationForbidden","message":"m"}"#).class(),
+            FailureClass::Terminal
+        );
+        // another 5xx can go away
+        assert_eq!(
+            api(500, r#"{"code":"InternalError"}"#).class(),
+            FailureClass::Transient
+        );
+        assert_eq!(api(500, "not json").class(), FailureClass::Transient);
+        // the API schema refuses with the number 610: it is in no list, and a 422 stays
+        assert_eq!(
+            api(
+                422,
+                r#"{"code":610,"message":"packs in body shouldn't contain duplicates"}"#
+            )
+            .class(),
+            FailureClass::Terminal
+        );
+        assert_eq!(api(500, r#"{"code":610}"#).class(), FailureClass::Transient);
     }
 
     #[test]

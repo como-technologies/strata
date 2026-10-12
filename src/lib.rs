@@ -86,6 +86,7 @@ pub mod repave;
 pub mod scope;
 pub(crate) mod shape;
 pub mod snapshot;
+pub(crate) mod text;
 pub mod validation;
 pub mod version;
 

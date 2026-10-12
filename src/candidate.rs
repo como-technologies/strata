@@ -16,7 +16,7 @@ use serde_json::{Map, Value, json};
 
 use crate::api::{Palette, PaletteApi, RawProfile, RegistryKind};
 use crate::canon::{Canon, canon_yaml};
-use crate::error::{Error, Result};
+use crate::error::{Error, Result, unread_reason};
 use crate::json::{arr, first_nonempty, items, opt_text, str_at, strings, take_items, text};
 use crate::progress::Progress;
 use crate::reference::LATEST;
@@ -616,7 +616,7 @@ pub(crate) fn registry_sync_note<A: PaletteApi>(
         Ok(sync) => Ok(RegistrySyncNote { sync, error: None }),
         Err(e @ (Error::Api { .. } | Error::Transport { .. })) => {
             let reason = match &e {
-                Error::Api { status, body, .. } => format!("HTTP {status}: {body}"),
+                Error::Api { status, body, .. } => unread_reason(*status, body),
                 _ => e.to_string(),
             };
             progress.note(&format!(

@@ -6,6 +6,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
 use schemars::JsonSchema;
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 
@@ -27,9 +28,6 @@ pub const PUBLISHED_TEMPLATE: &str = "published";
 /// The `source.template` of a record of the draft template of a profile version: of
 /// `<ref>@draft`, or of a version that was never published.
 pub const DRAFT_TEMPLATE: &str = "draft";
-
-/// The part of a snapshot schema id shared by every version of it.
-const SNAPSHOT_FAMILY: &str = "strata-snapshot/";
 
 /// The version of the content digest encoding. It is in the input of the digest, so a change to
 /// what the digest covers is a change of this tag, and a digest of one version is never equal to
@@ -1484,28 +1482,11 @@ impl Snapshot {
         self
     }
 
-    /// Read a snapshot file, checking its schema id.
+    /// Read a snapshot file, checking its schema id: see [`load_document`].
     pub fn load(path: &Path) -> Result<Snapshot> {
-        let text = crate::ops::read_file(path)?;
-        let v: Value =
-            serde_json::from_str(&text).map_err(|_| Error::NotSnapshot(path.to_path_buf()))?;
-        match v.get("schema").and_then(Value::as_str) {
-            Some(SNAPSHOT_SCHEMA) => {}
-            Some(other) if other.starts_with(SNAPSHOT_FAMILY) => {
-                return Err(Error::UnsupportedSchema {
-                    path: path.to_path_buf(),
-                    found: other.to_string(),
-                    supported: SNAPSHOT_SCHEMA,
-                });
-            }
-            _ => return Err(Error::NotSnapshot(path.to_path_buf())),
-        }
-        let mut snap: Snapshot =
-            serde_json::from_value(v).map_err(|source| Error::SnapshotSchema {
-                path: path.to_path_buf(),
-                schema: SNAPSHOT_SCHEMA,
-                source,
-            })?;
+        let mut snap: Snapshot = load_document(path, SNAPSHOT_SCHEMA, || {
+            Error::NotSnapshot(path.to_path_buf())
+        })?;
         snap.fill_content();
         Ok(snap)
     }
@@ -1533,6 +1514,47 @@ impl Snapshot {
         s.push('\n');
         Ok(s)
     }
+}
+
+/// Read the document of the schema id `schema` at `path`, with its id checked.
+///
+/// A file with the id `schema` gives the document, or [`Error::SnapshotSchema`] when its
+/// fields do not match. A file whose id names another version of the same document, such as
+/// `strata-snapshot/2` for `strata-snapshot/1`, gives [`Error::UnsupportedSchema`], which names
+/// both ids. Each other file gives `not_one`: it is not JSON, it has no id, or its id names
+/// another document. The records and the report of `behind --since` follow this one rule.
+pub(crate) fn load_document<T: DeserializeOwned>(
+    path: &Path,
+    schema: &'static str,
+    not_one: impl FnOnce() -> Error,
+) -> Result<T> {
+    let text = crate::ops::read_file(path)?;
+    let Ok(v) = serde_json::from_str::<Value>(&text) else {
+        return Err(not_one());
+    };
+    let found = str_at(&v, "/schema");
+    if found != schema {
+        return Err(if document_name(found) == document_name(schema) {
+            Error::UnsupportedSchema {
+                path: path.to_path_buf(),
+                found: found.to_string(),
+                supported: schema,
+            }
+        } else {
+            not_one()
+        });
+    }
+    serde_json::from_value(v).map_err(|source| Error::SnapshotSchema {
+        path: path.to_path_buf(),
+        schema,
+        source,
+    })
+}
+
+/// The name of the document in the schema id `id`: the text before its last `/`, which each
+/// version of the document shares. None when `id` is no schema id.
+fn document_name(id: &str) -> Option<&str> {
+    id.rsplit_once('/').map(|(name, _)| name)
 }
 
 #[cfg(test)]

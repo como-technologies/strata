@@ -53,9 +53,11 @@ from the root that 0.17.0 gives. `verify` of such an older record shows a
 change. An app profile whose tiers have no install order keeps its root.
 
 Roots are comparable only within one snapshot schema id. Strata refuses a
-snapshot of another id with `unsupported-schema`, which names both ids. The
-JSON Schema of each document holds its id as a `const`. So a validator that
-reads `strata schema <kind>` refuses a document of another id too.
+snapshot of another id with `unsupported-schema`, which names both ids. A file
+whose id names another document, or no document, is not a snapshot. The report
+that `behind --since` reads follows the same rule. The JSON Schema of each
+document holds its id as a `const`. So a validator that reads
+`strata schema <kind>` refuses a document of another id too.
 
 ## The command line
 

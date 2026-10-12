@@ -103,6 +103,11 @@ Last week the registry had no `csi-aws-ebs` 1.65.0. Today it has, and the report
 names it as arrived. A pack that the previous run had no pin of names no
 arrival.
 
+`--since` takes a `strata-behind/1` document, by the rule of the records (see
+[The documents](../reference/compatibility.md#the-documents)). A report of
+another `strata-behind` id is `unsupported-schema`, which names both ids. A file
+of another document, such as a record, or of no document is a `usage` error.
+
 The registry also says when Palette first listed each version: `listed since`
 under a pin that is behind, and `newer[].listed` in the JSON.
 

@@ -9,7 +9,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::api::{Palette, PaletteApi, SEARCH_ENVIRONMENT, SEARCH_TAGS, search_condition};
+use crate::api::{Palette, PaletteApi, SEARCH_TAGS, search_condition};
 use crate::error::{Error, Result};
 use crate::progress::Progress;
 use crate::reference::Ref;
@@ -283,13 +283,14 @@ pub fn select<A: PaletteApi>(
                 "filters": conditions.iter().map(TagCondition::search_item).collect::<Vec<_>>(),
             })).collect::<Vec<_>>(),
         });
-        let mut found = tenant.cluster_search(&body)?;
-        let includes_virtual = properties.contains(SEARCH_ENVIRONMENT);
-        if includes_virtual {
-            progress.note("searching the virtual clusters of the tenant");
-            found.extend(tenant.virtual_cluster_search(&body)?);
-        }
-        (list_clusters(&found), Resolved::Search, includes_virtual)
+        let found = tenant.cluster_search_with_virtual(&properties, &body, || {
+            progress.note("searching the virtual clusters of the tenant")
+        })?;
+        (
+            list_clusters(&found.items),
+            Resolved::Search,
+            found.includes_virtual,
+        )
     } else {
         progress.note("listing the clusters, and matching their labels");
         let listing = tenant.cluster_listing()?;

@@ -7,6 +7,7 @@
 //! strata fills".
 
 use super::{Candidate, CandidateLayer, MANIFEST, MANIFEST_LAYER, PACK_TYPE, loose_semver};
+use crate::text::and_list;
 
 /// The cloud types that Palette knows. Each other cloud type is a custom cloud.
 const KNOWN_CLOUDS: &[&str] = &[
@@ -83,16 +84,6 @@ fn core_layers(kind: &str, cloud: &str) -> Option<&'static [&'static str]> {
     }
 }
 
-/// `items` as `a, b, and c`.
-fn listed(items: &[&str]) -> String {
-    match items {
-        [] => String::new(),
-        [one] => one.to_string(),
-        [a, b] => format!("{a} and {b}"),
-        [rest @ .., last] => format!("{}, and {last}", rest.join(", ")),
-    }
-}
-
 /// Check the layers of the type with the layers that the file gives. The layer of a pack that the
 /// file does not give comes from the registry, so [`super::resolve`] checks the layers again.
 pub(super) fn check_file(c: &Candidate) -> Result<(), String> {
@@ -120,7 +111,7 @@ pub(super) fn check_layers(c: &Candidate, layers: &[Option<&str>]) -> Result<(),
                     i + 1,
                     l.name,
                     c.kind,
-                    listed(allowed)
+                    and_list(allowed)
                 )));
             }
         }
@@ -137,8 +128,8 @@ pub(super) fn check_layers(c: &Candidate, layers: &[Option<&str>]) -> Result<(),
             return Err(CreateRule::CoreLayers.refuse(&format!(
                 "a profile of type {} needs the layers {}; this one has no layer {}",
                 c.kind,
-                listed(core),
-                listed(&missing)
+                and_list(core),
+                and_list(&missing)
             )));
         }
     }
@@ -177,7 +168,7 @@ pub(super) fn check_cloud(
         i + 1,
         l.name,
         l.version,
-        listed(&clouds.iter().map(String::as_str).collect::<Vec<_>>()),
+        and_list(&clouds.iter().map(String::as_str).collect::<Vec<_>>()),
     )))
 }
 

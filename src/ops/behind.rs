@@ -3,7 +3,7 @@
 
 use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, BTreeSet};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -15,7 +15,7 @@ use crate::diff::RegistrySync;
 use crate::error::{Error, Result};
 use crate::impact::ImpactLevel;
 use crate::progress::Progress;
-use crate::snapshot::{Snapshot, Tool};
+use crate::snapshot::{Snapshot, Tool, load_document};
 use crate::version;
 
 use super::packs::{PackBuild, PackOptions, registry_packs, supports};
@@ -55,6 +55,24 @@ impl BehindReport {
         } else {
             u8::from(self.summary.behind > 0)
         }
+    }
+
+    /// Read the report of a previous run, the file that `--since` names.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Usage`] when the file is not a `strata-behind/1` document: it is not JSON, it has
+    /// no schema id, or its id names another document, such as a record.
+    /// [`Error::UnsupportedSchema`] when its id names another version of the report, and
+    /// [`Error::SnapshotSchema`] when its fields do not match `strata-behind/1`. [`Error::Io`]
+    /// when strata cannot read the file.
+    pub fn load(path: &Path) -> Result<BehindReport> {
+        load_document(path, BEHIND_SCHEMA, || Error::Usage {
+            message: format!(
+                "--since {} is not a {BEHIND_SCHEMA} document: give the JSON of a previous run",
+                path.display()
+            ),
+        })
     }
 }
 

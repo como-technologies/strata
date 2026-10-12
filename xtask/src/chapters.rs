@@ -69,6 +69,8 @@ const STORE_1: &str = "64f4000000000000000000e1";
 const STORE_2: &str = "64f4000000000000000000e2";
 const SHOP: &str = "64f6000000000000000000a1";
 const SHOP_DEV: &str = "64f7000000000000000000a1";
+// the manifest pack of platform-addons
+const ADDONS_PACK: &str = "64e2000000000000000000d1";
 
 const RETAIN: &[Edit] = &[Edit::Reclaim("Retain")];
 const TAG_2404: &[Edit] = &[Edit::Tag {
@@ -1200,15 +1202,7 @@ fn use_cases(r: &mut Runner) {
 
     r.chapter("manifest-pack", &[]);
     r.tenant(|t| t.projects(&[("dev", DEV), ("prod", PROD)]));
-    r.tenant(|t| {
-        t.addons(
-            DEV,
-            ADDONS_DEV,
-            "64e2000000000000000000d1",
-            "restricted",
-            "1.0.0",
-        )
-    });
+    r.tenant(|t| t.addons(DEV, ADDONS_DEV, ADDONS_PACK, "restricted", "1.0.0"));
     r.tenant(|t| {
         t.addons(
             PROD,
@@ -1603,15 +1597,7 @@ fn use_cases(r: &mut Runner) {
     r.tenant(|t| t.projects(&[("dev", DEV)]));
     r.profile(DEV, A110, "1.1.0", "aws-stack@1.1.0", &[]);
     r.profile(DEV, A111, "1.1.1", "aws-stack@1.1.1", &[]);
-    r.tenant(|t| {
-        t.addons(
-            DEV,
-            ADDONS_DEV,
-            "64e2000000000000000000d1",
-            "restricted",
-            "1.0.0",
-        )
-    });
+    r.tenant(|t| t.addons(DEV, ADDONS_DEV, ADDONS_PACK, "restricted", "1.0.0"));
     r.tenant(|t| t.cluster(DEV, PAYMENTS, "payments", &[A110, ADDONS_DEV], &[]));
     r.tenant(|t| t.cluster(DEV, SEARCH, "search", &[A111], &[]));
     r.tenant(|t| t.cluster(DEV, LEDGER, "ledger", &[A110], &[]));
@@ -1751,7 +1737,7 @@ fn use_cases(r: &mut Runner) {
         t.addons(
             DEV,
             ADDONS_DEV,
-            "64e2000000000000000000d1",
+            ADDONS_PACK,
             "\"{{.spectro.macro.podSecurity}}\"",
             "1.0.0",
         )
@@ -2481,15 +2467,7 @@ fn use_cases(r: &mut Runner) {
     r.chapter("edge-hosts", DEV_ENV);
     r.tenant(|t| t.projects(&[("dev", DEV)]));
     r.profile(DEV, A111, "1.1.1", "aws-stack@1.1.1", &[]);
-    r.tenant(|t| {
-        t.addons(
-            DEV,
-            ADDONS_DEV,
-            "64e2000000000000000000d1",
-            "baseline",
-            "1.0.0",
-        )
-    });
+    r.tenant(|t| t.addons(DEV, ADDONS_DEV, ADDONS_PACK, "baseline", "1.0.0"));
     r.tenant(|t| t.cluster(DEV, PAYMENTS, "payments", &[A111, ADDONS_DEV], &[]));
     r.tenant(|t| t.edge_host(DEV, STORE_1, "store-1", &[ADDONS_DEV]));
     r.tenant(|t| t.edge_host(DEV, STORE_2, "store-2", &[ADDONS_DEV]));
@@ -2519,15 +2497,7 @@ fn use_cases(r: &mut Runner) {
         "strata compare platform-addons@1.0.0 runs/store-1.json",
     );
     // an edit in place of the manifest: the edge host and the cluster each keep their own copy
-    r.tenant(|t| {
-        t.addons(
-            DEV,
-            ADDONS_DEV,
-            "64e2000000000000000000d1",
-            "restricted",
-            "1.0.0",
-        )
-    });
+    r.tenant(|t| t.addons(DEV, ADDONS_DEV, ADDONS_PACK, "restricted", "1.0.0"));
     r.serve_here(); // state 2: the manifest of platform-addons@1.0.0 is edited in place
     r.step("edge-verify", 0, false, "strata verify 'runs/*.json'");
     r.step(
@@ -2540,15 +2510,7 @@ fn use_cases(r: &mut Runner) {
     // A cluster group pins an add-on profile for its virtual clusters
     r.chapter("cluster-groups", DEV_ENV);
     r.tenant(|t| t.projects(&[("dev", DEV)]));
-    r.tenant(|t| {
-        t.addons(
-            DEV,
-            ADDONS_DEV,
-            "64e2000000000000000000d1",
-            "baseline",
-            "1.0.0",
-        )
-    });
+    r.tenant(|t| t.addons(DEV, ADDONS_DEV, ADDONS_PACK, "baseline", "1.0.0"));
     r.tenant(|t| {
         t.addons_named(
             DEV,
@@ -2805,7 +2767,7 @@ fn use_cases(r: &mut Runner) {
             )
         });
     }
-    r.tenant(|t| t.tag_filter("production", "64f7000000000000000000a1", "env", "prod"));
+    r.tenant(|t| t.tag_filter("production", PRODUCTION, "env", "prod"));
     r.serve_here(); // state 1: two clusters of each project, and the production ones labeled so
     r.step("fleet-tag", 0, false, "strata list clusters --tag env=prod");
     r.step(

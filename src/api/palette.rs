@@ -6,7 +6,7 @@ use std::collections::BTreeSet;
 use serde_json::Value;
 
 use super::{AuditKind, PaletteApi, RawCluster, RawProfile, ReadErrors, mask};
-use crate::error::{Error, Result};
+use crate::error::{Error, Result, unread_reason};
 use crate::json::{arr, items, opt_text, str_at, take_items, text};
 use crate::progress::Progress;
 use crate::reference::LATEST;
@@ -157,6 +157,18 @@ impl RegistryKind {
             Self::Oci => "oci",
         }
     }
+}
+
+/// The clusters that a search found, and whether the virtual clusters are among them.
+#[derive(Debug, Default)]
+pub struct SearchedClusters {
+    /// Each cluster that the filter selects, then each virtual cluster that it selects, when
+    /// `includes_virtual`.
+    pub items: Vec<Value>,
+    /// True when the search takes `environment`, so `items` holds the virtual clusters too. False
+    /// on a Palette whose search does not take it: the search then leaves each one out, and no
+    /// condition can ask for them.
+    pub includes_virtual: bool,
 }
 
 /// Profile-level operations over any [`PaletteApi`].
@@ -473,16 +485,13 @@ impl<A: PaletteApi> Palette<A> {
     }
 
     /// The uid of the one cluster named `name` in the scope, from [`Palette::cluster_listing`]
-    /// and from [`Palette::virtual_cluster_search`]: the listing leaves out each virtual cluster,
-    /// so the search gives them, when it takes `environment`.
+    /// and from [`Palette::virtual_clusters`]: the listing leaves out each virtual cluster, so
+    /// the search gives them, when it takes `environment`.
     pub fn cluster_uid_named(&self, name: &str) -> Result<String> {
         let listing = self.cluster_listing()?;
         let mut clusters = named_entries(&listing);
-        if self
-            .cluster_search_properties()?
-            .contains(SEARCH_ENVIRONMENT)
-        {
-            let found = self.virtual_cluster_search(&Value::Null)?;
+        let properties = self.cluster_search_properties()?;
+        if let Some(found) = self.virtual_clusters(&properties, &Value::Null, || {})? {
             clusters.extend(named_entries(&Value::Array(found)));
         }
         let mut uids: Vec<String> = clusters
@@ -886,6 +895,48 @@ impl<A: PaletteApi> Palette<A> {
     /// and the cluster group of the virtual cluster in `status.virtual`.
     pub fn virtual_cluster_search(&self, filter: &Value) -> Result<Vec<Value>> {
         self.cluster_search(&with_nested(filter))
+    }
+
+    /// The virtual clusters that `filter` selects, when the search takes `environment`.
+    ///
+    /// It is [`Palette::virtual_cluster_search`] behind the one check of that property.
+    /// `properties` is the answer of [`Palette::cluster_search_properties`]. `None` when the
+    /// search does not take `environment`: no condition can then ask for a virtual cluster, and
+    /// the search leaves each one out. `on_search` runs before the search, when there is one, so
+    /// that a caller can note it.
+    pub fn virtual_clusters(
+        &self,
+        properties: &BTreeSet<String>,
+        filter: &Value,
+        on_search: impl FnOnce(),
+    ) -> Result<Option<Vec<Value>>> {
+        if !properties.contains(SEARCH_ENVIRONMENT) {
+            return Ok(None);
+        }
+        on_search();
+        self.virtual_cluster_search(filter).map(Some)
+    }
+
+    /// The clusters that `filter` selects, with the virtual clusters among them.
+    ///
+    /// The clusters come from [`Palette::cluster_search`], and the virtual clusters from
+    /// [`Palette::virtual_clusters`], when the search takes `environment`. `properties` is the
+    /// answer of [`Palette::cluster_search_properties`], and `on_virtual` runs before the search
+    /// of the virtual clusters, when there is one.
+    pub fn cluster_search_with_virtual(
+        &self,
+        properties: &BTreeSet<String>,
+        filter: &Value,
+        on_virtual: impl FnOnce(),
+    ) -> Result<SearchedClusters> {
+        let mut items = self.cluster_search(filter)?;
+        let nested = self.virtual_clusters(properties, filter, on_virtual)?;
+        let includes_virtual = nested.is_some();
+        items.extend(nested.into_iter().flatten());
+        Ok(SearchedClusters {
+            items,
+            includes_virtual,
+        })
     }
 
     /// The properties that the cluster search takes, `GET
@@ -1473,7 +1524,7 @@ fn or_unread(
         Ok(doc) => Ok((Some(doc), None)),
         Err(Error::Api { status, body, .. }) => {
             unavailable_note(progress, what, status);
-            Ok((None, Some(format!("HTTP {status}: {}", body.trim()))))
+            Ok((None, Some(unread_reason(status, &body))))
         }
         Err(e) => Err(e),
     }
