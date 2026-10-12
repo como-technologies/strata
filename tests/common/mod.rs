@@ -789,6 +789,11 @@ pub fn variables_route(uid: &str) -> String {
     format!("/v1/clusterprofiles/{uid}/variables")
 }
 
+/// The value of each macro of the profile version `uid`, as Palette resolves it.
+pub fn resolved_values_route(uid: &str) -> String {
+    format!("/v1/clusterprofiles/{uid}/packs/resolvedValues")
+}
+
 /// The document of the cluster `uid`, `GET /v1/spectroclusters/{uid}`.
 pub fn cluster_route(uid: &str) -> String {
     format!("/v1/spectroclusters/{uid}")

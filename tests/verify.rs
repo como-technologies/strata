@@ -19,8 +19,8 @@ use common::{
     SECRET_VALUE, UID_A, UID_ADDONS, UID_B, candidate_snapshot, cluster_manifests_route,
     cluster_ref, cluster_route, cluster_variables_route, listing, manifest_route, manifests_route,
     no_manifests, no_template, no_variables, pack_listing_route, post, profile_document,
-    profile_route, read_json, serve_fixture, serve_profile, snapshot_of, snapshot_of_at,
-    strata_bin, template, variables_route,
+    profile_route, read_json, resolved_values_route, serve_fixture, serve_profile, snapshot_of,
+    snapshot_of_at, strata_bin, template, variables_route,
 };
 
 #[test]
@@ -8395,8 +8395,8 @@ fn each_report_states_the_verdict_of_a_record_in_the_same_words() {
     let same = write("same.json", base.clone().with_project(Some("p1")));
     let edited = write("edited.json", base.clone().with_project(Some("p2")));
     // project p1 still serves A's content; in p2 the live object has B's content
-    let live_p1 = serve(MemoryApi::new(), dir.path(), "a", UID_A);
-    let live_p2 = serve(MemoryApi::new(), dir.path(), "b", UID_A);
+    let live_p1 = serve_fixture(MemoryApi::new(), dir.path(), "a", UID_A);
+    let live_p2 = serve_fixture(MemoryApi::new(), dir.path(), "b", UID_A);
     let connect = |project: Option<&str>| {
         Ok(Palette::new(match project {
             Some("p1") => live_p1.clone(),
@@ -8785,7 +8785,7 @@ fn a_profile_record_with_macro_digests_drifts_when_a_macro_value_moves() {
     let dir = tempfile::tempdir().unwrap();
     common::make_fixtures(dir.path());
     with_macro(dir.path(), "macro");
-    let path = format!("/v1/clusterprofiles/{UID_A}/packs/resolvedValues");
+    let path = resolved_values_route(UID_A);
     let tenant = |answer: Value| {
         serve_fixture(MemoryApi::new(), dir.path(), "macro", UID_A).with(&path, answer)
     };
@@ -8875,15 +8875,15 @@ fn each_report_says_that_the_root_moved_when_a_macro_value_moved_too() {
             "{values}\nregion: \"{{{{.spectro.macro.region}}}}\"\nextra: 1\n"
         ));
     });
-    let path = format!("/v1/clusterprofiles/{UID_A}/packs/resolvedValues");
+    let path = resolved_values_route(UID_A);
     let palette = Palette::new(
-        serve(MemoryApi::new(), dir.path(), "macro", UID_A)
+        serve_fixture(MemoryApi::new(), dir.path(), "macro", UID_A)
             .with(&path, profile_resolved("us-east-2")),
     );
     let mut raw = palette.fetch_profile(UID_A, &Progress::silent()).unwrap();
     raw.resolved_values = Some(palette.profile_resolved_values(UID_A).unwrap());
     let recorded = Snapshot::from_raw(&raw, "aws-stack@1.1.1", "t0").unwrap();
-    let live = serve(MemoryApi::new(), dir.path(), "macro-edited", UID_A)
+    let live = serve_fixture(MemoryApi::new(), dir.path(), "macro-edited", UID_A)
         .with(&path, profile_resolved("eu-west-1"));
 
     // the root moved, and the verify names the macro too
