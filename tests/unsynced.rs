@@ -15,7 +15,7 @@ use strata::render::{self, Format};
 
 use crate::common;
 use common::{
-    OCI_REGISTRY_SUMMARY, REGISTRY_LISTING, candidate_snapshot, pack_listing_route,
+    OCI_REGISTRY_SUMMARY, REGISTRY_LISTING, candidate_snapshot, no_variables, pack_listing_route,
     profile_document, snapshot_of, template,
 };
 
@@ -193,7 +193,7 @@ fn published(dir: &Path, uid: &str, digest: &str) -> strata::snapshot::Snapshot 
                     "spec": {"name": CHART, "layer": "addon", "version": "1.0.0",
                         "registryUid": PRIVATE, "digest": digest, "values": "replicas: 2\n"}}]}}),
         ),
-        ("variables.json", json!({"variables": []})),
+        ("variables.json", no_variables()),
     ] {
         fs::write(raw.join(name), doc.to_string()).unwrap();
     }

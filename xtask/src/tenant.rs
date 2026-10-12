@@ -38,13 +38,17 @@ const OCI_CSI_DIGEST: &str =
 
 /// The projects that the key can see, `GET /v1/dashboard/projects/metadata`.
 pub const PROJECT_LISTING: &str = "v1/dashboard/projects/metadata";
-/// The profile search, `POST /v1/dashboard/clusterprofiles`. The server keeps the items of the
-/// scope that the body names.
+/// The profile search, `POST /v1/dashboard/clusterprofiles`.
+///
+/// The server keeps the items of the scope that the body names.
 pub const PROFILE_SEARCH_PATH: &str = "v1/dashboard/clusterprofiles";
-/// The cluster search, `POST /v1/dashboard/spectroclusters/search`. The server keeps the
-/// clusters that the body selects.
+/// The cluster search, `POST /v1/dashboard/spectroclusters/search`.
+///
+/// The server keeps the clusters that the body selects.
 pub const CLUSTER_SEARCH_PATH: &str = "v1/dashboard/spectroclusters/search";
-/// The audit log, `GET /v1/audits`. The server answers an empty log for a resource with no file.
+/// The audit log, `GET /v1/audits`.
+///
+/// The server answers an empty log for a resource with no file.
 pub const AUDITS: &str = "v1/audits";
 /// The profile documents of a scope, `v1/clusterprofiles/{uid}`.
 const PROFILES: &str = "v1/clusterprofiles";
@@ -60,7 +64,9 @@ const APP_PROFILES: &str = "v1/appProfiles";
 const REGISTRY_LISTING: &str = "v1/registries/metadata";
 
 /// The file of a listing or a search that strata reads by pages: `path` with the page of
-/// strata. One page holds every item of the stand-in.
+/// strata.
+///
+/// One page holds every item of the stand-in.
 fn paged(path: &str) -> String {
     format!("{path}@limit=50")
 }
@@ -149,15 +155,17 @@ fn pack_entity_route(name: &str, registry: &str) -> String {
 }
 
 /// The audit log of the resource `uid` of the kind `kind`, as the server names the file of
-/// `GET /v1/audits?resourceKind={kind}&resourceUid={uid}&limit=100`. The server leaves the time
-/// out of the query.
+/// `GET /v1/audits?resourceKind={kind}&resourceUid={uid}&limit=100`.
+///
+/// The server leaves the time out of the query.
 fn audit_log_file(kind: &str, uid: &str) -> String {
     format!("{AUDITS}@resourceKind={kind}&resourceUid={uid}&limit=100")
 }
 
-/// The cloud config of the cluster `uid` for the cloud type `kind`. Palette serves the cloud
-/// config of each cloud type at its own path. The stand-in gives the config the uid of the
-/// cluster with a `c` at the end.
+/// The cloud config of the cluster `uid` for the cloud type `kind`.
+///
+/// Palette serves the cloud config of each cloud type at its own path. The stand-in gives the
+/// config the uid of the cluster with a `c` at the end.
 fn cloud_config_route(kind: &str, uid: &str) -> String {
     format!("v1/cloudconfigs/{kind}/{uid}c")
 }
@@ -603,8 +611,10 @@ impl Tenant {
         self.write_cluster_search(TENANT, found, &schema);
     }
 
-    /// The profile listing, the profile search, and the cluster listing of one scope. The cluster
-    /// listing leaves out each virtual cluster; the search holds it, when a condition asks.
+    /// The profile listing, the profile search, and the cluster listing of one scope.
+    ///
+    /// The cluster listing leaves out each virtual cluster; the search holds it, when a condition
+    /// asks.
     fn write_listings(&self, scope: &str, profiles: &[Value], clusters: &[Value]) {
         let items: Vec<Value> = profiles.iter().map(profile_row).collect();
         self.write(
@@ -1395,7 +1405,9 @@ impl Tenant {
 
     /// Delete a cluster at the time `at`, as Palette does: the document stays, with the state
     /// `Deleted`, `metadata.isDeleted`, `at` in `metadata.deletionTimestamp`, and the annotation
-    /// `deleted`. The listing and the search drop it.
+    /// `deleted`.
+    ///
+    /// The listing and the search drop it.
     pub fn delete_cluster(&self, project: &str, uid: &str, at: &str) {
         let path = cluster_route(uid);
         let mut doc = self.read(project, &path);
@@ -1510,9 +1522,10 @@ impl Tenant {
     }
 
     /// Create a cluster that runs `profiles` in order, with its own copy of what each profile
-    /// holds now, so a later edit of a profile does not reach the cluster. Run it again for the
-    /// same cluster to apply the update that waits for it. `values` gives a value to each profile
-    /// variable that it names; each other variable keeps its default.
+    /// holds now, so a later edit of a profile does not reach the cluster.
+    ///
+    /// Run it again for the same cluster to apply the update that waits for it. `values` gives a
+    /// value to each profile variable that it names; each other variable keeps its default.
     pub fn cluster(
         &self,
         project: &str,
@@ -2436,10 +2449,12 @@ fn repave_answer_of(required: bool) -> Value {
 
 /// The template of a profile on a cluster, from the profile document: the published profile.
 impl Tenant {
-    /// The templates of an object that holds profiles without being a cluster: an edge host or a
-    /// cluster group. Palette gives the holder its own copy of each manifest, under a uid of its
-    /// own, and the template names the copy by that uid, with no content.
-    /// `route(profile, pack, copy)` is where the API serves a copy.
+    /// The templates of an object that holds profiles and is not a cluster: an edge host or a
+    /// cluster group.
+    ///
+    /// Palette gives the holder its own copy of each manifest, under a uid of its own. The
+    /// template names the copy by that uid, with no content. `route(profile, pack, copy)` is
+    /// where the API serves a copy.
     fn holder_templates(
         &self,
         project: &str,

@@ -327,8 +327,10 @@ printf '%s' "$answer" > "$out"
 printf '%s' "${FAKE_GL_STATUS:-200}"
 "#;
 
-/// The variables of a GitLab job, as the scripts read them. The stand-in curl answers from the
-/// directory `gl`; the project, the API, and the token are fixed.
+/// The variables of a GitLab job, as the scripts read them.
+///
+/// The stand-in curl answers from the directory `gl`; the project, the API, and the token are
+/// fixed.
 fn gitlab_job(gl: &str) -> Vec<(&str, &str)> {
     vec![
         ("FAKE_GL", gl),
@@ -1093,7 +1095,9 @@ impl Gate {
         self.run_env(args, &[])
     }
 
-    /// The same run, with these variables set after the others.
+    /// The same run, with `env` after the other variables of the gate.
+    ///
+    /// The git isolation comes last.
     fn run_env(&self, args: &[&str], env: &[(&str, &std::path::Path)]) -> Output {
         let mut c = Command::new("bash");
         c.arg(script("ci/merge-gate.sh"))
@@ -1577,7 +1581,7 @@ impl Report {
             .iter()
             .map(|(path, status, name, version)| {
                 let mut r = serde_json::json!({"path": path, "status": status, "name": name,
-                    "version": version, "uid": "64f0000000000000000000a1", "recordedAt": "2026-09-16T01:56:23Z"});
+                    "version": version, "uid": UID_A, "recordedAt": "2026-09-16T01:56:23Z"});
                 if *status == "error" {
                     r["error"] = serde_json::json!({"kind": "api", "message": "GET /v1/clusterprofiles/64f0 failed with HTTP 404"});
                 }
@@ -1605,12 +1609,12 @@ impl Report {
         }
     }
 
-    /// Run the script as a GitHub job does: no variable of a GitLab job is set.
+    /// Run the script as a GitHub job does, with no variable of a GitLab job.
     fn run(&self, args: &[&str]) -> Output {
         self.run_with(args, &[])
     }
 
-    /// Run the script with `envs` set last. It first removes the logs of the run before.
+    /// Run the script with `envs` after the other variables.
     fn run_with(&self, args: &[&str], envs: &[(&str, &str)]) -> Output {
         // a test reads the calls of one run, not of the runs before it
         for f in ["gh.log", "strata.log", "curl.log", "since-used.json"] {

@@ -18,7 +18,8 @@ use strata::reference::Ref;
 use strata::snapshot::Snapshot;
 
 use common::{
-    CLUSTER_LISTING, PROFILE_LISTING, PROJECT_LISTING, REGISTRY_LISTING, cluster_ref, listing,
+    CLUSTER_LISTING, PROFILE_LISTING, PROJECT_LISTING, REGISTRY_LISTING, UID_B,
+    cluster_manifests_route, cluster_ref, cluster_route, cluster_variables_route, listing,
     manifests_route, profile_route, strata_bin, text, variables_route,
 };
 
@@ -277,9 +278,9 @@ fn api_of_junk(rng: &mut Rng, uid: &str) -> MemoryApi {
         profile_route(uid),
         manifests_route(uid),
         variables_route(uid),
-        format!("/v1/spectroclusters/{uid}"),
-        format!("/v1/spectroclusters/{uid}/profiles/packs/manifests"),
-        format!("/v1/spectroclusters/{uid}/variables"),
+        cluster_route(uid),
+        cluster_manifests_route(uid),
+        cluster_variables_route(uid),
     ];
     for p in paths {
         api = api.with(p, junk_json(rng, 5));
@@ -293,7 +294,7 @@ fn api_of_junk(rng: &mut Rng, uid: &str) -> MemoryApi {
 /// and keeps its root.
 #[test]
 fn a_profile_of_junk_gives_a_record_that_round_trips() {
-    let uid = "64f0000000000000000000b2";
+    let uid = UID_B;
     let mut rng = Rng::new(seed().wrapping_add(2));
     let mut reached = 0;
     for case in 0..2_000 {
@@ -356,7 +357,7 @@ fn a_cluster_of_junk_snapshots_or_errors() {
 
 #[test]
 fn listing_and_consumers_of_junk_answer() {
-    let uid = "64f0000000000000000000b2";
+    let uid = UID_B;
     let mut rng = Rng::new(seed().wrapping_add(4));
     for case in 0..1_000 {
         let api = api_of_junk(&mut rng, uid);
@@ -385,7 +386,7 @@ fn listing_and_consumers_of_junk_answer() {
 
 #[test]
 fn a_diff_of_two_junk_records_answers() {
-    let uid = "64f0000000000000000000b2";
+    let uid = UID_B;
     let mut rng = Rng::new(seed().wrapping_add(5));
     let mut made: Vec<Snapshot> = Vec::new();
     while made.len() < 60 {

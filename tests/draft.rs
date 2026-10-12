@@ -15,8 +15,8 @@ use strata::snapshot::{DRAFT_TEMPLATE, PUBLISHED_TEMPLATE, Snapshot};
 
 use crate::common;
 use common::{
-    PROFILE_LISTING, manifest_content, manifest_entity, manifest_route, no_template, no_variables,
-    profile_document, serve_profile, snapshot_of,
+    PROFILE_LISTING, manifest_content, manifest_digest, manifest_entity, manifest_route,
+    no_template, no_variables, profile_document, serve_profile, snapshot_of,
 };
 
 const UID: &str = "64f0000000000000000000d1";
@@ -46,15 +46,6 @@ fn template(k8s: &str, refs: Value) -> Value {
              "version": "1.0.0", "packUid": "pk-rules", "values": "", "manifests": refs},
         ]),
     )
-}
-
-/// The digest that Palette gives a manifest content: empty for no content.
-fn digest(content: &str) -> String {
-    if content.is_empty() {
-        String::new()
-    } else {
-        format!("sha1:{}", content.len())
-    }
 }
 
 /// The answers of Palette for version 1.0.0 of `lab-profile`. The draft changes one value of the
@@ -105,7 +96,7 @@ fn serve(published: Value, draft: Value, content: impl Fn(&str) -> &'static str)
                 .map(|m| {
                     let name = m["name"].as_str().unwrap();
                     json!({"name": name, "uid": m["uid"], "content": content(name),
-                           "digest": digest(content(name))})
+                           "digest": manifest_digest(content(name))})
                 })
                 .collect();
             json!({"metadata": {"name": p["name"], "uid": p["packUid"]},

@@ -949,8 +949,10 @@ fn json_mode_writes_one_structured_error_line_on_stderr() {
 }
 
 /// Run against an address that refuses connections, with no retries and a clean environment, so
-/// the path in a transport error is the first request strata made. A `HOME` in `envs` replaces
-/// the empty home. With `quiet` false, the warnings that a person sees are on.
+/// the path in a transport error is the first request strata made.
+///
+/// A `HOME` in `envs` replaces the empty home. With `quiet` false, the warnings that a person
+/// sees are on.
 fn against_closed_port(args: &[&str], envs: &[(&str, &str)], quiet: bool) -> Run {
     let home = tempfile::tempdir().unwrap();
     let mut all = vec![

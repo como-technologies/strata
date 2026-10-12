@@ -242,12 +242,13 @@ fn tenant_sh_reports_cluster_state_and_never_reads_a_gateway_404_as_deleted() {
 }
 
 /// A `curl` that answers by path: the body of `<api path with / as _>` under $FAKE_ROUTES, with
-/// status 200, or 404 when there is no such file. A `<key>.status` file overrides the status.
-/// When an executable $FAKE_ROUTES/<route key>.sh exists, its output is the body of each answer.
-/// It logs each request as `METHOD path` to $FAKE_LOG. It keeps each request body as
-/// $FAKE_ROUTES/sent/<METHOD>_<route key>, adds the body to
-/// $FAKE_ROUTES/sent/<METHOD>_<route key>.all in the order of the requests, and keeps the query
-/// and the headers, without the key, as $FAKE_ROUTES/sent/<METHOD>_<route key>.request.
+/// status 200, or 404 when there is no such file.
+///
+/// A `<key>.status` file overrides the status. When an executable $FAKE_ROUTES/<route key>.sh
+/// exists, its output is the body of each answer. It logs each request as `METHOD path` to
+/// $FAKE_LOG. It keeps each request body as $FAKE_ROUTES/sent/<METHOD>_<route key>. It adds the
+/// body to $FAKE_ROUTES/sent/<METHOD>_<route key>.all, in the order of the requests. It keeps
+/// the query and the headers, without the key, as $FAKE_ROUTES/sent/<METHOD>_<route key>.request.
 const FAKE_API_CURL: &str = r#"#!/usr/bin/env bash
 out=""; write=""; url=""; method=GET; sent=""; headers=""
 while [ $# -gt 0 ]; do
@@ -276,9 +277,10 @@ if [ -n "$out" ]; then cp "$body" "$out"; else cat "$body"; fi
 exit 0
 "#;
 
-/// A `helm` whose `pull ... -d DIR` writes DIR/<name>-<version>.tgz holding "chart archive\n",
-/// or fails when $FAKE_HELM_FAIL is set. It logs its arguments and the Helm home it was given
-/// to $FAKE_TOOL_LOG.
+/// A `helm` whose `pull ... -d DIR` writes DIR/<name>-<version>.tgz with "chart archive\n".
+///
+/// It fails when $FAKE_HELM_FAIL has a value. It logs its arguments and the Helm home that it
+/// gets to $FAKE_TOOL_LOG.
 const FAKE_HELM: &str = r#"#!/usr/bin/env bash
 echo "$* HELM_CONFIG_HOME=$HELM_CONFIG_HOME" >> "$FAKE_TOOL_LOG"
 [ -z "${FAKE_HELM_FAIL:-}" ] || { echo "Error: chart not found" >&2; exit 1; }
@@ -295,8 +297,9 @@ done
 printf 'chart archive\n' > "$dest/$name-$version.tgz"
 "#;
 
-/// A `crane` whose `digest REF` prints a fixed digest, or fails when $FAKE_CRANE_FAIL is set.
-/// It logs its arguments to $FAKE_TOOL_LOG.
+/// A `crane` whose `digest REF` prints a fixed digest.
+///
+/// It fails when $FAKE_CRANE_FAIL has a value, and logs its arguments to $FAKE_TOOL_LOG.
 const FAKE_CRANE: &str = r#"#!/usr/bin/env bash
 echo "$*" >> "$FAKE_TOOL_LOG"
 [ -z "${FAKE_CRANE_FAIL:-}" ] || { echo "UNAUTHORIZED: authentication required" >&2; exit 1; }
@@ -581,8 +584,10 @@ fn api_sh_sync_waits_while_a_sync_of_the_registry_runs_and_asks_again() {
     );
 }
 
-/// The fake Palette routes of the add-on profile `prof-1`: one pack `config` with one manifest
-/// `m-1` whose content says `edited: "no"`, and a publish that answers.
+/// The routes of the add-on profile `prof-1` for the stand-in curl.
+///
+/// The profile has one pack `config` with one manifest `m-1`, whose content says `edited: "no"`.
+/// The publish route answers.
 fn addon_profile_routes(routes: &Path) {
     std::fs::create_dir_all(routes).unwrap();
     std::fs::write(
@@ -2415,7 +2420,7 @@ fn validate_packs_sh_stage_4_makes_a_profile_whose_pack_has_another_layer_than_i
         "/v1/packs",
         r#"{"items":[{"metadata":{"uid":"pk-1"},"spec":{"registryUid":"reg-pub","version":"1.21.1"}}]}"#,
     );
-    stage.route("/v1/dashboard/clusterprofiles/metadata", r#"{"items":[]}"#);
+    stage.route(PROFILE_LISTING, r#"{"items":[]}"#);
     stage.route("/v1/clusterprofiles", r#"{"uid":"lp-1"}"#);
     stage.route("/v1/clusterprofiles/lp-1/publish", "{}");
     stage.route(
@@ -2735,7 +2740,7 @@ fn unpublished_stage(un_published: bool) -> Stage {
     );
     stage.route("/v1/clusterprofiles", r#"{"uid":"un-1"}"#);
     stage.route(
-        "/v1/dashboard/clusterprofiles/metadata",
+        PROFILE_LISTING,
         r#"{"items":[{"metadata":{"name":"strata-live-unpublished","uid":"un-1"}}]}"#,
     );
     stage.route("/v1/clusterprofiles/un-1", "{}");
@@ -2813,7 +2818,7 @@ fn scope_stage(tenant_scope: &str) -> Stage {
         ),
     );
     stage.route(
-        "/v1/dashboard/clusterprofiles/metadata",
+        PROFILE_LISTING,
         r#"{"items":[
             {"metadata":{"name":"strata-live-profile","uid":"r-1"},"spec":{"version":"1.0.0","cloudType":"aws"}},
             {"metadata":{"name":"strata-live-profile","uid":"t-1"},"spec":{"version":"1.0.0","cloudType":"aws"}}]}"#,

@@ -232,8 +232,7 @@ fn write_cluster(root: &Path, dir: &str, profiles: &[&str], values: &[(&str, &st
     }
 }
 
-/// Copy the three raw files from `from` to `to`, applying each text replacement to every file.
-/// Copy a raw profile fixture with each replacement applied to its files.
+/// Copy the three raw files from `from` to `to`, and apply each text replacement to each file.
 pub fn rewrite(from: &Path, to: &Path, replacements: &[(&str, &str)]) {
     fs::create_dir_all(to).unwrap();
     for name in ["profile.json", "manifests.json", "variables.json"] {
@@ -790,6 +789,21 @@ pub fn variables_route(uid: &str) -> String {
     format!("/v1/clusterprofiles/{uid}/variables")
 }
 
+/// The document of the cluster `uid`, `GET /v1/spectroclusters/{uid}`.
+pub fn cluster_route(uid: &str) -> String {
+    format!("/v1/spectroclusters/{uid}")
+}
+
+/// The pack manifests of each profile of the cluster `uid`.
+pub fn cluster_manifests_route(uid: &str) -> String {
+    format!("/v1/spectroclusters/{uid}/profiles/packs/manifests")
+}
+
+/// The variables of the cluster `uid`.
+pub fn cluster_variables_route(uid: &str) -> String {
+    format!("/v1/spectroclusters/{uid}/variables")
+}
+
 /// The pack listing of the pack `name`, as strata asks for its first page.
 pub fn pack_listing_route(name: &str) -> String {
     format!("/v1/packs?filters=spec.name={name}&limit=100&offset=0")
@@ -884,18 +898,21 @@ pub fn no_variables() -> Value {
     json!({"variables": []})
 }
 
+/// The digest that Palette gives a manifest content, as the tests make one: none for no content.
+pub fn manifest_digest(content: &str) -> String {
+    if content.is_empty() {
+        String::new()
+    } else {
+        format!("sha1:{}", content.len())
+    }
+}
+
 /// One manifest of a pack, as `GET /v1/clusterprofiles/{uid}/packs/{pack}/manifests/{manifest}`
-/// gives it: the content of each template, with the digest that Palette gives a content, and no
-/// digest for no content.
+/// gives it.
+///
+/// Each template has its content and the digest of that content.
 pub fn manifest_entity(uid: &str, name: &str, published: &str, draft: &str) -> Value {
-    let data = |content: &str| {
-        let digest = if content.is_empty() {
-            String::new()
-        } else {
-            format!("sha1:{}", content.len())
-        };
-        json!({"content": content, "digest": digest})
-    };
+    let data = |content: &str| json!({"content": content, "digest": manifest_digest(content)});
     json!({"metadata": {"name": name, "uid": uid},
            "spec": {"published": data(published), "draft": data(draft)}})
 }
@@ -911,8 +928,10 @@ pub fn manifest_content<'a>(snap: &'a strata::snapshot::Snapshot, name: &str) ->
 
 // ---- the refs and the listings -----------------------------------------------------------------
 
-/// The ref of the cluster `uid`: of its profile `profile` when one is named, and of the update
-/// that waits for it when `pending` is true.
+/// The ref of the cluster `uid`.
+///
+/// With `profile`, the ref names one profile of the cluster. With `pending` true, it names the
+/// update that waits for the cluster.
 pub fn cluster_ref(uid: &str, profile: Option<&str>, pending: bool) -> strata::reference::Ref {
     strata::reference::Ref::Cluster {
         uid: uid.to_string(),

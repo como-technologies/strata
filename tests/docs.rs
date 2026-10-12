@@ -17,6 +17,7 @@ fn read(path: &Path) -> String {
 }
 
 /// The use-case pages one markdown text links to, in the order it links to them, without repeats.
+///
 /// A link is `<prefix><name>.md)`: the prefix is `use-cases/` in the navigation, and `](./` on
 /// the index page, whose links are relative.
 fn linked(text: &str, prefix: &str) -> Vec<String> {

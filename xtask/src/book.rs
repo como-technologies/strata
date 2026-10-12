@@ -269,8 +269,9 @@ impl Runner {
         self.tenant(|t| t.profile(project, uid, version, example, edits));
     }
 
-    /// Create a profile version with no publish: see [`Tenant::unpublish`]. The rule of
-    /// [`Runner::profile`] on one content for one identity holds for it.
+    /// Create a profile version with no publish: see [`Tenant::unpublish`].
+    ///
+    /// The rule of [`Runner::profile`] on one content for one identity holds for it.
     pub fn unpublished(
         &mut self,
         project: &str,

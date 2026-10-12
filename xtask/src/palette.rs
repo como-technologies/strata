@@ -109,8 +109,9 @@ fn answer(root: &Path, mut stream: TcpStream) -> std::io::Result<()> {
     stream.flush()
 }
 
-/// True when `target` asks for the route `path` with a query, as a search or a log does. The
-/// path alone, or a longer path under it, is another route.
+/// True when `target` asks for the route `path` with a query, as a search or a log does.
+///
+/// The path alone, or a longer path under it, is another route.
 fn with_query(target: &str, path: &str) -> bool {
     target
         .strip_prefix('/')

@@ -16,10 +16,11 @@ use strata::reference::Ref;
 use common::{
     CLUSTER_LISTING, CLUSTER_SEARCH, CLUSTER_SEARCH_SCHEMA, CLUSTER_UID, EDGE_HOST_SEARCH,
     OCI_REGISTRY_SUMMARY, PROFILE_LISTING, PROFILE_SEARCH, PROJECT_LISTING, REGISTRY_LISTING,
-    SECRET_VALUE, UID_A, UID_B, candidate_snapshot, cluster_ref, listing, manifest_route,
-    manifests_route, no_manifests, no_template, no_variables, pack_listing_route, post,
-    profile_document, profile_route, read_json, serve_fixture, serve_profile, snapshot_of,
-    snapshot_of_at, template, variables_route,
+    SECRET_VALUE, UID_A, UID_ADDONS, UID_B, candidate_snapshot, cluster_manifests_route,
+    cluster_ref, cluster_route, cluster_variables_route, listing, manifest_route, manifests_route,
+    no_manifests, no_template, no_variables, pack_listing_route, post, profile_document,
+    profile_route, read_json, serve_fixture, serve_profile, snapshot_of, snapshot_of_at,
+    strata_bin, template, variables_route,
 };
 
 #[test]
@@ -893,8 +894,10 @@ fn with_manifest_pack(raw_root: &Path, dir: &str, pack_uid: &str, rules: Option<
 }
 
 /// Fixture a with its pack `name` changed by `edit`, saved as the raw directory `dir` and read
-/// as a record. `edit` gets the pack reference of the profile and the entry of the pack in the
-/// manifests listing; the variables stay those of a.
+/// as a record.
+///
+/// `edit` gets the pack reference of the profile and the entry of the pack in the manifests
+/// listing. The variables stay those of a.
 fn edited_a(
     raw_root: &Path,
     dir: &str,
@@ -1363,20 +1366,20 @@ fn serve_cluster(api: MemoryApi, raw_root: &Path, dir: &str) -> MemoryApi {
         }
     }
     api.with(
-        format!("/v1/spectroclusters/{CLUSTER_UID}"),
+        cluster_route(CLUSTER_UID),
         read_json(&d.join("cluster.json")),
     )
     .with(
-        format!("/v1/spectroclusters/{CLUSTER_UID}/profiles/packs/manifests"),
+        cluster_manifests_route(CLUSTER_UID),
         read_json(&d.join("manifests.json")),
     )
     .with(
-        format!("/v1/spectroclusters/{CLUSTER_UID}/variables"),
+        cluster_variables_route(CLUSTER_UID),
         read_json(&d.join("variables.json")),
     )
 }
 
-/// The record of the cluster under CLUSTER_UID, of its profile `profile` when one is named.
+/// The record of the cluster under CLUSTER_UID, or of its profile `profile` when the test names one.
 fn snapshot_cluster(api: &MemoryApi, profile: Option<&str>) -> strata::Result<Snapshot> {
     ops::snapshot_for(
         &cluster_ref(CLUSTER_UID, profile, false),
@@ -1386,8 +1389,8 @@ fn snapshot_cluster(api: &MemoryApi, profile: Option<&str>) -> strata::Result<Sn
     )
 }
 
-/// The record of the update that waits for the cluster under CLUSTER_UID, of its profile
-/// `profile` when one is named.
+/// The record of the update that waits for the cluster under CLUSTER_UID, or of its profile
+/// `profile` when the test names one.
 fn snapshot_pending(api: &MemoryApi, profile: Option<&str>) -> strata::Result<Snapshot> {
     ops::snapshot_for(
         &cluster_ref(CLUSTER_UID, profile, true),
@@ -1640,15 +1643,15 @@ fn verify_reports_a_cluster_record_whose_profile_version_was_overwritten_or_dele
     let v = verify(
         MemoryApi::new()
             .with(
-                format!("/v1/spectroclusters/{CLUSTER_UID}"),
+                cluster_route(CLUSTER_UID),
                 read_json(&dir.path().join("cluster-a/cluster.json")),
             )
             .with(
-                format!("/v1/spectroclusters/{CLUSTER_UID}/profiles/packs/manifests"),
+                cluster_manifests_route(CLUSTER_UID),
                 read_json(&dir.path().join("cluster-a/manifests.json")),
             )
             .with(
-                format!("/v1/spectroclusters/{CLUSTER_UID}/variables"),
+                cluster_variables_route(CLUSTER_UID),
                 read_json(&dir.path().join("cluster-a/variables.json")),
             ),
     );
@@ -1712,11 +1715,11 @@ fn verify_refetches_the_cluster_for_a_cluster_record() {
     let d = dir.path().join("cluster-b");
     let no_vars = MemoryApi::new()
         .with(
-            format!("/v1/spectroclusters/{CLUSTER_UID}"),
+            cluster_route(CLUSTER_UID),
             read_json(&d.join("cluster.json")),
         )
         .with(
-            format!("/v1/spectroclusters/{CLUSTER_UID}/profiles/packs/manifests"),
+            cluster_manifests_route(CLUSTER_UID),
             read_json(&d.join("manifests.json")),
         );
     assert!(
@@ -1756,7 +1759,7 @@ fn serve_policy(dir: &Path, subjects: Value) -> MemoryApi {
     cluster["status"]["spcApply"] = serde_json::json!({
         "actionType": "DownloadAndInstallLater", "spcHash": "a1", "spcInfraHash": "b1"});
     serve_cluster(MemoryApi::new(), dir, "cluster-b")
-        .with(format!("/v1/spectroclusters/{CLUSTER_UID}"), cluster)
+        .with(cluster_route(CLUSTER_UID), cluster)
         .with(
             rbacs_route(),
             serde_json::json!({"items": [{
@@ -1942,7 +1945,7 @@ fn a_404_of_the_route_of_the_bindings_records_null_and_another_error_leaves_out_
     let mut cluster = read_json(&dir.path().join("cluster-b").join("cluster.json"));
     cluster["spec"]["clusterConfig"] = serde_json::json!({"timezone": "Etc/UTC"});
     let no_route = serve_cluster(MemoryApi::new(), dir.path(), "cluster-b")
-        .with(format!("/v1/spectroclusters/{CLUSTER_UID}"), cluster)
+        .with(cluster_route(CLUSTER_UID), cluster)
         .with(namespaces_route(), serde_json::json!({"items": []}));
     let p = policy_of(&snapshot_cluster(&no_route, None).unwrap());
     assert_eq!(p["rbacs"], Value::Null, "not read, and not an empty list");
@@ -2308,7 +2311,7 @@ fn consumers_shows_the_version_each_cluster_runs_and_marks_one_the_uid_no_longer
     let runs = |uid: &str, name: &str, version: &str| {
         let mut d = cluster_doc(uid, name, "p1", "Running");
         d["spec"] = serde_json::json!({"clusterProfileTemplates": [
-            {"uid": "64f0000000000000000000d4", "name": "lab-addons", "profileVersion": "2.0.0"},
+            {"uid": UID_ADDONS, "name": "lab-addons", "profileVersion": "2.0.0"},
             {"uid": UID_B, "name": "lab-profile", "profileVersion": version}
         ]});
         d
@@ -2807,11 +2810,18 @@ fn the_second_reading_asks_the_cluster_search_and_finds_a_virtual_cluster() {
     }
 }
 
+/// The listing of the cluster groups of a project.
+const GROUP_LISTING: &str = "/v1/clustergroups/hostCluster/metadata";
+
+/// The search of the virtual clusters of the group `g1`.
+const GROUP_MEMBERS: &str = "/v1/dashboard/clustergroups/g1/virtualClusters?limit=50";
+
 /// The key under which the memory API keeps the POST of the virtual clusters of the group `g1`:
 /// the path and the body.
 static MEMBERS_POST: std::sync::LazyLock<String> = std::sync::LazyLock::new(|| {
     format!(
-        "POST /v1/dashboard/clustergroups/g1/virtualClusters?limit=50 {}",
+        "{} {}",
+        post(GROUP_MEMBERS),
         serde_json::json!({"filter": {}, "sort": []})
     )
 });
@@ -2841,7 +2851,7 @@ fn with_pinning_group(api: MemoryApi) -> MemoryApi {
         serde_json::json!({"items": [], "listmeta": {"continue": ""}}),
     )
     .with(
-        "/v1/clustergroups/hostCluster/metadata",
+        GROUP_LISTING,
         serde_json::json!({"items": [{"uid": "g1", "name": "dev-group"}]}),
     )
     .with(
@@ -2850,7 +2860,7 @@ fn with_pinning_group(api: MemoryApi) -> MemoryApi {
             "spec": {"clusterProfileTemplates": [{"uid": UID_A, "name": "lab-profile"}]}}),
     )
     .with_post(
-        "/v1/dashboard/clustergroups/g1/virtualClusters?limit=50",
+        GROUP_MEMBERS,
         &serde_json::json!({"filter": {}, "sort": []}),
         serde_json::json!({"items": [{"metadata": {"uid": "vc-1", "name": "vc-1",
             "annotations": {"projectUid": "p1"}}}], "listmeta": {"continue": ""}}),
@@ -4479,27 +4489,14 @@ fn list_with_applied_reads_each_cluster_for_the_profiles_it_applies() {
             cluster_document(
                 "c1",
                 &[
-                    (
-                        "lab-profile",
-                        "1.3.0",
-                        "64f0000000000000000000b2",
-                        "cluster",
-                    ),
-                    ("lab-addons", "2.0.0", "64f0000000000000000000d4", "add-on"),
+                    ("lab-profile", "1.3.0", UID_B, "cluster"),
+                    ("lab-addons", "2.0.0", UID_ADDONS, "add-on"),
                 ],
             ),
         )
         .with(
             "/v1/spectroclusters/c2",
-            cluster_document(
-                "c2",
-                &[(
-                    "lab-profile",
-                    "1.2.0",
-                    "64f0000000000000000000a1",
-                    "cluster",
-                )],
-            ),
+            cluster_document("c2", &[("lab-profile", "1.2.0", UID_A, "cluster")]),
         )
         // an update of the add-on waits for c1; c2 serves no notifications, so it is unknown
         .with(
@@ -4509,7 +4506,7 @@ fn list_with_applied_reads_each_cluster_for_the_profiles_it_applies() {
                     "n1",
                     "2026-09-24T23:55:02.083Z",
                     false,
-                    &[("64f0000000000000000000d4", "m")],
+                    &[(UID_ADDONS, "m")],
                 )],
                 "",
             ),
@@ -4548,7 +4545,7 @@ fn list_with_applied_reads_each_cluster_for_the_profiles_it_applies() {
         ],
         "in the order Palette applies them"
     );
-    assert_eq!(applied[0].uid, "64f0000000000000000000b2");
+    assert_eq!(applied[0].uid, UID_B);
 
     let text = render::renderer(Format::Terminal, Paint::off(), false)
         .render_list(&l)
@@ -4602,28 +4599,12 @@ fn list_with_applied_keeps_a_cluster_it_cannot_read_and_reads_each_project_once(
     );
     let p1 = listing.clone().with(
         "/v1/spectroclusters/c1",
-        cluster_document(
-            "c1",
-            &[(
-                "lab-profile",
-                "1.3.0",
-                "64f0000000000000000000b2",
-                "cluster",
-            )],
-        ),
+        cluster_document("c1", &[("lab-profile", "1.3.0", UID_B, "cluster")]),
     );
     let p2 = MemoryApi::new()
         .with(
             "/v1/spectroclusters/c7",
-            cluster_document(
-                "c7",
-                &[(
-                    "lab-profile",
-                    "1.2.0",
-                    "64f0000000000000000000a1",
-                    "cluster",
-                )],
-            ),
+            cluster_document("c7", &[("lab-profile", "1.2.0", UID_A, "cluster")]),
         )
         .failing("/v1/spectroclusters/c9", 404, "no such cluster");
     let scopes: RefCell<Vec<Option<String>>> = RefCell::new(Vec::new());
@@ -4735,10 +4716,7 @@ fn list_with_applied_says_why_an_imported_cluster_has_no_profile_and_a_built_clu
         // full permission mode: an imported cluster with an add-on profile
         .with(
             "/v1/spectroclusters/c5",
-            cluster_document(
-                "c5",
-                &[("lab-addons", "2.0.0", "64f0000000000000000000d4", "add-on")],
-            ),
+            cluster_document("c5", &[("lab-addons", "2.0.0", UID_ADDONS, "add-on")]),
         )
         .failing("/v1/spectroclusters/c6", 404, "no such cluster");
     let l = listing(
@@ -4823,39 +4801,15 @@ fn list_with_a_cluster_text_keeps_the_clusters_that_match_and_reads_only_those()
         )
         .with(
             "/v1/spectroclusters/c1",
-            cluster_document(
-                "c1",
-                &[(
-                    "lab-profile",
-                    "1.3.0",
-                    "64f0000000000000000000b2",
-                    "cluster",
-                )],
-            ),
+            cluster_document("c1", &[("lab-profile", "1.3.0", UID_B, "cluster")]),
         )
         .with(
             "/v1/spectroclusters/c2",
-            cluster_document(
-                "c2",
-                &[(
-                    "lab-profile",
-                    "1.2.0",
-                    "64f0000000000000000000a1",
-                    "cluster",
-                )],
-            ),
+            cluster_document("c2", &[("lab-profile", "1.2.0", UID_A, "cluster")]),
         )
         .with(
             "/v1/spectroclusters/c7",
-            cluster_document(
-                "c7",
-                &[(
-                    "lab-profile",
-                    "1.3.0",
-                    "64f0000000000000000000b2",
-                    "cluster",
-                )],
-            ),
+            cluster_document("c7", &[("lab-profile", "1.3.0", UID_B, "cluster")]),
         );
     let list = |text: &str| {
         listing(
@@ -4979,7 +4933,7 @@ fn built_examples() -> tempfile::TempDir {
         .arg(repo.join("examples/fetch-examples.sh"))
         .env("EXAMPLES_DIR", dir.path())
         .env("OFFLINE", "1")
-        .env("STRATA_BIN", env!("CARGO_BIN_EXE_strata"))
+        .env("STRATA_BIN", strata_bin())
         .output()
         .unwrap();
     assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
@@ -5516,7 +5470,7 @@ fn a_cluster_record_taken_by_name_verifies_by_uid_after_a_rename() {
     renamed_doc["metadata"]["name"] = Value::from("lab-cluster-renamed");
     let renamed = api
         .clone()
-        .with(format!("/v1/spectroclusters/{CLUSTER_UID}"), renamed_doc)
+        .with(cluster_route(CLUSTER_UID), renamed_doc)
         .with(
             CLUSTER_LISTING,
             Value::Array(vec![listed_cluster(
@@ -7079,7 +7033,17 @@ fn audits_page(items: Vec<Value>, next: &str) -> Value {
     serde_json::json!({"items": items, "listmeta": {"continue": next, "limit": 100}})
 }
 
-const PROFILE_AUDITS: &str = "/v1/audits?resourceKind=clusterprofile&resourceUid=64f0000000000000000000a1&startTime=t0&limit=100";
+/// The audit log of the profile version `UID_A` from the time `since`, as `verify --who` reads it.
+fn profile_audits(since: &str) -> String {
+    format!(
+        "/v1/audits?resourceKind=clusterprofile&resourceUid={UID_A}&startTime={since}&limit=100"
+    )
+}
+
+/// The audit log of the cluster under CLUSTER_UID from the time `since`.
+fn cluster_audits(since: &str) -> String {
+    format!("/v1/audits?resourceUid={CLUSTER_UID}&startTime={since}&limit=100")
+}
 
 #[test]
 fn verify_who_reads_every_page_of_the_audit_log_and_lists_the_writes_oldest_first() {
@@ -7089,7 +7053,7 @@ fn verify_who_reads_every_page_of_the_audit_log_and_lists_the_writes_oldest_firs
     // Palette lists the newest first, 100 on a page, and names the next page in `continue`
     let api = serve_fixture(MemoryApi::new(), dir.path(), "b", UID_A)
         .with(
-            PROFILE_AUDITS,
+            profile_audits("t0"),
             audits_page(
                 vec![audit(
                     "au3",
@@ -7102,7 +7066,7 @@ fn verify_who_reads_every_page_of_the_audit_log_and_lists_the_writes_oldest_firs
             ),
         )
         .with(
-            format!("{PROFILE_AUDITS}&continue=tok"),
+            format!("{}&continue=tok", profile_audits("t0")),
             audits_page(
                 vec![audit(
                     "au1",
@@ -7175,7 +7139,7 @@ fn verify_who_says_so_when_the_log_holds_no_write_and_reads_nothing_for_an_uncha
     common::make_fixtures(dir.path());
     let recorded = ops::snapshot_from_dir(&dir.path().join("a"), "a", "t0").unwrap();
     let api = serve_fixture(MemoryApi::new(), dir.path(), "b", UID_A)
-        .with(PROFILE_AUDITS, audits_page(vec![], ""));
+        .with(profile_audits("t0"), audits_page(vec![], ""));
     let v = ops::verify_with(
         &recorded,
         &Palette::new(&api),
@@ -7215,7 +7179,7 @@ fn verify_who_says_so_when_the_log_holds_no_write_and_reads_nothing_for_an_uncha
     assert!(v.unchanged && v.diff.verify.unwrap().who.is_none());
     let v = ops::verify(&recorded, &Palette::new(&api), "t1", &Progress::silent()).unwrap();
     assert!(v.diff.verify.unwrap().who.is_none());
-    assert_eq!(api.calls(PROFILE_AUDITS), 1);
+    assert_eq!(api.calls(&profile_audits("t0")), 1);
 }
 
 #[test]
@@ -7227,7 +7191,7 @@ fn verify_who_reads_the_audit_log_of_the_cluster_for_a_cluster_record() {
         None,
     )
     .unwrap();
-    let path = format!("/v1/audits?resourceUid={CLUSTER_UID}&startTime=t0&limit=100");
+    let path = cluster_audits("t0");
     let api = serve_cluster(MemoryApi::new(), dir.path(), "cluster-b").with(
         path.clone(),
         audits_page(
@@ -7273,7 +7237,7 @@ fn verify_who_of_a_virtual_cluster_record_names_the_create_that_palette_logs_und
         "name": "lab-cluster", "uid": CLUSTER_UID});
     let mut entry = audit_of("au1", "2026-09-18T14:02:11.482Z", created, None);
     entry["spec"]["actionType"] = Value::from("create");
-    let path = format!("/v1/audits?resourceUid={CLUSTER_UID}&startTime=t0&limit=100");
+    let path = cluster_audits("t0");
     let api = serve_cluster(MemoryApi::new(), dir.path(), "cluster-b")
         .with(path.clone(), audits_page(vec![entry], ""));
     let v = ops::verify_with(
@@ -7307,7 +7271,8 @@ fn verify_who_encodes_a_time_with_an_offset_in_the_query() {
     common::make_fixtures(dir.path());
     let recorded =
         ops::snapshot_from_dir(&dir.path().join("a"), "a", "2026-09-17T09:30:00+00:00").unwrap();
-    let path = "/v1/audits?resourceKind=clusterprofile&resourceUid=64f0000000000000000000a1&startTime=2026-09-17T09:30:00%2B00:00&limit=100";
+    let key = profile_audits("2026-09-17T09:30:00%2B00:00");
+    let path = key.as_str();
     let api =
         serve_fixture(MemoryApi::new(), dir.path(), "b", UID_A).with(path, audits_page(vec![], ""));
     ops::verify_with(
@@ -7332,7 +7297,7 @@ fn verify_who_names_the_last_write_on_the_summary_line_of_a_drifted_record() {
     let path = dir.path().join("rec.json");
     fs::write(&path, recorded.to_json(true).unwrap()).unwrap();
     let api = serve_fixture(MemoryApi::new(), dir.path(), "b", UID_A).with(
-        PROFILE_AUDITS,
+        profile_audits("t0"),
         audits_page(
             vec![audit(
                 "au1",
@@ -7490,10 +7455,8 @@ fn verify_who_of_a_cluster_record_names_the_write_that_overwrote_the_profile_it_
     // a legacy version bump took the uid of the version that the cluster runs
     let mut bumped = read_json(&dir.path().join("a/profile.json"));
     bumped["spec"]["version"] = Value::from("1.3.0");
-    let cluster_log = format!("/v1/audits?resourceUid={CLUSTER_UID}&startTime=t0&limit=100");
-    let profile_log = format!(
-        "/v1/audits?resourceKind=clusterprofile&resourceUid={UID_A}&startTime=t0&limit=100"
-    );
+    let cluster_log = cluster_audits("t0");
+    let profile_log = profile_audits("t0");
     // an entry of the system that names no resource
     let mut bare = audit("au3", "2026-09-18T14:09:00.000Z", system(), "update", None);
     bare["spec"].as_object_mut().unwrap().remove("resource");
@@ -7937,6 +7900,21 @@ fn repave_route() -> String {
     format!("/v1/spectroclusters/{CLUSTER_UID}/repave/status")
 }
 
+/// The route that asks Palette if a change of the cluster fixture repaves it.
+fn validate_repave_route() -> String {
+    format!("/v1/spectroclusters/{CLUSTER_UID}/validate/repave")
+}
+
+/// The route that asks Palette if it takes the packs of a change of the cluster fixture.
+fn validate_packs_route() -> String {
+    format!("/v1/spectroclusters/{CLUSTER_UID}/validate/packs")
+}
+
+/// The update that waits for the cluster fixture.
+fn profile_updates_route() -> String {
+    format!("/v1/spectroclusters/{CLUSTER_UID}/profileUpdates")
+}
+
 /// The repave of a macro change in a field that repaves, in the shape that Palette gives it. Each
 /// side of the reason holds the resolved values of the pack.
 fn repave_status(state: &str) -> Value {
@@ -7964,7 +7942,7 @@ fn serve_repave(raw_root: &Path, dir: &str, state: &str) -> MemoryApi {
     let mut cluster = read_json(&raw_root.join(dir).join("cluster.json"));
     cluster["status"]["repave"] = serde_json::json!({"state": state});
     serve_cluster(MemoryApi::new(), raw_root, dir)
-        .with(format!("/v1/spectroclusters/{CLUSTER_UID}"), cluster)
+        .with(cluster_route(CLUSTER_UID), cluster)
         .with(repave_route(), repave_status(state))
         .with(notifications_route(), notifications_page(vec![], ""))
 }
@@ -8246,7 +8224,7 @@ fn a_raw_directory_keeps_each_read_error_so_the_record_is_the_record_of_the_fetc
     cluster["spec"]["clusterConfig"] = serde_json::json!({"timezone": "Etc/UTC"});
     // Palette refuses each document beside the copy, and the record still comes
     let api = serve_repave(dir.path(), "cluster-merged", "Pending")
-        .with(format!("/v1/spectroclusters/{CLUSTER_UID}"), cluster)
+        .with(cluster_route(CLUSTER_UID), cluster)
         .failing(repave_route(), 403, "forbidden")
         .failing(notifications_route(), 403, "forbidden")
         .failing(rbacs_route(), 403, "forbidden")
@@ -8826,7 +8804,7 @@ fn compare_asks_palette_and_names_a_disagreement_with_the_impact_table() {
     let cluster_api = serve_cluster(MemoryApi::new(), dir.path(), "cluster-a");
     let cluster = snapshot_cluster(&cluster_api, None).unwrap();
     let target = ops::snapshot_from_dir(&dir.path().join("b"), "b", "t0").unwrap();
-    let path = format!("POST /v1/spectroclusters/{CLUSTER_UID}/validate/repave");
+    let path = post(&validate_repave_route());
     let answer = serde_json::json!({"isRepaveRequired": true, "reasons": [{
         "code": "PackValuesUpdated", "message": "Pack 'kubernetes' values are updated",
         "pack": {"current": {"name": "kubernetes"}, "diffConfigKeys": ["kubeadmconfig.postKubeadmCommands"]}}]});
@@ -8839,10 +8817,7 @@ fn compare_asks_palette_and_names_a_disagreement_with_the_impact_table() {
     assert!(r.required);
     assert_eq!(r.reasons[0].keys, ["kubeadmconfig.postKubeadmCommands"]);
     assert_eq!(api.posted().len(), 1);
-    assert_eq!(
-        api.posted()[0].0,
-        format!("/v1/spectroclusters/{CLUSTER_UID}/validate/repave")
-    );
+    assert_eq!(api.posted()[0].0, validate_repave_route());
     ops::palette_repave(&palette, &target, &cluster, d.summary.max_impact).unwrap();
 
     // the table and Palette: a repave both ways agrees; in-place against a repave does not
@@ -8884,7 +8859,7 @@ fn compare_asks_the_template_route_for_a_cluster_that_a_cluster_template_governs
     let mut doc = read_json(&dir.path().join("cluster-a").join("cluster.json"));
     doc["spec"]["clusterTemplate"] = serde_json::json!({"uid": "tmpl-1", "projectUid": "p1"});
     let cluster_api = serve_cluster(MemoryApi::new(), dir.path(), "cluster-a")
-        .with(format!("/v1/spectroclusters/{CLUSTER_UID}"), doc);
+        .with(cluster_route(CLUSTER_UID), doc);
     let cluster = snapshot_cluster(&cluster_api, None).unwrap();
     let target = ops::snapshot_from_dir(&dir.path().join("b"), "b", "t0").unwrap();
     // on the route of a cluster in a template, Palette compares nothing and answers no repave; it
@@ -8893,11 +8868,11 @@ fn compare_asks_the_template_route_for_a_cluster_that_a_cluster_template_governs
     let api = cluster_api
         .clone()
         .with(
-            format!("POST /v1/spectroclusters/{CLUSTER_UID}/validate/repave"),
+            post(&validate_repave_route()),
             serde_json::json!({"isRepaveRequired": false, "reasons": []}),
         )
         .with(
-            format!("POST {template_route}"),
+            post(template_route),
             serde_json::json!({"isRepaveRequired": true, "reasons": [{
                 "code": "PackUpgraded", "message": "Pack 'kubernetes' is upgraded",
                 "pack": {"current": {"name": "kubernetes"}}}]}),
@@ -8961,8 +8936,10 @@ fn compare_asks_the_template_route_for_a_cluster_that_a_cluster_template_governs
     assert_eq!(api.posted().len(), 1);
 }
 
-/// The update that waits for the cluster under CLUSTER_UID: the templates of the cluster fixture
-/// `fixture`, changed by `edit`, and the pack manifests of each profile of the fixture.
+/// The update that waits for the cluster under CLUSTER_UID.
+///
+/// `edit` changes the templates of the cluster fixture `fixture`. The pack manifests of each
+/// profile come from the same fixture.
 fn serve_pending(
     api: MemoryApi,
     raw_root: &Path,
@@ -8974,7 +8951,7 @@ fn serve_pending(
         read_json(&d.join("cluster.json"))["spec"]["clusterProfileTemplates"].clone();
     edit(&mut templates);
     let mut api = api.with(
-        format!("/v1/spectroclusters/{CLUSTER_UID}/profileUpdates"),
+        profile_updates_route(),
         serde_json::json!({ "profiles": templates }),
     );
     for m in read_json(&d.join("manifests.json"))["profiles"]
@@ -8995,7 +8972,7 @@ fn the_repave_request_for_the_update_that_waits_gives_the_pending_values_to_each
     let (infra, addon) = merged_uids(dir.path());
     let running = serve_cluster(MemoryApi::new(), dir.path(), "cluster-merged");
     let cluster = snapshot_cluster(&running, None).unwrap();
-    let path = format!("POST /v1/spectroclusters/{CLUSTER_UID}/validate/repave");
+    let path = post(&validate_repave_route());
     let answer = serde_json::json!({"isRepaveRequired": true, "reasons": [{
         "code": "PackValuesUpdated", "message": "Pack 'kubernetes' values are updated",
         "pack": {"current": {"name": "kubernetes"}, "diffConfigKeys": ["kubeadmconfig.postKubeadmCommands"]}}]});
@@ -9022,10 +8999,7 @@ fn the_repave_request_for_the_update_that_waits_gives_the_pending_values_to_each
         assert!(r.required);
         let posted = api.posted();
         assert_eq!(posted.len(), 1);
-        assert_eq!(
-            posted[0].0,
-            format!("/v1/spectroclusters/{CLUSTER_UID}/validate/repave")
-        );
+        assert_eq!(posted[0].0, validate_repave_route());
         Ok(posted[0].1.clone())
     };
     let uid_and_packs = |body: &Value| -> Vec<(String, Option<Vec<String>>)> {
@@ -9126,9 +9100,7 @@ fn the_repave_request_for_the_update_that_waits_gives_the_pending_values_to_each
     // the route of the template by profile uid
     let mut doc = read_json(&dir.path().join("cluster-merged").join("cluster.json"));
     doc["spec"]["clusterTemplate"] = serde_json::json!({"uid": "tmpl-1", "projectUid": "p1"});
-    let governed = running
-        .clone()
-        .with(format!("/v1/spectroclusters/{CLUSTER_UID}"), doc);
+    let governed = running.clone().with(cluster_route(CLUSTER_UID), doc);
     let err = ask(&governed, &cluster, &pending).unwrap_err();
     assert!(
         matches!(&err, Error::Usage { message }
@@ -9175,7 +9147,7 @@ fn compare_validate_prints_each_error_of_palette_and_keeps_the_exit_of_the_compa
     let cluster_api = serve_cluster(MemoryApi::new(), dir.path(), "cluster-a");
     let cluster = snapshot_cluster(&cluster_api, None).unwrap();
     let target = ops::snapshot_from_dir(&dir.path().join("b"), "b", "t0").unwrap();
-    let path = format!("POST /v1/spectroclusters/{CLUSTER_UID}/validate/packs");
+    let path = post(&validate_packs_route());
     let message = "Pack 'strata-live-dep' is required with minimum compatible version '1.0.0'";
     // Palette gives the error under each profile that holds a pack of that name
     let error = serde_json::json!({"packs": {"results": [{"name": "strata-live-pack",
@@ -9196,10 +9168,7 @@ fn compare_validate_prints_each_error_of_palette_and_keeps_the_exit_of_the_compa
     // one POST, with the body of --repave, in either order of the sides
     let posted = api.posted();
     assert_eq!(posted.len(), 1);
-    assert_eq!(
-        posted[0].0,
-        format!("/v1/spectroclusters/{CLUSTER_UID}/validate/packs")
-    );
+    assert_eq!(posted[0].0, validate_packs_route());
     let running = strata::snapshot::AppliedProfile::of_cluster(
         &Palette::new(&cluster_api)
             .cluster_document(CLUSTER_UID)
@@ -10594,7 +10563,7 @@ fn a_pending_cluster_ref_records_the_release_that_the_waiting_update_brings() {
     assert!(v.unchanged, "{:?}", v.status);
     // once the cluster takes the update, nothing waits
     let taken = serve_cluster(MemoryApi::new(), dir.path(), "cluster-a").with(
-        format!("/v1/spectroclusters/{CLUSTER_UID}/profileUpdates"),
+        profile_updates_route(),
         serde_json::json!({ "profiles": [] }),
     );
     let v = ops::verify(&pending, &Palette::new(taken), "t1", &Progress::silent()).unwrap();
@@ -10848,7 +10817,7 @@ fn a_cluster_group_record_holds_its_own_copy_of_each_manifest() {
                 }),
             )
             .with(
-                "POST /v1/dashboard/clustergroups/g1/virtualClusters?limit=50",
+                post(GROUP_MEMBERS),
                 serde_json::json!({"items": [], "listmeta": {"continue": ""}}),
             )
             .with(
@@ -11067,11 +11036,11 @@ fn serve_cluster_group(api: MemoryApi, raw_root: &Path) -> MemoryApi {
     serve_cluster(api, raw_root, "cluster-merged")
         .with("/v1/clustergroups/g1", group_doc(raw_root))
         .with(
-            "/v1/clustergroups/hostCluster/metadata",
+            GROUP_LISTING,
             serde_json::json!({"items": [{"uid": "g1", "name": "group-1", "scope": "project"}]}),
         )
         .with(
-            "POST /v1/dashboard/clustergroups/g1/virtualClusters?limit=50",
+            post(GROUP_MEMBERS),
             serde_json::json!({"items": [{"metadata": {"uid": CLUSTER_UID, "name": "lab-cluster",
                 "annotations": {"projectUid": "p1"}}}], "listmeta": {"continue": ""}}),
         )
@@ -12851,7 +12820,7 @@ fn snapshot_prod_set(dir: &Path) -> (ops::SetReport, std::path::PathBuf, Snapsho
         vec![lab, gone],
         vec![],
     )
-    .with(format!("/v1/spectroclusters/{CLUSTER_UID}"), doc);
+    .with(cluster_route(CLUSTER_UID), doc);
     let out = dir.join("fleet");
     fs::create_dir_all(&out).unwrap();
     // a record of a cluster that left the set, and a file that is not a record
@@ -12990,8 +12959,7 @@ fn cluster_in_state(dir: &Path, state: &str, extra: Value) -> MemoryApi {
     for (k, v) in extra.as_object().unwrap() {
         doc["metadata"][k] = v.clone();
     }
-    serve_cluster(MemoryApi::new(), dir, "cluster-a")
-        .with(format!("/v1/spectroclusters/{CLUSTER_UID}"), doc)
+    serve_cluster(MemoryApi::new(), dir, "cluster-a").with(cluster_route(CLUSTER_UID), doc)
 }
 
 /// The verdict line of a verify, as the terminal prints it.
@@ -13124,7 +13092,7 @@ fn verify_ends_the_verdict_of_a_cluster_record_with_a_state_other_than_running()
     let mut moved_doc = read_json(&dir.path().join("cluster-b/cluster.json"));
     moved_doc["status"]["state"] = Value::from("Error");
     let moved = serve_cluster(MemoryApi::new(), dir.path(), "cluster-b")
-        .with(format!("/v1/spectroclusters/{CLUSTER_UID}"), moved_doc);
+        .with(cluster_route(CLUSTER_UID), moved_doc);
     let v = ops::verify(&recorded, &Palette::new(moved), "t1", &Progress::silent()).unwrap();
     assert!(!v.unchanged);
     let line = verdict_of(&v, &recorded);
@@ -13268,6 +13236,14 @@ fn name_route(snap: &strata::snapshot::Snapshot) -> String {
 /// The import validate route.
 const IMPORT_ROUTE: &str = "/v1/clusterprofiles/import/validate";
 
+/// The route that asks Palette if it takes the packs of a new profile.
+const PROFILE_VALIDATE_PACKS: &str = "/v1/clusterprofiles/validate/packs";
+
+/// The route that asks Palette if it takes the packs of an update of the profile version `uid`.
+fn update_validate_packs_route(uid: &str) -> String {
+    format!("/v1/clusterprofiles/{uid}/validate/packs")
+}
+
 /// The registry listing that `snapshot --validate` reads for the body of the import validate
 /// route: the registry of the packs of fixture B.
 fn registry_listing() -> Value {
@@ -13279,7 +13255,7 @@ fn registry_listing() -> Value {
 /// for a candidate before the packs route. Both take `snap`.
 fn serve_candidate_checks(api: MemoryApi, snap: &strata::snapshot::Snapshot) -> MemoryApi {
     api.with(name_route(snap), Value::Null)
-        .with(format!("POST {IMPORT_ROUTE}"), serde_json::json!({}))
+        .with(post(IMPORT_ROUTE), serde_json::json!({}))
         .with(REGISTRY_LISTING, registry_listing())
 }
 
@@ -13291,7 +13267,8 @@ fn snapshot_validate_asks_palette_whether_it_takes_the_packs_of_a_candidate() {
     let file = dir.path().join("c.yaml");
     candidate::write(&Candidate::from_snapshot(&recorded_b).unwrap(), &file, None).unwrap();
     let registry = serve_registry_for_b(dir.path());
-    let path = "POST /v1/clusterprofiles/validate/packs";
+    let key = post(PROFILE_VALIDATE_PACKS);
+    let path = key.as_str();
     let message = "Pack 'strata-live-dep' is required with minimum compatible version '1.0.0'";
     let answer = serde_json::json!({"packs": {"results": [{"name": "kubernetes",
         "displayName": "kubernetes",
@@ -13340,7 +13317,7 @@ fn snapshot_validate_asks_palette_whether_it_takes_the_packs_of_a_candidate() {
                 "isPrivate": false})
         );
     }
-    assert_eq!(posted[1].0, "/v1/clusterprofiles/validate/packs");
+    assert_eq!(posted[1].0, PROFILE_VALIDATE_PACKS);
     assert_eq!(posted[1].1, ops::profile_validate_body(&snap));
     let body = &posted[1].1;
     assert_eq!(body["cloudType"], recorded_b.source.cloud_type.as_str());
@@ -13421,7 +13398,8 @@ fn snapshot_validate_takes_a_refusal_of_the_whole_request_as_an_answer() {
     let b = ops::snapshot_from_dir(&dir.path().join("b"), "b", "t0").unwrap();
     let mut candidate = b.clone();
     candidate.source.uid = String::new();
-    let path = "POST /v1/clusterprofiles/validate/packs";
+    let key = post(PROFILE_VALIDATE_PACKS);
+    let path = key.as_str();
     // Palette sends each refusal of the whole request as HTTP 500
     for code in strata::error::PROFILE_PACK_REFUSAL_CODES {
         let body = format!(r#"{{"code":"{code}","message":"refused"}}"#);
@@ -13472,8 +13450,8 @@ fn snapshot_validate_of_a_version_asks_the_route_of_an_update_of_that_version() 
     common::make_fixtures(dir.path());
     let b = ops::snapshot_from_dir(&dir.path().join("b"), "b", "t0").unwrap();
     assert!(!b.source.uid.is_empty());
-    let route = format!("/v1/clusterprofiles/{}/validate/packs", b.source.uid);
-    let api = MemoryApi::new().with(format!("POST {route}"), serde_json::json!({}));
+    let route = update_validate_packs_route(&b.source.uid);
+    let api = MemoryApi::new().with(post(&route), serde_json::json!({}));
     let v = ops::profile_validation(&Palette::new(&api), &b).unwrap();
     assert!(v.accepts);
     let posted = api.posted();
@@ -13499,11 +13477,11 @@ fn snapshot_validate_of_a_candidate_takes_a_refusal_of_the_name_route_or_the_imp
     candidate.source.uid = String::new();
     let accepting = || {
         serve_candidate_checks(MemoryApi::new(), &candidate).with(
-            "POST /v1/clusterprofiles/validate/packs",
+            post(PROFILE_VALIDATE_PACKS),
             serde_json::json!({"packs": {"results": []}}),
         )
     };
-    let import = format!("POST {IMPORT_ROUTE}");
+    let import = post(IMPORT_ROUTE);
     let refusal = |api: MemoryApi| ops::profile_validation(&Palette::new(&api), &candidate);
     let body_of = |code: &str| format!(r#"{{"code":"{code}","message":"refused"}}"#);
     let class_of = |status: u16, code: &str| {
@@ -13585,7 +13563,7 @@ fn snapshot_validate_of_a_candidate_takes_a_refusal_of_the_name_route_or_the_imp
     assert!(matches!(err, Error::Api { status: 400, .. }), "{err}");
 
     // a version that Palette holds goes only to the route of an update
-    let route = format!("POST /v1/clusterprofiles/{}/validate/packs", b.source.uid);
+    let route = post(&update_validate_packs_route(&b.source.uid));
     let api = MemoryApi::new().with(route, serde_json::json!({}));
     assert!(
         ops::profile_validation(&Palette::new(&api), &b)
@@ -13637,7 +13615,7 @@ fn a_candidate_with_a_fault_that_only_a_route_answers_gives_a_record_with_the_sa
     let api = serve_candidate_checks(registry, &snap)
         .failing(name_route(&snap), 500, body)
         .with(
-            "POST /v1/clusterprofiles/validate/packs",
+            post(PROFILE_VALIDATE_PACKS),
             serde_json::json!({"packs": {"results": []}}),
         );
     let refused = ops::snapshot_from_candidate(
