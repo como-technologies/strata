@@ -1,7 +1,7 @@
 //! The content digest, the pins, a snapshot for each applied profile, and the failure class.
 //! These are what a caller needs to pin a profile version by digest. They need no network.
 
-mod common;
+use crate::common;
 
 use std::path::Path;
 

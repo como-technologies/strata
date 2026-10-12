@@ -8,8 +8,8 @@ use serde_json::{Value, json};
 use strata::api::MemoryApi;
 use strata::snapshot::{PresetOption, Snapshot};
 
-mod common;
-use common::candidate_snapshot;
+use crate::common;
+use common::{candidate_snapshot, pack_listing_route};
 
 const REGISTRY: &str = "reg-public";
 
@@ -26,7 +26,7 @@ fn registry(template: Option<Value>) -> MemoryApi {
     }
     MemoryApi::new()
         .with(
-            "/v1/packs?filters=spec.name=barney&limit=100&offset=0",
+            pack_listing_route("barney"),
             json!({"items": [summary], "listmeta": {"count": 1}}),
         )
         .with(

@@ -13,10 +13,7 @@ use std::path::{Path, PathBuf};
 use serde_json::{Map, Value, json};
 
 /// The directory of the documents that Palette serves at tenant scope, with no `ProjectUid`.
-const TENANT: &str = "tenant";
-/// The profile search, as the server names its file: `POST /v1/dashboard/clusterprofiles` with
-/// the `limit` of strata. One page holds every profile name of the stand-in.
-const PROFILE_SEARCH: &str = "v1/dashboard/clusterprofiles@limit=50";
+pub const TENANT: &str = "tenant";
 
 /// The uid of the Public Repo pack registry, as Palette gives it.
 pub const PUBLIC_REPO: &str = "5eecc89d0b150045ae661cef";
@@ -34,6 +31,144 @@ const GROUP_HOST: &str = "64f5000000000000000000b1";
 const GROUP_VALUES: &str = "# Sync describes how to sync resources to the host cluster.\nsync:\n  toHost:\n    services:\n      enabled: true\n    ingresses:\n      enabled: false\n# The external database of each virtual cluster.\ndatabase:\n  user: vcluster\n  password: s3cr3t\n";
 const OCI_CSI_DIGEST: &str =
     "sha256:a746e14689085b14531566f9c9cfb2bc7716e96a394547ef50a1c52eab510c9e";
+
+// The routes of Palette, as the server names their files: the path, and the query after an `@`.
+// A route that two helpers write has one const or one fn here, and the server reads the same
+// one.
+
+/// The projects that the key can see, `GET /v1/dashboard/projects/metadata`.
+pub const PROJECT_LISTING: &str = "v1/dashboard/projects/metadata";
+/// The profile search, `POST /v1/dashboard/clusterprofiles`.
+///
+/// The server keeps the items of the scope that the body names.
+pub const PROFILE_SEARCH_PATH: &str = "v1/dashboard/clusterprofiles";
+/// The cluster search, `POST /v1/dashboard/spectroclusters/search`.
+///
+/// The server keeps the clusters that the body selects.
+pub const CLUSTER_SEARCH_PATH: &str = "v1/dashboard/spectroclusters/search";
+/// The audit log, `GET /v1/audits`.
+///
+/// The server answers an empty log for a resource with no file.
+pub const AUDITS: &str = "v1/audits";
+/// The profile documents of a scope, `v1/clusterprofiles/{uid}`.
+const PROFILES: &str = "v1/clusterprofiles";
+/// The cluster documents of a project, `v1/spectroclusters/{uid}`.
+const CLUSTERS: &str = "v1/spectroclusters";
+/// The cluster group documents of a project, `v1/clustergroups/{uid}`.
+const GROUPS: &str = "v1/clustergroups";
+/// The edge host documents of a project, `v1/edgehosts/{uid}`.
+const EDGE_HOSTS: &str = "v1/edgehosts";
+/// The app profile documents of a project, `v1/appProfiles/{uid}`.
+const APP_PROFILES: &str = "v1/appProfiles";
+/// The pack registries of a scope, `GET /v1/registries/metadata`.
+const REGISTRY_LISTING: &str = "v1/registries/metadata";
+
+/// The file of a listing or a search that strata reads by pages: `path` with the page of
+/// strata.
+///
+/// One page holds every item of the stand-in.
+fn paged(path: &str) -> String {
+    format!("{path}@limit=50")
+}
+
+/// The document of the profile version `uid`, `GET /v1/clusterprofiles/{uid}`.
+fn profile_route(uid: &str) -> String {
+    format!("{PROFILES}/{uid}")
+}
+
+/// The manifests of the profile version `uid`, `GET /v1/clusterprofiles/{uid}/packs/manifests`.
+fn manifests_route(uid: &str) -> String {
+    format!("{}/packs/manifests", profile_route(uid))
+}
+
+/// The variables of the profile version `uid`, `GET /v1/clusterprofiles/{uid}/variables`.
+fn variables_route(uid: &str) -> String {
+    format!("{}/variables", profile_route(uid))
+}
+
+/// One manifest of the pack `pack` of the profile version `uid`,
+/// `GET /v1/clusterprofiles/{uid}/packs/{pack}/manifests/{manifest}`.
+fn manifest_route(uid: &str, pack: &str, manifest: &str) -> String {
+    format!("{}/packs/{pack}/manifests/{manifest}", profile_route(uid))
+}
+
+/// The document of the cluster `uid`, `GET /v1/spectroclusters/{uid}`.
+fn cluster_route(uid: &str) -> String {
+    format!("{CLUSTERS}/{uid}")
+}
+
+/// The variables of the cluster `uid`, `GET /v1/spectroclusters/{uid}/variables`.
+fn cluster_variables_route(uid: &str) -> String {
+    format!("{}/variables", cluster_route(uid))
+}
+
+/// The role bindings of the cluster `uid`, `GET /v1/spectroclusters/{uid}/config/rbacs`.
+pub fn rbacs_route(uid: &str) -> String {
+    format!("{}/config/rbacs", cluster_route(uid))
+}
+
+/// The namespaces of the cluster `uid`, `GET /v1/spectroclusters/{uid}/config/namespaces`.
+fn namespaces_route(uid: &str) -> String {
+    format!("{}/config/namespaces", cluster_route(uid))
+}
+
+/// The repave check of the cluster `uid`, `POST /v1/spectroclusters/{uid}/validate/repave`.
+fn repave_route(uid: &str) -> String {
+    format!("{}/validate/repave", cluster_route(uid))
+}
+
+/// The notifications of the cluster `uid`, `GET /v1/notifications/spectrocluster/{uid}`.
+fn notifications_route(uid: &str) -> String {
+    format!("v1/notifications/spectrocluster/{uid}")
+}
+
+/// The document of the cluster group `uid`, `GET /v1/clustergroups/{uid}`.
+fn group_route(uid: &str) -> String {
+    format!("{GROUPS}/{uid}")
+}
+
+/// The virtual clusters of the cluster group `uid`, as the server names the file of
+/// `GET /v1/dashboard/clustergroups/{uid}/virtualClusters`.
+fn virtual_clusters_file(uid: &str) -> String {
+    paged(&format!("v1/dashboard/clustergroups/{uid}/virtualClusters"))
+}
+
+/// The document of the app profile `uid`, `GET /v1/appProfiles/{uid}`.
+fn app_profile_route(uid: &str) -> String {
+    format!("{APP_PROFILES}/{uid}")
+}
+
+/// The macros of the project `project`, `GET /v1/projects/{project}/macros`.
+fn macros_route(project: &str) -> String {
+    format!("v1/projects/{project}/macros")
+}
+
+/// The versions of the pack `name` in each registry, as the server names the file of
+/// `GET /v1/packs?filters=spec.name={name}&limit=100&offset=0`: the first page of the listing.
+fn pack_listing(name: &str) -> String {
+    format!("v1/packs@filters=spec.name={name}&limit=100&offset=0")
+}
+
+/// The pack `name` in the registry `registry`, `GET /v1/packs/{name}/registries/{registry}`.
+fn pack_entity_route(name: &str, registry: &str) -> String {
+    format!("v1/packs/{name}/registries/{registry}")
+}
+
+/// The audit log of the resource `uid` of the kind `kind`, as the server names the file of
+/// `GET /v1/audits?resourceKind={kind}&resourceUid={uid}&limit=100`.
+///
+/// The server leaves the time out of the query.
+fn audit_log_file(kind: &str, uid: &str) -> String {
+    format!("{AUDITS}@resourceKind={kind}&resourceUid={uid}&limit=100")
+}
+
+/// The cloud config of the cluster `uid` for the cloud type `kind`.
+///
+/// Palette serves the cloud config of each cloud type at its own path. The stand-in gives the
+/// config the uid of the cluster with a `c` at the end.
+fn cloud_config_route(kind: &str, uid: &str) -> String {
+    format!("v1/cloudconfigs/{kind}/{uid}c")
+}
 
 /// One change to a published profile document, as a person makes it through the API.
 #[derive(Clone, Debug)]
@@ -325,17 +460,9 @@ impl Tenant {
             .map(|(name, uid)| json!({"metadata": {"name": name, "uid": uid}}))
             .collect();
         for (pair, item) in pairs.iter().zip(&items) {
-            self.write(
-                pair.1,
-                "v1/dashboard/projects/metadata",
-                &json!({"items": [item]}),
-            );
+            self.write(pair.1, PROJECT_LISTING, &json!({"items": [item]}));
         }
-        self.write(
-            "tenant",
-            "v1/dashboard/projects/metadata",
-            &json!({"items": items}),
-        );
+        self.write(TENANT, PROJECT_LISTING, &json!({"items": items}));
         self.listings();
     }
 
@@ -355,7 +482,7 @@ impl Tenant {
         // Palette lists a profile of the tenant in each project, and serves its document there.
         // So each project gets a copy of the documents of each tenant profile. Its listing and
         // its search name the tenant versions beside its own.
-        let tenant_profiles = self.documents_in(TENANT, "v1/clusterprofiles");
+        let tenant_profiles = self.documents_in(TENANT, PROFILES);
         for project in &scopes {
             for doc in &tenant_profiles {
                 self.copy_profile(
@@ -365,53 +492,27 @@ impl Tenant {
                 );
             }
             let profiles: Vec<Value> = self
-                .documents_in(project, "v1/clusterprofiles")
+                .documents_in(project, PROFILES)
                 .into_iter()
                 .filter(|d| d["metadata"]["annotations"]["scope"] != "tenant")
                 .chain(tenant_profiles.iter().cloned())
                 .collect();
             // a deleted cluster leaves the listing and the search, and keeps its document
             let clusters: Vec<Value> = self
-                .documents_in(project, "v1/spectroclusters")
+                .documents_in(project, CLUSTERS)
                 .into_iter()
                 .filter(|d| d["status"]["state"] != "Deleted")
                 .collect();
             every_cluster.extend(clusters.iter().cloned());
-            let items: Vec<Value> = profiles.iter().map(profile_row).collect();
-            self.write(
-                project,
-                "v1/dashboard/clusterprofiles/metadata",
-                &json!({"items": items}),
-            );
-            self.write(project, PROFILE_SEARCH, &profile_search(&profiles));
-            let rows: Vec<Value> = clusters
-                .iter()
-                .filter(|c| !nested(c))
-                .map(cluster_row)
-                .collect();
-            self.write(project, "v1/dashboard/spectroclusters/meta", &json!(rows));
+            self.write_listings(project, &profiles, &clusters);
         }
-        let items: Vec<Value> = tenant_profiles.iter().map(profile_row).collect();
-        self.write(
-            TENANT,
-            "v1/dashboard/clusterprofiles/metadata",
-            &json!({"items": items}),
-        );
-        self.write(TENANT, PROFILE_SEARCH, &profile_search(&tenant_profiles));
-        // the listing leaves out each virtual cluster; the search holds it, when a condition asks
-        let rows: Vec<Value> = every_cluster
-            .iter()
-            .filter(|c| !nested(c))
-            .map(cluster_row)
-            .collect();
-        self.write(TENANT, "v1/dashboard/spectroclusters/meta", &json!(rows));
+        self.write_listings(TENANT, &tenant_profiles, &every_cluster);
         // the search of the tenant: every cluster, which the server filters by the body of a
         // request, and the schema that says the search takes tags
-        let projects: Value =
-            std::fs::read_to_string(self.doc(TENANT, "v1/dashboard/projects/metadata"))
-                .ok()
-                .and_then(|t| serde_json::from_str(&t).ok())
-                .unwrap_or_default();
+        let projects: Value = std::fs::read_to_string(self.doc(TENANT, PROJECT_LISTING))
+            .ok()
+            .and_then(|t| serde_json::from_str(&t).ok())
+            .unwrap_or_default();
         let names: Map<String, Value> = projects["items"]
             .as_array()
             .into_iter()
@@ -433,7 +534,7 @@ impl Tenant {
         let mut group_pins: Map<String, Value> = Map::new();
         let mut group_of: Map<String, Value> = Map::new();
         for project in &scopes {
-            for group in self.documents_in(project, "v1/clustergroups") {
+            for group in self.documents_in(project, GROUPS) {
                 let gid = group["metadata"]["uid"].as_str().unwrap_or_default();
                 let pinned: Vec<Value> = group["spec"]["clusterProfileTemplates"]
                     .as_array()
@@ -444,7 +545,7 @@ impl Tenant {
                 let host = group["spec"]["clustersConfig"]["hostClustersConfig"][0]["clusterUid"]
                     .as_str()
                     .unwrap_or_default();
-                let host_path = format!("v1/spectroclusters/{host}");
+                let host_path = cluster_route(host);
                 let host_name = if self.doc(project, &host_path).is_file() {
                     self.read(project, &host_path)["metadata"]["name"].clone()
                 } else {
@@ -455,10 +556,7 @@ impl Tenant {
                                      "kind": "clustergroup"},
                     "hostCluster": {"uid": host, "name": host_name, "kind": "spectrocluster"},
                 });
-                let members = self.read(
-                    project,
-                    &format!("v1/dashboard/clustergroups/{gid}/virtualClusters@limit=50"),
-                );
+                let members = self.read(project, &virtual_clusters_file(gid));
                 for m in members["items"].as_array().into_iter().flatten() {
                     let muid = m["metadata"]["uid"].as_str().unwrap_or_default();
                     let entry = group_pins.entry(muid.to_string()).or_insert(json!([]));
@@ -508,34 +606,50 @@ impl Tenant {
                 .filter(|r| r["specSummary"]["projectMeta"]["uid"] == json!(project))
                 .cloned()
                 .collect();
-            self.write(
-                project,
-                "v1/dashboard/spectroclusters/search@limit=50",
-                &json!({"items": rows, "listmeta": {"continue": ""}}),
-            );
-            self.write(
-                project,
-                "v1/dashboard/spectroclusters/search/schema",
-                &schema,
-            );
+            self.write_cluster_search(project, rows, &schema);
         }
+        self.write_cluster_search(TENANT, found, &schema);
+    }
+
+    /// The profile listing, the profile search, and the cluster listing of one scope.
+    ///
+    /// The cluster listing leaves out each virtual cluster; the search holds it, when a condition
+    /// asks.
+    fn write_listings(&self, scope: &str, profiles: &[Value], clusters: &[Value]) {
+        let items: Vec<Value> = profiles.iter().map(profile_row).collect();
         self.write(
-            "tenant",
-            "v1/dashboard/spectroclusters/search@limit=50",
-            &json!({"items": found, "listmeta": {"continue": ""}}),
+            scope,
+            "v1/dashboard/clusterprofiles/metadata",
+            &json!({"items": items}),
         );
         self.write(
-            "tenant",
-            "v1/dashboard/spectroclusters/search/schema",
-            &schema,
+            scope,
+            &paged(PROFILE_SEARCH_PATH),
+            &profile_search(profiles),
         );
+        let rows: Vec<Value> = clusters
+            .iter()
+            .filter(|c| !nested(c))
+            .map(cluster_row)
+            .collect();
+        self.write(scope, "v1/dashboard/spectroclusters/meta", &json!(rows));
+    }
+
+    /// The cluster search of one scope, with `rows` as its clusters, and the schema of the search.
+    fn write_cluster_search(&self, scope: &str, rows: Vec<Value>, schema: &Value) {
+        self.write(
+            scope,
+            &paged(CLUSTER_SEARCH_PATH),
+            &json!({"items": rows, "listmeta": {"continue": ""}}),
+        );
+        self.write(scope, &format!("{CLUSTER_SEARCH_PATH}/schema"), schema);
     }
 
     /// Copy the documents of the profile `uid` from the directory `from` to the directory `to`:
     /// the profile document, and each document under its path, such as its manifests and its
     /// variables.
     fn copy_profile(&self, from: &str, to: &str, uid: &str) {
-        let path = format!("v1/clusterprofiles/{uid}");
+        let path = profile_route(uid);
         let source = self.doc(from, &path);
         let target = self.doc(to, &path);
         std::fs::copy(&source, &target)
@@ -601,7 +715,7 @@ impl Tenant {
         for edit in edits {
             edit.apply(&mut doc);
         }
-        self.write(project, &format!("v1/clusterprofiles/{uid}"), &doc);
+        self.write(project, &profile_route(uid), &doc);
 
         let text = std::fs::read_to_string(from.join("manifests.json")).unwrap_or_default();
         let mut manifests: Value = serde_json::from_str(&text).unwrap_or_else(|_| json!({}));
@@ -609,19 +723,11 @@ impl Tenant {
         for edit in edits {
             edit.apply_manifests(&mut manifests);
         }
-        self.write(
-            project,
-            &format!("v1/clusterprofiles/{uid}/packs/manifests"),
-            &manifests,
-        );
+        self.write(project, &manifests_route(uid), &manifests);
 
         let text = std::fs::read_to_string(from.join("variables.json")).unwrap_or_default();
         let variables: Value = serde_json::from_str(&text).unwrap_or_else(|_| json!({}));
-        self.write(
-            project,
-            &format!("v1/clusterprofiles/{uid}/variables"),
-            &variables,
-        );
+        self.write(project, &variables_route(uid), &variables);
         self.resolve_profile_macros(project, uid);
         self.listings();
     }
@@ -635,13 +741,10 @@ impl Tenant {
     /// manifest, and gives a manifest pack an empty registry. The export holds no params and no
     /// pack uid.
     pub fn export(&self, project: &str, uid: &str) {
-        let doc = self.read(project, &format!("v1/clusterprofiles/{uid}"));
-        let manifests = self.read(
-            project,
-            &format!("v1/clusterprofiles/{uid}/packs/manifests"),
-        );
-        let variables = self.read(project, &format!("v1/clusterprofiles/{uid}/variables"));
-        let registries = self.read(project, "v1/registries/metadata");
+        let doc = self.read(project, &profile_route(uid));
+        let manifests = self.read(project, &manifests_route(uid));
+        let variables = self.read(project, &variables_route(uid));
+        let registries = self.read(project, REGISTRY_LISTING);
         let registry = |registry_uid: &Value| {
             let row = registries["items"]
                 .as_array()
@@ -697,7 +800,7 @@ impl Tenant {
         });
         self.write(
             project,
-            &format!("v1/clusterprofiles/{uid}/export@format=json"),
+            &format!("{}/export@format=json", profile_route(uid)),
             &export,
         );
     }
@@ -724,7 +827,7 @@ impl Tenant {
         );
         self.write(
             project,
-            &format!("v1/clusterprofiles/{uid}"),
+            &profile_route(uid),
             &json!({
                 "apiVersion": "v1", "kind": "ClusterProfile",
                 "metadata": {"name": name, "uid": uid, "annotations": {"scope": "project"}},
@@ -738,7 +841,7 @@ impl Tenant {
         );
         self.write(
             project,
-            &format!("v1/clusterprofiles/{uid}/packs/manifests"),
+            &manifests_route(uid),
             &json!({
                 "metadata": {"name": name, "uid": uid, "annotations": {"scope": "project"}},
                 "spec": {"packs": [{"metadata": {"name": "namespace-policy", "uid": pack},
@@ -747,18 +850,14 @@ impl Tenant {
                     "status": {}}]}
             }),
         );
-        self.write(
-            project,
-            &format!("v1/clusterprofiles/{uid}/variables"),
-            &json!({"variables": []}),
-        );
+        self.write(project, &variables_route(uid), &json!({"variables": []}));
         self.listings();
     }
 
     /// A Helm registry that is private, `charts-auth`. Palette does not sync it, so the pack
     /// listing has no chart of it until a profile pins one.
     pub fn private_charts(&self, project: &str) {
-        let path = "v1/registries/metadata";
+        let path = REGISTRY_LISTING;
         let mut listing = self.read(project, path);
         if let Some(items) = listing["items"].as_array_mut() {
             items.push(
@@ -769,7 +868,7 @@ impl Tenant {
         self.write(project, path, &listing);
         self.write(
             project,
-            &format!("v1/packs@filters=spec.name={CHART}&limit=100&offset=0"),
+            &pack_listing(CHART),
             &json!({"items": [], "listmeta": {"count": 0}}),
         );
     }
@@ -781,7 +880,7 @@ impl Tenant {
         let values = "replicaCount: 2\n";
         self.write(
             project,
-            &format!("v1/clusterprofiles/{uid}"),
+            &profile_route(uid),
             &json!({
                 "apiVersion": "v1", "kind": "ClusterProfile",
                 "metadata": {"name": "charts-probe", "uid": uid},
@@ -794,7 +893,7 @@ impl Tenant {
         );
         self.write(
             project,
-            &format!("v1/clusterprofiles/{uid}/packs/manifests"),
+            &manifests_route(uid),
             &json!({
                 "metadata": {"name": "charts-probe", "uid": uid},
                 "spec": {"packs": [{"metadata": {"name": CHART, "uid": pack},
@@ -803,22 +902,18 @@ impl Tenant {
                     "status": {}}]}
             }),
         );
-        self.write(
-            project,
-            &format!("v1/clusterprofiles/{uid}/variables"),
-            &json!({"variables": []}),
-        );
+        self.write(project, &variables_route(uid), &json!({"variables": []}));
         let made = json!({"metadata": {"uid": pack, "name": CHART},
             "spec": {"name": CHART, "version": version, "registryUid": PRIVATE_CHARTS,
                 "layer": "addon", "type": "helm", "digest": ""}});
         self.write(
             project,
-            &format!("v1/packs@filters=spec.name={CHART}&limit=100&offset=0"),
+            &pack_listing(CHART),
             &json!({"items": [made], "listmeta": {"count": 1}}),
         );
         self.write(
             project,
-            &format!("v1/packs/{CHART}/registries/{PRIVATE_CHARTS}"),
+            &pack_entity_route(CHART, PRIVATE_CHARTS),
             &json!({"name": CHART, "layer": "addon",
                 "tags": [{"tag": version, "version": version, "packUid": pack}],
                 "packValues": [{"packUid": pack, "values": ""}]}),
@@ -830,7 +925,7 @@ impl Tenant {
     /// in the audit log, as Palette does. The document takes the time of the write in
     /// `metadata.lastModifiedTimestamp`.
     pub fn edit(&self, project: &str, uid: &str, edits: &[Edit]) {
-        let path = format!("v1/clusterprofiles/{uid}");
+        let path = profile_route(uid);
         let mut doc = self.read(project, &path);
         for edit in edits {
             edit.apply(&mut doc);
@@ -849,7 +944,7 @@ impl Tenant {
     /// Each manifest with a uid answers its own route, with its draft content and its published
     /// content; an edit of values leaves the draft content of a manifest empty.
     pub fn draft(&self, project: &str, uid: &str, edits: &[Edit]) {
-        let path = format!("v1/clusterprofiles/{uid}");
+        let path = profile_route(uid);
         let mut doc = self.read(project, &path);
         let mut edited = doc.clone();
         for edit in edits {
@@ -860,7 +955,7 @@ impl Tenant {
         doc["metadata"]["lastModifiedTimestamp"] = json!(at);
         self.write(project, &path, &doc);
 
-        let listed = format!("{path}/packs/manifests");
+        let listed = manifests_route(uid);
         let mut manifests = self.read(project, &listed);
         let draft = doc["spec"]["draft"]["packs"]
             .as_array()
@@ -886,9 +981,10 @@ impl Tenant {
                 };
                 self.write(
                     project,
-                    &format!(
-                        "{path}/packs/{}/manifests/{manifest}",
-                        pack["spec"]["name"].as_str().unwrap_or_default()
+                    &manifest_route(
+                        uid,
+                        pack["spec"]["name"].as_str().unwrap_or_default(),
+                        manifest,
                     ),
                     &json!({"metadata": {"name": m["name"], "uid": manifest},
                         "spec": {"published": {"content": m["content"], "digest": m["digest"]},
@@ -903,7 +999,7 @@ impl Tenant {
     /// it: the packs are in `spec.draft`, `spec.published` holds no pack, and
     /// `status.isPublished` is false. The profile listing still names the version.
     pub fn unpublish(&self, project: &str, uid: &str) {
-        let path = format!("v1/clusterprofiles/{uid}");
+        let path = profile_route(uid);
         let mut doc = self.read(project, &path);
         doc["spec"]["draft"] = doc["spec"]["published"].clone();
         doc["spec"]["published"] = json!({"packs": []});
@@ -917,7 +1013,7 @@ impl Tenant {
     /// uid and its number, so each cluster that runs it learns of an update, as after an edit in
     /// place.
     pub fn publish(&self, project: &str, uid: &str) {
-        let path = format!("v1/clusterprofiles/{uid}");
+        let path = profile_route(uid);
         let mut doc = self.read(project, &path);
         doc["spec"]["published"] = doc["spec"]["draft"].clone();
         doc["spec"]["draft"] = json!({"packs": []});
@@ -946,16 +1042,16 @@ impl Tenant {
             .cloned()
             .unwrap_or_default();
         for cluster in clusters {
-            let copy: Vec<Value> = self.read(project, &format!("v1/spectroclusters/{cluster}"))
-                ["spec"]["clusterProfileTemplates"]
-                .as_array()
-                .into_iter()
-                .flatten()
-                .find(|t| t["uid"] == json!(uid))
-                .and_then(|t| t["packs"].as_array().cloned())
-                .unwrap_or_default();
+            let copy: Vec<Value> =
+                self.read(project, &cluster_route(&cluster))["spec"]["clusterProfileTemplates"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .find(|t| t["uid"] == json!(uid))
+                    .and_then(|t| t["packs"].as_array().cloned())
+                    .unwrap_or_default();
             self.write_profile_updates(project, &cluster);
-            let path = format!("v1/notifications/spectrocluster/{cluster}");
+            let path = notifications_route(&cluster);
             let mut items = self.notifications(project, &cluster);
             if copy == packs {
                 for n in &mut items {
@@ -1018,19 +1114,19 @@ impl Tenant {
     /// is now, in the shape of the cluster's templates. A live run gives the rule: Palette lists
     /// each profile of the cluster also when no update waits.
     fn write_profile_updates(&self, project: &str, cluster: &str) {
-        let profiles: Vec<Value> = self.read(project, &format!("v1/spectroclusters/{cluster}"))
-            ["spec"]["clusterProfileTemplates"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .map(|t| {
-                let uid = t["uid"].as_str().unwrap_or_default();
-                template_of(&self.read(project, &format!("v1/clusterprofiles/{uid}")))
-            })
-            .collect();
+        let profiles: Vec<Value> =
+            self.read(project, &cluster_route(cluster))["spec"]["clusterProfileTemplates"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .map(|t| {
+                    let uid = t["uid"].as_str().unwrap_or_default();
+                    template_of(&self.read(project, &profile_route(uid)))
+                })
+                .collect();
         self.write(
             project,
-            &format!("v1/spectroclusters/{cluster}/profileUpdates"),
+            &format!("{}/profileUpdates", cluster_route(cluster)),
             &json!({ "profiles": profiles }),
         );
     }
@@ -1039,12 +1135,12 @@ impl Tenant {
     /// the profile is now. A live run gives the rules: the host keeps its copy of the values,
     /// and holds each manifest by uid alone, so strata reads the manifests of the profile.
     pub fn edge_host(&self, project: &str, uid: &str, name: &str, profiles: &[&str]) {
-        let templates = self.holder_templates(project, uid, profiles, |_, copy| {
-            format!("v1/edgehosts/{uid}/pack/manifests/{copy}")
+        let templates = self.holder_templates(project, uid, profiles, |_, _, copy| {
+            format!("{EDGE_HOSTS}/{uid}/pack/manifests/{copy}")
         });
         self.write(
             project,
-            &format!("v1/edgehosts/{uid}"),
+            &format!("{EDGE_HOSTS}/{uid}"),
             &json!({
                 "metadata": {"uid": uid, "name": name,
                     "annotations": {"projectUid": project, "scope": "project"}},
@@ -1054,7 +1150,7 @@ impl Tenant {
         );
         // the search gives a summary of each template: uid, name, and version
         let items: Vec<Value> = self
-            .documents_in(project, "v1/edgehosts")
+            .documents_in(project, EDGE_HOSTS)
             .iter()
             .map(|h| {
                 let summary: Vec<Value> = h["spec"]["clusterProfileTemplates"]
@@ -1071,8 +1167,9 @@ impl Tenant {
             })
             .collect();
         let search = json!({"items": items, "listmeta": {"continue": ""}});
-        self.write(project, "v1/dashboard/edgehosts/search@limit=50", &search);
-        self.write(TENANT, "v1/dashboard/edgehosts/search@limit=50", &search);
+        for scope in [project, TENANT] {
+            self.write(scope, &paged("v1/dashboard/edgehosts/search"), &search);
+        }
     }
 
     /// A cluster template `uid`, `name`, that links `profiles`. Palette names each template that
@@ -1080,7 +1177,7 @@ impl Tenant {
     /// of `v1ProjectResourceReference`, and refuses the delete of the version while one does.
     pub fn cluster_template(&self, project: &str, uid: &str, name: &str, profiles: &[&str]) {
         for p in profiles {
-            let path = format!("v1/clusterprofiles/{p}");
+            let path = profile_route(p);
             let mut doc = self.read(project, &path);
             let mut rows: Vec<Value> = doc["status"]["inUseClusterTemplates"]
                 .as_array()
@@ -1107,12 +1204,10 @@ impl Tenant {
         profiles: &[&str],
         members: &[&str],
     ) {
-        let templates = self.holder_templates(project, uid, profiles, |pack, copy| {
-            format!("v1/clusterprofiles/{{profile}}/packs/{pack}/manifests/{copy}")
-        });
+        let templates = self.holder_templates(project, uid, profiles, manifest_route);
         self.write(
             project,
-            &format!("v1/clustergroups/{uid}"),
+            &group_route(uid),
             &json!({
                 "metadata": {"uid": uid, "name": name},
                 "spec": {
@@ -1141,14 +1236,14 @@ impl Tenant {
         let items: Vec<Value> = members
             .iter()
             .map(|m| {
-                let doc = self.read(project, &format!("v1/spectroclusters/{m}"));
+                let doc = self.read(project, &cluster_route(m));
                 json!({"metadata": {"uid": m, "name": doc["metadata"]["name"],
                     "annotations": {"projectUid": project}}})
             })
             .collect();
         self.write(
             project,
-            &format!("v1/dashboard/clustergroups/{uid}/virtualClusters@limit=50"),
+            &virtual_clusters_file(uid),
             &json!({"items": items, "listmeta": {"continue": ""}}),
         );
         self.resolve_group_macros(project, uid);
@@ -1182,7 +1277,7 @@ impl Tenant {
         );
         self.write(
             project,
-            &format!("v1/appProfiles/{uid}"),
+            &app_profile_route(uid),
             &json!({
                 "metadata": {"name": "shop", "uid": uid},
                 "spec": {"version": version,
@@ -1197,7 +1292,7 @@ impl Tenant {
         );
         self.write(
             project,
-            &format!("v1/appProfiles/{uid}/tiers"),
+            &format!("{}/tiers", app_profile_route(uid)),
             &json!({"spec": {"appTiers": [
                 web,
                 {"metadata": {"name": "config", "uid": format!("{uid}2")},
@@ -1208,7 +1303,7 @@ impl Tenant {
         );
         self.write(
             project,
-            &format!("v1/appProfiles/{uid}/tiers/{uid}2/manifests/{uid}3"),
+            &format!("{}/tiers/{uid}2/manifests/{uid}3", app_profile_route(uid)),
             &json!({"metadata": {"name": "config", "uid": format!("{uid}3")},
                 "spec": {"published": {
                     "content": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: shop\ndata:\n  mode: live\n"}}}),
@@ -1218,7 +1313,7 @@ impl Tenant {
     /// The app deployment `name`, `uid`, of the app profile `profile` at its version now, in the
     /// state `Deployed`. Palette names it in `status.inUseApps` of the app profile.
     pub fn app_deployment(&self, project: &str, uid: &str, name: &str, profile: &str) {
-        let path = format!("v1/appProfiles/{profile}");
+        let path = app_profile_route(profile);
         let mut doc = self.read(project, &path);
         let version = doc["spec"]["version"].clone();
         doc["status"]["inUseApps"]
@@ -1242,7 +1337,7 @@ impl Tenant {
 
     /// The notifications of a cluster, newest first; none for a cluster that has no file yet.
     fn notifications(&self, project: &str, cluster: &str) -> Vec<Value> {
-        let path = format!("v1/notifications/spectrocluster/{cluster}");
+        let path = notifications_route(cluster);
         if !self.doc(project, &path).is_file() {
             return Vec::new();
         }
@@ -1271,7 +1366,7 @@ impl Tenant {
     /// newest first, as Palette lists it. Each entry is one minute after the one before it. It
     /// gives the time of the entry.
     fn log_write(&self, project: &str, kind: &str, uid: &str, doc: &Value) -> String {
-        let path = format!("v1/audits@resourceKind={kind}&resourceUid={uid}&limit=100");
+        let path = audit_log_file(kind, uid);
         let mut log = if self.doc(project, &path).is_file() {
             self.read(project, &path)
         } else {
@@ -1308,11 +1403,13 @@ impl Tenant {
         at
     }
 
-    /// Delete a cluster as Palette does: the document stays, with the state `Deleted`,
-    /// `metadata.isDeleted`, the time in `metadata.deletionTimestamp`, and the annotation
-    /// `deleted`. The listing and the search drop it.
+    /// Delete a cluster at the time `at`, as Palette does: the document stays, with the state
+    /// `Deleted`, `metadata.isDeleted`, `at` in `metadata.deletionTimestamp`, and the annotation
+    /// `deleted`.
+    ///
+    /// The listing and the search drop it.
     pub fn delete_cluster(&self, project: &str, uid: &str, at: &str) {
-        let path = format!("v1/spectroclusters/{uid}");
+        let path = cluster_route(uid);
         let mut doc = self.read(project, &path);
         doc["status"]["state"] = json!("Deleted");
         doc["metadata"]["isDeleted"] = json!(true);
@@ -1326,7 +1423,7 @@ impl Tenant {
     /// Take the cluster `cluster` out of the consumer list of the profile `profile`, as Palette
     /// does when it cannot compute the list: the cluster still runs the profile.
     pub fn drop_consumer(&self, project: &str, profile: &str, cluster: &str) {
-        let path = format!("v1/clusterprofiles/{profile}");
+        let path = profile_route(profile);
         let mut doc = self.read(project, &path);
         for key in ["inUseClusterUids", "inUseClusters"] {
             if let Some(rows) = doc["status"][key].as_array_mut() {
@@ -1342,15 +1439,14 @@ impl Tenant {
     /// pointer that starts with `/cloudconfig`, `/rbacs`, or `/namespaces` changes the cloud
     /// config, the role bindings, or the namespaces of the cluster.
     pub fn cluster_field(&self, project: &str, uid: &str, pointer: &str, value: Value) {
-        let cluster = format!("v1/spectroclusters/{uid}");
         let (path, pointer) = if let Some(rest) = pointer.strip_prefix("/cloudconfig") {
             (self.cloud_config_path(project, uid), rest.to_string())
         } else if let Some(rest) = pointer.strip_prefix("/rbacs") {
-            (format!("{cluster}/config/rbacs"), rest.to_string())
+            (rbacs_route(uid), rest.to_string())
         } else if let Some(rest) = pointer.strip_prefix("/namespaces") {
-            (format!("{cluster}/config/namespaces"), rest.to_string())
+            (namespaces_route(uid), rest.to_string())
         } else {
-            (cluster, pointer.to_string())
+            (cluster_route(uid), pointer.to_string())
         };
         self.set_field(project, &path, &pointer, value);
         // a label is in the listing and the search too
@@ -1360,7 +1456,7 @@ impl Tenant {
     /// Change one field of the document of a cluster group at a JSON pointer, as a person
     /// changes the group: the profiles that it pins stay.
     pub fn cluster_group_field(&self, project: &str, uid: &str, pointer: &str, value: Value) {
-        self.set_field(project, &format!("v1/clustergroups/{uid}"), pointer, value);
+        self.set_field(project, &group_route(uid), pointer, value);
     }
 
     /// Set the field at `pointer` of the document at `path`. An existing field is replaced, and a
@@ -1393,7 +1489,7 @@ impl Tenant {
         items.push(json!({"metadata": {"name": name, "uid": uid}, "spec": {"filterType": "tag"}}));
         self.write(TENANT, path, &json!({"items": items}));
         self.write(
-            "tenant",
+            TENANT,
             &format!("v1/filters/tag/{uid}"),
             &json!({"metadata": {"name": name, "uid": uid},
                 "spec": {"filterGroup": {"conjunction": "and", "filters": [
@@ -1403,7 +1499,7 @@ impl Tenant {
 
     /// The path of the cloud config of the cluster `uid`, from the kind that its document names.
     fn cloud_config_path(&self, project: &str, uid: &str) -> String {
-        let doc = self.read(project, &format!("v1/spectroclusters/{uid}"));
+        let doc = self.read(project, &cluster_route(uid));
         let kind = doc["spec"]["cloudConfigRef"]["kind"]
             .as_str()
             .unwrap_or("aws");
@@ -1413,7 +1509,7 @@ impl Tenant {
     /// Move the cluster `uid` to the cloud type `kind`, with `spec` as the spec of its cloud
     /// config. Palette serves the cloud config of each cloud type at its own path.
     pub fn cloud(&self, project: &str, uid: &str, kind: &str, spec: Value) {
-        let path = format!("v1/spectroclusters/{uid}");
+        let path = cluster_route(uid);
         let mut doc = self.read(project, &path);
         doc["spec"]["cloudType"] = json!(kind);
         doc["spec"]["cloudConfigRef"]["kind"] = json!(kind);
@@ -1426,8 +1522,10 @@ impl Tenant {
     }
 
     /// Create a cluster that runs `profiles` in order, with its own copy of what each profile
-    /// holds now, so a later edit of a profile does not reach the cluster. Run it again for the
-    /// same cluster to apply the update that waits for it.
+    /// holds now, so a later edit of a profile does not reach the cluster.
+    ///
+    /// Run it again for the same cluster to apply the update that waits for it. `values` gives a
+    /// value to each profile variable that it names; each other variable keeps its default.
     pub fn cluster(
         &self,
         project: &str,
@@ -1438,7 +1536,7 @@ impl Tenant {
     ) {
         let docs: Vec<Value> = profiles
             .iter()
-            .map(|p| self.read(project, &format!("v1/clusterprofiles/{p}")))
+            .map(|p| self.read(project, &profile_route(p)))
             .collect();
         let templates: Vec<Value> = docs.iter().map(template_of).collect();
         // what Palette reports of a cluster beside its profiles: its own hashes of the spec it
@@ -1473,7 +1571,7 @@ impl Tenant {
         // for an imported cluster.
         self.write(
             project,
-            &format!("v1/spectroclusters/{uid}"),
+            &cluster_route(uid),
             &json!({
                 "apiVersion": "v1", "kind": "SpectroCluster",
                 "metadata": {"name": name, "uid": uid,
@@ -1523,7 +1621,7 @@ impl Tenant {
         let related = json!({"kind": "spectrocluster", "name": name, "uid": uid});
         self.write(
             project,
-            &format!("v1/spectroclusters/{uid}/config/rbacs"),
+            &rbacs_route(uid),
             &json!({"items": [{
                 "metadata": {"uid": format!("{uid}r"), "name": format!("{name}-rbac"),
                     "creationTimestamp": "2026-09-01T10:00:00.000Z"},
@@ -1535,7 +1633,7 @@ impl Tenant {
         );
         self.write(
             project,
-            &format!("v1/spectroclusters/{uid}/config/namespaces"),
+            &namespaces_route(uid),
             &json!({"items": [{
                 "metadata": {"uid": format!("{uid}n"), "name": "apps",
                     "creationTimestamp": "2026-09-01T10:00:00.000Z"},
@@ -1547,13 +1645,13 @@ impl Tenant {
         let manifests: Vec<Value> = profiles
             .iter()
             .map(|p| {
-                let d = self.read(project, &format!("v1/clusterprofiles/{p}/packs/manifests"));
+                let d = self.read(project, &manifests_route(p));
                 json!({"metadata": d["metadata"], "spec": d["spec"]})
             })
             .collect();
         self.write(
             project,
-            &format!("v1/spectroclusters/{uid}/profiles/packs/manifests"),
+            &format!("{}/profiles/packs/manifests", cluster_route(uid)),
             &json!({"profiles": manifests}),
         );
 
@@ -1564,7 +1662,7 @@ impl Tenant {
         let variables: Vec<Value> = profiles
             .iter()
             .map(|p| {
-                let d = self.read(project, &format!("v1/clusterprofiles/{p}/variables"));
+                let d = self.read(project, &variables_route(p));
                 let rows: Vec<Value> = d["variables"]
                     .as_array()
                     .map(|v| v.as_slice())
@@ -1583,11 +1681,7 @@ impl Tenant {
                 json!({"profileUid": p, "variables": rows})
             })
             .collect();
-        self.write(
-            project,
-            &format!("v1/spectroclusters/{uid}/variables"),
-            &json!(variables),
-        );
+        self.write(project, &cluster_variables_route(uid), &json!(variables));
 
         self.resolve_macros(project, uid);
         self.write_profile_updates(project, uid);
@@ -1596,14 +1690,10 @@ impl Tenant {
         for n in &mut items {
             n["action"]["isDone"] = json!(true);
         }
-        self.write_notifications(
-            project,
-            &format!("v1/notifications/spectrocluster/{uid}"),
-            items,
-        );
+        self.write_notifications(project, &notifications_route(uid), items);
 
         // a cluster that moved to other versions is no longer a consumer of the ones it left
-        for doc in self.documents_in(project, "v1/clusterprofiles") {
+        for doc in self.documents_in(project, PROFILES) {
             let Some(p) = doc["metadata"]["uid"].as_str() else {
                 continue;
             };
@@ -1619,10 +1709,10 @@ impl Tenant {
                     rows.retain(|r| r != &json!(uid) && r["uid"] != json!(uid));
                 }
             }
-            self.write(project, &format!("v1/clusterprofiles/{p}"), &doc);
+            self.write(project, &profile_route(p), &doc);
         }
         for p in profiles {
-            let path = format!("v1/clusterprofiles/{p}");
+            let path = profile_route(p);
             let mut doc = self.read(project, &path);
             let mut uids: Vec<Value> = doc["status"]["inUseClusterUids"]
                 .as_array()
@@ -1651,7 +1741,7 @@ impl Tenant {
     /// Change the pack values on a cluster, as a person editing the cluster does. The profile
     /// keeps what it held, so only the cluster's copy differs.
     pub fn on_cluster_reclaim(&self, project: &str, uid: &str, policy: &str) {
-        let path = format!("v1/spectroclusters/{uid}");
+        let path = cluster_route(uid);
         let mut doc = self.read(project, &path);
         let from = if policy == "Retain" {
             "Delete"
@@ -1683,11 +1773,7 @@ impl Tenant {
     /// asked change repaves it, and the reason, as a live run gave it for a kubeadm command. The
     /// stand-in gives one answer for every request; it does not compare anything.
     pub fn repave_answer(&self, project: &str, cluster: &str, required: bool) {
-        self.write(
-            project,
-            &format!("v1/spectroclusters/{cluster}/validate/repave"),
-            &repave_answer_of(required),
-        );
+        self.write(project, &repave_route(cluster), &repave_answer_of(required));
     }
 
     /// Put a cluster in the cluster template `template`, as a cluster that the template launched.
@@ -1702,11 +1788,7 @@ impl Tenant {
             "/spec/clusterTemplate",
             json!({"uid": template, "projectUid": project}),
         );
-        self.write(
-            project,
-            &format!("v1/spectroclusters/{cluster}/validate/repave"),
-            &repave_answer_of(false),
-        );
+        self.write(project, &repave_route(cluster), &repave_answer_of(false));
     }
 
     /// The answer of `POST /v1/spectroclusters/clusterTemplates/{uid}/validate/repave` for a
@@ -1716,7 +1798,7 @@ impl Tenant {
     pub fn template_repave_answer(&self, project: &str, template: &str, required: bool) {
         self.write(
             project,
-            &format!("v1/spectroclusters/clusterTemplates/{template}/validate/repave"),
+            &format!("{CLUSTERS}/clusterTemplates/{template}/validate/repave"),
             &repave_answer_of(required),
         );
     }
@@ -1759,7 +1841,7 @@ impl Tenant {
         };
         self.write(
             project,
-            &format!("v1/spectroclusters/{cluster}/repave/status"),
+            &format!("{}/repave/status", cluster_route(cluster)),
             &json!({
                 "metadata": {"uid": format!("{cluster}r"), "creationTimestamp": since},
                 "spec": {
@@ -1804,7 +1886,7 @@ impl Tenant {
             .collect();
         self.write(
             project,
-            &format!("v1/spectroclusters/{cluster}/validate/packs"),
+            &format!("{}/validate/packs", cluster_route(cluster)),
             &json!({ "profiles": profiles }),
         );
     }
@@ -1838,8 +1920,8 @@ impl Tenant {
             .into_iter()
             .collect();
         let path = match profile {
-            Some(uid) => format!("v1/clusterprofiles/{uid}/validate/packs"),
-            None => "v1/clusterprofiles/validate/packs".to_string(),
+            Some(uid) => format!("{}/validate/packs", profile_route(uid)),
+            None => format!("{PROFILES}/validate/packs"),
         };
         self.write(project, &path, &json!({ "packs": { "results": results } }));
     }
@@ -1857,15 +1939,12 @@ impl Tenant {
         name_refusal: Option<(u16, &str, &str)>,
         import_refusal: Option<(u16, &str, &str)>,
     ) {
-        let name_route = format!("v1/clusterprofiles/validate/name@name={name}&version={version}");
+        let name_route = format!("{PROFILES}/validate/name@name={name}&version={version}");
+        let import_route = format!("{PROFILES}/import/validate");
         let taken = json!({"metadata": {"name": name}, "spec": {"version": version}});
         for (path, refusal, body) in [
             (name_route.as_str(), name_refusal, None),
-            (
-                "v1/clusterprofiles/import/validate",
-                import_refusal,
-                Some(taken),
-            ),
+            (import_route.as_str(), import_refusal, Some(taken)),
         ] {
             let file = self.doc(project, path);
             for status in std::iter::once(None).chain(crate::palette::REFUSALS.map(Some)) {
@@ -1889,7 +1968,7 @@ impl Tenant {
     /// cluster, profile version, and cluster group of the project resolve it again: Palette
     /// answers `packs/resolvedValues` with the value the macro has now.
     pub fn set_macro(&self, project: &str, name: &str, value: &str) {
-        let path = format!("v1/projects/{project}/macros");
+        let path = macros_route(project);
         let mut doc = if self.doc(project, &path).is_file() {
             self.read(project, &path)
         } else {
@@ -1899,31 +1978,29 @@ impl Tenant {
         macros.retain(|m| m["name"] != name);
         macros.push(json!({"name": name, "value": value}));
         self.write(project, &path, &doc);
-        let dir = self.doc(project, "v1/spectroclusters/x").with_file_name("");
-        for entry in std::fs::read_dir(&dir).into_iter().flatten().flatten() {
-            let file = entry.file_name().to_string_lossy().to_string();
-            if let Some(uid) = file.strip_suffix(".json") {
-                self.resolve_macros(project, uid);
-            }
+        for uid in self.uids_in(project, CLUSTERS) {
+            self.resolve_macros(project, &uid);
         }
-        for kind in ["v1/clusterprofiles", "v1/clustergroups"] {
-            for doc in self.documents_in(project, kind) {
-                let Some(uid) = doc["metadata"]["uid"].as_str() else {
-                    continue;
-                };
-                if kind == "v1/clusterprofiles" {
-                    self.resolve_profile_macros(project, uid);
-                } else {
-                    self.resolve_group_macros(project, uid);
-                }
-            }
+        for uid in self.uids_in(project, PROFILES) {
+            self.resolve_profile_macros(project, &uid);
         }
+        for uid in self.uids_in(project, GROUPS) {
+            self.resolve_group_macros(project, &uid);
+        }
+    }
+
+    /// The uid of each document directly inside one directory of a project.
+    fn uids_in(&self, project: &str, path: &str) -> Vec<String> {
+        self.documents_in(project, path)
+            .iter()
+            .filter_map(|d| d["metadata"]["uid"].as_str().map(str::to_string))
+            .collect()
     }
 
     /// The user macros of `project`, by placeholder: each `{{.spectro.macro.<name>}}` and its
     /// value.
     fn user_macros(&self, project: &str) -> Map<String, Value> {
-        let macros_path = format!("v1/projects/{project}/macros");
+        let macros_path = macros_route(project);
         let macros = if self.doc(project, &macros_path).is_file() {
             self.read(project, &macros_path)["macros"].clone()
         } else {
@@ -1941,7 +2018,7 @@ impl Tenant {
     /// map with each project macro and the system macro of the profile name. The system macro of
     /// the cluster name has an empty value, as Palette gives it for a profile.
     fn resolve_profile_macros(&self, project: &str, profile: &str) {
-        let doc = self.read(project, &format!("v1/clusterprofiles/{profile}"));
+        let doc = self.read(project, &profile_route(profile));
         let mut resolved = self.user_macros(project);
         resolved.insert(
             "{{.spectro.system.clusterprofile.name}}".to_string(),
@@ -1950,7 +2027,7 @@ impl Tenant {
         resolved.insert("{{.spectro.system.cluster.name}}".to_string(), json!(""));
         self.write(
             project,
-            &format!("v1/clusterprofiles/{profile}/packs/resolvedValues"),
+            &format!("{}/packs/resolvedValues", profile_route(profile)),
             &json!({ "resolved": resolved }),
         );
     }
@@ -1958,7 +2035,7 @@ impl Tenant {
     /// The `packs/resolvedValues` answer of one cluster group: for each profile it pins, each
     /// project macro, in the shape of the answer for a cluster.
     fn resolve_group_macros(&self, project: &str, group: &str) {
-        let doc = self.read(project, &format!("v1/clustergroups/{group}"));
+        let doc = self.read(project, &group_route(group));
         let resolved = self.user_macros(project);
         let profiles: Vec<Value> = doc["spec"]["clusterProfileTemplates"]
             .as_array()
@@ -1968,7 +2045,7 @@ impl Tenant {
             .collect();
         self.write(
             project,
-            &format!("v1/clustergroups/{group}/packs/resolvedValues"),
+            &format!("{}/packs/resolvedValues", group_route(group)),
             &json!({ "profiles": profiles }),
         );
     }
@@ -1976,7 +2053,7 @@ impl Tenant {
     /// The `packs/resolvedValues` answer of one cluster: for each profile it runs, each project
     /// macro and its value, and the system macro of the cluster name, as Palette gives them.
     fn resolve_macros(&self, project: &str, cluster: &str) {
-        let doc = self.read(project, &format!("v1/spectroclusters/{cluster}"));
+        let doc = self.read(project, &cluster_route(cluster));
         let mut resolved = self.user_macros(project);
         resolved.insert(
             "{{.spectro.system.cluster.name}}".to_string(),
@@ -1990,14 +2067,14 @@ impl Tenant {
             .collect();
         self.write(
             project,
-            &format!("v1/spectroclusters/{cluster}/packs/resolvedValues"),
+            &format!("{}/packs/resolvedValues", cluster_route(cluster)),
             &json!({"profiles": profiles}),
         );
     }
 
     /// Give a cluster variable a new value, as a person changing it in Palette does.
     pub fn set_value(&self, project: &str, uid: &str, variable: &str, value: &str) {
-        let path = format!("v1/spectroclusters/{uid}/variables");
+        let path = cluster_variables_route(uid);
         let mut doc = self.read(project, &path);
         if let Some(profiles) = doc.as_array_mut() {
             for profile in profiles {
@@ -2018,7 +2095,7 @@ impl Tenant {
     pub fn registries(&self, project: &str) {
         self.write(
             project,
-            "v1/registries/metadata",
+            REGISTRY_LISTING,
             &json!({"items": [
                 {"name": "Public Repo", "uid": PUBLIC_REPO, "kind": "pack"},
                 {"name": "Palette Registry", "uid": PALETTE_REGISTRY, "kind": "oci"}]}),
@@ -2057,11 +2134,7 @@ impl Tenant {
             let count = summaries.as_array().map(Vec::len).unwrap_or(0);
             let mut listing = json!({"items": summaries, "listmeta": {"count": count}});
             let entity: Value = read_json(&dir.join("_entity.json"));
-            self.write(
-                project,
-                &format!("v1/packs/{name}/registries/{PUBLIC_REPO}"),
-                &entity,
-            );
+            self.write(project, &pack_entity_route(&name, PUBLIC_REPO), &entity);
             // The answer with the states query: the tags of the retired versions, which the
             // answer above does not include. A pack with no disabled or deleted version has no file.
             let retired = dir.join("_entity_retired.json");
@@ -2069,7 +2142,8 @@ impl Tenant {
                 self.write(
                     project,
                     &format!(
-                        "v1/packs/{name}/registries/{PUBLIC_REPO}@states=deprecated,disabled,deleted"
+                        "{}@states=deprecated,disabled,deleted",
+                        pack_entity_route(&name, PUBLIC_REPO)
                     ),
                     &read_json(&retired),
                 );
@@ -2080,15 +2154,11 @@ impl Tenant {
                 add_csi_to_oci(&mut listing);
                 self.write(
                     project,
-                    &format!("v1/packs/{name}/registries/{PALETTE_REGISTRY}"),
+                    &pack_entity_route(&name, PALETTE_REGISTRY),
                     &csi_entity_in_oci(&entity),
                 );
             }
-            self.write(
-                project,
-                &format!("v1/packs@filters=spec.name={name}&limit=100&offset=0"),
-                &listing,
-            );
+            self.write(project, &pack_listing(&name), &listing);
         }
     }
 }
@@ -2097,7 +2167,7 @@ impl Tenant {
     /// Take one version of a pack out of the listing of the Public Repo, as before the registry
     /// published it. `registries` puts it back.
     pub fn hide_pack_version(&self, project: &str, name: &str, version: &str) {
-        let path = format!("v1/packs@filters=spec.name={name}&limit=100&offset=0");
+        let path = pack_listing(name);
         let mut listing = self.read(project, &path);
         if let Some(items) = listing["items"].as_array_mut() {
             items.retain(|i| {
@@ -2115,7 +2185,7 @@ impl Tenant {
     /// floating tags stay on the base, and the rebuild gets only its exact tag.
     pub fn rebuild_pack_version(&self, project: &str, name: &str, version: &str) {
         let rebuild = format!("{version}-rev1");
-        let path = format!("v1/packs@filters=spec.name={name}&limit=100&offset=0");
+        let path = pack_listing(name);
         let mut listing = self.read(project, &path);
         let Some(items) = listing["items"].as_array_mut() else {
             return;
@@ -2138,7 +2208,7 @@ impl Tenant {
         listing["listmeta"]["count"] = json!(count);
         self.write(project, &path, &listing);
 
-        let path = format!("v1/packs/{name}/registries/{PUBLIC_REPO}");
+        let path = pack_entity_route(name, PUBLIC_REPO);
         let mut entity = self.read(project, &path);
         let above = entity["tags"]
             .as_array()
@@ -2165,7 +2235,7 @@ impl Tenant {
         version: &str,
         architectures: &str,
     ) {
-        let path = format!("v1/packs@filters=spec.name={name}&limit=100&offset=0");
+        let path = pack_listing(name);
         let mut listing = self.read(project, &path);
         for item in listing["items"].as_array_mut().into_iter().flatten() {
             if item["spec"]["version"] == version && item["spec"]["registryUid"] == PUBLIC_REPO {
@@ -2179,7 +2249,7 @@ impl Tenant {
     /// `spec.template` of `v1PackSummarySpec`. Palette gives each option of an input parameter
     /// with its label and dependencies, and with no presets.
     pub fn pack_template(&self, project: &str, name: &str, version: &str, template: &Value) {
-        let path = format!("v1/packs@filters=spec.name={name}&limit=100&offset=0");
+        let path = pack_listing(name);
         let mut listing = self.read(project, &path);
         for item in listing["items"].as_array_mut().into_iter().flatten() {
             if item["spec"]["version"] == version && item["spec"]["registryUid"] == PUBLIC_REPO {
@@ -2258,13 +2328,6 @@ fn copy_dir(from: &Path, to: &Path) {
                 .unwrap_or_else(|e| panic!("{} -> {}: {e}", path.display(), target.display()));
         }
     }
-}
-
-/// The route of the cloud config of the cluster `uid` for the cloud type `kind`. Palette serves
-/// the cloud config of each cloud type at its own path. The stand-in gives the config the uid of
-/// the cluster with a `c` at the end.
-fn cloud_config_route(kind: &str, uid: &str) -> String {
-    format!("v1/cloudconfigs/{kind}/{uid}c")
 }
 
 fn cluster_row(doc: &Value) -> Value {
@@ -2386,23 +2449,25 @@ fn repave_answer_of(required: bool) -> Value {
 
 /// The template of a profile on a cluster, from the profile document: the published profile.
 impl Tenant {
-    /// The templates of an object that holds profiles without being a cluster: an edge host or a
-    /// cluster group. Palette gives the holder its own copy of each manifest, under a uid of its
-    /// own, and the template names the copy by that uid, with no content. `route(pack, copy)` is
-    /// where the API serves a copy; `{profile}` in it becomes the uid of the profile.
+    /// The templates of an object that holds profiles and is not a cluster: an edge host or a
+    /// cluster group.
+    ///
+    /// Palette gives the holder its own copy of each manifest, under a uid of its own. The
+    /// template names the copy by that uid, with no content. `route(profile, pack, copy)` is
+    /// where the API serves a copy.
     fn holder_templates(
         &self,
         project: &str,
         holder: &str,
         profiles: &[&str],
-        route: impl Fn(&str, &str) -> String,
+        route: impl Fn(&str, &str, &str) -> String,
     ) -> Vec<Value> {
         let mut n = 0;
         profiles
             .iter()
             .map(|p| {
-                let mut t = template_of(&self.read(project, &format!("v1/clusterprofiles/{p}")));
-                let contents = self.read(project, &format!("v1/clusterprofiles/{p}/packs/manifests"));
+                let mut t = template_of(&self.read(project, &profile_route(p)));
+                let contents = self.read(project, &manifests_route(p));
                 for pack in t["packs"].as_array_mut().into_iter().flatten() {
                     let pname = pack["name"].as_str().unwrap_or_default().to_string();
                     let source: Vec<Value> = contents["spec"]["packs"]
@@ -2421,7 +2486,7 @@ impl Tenant {
                         let copy = format!("{}{n:04x}", &holder[..holder.len().min(20)]);
                         self.write(
                             project,
-                            &route(&pname, &copy).replace("{profile}", p),
+                            &route(p, &pname, &copy),
                             &json!({"metadata": {"uid": copy, "name": m["name"]},
                                 "spec": {"published": {"content": m["content"], "digest": m["digest"]}}}),
                         );

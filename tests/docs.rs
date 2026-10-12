@@ -17,32 +17,15 @@ fn read(path: &Path) -> String {
 }
 
 /// The use-case pages one markdown text links to, in the order it links to them, without repeats.
-fn linked(text: &str) -> Vec<String> {
+///
+/// A link is `<prefix><name>.md)`: the prefix is `use-cases/` in the navigation, and `](./` on
+/// the index page, whose links are relative.
+fn linked(text: &str, prefix: &str) -> Vec<String> {
     let mut seen = BTreeSet::new();
     let mut out = Vec::new();
     let mut rest = text;
-    while let Some(at) = rest.find("use-cases/") {
-        rest = &rest[at + "use-cases/".len()..];
-        let Some(end) = rest.find(".md)") else { break };
-        let name = &rest[..end];
-        if !name.is_empty()
-            && name != "index"
-            && !name.contains('/')
-            && seen.insert(name.to_string())
-        {
-            out.push(name.to_string());
-        }
-    }
-    out
-}
-
-/// The same, for the index page, whose links are relative: `](./review.md)`.
-fn linked_relative(text: &str) -> Vec<String> {
-    let mut seen = BTreeSet::new();
-    let mut out = Vec::new();
-    let mut rest = text;
-    while let Some(at) = rest.find("](./") {
-        rest = &rest[at + "](./".len()..];
+    while let Some(at) = rest.find(prefix) {
+        rest = &rest[at + prefix.len()..];
         let Some(end) = rest.find(".md)") else { break };
         let name = &rest[..end];
         if !name.is_empty()
@@ -72,12 +55,11 @@ fn every_use_case_is_in_the_navigation_and_the_list_in_one_order() {
     let index = read(&docs().join("use-cases/index.md"));
     let summary = read(&docs().join("SUMMARY.md"));
 
-    let nav = linked(&summary);
-    let listed_in_order = linked_relative(section(
-        &index,
-        "## The pages, in order",
-        Some("## The examples"),
-    ));
+    let nav = linked(&summary, "use-cases/");
+    let listed_in_order = linked(
+        section(&index, "## The pages, in order", Some("## The examples")),
+        "](./",
+    );
 
     assert_eq!(
         nav, listed_in_order,

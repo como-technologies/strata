@@ -28,6 +28,10 @@ exclude = ["docs/", "examples/", ".github/", ".cargo/"]
 # sources public. Two things must happen before this line goes: the repository becomes public, and
 # the package takes another name, because `strata` on crates.io belongs to another crate.
 publish = false
+# The tests under tests/ are one crate, tests/main.rs: each file is a module of it. So a helper of
+# tests/common/mod.rs with no caller in any test warns as dead code, which 14 crates with a copy
+# of the module each could not show.
+autotests = false
 
 [lib]
 name = "strata"
@@ -36,6 +40,10 @@ path = "src/lib.rs"
 [[bin]]
 name = "strata"
 path = "src/main.rs"
+
+[[test]]
+name = "integration"
+path = "tests/main.rs"
 
 [dependencies]
 chrono = "0.4"

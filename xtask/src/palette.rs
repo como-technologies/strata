@@ -29,6 +29,8 @@ use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::{fs, thread};
 
+use crate::tenant::{AUDITS, CLUSTER_SEARCH_PATH, PROFILE_SEARCH_PATH, TENANT};
+
 /// Serve `root` on a free port of 127.0.0.1, write the port to `port_file`, and never return.
 pub fn serve(root: &Path, port_file: &Path) -> std::io::Result<()> {
     // The runner holds the write end of this server's standard input. Whatever ends the runner --
@@ -62,17 +64,10 @@ fn answer(root: &Path, mut stream: TcpStream) -> std::io::Result<()> {
     let path = file_for(root, request.project.as_deref(), &request.target);
     let refusal = path.as_deref().and_then(refusal_of);
     let (status, body) = match (path, refusal) {
-        (Some(path), _)
-            if path.is_file()
-                && request
-                    .target
-                    .starts_with("/v1/dashboard/spectroclusters/search?") =>
-        {
+        (Some(path), _) if path.is_file() && with_query(&request.target, CLUSTER_SEARCH_PATH) => {
             (200, searched(&fs::read(path)?, &request.body))
         }
-        (Some(path), _)
-            if path.is_file() && request.target.starts_with("/v1/dashboard/clusterprofiles?") =>
-        {
+        (Some(path), _) if path.is_file() && with_query(&request.target, PROFILE_SEARCH_PATH) => {
             (200, profiles_searched(&fs::read(path)?, &request.body))
         }
         (Some(path), _) if path.is_file() => match fs::read(path)? {
@@ -81,7 +76,7 @@ fn answer(root: &Path, mut stream: TcpStream) -> std::io::Result<()> {
         },
         (Some(path), Some(status)) => (status, fs::read(refused(&path, status))?),
         // Palette answers an empty log for an object with no entry, and not 404
-        (Some(_), None) if request.target.starts_with("/v1/audits?") => (
+        (Some(_), None) if with_query(&request.target, AUDITS) => (
             200,
             br#"{"items":[],"listmeta":{"continue":"","limit":100}}"#.to_vec(),
         ),
@@ -112,6 +107,16 @@ fn answer(root: &Path, mut stream: TcpStream) -> std::io::Result<()> {
     )?;
     stream.write_all(&body)?;
     stream.flush()
+}
+
+/// True when `target` asks for the route `path` with a query, as a search or a log does.
+///
+/// The path alone, or a longer path under it, is another route.
+fn with_query(target: &str, path: &str) -> bool {
+    target
+        .strip_prefix('/')
+        .and_then(|t| t.strip_prefix(path))
+        .is_some_and(|rest| rest.starts_with('?'))
 }
 
 /// The statuses of a refusal that a file beside the file of the answer gives:
@@ -283,7 +288,7 @@ fn file_for(root: &Path, project: Option<&str>, target: &str) -> Option<PathBuf>
         Some(q) if !q.is_empty() => format!("{path}@{}", percent_decode(&q)),
         _ => path,
     };
-    let scope = project.filter(|p| !p.is_empty()).unwrap_or("tenant");
+    let scope = project.filter(|p| !p.is_empty()).unwrap_or(TENANT);
     if scope.contains('/') || scope == ".." {
         return None;
     }
@@ -323,6 +328,7 @@ fn percent_decode(text: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::tenant::PROJECT_LISTING;
 
     /// The body of a search with one condition on `clusterProfiles`.
     fn profile_query(value: &str) -> Vec<u8> {
@@ -366,10 +372,12 @@ mod tests {
 
     #[test]
     fn no_project_uid_is_tenant_scope() {
-        let got = file_for(Path::new("/r"), None, "/v1/dashboard/projects/metadata");
+        let got = file_for(Path::new("/r"), None, &format!("/{PROJECT_LISTING}"));
         assert_eq!(
             got.unwrap(),
-            Path::new("/r/tenant/v1/dashboard/projects/metadata.json")
+            Path::new("/r")
+                .join(TENANT)
+                .join(format!("{PROJECT_LISTING}.json"))
         );
     }
 
@@ -377,7 +385,27 @@ mod tests {
     #[test]
     fn an_empty_project_uid_is_tenant_scope() {
         let got = file_for(Path::new("/r"), Some(""), "/v1/packs");
-        assert_eq!(got.unwrap(), Path::new("/r/tenant/v1/packs.json"));
+        assert_eq!(
+            got.unwrap(),
+            Path::new("/r").join(TENANT).join("v1/packs.json")
+        );
+    }
+
+    /// The profile listing is under the path of the profile search, and is not the search.
+    #[test]
+    fn a_search_is_its_path_with_a_query() {
+        assert!(with_query(
+            "/v1/dashboard/clusterprofiles?limit=50",
+            PROFILE_SEARCH_PATH
+        ));
+        assert!(!with_query(
+            "/v1/dashboard/clusterprofiles",
+            PROFILE_SEARCH_PATH
+        ));
+        assert!(!with_query(
+            "/v1/dashboard/clusterprofiles/metadata",
+            PROFILE_SEARCH_PATH
+        ));
     }
 
     /// A query string is part of the file name, so one path with two queries is two files.
