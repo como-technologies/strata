@@ -5,6 +5,9 @@ use std::path::PathBuf;
 
 use serde_json::{Map, Value};
 
+use crate::config::{KEY_VARS, MAX_RETRY_AFTER_VAR};
+use crate::json::opt_text;
+
 /// Everything that can go wrong in the library.
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -20,11 +23,7 @@ pub enum Error {
     },
     /// Palette answered with a non-2xx status. A 401 or a 403 is almost always the key, so the
     /// message names where a key comes from; the body alone names nothing the reader can set.
-    #[error("{method} {path} failed with HTTP {status}: {}{}", first_part(body), if *status == 401 || *status == 403 {
-        "; check PALETTE_API_KEY, SPECTROCLOUD_APIKEY, or ~/.palette.env: the key can be wrong, expired, or for another tenant"
-    } else {
-        ""
-    })]
+    #[error("{method} {path} failed with HTTP {status}: {}{}", first_part(body), key_hint(*status))]
     Api {
         /// The request method: `GET`, `POST`, `PUT`, `PATCH`, or `DELETE`.
         method: String,
@@ -40,7 +39,8 @@ pub enum Error {
     },
     /// Palette asked strata to wait longer than it will before retrying.
     #[error(
-        "GET {path} failed with HTTP {status} and Retry-After {retry_after}s, longer than the {limit}s strata waits (STRATA_MAX_RETRY_AFTER); try again later"
+        "GET {path} failed with HTTP {status} and Retry-After {retry_after}s, longer than the {limit}s strata waits ({}); try again later",
+        MAX_RETRY_AFTER_VAR
     )]
     RetryAfterTooLong {
         /// Request path.
@@ -391,6 +391,19 @@ pub enum Error {
     Serialize(#[from] serde_json::Error),
 }
 
+/// The hint of a 401 or a 403: the key is almost always the cause, so the message names where a
+/// key comes from. Empty for each other status.
+fn key_hint(status: u16) -> String {
+    if status == 401 || status == 403 {
+        format!(
+            "; check {}, {}, or ~/.palette.env: the key can be wrong, expired, or for another tenant",
+            KEY_VARS[0], KEY_VARS[1]
+        )
+    } else {
+        String::new()
+    }
+}
+
 /// The first 300 characters of a body, for a message. The field keeps the whole body.
 fn first_part(body: &str) -> String {
     if body.chars().count() <= 300 {
@@ -500,7 +513,7 @@ pub const PACK_FORBIDDEN_CODE: &str = "PackValuesOverrideForbidden";
 pub fn error_code(body: &str) -> Option<String> {
     serde_json::from_str::<Value>(body)
         .ok()
-        .and_then(|v| v.get("code").and_then(Value::as_str).map(str::to_owned))
+        .and_then(|v| opt_text(&v, "/code"))
 }
 
 /// True when the body of a Palette error is JSON with a `code` in [`REFUSAL_CODES`],

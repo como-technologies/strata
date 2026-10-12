@@ -13,6 +13,7 @@ use crate::api::mask::MASKED;
 use crate::api::{RawCluster, RawProfile};
 use crate::canon::{canon_yaml_hashed, canonical_json, hash_yaml, sha256_hex};
 use crate::error::{Error, Result};
+use crate::json::{arr, first_nonempty, opt_text, str_at, strings, text};
 pub use crate::repave::PendingRepave;
 use crate::repave::is_pending;
 pub use crate::validation::ProfileValidation;
@@ -404,8 +405,8 @@ pub fn cluster_tiers(
         tiers.insert(
             "applied".to_string(),
             ClusterTier::of(json!({
-                "spcHash": s(apply, "/spcHash"),
-                "spcInfraHash": s(apply, "/spcInfraHash"),
+                "spcHash": text(apply, "/spcHash"),
+                "spcInfraHash": text(apply, "/spcInfraHash"),
             })),
         );
     }
@@ -444,12 +445,12 @@ pub fn cluster_tiers(
 fn running_tier(cluster: &Value, covered: &[AppliedProfile]) -> ClusterTier {
     let mut running: Vec<Value> = arr(cluster, "/status/packs")
         .iter()
-        .filter(|p| covered.iter().any(|c| c.uid == s(p, "/profileUid")))
+        .filter(|p| covered.iter().any(|c| c.uid == text(p, "/profileUid")))
         .map(|p| {
-            json!({"name": s(p, "/name"), "version": s(p, "/version"), "profileUid": s(p, "/profileUid")})
+            json!({"name": text(p, "/name"), "version": text(p, "/version"), "profileUid": text(p, "/profileUid")})
         })
         .collect();
-    running.sort_by_key(|p| (s(p, "/profileUid"), s(p, "/name")));
+    running.sort_by_key(|p| (text(p, "/profileUid"), text(p, "/name")));
     ClusterTier::of(Value::Array(running))
 }
 
@@ -461,12 +462,9 @@ pub fn macro_digests(
     profiles: &[AppliedProfile],
     names: &[String],
 ) -> BTreeMap<String, String> {
-    let maps: Vec<&Value> = resolved
-        .get("profiles")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter(|p| profiles.iter().any(|a| s(p, "/uid") == a.uid))
+    let maps: Vec<&Value> = arr(resolved, "/profiles")
+        .iter()
+        .filter(|p| profiles.iter().any(|a| str_at(p, "/uid") == a.uid))
         .map(|p| &p["resolved"])
         .collect();
     digests_in(&maps, names)
@@ -518,23 +516,22 @@ impl PendingUpdate {
     pub fn read(notifications: &Value, covered: &[AppliedProfile]) -> Vec<PendingUpdate> {
         let mut out = Vec::new();
         for n in notifications.as_array().into_iter().flatten().rev() {
-            let open = n.pointer("/action/actionType").and_then(Value::as_str)
-                == Some(PROFILE_UPDATE_ACTION)
+            let open = str_at(n, "/action/actionType") == PROFILE_UPDATE_ACTION
                 && n.pointer("/action/isDone").and_then(Value::as_bool) != Some(true);
             if !open {
                 continue;
             }
             let events = n.pointer("/action/events").and_then(Value::as_object);
             for e in events.into_iter().flat_map(|m| m.values()) {
-                let uid = s(e, "/profileUid");
+                let uid = text(e, "/profileUid");
                 let Some(p) = covered.iter().find(|p| p.uid == uid) else {
                     continue;
                 };
                 out.push(PendingUpdate {
                     profile_uid: uid,
                     profile: p.name.clone(),
-                    message: s(e, "/message"),
-                    since: s(n, "/metadata/creationTimestamp"),
+                    message: text(e, "/message"),
+                    since: text(n, "/metadata/creationTimestamp"),
                 });
             }
         }
@@ -569,15 +566,15 @@ impl ClusterVariable {
         for p in profiles {
             let mut of_profile: Vec<ClusterVariable> = entries
                 .iter()
-                .filter(|e| s(e, "/profileUid") == p.uid)
+                .filter(|e| text(e, "/profileUid") == p.uid)
                 .flat_map(|e| arr(e, "/variables"))
                 .map(|v| {
                     let sensitive = v.get("isSensitive").and_then(Value::as_bool) == Some(true);
                     ClusterVariable {
                         profile: p.name.clone(),
                         profile_uid: p.uid.clone(),
-                        name: s(&v, "/name"),
-                        value: (!sensitive).then(|| s(&v, "/value")),
+                        name: text(v, "/name"),
+                        value: (!sensitive).then(|| text(v, "/value")),
                         sensitive,
                     }
                 })
@@ -618,11 +615,8 @@ impl AppliedProfile {
     /// Each template of `spec.clusterProfileTemplates` with the profile it applies, in
     /// canonical order. Two profiles of one type are by name, then by version, then by uid.
     fn templates_of(doc: &Value) -> Vec<(Value, AppliedProfile)> {
-        let mut pairs: Vec<(Value, AppliedProfile)> = doc
-            .pointer("/spec/clusterProfileTemplates")
-            .and_then(Value::as_array)
-            .into_iter()
-            .flatten()
+        let mut pairs: Vec<(Value, AppliedProfile)> = arr(doc, "/spec/clusterProfileTemplates")
+            .iter()
             .map(|t| (t.clone(), AppliedProfile::from_template(t)))
             .collect();
         pairs.sort_by(|(_, a), (_, b)| {
@@ -645,10 +639,10 @@ impl AppliedProfile {
 
     fn from_template(t: &Value) -> AppliedProfile {
         AppliedProfile {
-            uid: s(t, "/uid"),
-            name: s(t, "/name"),
-            version: s(t, "/profileVersion"),
-            kind: s(t, "/type"),
+            uid: text(t, "/uid"),
+            name: text(t, "/name"),
+            version: text(t, "/profileVersion"),
+            kind: text(t, "/type"),
         }
     }
 }
@@ -790,9 +784,9 @@ pub fn pack_content(values: &Value) -> (Vec<String>, Vec<PackChart>) {
     let mut charts: Vec<PackChart> = arr(content, "/charts")
         .iter()
         .map(|c| PackChart {
-            name: s(c, "/name"),
-            version: s(c, "/version"),
-            repo: s(c, "/repo"),
+            name: text(c, "/name"),
+            version: text(c, "/version"),
+            repo: text(c, "/repo"),
         })
         .filter(|c| !c.name.is_empty())
         .collect();
@@ -868,34 +862,8 @@ fn root_of(variables_hash: &str, packs: &[Pack]) -> String {
     })))
 }
 
-fn s(v: &Value, ptr: &str) -> String {
-    str_at(v, ptr).to_string()
-}
-
-/// The string at `ptr` in `v`, or empty when there is none.
-fn str_at<'a>(v: &'a Value, ptr: &str) -> &'a str {
-    v.pointer(ptr).and_then(Value::as_str).unwrap_or("")
-}
-
-fn arr(v: &Value, ptr: &str) -> Vec<Value> {
-    v.pointer(ptr)
-        .and_then(Value::as_array)
-        .cloned()
-        .unwrap_or_default()
-}
-
-fn or(v: String, default: &str) -> String {
-    if v.is_empty() { default.to_string() } else { v }
-}
-
-fn first_nonempty(candidates: &[String]) -> String {
-    candidates
-        .iter()
-        .find(|c| !c.is_empty())
-        .cloned()
-        .unwrap_or_default()
-}
-
+/// The text of `key` in `v`, or `default` when `v` has no text there. An empty text stays empty,
+/// so the hash of the variables does not change: this is not [`first_nonempty`].
 fn str_or(v: &Value, key: &str, default: &str) -> Value {
     Value::String(
         v.get(key)
@@ -911,21 +879,16 @@ fn bool_or(v: &Value, key: &str) -> Value {
 
 /// Same field set and defaults as the bash extraction, so hashes agree across implementations.
 fn normalize_variable(v: &Value) -> Value {
-    let options: Vec<Value> = v
-        .get("options")
-        .and_then(Value::as_array)
-        .map(|opts| {
-            opts.iter()
-                .map(|o| {
-                    json!({
-                        "label": str_or(o, "label", ""),
-                        "value": str_or(o, "value", ""),
-                        "description": str_or(o, "description", ""),
-                    })
-                })
-                .collect()
+    let options: Vec<Value> = arr(v, "/options")
+        .iter()
+        .map(|o| {
+            json!({
+                "label": str_or(o, "label", ""),
+                "value": str_or(o, "value", ""),
+                "description": str_or(o, "description", ""),
+            })
         })
-        .unwrap_or_default();
+        .collect();
     json!({
         "name": v.get("name").cloned().unwrap_or(Value::Null),
         "displayName": str_or(v, "displayName", ""),
@@ -951,15 +914,15 @@ fn manifests_of_template(pk: &Value, entities: &Value, template: &str) -> Vec<Va
     arr(pk, "/manifests")
         .iter()
         .map(|m| {
-            let uid = s(m, "/uid");
+            let uid = text(m, "/uid");
             let entity = entities.get(&uid).unwrap_or(&Value::Null);
-            let edited = !s(entity, &format!("/spec/{template}/content")).is_empty();
+            let edited = !text(entity, &format!("/spec/{template}/content")).is_empty();
             let from = if edited { template } else { PUBLISHED_TEMPLATE };
-            let content = s(entity, &format!("/spec/{from}/content"));
+            let content = text(entity, &format!("/spec/{from}/content"));
             json!({
-                "name": or(s(m, "/name"), &s(entity, "/metadata/name")),
+                "name": first_nonempty(&[str_at(m, "/name"), str_at(entity, "/metadata/name")]),
                 "uid": uid,
-                "digest": s(entity, &format!("/spec/{from}/digest")),
+                "digest": text(entity, &format!("/spec/{from}/digest")),
                 "content": content,
             })
         })
@@ -991,10 +954,10 @@ impl Pack {
     /// [`Pack::from_api`], with the manifests of the pack given apart, each as `name`, `uid`,
     /// `digest`, and `content`, in place of those of the packs/manifests entry.
     fn from_api_with(pk: &Value, manifests_packs: &[Value], given: Option<Vec<Value>>) -> Pack {
-        let name = s(pk, "/name");
+        let name = text(pk, "/name");
         let mut mm = manifests_packs
             .iter()
-            .find(|m| s(m, "/metadata/name") == name || s(m, "/spec/name") == name)
+            .find(|m| text(m, "/metadata/name") == name || text(m, "/spec/name") == name)
             .cloned()
             .unwrap_or(Value::Null);
         if let Some(given) = given {
@@ -1003,29 +966,26 @@ impl Pack {
             }
             mm["spec"]["manifests"] = Value::Array(given);
         }
-        let layer = or(s(pk, "/layer"), "addon");
-        let kind = or(s(pk, "/type"), "spectro");
-        let tag = s(pk, "/tag");
-        let version = first_nonempty(&[s(pk, "/version"), s(&mm, "/spec/version")]);
-        let pack_uid = s(pk, "/packUid");
-        let registry_uid = s(pk, "/registryUid");
-        let ref_digest = s(pk, "/digest");
-        let registry_digest = s(&mm, "/spec/digest");
-        let registry_provider_type =
-            Some(s(pk, "/annotations/ociRegistryProviderType")).filter(|t| !t.is_empty());
+        let layer = first_nonempty(&[str_at(pk, "/layer"), "addon"]);
+        let kind = first_nonempty(&[str_at(pk, "/type"), "spectro"]);
+        let tag = text(pk, "/tag");
+        let version = first_nonempty(&[str_at(pk, "/version"), str_at(&mm, "/spec/version")]);
+        let pack_uid = text(pk, "/packUid");
+        let registry_uid = text(pk, "/registryUid");
+        let ref_digest = text(pk, "/digest");
+        let registry_digest = text(&mm, "/spec/digest");
+        let registry_provider_type = opt_text(pk, "/annotations/ociRegistryProviderType");
         // only `imageId`: another annotation can hold a secret, and strata reads no other one.
         // Palette gives each annotation as text; a value of another type is not an annotation
-        let annotations: BTreeMap<String, String> = pk
-            .pointer("/annotations")
-            .and_then(|a| a.get(IMAGE_ID_ANNOTATION))
-            .and_then(Value::as_str)
-            .map(|id| (IMAGE_ID_ANNOTATION.to_string(), id.to_string()))
-            .into_iter()
-            .collect();
+        let annotations: BTreeMap<String, String> =
+            opt_text(pk, &format!("/annotations/{IMAGE_ID_ANNOTATION}"))
+                .map(|id| (IMAGE_ID_ANNOTATION.to_string(), id))
+                .into_iter()
+                .collect();
         // a reason without the flag is not a reason: Palette clears the flag when the tag is back
         let invalid = pk.get("isInvalid").and_then(Value::as_bool) == Some(true);
         let invalid_reason = if invalid {
-            s(pk, "/inValidReason")
+            text(pk, "/inValidReason")
         } else {
             String::new()
         };
@@ -1039,17 +999,17 @@ impl Pack {
             .cloned()
             .filter(Value::is_object)
             .unwrap_or_else(|| Value::Object(Map::new()));
-        let values = first_nonempty(&[s(pk, "/values"), s(&mm, "/spec/values")]);
+        let values = first_nonempty(&[str_at(pk, "/values"), str_at(&mm, "/spec/values")]);
 
         let mut manifests: Vec<Manifest> = arr(&mm, "/spec/manifests")
             .iter()
             .map(|m| {
-                let content = s(m, "/content");
+                let content = text(m, "/content");
                 let (content_hash, content_parse_error) = hash_yaml(&content);
                 Manifest {
-                    name: s(m, "/name"),
-                    uid: s(m, "/uid"),
-                    digest: s(m, "/digest"),
+                    name: text(m, "/name"),
+                    uid: text(m, "/uid"),
+                    digest: text(m, "/digest"),
                     content,
                     content_hash,
                     content_parse_error,
@@ -1189,9 +1149,9 @@ impl Snapshot {
         let prof = &raw.profile;
         if !crate::api::has_draft(prof) {
             return Err(Error::NoDraft {
-                name: s(prof, "/metadata/name"),
-                version: s(prof, "/spec/version"),
-                uid: s(prof, "/metadata/uid"),
+                name: text(prof, "/metadata/name"),
+                version: text(prof, "/spec/version"),
+                uid: text(prof, "/metadata/uid"),
             });
         }
         Self::from_raw_template(raw, reference, fetched_at, DRAFT_TEMPLATE)
@@ -1208,7 +1168,7 @@ impl Snapshot {
         let prof = &raw.profile;
         let tpl_ptr = format!("/spec/{template}");
         let tpl_packs = arr(prof, &format!("{tpl_ptr}/packs"));
-        let mut mpacks = arr(&raw.manifests, "/spec/packs");
+        let mut mpacks = arr(&raw.manifests, "/spec/packs").to_vec();
         if crate::api::has_draft(prof) && template == PUBLISHED_TEMPLATE {
             // packs/manifests holds the packs of the draft: keep only the entries of the packs
             // that the published template holds, by pack uid
@@ -1225,18 +1185,15 @@ impl Snapshot {
                     .collect()
             })
             .unwrap_or_default();
-        let clusters: Vec<String> = arr(prof, "/status/inUseClusterUids")
-            .iter()
-            .filter_map(|v| v.as_str().map(str::to_string))
-            .collect();
+        let clusters = strings(prof, "/status/inUseClusterUids");
         let source = Source {
             reference: reference.to_string(),
-            uid: s(prof, "/metadata/uid"),
+            uid: text(prof, "/metadata/uid"),
             project_uid: String::new(),
-            name: s(prof, "/metadata/name"),
-            version: s(prof, "/spec/version"),
-            cloud_type: s(prof, &format!("{tpl_ptr}/cloudType")),
-            kind: s(prof, &format!("{tpl_ptr}/type")),
+            name: text(prof, "/metadata/name"),
+            version: text(prof, "/spec/version"),
+            cloud_type: text(prof, &format!("{tpl_ptr}/cloudType")),
+            kind: text(prof, &format!("{tpl_ptr}/type")),
             template: template.to_string(),
             variables_unavailable: raw.variables_unavailable,
             tags,
@@ -1255,7 +1212,7 @@ impl Snapshot {
             .iter()
             .map(normalize_variable)
             .collect();
-        variables.sort_by_key(|v| s(v, "/name"));
+        variables.sort_by_key(|v| text(v, "/name"));
         let variables_hash = sha256_hex(&canonical_json(&Value::Array(variables.clone())));
 
         let packs: Vec<Pack> = tpl_packs
@@ -1367,7 +1324,7 @@ impl Snapshot {
                     .collect();
                 if chosen.is_empty() {
                     return Err(Error::ClusterProfileNotFound {
-                        cluster: s(&raw.cluster, "/metadata/uid"),
+                        cluster: text(&raw.cluster, "/metadata/uid"),
                         profile: p.to_string(),
                         applied: applied.iter().map(|a| a.name.clone()).collect(),
                     });
@@ -1382,7 +1339,7 @@ impl Snapshot {
         let covered: Vec<AppliedProfile> = chosen.iter().map(|&i| applied[i].clone()).collect();
 
         let mut variables: Vec<Value> = parts.iter().flat_map(|p| p.variables.clone()).collect();
-        variables.sort_by_key(|v| s(v, "/name"));
+        variables.sort_by_key(|v| text(v, "/name"));
         let variables_hash = sha256_hex(&canonical_json(&Value::Array(variables.clone())));
         let packs: Vec<Pack> = parts.iter().flat_map(|p| p.packs.clone()).collect();
         let root = root_of(&variables_hash, &packs);
@@ -1407,7 +1364,7 @@ impl Snapshot {
                 .first()
                 .map(|p| p.source.cloud_type.clone())
                 .filter(|c| !c.is_empty())
-                .unwrap_or_else(|| s(&raw.cluster, "/spec/cloudType")),
+                .unwrap_or_else(|| text(&raw.cluster, "/spec/cloudType")),
             kind: joined(|s| &s.kind),
             template: "applied".to_string(),
             variables_unavailable: raw.variables_unavailable,
@@ -1425,8 +1382,8 @@ impl Snapshot {
                     .map(|n| PendingUpdate::read(n, &covered))
                     .unwrap_or_default();
                 ClusterSource {
-                    uid: s(&raw.cluster, "/metadata/uid"),
-                    name: s(&raw.cluster, "/metadata/name"),
+                    uid: text(&raw.cluster, "/metadata/uid"),
+                    name: text(&raw.cluster, "/metadata/name"),
                     profile: profile.map(str::to_string),
                     variables: ClusterVariable::read(raw, &covered),
                     updates_pending: raw
@@ -1529,10 +1486,7 @@ impl Snapshot {
 
     /// Read a snapshot file, checking its schema id.
     pub fn load(path: &Path) -> Result<Snapshot> {
-        let text = std::fs::read_to_string(path).map_err(|source| Error::Io {
-            path: path.to_path_buf(),
-            source,
-        })?;
+        let text = crate::ops::read_file(path)?;
         let v: Value =
             serde_json::from_str(&text).map_err(|_| Error::NotSnapshot(path.to_path_buf()))?;
         match v.get("schema").and_then(Value::as_str) {

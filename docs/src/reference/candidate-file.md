@@ -130,7 +130,8 @@ is not a `manifest` layer:
    digest, the layer, the type, and the default values of the version in that
    registry.
 2. `GET /v1/packs/<name>/registries/<uid>`: the tags of that version, and the
-   default values and the layer when the listing gives none.
+   default values and the layer when the listing gives none. Empty text in the
+   listing counts as none.
 
 Palette does not sync some registries. If the listing does not have a version
 from such a registry, the layer gets the pack that Palette makes at the create.

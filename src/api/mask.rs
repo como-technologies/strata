@@ -13,6 +13,7 @@ use serde_yaml::Value as Yaml;
 
 use crate::canon::{Canon, canon_yaml};
 use crate::error::{Error, Result};
+use crate::json::{arr, opt_text, str_at};
 
 /// The text that Palette writes over a secret.
 pub(crate) const MASKED: &str = "********";
@@ -30,40 +31,22 @@ pub(super) fn is_password_format(format: &str) -> bool {
 /// The names of the secret fields of the pack `uid`, from the answer of `GET /v1/packs/{uid}`:
 /// each `packValues[].schema[]` of that pack whose format is a password.
 pub(super) fn password_fields(pack: &Value, uid: &str) -> Vec<String> {
-    pack.get("packValues")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter(|v| v.get("packUid").and_then(Value::as_str) == Some(uid))
-        .filter_map(|v| v.get("schema").and_then(Value::as_array))
-        .flatten()
-        .filter(|s| {
-            s.get("format")
-                .and_then(Value::as_str)
-                .is_some_and(is_password_format)
-        })
-        .filter_map(|s| s.get("name").and_then(Value::as_str).map(str::to_string))
+    arr(pack, "/packValues")
+        .iter()
+        .filter(|v| str_at(v, "/packUid") == uid)
+        .flat_map(|v| arr(v, "/schema"))
+        .filter(|s| is_password_format(str_at(s, "/format")))
+        .filter_map(|s| opt_text(s, "/name"))
         .collect()
-}
-
-/// The uid of a pack of a profile template, when it has one.
-fn pack_uid(pack: &Value) -> Option<&str> {
-    pack.get("packUid")
-        .and_then(Value::as_str)
-        .filter(|u| !u.is_empty())
 }
 
 /// The uids of the draft packs of `profile` that can have a schema, sorted, each one time. A
 /// manifest pack has no schema, so this list does not have it.
 pub(super) fn draft_pack_uids(profile: &Value) -> Vec<String> {
-    let mut uids: Vec<String> = profile
-        .pointer("/spec/draft/packs")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter(|pk| pk.get("type").and_then(Value::as_str) != Some("manifest"))
-        .filter_map(pack_uid)
-        .map(str::to_string)
+    let mut uids: Vec<String> = arr(profile, "/spec/draft/packs")
+        .iter()
+        .filter(|pk| str_at(pk, "/type") != "manifest")
+        .filter_map(|pk| opt_text(pk, "/packUid"))
         .collect();
     uids.sort();
     uids.dedup();
@@ -92,7 +75,7 @@ pub(super) fn mask_draft_packs(
         .pointer_mut("/spec/draft/packs")
         .and_then(Value::as_array_mut);
     for pk in draft.into_iter().flatten() {
-        if let Some(fields) = pack_uid(pk).and_then(|u| secrets.get(u))
+        if let Some(fields) = opt_text(pk, "/packUid").and_then(|u| secrets.get(&u))
             && let Some(v) = pk.get_mut("values")
         {
             mask_at(v, fields)?;
@@ -102,8 +85,7 @@ pub(super) fn mask_draft_packs(
         .pointer_mut("/spec/packs")
         .and_then(Value::as_array_mut);
     for pk in served.into_iter().flatten() {
-        let uid = pk.pointer("/metadata/uid").and_then(Value::as_str);
-        if let Some(fields) = uid.and_then(|u| secrets.get(u))
+        if let Some(fields) = opt_text(pk, "/metadata/uid").and_then(|u| secrets.get(&u))
             && let Some(v) = pk.pointer_mut("/spec/values")
         {
             mask_at(v, fields)?;

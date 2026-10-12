@@ -14,8 +14,11 @@ use crate::diff::{
     InvalidPack, Verify, VerifyStatus,
 };
 use crate::error::{Error, Result};
+use crate::json::{is_zero, opt_text, str_at, text};
 use crate::progress::Progress;
 use crate::snapshot::{APP_KIND, Snapshot, SubjectKind, Tool};
+
+use super::scope_of;
 
 /// The outcome of a verification.
 #[derive(Debug)]
@@ -82,11 +85,7 @@ fn profiles_overwritten<A: PaletteApi>(
     let mut out = Vec::new();
     for p in running {
         let now = match palette.profile_document(&p.uid) {
-            Ok(doc) => doc
-                .pointer("/spec/version")
-                .and_then(Value::as_str)
-                .unwrap_or_default()
-                .to_string(),
+            Ok(doc) => text(&doc, "/spec/version"),
             Err(Error::Api { status: 404, .. }) => String::new(),
             Err(e) => return Err(e),
         };
@@ -102,14 +101,6 @@ fn profiles_overwritten<A: PaletteApi>(
     Ok(out)
 }
 
-/// The text at `ptr` in `doc`, when it is there and not empty.
-fn text(doc: &Value, ptr: &str) -> Option<String> {
-    doc.pointer(ptr)
-        .and_then(Value::as_str)
-        .filter(|s| !s.is_empty())
-        .map(str::to_string)
-}
-
 /// The state of a cluster, an edge host, or a cluster group, from its document: `status.state`,
 /// or, for a cluster group, `active` or `inactive` from `status.isActive`.
 fn subject_state(kind: SubjectKind, doc: &Value) -> Option<String> {
@@ -118,14 +109,14 @@ fn subject_state(kind: SubjectKind, doc: &Value) -> Option<String> {
             .pointer("/status/isActive")
             .and_then(Value::as_bool)
             .map(|a| if a { "active" } else { "inactive" }.to_string()),
-        _ => text(doc, "/status/state"),
+        _ => opt_text(doc, "/status/state"),
     }
 }
 
 /// True when Palette keeps the document of a deleted object: the state `Deleted`, or
 /// `metadata.isDeleted`. Palette deletes a cluster so, and keeps its spec.
 fn is_deleted(doc: &Value) -> bool {
-    doc.pointer("/status/state").and_then(Value::as_str) == Some("Deleted")
+    str_at(doc, "/status/state") == "Deleted"
         || doc
             .pointer("/metadata/isDeleted")
             .and_then(Value::as_bool)
@@ -318,10 +309,10 @@ pub fn verify_with<A: PaletteApi>(
                 Err(e) => return Err(e),
             };
             state = subject_state(c.kind, &doc);
-            last_modified = text(&doc, "/metadata/lastModifiedTimestamp");
+            last_modified = opt_text(&doc, "/metadata/lastModifiedTimestamp");
             if doc.is_null() || is_deleted(&doc) {
                 gone = true;
-                deleted_at = text(&doc, "/metadata/deletionTimestamp");
+                deleted_at = opt_text(&doc, "/metadata/deletionTimestamp");
                 recorded.gone(checked_at)
             } else {
                 live_holder(recorded, c, uid, doc, palette, checked_at, progress)?
@@ -330,7 +321,7 @@ pub fn verify_with<A: PaletteApi>(
         None if recorded.source.kind == APP_KIND => {
             match palette.fetch_app_profile(uid, progress) {
                 Ok(raw) => {
-                    last_modified = text(&raw.profile, "/metadata/lastModifiedTimestamp");
+                    last_modified = opt_text(&raw.profile, "/metadata/lastModifiedTimestamp");
                     let mut live = Snapshot::from_raw(&raw, uid, checked_at)?;
                     live.source.consumers = None;
                     live
@@ -345,7 +336,7 @@ pub fn verify_with<A: PaletteApi>(
         // a version that Palette no longer has is a drift, not an error: a retire deletes it
         None => match palette.fetch_profile(uid, progress) {
             Ok(mut raw) => {
-                last_modified = text(&raw.profile, "/metadata/lastModifiedTimestamp");
+                last_modified = opt_text(&raw.profile, "/metadata/lastModifiedTimestamp");
                 // strata also checks the macro values of a record that holds their digests
                 if recorded.source.macro_values.is_some() {
                     raw.resolved_values = Some(palette.profile_resolved_values(uid)?);
@@ -606,10 +597,6 @@ impl VerifiedRecord {
     }
 }
 
-fn is_zero(n: &usize) -> bool {
-    *n == 0
-}
-
 /// The document `verify` writes for several records: `strata-verify-summary/1`.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
@@ -667,8 +654,8 @@ where
             }
         };
         let scope: Option<String> = project
-            .map(str::to_string)
-            .or_else(|| Some(recorded.source.project_uid.clone()).filter(|p| !p.is_empty()));
+            .or_else(|| scope_of(&recorded.source.project_uid))
+            .map(str::to_string);
         let palette = match clients.entry(scope.clone()) {
             Entry::Occupied(e) => e.into_mut(),
             Entry::Vacant(v) => match connect(scope.as_deref()) {

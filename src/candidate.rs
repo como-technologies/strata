@@ -17,6 +17,7 @@ use serde_json::{Map, Value, json};
 use crate::api::{Palette, PaletteApi, RawProfile, RegistryKind};
 use crate::canon::{Canon, canon_yaml};
 use crate::error::{Error, Result};
+use crate::json::{arr, first_nonempty, items, opt_text, str_at, strings, take_items, text};
 use crate::progress::Progress;
 use crate::reference::LATEST;
 use crate::snapshot::{PackSource, PresetOption, Snapshot};
@@ -339,22 +340,24 @@ fn pick_registry(
 /// candidate that it holds. The page "The candidate file" of the book gives the field of the
 /// export that gives each field of the candidate.
 pub fn load(path: &Path) -> Result<LoadedCandidate> {
-    let text = std::fs::read_to_string(path).map_err(|source| Error::Io {
-        path: path.to_path_buf(),
-        source,
-    })?;
-    let invalid = |message: String| Error::CandidateInvalid {
-        path: path.to_path_buf(),
-        message,
-    };
-    let doc: Value = serde_yaml::from_str(&text).map_err(|e| invalid(e.to_string()))?;
+    let yaml = crate::ops::read_file(path)?;
+    let invalid = invalid_at(path);
+    let doc: Value = serde_yaml::from_str(&yaml).map_err(|e| invalid(e.to_string()))?;
     let candidate: Candidate = if export::is_export(&doc) {
         export::to_candidate(&doc).map_err(invalid)?
     } else {
         // parse the text again, and not `doc`: an error of the YAML parser names the line
-        serde_yaml::from_str(&text).map_err(|e| invalid(e.to_string()))?
+        serde_yaml::from_str(&yaml).map_err(|e| invalid(e.to_string()))?
     };
     check(candidate, path)
+}
+
+/// The `CandidateInvalid` error of the candidate file `path`, from its message.
+fn invalid_at(path: &Path) -> impl Fn(String) -> Error + Copy + '_ {
+    move |message| Error::CandidateInvalid {
+        path: path.to_path_buf(),
+        message,
+    }
 }
 
 /// Check a candidate that is in memory, and read the files it points at, relative to the
@@ -362,10 +365,7 @@ pub fn load(path: &Path) -> Result<LoadedCandidate> {
 /// [`load`] reads a file and then does this; a caller that builds the candidate itself, as
 /// [`Candidate::from_snapshot`] does, starts here and writes no file.
 pub fn check(candidate: Candidate, path: &Path) -> Result<LoadedCandidate> {
-    let invalid = |message: String| Error::CandidateInvalid {
-        path: path.to_path_buf(),
-        message,
-    };
+    let invalid = invalid_at(path);
     if candidate.name.is_empty() || candidate.version.is_empty() {
         return Err(invalid("name and version must not be empty".to_string()));
     }
@@ -373,10 +373,7 @@ pub fn check(candidate: Candidate, path: &Path) -> Result<LoadedCandidate> {
         return Err(invalid("a candidate needs at least one layer".to_string()));
     }
     let base = path.parent().unwrap_or(Path::new("."));
-    let read = |rel: &str| -> Result<String> {
-        let p = base.join(rel);
-        std::fs::read_to_string(&p).map_err(|source| Error::Io { path: p, source })
-    };
+    let read = |rel: &str| crate::ops::read_file(&base.join(rel));
     let top = pick_registry(
         &candidate.registry_uid,
         &candidate.registry,
@@ -485,7 +482,7 @@ fn each_pack_named<A: PaletteApi>(
 pub(crate) fn versions_of<A: PaletteApi>(palette: &Palette<A>, name: &str) -> Result<Vec<Value>> {
     let mut out: Vec<Value> = Vec::new();
     each_pack_named(palette, name, |it| {
-        if text(&it, "/spec/name").as_deref() == Some(name) {
+        if str_at(&it, "/spec/name") == name {
             out.push(it);
         }
         true
@@ -500,21 +497,14 @@ fn oci_provider_types<A: PaletteApi>(palette: &Palette<A>) -> BTreeMap<String, S
     let Ok(listing) = palette.registry_summary(RegistryKind::Oci) else {
         return BTreeMap::new();
     };
-    listing
-        .get("items")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter_map(|it| Some((text(it, "/metadata/uid")?, text(it, "/spec/providerType")?)))
+    items(&listing)
+        .filter_map(|it| {
+            Some((
+                opt_text(it, "/metadata/uid")?,
+                opt_text(it, "/spec/providerType")?,
+            ))
+        })
         .collect()
-}
-
-/// The `items` of `listing`, a listing of Palette, taken out of it. Empty when it has none.
-fn take_items(mut listing: Value) -> Vec<Value> {
-    match listing.get_mut("items").map(Value::take) {
-        Some(Value::Array(items)) => items,
-        _ => Vec::new(),
-    }
 }
 
 /// A listing of registries, read one time, when a check first needs it.
@@ -548,9 +538,7 @@ impl Listing {
 /// The entry of the registry `uid` in `entries`, the items of a registry listing, where `ptr`
 /// points to the uid of each entry.
 fn registry_entry<'a>(entries: &'a [Value], ptr: &str, uid: &str) -> Option<&'a Value> {
-    entries
-        .iter()
-        .find(|it| text(it, ptr).as_deref() == Some(uid))
+    entries.iter().find(|it| str_at(it, ptr) == uid)
 }
 
 /// The state that Palette gives to the recovery of a sync when no sync waits for a recovery.
@@ -583,18 +571,22 @@ pub(crate) fn registry_sync<A: PaletteApi>(
         return Ok(None);
     }
     // Palette writes the zero time for a registry that never completed a sync
-    let time = |ptr: &str| text(status, ptr).filter(|t| !t.starts_with("0001-"));
-    let sync_recovery = text(status, "/syncRecovery/syncRecoveryState")
+    let time = |ptr: &str| {
+        opt_text(status, ptr)
+            .filter(|t| !t.starts_with("0001-"))
+            .unwrap_or_default()
+    };
+    let sync_recovery = opt_text(status, "/syncRecovery/syncRecoveryState")
         .filter(|s| s != SYNC_RECOVERED)
         .map(|state| crate::diff::SyncRecovery {
             sync_recovery_state: state,
-            message: text(status, "/syncRecovery/message").unwrap_or_default(),
+            message: text(status, "/syncRecovery/message"),
         });
     Ok(Some(crate::diff::RegistrySync {
-        last_synced_time: time("/lastSyncedTime").unwrap_or_default(),
-        last_run_time: time("/lastRunTime").unwrap_or_default(),
-        status: text(status, "/status").unwrap_or_default(),
-        message: text(status, "/message").unwrap_or_default(),
+        last_synced_time: time("/lastSyncedTime"),
+        last_run_time: time("/lastRunTime"),
+        status: text(status, "/status"),
+        message: text(status, "/message"),
         sync_recovery,
     }))
 }
@@ -710,8 +702,8 @@ impl RegistryListings {
         let Some(meta) = registry_entry(metas, "/uid", uid) else {
             return Ok(None);
         };
-        match text(meta, "/kind").as_deref() {
-            Some("helm") => Ok(meta
+        match str_at(meta, "/kind") {
+            "helm" => Ok(meta
                 .get("isPrivate")
                 .and_then(Value::as_bool)
                 .unwrap_or(false)
@@ -719,7 +711,7 @@ impl RegistryListings {
                     kind: UnsyncedKind::Helm,
                     provider: None,
                 })),
-            Some("oci") => {
+            "oci" => {
                 let Some(regs) = self
                     .oci
                     .entries(|| palette.registry_summary(RegistryKind::Oci))?
@@ -730,15 +722,15 @@ impl RegistryListings {
                     return Ok(None);
                 };
                 // Palette syncs each OCI registry of the provider type pack
-                let provider = text(reg, "/spec/providerType").unwrap_or_default();
-                let syncs = provider == "pack"
+                let provider = opt_text(reg, "/spec/providerType");
+                let syncs = provider.as_deref() == Some("pack")
                     || reg
                         .pointer("/status/sync/isSyncSupported")
                         .and_then(Value::as_bool)
                         == Some(true);
                 Ok((!syncs).then_some(Unsynced {
                     kind: UnsyncedKind::Oci,
-                    provider: Some(provider).filter(|p| !p.is_empty()),
+                    provider,
                 }))
             }
             _ => Ok(None),
@@ -778,7 +770,7 @@ pub(crate) fn registry_entries<A: PaletteApi>(palette: &Palette<A>) -> Result<Ve
 pub(crate) fn registry_names(entries: &[Value]) -> Vec<(String, String)> {
     entries
         .iter()
-        .filter_map(|it| Some((text(it, "/name")?, text(it, "/uid")?)))
+        .filter_map(|it| Some((opt_text(it, "/name")?, opt_text(it, "/uid")?)))
         .collect()
 }
 
@@ -815,8 +807,6 @@ pub fn pack_snapshot<A: PaletteApi>(
         registry,
         unsynced,
     };
-    let of = |e: &Value, ptr: &str| text(e, ptr).unwrap_or_default();
-
     let registry_uid = match registry {
         Some(r) => visible
             .iter()
@@ -832,8 +822,8 @@ pub fn pack_snapshot<A: PaletteApi>(
                 .iter()
                 .filter(|(_, uid)| {
                     entries.iter().any(|e| {
-                        of(e, "/spec/registryUid") == *uid
-                            && (version == LATEST || of(e, "/spec/version") == version)
+                        str_at(e, "/spec/registryUid") == uid
+                            && (version == LATEST || str_at(e, "/spec/version") == version)
                     })
                 })
                 .collect();
@@ -875,8 +865,8 @@ pub fn pack_snapshot<A: PaletteApi>(
 
     let here: Vec<String> = entries
         .iter()
-        .filter(|e| of(e, "/spec/registryUid") == registry_uid)
-        .map(|e| of(e, "/spec/version"))
+        .filter(|e| str_at(e, "/spec/registryUid") == registry_uid)
+        .map(|e| text(e, "/spec/version"))
         .collect();
     let resolved = if version == LATEST {
         here.iter()
@@ -948,10 +938,6 @@ pub fn pack_snapshot<A: PaletteApi>(
     Ok(snap)
 }
 
-fn text(v: &Value, ptr: &str) -> Option<String> {
-    v.pointer(ptr).and_then(Value::as_str).map(str::to_string)
-}
-
 /// The options of the pack template that `values` select, sorted by parameter. `summary` is the
 /// entry of the pack version in the listing, which gives the template in
 /// `spec.template.parameters.inputParameters`. On a create and an update of a profile, Palette
@@ -959,12 +945,10 @@ fn text(v: &Value, ptr: &str) -> Option<String> {
 /// one of its `options`, writes the presets of that option into the values. The listing gives
 /// each option with no presets, so strata records the selection and does not change the values.
 pub(crate) fn preset_options(summary: &Value, values: &str) -> Vec<PresetOption> {
-    let params = summary
-        .pointer("/spec/template/parameters/inputParameters")
-        .and_then(Value::as_array);
-    let Some(params) = params.filter(|p| !p.is_empty()) else {
+    let params = arr(summary, "/spec/template/parameters/inputParameters");
+    if params.is_empty() {
         return Vec::new();
-    };
+    }
     let Canon::Parsed(parsed) = canon_yaml(values) else {
         return Vec::new();
     };
@@ -976,8 +960,8 @@ pub(crate) fn preset_options(summary: &Value, values: &str) -> Vec<PresetOption>
     let mut selected: BTreeMap<String, PresetOption> = BTreeMap::new();
     for p in params {
         let (Some(name), Some(key), Some(options)) = (
-            text(p, "/name"),
-            text(p, "/targetKey").filter(|k| !k.is_empty()),
+            opt_text(p, "/name"),
+            opt_text(p, "/targetKey"),
             p.get("options").and_then(Value::as_object),
         ) else {
             continue;
@@ -1074,15 +1058,14 @@ const DISABLED_MARK: &str = "/spec/annotations/disabled";
 /// The state is the `system_state`: `deprecated`, `disabled`, or `deleted`. It is `disabled` for
 /// a version with the [`DISABLED_MARK`] and no `system_state`.
 pub(crate) fn pack_state(summary: &Value) -> Option<String> {
-    system_state(summary).or_else(|| {
-        (text(summary, DISABLED_MARK).as_deref() == Some("true")).then(|| "disabled".to_string())
-    })
+    system_state(summary)
+        .or_else(|| (str_at(summary, DISABLED_MARK) == "true").then(|| "disabled".to_string()))
 }
 
 /// The state that Spectro Cloud gives a version that it retired: `deprecated`, `disabled`, or
 /// `deleted`.
 fn system_state(summary: &Value) -> Option<String> {
-    text(summary, "/spec/annotations/system_state").filter(|s| !s.is_empty())
+    opt_text(summary, "/spec/annotations/system_state")
 }
 
 /// True when `state` is a state of a version that Palette no longer serves: `disabled` or
@@ -1108,9 +1091,9 @@ fn find_version<A: PaletteApi>(
 ) -> Result<Option<Value>> {
     let mut found = None;
     each_pack_named(palette, name, |it| {
-        let hit = text(&it, "/spec/name").as_deref() == Some(name)
-            && text(&it, "/spec/registryUid").as_deref() == Some(registry)
-            && text(&it, "/spec/version").as_deref() == Some(version);
+        let hit = str_at(&it, "/spec/name") == name
+            && str_at(&it, "/spec/registryUid") == registry
+            && str_at(&it, "/spec/version") == version;
         if hit {
             found = Some(it);
         }
@@ -1182,10 +1165,7 @@ struct Resolver<'r, A: PaletteApi> {
 impl<A: PaletteApi> Resolver<'_, A> {
     /// A `CandidateInvalid` error for the candidate file with `message`.
     fn invalid(&self, message: String) -> Error {
-        Error::CandidateInvalid {
-            path: self.loaded.path.clone(),
-            message,
-        }
+        invalid_at(&self.loaded.path)(message)
     }
 
     /// The uid of the registry that `registry_ref` names.
@@ -1331,23 +1311,14 @@ impl<A: PaletteApi> Resolver<'_, A> {
             });
         }
         // only the create checks that the pack supports the cloud of the profile
-        let clouds: Vec<String> = summary
-            .pointer("/spec/cloudTypes")
-            .and_then(Value::as_array)
-            .into_iter()
-            .flatten()
-            .filter_map(|v| v.as_str().map(str::to_string))
-            .collect();
+        let clouds = strings(summary, "/spec/cloudTypes");
         gaps::check_cloud(&c.cloud_type, i, l, &clouds).map_err(|m| self.invalid(m))?;
-        let pack_uid = text(summary, "/metadata/uid").unwrap_or_default();
+        let pack_uid = text(summary, "/metadata/uid");
         let entity = self.palette.pack_tags(&l.name, registry, None)?;
-        let tags: Vec<String> = entity
-            .get("tags")
-            .and_then(Value::as_array)
-            .into_iter()
-            .flatten()
-            .filter(|t| text(t, "/packUid").as_deref() == Some(pack_uid.as_str()))
-            .filter_map(|t| text(t, "/tag"))
+        let tags: Vec<String> = arr(&entity, "/tags")
+            .iter()
+            .filter(|t| str_at(t, "/packUid") == pack_uid)
+            .filter_map(|t| opt_text(t, "/tag"))
             .collect();
         // Palette stores the tag a profile was authored with, which can be the version itself
         // rather than one of the registry's tag names (a Terraform-built profile pins `24.04`
@@ -1370,23 +1341,23 @@ impl<A: PaletteApi> Resolver<'_, A> {
                 .cloned()
                 .unwrap_or_else(|| l.version.clone()),
         };
-        let pack_values = entity
-            .get("packValues")
-            .and_then(Value::as_array)
-            .into_iter()
-            .flatten()
-            .find(|v| text(v, "/packUid").as_deref() == Some(pack_uid.as_str()))
-            .and_then(|v| text(v, "/values"));
+        // the default values of the version: the listing, and the tags route when the listing
+        // gives none. The file keeps `values: ""` as empty values, so this rule does not read it
+        let pack_values = arr(&entity, "/packValues")
+            .iter()
+            .find(|v| str_at(v, "/packUid") == pack_uid)
+            .and_then(|v| opt_text(v, "/values"));
         let values = loaded_layer
             .values
             .clone()
-            .or_else(|| text(summary, "/spec/values"))
+            .or_else(|| opt_text(summary, "/spec/values"))
             .or(pack_values)
             .unwrap_or_default();
         // Palette gives the pack the layer of the registry and drops the layer of the request with
         // no error. So another layer in the file gives a root that the published version does not
         // have.
-        let registry_layer = text(summary, "/spec/layer").or_else(|| text(&entity, "/layer"));
+        let registry_layer =
+            opt_text(summary, "/spec/layer").or_else(|| opt_text(&entity, "/layer"));
         if let (Some(given), Some(theirs)) = (l.layer.as_deref(), registry_layer.as_deref())
             && given != theirs
         {
@@ -1400,8 +1371,8 @@ impl<A: PaletteApi> Resolver<'_, A> {
         let layer = registry_layer
             .or_else(|| l.layer.clone())
             .unwrap_or_default();
-        let kind = text(summary, "/spec/type").unwrap_or_else(|| "spectro".to_string());
-        let digest = text(summary, "/spec/digest").unwrap_or_default();
+        let kind = first_nonempty(&[str_at(summary, "/spec/type"), "spectro"]);
+        let digest = text(summary, "/spec/digest");
         let fields = PackFields {
             layer: &layer,
             kind: &kind,
@@ -1912,8 +1883,15 @@ variables:
     }
 
     /// A registry that serves each layer of [`stack`] with the layer `layers[i]` and the cloud
-    /// types `clouds[i]`.
+    /// types `clouds[i]`. The listing gives each version empty values, and the tags route gives
+    /// none.
     fn served(layers: &[&str], clouds: &[Value]) -> Palette<MemoryApi> {
+        served_with_values(layers, clouds, "")
+    }
+
+    /// [`served`], where the tags route gives each version the default values `values` in
+    /// `packValues[].values`.
+    fn served_with_values(layers: &[&str], clouds: &[Value], values: &str) -> Palette<MemoryApi> {
         let mut api = MemoryApi::new();
         for (i, l) in stack().layers.iter().enumerate() {
             let uid = format!("pk-{i}");
@@ -1928,10 +1906,29 @@ variables:
                 )
                 .with(
                     format!("/v1/packs/{}/registries/r1", l.name),
-                    json!({"tags": [{"tag": l.version, "packUid": uid}]}),
+                    json!({"tags": [{"tag": l.version, "packUid": uid}],
+                           "packValues": [{"packUid": uid, "values": values}]}),
                 );
         }
         Palette::new(api)
+    }
+
+    #[test]
+    fn a_layer_with_no_values_takes_the_default_values_of_the_tags_route_when_the_listing_gives_none()
+     {
+        // the listing gives `values: ""`, so the default values of the version come from the
+        // tags route. A layer with values in the file keeps them
+        let palette = served_with_values(&STACK_LAYERS, &vec![json!(["aws"]); 5], "b: 2");
+        let raw = resolved(stack(), &palette).unwrap();
+        let packs = &raw.profile["spec"]["published"]["packs"];
+        assert_eq!(
+            packs[0]["values"], "b: 2",
+            "ubuntu-aws has no values in the file"
+        );
+        assert_eq!(
+            packs[1]["values"], "a: 1",
+            "kubernetes has values in the file"
+        );
     }
 
     const STACK_LAYERS: [&str; 5] = ["os", "k8s", "cni", "csi", "addon"];

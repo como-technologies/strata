@@ -13,7 +13,9 @@ use crate::scope::ProfileScope;
 use crate::snapshot::{AppliedProfile, Tool};
 use crate::version;
 
-use super::{ConsumerCounts, client_for, items, text};
+use crate::json::{arr, first_nonempty, items, opt_text, str_at, text};
+
+use super::{ConsumerCounts, client_for};
 
 /// Schema id of the document `list` writes.
 pub const LIST_SCHEMA: &str = "strata-list/1";
@@ -507,17 +509,11 @@ fn list_profiles<A: PaletteApi>(
         let template = ["/spec/published", "/spec/draft"]
             .into_iter()
             .filter_map(|ptr| doc.pointer(ptr))
-            .find(|t| {
-                t.get("packs")
-                    .and_then(Value::as_array)
-                    .is_some_and(|a| !a.is_empty())
-            })
+            .find(|t| !arr(t, "/packs").is_empty())
             .or_else(|| doc.pointer("/spec/published"));
         let packs = template
-            .and_then(|t| t.get("packs"))
-            .and_then(Value::as_array)
             .into_iter()
-            .flatten()
+            .flat_map(|t| arr(t, "/packs"))
             .map(|pk| ListedPack {
                 layer: text(pk, "/layer"),
                 name: text(pk, "/name"),
@@ -525,7 +521,7 @@ fn list_profiles<A: PaletteApi>(
                 version: text(pk, "/version"),
             })
             .collect();
-        p.profile_type = template.map(|t| text(t, "/type")).filter(|t| !t.is_empty());
+        p.profile_type = template.and_then(|t| opt_text(t, "/type"));
         let consumers = ConsumerCounts::of(&doc);
         p.consumers = Some(consumers.count());
         p.consumers_by_kind = Some(consumers);
@@ -604,9 +600,7 @@ pub(super) fn name_projects_of<T, A: PaletteApi>(
 /// The text at `listing` of an entry of the cluster listing, or at `search` of an entry of the
 /// search: the listing gives a field in the spec, and the search in a summary.
 fn listing_or_search(it: &Value, listing: &str, search: &str) -> String {
-    Some(text(it, listing))
-        .filter(|t| !t.is_empty())
-        .unwrap_or_else(|| text(it, search))
+    first_nonempty(&[str_at(it, listing), str_at(it, search)])
 }
 
 /// The clusters of `rows`, the entries of the listing or the items of a search, by name. A

@@ -11,6 +11,7 @@ use serde_json::{Value, json};
 use crate::canon::canonical_json;
 use crate::cluster_template::ClusterTemplateRef;
 pub use crate::impact::{Flags, Impact, ImpactLevel, impact, presence_impact};
+use crate::json::{is_zero, str_at, text};
 use crate::layer::Layer;
 pub use crate::repave::PaletteRepaveReason;
 use crate::snapshot::{ClusterTier, ClusterVariable, Pack, Snapshot, Source, Tool};
@@ -326,10 +327,8 @@ fn running_behind(side: &str, s: &Snapshot) -> Vec<RunningBehind> {
     s.packs
         .iter()
         .filter_map(|p| {
-            let r = running
-                .iter()
-                .find(|r| r.get("name").and_then(Value::as_str) == Some(p.name.as_str()))?;
-            let version = r.get("version").and_then(Value::as_str).unwrap_or_default();
+            let r = running.iter().find(|r| str_at(r, "/name") == p.name)?;
+            let version = str_at(r, "/version");
             (!version.is_empty() && !p.version.is_empty() && version != p.version).then(|| {
                 RunningBehind {
                     side: side.to_string(),
@@ -481,11 +480,7 @@ impl VariableSummary {
     fn from_value(v: &Value) -> VariableSummary {
         let flag = |k: &str| v.get(k).and_then(Value::as_bool).unwrap_or(false);
         VariableSummary {
-            name: v
-                .get("name")
-                .and_then(Value::as_str)
-                .unwrap_or("")
-                .to_string(),
+            name: text(v, "/name"),
             required: flag("required"),
             sensitive: flag("isSensitive"),
             hidden: flag("hidden"),
@@ -918,7 +913,7 @@ impl PaletteRepave {
             .get("isRepaveRequired")
             .and_then(Value::as_bool)
             .unwrap_or(false);
-        let reasons = PaletteRepaveReason::read_all(answer.get("reasons"));
+        let reasons = PaletteRepaveReason::read_all(answer, "/reasons");
         let agrees = match level {
             ImpactLevel::Repave => required,
             ImpactLevel::MayRepave => true,
@@ -1211,13 +1206,8 @@ pub struct AuditResource {
 impl AuditEntry {
     /// Read one item of `GET /v1/audits`.
     pub fn from_palette(item: &Value) -> AuditEntry {
-        let text = |ptr: &str| {
-            item.pointer(ptr)
-                .and_then(Value::as_str)
-                .unwrap_or_default()
-                .trim()
-                .to_string()
-        };
+        // no space around a name or a message in the record
+        let text = |ptr: &str| str_at(item, ptr).trim().to_string();
         let actor_type = text("/spec/actor/actorType");
         let full_name = format!(
             "{} {}",
@@ -1270,10 +1260,6 @@ pub struct ClusterProfileOverwritten {
     pub cluster_version: String,
     /// The version the uid names now; empty when the uid no longer exists.
     pub profile_version: String,
-}
-
-fn is_zero(n: &usize) -> bool {
-    *n == 0
 }
 
 /// Whether a published version still matches its record.
@@ -1535,12 +1521,7 @@ fn manifests_diff(x: &Pack, y: &Pack) -> Vec<ManifestChange> {
 fn by_name(vars: &[Value]) -> Value {
     let mut m = serde_json::Map::new();
     for v in vars {
-        let name = v
-            .get("name")
-            .and_then(Value::as_str)
-            .unwrap_or("")
-            .to_string();
-        m.insert(name, v.clone());
+        m.insert(text(v, "/name"), v.clone());
     }
     Value::Object(m)
 }

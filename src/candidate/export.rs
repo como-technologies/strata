@@ -8,6 +8,7 @@
 use serde_json::{Map, Value};
 
 use super::{Candidate, CandidateLayer, CandidateManifest, MANIFEST, default_type};
+use crate::json::arr;
 
 /// The packs of an export. A file that has an array here is an export.
 const PACKS: &str = "/spec/template/packs";
@@ -33,10 +34,8 @@ pub(super) fn is_export(doc: &Value) -> bool {
 /// A message that names the field, when a field that holds text in an export holds another
 /// value, such as a number, or when `spec.variables` or the `manifests` of a pack is not a list.
 pub(super) fn to_candidate(doc: &Value) -> Result<Candidate, String> {
-    let packs = doc.pointer(PACKS).and_then(Value::as_array);
-    let layers = packs
-        .into_iter()
-        .flatten()
+    let layers = arr(doc, PACKS)
+        .iter()
         .enumerate()
         .map(|(i, p)| layer(p, &format!("spec.template.packs[{i}]")))
         .collect::<Result<Vec<_>, _>>()?;

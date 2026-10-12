@@ -17,7 +17,9 @@ use crate::snapshot::{Snapshot, Tool};
 use super::consumer_list::consumer_uids;
 use super::fleet::Resolved;
 use super::list::{ListedCluster, TENANT_SCOPE, list_clusters, name_projects_of};
-use super::{client_for, items, text};
+use crate::json::{arr, first_nonempty, is_zero, items, str_at, text};
+
+use super::{client_for, scope_of};
 
 /// Schema id of the document `consumers` writes.
 pub const CONSUMERS_SCHEMA: &str = "strata-consumers/1";
@@ -157,10 +159,6 @@ impl ClustersRead {
     pub fn incomplete(&self) -> bool {
         self.error.is_some() || self.groups_error.is_some() || self.unread > 0
     }
-}
-
-fn is_zero(n: &usize) -> bool {
-    *n == 0
 }
 
 /// The edge hosts that `consumers` read. The consumer list of a profile names clusters only, so
@@ -328,7 +326,7 @@ where
             if recorded.source.uid.is_empty() {
                 return Err(Error::NoUid);
             }
-            let scope = Some(recorded.source.project_uid.clone()).filter(|p| !p.is_empty());
+            let scope = scope_of(&recorded.source.project_uid).map(str::to_string);
             if recorded.source.kind == crate::snapshot::APP_KIND {
                 return app_consumers(
                     scope.as_deref(),
@@ -357,11 +355,7 @@ where
     progress.note(&format!("listing consumers of profile {uid}"));
     let doc = home.profile_document(&uid)?;
 
-    let named: Vec<Value> = doc
-        .pointer("/status/inUseClusters")
-        .and_then(Value::as_array)
-        .cloned()
-        .unwrap_or_default();
+    let named = arr(&doc, "/status/inUseClusters").to_vec();
     let uids = consumer_uids(&doc);
 
     let mut list = Vec::with_capacity(uids.len());
@@ -382,17 +376,15 @@ where
             .and_then(|p| p.cluster_document(&c.uid));
         match doc {
             Ok(d) => {
-                let or_keep = |current: String, found: String| {
-                    if found.is_empty() { current } else { found }
-                };
-                c.name = or_keep(c.name, text(&d, "/metadata/name"));
-                c.project_uid =
-                    or_keep(c.project_uid, text(&d, "/metadata/annotations/projectUid"));
-                c.state = or_keep(c.state, text(&d, "/status/state"));
-                c.version = d
-                    .pointer("/spec/clusterProfileTemplates")
-                    .and_then(Value::as_array)
-                    .and_then(|ts| ts.iter().find(|t| text(t, "/uid") == uid))
+                c.name = first_nonempty(&[str_at(&d, "/metadata/name"), &c.name]);
+                c.project_uid = first_nonempty(&[
+                    str_at(&d, "/metadata/annotations/projectUid"),
+                    &c.project_uid,
+                ]);
+                c.state = first_nonempty(&[str_at(&d, "/status/state"), &c.state]);
+                c.version = arr(&d, "/spec/clusterProfileTemplates")
+                    .iter()
+                    .find(|t| str_at(t, "/uid") == uid)
                     .map(|t| text(t, "/profileVersion"))
                     .unwrap_or_default();
             }
@@ -518,12 +510,7 @@ where
     let version = text(&doc, "/spec/version");
 
     let mut list: Vec<Consumer> = Vec::new();
-    for app in doc
-        .pointer("/status/inUseApps")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-    {
+    for app in arr(&doc, "/status/inUseApps") {
         let app_uid = text(app, "/uid");
         if app_uid.is_empty() || list.iter().any(|c| c.uid == app_uid) {
             continue;
@@ -543,13 +530,12 @@ where
             .and_then(|p| p.app_deployment_document(&c.uid));
         match doc {
             Ok(d) => {
-                let or_keep = |current: String, found: String| {
-                    if found.is_empty() { current } else { found }
-                };
-                c.name = or_keep(c.name, text(&d, "/metadata/name"));
-                c.project_uid =
-                    or_keep(c.project_uid, text(&d, "/metadata/annotations/projectUid"));
-                c.state = or_keep(c.state, text(&d, "/status/state"));
+                c.name = first_nonempty(&[str_at(&d, "/metadata/name"), &c.name]);
+                c.project_uid = first_nonempty(&[
+                    str_at(&d, "/metadata/annotations/projectUid"),
+                    &c.project_uid,
+                ]);
+                c.state = first_nonempty(&[str_at(&d, "/status/state"), &c.state]);
                 c.version = text(&d, "/spec/profile/metadata/version");
             }
             Err(e) => c.error = Some(e.to_json()),
@@ -615,10 +601,9 @@ fn edge_hosts_bound<A: PaletteApi>(
         }
     };
     for host in &hosts {
-        let bound = host
-            .pointer("/spec/clusterProfileTemplates")
-            .and_then(Value::as_array)
-            .and_then(|ts| ts.iter().find(|t| text(t, "/uid") == uid));
+        let bound = arr(host, "/spec/clusterProfileTemplates")
+            .iter()
+            .find(|t| str_at(t, "/uid") == uid);
         if let Some(bound) = bound {
             list.push(Consumer {
                 kind: EDGE_HOST_KIND.to_string(),
@@ -626,9 +611,7 @@ fn edge_hosts_bound<A: PaletteApi>(
                 name: text(host, "/metadata/name"),
                 project_uid: text(host, "/metadata/annotations/projectUid"),
                 project_name: String::new(),
-                state: Some(text(host, "/status/state"))
-                    .filter(|s| !s.is_empty())
-                    .unwrap_or_else(|| UNKNOWN_STATE.to_string()),
+                state: first_nonempty(&[str_at(host, "/status/state"), UNKNOWN_STATE]),
                 version: text(bound, "/version"),
                 error: None,
                 unlisted: false,
@@ -758,28 +741,20 @@ where
             }
         };
         clusters_read.read += 1;
-        let copy = doc
-            .pointer("/spec/clusterProfileTemplates")
-            .and_then(Value::as_array)
-            .and_then(|ts| ts.iter().find(|t| text(t, "/uid") == uid));
+        let copy = arr(&doc, "/spec/clusterProfileTemplates")
+            .iter()
+            .find(|t| str_at(t, "/uid") == uid);
         if let Some(copy) = copy {
-            let or_listed = |found: String, listed: &str| {
-                if found.is_empty() {
-                    listed.to_string()
-                } else {
-                    found
-                }
-            };
             list.push(Consumer {
                 kind: cluster_kind(),
                 uid: listed.uid.clone(),
-                name: or_listed(text(&doc, "/metadata/name"), &listed.name),
-                project_uid: or_listed(
-                    text(&doc, "/metadata/annotations/projectUid"),
+                name: first_nonempty(&[str_at(&doc, "/metadata/name"), &listed.name]),
+                project_uid: first_nonempty(&[
+                    str_at(&doc, "/metadata/annotations/projectUid"),
                     &listed.project_uid,
-                ),
+                ]),
                 project_name: String::new(),
-                state: or_listed(text(&doc, "/status/state"), &listed.state),
+                state: first_nonempty(&[str_at(&doc, "/status/state"), &listed.state]),
                 version: text(copy, "/profileVersion"),
                 error: None,
                 unlisted: true,
@@ -841,10 +816,9 @@ fn group_members<A: PaletteApi>(
                 continue;
             }
         };
-        let pins = doc
-            .pointer("/spec/clusterProfileTemplates")
-            .and_then(Value::as_array)
-            .is_some_and(|ts| ts.iter().any(|t| text(t, "/uid") == uid));
+        let pins = arr(&doc, "/spec/clusterProfileTemplates")
+            .iter()
+            .any(|t| str_at(t, "/uid") == uid);
         if !pins {
             continue;
         }

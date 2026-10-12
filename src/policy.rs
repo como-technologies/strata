@@ -11,6 +11,7 @@ use serde_json::{Map, Value, json};
 use crate::api::RawCluster;
 use crate::api::mask::mask_password_keys;
 use crate::canon::{canon_yaml_hashed, canonical_json, sha256_hex};
+use crate::json::{arr, items, str_at};
 
 /// The key of the policy fields that holds the role bindings.
 const RBACS: &str = "rbacs";
@@ -53,8 +54,8 @@ pub(crate) fn fields(raw: &RawCluster, config: &Value) -> Value {
             .unwrap_or(Value::Null),
         "lifecycle": field("lifecycleConfig"),
         "machineHealth": field("machineHealthConfig"),
-        "timezone": text(config, "/timezone"),
-        "fips": text(cluster, "/status/fips/mode"),
+        "timezone": str_at(config, "/timezone"),
+        "fips": str_at(cluster, "/status/fips/mode"),
         RBACS: raw.rbacs.as_ref().map(bindings),
         NAMESPACES: raw.namespaces.as_ref().map(namespaces),
         // Palette omits the field when it is false
@@ -62,9 +63,9 @@ pub(crate) fn fields(raw: &RawCluster, config: &Value) -> Value {
             .get("updateWorkerPoolsInParallel")
             .and_then(Value::as_bool)
             .unwrap_or(false),
-        "controlPlaneHealthCheckTimeout": text(config, "/controlPlaneHealthCheckTimeout"),
-        "clusterMetaAttribute": text(config, "/clusterMetaAttribute"),
-        "applySetting": text(cluster, "/status/spcApply/actionType"),
+        "controlPlaneHealthCheckTimeout": str_at(config, "/controlPlaneHealthCheckTimeout"),
+        "clusterMetaAttribute": str_at(config, "/clusterMetaAttribute"),
+        "applySetting": str_at(cluster, "/status/spcApply/actionType"),
     });
     if let Some(v) = agent_upgrades_forbidden(cluster) {
         fields[AGENT_UPGRADES_FORBIDDEN] = v.clone();
@@ -101,23 +102,20 @@ pub(crate) fn errors(raw: &RawCluster) -> BTreeMap<String, String> {
 /// the tier holds the values in canonical form with their hash, and the host clusters sorted by
 /// uid. The values hold `********` over each password, and the hash covers the masked values.
 pub(crate) fn group_fields(config: &Value) -> Value {
-    let (values, values_hash, values_parse_error) = canon_yaml_hashed(text(config, "/values"));
-    let mut hosts: Vec<Value> = config
-        .get("hostClustersConfig")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
+    let (values, values_hash, values_parse_error) = canon_yaml_hashed(str_at(config, "/values"));
+    let mut hosts: Vec<Value> = arr(config, "/hostClustersConfig")
+        .iter()
         .map(|h| {
             json!({
-                "uid": text(h, "/clusterUid"),
+                "uid": str_at(h, "/clusterUid"),
                 "endpointConfig": h.get("endpointConfig").cloned().unwrap_or(Value::Null),
             })
         })
         .collect();
-    hosts.sort_by(|a, b| text(a, "/uid").cmp(text(b, "/uid")));
+    hosts.sort_by(|a, b| str_at(a, "/uid").cmp(str_at(b, "/uid")));
     let mut fields = json!({
-        "endpointType": text(config, "/endpointType"),
-        "kubernetesDistroType": text(config, "/kubernetesDistroType"),
+        "endpointType": str_at(config, "/endpointType"),
+        "kubernetesDistroType": str_at(config, "/kubernetesDistroType"),
         "limitConfig": config.get("limitConfig").cloned().unwrap_or(Value::Null),
         "values": values,
         "valuesHash": values_hash,
@@ -147,15 +145,11 @@ fn mask_group_fields(fields: &mut Value) {
 /// set of bindings, so both are in canonical order.
 fn bindings(doc: &Value) -> Value {
     let mut out: Vec<Value> = items(doc)
-        .filter_map(|item| item.pointer("/spec/bindings").and_then(Value::as_array))
-        .flatten()
+        .flat_map(|item| arr(item, "/spec/bindings"))
         .map(|b| {
             let mut binding = pick(b, &["namespace", "role", "type"]);
-            let mut subjects: Vec<Value> = b
-                .get("subjects")
-                .and_then(Value::as_array)
-                .into_iter()
-                .flatten()
+            let mut subjects: Vec<Value> = arr(b, "/subjects")
+                .iter()
                 .map(|s| Value::Object(pick(s, &["name", "namespace", "type"])))
                 .collect();
             sort_canonical(&mut subjects);
@@ -182,19 +176,6 @@ fn namespaces(doc: &Value) -> Value {
         .collect();
     out.sort_by_cached_key(|n| canonical_json(n.get("name").unwrap_or(&Value::Null)));
     Value::Array(out)
-}
-
-/// The entries of `items` of an answer of Palette.
-fn items(doc: &Value) -> impl Iterator<Item = &Value> {
-    doc.get("items")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-}
-
-/// The text at the pointer `ptr` of `v`, or empty when `v` has none.
-fn text<'a>(v: &'a Value, ptr: &str) -> &'a str {
-    v.pointer(ptr).and_then(Value::as_str).unwrap_or_default()
 }
 
 /// The keys of `v` that `keys` names, without a null value.

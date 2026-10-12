@@ -9,6 +9,7 @@ use serde_json::Value;
 
 use super::mask::{MASKED, mask_group_values};
 use crate::error::{Error, Result};
+use crate::json::{arr, opt_text, str_at};
 
 /// The three raw API responses a snapshot is built from, and the project they were fetched in.
 /// Saved as `profile.json`, `manifests.json`, `variables.json` and `scope.json` by `--raw-dir` and
@@ -46,11 +47,17 @@ const MANIFEST_ENTITIES_FILE: &str = "manifest-entities.json";
 /// True when a profile document has a draft: packs in `spec.draft`. Palette does not give
 /// `status.hasDraft`, and the publish empties the draft.
 pub fn has_draft(profile: &Value) -> bool {
-    profile
-        .pointer("/spec/draft/packs")
-        .and_then(Value::as_array)
-        .is_some_and(|p| !p.is_empty())
+    !arr(profile, "/spec/draft/packs").is_empty()
 }
+
+/// The file of a raw directory that holds the profile document.
+const PROFILE_FILE: &str = "profile.json";
+
+/// The file of a raw directory that holds the answer of the manifests route.
+const MANIFESTS_FILE: &str = "manifests.json";
+
+/// The file of a raw directory that holds the answer of the variables route.
+const VARIABLES_FILE: &str = "variables.json";
 
 /// The file that records the project a raw directory's responses came from.
 const SCOPE_FILE: &str = "scope.json";
@@ -89,11 +96,7 @@ fn scope_field(dir: &Path, key: &str) -> Result<Option<String>> {
         return Ok(None);
     }
     let scope: Value = read_json_file(dir, SCOPE_FILE)?;
-    Ok(scope
-        .get(key)
-        .and_then(Value::as_str)
-        .filter(|p| !p.is_empty())
-        .map(str::to_string))
+    Ok(opt_text(&scope, &format!("/{key}")))
 }
 
 /// The scope file's document: the project uid, empty at tenant scope, the time the responses were
@@ -127,10 +130,7 @@ fn read_optional<T: DeserializeOwned>(dir: &Path, name: &str) -> Result<Option<T
 /// Read one JSON file from `dir`; an empty file is an error of its own.
 fn read_json_file<T: DeserializeOwned>(dir: &Path, name: &str) -> Result<T> {
     let path = dir.join(name);
-    let text = fs::read_to_string(&path).map_err(|source| Error::Io {
-        path: path.clone(),
-        source,
-    })?;
+    let text = crate::ops::read_file(&path)?;
     if text.trim().is_empty() {
         return Err(Error::EmptyFile(path));
     }
@@ -222,9 +222,9 @@ impl RawProfile {
     /// Read the three files from `dir`, and the project from `scope.json` when it is there.
     pub fn load_dir(dir: &Path) -> Result<RawProfile> {
         Ok(RawProfile {
-            profile: read_json_file(dir, "profile.json")?,
-            manifests: read_json_file(dir, "manifests.json")?,
-            variables: read_json_file(dir, "variables.json")?,
+            profile: read_json_file(dir, PROFILE_FILE)?,
+            manifests: read_json_file(dir, MANIFESTS_FILE)?,
+            variables: read_json_file(dir, VARIABLES_FILE)?,
             variables_unavailable: read_scope_variables_unavailable(dir)?,
             project_uid: read_scope(dir)?,
             fetched_at: read_scope_fetched_at(dir)?,
@@ -239,9 +239,9 @@ impl RawProfile {
     pub fn save_dir(&self, dir: &Path, fetched_at: &str) -> Result<()> {
         let scope = scope_document(&self.project_uid, fetched_at, self.variables_unavailable);
         let mut files = vec![
-            ("profile.json", &self.profile),
-            ("manifests.json", &self.manifests),
-            ("variables.json", &self.variables),
+            (PROFILE_FILE, &self.profile),
+            (MANIFESTS_FILE, &self.manifests),
+            (VARIABLES_FILE, &self.variables),
             (SCOPE_FILE, &scope),
         ];
         if let Some(entities) = &self.manifest_entities {
@@ -338,8 +338,8 @@ impl RawCluster {
     pub fn load_dir(dir: &Path) -> Result<RawCluster> {
         Ok(RawCluster {
             cluster: read_json_file(dir, Self::MARKER)?,
-            manifests: read_json_file(dir, "manifests.json")?,
-            variables: read_json_file(dir, "variables.json")?,
+            manifests: read_json_file(dir, MANIFESTS_FILE)?,
+            variables: read_json_file(dir, VARIABLES_FILE)?,
             variables_unavailable: read_scope_variables_unavailable(dir)?,
             project_uid: read_scope(dir)?,
             fetched_at: read_scope_fetched_at(dir)?,
@@ -390,8 +390,8 @@ impl RawCluster {
         let cluster = masked_group(&self.cluster)?;
         let mut files: Vec<(&str, &Value)> = vec![
             (Self::MARKER, &cluster),
-            ("manifests.json", &self.manifests),
-            ("variables.json", &self.variables),
+            (MANIFESTS_FILE, &self.manifests),
+            (VARIABLES_FILE, &self.variables),
             (SCOPE_FILE, &scope),
         ];
         let notifications = self.notifications.as_ref().map(masked_notifications);
@@ -426,14 +426,8 @@ impl RawCluster {
     /// The cloud type of the cluster document `cluster`: the kind of its `spec.cloudConfigRef`,
     /// else its `spec.cloudType`, or empty when it names neither.
     pub(crate) fn cloud_type(cluster: &Value) -> &str {
-        let field = |p: &str| {
-            cluster
-                .pointer(p)
-                .and_then(Value::as_str)
-                .unwrap_or_default()
-        };
-        match field("/spec/cloudConfigRef/kind") {
-            "" => field("/spec/cloudType"),
+        match str_at(cluster, "/spec/cloudConfigRef/kind") {
+            "" => str_at(cluster, "/spec/cloudType"),
             k => k,
         }
     }
@@ -441,11 +435,7 @@ impl RawCluster {
     /// The applied profile templates, in the order the cluster document lists them. That order is
     /// no install order; `AppliedProfile::of_cluster` puts them in canonical order.
     pub fn templates(&self) -> Vec<Value> {
-        self.cluster
-            .pointer("/spec/clusterProfileTemplates")
-            .and_then(Value::as_array)
-            .cloned()
-            .unwrap_or_default()
+        arr(&self.cluster, "/spec/clusterProfileTemplates").to_vec()
     }
 
     /// One applied template as the three documents of a profile, so a cluster's profile is hashed
@@ -454,8 +444,8 @@ impl RawCluster {
     /// are left out; they are run-time input, not part of the release.
     pub fn template_raw(&self, template: &Value) -> RawProfile {
         let field = |k: &str| template.get(k).cloned().unwrap_or(Value::Null);
-        let uid = template.get("uid").and_then(Value::as_str).unwrap_or("");
-        let name = template.get("name").and_then(Value::as_str).unwrap_or("");
+        let uid = str_at(template, "/uid");
+        let name = str_at(template, "/name");
         let profile = serde_json::json!({
             "metadata": {"uid": uid, "name": name},
             "spec": {
@@ -468,29 +458,18 @@ impl RawCluster {
             },
             "status": {},
         });
-        let entries = |doc: &Value, key: &str| -> Vec<Value> {
-            match key {
-                "" => doc.as_array().cloned().unwrap_or_default(),
-                k => doc
-                    .get(k)
-                    .and_then(Value::as_array)
-                    .cloned()
-                    .unwrap_or_default(),
-            }
-        };
-        let meta = |m: &Value, k: &str| {
-            m.pointer(&format!("/metadata/{k}"))
-                .and_then(Value::as_str)
-                .unwrap_or("")
-                .to_string()
-        };
-        let manifests = entries(&self.manifests, "profiles")
-            .into_iter()
-            .find(|m| (!uid.is_empty() && meta(m, "uid") == uid) || meta(m, "name") == name)
+        let manifests = arr(&self.manifests, "/profiles")
+            .iter()
+            .find(|m| {
+                (!uid.is_empty() && str_at(m, "/metadata/uid") == uid)
+                    || str_at(m, "/metadata/name") == name
+            })
+            .cloned()
             .unwrap_or_else(|| serde_json::json!({"spec": {"packs": []}}));
-        let variables = entries(&self.variables, "")
-            .into_iter()
-            .find(|v| v.get("profileUid").and_then(Value::as_str) == Some(uid))
+        // the variables route answers an array at the top level
+        let variables = arr(&self.variables, "")
+            .iter()
+            .find(|v| str_at(v, "/profileUid") == uid)
             .and_then(|v| v.get("variables").cloned())
             .unwrap_or_else(|| serde_json::json!([]));
         RawProfile {
@@ -531,7 +510,7 @@ mod tests {
         assert_eq!(back.project_uid.as_deref(), Some("p1"));
         assert_eq!(back.manifest_entities, raw.manifest_entities);
         assert_eq!(back.resolved_values, raw.resolved_values);
-        fs::write(dir.path().join("variables.json"), "").unwrap();
+        fs::write(dir.path().join(VARIABLES_FILE), "").unwrap();
         assert!(matches!(
             RawProfile::load_dir(dir.path()).unwrap_err(),
             Error::EmptyFile(_)

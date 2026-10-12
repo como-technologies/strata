@@ -6,6 +6,7 @@
 use serde_json::{Map, Value, json};
 
 use crate::api::RawCluster;
+use crate::json::{arr, str_at};
 
 /// The key of the shape fields that names the cloud type of the cluster. A record from before
 /// strata read the fields by cloud type does not have it.
@@ -233,14 +234,11 @@ impl Cloud {
 pub(crate) fn fields(cluster: &Value, cloud_config: &Value) -> Value {
     let cloud_type = RawCluster::cloud_type(cluster);
     let cloud = Cloud::of(cloud_type);
-    let mut pools: Vec<Value> = cloud_config
-        .pointer("/spec/machinePoolConfig")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
+    let mut pools: Vec<Value> = arr(cloud_config, "/spec/machinePoolConfig")
+        .iter()
         .map(|p| pick(p, &[POOL_FIELDS, cloud.pool_fields()]))
         .collect();
-    pools.sort_by(|a, b| name(a).cmp(name(b)));
+    pools.sort_by(|a, b| str_at(a, "/name").cmp(str_at(b, "/name")));
     let part = cloud_config
         .pointer("/spec/clusterConfig")
         .unwrap_or(&Value::Null);
@@ -264,21 +262,14 @@ pub(crate) fn comparable(a: &Value, b: &Value) -> (Value, Value) {
 
 /// The shape fields `v` as a record from before strata read the fields by cloud type holds them.
 fn as_legacy(v: &Value) -> Value {
-    let pools: Vec<Value> = v
-        .get("pools")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
+    let pools: Vec<Value> = arr(v, "/pools")
+        .iter()
         .map(|p| pick(p, &[LEGACY_POOL_FIELDS]))
         .collect();
     json!({
         "cloud": pick(v.get("cloud").unwrap_or(&Value::Null), &[LEGACY_CLOUD_FIELDS]),
         "pools": pools,
     })
-}
-
-fn name(pool: &Value) -> &str {
-    pool.get("name").and_then(Value::as_str).unwrap_or_default()
 }
 
 /// The keys of `v` that one of the lists `keys` names, without a null value, and without the uid

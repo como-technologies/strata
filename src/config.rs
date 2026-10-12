@@ -10,13 +10,15 @@ use crate::error::{Error, Result};
 /// The default Palette API base URL.
 pub const DEFAULT_BASE_URL: &str = "https://api.spectrocloud.com";
 
-const KEY_VARS: [&str; 2] = ["PALETTE_API_KEY", "SPECTROCLOUD_APIKEY"];
+/// The variables that hold the API key, the first one preferred.
+pub(crate) const KEY_VARS: [&str; 2] = ["PALETTE_API_KEY", "SPECTROCLOUD_APIKEY"];
 const URL_VARS: [&str; 2] = ["PALETTE_API", "SPECTROCLOUD_HOST"];
 const PROJECT_VARS: [&str; 1] = ["PALETTE_PROJECT_UID"];
 const PROJECT_NAME_VAR: &str = "PALETTE_PROJECT";
 const RETRIES_VAR: &str = "STRATA_RETRIES";
 const DEFAULT_RETRIES: u32 = 3;
-const MAX_RETRY_AFTER_VAR: &str = "STRATA_MAX_RETRY_AFTER";
+/// The variable that sets the longest `Retry-After` wait that strata takes.
+pub(crate) const MAX_RETRY_AFTER_VAR: &str = "STRATA_MAX_RETRY_AFTER";
 const DEFAULT_MAX_RETRY_AFTER: Duration = Duration::from_secs(300);
 
 /// Connection settings for one Palette tenant or project.

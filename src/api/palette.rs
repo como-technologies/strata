@@ -7,6 +7,7 @@ use serde_json::Value;
 
 use super::{AuditKind, PaletteApi, RawCluster, RawProfile, ReadErrors, mask};
 use crate::error::{Error, Result};
+use crate::json::{arr, items, opt_text, str_at, take_items, text};
 use crate::progress::Progress;
 use crate::reference::LATEST;
 use crate::scope::{ProfileScope, ScopedUid};
@@ -14,20 +15,22 @@ use crate::snapshot::{APP_KIND, SubjectKind};
 use crate::version;
 
 const PROFILE_LISTING: &str = "/v1/dashboard/clusterprofiles/metadata";
-/// The profile search. Palette gives at most 50 profile names on a page, and pages by `offset`.
-const PROFILE_SEARCH: &str = "/v1/dashboard/clusterprofiles?limit=50";
-/// The most profile names that Palette serves on one page of the profile search.
-const PROFILE_SEARCH_PAGE: usize = 50;
+/// The profile search. It pages by `offset`.
+const PROFILE_SEARCH: &str = "/v1/dashboard/clusterprofiles";
+/// The most entries that Palette serves on one page of a search of the dashboard. The searches:
+/// the profile search, the cluster search, the edge host search, and the virtual clusters of a
+/// cluster group.
+const SEARCH_PAGE: usize = 50;
 /// The most entries that Palette serves on one page of the pack listing, `/v1/packs`.
 pub(crate) const PACK_LISTING_PAGE: usize = 100;
 const CLUSTER_LISTING: &str = "/v1/dashboard/spectroclusters/meta";
 const PROJECT_LISTING: &str = "/v1/dashboard/projects/metadata";
-/// The edge host search. Palette gives at most 50 on a page.
-const EDGE_HOST_SEARCH: &str = "/v1/dashboard/edgehosts/search?limit=50";
+/// The edge host search. It pages by `continue`.
+const EDGE_HOST_SEARCH: &str = "/v1/dashboard/edgehosts/search";
 const CLUSTER_GROUP_LISTING: &str = "/v1/clustergroups/hostCluster/metadata";
 const APP_PROFILE_LISTING: &str = "/v1/dashboard/appProfiles/metadata";
-/// The cluster search. Palette gives at most 50 on a page.
-const CLUSTER_SEARCH: &str = "/v1/dashboard/spectroclusters/search?limit=50";
+/// The cluster search. It pages by `continue`.
+const CLUSTER_SEARCH: &str = "/v1/dashboard/spectroclusters/search";
 const CLUSTER_SEARCH_SCHEMA: &str = "/v1/dashboard/spectroclusters/search/schema";
 /// The property of the cluster search that takes a label, as `key:value` or `key`.
 pub(crate) const SEARCH_TAGS: &str = "tags";
@@ -48,6 +51,11 @@ const TIER_INSTALL_ORDER: &str = "installOrder";
 /// The field of a container tier that gives the registry of its image.
 const TIER_CONTAINER_REGISTRY: &str = "containerRegistryUid";
 
+/// The search `route` with the page size of the dashboard, [`SEARCH_PAGE`], as its `limit`.
+fn paged(route: &str) -> String {
+    format!("{route}?limit={SEARCH_PAGE}")
+}
+
 /// The install order of a tier, when Palette gives one.
 fn install_order(tier: &Value) -> Option<&Value> {
     tier.pointer(&format!("/spec/{TIER_INSTALL_ORDER}"))
@@ -55,19 +63,8 @@ fn install_order(tier: &Value) -> Option<&Value> {
 
 /// `(name, uid)` of each entry of a listing: an array, or an object with `items`.
 fn named_entries(listing: &Value) -> Vec<(String, String)> {
-    let field = |v: &Value, k: &str| {
-        v.pointer(&format!("/metadata/{k}"))
-            .and_then(Value::as_str)
-            .unwrap_or("")
-            .to_string()
-    };
-    listing
-        .get("items")
-        .unwrap_or(listing)
-        .as_array()
-        .into_iter()
-        .flatten()
-        .map(|e| (field(e, "name"), field(e, "uid")))
+    items(listing)
+        .map(|e| (text(e, "/metadata/name"), text(e, "/metadata/uid")))
         .collect()
 }
 
@@ -90,16 +87,13 @@ fn listed_versions<'a>(
     listing: &'a Value,
     name: &'a str,
 ) -> impl Iterator<Item = (String, String)> + 'a {
-    listing
-        .get("items")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter(move |it| it.pointer("/metadata/name").and_then(Value::as_str) == Some(name))
+    items(listing)
+        .filter(move |it| str_at(it, "/metadata/name") == name)
         .filter_map(|it| {
-            let version = it.pointer("/spec/version")?.as_str()?;
-            let uid = it.pointer("/metadata/uid")?.as_str()?;
-            Some((version.to_string(), uid.to_string()))
+            Some((
+                opt_text(it, "/spec/version")?,
+                opt_text(it, "/metadata/uid")?,
+            ))
         })
 }
 
@@ -124,11 +118,7 @@ pub(crate) fn search_condition(property: &str, values: &[String], negation: bool
 /// `environment` equals [`NESTED_CLOUD`]. `filter` joins its groups with `and`; `Null` has no
 /// group, so the result selects each virtual cluster.
 fn with_nested(filter: &Value) -> Value {
-    let mut groups: Vec<Value> = filter
-        .get("filterGroups")
-        .and_then(Value::as_array)
-        .cloned()
-        .unwrap_or_default();
+    let mut groups = arr(filter, "/filterGroups").to_vec();
     groups.push(serde_json::json!({
         "conjunction": "and",
         "filters": [search_condition(SEARCH_ENVIRONMENT, &[NESTED_CLOUD.to_string()], false)],
@@ -290,23 +280,21 @@ impl<A: PaletteApi> Palette<A> {
         });
         let mut uids = BTreeSet::new();
         self.each_offset_page(
-            PROFILE_SEARCH_PAGE,
+            SEARCH_PAGE,
             |offset| {
                 let path = if offset == 0 {
-                    PROFILE_SEARCH.to_string()
+                    paged(PROFILE_SEARCH)
                 } else {
-                    format!("{PROFILE_SEARCH}&offset={offset}")
+                    format!("{}&offset={offset}", paged(PROFILE_SEARCH))
                 };
                 self.api.post_json(&path, &body)
             },
             |item| {
-                let versions = item
-                    .pointer("/specSummary/versions")
-                    .and_then(Value::as_array)
-                    .into_iter()
-                    .flatten()
-                    .filter_map(|v| v.get("uid").and_then(Value::as_str));
-                uids.extend(versions.map(str::to_string));
+                uids.extend(
+                    arr(&item, "/specSummary/versions")
+                        .iter()
+                        .filter_map(|v| opt_text(v, "/uid")),
+                );
                 true
             },
         )?;
@@ -326,11 +314,11 @@ impl<A: PaletteApi> Palette<A> {
         let mut offset = 0;
         loop {
             let got = fetch(offset)?;
-            let items = got
-                .get("items")
-                .and_then(Value::as_array)
-                .cloned()
-                .unwrap_or_default();
+            let total = got
+                .pointer("/listmeta/count")
+                .and_then(Value::as_u64)
+                .unwrap_or(0) as usize;
+            let items = take_items(got);
             let n = items.len();
             for it in items {
                 if !each(it) {
@@ -338,10 +326,6 @@ impl<A: PaletteApi> Palette<A> {
                 }
             }
             offset += n;
-            let total = got
-                .pointer("/listmeta/count")
-                .and_then(Value::as_u64)
-                .unwrap_or(0) as usize;
             if n < page || offset >= total {
                 return Ok(());
             }
@@ -352,22 +336,13 @@ impl<A: PaletteApi> Palette<A> {
     /// [`LATEST`], from `GET /v1/dashboard/appProfiles/metadata`.
     pub fn resolve_app_profile(&self, name: &str, version: &str) -> Result<String> {
         let listing = self.api.get_json(APP_PROFILE_LISTING)?;
-        let all: Vec<(String, String, String)> = listing
-            .get("appProfiles")
-            .and_then(Value::as_array)
-            .into_iter()
-            .flatten()
+        let all: Vec<(String, String, String)> = arr(&listing, "/appProfiles")
+            .iter()
             .map(|it| {
-                let text = |p: &str| {
-                    it.pointer(p)
-                        .and_then(Value::as_str)
-                        .unwrap_or_default()
-                        .to_string()
-                };
                 (
-                    text("/metadata/name"),
-                    text("/spec/version"),
-                    text("/metadata/uid"),
+                    text(it, "/metadata/name"),
+                    text(it, "/spec/version"),
+                    text(it, "/metadata/uid"),
                 )
             })
             .collect();
@@ -413,30 +388,16 @@ impl<A: PaletteApi> Palette<A> {
         let at = query_value(uid);
         let doc = self.api.get_json(&format!("/v1/appProfiles/{at}"))?;
         let tiers = self.api.get_json(&format!("/v1/appProfiles/{at}/tiers"))?;
-        let text = |v: &Value, p: &str| {
-            v.pointer(p)
-                .and_then(Value::as_str)
-                .unwrap_or_default()
-                .to_string()
-        };
         // Palette lists the tiers in the display order of the app profile, not in install order.
-        let mut ordered: Vec<&Value> = tiers
-            .pointer("/spec/appTiers")
-            .and_then(Value::as_array)
-            .into_iter()
-            .flatten()
-            .collect();
+        let mut ordered: Vec<&Value> = arr(&tiers, "/spec/appTiers").iter().collect();
         // A stable sort: tiers of one order keep the order of the listing. Palette gives no order
         // for a tier at 0. An order that is not an integer comes first, and the record keeps it.
         ordered.sort_by_key(|tier| install_order(tier).map_or(Some(0), Value::as_i64));
         let (mut packs, mut mpacks) = (Vec::new(), Vec::new());
         for tier in ordered {
             let name = text(tier, "/metadata/name");
-            let mut params: serde_json::Map<String, Value> = tier
-                .pointer("/spec/properties")
-                .and_then(Value::as_array)
-                .into_iter()
-                .flatten()
+            let mut params: serde_json::Map<String, Value> = arr(tier, "/spec/properties")
+                .iter()
                 .map(|p| (text(p, "/name"), Value::from(text(p, "/value"))))
                 .collect();
             if let Some(order) = install_order(tier) {
@@ -455,12 +416,7 @@ impl<A: PaletteApi> Palette<A> {
             }));
             let tier_uid = query_value(&text(tier, "/metadata/uid"));
             let mut manifests = Vec::new();
-            for m in tier
-                .pointer("/spec/manifests")
-                .and_then(Value::as_array)
-                .into_iter()
-                .flatten()
-            {
+            for m in arr(tier, "/spec/manifests") {
                 let d = self.api.get_json(&format!(
                     "/v1/appProfiles/{at}/tiers/{tier_uid}/manifests/{}",
                     query_value(&text(m, "/uid"))
@@ -674,27 +630,11 @@ impl<A: PaletteApi> Palette<A> {
         if !super::raw::has_draft(profile) {
             return Ok(None);
         }
-        let text = |v: &Value, p: &str| {
-            v.pointer(p)
-                .and_then(Value::as_str)
-                .unwrap_or_default()
-                .to_string()
-        };
         let mut out = serde_json::Map::new();
         for template in ["/spec/published/packs", "/spec/draft/packs"] {
-            for pack in profile
-                .pointer(template)
-                .and_then(Value::as_array)
-                .into_iter()
-                .flatten()
-            {
+            for pack in arr(profile, template) {
                 let name = text(pack, "/name");
-                for m in pack
-                    .get("manifests")
-                    .and_then(Value::as_array)
-                    .into_iter()
-                    .flatten()
-                {
+                for m in arr(pack, "/manifests") {
                     let manifest = text(m, "/uid");
                     if name.is_empty() || manifest.is_empty() || out.contains_key(&manifest) {
                         continue;
@@ -821,11 +761,7 @@ impl<A: PaletteApi> Palette<A> {
     ) -> Result<RawCluster> {
         match kind {
             SubjectKind::Cluster => {
-                let uid = doc
-                    .pointer("/metadata/uid")
-                    .and_then(Value::as_str)
-                    .unwrap_or_default()
-                    .to_string();
+                let uid = text(&doc, "/metadata/uid");
                 self.cluster_raw(&uid, doc, progress)
             }
             SubjectKind::EdgeHost => self.holder_raw(doc, Holder::EdgeHost, progress),
@@ -892,21 +828,12 @@ impl<A: PaletteApi> Palette<A> {
     /// templates of the cluster. The manifests of each come from its profile, `GET
     /// /v1/clusterprofiles/{uid}/packs/manifests`, since the cluster holds no copy of them yet.
     pub fn with_pending(&self, mut raw: RawCluster) -> Result<RawCluster> {
-        let uid = raw
-            .cluster
-            .pointer("/metadata/uid")
-            .and_then(Value::as_str)
-            .unwrap_or_default()
-            .to_string();
+        let uid = text(&raw.cluster, "/metadata/uid");
         let updates = self.api.get_json(&format!(
             "/v1/spectroclusters/{}/profileUpdates",
             query_value(&uid)
         ))?;
-        let profiles: Vec<Value> = updates
-            .get("profiles")
-            .and_then(Value::as_array)
-            .cloned()
-            .unwrap_or_default();
+        let profiles = arr(&updates, "/profiles").to_vec();
         raw.manifests = self.profile_manifests(&profiles)?;
         raw.cluster["spec"]["clusterProfileTemplates"] = Value::Array(profiles);
         Ok(raw)
@@ -918,7 +845,7 @@ impl<A: PaletteApi> Palette<A> {
     fn profile_manifests(&self, templates: &[Value]) -> Result<Value> {
         let mut manifests = Vec::with_capacity(templates.len());
         for t in templates {
-            let puid = t.get("uid").and_then(Value::as_str).unwrap_or_default();
+            let puid = str_at(t, "/uid");
             let d = self.api.get_json(&format!(
                 "/v1/clusterprofiles/{}/packs/manifests",
                 query_value(puid)
@@ -933,7 +860,7 @@ impl<A: PaletteApi> Palette<A> {
     /// summary: uid, name, and version.
     pub fn edge_hosts(&self) -> Result<Vec<Value>> {
         self.searched(
-            EDGE_HOST_SEARCH,
+            &paged(EDGE_HOST_SEARCH),
             &serde_json::json!({"filter": {}, "sort": []}),
         )
     }
@@ -946,7 +873,7 @@ impl<A: PaletteApi> Palette<A> {
     /// [`Palette::virtual_cluster_search`].
     pub fn cluster_search(&self, filter: &Value) -> Result<Vec<Value>> {
         self.searched(
-            CLUSTER_SEARCH,
+            &paged(CLUSTER_SEARCH),
             &serde_json::json!({"filter": filter, "sort": [{"field": "clusterName", "order": "asc"}]}),
         )
     }
@@ -975,16 +902,11 @@ impl<A: PaletteApi> Palette<A> {
     ///
     /// Each other error of the request.
     pub fn cluster_search_properties(&self) -> Result<BTreeSet<String>> {
-        let field = |p: &Value, k: &str| p.get(k).and_then(Value::as_str).unwrap_or("").to_string();
         match self.cluster_search_schema() {
-            Ok(schema) => Ok(schema
-                .pointer("/schema/properties")
-                .and_then(Value::as_array)
-                .into_iter()
-                .flatten()
-                .filter(|p| field(p, "type") == "string")
-                .map(|p| field(p, "name"))
-                .filter(|name| !name.is_empty())
+            Ok(schema) => Ok(arr(&schema, "/schema/properties")
+                .iter()
+                .filter(|p| str_at(p, "/type") == "string")
+                .filter_map(|p| opt_text(p, "/name"))
                 .collect()),
             Err(Error::Api {
                 status: 404 | 405, ..
@@ -1018,18 +940,10 @@ impl<A: PaletteApi> Palette<A> {
                 format!("{search}&continue={}", query_value(&next))
             };
             let page = self.api.post_json(&path, body)?;
-            let got = page
-                .get("items")
-                .and_then(Value::as_array)
-                .cloned()
-                .unwrap_or_default();
+            next = text(&page, "/listmeta/continue");
+            let got = take_items(page);
             let done = got.is_empty();
             items.extend(got);
-            next = page
-                .pointer("/listmeta/continue")
-                .and_then(Value::as_str)
-                .unwrap_or_default()
-                .to_string();
             if next.is_empty() || done {
                 return Ok(items);
             }
@@ -1089,10 +1003,10 @@ impl<A: PaletteApi> Palette<A> {
     /// profiles that the group pins.
     pub fn cluster_group_members(&self, uid: &str) -> Result<Vec<Value>> {
         self.searched(
-            &format!(
-                "/v1/dashboard/clustergroups/{}/virtualClusters?limit=50",
+            &paged(&format!(
+                "/v1/dashboard/clustergroups/{}/virtualClusters",
                 query_value(uid)
-            ),
+            )),
             &serde_json::json!({"filter": {}, "sort": []}),
         )
     }
@@ -1101,24 +1015,9 @@ impl<A: PaletteApi> Palette<A> {
     /// /v1/clustergroups/hostCluster/metadata`.
     pub fn cluster_groups(&self) -> Result<Vec<(String, String)>> {
         let listing = self.api.get_json(CLUSTER_GROUP_LISTING)?;
-        Ok(listing
-            .get("items")
-            .and_then(Value::as_array)
-            .map(|items| {
-                items
-                    .iter()
-                    .map(|g| {
-                        let text = |k: &str| {
-                            g.get(k)
-                                .and_then(Value::as_str)
-                                .unwrap_or_default()
-                                .to_string()
-                        };
-                        (text("name"), text("uid"))
-                    })
-                    .collect()
-            })
-            .unwrap_or_default())
+        Ok(items(&listing)
+            .map(|g| (text(g, "/name"), text(g, "/uid")))
+            .collect())
     }
 
     /// The document of the cluster group `uid`, `GET /v1/clustergroups/{uid}`: the profiles that
@@ -1156,15 +1055,11 @@ impl<A: PaletteApi> Palette<A> {
     /// Such an object gives no values to the variables, so a record holds the definitions of each
     /// profile, as a profile record does. It has no notifications.
     fn holder_raw(&self, doc: Value, holder: Holder, progress: &Progress) -> Result<RawCluster> {
-        let templates: Vec<Value> = doc
-            .pointer("/spec/clusterProfileTemplates")
-            .and_then(Value::as_array)
-            .cloned()
-            .unwrap_or_default();
+        let templates = arr(&doc, "/spec/clusterProfileTemplates").to_vec();
         let mut variables = Vec::with_capacity(templates.len());
         let mut variables_unavailable = false;
         for t in &templates {
-            let puid = t.get("uid").and_then(Value::as_str).unwrap_or_default();
+            let puid = str_at(t, "/uid");
             let profile = format!("/v1/clusterprofiles/{}", query_value(puid));
             let (v, unavailable) = self.variables_or(
                 &format!("{profile}/variables"),
@@ -1205,38 +1100,19 @@ impl<A: PaletteApi> Palette<A> {
         holder: Holder,
         manifests: &mut Value,
     ) -> Result<()> {
-        let holder_uid = doc
-            .pointer("/metadata/uid")
-            .and_then(Value::as_str)
-            .unwrap_or_default();
+        let holder_uid = str_at(doc, "/metadata/uid");
         for (i, t) in templates.iter().enumerate() {
-            let puid = t.get("uid").and_then(Value::as_str).unwrap_or_default();
-            for pack in t
-                .get("packs")
-                .and_then(Value::as_array)
-                .into_iter()
-                .flatten()
-            {
-                let name = pack.get("name").and_then(Value::as_str).unwrap_or_default();
-                let refs = pack
-                    .get("manifests")
-                    .and_then(Value::as_array)
-                    .cloned()
-                    .unwrap_or_default();
+            let puid = str_at(t, "/uid");
+            for pack in arr(t, "/packs") {
+                let name = str_at(pack, "/name");
+                let refs = arr(pack, "/manifests");
                 // a copy with no uid cannot be read: the manifests of the profile stay
-                if refs.is_empty()
-                    || refs.iter().any(|m| {
-                        m.get("uid")
-                            .and_then(Value::as_str)
-                            .unwrap_or_default()
-                            .is_empty()
-                    })
-                {
+                if refs.is_empty() || refs.iter().any(|m| str_at(m, "/uid").is_empty()) {
                     continue;
                 }
                 let mut own = Vec::with_capacity(refs.len());
-                for m in &refs {
-                    let muid = m.get("uid").and_then(Value::as_str).unwrap_or_default();
+                for m in refs {
+                    let muid = str_at(m, "/uid");
                     let path = match holder {
                         Holder::EdgeHost => format!(
                             "/v1/edgehosts/{}/pack/manifests/{}",
@@ -1266,8 +1142,7 @@ impl<A: PaletteApi> Palette<A> {
                     continue;
                 };
                 if let Some(p) = packs.iter_mut().find(|p| {
-                    p.pointer("/spec/name").and_then(Value::as_str) == Some(name)
-                        || p.pointer("/metadata/name").and_then(Value::as_str) == Some(name)
+                    str_at(p, "/spec/name") == name || str_at(p, "/metadata/name") == name
                 }) {
                     p["spec"]["manifests"] = Value::Array(own);
                 }
@@ -1281,15 +1156,7 @@ impl<A: PaletteApi> Palette<A> {
         let hosts: Vec<(String, String)> = self
             .edge_hosts()?
             .iter()
-            .map(|h| {
-                let text = |p: &str| {
-                    h.pointer(p)
-                        .and_then(Value::as_str)
-                        .unwrap_or_default()
-                        .to_string()
-                };
-                (text("/metadata/name"), text("/metadata/uid"))
-            })
+            .map(|h| (text(h, "/metadata/name"), text(h, "/metadata/uid")))
             .collect();
         let mut uids: Vec<String> = hosts
             .iter()
@@ -1319,10 +1186,7 @@ impl<A: PaletteApi> Palette<A> {
     /// request that fails.
     pub fn cloud_config(&self, cluster: &Value) -> Result<Value> {
         let kind = RawCluster::cloud_type(cluster);
-        let uid = cluster
-            .pointer("/spec/cloudConfigRef/uid")
-            .and_then(Value::as_str)
-            .unwrap_or_default();
+        let uid = str_at(cluster, "/spec/cloudConfigRef/uid");
         if kind.is_empty() || uid.is_empty() {
             return Err(Error::Usage {
                 message: "the cluster document names no cloud config".to_string(),
@@ -1580,18 +1444,10 @@ impl<A: PaletteApi> Palette<A> {
                 self.api
                     .get_json(&format!("{path}{join}continue={}", query_value(&next)))?
             };
-            let got = page
-                .get("items")
-                .and_then(Value::as_array)
-                .cloned()
-                .unwrap_or_default();
+            next = text(&page, "/listmeta/continue");
+            let got = take_items(page);
             let done = got.is_empty();
             items.extend(got);
-            next = page
-                .pointer("/listmeta/continue")
-                .and_then(Value::as_str)
-                .unwrap_or_default()
-                .to_string();
             if next.is_empty() || done {
                 return Ok(items);
             }
@@ -1858,12 +1714,12 @@ mod tests {
         };
         let api = MemoryApi::new()
             .with_post(
-                "/v1/dashboard/clusterprofiles?limit=50",
+                &paged(PROFILE_SEARCH),
                 &body,
                 json!({"items": names(0, 50), "listmeta": {"count": 51, "limit": 50, "offset": 0}}),
             )
             .with_post(
-                "/v1/dashboard/clusterprofiles?limit=50&offset=50",
+                &format!("{}&offset=50", paged(PROFILE_SEARCH)),
                 &body,
                 json!({"items": [{"metadata": {"name": "p50"}, "specSummary": {"versions": [
                     {"version": "1.0.0", "uid": "u50"}, {"version": "2.0.0", "uid": "u50b"}]}}],

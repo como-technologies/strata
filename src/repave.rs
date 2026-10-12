@@ -8,16 +8,15 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::json::{arr, first_nonempty, str_at, strings, text};
+
 /// The state of a repave that waits for approval, in `status.repave.state` of a cluster. Palette
 /// also gives `Approved` and `Reverted`.
 const PENDING_STATE: &str = "Pending";
 
 /// True when the cluster document `cluster` says that a repave waits for approval.
 pub(crate) fn is_pending(cluster: &Value) -> bool {
-    cluster
-        .pointer("/status/repave/state")
-        .and_then(Value::as_str)
-        == Some(PENDING_STATE)
+    str_at(cluster, "/status/repave/state") == PENDING_STATE
 }
 
 /// One reason Palette gives for a repave.
@@ -37,13 +36,12 @@ pub struct PaletteRepaveReason {
 }
 
 impl PaletteRepaveReason {
-    /// Each reason of the list `reasons`, in the order of Palette: `reasons` of an answer of
-    /// `validate/repave`, or `spec.reasons` of the repave of a cluster. No list gives no reason.
-    pub(crate) fn read_all(reasons: Option<&Value>) -> Vec<PaletteRepaveReason> {
-        reasons
-            .and_then(Value::as_array)
-            .into_iter()
-            .flatten()
+    /// Each reason of the list at the pointer `ptr` of `doc`, in the order of Palette. The list
+    /// is `reasons` of an answer of `validate/repave`, or `spec.reasons` of the repave of a
+    /// cluster. No list gives no reason.
+    pub(crate) fn read_all(doc: &Value, ptr: &str) -> Vec<PaletteRepaveReason> {
+        arr(doc, ptr)
+            .iter()
             .map(PaletteRepaveReason::read)
             .collect()
     }
@@ -51,29 +49,14 @@ impl PaletteRepaveReason {
     /// One reason. A pack that the change removes has no `target`, and a pack that it adds has no
     /// `current`, so the name comes from the side that is there.
     fn read(r: &Value) -> PaletteRepaveReason {
-        let text = |ptr: &str| {
-            r.pointer(ptr)
-                .and_then(Value::as_str)
-                .unwrap_or_default()
-                .to_string()
-        };
-        let pack = r
-            .pointer("/pack/current/name")
-            .or_else(|| r.pointer("/pack/target/name"))
-            .and_then(Value::as_str)
-            .unwrap_or_default()
-            .to_string();
         PaletteRepaveReason {
-            code: text("/code"),
-            message: text("/message"),
-            pack,
-            keys: r
-                .pointer("/pack/diffConfigKeys")
-                .and_then(Value::as_array)
-                .into_iter()
-                .flatten()
-                .filter_map(|k| k.as_str().map(str::to_string))
-                .collect(),
+            code: text(r, "/code"),
+            message: text(r, "/message"),
+            pack: first_nonempty(&[
+                str_at(r, "/pack/current/name"),
+                str_at(r, "/pack/target/name"),
+            ]),
+            keys: strings(r, "/pack/diffConfigKeys"),
         }
     }
 }
@@ -97,17 +80,11 @@ pub struct PendingRepave {
 impl PendingRepave {
     /// The repave in `doc`, the answer of `GET /v1/spectroclusters/{uid}/repave/status`.
     pub(crate) fn read(doc: &Value) -> PendingRepave {
-        let text = |ptr: &str| {
-            doc.pointer(ptr)
-                .and_then(Value::as_str)
-                .unwrap_or_default()
-                .to_string()
-        };
         PendingRepave {
-            source: text("/spec/source"),
+            source: text(doc, "/spec/source"),
             // Palette sets the time at each change of the state, so it is the time of `Pending`
-            since: text("/status/repaveTransitionTime"),
-            reasons: PaletteRepaveReason::read_all(doc.pointer("/spec/reasons")),
+            since: text(doc, "/status/repaveTransitionTime"),
+            reasons: PaletteRepaveReason::read_all(doc, "/spec/reasons"),
         }
     }
 }

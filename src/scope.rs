@@ -6,6 +6,8 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::json::str_at;
+
 /// Where a profile version lives. Palette gives it in `metadata.annotations.scope` of the profile
 /// document, and the profile search takes it as the filter `scope`.
 #[derive(
@@ -56,9 +58,7 @@ impl ProfileScope {
     /// The scope of the profile document `doc`, from `metadata.annotations.scope`. None when the
     /// document does not give it.
     pub(crate) fn of_document(doc: &Value) -> Option<Self> {
-        doc.pointer("/metadata/annotations/scope")
-            .and_then(Value::as_str)
-            .and_then(Self::parse)
+        Self::parse(str_at(doc, "/metadata/annotations/scope"))
     }
 
     /// The scopes whose versions a listing of `self` holds beside its own. A project lists the
