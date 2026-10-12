@@ -379,7 +379,7 @@ pub struct ClusterSource {
 }
 
 /// A tier of a cluster record: a part of the cluster beside its release, with a hash of its own.
-/// The variants are in the order of their names, so the map of the tiers of a record, and its
+/// The variants are in the order of their names. So the map of the tiers of a record, and its
 /// JSON, keep the order of a record of strata 0.21.
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema,

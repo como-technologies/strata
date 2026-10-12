@@ -14222,6 +14222,25 @@ fn one_function_builds_the_root_of_each_kind_of_record_and_no_root_moved() {
     common::make_fixtures(dir.path());
     let a = dir.path().join("a");
     let published = ops::snapshot_from_dir(&a, "a", "t0").unwrap();
+    // the order of the variables in the answer of Palette does not change the root: the record
+    // sorts them by name
+    let reversed = {
+        let to = dir.path().join("a-variables-reversed");
+        fs::create_dir_all(&to).unwrap();
+        for f in ["profile.json", "manifests.json"] {
+            fs::copy(a.join(f), to.join(f)).unwrap();
+        }
+        let mut vars = read_json(&a.join("variables.json"));
+        vars["variables"].as_array_mut().unwrap().reverse();
+        fs::write(
+            to.join("variables.json"),
+            serde_json::to_string_pretty(&vars).unwrap(),
+        )
+        .unwrap();
+        ops::snapshot_from_dir(&to, "a", "t0").unwrap()
+    };
+    assert_eq!(reversed.variables, published.variables);
+    assert_eq!(reversed.root, published.root, "the sort of the variables");
     // the draft of `a`: one more line in the values of its Kubernetes pack
     let draft = {
         let profile = read_json(&a.join("profile.json"));
