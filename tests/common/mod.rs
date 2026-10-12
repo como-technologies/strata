@@ -32,6 +32,7 @@
 
 use std::fs;
 use std::path::Path;
+use std::process::Command;
 
 use serde_json::{Value, json};
 
@@ -135,8 +136,8 @@ fn write_profile(
             "version": version,
             "published": {"cloudType": "aws", "type": "cluster", "packs": packs},
             "versions": [
-                {"uid": "64f0000000000000000000a1", "version": "1.2.0"},
-                {"uid": "64f0000000000000000000b2", "version": "1.3.0"},
+                {"uid": UID_A, "version": "1.2.0"},
+                {"uid": UID_B, "version": "1.3.0"},
             ],
         },
         "status": {"isPublished": true, "inUseClusterUids": in_use},
@@ -163,10 +164,20 @@ fn write_profile(
 /// The uid every cluster fixture carries: the fixtures are one cluster at different moments.
 pub const CLUSTER_UID: &str = "c1a5000000000000000000c1";
 
+/// The uid of the fixture a, `lab-profile@1.2.0`, and of each fixture made from a.
+pub const UID_A: &str = "64f0000000000000000000a1";
+
+/// The uid of the fixture b, `lab-profile@1.3.0`.
+pub const UID_B: &str = "64f0000000000000000000b2";
+
+/// The uid of the fixture addons, `lab-addons@2.0.0`.
+pub const UID_ADDONS: &str = "64f0000000000000000000d4";
+
 /// A cluster variable value that must never reach a snapshot.
 pub const SECRET_VALUE: &str = "s3cr3t-value";
 
-fn read_json(path: &Path) -> Value {
+/// The JSON document in the file at `path`.
+pub fn read_json(path: &Path) -> Value {
     serde_json::from_str(&fs::read_to_string(path).unwrap()).unwrap()
 }
 
@@ -384,7 +395,7 @@ pub fn make_fixtures(root: &Path) {
     ]});
     write_profile(
         &root.join("a"),
-        "64f0000000000000000000a1",
+        UID_A,
         "1.2.0",
         packs_a(K8S_VALUES_A),
         manifests_a(K8S_VALUES_A),
@@ -396,7 +407,7 @@ pub fn make_fixtures(root: &Path) {
     reversed.reverse();
     write_profile(
         &root.join("a-reversed"),
-        "64f0000000000000000000a1",
+        UID_A,
         "1.2.0",
         reversed,
         manifests_a(K8S_VALUES_A),
@@ -405,7 +416,7 @@ pub fn make_fixtures(root: &Path) {
     );
     write_profile(
         &root.join("a2"),
-        "64f0000000000000000000a1",
+        UID_A,
         "1.2.0",
         packs_a(K8S_VALUES_A2),
         manifests_a(K8S_VALUES_A2),
@@ -588,7 +599,7 @@ pub fn make_fixtures(root: &Path) {
     ]});
     write_profile(
         &root.join("b"),
-        "64f0000000000000000000b2",
+        UID_B,
         "1.3.0",
         packs_b,
         manifests_b,
@@ -598,7 +609,7 @@ pub fn make_fixtures(root: &Path) {
 
     write_profile(
         &root.join("addons"),
-        "64f0000000000000000000d4",
+        UID_ADDONS,
         "2.0.0",
         vec![pack_ref(
             "nginx-ingress",
@@ -678,17 +689,9 @@ pub fn text(bytes: &[u8]) -> String {
 
 /// Run git in `dir` with no user or global configuration, so signing settings cannot leak in.
 pub fn git(dir: &Path, args: &[&str]) -> std::process::Output {
-    let o = std::process::Command::new("git")
-        .args(args)
-        .current_dir(dir)
-        .env("GIT_CONFIG_GLOBAL", "/dev/null")
-        .env("GIT_CONFIG_SYSTEM", "/dev/null")
-        .env("GIT_AUTHOR_NAME", "t")
-        .env("GIT_AUTHOR_EMAIL", "t@example.com")
-        .env("GIT_COMMITTER_NAME", "t")
-        .env("GIT_COMMITTER_EMAIL", "t@example.com")
-        .output()
-        .unwrap();
+    let mut c = Command::new("git");
+    c.args(args).current_dir(dir);
+    let o = isolate_git(&mut c).output().unwrap();
     assert!(o.status.success(), "git {args:?}: {}", text(&o.stderr));
     o
 }
@@ -741,4 +744,231 @@ pub fn candidate_snapshot(
         "t0",
         &strata::progress::Progress::silent(),
     )
+}
+
+// ---- the routes of Palette ---------------------------------------------------------------------
+//
+// The crate names each route in a const of its own that is not public, so the tests name the
+// route again here, in one place.
+
+/// The profile listing, `GET /v1/dashboard/clusterprofiles/metadata`.
+pub const PROFILE_LISTING: &str = "/v1/dashboard/clusterprofiles/metadata";
+
+/// The profile search, `POST /v1/dashboard/clusterprofiles?limit=50`.
+pub const PROFILE_SEARCH: &str = "/v1/dashboard/clusterprofiles?limit=50";
+
+/// The cluster listing, `GET /v1/dashboard/spectroclusters/meta`.
+pub const CLUSTER_LISTING: &str = "/v1/dashboard/spectroclusters/meta";
+
+/// The project listing, `GET /v1/dashboard/projects/metadata`.
+pub const PROJECT_LISTING: &str = "/v1/dashboard/projects/metadata";
+
+/// The cluster search, `POST /v1/dashboard/spectroclusters/search?limit=50`.
+pub const CLUSTER_SEARCH: &str = "/v1/dashboard/spectroclusters/search?limit=50";
+
+/// The schema of the cluster search: the properties that a search can filter on.
+pub const CLUSTER_SEARCH_SCHEMA: &str = "/v1/dashboard/spectroclusters/search/schema";
+
+/// The edge host search, `POST /v1/dashboard/edgehosts/search?limit=50`.
+pub const EDGE_HOST_SEARCH: &str = "/v1/dashboard/edgehosts/search?limit=50";
+
+/// The key of a POST to `route` in the in-memory Palette, for one answer to each body.
+pub fn post(route: &str) -> String {
+    format!("POST {route}")
+}
+
+/// The document of the profile version `uid`, `GET /v1/clusterprofiles/{uid}`.
+pub fn profile_route(uid: &str) -> String {
+    format!("/v1/clusterprofiles/{uid}")
+}
+
+/// The pack manifests of the profile version `uid`.
+pub fn manifests_route(uid: &str) -> String {
+    format!("/v1/clusterprofiles/{uid}/packs/manifests")
+}
+
+/// The variables of the profile version `uid`.
+pub fn variables_route(uid: &str) -> String {
+    format!("/v1/clusterprofiles/{uid}/variables")
+}
+
+/// The pack listing of the pack `name`, as strata asks for its first page.
+pub fn pack_listing_route(name: &str) -> String {
+    format!("/v1/packs?filters=spec.name={name}&limit=100&offset=0")
+}
+
+// ---- the profile documents ---------------------------------------------------------------------
+
+/// A template of a profile version: the cloud type, the type of the profile, and its packs.
+pub fn template(cloud: &str, kind: &str, packs: Value) -> Value {
+    json!({"cloudType": cloud, "type": kind, "packs": packs})
+}
+
+/// A template with no pack: the published template of a version that nobody published, or the
+/// draft of a version with no draft.
+pub fn no_template() -> Value {
+    json!({"packs": []})
+}
+
+/// The document of the profile version `uid`, as `GET /v1/clusterprofiles/{uid}` gives it.
+///
+/// `published` and `draft` are its two templates. `status.isPublished` is true when the published
+/// template has a pack. With `draft` None, the document has no draft template at all.
+pub fn profile_document(
+    uid: &str,
+    name: &str,
+    version: &str,
+    published: Value,
+    draft: Option<Value>,
+) -> Value {
+    let is_published = published["packs"].as_array().is_some_and(|p| !p.is_empty());
+    let mut doc = json!({
+        "metadata": {"name": name, "uid": uid},
+        "spec": {"version": version, "published": published},
+        "status": {"isPublished": is_published, "inUseClusterUids": []},
+    });
+    if let Some(draft) = draft {
+        doc["spec"]["draft"] = draft;
+    }
+    doc
+}
+
+/// Serve the three documents of the profile version `uid`: its document, its pack manifests,
+/// and its variables.
+pub fn serve_profile(
+    api: strata::api::MemoryApi,
+    uid: &str,
+    document: Value,
+    manifests: Value,
+    variables: Value,
+) -> strata::api::MemoryApi {
+    api.with(profile_route(uid), document)
+        .with(manifests_route(uid), manifests)
+        .with(variables_route(uid), variables)
+}
+
+/// Serve the raw files of the profile fixture `name` under `raw_root` as the version `uid`.
+pub fn serve_fixture(
+    api: strata::api::MemoryApi,
+    raw_root: &Path,
+    name: &str,
+    uid: &str,
+) -> strata::api::MemoryApi {
+    let d = raw_root.join(name);
+    serve_profile(
+        api,
+        uid,
+        read_json(&d.join("profile.json")),
+        read_json(&d.join("manifests.json")),
+        read_json(&d.join("variables.json")),
+    )
+}
+
+/// The answer of `packs/manifests` for a version whose packs have no manifest.
+pub fn no_manifests() -> Value {
+    json!({"spec": {"packs": []}})
+}
+
+/// The answer of `variables` for a version with no variable.
+pub fn no_variables() -> Value {
+    json!({"variables": []})
+}
+
+/// One manifest of a pack, as `GET /v1/clusterprofiles/{uid}/packs/{pack}/manifests/{manifest}`
+/// gives it: the content of each template, with the digest that Palette gives a content, and no
+/// digest for no content.
+pub fn manifest_entity(uid: &str, name: &str, published: &str, draft: &str) -> Value {
+    let data = |content: &str| {
+        let digest = if content.is_empty() {
+            String::new()
+        } else {
+            format!("sha1:{}", content.len())
+        };
+        json!({"content": content, "digest": digest})
+    };
+    json!({"metadata": {"name": name, "uid": uid},
+           "spec": {"published": data(published), "draft": data(draft)}})
+}
+
+/// The content of the manifest `name` in a record, or None when no pack of it has the manifest.
+pub fn manifest_content<'a>(snap: &'a strata::snapshot::Snapshot, name: &str) -> Option<&'a str> {
+    snap.packs
+        .iter()
+        .flat_map(|p| &p.manifests)
+        .find(|m| m.name == name)
+        .map(|m| m.content.as_str())
+}
+
+// ---- the refs and the listings -----------------------------------------------------------------
+
+/// The ref of the cluster `uid`: of its profile `profile` when one is named, and of the update
+/// that waits for it when `pending` is true.
+pub fn cluster_ref(uid: &str, profile: Option<&str>, pending: bool) -> strata::reference::Ref {
+    strata::reference::Ref::Cluster {
+        uid: uid.to_string(),
+        profile: profile.map(str::to_string),
+        pending,
+    }
+}
+
+/// The listing that `options` asks for, from the in-memory Palette `api`, read at `t1` with no
+/// progress output.
+pub fn listing(
+    api: &strata::api::MemoryApi,
+    options: &strata::ops::ListOptions,
+) -> strata::Result<strata::ops::Listing> {
+    strata::ops::list(
+        options,
+        |_| Ok(strata::api::Palette::new(api)),
+        "t1",
+        &strata::progress::Progress::silent(),
+    )
+}
+
+// ---- the processes -----------------------------------------------------------------------------
+
+/// The strata binary that cargo built for the tests.
+pub fn strata_bin() -> &'static Path {
+    Path::new(env!("CARGO_BIN_EXE_strata"))
+}
+
+/// `PATH` with the directory `bin` first, so that a stand-in command in it runs in place of the
+/// real one.
+pub fn path_with(bin: &Path) -> String {
+    format!("{}:{}", bin.display(), std::env::var("PATH").unwrap())
+}
+
+/// The lines of the file at `path`, or none when there is no file.
+pub fn lines_of(path: &Path) -> Vec<String> {
+    fs::read_to_string(path)
+        .unwrap_or_default()
+        .lines()
+        .map(str::to_string)
+        .collect()
+}
+
+/// Give `command` no user or global git configuration and a fixed author, so that a signing
+/// setting of the machine cannot reach the test.
+pub fn isolate_git(command: &mut Command) -> &mut Command {
+    command
+        .env("GIT_CONFIG_GLOBAL", "/dev/null")
+        .env("GIT_CONFIG_SYSTEM", "/dev/null")
+        .env("GIT_AUTHOR_NAME", "t")
+        .env("GIT_AUTHOR_EMAIL", "t@example.com")
+        .env("GIT_COMMITTER_NAME", "t")
+        .env("GIT_COMMITTER_EMAIL", "t@example.com")
+}
+
+/// Write the record of the raw profile fixture `name` under `raw` to `out` with the strata
+/// binary, as `snapshot --from-raw` writes one.
+pub fn snapshot_from_raw(raw: &Path, name: &str, out: &Path) {
+    let o = Command::new(strata_bin())
+        .args(["snapshot", "--from-raw"])
+        .arg(raw.join(name))
+        .arg("-o")
+        .arg(out)
+        .env("STRATA_QUIET", "1")
+        .output()
+        .unwrap();
+    assert!(o.status.success(), "snapshot {name}: {}", text(&o.stderr));
 }
