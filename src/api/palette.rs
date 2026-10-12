@@ -172,13 +172,15 @@ fn query_value(text: &str) -> String {
     out
 }
 
-/// `(version, uid)` of each item of the profile listing named `name`.
+/// `(version, uid)` of each item of the profile listing named `name`. An item with no version
+/// or no uid is not a version that a resolve can give: the resolve skips it, so a name with no
+/// other item is [`Error::ProfileNotFound`].
 fn listed_versions<'a>(
     listing: &'a Value,
     name: &'a str,
 ) -> impl Iterator<Item = (String, String)> + 'a {
     profile_versions(listing)
-        .filter(move |v| v.name == name)
+        .filter(move |v| v.name == name && !v.version.is_empty() && !v.uid.is_empty())
         .map(|v| (v.version, v.uid))
 }
 
@@ -1818,6 +1820,26 @@ mod tests {
         assert!(matches!(err, Error::ProfileNotFound { .. }), "{err}");
         assert!(err.to_string().contains("'nope'"));
         assert!(err.to_string().contains("'latest'"));
+    }
+
+    #[test]
+    fn an_item_with_no_version_or_no_uid_is_not_a_version_of_the_name() {
+        // the one parse keeps each item of the listing; a resolve skips an item with no version
+        // or no uid, so a name with no other item is profile-not-found, not an empty uid
+        let listing = json!({"items": [
+            {"metadata": {"name": "x"}},
+            {"metadata": {"name": "y", "uid": "u1"}},
+            {"metadata": {"name": "y"}, "spec": {"version": "2.0.0"}},
+            {"metadata": {"name": "y", "uid": "u2"}, "spec": {"version": "1.0.0"}},
+        ]});
+        let p =
+            Palette::new(MemoryApi::new().with("/v1/dashboard/clusterprofiles/metadata", listing));
+        let err = p.resolve_latest("x").unwrap_err();
+        assert!(matches!(err, Error::ProfileNotFound { .. }), "{err}");
+        assert_eq!(p.resolve_latest("y").unwrap(), "u2");
+        assert_eq!(p.resolve("y", "1.0.0").unwrap(), "u2");
+        let err = p.resolve("y", "2.0.0").unwrap_err();
+        assert!(matches!(err, Error::ProfileNotFound { .. }), "{err}");
     }
 
     #[test]

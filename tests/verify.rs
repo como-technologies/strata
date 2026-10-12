@@ -5317,6 +5317,35 @@ fn candidate_errors_name_what_is_wrong() {
 }
 
 #[test]
+fn the_registry_field_of_a_candidate_takes_a_name_or_a_uid() {
+    // `registry` names the registry as the listing names it, by name or by uid (#327): the three
+    // candidates give one record
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let api = serve_registry_for_b(dir.path()).with(
+        REGISTRY_LISTING,
+        serde_json::json!({"items": [{"name": "Public Repo", "uid": "reg-public", "kind": "pack"}]}),
+    );
+    let b = read_json(&dir.path().join("b").join("profile.json"));
+    let layers: Vec<Value> = b["spec"]["published"]["packs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| serde_json::json!({"name": p["name"], "version": p["version"]}))
+        .collect();
+    let root_with = |field: &str, value: &str| {
+        let mut doc = serde_json::json!({"name": "p", "version": "1", "layers": layers.clone()});
+        doc[field] = Value::String(value.to_string());
+        let f = dir.path().join(format!("{field}.yaml"));
+        write_yaml(&f, &doc);
+        candidate_snapshot(&f, &api).unwrap().root
+    };
+    let by_uid = root_with("registryUid", "reg-public");
+    assert_eq!(root_with("registry", "Public Repo"), by_uid);
+    assert_eq!(root_with("registry", "reg-public"), by_uid);
+}
+
+#[test]
 fn an_explicit_tag_equal_to_the_version_is_accepted_as_palette_does() {
     // Palette stores the tag a profile was authored with. A profile built with Terraform pins the
     // version itself, `24.04`, although the registry names that version `LTS__24.x`; the live
