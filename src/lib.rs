@@ -75,6 +75,7 @@ pub mod config;
 pub mod diff;
 pub mod error;
 pub mod impact;
+pub(crate) mod json;
 pub mod layer;
 pub mod ops;
 pub(crate) mod policy;

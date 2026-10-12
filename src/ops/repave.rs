@@ -12,6 +12,7 @@ use crate::api::{Palette, PaletteApi};
 use crate::cluster_template::ClusterTemplateRef;
 use crate::diff::{ImpactLevel, PaletteRepave};
 use crate::error::{Error, Result};
+use crate::json::arr;
 use crate::snapshot::{AppliedProfile, ClusterSource, Pack, Snapshot, SubjectKind};
 
 /// A profile type that builds a cluster: its OS and Kubernetes layers.
@@ -176,15 +177,10 @@ fn pending_body(doc: &Value, pending: &Snapshot, source: &ClusterSource) -> Resu
             ),
         });
     }
-    let templates: Vec<&Value> = doc
-        .pointer("/spec/clusterProfileTemplates")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .collect();
+    let templates = arr(doc, "/spec/clusterProfileTemplates");
     let running_names: BTreeSet<&str> = templates
         .iter()
-        .flat_map(|t| t["packs"].as_array().into_iter().flatten())
+        .flat_map(|t| arr(t, "/packs"))
         .filter_map(|p| p["name"].as_str())
         .collect();
     let new_packs: Vec<&Pack> = pending
@@ -198,8 +194,7 @@ fn pending_body(doc: &Value, pending: &Snapshot, source: &ClusterSource) -> Resu
             let current = templates
                 .iter()
                 .find(|t| t["uid"] == r.uid.as_str())
-                .and_then(|t| t["packs"].as_array())
-                .map_or(&[][..], Vec::as_slice);
+                .map_or(&[][..], |t| arr(t, "/packs"));
             let covered = source.profiles.iter().any(|p| p.uid == r.uid);
             match pending_packs(current, &pending.packs, &new_packs) {
                 Some(packs) if covered => json!({"uid": r.uid, "packValues": packs}),

@@ -586,7 +586,7 @@ fn progress(quiet: bool) -> Progress {
 fn connect(progress: Progress, project: Option<&str>) -> Result<Palette<Retry<HttpApi>>> {
     let mut config = Config::from_env()?;
     match project {
-        Some(p) => config.project_uid = Some(p.to_string()).filter(|p| !p.is_empty()),
+        Some(p) => config.project_uid = ops::scope_of(p).map(str::to_string),
         None => {
             if let Some(name) = config.project_name.clone() {
                 config.project_uid = Some(project_uid_named(&config, &name, progress)?);
@@ -685,9 +685,8 @@ fn cmd_compare(a: &CompareArgs) -> Result<ExitCode> {
         let scope = [&sa, &sb]
             .into_iter()
             .find(|s| s.source.cluster.is_some())
-            .map(|s| s.source.project_uid.clone())
-            .filter(|p| !p.is_empty());
-        let palette = connect(progress, scope.as_deref())?;
+            .and_then(|s| ops::scope_of(&s.source.project_uid));
+        let palette = connect(progress, scope)?;
         if a.repave {
             d.palette_repave = Some(ops::palette_repave(
                 &palette,
@@ -1038,7 +1037,7 @@ fn cmd_verify(a: &VerifyArgs) -> Result<ExitCode> {
     let recorded = Snapshot::load(&paths[0])?;
     let scope = project
         .as_deref()
-        .or(Some(recorded.source.project_uid.as_str()).filter(|p| !p.is_empty()));
+        .or(ops::scope_of(&recorded.source.project_uid));
     let palette = connect(progress, scope)?;
     let v = ops::verify_with(&recorded, &palette, &now_utc(), &options, &progress)?;
     let renderer = a.out.renderer();
@@ -1092,10 +1091,7 @@ fn cmd_behind(a: &BehindArgs) -> Result<ExitCode> {
     let paths = expand_records(&a.records)?;
     let since = match &a.since {
         Some(path) => {
-            let text = std::fs::read_to_string(path).map_err(|source| Error::Io {
-                path: path.clone(),
-                source,
-            })?;
+            let text = ops::read_file(path)?;
             let not_one = || Error::Usage {
                 message: format!(
                     "--since {} is not a {} document: give the JSON of a previous run",

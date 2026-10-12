@@ -16,7 +16,9 @@ use crate::reference::Ref;
 use crate::snapshot::{Snapshot, Tool};
 
 use super::list::{ListedCluster, TENANT_SCOPE, list_clusters, name_projects_of};
-use super::{items, text};
+use crate::json::{arr, first_nonempty, items, str_at, strings, text};
+
+use super::scope_of;
 
 /// Schema id of the document that `snapshot` writes for a set of clusters.
 pub const SET_SCHEMA: &str = "strata-set/1";
@@ -173,21 +175,11 @@ pub struct Selection {
 /// for each filter.
 pub fn saved_filters<A: PaletteApi>(tenant: &Palette<A>) -> Result<Vec<SavedFilter>> {
     let listing = tenant.tag_filters()?;
-    let entries: Vec<(String, String)> = listing
-        .get("items")
-        .and_then(Value::as_array)
-        .or_else(|| listing.as_array())
-        .into_iter()
-        .flatten()
+    let entries: Vec<(String, String)> = items(&listing)
         .map(|it| {
-            let pick = |a: &str, b: &str| {
-                Some(text(it, a))
-                    .filter(|s| !s.is_empty())
-                    .unwrap_or_else(|| text(it, b))
-            };
             (
-                pick("/metadata/name", "/name"),
-                pick("/metadata/uid", "/uid"),
+                first_nonempty(&[str_at(it, "/metadata/name"), str_at(it, "/name")]),
+                first_nonempty(&[str_at(it, "/metadata/uid"), str_at(it, "/uid")]),
             )
         })
         .filter(|(_, uid)| !uid.is_empty())
@@ -202,37 +194,18 @@ pub fn saved_filters<A: PaletteApi>(tenant: &Palette<A>) -> Result<Vec<SavedFilt
 
 /// A saved tag filter from its document.
 fn filter_of(doc: &Value, name: &str, uid: &str) -> SavedFilter {
-    let group = doc
-        .pointer("/spec/filterGroup")
-        .cloned()
-        .unwrap_or(Value::Null);
-    let conditions = group
-        .get("filters")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
+    let conditions = arr(doc, "/spec/filterGroup/filters")
+        .iter()
         .map(|f| TagCondition {
             key: text(f, "/key"),
-            values: f
-                .get("values")
-                .and_then(Value::as_array)
-                .map(|vs| {
-                    vs.iter()
-                        .filter_map(|v| v.as_str().map(str::to_string))
-                        .collect()
-                })
-                .unwrap_or_default(),
+            values: strings(f, "/values"),
             negation: f.get("negation").and_then(Value::as_bool).unwrap_or(false),
         })
         .collect();
     SavedFilter {
-        name: Some(text(doc, "/metadata/name"))
-            .filter(|n| !n.is_empty())
-            .unwrap_or_else(|| name.to_string()),
+        name: first_nonempty(&[str_at(doc, "/metadata/name"), name]),
         uid: uid.to_string(),
-        conjunction: Some(text(&group, "/conjunction"))
-            .filter(|c| !c.is_empty())
-            .unwrap_or_else(|| "and".to_string()),
+        conjunction: first_nonempty(&[str_at(doc, "/spec/filterGroup/conjunction"), "and"]),
         conditions,
     }
 }
@@ -459,10 +432,10 @@ where
             profile: None,
             pending: false,
         };
-        let scope = Some(cluster.project_uid.clone()).filter(|p| !p.is_empty());
+        let scope = scope_of(&cluster.project_uid);
         let snap = super::snapshot_for(
             &reference,
-            || connect(scope.as_deref()),
+            || connect(scope),
             fetched_at,
             progress,
         )

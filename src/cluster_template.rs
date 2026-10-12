@@ -9,6 +9,8 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::json::{arr, text};
+
 /// A cluster template: one that links a profile version, or one that governs a cluster.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
@@ -28,11 +30,8 @@ impl ClusterTemplateRef {
     /// `status.inUseClusterTemplates`, once for each uid, in the order of Palette.
     pub(crate) fn linked(profile: &Value) -> Vec<Self> {
         let mut seen = BTreeSet::new();
-        profile
-            .pointer("/status/inUseClusterTemplates")
-            .and_then(Value::as_array)
-            .into_iter()
-            .flatten()
+        arr(profile, "/status/inUseClusterTemplates")
+            .iter()
             .map(|t| ClusterTemplateRef {
                 uid: text(t, "/uid"),
                 name: text(t, "/name"),
@@ -52,14 +51,6 @@ impl ClusterTemplateRef {
             project_uid: text(cluster, "/spec/clusterTemplate/projectUid"),
         })
     }
-}
-
-/// The string at `ptr` in `v`, or empty.
-fn text(v: &Value, ptr: &str) -> String {
-    v.pointer(ptr)
-        .and_then(Value::as_str)
-        .unwrap_or_default()
-        .to_string()
 }
 
 #[cfg(test)]

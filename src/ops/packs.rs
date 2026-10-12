@@ -8,9 +8,8 @@ use crate::api::{Palette, PaletteApi};
 use crate::error::{Error, Result};
 use crate::progress::Progress;
 use crate::snapshot::Tool;
+use crate::json::{arr, opt_text, strings, text};
 use crate::version;
-
-use super::text;
 
 /// The schema id of the document `packs` writes.
 pub const PACKS_SCHEMA: &str = "strata-packs/1";
@@ -182,8 +181,7 @@ fn merged_tags(answers: &[Value]) -> Vec<Value> {
     let mut seen = std::collections::BTreeSet::new();
     answers
         .iter()
-        .filter_map(|a| a.get("tags").and_then(Value::as_array))
-        .flatten()
+        .flat_map(|a| arr(a, "/tags"))
         .filter(|t| seen.insert((text(t, "/packUid"), text(t, "/version"), text(t, "/tag"))))
         .cloned()
         .collect()
@@ -283,7 +281,7 @@ where
         // flag
         let versions_offered = mine
             .iter()
-            .filter_map(|e| Some(text(e, "/spec/version")).filter(|v| !v.is_empty()))
+            .filter_map(|e| opt_text(e, "/spec/version"))
             .collect::<std::collections::BTreeSet<_>>()
             .len();
         // one state for the registry, when every version of the pack in it has the same one
@@ -302,15 +300,7 @@ where
             if versions.iter().any(|v: &PackBuild| v.version == version) {
                 continue; // the paged listing repeats a version
             }
-            let cloud_types: Vec<String> = e
-                .pointer("/spec/cloudTypes")
-                .and_then(Value::as_array)
-                .map(|a| {
-                    a.iter()
-                        .filter_map(|c| c.as_str().map(str::to_string))
-                        .collect()
-                })
-                .unwrap_or_default();
+            let cloud_types = strings(e, "/spec/cloudTypes");
             if let Some(cloud) = &options.cloud
                 && !supports(&cloud_types, cloud)
             {
@@ -319,13 +309,7 @@ where
             let pack_uid = text(e, "/metadata/uid");
             let mut rows: Vec<(usize, String)> = tag_rows(&tags, e)
                 .into_iter()
-                .map(|t| {
-                    let above = t
-                        .pointer("/parentTags")
-                        .and_then(Value::as_array)
-                        .map_or(0, Vec::len);
-                    (above, text(t, "/tag"))
-                })
+                .map(|t| (arr(t, "/parentTags").len(), text(t, "/tag")))
                 .collect();
             // the exact tag first, then the floating tags above it. A tag row names every tag
             // above it, so the row with the most of them is the most exact. A registry that

@@ -8,8 +8,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::cluster_template::ClusterTemplateRef;
-
-use super::text;
+use crate::json::{arr, strings, text};
 
 /// The consumers that a profile document names, by kind.
 ///
@@ -46,20 +45,11 @@ impl ConsumerCounts {
 pub(super) fn consumer_uids(doc: &Value) -> Vec<String> {
     let mut seen = BTreeSet::new();
     let mut uids = Vec::new();
-    let by_uid = doc
-        .pointer("/status/inUseClusterUids")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter_map(Value::as_str)
-        .map(str::to_string);
-    let named = doc
-        .pointer("/status/inUseClusters")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
+    let by_uid = strings(doc, "/status/inUseClusterUids");
+    let named = arr(doc, "/status/inUseClusters")
+        .iter()
         .map(|n| text(n, "/uid"));
-    for u in by_uid.chain(named) {
+    for u in by_uid.into_iter().chain(named) {
         if !u.is_empty() && seen.insert(u.clone()) {
             uids.push(u);
         }

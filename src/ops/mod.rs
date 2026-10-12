@@ -7,12 +7,12 @@ use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 use std::path::Path;
 
-use serde_json::Value;
 
 use crate::api::{Palette, PaletteApi, RawCluster, RawProfile};
 use crate::candidate::LoadedCandidate;
 use crate::diff::{self, Diff};
 use crate::error::{Error, Result};
+use crate::json::text;
 use crate::progress::Progress;
 use crate::reference::Ref;
 use crate::snapshot::{GroupMember, Snapshot, SubjectKind};
@@ -387,26 +387,27 @@ pub fn write_file(path: &Path, text: &str) -> Result<()> {
     std::fs::write(path, text).map_err(io)
 }
 
+/// Read the text of the file at `path`. Every text file strata reads goes through here.
+///
+/// # Errors
+///
+/// `Io`, with `path`, when the file cannot be read.
+pub fn read_file(path: &Path) -> Result<String> {
+    std::fs::read_to_string(path).map_err(|source| Error::Io {
+        path: path.to_path_buf(),
+        source,
+    })
+}
+
 /// Compare two snapshots.
 pub fn compare(a: &Snapshot, b: &Snapshot, generated_at: &str) -> Diff {
     diff::compute(a, b, generated_at, None)
 }
 
-/// The string at `ptr` in `v`, or empty.
-fn text(v: &Value, ptr: &str) -> String {
-    v.pointer(ptr)
-        .and_then(Value::as_str)
-        .unwrap_or("")
-        .to_string()
-}
-
-/// The entries of a listing: its `items` array, or the document itself when it is the array.
-fn items(doc: &Value) -> impl Iterator<Item = &Value> {
-    doc.get("items")
-        .or(Some(doc))
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
+/// The scope that the project uid `project` names: `None`, the scope of the connection, when it
+/// is empty. A record of the tenant scope and a cluster with no project both give an empty uid.
+pub fn scope_of(project: &str) -> Option<&str> {
+    Some(project).filter(|p| !p.is_empty())
 }
 
 /// The client that reads a cluster of project `project`: the one already connected for that

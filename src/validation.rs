@@ -6,6 +6,8 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::json::{arr, text};
+
 /// Palette's answer to `POST /v1/spectroclusters/{uid}/validate/packs`, for a change from what a
 /// cluster runs to a profile version.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -46,14 +48,6 @@ pub struct PaletteRefusal {
     pub message: String,
 }
 
-/// The text of `key` in a JSON object, or empty when it is not there.
-fn text(v: &Value, key: &str) -> String {
-    v.get(key)
-        .and_then(Value::as_str)
-        .unwrap_or_default()
-        .to_string()
-}
-
 impl PaletteRefusal {
     /// `<code> <pack>: <message>`, with no pack for a refusal of the whole request.
     pub fn line(&self) -> String {
@@ -67,22 +61,15 @@ impl PaletteRefusal {
     /// The errors of a `v1ConstraintValidatorResponse`: `results[]`, each with the `name` of its
     /// pack and `errors[]` of `code` and `message`.
     pub fn from_constraints(answer: &Value) -> Vec<PaletteRefusal> {
-        answer
-            .get("results")
-            .and_then(Value::as_array)
-            .into_iter()
-            .flatten()
+        arr(answer, "/results")
+            .iter()
             .flat_map(|r| {
-                let pack = text(r, "name");
-                r.get("errors")
-                    .and_then(Value::as_array)
-                    .into_iter()
-                    .flatten()
-                    .map(move |e| PaletteRefusal {
-                        pack: pack.clone(),
-                        code: text(e, "code"),
-                        message: text(e, "message"),
-                    })
+                let pack = text(r, "/name");
+                arr(r, "/errors").iter().map(move |e| PaletteRefusal {
+                    pack: pack.clone(),
+                    code: text(e, "/code"),
+                    message: text(e, "/message"),
+                })
             })
             .collect()
     }
@@ -100,7 +87,7 @@ impl PaletteRefusal {
         Some(PaletteRefusal {
             pack: String::new(),
             code,
-            message: text(&error, "message"),
+            message: text(&error, "/message"),
         })
     }
 }
@@ -130,11 +117,8 @@ impl PaletteValidation {
     /// Palette gives the error of a pack under each profile that holds a pack of that name, so
     /// strata keeps one copy.
     pub fn from_palette(cluster_uid: &str, answer: &Value) -> PaletteValidation {
-        let errors = answer
-            .get("profiles")
-            .and_then(Value::as_array)
-            .into_iter()
-            .flatten()
+        let errors = arr(answer, "/profiles")
+            .iter()
             .filter_map(|p| p.get("packs"))
             .chain(answer.get("machinePools"))
             .flat_map(PaletteRefusal::from_constraints)

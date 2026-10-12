@@ -19,6 +19,7 @@ use crate::snapshot::{Snapshot, Tool};
 use crate::version;
 
 use super::packs::{PackBuild, PackOptions, registry_packs, supports};
+use super::scope_of;
 
 /// The schema id of the document `behind` writes.
 pub const BEHIND_SCHEMA: &str = "strata-behind/1";
@@ -263,7 +264,7 @@ where
     let mut syncs: BTreeMap<String, RegistrySyncNote> = BTreeMap::new();
     let mut out: Vec<(Pin, String)> = Vec::with_capacity(pins.len());
     for ((name, registry_uid, _, _), (mut pin, project)) in pins {
-        let scope = Some(project.as_str()).filter(|p| !p.is_empty());
+        let scope = scope_of(&project);
         let offered = offers
             .entry((name.clone(), registry_uid.clone()))
             .or_insert_with(|| {
@@ -361,7 +362,7 @@ where
         for (pin, project) in out.iter_mut().filter(|(p, _)| p.behind) {
             let to = pin.newer[0].version.clone();
             progress.note(&format!("comparing {} {} with {to}", pin.name, pin.version));
-            let scope = Some(project.as_str()).filter(|p| !p.is_empty());
+            let scope = scope_of(project);
             let bump = connect(scope).and_then(|palette| {
                 bump_of(
                     &pin.name,
