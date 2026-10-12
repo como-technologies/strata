@@ -609,9 +609,9 @@ pub(crate) fn edge_hosts_line(r: &ConsumersReport) -> String {
     }
 }
 
-/// `second reading: 3 of 3 clusters read`, or why the second reading was not done: `--list-only`
-/// asked, an app profile has none, or the search or the listing failed. `code` puts the flag in
-/// the form of the report.
+/// `second reading: 3 of 3 clusters read`, or why the second reading was not done. `--list-only`
+/// asked for none, an app profile has none, or the search or the listing failed. `code` puts the
+/// flag in the form of the report.
 pub(crate) fn second_reading_line(read: &ClustersRead, code: fn(&str) -> String) -> String {
     // The consumer list of a profile is empty on an error too, so the second reading says how
     // far it got.
@@ -675,8 +675,8 @@ pub(crate) fn record_word(status: RecordStatus) -> &'static str {
     }
 }
 
-/// The word of a diff: `IDENTICAL` for equal roots, `SAME CONTENT` for roots that differ only by
-/// the tag name of a pack or the uid that Palette mints, or `CHANGED`.
+/// The word of a diff: `IDENTICAL`, `SAME CONTENT`, or `CHANGED`. The roots of the same content
+/// differ only by the tag name of a pack, or by the uid that Palette mints.
 pub(crate) fn diff_word(d: &Diff) -> &'static str {
     if d.same {
         "IDENTICAL"
@@ -1039,8 +1039,8 @@ pub(crate) fn upstream_unknown_note(d: &Diff) -> Option<String> {
     })
 }
 
-/// `pack csi/x has no upstream digest`, or `packs csi/x, csi/y have no upstream digest`: the
-/// start of each sentence about the packs whose archive a root cannot show.
+/// `pack csi/x has no upstream digest`, or `packs csi/x, csi/y have no upstream digest`. Each
+/// sentence about the packs whose archive a root cannot show starts with it.
 pub(crate) fn no_upstream_digest(packs: &[String]) -> String {
     let (noun, verb) = if packs.len() == 1 {
         ("pack", "has")
@@ -1265,9 +1265,9 @@ fn verdict_case(v: &Verify) -> VerdictCase {
     }
 }
 
-/// The verdict of a record, in parts, so that each report builds its line one way: the terminal
-/// and the markdown put the subject before the sentence, and a row of the summary names the
-/// record in its own column.
+/// The verdict of a record, in parts, so that each report builds its line one way. The terminal
+/// and the markdown put the subject before the sentence. A row of the summary names the record
+/// in its own column.
 pub(crate) struct VerdictParts {
     /// `OK`, `UNVERIFIED`, or `DRIFT`.
     pub(crate) word: &'static str,
@@ -1456,8 +1456,8 @@ pub(crate) fn record_detail(r: &crate::ops::VerifiedRecord) -> String {
     detail
 }
 
-/// The sentence of a row of the summary: the verdict of the record, with what the diff of one
-/// record shows above its verdict, the last write of `--who`, and the sync of the registry.
+/// The sentence of a row of the summary: the verdict of the record, then what the report of one
+/// record shows above its verdict. The last write of `--who` and the sync of the registry end it.
 fn record_sentence(r: &VerifiedRecord) -> String {
     let sync = registry_sync_suffix(record_verify(r).and_then(|v| v.registry_sync.as_ref()));
     let verdict = r.diff.as_ref().and_then(|d| Some((d, d.verify.as_ref()?)));
@@ -1537,8 +1537,8 @@ pub fn renderer(format: Format, paint: Paint, compact: bool) -> Box<dyn Renderer
     }
 }
 
-/// One line of a diff of values: a leaf, or a value that a cluster gives a variable, with its
-/// path and its two sides as the reports show them.
+/// One line of a diff of values: a leaf, or a value that a cluster gives a variable. It holds
+/// the path and the two sides as the reports show them.
 pub(crate) struct OpLine {
     pub(crate) op: Op,
     pub(crate) path: String,
@@ -1788,8 +1788,8 @@ pub(crate) fn values_summary(v: &ValuesDiff) -> String {
     )
 }
 
-/// `values changed (not parseable as YAML on one side; use --full for a unified diff)`, for a
-/// pack whose values changed and did not parse on one side. `code` puts the flag in the form of
+/// `values changed (not parseable as YAML on one side; use --full for a unified diff)`. The
+/// values of the pack changed, and one side did not parse. `code` puts the flag in the form of
 /// the report.
 pub(crate) fn values_unparsed_sentence(code: fn(&str) -> String) -> String {
     format!(
