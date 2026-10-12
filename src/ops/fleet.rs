@@ -9,10 +9,10 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::api::{Palette, PaletteApi, SEARCH_TAGS, search_condition};
+use crate::api::{Palette, PaletteApi, SEARCH_TAGS, search_condition, search_filter, search_group};
 use crate::error::{Error, Result};
 use crate::progress::Progress;
-use crate::reference::Ref;
+use crate::reference::{Ref, one_named};
 use crate::snapshot::{Snapshot, Tool};
 
 use super::list::{ListedCluster, TENANT_SCOPE, list_clusters, name_projects_of};
@@ -213,21 +213,23 @@ fn filter_of(doc: &Value, name: &str, uid: &str) -> SavedFilter {
 /// The saved filter of that name or uid.
 fn find_filter<A: PaletteApi>(tenant: &Palette<A>, wanted: &str) -> Result<SavedFilter> {
     let filters = saved_filters(tenant)?;
-    let mut hits: Vec<&SavedFilter> = filters
+    let hits: Vec<&SavedFilter> = filters
         .iter()
         .filter(|f| f.name == wanted || f.uid == wanted)
         .collect();
-    match hits.len() {
-        1 => Ok(hits.remove(0).clone()),
-        0 => Err(Error::FilterNotFound {
+    one_named(
+        hits,
+        |f| f.uid.as_str(),
+        || Error::FilterNotFound {
             filter: wanted.to_string(),
             available: filters.iter().map(|f| f.name.clone()).collect(),
-        }),
-        _ => Err(Error::FilterNameAmbiguous {
+        },
+        |uids| Error::FilterNameAmbiguous {
             name: wanted.to_string(),
-            uids: hits.iter().map(|f| f.uid.clone()).collect(),
-        }),
-    }
+            uids,
+        },
+    )
+    .cloned()
 }
 
 /// The groups of the query: the labels of `--tag`, which must all hold, and the conditions of
@@ -276,13 +278,17 @@ pub fn select<A: PaletteApi>(
     let properties = tenant.cluster_search_properties()?;
     let (mut clusters, resolved, includes_virtual) = if properties.contains(SEARCH_TAGS) {
         progress.note("searching the clusters of the tenant");
-        let body = serde_json::json!({
-            "conjunction": "and",
-            "filterGroups": groups.iter().map(|(conjunction, conditions)| serde_json::json!({
-                "conjunction": conjunction,
-                "filters": conditions.iter().map(TagCondition::search_item).collect::<Vec<_>>(),
-            })).collect::<Vec<_>>(),
-        });
+        let body = search_filter(
+            groups
+                .iter()
+                .map(|(conjunction, conditions)| {
+                    search_group(
+                        conjunction,
+                        conditions.iter().map(TagCondition::search_item).collect(),
+                    )
+                })
+                .collect(),
+        );
         let found = tenant.cluster_search_with_virtual(&properties, &body, || {
             progress.note("searching the virtual clusters of the tenant")
         })?;

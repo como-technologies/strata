@@ -862,13 +862,7 @@ pub fn pack_snapshot<A: PaletteApi>(
         .filter(|e| str_at(e, "/spec/registryUid") == registry_uid)
         .map(|e| text(e, "/spec/version"))
         .collect();
-    let resolved = if version == LATEST {
-        here.iter()
-            .max_by(|a, b| crate::version::compare(a, b))
-            .cloned()
-    } else {
-        here.iter().find(|v| *v == version).cloned()
-    };
+    let resolved = crate::version::pick(here.iter(), |v| v.as_str(), version).cloned();
     let Some(resolved) = resolved else {
         let asked = visible.iter().filter(|(_, u)| *u == registry_uid);
         return Err(not_found(

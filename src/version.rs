@@ -2,6 +2,8 @@
 
 use std::cmp::Ordering;
 
+use crate::reference::LATEST;
+
 /// Compare two version strings naturally: runs of digits compare as numbers (leading zeros do not
 /// count), runs of anything else compare as text, and when one string is a prefix of the other
 /// the longer one is higher. This orders `1.30.6` above `1.29.10`, `22.04` above `20.04`, and
@@ -19,6 +21,22 @@ pub fn compare(a: &str, b: &str) -> Ordering {
         }
     }
     ra.len().cmp(&rb.len())
+}
+
+/// The item of `items` whose version is `wanted`, or the item with the highest version by
+/// [`compare`] when `wanted` is [`LATEST`]. `version_of` gives the version of an item. None when
+/// no item has the version, and when `items` is empty.
+pub(crate) fn pick<T>(
+    items: impl IntoIterator<Item = T>,
+    version_of: impl Fn(&T) -> &str,
+    wanted: &str,
+) -> Option<T> {
+    let mut items = items.into_iter();
+    if wanted == LATEST {
+        items.max_by(|a, b| compare(version_of(a), version_of(b)))
+    } else {
+        items.find(|item| version_of(item) == wanted)
+    }
 }
 
 /// Split into alternating runs of digits and non-digits.
@@ -81,6 +99,15 @@ mod tests {
         assert_eq!(compare("1.2.0", "1.2.0"), Ordering::Equal);
         assert_eq!(compare("", ""), Ordering::Equal);
         gt("1", "");
+    }
+
+    #[test]
+    fn pick_gives_the_wanted_version_or_the_highest_for_latest() {
+        let versions = ["1.9.0", "1.10.0", "1.2.0"];
+        assert_eq!(pick(versions, |v| *v, "1.9.0"), Some("1.9.0"));
+        assert_eq!(pick(versions, |v| *v, LATEST), Some("1.10.0"));
+        assert_eq!(pick(versions, |v| *v, "2.0.0"), None);
+        assert_eq!(pick(Vec::<&str>::new(), |v| *v, LATEST), None);
     }
 
     #[test]

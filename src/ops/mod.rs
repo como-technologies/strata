@@ -170,10 +170,7 @@ pub fn app_profile_snapshot<A: PaletteApi>(
     fetched_at: &str,
     progress: &Progress,
 ) -> Result<Snapshot> {
-    let uid = match version {
-        Some(v) => palette.resolve_app_profile(id, v)?,
-        None => id.to_string(),
-    };
+    let uid = palette.app_profile_uid(id, version)?;
     let mut snap = Snapshot::from_raw(
         &palette.fetch_app_profile(&uid, progress)?,
         reference,

@@ -6,7 +6,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::api::{Palette, PaletteApi};
+use crate::api::{Palette, PaletteApi, named_entries, profile_versions};
 use crate::cloud::Cloud;
 use crate::error::{Result, found};
 use crate::progress::Progress;
@@ -460,24 +460,20 @@ fn list_profiles<A: PaletteApi>(
     options: &ListOptions,
     progress: &Progress,
 ) -> Result<Vec<ListedProfile>> {
-    let mut profiles: Vec<ListedProfile> = items(&palette.profile_listing()?)
-        .map(|it| {
-            let name = text(it, "/metadata/name");
-            let version = text(it, "/spec/version");
-            ListedProfile {
-                reference: format!("{name}@{version}"),
-                uid: text(it, "/metadata/uid"),
-                cloud_type: text(it, "/spec/cloudType"),
-                name,
-                version,
-                scope: None,
-                profile_type: None,
-                consumers: None,
-                consumers_by_kind: None,
-                packs: None,
-                published: None,
-                error: None,
-            }
+    let mut profiles: Vec<ListedProfile> = profile_versions(&palette.profile_listing()?)
+        .map(|v| ListedProfile {
+            reference: format!("{}@{}", v.name, v.version),
+            uid: v.uid,
+            cloud_type: v.cloud_type,
+            name: v.name,
+            version: v.version,
+            scope: None,
+            profile_type: None,
+            consumers: None,
+            consumers_by_kind: None,
+            packs: None,
+            published: None,
+            error: None,
         })
         .collect();
     profiles.sort_by(|a, b| {
@@ -686,11 +682,9 @@ fn read_applied<A, F>(
 }
 
 fn list_projects(doc: &Value) -> Vec<ListedProject> {
-    let mut projects: Vec<ListedProject> = items(doc)
-        .map(|it| ListedProject {
-            name: text(it, "/metadata/name"),
-            uid: text(it, "/metadata/uid"),
-        })
+    let mut projects: Vec<ListedProject> = named_entries(doc)
+        .into_iter()
+        .map(|(name, uid)| ListedProject { name, uid })
         .collect();
     projects.sort_by(|a, b| a.name.cmp(&b.name).then_with(|| a.uid.cmp(&b.uid)));
     projects

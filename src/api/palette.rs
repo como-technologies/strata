@@ -10,7 +10,7 @@ use crate::cloud::{CLOUD_ALL, CLOUD_NESTED};
 use crate::error::{Error, Result, found, unread_reason};
 use crate::json::{arr, items, opt_text, str_at, take_items, text};
 use crate::progress::Progress;
-use crate::reference::LATEST;
+use crate::reference::{LATEST, one_named};
 use crate::scope::{ProfileScope, ScopedUid};
 use crate::snapshot::{APP_KIND, SubjectKind};
 use crate::version;
@@ -121,10 +121,41 @@ fn install_order(tier: &Value) -> Option<&Value> {
 }
 
 /// `(name, uid)` of each entry of a listing: an array, or an object with `items`.
-fn named_entries(listing: &Value) -> Vec<(String, String)> {
+pub(crate) fn named_entries(listing: &Value) -> Vec<(String, String)> {
     items(listing)
         .map(|e| (text(e, "/metadata/name"), text(e, "/metadata/uid")))
         .collect()
+}
+
+/// The uid of each entry of `entries`, `(name, uid)` pairs, that is named `name`.
+fn uids_named(entries: &[(String, String)], name: &str) -> Vec<String> {
+    entries
+        .iter()
+        .filter(|(n, _)| n == name)
+        .map(|(_, uid)| uid.clone())
+        .collect()
+}
+
+/// One version of a profile, as the profile listing gives it.
+pub(crate) struct ProfileVersion {
+    /// The profile name.
+    pub name: String,
+    /// The version.
+    pub version: String,
+    /// The uid of the version.
+    pub uid: String,
+    /// The cloud type of the profile, for example `aws`.
+    pub cloud_type: String,
+}
+
+/// Each version of the profile listing, `items[]`, in the order Palette lists them.
+pub(crate) fn profile_versions(listing: &Value) -> impl Iterator<Item = ProfileVersion> + '_ {
+    items(listing).map(|it| ProfileVersion {
+        name: text(it, "/metadata/name"),
+        version: text(it, "/spec/version"),
+        uid: text(it, "/metadata/uid"),
+        cloud_type: text(it, "/spec/cloudType"),
+    })
 }
 
 /// `text` as a value in a query string: each byte that is not a letter, a digit, or one of
@@ -146,14 +177,9 @@ fn listed_versions<'a>(
     listing: &'a Value,
     name: &'a str,
 ) -> impl Iterator<Item = (String, String)> + 'a {
-    items(listing)
-        .filter(move |it| str_at(it, "/metadata/name") == name)
-        .filter_map(|it| {
-            Some((
-                opt_text(it, "/spec/version")?,
-                opt_text(it, "/metadata/uid")?,
-            ))
-        })
+    profile_versions(listing)
+        .filter(move |v| v.name == name)
+        .map(|v| (v.version, v.uid))
 }
 
 /// The names of `entries`, sorted.
@@ -173,16 +199,31 @@ pub(crate) fn search_condition(property: &str, values: &[String], negation: bool
     })
 }
 
+/// A group of the filter of the cluster search: `filters`, its conditions, joined by
+/// `conjunction`, `and` or `or`.
+pub(crate) fn search_group(conjunction: &str, filters: Vec<Value>) -> Value {
+    serde_json::json!({"conjunction": conjunction, "filters": filters})
+}
+
+/// The filter of the cluster search: `groups`, each a [`search_group`], joined with `and`.
+pub(crate) fn search_filter(groups: Vec<Value>) -> Value {
+    serde_json::json!({"conjunction": "and", "filterGroups": groups})
+}
+
 /// `filter` with one more group, the condition that asks the search for the virtual clusters:
 /// `environment` equals [`CLOUD_NESTED`]. `filter` joins its groups with `and`; `Null` has no
 /// group, so the result selects each virtual cluster.
 fn with_nested(filter: &Value) -> Value {
     let mut groups = arr(filter, "/filterGroups").to_vec();
-    groups.push(serde_json::json!({
-        "conjunction": "and",
-        "filters": [search_condition(SEARCH_ENVIRONMENT, &[CLOUD_NESTED.to_string()], false)],
-    }));
-    serde_json::json!({"conjunction": "and", "filterGroups": groups})
+    groups.push(search_group(
+        "and",
+        vec![search_condition(
+            SEARCH_ENVIRONMENT,
+            &[CLOUD_NESTED.to_string()],
+            false,
+        )],
+    ));
+    search_filter(groups)
 }
 
 /// A kind of registry, as the routes of Palette name it.
@@ -274,30 +315,37 @@ impl<A: PaletteApi> Palette<A> {
     /// The one uid of `uids`, the versions of `name` at `version` in the listing. None is
     /// [`Error::ProfileNotFound`]. Two or more are [`Error::ProfileNameAmbiguous`], each with
     /// the scope that its document gives.
-    fn one_of(&self, name: &str, version: &str, mut uids: Vec<String>) -> Result<String> {
-        uids.sort();
-        match uids.len() {
-            1 => Ok(uids.remove(0)),
-            0 => Err(Error::ProfileNotFound {
+    fn one_of(&self, name: &str, version: &str, uids: Vec<String>) -> Result<String> {
+        one_named(
+            uids,
+            String::as_str,
+            || Error::ProfileNotFound {
                 name: name.to_string(),
                 version: version.to_string(),
                 tenant_scope: self.project_uid().is_none(),
-            }),
-            _ => {
-                let mut profiles = Vec::with_capacity(uids.len());
-                for uid in uids {
-                    let doc = self.profile_document(&uid)?;
-                    profiles.push(ScopedUid {
-                        scope: ProfileScope::of_document(&doc),
-                        uid,
-                    });
-                }
-                Err(Error::ProfileNameAmbiguous {
-                    name: name.to_string(),
-                    version: version.to_string(),
-                    profiles,
-                })
+            },
+            |uids| self.ambiguous_profiles(name, version, uids),
+        )
+    }
+
+    /// The error for `uids`, two or more versions of `name` at `version`:
+    /// [`Error::ProfileNameAmbiguous`], with the scope that the document of each gives. A read of
+    /// a document that fails gives its own error.
+    fn ambiguous_profiles(&self, name: &str, version: &str, uids: Vec<String>) -> Error {
+        let mut profiles = Vec::with_capacity(uids.len());
+        for uid in uids {
+            match self.profile_document(&uid) {
+                Ok(doc) => profiles.push(ScopedUid {
+                    scope: ProfileScope::of_document(&doc),
+                    uid,
+                }),
+                Err(e) => return e,
             }
+        }
+        Error::ProfileNameAmbiguous {
+            name: name.to_string(),
+            version: version.to_string(),
+            profiles,
         }
     }
 
@@ -306,6 +354,15 @@ impl<A: PaletteApi> Palette<A> {
     pub(crate) fn profile_uid(&self, id: &str, version: Option<&str>) -> Result<String> {
         match version {
             Some(version) => self.resolve(id, version),
+            None => Ok(id.to_string()),
+        }
+    }
+
+    /// The uid of an app profile that a ref names: `id` is a uid when there is no `version`, and
+    /// else a name that [`Palette::resolve_app_profile`] finds at `version`.
+    pub(crate) fn app_profile_uid(&self, id: &str, version: Option<&str>) -> Result<String> {
+        match version {
+            Some(version) => self.resolve_app_profile(id, version),
             None => Ok(id.to_string()),
         }
     }
@@ -321,11 +378,7 @@ impl<A: PaletteApi> Palette<A> {
     pub fn resolve_latest(&self, name: &str) -> Result<String> {
         let listing = self.profile_listing()?;
         let versions: Vec<(String, String)> = listed_versions(&listing, name).collect();
-        let Some(highest) = versions
-            .iter()
-            .map(|(v, _)| v.as_str())
-            .max_by(|x, y| version::compare(x, y))
-        else {
+        let Some((highest, _)) = version::pick(versions.iter(), |(v, _)| v.as_str(), LATEST) else {
             return Err(Error::ProfileNotFound {
                 name: name.to_string(),
                 version: LATEST.to_string(),
@@ -418,12 +471,7 @@ impl<A: PaletteApi> Palette<A> {
             })
             .collect();
         let named = all.iter().filter(|(n, _, _)| n == name);
-        let found = if version == LATEST {
-            named.max_by(|(_, x, _), (_, y, _)| version::compare(x, y))
-        } else {
-            named.into_iter().find(|(_, v, _)| v == version)
-        };
-        match found {
+        match version::pick(named, |(_, v, _)| v.as_str(), version) {
             Some((_, _, uid)) => Ok(uid.clone()),
             None => {
                 let mut available: Vec<String> =
@@ -557,23 +605,18 @@ impl<A: PaletteApi> Palette<A> {
         if let Some(found) = self.virtual_clusters(&properties, &Value::Null, || {})? {
             clusters.extend(named_entries(&Value::Array(found)));
         }
-        let mut uids: Vec<String> = clusters
-            .iter()
-            .filter(|(n, _)| n == name)
-            .map(|(_, uid)| uid.clone())
-            .collect();
-        uids.sort();
-        match uids.len() {
-            1 => Ok(uids.remove(0)),
-            0 => Err(Error::ClusterNotFound {
+        one_named(
+            uids_named(&clusters, name),
+            String::as_str,
+            || Error::ClusterNotFound {
                 cluster: name.to_string(),
                 available: sorted_names(&clusters),
-            }),
-            _ => Err(Error::ClusterNameAmbiguous {
+            },
+            |uids| Error::ClusterNameAmbiguous {
                 name: name.to_string(),
                 uids,
-            }),
-        }
+            },
+        )
     }
 
     /// The project listing, `GET /v1/dashboard/projects/metadata`: `items[]` with each project's
@@ -1106,23 +1149,18 @@ impl<A: PaletteApi> Palette<A> {
     /// /v1/clustergroups/hostCluster/metadata`.
     fn cluster_group_uid_named(&self, name: &str) -> Result<String> {
         let groups = self.cluster_groups()?;
-        let mut uids: Vec<String> = groups
-            .iter()
-            .filter(|(n, _)| n == name)
-            .map(|(_, uid)| uid.clone())
-            .collect();
-        uids.sort();
-        match uids.len() {
-            1 => Ok(uids.remove(0)),
-            0 => Err(Error::ClusterGroupNotFound {
+        one_named(
+            uids_named(&groups, name),
+            String::as_str,
+            || Error::ClusterGroupNotFound {
                 cluster_group: name.to_string(),
                 available: sorted_names(&groups),
-            }),
-            _ => Err(Error::ClusterGroupNameAmbiguous {
+            },
+            |uids| Error::ClusterGroupNameAmbiguous {
                 name: name.to_string(),
                 uids,
-            }),
-        }
+            },
+        )
     }
 
     /// The raw documents of an object that holds profiles in `spec.clusterProfileTemplates` and
@@ -1216,28 +1254,19 @@ impl<A: PaletteApi> Palette<A> {
 
     /// The uid of the one edge host in the scope that has the name `name`.
     fn edge_host_uid_named(&self, name: &str) -> Result<String> {
-        let hosts: Vec<(String, String)> = self
-            .edge_hosts()?
-            .iter()
-            .map(|h| (text(h, "/metadata/name"), text(h, "/metadata/uid")))
-            .collect();
-        let mut uids: Vec<String> = hosts
-            .iter()
-            .filter(|(n, _)| n == name)
-            .map(|(_, uid)| uid.clone())
-            .collect();
-        uids.sort();
-        match uids.len() {
-            1 => Ok(uids.remove(0)),
-            0 => Err(Error::EdgeHostNotFound {
+        let hosts = named_entries(&Value::Array(self.edge_hosts()?));
+        one_named(
+            uids_named(&hosts, name),
+            String::as_str,
+            || Error::EdgeHostNotFound {
                 edge_host: name.to_string(),
                 available: sorted_names(&hosts),
-            }),
-            _ => Err(Error::EdgeHostNameAmbiguous {
+            },
+            |uids| Error::EdgeHostNameAmbiguous {
                 name: name.to_string(),
                 uids,
-            }),
-        }
+            },
+        )
     }
 
     /// The cloud config of a cluster, `GET /v1/cloudconfigs/{cloudType}/{configUid}`, from the

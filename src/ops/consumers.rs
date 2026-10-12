@@ -7,7 +7,9 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::api::{Palette, PaletteApi, SEARCH_CLUSTER_PROFILES, search_condition};
+use crate::api::{
+    Palette, PaletteApi, SEARCH_CLUSTER_PROFILES, search_condition, search_filter, search_group,
+};
 use crate::cluster_template::ClusterTemplateRef;
 use crate::error::{Error, Result, found};
 use crate::progress::Progress;
@@ -513,10 +515,7 @@ where
 {
     let mut clients: HashMap<String, Palette<A>> = HashMap::new();
     let home = connect(scope)?;
-    let uid = match version {
-        Some(v) => home.resolve_app_profile(id, v)?,
-        None => id.to_string(),
-    };
+    let uid = home.app_profile_uid(id, version)?;
     progress.note(&format!("listing the app deployments of app profile {uid}"));
     let doc = home.app_profile_document(&uid)?;
     let version = text(&doc, "/spec/version");
@@ -655,12 +654,14 @@ fn searched_consumers<A: PaletteApi>(
     if !properties.contains(SEARCH_CLUSTER_PROFILES) {
         return Ok(None);
     }
-    let body = serde_json::json!({
-        "conjunction": "and",
-        "filterGroups": [{"conjunction": "and", "filters": [
-            search_condition(SEARCH_CLUSTER_PROFILES, &[name.to_string()], false)
-        ]}],
-    });
+    let body = search_filter(vec![search_group(
+        "and",
+        vec![search_condition(
+            SEARCH_CLUSTER_PROFILES,
+            &[name.to_string()],
+            false,
+        )],
+    )]);
     let found = palette.cluster_search_with_virtual(&properties, &body, || {})?;
     Ok(Some(list_clusters(&found.items)))
 }
