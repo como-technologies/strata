@@ -50,3 +50,28 @@ fn the_preflight_workflow_does_not_let_the_shell_expand_the_record_patterns() {
         path.display()
     );
 }
+
+/// The verify reads one check run named `Gate` on the head commit of a pull request, and sets no
+/// success while that run has none. The job needs `checks` and has no `if`, so GitHub runs it only
+/// when each check passed, and skips it when one failed. A renamed job, a lost `needs`, or an
+/// `if: always()` lets a verify pass a commit that a check refused.
+#[test]
+fn the_gate_job_of_ci_needs_the_checks_and_has_no_condition() {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join(".github/workflows/ci.yml");
+    let text = std::fs::read_to_string(&path).unwrap();
+    let doc: serde_yaml::Value = serde_yaml::from_str(&text).unwrap();
+    let jobs = doc["jobs"].as_mapping().expect("ci.yml has jobs");
+    let gate = jobs
+        .values()
+        .find(|job| job["name"].as_str() == Some("Gate"))
+        .expect("ci.yml has a job named Gate");
+    let needs = gate["needs"].as_str().expect("the Gate needs one job");
+    assert!(
+        jobs.get(needs).is_some_and(|job| job.get("uses").is_some()),
+        "the Gate needs `{needs}`, which is not the job that calls the checks workflow"
+    );
+    assert!(
+        gate.get("if").is_none(),
+        "the Gate has a condition: GitHub must skip it when a check fails"
+    );
+}

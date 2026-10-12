@@ -14,6 +14,17 @@ jobs:
     name: checks
     uses: ./.github/workflows/checks.yml
 
+  # The one check that a verify reads: `riff verify pass` needs a run named `Gate` with a success
+  # on the head commit of the pull request. The job needs `checks`, so GitHub runs it only when
+  # each check passed, and skips it when one failed. A skipped run is not a success. It does no
+  # other work.
+  gate:
+    name: Gate
+    needs: checks
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "each check passed"
+
   # the book goes out only after every check passed, and only from main
   publish-docs:
     name: publish the book

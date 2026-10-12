@@ -55,6 +55,12 @@ The verifier writes the result as a comment on the pull request, and sets a
 verify status on the head commit: success or failure. The status holds for that
 commit only. A new push needs a new verify.
 
+The tool that sets the status reads the check `Gate` of the head commit first,
+and sets no success while `Gate` has none. `Gate` is a job of the `ci`
+workflow. It needs the four checks and does no other work. GitHub runs it only
+when each check passed, and skips it when one failed. So one check run names
+the full result of a commit, and the ruleset of `main` needs no change for it.
+
 ## The merge
 
 A ruleset on `main` applies these rules to each change:
