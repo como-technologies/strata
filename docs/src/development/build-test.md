@@ -111,9 +111,12 @@ fails when 50 or fewer of its 2000 cases build a record.
 | build | the Linux musl binary, with the step that a release uses |
 | the lowest Rust version | `cargo check --workspace --all-targets` with the `rust-version` of `Cargo.toml`, so the number a reader trusts is the number CI builds with |
 
-`ci` adds one job of its own, `publish the book`, which needs the checks and runs
-only on `main`, so the site is a build that every check passed. The `docs` job
-builds the book once and passes it to the publish job, so no job builds it twice.
+`ci` adds two jobs of its own. `Gate` needs the checks and does no other work:
+it is the one check run that the verify reads (see
+[How a change lands](./changes.md#the-verify)). `publish the book` needs the
+checks and runs only on `main`, so the site is a build that every check passed.
+The `docs` job builds the book once and passes it to the publish job, so no job
+builds it twice.
 
 The checks are a workflow of their own because a caller cannot grant a called
 workflow more than it has itself. `publish the book` needs `pages: write`, which
