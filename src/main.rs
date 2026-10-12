@@ -828,7 +828,11 @@ fn cmd_snapshot(a: &SnapshotArgs) -> Result<ExitCode> {
                     profile,
                     pending,
                 } => {
-                    let mut raw = palette.fetch_cluster(uid, &progress)?;
+                    let mut raw = palette.fetch_subject(
+                        strata::snapshot::SubjectKind::Cluster,
+                        uid,
+                        &progress,
+                    )?;
                     if *pending {
                         raw = palette.with_pending(raw)?;
                     }
@@ -866,7 +870,11 @@ fn cmd_snapshot(a: &SnapshotArgs) -> Result<ExitCode> {
                     &progress,
                 )?,
                 Ref::EdgeHost { uid, profile } => {
-                    let raw = palette.fetch_edge_host(uid, &progress)?;
+                    let raw = palette.fetch_subject(
+                        strata::snapshot::SubjectKind::EdgeHost,
+                        uid,
+                        &progress,
+                    )?;
                     Snapshot::from_cluster(&raw, profile.as_deref(), text, &now)?
                         .with_kind(strata::snapshot::SubjectKind::EdgeHost)
                 }

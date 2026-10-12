@@ -9,10 +9,10 @@ use serde_json::Value;
 
 use crate::api::{Palette, PaletteApi, SEARCH_CLUSTER_PROFILES, search_condition};
 use crate::cluster_template::ClusterTemplateRef;
-use crate::error::{Error, Result};
+use crate::error::{Error, Result, found};
 use crate::progress::Progress;
 use crate::reference::Ref;
-use crate::snapshot::{Snapshot, Tool};
+use crate::snapshot::{Snapshot, SubjectKind, Tool};
 
 use super::consumer_list::consumer_uids;
 use super::fleet::Resolved;
@@ -385,7 +385,7 @@ where
             uid: cluster,
         };
         let doc = client_for(&mut clients, &home, &c.project_uid, &mut connect)
-            .and_then(|p| p.cluster_document(&c.uid));
+            .and_then(|p| p.subject_document(SubjectKind::Cluster, &c.uid));
         match doc {
             Ok(d) => {
                 c.name = first_nonempty(&[str_at(&d, "/metadata/name"), &c.name]);
@@ -601,10 +601,8 @@ fn edge_hosts_bound<A: PaletteApi>(
     progress: &Progress,
 ) -> EdgeHostsRead {
     progress.note("reading each edge host for the profiles bound to it");
-    let hosts = wide.edge_hosts().or_else(|_| home.edge_hosts());
-    let hosts = match hosts {
-        Ok(hosts) => hosts,
-        Err(Error::Api { status: 404, .. }) => Vec::new(),
+    let hosts = match found(wide.edge_hosts().or_else(|_| home.edge_hosts())) {
+        Ok(hosts) => hosts.unwrap_or_default(),
         Err(e) => {
             return EdgeHostsRead {
                 error: Some(e.to_json()),
@@ -742,7 +740,7 @@ where
             clusters_read.members += 1;
         }
         let doc = client_for(clients, home, &listed.project_uid, connect)
-            .and_then(|p| p.cluster_document(&listed.uid));
+            .and_then(|p| p.subject_document(SubjectKind::Cluster, &listed.uid));
         let doc = match doc {
             Ok(doc) => doc,
             Err(_) => {
@@ -806,9 +804,7 @@ fn group_members<A: PaletteApi>(
                     }
                 }
             }
-            Err(Error::Api {
-                status: 404 | 405, ..
-            }) => answered = true,
+            Err(e) if e.is_missing_route() => answered = true,
             Err(e) => failed = Some(e.to_json()),
         }
     }
@@ -820,8 +816,8 @@ fn group_members<A: PaletteApi>(
     for (scope, group) in groups {
         // a group that the tenant lists can be one that only the scope of the key can read
         let doc = match scope
-            .cluster_group_document(&group)
-            .or_else(|_| home.cluster_group_document(&group))
+            .subject_document(SubjectKind::ClusterGroup, &group)
+            .or_else(|_| home.subject_document(SubjectKind::ClusterGroup, &group))
         {
             Ok(doc) => doc,
             Err(e) => {

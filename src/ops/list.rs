@@ -8,10 +8,10 @@ use serde_json::Value;
 
 use crate::api::{Palette, PaletteApi};
 use crate::cloud::Cloud;
-use crate::error::{Error, Result};
+use crate::error::{Result, found};
 use crate::progress::Progress;
 use crate::scope::ProfileScope;
-use crate::snapshot::{AppliedProfile, Tool};
+use crate::snapshot::{AppliedProfile, SubjectKind, Tool};
 use crate::version;
 
 use crate::json::{arr, first_nonempty, items, opt_text, str_at, text};
@@ -555,17 +555,16 @@ fn scopes_from_search<A: PaletteApi>(
         return Ok(());
     }
     let own = ProfileScope::of_listing(palette.project_uid().unwrap_or(""));
-    let mut found: BTreeMap<String, ProfileScope> = BTreeMap::new();
+    let mut scopes: BTreeMap<String, ProfileScope> = BTreeMap::new();
     for &scope in own.others_listed() {
         progress.note(&format!("searching the {scope} profiles"));
-        match palette.profile_uids_in_scope(scope) {
-            Ok(uids) => found.extend(uids.into_iter().map(|uid| (uid, scope))),
-            Err(Error::Api { status: 404, .. }) => return Ok(()),
-            Err(e) => return Err(e),
-        }
+        let Some(uids) = found(palette.profile_uids_in_scope(scope))? else {
+            return Ok(());
+        };
+        scopes.extend(uids.into_iter().map(|uid| (uid, scope)));
     }
     for p in profiles {
-        p.scope = Some(found.get(&p.uid).copied().unwrap_or(own));
+        p.scope = Some(scopes.get(&p.uid).copied().unwrap_or(own));
     }
     Ok(())
 }
@@ -670,7 +669,7 @@ fn read_applied<A, F>(
                 continue;
             }
         };
-        let profiles = match palette.cluster_document(&c.uid) {
+        let profiles = match palette.subject_document(SubjectKind::Cluster, &c.uid) {
             Ok(d) => AppliedProfile::of_cluster(&d),
             Err(e) => {
                 c.error = Some(e.to_json());

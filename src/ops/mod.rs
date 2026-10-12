@@ -101,7 +101,7 @@ where
             pending,
         } => {
             let palette = connect()?;
-            let mut raw = palette.fetch_cluster(uid, progress)?;
+            let mut raw = palette.fetch_subject(SubjectKind::Cluster, uid, progress)?;
             if *pending {
                 raw = palette.with_pending(raw)?;
             }
@@ -147,7 +147,7 @@ where
         }
         Ref::EdgeHost { uid, profile } => {
             let palette = connect()?;
-            let raw = palette.fetch_edge_host(uid, progress)?;
+            let raw = palette.fetch_subject(SubjectKind::EdgeHost, uid, progress)?;
             Ok(Snapshot::from_cluster(
                 &raw,
                 profile.as_deref(),
@@ -198,7 +198,7 @@ pub fn cluster_group_snapshot<A: PaletteApi>(
     fetched_at: &str,
     progress: &Progress,
 ) -> Result<Snapshot> {
-    let mut raw = palette.fetch_cluster_group(group, progress)?;
+    let mut raw = palette.fetch_subject(SubjectKind::ClusterGroup, group, progress)?;
     let uid = text(&raw.cluster, "/metadata/uid");
     if macros {
         raw.resolved_values = Some(palette.resolved_values(SubjectKind::ClusterGroup, &uid)?);

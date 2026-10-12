@@ -13,7 +13,7 @@ use crate::error::{
     PROFILE_IMPORT_REFUSAL_CODES, PROFILE_NAME_REFUSAL_CODES, PROFILE_PACK_REFUSAL_CODES, Result,
 };
 use crate::json::str_at;
-use crate::snapshot::{AppliedProfile, Snapshot};
+use crate::snapshot::{AppliedProfile, Snapshot, SubjectKind};
 use crate::validation::{PaletteRefusal, PaletteValidation, ProfileValidation};
 
 /// The refusal of the whole request in an error of strata, when it is an HTTP error of Palette
@@ -223,7 +223,8 @@ pub fn palette_validation<A: PaletteApi>(
     b: &Snapshot,
 ) -> Result<PaletteValidation> {
     let (cluster, target) = cluster_and_target(a, b, "--validate")?;
-    let running = AppliedProfile::of_cluster(&palette.cluster_document(&cluster.uid)?);
+    let running =
+        AppliedProfile::of_cluster(&palette.subject_document(SubjectKind::Cluster, &cluster.uid)?);
     match palette.validate_packs(&cluster.uid, &validate_body(&running, target)) {
         Ok(answer) => Ok(PaletteValidation::from_palette(&cluster.uid, &answer)),
         Err(e) => whole_request_refusal(&e, |status, code| match status {

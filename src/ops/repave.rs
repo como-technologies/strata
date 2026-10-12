@@ -252,7 +252,7 @@ pub fn palette_repave<A: PaletteApi>(
 ) -> Result<PaletteRepave> {
     let (cluster, doc, body, asked) = match cluster_and_pending(a, b)? {
         Some((source, pending)) => {
-            let doc = palette.cluster_document(&source.uid)?;
+            let doc = palette.subject_document(SubjectKind::Cluster, &source.uid)?;
             let body = pending_body(&doc, pending, source)?;
             let asked = format!(
                 "the update that waits for the cluster {}: the update changes a profile that the \
@@ -263,7 +263,7 @@ pub fn palette_repave<A: PaletteApi>(
         }
         None => {
             let (cluster, target) = cluster_and_target(a, b, "--repave")?;
-            let doc = palette.cluster_document(&cluster.uid)?;
+            let doc = palette.subject_document(SubjectKind::Cluster, &cluster.uid)?;
             let body = validate_body(&AppliedProfile::of_cluster(&doc), target);
             let asked = format!(
                 "{}@{}: the cluster {} runs it",

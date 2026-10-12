@@ -532,6 +532,16 @@ pub(crate) fn unread_reason(status: u16, body: &str) -> String {
     format!("HTTP {status}: {}", body.trim())
 }
 
+/// `answer`, or `None` when Palette answered HTTP 404: it does not have the object. Each other
+/// error returns.
+pub(crate) fn found<T>(answer: Result<T>) -> Result<Option<T>> {
+    match answer {
+        Ok(v) => Ok(Some(v)),
+        Err(Error::Api { status: 404, .. }) => Ok(None),
+        Err(e) => Err(e),
+    }
+}
+
 /// `a, b, c`, or `none` for an empty list.
 fn list_or_none(items: &[String]) -> String {
     if items.is_empty() {
@@ -606,6 +616,18 @@ impl Error {
     /// exists so a future distinction (for example, 3 for "cannot reach Palette") lands in one place.
     pub fn exit_code(&self) -> u8 {
         2
+    }
+
+    /// True for an answer of Palette that says it has no such route: HTTP 404 or 405. An older
+    /// Palette answers so for a route that a later one added.
+    pub(crate) fn is_missing_route(&self) -> bool {
+        matches!(
+            self,
+            Error::Api {
+                status: 404 | 405,
+                ..
+            }
+        )
     }
 
     /// How a caller treats the failure when it decides to try again. [`crate::api::Retry`]

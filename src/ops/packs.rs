@@ -6,7 +6,7 @@ use serde_json::Value;
 
 use crate::api::{Palette, PaletteApi};
 use crate::cloud::supports;
-use crate::error::{Error, Result};
+use crate::error::{Error, Result, found};
 use crate::json::{arr, opt_text, strings, text};
 use crate::progress::Progress;
 use crate::snapshot::Tool;
@@ -158,15 +158,6 @@ fn architectures(entry: &Value) -> Vec<String> {
 /// pack. With it, Palette answers with the versions in these states only.
 const RETIRED_STATES: &str = "deprecated,disabled,deleted";
 
-/// `answer`, one answer of a registry for the tags of a pack: none when Palette answered 404.
-fn tags_answer(answer: Result<Value>) -> Result<Option<Value>> {
-    match answer {
-        Ok(answer) => Ok(Some(answer)),
-        Err(Error::Api { status: 404, .. }) => Ok(None),
-        Err(e) => Err(e),
-    }
-}
-
 /// Join the tag rows of the `answers` of one registry, and keep each row one time.
 ///
 /// A deprecated version is in the answer with no query and in the answer with the states query,
@@ -242,16 +233,12 @@ where
         // with the states query. A registry that answers 404 to both keeps only the disabled and
         // the deleted versions of the listing, with no tags. The other registries still answer
         progress.note(&format!("reading the tags of {name} in {registry}"));
-        let mut answers = vec![tags_answer(palette.pack_tags(name, uid, None))?];
+        let mut answers = vec![found(palette.pack_tags(name, uid, None))?];
         if mine
             .iter()
             .any(|e| crate::candidate::retired_state(e).is_some())
         {
-            answers.push(tags_answer(palette.pack_tags(
-                name,
-                uid,
-                Some(RETIRED_STATES),
-            ))?);
+            answers.push(found(palette.pack_tags(name, uid, Some(RETIRED_STATES)))?);
         }
         let answers: Vec<Value> = answers.into_iter().flatten().collect();
         let tags_unavailable = answers.is_empty();

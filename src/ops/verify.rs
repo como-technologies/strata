@@ -13,7 +13,7 @@ use crate::diff::{
     self, AuditEntry, AuditResource, ClusterProfileOverwritten, Diff, ImageIdChange, ImpactLevel,
     InvalidPack, Verify, VerifyStatus,
 };
-use crate::error::{Error, Result};
+use crate::error::{Error, Result, found};
 use crate::json::{is_zero, opt_text, str_at, text};
 use crate::progress::Progress;
 use crate::snapshot::{APP_KIND, Snapshot, SubjectKind, Tier, Tool};
@@ -85,11 +85,8 @@ fn profiles_overwritten<A: PaletteApi>(
 ) -> Result<Vec<ClusterProfileOverwritten>> {
     let mut out = Vec::new();
     for p in running {
-        let now = match palette.profile_document(&p.uid) {
-            Ok(doc) => text(&doc, "/spec/version"),
-            Err(Error::Api { status: 404, .. }) => String::new(),
-            Err(e) => return Err(e),
-        };
+        let now = found(palette.profile_document(&p.uid))?
+            .map_or_else(String::new, |doc| text(&doc, "/spec/version"));
         if now != p.version {
             out.push(ClusterProfileOverwritten {
                 uid: p.uid.clone(),
@@ -304,11 +301,8 @@ pub fn verify_with<A: PaletteApi>(
     let live = match &recorded.source.cluster {
         Some(c) => {
             // the document by uid alone: a 404 is a gone object, and not a name to look up
-            let doc = match palette.subject_document(c.kind, uid, progress) {
-                Ok(doc) => doc,
-                Err(Error::Api { status: 404, .. }) => Value::Null,
-                Err(e) => return Err(e),
-            };
+            progress.note(&format!("fetching {} {uid}", c.kind.noun()));
+            let doc = found(palette.subject_document(c.kind, uid))?.unwrap_or(Value::Null);
             state = subject_state(c.kind, &doc);
             last_modified = opt_text(&doc, "/metadata/lastModifiedTimestamp");
             if doc.is_null() || is_deleted(&doc) {
@@ -320,23 +314,22 @@ pub fn verify_with<A: PaletteApi>(
             }
         }
         None if recorded.source.kind == APP_KIND => {
-            match palette.fetch_app_profile(uid, progress) {
-                Ok(raw) => {
+            match found(palette.fetch_app_profile(uid, progress))? {
+                Some(raw) => {
                     last_modified = opt_text(&raw.profile, "/metadata/lastModifiedTimestamp");
                     let mut live = Snapshot::from_raw(&raw, uid, checked_at)?;
                     live.source.consumers = None;
                     live
                 }
-                Err(Error::Api { status: 404, .. }) => {
+                None => {
                     gone = true;
                     recorded.gone(checked_at)
                 }
-                Err(e) => return Err(e),
             }
         }
         // a version that Palette no longer has is a drift, not an error: a retire deletes it
-        None => match palette.fetch_profile(uid, progress) {
-            Ok(mut raw) => {
+        None => match found(palette.fetch_profile(uid, progress))? {
+            Some(mut raw) => {
                 last_modified = opt_text(&raw.profile, "/metadata/lastModifiedTimestamp");
                 // strata also checks the macro values of a record that holds their digests
                 if recorded.source.macro_values.is_some() {
@@ -344,11 +337,10 @@ pub fn verify_with<A: PaletteApi>(
                 }
                 Snapshot::from_raw(&raw, uid, checked_at)?
             }
-            Err(Error::Api { status: 404, .. }) => {
+            None => {
                 gone = true;
                 recorded.gone(checked_at)
             }
-            Err(e) => return Err(e),
         },
     }
     .with_project(palette.project_uid());
