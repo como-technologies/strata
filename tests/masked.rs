@@ -13,7 +13,7 @@ use strata::render::{self, Format};
 use strata::snapshot::Snapshot;
 
 mod common;
-use common::snapshot_of;
+use common::{no_manifests, no_variables, profile_document, serve_profile, snapshot_of, template};
 
 const PROFILE: &str = "64f0000000000000000000d2";
 const GRAFANA: &str = "64f0000000000000000000e2";
@@ -27,30 +27,27 @@ const NOTE: &str = "pack addon/grafana has a masked value at charts.grafana.admi
 fn published() -> MemoryApi {
     let grafana = "charts:\n  grafana:\n    adminUser: fred\n    adminPassword: '********'\n";
     let certs = "charts:\n  cert-manager:\n    replicas: 2\n";
-    MemoryApi::new()
-        .with(
-            format!("/v1/clusterprofiles/{PROFILE}"),
-            json!({
-                "metadata": {"uid": PROFILE, "name": "barney"},
-                "spec": {"version": "1.0.0", "published": {"cloudType": "all", "type": "add-on",
-                    "packs": [
-                        {"name": "grafana", "layer": "addon", "type": "spectro", "tag": "1.0.0",
-                         "version": "1.0.0", "packUid": GRAFANA, "registryUid": "r1",
-                         "digest": "sha256:aa", "values": grafana},
-                        {"name": "cert-manager", "layer": "addon", "type": "spectro",
-                         "tag": "1.0.0", "version": "1.0.0", "packUid": CERTS,
-                         "registryUid": "r1", "digest": "sha256:bb", "values": certs}]}},
-                "status": {"isPublished": true, "inUseClusterUids": []}
-            }),
-        )
-        .with(
-            format!("/v1/clusterprofiles/{PROFILE}/packs/manifests"),
-            json!({"spec": {"packs": []}}),
-        )
-        .with(
-            format!("/v1/clusterprofiles/{PROFILE}/variables"),
-            json!({"variables": []}),
-        )
+    let packs = json!([
+        {"name": "grafana", "layer": "addon", "type": "spectro", "tag": "1.0.0",
+         "version": "1.0.0", "packUid": GRAFANA, "registryUid": "r1",
+         "digest": "sha256:aa", "values": grafana},
+        {"name": "cert-manager", "layer": "addon", "type": "spectro",
+         "tag": "1.0.0", "version": "1.0.0", "packUid": CERTS,
+         "registryUid": "r1", "digest": "sha256:bb", "values": certs}]);
+    let document = profile_document(
+        PROFILE,
+        "barney",
+        "1.0.0",
+        template("all", "add-on", packs),
+        None,
+    );
+    serve_profile(
+        MemoryApi::new(),
+        PROFILE,
+        document,
+        no_manifests(),
+        no_variables(),
+    )
 }
 
 fn record() -> Snapshot {

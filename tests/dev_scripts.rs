@@ -9,17 +9,9 @@ use std::process::{Command, Output};
 use common::*;
 
 fn tag_release(dir: &Path) -> Output {
-    Command::new("bash")
-        .arg(script("dev/tag-release.sh"))
-        .current_dir(dir)
-        .env("GIT_CONFIG_GLOBAL", "/dev/null")
-        .env("GIT_CONFIG_SYSTEM", "/dev/null")
-        .env("GIT_AUTHOR_NAME", "t")
-        .env("GIT_AUTHOR_EMAIL", "t@example.com")
-        .env("GIT_COMMITTER_NAME", "t")
-        .env("GIT_COMMITTER_EMAIL", "t@example.com")
-        .output()
-        .unwrap()
+    let mut c = Command::new("bash");
+    c.arg(script("dev/tag-release.sh")).current_dir(dir);
+    isolate_git(&mut c).output().unwrap()
 }
 
 #[test]
@@ -98,7 +90,7 @@ fn the_playground_serves_the_tenant_of_one_chapter() {
     let log = dir.path().join("serve.log");
     let mut child = Command::new(&stand_in)
         .args(["playground", last])
-        .env("STRATA_BIN", env!("CARGO_BIN_EXE_strata"))
+        .env("STRATA_BIN", strata_bin())
         .stdout(std::fs::File::create(&log).unwrap())
         .stderr(std::process::Stdio::null())
         .spawn()
@@ -125,7 +117,7 @@ fn the_playground_serves_the_tenant_of_one_chapter() {
     let uid = value("PALETTE_PROJECT_UID=");
 
     // the commands of the book run against it, by name, with no key of a real tenant
-    let o = Command::new(env!("CARGO_BIN_EXE_strata"))
+    let o = Command::new(strata_bin())
         .args([
             "compare",
             "aws-stack@1.0.0",

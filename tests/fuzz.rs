@@ -6,7 +6,8 @@
 //! repeats: each test prints its seed, and `STRATA_FUZZ_SEED=<n> cargo test --test fuzz` runs that
 //! seed alone. The default seed is fixed, so CI runs the same cases every time.
 
-use std::path::Path;
+mod common;
+
 use std::process::Command;
 
 use serde_json::{Value, json};
@@ -15,6 +16,11 @@ use strata::ops;
 use strata::progress::Progress;
 use strata::reference::Ref;
 use strata::snapshot::Snapshot;
+
+use common::{
+    CLUSTER_LISTING, PROFILE_LISTING, PROJECT_LISTING, REGISTRY_LISTING, cluster_ref, listing,
+    manifests_route, profile_route, strata_bin, text, variables_route,
+};
 
 /// xorshift64*: a deterministic source of cases, so a failure has a seed that reproduces it.
 struct Rng(u64);
@@ -189,7 +195,7 @@ fn junk_json(rng: &mut Rng, depth: usize) -> Value {
 }
 
 /// An error is an answer: it carries a kind and exits 2. A panic is not.
-fn is_answer<T>(r: strata::Result<T>) -> bool {
+fn is_answer<T>(r: &strata::Result<T>) -> bool {
     match r {
         Ok(_) => true,
         Err(e) => {
@@ -236,7 +242,7 @@ fn a_record_of_junk_is_refused_and_never_read_as_one() {
         };
         std::fs::write(&path, &text).unwrap();
         assert!(
-            is_answer(Snapshot::load(&path)),
+            is_answer(&Snapshot::load(&path)),
             "seed {} case {case}: {text:?}",
             seed()
         );
@@ -247,30 +253,30 @@ fn a_record_of_junk_is_refused_and_never_read_as_one() {
 fn a_path_that_is_not_a_file_is_an_answer() {
     let dir = tempfile::tempdir().unwrap();
     let missing = dir.path().join("no/such/record.json");
-    assert!(is_answer(Snapshot::load(&missing)), "a missing path");
+    assert!(is_answer(&Snapshot::load(&missing)), "a missing path");
     assert!(
-        is_answer(Snapshot::load(dir.path())),
+        is_answer(&Snapshot::load(dir.path())),
         "a directory where a file is named"
     );
     let empty = dir.path().join("empty.json");
     std::fs::write(&empty, "").unwrap();
-    assert!(is_answer(Snapshot::load(&empty)), "an empty file");
+    assert!(is_answer(&Snapshot::load(&empty)), "an empty file");
     let nul = dir.path().join("nul.json");
     std::fs::write(&nul, [0u8, 159, 146, 150]).unwrap();
-    assert!(is_answer(Snapshot::load(&nul)), "bytes that are not UTF-8");
+    assert!(is_answer(&Snapshot::load(&nul)), "bytes that are not UTF-8");
 }
 
 /// Every path strata asks Palette for, answered with the same junk document.
 fn api_of_junk(rng: &mut Rng, uid: &str) -> MemoryApi {
     let mut api = MemoryApi::new();
     let paths = [
-        "/v1/dashboard/clusterprofiles/metadata".to_string(),
-        "/v1/dashboard/spectroclusters/meta".to_string(),
-        "/v1/dashboard/projects/metadata".to_string(),
-        "/v1/registries/metadata".to_string(),
-        format!("/v1/clusterprofiles/{uid}"),
-        format!("/v1/clusterprofiles/{uid}/packs/manifests"),
-        format!("/v1/clusterprofiles/{uid}/variables"),
+        PROFILE_LISTING.to_string(),
+        CLUSTER_LISTING.to_string(),
+        PROJECT_LISTING.to_string(),
+        REGISTRY_LISTING.to_string(),
+        profile_route(uid),
+        manifests_route(uid),
+        variables_route(uid),
         format!("/v1/spectroclusters/{uid}"),
         format!("/v1/spectroclusters/{uid}/profiles/packs/manifests"),
         format!("/v1/spectroclusters/{uid}/variables"),
@@ -298,7 +304,7 @@ fn a_profile_of_junk_gives_a_record_that_round_trips() {
             "t0",
             &Progress::silent(),
         );
-        assert!(is_answer_snapshot(&snap), "seed {} case {case}", seed());
+        assert!(is_answer(&snap), "seed {} case {case}", seed());
         if snap.is_ok() {
             reached += 1;
         }
@@ -332,13 +338,6 @@ fn a_profile_of_junk_gives_a_record_that_round_trips() {
     );
 }
 
-fn is_answer_snapshot(r: &strata::Result<Snapshot>) -> bool {
-    match r {
-        Ok(_) => true,
-        Err(e) => !e.kind().is_empty() && e.exit_code() == 2,
-    }
-}
-
 #[test]
 fn a_cluster_of_junk_snapshots_or_errors() {
     let uid = "64f1000000000000000000e1";
@@ -346,16 +345,12 @@ fn a_cluster_of_junk_snapshots_or_errors() {
     for case in 0..2_000 {
         let api = api_of_junk(&mut rng, uid);
         let r = ops::snapshot_for(
-            &Ref::Cluster {
-                uid: uid.to_string(),
-                profile: None,
-                pending: false,
-            },
+            &cluster_ref(uid, None, false),
             || Ok(Palette::new(&api)),
             "t0",
             &Progress::silent(),
         );
-        assert!(is_answer_snapshot(&r), "seed {} case {case}", seed());
+        assert!(is_answer(&r), "seed {} case {case}", seed());
     }
 }
 
@@ -365,16 +360,14 @@ fn listing_and_consumers_of_junk_answer() {
     let mut rng = Rng::new(seed().wrapping_add(4));
     for case in 0..1_000 {
         let api = api_of_junk(&mut rng, uid);
-        let listed = ops::list(
+        let listed = listing(
+            &api,
             &ops::ListOptions {
                 applied: true,
                 ..ops::ListOptions::default()
             },
-            |_| Ok(Palette::new(&api)),
-            "t1",
-            &Progress::silent(),
         );
-        assert!(is_answer(listed), "seed {} case {case}: list", seed());
+        assert!(is_answer(&listed), "seed {} case {case}: list", seed());
 
         let consumed = ops::consumers(
             &Ref::Uid(uid.to_string()),
@@ -383,7 +376,7 @@ fn listing_and_consumers_of_junk_answer() {
             &Progress::silent(),
         );
         assert!(
-            is_answer(consumed),
+            is_answer(&consumed),
             "seed {} case {case}: consumers",
             seed()
         );
@@ -479,7 +472,7 @@ fn the_binary_never_panics_on_junk_arguments() {
                 _ => args.push(dir.path().display().to_string()),
             }
         }
-        let out = Command::new(bin())
+        let out = Command::new(strata_bin())
             .args(&args)
             // an address nothing listens on: a request must fail as an error, not a panic
             .env("PALETTE_API", "http://127.0.0.1:1")
@@ -491,7 +484,7 @@ fn the_binary_never_panics_on_junk_arguments() {
             .env("NO_COLOR", "1")
             .output()
             .expect("the binary runs");
-        let err = String::from_utf8_lossy(&out.stderr);
+        let err = text(&out.stderr);
         assert!(
             !err.contains("panicked at"),
             "seed {} case {case}: {args:?} panicked:\n{err}",
@@ -504,8 +497,4 @@ fn the_binary_never_panics_on_junk_arguments() {
             seed()
         );
     }
-}
-
-fn bin() -> &'static Path {
-    Path::new(env!("CARGO_BIN_EXE_strata"))
 }

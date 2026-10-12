@@ -11,7 +11,7 @@ use std::process::{Child, Command, Stdio};
 
 use regex::Regex;
 
-use crate::tenant::{Edit, PackRefusal, Tenant};
+use crate::tenant::{Edit, PROJECT_LISTING, TENANT, Tenant};
 
 /// What the run is for.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -45,7 +45,7 @@ pub fn playground(name: &str) -> (&str, u32) {
 /// One run of the book's commands.
 pub struct Runner {
     /// The tenant the commands talk to.
-    pub tenant: Tenant,
+    tenant: Tenant,
     mode: Mode,
     repo: PathBuf,
     work: PathBuf,
@@ -83,7 +83,7 @@ impl Runner {
     pub fn start(repo: &Path, strata: &Path, xtask: &Path, mode: Mode) -> std::io::Result<Self> {
         let work = std::env::temp_dir().join(format!("strata-book-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&work);
-        let tenant_dir = work.join("tenant");
+        let tenant_dir = work.join(TENANT);
         let out = work.join("output");
         let bin = work.join("bin");
         std::fs::create_dir_all(&tenant_dir)?;
@@ -151,7 +151,7 @@ impl Runner {
         matches!(self.mode, Mode::Serve { .. })
     }
 
-    /// True when the tenant helpers must do nothing: a served run builds one chapter only.
+    /// True when this run builds the chapter: a served run builds one chapter only.
     fn building(&self) -> bool {
         !self.skip
     }
@@ -191,19 +191,16 @@ impl Runner {
         self.mutated = 1;
     }
 
-    /// Run the tenant helper `f` when this run builds the chapter, and mark the change. A served
-    /// run that does not build this chapter does nothing.
-    fn build(&mut self, f: impl FnOnce(&Tenant)) {
+    /// Run the tenant helper `f` when this run builds the chapter, and mark the change.
+    ///
+    /// A chapter changes the tenant through it, with the methods of [`Tenant`]: a profile, a
+    /// cluster, an edit in place. A served run that does not build this chapter does nothing.
+    pub fn tenant(&mut self, f: impl FnOnce(&Tenant)) {
         if !self.building() {
             return;
         }
         self.changed();
         f(&self.tenant);
-    }
-
-    /// The projects the key can see.
-    pub fn projects(&mut self, pairs: &[(&str, &str)]) {
-        self.build(|t| t.projects(pairs));
     }
 
     /// Publish a copy of an example profile.
@@ -221,15 +218,15 @@ impl Runner {
         edits: &[Edit],
     ) {
         self.seed_once(project, uid, version, example, edits);
-        self.publish(project, uid, version, example, edits);
+        self.tenant(|t| t.profile(project, uid, version, example, edits));
     }
 
     /// Publish a copy of an example profile at tenant scope. Palette lists a profile of the
     /// tenant in each project, beside the profiles of the project, and serves its document
     /// there. The rule of [`Runner::profile`] on one content for one identity holds for it too.
     pub fn tenant_profile(&mut self, uid: &str, version: &str, example: &str, edits: &[Edit]) {
-        self.seed_once("tenant", uid, version, example, edits);
-        self.build(|t| t.tenant_profile(uid, version, example, edits));
+        self.seed_once(TENANT, uid, version, example, edits);
+        self.tenant(|t| t.tenant_profile(uid, version, example, edits));
     }
 
     /// Stop when another chapter seeds `project` `uid` `version` from another content.
@@ -269,58 +266,11 @@ impl Runner {
         edits: &[Edit],
         _why: &str,
     ) {
-        self.publish(project, uid, version, example, edits);
+        self.tenant(|t| t.profile(project, uid, version, example, edits));
     }
 
-    fn publish(&mut self, project: &str, uid: &str, version: &str, example: &str, edits: &[Edit]) {
-        self.build(|t| t.profile(project, uid, version, example, edits));
-    }
-
-    /// [`Runner::addons`] under another profile name.
-    pub fn addons_named(
-        &mut self,
-        project: &str,
-        uid: &str,
-        name: &str,
-        pack: &str,
-        label: &str,
-        version: &str,
-    ) {
-        self.build(|t| t.addons_named(project, uid, name, pack, label, version));
-    }
-
-    /// Publish the add-on profile with one manifest pack.
-    pub fn addons(&mut self, project: &str, uid: &str, pack: &str, label: &str, version: &str) {
-        self.build(|t| t.addons(project, uid, pack, label, version));
-    }
-
-    /// A private Helm registry: see [`Tenant::private_charts`].
-    pub fn private_charts(&mut self, project: &str) {
-        self.build(|t| t.private_charts(project));
-    }
-
-    /// A profile that pins a chart of the private Helm registry: see [`Tenant::chart_profile`].
-    pub fn chart_profile(&mut self, project: &str, uid: &str, pack: &str, version: &str) {
-        self.build(|t| t.chart_profile(project, uid, pack, version));
-    }
-
-    /// Change a published profile in place, as an edit through the API does.
-    pub fn edit(&mut self, project: &str, uid: &str, edits: &[Edit]) {
-        self.build(|t| t.edit(project, uid, edits));
-    }
-
-    /// Edit a published profile with no publish, as a PUT of the version does: the edits go to
-    /// its draft.
-    pub fn draft(&mut self, project: &str, uid: &str, edits: &[Edit]) {
-        self.build(|t| t.draft(project, uid, edits));
-    }
-
-    /// Publish the draft of a profile version.
-    pub fn publish_draft(&mut self, project: &str, uid: &str) {
-        self.build(|t| t.publish(project, uid));
-    }
-
-    /// Create a profile version with no publish: see [`Tenant::unpublish`].
+    /// Create a profile version with no publish: see [`Tenant::unpublish`]. The rule of
+    /// [`Runner::profile`] on one content for one identity holds for it.
     pub fn unpublished(
         &mut self,
         project: &str,
@@ -330,217 +280,7 @@ impl Runner {
         edits: &[Edit],
     ) {
         self.profile(project, uid, version, example, edits);
-        self.build(|t| t.unpublish(project, uid));
-    }
-
-    /// Create a cluster, or apply the update that waits for one that exists.
-    pub fn cluster(&mut self, project: &str, uid: &str, name: &str, profiles: &[&str]) {
-        self.cluster_with(project, uid, name, profiles, &[]);
-    }
-
-    /// The same, with a value for each profile variable.
-    pub fn cluster_with(
-        &mut self,
-        project: &str,
-        uid: &str,
-        name: &str,
-        profiles: &[&str],
-        values: &[(&str, &str)],
-    ) {
-        self.build(|t| t.cluster(project, uid, name, profiles, values));
-    }
-
-    /// A saved tag filter of the tenant: see [`Tenant::tag_filter`].
-    pub fn tag_filter(&mut self, name: &str, uid: &str, key: &str, value: &str) {
-        self.build(|t| t.tag_filter(name, uid, key, value));
-    }
-
-    /// The registry before it published one version: see [`Tenant::hide_pack_version`].
-    pub fn hide_pack_version(&mut self, project: &str, name: &str, version: &str) {
-        self.build(|t| t.hide_pack_version(project, name, version));
-    }
-
-    /// A rebuild of one version of a pack: see [`Tenant::rebuild_pack_version`].
-    pub fn rebuild_pack_version(&mut self, project: &str, name: &str, version: &str) {
-        self.build(|t| t.rebuild_pack_version(project, name, version));
-    }
-
-    /// The architectures of one version of a pack: see [`Tenant::pack_architectures`].
-    pub fn pack_architectures(
-        &mut self,
-        project: &str,
-        name: &str,
-        version: &str,
-        architectures: &str,
-    ) {
-        self.build(|t| t.pack_architectures(project, name, version, architectures));
-    }
-
-    /// A template on one version of a pack: see [`Tenant::pack_template`].
-    pub fn pack_template(
-        &mut self,
-        project: &str,
-        name: &str,
-        version: &str,
-        template: &serde_json::Value,
-    ) {
-        self.build(|t| t.pack_template(project, name, version, template));
-    }
-
-    /// An edge host with profiles bound to it: see [`Tenant::edge_host`].
-    pub fn edge_host(&mut self, project: &str, uid: &str, name: &str, profiles: &[&str]) {
-        self.build(|t| t.edge_host(project, uid, name, profiles));
-    }
-
-    /// A cluster template that links profiles: see [`Tenant::cluster_template`].
-    pub fn cluster_template(&mut self, project: &str, uid: &str, name: &str, profiles: &[&str]) {
-        self.build(|t| t.cluster_template(project, uid, name, profiles));
-    }
-
-    /// A cluster group and its virtual clusters: see [`Tenant::cluster_group`].
-    pub fn cluster_group(
-        &mut self,
-        project: &str,
-        uid: &str,
-        name: &str,
-        profiles: &[&str],
-        members: &[&str],
-    ) {
-        self.build(|t| t.cluster_group(project, uid, name, profiles, members));
-    }
-
-    /// The app profile `shop`, or a plain update of it: see [`Tenant::app_profile`].
-    pub fn app_profile(
-        &mut self,
-        project: &str,
-        uid: &str,
-        version: &str,
-        replicas: &str,
-        web_order: u32,
-    ) {
-        self.build(|t| t.app_profile(project, uid, version, replicas, web_order));
-    }
-
-    /// An app deployment of an app profile: see [`Tenant::app_deployment`].
-    pub fn app_deployment(&mut self, project: &str, uid: &str, name: &str, profile: &str) {
-        self.build(|t| t.app_deployment(project, uid, name, profile));
-    }
-
-    /// Change the pack values on a cluster, and not on its profile.
-    pub fn on_cluster_reclaim(&mut self, project: &str, uid: &str, policy: &str) {
-        self.build(|t| t.on_cluster_reclaim(project, uid, policy));
-    }
-
-    /// The answer that Palette gives when asked if a change repaves a cluster.
-    pub fn repave_answer(&mut self, project: &str, cluster: &str, required: bool) {
-        self.build(|t| t.repave_answer(project, cluster, required));
-    }
-
-    /// Put a cluster in a cluster template: see [`Tenant::cluster_in_template`].
-    pub fn cluster_in_template(&mut self, project: &str, cluster: &str, template: &str) {
-        self.build(|t| t.cluster_in_template(project, cluster, template));
-    }
-
-    /// The answer that Palette gives when asked if a change of the profiles of a cluster
-    /// template repaves its clusters: see [`Tenant::template_repave_answer`].
-    pub fn template_repave_answer(&mut self, project: &str, template: &str, required: bool) {
-        self.build(|t| t.template_repave_answer(project, template, required));
-    }
-
-    /// Hold a repave of a cluster for approval: see [`Tenant::repave_waits`].
-    pub fn repave_waits(&mut self, project: &str, cluster: &str, since: &str) {
-        self.build(|t| t.repave_waits(project, cluster, since));
-    }
-
-    /// Make Palette refuse one request with HTTP 403: see [`Tenant::forbid`].
-    pub fn forbid(&mut self, project: &str, path: &str) {
-        self.build(|t| t.forbid(project, path));
-    }
-
-    /// Set the answer of `validate/packs` for a cluster: see [`Tenant::packs_answer`].
-    pub fn packs_answer(&mut self, project: &str, cluster: &str, refusal: Option<PackRefusal>) {
-        self.build(|t| t.packs_answer(project, cluster, refusal));
-    }
-
-    /// Set the answer of `validate/packs` for a profile: see [`Tenant::profile_packs_answer`].
-    pub fn profile_packs_answer(
-        &mut self,
-        project: &str,
-        profile: Option<&str>,
-        refusal: Option<(&str, &str, &str)>,
-    ) {
-        self.build(|t| t.profile_packs_answer(project, profile, refusal));
-    }
-
-    /// Set the answers of the name route and the import validate route for a new profile
-    /// version: see [`Tenant::profile_create_checks`].
-    pub fn profile_create_checks(
-        &mut self,
-        project: &str,
-        profile: (&str, &str),
-        name_refusal: Option<(u16, &str, &str)>,
-        import_refusal: Option<(u16, &str, &str)>,
-    ) {
-        self.build(|t| t.profile_create_checks(project, profile, name_refusal, import_refusal));
-    }
-
-    /// Delete a cluster at the time `at`: see [`Tenant::delete_cluster`].
-    pub fn delete_cluster(&mut self, project: &str, uid: &str, at: &str) {
-        self.build(|t| t.delete_cluster(project, uid, at));
-    }
-
-    /// Change one field of what Palette reports for a cluster, or its cloud config: see
-    /// [`Tenant::cluster_field`].
-    pub fn cluster_field(
-        &mut self,
-        project: &str,
-        uid: &str,
-        pointer: &str,
-        value: serde_json::Value,
-    ) {
-        self.build(|t| t.cluster_field(project, uid, pointer, value));
-    }
-
-    /// Change one field of the document of a cluster group: see
-    /// [`Tenant::cluster_group_field`].
-    pub fn cluster_group_field(
-        &mut self,
-        project: &str,
-        uid: &str,
-        pointer: &str,
-        value: serde_json::Value,
-    ) {
-        self.build(|t| t.cluster_group_field(project, uid, pointer, value));
-    }
-
-    /// Move a cluster to another cloud type: see [`Tenant::cloud`].
-    pub fn cloud(&mut self, project: &str, uid: &str, kind: &str, spec: serde_json::Value) {
-        self.build(|t| t.cloud(project, uid, kind, spec));
-    }
-
-    /// Take a cluster out of the consumer list of a profile: see [`Tenant::drop_consumer`].
-    pub fn drop_consumer(&mut self, project: &str, profile: &str, cluster: &str) {
-        self.build(|t| t.drop_consumer(project, profile, cluster));
-    }
-
-    /// Give a project macro a value, and let each cluster of the project resolve it again.
-    pub fn set_macro(&mut self, project: &str, name: &str, value: &str) {
-        self.build(|t| t.set_macro(project, name, value));
-    }
-
-    /// Give a cluster variable a new value.
-    pub fn set_value(&mut self, project: &str, uid: &str, variable: &str, value: &str) {
-        self.build(|t| t.set_value(project, uid, variable, value));
-    }
-
-    /// The export of a published profile, at the export route of Palette.
-    pub fn export(&mut self, project: &str, uid: &str) {
-        self.build(|t| t.export(project, uid));
-    }
-
-    /// The pack registries and their versions.
-    pub fn registries(&mut self, project: &str) {
-        self.build(|t| t.registries(project));
+        self.tenant(|t| t.unpublish(project, uid));
     }
 
     /// Write the answer of one request of the tenant, for a route no other helper writes.
@@ -861,7 +601,7 @@ impl Runner {
             .find(|(k, _)| k == "PALETTE_PROJECT")
             .map(|(_, v)| v.clone())
             .unwrap_or_default();
-        let listing = self.tenant.doc("tenant", "v1/dashboard/projects/metadata");
+        let listing = self.tenant.doc(TENANT, PROJECT_LISTING);
         let text = std::fs::read_to_string(&listing).unwrap_or_default();
         let doc: serde_json::Value = serde_json::from_str(&text).unwrap_or(serde_json::json!({}));
         let items = doc["items"].as_array().cloned().unwrap_or_default();

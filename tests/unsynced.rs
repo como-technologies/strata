@@ -11,11 +11,13 @@ use strata::color::Paint;
 use strata::error::Error;
 use strata::ops::{self, PairStatus, Policy};
 use strata::progress::Progress;
-use strata::reference::Ref;
 use strata::render::{self, Format};
 
 mod common;
-use common::candidate_snapshot;
+use common::{
+    OCI_REGISTRY_SUMMARY, REGISTRY_LISTING, candidate_snapshot, pack_listing_route,
+    profile_document, snapshot_of, template,
+};
 
 const CHART: &str = "strata-live-chart";
 const PRIVATE: &str = "reg-charts-auth";
@@ -24,7 +26,7 @@ const ZARF: &str = "reg-zarf";
 
 fn listing(path_name: &str, items: Value) -> (String, Value) {
     (
-        format!("/v1/packs?filters=spec.name={path_name}&limit=100&offset=0"),
+        pack_listing_route(path_name),
         json!({"items": items, "listmeta": {"count": items.as_array().map_or(0, Vec::len)}}),
     )
 }
@@ -35,7 +37,7 @@ fn tenant() -> MemoryApi {
     let (path, empty) = listing(CHART, json!([]));
     MemoryApi::new()
         .with(
-            "/v1/registries/metadata",
+            REGISTRY_LISTING,
             json!({"items": [
                 {"name": "charts-auth", "uid": PRIVATE, "kind": "helm", "isPrivate": true},
                 {"name": "charts", "uid": PUBLIC, "kind": "helm", "isPrivate": false},
@@ -43,7 +45,7 @@ fn tenant() -> MemoryApi {
             ]}),
         )
         .with(
-            "/v1/registries/oci/summary",
+            OCI_REGISTRY_SUMMARY,
             json!({"items": [{"metadata": {"uid": ZARF, "name": "zarf"},
                 "spec": {"providerType": "zarf"},
                 "status": {"sync": {"isSyncSupported": false}}}]}),
@@ -101,11 +103,11 @@ fn a_layer_from_a_registry_that_syncs_is_still_pack_not_found() {
     // an OCI registry of the provider type pack syncs, whatever the flag says
     let api = tenant()
         .with(
-            "/v1/registries/metadata",
+            REGISTRY_LISTING,
             json!({"items": [{"name": "zarf", "uid": ZARF, "kind": "oci"}]}),
         )
         .with(
-            "/v1/registries/oci/summary",
+            OCI_REGISTRY_SUMMARY,
             json!({"items": [{"metadata": {"uid": ZARF}, "spec": {"providerType": "pack"},
                 "status": {"sync": {"isSyncSupported": false}}}]}),
         );
@@ -170,11 +172,19 @@ fn published(dir: &Path, uid: &str, digest: &str) -> strata::snapshot::Snapshot 
     for (name, doc) in [
         (
             "profile.json",
-            json!({"metadata": {"name": "charts-probe", "uid": "p1"},
-                "spec": {"version": "1.0.0", "published": {"cloudType": "all", "type": "add-on",
-                    "packs": [{"name": CHART, "layer": "addon", "type": "helm", "tag": "1.0.0",
-                        "version": "1.0.0", "packUid": uid, "registryUid": PRIVATE,
-                        "digest": digest, "values": "replicas: 2\n"}]}}}),
+            profile_document(
+                "p1",
+                "charts-probe",
+                "1.0.0",
+                template(
+                    "all",
+                    "add-on",
+                    json!([{"name": CHART, "layer": "addon",
+                    "type": "helm", "tag": "1.0.0", "version": "1.0.0", "packUid": uid,
+                    "registryUid": PRIVATE, "digest": digest, "values": "replicas: 2\n"}]),
+                ),
+                None,
+            ),
         ),
         (
             "manifests.json",
@@ -237,16 +247,6 @@ fn the_pack_that_palette_makes_has_the_layer_addon_for_the_rules_of_the_profile_
     );
 }
 
-/// A pack ref against the tenant, as `snapshot pack:...` reads it.
-fn pack_record(api: &MemoryApi, reference: &str) -> strata::Result<strata::snapshot::Snapshot> {
-    ops::snapshot_for(
-        &Ref::parse_with(reference, |_| false),
-        || Ok(Palette::new(api.clone())),
-        "t0",
-        &Progress::silent(),
-    )
-}
-
 #[test]
 fn packs_and_behind_name_the_registries_that_palette_does_not_sync_when_none_has_the_pack() {
     let api = tenant();
@@ -299,7 +299,7 @@ fn packs_and_behind_name_the_registries_that_palette_does_not_sync_when_none_has
     assert!(err.to_json().get("unsynced").is_none(), "{err}");
 
     // a pack ref of that registry, and one with no registry
-    let err = pack_record(&api, "pack:charts-auth/strata-live-chart@1.0.0").unwrap_err();
+    let err = snapshot_of(&api, "pack:charts-auth/strata-live-chart@1.0.0").unwrap_err();
     assert_eq!(err.kind(), "pack-not-found");
     assert_eq!(err.to_json()["unsynced"], json!(["charts-auth"]));
     assert!(
@@ -308,7 +308,7 @@ fn packs_and_behind_name_the_registries_that_palette_does_not_sync_when_none_has
         ),
         "{err}"
     );
-    let err = pack_record(&api, "pack:strata-live-chart@1.0.0").unwrap_err();
+    let err = snapshot_of(&api, "pack:strata-live-chart@1.0.0").unwrap_err();
     assert_eq!(err.to_json()["unsynced"], json!(["charts-auth", "zarf"]));
 
     // behind cannot check the pin of a candidate record from that registry, and says why
@@ -357,6 +357,6 @@ fn packs_reads_the_registry_listing_and_the_oci_summary_one_time_when_no_registr
     )
     .unwrap_err();
     assert_eq!(err.to_json()["unsynced"], json!(["charts-auth", "zarf"]));
-    assert_eq!(api.calls("/v1/registries/metadata"), 1, "{err}");
-    assert_eq!(api.calls("/v1/registries/oci/summary"), 1, "{err}");
+    assert_eq!(api.calls(REGISTRY_LISTING), 1, "{err}");
+    assert_eq!(api.calls(OCI_REGISTRY_SUMMARY), 1, "{err}");
 }

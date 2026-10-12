@@ -797,6 +797,18 @@ pub fn pack_listing_route(name: &str) -> String {
     format!("/v1/packs?filters=spec.name={name}&limit=100&offset=0")
 }
 
+/// The registry listing, `GET /v1/registries/metadata`.
+pub const REGISTRY_LISTING: &str = "/v1/registries/metadata";
+
+/// The summary of the OCI registries, `GET /v1/registries/oci/summary`.
+pub const OCI_REGISTRY_SUMMARY: &str = "/v1/registries/oci/summary";
+
+/// One manifest `manifest` of the pack `pack` of the profile version `uid`, with the content of
+/// each template.
+pub fn manifest_route(uid: &str, pack: &str, manifest: &str) -> String {
+    format!("/v1/clusterprofiles/{uid}/packs/{pack}/manifests/{manifest}")
+}
+
 // ---- the profile documents ---------------------------------------------------------------------
 
 /// A template of a profile version: the cloud type, the type of the profile, and its packs.

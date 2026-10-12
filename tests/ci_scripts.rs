@@ -91,9 +91,7 @@ fn the_ci_drop_ins_name_only_scripts_that_ship() {
             );
             // a path under scripts/ is this repository's copy, and must be where it says
             if let Some(rest) = token.split_once("scripts/").map(|(_, r)| r) {
-                let at = Path::new(env!("CARGO_MANIFEST_DIR"))
-                    .join("scripts")
-                    .join(rest);
+                let at = script(rest);
                 assert!(at.exists(), "{file} names {token}, which is not at {at:?}");
             }
         }
@@ -218,9 +216,8 @@ fn the_ci_drop_ins_name_the_version_this_repository_is_at() {
 /// failed on it. This holds them together.
 #[test]
 fn the_release_check_runs_the_scripts_the_installer_installs() {
-    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
-    let installer = std::fs::read_to_string(root.join("scripts/ci/install-strata.sh")).unwrap();
-    let release = std::fs::read_to_string(root.join(".github/workflows/release.yml")).unwrap();
+    let installer = repo_file("scripts/ci/install-strata.sh");
+    let release = repo_file(".github/workflows/release.yml");
 
     // `scripts=(pr-comment.sh merge-gate.sh verify-report.sh)` in the installer. --bin-only empties
     // that list at run time; this is the declaration, which names every script a full install gets.
@@ -330,6 +327,25 @@ printf '%s' "$answer" > "$out"
 printf '%s' "${FAKE_GL_STATUS:-200}"
 "#;
 
+/// The variables of a GitLab job, as the scripts read them. The stand-in curl answers from the
+/// directory `gl`; the project, the API, and the token are fixed.
+fn gitlab_job(gl: &str) -> Vec<(&str, &str)> {
+    vec![
+        ("FAKE_GL", gl),
+        ("GITLAB_CI", "true"),
+        ("CI_PROJECT_ID", "42"),
+        ("CI_API_V4_URL", "https://gitlab.example/api/v4"),
+        ("GITLAB_TOKEN", "a-token"),
+    ]
+}
+
+/// The `kind` (a body or a comment) that a stand-in kept from the call with the 1-based number
+/// `call`, as `<kind>-<call>.md` under `dir`.
+fn handed_in(dir: &Path, kind: &str, call: usize) -> String {
+    std::fs::read_to_string(dir.join(format!("{kind}-{call}.md")))
+        .unwrap_or_else(|_| panic!("no {kind} from call {call}"))
+}
+
 struct Host {
     _dir: tempfile::TempDir,
     bin: PathBuf,
@@ -353,15 +369,7 @@ fn host() -> Host {
     common::make_fixtures(&raw);
     let snap = |name: &str| -> String {
         let out = dir.path().join(format!("{name}.json"));
-        let o = Command::new(env!("CARGO_BIN_EXE_strata"))
-            .args(["snapshot", "--from-raw"])
-            .arg(raw.join(name))
-            .arg("-o")
-            .arg(&out)
-            .env("STRATA_QUIET", "1")
-            .output()
-            .unwrap();
-        assert!(o.status.success(), "{}", text(&o.stderr));
+        snapshot_from_raw(&raw, name, &out);
         out.to_str().unwrap().to_string()
     };
     let bin = dir.path().join("bin");
@@ -371,13 +379,7 @@ fn host() -> Host {
         ("fake-strata", FAKE_STRATA),
         ("curl", FAKE_GL_CURL),
     ] {
-        let path = bin.join(name);
-        std::fs::write(&path, body).unwrap();
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
-        }
+        executable(&bin.join(name), body);
     }
     Host {
         a: snap("a"),
@@ -412,16 +414,11 @@ impl Host {
     fn run_with(&self, args: &[&str], envs: &[(&str, &str)]) -> Output {
         let _ = std::fs::remove_file(&self.log);
         let _ = std::fs::remove_file(&self.body);
-        let path = format!(
-            "{}:{}",
-            self.bin.display(),
-            std::env::var("PATH").unwrap_or_default()
-        );
         let mut c = Command::new("bash");
         c.arg(script("ci/pr-comment.sh"))
             .args(args)
-            .env("PATH", path)
-            .env("STRATA_BIN", env!("CARGO_BIN_EXE_strata"))
+            .env("PATH", path_with(&self.bin))
+            .env("STRATA_BIN", strata_bin())
             .env("STRATA_QUIET", "1")
             .env("FAKE_GH_LOG", &self.log)
             .env("FAKE_GH_SAVED_BODY", &self.body)
@@ -445,11 +442,7 @@ impl Host {
     }
 
     fn calls(&self) -> Vec<String> {
-        std::fs::read_to_string(&self.log)
-            .unwrap_or_default()
-            .lines()
-            .map(str::to_string)
-            .collect()
+        lines_of(&self.log)
     }
 
     fn saved_body(&self) -> String {
@@ -462,14 +455,8 @@ impl Host {
             let _ = std::fs::remove_file(self.gl.join(f));
         }
         let gl = self.gl.display().to_string();
-        let mut all: Vec<(&str, &str)> = vec![
-            ("FAKE_GL", &gl),
-            ("GITLAB_CI", "true"),
-            ("CI_PROJECT_ID", "42"),
-            ("CI_MERGE_REQUEST_IID", "7"),
-            ("CI_API_V4_URL", "https://gitlab.example/api/v4"),
-            ("GITLAB_TOKEN", "a-token"),
-        ];
+        let mut all = gitlab_job(&gl);
+        all.push(("CI_MERGE_REQUEST_IID", "7"));
         all.extend_from_slice(envs);
         self.run_with(args, &all)
     }
@@ -479,17 +466,12 @@ impl Host {
     }
 
     fn gl_calls(&self) -> Vec<String> {
-        std::fs::read_to_string(self.gl.join("curl.log"))
-            .unwrap_or_default()
-            .lines()
-            .map(str::to_string)
-            .collect()
+        lines_of(&self.gl.join("curl.log"))
     }
 
     /// The body file handed to curl on the call with this 1-based number.
     fn gl_handed(&self, call: usize) -> String {
-        std::fs::read_to_string(self.gl.join(format!("body-{call}.md")))
-            .unwrap_or_else(|_| panic!("curl call {call} was handed no body"))
+        handed_in(&self.gl, "body", call)
     }
 }
 
@@ -669,17 +651,13 @@ fn pr_comment_snapshots_a_live_ref_once_and_compares_files_offline() {
         &["lab-profile@1.3.0", &h.a, "--pr", "7", "--repo", "o/r"],
         &[
             ("STRATA_BIN", h.bin.join("fake-strata").to_str().unwrap()),
-            ("REAL_STRATA", env!("CARGO_BIN_EXE_strata")),
+            ("REAL_STRATA", strata_bin().to_str().unwrap()),
             ("FAKE_STRATA_SNAPSHOT", &h.b),
             ("FAKE_STRATA_LOG", log.to_str().unwrap()),
         ],
     );
     assert!(o.status.success(), "{}", text(&o.stderr));
-    let calls: Vec<String> = std::fs::read_to_string(&log)
-        .unwrap()
-        .lines()
-        .map(str::to_string)
-        .collect();
+    let calls = lines_of(&log);
     let snapshots: Vec<&String> = calls
         .iter()
         .filter(|c| c.starts_with("snapshot "))
@@ -875,14 +853,7 @@ fn install(d: &Path, args: &[&str]) -> Output {
         .arg(script("ci/install-strata.sh"))
         .args(args)
         .current_dir(d)
-        .env(
-            "PATH",
-            format!(
-                "{}:{}",
-                d.join("bin").display(),
-                std::env::var("PATH").unwrap()
-            ),
-        )
+        .env("PATH", path_with(&d.join("bin")))
         .env("FAKE_REL", d)
         .env("STRATA_API", "https://host.example/api")
         .env("STRATA_REPO", "o/r")
@@ -1124,19 +1095,13 @@ impl Gate {
 
     /// The same run, with these variables set after the others.
     fn run_env(&self, args: &[&str], env: &[(&str, &std::path::Path)]) -> Output {
-        Command::new("bash")
-            .arg(script("ci/merge-gate.sh"))
+        let mut c = Command::new("bash");
+        c.arg(script("ci/merge-gate.sh"))
             .args(args)
             .current_dir(self.dir.path())
             // a key in the ~/.palette.env of the machine must not reach the gate
             .env("HOME", self.dir.path())
-            .env("GIT_CONFIG_GLOBAL", "/dev/null")
-            .env("GIT_CONFIG_SYSTEM", "/dev/null")
-            .env("GIT_AUTHOR_NAME", "t")
-            .env("GIT_AUTHOR_EMAIL", "t@example.com")
-            .env("GIT_COMMITTER_NAME", "t")
-            .env("GIT_COMMITTER_EMAIL", "t@example.com")
-            .env("STRATA_BIN", env!("CARGO_BIN_EXE_strata"))
+            .env("STRATA_BIN", strata_bin())
             .env("STRATA_QUIET", "1")
             .env_remove("PALETTE_API_KEY")
             .env_remove("SPECTROCLOUD_APIKEY")
@@ -1146,9 +1111,8 @@ impl Gate {
             .env_remove("GITHUB_BASE_REF")
             .env_remove("CI_MERGE_REQUEST_TARGET_BRANCH_NAME")
             .env_remove("STRATA_REMOTE")
-            .envs(env.iter().copied())
-            .output()
-            .unwrap()
+            .envs(env.iter().copied());
+        isolate_git(&mut c).output().unwrap()
     }
 }
 
@@ -1166,15 +1130,7 @@ fn gate_records() -> (String, String, String) {
     );
     let snap = |name: &str| -> String {
         let out = dir.path().join(format!("{name}.json"));
-        let o = Command::new(env!("CARGO_BIN_EXE_strata"))
-            .args(["snapshot", "--from-raw"])
-            .arg(raw.join(name))
-            .arg("-o")
-            .arg(&out)
-            .env("STRATA_QUIET", "1")
-            .output()
-            .unwrap();
-        assert!(o.status.success(), "{}", text(&o.stderr));
+        snapshot_from_raw(&raw, name, &out);
         // one header for all three: the ref and the time are what the job wrote, not the change
         let doc = std::fs::read_to_string(&out).unwrap();
         let doc = field(&doc, "\"ref\": \"", "releases/dev.json");
@@ -1495,28 +1451,24 @@ fn merge_gate_names_an_unverified_record_and_passes_allow_no_digest_on() {
     let g = Gate::new(&base, &branch, &base);
     let bin = tempfile::tempdir().unwrap();
     let fake = bin.path().join("strata");
-    std::fs::write(&fake, FAKE_UNVERIFIED_STRATA).unwrap();
-    std::fs::set_permissions(&fake, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
+    executable(&fake, FAKE_UNVERIFIED_STRATA);
     let log = bin.path().join("verify.log");
     let run = |extra: &[&str]| {
-        Command::new("bash")
-            .arg(script("ci/merge-gate.sh"))
+        let mut c = Command::new("bash");
+        c.arg(script("ci/merge-gate.sh"))
             .args(["releases/*.json", "--base", "main"])
             .args(extra)
             .current_dir(g.dir.path())
             .env("HOME", g.dir.path())
-            .env("GIT_CONFIG_GLOBAL", "/dev/null")
-            .env("GIT_CONFIG_SYSTEM", "/dev/null")
             .env("STRATA_BIN", &fake)
-            .env("REAL_STRATA", env!("CARGO_BIN_EXE_strata"))
+            .env("REAL_STRATA", strata_bin())
             .env("FAKE_LOG", &log)
             .env("STRATA_QUIET", "1")
             .env("PALETTE_API_KEY", "k")
             .env_remove("GITHUB_BASE_REF")
             .env_remove("CI_MERGE_REQUEST_TARGET_BRANCH_NAME")
-            .env_remove("STRATA_REMOTE")
-            .output()
-            .unwrap()
+            .env_remove("STRATA_REMOTE");
+        isolate_git(&mut c).output().unwrap()
     };
 
     // red, and the report says why: a pack with no digest, not a drift
@@ -1534,10 +1486,10 @@ fn merge_gate_names_an_unverified_record_and_passes_allow_no_digest_on() {
     std::fs::remove_file(&log).unwrap();
     let o = run(&["--allow-no-digest"]);
     assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
-    let calls = std::fs::read_to_string(&log).unwrap();
+    let calls = lines_of(&log);
     assert!(
-        calls.lines().all(|l| l.contains("--allow-no-digest")),
-        "{calls}"
+        !calls.is_empty() && calls.iter().all(|l| l.contains("--allow-no-digest")),
+        "{calls:?}"
     );
 }
 
@@ -1584,26 +1536,42 @@ case "$*" in
 esac
 "#;
 
-struct Drift {
+/// The stand-ins of one script that opens issues: verify-report.sh or upstream-report.sh.
+///
+/// The directory holds a `strata` that answers from the files that a test puts there. Its `gh`
+/// and `curl` log each call and keep each body there.
+struct Report {
+    script: PathBuf,
     dir: tempfile::TempDir,
 }
 
-impl Drift {
-    fn new() -> Drift {
+impl Report {
+    /// The stand-ins of the script `name` under scripts/, with `strata_stand_in` as its strata.
+    fn new(name: &str, strata_stand_in: &str) -> Report {
         let dir = tempfile::tempdir().unwrap();
         let bin = dir.path().join("bin");
         std::fs::create_dir(&bin).unwrap();
-        executable(&bin.join("strata"), FAKE_VERIFY_STRATA);
+        executable(&bin.join("strata"), strata_stand_in);
         executable(&bin.join("gh"), FAKE_ISSUES_GH);
         executable(&bin.join("curl"), FAKE_GL_CURL);
-        Drift { dir }
+        Report {
+            script: script(name),
+            dir,
+        }
     }
 
+    /// verify-report.sh, with the strata that answers `verify`.
+    fn verify() -> Report {
+        Report::new("ci/verify-report.sh", FAKE_VERIFY_STRATA)
+    }
+
+    /// Write the file `name` where the stand-ins read it.
     fn put(&self, name: &str, body: &str) {
         std::fs::write(self.dir.path().join(name), body).unwrap();
     }
 
-    /// The summary strata prints, from (path, status, name, version) per record.
+    /// The summary that strata prints for verify-report.sh, from (path, status, name, version)
+    /// per record.
     fn summary(&self, exit: i32, records: &[(&str, &str, &str, &str)]) {
         let records: Vec<serde_json::Value> = records
             .iter()
@@ -1624,7 +1592,8 @@ impl Drift {
         self.put("summary.exit", &exit.to_string());
     }
 
-    /// What `strata verify <path> --format markdown` prints and exits with for one record.
+    /// The report and the exit code of `strata verify <path> --format markdown` for one record,
+    /// for verify-report.sh.
     fn record(&self, key: &str, exit: i32, report: &str, err: &str) {
         self.put(&format!("{key}.md"), report);
         self.put(&format!("{key}.exit"), &exit.to_string());
@@ -1636,73 +1605,49 @@ impl Drift {
         }
     }
 
+    /// Run the script as a GitHub job does: no variable of a GitLab job is set.
     fn run(&self, args: &[&str]) -> Output {
-        for f in ["gh.log", "strata.log"] {
+        self.run_with(args, &[])
+    }
+
+    /// Run the script with `envs` set last. It first removes the logs of the run before.
+    fn run_with(&self, args: &[&str], envs: &[(&str, &str)]) -> Output {
+        // a test reads the calls of one run, not of the runs before it
+        for f in ["gh.log", "strata.log", "curl.log", "since-used.json"] {
             let _ = std::fs::remove_file(self.dir.path().join(f));
         }
-        Command::new("bash")
-            .arg(script("ci/verify-report.sh"))
+        let mut c = Command::new("bash");
+        c.arg(&self.script)
             .args(args)
-            .env(
-                "PATH",
-                format!(
-                    "{}:{}",
-                    self.dir.path().join("bin").display(),
-                    std::env::var("PATH").unwrap()
-                ),
-            )
+            .env("PATH", path_with(&self.dir.path().join("bin")))
             .env("FAKE_VERIFY", self.dir.path())
             .env_remove("STRATA_BIN")
             .env_remove("GITHUB_REPOSITORY")
-            .output()
-            .unwrap()
+            .envs(envs.iter().copied());
+        c.output().unwrap()
     }
 
-    /// Run the script the way a GitLab job does; the stand-in curl answers from the same
-    /// directory, so its log and the bodies it is handed sit beside the rest.
+    /// Run the script as a GitLab job does: the stand-in curl answers from the same directory,
+    /// so its log is there too.
     fn run_gitlab(&self, args: &[&str]) -> Output {
-        let _ = std::fs::remove_file(self.dir.path().join("curl.log"));
-        Command::new("bash")
-            .arg(script("ci/verify-report.sh"))
-            .args(args)
-            .env(
-                "PATH",
-                format!(
-                    "{}:{}",
-                    self.dir.path().join("bin").display(),
-                    std::env::var("PATH").unwrap()
-                ),
-            )
-            .env("FAKE_VERIFY", self.dir.path())
-            .env("FAKE_GL", self.dir.path())
-            .env("GITLAB_CI", "true")
-            .env("CI_PROJECT_ID", "42")
-            .env("CI_API_V4_URL", "https://gitlab.example/api/v4")
-            .env("GITLAB_TOKEN", "a-token")
-            .env_remove("STRATA_BIN")
-            .env_remove("GITHUB_REPOSITORY")
-            .output()
-            .unwrap()
+        let dir = self.dir.path().display().to_string();
+        self.run_with(args, &gitlab_job(&dir))
     }
 
+    /// The lines of the log `name` of a stand-in, or none when it made no call.
     fn log(&self, name: &str) -> Vec<String> {
-        std::fs::read_to_string(self.dir.path().join(name))
-            .unwrap_or_default()
-            .lines()
-            .map(str::to_string)
-            .collect()
+        lines_of(&self.dir.path().join(name))
     }
 
     /// The body or comment handed to gh on the call with this 1-based number.
     fn handed(&self, kind: &str, call: usize) -> String {
-        std::fs::read_to_string(self.dir.path().join(format!("{kind}-{call}.md")))
-            .unwrap_or_else(|_| panic!("gh call {call} was handed no {kind}"))
+        handed_in(self.dir.path(), kind, call)
     }
 }
 
 #[test]
 fn verify_report_opens_one_issue_per_record_that_did_not_verify_and_closes_it_once_it_does() {
-    let d = Drift::new();
+    let d = Report::verify();
     d.summary(
         2,
         &[
@@ -1886,7 +1831,7 @@ fn verify_report_opens_one_issue_per_record_that_did_not_verify_and_closes_it_on
 
 #[test]
 fn verify_report_opens_updates_and_closes_gitlab_issues_the_same_way() {
-    let d = Drift::new();
+    let d = Report::verify();
     d.summary(
         2,
         &[
@@ -1965,7 +1910,7 @@ fn verify_report_opens_updates_and_closes_gitlab_issues_the_same_way() {
 
 #[test]
 fn verify_report_touches_no_issue_when_verify_checks_nothing() {
-    let d = Drift::new();
+    let d = Report::verify();
     d.put(
         "summary.err",
         r#"{"error":{"kind":"pattern","message":"'releases/*.json' matched no files"}}"#,
@@ -1984,7 +1929,7 @@ fn verify_report_touches_no_issue_when_verify_checks_nothing() {
 
 #[test]
 fn verify_report_dry_run_prints_each_report_and_calls_no_host() {
-    let d = Drift::new();
+    let d = Report::verify();
     d.summary(
         1,
         &[
@@ -2015,7 +1960,7 @@ fn verify_report_dry_run_prints_each_report_and_calls_no_host() {
 
 #[test]
 fn verify_report_opens_an_issue_for_an_unverified_record_and_passes_allow_no_digest_on() {
-    let d = Drift::new();
+    let d = Report::verify();
     d.summary(
         1,
         &[
@@ -2147,10 +2092,7 @@ fn live_applies_take_the_script_flag_and_the_baseline_restore_turns_it_off() {
         );
         let o = Command::new("bash")
             .args(["-c", &probe])
-            .env(
-                "PATH",
-                format!("{}:{}", bin.display(), std::env::var("PATH").unwrap()),
-            )
+            .env("PATH", path_with(&bin))
             .env("WORK", root.path())
             .env("HOME", root.path())
             .env("PALETTE_API_KEY", "k")
@@ -2159,10 +2101,10 @@ fn live_applies_take_the_script_flag_and_the_baseline_restore_turns_it_off() {
             .output()
             .unwrap();
         assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
-        let calls = std::fs::read_to_string(&log).unwrap();
+        let calls = lines_of(&log);
         // each call starts with tf.sh's -chdir
         let applies: Vec<&str> = calls
-            .lines()
+            .iter()
             .filter_map(|c| c.split_once(' ').map(|(_, rest)| rest))
             .filter(|c| c.starts_with("apply "))
             .collect();
@@ -2177,7 +2119,7 @@ fn live_applies_take_the_script_flag_and_the_baseline_restore_turns_it_off() {
                 format!("{with}{flag} -var addon_version=1.0.1"),
                 format!("{with}false"),
             ],
-            "hold_versions and apply take the flag with no -target, read serially, and apply_baseline turns it off: {calls}"
+            "hold_versions and apply take the flag with no -target, read serially, and apply_baseline turns it off: {calls:?}"
         );
     }
 }
@@ -2199,26 +2141,14 @@ cat "$FAKE_VERIFY/report.json"
 exit "$(cat "$FAKE_VERIFY/report.exit")"
 "#;
 
-struct Upstream {
-    dir: tempfile::TempDir,
-}
-
-impl Upstream {
-    fn new() -> Upstream {
-        let dir = tempfile::tempdir().unwrap();
-        let bin = dir.path().join("bin");
-        std::fs::create_dir(&bin).unwrap();
-        executable(&bin.join("strata"), FAKE_BEHIND_STRATA);
-        executable(&bin.join("gh"), FAKE_ISSUES_GH);
-        Upstream { dir }
+impl Report {
+    /// upstream-report.sh, with the strata that answers `behind`.
+    fn upstream() -> Report {
+        Report::new("ci/upstream-report.sh", FAKE_BEHIND_STRATA)
     }
 
-    fn put(&self, name: &str, body: &str) {
-        std::fs::write(self.dir.path().join(name), body).unwrap();
-    }
-
-    /// The report strata prints: csi-aws-ebs pinned at 1.63.1 with `newer`, and kubernetes
-    /// current.
+    /// The report that strata prints for upstream-report.sh: csi-aws-ebs pinned at 1.63.1 with
+    /// `newer`, and kubernetes current.
     fn report(&self, exit: i32, newer: &[&str], arrived: Option<&[&str]>) {
         let mut csi = serde_json::json!({
             "name": "csi-aws-ebs", "layer": "csi", "registry": "Public Repo",
@@ -2248,45 +2178,11 @@ impl Upstream {
         );
         self.put("report.exit", &exit.to_string());
     }
-
-    fn run(&self, args: &[&str]) -> Output {
-        for f in ["gh.log", "strata.log", "since-used.json"] {
-            let _ = std::fs::remove_file(self.dir.path().join(f));
-        }
-        Command::new("bash")
-            .arg(script("ci/upstream-report.sh"))
-            .args(args)
-            .env(
-                "PATH",
-                format!(
-                    "{}:{}",
-                    self.dir.path().join("bin").display(),
-                    std::env::var("PATH").unwrap()
-                ),
-            )
-            .env("FAKE_VERIFY", self.dir.path())
-            .env_remove("STRATA_BIN")
-            .env_remove("GITHUB_REPOSITORY")
-            .output()
-            .unwrap()
-    }
-
-    fn log(&self, name: &str) -> Vec<String> {
-        std::fs::read_to_string(self.dir.path().join(name))
-            .unwrap_or_default()
-            .lines()
-            .map(str::to_string)
-            .collect()
-    }
-
-    fn file(&self, name: &str) -> String {
-        std::fs::read_to_string(self.dir.path().join(name)).unwrap_or_else(|_| panic!("no {name}"))
-    }
 }
 
 #[test]
 fn upstream_report_opens_one_issue_per_pack_behind_names_what_arrived_and_closes_it_when_current() {
-    let u = Upstream::new();
+    let u = Report::upstream();
     // first run: csi-aws-ebs is behind, kubernetes is current, and no issue is open
     u.report(1, &["1.65.0"], None);
     let o = u.run(&["releases/*.json", "--repo", "o/r"]);
@@ -2311,7 +2207,7 @@ fn upstream_report_opens_one_issue_per_pack_behind_names_what_arrived_and_closes
         "{}",
         calls[3]
     );
-    let body = u.file("body-4.md");
+    let body = u.handed("body", 4);
     let lines: Vec<&str> = body.lines().collect();
     assert_eq!(lines[0], "<!-- strata-behind: csi-aws-ebs reg-public -->");
     assert!(
@@ -2343,7 +2239,7 @@ fn upstream_report_opens_one_issue_per_pack_behind_names_what_arrived_and_closes
     assert_eq!(o.status.code(), Some(1), "{}", text(&o.stderr));
     let strata_call = &u.log("strata.log")[0];
     assert!(strata_call.contains("--since "), "{strata_call}");
-    let previous: serde_json::Value = serde_json::from_str(&u.file("since-used.json")).unwrap();
+    let previous = read_json(&u.dir.path().join("since-used.json"));
     assert_eq!(previous["schema"], "strata-behind/1");
     assert_eq!(previous["generatedAt"], "2026-09-26T06:00:00Z");
     assert_eq!(previous["pins"][0]["newer"][0]["version"], "1.65.0");
@@ -2355,13 +2251,13 @@ fn upstream_report_opens_one_issue_per_pack_behind_names_what_arrived_and_closes
         calls[1]
     );
     assert!(
-        u.file("body-2.md")
+        u.handed("body", 2)
             .contains("| 1.66.0, 1.65.0 | 1.66.0: cluster-wide IDENTITY AUTHORED | 1.66.0 |"),
         "{}",
-        u.file("body-2.md")
+        u.handed("body", 2)
     );
     assert!(
-        u.file("body-2.md")
+        u.handed("body", 2)
             .contains("**arrived** names the versions that arrived since")
     );
 
@@ -2374,14 +2270,14 @@ fn upstream_report_opens_one_issue_per_pack_behind_names_what_arrived_and_closes
         calls[1].starts_with("issue close 41 --repo o/r --comment"),
         "{calls:#?}"
     );
-    assert!(u.file("comment-2.md").contains(
+    assert!(u.handed("comment", 2).contains(
         "Each pin of `csi-aws-ebs` in Public Repo is at the newest version it can move to"
     ));
 }
 
 #[test]
 fn upstream_report_dry_run_prints_each_issue_and_calls_no_host() {
-    let u = Upstream::new();
+    let u = Report::upstream();
     u.report(1, &["1.65.0"], None);
     let o = u.run(&["releases/*.json", "--dry-run", "--no-impact"]);
     assert_eq!(o.status.code(), Some(1), "{}", text(&o.stderr));
@@ -2402,7 +2298,7 @@ fn upstream_report_dry_run_prints_each_issue_and_calls_no_host() {
 
 #[test]
 fn upstream_report_touches_no_issue_when_behind_checks_nothing() {
-    let u = Upstream::new();
+    let u = Report::upstream();
     u.put("report.json", "");
     u.put("report.exit", "2");
     let o = u.run(&["releases/*.json", "--repo", "o/r"]);

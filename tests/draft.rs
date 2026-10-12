@@ -14,7 +14,10 @@ use strata::render::{self, Format};
 use strata::snapshot::{DRAFT_TEMPLATE, PUBLISHED_TEMPLATE, Snapshot};
 
 mod common;
-use common::snapshot_of;
+use common::{
+    PROFILE_LISTING, manifest_content, manifest_entity, manifest_route, no_template, no_variables,
+    profile_document, serve_profile, snapshot_of,
+};
 
 const UID: &str = "64f0000000000000000000d1";
 const RULES: &str = "64f00000000000000000a0e1";
@@ -32,13 +35,17 @@ const ADDED_QUOTA: &str = "apiVersion: v1\nkind: ResourceQuota\nmetadata:\n  nam
 /// A pack ref of a template: the Kubernetes pack with `k8s` as its values, and the manifest pack
 /// `team-rules` with the manifests `refs`.
 fn template(k8s: &str, refs: Value) -> Value {
-    json!({"cloudType": "aws", "type": "cluster", "packs": [
-        {"name": "kubernetes", "layer": "k8s", "type": "spectro", "tag": "1.30.6",
-         "version": "1.30.6", "packUid": "pk-k8s-1306", "registryUid": "reg-public",
-         "digest": "sha256:k8s1306", "values": k8s, "manifests": []},
-        {"name": "team-rules", "layer": "addon", "type": "manifest", "tag": "1.0.0",
-         "version": "1.0.0", "packUid": "pk-rules", "values": "", "manifests": refs},
-    ]})
+    common::template(
+        "aws",
+        "cluster",
+        json!([
+            {"name": "kubernetes", "layer": "k8s", "type": "spectro", "tag": "1.30.6",
+             "version": "1.30.6", "packUid": "pk-k8s-1306", "registryUid": "reg-public",
+             "digest": "sha256:k8s1306", "values": k8s, "manifests": []},
+            {"name": "team-rules", "layer": "addon", "type": "manifest", "tag": "1.0.0",
+             "version": "1.0.0", "packUid": "pk-rules", "values": "", "manifests": refs},
+        ]),
+    )
 }
 
 /// The digest that Palette gives a manifest content: empty for no content.
@@ -48,14 +55,6 @@ fn digest(content: &str) -> String {
     } else {
         format!("sha1:{}", content.len())
     }
-}
-
-/// One manifest of the draft and the published template, as
-/// `GET /v1/clusterprofiles/{uid}/packs/{packName}/manifests/{manifestUid}` gives it.
-fn entity(uid: &str, name: &str, published: &str, draft: &str) -> Value {
-    let data = |c: &str| json!({"content": c, "digest": if c.is_empty() { String::new() } else { format!("sha1:{}", c.len()) }});
-    json!({"metadata": {"name": name, "uid": uid},
-           "spec": {"published": data(published), "draft": data(draft)}})
 }
 
 /// The answers of Palette for version 1.0.0 of `lab-profile`. The draft changes one value of the
@@ -76,12 +75,12 @@ fn palette_with_draft() -> MemoryApi {
         _ => "",
     })
     .with(
-        format!("/v1/clusterprofiles/{UID}/packs/team-rules/manifests/{RULES}"),
-        entity(RULES, "rules", PUBLISHED_RULES, DRAFT_RULES),
+        manifest_route(UID, "team-rules", RULES),
+        manifest_entity(RULES, "rules", PUBLISHED_RULES, DRAFT_RULES),
     )
     .with(
-        format!("/v1/clusterprofiles/{UID}/packs/team-rules/manifests/{ADDED}"),
-        entity(ADDED, "quota", "", ADDED_QUOTA),
+        manifest_route(UID, "team-rules", ADDED),
+        manifest_entity(ADDED, "quota", "", ADDED_QUOTA),
     )
 }
 
@@ -115,36 +114,15 @@ fn serve(published: Value, draft: Value, content: impl Fn(&str) -> &'static str)
                             "manifests": manifests}})
         })
         .collect();
-    let is_published = published["packs"].as_array().is_some_and(|p| !p.is_empty());
-    MemoryApi::new()
-        .with(
-            format!("/v1/clusterprofiles/{UID}"),
-            json!({"metadata": {"name": "lab-profile", "uid": UID},
-                   "spec": {"version": "1.0.0", "published": published, "draft": draft},
-                   "status": {"isPublished": is_published, "inUseClusterUids": []}}),
-        )
-        .with(
-            format!("/v1/clusterprofiles/{UID}/packs/manifests"),
-            json!({"metadata": {"name": "lab-profile", "uid": UID}, "spec": {"packs": packs}}),
-        )
-        .with(
-            format!("/v1/clusterprofiles/{UID}/variables"),
-            json!({"variables": []}),
-        )
-        .with(
-            "/v1/dashboard/clusterprofiles/metadata",
-            json!({"items": [
-                {"metadata": {"name": "lab-profile", "uid": UID}, "spec": {"version": "1.0.0"}}
-            ]}),
-        )
-}
-
-fn manifest<'a>(snap: &'a Snapshot, name: &str) -> Option<&'a str> {
-    snap.packs
-        .iter()
-        .flat_map(|p| &p.manifests)
-        .find(|m| m.name == name)
-        .map(|m| m.content.as_str())
+    let document = profile_document(UID, "lab-profile", "1.0.0", published, Some(draft));
+    let manifests =
+        json!({"metadata": {"name": "lab-profile", "uid": UID}, "spec": {"packs": packs}});
+    serve_profile(MemoryApi::new(), UID, document, manifests, no_variables()).with(
+        PROFILE_LISTING,
+        json!({"items": [
+            {"metadata": {"name": "lab-profile", "uid": UID}, "spec": {"version": "1.0.0"}}
+        ]}),
+    )
 }
 
 fn values<'a>(snap: &'a Snapshot, pack: &str) -> &'a str {
@@ -166,10 +144,14 @@ fn a_draft_records_apart_from_its_version_and_compare_names_the_layer_that_the_p
     // each record holds the content of its own template
     assert_eq!(values(&version, "kubernetes"), PUBLISHED_K8S);
     assert_eq!(values(&draft, "kubernetes"), DRAFT_K8S);
-    assert_eq!(manifest(&version, "rules"), Some(PUBLISHED_RULES));
-    assert_eq!(manifest(&draft, "rules"), Some(DRAFT_RULES));
-    assert_eq!(manifest(&version, "quota"), None, "the draft adds it");
-    assert_eq!(manifest(&draft, "quota"), Some(ADDED_QUOTA));
+    assert_eq!(manifest_content(&version, "rules"), Some(PUBLISHED_RULES));
+    assert_eq!(manifest_content(&draft, "rules"), Some(DRAFT_RULES));
+    assert_eq!(
+        manifest_content(&version, "quota"),
+        None,
+        "the draft adds it"
+    );
+    assert_eq!(manifest_content(&draft, "quota"), Some(ADDED_QUOTA));
 
     let d = ops::compare(&version, &draft, "t1");
     assert!(!d.same);
@@ -198,8 +180,7 @@ fn a_version_with_no_draft_is_the_error_no_draft_and_reads_no_manifest_by_uid() 
         PUBLISHED_K8S,
         json!([{"name": "rules", "uid": RULES, "kind": "manifest"}]),
     );
-    let empty = json!({"cloudType": "", "type": "", "packs": []});
-    let api = serve(published, empty, |_| PUBLISHED_RULES);
+    let api = serve(published, no_template(), |_| PUBLISHED_RULES);
     let err = snapshot_of(&api, &format!("{UID}@draft")).unwrap_err();
     assert!(
         matches!(&err, Error::NoDraft { uid, .. } if uid == UID),
@@ -210,8 +191,8 @@ fn a_version_with_no_draft_is_the_error_no_draft_and_reads_no_manifest_by_uid() 
 
     // the record of the version needs no more requests than before
     let version = snapshot_of(&api, UID).unwrap();
-    assert_eq!(manifest(&version, "rules"), Some(PUBLISHED_RULES));
-    let path = format!("/v1/clusterprofiles/{UID}/packs/team-rules/manifests/{RULES}");
+    assert_eq!(manifest_content(&version, "rules"), Some(PUBLISHED_RULES));
+    let path = manifest_route(UID, "team-rules", RULES);
     assert_eq!(api.calls(&path), 0);
 }
 
@@ -219,18 +200,17 @@ fn a_version_with_no_draft_is_the_error_no_draft_and_reads_no_manifest_by_uid() 
 fn a_version_that_was_never_published_records_the_manifest_content_of_its_draft() {
     // packs/manifests gives the published content of each manifest, and a manifest of a version
     // that was never published has none
-    let empty = json!({"cloudType": "", "type": "", "packs": []});
     let draft = template(
         DRAFT_K8S,
         json!([{"name": "rules", "uid": RULES, "kind": "manifest"}]),
     );
-    let api = serve(empty, draft, |_| "").with(
-        format!("/v1/clusterprofiles/{UID}/packs/team-rules/manifests/{RULES}"),
-        entity(RULES, "rules", "", DRAFT_RULES),
+    let api = serve(no_template(), draft, |_| "").with(
+        manifest_route(UID, "team-rules", RULES),
+        manifest_entity(RULES, "rules", "", DRAFT_RULES),
     );
     let snap = snapshot_of(&api, UID).unwrap();
     assert_eq!(snap.source.template, DRAFT_TEMPLATE);
-    assert_eq!(manifest(&snap, "rules"), Some(DRAFT_RULES));
+    assert_eq!(manifest_content(&snap, "rules"), Some(DRAFT_RULES));
     let draft = snapshot_of(&api, &format!("{UID}@draft")).unwrap();
     assert_eq!(draft.root, snap.root, "the draft is the only template");
 }
@@ -285,8 +265,7 @@ fn a_record_of_the_draft_verifies_against_the_version_once_the_draft_is_publishe
         json!([{"name": "rules", "uid": RULES, "kind": "manifest"},
                {"name": "quota", "uid": ADDED, "kind": "manifest"}]),
     );
-    let empty = json!({"cloudType": "", "type": "", "packs": []});
-    let after = serve(published, empty, |name| match name {
+    let after = serve(published, no_template(), |name| match name {
         "rules" => DRAFT_RULES,
         "quota" => ADDED_QUOTA,
         _ => "",

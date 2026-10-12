@@ -10,21 +10,6 @@ use common::*;
 
 // ---- examples/live helpers -------------------------------------------------------------------
 
-fn live_script(name: &str) -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("examples/live")
-        .join(name)
-}
-
-fn executable(path: &Path, body: &str) {
-    std::fs::write(path, body).unwrap();
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755)).unwrap();
-    }
-}
-
 /// A `tofu` that reports the host and whether a key arrived, never the key itself.
 const FAKE_TOFU: &str = r#"#!/usr/bin/env bash
 echo "host=${SPECTROCLOUD_HOST-<unset>} key=${SPECTROCLOUD_APIKEY:+set} args=$*"
@@ -43,10 +28,7 @@ fn tf_sh(envs: &[(&str, &str)], palette_env: Option<&str>) -> Output {
     let mut c = Command::new("bash");
     c.arg(live_script("tf.sh"))
         .arg("output")
-        .env(
-            "PATH",
-            format!("{}:{}", bin.display(), std::env::var("PATH").unwrap()),
-        )
+        .env("PATH", path_with(&bin))
         .env("HOME", &home)
         .env_remove("SPECTROCLOUD_APIKEY")
         .env_remove("SPECTROCLOUD_HOST")
@@ -160,10 +142,7 @@ fn tenant_sh(args: &[&str], status: &str, body: &str) -> (Output, String) {
     let o = Command::new("bash")
         .arg(live_script("tenant.sh"))
         .args(args)
-        .env(
-            "PATH",
-            format!("{}:{}", bin.display(), std::env::var("PATH").unwrap()),
-        )
+        .env("PATH", path_with(&bin))
         .env("HOME", dir.path())
         .env("PALETTE_API_KEY", "k")
         .env("PALETTE_PROJECT_UID", "p-1")
@@ -264,19 +243,32 @@ fn tenant_sh_reports_cluster_state_and_never_reads_a_gateway_404_as_deleted() {
 
 /// A `curl` that answers by path: the body of `<api path with / as _>` under $FAKE_ROUTES, with
 /// status 200, or 404 when there is no such file. A `<key>.status` file overrides the status.
-const FAKE_ROUTED_CURL: &str = r#"#!/usr/bin/env bash
-out=""; write=""; url=""
+/// When an executable $FAKE_ROUTES/<route key>.sh exists, its output is the body of each answer.
+/// It logs each request as `METHOD path` to $FAKE_LOG. It keeps each request body as
+/// $FAKE_ROUTES/sent/<METHOD>_<route key>, adds the body to
+/// $FAKE_ROUTES/sent/<METHOD>_<route key>.all in the order of the requests, and keeps the query
+/// and the headers, without the key, as $FAKE_ROUTES/sent/<METHOD>_<route key>.request.
+const FAKE_API_CURL: &str = r#"#!/usr/bin/env bash
+out=""; write=""; url=""; method=GET; sent=""; headers=""
 while [ $# -gt 0 ]; do
   case "$1" in
     -o) out=$2; shift 2 ;;
     -w) write=$2; shift 2 ;;
-    -H|-X|-d) shift 2 ;;
+    -X) method=$2; shift 2 ;;
+    --data-binary) sent=${2#@}; shift 2 ;;
+    -H) headers="$headers$2"$'\n'; shift 2 ;;
+    -d) shift 2 ;;
     -*) shift ;;
     *) url=$1; shift ;;
   esac
 done
-path=${url#*://*/}; key=${path//\//_}
+path=${url#*://*/}; query=""; [ "$path" != "${path#*\?}" ] && query=${path#*\?}; path=${path%%\?*}; key=${path//\//_}
+echo "$method /$path" >> "$FAKE_LOG"
+mkdir -p "$FAKE_ROUTES/sent"
+[ -n "$sent" ] && cp "$sent" "$FAKE_ROUTES/sent/${method}_$key" && cat "$sent" >> "$FAKE_ROUTES/sent/${method}_$key.all"
+printf 'query=%s\n%s' "$query" "$headers" | grep -v '^ApiKey:' > "$FAKE_ROUTES/sent/${method}_$key.request"
 body="$FAKE_ROUTES/$key"; status=404
+[ -x "$body.sh" ] && "$body.sh" > "$body"
 [ -f "$body" ] && status=200 || body=/dev/null
 [ -f "$FAKE_ROUTES/$key.status" ] && status=$(cat "$FAKE_ROUTES/$key.status")
 if [ -n "$out" ]; then cp "$body" "$out"; else cat "$body"; fi
@@ -285,9 +277,10 @@ exit 0
 "#;
 
 /// A `helm` whose `pull ... -d DIR` writes DIR/<name>-<version>.tgz holding "chart archive\n",
-/// or fails when $FAKE_HELM_FAIL is set. It logs its arguments and the Helm home it was given.
+/// or fails when $FAKE_HELM_FAIL is set. It logs its arguments and the Helm home it was given
+/// to $FAKE_TOOL_LOG.
 const FAKE_HELM: &str = r#"#!/usr/bin/env bash
-echo "$* HELM_CONFIG_HOME=$HELM_CONFIG_HOME" >> "$FAKE_LOG"
+echo "$* HELM_CONFIG_HOME=$HELM_CONFIG_HOME" >> "$FAKE_TOOL_LOG"
 [ -z "${FAKE_HELM_FAIL:-}" ] || { echo "Error: chart not found" >&2; exit 1; }
 name=""; version=""; dest=""
 shift
@@ -303,8 +296,9 @@ printf 'chart archive\n' > "$dest/$name-$version.tgz"
 "#;
 
 /// A `crane` whose `digest REF` prints a fixed digest, or fails when $FAKE_CRANE_FAIL is set.
+/// It logs its arguments to $FAKE_TOOL_LOG.
 const FAKE_CRANE: &str = r#"#!/usr/bin/env bash
-echo "$*" >> "$FAKE_LOG"
+echo "$*" >> "$FAKE_TOOL_LOG"
 [ -z "${FAKE_CRANE_FAIL:-}" ] || { echo "UNAUTHORIZED: authentication required" >&2; exit 1; }
 echo "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 "#;
@@ -314,47 +308,35 @@ const FAKE_CHART_SHA256: &str = "c7b3bbf2a53bd8a37070529402e843305d2cd0a95abd86c
 
 struct Digest {
     out: Output,
+    /// What helm and crane logged.
     log: String,
     /// The TMPDIR tenant.sh ran with, and the entries it left there.
     tmp: String,
     tmp_left: usize,
 }
 
+/// Run `tenant.sh digest` with `args` against the `routes` of Palette and the stand-ins of helm
+/// and crane, with `envs` in its environment.
 fn tenant_digest(args: &[&str], routes: &[(&str, &str)], envs: &[(&str, &str)]) -> Digest {
     let dir = tempfile::tempdir().unwrap();
-    let (bin, route_dir, tmp) = (
-        dir.path().join("bin"),
-        dir.path().join("routes"),
-        dir.path().join("tmp"),
-    );
-    for d in [&bin, &route_dir, &tmp] {
+    let (bin, route_dir) = (dir.path().join("bin"), dir.path().join("routes"));
+    for d in [&bin, &route_dir] {
         std::fs::create_dir(d).unwrap();
     }
-    executable(&bin.join("curl"), FAKE_ROUTED_CURL);
     executable(&bin.join("helm"), FAKE_HELM);
     executable(&bin.join("crane"), FAKE_CRANE);
     for (key, body) in routes {
         std::fs::write(route_dir.join(key), body).unwrap();
     }
     let log = dir.path().join("tools.log");
-    let mut cmd = Command::new("bash");
-    cmd.arg(live_script("tenant.sh"))
-        .arg("digest")
-        .args(args)
-        .env(
-            "PATH",
-            format!("{}:{}", bin.display(), std::env::var("PATH").unwrap()),
-        )
-        .env("HOME", dir.path())
-        .env("TMPDIR", &tmp)
-        .env("PALETTE_API_KEY", "k")
-        .env("PALETTE_PROJECT_UID", "p-1")
-        .env("FAKE_ROUTES", &route_dir)
-        .env("FAKE_LOG", &log);
-    for (k, v) in envs {
-        cmd.env(k, v);
-    }
-    let out = cmd.output().unwrap();
+    let log_path = log.display().to_string();
+    let mut env = vec![("FAKE_TOOL_LOG", log_path.as_str())];
+    env.extend_from_slice(envs);
+    let args: Vec<&str> = std::iter::once("digest")
+        .chain(args.iter().copied())
+        .collect();
+    let out = run_live("tenant.sh", &args, dir.path(), &env);
+    let tmp = dir.path().join("tmp");
     Digest {
         out,
         log: std::fs::read_to_string(&log).unwrap_or_default(),
@@ -511,39 +493,6 @@ fn tenant_sh_digest_exits_2_when_the_registry_cannot_be_read() {
     expect_2(&tenant_digest(&["git", "r", "n", "1"], &[], &[]), "usage");
 }
 
-/// A `curl` for api.sh: FAKE_ROUTED_CURL that also logs each request as `METHOD path` to
-/// $FAKE_LOG, keeps each request body as $FAKE_ROUTES/sent/<METHOD>_<route key>, and its query and
-/// headers, without the key, as $FAKE_ROUTES/sent/<METHOD>_<route key>.request. It also adds each
-/// body to $FAKE_ROUTES/sent/<METHOD>_<route key>.all, in the order of the requests. When an
-/// executable $FAKE_ROUTES/<route key>.sh exists, its output is the body of each answer.
-const FAKE_API_CURL: &str = r#"#!/usr/bin/env bash
-out=""; write=""; url=""; method=GET; sent=""; headers=""
-while [ $# -gt 0 ]; do
-  case "$1" in
-    -o) out=$2; shift 2 ;;
-    -w) write=$2; shift 2 ;;
-    -X) method=$2; shift 2 ;;
-    --data-binary) sent=${2#@}; shift 2 ;;
-    -H) headers="$headers$2"$'\n'; shift 2 ;;
-    -d) shift 2 ;;
-    -*) shift ;;
-    *) url=$1; shift ;;
-  esac
-done
-path=${url#*://*/}; query=""; [ "$path" != "${path#*\?}" ] && query=${path#*\?}; path=${path%%\?*}; key=${path//\//_}
-echo "$method /$path" >> "$FAKE_LOG"
-mkdir -p "$FAKE_ROUTES/sent"
-[ -n "$sent" ] && cp "$sent" "$FAKE_ROUTES/sent/${method}_$key" && cat "$sent" >> "$FAKE_ROUTES/sent/${method}_$key.all"
-printf 'query=%s\n%s' "$query" "$headers" | grep -v '^ApiKey:' > "$FAKE_ROUTES/sent/${method}_$key.request"
-body="$FAKE_ROUTES/$key"; status=404
-[ -x "$body.sh" ] && "$body.sh" > "$body"
-[ -f "$body" ] && status=200 || body=/dev/null
-[ -f "$FAKE_ROUTES/$key.status" ] && status=$(cat "$FAKE_ROUTES/$key.status")
-if [ -n "$out" ]; then cp "$body" "$out"; else cat "$body"; fi
-[ -n "$write" ] && printf '%s' "$status"
-exit 0
-"#;
-
 /// The sync route of `reg-1` for FAKE_API_CURL: Palette refuses the first $SYNC_REFUSALS
 /// requests with HTTP 500 and `OciSyncInProgress`, and takes each request after them.
 const FAKE_SYNC_ROUTE: &str = r#"#!/usr/bin/env bash
@@ -560,12 +509,9 @@ fi
 
 #[test]
 fn api_sh_sync_waits_while_a_sync_of_the_registry_runs_and_asks_again() {
-    let dir = tempfile::tempdir().unwrap();
-    let (bin, routes) = (dir.path().join("bin"), dir.path().join("routes"));
-    for d in [&bin, &routes] {
-        std::fs::create_dir(d).unwrap();
-    }
-    executable(&bin.join("curl"), FAKE_API_CURL);
+    let root = tempfile::tempdir().unwrap();
+    let routes = root.path().join("routes");
+    std::fs::create_dir(&routes).unwrap();
     executable(
         &routes.join("v1_registries_oci_reg-1_ecr_sync.sh"),
         FAKE_SYNC_ROUTE,
@@ -575,32 +521,21 @@ fn api_sh_sync_waits_while_a_sync_of_the_registry_runs_and_asks_again() {
         &routes.join("v1_registries_oci_reg-1_ecr_sync_status.sh"),
         "#!/usr/bin/env bash\necho \"{\\\"status\\\":\\\"Completed\\\",\\\"lastRunTime\\\":\\\"$(date +%s%N)\\\"}\"\n",
     );
-    let log = dir.path().join("curl.log");
+    let log = root.path().join("curl.log");
     let sync = |refusals: &str| {
         std::fs::write(&log, "").unwrap();
         let _ = std::fs::remove_file(routes.join("v1_registries_oci_reg-1_ecr_sync.calls"));
-        Command::new("bash")
-            .arg(live_script("api.sh"))
-            .args(["sync-oci", "reg-1"])
-            .env(
-                "PATH",
-                format!("{}:{}", bin.display(), std::env::var("PATH").unwrap()),
-            )
-            .env("HOME", dir.path())
-            .env("PALETTE_API_KEY", "k")
-            .env("PALETTE_PROJECT_UID", "p-1")
-            .env("FAKE_ROUTES", &routes)
-            .env("FAKE_LOG", &log)
-            .env("SYNC_WAIT", "0")
-            .env("SYNC_REFUSALS", refusals)
-            .output()
-            .unwrap()
+        run_live(
+            "api.sh",
+            &["sync-oci", "reg-1"],
+            root.path(),
+            &[("SYNC_WAIT", "0"), ("SYNC_REFUSALS", refusals)],
+        )
     };
     let posts = || {
-        std::fs::read_to_string(&log)
-            .unwrap()
-            .lines()
-            .filter(|l| *l == "POST /v1/registries/oci/reg-1/ecr/sync")
+        lines_of(&log)
+            .iter()
+            .filter(|l| l.as_str() == "POST /v1/registries/oci/reg-1/ecr/sync")
             .count()
     };
 
@@ -646,14 +581,10 @@ fn api_sh_sync_waits_while_a_sync_of_the_registry_runs_and_asks_again() {
     );
 }
 
-#[test]
-fn api_sh_edit_keeps_each_manifest_uid_so_clusters_keep_their_copies() {
-    let dir = tempfile::tempdir().unwrap();
-    let (bin, routes) = (dir.path().join("bin"), dir.path().join("routes"));
-    for d in [&bin, &routes] {
-        std::fs::create_dir(d).unwrap();
-    }
-    executable(&bin.join("curl"), FAKE_API_CURL);
+/// The fake Palette routes of the add-on profile `prof-1`: one pack `config` with one manifest
+/// `m-1` whose content says `edited: "no"`, and a publish that answers.
+fn addon_profile_routes(routes: &Path) {
+    std::fs::create_dir_all(routes).unwrap();
     std::fs::write(
         routes.join("v1_clusterprofiles_prof-1"),
         r#"{"metadata":{"name":"addon","uid":"prof-1"},"spec":{"version":"1.0.0","published":{
@@ -668,31 +599,26 @@ fn api_sh_edit_keeps_each_manifest_uid_so_clusters_keep_their_copies() {
     )
     .unwrap();
     std::fs::write(routes.join("v1_clusterprofiles_prof-1_publish"), "{}").unwrap();
-    let log = dir.path().join("curl.log");
-    let o = Command::new("bash")
-        .arg(live_script("api.sh"))
-        .args(["edit", "prof-1", r#"edited: "no""#, r#"edited: "yes""#])
-        .env(
-            "PATH",
-            format!("{}:{}", bin.display(), std::env::var("PATH").unwrap()),
-        )
-        .env("HOME", dir.path())
-        .env("PALETTE_API_KEY", "k")
-        .env("PALETTE_PROJECT_UID", "p-1")
-        .env("FAKE_ROUTES", &routes)
-        .env("FAKE_LOG", &log)
-        .output()
-        .unwrap();
+}
+
+#[test]
+fn api_sh_edit_keeps_each_manifest_uid_so_clusters_keep_their_copies() {
+    let root = tempfile::tempdir().unwrap();
+    let routes = root.path().join("routes");
+    addon_profile_routes(&routes);
+    let o = run_live(
+        "api.sh",
+        &["edit", "prof-1", r#"edited: "no""#, r#"edited: "yes""#],
+        root.path(),
+        &[],
+    );
     assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
-    let calls = std::fs::read_to_string(&log).unwrap();
+    let calls = std::fs::read_to_string(root.path().join("curl.log")).unwrap();
     assert!(
         calls.contains("PATCH /v1/clusterprofiles/prof-1/publish"),
         "{calls}"
     );
-    let put: serde_json::Value = serde_json::from_str(
-        &std::fs::read_to_string(routes.join("sent/PUT_v1_clusterprofiles_prof-1")).unwrap(),
-    )
-    .unwrap();
+    let put = read_json(&routes.join("sent/PUT_v1_clusterprofiles_prof-1"));
     assert_eq!(
         put["spec"]["template"]["packs"][0]["manifests"],
         serde_json::json!([{"name": "config", "uid": "m-1", "content": "edited: \"yes\"\n"}]),
@@ -702,43 +628,11 @@ fn api_sh_edit_keeps_each_manifest_uid_so_clusters_keep_their_copies() {
 
 #[test]
 fn api_sh_draft_puts_the_change_with_no_publish_and_publish_publishes_it() {
-    let dir = tempfile::tempdir().unwrap();
-    let (bin, routes) = (dir.path().join("bin"), dir.path().join("routes"));
-    for d in [&bin, &routes] {
-        std::fs::create_dir(d).unwrap();
-    }
-    executable(&bin.join("curl"), FAKE_API_CURL);
-    std::fs::write(
-        routes.join("v1_clusterprofiles_prof-1"),
-        r#"{"metadata":{"name":"addon","uid":"prof-1"},"spec":{"version":"1.0.0","published":{
-            "type":"add-on","cloudType":"all","packs":[{"name":"config","tag":"1.0.0",
-            "type":"manifest","layer":"addon","packUid":"pk-1","values":""}]}}}"#,
-    )
-    .unwrap();
-    std::fs::write(
-        routes.join("v1_clusterprofiles_prof-1_packs_manifests"),
-        r#"{"metadata":{},"spec":{"packs":[{"metadata":{},"spec":{"name":"config","manifests":[
-            {"name":"config","uid":"m-1","digest":"d","content":"edited: \"no\"\n"}]}}]}}"#,
-    )
-    .unwrap();
-    std::fs::write(routes.join("v1_clusterprofiles_prof-1_publish"), "{}").unwrap();
-    let log = dir.path().join("curl.log");
-    let api = |args: &[&str]| {
-        Command::new("bash")
-            .arg(live_script("api.sh"))
-            .args(args)
-            .env(
-                "PATH",
-                format!("{}:{}", bin.display(), std::env::var("PATH").unwrap()),
-            )
-            .env("HOME", dir.path())
-            .env("PALETTE_API_KEY", "k")
-            .env("PALETTE_PROJECT_UID", "p-1")
-            .env("FAKE_ROUTES", &routes)
-            .env("FAKE_LOG", &log)
-            .output()
-            .unwrap()
-    };
+    let root = tempfile::tempdir().unwrap();
+    let routes = root.path().join("routes");
+    addon_profile_routes(&routes);
+    let log = root.path().join("curl.log");
+    let api = |args: &[&str]| run_live("api.sh", args, root.path(), &[]);
     let o = api(&["draft", "prof-1", r#"edited: "no""#, r#"edited: "yes""#]);
     assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
     let calls = std::fs::read_to_string(&log).unwrap();
@@ -747,10 +641,7 @@ fn api_sh_draft_puts_the_change_with_no_publish_and_publish_publishes_it() {
         !calls.contains("publish"),
         "a draft is not published: {calls}"
     );
-    let put: serde_json::Value = serde_json::from_str(
-        &std::fs::read_to_string(routes.join("sent/PUT_v1_clusterprofiles_prof-1")).unwrap(),
-    )
-    .unwrap();
+    let put = read_json(&routes.join("sent/PUT_v1_clusterprofiles_prof-1"));
     assert_eq!(
         put["spec"]["template"]["packs"][0]["manifests"],
         serde_json::json!([{"name": "config", "uid": "m-1", "content": "edited: \"yes\"\n"}]),
@@ -767,12 +658,9 @@ fn api_sh_draft_puts_the_change_with_no_publish_and_publish_publishes_it() {
 
 #[test]
 fn api_sh_delete_named_deletes_every_version_of_exactly_that_name() {
-    let dir = tempfile::tempdir().unwrap();
-    let (bin, routes) = (dir.path().join("bin"), dir.path().join("routes"));
-    for d in [&bin, &routes] {
-        std::fs::create_dir(d).unwrap();
-    }
-    executable(&bin.join("curl"), FAKE_API_CURL);
+    let root = tempfile::tempdir().unwrap();
+    let routes = root.path().join("routes");
+    std::fs::create_dir(&routes).unwrap();
     std::fs::write(
         routes.join("v1_dashboard_clusterprofiles_metadata"),
         r#"{"items":[
@@ -786,27 +674,16 @@ fn api_sh_delete_named_deletes_every_version_of_exactly_that_name() {
     for uid in ["u1", "u2", "u3", "u4"] {
         std::fs::write(routes.join(format!("v1_clusterprofiles_{uid}")), "{}").unwrap();
     }
-    let log = dir.path().join("curl.log");
-    let o = Command::new("bash")
-        .arg(live_script("api.sh"))
-        .args(["delete-named", "strata-live-addon", "strata-live-move"])
-        .env(
-            "PATH",
-            format!("{}:{}", bin.display(), std::env::var("PATH").unwrap()),
-        )
-        .env("HOME", dir.path())
-        .env("PALETTE_API_KEY", "k")
-        .env("PALETTE_PROJECT_UID", "p-1")
-        .env("FAKE_ROUTES", &routes)
-        .env("FAKE_LOG", &log)
-        .output()
-        .unwrap();
+    let o = run_live(
+        "api.sh",
+        &["delete-named", "strata-live-addon", "strata-live-move"],
+        root.path(),
+        &[],
+    );
     assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
-    let deletes: Vec<String> = std::fs::read_to_string(&log)
-        .unwrap()
-        .lines()
+    let deletes: Vec<String> = lines_of(&root.path().join("curl.log"))
+        .into_iter()
         .filter(|l| l.starts_with("DELETE "))
-        .map(str::to_string)
         .collect();
     assert_eq!(
         deletes,
@@ -864,10 +741,7 @@ fn run_live(script: &str, args: &[&str], root: &Path, extra: &[(&str, &str)]) ->
     let mut c = Command::new("bash");
     c.arg(live_script(script))
         .args(args)
-        .env(
-            "PATH",
-            format!("{}:{}", bin.display(), std::env::var("PATH").unwrap()),
-        )
+        .env("PATH", path_with(&bin))
         .env("HOME", root)
         .env("TMPDIR", &tmp)
         .env("PALETTE_API_KEY", "k")
@@ -1172,10 +1046,7 @@ fn aws_inventory(answers: &[(&str, &str)]) -> (Output, String) {
     let o = Command::new("bash")
         .arg(live_script("aws-inventory.sh"))
         .args(["fred", "us-east-2"])
-        .env(
-            "PATH",
-            format!("{}:{}", bin.display(), std::env::var("PATH").unwrap()),
-        )
+        .env("PATH", path_with(&bin))
         .env("FAKE_AWS", &fake)
         .output()
         .unwrap();
@@ -1269,12 +1140,9 @@ fn tenant_sh_cluster_shows_the_latest_events_of_a_cluster_that_is_not_settled() 
 
 #[test]
 fn api_sh_retag_renames_one_pack_tag_in_place_and_keeps_everything_else() {
-    let dir = tempfile::tempdir().unwrap();
-    let (bin, routes) = (dir.path().join("bin"), dir.path().join("routes"));
-    for d in [&bin, &routes] {
-        std::fs::create_dir(d).unwrap();
-    }
-    executable(&bin.join("curl"), FAKE_API_CURL);
+    let root = tempfile::tempdir().unwrap();
+    let routes = root.path().join("routes");
+    std::fs::create_dir(&routes).unwrap();
     std::fs::write(
         routes.join("v1_clusterprofiles_prof-1"),
         r#"{"metadata":{"name":"release","uid":"prof-1"},"spec":{"version":"1.0.2","published":{
@@ -1289,28 +1157,10 @@ fn api_sh_retag_renames_one_pack_tag_in_place_and_keeps_everything_else() {
     )
     .unwrap();
     std::fs::write(routes.join("v1_clusterprofiles_prof-1_publish"), "{}").unwrap();
-    let run = |args: &[&str]| {
-        Command::new("bash")
-            .arg(live_script("api.sh"))
-            .args(args)
-            .env(
-                "PATH",
-                format!("{}:{}", bin.display(), std::env::var("PATH").unwrap()),
-            )
-            .env("HOME", dir.path())
-            .env("PALETTE_API_KEY", "k")
-            .env("PALETTE_PROJECT_UID", "p-1")
-            .env("FAKE_ROUTES", &routes)
-            .env("FAKE_LOG", dir.path().join("curl.log"))
-            .output()
-            .unwrap()
-    };
+    let run = |args: &[&str]| run_live("api.sh", args, root.path(), &[]);
     let o = run(&["retag", "prof-1", "ubuntu-aws", "LTS__24.04", "24.04"]);
     assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
-    let put: serde_json::Value = serde_json::from_str(
-        &std::fs::read_to_string(routes.join("sent/PUT_v1_clusterprofiles_prof-1")).unwrap(),
-    )
-    .unwrap();
+    let put = read_json(&routes.join("sent/PUT_v1_clusterprofiles_prof-1"));
     let packs = &put["spec"]["template"]["packs"];
     assert_eq!(
         (
@@ -1323,7 +1173,7 @@ fn api_sh_retag_renames_one_pack_tag_in_place_and_keeps_everything_else() {
     );
     assert_eq!(packs[0]["values"], "os: values\n");
     assert_eq!(packs[1]["tag"], "1.36.2", "other packs keep their tags");
-    let calls = std::fs::read_to_string(dir.path().join("curl.log")).unwrap();
+    let calls = std::fs::read_to_string(root.path().join("curl.log")).unwrap();
     assert!(
         calls.contains("PATCH /v1/clusterprofiles/prof-1/publish"),
         "{calls}"
@@ -1340,12 +1190,9 @@ fn api_sh_retag_renames_one_pack_tag_in_place_and_keeps_everything_else() {
 
 #[test]
 fn api_sh_app_profile_order_puts_the_first_tier_with_the_order_and_reads_the_order_again() {
-    let dir = tempfile::tempdir().unwrap();
-    let (bin, routes) = (dir.path().join("bin"), dir.path().join("routes"));
-    for d in [&bin, &routes] {
-        std::fs::create_dir(d).unwrap();
-    }
-    executable(&bin.join("curl"), FAKE_API_CURL);
+    let root = tempfile::tempdir().unwrap();
+    let routes = root.path().join("routes");
+    std::fs::create_dir(&routes).unwrap();
     std::fs::write(
         routes.join("v1_appProfiles_ap-1_tiers"),
         r#"{"spec":{"appTiers":[
@@ -1356,27 +1203,10 @@ fn api_sh_app_profile_order_puts_the_first_tier_with_the_order_and_reads_the_ord
     )
     .unwrap();
     std::fs::write(routes.join("v1_appProfiles_ap-1_tiers_t-1"), "{}").unwrap();
-    let run = |args: &[&str]| {
-        Command::new("bash")
-            .arg(live_script("api.sh"))
-            .args(args)
-            .env(
-                "PATH",
-                format!("{}:{}", bin.display(), std::env::var("PATH").unwrap()),
-            )
-            .env("HOME", dir.path())
-            .env("PALETTE_API_KEY", "k")
-            .env("FAKE_ROUTES", &routes)
-            .env("FAKE_LOG", dir.path().join("curl.log"))
-            .output()
-            .unwrap()
-    };
+    let run = |args: &[&str]| run_live("api.sh", args, root.path(), &[]);
     let o = run(&["app-profile-order", "ap-1", "2"]);
     assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
-    let put: serde_json::Value = serde_json::from_str(
-        &std::fs::read_to_string(routes.join("sent/PUT_v1_appProfiles_ap-1_tiers_t-1")).unwrap(),
-    )
-    .unwrap();
+    let put = read_json(&routes.join("sent/PUT_v1_appProfiles_ap-1_tiers_t-1"));
     assert_eq!(
         put,
         serde_json::json!({"name": "web", "version": "1.0.0", "values": "replicas: 2\n",
@@ -1413,15 +1243,7 @@ fn tenant_sh_repave_asks_palette_whether_a_move_to_another_profile_version_repav
     .unwrap();
     let validate = routes.join("v1_spectroclusters_c-1_validate_repave");
     std::fs::write(&validate, r#"{"isRepaveRequired":false,"reasons":[]}"#).unwrap();
-    let sent = || -> serde_json::Value {
-        serde_json::from_str(
-            &std::fs::read_to_string(
-                routes.join("sent/POST_v1_spectroclusters_c-1_validate_repave"),
-            )
-            .unwrap(),
-        )
-        .unwrap()
-    };
+    let sent = || read_json(&routes.join("sent/POST_v1_spectroclusters_c-1_validate_repave"));
 
     let o = run_live(
         "tenant.sh",
@@ -1551,10 +1373,9 @@ fn preflight_scripts_print_their_usage_and_refuse_an_engine_they_have_no_plan_fo
 
 #[test]
 fn the_entities_of_the_test_plan_are_the_shape_of_a_create_for_each_engine() {
-    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/live/preflight");
+    let dir = live_script("preflight");
     for engine in ["aws", "eks", "gcp", "gke"] {
-        let text = std::fs::read_to_string(dir.join(format!("{engine}.json"))).unwrap();
-        let doc: serde_json::Value = serde_json::from_str(&text).unwrap();
+        let doc = read_json(&dir.join(format!("{engine}.json")));
         assert_eq!(
             doc["spec"]["cloudAccountUid"], "__ACCOUNT_UID__",
             "{engine}"
@@ -1589,10 +1410,7 @@ fn aws_cleanup_takes_yes_in_any_position_and_keeps_the_name_and_the_region() {
     let o = Command::new("bash")
         .arg(live_script("aws-cleanup.sh"))
         .args(["--yes", "barney"])
-        .env(
-            "PATH",
-            format!("{}:{}", bin.display(), std::env::var("PATH").unwrap()),
-        )
+        .env("PATH", path_with(&bin))
         .env("FAKE_AWS_LOG", &log)
         .output()
         .unwrap();
@@ -1665,10 +1483,7 @@ fn aws_cleanup_deletes_nothing_without_yes_and_names_what_it_would() {
     let o = Command::new("bash")
         .arg(live_script("aws-cleanup.sh"))
         .args(["fred", "us-east-2"])
-        .env(
-            "PATH",
-            format!("{}:{}", bin.display(), std::env::var("PATH").unwrap()),
-        )
+        .env("PATH", path_with(&bin))
         .env("FAKE_AWS_LOG", &log)
         .output()
         .unwrap();
@@ -2148,10 +1963,10 @@ fn cluster_group_sh_stage_1_lists_the_virtual_cluster_and_resolves_its_name() {
         &steps,
         &["member-listed", "member-listed-group", "member-by-name"],
     );
-    let calls = std::fs::read_to_string(stage.path("strata/calls")).unwrap();
+    let calls = lines_of(&stage.path("strata/calls"));
     assert!(
-        calls.lines().any(|l| l == "snapshot cluster:fred-member"),
-        "the name of the member, from its record: {calls}"
+        calls.iter().any(|l| l == "snapshot cluster:fred-member"),
+        "the name of the member, from its record: {calls:?}"
     );
 
     // a list that leaves out the virtual cluster, as before #116, fails the check
@@ -2331,22 +2146,22 @@ fn registry_sh_step_3b_deletes_the_tag_that_the_profile_pins_and_pushes_it_again
         "{fields}"
     );
 
-    let aws = std::fs::read_to_string(stage.path("aws/calls.log")).unwrap();
-    let deletes: Vec<&str> = aws
-        .lines()
+    let aws = lines_of(&stage.path("aws/calls.log"));
+    let deletes: Vec<&String> = aws
+        .iter()
         .filter(|l| l.contains("batch-delete-image"))
         .collect();
     assert_eq!(
         deletes.len(),
         2,
-        "the delete, then the delete at the end: {aws}"
+        "the delete, then the delete at the end: {aws:?}"
     );
     assert!(
         deletes
             .iter()
             .all(|l| l
                 .contains("--repository-name strata/strata-live-pack --image-ids imageTag=1.0.9")),
-        "{aws}"
+        "{aws:?}"
     );
     let oras = std::fs::read_to_string(stage.path("aws/oras.log")).unwrap();
     assert_eq!(
@@ -2418,10 +2233,7 @@ fn registry_sh_step_4b_pins_a_profile_with_values_of_its_own_under_the_floating_
         ],
     );
     // the profile pins the build of 1.0.1 under the floating tag, with the changed values
-    let sent: serde_json::Value = serde_json::from_str(
-        &std::fs::read_to_string(stage.path("routes/sent/POST_v1_clusterprofiles")).unwrap(),
-    )
-    .unwrap();
+    let sent = read_json(&stage.path("routes/sent/POST_v1_clusterprofiles"));
     let pack = &sent["spec"]["template"]["packs"][0];
     assert_eq!(pack["tag"], "1.0.x", "{sent}");
     assert_eq!(pack["uid"], "pk-101", "{sent}");
@@ -2433,14 +2245,12 @@ fn registry_sh_step_4b_pins_a_profile_with_values_of_its_own_under_the_floating_
             .contains("strataModified: true"),
         "{sent}"
     );
-    let calls = std::fs::read_to_string(stage.path("strata/calls")).unwrap();
-    let kept = calls
-        .lines()
-        .position(|l| l == "verify floating-mod-1.json");
-    let moved = calls.lines().position(|l| l == "verify profile-3.json");
+    let calls = lines_of(&stage.path("strata/calls"));
+    let kept = calls.iter().position(|l| l == "verify floating-mod-1.json");
+    let moved = calls.iter().position(|l| l == "verify profile-3.json");
     assert!(
         moved.is_some() && kept > moved,
-        "the check of the profile with changed values comes after the wait for the move: {calls}"
+        "the check of the profile with changed values comes after the wait for the move: {calls:?}"
     );
 }
 
@@ -2471,12 +2281,12 @@ fn registry_sh_step_6_lists_the_required_pack_with_the_cloud_type_all_for_the_cl
     let (_, steps) = stage.run("registry.sh", &[]);
     assert!(steps.contains("== 6."), "{steps}");
     passed(&steps, &["dep-packs-cloud", "dep-packs-cloud-version"]);
-    let calls = std::fs::read_to_string(stage.path("strata/calls")).unwrap();
+    let calls = lines_of(&stage.path("strata/calls"));
     assert!(
-        calls.lines().any(
+        calls.iter().any(
             |l| l == "packs strata-live-dep --registry strata-live-registry --cloud aws --json"
         ),
-        "{calls}"
+        "{calls:?}"
     );
 }
 
@@ -2493,8 +2303,8 @@ fn packs_paged(count: u32, headings: &str) -> String {
     );
     stage.strata("packs kubernetes", 0, headings);
     let (_, steps) = stage.run("packs.sh", &[]);
-    let calls = std::fs::read_to_string(stage.path("strata/calls")).unwrap();
-    assert!(calls.lines().any(|l| l == "packs kubernetes"), "{calls}");
+    let calls = lines_of(&stage.path("strata/calls"));
+    assert!(calls.iter().any(|l| l == "packs kubernetes"), "{calls:?}");
     steps
 }
 
@@ -2663,10 +2473,10 @@ fn validate_packs_sh_stage_4_makes_a_profile_whose_pack_has_another_layer_than_i
         ),
         "the pack of the candidate, with the values of the candidate and the layer csi"
     );
-    let log = std::fs::read_to_string(stage.path("curl.log")).unwrap();
+    let log = lines_of(&stage.path("curl.log"));
     assert!(
-        log.lines().any(|l| l == "DELETE /v1/clusterprofiles/lp-1"),
-        "{log}"
+        log.iter().any(|l| l == "DELETE /v1/clusterprofiles/lp-1"),
+        "{log:?}"
     );
 }
 
@@ -3202,12 +3012,12 @@ fn registry_kinds_sh_checks_that_packs_says_no_digest_on_the_row_and_in_the_head
         "strata-live-zarf in strata-live-oci (1 version, no digests)\n{row}"
     ));
     passed(&steps, &["packs-zarf", "packs-zarf-says"]);
-    let calls = std::fs::read_to_string(stage.path("strata/calls")).unwrap();
+    let calls = lines_of(&stage.path("strata/calls"));
     assert!(
         calls
-            .lines()
+            .iter()
             .any(|l| l == "packs strata-live-zarf --registry strata-live-oci"),
-        "{calls}"
+        "{calls:?}"
     );
 
     // a heading with no mark, or a row with no mark, fails the check

@@ -4,7 +4,7 @@
 //! where the page describes one. `serve_here` marks a state the playground can hand over.
 
 use crate::book::Runner;
-use crate::tenant::{Edit, PackRefusal};
+use crate::tenant::{Edit, PackRefusal, rbacs_route};
 use serde_json::json;
 
 const DEV: &str = "64f20000000000000000a0d1";
@@ -147,13 +147,13 @@ pub fn run(r: &mut Runner) {
 /// What `verify` says when the object of a record changed its state, went, or took another name.
 fn verify_objects(r: &mut Runner) {
     r.chapter("verify-objects", DEV_ENV);
-    r.projects(&[("dev", DEV)]);
+    r.tenant(|t| t.projects(&[("dev", DEV)]));
     r.profile(DEV, A111, "1.1.1", "aws-stack@1.1.1", &[]);
-    r.cluster(DEV, PAYMENTS, "payments", &[A111]);
+    r.tenant(|t| t.cluster(DEV, PAYMENTS, "payments", &[A111], &[]));
     r.quiet("strata snapshot aws-stack@1.1.1 -o releases/1.1.1/dev.json");
     r.quiet("strata snapshot cluster:payments -o runs/payments.json");
     // the cluster goes: it runs the same copy, and the verdict says the state
-    r.cluster_field(DEV, PAYMENTS, "/status/state", json!("Deleting"));
+    r.tenant(|t| t.cluster_field(DEV, PAYMENTS, "/status/state", json!("Deleting")));
     r.step(
         "verify-state-full",
         0,
@@ -162,7 +162,7 @@ fn verify_objects(r: &mut Runner) {
     );
     r.excerpt("verify-state", "verify-state-full", r"^OK:");
     // Palette deletes the cluster, and keeps its document
-    r.delete_cluster(DEV, PAYMENTS, "2026-09-17T11:05:00Z");
+    r.tenant(|t| t.delete_cluster(DEV, PAYMENTS, "2026-09-17T11:05:00Z"));
     r.step(
         "verify-deleted-full",
         1,
@@ -171,7 +171,7 @@ fn verify_objects(r: &mut Runner) {
     );
     r.excerpt("verify-deleted", "verify-deleted-full", r"^DRIFT:");
     // a rename keeps the uid and the version of the profile
-    r.edit(DEV, A111, &[Edit::Name("aws-stack-legacy")]);
+    r.tenant(|t| t.edit(DEV, A111, &[Edit::Name("aws-stack-legacy")]));
     r.step(
         "verify-renamed-full",
         1,
@@ -212,11 +212,11 @@ fn getting_started(r: &mut Runner) {
     }
 
     r.chapter("quickstart", DEV_ENV);
-    r.projects(&[("dev", DEV), ("prod", PROD)]);
+    r.tenant(|t| t.projects(&[("dev", DEV), ("prod", PROD)]));
     r.profile(DEV, A100, "1.0.0", "aws-stack@1.0.0", &[]);
     r.profile(DEV, A110, "1.1.0", "aws-stack@1.1.0", &[]);
     r.profile(DEV, A111, "1.1.1", "aws-stack@1.1.1", &[]);
-    r.cluster(DEV, PAYMENTS, "payments", &[A110]);
+    r.tenant(|t| t.cluster(DEV, PAYMENTS, "payments", &[A110], &[]));
     r.step("quickstart-offline", 1, false, "strata compare examples/profiles/aws-stack@1.1.0.json examples/profiles/aws-stack@1.1.1.json");
     r.step("quickstart-list", 0, false, "strata list");
     r.step(
@@ -247,12 +247,14 @@ fn getting_started(r: &mut Runner) {
 
 /// The labels that put a cluster of the loop in its environment, and in the fleet of its filter.
 fn label(r: &mut Runner, project: &str, uid: &str, env: &str) {
-    r.cluster_field(
-        project,
-        uid,
-        "/metadata/labels",
-        json!({"env": env, "managed-by": "opentofu"}),
-    );
+    r.tenant(|t| {
+        t.cluster_field(
+            project,
+            uid,
+            "/metadata/labels",
+            json!({"env": env, "managed-by": "opentofu"}),
+        )
+    });
 }
 
 /// The everyday loop: one change of one team, from the pull request to the retire of the
@@ -260,16 +262,16 @@ fn label(r: &mut Runner, project: &str, uid: &str, env: &str) {
 /// case of the step shows the rest.
 fn the_loop(r: &mut Runner) {
     r.chapter("loop", GIT);
-    r.projects(&[("dev", DEV), ("prod", PROD)]);
-    r.registries(DEV);
-    r.registries(PROD);
+    r.tenant(|t| t.projects(&[("dev", DEV), ("prod", PROD)]));
+    r.tenant(|t| t.registries(DEV));
+    r.tenant(|t| t.registries(PROD));
     r.profile(DEV, A100, "1.0.0", "aws-stack@1.0.0", &[]);
     r.profile(PROD, A100_PROD, "1.0.0", "aws-stack@1.0.0", &[]);
-    r.cluster(DEV, PAYMENTS, "payments", &[A100]);
-    r.cluster(PROD, PAYMENTS_PROD, "payments", &[A100_PROD]);
+    r.tenant(|t| t.cluster(DEV, PAYMENTS, "payments", &[A100], &[]));
+    r.tenant(|t| t.cluster(PROD, PAYMENTS_PROD, "payments", &[A100_PROD], &[]));
     label(r, DEV, PAYMENTS, "dev");
     label(r, PROD, PAYMENTS_PROD, "prod");
-    r.tag_filter("production", PRODUCTION, "env", "prod");
+    r.tenant(|t| t.tag_filter("production", PRODUCTION, "env", "prod"));
     // the repository of the team: main holds the record of what each project runs
     r.quiet("git init -q -b main . && git remote add origin .");
     r.quiet("strata snapshot aws-stack@1.0.0 -o releases/1.0.0/dev.json &&\n  PALETTE_PROJECT=prod strata snapshot aws-stack@1.0.0 -o releases/1.0.0/prod.json &&\n  git add releases && git commit -qm \"dev and prod run aws-stack@1.0.0\"");
@@ -312,7 +314,7 @@ fn the_loop(r: &mut Runner) {
     );
     r.quiet("git add releases && git commit -qm \"record aws-stack@1.1.0 in dev\"");
     // dev moves payments to the new version, and a record says what the cluster runs
-    r.cluster(DEV, PAYMENTS, "payments", &[A110]);
+    r.tenant(|t| t.cluster(DEV, PAYMENTS, "payments", &[A110], &[]));
     label(r, DEV, PAYMENTS, "dev");
     r.step(
         "loop-cluster",
@@ -330,7 +332,7 @@ fn the_loop(r: &mut Runner) {
         false,
         "strata same-release releases/1.1.0/dev.json releases/1.1.0/prod.json",
     );
-    r.cluster(PROD, PAYMENTS_PROD, "payments", &[A110_PROD]);
+    r.tenant(|t| t.cluster(PROD, PAYMENTS_PROD, "payments", &[A110_PROD], &[]));
     label(r, PROD, PAYMENTS_PROD, "prod");
     r.quiet("git add releases && git commit -qm \"promote aws-stack@1.1.0 to prod\"");
     r.serve_here(); // state 3: both projects run 1.1.0, and main records it
@@ -344,7 +346,7 @@ fn the_loop(r: &mut Runner) {
     );
     r.quiet("git add fleet && git commit -qm \"the fleet of prod\"");
     // a person edits the published version in prod through the API, with no review
-    r.edit(PROD, A110_PROD, RETAIN);
+    r.tenant(|t| t.edit(PROD, A110_PROD, RETAIN));
     r.serve_here(); // state 4: somebody edited aws-stack@1.1.0 in prod in place
     r.step(
         "loop-nightly",
@@ -399,14 +401,14 @@ fn the_loop(r: &mut Runner) {
 
 fn commands(r: &mut Runner) {
     r.chapter("list", DEV_ENV);
-    r.projects(&[("dev", DEV), ("prod", PROD)]);
+    r.tenant(|t| t.projects(&[("dev", DEV), ("prod", PROD)]));
     r.profile(DEV, A100, "1.0.0", "aws-stack@1.0.0", &[]);
     r.profile(DEV, A110, "1.1.0", "aws-stack@1.1.0", &[]);
     r.profile(DEV, A111, "1.1.1", "aws-stack@1.1.1", &[]);
     r.profile(PROD, A111_PROD, "1.1.1", "aws-stack@1.1.1", &[]);
-    r.cluster(DEV, PAYMENTS, "payments", &[A110]);
-    r.cluster(DEV, SEARCH, "search", &[A111]);
-    r.cluster(PROD, PAYMENTS_PROD, "payments", &[A111_PROD]);
+    r.tenant(|t| t.cluster(DEV, PAYMENTS, "payments", &[A110], &[]));
+    r.tenant(|t| t.cluster(DEV, SEARCH, "search", &[A111], &[]));
+    r.tenant(|t| t.cluster(PROD, PAYMENTS_PROD, "payments", &[A111_PROD], &[]));
     r.step("list", 0, false, "strata list");
     r.step("list-projects", 0, false, "strata list projects");
     r.step("list-prod", 0, false, "strata list --project-name prod");
@@ -459,9 +461,9 @@ fn commands(r: &mut Runner) {
     );
     // an imported cluster in read-only mode: Palette lists it with an import type and the cloud
     // generic, and applies no add-on profile to it
-    r.cluster(DEV, LEGACY, "legacy", &[]);
-    r.cluster_field(DEV, LEGACY, "/spec/clusterType", json!("AlloyMonitor"));
-    r.cluster_field(DEV, LEGACY, "/spec/cloudType", json!("generic"));
+    r.tenant(|t| t.cluster(DEV, LEGACY, "legacy", &[], &[]));
+    r.tenant(|t| t.cluster_field(DEV, LEGACY, "/spec/clusterType", json!("AlloyMonitor")));
+    r.tenant(|t| t.cluster_field(DEV, LEGACY, "/spec/cloudType", json!("generic")));
     r.step("list-imported", 0, false, "strata list clusters --applied");
     r.step(
         "list-imported-json",
@@ -470,7 +472,7 @@ fn commands(r: &mut Runner) {
         r#"strata list clusters --json | jq -r '.clusters[] | "\(.name) \(.clusterType)"'"#,
     );
     // a cluster template links a version that no cluster runs: the version has a consumer
-    r.cluster_template(DEV, AWS_STANDARD, "aws-standard", &[A100]);
+    r.tenant(|t| t.cluster_template(DEV, AWS_STANDARD, "aws-standard", &[A100]));
     r.step(
         "list-consumers-full",
         0,
@@ -493,7 +495,7 @@ fn commands(r: &mut Runner) {
 
     // a profile of the tenant with the name and the version of a profile of the project
     r.chapter("scope", DEV_ENV);
-    r.projects(&[("dev", DEV), ("prod", PROD)]);
+    r.tenant(|t| t.projects(&[("dev", DEV), ("prod", PROD)]));
     r.profile(DEV, A110, "1.1.0", "aws-stack@1.1.0", &[]);
     r.profile(DEV, A111, "1.1.1", "aws-stack@1.1.1", &[]);
     r.tenant_profile(A111_TENANT, "1.1.1", "aws-stack@1.1.1", &[]);
@@ -525,10 +527,10 @@ fn commands(r: &mut Runner) {
     );
 
     r.chapter("snapshot", DEV_ENV);
-    r.projects(&[("dev", DEV)]);
+    r.tenant(|t| t.projects(&[("dev", DEV)]));
     r.profile(DEV, A110, "1.1.0", "aws-stack@1.1.0", &[]);
     r.profile(DEV, A111, "1.1.1", "aws-stack@1.1.1", &[]);
-    r.cluster(DEV, PAYMENTS, "payments", &[A111]);
+    r.tenant(|t| t.cluster(DEV, PAYMENTS, "payments", &[A111], &[]));
     r.step(
         "snapshot-profile",
         0,
@@ -588,8 +590,8 @@ fn commands(r: &mut Runner) {
     );
 
     r.chapter("candidate", DEV_ENV);
-    r.projects(&[("dev", DEV)]);
-    r.registries(DEV);
+    r.tenant(|t| t.projects(&[("dev", DEV)]));
+    r.tenant(|t| t.registries(DEV));
     r.profile(DEV, A111, "1.1.1", "aws-stack@1.1.1", &[]);
     r.step(
         "candidate-write",
@@ -619,7 +621,7 @@ fn commands(r: &mut Runner) {
     );
     // the export of Palette is a candidate too: the export route gives the file, and its record
     // has the root of the version (#156)
-    r.export(DEV, A111);
+    r.tenant(|t| t.export(DEV, A111));
     r.quiet(&format!(
         "curl -sS -H 'Accept: application/octet-stream' -H 'ProjectUid: {DEV}' \
          \"$PALETTE_API/v1/clusterprofiles/{A111}/export?format=json\" -o aws-stack-export.json"
@@ -644,13 +646,13 @@ fn commands(r: &mut Runner) {
     );
     // Palette's own checks before a create (#273). The candidate comes from aws-stack@1.1.1, which
     // the project holds, so the name route and the import validate route refuse it
-    r.profile_packs_answer(DEV, None, None);
+    r.tenant(|t| t.profile_packs_answer(DEV, None, None));
     let exists = (
         409,
         "ClusterProfileAlreadyExists",
         "Cluster Profile with name 'aws-stack' and version '1.1.1' already exists",
     );
-    r.profile_create_checks(DEV, ("aws-stack", "1.1.1"), Some(exists), Some(exists));
+    r.tenant(|t| t.profile_create_checks(DEV, ("aws-stack", "1.1.1"), Some(exists), Some(exists)));
     r.step(
         "candidate-validate-exists",
         2,
@@ -664,12 +666,14 @@ fn commands(r: &mut Runner) {
         "VersionParseFailure",
         "Unable to parse the version '1.1.1.1'",
     );
-    r.profile_create_checks(
-        DEV,
-        ("aws-stack", "1.1.1.1"),
-        Some(unparsed),
-        Some(unparsed),
-    );
+    r.tenant(|t| {
+        t.profile_create_checks(
+            DEV,
+            ("aws-stack", "1.1.1.1"),
+            Some(unparsed),
+            Some(unparsed),
+        )
+    });
     r.step(
         "candidate-validate-version",
         2,
@@ -680,8 +684,10 @@ fn commands(r: &mut Runner) {
     r.quiet(
         "sed 's/^version: 1.1.1$/version: 1.2.0/' aws-stack.yaml > next.yaml && mv next.yaml aws-stack.yaml",
     );
-    r.profile_create_checks(DEV, ("aws-stack", "1.2.0"), None, None);
-    r.profile_packs_answer(DEV, None, Some(("cni-cilium-oss", "kubernetes", "1.37.0")));
+    r.tenant(|t| t.profile_create_checks(DEV, ("aws-stack", "1.2.0"), None, None));
+    r.tenant(|t| {
+        t.profile_packs_answer(DEV, None, Some(("cni-cilium-oss", "kubernetes", "1.37.0")))
+    });
     r.step(
         "candidate-validate-refuses",
         2,
@@ -694,7 +700,7 @@ fn commands(r: &mut Runner) {
         false,
         "test -e validated.json || echo no record",
     );
-    r.profile_packs_answer(DEV, None, None);
+    r.tenant(|t| t.profile_packs_answer(DEV, None, None));
     r.step(
         "candidate-validate-accepts",
         0,
@@ -708,7 +714,7 @@ fn commands(r: &mut Runner) {
         "jq -c .source.paletteValidation validated.json",
     );
     // a version that Palette holds, as an update of itself
-    r.profile_packs_answer(DEV, Some(A111), None);
+    r.tenant(|t| t.profile_packs_answer(DEV, Some(A111), None));
     r.step(
         "snapshot-validate-version",
         0,
@@ -723,16 +729,18 @@ fn commands(r: &mut Runner) {
     );
     // a template on cert-manager 1.21.1 with one input parameter and one option, as the listing
     // gives it: the option has no presets
-    r.pack_template(
-        DEV,
-        "cert-manager",
-        "1.21.1",
-        &json!({"parameters": {"inputParameters": [{
-            "name": "access", "displayName": "Access", "type": "string",
-            "targetKey": "pack.access",
-            "options": {"public": {"label": "Direct", "dependencies": []}},
-        }]}}),
-    );
+    r.tenant(|t| {
+        t.pack_template(
+            DEV,
+            "cert-manager",
+            "1.21.1",
+            &json!({"parameters": {"inputParameters": [{
+                "name": "access", "displayName": "Access", "type": "string",
+                "targetKey": "pack.access",
+                "options": {"public": {"label": "Direct", "dependencies": []}},
+            }]}}),
+        )
+    });
     r.write_file("certs.yaml", PRESET_CANDIDATE_YAML);
     r.step("candidate-preset-yaml", 0, false, "cat certs.yaml");
     r.step(
@@ -766,7 +774,7 @@ fn commands(r: &mut Runner) {
     );
 
     r.chapter("compare", DEV_ENV);
-    r.projects(&[("dev", DEV)]);
+    r.tenant(|t| t.projects(&[("dev", DEV)]));
     r.profile(DEV, A100, "1.0.0", "aws-stack@1.0.0", &[]);
     r.profile(DEV, A110, "1.1.0", "aws-stack@1.1.0", &[]);
     r.profile(DEV, A111, "1.1.1", "aws-stack@1.1.1", &[]);
@@ -858,11 +866,11 @@ layers:
 
 fn use_cases(r: &mut Runner) {
     r.chapter("review", DEV_ENV);
-    r.projects(&[("dev", DEV)]);
-    r.registries(DEV);
+    r.tenant(|t| t.projects(&[("dev", DEV)]));
+    r.tenant(|t| t.registries(DEV));
     r.profile(DEV, A100, "1.0.0", "aws-stack@1.0.0", &[]);
     // the release under review runs somewhere: the repave has a target
-    r.cluster(DEV, PAYMENTS, "payments", &[A100]);
+    r.tenant(|t| t.cluster(DEV, PAYMENTS, "payments", &[A100], &[]));
     r.step(
         "review-record",
         0,
@@ -907,14 +915,14 @@ fn use_cases(r: &mut Runner) {
     );
 
     r.chapter("merge-gate", GIT);
-    r.projects(&[("dev", DEV)]);
-    r.registries(DEV);
+    r.tenant(|t| t.projects(&[("dev", DEV)]));
+    r.tenant(|t| t.registries(DEV));
     r.profile(DEV, A100, "1.0.0", "aws-stack@1.0.0", &[]);
     // main pins aws-stack@1.0.0, and a branch changes the record: the profile was edited in place
     r.quiet("git init -q -b main . && git remote add origin .");
     r.quiet("strata snapshot aws-stack@1.0.0 -o releases/dev.json &&\n  git add releases && git commit -qm \"dev pins aws-stack@1.0.0\"");
     r.quiet("git checkout -q -b keep-the-volumes");
-    r.edit(DEV, A100, RETAIN);
+    r.tenant(|t| t.edit(DEV, A100, RETAIN));
     r.quiet("strata snapshot aws-stack@1.0.0 -o releases/dev.json &&\n  git commit -qam \"keep the volumes on delete\"");
     // while that branch waited, another merge request published 1.1.0 and pinned it on main
     r.quiet("git checkout -q main");
@@ -937,7 +945,7 @@ fn use_cases(r: &mut Runner) {
         r#"scripts/ci/merge-gate.sh "releases/*.json" --base main"#,
     );
     // and the check that git cannot make: the pinned profile is edited in Palette after the record
-    r.edit(DEV, A110, RETAIN);
+    r.tenant(|t| t.edit(DEV, A110, RETAIN));
     r.step(
         "merge-gate-drifted",
         1,
@@ -946,8 +954,8 @@ fn use_cases(r: &mut Runner) {
     );
 
     r.chapter("merge-gate-rollback", GIT);
-    r.projects(&[("dev", DEV)]);
-    r.registries(DEV);
+    r.tenant(|t| t.projects(&[("dev", DEV)]));
+    r.tenant(|t| t.registries(DEV));
     r.profile(DEV, A100, "1.0.0", "aws-stack@1.0.0", &[]);
     r.profile(DEV, A110, "1.1.0", "aws-stack@1.1.0", &[]);
     // dev ran 1.0.0, and then 1.1.0
@@ -972,11 +980,11 @@ fn use_cases(r: &mut Runner) {
     );
 
     r.chapter("promote", &[]);
-    r.projects(&[("dev", DEV), ("prod", PROD)]);
+    r.tenant(|t| t.projects(&[("dev", DEV), ("prod", PROD)]));
     r.profile(DEV, A110, "1.1.0", "aws-stack@1.1.0", &[]);
     r.profile(DEV, A111, "1.1.1", "aws-stack@1.1.1", &[]);
     // the release under review runs somewhere, so the check discriminates
-    r.cluster(DEV, PAYMENTS, "payments", &[A111]);
+    r.tenant(|t| t.cluster(DEV, PAYMENTS, "payments", &[A111], &[]));
     // 1.1.0 reached prod by a promotion from the dev source, so its content is dev's content.
     r.profile(PROD, A110_PROD, "1.1.0", "aws-stack@1.1.0", &[]);
     // 1.1.1 was built by hand in prod, and one value differs.
@@ -1040,8 +1048,8 @@ fn use_cases(r: &mut Runner) {
     // project gives another value: one release, two configurations (#164)
     r.profile(DEV, A114, "1.1.4", "aws-stack@1.1.1", MACRO_REGION);
     r.profile(PROD, A114_PROD, "1.1.4", "aws-stack@1.1.1", MACRO_REGION);
-    r.set_macro(DEV, "region", "us-east-2");
-    r.set_macro(PROD, "region", "eu-west-1");
+    r.tenant(|t| t.set_macro(DEV, "region", "us-east-2"));
+    r.tenant(|t| t.set_macro(PROD, "region", "eu-west-1"));
     r.step(
         "promote-macro-record",
         0,
@@ -1086,7 +1094,7 @@ fn use_cases(r: &mut Runner) {
     );
 
     r.chapter("registry-move", &[]);
-    r.projects(&[("dev", DEV), ("prod", PROD)]);
+    r.tenant(|t| t.projects(&[("dev", DEV), ("prod", PROD)]));
     r.profile(DEV, A111, "1.1.1", "aws-stack@1.1.1", &[]);
     r.profile_own_copy(
         PROD,
@@ -1147,7 +1155,7 @@ fn use_cases(r: &mut Runner) {
     r.step("move-allow-edited", 1, false, "strata same-release --allow registry-move releases/1.1.1/dev.json releases/1.1.2/prod.json");
 
     r.chapter("tag-name", DEV_ENV);
-    r.projects(&[("dev", DEV)]);
+    r.tenant(|t| t.projects(&[("dev", DEV)]));
     r.profile(DEV, A111, "1.1.1", "aws-stack@1.1.1", &[]);
     r.profile(DEV, A113, "1.1.3", "aws-stack@1.1.1", TAG_2404);
     r.step(
@@ -1176,7 +1184,7 @@ fn use_cases(r: &mut Runner) {
         "strata snapshot aws-stack@1.1.3 -o releases/1.1.3/dev.json",
     );
     r.serve_here(); // the page describes what follows: the tag rename that it reports as drift
-    r.edit(DEV, A113, TAG_LTS2404);
+    r.tenant(|t| t.edit(DEV, A113, TAG_LTS2404));
     r.step(
         "tag-verify",
         1,
@@ -1191,30 +1199,36 @@ fn use_cases(r: &mut Runner) {
     );
 
     r.chapter("manifest-pack", &[]);
-    r.projects(&[("dev", DEV), ("prod", PROD)]);
-    r.addons(
-        DEV,
-        ADDONS_DEV,
-        "64e2000000000000000000d1",
-        "restricted",
-        "1.0.0",
-    );
-    r.addons(
-        PROD,
-        ADDONS_PROD,
-        "64e3000000000000000000d1",
-        "restricted",
-        "1.0.0",
-    );
+    r.tenant(|t| t.projects(&[("dev", DEV), ("prod", PROD)]));
+    r.tenant(|t| {
+        t.addons(
+            DEV,
+            ADDONS_DEV,
+            "64e2000000000000000000d1",
+            "restricted",
+            "1.0.0",
+        )
+    });
+    r.tenant(|t| {
+        t.addons(
+            PROD,
+            ADDONS_PROD,
+            "64e3000000000000000000d1",
+            "restricted",
+            "1.0.0",
+        )
+    });
     // prod also holds 1.0.1, whose manifest sets another Pod Security level. Both versions exist
     // before the playground hands the tenant over, so every step of the page runs against it.
-    r.addons(
-        PROD,
-        ADDONS_PROD2,
-        "64e3000000000000000000d2",
-        "baseline",
-        "1.0.1",
-    );
+    r.tenant(|t| {
+        t.addons(
+            PROD,
+            ADDONS_PROD2,
+            "64e3000000000000000000d2",
+            "baseline",
+            "1.0.1",
+        )
+    });
     r.step(
         "manifest-record",
         0,
@@ -1298,9 +1312,9 @@ fn use_cases(r: &mut Runner) {
     );
 
     r.chapter("edited-in-place", DEV_ENV);
-    r.projects(&[("dev", DEV)]);
+    r.tenant(|t| t.projects(&[("dev", DEV)]));
     r.profile(DEV, A111, "1.1.1", "aws-stack@1.1.1", &[]);
-    r.cluster(DEV, PAYMENTS, "payments", &[A111]);
+    r.tenant(|t| t.cluster(DEV, PAYMENTS, "payments", &[A111], &[]));
     r.step(
         "edited-record",
         0,
@@ -1320,7 +1334,7 @@ fn use_cases(r: &mut Runner) {
         "strata verify releases/1.1.1/dev.json",
     );
     r.serve_here(); // state 1: the records are taken, and nobody has edited the version
-    r.edit(DEV, A111, RETAIN);
+    r.tenant(|t| t.edit(DEV, A111, RETAIN));
     r.step(
         "edited-verify",
         1,
@@ -1380,7 +1394,7 @@ fn use_cases(r: &mut Runner) {
         "strata compare cluster:payments cluster:payments@pending",
     );
     // the update waits: does accepting it repave? A change of the CSI values repaves nothing.
-    r.repave_answer(DEV, PAYMENTS, false);
+    r.tenant(|t| t.repave_answer(DEV, PAYMENTS, false));
     r.step(
         "edited-repave",
         1,
@@ -1392,7 +1406,7 @@ fn use_cases(r: &mut Runner) {
         "edited-repave",
         r"^(aws-stack|root |note |palette|      impact)",
     );
-    r.cluster(DEV, SEARCH, "search", &[A111]);
+    r.tenant(|t| t.cluster(DEV, SEARCH, "search", &[A111], &[]));
     r.serve_here(); // state 2: the edit is in Palette, and search started after it
     r.step(
         "edited-two-clusters",
@@ -1425,7 +1439,7 @@ fn use_cases(r: &mut Runner) {
         true,
         "scripts/ci/verify-report.sh 'releases/**/*.json' 'runs/*.json' --dry-run",
     );
-    r.cluster(DEV, PAYMENTS, "payments", &[A111]);
+    r.tenant(|t| t.cluster(DEV, PAYMENTS, "payments", &[A111], &[]));
     r.step(
         "edited-cluster-updated",
         1,
@@ -1434,8 +1448,8 @@ fn use_cases(r: &mut Runner) {
     );
 
     r.chapter("draft", DEV_ENV);
-    r.projects(&[("dev", DEV)]);
-    r.registries(DEV);
+    r.tenant(|t| t.projects(&[("dev", DEV)]));
+    r.tenant(|t| t.registries(DEV));
     r.profile(DEV, A111, "1.1.1", "aws-stack@1.1.1", &[]);
     r.step(
         "draft-release",
@@ -1451,7 +1465,7 @@ fn use_cases(r: &mut Runner) {
     );
     r.serve_here(); // state 1: aws-stack@1.1.1 has no draft, and the release record is there
     // a person edits the version in the console, and does not publish
-    r.draft(DEV, A111, RETAIN);
+    r.tenant(|t| t.draft(DEV, A111, RETAIN));
     r.serve_here(); // state 2: a draft of aws-stack@1.1.1 waits
     r.step(
         "draft-compare",
@@ -1484,7 +1498,7 @@ fn use_cases(r: &mut Runner) {
         "strata candidate aws-stack@1.1.1@draft -o aws-stack.yaml",
     );
     // the reviewer approves, and the person publishes the draft
-    r.publish_draft(DEV, A111);
+    r.tenant(|t| t.publish(DEV, A111));
     r.serve_here(); // state 3: the draft is published
     r.step(
         "draft-published",
@@ -1506,9 +1520,9 @@ fn use_cases(r: &mut Runner) {
     );
 
     r.chapter("overwritten", DEV_ENV);
-    r.projects(&[("dev", DEV)]);
+    r.tenant(|t| t.projects(&[("dev", DEV)]));
     r.profile(DEV, A111, "1.1.1", "aws-stack@1.1.1", &[]);
-    r.cluster(DEV, PAYMENTS, "payments", &[A111]);
+    r.tenant(|t| t.cluster(DEV, PAYMENTS, "payments", &[A111], &[]));
     r.step(
         "overwritten-records",
         0,
@@ -1522,11 +1536,13 @@ fn use_cases(r: &mut Runner) {
         "strata snapshot cluster:payments -o runs/payments.json",
     );
     r.serve_here(); // state 1: the records are taken, and nobody has bumped the version
-    r.edit(
-        DEV,
-        A111,
-        &[Edit::Version("1.2.0"), Edit::Reclaim("Retain")],
-    );
+    r.tenant(|t| {
+        t.edit(
+            DEV,
+            A111,
+            &[Edit::Version("1.2.0"), Edit::Reclaim("Retain")],
+        )
+    });
     r.serve_here(); // state 2: the bump took the uid of 1.1.1, with the flag off
     r.step("overwritten-list", 0, false, "strata list profiles");
     r.step(
@@ -1566,11 +1582,13 @@ fn use_cases(r: &mut Runner) {
         "strata compare cluster:payments aws-stack@1.2.0",
     );
     r.step("overwritten-candidate", 0, true, "strata candidate releases/1.1.1/dev.json -o aws-stack-1.1.1.yaml --files-dir aws-stack-1.1.1");
-    r.edit(
-        DEV,
-        A111,
-        &[Edit::Version("1.1.1"), Edit::Reclaim("Delete")],
-    );
+    r.tenant(|t| {
+        t.edit(
+            DEV,
+            A111,
+            &[Edit::Version("1.1.1"), Edit::Reclaim("Delete")],
+        )
+    });
     r.profile(DEV, A120, "1.2.0", "aws-stack@1.1.1", RETAIN);
     // state 3, which serve_last reaches at the next chapter: the same bump with the flag on
     r.step("overwritten-flag-list", 0, false, "strata list profiles");
@@ -1582,20 +1600,22 @@ fn use_cases(r: &mut Runner) {
     );
 
     r.chapter("cluster-release", DEV_ENV);
-    r.projects(&[("dev", DEV)]);
+    r.tenant(|t| t.projects(&[("dev", DEV)]));
     r.profile(DEV, A110, "1.1.0", "aws-stack@1.1.0", &[]);
     r.profile(DEV, A111, "1.1.1", "aws-stack@1.1.1", &[]);
-    r.addons(
-        DEV,
-        ADDONS_DEV,
-        "64e2000000000000000000d1",
-        "restricted",
-        "1.0.0",
-    );
-    r.cluster(DEV, PAYMENTS, "payments", &[A110, ADDONS_DEV]);
-    r.cluster(DEV, SEARCH, "search", &[A111]);
-    r.cluster(DEV, LEDGER, "ledger", &[A110]);
-    r.on_cluster_reclaim(DEV, LEDGER, "Retain");
+    r.tenant(|t| {
+        t.addons(
+            DEV,
+            ADDONS_DEV,
+            "64e2000000000000000000d1",
+            "restricted",
+            "1.0.0",
+        )
+    });
+    r.tenant(|t| t.cluster(DEV, PAYMENTS, "payments", &[A110, ADDONS_DEV], &[]));
+    r.tenant(|t| t.cluster(DEV, SEARCH, "search", &[A111], &[]));
+    r.tenant(|t| t.cluster(DEV, LEDGER, "ledger", &[A110], &[]));
+    r.tenant(|t| t.on_cluster_reclaim(DEV, LEDGER, "Retain"));
     r.step(
         "cluster-release-record",
         0,
@@ -1660,22 +1680,26 @@ fn use_cases(r: &mut Runner) {
     );
 
     r.chapter("cluster-values", DEV_ENV);
-    r.projects(&[("dev", DEV)]);
+    r.tenant(|t| t.projects(&[("dev", DEV)]));
     r.profile(DEV, A111, "1.1.1", "aws-stack@1.1.1", &[]);
-    r.cluster_with(
-        DEV,
-        PAYMENTS,
-        "payments",
-        &[A111],
-        &[("platform_owner", "team-payments")],
-    );
-    r.cluster_with(
-        DEV,
-        SEARCH,
-        "search",
-        &[A111],
-        &[("platform_owner", "team-search")],
-    );
+    r.tenant(|t| {
+        t.cluster(
+            DEV,
+            PAYMENTS,
+            "payments",
+            &[A111],
+            &[("platform_owner", "team-payments")],
+        )
+    });
+    r.tenant(|t| {
+        t.cluster(
+            DEV,
+            SEARCH,
+            "search",
+            &[A111],
+            &[("platform_owner", "team-search")],
+        )
+    });
     r.step(
         "values-compare",
         0,
@@ -1695,7 +1719,7 @@ fn use_cases(r: &mut Runner) {
         "jq .source.cluster.variables runs/payments.json",
     );
     r.serve_here(); // state 1: each cluster keeps the value it started with
-    r.set_value(DEV, PAYMENTS, "platform_owner", "team-platform");
+    r.tenant(|t| t.set_value(DEV, PAYMENTS, "platform_owner", "team-platform"));
     // state 2, which serve_last reaches at the next chapter: a person changed the value
     r.step(
         "values-verify",
@@ -1721,19 +1745,21 @@ fn use_cases(r: &mut Runner) {
     // with --macros holds the digest of its value. The add-on profile that the cluster group pins
     // reads a second macro in its manifest.
     r.chapter("macros", DEV_ENV);
-    r.projects(&[("dev", DEV)]);
+    r.tenant(|t| t.projects(&[("dev", DEV)]));
     r.profile(DEV, A114, "1.1.4", "aws-stack@1.1.1", MACRO_REGION);
-    r.addons(
-        DEV,
-        ADDONS_DEV,
-        "64e2000000000000000000d1",
-        "\"{{.spectro.macro.podSecurity}}\"",
-        "1.0.0",
-    );
-    r.set_macro(DEV, "region", "us-east-2");
-    r.set_macro(DEV, "podSecurity", "baseline");
-    r.cluster(DEV, PAYMENTS, "payments", &[A114]);
-    r.cluster_group(DEV, DEV_GROUP, "dev-group", &[ADDONS_DEV], &[]);
+    r.tenant(|t| {
+        t.addons(
+            DEV,
+            ADDONS_DEV,
+            "64e2000000000000000000d1",
+            "\"{{.spectro.macro.podSecurity}}\"",
+            "1.0.0",
+        )
+    });
+    r.tenant(|t| t.set_macro(DEV, "region", "us-east-2"));
+    r.tenant(|t| t.set_macro(DEV, "podSecurity", "baseline"));
+    r.tenant(|t| t.cluster(DEV, PAYMENTS, "payments", &[A114], &[]));
+    r.tenant(|t| t.cluster_group(DEV, DEV_GROUP, "dev-group", &[ADDONS_DEV], &[]));
     r.step(
         "macros-record",
         0,
@@ -1777,8 +1803,8 @@ fn use_cases(r: &mut Runner) {
         "jq .source.cluster.macroValues runs/dev-group.json",
     );
     r.serve_here(); // state 1: the records are taken, and each macro has its first value
-    r.set_macro(DEV, "region", "eu-west-1");
-    r.set_macro(DEV, "podSecurity", "restricted");
+    r.tenant(|t| t.set_macro(DEV, "region", "eu-west-1"));
+    r.tenant(|t| t.set_macro(DEV, "podSecurity", "restricted"));
     r.step(
         "macros-verify-release-full",
         0,
@@ -1827,7 +1853,7 @@ fn use_cases(r: &mut Runner) {
     // an OS pack that names its machine image in the annotation imageId: the root does not
     // cover the annotations, and compare, verify, and same-release name a new image (#189)
     r.chapter("os-image", DEV_ENV);
-    r.projects(&[("dev", DEV)]);
+    r.tenant(|t| t.projects(&[("dev", DEV)]));
     r.profile(DEV, A118, "1.1.8", "aws-stack@1.1.1", IMAGE_1);
     r.step(
         "os-image-record",
@@ -1842,7 +1868,7 @@ fn use_cases(r: &mut Runner) {
         r#"jq '.packs[] | select(.layer == "os") | .annotations' releases/1.1.8/dev.json"#,
     );
     r.serve_here(); // state 1: the record is taken, and the OS pack names its first image
-    r.edit(DEV, A118, IMAGE_2);
+    r.tenant(|t| t.edit(DEV, A118, IMAGE_2));
     r.step(
         "os-image-verify-full",
         1,
@@ -1871,7 +1897,7 @@ fn use_cases(r: &mut Runner) {
     // a registry deletes the tag of a pack that a published version uses. Palette marks the
     // pack ref invalid, the root stays, and snapshot, verify, and compare say so (#108).
     r.chapter("invalid-pack", DEV_ENV);
-    r.projects(&[("dev", DEV)]);
+    r.tenant(|t| t.projects(&[("dev", DEV)]));
     r.profile(DEV, A119, "1.1.9", "aws-stack@1.1.1", &[]);
     r.step(
         "invalid-pack-record",
@@ -1880,7 +1906,7 @@ fn use_cases(r: &mut Runner) {
         "strata snapshot aws-stack@1.1.9 -o releases/1.1.9/dev.json",
     );
     r.serve_here(); // state 1: the record is taken, and each pack is valid
-    r.edit(DEV, A119, CERT_MANAGER_TAG_DELETED);
+    r.tenant(|t| t.edit(DEV, A119, CERT_MANAGER_TAG_DELETED));
     r.step(
         "invalid-pack-verify-full",
         0,
@@ -1913,7 +1939,7 @@ fn use_cases(r: &mut Runner) {
 
     // a pack with no upstream digest, as a registry that Palette does not sync gives it
     r.chapter("no-digest", DEV_ENV);
-    r.projects(&[("dev", DEV)]);
+    r.tenant(|t| t.projects(&[("dev", DEV)]));
     r.profile(DEV, A111, "1.1.1", "aws-stack@1.1.1", &[]);
     r.profile(
         DEV,
@@ -1960,8 +1986,8 @@ fn use_cases(r: &mut Runner) {
     );
     // a candidate layer from a private Helm registry: Palette lists no chart of it, and makes
     // the pack when it creates the profile (#154)
-    r.registries(DEV);
-    r.private_charts(DEV);
+    r.tenant(|t| t.registries(DEV));
+    r.tenant(|t| t.private_charts(DEV));
     r.write_file(
         "charts-probe.yaml",
         "name: charts-probe\nversion: 1.0.0\ntype: add-on\ncloudType: all\nlayers:\n  - name: podinfo\n    version: 6.7.1\n    registry: charts-auth\n    values: |\n      replicaCount: 2\n",
@@ -1988,7 +2014,7 @@ fn use_cases(r: &mut Runner) {
         false,
         "jq -c '.packs[] | {name, type, layer, version, packUid, upstreamSource: .hash.upstreamSource}' charts/candidate.json",
     );
-    r.chart_profile(DEV, CHARTS_PROBE, CHART_PACK, "6.7.1");
+    r.tenant(|t| t.chart_profile(DEV, CHARTS_PROBE, CHART_PACK, "6.7.1"));
     r.step(
         "nodigest-chart-published",
         0,
@@ -2029,7 +2055,7 @@ fn use_cases(r: &mut Runner) {
     // a pack value whose schema format is password: Palette serves the mask in place of the
     // secret, so an equal root does not show an equal secret (#163)
     r.chapter("masked-value", DEV_ENV);
-    r.projects(&[("dev", DEV), ("prod", PROD)]);
+    r.tenant(|t| t.projects(&[("dev", DEV), ("prod", PROD)]));
     r.profile(DEV, A1110, "1.1.10", "aws-stack@1.1.1", SECRET_VALUE);
     r.profile(PROD, A1110_PROD, "1.1.10", "aws-stack@1.1.1", SECRET_VALUE);
     r.step(
@@ -2083,7 +2109,7 @@ fn use_cases(r: &mut Runner) {
 
     // Palette's own answer beside the impact table: a change that repaves, and one that does not
     r.chapter("repave", DEV_ENV);
-    r.projects(&[("dev", DEV)]);
+    r.tenant(|t| t.projects(&[("dev", DEV)]));
     r.profile(DEV, A111, "1.1.1", "aws-stack@1.1.1", &[]);
     r.profile(
         DEV,
@@ -2093,8 +2119,8 @@ fn use_cases(r: &mut Runner) {
         &[Edit::KubeadmCommand("echo strata-repave-test")],
     );
     r.profile(DEV, A112, "1.1.2", "aws-stack@1.1.1", RETAIN);
-    r.cluster(DEV, PAYMENTS, "payments", &[A111]);
-    r.repave_answer(DEV, PAYMENTS, true);
+    r.tenant(|t| t.cluster(DEV, PAYMENTS, "payments", &[A111], &[]));
+    r.tenant(|t| t.repave_answer(DEV, PAYMENTS, true));
     r.step(
         "repave-kubeadm",
         1,
@@ -2112,7 +2138,7 @@ fn use_cases(r: &mut Runner) {
         false,
         "strata compare cluster:payments aws-stack@1.1.6 --repave --json | jq .paletteRepave",
     );
-    r.repave_answer(DEV, PAYMENTS, false);
+    r.tenant(|t| t.repave_answer(DEV, PAYMENTS, false));
     r.step(
         "repave-csi",
         1,
@@ -2154,16 +2180,18 @@ fn use_cases(r: &mut Runner) {
     );
 
     // Palette's own check of the packs of the change on the cluster: a refusal, and an accept
-    r.packs_answer(
-        DEV,
-        PAYMENTS,
-        Some(PackRefusal {
-            profile: A117,
-            pack: "kubernetes",
-            required: "cni-cilium-oss",
-            version: "1.21.0",
-        }),
-    );
+    r.tenant(|t| {
+        t.packs_answer(
+            DEV,
+            PAYMENTS,
+            Some(PackRefusal {
+                profile: A117,
+                pack: "kubernetes",
+                required: "cni-cilium-oss",
+                version: "1.21.0",
+            }),
+        )
+    });
     r.step(
         "validate-refuses",
         1,
@@ -2181,7 +2209,7 @@ fn use_cases(r: &mut Runner) {
         false,
         "strata compare cluster:payments aws-stack@1.1.7 --validate --json | jq .paletteValidation",
     );
-    r.packs_answer(DEV, PAYMENTS, None);
+    r.tenant(|t| t.packs_answer(DEV, PAYMENTS, None));
     r.step(
         "validate-accepts",
         1,
@@ -2208,7 +2236,7 @@ fn use_cases(r: &mut Runner) {
         true,
         "strata snapshot cluster:payments -o runs/payments.json",
     );
-    r.repave_waits(DEV, PAYMENTS, "2026-09-10T10:15:00Z");
+    r.tenant(|t| t.repave_waits(DEV, PAYMENTS, "2026-09-10T10:15:00Z"));
     r.step(
         "repave-waits-verify",
         0,
@@ -2235,8 +2263,8 @@ fn use_cases(r: &mut Runner) {
 
     // a cluster that a cluster template governs: on the route of the cluster, Palette compares
     // nothing and answers no repave, so --repave asks the route of the template (#130)
-    r.cluster_in_template(DEV, PAYMENTS, AWS_STANDARD);
-    r.template_repave_answer(DEV, AWS_STANDARD, true);
+    r.tenant(|t| t.cluster_in_template(DEV, PAYMENTS, AWS_STANDARD));
+    r.tenant(|t| t.template_repave_answer(DEV, AWS_STANDARD, true));
     r.step(
         "repave-template",
         1,
@@ -2263,10 +2291,10 @@ fn use_cases(r: &mut Runner) {
 
     // More of a cluster than its release: the tiers that Palette reports of the cluster
     r.chapter("cluster-tiers", DEV_ENV);
-    r.projects(&[("dev", DEV)]);
+    r.tenant(|t| t.projects(&[("dev", DEV)]));
     r.profile(DEV, A111, "1.1.1", "aws-stack@1.1.1", &[]);
-    r.cluster(DEV, PAYMENTS, "payments", &[A111]);
-    r.cluster(DEV, SEARCH, "search", &[A111]);
+    r.tenant(|t| t.cluster(DEV, PAYMENTS, "payments", &[A111], &[]));
+    r.tenant(|t| t.cluster(DEV, SEARCH, "search", &[A111], &[]));
     r.serve_here(); // state 1: two clusters on one release, nothing changed
     r.step(
         "tiers-record-payments",
@@ -2304,42 +2332,52 @@ fn use_cases(r: &mut Runner) {
         r"^(runs/|root |  variables|  cluster tiers)",
     );
     // search takes a larger worker pool with a taint, and another timezone and label
-    r.cluster_field(
-        DEV,
-        SEARCH,
-        "/cloudconfig/spec/machinePoolConfig/1/size",
-        json!(3),
-    );
-    r.cluster_field(
-        DEV,
-        SEARCH,
-        "/cloudconfig/spec/machinePoolConfig/1/taints",
-        json!([{"key": "dedicated", "value": "search", "effect": "NoSchedule"}]),
-    );
-    r.cluster_field(
-        DEV,
-        SEARCH,
-        "/spec/clusterConfig/timezone",
-        json!("America/Chicago"),
-    );
-    r.cluster_field(
-        DEV,
-        SEARCH,
-        "/metadata/labels",
-        json!({"managed-by": "opentofu", "team": "search"}),
-    );
+    r.tenant(|t| {
+        t.cluster_field(
+            DEV,
+            SEARCH,
+            "/cloudconfig/spec/machinePoolConfig/1/size",
+            json!(3),
+        )
+    });
+    r.tenant(|t| {
+        t.cluster_field(
+            DEV,
+            SEARCH,
+            "/cloudconfig/spec/machinePoolConfig/1/taints",
+            json!([{"key": "dedicated", "value": "search", "effect": "NoSchedule"}]),
+        )
+    });
+    r.tenant(|t| {
+        t.cluster_field(
+            DEV,
+            SEARCH,
+            "/spec/clusterConfig/timezone",
+            json!("America/Chicago"),
+        )
+    });
+    r.tenant(|t| {
+        t.cluster_field(
+            DEV,
+            SEARCH,
+            "/metadata/labels",
+            json!({"managed-by": "opentofu", "team": "search"}),
+        )
+    });
     // a person adds a user to the role binding of search: the binding keeps its uid
-    r.cluster_field(
-        DEV,
-        SEARCH,
-        "/rbacs/items/0/spec/bindings/0/subjects",
-        json!([
-            {"type": "Group", "name": "platform", "namespace": ""},
-            {"type": "User", "name": "fred@example.com", "namespace": ""}
-        ]),
-    );
+    r.tenant(|t| {
+        t.cluster_field(
+            DEV,
+            SEARCH,
+            "/rbacs/items/0/spec/bindings/0/subjects",
+            json!([
+                {"type": "Group", "name": "platform", "namespace": ""},
+                {"type": "User", "name": "fred@example.com", "namespace": ""}
+            ]),
+        )
+    });
     // payments reconciled an older Kubernetes version than its profile declares
-    r.cluster_field(DEV, PAYMENTS, "/status/packs/1/version", json!("1.36.1"));
+    r.tenant(|t| t.cluster_field(DEV, PAYMENTS, "/status/packs/1/version", json!("1.36.1")));
     r.serve_here(); // state 2: search has another shape and policy, and payments is behind
     r.step(
         "tiers-verify-search",
@@ -2396,7 +2434,7 @@ fn use_cases(r: &mut Runner) {
     // the key loses the permission to read the role bindings of payments: the record holds the
     // error in the policy tier and no value for the field, and verify does not compare the field
     // (#251, #274)
-    r.forbid(DEV, &format!("v1/spectroclusters/{PAYMENTS}/config/rbacs"));
+    r.tenant(|t| t.forbid(DEV, &rbacs_route(PAYMENTS)));
     r.serve_here(); // state 3: Palette refuses the role bindings of payments
     r.step(
         "tiers-forbidden-record",
@@ -2421,10 +2459,10 @@ fn use_cases(r: &mut Runner) {
     // The shape tier reads the fields of the cloud type of the cluster. lab runs on vSphere: its
     // cloud config has the model of the API reference of Palette.
     r.chapter("cluster-shape", DEV_ENV);
-    r.projects(&[("dev", DEV)]);
+    r.tenant(|t| t.projects(&[("dev", DEV)]));
     r.profile(DEV, A111, "1.1.1", "aws-stack@1.1.1", &[]);
-    r.cluster(DEV, LAB, "lab", &[A111]);
-    r.cloud(DEV, LAB, "vsphere", vsphere_spec());
+    r.tenant(|t| t.cluster(DEV, LAB, "lab", &[A111], &[]));
+    r.tenant(|t| t.cloud(DEV, LAB, "vsphere", vsphere_spec()));
     r.serve_here();
     r.step(
         "shape-vsphere-record",
@@ -2441,18 +2479,20 @@ fn use_cases(r: &mut Runner) {
 
     // Edge hosts: an add-on profile bound to two edge hosts and applied to one cluster
     r.chapter("edge-hosts", DEV_ENV);
-    r.projects(&[("dev", DEV)]);
+    r.tenant(|t| t.projects(&[("dev", DEV)]));
     r.profile(DEV, A111, "1.1.1", "aws-stack@1.1.1", &[]);
-    r.addons(
-        DEV,
-        ADDONS_DEV,
-        "64e2000000000000000000d1",
-        "baseline",
-        "1.0.0",
-    );
-    r.cluster(DEV, PAYMENTS, "payments", &[A111, ADDONS_DEV]);
-    r.edge_host(DEV, STORE_1, "store-1", &[ADDONS_DEV]);
-    r.edge_host(DEV, STORE_2, "store-2", &[ADDONS_DEV]);
+    r.tenant(|t| {
+        t.addons(
+            DEV,
+            ADDONS_DEV,
+            "64e2000000000000000000d1",
+            "baseline",
+            "1.0.0",
+        )
+    });
+    r.tenant(|t| t.cluster(DEV, PAYMENTS, "payments", &[A111, ADDONS_DEV], &[]));
+    r.tenant(|t| t.edge_host(DEV, STORE_1, "store-1", &[ADDONS_DEV]));
+    r.tenant(|t| t.edge_host(DEV, STORE_2, "store-2", &[ADDONS_DEV]));
     r.serve_here(); // state 1: one cluster and two edge hosts on platform-addons@1.0.0
     r.step(
         "edge-consumers",
@@ -2479,13 +2519,15 @@ fn use_cases(r: &mut Runner) {
         "strata compare platform-addons@1.0.0 runs/store-1.json",
     );
     // an edit in place of the manifest: the edge host and the cluster each keep their own copy
-    r.addons(
-        DEV,
-        ADDONS_DEV,
-        "64e2000000000000000000d1",
-        "restricted",
-        "1.0.0",
-    );
+    r.tenant(|t| {
+        t.addons(
+            DEV,
+            ADDONS_DEV,
+            "64e2000000000000000000d1",
+            "restricted",
+            "1.0.0",
+        )
+    });
     r.serve_here(); // state 2: the manifest of platform-addons@1.0.0 is edited in place
     r.step("edge-verify", 0, false, "strata verify 'runs/*.json'");
     r.step(
@@ -2497,31 +2539,37 @@ fn use_cases(r: &mut Runner) {
 
     // A cluster group pins an add-on profile for its virtual clusters
     r.chapter("cluster-groups", DEV_ENV);
-    r.projects(&[("dev", DEV)]);
-    r.addons(
-        DEV,
-        ADDONS_DEV,
-        "64e2000000000000000000d1",
-        "baseline",
-        "1.0.0",
-    );
-    r.addons_named(
-        DEV,
-        TEAM_A_APPS,
-        "team-a-apps",
-        "64e2000000000000000000d3",
-        "restricted",
-        "1.0.0",
-    );
-    r.cluster(DEV, TENANT_A, "tenant-a", &[ADDONS_DEV, TEAM_A_APPS]);
-    r.cluster(DEV, TENANT_B, "tenant-b", &[ADDONS_DEV]);
-    r.cluster_group(
-        DEV,
-        DEV_GROUP,
-        "dev-group",
-        &[ADDONS_DEV],
-        &[TENANT_A, TENANT_B],
-    );
+    r.tenant(|t| t.projects(&[("dev", DEV)]));
+    r.tenant(|t| {
+        t.addons(
+            DEV,
+            ADDONS_DEV,
+            "64e2000000000000000000d1",
+            "baseline",
+            "1.0.0",
+        )
+    });
+    r.tenant(|t| {
+        t.addons_named(
+            DEV,
+            TEAM_A_APPS,
+            "team-a-apps",
+            "64e2000000000000000000d3",
+            "restricted",
+            "1.0.0",
+        )
+    });
+    r.tenant(|t| t.cluster(DEV, TENANT_A, "tenant-a", &[ADDONS_DEV, TEAM_A_APPS], &[]));
+    r.tenant(|t| t.cluster(DEV, TENANT_B, "tenant-b", &[ADDONS_DEV], &[]));
+    r.tenant(|t| {
+        t.cluster_group(
+            DEV,
+            DEV_GROUP,
+            "dev-group",
+            &[ADDONS_DEV],
+            &[TENANT_A, TENANT_B],
+        )
+    });
     r.serve_here(); // state 1: the group pins platform-addons@1.0.0, and two members run it
     r.step(
         "group-record",
@@ -2542,8 +2590,8 @@ fn use_cases(r: &mut Runner) {
         "strata compare runs/dev-group.json cluster:tenant-a",
     );
     // tenant-b is a virtual cluster, and the consumer list of the profile does not name it
-    r.cluster_field(DEV, TENANT_B, "/spec/cloudType", json!("nested"));
-    r.drop_consumer(DEV, ADDONS_DEV, TENANT_B);
+    r.tenant(|t| t.cluster_field(DEV, TENANT_B, "/spec/cloudType", json!("nested")));
+    r.tenant(|t| t.drop_consumer(DEV, ADDONS_DEV, TENANT_B));
     r.step(
         "group-consumers",
         1,
@@ -2558,12 +2606,14 @@ fn use_cases(r: &mut Runner) {
         false,
         r#"strata list clusters --json | jq -c '.includesVirtual, (.clusters[] | select(.virtual) | {name, virtual})'"#,
     );
-    r.cluster_field(
-        DEV,
-        TENANT_B,
-        "/metadata/labels",
-        json!({"managed-by": "opentofu", "team": "b"}),
-    );
+    r.tenant(|t| {
+        t.cluster_field(
+            DEV,
+            TENANT_B,
+            "/metadata/labels",
+            json!({"managed-by": "opentofu", "team": "b"}),
+        )
+    });
     r.step(
         "group-list-tag",
         0,
@@ -2589,13 +2639,15 @@ fn use_cases(r: &mut Runner) {
         "jq -c '.source.cluster.tiers.policy.fields.values' runs/dev-group.json",
     );
     // the group gives each virtual cluster 4 cores in place of 6
-    r.cluster_group_field(
-        DEV,
-        DEV_GROUP,
-        "/spec/clustersConfig/limitConfig",
-        json!({"cpu": 4, "cpuMilliCore": 4000, "memory": 12288, "memoryMiB": 12288,
+    r.tenant(|t| {
+        t.cluster_group_field(
+            DEV,
+            DEV_GROUP,
+            "/spec/clustersConfig/limitConfig",
+            json!({"cpu": 4, "cpuMilliCore": 4000, "memory": 12288, "memoryMiB": 12288,
             "overSubscription": 120, "storageGiB": 10}),
-    );
+        )
+    });
     r.serve_here(); // state 2: the group gives each virtual cluster less CPU
     r.step(
         "group-policy-verify",
@@ -2612,8 +2664,8 @@ fn use_cases(r: &mut Runner) {
 
     // An app profile, and a plain update of it
     r.chapter("app-profiles", DEV_ENV);
-    r.projects(&[("dev", DEV)]);
-    r.app_profile(DEV, SHOP, "1.0.0", "2", 0);
+    r.tenant(|t| t.projects(&[("dev", DEV)]));
+    r.tenant(|t| t.app_profile(DEV, SHOP, "1.0.0", "2", 0));
     r.serve_here(); // state 1: shop@1.0.0
     r.step(
         "app-record",
@@ -2648,7 +2700,7 @@ fn use_cases(r: &mut Runner) {
         "strata consumers appprofile:shop@1.0.0",
     );
     // a plain update: the replicas of the web tier, with the same uid and version
-    r.app_profile(DEV, SHOP, "1.0.0", "3", 0);
+    r.tenant(|t| t.app_profile(DEV, SHOP, "1.0.0", "3", 0));
     r.serve_here(); // state 2: the web tier of shop@1.0.0 has another replica count
     r.step(
         "app-verify",
@@ -2657,7 +2709,7 @@ fn use_cases(r: &mut Runner) {
         "strata verify runs/shop.json --allow-no-digest",
     );
     // a plain update of the install order: web installs after config
-    r.app_profile(DEV, SHOP, "1.0.0", "3", 1);
+    r.tenant(|t| t.app_profile(DEV, SHOP, "1.0.0", "3", 1));
     r.serve_here(); // state 3: the web tier of shop@1.0.0 has the install order 1
     r.step(
         "app-order-compare",
@@ -2666,7 +2718,7 @@ fn use_cases(r: &mut Runner) {
         "strata compare runs/shop.json appprofile:shop@1.0.0",
     );
     // a team deploys the app profile, so Palette refuses its delete
-    r.app_deployment(DEV, SHOP_DEV, "shop-dev", SHOP);
+    r.tenant(|t| t.app_deployment(DEV, SHOP_DEV, "shop-dev", SHOP));
     r.serve_here(); // state 4: the app deployment shop-dev uses shop@1.0.0
     r.step(
         "app-consumers",
@@ -2683,11 +2735,11 @@ fn use_cases(r: &mut Runner) {
 
     // The pins that are behind the registry, and a version that arrives between two runs
     r.chapter("behind", DEV_ENV);
-    r.projects(&[("dev", DEV)]);
-    r.registries(DEV);
+    r.tenant(|t| t.projects(&[("dev", DEV)]));
+    r.tenant(|t| t.registries(DEV));
     r.profile(DEV, A100, "1.0.0", "aws-stack@1.0.0", &[]);
     r.profile(DEV, A111, "1.1.1", "aws-stack@1.1.1", &[]);
-    r.hide_pack_version(DEV, "csi-aws-ebs", "1.65.0");
+    r.tenant(|t| t.hide_pack_version(DEV, "csi-aws-ebs", "1.65.0"));
     r.serve_here(); // state 1: the registry has not published csi-aws-ebs 1.65.0 yet
     r.quiet("strata snapshot aws-stack@1.0.0 -o releases/1.0.0/dev.json");
     r.step(
@@ -2696,9 +2748,9 @@ fn use_cases(r: &mut Runner) {
         false,
         "strata behind releases/1.0.0/dev.json --no-impact --json > behind.json; jq -c '.pins[] | select(.name == \"csi-aws-ebs\") | {version, newer: [.newer[].version]}' behind.json",
     );
-    r.registries(DEV);
+    r.tenant(|t| t.registries(DEV));
     // the newest kubernetes supports amd64 alone, as loki 3.6.7 does in the Public Repo
-    r.pack_architectures(DEV, "kubernetes", "1.36.2", "amd64");
+    r.tenant(|t| t.pack_architectures(DEV, "kubernetes", "1.36.2", "amd64"));
     r.serve_here(); // state 2: the registry publishes csi-aws-ebs 1.65.0
     r.quiet("strata snapshot aws-stack@1.1.1 -o releases/1.1.1/dev.json");
     r.step("behind", 1, false, "strata behind 'releases/*/dev.json'");
@@ -2731,27 +2783,29 @@ fn use_cases(r: &mut Runner) {
 
     // The fleet from Palette: the clusters of a label, in two projects, and a record of each
     r.chapter("fleet", &[]);
-    r.projects(&[("dev", DEV), ("prod", PROD)]);
+    r.tenant(|t| t.projects(&[("dev", DEV), ("prod", PROD)]));
     r.profile(DEV, A111, "1.1.1", "aws-stack@1.1.1", &[]);
     r.profile(PROD, A111_PROD, "1.1.1", "aws-stack@1.1.1", &[]);
-    r.cluster(DEV, PAYMENTS, "payments", &[A111]);
-    r.cluster(DEV, SEARCH, "search", &[A111]);
-    r.cluster(PROD, PAYMENTS_PROD, "payments", &[A111_PROD]);
-    r.cluster(PROD, LEDGER, "ledger", &[A111_PROD]);
+    r.tenant(|t| t.cluster(DEV, PAYMENTS, "payments", &[A111], &[]));
+    r.tenant(|t| t.cluster(DEV, SEARCH, "search", &[A111], &[]));
+    r.tenant(|t| t.cluster(PROD, PAYMENTS_PROD, "payments", &[A111_PROD], &[]));
+    r.tenant(|t| t.cluster(PROD, LEDGER, "ledger", &[A111_PROD], &[]));
     for (project, uid, env) in [
         (DEV, PAYMENTS, "dev"),
         (DEV, SEARCH, "dev"),
         (PROD, PAYMENTS_PROD, "prod"),
         (PROD, LEDGER, "prod"),
     ] {
-        r.cluster_field(
-            project,
-            uid,
-            "/metadata/labels",
-            json!({"env": env, "managed-by": "opentofu"}),
-        );
+        r.tenant(|t| {
+            t.cluster_field(
+                project,
+                uid,
+                "/metadata/labels",
+                json!({"env": env, "managed-by": "opentofu"}),
+            )
+        });
     }
-    r.tag_filter("production", "64f7000000000000000000a1", "env", "prod");
+    r.tenant(|t| t.tag_filter("production", "64f7000000000000000000a1", "env", "prod"));
     r.serve_here(); // state 1: two clusters of each project, and the production ones labeled so
     r.step("fleet-tag", 0, false, "strata list clusters --tag env=prod");
     r.step(
@@ -2779,12 +2833,14 @@ fn use_cases(r: &mut Runner) {
         "strata list clusters --filter production --json | jq -c '.resolved, (.clusters[] | {name, projectName, labels})'",
     );
     // ledger leaves production: the automation that labels it drops the label
-    r.cluster_field(
-        PROD,
-        LEDGER,
-        "/metadata/labels",
-        json!({"env": "retired", "managed-by": "opentofu"}),
-    );
+    r.tenant(|t| {
+        t.cluster_field(
+            PROD,
+            LEDGER,
+            "/metadata/labels",
+            json!({"env": "retired", "managed-by": "opentofu"}),
+        )
+    });
     r.serve_here(); // state 2: ledger is no longer labeled env=prod
     r.step(
         "fleet-snapshot-again",
@@ -2800,7 +2856,7 @@ fn use_cases(r: &mut Runner) {
     );
 
     r.chapter("same-names", &[]);
-    r.projects(&[("dev", DEV), ("prod", PROD)]);
+    r.tenant(|t| t.projects(&[("dev", DEV), ("prod", PROD)]));
     r.profile(DEV, A111, "1.1.1", "aws-stack@1.1.1", &[]);
     r.profile_own_copy(
         PROD,
@@ -2810,8 +2866,8 @@ fn use_cases(r: &mut Runner) {
         RETAIN,
         "the same-names chapter gives prod a changed value",
     );
-    r.cluster(DEV, PAYMENTS, "payments", &[A111]);
-    r.cluster(PROD, PAYMENTS_PROD, "payments", &[A111_PROD]);
+    r.tenant(|t| t.cluster(DEV, PAYMENTS, "payments", &[A111], &[]));
+    r.tenant(|t| t.cluster(PROD, PAYMENTS_PROD, "payments", &[A111_PROD], &[]));
     r.step(
         "names-tenant",
         0,
@@ -2862,8 +2918,8 @@ fn use_cases(r: &mut Runner) {
     );
 
     r.chapter("packs", DEV_ENV);
-    r.projects(&[("dev", DEV), ("prod", PROD)]);
-    r.registries(DEV);
+    r.tenant(|t| t.projects(&[("dev", DEV), ("prod", PROD)]));
+    r.tenant(|t| t.registries(DEV));
     r.step(
         "pack-compare",
         1,
@@ -2931,9 +2987,9 @@ fn use_cases(r: &mut Runner) {
 
     // A rebuild of the newest version: strata orders it above its base, and Palette below
     r.chapter("palette-latest", DEV_ENV);
-    r.projects(&[("dev", DEV)]);
-    r.registries(DEV);
-    r.rebuild_pack_version(DEV, "cert-manager", "1.21.1");
+    r.tenant(|t| t.projects(&[("dev", DEV)]));
+    r.tenant(|t| t.registries(DEV));
+    r.tenant(|t| t.rebuild_pack_version(DEV, "cert-manager", "1.21.1"));
     r.step(
         "packs-palette-latest",
         0,
@@ -2948,11 +3004,11 @@ fn use_cases(r: &mut Runner) {
     );
 
     r.chapter("retire", DEV_ENV);
-    r.projects(&[("dev", DEV)]);
+    r.tenant(|t| t.projects(&[("dev", DEV)]));
     r.profile(DEV, A100, "1.0.0", "aws-stack@1.0.0", &[]);
     r.profile(DEV, A110, "1.1.0", "aws-stack@1.1.0", &[]);
-    r.cluster(DEV, PAYMENTS, "payments", &[A110]);
-    r.cluster(DEV, SEARCH, "search", &[A110]);
+    r.tenant(|t| t.cluster(DEV, PAYMENTS, "payments", &[A110], &[]));
+    r.tenant(|t| t.cluster(DEV, SEARCH, "search", &[A110], &[]));
     r.step(
         "retire-in-use",
         1,
@@ -2975,7 +3031,7 @@ fn use_cases(r: &mut Runner) {
     r.step("retire-json", 1, false, r#"strata consumers aws-stack@1.1.0 --json | jq -r '.consumers[] | "\(.name) \(.state) \(.version)"'"#);
     // no cluster runs 1.1.1, and a cluster template links it: Palette refuses the delete
     r.profile(DEV, A111, "1.1.1", "aws-stack@1.1.1", &[]);
-    r.cluster_template(DEV, AWS_STANDARD, "aws-standard", &[A111]);
+    r.tenant(|t| t.cluster_template(DEV, AWS_STANDARD, "aws-standard", &[A111]));
     r.step(
         "retire-template",
         1,
@@ -2986,7 +3042,7 @@ fn use_cases(r: &mut Runner) {
 
 fn automation(r: &mut Runner) {
     r.chapter("automation", DEV_ENV);
-    r.projects(&[("dev", DEV)]);
+    r.tenant(|t| t.projects(&[("dev", DEV)]));
     r.profile(DEV, A100, "1.0.0", "aws-stack@1.0.0", &[]);
     r.profile(DEV, A110, "1.1.0", "aws-stack@1.1.0", &[]);
     r.profile(DEV, A111, "1.1.1", "aws-stack@1.1.1", &[]);
@@ -3025,7 +3081,7 @@ fn automation(r: &mut Runner) {
     // aws-stack@1.1.1; the stand-in answers the validate route with the CPU floor of the packs,
     // and holds the cloud account of the entity.
     r.chapter("preflight", DEV_ENV);
-    r.projects(&[("dev", DEV), ("prod", PROD)]);
+    r.tenant(|t| t.projects(&[("dev", DEV), ("prod", PROD)]));
     r.profile(DEV, A111, "1.1.1", "aws-stack@1.1.1", &[]);
     r.write_file("cluster.json", PREFLIGHT_ENTITY);
     r.answer(
@@ -3078,7 +3134,7 @@ fn automation(r: &mut Runner) {
     // once Running: the cluster as Palette holds it, a change of its worker pool before the
     // change is made, and one reading of the watch (the stand-in's cluster is Running, so the
     // watch ends at once; a real build reads every 30 seconds until Running)
-    r.cluster(DEV, PAYMENTS, "payments", &[A111]);
+    r.tenant(|t| t.cluster(DEV, PAYMENTS, "payments", &[A111], &[]));
     r.write_file(
         "change.json",
         r#"{"spec": {"machinepoolconfig": [{"poolConfig": {"name": "worker-pool"}, "cloudConfig": {"instanceType": "m5.xlarge"}}]}}"#,

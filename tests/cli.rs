@@ -2,14 +2,12 @@
 
 mod common;
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
-const ESC: char = '\x1b';
+use common::{PROFILE_LISTING, PROJECT_LISTING, read_json, snapshot_from_raw, strata_bin, text};
 
-fn bin() -> PathBuf {
-    PathBuf::from(env!("CARGO_BIN_EXE_strata"))
-}
+const ESC: char = '\x1b';
 
 struct Run {
     code: i32,
@@ -18,7 +16,7 @@ struct Run {
 }
 
 fn run_in(args: &[&str], envs: &[(&str, &str)], clear: &[&str]) -> Run {
-    let mut c = Command::new(bin());
+    let mut c = Command::new(strata_bin());
     c.args(args).env("STRATA_QUIET", "1");
     for k in clear {
         c.env_remove(k);
@@ -29,8 +27,8 @@ fn run_in(args: &[&str], envs: &[(&str, &str)], clear: &[&str]) -> Run {
     let o = c.output().expect("binary runs");
     Run {
         code: o.status.code().unwrap_or(-1),
-        out: String::from_utf8_lossy(&o.stdout).into_owned(),
-        err: String::from_utf8_lossy(&o.stderr).into_owned(),
+        out: text(&o.stdout),
+        err: text(&o.stderr),
     }
 }
 
@@ -50,18 +48,7 @@ fn fixtures() -> Fx {
     let dir = tempfile::tempdir().unwrap();
     let raw = dir.path().join("fx");
     common::make_fixtures(&raw);
-    let snap = |name: &str| -> String {
-        let out = dir.path().join(format!("{name}.json"));
-        let r = run(&[
-            "snapshot",
-            "--from-raw",
-            raw.join(name).to_str().unwrap(),
-            "-o",
-            out.to_str().unwrap(),
-        ]);
-        assert_eq!(r.code, 0, "snapshot {name}: {}", r.err);
-        out.to_str().unwrap().to_string()
-    };
+    let snap = |name: &str| record_of(&raw, dir.path(), name);
     let (a, a2, b) = (snap("a"), snap("a2"), snap("b"));
     Fx {
         _dir: dir,
@@ -72,8 +59,12 @@ fn fixtures() -> Fx {
     }
 }
 
-fn json(path: &str) -> serde_json::Value {
-    serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap()
+/// The path of the record of the raw profile fixture `name` under `raw`, written to
+/// `dir/<name>.json`.
+fn record_of(raw: &Path, dir: &Path, name: &str) -> String {
+    let out = dir.join(format!("{name}.json"));
+    snapshot_from_raw(raw, name, &out);
+    out.to_str().unwrap().to_string()
 }
 
 fn has_line(text: &str, re: &str) -> bool {
@@ -91,7 +82,7 @@ fn has_line(text: &str, re: &str) -> bool {
 #[test]
 fn snapshot_shape_and_upstream_sources() {
     let fx = fixtures();
-    let a = json(&fx.a);
+    let a = read_json(Path::new(&fx.a));
     assert_eq!(a["schema"], "strata-snapshot/1");
     assert_eq!(a["tool"]["impl"], "rust");
     assert_eq!(a["packs"].as_array().unwrap().len(), 7);
@@ -119,7 +110,10 @@ fn snapshot_shape_and_upstream_sources() {
 #[test]
 fn reordered_yaml_gives_the_same_root() {
     let fx = fixtures();
-    assert_eq!(json(&fx.a)["root"], json(&fx.a2)["root"]);
+    assert_eq!(
+        read_json(Path::new(&fx.a))["root"],
+        read_json(Path::new(&fx.a2))["root"]
+    );
 }
 
 #[test]
@@ -179,7 +173,7 @@ fn identical_profiles_exit_zero() {
 fn two_records_whose_os_pack_names_two_images_exit_one_with_identical_roots() {
     let fx = fixtures();
     let with_image = |image: &str| -> String {
-        let mut doc = json(&fx.a);
+        let mut doc = read_json(Path::new(&fx.a));
         for pack in doc["packs"].as_array_mut().unwrap() {
             if pack["layer"] == "os" {
                 pack["annotations"] = serde_json::json!({"imageId": image});
@@ -552,18 +546,7 @@ fn verify_over_many_records_prints_one_line_each_and_a_summary_document() {
 fn same_release_checks_consecutive_records_with_an_optional_registry_move_policy() {
     let fx = fixtures();
     let dir = std::path::Path::new(&fx.a).parent().unwrap();
-    let snap = |name: &str| -> String {
-        let out = dir.join(format!("{name}.json"));
-        let r = run(&[
-            "snapshot",
-            "--from-raw",
-            fx.raw.join(name).to_str().unwrap(),
-            "-o",
-            out.to_str().unwrap(),
-        ]);
-        assert_eq!(r.code, 0, "{}", r.err);
-        out.to_str().unwrap().to_string()
-    };
+    let snap = |name: &str| record_of(&fx.raw, dir, name);
     let (a3, a4) = (snap("a3"), snap("a4"));
 
     let r = run(&["same-release", &fx.a, &fx.a2, &fx.a]);
@@ -643,7 +626,7 @@ fn same_release_names_a_macro_with_another_value_on_each_side_and_keeps_the_stat
     // `digest` is the digest of the value that the project gives, or none for a record without
     // --macros.
     let record = |name: &str, digest: Option<&str>| -> String {
-        let mut doc = json(&fx.a);
+        let mut doc = read_json(Path::new(&fx.a));
         let pack = &mut doc["packs"][0];
         let values = pack["values"].as_str().unwrap_or_default();
         pack["values"] = format!("{values}\nregion: \"{{{{.spectro.macro.region}}}}\"\n").into();
@@ -747,7 +730,7 @@ fn a_cluster_snapshot_from_raw_compares_against_profile_records() {
         r.out
     );
 
-    let snap = json(&on_b);
+    let snap = read_json(Path::new(&on_b));
     assert_eq!(snap["source"]["cluster"]["uid"], uid);
     assert_eq!(snap["source"]["cluster"]["name"], "lab-cluster");
     assert_eq!(snap["source"]["cluster"]["profiles"][0]["version"], "1.3.0");
@@ -966,8 +949,9 @@ fn json_mode_writes_one_structured_error_line_on_stderr() {
 }
 
 /// Run against an address that refuses connections, with no retries and a clean environment, so
-/// the path in a transport error is the first request strata made.
-fn closed_port(args: &[&str], envs: &[(&str, &str)]) -> Run {
+/// the path in a transport error is the first request strata made. A `HOME` in `envs` replaces
+/// the empty home. With `quiet` false, the warnings that a person sees are on.
+fn against_closed_port(args: &[&str], envs: &[(&str, &str)], quiet: bool) -> Run {
     let home = tempfile::tempdir().unwrap();
     let mut all = vec![
         ("HOME", home.path().to_str().unwrap()),
@@ -976,16 +960,21 @@ fn closed_port(args: &[&str], envs: &[(&str, &str)]) -> Run {
         ("STRATA_RETRIES", "0"),
     ];
     all.extend_from_slice(envs);
-    run_in(
-        args,
-        &all,
-        &[
-            "PALETTE_PROJECT_UID",
-            "PALETTE_PROJECT",
-            "SPECTROCLOUD_APIKEY",
-            "SPECTROCLOUD_HOST",
-        ],
-    )
+    let mut clear = vec![
+        "PALETTE_PROJECT_UID",
+        "PALETTE_PROJECT",
+        "SPECTROCLOUD_APIKEY",
+        "SPECTROCLOUD_HOST",
+    ];
+    if !quiet {
+        clear.push("STRATA_QUIET");
+    }
+    run_in(args, &all, &clear)
+}
+
+/// [`against_closed_port`] with `STRATA_QUIET` set, as [`run`] sets it.
+fn closed_port(args: &[&str], envs: &[(&str, &str)]) -> Run {
+    against_closed_port(args, envs, true)
 }
 
 /// [`closed_port`] in JSON mode: the exit status and the error object.
@@ -999,7 +988,7 @@ fn first_request(args: &[&str], envs: &[(&str, &str)]) -> (i32, serde_json::Valu
 #[test]
 fn a_project_name_is_looked_up_in_the_project_listing_before_anything_else() {
     let fx = fixtures();
-    let projects = "/v1/dashboard/projects/metadata";
+    let projects = PROJECT_LISTING;
 
     let (code, e) = first_request(
         &["list", "profiles", "--json"],
@@ -1012,10 +1001,7 @@ fn a_project_name_is_looked_up_in_the_project_listing_before_anything_else() {
         &["list", "profiles", "--json"],
         &[("PALETTE_PROJECT", "lab"), ("PALETTE_PROJECT_UID", "p1")],
     );
-    assert_eq!(
-        e["path"], "/v1/dashboard/clusterprofiles/metadata",
-        "a uid wins over a name: {e}"
-    );
+    assert_eq!(e["path"], PROFILE_LISTING, "a uid wins over a name: {e}");
 
     for args in [
         vec!["list", "profiles", "--json", "--project-name", "lab"],
@@ -1065,7 +1051,7 @@ fn candidate_writes_a_record_as_a_candidate_file_with_values_and_manifests_in_fi
     let doc: serde_json::Value =
         serde_yaml::from_str(&std::fs::read_to_string(&file).unwrap()).unwrap();
     assert_eq!(doc["name"], "lab-profile");
-    let recorded = json(&fx.b);
+    let recorded = read_json(Path::new(&fx.b));
     let k8s = doc["layers"]
         .as_array()
         .unwrap()
@@ -1090,29 +1076,9 @@ fn candidate_writes_a_record_as_a_candidate_file_with_values_and_manifests_in_fi
     assert_eq!(r.code, 2, "--files-dir needs -o");
 }
 
-/// Like [`first_request`] but without `STRATA_QUIET`, so the warnings a person sees are on.
+/// [`closed_port`] without `STRATA_QUIET`, so the warnings a person sees are on.
 fn first_request_loud(args: &[&str], envs: &[(&str, &str)]) -> Run {
-    let home = tempfile::tempdir().unwrap();
-    let mut c = Command::new(bin());
-    c.args(args)
-        .env("HOME", home.path())
-        .env("PALETTE_API_KEY", "k")
-        .env("PALETTE_API", "http://127.0.0.1:9")
-        .env("STRATA_RETRIES", "0")
-        .env_remove("STRATA_QUIET")
-        .env_remove("PALETTE_PROJECT_UID")
-        .env_remove("PALETTE_PROJECT")
-        .env_remove("SPECTROCLOUD_APIKEY")
-        .env_remove("SPECTROCLOUD_HOST");
-    for (k, v) in envs {
-        c.env(k, v);
-    }
-    let o = c.output().expect("binary runs");
-    Run {
-        code: o.status.code().unwrap_or(-1),
-        out: String::from_utf8_lossy(&o.stdout).into_owned(),
-        err: String::from_utf8_lossy(&o.stderr).into_owned(),
-    }
+    against_closed_port(args, envs, false)
 }
 
 /// A uid and a name both reach strata and the uid decides, so the name decided nothing. Strata
@@ -1139,20 +1105,17 @@ fn a_scope_conflict_is_looked_up_before_the_work() {
 fn a_name_in_the_file_under_a_uid_in_the_environment_starts_no_lookup() {
     let home = tempfile::tempdir().unwrap();
     std::fs::write(home.path().join(".palette.env"), "PALETTE_PROJECT=lab\n").unwrap();
-    let mut c = Command::new(bin());
-    c.args(["consumers", "aws-stack@1.0.0"])
-        .env("HOME", home.path())
-        .env("PALETTE_API_KEY", "k")
-        .env("PALETTE_API", "http://127.0.0.1:9")
-        .env("STRATA_RETRIES", "0")
-        .env("PALETTE_PROJECT_UID", "p1")
-        .env_remove("STRATA_QUIET")
-        .env_remove("PALETTE_PROJECT");
-    let o = c.output().expect("binary runs");
-    let err = String::from_utf8_lossy(&o.stderr);
+    let r = first_request_loud(
+        &["consumers", "aws-stack@1.0.0"],
+        &[
+            ("HOME", home.path().to_str().unwrap()),
+            ("PALETTE_PROJECT_UID", "p1"),
+        ],
+    );
     assert!(
-        !err.contains("looking up project") && !err.contains("warning:"),
-        "the fallback is not a conflict: {err}"
+        !r.err.contains("looking up project") && !r.err.contains("warning:"),
+        "the fallback is not a conflict: {}",
+        r.err
     );
 }
 
@@ -1165,7 +1128,7 @@ fn a_quiet_run_skips_the_scope_conflict_lookup() {
         &[("PALETTE_PROJECT", "lab"), ("PALETTE_PROJECT_UID", "p1")],
     );
     assert_eq!(
-        e["path"], "/v1/dashboard/clusterprofiles/metadata",
+        e["path"], PROFILE_LISTING,
         "no project listing on a quiet run: {e}"
     );
 }
@@ -1298,7 +1261,7 @@ fn snapshot_of_a_version_whose_pack_palette_marks_invalid_warns_on_standard_erro
     for name in ["manifests.json", "variables.json"] {
         std::fs::copy(fx.raw.join("a").join(name), raw.join(name)).unwrap();
     }
-    let mut profile = json(fx.raw.join("a").join("profile.json").to_str().unwrap());
+    let mut profile = read_json(&fx.raw.join("a").join("profile.json"));
     for pack in profile["spec"]["published"]["packs"]
         .as_array_mut()
         .unwrap()
@@ -1331,8 +1294,8 @@ fn snapshot_of_a_version_whose_pack_palette_marks_invalid_warns_on_standard_erro
         "{}",
         r.err
     );
-    let record = json(out.to_str().unwrap());
-    assert_eq!(record["root"], json(&fx.a)["root"]);
+    let record = read_json(&out);
+    assert_eq!(record["root"], read_json(Path::new(&fx.a))["root"]);
     // a quiet run writes no warning, as for each other warning
     let r = run(&args);
     assert_eq!((r.code, r.err.as_str()), (0, ""));
