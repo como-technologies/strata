@@ -1,11 +1,11 @@
 //! The registries of Palette, read one time for each command.
 //!
-//! [`Registries`] holds the listings of the registries that a command reads: the registries that
-//! the key can see, `GET /v1/registries/metadata`, and the summary listing of each kind,
+//! [`Registries`] holds the listings of the registries that a command reads. The registries that
+//! the key can see are `GET /v1/registries/metadata`, and the summary of each kind is
 //! `GET /v1/registries/{kind}/summary`. It reads each listing one time, when a check first needs
-//! it. The registry that a name or a uid names, the name of a uid, the provider type of an OCI
-//! registry, the registries that Palette does not sync, and the last sync of a registry each
-//! come from it.
+//! it. From it come the registry that a name or a uid names, the name of a uid, and the provider
+//! type of an OCI registry. Also the registries that Palette does not sync, and the last sync of
+//! a registry.
 
 use std::collections::BTreeMap;
 use std::collections::btree_map::Entry;
@@ -62,8 +62,8 @@ impl<'a, A: PaletteApi> Registries<'a, A> {
     }
 
     /// The entries of the summary listing of the registries of `kind`,
-    /// `GET /v1/registries/{kind}/summary`: each with its last sync in `status.sync`, and an OCI
-    /// registry with its provider type in `spec.providerType`. `None` when Palette answers the
+    /// `GET /v1/registries/{kind}/summary`. Each has its last sync in `status.sync`, and an OCI
+    /// registry has its provider type in `spec.providerType`. `None` when Palette answers the
     /// listing with a 4xx: it has no such listing.
     ///
     /// # Errors
@@ -279,8 +279,8 @@ pub(crate) struct Unsynced {
 pub(crate) struct RegistrySyncNote {
     /// The sync, when Palette gives one: see [`Registries::sync`].
     pub sync: Option<RegistrySync>,
-    /// Why strata could not read the sync: Palette answered with a 5xx, or the request did not
-    /// complete. `sync` is then `None`.
+    /// Why strata has no sync: Palette answered with a 5xx, or the request did not complete.
+    /// `sync` is then `None`.
     pub error: Option<String>,
 }
 

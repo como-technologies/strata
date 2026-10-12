@@ -5260,10 +5260,18 @@ fn candidate_errors_name_what_is_wrong() {
         .unwrap_err();
     assert!(matches!(err, Error::CandidateInvalid { .. }), "{err}");
 
-    // registry problems need the registry
+    // registry problems need the registry. A version that the listing does not have asks whether
+    // Palette syncs the registry, and the registry listing is the first read of that check: an
+    // answer of Palette that is an error is an error of the record (#327)
     let f = write(
         "unknown-version.yaml",
         k8s(serde_json::json!({"version": "9.9.9"})),
+    );
+    let err = candidate_snapshot(&f, &api).unwrap_err();
+    assert!(matches!(err, Error::Api { status: 404, .. }), "{err}");
+    let api = api.with(
+        REGISTRY_LISTING,
+        serde_json::json!({"items": [{"name": "Public Repo", "uid": "reg-public", "kind": "pack"}]}),
     );
     let err = candidate_snapshot(&f, &api).unwrap_err();
     match &err {
@@ -9634,7 +9642,7 @@ fn a_record_of_a_pack_from_an_oci_registry_names_its_provider_type() {
         1,
         "one read for the two records"
     );
-    // a 5xx of the listing is an error of the record: the provider type is content, so a record
+    // a 5xx of the listing is an error of the record. The provider type is content, so a record
     // with none in its place is wrong (#327)
     let broken = api.failing(OCI_REGISTRY_SUMMARY, 500, r#"{"code":"InternalError"}"#);
     let err = snapshot_of(&broken, "pack:Mirror/csi-aws-ebs@1.64.0").unwrap_err();

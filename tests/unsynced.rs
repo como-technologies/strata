@@ -346,10 +346,11 @@ fn packs_and_behind_name_the_registries_that_palette_does_not_sync_when_none_has
 
 #[test]
 fn a_resolve_reads_the_registry_listing_and_the_oci_summary_one_time() {
-    // three layers, each with a reason to read a listing: a listed chart of the OCI registry
-    // (its provider type), a chart that the listing does not have from the same registry
-    // (whether Palette syncs it), and one from the private Helm registry, each registry named by
-    // name (its uid). One resolve reads each listing one time (#327)
+    // three layers, each with a reason to read a listing. A listed chart of the OCI registry
+    // needs its provider type. A chart that the listing does not have asks whether Palette syncs
+    // its registry. One is from the same registry, one from the private Helm registry. Each layer
+    // names its registry by name, so each needs its uid. One resolve reads each listing one time
+    // (#327)
     let listed = json!({
         "metadata": {"uid": "pack-listed-1"},
         "spec": {"name": "listed-chart", "version": "1.0.0", "registryUid": ZARF,

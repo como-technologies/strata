@@ -376,7 +376,7 @@ impl<A: PaletteApi> Palette<A> {
         }
     }
 
-    /// The uid of an app profile that a ref names: `id` is a uid when there is no `version`, and
+    /// The uid of an app profile that a ref names. `id` is a uid when there is no `version`, and
     /// else a name that [`Palette::resolve_app_profile`] finds at `version`.
     pub(crate) fn app_profile_uid(&self, id: &str, version: Option<&str>) -> Result<String> {
         match version {
@@ -853,6 +853,7 @@ impl<A: PaletteApi> Palette<A> {
     /// group: `GET /v1/clustergroups/{uid}` gives the profiles that the group pins for its
     /// virtual clusters. The group holds its own copy of each manifest, which
     /// `GET /v1/clusterprofiles/{uid}/packs/{pack}/manifests/{manifestUid}` reads by its uid.
+    ///
     /// The variables and the rest of each pack of a host or a group come from its profile, and
     /// neither has notifications. A missing variables route is "no variables". Each other error
     /// returns.
@@ -861,7 +862,7 @@ impl<A: PaletteApi> Palette<A> {
     ///
     /// The error of the first request that fails. [`Error::ClusterNotFound`],
     /// [`Error::EdgeHostNotFound`], or [`Error::ClusterGroupNotFound`] when `id` is no uid and no
-    /// name in the scope, and the `NameAmbiguous` kind of the same object when two have the name.
+    /// name in the scope. The `NameAmbiguous` kind of the same object when two have the name.
     pub fn fetch_subject(
         &self,
         kind: SubjectKind,
@@ -880,9 +881,9 @@ impl<A: PaletteApi> Palette<A> {
         self.api.get_json(&route(collection(kind), &[uid]))
     }
 
-    /// The document of the object `id` of `kind`: [`Palette::subject_document`] of the uid `id`,
-    /// or, when no object has that uid, of the uid of the one object named `id` in the scope. A
-    /// note names the uid of a name.
+    /// The document of the object `id` of `kind`: [`Palette::subject_document`] of the uid `id`.
+    /// When no object has that uid, it is the document of the one object named `id` in the
+    /// scope. A note names the uid of a name.
     fn subject_by_id(&self, kind: SubjectKind, id: &str, progress: &Progress) -> Result<Value> {
         progress.note(&format!("fetching {} {id}", kind.noun()));
         match found(self.subject_document(kind, id))? {

@@ -3,8 +3,8 @@
 /// The kind of an object in the audit log of Palette: the value of `resourceKind`.
 ///
 /// A cluster has no kind here. Strata reads the log of a cluster by its uid alone, with no
-/// `resourceKind`: Palette logs the create and the delete of a virtual cluster under
-/// `virtualCluster`, and its other writes under `spectrocluster`, and the uid finds both.
+/// `resourceKind`. Palette logs the create and the delete of a virtual cluster under
+/// `virtualCluster`, and its other writes under `spectrocluster`. The uid finds both.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AuditKind {
     /// A cluster profile.
