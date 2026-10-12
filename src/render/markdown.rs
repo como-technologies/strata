@@ -1,26 +1,21 @@
 //! The pull request comment.
 
 use super::{
-    Renderer, VarLine, applied_ref, artifact_lines, artifacts_summary, capitalized, chain_verdict,
-    cluster_count, cluster_value, consumer_count, consumer_counts, consumers_heading,
-    consumers_sentence, count_of, counts_line, cross_kind_note, dash, draft_note, edge_hosts_line,
-    edited_in_place_note, entry_error, gone_sentence, image_ids_changed_notes, invalid_mark,
-    invalid_pack_sentences, last_modified_suffix, list_count, list_scope, macros_changed_note,
-    macros_note, masked_notes, outside_root_sentence, overwritten_in_place_notes, pack_version,
-    pair_detail, pair_notes, pair_word, palette_repave_lines, palette_repave_note,
-    palette_validation_lines, plain_flags, profile_marks, profiles_overwritten_sentence,
-    project_label, record_detail, record_label, recorded_noun, registry_note, registry_sync_suffix,
-    repave_pending_notes, running_behind_notes, same_content_note, second_reading_counts, short,
-    show, state_suffix, subject, tier_path, tier_states, traits_suffix, unchanged_sentence,
-    unread_notes, unverified_sentence, updates_pending_notes, upstream_unknown_note,
-    values_changed, values_changed_suffix, variable_lines, variables_comparable,
-    variables_unavailable_note, version_display, version_note, virtual_group, virtual_line,
-    who_entry, who_heading,
+    DiffNote, OpLine, Renderer, VarLine, applied_ref, artifact_lines, artifacts_summary,
+    capitalized, chain_verdict, cluster_count, consumer_count, consumer_counts, consumers_heading,
+    consumers_sentence, count_of, counts_line, dash, diff_notes, diff_word, edge_hosts_line,
+    entry_error, invalid_mark, invalid_pack_sentences, list_count, list_scope, no_version_sentence,
+    pack_order_note, pack_version, pair_detail, pair_notes, pair_word, pending_profile_names,
+    plain_flags, profile_marks, project_label, record_detail, record_label, record_word,
+    registry_note, second_reading_line, short, tier_path, tier_states, traits_suffix,
+    values_changed, values_summary, values_unparsed_sentence, variable_lines, variables_comparable,
+    verdict_parts, version_display, version_note, virtual_group, virtual_line, who_entry,
+    who_heading,
 };
 use crate::color::Paint;
-use crate::diff::{Diff, Leaf, Op, Status, Verify, VerifyStatus};
+use crate::diff::{Diff, Leaf, Op, Status, Verify};
 use crate::error::Result;
-use crate::ops::{Chain, ConsumersReport, Listing, PackListing, RecordStatus, VerifySummary};
+use crate::ops::{Chain, ConsumersReport, Listing, PackListing, VerifySummary};
 use crate::snapshot::{Snapshot, Source};
 
 /// Renders markdown for a pull request comment.
@@ -30,13 +25,19 @@ fn escape(s: &str) -> String {
     s.replace('|', "\\|")
 }
 
-fn leaf(l: &Leaf) -> String {
-    leaf_at(&l.path, l)
+/// The text in a code span: `` `--full` ``.
+fn code(text: &str) -> String {
+    format!("`{text}`")
 }
 
-fn leaf_at(path: &str, l: &Leaf) -> String {
-    let old = l.old.as_ref().map(show).unwrap_or_else(|| "null".into());
-    let new = l.new.as_ref().map(show).unwrap_or_else(|| "null".into());
+fn leaf(l: &Leaf) -> String {
+    op_line(&OpLine::leaf(&l.path, l))
+}
+
+/// The lines of a `diff` block: `- path: old` and `+ path: new`, one of them for a side that has
+/// no value.
+fn op_line(l: &OpLine) -> String {
+    let OpLine { path, old, new, .. } = l;
     match l.op {
         Op::Changed => format!("- {path}: {old}\n+ {path}: {new}\n"),
         Op::Added => format!("+ {path}: {new}\n"),
@@ -48,7 +49,7 @@ fn variable_line(v: &VarLine<'_>) -> String {
     match v {
         VarLine::Added(s) => format!("+ variable {}{}\n", s.name, traits_suffix(s)),
         VarLine::Removed(s) => format!("- variable {}{}\n", s.name, traits_suffix(s)),
-        VarLine::Field(name, l) => leaf_at(&format!("{name}.{}", l.path), l),
+        VarLine::Field(name, l) => op_line(&OpLine::leaf(&format!("{name}.{}", l.path), l)),
     }
 }
 
@@ -80,10 +81,6 @@ impl Renderer for MarkdownRenderer {
             dash(&d.b.fetched_at)
         ));
         let s = &d.summary;
-        let max_impact = serde_json::to_value(s.max_impact)
-            .ok()
-            .and_then(|v| v.as_str().map(str::to_string))
-            .unwrap_or_default();
         // two packs have no profile variables, and no request asked for any
         let variables = if variables_comparable(d) {
             format!(
@@ -99,14 +96,8 @@ impl Renderer for MarkdownRenderer {
         };
         o.push_str(&format!(
             "**Result:** {} · max impact: `{}` · packs: {} changed, {} added, {} removed, {} unchanged{}\n\n",
-            if d.same {
-                "IDENTICAL"
-            } else if d.same_content {
-                "SAME CONTENT"
-            } else {
-                "CHANGED"
-            },
-            max_impact,
+            diff_word(d),
+            s.max_impact.as_str(),
             s.packs_changed,
             s.packs_added,
             s.packs_removed,
@@ -116,64 +107,13 @@ impl Renderer for MarkdownRenderer {
         if let Some(sentence) = consumers_sentence(d) {
             o.push_str(&format!("**Consumers:** {sentence}\n\n"));
         }
-        if let Some(note) = edited_in_place_note(d) {
-            o.push_str(&format!("**Note:** {note}\n\n"));
-        }
-        if let Some(note) = draft_note(d) {
-            o.push_str(&format!("**Note:** {note}\n\n"));
-        }
-        for note in overwritten_in_place_notes(d) {
-            o.push_str(&format!("**Note:** {note}\n\n"));
-        }
-        for note in updates_pending_notes(d) {
-            o.push_str(&format!("**Note:** {note}\n\n"));
-        }
-        for note in repave_pending_notes(d) {
-            o.push_str(&format!("**Note:** {note}\n\n"));
-        }
-        for note in unread_notes(d) {
-            o.push_str(&format!("**Note:** {note}\n\n"));
-        }
-        for note in running_behind_notes(d) {
-            o.push_str(&format!("**Note:** {note}\n\n"));
-        }
-        if let Some(note) = upstream_unknown_note(d) {
-            o.push_str(&format!("**Note:** {note}\n\n"));
-        }
-        for note in masked_notes(d) {
-            o.push_str(&format!("**Note:** {note}\n\n"));
-        }
-        if let Some(note) = macros_note(d) {
-            o.push_str(&format!("**Note:** {note}\n\n"));
-        }
-        if let Some(note) = macros_changed_note(&d.macros_changed) {
-            o.push_str(&format!("**Note:** {note}\n\n"));
-        }
-        for note in image_ids_changed_notes(d) {
-            o.push_str(&format!("**Note:** {note}\n\n"));
-        }
-        let palette = palette_repave_lines(d);
-        if !palette.is_empty() {
-            o.push_str(&format!("**Palette:** {}\n\n", escape(&palette.join("; "))));
-        }
-        if let Some(note) = palette_repave_note(d) {
-            o.push_str(&format!("**Note:** {note}\n\n"));
-        }
-        let validation = palette_validation_lines(d);
-        if !validation.is_empty() {
-            o.push_str(&format!(
-                "**Palette:** {}\n\n",
-                escape(&validation.join("; "))
-            ));
-        }
-        if let Some(note) = same_content_note(d) {
-            o.push_str(&format!("**Note:** {note}\n\n"));
-        }
-        if let Some(note) = variables_unavailable_note(d) {
-            o.push_str(&format!("**Note:** {note}\n\n"));
-        }
-        if let Some(note) = cross_kind_note(d) {
-            o.push_str(&format!("**Note:** {note}\n\n"));
+        for note in diff_notes(d) {
+            o.push_str(&match note {
+                DiffNote::Warn(text) | DiffNote::Good(text) => format!("**Note:** {text}\n\n"),
+                DiffNote::Palette(lines) => {
+                    format!("**Palette:** {}\n\n", escape(&lines.join("; ")))
+                }
+            });
         }
         if let Some(v) = &d.verify {
             o.push_str(&format!(
@@ -233,7 +173,7 @@ impl Renderer for MarkdownRenderer {
                 o.push_str("<details><summary>cluster tiers that differ</summary>\n\n```diff\n");
                 for t in changed {
                     for l in &t.diff {
-                        o.push_str(&leaf_at(&tier_path(&t.tier, &l.path), l));
+                        o.push_str(&op_line(&OpLine::leaf(&tier_path(&t.tier, &l.path), l)));
                     }
                 }
                 o.push_str("```\n</details>\n\n");
@@ -245,16 +185,7 @@ impl Renderer for MarkdownRenderer {
                 values_changed(cv.values.len())
             ));
             for c in &cv.values {
-                let path = format!("{}.{}", c.profile, c.name);
-                let (old, new) = (
-                    cluster_value(&c.old, c.sensitive),
-                    cluster_value(&c.new, c.sensitive),
-                );
-                o.push_str(&match c.op {
-                    Op::Changed => format!("- {path}: {old}\n+ {path}: {new}\n"),
-                    Op::Added => format!("+ {path}: {new}\n"),
-                    Op::Removed => format!("- {path}: {old}\n"),
-                });
+                o.push_str(&op_line(&OpLine::cluster_value(c)));
             }
             o.push_str("```\n</details>\n\n");
         }
@@ -278,7 +209,8 @@ impl Renderer for MarkdownRenderer {
                 body.push_str("```\n");
             }
             if pd.values.changed && !pd.values.parseable {
-                body.push_str("values changed but did not parse as YAML on one side; see `--full` for the text diff\n");
+                body.push_str(&values_unparsed_sentence(code));
+                body.push('\n');
             }
             let artifacts = artifact_lines(pd);
             if !artifacts.is_empty() {
@@ -300,10 +232,7 @@ impl Renderer for MarkdownRenderer {
                 continue;
             }
             let what = if pd.values.changed && pd.values.parseable {
-                format!(
-                    "values: {} changed, {} added, {} removed",
-                    pd.values.changed_count, pd.values.added_count, pd.values.removed_count
-                )
+                values_summary(&pd.values)
             } else {
                 plain_flags(pd)
             };
@@ -314,8 +243,8 @@ impl Renderer for MarkdownRenderer {
                 body
             ));
         }
-        if d.order_changed {
-            o.push_str("> note: pack order changed between the two profiles\n\n");
+        if let Some(note) = pack_order_note(d) {
+            o.push_str(&format!("> note: {note}\n\n"));
         }
         if full {
             o.push_str(&super::unified::full_diffs(a, b, d, &Paint::off(), true));
@@ -324,80 +253,29 @@ impl Renderer for MarkdownRenderer {
     }
 
     fn verdict(&self, v: &Verify, recorded: &Source) -> Option<String> {
-        let (what, at) = (subject(recorded), &recorded.fetched_at);
-        let outside = outside_root_sentence(&v.macros_changed, &v.image_ids_changed);
-        Some(match v.status {
-            VerifyStatus::Unchanged => format!(
-                "\n**OK**: {what} {}{}",
-                unchanged_sentence(recorded, at),
-                values_changed_suffix(v.cluster_values_changed)
-            ),
-            VerifyStatus::Unverified => format!(
-                "\n**UNVERIFIED**: {what} has the content recorded {at}, but {}{}",
-                unverified_sentence(&v.upstream_unknown),
-                values_changed_suffix(v.cluster_values_changed)
-            ),
-            VerifyStatus::Drifted => match &v.overwritten_by {
-                _ if !v.profiles_overwritten.is_empty() => format!(
-                    "\n**DRIFT**: {}{}",
-                    profiles_overwritten_sentence(v, recorded).unwrap_or_default(),
-                    values_changed_suffix(v.cluster_values_changed)
-                ),
-                _ if v.gone => format!(
-                    "\n**DRIFT**: {}",
-                    gone_sentence(v, recorded, |uid| format!("`{uid}`"))
-                ),
-                _ if v.renamed_to.is_some() => format!(
-                    "\n**DRIFT**: {what} was renamed to {}",
-                    v.renamed_to.as_deref().unwrap_or_default()
-                ),
-                Some(now) => format!(
-                    "\n**DRIFT**: {what} now names {now}: the version recorded {at} was overwritten in place{}",
-                    values_changed_suffix(v.cluster_values_changed)
-                ),
-                None if outside.is_some() => format!(
-                    "\n**DRIFT**: {what} has the content recorded {at}, but {}{}",
-                    outside.as_deref().unwrap_or_default(),
-                    values_changed_suffix(v.cluster_values_changed)
-                ),
-                None => format!(
-                    "\n**DRIFT**: {what} differs from {} recorded {at}{}",
-                    recorded_noun(recorded),
-                    values_changed_suffix(v.cluster_values_changed)
-                ),
-            },
-        })
-        .map(|mut line| {
-            line.push_str(&registry_sync_suffix(v.registry_sync.as_ref()));
-            line.push_str(&state_suffix(v, recorded));
-            line.push_str(&last_modified_suffix(v));
-            for sentence in invalid_pack_sentences(&v.invalid_packs) {
-                line.push_str(&format!("\n\n**INVALID**: {}", escape(&sentence)));
+        let parts = verdict_parts(v, recorded, code);
+        let mut line = format!("\n**{}**: {}", parts.word, parts.line(recorded));
+        for sentence in invalid_pack_sentences(&v.invalid_packs) {
+            line.push_str(&format!("\n\n**INVALID**: {}", escape(&sentence)));
+        }
+        if let Some(heading) = who_heading(v) {
+            line.push_str("\n\n");
+            line.push_str(&heading);
+            line.push('\n');
+            for e in v.who.iter().flatten() {
+                line.push_str(&format!("\n- {}", escape(&who_entry(e, &v.uid))));
             }
-            if let Some(heading) = who_heading(v) {
-                line.push_str("\n\n");
-                line.push_str(&heading);
-                line.push('\n');
-                for e in v.who.iter().flatten() {
-                    line.push_str(&format!("\n- {}", escape(&who_entry(e, &v.uid))));
-                }
-            }
-            line
-        })
+        }
+        Some(line)
     }
 
     fn render_verify_summary(&self, s: &VerifySummary) -> Result<String> {
         let mut o = format!("### verify: {}\n\n", counts_line(s));
         o.push_str("| status | record | profile | detail |\n|---|---|---|---|\n");
         for r in &s.records {
-            let word = match r.status {
-                RecordStatus::Unchanged => "OK",
-                RecordStatus::Drifted => "DRIFT",
-                RecordStatus::Unverified => "UNVERIFIED",
-                RecordStatus::Error => "ERROR",
-            };
             o.push_str(&format!(
-                "| {word} | `{}` | `{}` | {} |\n",
+                "| {} | `{}` | `{}` | {} |\n",
+                record_word(r.status),
                 escape(&r.path),
                 record_label(&r.name, &r.version),
                 escape(&record_detail(r))
@@ -497,17 +375,10 @@ impl Renderer for MarkdownRenderer {
 
     fn render_consumers(&self, r: &ConsumersReport) -> Result<String> {
         let mut o = format!("### consumers: {}\n\n", consumers_heading(r));
-        // The consumer list of a profile is empty on an error too, so the second reading says
-        // how far it got.
-        let read = &r.clusters_read;
-        let second = match entry_error(read.error.as_ref()) {
-            _ if read.skipped && !read.reason.is_empty() => {
-                format!("Second reading: not done ({}).", escape(&read.reason))
-            }
-            _ if read.skipped => "Second reading: not done (`--list-only`).".to_string(),
-            Some(msg) => format!("Second reading: not done ({}).", escape(msg)),
-            None => format!("Second reading: {}.", second_reading_counts(read)),
-        };
+        let second = format!(
+            "{}.",
+            capitalized(&escape(&second_reading_line(&r.clusters_read, code)))
+        );
         let edge = format!("{}.", capitalized(&edge_hosts_line(r)));
         if r.consumers.is_empty() {
             o.push_str(&second);
@@ -565,6 +436,9 @@ impl Renderer for MarkdownRenderer {
 
     fn render_packs(&self, l: &PackListing) -> Result<String> {
         let mut out = String::new();
+        if let Some(sentence) = no_version_sentence(l) {
+            return Ok(format!("{}.\n", capitalized(&sentence)));
+        }
         for r in &l.registries {
             out.push_str(&format!(
                 "### {} in {}{}\n\n",
@@ -727,15 +601,7 @@ impl Renderer for MarkdownRenderer {
                     };
                     o.push_str(&format!(" {} |", escape(dash(&profiles))));
                     let behind = match c.updates_pending {
-                        Some(true) => {
-                            let mut names: Vec<&str> = c
-                                .pending_updates
-                                .iter()
-                                .map(|u| u.profile.as_str())
-                                .collect();
-                            names.dedup();
-                            format!("yes: {}", names.join(", "))
-                        }
+                        Some(true) => format!("yes: {}", pending_profile_names(&c.pending_updates)),
                         Some(false) => "no".to_string(),
                         None => "-".to_string(),
                     };

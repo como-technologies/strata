@@ -1,30 +1,23 @@
 //! The terminal report: plain when piped, colored on a terminal.
 
 use super::{
-    Renderer, VarLine, applied_ref, artifact_lines, artifacts_summary, chain_verdict,
-    cluster_count, cluster_value, consumer_count, consumer_counts, consumers_heading,
-    consumers_sentence, count_of, counts_line, cross_kind_note, dash, draft_note, edge_hosts_line,
-    edited_in_place_note, entry_error, gone_sentence, image_ids_changed_notes, invalid_mark,
-    invalid_pack_sentences, last_modified_suffix, list_count, list_scope, macros_changed_note,
-    macros_note, masked_notes, outside_root_sentence, overwritten_in_place_notes, pack_version,
-    pair_detail, pair_notes, pair_word, palette_repave_lines, palette_repave_note,
-    palette_validation_lines, profile_marks, profiles_overwritten_sentence, project_label,
-    record_detail, record_label, recorded_noun, registry_note, registry_sync_suffix,
-    repave_pending_notes, running_behind_notes, same_content_note, second_reading_counts, short,
-    show, state_suffix, subject, tag_rename, tier_path, tier_states, traits_suffix,
-    unchanged_sentence, unread_notes, unverified_sentence, updates_pending_notes,
-    upstream_unknown_note, values_changed_suffix, variable_lines, variables_comparable,
-    variables_unavailable_note, version_display, version_note, virtual_line, virtual_note,
-    who_entry, who_heading,
+    DiffNote, OpLine, Renderer, VarLine, applied_ref, artifact_lines, artifacts_summary,
+    chain_verdict, cluster_count, consumer_count, consumer_counts, consumers_heading,
+    consumers_sentence, count_of, counts_line, dash, diff_notes, diff_word, edge_hosts_line,
+    entry_error, invalid_mark, invalid_pack_sentences, list_count, list_scope, no_version_sentence,
+    pack_order_note, pack_version, pair_detail, pair_notes, pair_word, profile_marks,
+    project_label, record_detail, record_label, record_word, registry_note, second_reading_line,
+    short, tag_rename, tier_path, tier_states, traits_suffix, values_summary,
+    values_unparsed_sentence, variable_lines, variables_comparable, verdict_parts, version_display,
+    version_note, virtual_line, virtual_note, who_entry, who_heading,
 };
 use crate::api::mask::MASKED;
 use crate::color::Paint;
-use crate::diff::{
-    ClusterValueChange, Diff, ImpactLevel, Leaf, Op, PackDiff, Status, Verify, VerifyStatus,
-};
+use crate::diff::{Diff, ImpactLevel, Leaf, Op, PackDiff, Status, Verify, VerifyStatus};
 use crate::error::Result;
 use crate::ops::{
-    Chain, ConsumersReport, Listing, PackListing, PairStatus, RecordStatus, VerifySummary,
+    Chain, ConsumersReport, Listing, PackListing, PairStatus, RUNNING_STATE, RecordStatus,
+    VerifySummary,
 };
 use crate::snapshot::{Snapshot, Source};
 
@@ -103,22 +96,21 @@ fn opmark(op: Op, p: &Paint) -> String {
 }
 
 fn vline(l: &Leaf, p: &Paint) -> String {
-    vline_at(&l.path, l, p)
+    op_line(&OpLine::leaf(&l.path, l), p)
 }
 
-fn vline_at(path: &str, l: &Leaf, p: &Paint) -> String {
-    let old = l.old.as_ref().map(show).unwrap_or_else(|| "null".into());
-    let new = l.new.as_ref().map(show).unwrap_or_else(|| "null".into());
+/// `~ path: old -> new`, `+ path: new`, or `- path: old`, with the mark and each side colored.
+fn op_line(l: &OpLine, p: &Paint) -> String {
+    let mark = opmark(l.op, p);
     match l.op {
         Op::Changed => format!(
-            "{} {}: {} -> {}",
-            opmark(l.op, p),
-            path,
-            p.red(&old),
-            p.green(&new)
+            "{mark} {}: {} -> {}",
+            l.path,
+            p.red(&l.old),
+            p.green(&l.new)
         ),
-        Op::Added => format!("{} {}: {}", opmark(l.op, p), path, p.green(&new)),
-        Op::Removed => format!("{} {}: {}", opmark(l.op, p), path, p.red(&old)),
+        Op::Added => format!("{mark} {}: {}", l.path, p.green(&l.new)),
+        Op::Removed => format!("{mark} {}: {}", l.path, p.red(&l.old)),
     }
 }
 
@@ -137,25 +129,7 @@ fn variable_line(v: &VarLine<'_>, p: &Paint) -> String {
             p.bold(&s.name),
             traits_suffix(s)
         ),
-        VarLine::Field(name, l) => vline_at(&format!("{name}.{}", l.path), l, p),
-    }
-}
-
-fn cluster_value_line(c: &ClusterValueChange, p: &Paint) -> String {
-    let path = format!("{}.{}", c.profile, c.name);
-    let (old, new) = (
-        cluster_value(&c.old, c.sensitive),
-        cluster_value(&c.new, c.sensitive),
-    );
-    match c.op {
-        Op::Changed => format!(
-            "{} {path}: {} -> {}",
-            opmark(c.op, p),
-            p.red(&old),
-            p.green(&new)
-        ),
-        Op::Added => format!("{} {path}: {}", opmark(c.op, p), p.green(&new)),
-        Op::Removed => format!("{} {path}: {}", opmark(c.op, p), p.red(&old)),
+        VarLine::Field(name, l) => op_line(&OpLine::leaf(&format!("{name}.{}", l.path), l), p),
     }
 }
 
@@ -244,16 +218,16 @@ fn packdetail(pd: &PackDiff, p: &Paint, out: &mut Vec<String>) {
         out.push(format!("      {line}"));
     }
     if pd.values.changed && pd.values.parseable && !pd.values.diff.is_empty() {
-        out.push(format!(
-            "      values: {} changed, {} added, {} removed",
-            pd.values.changed_count, pd.values.added_count, pd.values.removed_count
-        ));
+        out.push(format!("      {}", values_summary(&pd.values)));
         for l in &pd.values.diff {
             out.push(format!("        {}", vline(l, p)));
         }
     }
     if pd.values.changed && !pd.values.parseable {
-        out.push(p.yellow("      values changed (not parseable as YAML on one side; use --full for a unified diff)"));
+        out.push(p.yellow(&format!(
+            "      {}",
+            values_unparsed_sentence(str::to_string)
+        )));
     }
     for m in &pd.manifests {
         out.push(format!("      {} manifest {}", opmark(m.op, p), m.name));
@@ -277,71 +251,25 @@ impl Renderer for TerminalRenderer {
             p.bold(&d.b.title()),
             p.dim(dash(d.b.shown_uid()))
         ));
+        let word = diff_word(d);
         out.push(format!(
             "root       {} -> {}   {}",
             p.dim(short(&d.root_a)),
             p.dim(short(&d.root_b)),
-            if d.same {
-                p.bgreen("IDENTICAL")
-            } else if d.same_content {
-                p.bgreen("SAME CONTENT")
+            if d.same || d.same_content {
+                p.bgreen(word)
             } else {
-                p.bred("CHANGED")
+                p.bred(word)
             }
         ));
-        if let Some(note) = edited_in_place_note(d) {
-            out.push(format!("note       {}", p.byellow(&note)));
-        }
-        if let Some(note) = draft_note(d) {
-            out.push(format!("note       {}", p.byellow(&note)));
-        }
-        for note in overwritten_in_place_notes(d) {
-            out.push(format!("note       {}", p.byellow(&note)));
-        }
-        for note in updates_pending_notes(d) {
-            out.push(format!("note       {}", p.byellow(&note)));
-        }
-        for note in repave_pending_notes(d) {
-            out.push(format!("note       {}", p.byellow(&note)));
-        }
-        for note in unread_notes(d) {
-            out.push(format!("note       {}", p.byellow(&note)));
-        }
-        for note in running_behind_notes(d) {
-            out.push(format!("note       {}", p.byellow(&note)));
-        }
-        if let Some(note) = upstream_unknown_note(d) {
-            out.push(format!("note       {}", p.byellow(&note)));
-        }
-        for note in masked_notes(d) {
-            out.push(format!("note       {}", p.byellow(&note)));
-        }
-        if let Some(note) = macros_note(d) {
-            out.push(format!("note       {}", p.byellow(&note)));
-        }
-        if let Some(note) = macros_changed_note(&d.macros_changed) {
-            out.push(format!("note       {}", p.byellow(&note)));
-        }
-        for note in image_ids_changed_notes(d) {
-            out.push(format!("note       {}", p.byellow(&note)));
-        }
-        for line in palette_repave_lines(d) {
-            out.push(format!("palette    {line}"));
-        }
-        if let Some(note) = palette_repave_note(d) {
-            out.push(format!("note       {}", p.byellow(&note)));
-        }
-        for line in palette_validation_lines(d) {
-            out.push(format!("palette    {line}"));
-        }
-        if let Some(note) = same_content_note(d) {
-            out.push(format!("note       {}", p.bgreen(&note)));
-        }
-        if let Some(note) = variables_unavailable_note(d) {
-            out.push(format!("note       {}", p.byellow(&note)));
-        }
-        if let Some(note) = cross_kind_note(d) {
-            out.push(format!("note       {}", p.byellow(&note)));
+        for note in diff_notes(d) {
+            match note {
+                DiffNote::Warn(text) => out.push(format!("note       {}", p.byellow(&text))),
+                DiffNote::Good(text) => out.push(format!("note       {}", p.bgreen(&text))),
+                DiffNote::Palette(lines) => {
+                    out.extend(lines.iter().map(|line| format!("palette    {line}")));
+                }
+            }
         }
         if let Some(line) = artifacts_summary(d) {
             out.push(format!("images     {line}"));
@@ -372,7 +300,7 @@ impl Renderer for TerminalRenderer {
         if let Some(cv) = d.cluster_variables.as_ref().filter(|c| c.changed) {
             out.push(format!("  cluster values {}", p.byellow("CHANGED")));
             for c in &cv.values {
-                out.push(format!("        {}", cluster_value_line(c, p)));
+                out.push(format!("        {}", op_line(&OpLine::cluster_value(c), p)));
             }
         }
         let states = tier_states(d);
@@ -394,7 +322,7 @@ impl Renderer for TerminalRenderer {
                 for l in &t.diff {
                     out.push(format!(
                         "        {}",
-                        vline_at(&tier_path(&t.tier, &l.path), l, p)
+                        op_line(&OpLine::leaf(&tier_path(&t.tier, &l.path), l), p)
                     ));
                 }
             }
@@ -404,9 +332,9 @@ impl Renderer for TerminalRenderer {
             out.push(packline(pd, p));
             packdetail(pd, p, &mut out);
         }
-        if d.order_changed {
+        if let Some(note) = pack_order_note(d) {
             out.push(String::new());
-            out.push(p.yellow("  note: pack order changed between the two profiles"));
+            out.push(p.yellow(&format!("  note: {note}")));
         }
         let mut s = out.join("\n");
         s.push('\n');
@@ -418,85 +346,37 @@ impl Renderer for TerminalRenderer {
 
     fn verdict(&self, v: &Verify, recorded: &Source) -> Option<String> {
         let p = &self.paint;
-        let (what, at) = (subject(recorded), &recorded.fetched_at);
-        let outside = outside_root_sentence(&v.macros_changed, &v.image_ids_changed);
-        Some(match v.status {
-            VerifyStatus::Unchanged => format!(
-                "{}: {what} {}{}",
-                p.bgreen("OK"),
-                unchanged_sentence(recorded, at),
-                values_changed_suffix(v.cluster_values_changed)
-            ),
-            VerifyStatus::Unverified => format!(
-                "{}: {what} has the content recorded {at}, but {}{}",
-                p.byellow("UNVERIFIED"),
-                unverified_sentence(&v.upstream_unknown),
-                values_changed_suffix(v.cluster_values_changed)
-            ),
-            VerifyStatus::Drifted => match &v.overwritten_by {
-                _ if !v.profiles_overwritten.is_empty() => format!(
-                    "{}: {}{}",
-                    p.bred("DRIFT"),
-                    profiles_overwritten_sentence(v, recorded).unwrap_or_default(),
-                    values_changed_suffix(v.cluster_values_changed)
-                ),
-                _ if v.gone => format!(
-                    "{}: {}",
-                    p.bred("DRIFT"),
-                    gone_sentence(v, recorded, str::to_string)
-                ),
-                _ if v.renamed_to.is_some() => format!(
-                    "{}: {what} was renamed to {}",
-                    p.bred("DRIFT"),
-                    v.renamed_to.as_deref().unwrap_or_default()
-                ),
-                Some(now) => format!(
-                    "{}: {what} now names {now}: the version recorded {at} was overwritten in place{}",
-                    p.bred("DRIFT"),
-                    values_changed_suffix(v.cluster_values_changed)
-                ),
-                None if outside.is_some() => format!(
-                    "{}: {what} has the content recorded {at}, but {}{}",
-                    p.bred("DRIFT"),
-                    outside.as_deref().unwrap_or_default(),
-                    values_changed_suffix(v.cluster_values_changed)
-                ),
-                None => format!(
-                    "{}: {what} differs from {} recorded {at}{}",
-                    p.bred("DRIFT"),
-                    recorded_noun(recorded),
-                    values_changed_suffix(v.cluster_values_changed)
-                ),
-            },
-        })
-        .map(|mut line| {
-            line.push_str(&registry_sync_suffix(v.registry_sync.as_ref()));
-            line.push_str(&state_suffix(v, recorded));
-            line.push_str(&last_modified_suffix(v));
-            for sentence in invalid_pack_sentences(&v.invalid_packs) {
-                line.push_str(&format!("\n{}: {sentence}", p.bred("INVALID")));
+        let parts = verdict_parts(v, recorded, str::to_string);
+        let word = match v.status {
+            VerifyStatus::Unchanged => p.bgreen(parts.word),
+            VerifyStatus::Unverified => p.byellow(parts.word),
+            VerifyStatus::Drifted => p.bred(parts.word),
+        };
+        let mut line = format!("{word}: {}", parts.line(recorded));
+        for sentence in invalid_pack_sentences(&v.invalid_packs) {
+            line.push_str(&format!("\n{}: {sentence}", p.bred("INVALID")));
+        }
+        if let Some(heading) = who_heading(v) {
+            line.push('\n');
+            line.push_str(&heading);
+            for e in v.who.iter().flatten() {
+                line.push_str("\n  ");
+                line.push_str(&who_entry(e, &v.uid));
             }
-            if let Some(heading) = who_heading(v) {
-                line.push('\n');
-                line.push_str(&heading);
-                for e in v.who.iter().flatten() {
-                    line.push_str("\n  ");
-                    line.push_str(&who_entry(e, &v.uid));
-                }
-            }
-            line
-        })
+        }
+        Some(line)
     }
 
     fn render_verify_summary(&self, s: &VerifySummary) -> Result<String> {
         let p = &self.paint;
         let mut out = String::new();
         for r in &s.records {
+            // the words of a column: `OK` padded to the width of `DRIFT`
+            let word = format!("{:<5}", record_word(r.status));
             let word = match r.status {
-                RecordStatus::Unchanged => p.bgreen("OK   "),
-                RecordStatus::Drifted => p.bred("DRIFT"),
-                RecordStatus::Unverified => p.byellow("UNVERIFIED"),
-                RecordStatus::Error => p.byellow("ERROR"),
+                RecordStatus::Unchanged => p.bgreen(&word),
+                RecordStatus::Drifted => p.bred(&word),
+                RecordStatus::Unverified | RecordStatus::Error => p.byellow(&word),
             };
             out.push_str(&format!(
                 "{word}  {}  {}  {}\n",
@@ -554,7 +434,7 @@ impl Renderer for TerminalRenderer {
             .unwrap_or(0);
         for c in &r.consumers {
             let state = match c.state.as_str() {
-                "Running" => p.green(&c.state),
+                RUNNING_STATE => p.green(&c.state),
                 crate::ops::UNKNOWN_STATE => p.yellow(&c.state),
                 _ => c.state.clone(),
             };
@@ -584,12 +464,7 @@ impl Renderer for TerminalRenderer {
                     ))
                 ));
             }
-            if let Some(msg) = c
-                .error
-                .as_ref()
-                .and_then(|e| e.get("message"))
-                .and_then(serde_json::Value::as_str)
-            {
+            if let Some(msg) = entry_error(c.error.as_ref()) {
                 out.push_str(&format!("  {}", p.dim(&format!("({msg})"))));
             }
             if c.unlisted {
@@ -600,21 +475,10 @@ impl Renderer for TerminalRenderer {
             }
             out.push('\n');
         }
-        // The consumer list of a profile is empty on an error too, so the second reading says
-        // how far it got.
-        let read = &r.clusters_read;
-        let second = match read.error.as_ref().and_then(|e| e.get("message")) {
-            _ if read.skipped && !read.reason.is_empty() => {
-                format!("second reading: not done ({})", read.reason)
-            }
-            _ if read.skipped => "second reading: not done (--list-only)".to_string(),
-            Some(msg) => format!(
-                "second reading: not done ({})",
-                msg.as_str().unwrap_or("error")
-            ),
-            None => format!("second reading: {}", second_reading_counts(read)),
-        };
-        out.push_str(&format!("  {}\n", p.dim(&second)));
+        out.push_str(&format!(
+            "  {}\n",
+            p.dim(&second_reading_line(&r.clusters_read, str::to_string))
+        ));
         out.push_str(&format!("  {}\n", p.dim(&edge_hosts_line(r))));
         Ok(out)
     }
@@ -710,9 +574,8 @@ impl Renderer for TerminalRenderer {
     fn render_packs(&self, l: &PackListing) -> Result<String> {
         let p = &self.paint;
         let mut out = String::new();
-        if l.registries.is_empty() {
-            let cloud = l.cloud.as_deref().unwrap_or("");
-            return Ok(format!("no version of {} supports {cloud}\n", l.name));
+        if let Some(sentence) = no_version_sentence(l) {
+            return Ok(format!("{sentence}\n"));
         }
         for r in &l.registries {
             // the heading states what the registry holds. A flag that cuts the list says so, so
@@ -876,7 +739,7 @@ impl Renderer for TerminalRenderer {
                 out.push_str(&table_line("  ", row, &widths, |i, cell| match i {
                     0 => p.bold(cell),
                     1 => matched(p, cell, l.cluster.as_deref()),
-                    2 if c.state == "Running" => p.green(cell),
+                    2 if c.state == RUNNING_STATE => p.green(cell),
                     _ => cell.to_string(),
                 }));
                 let applied: Vec<Vec<String>> = c

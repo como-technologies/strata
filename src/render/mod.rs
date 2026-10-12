@@ -9,16 +9,18 @@ use serde_json::Value;
 
 use crate::color::Paint;
 use crate::diff::{
-    Diff, ImageIdChange, InvalidPack, InvalidSides, Leaf, PackDiff, Status, VariableSummary,
-    VariablesByName, Verify,
+    ClusterValueChange, Diff, ImageIdChange, InvalidPack, InvalidSides, Leaf, Op, PackDiff, Status,
+    ValuesDiff, VariableSummary, VariablesByName, Verify, VerifyStatus,
 };
 use crate::error::Result;
+use crate::impact::ImpactLevel;
 use crate::ops::{
-    Chain, ConsumersReport, Listing, PackListing, Pair, PairStatus, Resolved, SetRecord, SetReport,
+    ACTIVE_STATE, Chain, ClustersRead, ConsumersReport, IN_USE_STATE, Listing, PackListing, Pair,
+    PairStatus, RUNNING_STATE, RecordStatus, Resolved, SetRecord, SetReport, VerifiedRecord,
     VerifySummary,
 };
 use crate::repave::PaletteRepaveReason;
-use crate::snapshot::{Snapshot, Source, SubjectKind};
+use crate::snapshot::{PendingUpdate, Snapshot, Source, SubjectKind};
 
 pub use json::JsonRenderer;
 pub use markdown::MarkdownRenderer;
@@ -98,12 +100,12 @@ pub(crate) fn virtual_line(l: &Listing) -> Option<String> {
 /// gives no name. None when Palette names no group.
 pub(crate) fn virtual_group(v: &crate::ops::VirtualCluster) -> Option<String> {
     let group = v.cluster_group.as_ref()?;
-    let name = if group.name.is_empty() {
-        &group.uid
-    } else {
-        &group.name
-    };
-    Some(format!("group {name}"))
+    Some(format!("group {}", name_or_uid(&group.name, &group.uid)))
+}
+
+/// The name of an object, or its uid when Palette gives no name.
+pub(crate) fn name_or_uid<'a>(name: &'a str, uid: &'a str) -> &'a str {
+    if name.is_empty() { uid } else { name }
 }
 
 /// `virtual (group dev-group)`, or `virtual` when Palette names no group: what the row of a
@@ -162,14 +164,6 @@ pub(crate) fn behind_heading(r: &crate::ops::BehindReport) -> String {
     line
 }
 
-/// The text of an impact level, as the reports print it: `in-place`, `may-repave`.
-pub(crate) fn impact_word(level: crate::impact::ImpactLevel) -> String {
-    serde_json::to_value(level)
-        .ok()
-        .and_then(|v| v.as_str().map(str::to_string))
-        .unwrap_or_default()
-}
-
 /// What a pin is: `behind: 1.65.0, 1.64.0`, `current`, or `not checked`, with its floating tag and
 /// the version the tag names now, the state of the pinned version when the registry gives one,
 /// and the last sync of the registry when that sync did not complete. Each newer version names
@@ -215,7 +209,7 @@ fn newer_version(n: &crate::ops::Newer) -> String {
 /// latest`.
 pub(crate) fn bump_line(pin: &crate::ops::Pin) -> Option<String> {
     let b = pin.bump.as_ref()?;
-    let mut line = format!("bump to {}: {}", b.to, impact_word(b.impact));
+    let mut line = format!("bump to {}: {}", b.to, b.impact.as_str());
     if !b.flags.is_empty() {
         line.push_str(&format!(" {}", b.flags.join(" ")));
     }
@@ -231,10 +225,10 @@ pub(crate) fn bump_line(pin: &crate::ops::Pin) -> Option<String> {
 
 /// `project lab (uid p1)`, `project p1` when the name is unknown, or `tenant scope`.
 pub(crate) fn list_scope(l: &Listing) -> String {
-    match (l.project_uid.as_str(), l.project_name.as_str()) {
-        ("", _) => "tenant scope".to_string(),
-        (uid, "") => format!("project {uid}"),
-        (uid, name) => format!("project {name} (uid {uid})"),
+    if l.project_uid.is_empty() {
+        "tenant scope".to_string()
+    } else {
+        format!("project {}", project_label(&l.project_uid, &l.project_name))
     }
 }
 
@@ -273,6 +267,18 @@ pub(crate) fn version_note(v: &crate::ops::PackBuild) -> Option<String> {
         v.digest.is_empty().then_some("no digest"),
         (v.palette_latest && !v.latest).then_some("latest in Palette"),
     ])
+}
+
+/// `no version of csi-aws-ebs supports edge-native`: the one line of a listing that `--cloud`
+/// left empty. None when a registry has the pack.
+pub(crate) fn no_version_sentence(l: &PackListing) -> Option<String> {
+    if !l.registries.is_empty() {
+        return None;
+    }
+    Some(match &l.cloud {
+        Some(cloud) => format!("no version of {} supports {cloud}", l.name),
+        None => format!("no registry has a version of {}", l.name),
+    })
 }
 
 /// The parts of a packs note that are there, joined with commas. None when no part is there.
@@ -430,6 +436,57 @@ pub(crate) fn cross_kind_note(d: &Diff) -> Option<String> {
     )
 }
 
+/// One note under the heading of a diff.
+pub(crate) enum DiffNote {
+    /// A fact that a reader must weigh: yellow on the terminal.
+    Warn(String),
+    /// The roots differ in nothing that a cluster sees: green on the terminal.
+    Good(String),
+    /// The answer of Palette to `--repave` or to `--validate`, one line each.
+    Palette(Vec<String>),
+}
+
+/// The notes under the heading of a diff, in the order that the reports print them.
+pub(crate) fn diff_notes(d: &Diff) -> Vec<DiffNote> {
+    let mut notes: Vec<DiffNote> = Vec::new();
+    notes.extend(edited_in_place_note(d).map(DiffNote::Warn));
+    notes.extend(draft_note(d).map(DiffNote::Warn));
+    notes.extend(
+        overwritten_in_place_notes(d)
+            .into_iter()
+            .map(DiffNote::Warn),
+    );
+    notes.extend(updates_pending_notes(d).into_iter().map(DiffNote::Warn));
+    notes.extend(repave_pending_notes(d).into_iter().map(DiffNote::Warn));
+    notes.extend(unread_notes(d).into_iter().map(DiffNote::Warn));
+    notes.extend(running_behind_notes(d).into_iter().map(DiffNote::Warn));
+    notes.extend(upstream_unknown_note(d).map(DiffNote::Warn));
+    notes.extend(masked_notes(d).into_iter().map(DiffNote::Warn));
+    notes.extend(macros_note(d).map(DiffNote::Warn));
+    notes.extend(macros_changed_note(&d.macros_changed).map(DiffNote::Warn));
+    notes.extend(image_ids_changed_notes(d).into_iter().map(DiffNote::Warn));
+    let repave = palette_repave_lines(d);
+    if !repave.is_empty() {
+        notes.push(DiffNote::Palette(repave));
+    }
+    notes.extend(palette_repave_note(d).map(DiffNote::Warn));
+    let validation = palette_validation_lines(d);
+    if !validation.is_empty() {
+        notes.push(DiffNote::Palette(validation));
+    }
+    notes.extend(same_content_note(d).map(DiffNote::Good));
+    notes.extend(variables_unavailable_note(d).map(DiffNote::Warn));
+    notes.extend(cross_kind_note(d).map(DiffNote::Warn));
+    notes
+}
+
+/// `pack order changed between the two profiles`, for a diff whose packs are in another order.
+/// Palette keeps the order of the packs, so two orders are two roots.
+pub(crate) fn pack_order_note(d: &Diff) -> Option<&'static str> {
+    d.order_changed
+        .then_some("pack order changed between the two profiles")
+}
+
 /// True when a side can have profile variables. A registry pack cannot, and no request asks for
 /// any, so `variables unchanged` there would state a comparison that nothing compared.
 pub(crate) fn lists_variables(s: &Source) -> bool {
@@ -546,15 +603,28 @@ pub(crate) fn edge_hosts_line(r: &ConsumersReport) -> String {
     if read.skipped {
         return format!("edge hosts: not read ({})", read.reason);
     }
-    match read
-        .error
-        .as_ref()
-        .and_then(|e| e.get("message"))
-        .and_then(Value::as_str)
-    {
+    match entry_error(read.error.as_ref()) {
         Some(msg) => format!("edge hosts: not read ({msg})"),
         None => format!("edge hosts: {} read", read.read),
     }
+}
+
+/// `second reading: 3 of 3 clusters read`, or why the second reading was not done: `--list-only`
+/// asked, an app profile has none, or the search or the listing failed. `code` puts the flag in
+/// the form of the report.
+pub(crate) fn second_reading_line(read: &ClustersRead, code: fn(&str) -> String) -> String {
+    // The consumer list of a profile is empty on an error too, so the second reading says how
+    // far it got.
+    let what = if read.skipped && !read.reason.is_empty() {
+        format!("not done ({})", read.reason)
+    } else if read.skipped {
+        format!("not done ({})", code("--list-only"))
+    } else if let Some(e) = &read.error {
+        format!("not done ({})", entry_error(Some(e)).unwrap_or("an error"))
+    } else {
+        second_reading_counts(read)
+    };
+    format!("second reading: {what}")
 }
 
 /// The text with its first letter in upper case.
@@ -591,6 +661,29 @@ pub(crate) fn pair_word(status: PairStatus) -> &'static str {
         PairStatus::RegistryMove => "REGISTRY MOVE",
         PairStatus::Different => "DIFFERENT",
         PairStatus::UnknownUpstream => "NO DIGEST",
+    }
+}
+
+/// The status word of a record, as the text reports print it: on the line of its verdict, and in
+/// the row of the summary.
+pub(crate) fn record_word(status: RecordStatus) -> &'static str {
+    match status {
+        RecordStatus::Unchanged => "OK",
+        RecordStatus::Drifted => "DRIFT",
+        RecordStatus::Unverified => "UNVERIFIED",
+        RecordStatus::Error => "ERROR",
+    }
+}
+
+/// The word of a diff: `IDENTICAL` for equal roots, `SAME CONTENT` for roots that differ only by
+/// the tag name of a pack or the uid that Palette mints, or `CHANGED`.
+pub(crate) fn diff_word(d: &Diff) -> &'static str {
+    if d.same {
+        "IDENTICAL"
+    } else if d.same_content {
+        "SAME CONTENT"
+    } else {
+        "CHANGED"
     }
 }
 
@@ -652,14 +745,14 @@ pub(crate) fn chain_verdict(c: &Chain) -> String {
 
 /// What a verdict line is about: a published version, what a cluster runs, or what an edge host
 /// or a cluster group holds, as [`Source::title`] names it.
-pub(crate) fn subject(recorded: &Source) -> String {
+fn subject(recorded: &Source) -> String {
     if let Some(p) = &recorded.pack {
-        let registry = if p.registry_name.is_empty() {
-            p.registry_uid.clone()
-        } else {
-            p.registry_name.clone()
-        };
-        return format!("pack {}@{} in registry {registry}", p.name, p.version);
+        return format!(
+            "pack {}@{} in registry {}",
+            p.name,
+            p.version,
+            name_or_uid(&p.registry_name, &p.registry_uid)
+        );
     }
     let profile = format!("{}@{}", recorded.name, recorded.version);
     match &recorded.cluster {
@@ -718,11 +811,6 @@ pub(crate) fn profiles_overwritten_sentence(v: &Verify, recorded: &Source) -> Op
 /// The verify part of the diff of a record that did not stay unchanged.
 fn record_verify(r: &crate::ops::VerifiedRecord) -> Option<&Verify> {
     r.diff.as_ref().and_then(|d| d.verify.as_ref())
-}
-
-/// The sentence after a record's status.
-fn overwritten_by(r: &crate::ops::VerifiedRecord) -> Option<&str> {
-    record_verify(r).and_then(|v| v.overwritten_by.as_deref())
 }
 
 /// `uid u is name@1.2.0 on one side and name@1.3.0 on the other: the version was overwritten in
@@ -927,13 +1015,10 @@ pub(crate) fn palette_validation_lines(d: &Diff) -> Vec<String> {
 /// The note when the impact table and Palette disagree about a repave.
 pub(crate) fn palette_repave_note(d: &Diff) -> Option<String> {
     let r = d.palette_repave.as_ref().filter(|r| !r.agrees)?;
-    let level = serde_json::to_value(d.summary.max_impact)
-        .ok()
-        .and_then(|v| v.as_str().map(str::to_string))
-        .unwrap_or_default();
     Some(format!(
-        "the impact table says {level}, and Palette says {} for {}: the table does not describe \
-         its upgrade engine",
+        "the impact table says {}, and Palette says {} for {}: the table does not describe its \
+         upgrade engine",
+        d.summary.max_impact.as_str(),
         if r.required { "repave" } else { "no repave" },
         if r.cluster_template.is_some() {
             "the cluster template"
@@ -946,17 +1031,26 @@ pub(crate) fn palette_repave_note(d: &Diff) -> Option<String> {
 /// The note for the packs with no upstream digest: `pack csi/x has no upstream digest: Palette
 /// gives none, so a change of its archive does not show`. None when every pack has one.
 pub(crate) fn upstream_unknown_note(d: &Diff) -> Option<String> {
-    let (noun, verb) = match d.upstream_unknown.len() {
-        0 => return None,
-        1 => ("pack", "has"),
-        _ => ("packs", "have"),
-    };
-    Some(format!(
-        "{noun} {} {verb} no upstream digest: Palette gives none, so a change of the archive does \
-         not show",
-        d.upstream_unknown.join(", ")
-    ))
+    (!d.upstream_unknown.is_empty()).then(|| {
+        format!(
+            "{}: Palette gives none, {ARCHIVE_CHANGE_HIDDEN}",
+            no_upstream_digest(&d.upstream_unknown)
+        )
+    })
 }
+
+/// `pack csi/x has no upstream digest`, or `packs csi/x, csi/y have no upstream digest`.
+fn no_upstream_digest(packs: &[String]) -> String {
+    let (noun, verb) = if packs.len() == 1 {
+        ("pack", "has")
+    } else {
+        ("packs", "have")
+    };
+    format!("{noun} {} {verb} no upstream digest", packs.join(", "))
+}
+
+/// What a pack with no upstream digest hides from a record and from a diff.
+const ARCHIVE_CHANGE_HIDDEN: &str = "so a change of the archive does not show";
 
 /// `pack addon/x has a masked value at <path>: an equal root does not show an equal secret`, for
 /// the pack `key` and its masked `paths`.
@@ -985,12 +1079,6 @@ pub(crate) fn updates_pending_notes(d: &Diff) -> Vec<String> {
         .filter_map(|side| side.cluster.as_ref())
         .filter(|c| c.updates_pending == Some(true))
         .map(|c| {
-            let mut names: Vec<&str> = c
-                .pending_updates
-                .iter()
-                .map(|u| u.profile.as_str())
-                .collect();
-            names.dedup();
             let since = c
                 .pending_updates
                 .first()
@@ -999,10 +1087,17 @@ pub(crate) fn updates_pending_notes(d: &Diff) -> Vec<String> {
             format!(
                 "cluster {} is behind: Palette says an update of {} waits for it{since}",
                 c.name,
-                names.join(", ")
+                pending_profile_names(&c.pending_updates)
             )
         })
         .collect()
+}
+
+/// The names of the profiles whose updates wait for a cluster, each one time, with commas.
+pub(crate) fn pending_profile_names(updates: &[PendingUpdate]) -> String {
+    let mut names: Vec<&str> = updates.iter().map(|u| u.profile.as_str()).collect();
+    names.dedup();
+    names.join(", ")
 }
 
 /// One note for each cluster side that Palette says holds a repave for approval: `a repave of
@@ -1120,11 +1215,136 @@ pub(crate) fn recorded_noun(recorded: &Source) -> &'static str {
 /// The verdict of a record that verifies: `holds the draft recorded <at>` for a record of
 /// `<ref>@draft`, as the publish of the draft gives it, and `is unchanged since <at>` for each
 /// other record.
-pub(crate) fn unchanged_sentence(recorded: &Source, at: &str) -> String {
-    if recorded.is_draft() {
+fn unchanged_sentence(draft: bool, at: &str) -> String {
+    if draft {
         format!("holds the draft recorded {at}")
     } else {
         format!("is unchanged since {at}")
+    }
+}
+
+/// What a verdict states, in the order that each report tests it. The first case that holds
+/// wins.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum VerdictCase {
+    /// The root did not move.
+    Unchanged,
+    /// The content is the recorded content, and a pack has no upstream digest.
+    Unverified,
+    /// A cluster runs a version that its uid no longer names.
+    ProfilesOverwritten,
+    /// Palette no longer has the object.
+    Gone,
+    /// The uid names the same version under another name.
+    Renamed,
+    /// The uid names another version: the recorded one was overwritten in place.
+    OverwrittenBy,
+    /// The content is the recorded content, and a macro value or a machine image moved.
+    OutsideRoot,
+    /// The root moved.
+    RootMoved,
+}
+
+fn verdict_case(v: &Verify) -> VerdictCase {
+    match v.status {
+        VerifyStatus::Unchanged => VerdictCase::Unchanged,
+        VerifyStatus::Unverified => VerdictCase::Unverified,
+        VerifyStatus::Drifted if !v.profiles_overwritten.is_empty() => {
+            VerdictCase::ProfilesOverwritten
+        }
+        VerifyStatus::Drifted if v.gone => VerdictCase::Gone,
+        VerifyStatus::Drifted if v.renamed_to.is_some() => VerdictCase::Renamed,
+        VerifyStatus::Drifted if v.overwritten_by.is_some() => VerdictCase::OverwrittenBy,
+        VerifyStatus::Drifted
+            if !v.macros_changed.is_empty() || !v.image_ids_changed.is_empty() =>
+        {
+            VerdictCase::OutsideRoot
+        }
+        VerifyStatus::Drifted => VerdictCase::RootMoved,
+    }
+}
+
+/// The verdict of a record, in parts, so that each report builds its line one way: the terminal
+/// and the markdown put the subject before the sentence, and a row of the summary names the
+/// record in its own column.
+pub(crate) struct VerdictParts {
+    /// `OK`, `UNVERIFIED`, or `DRIFT`.
+    pub(crate) word: &'static str,
+    /// What the verdict states.
+    pub(crate) case: VerdictCase,
+    /// The sentence after the subject: `is unchanged since <at>`. For a gone object, and for a
+    /// cluster that runs a version its uid no longer names, the sentence names the subject
+    /// itself.
+    pub(crate) sentence: String,
+    /// `; 1 variable value changed`, or nothing. A row of the summary puts its detail before it.
+    pub(crate) values: String,
+    /// The end of the line of one record: the sync of the registry, the state of the object, and
+    /// when Palette last changed it.
+    pub(crate) tail: String,
+}
+
+impl VerdictParts {
+    /// The line of one record after its status word: `published version x@1.0 is unchanged
+    /// since <at>`, with the values and the tail.
+    pub(crate) fn line(&self, recorded: &Source) -> String {
+        let subject = match self.case {
+            VerdictCase::ProfilesOverwritten | VerdictCase::Gone => String::new(),
+            _ => format!("{} ", subject(recorded)),
+        };
+        format!("{subject}{}{}{}", self.sentence, self.values, self.tail)
+    }
+}
+
+/// The parts of the verdict of a record. `code` puts a uid in the form of the report.
+pub(crate) fn verdict_parts(
+    v: &Verify,
+    recorded: &Source,
+    code: fn(&str) -> String,
+) -> VerdictParts {
+    let at = recorded.fetched_at.as_str();
+    let case = verdict_case(v);
+    let sentence = match case {
+        VerdictCase::Unchanged => unchanged_sentence(recorded.is_draft(), at),
+        VerdictCase::Unverified => format!(
+            "has the content recorded {at}, but {}",
+            unverified_sentence(&v.upstream_unknown)
+        ),
+        VerdictCase::ProfilesOverwritten => {
+            profiles_overwritten_sentence(v, recorded).unwrap_or_default()
+        }
+        VerdictCase::Gone => gone_sentence(v, recorded, code),
+        VerdictCase::Renamed => format!(
+            "was renamed to {}",
+            v.renamed_to.as_deref().unwrap_or_default()
+        ),
+        VerdictCase::OverwrittenBy => format!(
+            "now names {}: the version recorded {at} was overwritten in place",
+            v.overwritten_by.as_deref().unwrap_or_default()
+        ),
+        VerdictCase::OutsideRoot => format!(
+            "has the content recorded {at}, but {}",
+            outside_root_sentence(&v.macros_changed, &v.image_ids_changed).unwrap_or_default()
+        ),
+        VerdictCase::RootMoved => {
+            format!("differs from {} recorded {at}", recorded_noun(recorded))
+        }
+    };
+    // a gone object has no values to state, and a rename changes none
+    let values = match case {
+        VerdictCase::Gone | VerdictCase::Renamed => String::new(),
+        _ => values_changed_suffix(v.cluster_values_changed),
+    };
+    VerdictParts {
+        word: record_word(RecordStatus::from(v.status)),
+        case,
+        sentence,
+        values,
+        tail: format!(
+            "{}{}{}",
+            registry_sync_suffix(v.registry_sync.as_ref()),
+            state_suffix(v, recorded),
+            last_modified_suffix(v)
+        ),
     }
 }
 
@@ -1151,11 +1371,6 @@ fn record_values_changed(r: &crate::ops::VerifiedRecord) -> usize {
     r.cluster_variables.as_ref().map_or(0, |c| c.values.len())
 }
 
-fn record_profiles_overwritten(r: &crate::ops::VerifiedRecord) -> Option<String> {
-    let d = r.diff.as_ref()?;
-    profiles_overwritten_sentence(d.verify.as_ref()?, &d.a)
-}
-
 /// What `verify --who` found: `who: 2 writes in the audit log since the record`, or `who: no
 /// audit entry since the record`. `None` without `--who`.
 pub(crate) fn who_heading(v: &Verify) -> Option<String> {
@@ -1179,7 +1394,7 @@ pub(crate) fn who_entry(e: &crate::diff::AuditEntry, uid: &str) -> String {
         line.push(' ');
         line.push_str(&r.kind);
         line.push(' ');
-        line.push_str(if r.name.is_empty() { &r.uid } else { &r.name });
+        line.push_str(name_or_uid(&r.name, &r.uid));
     }
     if !e.summary.is_empty() {
         line.push_str(": ");
@@ -1223,16 +1438,6 @@ fn who_suffix(r: &crate::ops::VerifiedRecord) -> String {
     }
 }
 
-/// Why a drifted record with the recorded content drifted: see [`outside_root_sentence`]. None
-/// when no macro value and no image moved, or when the root moved.
-fn record_outside_root(r: &crate::ops::VerifiedRecord) -> Option<String> {
-    r.diff
-        .as_ref()
-        .filter(|d| d.same)
-        .and_then(|d| d.verify.as_ref())
-        .and_then(|v| outside_root_sentence(&v.macros_changed, &v.image_ids_changed))
-}
-
 /// The sentence after a record's status, and the state of its object when it is not the state
 /// of one that runs: `; the state is Deleting`.
 pub(crate) fn record_detail(r: &crate::ops::VerifiedRecord) -> String {
@@ -1250,99 +1455,48 @@ pub(crate) fn record_detail(r: &crate::ops::VerifiedRecord) -> String {
     detail
 }
 
-fn record_sentence(r: &crate::ops::VerifiedRecord) -> String {
-    use crate::ops::RecordStatus;
-    let sync = registry_sync_suffix(
-        r.diff
-            .as_ref()
-            .and_then(|d| d.verify.as_ref())
-            .and_then(|v| v.registry_sync.as_ref()),
-    );
-    let outside_root = record_outside_root(r);
-    let detail = match r.status {
-        RecordStatus::Unchanged if r.diff.as_ref().is_some_and(|d| d.a.is_draft()) => format!(
-            "holds the draft recorded {}{}",
-            r.recorded_at,
-            values_changed_suffix(record_values_changed(r))
-        ),
-        RecordStatus::Unchanged => format!(
-            "unchanged since {}{}",
-            r.recorded_at,
-            values_changed_suffix(record_values_changed(r))
-        ),
-        RecordStatus::Unverified => format!(
-            "same content as recorded {}, but {}",
-            r.recorded_at,
-            unverified_sentence(
-                r.diff
-                    .as_ref()
-                    .map(|d| d.upstream_unknown.as_slice())
-                    .unwrap_or_default()
-            )
-        ),
-        RecordStatus::Drifted if record_verify(r).is_some_and(|v| v.gone) => {
-            let (v, d) = (record_verify(r).unwrap(), r.diff.as_ref().unwrap());
-            format!(
-                "{}{}",
-                gone_sentence(v, &d.a, str::to_string),
-                who_suffix(r)
-            )
-        }
-        RecordStatus::Drifted if record_profiles_overwritten(r).is_some() => format!(
-            "{}{}{}",
-            record_profiles_overwritten(r).unwrap_or_default(),
-            values_changed_suffix(record_values_changed(r)),
-            who_suffix(r)
-        ),
-        RecordStatus::Drifted if outside_root.is_some() => format!(
-            "has the content recorded {}, but {}{}{}",
-            r.recorded_at,
-            outside_root.unwrap_or_default(),
-            values_changed_suffix(record_values_changed(r)),
-            who_suffix(r)
-        ),
-        RecordStatus::Drifted if record_verify(r).is_some_and(|v| v.renamed_to.is_some()) => {
-            format!(
-                "was renamed to {}{}",
-                record_verify(r)
-                    .and_then(|v| v.renamed_to.as_deref())
-                    .unwrap_or_default(),
-                who_suffix(r)
-            )
-        }
-        RecordStatus::Drifted if overwritten_by(r).is_some() => format!(
-            "now names {}: the version recorded {} was overwritten in place{}{}",
-            overwritten_by(r).unwrap_or_default(),
-            r.recorded_at,
-            values_changed_suffix(record_values_changed(r)),
-            who_suffix(r)
-        ),
-        RecordStatus::Drifted => format!(
-            "differs from {} recorded {}; max impact {}, {} changed{}{}{}",
-            r.diff.as_ref().map_or("the copy", |d| recorded_noun(&d.a)),
-            r.recorded_at,
-            r.max_impact
-                .and_then(|l| serde_json::to_value(l).ok())
-                .and_then(|v| v.as_str().map(str::to_string))
-                .unwrap_or_default(),
-            count_of(r.packs_changed.unwrap_or(0), "pack"),
-            // Palette keeps the order of the packs, so two orders are two roots: a reorder alone
-            // is drift, and the line says so.
-            if r.diff.as_ref().is_some_and(|d| d.order_changed) {
-                ", the packs in another order"
-            } else {
-                ""
-            },
-            values_changed_suffix(record_values_changed(r)),
-            who_suffix(r)
-        ),
-        RecordStatus::Error => r
-            .error
-            .as_ref()
-            .and_then(|e| e.get("message"))
-            .and_then(Value::as_str)
+/// The sentence of a row of the summary: the verdict of the record, with what the diff of one
+/// record shows above its verdict, the last write of `--who`, and the sync of the registry.
+fn record_sentence(r: &VerifiedRecord) -> String {
+    let sync = registry_sync_suffix(record_verify(r).and_then(|v| v.registry_sync.as_ref()));
+    let verdict = r.diff.as_ref().and_then(|d| Some((d, d.verify.as_ref()?)));
+    let detail = match (r.status, verdict) {
+        (RecordStatus::Error, _) => entry_error(r.error.as_ref())
             .unwrap_or("could not be checked")
             .to_string(),
+        (_, Some((d, v))) => {
+            let parts = verdict_parts(v, &d.a, str::to_string);
+            // the report of one record shows the impact of its diff above the verdict, and a row
+            // of the summary states it
+            let impact = match parts.case {
+                VerdictCase::RootMoved => format!(
+                    "; max impact {}, {} changed{}",
+                    r.max_impact.map(ImpactLevel::as_str).unwrap_or_default(),
+                    count_of(r.packs_changed.unwrap_or(0), "pack"),
+                    // Palette keeps the order of the packs, so two orders are two roots: a
+                    // reorder alone is drift, and the line says so.
+                    if d.order_changed {
+                        ", the packs in another order"
+                    } else {
+                        ""
+                    }
+                ),
+                _ => String::new(),
+            };
+            format!(
+                "{}{impact}{}{}",
+                parts.sentence,
+                parts.values,
+                who_suffix(r)
+            )
+        }
+        // an unchanged record carries no diff, and the document of the summary does not say
+        // whether the record holds a draft
+        (_, None) => format!(
+            "{}{}",
+            unchanged_sentence(false, &r.recorded_at),
+            values_changed_suffix(record_values_changed(r))
+        ),
     };
     detail + &sync
 }
@@ -1366,16 +1520,10 @@ pub(crate) fn counts_line(s: &VerifySummary) -> String {
 
 /// Why a record is unverified: `pack csi/x has no upstream digest, so a change of its archive
 /// does not show; --allow-no-digest accepts it`.
-pub(crate) fn unverified_sentence(packs: &[String]) -> String {
-    let (noun, verb) = if packs.len() == 1 {
-        ("pack", "has")
-    } else {
-        ("packs", "have")
-    };
+fn unverified_sentence(packs: &[String]) -> String {
     format!(
-        "{noun} {} {verb} no upstream digest, so a change of the archive does not show; \
-         --allow-no-digest accepts it",
-        packs.join(", ")
+        "{}, {ARCHIVE_CHANGE_HIDDEN}; --allow-no-digest accepts it",
+        no_upstream_digest(packs)
     )
 }
 
@@ -1386,6 +1534,45 @@ pub fn renderer(format: Format, paint: Paint, compact: bool) -> Box<dyn Renderer
         Format::Markdown => Box::new(MarkdownRenderer),
         Format::Json => Box::new(JsonRenderer { compact }),
     }
+}
+
+/// One line of a diff of values: a leaf, or a value that a cluster gives a variable, with its
+/// path and its two sides as the reports show them.
+pub(crate) struct OpLine {
+    pub(crate) op: Op,
+    pub(crate) path: String,
+    /// The value on side A, or `null`.
+    pub(crate) old: String,
+    /// The value on side B, or `null`.
+    pub(crate) new: String,
+}
+
+impl OpLine {
+    /// The line of a leaf at `path`: the path of the leaf alone, or inside its variable or its
+    /// tier.
+    pub(crate) fn leaf(path: &str, l: &Leaf) -> Self {
+        Self {
+            op: l.op,
+            path: path.to_string(),
+            old: shown(l.old.as_ref()),
+            new: shown(l.new.as_ref()),
+        }
+    }
+
+    /// The line of a value that a cluster gives a variable, at `<profile>.<name>`.
+    pub(crate) fn cluster_value(c: &ClusterValueChange) -> Self {
+        Self {
+            op: c.op,
+            path: format!("{}.{}", c.profile, c.name),
+            old: cluster_value(&c.old, c.sensitive),
+            new: cluster_value(&c.new, c.sensitive),
+        }
+    }
+}
+
+/// A leaf value as the reports show it, or `null` for a side that has none.
+fn shown(v: Option<&Value>) -> String {
+    v.map(show).unwrap_or_else(|| "null".to_string())
 }
 
 /// The first twelve characters of a hash, or `-` for an empty one.
@@ -1592,6 +1779,24 @@ pub(crate) fn registry_sync_suffix(sync: Option<&crate::diff::RegistrySync>) -> 
     out
 }
 
+/// `values: 2 changed, 1 added, 0 removed`: the counts of the leaves of the values of a pack.
+pub(crate) fn values_summary(v: &ValuesDiff) -> String {
+    format!(
+        "values: {} changed, {} added, {} removed",
+        v.changed_count, v.added_count, v.removed_count
+    )
+}
+
+/// `values changed (not parseable as YAML on one side; use --full for a unified diff)`, for a
+/// pack whose values changed and did not parse on one side. `code` puts the flag in the form of
+/// the report.
+pub(crate) fn values_unparsed_sentence(code: fn(&str) -> String) -> String {
+    format!(
+        "values changed (not parseable as YAML on one side; use {} for a unified diff)",
+        code("--full")
+    )
+}
+
 /// `1 variable value changed`, `2 variable values changed`.
 pub(crate) fn values_changed(n: usize) -> String {
     format!(
@@ -1602,7 +1807,7 @@ pub(crate) fn values_changed(n: usize) -> String {
 
 /// The state that a cluster, an edge host, or a cluster group has when it runs what it holds.
 fn normal_state(state: &str) -> bool {
-    matches!(state, "Running" | "in-use" | "active")
+    matches!(state, RUNNING_STATE | IN_USE_STATE | ACTIVE_STATE)
 }
 
 /// `; the cluster is Deleting`: the state of the object of a record, when it is not the state of
@@ -1650,7 +1855,7 @@ pub(crate) fn values_changed_suffix(n: usize) -> String {
 }
 
 /// A cluster value as the reports print it: quoted, or `(sensitive)`.
-pub(crate) fn cluster_value(value: &Option<String>, sensitive: bool) -> String {
+fn cluster_value(value: &Option<String>, sensitive: bool) -> String {
     match value {
         Some(v) => show(&Value::from(v.as_str())),
         None if sensitive => "(sensitive)".to_string(),

@@ -27,6 +27,18 @@ pub const CONSUMERS_SCHEMA: &str = "strata-consumers/1";
 /// The state a consumer shows when its cluster could not be read.
 pub const UNKNOWN_STATE: &str = "unknown";
 
+/// The state of a cluster that runs, as Palette gives it in `status.state`.
+pub(crate) const RUNNING_STATE: &str = "Running";
+
+/// The state of an edge host that a cluster uses, as Palette gives it in `status.state`.
+pub(crate) const IN_USE_STATE: &str = "in-use";
+
+/// The state of a cluster group that Palette marks active, as strata names it.
+pub(crate) const ACTIVE_STATE: &str = "active";
+
+/// The state of a cluster group that Palette does not mark active, as strata names it.
+pub(crate) const INACTIVE_STATE: &str = "inactive";
+
 /// The kind of a consumer that is a cluster.
 pub const CLUSTER_KIND: &str = "cluster";
 

@@ -8367,8 +8367,9 @@ fn many_records_count_an_unverified_one_and_exit_1() {
         .render_verify_summary(&s)
         .unwrap();
     assert!(text.contains("UNVERIFIED"), "{text}");
+    // the row states the verdict of the record in the words of its own report
     assert!(
-        text.contains("same content as recorded t0, but pack os/ubuntu-aws has no upstream digest"),
+        text.contains("has the content recorded t0, but pack os/ubuntu-aws has no upstream digest"),
         "{text}"
     );
     assert!(
