@@ -559,7 +559,7 @@ pub(crate) fn consumers_sentence(d: &Diff) -> Option<String> {
 /// profile, 2 read`. The search takes the name of the profile, so it names each cluster that runs
 /// a version of it; strata keeps the clusters that run this version. Only the clusters that the
 /// consumer list did not name are read.
-pub(crate) fn second_reading_counts(read: &crate::ops::ClustersRead) -> String {
+fn second_reading_counts(read: &crate::ops::ClustersRead) -> String {
     let counts = second_reading_main(read);
     // the virtual clusters of the cluster groups that pin the version (#184)
     match (read.groups, &read.groups_error) {
@@ -1237,7 +1237,7 @@ fn unchanged_sentence(draft: bool, at: &str) -> String {
 ///
 /// The cases are in the order that each report tests them: the first case that holds wins.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum VerdictCase {
+enum VerdictCase {
     /// The root did not move.
     Unchanged,
     /// The content is the recorded content, and a pack has no upstream digest.
@@ -1288,12 +1288,15 @@ pub(crate) struct VerdictParts {
     /// `OK`, `UNVERIFIED`, or `DRIFT`.
     pub(crate) word: &'static str,
     /// What the verdict states.
-    pub(crate) case: VerdictCase,
-    /// The sentence after the subject: `is unchanged since <at>`. For a gone object, and for a
-    /// cluster that runs a version its uid no longer names, the sentence names the subject
-    /// itself.
+    case: VerdictCase,
+    /// The sentence after the subject: `is unchanged since <at>`.
+    ///
+    /// For a gone object, and for a cluster that runs a version its uid no longer names, the
+    /// sentence names the subject itself.
     pub(crate) sentence: String,
-    /// `; 1 variable value changed`, or nothing. A row of the summary puts its detail before it.
+    /// `; 1 variable value changed`, or nothing.
+    ///
+    /// A row of the summary puts its detail before it.
     pub(crate) values: String,
     /// The end of the line of one record: the sync of the registry, the state of the object, and
     /// when Palette last changed it.

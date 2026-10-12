@@ -63,12 +63,13 @@ on one cloud keeps that pack: see
 JSON keeps `cloudTypes` as Palette gives it.
 
 A cloud that no version supports is an answer, and an empty one: exit `0` and
-one line, `no version of <name> supports <cloud>`. A pack whose versions
-Palette does not serve, for example when none is FIPS compliant, is an empty
-answer too: `Palette serves no version of <name>`. A registry the key cannot
-see is an error that lists the visible registries. A pack that no registry has
-is `pack-name-not-found`. With `--registry`, a pack that this registry does not
-have is `pack-not-found`. Each exits `2`.
+one line, `no version of <name> supports <cloud>`. A pack with no version that
+Palette serves is an empty answer too: `Palette serves no version of <name>`.
+One example is a pack with no FIPS compliant version.
+
+A registry the key cannot see is an error that lists the visible registries. A
+pack that no registry has is `pack-name-not-found`. With `--registry`, a pack
+that this registry does not have is `pack-not-found`. Each exits `2`.
 
 When one of the registries that strata asked is a registry that Palette does
 not sync, the error names it. Palette lists a pack of such a registry only while
