@@ -10852,7 +10852,7 @@ fn a_cluster_group_record_holds_its_own_copy_of_each_manifest() {
                 serde_json::json!({"items": [], "listmeta": {"continue": ""}}),
             )
             .with(
-                manifest_route(puid, "prometheus-operator", "group-rules-1"),
+                manifest_route(&puid, "prometheus-operator", "group-rules-1"),
                 own_copy("group-rules-1", copy),
             )
             .with(
