@@ -477,8 +477,7 @@ pub enum RecordStatus {
 impl From<VerifyStatus> for RecordStatus {
     /// The outcome of one record from the verdict of its check.
     ///
-    /// A record that could not be checked has no verdict, so it is never
-    /// [`RecordStatus::Error`].
+    /// A record whose check failed has no verdict, so it is never [`RecordStatus::Error`].
     fn from(status: VerifyStatus) -> Self {
         match status {
             VerifyStatus::Unchanged => Self::Unchanged,

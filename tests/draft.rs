@@ -264,9 +264,7 @@ fn a_record_of_the_draft_verifies_against_the_version_once_the_draft_is_publishe
     let palette = Palette::new(&after);
     let v = ops::verify(&draft, &palette, "t2", &Progress::silent()).unwrap();
     assert!(v.unchanged, "{:?}", v.diff.packs);
-    let verdict = r
-        .verdict(&v.diff)
-        .unwrap();
+    let verdict = r.verdict(&v.diff).unwrap();
     assert!(
         verdict.contains("published version lab-profile@1.0.0 holds the draft recorded t0"),
         "{verdict}"

@@ -5613,9 +5613,7 @@ fn verify_names_a_cluster_value_changed_since_the_record_without_calling_it_drif
     assert!(v.unchanged, "a value is not part of the release");
     assert!(v.diff.cluster_variables.as_ref().unwrap().changed);
     let renderer = render::renderer(Format::Terminal, Paint::off(), false);
-    let verdict = renderer
-        .verdict(&v.diff)
-        .unwrap();
+    let verdict = renderer.verdict(&v.diff).unwrap();
     assert!(
         verdict.starts_with("OK:") && verdict.contains("1 variable value changed"),
         "{verdict}"

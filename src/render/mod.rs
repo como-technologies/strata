@@ -273,8 +273,8 @@ pub(crate) fn version_note(v: &crate::ops::PackBuild) -> Option<String> {
 /// The one line of a listing that keeps no registry, or None when a registry has the pack.
 ///
 /// `no version of csi-aws-ebs supports edge-native` when `--cloud` left the listing empty.
-/// `Palette serves no version of csi-aws-ebs` with no `--cloud`: the registry gives no version of
-/// the pack a tag, for example when none is FIPS compliant, so strata shows none.
+/// `Palette serves no version of csi-aws-ebs` with no `--cloud`: the registry gives no version a
+/// tag, so strata shows none.
 pub(crate) fn no_version_sentence(l: &PackListing) -> Option<String> {
     if !l.registries.is_empty() {
         return None;
@@ -1256,7 +1256,9 @@ pub(crate) enum VerdictCase {
     RootMoved,
 }
 
-/// The case of a verdict. `same` is whether the root did not move, from `Diff::same`.
+/// The case of a verdict.
+///
+/// `same` is whether the root did not move, from `Diff::same`.
 fn verdict_case(v: &Verify, same: bool) -> VerdictCase {
     match v.status {
         VerifyStatus::Unchanged => VerdictCase::Unchanged,
