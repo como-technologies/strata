@@ -2,4 +2,4 @@ $ strata list filters --project ''
 tenant scope
 
 1 saved tag filter
-  filter:production  64f7000000000000000000a1  env=prod
+  filter:production  64f7000000000000000000a2  env=prod

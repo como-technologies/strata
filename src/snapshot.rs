@@ -1482,7 +1482,13 @@ impl Snapshot {
         self
     }
 
-    /// Read a snapshot file, checking its schema id: see [`load_document`].
+    /// Read a snapshot file, checking its schema id.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::UnsupportedSchema`] for a snapshot of another schema id, [`Error::SnapshotSchema`]
+    /// when the fields do not match, [`Error::NotSnapshot`] for a file that is not a snapshot,
+    /// and [`Error::Io`] when strata cannot read the file.
     pub fn load(path: &Path) -> Result<Snapshot> {
         let mut snap: Snapshot = load_document(path, SNAPSHOT_SCHEMA, || {
             Error::NotSnapshot(path.to_path_buf())
