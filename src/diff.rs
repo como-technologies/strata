@@ -14,7 +14,9 @@ pub use crate::impact::{Flags, Impact, ImpactLevel, impact, presence_impact};
 use crate::json::{is_zero, str_at, text};
 use crate::layer::Layer;
 pub use crate::repave::PaletteRepaveReason;
-use crate::snapshot::{ClusterTier, ClusterVariable, Pack, Snapshot, Source, Tool};
+use crate::snapshot::{
+    ClusterTier, ClusterVariable, Pack, Snapshot, Source, Tier, Tool, UpstreamSource,
+};
 pub use crate::validation::{PaletteRefusal, PaletteValidation};
 
 /// Schema id written into every diff document.
@@ -230,7 +232,7 @@ pub struct ClusterVariablesDiff {
 pub struct TierDiff {
     /// `applied`, `running`, `policy`, `shape`, or `labels`. Between two clusters, `applied`
     /// compares `spcInfraHash` alone: Palette's `spcHash` is its own for each cluster.
-    pub tier: String,
+    pub tier: Tier,
     /// True when the hashes are equal.
     pub same: bool,
     /// The fields that differ, when the tier differs.
@@ -281,21 +283,21 @@ fn tiers_diff(a: &Snapshot, b: &Snapshot) -> Vec<TierDiff> {
             let u = y.tiers.get(name)?;
             // Palette's spcHash is its own for each cluster, and equal for no two: between two
             // clusters, applied compares spcInfraHash alone
-            let (f, g) = match name.as_str() {
-                "applied" if x.uid != y.uid => {
+            let (f, g) = match name {
+                Tier::Applied if x.uid != y.uid => {
                     let infra = |v: &Value| json!({"spcInfraHash": v.get("spcInfraHash")});
                     (infra(&t.fields), infra(&u.fields))
                 }
                 // a record from before strata read the shape by cloud type holds fewer fields
-                "shape" => crate::shape::comparable(&t.fields, &u.fields),
+                Tier::Shape => crate::shape::comparable(&t.fields, &u.fields),
                 // and one from before strata read the role bindings holds their references
-                "policy" => crate::policy::comparable(&t.fields, &u.fields),
+                Tier::Policy => crate::policy::comparable(&t.fields, &u.fields),
                 _ => (t.fields.clone(), u.fields.clone()),
             };
             let (f, g) = (read_fields(f, t, u), read_fields(g, t, u));
             let same = f == g;
             Some(TierDiff {
-                tier: name.clone(),
+                tier: *name,
                 same,
                 diff: if same { Vec::new() } else { leaf_diff(&f, &g) },
             })
@@ -306,7 +308,7 @@ fn tiers_diff(a: &Snapshot, b: &Snapshot) -> Vec<TierDiff> {
     };
     let (la, lb) = (labels(&x.labels), labels(&y.labels));
     out.push(TierDiff {
-        tier: "labels".to_string(),
+        tier: Tier::Labels,
         same: la == lb,
         diff: leaf_diff(&la, &lb),
     });
@@ -319,7 +321,7 @@ fn running_behind(side: &str, s: &Snapshot) -> Vec<RunningBehind> {
         .source
         .cluster
         .as_ref()
-        .and_then(|c| c.tiers.get("running"))
+        .and_then(|c| c.tiers.get(&Tier::Running))
     else {
         return Vec::new();
     };
@@ -557,7 +559,7 @@ pub struct PackSide {
     /// The raw digest that fed the upstream hash
     pub upstream: String,
     /// Which field fed it: `packRef.digest`, `packSummary.digest`, or `none`.
-    pub upstream_source: String,
+    pub upstream_source: UpstreamSource,
     /// Hash of the canonical values.
     pub values_hash: String,
     /// Node hash.
@@ -1446,7 +1448,7 @@ fn side(p: &Pack) -> PackSide {
         pack_uid: p.pack_uid.clone(),
         registry_uid: p.registry_uid.clone(),
         upstream: p.hash.upstream_raw.clone(),
-        upstream_source: p.hash.upstream_source.clone(),
+        upstream_source: p.hash.upstream_source,
         values_hash: p.values_hash.clone(),
         node: p.hash.node.clone(),
         invalid: p.invalid,

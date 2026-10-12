@@ -16,7 +16,7 @@ use crate::diff::{
 use crate::error::{Error, Result};
 use crate::json::{is_zero, opt_text, str_at, text};
 use crate::progress::Progress;
-use crate::snapshot::{APP_KIND, Snapshot, SubjectKind, Tool};
+use crate::snapshot::{APP_KIND, Snapshot, SubjectKind, Tier, Tool};
 
 use super::consumers::{ACTIVE_STATE, INACTIVE_STATE};
 use super::scope_of;
@@ -145,7 +145,7 @@ fn live_holder<A: PaletteApi>(
         raw.resolved_values = Some(palette.resolved_values(c.kind, uid)?);
     }
     // and one that holds the shape tier on its shape
-    if c.tiers.contains_key("shape") {
+    if c.tiers.contains_key(&Tier::Shape) {
         raw.cloud_config = Some(palette.cloud_config(&raw.cluster)?);
     }
     let live = Snapshot::from_cluster(

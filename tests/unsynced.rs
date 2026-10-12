@@ -12,6 +12,7 @@ use strata::error::Error;
 use strata::ops::{self, PairStatus, Policy};
 use strata::progress::Progress;
 use strata::render::{self, Format};
+use strata::snapshot::UpstreamSource;
 
 use crate::common;
 use common::{
@@ -72,7 +73,7 @@ fn a_layer_from_a_private_helm_registry_gives_the_pack_that_palette_makes_at_the
     let file = candidate(dir.path(), "charts-auth", json!({}));
     let snap = candidate_snapshot(&file, &tenant()).unwrap();
     let p = &snap.packs[0];
-    assert_eq!(p.hash.upstream_source, "none");
+    assert_eq!(p.hash.upstream_source, UpstreamSource::NoDigest);
     assert_eq!(p.pack_uid, "");
     assert_eq!(p.version, "1.0.0");
     assert_eq!(p.tag, "1.0.0");
@@ -90,7 +91,7 @@ fn a_layer_from_an_oci_registry_with_sync_off_names_its_provider_type() {
     let p = &snap.packs[0];
     assert_eq!((p.kind.as_str(), p.pack_uid.as_str()), ("oci", ""));
     assert_eq!(p.registry_provider_type.as_deref(), Some("zarf"));
-    assert_eq!(p.hash.upstream_source, "none");
+    assert_eq!(p.hash.upstream_source, UpstreamSource::NoDigest);
 }
 
 #[test]

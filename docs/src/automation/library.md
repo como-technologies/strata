@@ -22,6 +22,7 @@ program can use the same parts:
 | `ops::behind`, `ops::BehindOptions`, `ops::BehindReport` | `behind`: each pack version that records pin, the newer versions of the registry, the impact of each bump, and, with a previous report, what arrived since. `ops::is_floating` says whether a tag is a floating tag. |
 | `ops::consumers_with`, `ops::ConsumersOptions` | `consumers`, with `list_only` to read the consumer list of Palette alone. Each `Consumer` has a `kind`, `cluster` or `edgehost`, and `ConsumersReport::edge_hosts_read` says how many edge hosts strata read. |
 | `snapshot::Snapshot` | A record. |
+| `snapshot::Template`, `snapshot::Tier`, `snapshot::UpstreamSource` | The closed sets of a record, each printed as the documents name it. `Source::template` is the template that a record reads. The keys of `ClusterSource::tiers` and `TierDiff::tier` are tiers of a cluster record. `PackHash::upstream_source` is the field of Palette that gave the upstream digest of a pack. |
 | `diff::compute` | The comparison of two snapshots. |
 | `render::Renderer` | The terminal, markdown, and JSON output. |
 | `ops` | The operations of the commands: `snapshot_for`, `compare`, `verify`, `verify_many`, `same_release`, `consumers`, `behind`, `list`, `registry_packs`, and the rows above. Each command has a module of its own under `ops`; `fleet` and `repave` hold the queries of labels and the answer of Palette on a repave. |

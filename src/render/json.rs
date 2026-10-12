@@ -15,7 +15,9 @@ pub struct JsonRenderer {
 }
 
 impl JsonRenderer {
-    fn document<T: Serialize>(&self, doc: &T) -> Result<String> {
+    /// Serializes `doc`, pretty-printed unless `compact`, with a trailing newline. Each JSON
+    /// document of strata, also a record, goes through here.
+    pub(crate) fn document<T: Serialize>(&self, doc: &T) -> Result<String> {
         let mut s = if self.compact {
             serde_json::to_string(doc)?
         } else {

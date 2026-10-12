@@ -3,6 +3,7 @@
 //! written by the bash reference implementation.
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::fmt;
 use std::path::Path;
 
 use schemars::JsonSchema;
@@ -22,12 +23,43 @@ pub use crate::validation::ProfileValidation;
 /// Schema id written into every snapshot.
 pub const SNAPSHOT_SCHEMA: &str = "strata-snapshot/1";
 
-/// The `source.template` of a record of the published template of a profile version.
-pub const PUBLISHED_TEMPLATE: &str = "published";
+/// The template of a profile that a record reads, as `source.template` names it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum Template {
+    /// The published template of a profile version.
+    Published,
+    /// The draft template of a profile version: of `<ref>@draft`, or of a version that was never
+    /// published.
+    Draft,
+    /// The templates that a cluster applies: a record of a cluster, of a cluster group, or of an
+    /// edge host.
+    Applied,
+    /// A candidate file, resolved against the registries. Palette holds no such template.
+    Candidate,
+    /// One pack version of a registry: a pack record.
+    Registry,
+}
 
-/// The `source.template` of a record of the draft template of a profile version: of
-/// `<ref>@draft`, or of a version that was never published.
-pub const DRAFT_TEMPLATE: &str = "draft";
+impl Template {
+    /// The template as the documents name it: `published`, `draft`, `applied`, `candidate`, or
+    /// `registry`.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Published => "published",
+            Self::Draft => "draft",
+            Self::Applied => "applied",
+            Self::Candidate => "candidate",
+            Self::Registry => "registry",
+        }
+    }
+}
+
+impl fmt::Display for Template {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
 
 /// The version of the content digest encoding. It is in the input of the digest, so a change to
 /// what the digest covers is a change of this tag, and a digest of one version is never equal to
@@ -99,7 +131,7 @@ impl Tool {
 }
 
 /// Where a snapshot came from.
-#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct Source {
     /// The ref the snapshot was taken from, as given on the command line
@@ -120,8 +152,8 @@ pub struct Source {
     /// Profile type: cluster, infra, add-on, system
     #[serde(rename = "type")]
     pub kind: String,
-    /// "published" or "draft": the template the packs were read from
-    pub template: String,
+    /// The template that the packs were read from: see [`Template`].
+    pub template: Template,
     /// Profile labels.
     #[serde(default)]
     pub tags: BTreeMap<String, String>,
@@ -178,7 +210,7 @@ impl Source {
     /// published template. A record of a version that was never published reads its draft too,
     /// with no `@draft` in its ref, and is not one.
     pub fn is_draft(&self) -> bool {
-        self.template == DRAFT_TEMPLATE && self.reference.ends_with(crate::reference::DRAFT_SUFFIX)
+        self.template == Template::Draft && self.reference.ends_with(crate::reference::DRAFT_SUFFIX)
     }
 
     /// `name@version`, and `on cluster <name>` for a snapshot of a cluster, or `pending for cluster
@@ -343,7 +375,47 @@ pub struct ClusterSource {
     /// gives each virtual cluster. Each tier has its own hash. A record names the tiers that it
     /// carries by carrying them, so a record without one still verifies. Outside the root.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-    pub tiers: BTreeMap<String, ClusterTier>,
+    pub tiers: BTreeMap<Tier, ClusterTier>,
+}
+
+/// A tier of a cluster record: a part of the cluster beside its release, with a hash of its own.
+/// The variants are in the order of their names, so the map of the tiers of a record, and its
+/// JSON, keep the order of a record of strata 0.21.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema,
+)]
+#[serde(rename_all = "lowercase")]
+pub enum Tier {
+    /// The hashes of the spec that Palette applied to the cluster.
+    Applied,
+    /// The labels of the cluster. Only `compare` gives this tier: a record holds the labels in
+    /// `labels`, and carries no tier of this name.
+    Labels,
+    /// The config of the cluster, or the config that a cluster group gives each virtual cluster.
+    Policy,
+    /// The pack version that the cluster reconciled, for each pack of a covered profile.
+    Running,
+    /// The machine pools and the cloud part of the cluster, with `snapshot --shape`.
+    Shape,
+}
+
+impl Tier {
+    /// The tier as the documents name it: `applied`, `labels`, `policy`, `running`, or `shape`.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Applied => "applied",
+            Self::Labels => "labels",
+            Self::Policy => "policy",
+            Self::Running => "running",
+            Self::Shape => "shape",
+        }
+    }
+}
+
+impl fmt::Display for Tier {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
 }
 
 /// One tier of a cluster record: the fields that Palette gives for it, and their hash.
@@ -392,16 +464,13 @@ impl ClusterTier {
 /// role bindings, the namespaces, and the cloud config when strata read them. `covered` limits
 /// `running` to the profiles that the record covers. The record carries a tier only when Palette
 /// gives the part of the document that the tier reads.
-pub fn cluster_tiers(
-    raw: &RawCluster,
-    covered: &[AppliedProfile],
-) -> BTreeMap<String, ClusterTier> {
+pub fn cluster_tiers(raw: &RawCluster, covered: &[AppliedProfile]) -> BTreeMap<Tier, ClusterTier> {
     let cluster = &raw.cluster;
     let mut tiers = BTreeMap::new();
     // Palette's own hashes of the spec that it applied to the cluster
     if let Some(apply) = cluster.pointer("/status/spcApply") {
         tiers.insert(
-            "applied".to_string(),
+            Tier::Applied,
             ClusterTier::of(json!({
                 "spcHash": text(apply, "/spcHash"),
                 "spcInfraHash": text(apply, "/spcInfraHash"),
@@ -413,11 +482,11 @@ pub fn cluster_tiers(
         .pointer("/status/packs")
         .is_some_and(Value::is_array)
     {
-        tiers.insert("running".to_string(), running_tier(cluster, covered));
+        tiers.insert(Tier::Running, running_tier(cluster, covered));
     }
     if let Some(config) = cluster.pointer("/spec/clusterConfig") {
         tiers.insert(
-            "policy".to_string(),
+            Tier::Policy,
             ClusterTier::with_errors(
                 crate::policy::fields(raw, config),
                 crate::policy::errors(raw),
@@ -427,13 +496,13 @@ pub fn cluster_tiers(
     // the document of a cluster group has spec.clustersConfig, and no spec.clusterConfig
     if let Some(config) = cluster.pointer("/spec/clustersConfig") {
         tiers.insert(
-            "policy".to_string(),
+            Tier::Policy,
             ClusterTier::of(crate::policy::group_fields(config)),
         );
     }
     if let Some(cc) = &raw.cloud_config {
         tiers.insert(
-            "shape".to_string(),
+            Tier::Shape,
             ClusterTier::of(crate::shape::fields(cluster, cc)),
         );
     }
@@ -479,7 +548,7 @@ fn digests_in(maps: &[&Value], names: &[String]) -> BTreeMap<String, String> {
     names
         .iter()
         .map(|name| {
-            let key = format!("{{{{.spectro.macro.{name}}}}}");
+            let key = macro_placeholder(name);
             let digest = maps
                 .iter()
                 .find_map(|m| m.get(&key).and_then(Value::as_str))
@@ -818,6 +887,39 @@ pub struct Manifest {
     pub content_parse_error: Option<String>,
 }
 
+/// The field of Palette that gave the upstream digest of a pack, as `hash.upstreamSource` names
+/// it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub enum UpstreamSource {
+    /// The digest on the pack ref of the profile template.
+    #[serde(rename = "packRef.digest")]
+    PackRef,
+    /// The digest of the entry of `packs/manifests`, when the pack ref gives none.
+    #[serde(rename = "packSummary.digest")]
+    PackSummary,
+    /// Palette gave no digest, so `upstream` is the hash of nothing: see
+    /// [`Pack::upstream_unknown`].
+    #[serde(rename = "none")]
+    NoDigest,
+}
+
+impl UpstreamSource {
+    /// The source as the documents name it: `packRef.digest`, `packSummary.digest`, or `none`.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::PackRef => "packRef.digest",
+            Self::PackSummary => "packSummary.digest",
+            Self::NoDigest => "none",
+        }
+    }
+}
+
+impl fmt::Display for UpstreamSource {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
 /// The three sub-hashes and the node hash of one pack.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
@@ -828,8 +930,8 @@ pub struct PackHash {
     pub upstream: String,
     /// The digest that fed `upstream`
     pub upstream_raw: String,
-    /// "packRef.digest", "packSummary.digest", or "none"
-    pub upstream_source: String,
+    /// The field of Palette that gave `upstream`.
+    pub upstream_source: UpstreamSource,
     /// sha256 over valuesHash, [manifest name, contentHash]..., params
     pub authored: String,
     /// sha256(identity + upstream + authored)
@@ -908,14 +1010,18 @@ fn normalize_variable(v: &Value) -> Value {
 /// of the published template has its published content. A manifest of the draft has its draft
 /// content, and its published content when the draft did not change it: Palette writes the draft
 /// content of a manifest at an edit, and empties it at the publish.
-fn manifests_of_template(pk: &Value, entities: &Value, template: &str) -> Vec<Value> {
+fn manifests_of_template(pk: &Value, entities: &Value, template: Template) -> Vec<Value> {
     arr(pk, "/manifests")
         .iter()
         .map(|m| {
             let uid = text(m, "/uid");
             let entity = entities.get(&uid).unwrap_or(&Value::Null);
             let edited = !text(entity, &format!("/spec/{template}/content")).is_empty();
-            let from = if edited { template } else { PUBLISHED_TEMPLATE };
+            let from = if edited {
+                template
+            } else {
+                Template::Published
+            };
             let content = text(entity, &format!("/spec/{from}/content"));
             json!({
                 "name": first_nonempty(&[str_at(m, "/name"), str_at(entity, "/metadata/name")]),
@@ -932,7 +1038,7 @@ impl Pack {
     /// `upstream` hash is the hash of nothing and a change of its archive cannot show. A manifest
     /// pack has no archive: its content is the manifests of the profile, which `authored` covers.
     pub fn upstream_unknown(&self) -> bool {
-        self.hash.upstream_source == "none" && self.kind != "manifest"
+        self.hash.upstream_source == UpstreamSource::NoDigest && self.kind != "manifest"
     }
 
     /// The machine image that the pack names in its annotation `imageId`, when it names one.
@@ -1023,11 +1129,11 @@ impl Pack {
             "packUid": pack_uid, "registryUid": registry_uid,
         })));
         let (upstream_raw, upstream_source) = if !ref_digest.is_empty() {
-            (ref_digest.clone(), "packRef.digest")
+            (ref_digest.clone(), UpstreamSource::PackRef)
         } else if !registry_digest.is_empty() {
-            (registry_digest.clone(), "packSummary.digest")
+            (registry_digest.clone(), UpstreamSource::PackSummary)
         } else {
-            (String::new(), "none")
+            (String::new(), UpstreamSource::NoDigest)
         };
         let upstream = sha256_hex(&upstream_raw);
         let authored = sha256_hex(&canonical_json(&json!({
@@ -1068,7 +1174,7 @@ impl Pack {
                 identity,
                 upstream,
                 upstream_raw,
-                upstream_source: upstream_source.to_string(),
+                upstream_source,
                 authored,
                 node,
             },
@@ -1088,18 +1194,27 @@ fn macros_of(packs: &[Pack]) -> Vec<String> {
     names.into_iter().collect()
 }
 
+/// The prefix of a user macro in a value or a manifest: `{{.spectro.macro.NAME}}`. A system
+/// macro, `{{.spectro.system.NAME}}`, has another prefix.
+const MACRO_PREFIX: &str = ".spectro.macro.";
+
+/// The placeholder of the user macro `name`, as the resolved values of Palette key it:
+/// `{{.spectro.macro.NAME}}`.
+fn macro_placeholder(name: &str) -> String {
+    format!("{{{{{MACRO_PREFIX}{name}}}}}")
+}
+
 /// The names of the user macros that `text` uses: each `{{.spectro.macro.NAME}}`, with spaces
 /// after `{{` allowed. A name holds letters, digits, `_`, `-`, and `.`. A system macro,
 /// `{{.spectro.system.NAME}}`, is not a user macro: Palette gives it from the cluster, and no
 /// person edits it.
 pub fn macro_names(text: &str) -> std::collections::BTreeSet<String> {
-    const PREFIX: &str = ".spectro.macro.";
     let mut names = std::collections::BTreeSet::new();
     let mut rest = text;
     while let Some(i) = rest.find("{{") {
         rest = &rest[i + 2..];
         let body = rest.trim_start();
-        if let Some(after) = body.strip_prefix(PREFIX) {
+        if let Some(after) = body.strip_prefix(MACRO_PREFIX) {
             let name: String = after
                 .chars()
                 .take_while(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.'))
@@ -1135,9 +1250,9 @@ impl Snapshot {
     /// of its draft when it has no published template.
     pub fn from_raw(raw: &RawProfile, reference: &str, fetched_at: &str) -> Result<Snapshot> {
         if arr(&raw.profile, "/spec/published/packs").is_empty() {
-            Self::from_raw_template(raw, reference, fetched_at, DRAFT_TEMPLATE)
+            Self::from_raw_template(raw, reference, fetched_at, Template::Draft)
         } else {
-            Self::from_raw_template(raw, reference, fetched_at, PUBLISHED_TEMPLATE)
+            Self::from_raw_template(raw, reference, fetched_at, Template::Published)
         }
     }
 
@@ -1152,22 +1267,22 @@ impl Snapshot {
                 uid: text(prof, "/metadata/uid"),
             });
         }
-        Self::from_raw_template(raw, reference, fetched_at, DRAFT_TEMPLATE)
+        Self::from_raw_template(raw, reference, fetched_at, Template::Draft)
     }
 
-    /// Build a snapshot of one template of a profile, [`PUBLISHED_TEMPLATE`] or
-    /// [`DRAFT_TEMPLATE`].
+    /// Build a snapshot of one template of a profile: [`Template::Published`] or
+    /// [`Template::Draft`].
     fn from_raw_template(
         raw: &RawProfile,
         reference: &str,
         fetched_at: &str,
-        template: &str,
+        template: Template,
     ) -> Result<Snapshot> {
         let prof = &raw.profile;
         let tpl_ptr = format!("/spec/{template}");
         let tpl_packs = arr(prof, &format!("{tpl_ptr}/packs"));
         let mut mpacks = arr(&raw.manifests, "/spec/packs").to_vec();
-        if crate::api::has_draft(prof) && template == PUBLISHED_TEMPLATE {
+        if crate::api::has_draft(prof) && template == Template::Published {
             // packs/manifests holds the packs of the draft: keep only the entries of the packs
             // that the published template holds, by pack uid
             let uids: BTreeSet<&str> = tpl_packs.iter().map(|pk| str_at(pk, "/packUid")).collect();
@@ -1184,35 +1299,10 @@ impl Snapshot {
             })
             .unwrap_or_default();
         let clusters = strings(prof, "/status/inUseClusterUids");
-        let source = Source {
-            reference: reference.to_string(),
-            uid: text(prof, "/metadata/uid"),
-            project_uid: String::new(),
-            name: text(prof, "/metadata/name"),
-            version: text(prof, "/spec/version"),
-            cloud_type: text(prof, &format!("{tpl_ptr}/cloudType")),
-            kind: text(prof, &format!("{tpl_ptr}/type")),
-            template: template.to_string(),
-            variables_unavailable: raw.variables_unavailable,
-            tags,
-            consumers: Some(Consumers {
-                count: clusters.len(),
-                clusters,
-            }),
-            fetched_at: fetched_at.to_string(),
-            cluster: None,
-            pack: None,
-            palette_validation: None,
-            macro_values: None,
-        };
-
-        let mut variables: Vec<Value> = arr(&raw.variables, "/variables")
+        let variables: Vec<Value> = arr(&raw.variables, "/variables")
             .iter()
             .map(normalize_variable)
             .collect();
-        variables.sort_by_key(|v| text(v, "/name"));
-        let variables_hash = sha256_hex(&canonical_json(&Value::Array(variables.clone())));
-
         let packs: Vec<Pack> = tpl_packs
             .iter()
             .map(|pk| {
@@ -1225,26 +1315,51 @@ impl Snapshot {
                 Pack::from_api_with(pk, &mpacks, given)
             })
             .collect();
-
-        let root = root_of(&variables_hash, &packs);
         let source = Source {
+            reference: reference.to_string(),
+            uid: text(prof, "/metadata/uid"),
+            project_uid: String::new(),
+            name: text(prof, "/metadata/name"),
+            version: text(prof, "/spec/version"),
+            cloud_type: text(prof, &format!("{tpl_ptr}/cloudType")),
+            kind: text(prof, &format!("{tpl_ptr}/type")),
+            template,
+            variables_unavailable: raw.variables_unavailable,
+            tags,
+            consumers: Some(Consumers {
+                count: clusters.len(),
+                clusters,
+            }),
+            fetched_at: fetched_at.to_string(),
+            cluster: None,
+            pack: None,
+            palette_validation: None,
             macro_values: raw
                 .resolved_values
                 .as_ref()
                 .map(|r| profile_macro_digests(r, &macros_of(&packs))),
-            ..source
         };
+        Ok(Snapshot::assemble(source, variables, packs))
+    }
 
-        Ok(Snapshot {
+    /// The record of `source`, with `variables` sorted by name, `packs` in profile order, and
+    /// the root and the content digest over both.
+    ///
+    /// Each kind of record comes from this function. A change here moves the root of each one, so
+    /// it is a change of the schema id.
+    fn assemble(source: Source, mut variables: Vec<Value>, packs: Vec<Pack>) -> Snapshot {
+        variables.sort_by_key(|v| text(v, "/name"));
+        let variables_hash = sha256_hex(&canonical_json(&Value::Array(variables.clone())));
+        Snapshot {
             schema: SNAPSHOT_SCHEMA.to_string(),
             tool: Tool::current(),
             source,
-            variables,
+            root: root_of(&variables_hash, &packs),
             content_digest: content_of(&variables_hash, &packs),
+            variables,
             variables_hash,
             packs,
-            root,
-        })
+        }
     }
 
     /// The content digest: equal for two objects that are the same version, where the root is
@@ -1336,11 +1451,8 @@ impl Snapshot {
             .collect::<Result<Vec<Snapshot>>>()?;
         let covered: Vec<AppliedProfile> = chosen.iter().map(|&i| applied[i].clone()).collect();
 
-        let mut variables: Vec<Value> = parts.iter().flat_map(|p| p.variables.clone()).collect();
-        variables.sort_by_key(|v| text(v, "/name"));
-        let variables_hash = sha256_hex(&canonical_json(&Value::Array(variables.clone())));
+        let variables: Vec<Value> = parts.iter().flat_map(|p| p.variables.clone()).collect();
         let packs: Vec<Pack> = parts.iter().flat_map(|p| p.packs.clone()).collect();
-        let root = root_of(&variables_hash, &packs);
 
         let joined = |f: fn(&Source) -> &String| {
             parts
@@ -1364,7 +1476,7 @@ impl Snapshot {
                 .filter(|c| !c.is_empty())
                 .unwrap_or_else(|| text(&raw.cluster, "/spec/cloudType")),
             kind: joined(|s| &s.kind),
-            template: "applied".to_string(),
+            template: Template::Applied,
             variables_unavailable: raw.variables_unavailable,
             tags: BTreeMap::new(),
             consumers: None,
@@ -1417,16 +1529,7 @@ impl Snapshot {
                 }
             }),
         };
-        Ok(Snapshot {
-            schema: SNAPSHOT_SCHEMA.to_string(),
-            tool: Tool::current(),
-            source,
-            variables,
-            content_digest: content_of(&variables_hash, &packs),
-            variables_hash,
-            packs,
-            root,
-        })
+        Ok(Snapshot::assemble(source, variables, packs))
     }
 
     /// What Palette holds of a version that it no longer has: the source of the record, fetched
@@ -1436,17 +1539,7 @@ impl Snapshot {
         let mut source = self.source.clone();
         source.fetched_at = checked_at.to_string();
         source.consumers = None;
-        let variables_hash = sha256_hex(&canonical_json(&Value::Array(Vec::new())));
-        Snapshot {
-            schema: SNAPSHOT_SCHEMA.to_string(),
-            tool: Tool::current(),
-            source,
-            variables: Vec::new(),
-            content_digest: content_of(&variables_hash, &[]),
-            root: root_of(&variables_hash, &[]),
-            variables_hash,
-            packs: Vec::new(),
-        }
+        Snapshot::assemble(source, Vec::new(), Vec::new())
     }
 
     /// Mark a record of a cluster as the profiles of the update that waits for it. Whether an
@@ -1510,15 +1603,10 @@ impl Snapshot {
         }
     }
 
-    /// Serialize, pretty-printed unless `compact`, with a trailing newline.
+    /// Serialize, pretty-printed unless `compact`, with a trailing newline: the document of the
+    /// record, as [`JsonRenderer`](crate::render::JsonRenderer) writes each document.
     pub fn to_json(&self, compact: bool) -> Result<String> {
-        let mut s = if compact {
-            serde_json::to_string(self)?
-        } else {
-            serde_json::to_string_pretty(self)?
-        };
-        s.push('\n');
-        Ok(s)
+        crate::render::JsonRenderer { compact }.document(self)
     }
 }
 
@@ -1578,5 +1666,72 @@ mod tests {
         assert_eq!(unread.fields, read.fields);
         assert_eq!(unread.hash, read.hash);
         assert_eq!(unread.errors, errors);
+    }
+
+    /// `as_str` of each value equals its text in the documents, and the text reads back.
+    fn names_its_values<T>(values: &[T], as_str: fn(T) -> &'static str)
+    where
+        T: Copy + PartialEq + fmt::Debug + Serialize + serde::de::DeserializeOwned,
+    {
+        for v in values {
+            let text = Value::String(as_str(*v).to_string());
+            assert_eq!(serde_json::to_value(v).unwrap(), text);
+            assert_eq!(serde_json::from_value::<T>(text).unwrap(), *v);
+        }
+    }
+
+    #[test]
+    fn each_closed_set_of_a_record_prints_as_the_documents_name_it() {
+        names_its_values(
+            &[
+                Template::Published,
+                Template::Draft,
+                Template::Applied,
+                Template::Candidate,
+                Template::Registry,
+            ],
+            Template::as_str,
+        );
+        names_its_values(
+            &[
+                UpstreamSource::PackRef,
+                UpstreamSource::PackSummary,
+                UpstreamSource::NoDigest,
+            ],
+            UpstreamSource::as_str,
+        );
+        names_its_values(
+            &[
+                Tier::Applied,
+                Tier::Labels,
+                Tier::Policy,
+                Tier::Running,
+                Tier::Shape,
+            ],
+            Tier::as_str,
+        );
+        // the map of the tiers keeps the order of the names, as a map keyed by text did
+        let tiers: BTreeMap<Tier, u8> = [
+            (Tier::Shape, 0),
+            (Tier::Running, 0),
+            (Tier::Policy, 0),
+            (Tier::Applied, 0),
+        ]
+        .into_iter()
+        .collect();
+        assert_eq!(
+            serde_json::to_string(&tiers).unwrap(),
+            r#"{"applied":0,"policy":0,"running":0,"shape":0}"#
+        );
+    }
+
+    #[test]
+    fn the_placeholder_of_a_macro_is_what_macro_names_reads() {
+        let key = macro_placeholder("region");
+        assert_eq!(key, "{{.spectro.macro.region}}");
+        assert_eq!(
+            macro_names(&key).into_iter().collect::<Vec<_>>(),
+            ["region"]
+        );
     }
 }
