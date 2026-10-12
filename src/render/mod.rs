@@ -43,9 +43,10 @@ pub trait Renderer {
     /// format supports them.
     fn render(&self, d: &Diff, a: &Snapshot, b: &Snapshot, full: bool) -> Result<String>;
 
-    /// One line stating the outcome of `verify`, or `None` for formats where the document itself
-    /// carries it.
-    fn verdict(&self, _v: &Verify, _recorded: &Source) -> Option<String> {
+    /// One line that states the outcome of `verify`.
+    ///
+    /// `None` for a diff with no verify, and for the formats whose document carries the outcome.
+    fn verdict(&self, _d: &Diff) -> Option<String> {
         None
     }
 
@@ -104,7 +105,7 @@ pub(crate) fn virtual_group(v: &crate::ops::VirtualCluster) -> Option<String> {
 }
 
 /// The name of an object, or its uid when Palette gives no name.
-pub(crate) fn name_or_uid<'a>(name: &'a str, uid: &'a str) -> &'a str {
+fn name_or_uid<'a>(name: &'a str, uid: &'a str) -> &'a str {
     if name.is_empty() { uid } else { name }
 }
 
@@ -269,15 +270,18 @@ pub(crate) fn version_note(v: &crate::ops::PackBuild) -> Option<String> {
     ])
 }
 
-/// `no version of csi-aws-ebs supports edge-native`: the one line of a listing that `--cloud`
-/// left empty. None when a registry has the pack.
+/// The one line of a listing that keeps no registry, or None when a registry has the pack.
+///
+/// `no version of csi-aws-ebs supports edge-native` when `--cloud` left the listing empty.
+/// `Palette serves no version of csi-aws-ebs` with no `--cloud`: the registry gives no version of
+/// the pack a tag, for example when none is FIPS compliant, so strata shows none.
 pub(crate) fn no_version_sentence(l: &PackListing) -> Option<String> {
     if !l.registries.is_empty() {
         return None;
     }
     Some(match &l.cloud {
         Some(cloud) => format!("no version of {} supports {cloud}", l.name),
-        None => format!("no registry has a version of {}", l.name),
+        None => format!("Palette serves no version of {}", l.name),
     })
 }
 
@@ -425,7 +429,7 @@ pub(crate) fn releases_of_each_other(d: &Diff) -> bool {
 }
 
 /// The note for a comparison whose two sides are not releases of each other.
-pub(crate) fn cross_kind_note(d: &Diff) -> Option<String> {
+fn cross_kind_note(d: &Diff) -> Option<String> {
     if releases_of_each_other(d) {
         return None;
     }
@@ -481,6 +485,7 @@ pub(crate) fn diff_notes(d: &Diff) -> Vec<DiffNote> {
 }
 
 /// `pack order changed between the two profiles`, for a diff whose packs are in another order.
+///
 /// Palette keeps the order of the packs, so two orders are two roots.
 pub(crate) fn pack_order_note(d: &Diff) -> Option<&'static str> {
     d.order_changed
@@ -501,7 +506,7 @@ pub(crate) fn variables_comparable(d: &Diff) -> bool {
 /// A note for a side whose variables endpoint Palette did not serve. That side's root is the root
 /// of a version with no variables, so it cannot be compared with a side read from a Palette that
 /// serves the endpoint. Nothing else in the report tells the two apart.
-pub(crate) fn variables_unavailable_note(d: &Diff) -> Option<String> {
+fn variables_unavailable_note(d: &Diff) -> Option<String> {
     let sides = match (d.a.variables_unavailable, d.b.variables_unavailable) {
         (true, true) => "both sides",
         (true, false) => "side A",
@@ -609,9 +614,10 @@ pub(crate) fn edge_hosts_line(r: &ConsumersReport) -> String {
     }
 }
 
-/// `second reading: 3 of 3 clusters read`, or why the second reading was not done. `--list-only`
-/// asked for none, an app profile has none, or the search or the listing failed. `code` puts the
-/// flag in the form of the report.
+/// `second reading: 3 of 3 clusters read`, or why the second reading was not done.
+///
+/// `--list-only` asked for none, an app profile has none, or the search or the listing failed.
+/// `code` puts the flag in the form of the report.
 pub(crate) fn second_reading_line(read: &ClustersRead, code: fn(&str) -> String) -> String {
     // The consumer list of a profile is empty on an error too, so the second reading says how
     // far it got.
@@ -675,8 +681,10 @@ pub(crate) fn record_word(status: RecordStatus) -> &'static str {
     }
 }
 
-/// The word of a diff: `IDENTICAL`, `SAME CONTENT`, or `CHANGED`. The roots of the same content
-/// differ only by the tag name of a pack, or by the uid that Palette mints.
+/// The word of a diff: `IDENTICAL`, `SAME CONTENT`, or `CHANGED`.
+///
+/// The roots of the same content differ only by the tag name of a pack, or by the uid that
+/// Palette mints.
 pub(crate) fn diff_word(d: &Diff) -> &'static str {
     if d.same {
         "IDENTICAL"
@@ -777,7 +785,7 @@ pub(crate) fn record_label(name: &str, version: &str) -> String {
 /// For a cluster record whose running profile versions are gone from Palette: `cluster c runs
 /// name@1.2.0, but uid u now names 1.3.0: the version was overwritten in place`, or `but uid u no
 /// longer exists`, one clause per profile.
-pub(crate) fn profiles_overwritten_sentence(v: &Verify, recorded: &Source) -> Option<String> {
+fn profiles_overwritten_sentence(v: &Verify, recorded: &Source) -> Option<String> {
     if v.profiles_overwritten.is_empty() {
         return None;
     }
@@ -816,7 +824,7 @@ fn record_verify(r: &crate::ops::VerifiedRecord) -> Option<&Verify> {
 /// `uid u is name@1.2.0 on one side and name@1.3.0 on the other: the version was overwritten in
 /// place`, one per profile uid the two sides name under different versions. A verify whose verdict
 /// already says the recorded version was overwritten gets none.
-pub(crate) fn overwritten_in_place_notes(d: &Diff) -> Vec<String> {
+fn overwritten_in_place_notes(d: &Diff) -> Vec<String> {
     if d.verify
         .as_ref()
         .is_some_and(|v| v.overwritten_by.is_some() || v.renamed_to.is_some())
@@ -838,7 +846,7 @@ pub(crate) fn overwritten_in_place_notes(d: &Diff) -> Vec<String> {
 /// `the roots differ only by the tag name a pack is pinned under: the same pack build`, or by the
 /// packUid that Palette mints for a manifest pack or for a pack from a registry that it does not
 /// sync, for a diff whose roots differ in nothing else.
-pub(crate) fn same_content_note(d: &Diff) -> Option<String> {
+fn same_content_note(d: &Diff) -> Option<String> {
     if d.same || !d.same_content {
         return None;
     }
@@ -866,7 +874,7 @@ pub(crate) fn tag_rename(pd: &PackDiff) -> Option<String> {
 /// The note for the user macros the content uses: `the content uses macro region: the root
 /// covers its name and not its value, so an edit of the macro does not show`. None when it uses
 /// none.
-pub(crate) fn macros_note(d: &Diff) -> Option<String> {
+fn macros_note(d: &Diff) -> Option<String> {
     let (noun, pron) = match d.macros.len() {
         0 => return None,
         1 => ("macro", "its name and not its value"),
@@ -881,7 +889,7 @@ pub(crate) fn macros_note(d: &Diff) -> Option<String> {
 /// Why a record with the recorded content drifted: `macro region has another value now`, and
 /// `pack os/ubuntu-aws names image ami-2 now, not ami-1`. None when no macro value and no image
 /// moved.
-pub(crate) fn outside_root_sentence(macros: &[String], images: &[ImageIdChange]) -> Option<String> {
+fn outside_root_sentence(macros: &[String], images: &[ImageIdChange]) -> Option<String> {
     let mut parts = match macros {
         [] => Vec::new(),
         [one] => vec![format!("macro {one} has another value now")],
@@ -897,7 +905,7 @@ pub(crate) fn outside_root_sentence(macros: &[String], images: &[ImageIdChange])
 
 /// The note for two records whose macro values differ: `macros` names each macro, as
 /// [`Diff::macros_changed`] does. None when it is empty.
-pub(crate) fn macros_changed_note(macros: &[String]) -> Option<String> {
+fn macros_changed_note(macros: &[String]) -> Option<String> {
     let names = match macros {
         [] => return None,
         [one] => format!("macro {one} has another value on each side"),
@@ -928,7 +936,7 @@ pub(crate) fn macros_not_compared_note(macros: &[String]) -> Option<String> {
 
 /// One note for each pack whose two sides name another machine image: `pack os/ubuntu-aws names
 /// image ami-1 on one side and ami-2 on the other: the root does not cover the annotations`.
-pub(crate) fn image_ids_changed_notes(d: &Diff) -> Vec<String> {
+fn image_ids_changed_notes(d: &Diff) -> Vec<String> {
     d.image_ids_changed
         .iter()
         .map(ImageIdChange::sentence)
@@ -968,7 +976,7 @@ pub(crate) fn invalid_pack_sentences(packs: &[InvalidPack]) -> Vec<String> {
 /// Palette's answer to `--repave`, one line for each reason: `repave: PackValuesUpdated
 /// kubernetes (kubeadmconfig.postKubeadmCommands)`, or `no repave`. For a cluster in a cluster
 /// template, a first line names the template that Palette answered for. Empty without the option.
-pub(crate) fn palette_repave_lines(d: &Diff) -> Vec<String> {
+fn palette_repave_lines(d: &Diff) -> Vec<String> {
     let Some(r) = &d.palette_repave else {
         return Vec::new();
     };
@@ -1005,7 +1013,7 @@ fn repave_reason_text(x: &PaletteRepaveReason) -> String {
 
 /// Palette's answer to `--validate`: `accepts`, or one line for each error, `refuses:
 /// PackDependencyNotFound strata-live-pack: <message>`. Empty without the option.
-pub(crate) fn palette_validation_lines(d: &Diff) -> Vec<String> {
+fn palette_validation_lines(d: &Diff) -> Vec<String> {
     d.palette_validation
         .as_ref()
         .map(|v| crate::validation::answer_lines(&v.errors))
@@ -1013,7 +1021,7 @@ pub(crate) fn palette_validation_lines(d: &Diff) -> Vec<String> {
 }
 
 /// The note when the impact table and Palette disagree about a repave.
-pub(crate) fn palette_repave_note(d: &Diff) -> Option<String> {
+fn palette_repave_note(d: &Diff) -> Option<String> {
     let r = d.palette_repave.as_ref().filter(|r| !r.agrees)?;
     Some(format!(
         "the impact table says {}, and Palette says {} for {}: the table does not describe its \
@@ -1030,7 +1038,7 @@ pub(crate) fn palette_repave_note(d: &Diff) -> Option<String> {
 
 /// The note for the packs with no upstream digest: `pack csi/x has no upstream digest: Palette
 /// gives none, so a change of its archive does not show`. None when every pack has one.
-pub(crate) fn upstream_unknown_note(d: &Diff) -> Option<String> {
+fn upstream_unknown_note(d: &Diff) -> Option<String> {
     (!d.upstream_unknown.is_empty()).then(|| {
         format!(
             "{}: Palette gives none, {ARCHIVE_CHANGE_HIDDEN}",
@@ -1039,8 +1047,9 @@ pub(crate) fn upstream_unknown_note(d: &Diff) -> Option<String> {
     })
 }
 
-/// `pack csi/x has no upstream digest`, or `packs csi/x, csi/y have no upstream digest`. Each
-/// sentence about the packs whose archive a root cannot show starts with it.
+/// `pack csi/x has no upstream digest`, or `packs csi/x, csi/y have no upstream digest`.
+///
+/// Each sentence about the packs whose archive a root cannot show starts with it.
 pub(crate) fn no_upstream_digest(packs: &[String]) -> String {
     let (noun, verb) = if packs.len() == 1 {
         ("pack", "has")
@@ -1064,7 +1073,7 @@ pub(crate) fn masked_sentence(key: &str, paths: &[String]) -> String {
 }
 
 /// One note for each pack with a value that Palette masks: see [`masked_sentence`].
-pub(crate) fn masked_notes(d: &Diff) -> Vec<String> {
+fn masked_notes(d: &Diff) -> Vec<String> {
     d.masked_packs()
         .iter()
         .map(|m| masked_sentence(&m.key, &m.paths))
@@ -1074,7 +1083,7 @@ pub(crate) fn masked_notes(d: &Diff) -> Vec<String> {
 /// One note for each cluster side that Palette says is behind its profile: `cluster fred is
 /// behind: an update of strata-live-addon waits, since <time>`. A side read when nothing waited,
 /// or whose notifications were not read, gets none.
-pub(crate) fn updates_pending_notes(d: &Diff) -> Vec<String> {
+fn updates_pending_notes(d: &Diff) -> Vec<String> {
     [&d.a, &d.b]
         .into_iter()
         .filter_map(|side| side.cluster.as_ref())
@@ -1104,7 +1113,7 @@ pub(crate) fn pending_profile_names(updates: &[PendingUpdate]) -> String {
 /// One note for each cluster side that Palette says holds a repave for approval: `a repave of
 /// cluster fred waits for approval, since <time>: PackValuesUpdated kubernetes
 /// (kubeadmconfig.postKubeadmCommands)`. Two sides that say the same get one note.
-pub(crate) fn repave_pending_notes(d: &Diff) -> Vec<String> {
+fn repave_pending_notes(d: &Diff) -> Vec<String> {
     let mut notes: Vec<String> = [&d.a, &d.b]
         .into_iter()
         .filter_map(|side| side.cluster.as_ref())
@@ -1133,7 +1142,7 @@ pub(crate) fn repave_pending_notes(d: &Diff) -> Vec<String> {
 /// One note for each field of a cluster tier that strata could not read on a side: `strata could
 /// not read policy.rbacs of cluster fred (HTTP 403: forbidden), so it does not compare it`, in
 /// text order. Two sides that say the same get one note.
-pub(crate) fn unread_notes(d: &Diff) -> Vec<String> {
+fn unread_notes(d: &Diff) -> Vec<String> {
     let notes: std::collections::BTreeSet<String> = [&d.a, &d.b]
         .into_iter()
         .filter_map(|side| side.cluster.as_ref())
@@ -1154,7 +1163,7 @@ pub(crate) fn unread_notes(d: &Diff) -> Vec<String> {
 
 /// One note for each pack that a cluster side runs at another version than its profile
 /// declares: `cluster fred runs kubernetes 1.36.1, and its profile declares 1.36.2`.
-pub(crate) fn running_behind_notes(d: &Diff) -> Vec<String> {
+fn running_behind_notes(d: &Diff) -> Vec<String> {
     d.running_behind
         .iter()
         .map(|r| {
@@ -1189,7 +1198,7 @@ pub(crate) fn tier_states(d: &Diff) -> Vec<(String, bool)> {
 
 /// `aws-stack@1.1.1@draft is the draft of aws-stack@1.1.1 (uid u): its publish makes this
 /// change`, for a diff of a version and its draft whose roots differ.
-pub(crate) fn draft_note(d: &Diff) -> Option<String> {
+fn draft_note(d: &Diff) -> Option<String> {
     let draft = match (d.a.is_draft(), d.b.is_draft()) {
         (false, true) => &d.b,
         (true, false) => &d.a,
@@ -1205,7 +1214,7 @@ pub(crate) fn draft_note(d: &Diff) -> Option<String> {
 
 /// What a verdict says that a record holds: `the draft` for a record of `<ref>@draft`, which the
 /// verify compares with the published version, and `the copy` for each other record.
-pub(crate) fn recorded_noun(recorded: &Source) -> &'static str {
+fn recorded_noun(recorded: &Source) -> &'static str {
     if recorded.is_draft() {
         "the draft"
     } else {
@@ -1224,8 +1233,9 @@ fn unchanged_sentence(draft: bool, at: &str) -> String {
     }
 }
 
-/// What a verdict states, in the order that each report tests it. The first case that holds
-/// wins.
+/// What a verdict states.
+///
+/// The cases are in the order that each report tests them: the first case that holds wins.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum VerdictCase {
     /// The root did not move.
@@ -1240,13 +1250,14 @@ pub(crate) enum VerdictCase {
     Renamed,
     /// The uid names another version: the recorded one was overwritten in place.
     OverwrittenBy,
-    /// The content is the recorded content, and a macro value or a machine image moved.
+    /// The root did not move, and a macro value or a machine image moved.
     OutsideRoot,
     /// The root moved.
     RootMoved,
 }
 
-fn verdict_case(v: &Verify) -> VerdictCase {
+/// The case of a verdict. `same` is whether the root did not move, from `Diff::same`.
+fn verdict_case(v: &Verify, same: bool) -> VerdictCase {
     match v.status {
         VerifyStatus::Unchanged => VerdictCase::Unchanged,
         VerifyStatus::Unverified => VerdictCase::Unverified,
@@ -1256,8 +1267,10 @@ fn verdict_case(v: &Verify) -> VerdictCase {
         VerifyStatus::Drifted if v.gone => VerdictCase::Gone,
         VerifyStatus::Drifted if v.renamed_to.is_some() => VerdictCase::Renamed,
         VerifyStatus::Drifted if v.overwritten_by.is_some() => VerdictCase::OverwrittenBy,
+        // The verify names a macro whose value moved also when the root moved. The verdict
+        // states the root then: the content differs, and the report names the macro in a note.
         VerifyStatus::Drifted
-            if !v.macros_changed.is_empty() || !v.image_ids_changed.is_empty() =>
+            if same && (!v.macros_changed.is_empty() || !v.image_ids_changed.is_empty()) =>
         {
             VerdictCase::OutsideRoot
         }
@@ -1265,9 +1278,10 @@ fn verdict_case(v: &Verify) -> VerdictCase {
     }
 }
 
-/// The verdict of a record, in parts, so that each report builds its line one way. The terminal
-/// and the markdown put the subject before the sentence. A row of the summary names the record
-/// in its own column.
+/// The verdict of a record, in parts, so that each report builds its line one way.
+///
+/// The terminal and the markdown put the subject before the sentence. A row of the summary names
+/// the record in its own column.
 pub(crate) struct VerdictParts {
     /// `OK`, `UNVERIFIED`, or `DRIFT`.
     pub(crate) word: &'static str,
@@ -1296,14 +1310,19 @@ impl VerdictParts {
     }
 }
 
-/// The parts of the verdict of a record. `code` puts a uid in the form of the report.
+/// The parts of the verdict of a record.
+///
+/// `same` is whether the root did not move, from `Diff::same`: a macro value that moved is drift
+/// outside the root only then. `recorded` is the source of the record, side A of the diff.
+/// `code` puts a uid in the form of the report.
 pub(crate) fn verdict_parts(
     v: &Verify,
+    same: bool,
     recorded: &Source,
     code: fn(&str) -> String,
 ) -> VerdictParts {
     let at = recorded.fetched_at.as_str();
-    let case = verdict_case(v);
+    let case = verdict_case(v, same);
     let sentence = match case {
         VerdictCase::Unchanged => unchanged_sentence(recorded.is_draft(), at),
         VerdictCase::Unverified => format!(
@@ -1349,7 +1368,7 @@ pub(crate) fn verdict_parts(
     }
 }
 
-pub(crate) fn edited_in_place_note(d: &Diff) -> Option<String> {
+fn edited_in_place_note(d: &Diff) -> Option<String> {
     // a version that Palette no longer has was deleted, and not edited
     let gone = d.verify.as_ref().is_some_and(|v| v.gone);
     (d.edited_in_place && !gone).then(|| {
@@ -1410,7 +1429,7 @@ pub(crate) fn who_entry(e: &crate::diff::AuditEntry, uid: &str) -> String {
 
 /// `; Palette last changed it <time>`: the end of a `DRIFT` verdict, from `verify.lastModified`.
 /// Nothing for another verdict, or when Palette gives no time.
-pub(crate) fn last_modified_suffix(v: &Verify) -> String {
+fn last_modified_suffix(v: &Verify) -> String {
     match &v.last_modified {
         Some(at) if v.status == crate::diff::VerifyStatus::Drifted => {
             format!("; Palette last changed it {at}")
@@ -1466,7 +1485,7 @@ fn record_sentence(r: &VerifiedRecord) -> String {
             .unwrap_or("could not be checked")
             .to_string(),
         (_, Some((d, v))) => {
-            let parts = verdict_parts(v, &d.a, str::to_string);
+            let parts = verdict_parts(v, d.same, &d.a, str::to_string);
             // the report of one record shows the impact of its diff above the verdict, and a row
             // of the summary states it
             let impact = match parts.case {
@@ -1537,8 +1556,9 @@ pub fn renderer(format: Format, paint: Paint, compact: bool) -> Box<dyn Renderer
     }
 }
 
-/// One line of a diff of values: a leaf, or a value that a cluster gives a variable. It holds
-/// the path and the two sides as the reports show them.
+/// One line of a diff of values: a leaf, or a value that a cluster gives a variable.
+///
+/// It holds the path and the two sides as the reports show them.
 pub(crate) struct OpLine {
     pub(crate) op: Op,
     pub(crate) path: String,
@@ -1737,7 +1757,7 @@ pub(crate) fn variable_lines(g: &VariablesByName) -> Vec<VarLine<'_>> {
 /// when the last complete sync of the registry started, that a sync runs now, or that the last
 /// sync failed. It also names a recovery of a sync that stopped. Palette holds a copy of each
 /// registry, and the answer states that copy. Nothing when Palette gives no sync.
-pub(crate) fn registry_sync_suffix(sync: Option<&crate::diff::RegistrySync>) -> String {
+fn registry_sync_suffix(sync: Option<&crate::diff::RegistrySync>) -> String {
     let Some(s) = sync else {
         return String::new();
     };
@@ -1788,9 +1808,10 @@ pub(crate) fn values_summary(v: &ValuesDiff) -> String {
     )
 }
 
-/// `values changed (not parseable as YAML on one side; use --full for a unified diff)`. The
-/// values of the pack changed, and one side did not parse. `code` puts the flag in the form of
-/// the report.
+/// `values changed (not parseable as YAML on one side; use --full for a unified diff)`.
+///
+/// The values of the pack changed, and one side did not parse. `code` puts the flag in the form
+/// of the report.
 pub(crate) fn values_unparsed_sentence(code: fn(&str) -> String) -> String {
     format!(
         "values changed (not parseable as YAML on one side; use {} for a unified diff)",
@@ -1813,7 +1834,7 @@ fn normal_state(state: &str) -> bool {
 
 /// `; the cluster is Deleting`: the state of the object of a record, when it is not the state of
 /// one that runs what it holds, and the object is not gone. Nothing for a profile record.
-pub(crate) fn state_suffix(v: &Verify, recorded: &Source) -> String {
+fn state_suffix(v: &Verify, recorded: &Source) -> String {
     match (&recorded.cluster, &v.state) {
         (Some(c), Some(state)) if !v.gone && !normal_state(state) => {
             format!("; the {} is {state}", c.kind.noun())
@@ -1834,7 +1855,7 @@ fn gone_subject(recorded: &Source) -> String {
 /// `cluster c no longer exists: deleted <time>` when Palette keeps the document of the deleted
 /// object, else `... no longer exists: uid u is gone from Palette since the record of <time>`.
 /// `code` puts the uid in the form of the report.
-pub(crate) fn gone_sentence(v: &Verify, recorded: &Source, code: fn(&str) -> String) -> String {
+fn gone_sentence(v: &Verify, recorded: &Source, code: fn(&str) -> String) -> String {
     let what = gone_subject(recorded);
     match &v.deleted_at {
         Some(at) => format!("{what} no longer exists: deleted {at}"),
@@ -1847,7 +1868,7 @@ pub(crate) fn gone_sentence(v: &Verify, recorded: &Source, code: fn(&str) -> Str
 }
 
 /// `; 1 variable value changed`, or nothing when none did.
-pub(crate) fn values_changed_suffix(n: usize) -> String {
+fn values_changed_suffix(n: usize) -> String {
     if n == 0 {
         String::new()
     } else {

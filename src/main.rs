@@ -1042,12 +1042,7 @@ fn cmd_verify(a: &VerifyArgs) -> Result<ExitCode> {
     let v = ops::verify_with(&recorded, &palette, &now_utc(), &options, &progress)?;
     let renderer = a.out.renderer();
     print!("{}", renderer.render(&v.diff, &recorded, &v.live, false)?);
-    if let Some(line) = v
-        .diff
-        .verify
-        .as_ref()
-        .and_then(|ver| renderer.verdict(ver, &recorded.source))
-    {
+    if let Some(line) = renderer.verdict(&v.diff) {
         println!("{line}");
     }
     Ok(exit_for(v.status == diff::VerifyStatus::Unchanged))

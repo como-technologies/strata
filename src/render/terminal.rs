@@ -13,13 +13,13 @@ use super::{
 };
 use crate::api::mask::MASKED;
 use crate::color::Paint;
-use crate::diff::{Diff, ImpactLevel, Leaf, Op, PackDiff, Status, Verify, VerifyStatus};
+use crate::diff::{Diff, ImpactLevel, Leaf, Op, PackDiff, Status, VerifyStatus};
 use crate::error::Result;
 use crate::ops::{
     Chain, ConsumersReport, Listing, PackListing, PairStatus, RUNNING_STATE, RecordStatus,
     VerifySummary,
 };
-use crate::snapshot::{Snapshot, Source};
+use crate::snapshot::Snapshot;
 
 /// The width of each column: its widest cell, leaving out the last cell of each row, which is
 /// never padded.
@@ -344,15 +344,16 @@ impl Renderer for TerminalRenderer {
         Ok(s)
     }
 
-    fn verdict(&self, v: &Verify, recorded: &Source) -> Option<String> {
+    fn verdict(&self, d: &Diff) -> Option<String> {
+        let v = d.verify.as_ref()?;
         let p = &self.paint;
-        let parts = verdict_parts(v, recorded, str::to_string);
+        let parts = verdict_parts(v, d.same, &d.a, str::to_string);
         let word = match v.status {
             VerifyStatus::Unchanged => p.bgreen(parts.word),
             VerifyStatus::Unverified => p.byellow(parts.word),
             VerifyStatus::Drifted => p.bred(parts.word),
         };
-        let mut line = format!("{word}: {}", parts.line(recorded));
+        let mut line = format!("{word}: {}", parts.line(&d.a));
         for sentence in invalid_pack_sentences(&v.invalid_packs) {
             line.push_str(&format!("\n{}: {sentence}", p.bred("INVALID")));
         }

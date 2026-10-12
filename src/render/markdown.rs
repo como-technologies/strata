@@ -13,10 +13,10 @@ use super::{
     who_heading,
 };
 use crate::color::Paint;
-use crate::diff::{Diff, Leaf, Op, Status, Verify};
+use crate::diff::{Diff, Leaf, Op, Status};
 use crate::error::Result;
 use crate::ops::{Chain, ConsumersReport, Listing, PackListing, VerifySummary};
-use crate::snapshot::{Snapshot, Source};
+use crate::snapshot::Snapshot;
 
 /// Renders markdown for a pull request comment.
 pub struct MarkdownRenderer;
@@ -252,9 +252,10 @@ impl Renderer for MarkdownRenderer {
         Ok(o)
     }
 
-    fn verdict(&self, v: &Verify, recorded: &Source) -> Option<String> {
-        let parts = verdict_parts(v, recorded, code);
-        let mut line = format!("\n**{}**: {}", parts.word, parts.line(recorded));
+    fn verdict(&self, d: &Diff) -> Option<String> {
+        let v = d.verify.as_ref()?;
+        let parts = verdict_parts(v, d.same, &d.a, code);
+        let mut line = format!("\n**{}**: {}", parts.word, parts.line(&d.a));
         for sentence in invalid_pack_sentences(&v.invalid_packs) {
             line.push_str(&format!("\n\n**INVALID**: {}", escape(&sentence)));
         }
