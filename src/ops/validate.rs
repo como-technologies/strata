@@ -13,6 +13,7 @@ use crate::error::{
     PROFILE_IMPORT_REFUSAL_CODES, PROFILE_NAME_REFUSAL_CODES, PROFILE_PACK_REFUSAL_CODES, Result,
 };
 use crate::json::str_at;
+use crate::registry::Registries;
 use crate::snapshot::{AppliedProfile, Snapshot, SubjectKind};
 use crate::validation::{PaletteRefusal, PaletteValidation, ProfileValidation};
 
@@ -193,7 +194,7 @@ pub fn profile_validation<A: PaletteApi>(
     if uid.is_none() {
         let name = palette.validate_profile_name(&snap.source.name, &snap.source.version);
         errors.extend(refusal_in(name, name_refusal)?);
-        let body = profile_import_body(snap, &crate::candidate::registry_entries(palette)?);
+        let body = profile_import_body(snap, Registries::new(palette).metadata()?);
         errors.extend(refusal_in(
             palette.validate_profile_import(&body),
             import_refusal,

@@ -10,12 +10,12 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::api::{Palette, PaletteApi};
-use crate::candidate::RegistrySyncNote;
 use crate::cloud::supports;
 use crate::diff::RegistrySync;
 use crate::error::{Error, Result};
 use crate::impact::ImpactLevel;
 use crate::progress::Progress;
+use crate::registry::{Registries, RegistrySyncNote};
 use crate::snapshot::{Snapshot, Tool, load_document};
 use crate::version;
 
@@ -361,8 +361,7 @@ where
                 Entry::Occupied(e) => e.into_mut(),
                 Entry::Vacant(v) => {
                     let palette = connect(scope)?;
-                    v.insert(crate::candidate::registry_sync_note(
-                        &palette,
+                    v.insert(Registries::new(&palette).sync_note(
                         &registry_uid,
                         &first.kind,
                         progress,

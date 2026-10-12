@@ -9623,12 +9623,22 @@ fn a_record_of_a_pack_from_an_oci_registry_names_its_provider_type() {
         pack.packs[0].registry_provider_type.as_deref(),
         Some("helm")
     );
-    // a Palette that does not answer the listing gives a record that names no provider type
+    // a Palette that answers the listing with a 4xx gives a record that names no provider type
     let unnamed = snapshot_of(&api, "pack:Mirror/csi-aws-ebs@1.64.0").unwrap();
     assert_eq!(unnamed.packs[0].registry_provider_type, None);
     // and a pack from a pack registry names none, with no read of the listing
     let spectro = snapshot_of(&listed, "pack:Public Repo/csi-aws-ebs@1.65.0").unwrap();
     assert_eq!(spectro.packs[0].registry_provider_type, None);
+    assert_eq!(
+        listed.calls(OCI_REGISTRY_SUMMARY),
+        1,
+        "one read for the two records"
+    );
+    // a 5xx of the listing is an error of the record: the provider type is content, so a record
+    // with none in its place is wrong (#327)
+    let broken = api.failing(OCI_REGISTRY_SUMMARY, 500, r#"{"code":"InternalError"}"#);
+    let err = snapshot_of(&broken, "pack:Mirror/csi-aws-ebs@1.64.0").unwrap_err();
+    assert!(matches!(err, Error::Api { status: 500, .. }), "{err}");
 }
 
 // ---- the machine image of the OS pack (#189) ----------------------------------------------------

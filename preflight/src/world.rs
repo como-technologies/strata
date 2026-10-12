@@ -25,7 +25,7 @@ use serde_json::{Map, Value, json};
 use strata::api::{Palette, PaletteApi};
 use strata::progress::Progress;
 use strata::reference::Ref;
-use strata::snapshot::Snapshot;
+use strata::snapshot::{Snapshot, SubjectKind};
 
 use crate::error::{Error, Result};
 
@@ -166,7 +166,7 @@ impl World {
         progress: &Progress,
     ) -> Result<World> {
         progress.note(&format!("reading cluster {uid}"));
-        let cluster = palette.cluster_document(uid)?;
+        let cluster = palette.subject_document(SubjectKind::Cluster, uid)?;
         let cloud_type = cluster
             .pointer("/spec/cloudType")
             .and_then(Value::as_str)

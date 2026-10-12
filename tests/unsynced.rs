@@ -345,6 +345,57 @@ fn packs_and_behind_name_the_registries_that_palette_does_not_sync_when_none_has
 }
 
 #[test]
+fn a_resolve_reads_the_registry_listing_and_the_oci_summary_one_time() {
+    // three layers, each with a reason to read a listing: a listed chart of the OCI registry
+    // (its provider type), a chart that the listing does not have from the same registry
+    // (whether Palette syncs it), and one from the private Helm registry, each registry named by
+    // name (its uid). One resolve reads each listing one time (#327)
+    let listed = json!({
+        "metadata": {"uid": "pack-listed-1"},
+        "spec": {"name": "listed-chart", "version": "1.0.0", "registryUid": ZARF,
+                 "digest": "sha256:l1", "layer": "addon", "type": "oci", "values": "a: 1\n"},
+    });
+    let (path, one) = listing("listed-chart", json!([listed]));
+    let (other_path, empty) = listing("other-chart", json!([]));
+    let api = tenant().with(path, one).with(other_path, empty).with(
+        format!("/v1/packs/listed-chart/registries/{ZARF}"),
+        json!({"tags": [{"tag": "1.0.0", "packUid": "pack-listed-1"}]}),
+    );
+    let dir = tempfile::tempdir().unwrap();
+    let doc = json!({"name": "charts-probe", "version": "1.0.0", "type": "add-on",
+    "cloudType": "all", "layers": [
+        {"name": "listed-chart", "version": "1.0.0", "registry": "zarf"},
+        {"name": CHART, "version": "1.0.0", "registry": "zarf", "values": "replicas: 2\n"},
+        {"name": "other-chart", "version": "1.0.0", "registry": "charts-auth",
+         "values": "replicas: 1\n"},
+    ]});
+    let file = dir.path().join("three.yaml");
+    fs::write(&file, serde_yaml::to_string(&doc).unwrap()).unwrap();
+    let snap = candidate_snapshot(&file, &api).unwrap();
+    assert_eq!(snap.packs.len(), 3);
+    assert_eq!(
+        snap.packs[0].registry_provider_type.as_deref(),
+        Some("zarf"),
+        "the listed chart names the provider type of its registry"
+    );
+    assert_eq!(
+        snap.packs[1].registry_provider_type.as_deref(),
+        Some("zarf")
+    );
+    assert_eq!(snap.packs[2].kind, "helm");
+    assert_eq!(
+        api.calls(REGISTRY_LISTING),
+        1,
+        "one read of the registry listing"
+    );
+    assert_eq!(
+        api.calls(OCI_REGISTRY_SUMMARY),
+        1,
+        "one read of the OCI summary"
+    );
+}
+
+#[test]
 fn packs_reads_the_registry_listing_and_the_oci_summary_one_time_when_no_registry_has_the_pack() {
     // the error names each registry that Palette does not sync. The rule reads the registry
     // listing and the OCI summary one time each, and not one time for each registry

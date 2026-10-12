@@ -227,7 +227,7 @@ fn with_nested(filter: &Value) -> Value {
 }
 
 /// A kind of registry, as the routes of Palette name it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum RegistryKind {
     /// A pack registry. It holds the packs of the type `spectro`.
     Pack,
@@ -246,6 +246,24 @@ impl RegistryKind {
             "helm" => Some(Self::Helm),
             "oci" => Some(Self::Oci),
             _ => None,
+        }
+    }
+
+    /// The kind of a registry as the metadata listing names it in `kind`: `pack`, `helm`, or
+    /// `oci`, the words of the routes. None for another word.
+    pub(crate) fn of_kind(kind: &str) -> Option<Self> {
+        [Self::Pack, Self::Helm, Self::Oci]
+            .into_iter()
+            .find(|k| k.route() == kind)
+    }
+
+    /// The type of a pack of a registry of the kind: `spectro` for a pack registry, else the
+    /// word of the kind.
+    pub(crate) fn pack_type(self) -> &'static str {
+        match self {
+            Self::Pack => "spectro",
+            Self::Helm => "helm",
+            Self::Oci => "oci",
         }
     }
 
@@ -1628,6 +1646,11 @@ mod tests {
         );
         assert_eq!(RegistryKind::of_pack_type("helm"), Some(RegistryKind::Helm));
         assert_eq!(RegistryKind::of_pack_type("manifest"), None);
+        for kind in [RegistryKind::Pack, RegistryKind::Helm, RegistryKind::Oci] {
+            assert_eq!(RegistryKind::of_kind(kind.route()), Some(kind));
+            assert_eq!(RegistryKind::of_pack_type(kind.pack_type()), Some(kind));
+        }
+        assert_eq!(RegistryKind::of_kind("spectro"), None);
     }
 
     #[test]

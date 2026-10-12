@@ -122,9 +122,11 @@ A candidate that breaks one of them gives a record. To ask Palette before you pu
 
 ## The registry lookups
 
-Strata reads `GET /v1/registries/metadata` once, and only when a layer names its
-registry by name. It gives each registry name its uid. Then, for each layer that
-is not a `manifest` layer:
+Strata reads `GET /v1/registries/metadata` one time for each resolve, and only
+when it needs it: when a layer names its registry by name, when the listing does
+not have the version of a layer, or for the name of a registry in an error. It
+gives each registry name its uid. Then, for each layer that is not a `manifest`
+layer:
 
 1. `GET /v1/packs?filters=spec.name=<name>`, in pages of 100: the pack uid, the
    digest, the layer, the type, and the default values of the version in that

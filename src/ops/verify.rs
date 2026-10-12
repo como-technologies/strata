@@ -16,6 +16,7 @@ use crate::diff::{
 use crate::error::{Error, Result, found};
 use crate::json::{is_zero, opt_text, str_at, text};
 use crate::progress::Progress;
+use crate::registry::Registries;
 use crate::snapshot::{APP_KIND, Snapshot, SubjectKind, Tier, Tool};
 
 use super::consumers::{ACTIVE_STATE, INACTIVE_STATE};
@@ -244,8 +245,7 @@ pub fn verify_with<A: PaletteApi>(
             .unwrap_or_default();
         // the sync is a note beside the verdict: a failed read of it is named, and the verdict
         // stands
-        let sync =
-            crate::candidate::registry_sync_note(palette, &p.registry_uid, pack_type, progress)?;
+        let sync = Registries::new(palette).sync_note(&p.registry_uid, pack_type, progress)?;
         let image_ids_changed = images_moved_alone(recorded, &live);
         let unchanged = recorded.root == live.root && image_ids_changed.is_empty();
         let verify = Verify {

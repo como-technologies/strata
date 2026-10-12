@@ -9,6 +9,7 @@ use crate::cloud::supports;
 use crate::error::{Error, Result, found};
 use crate::json::{arr, opt_text, strings, text};
 use crate::progress::Progress;
+use crate::registry::Registries;
 use crate::snapshot::Tool;
 use crate::version;
 
@@ -197,20 +198,10 @@ where
 {
     let palette = connect(None)?;
     // the registry listing gives the names, and the reason of an error that finds no pack
-    let listed = crate::candidate::registry_entries(&palette)?;
-    let visible = crate::candidate::registry_names(&listed);
+    let mut listings = Registries::new(&palette);
     let wanted = match &options.registry {
-        Some(r) => {
-            let found = visible
-                .iter()
-                .find(|(n, u)| n == r || u == r)
-                .ok_or_else(|| Error::RegistryNotFound {
-                    registry: r.to_string(),
-                    available: visible.iter().map(|(n, _)| n.clone()).collect(),
-                })?;
-            vec![found.clone()]
-        }
-        None => visible.clone(),
+        Some(r) => vec![listings.by_ref(r)?],
+        None => listings.names()?,
     };
     progress.note(&format!("reading the versions of {name}"));
     let entries = crate::candidate::versions_of(&palette, name)?;
@@ -336,7 +327,7 @@ where
     // while a profile pins the pack. So the error names each such registry: it says why the
     // listing has nothing
     if !had_the_pack {
-        let unsynced = crate::candidate::unsynced_names(&palette, listed, &wanted)?;
+        let unsynced = listings.unsynced_names(&wanted)?;
         return Err(match (&options.registry, wanted.as_slice()) {
             // --registry named one registry, and wanted holds only that one
             (Some(_), [(registry, _)]) => Error::PackNotFound {
