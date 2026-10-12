@@ -4,7 +4,7 @@
 //! tenant registers. A pack names the clouds that it supports in `spec.cloudTypes`, and a
 //! profile names its cloud in `spec.published.cloudType`. The create of a profile version
 //! refuses a pack that does not support the cloud of the profile, with the code
-//! `PackNotSupported`. The function [`supports`] is that rule. `packs --cloud`, `behind`, and the
+//! `PackNotSupported`. The function `supports` is that rule. `packs --cloud`, `behind`, and the
 //! check of a candidate use it. The book states it in "A pack that supports a cloud". Each
 //! name of a cloud type that the code compares or sends is in this module.
 
