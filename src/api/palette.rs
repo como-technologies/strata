@@ -1838,4 +1838,139 @@ mod tests {
             .unwrap_err();
         assert!(matches!(err, Error::Api { status: 500, .. }), "{err}");
     }
+
+    #[test]
+    fn a_uid_with_a_slash_goes_into_each_route_escaped() {
+        // with no escape, a `/` in a uid ends the segment, and a `?` starts the query
+        assert_eq!(
+            route(PROFILES, &["a/b", "packs", "x?y"]),
+            "/v1/clusterprofiles/a%2Fb/packs/x%3Fy"
+        );
+        let uid = "a/b";
+        let cluster = "/v1/spectroclusters/a%2Fb";
+        let profile = "/v1/clusterprofiles/a%2Fb";
+        let p = Palette::new(
+            MemoryApi::new()
+                .with(cluster, json!({"metadata": {"uid": uid}}))
+                .with(
+                    format!("{cluster}/packs/resolvedValues"),
+                    json!({"profiles": []}),
+                )
+                .with(
+                    "/v1/notifications/spectrocluster/a%2Fb",
+                    json!({"items": [1], "listmeta": {"continue": ""}}),
+                )
+                .with(profile, json!({"metadata": {"uid": uid}}))
+                .with(
+                    format!("{profile}/packs/manifests"),
+                    json!({"spec": {"packs": []}}),
+                )
+                .with(format!("{profile}/variables"), json!({"variables": []})),
+        );
+        let doc = p.subject_document(SubjectKind::Cluster, uid).unwrap();
+        assert_eq!(text(&doc, "/metadata/uid"), uid);
+        let values = p.resolved_values(SubjectKind::Cluster, uid).unwrap();
+        assert_eq!(values["profiles"], json!([]));
+        assert_eq!(p.cluster_notifications(uid).unwrap(), vec![json!(1)]);
+        assert_eq!(
+            text(&p.profile_document(uid).unwrap(), "/metadata/uid"),
+            uid
+        );
+        let raw = p.fetch_profile(uid, &Progress::silent()).unwrap();
+        assert_eq!(raw.variables, json!({"variables": []}));
+    }
+
+    #[test]
+    fn one_pager_walks_a_get_listing_and_a_post_search_by_continue() {
+        let notifications = "/v1/notifications/spectrocluster/c1";
+        let search = with_limit(EDGE_HOST_SEARCH);
+        let api = MemoryApi::new()
+            .with(
+                notifications,
+                json!({"items": [1, 2], "listmeta": {"continue": "t1"}}),
+            )
+            .with(
+                format!("{notifications}?continue=t1"),
+                json!({"items": [3], "listmeta": {"continue": ""}}),
+            )
+            .with(
+                format!("POST {search}"),
+                json!({"items": [4], "listmeta": {"continue": "t 2"}}),
+            )
+            .with(
+                format!("POST {search}&continue=t%202"),
+                json!({"items": null, "listmeta": {"continue": "t3"}}),
+            );
+        let p = Palette::new(&api);
+        assert_eq!(
+            p.cluster_notifications("c1").unwrap(),
+            vec![json!(1), json!(2), json!(3)]
+        );
+        // a page with no items ends the search, also with a token
+        assert_eq!(p.edge_hosts().unwrap(), vec![json!(4)]);
+        assert_eq!(api.posted().len(), 2);
+        assert_eq!(page_after("/v1/x", ""), "/v1/x");
+        assert_eq!(page_after("/v1/x", "a b"), "/v1/x?continue=a%20b");
+        assert_eq!(
+            page_after("/v1/x?limit=50", "t"),
+            "/v1/x?limit=50&continue=t"
+        );
+    }
+
+    #[test]
+    fn fetch_subject_reads_each_kind_by_uid_and_then_by_name_after_a_404() {
+        // the three kinds share one lookup: the uid first, then the one object of the name
+        let templates =
+            |uid: &str| json!({"metadata": {"uid": uid}, "spec": {"clusterProfileTemplates": []}});
+        let api = MemoryApi::new()
+            .with(
+                CLUSTER_LISTING,
+                json!([{"metadata": {"name": "lab", "uid": "c1"}}]),
+            )
+            .with(CLUSTER_SEARCH_SCHEMA, json!({"schema": {"properties": []}}))
+            .with("/v1/spectroclusters/c1", templates("c1"))
+            .with(
+                "/v1/spectroclusters/c1/profiles/packs/manifests",
+                json!({"profiles": []}),
+            )
+            .with("/v1/spectroclusters/c1/variables", json!([]))
+            .with(
+                CLUSTER_GROUP_LISTING,
+                json!({"items": [{"name": "dev", "uid": "g1"}]}),
+            )
+            .with("/v1/clustergroups/g1", templates("g1"))
+            .with(
+                format!("POST {}", with_limit(EDGE_HOST_SEARCH)),
+                json!({"items": [{"metadata": {"name": "store", "uid": "e1"}}],
+                    "listmeta": {"continue": ""}}),
+            )
+            .with("/v1/edgehosts/e1", templates("e1"));
+        let p = Palette::new(&api);
+        let quiet = Progress::silent();
+        for (kind, name, uid) in [
+            (SubjectKind::Cluster, "lab", "c1"),
+            (SubjectKind::ClusterGroup, "dev", "g1"),
+            (SubjectKind::EdgeHost, "store", "e1"),
+        ] {
+            let by_uid = p.fetch_subject(kind, uid, &quiet).unwrap();
+            assert_eq!(text(&by_uid.cluster, "/metadata/uid"), uid);
+            let by_name = p.fetch_subject(kind, name, &quiet).unwrap();
+            assert_eq!(text(&by_name.cluster, "/metadata/uid"), uid);
+            let err = p.fetch_subject(kind, "nope", &quiet).unwrap_err();
+            let expected = match kind {
+                SubjectKind::Cluster => "cluster-not-found",
+                SubjectKind::ClusterGroup => "cluster-group-not-found",
+                SubjectKind::EdgeHost => "edge-host-not-found",
+            };
+            assert_eq!(err.kind(), expected, "{err}");
+        }
+        // another error of the document by uid returns, and no name is tried
+        let lookups = api.calls(CLUSTER_LISTING);
+        let broken = api.clone().failing("/v1/spectroclusters/c9", 500, "{}");
+        let err = Palette::new(&broken)
+            .fetch_subject(SubjectKind::Cluster, "c9", &quiet)
+            .unwrap_err();
+        assert!(matches!(err, Error::Api { status: 500, .. }), "{err}");
+        assert_eq!(broken.calls(CLUSTER_LISTING), lookups);
+    }
 }
