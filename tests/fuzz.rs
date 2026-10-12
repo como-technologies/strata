@@ -3,10 +3,10 @@
 //!
 //! One property holds everywhere: strata answers, or it errors with a kind and exit `2`. It never
 //! panics, and it never leaves a thread unwound. The generator is deterministic, so a failure
-//! repeats: each test prints its seed, and `STRATA_FUZZ_SEED=<n> cargo test --test fuzz` runs that
+//! repeats: each test prints its seed, and `STRATA_FUZZ_SEED=<n> cargo test fuzz::` runs that
 //! seed alone. The default seed is fixed, so CI runs the same cases every time.
 
-mod common;
+use crate::common;
 
 use std::process::Command;
 

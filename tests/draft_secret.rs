@@ -9,7 +9,7 @@ use strata::error::Error;
 use strata::progress::Progress;
 use strata::snapshot::{DRAFT_TEMPLATE, PUBLISHED_TEMPLATE};
 
-mod common;
+use crate::common;
 use common::{
     manifest_content, manifest_entity, manifest_route, no_manifests, no_template, no_variables,
     profile_document, profile_route, serve_profile, snapshot_of, template,

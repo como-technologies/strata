@@ -13,7 +13,7 @@ use strata::ops::{self, PairStatus, Policy};
 use strata::progress::Progress;
 use strata::render::{self, Format};
 
-mod common;
+use crate::common;
 use common::{
     OCI_REGISTRY_SUMMARY, REGISTRY_LISTING, candidate_snapshot, pack_listing_route,
     profile_document, snapshot_of, template,

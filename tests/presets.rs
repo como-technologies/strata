@@ -8,7 +8,7 @@ use serde_json::{Value, json};
 use strata::api::MemoryApi;
 use strata::snapshot::{PresetOption, Snapshot};
 
-mod common;
+use crate::common;
 use common::candidate_snapshot;
 
 const REGISTRY: &str = "reg-public";

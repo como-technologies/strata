@@ -31,6 +31,7 @@ The crate is edition 2024 and needs Rust 1.88 or later. `rust-version` in
 | `src/config.rs`, `src/error.rs`, `src/color.rs`, `src/progress.rs` | The settings, the error kinds and their exit codes, the color decision, and the progress notes on standard error. |
 | `src/canon.rs`, `src/layer.rs`, `src/version.rs`, `src/reference.rs` | The canonical form, the layers, the version order, and what a ref means. |
 | `xtask/` | The development tools: the stand-in for the Palette API (`palette.rs`), the tenant of each chapter of the book (`tenant.rs`, `chapters.rs`), and the runner that writes `docs/src/output/` (`book.rs`). |
+| `tests/` | The tests of the crate, in one crate: `main.rs` names each file as a module, and `common/mod.rs` holds each helper that two files use. `cargo test verify::` runs the tests of `verify.rs`. |
 | `adapter/` | The adapter for knurl, a package of its own: see [The knurl adapter](../automation/knurl.md). |
 | `preflight/` | `strata-preflight`, a package of its own in the workspace: the rule format (`rule.rs`), the catalog (`catalog.rs`, `rules/*.yaml`), the jq engine (`jq.rs`), the world (`world.rs`), the checks (`probe.rs`), the run and the watch (`run.rs`), the confidence and the ledger (`confidence.rs`, `evidence/runs.yaml`), the report (`report.rs`, `html.rs`), and the fixtures of its tests (`fixture.rs`, `rules/fixtures/`). See [How preflight works](../internals/preflight.md). |
 
@@ -87,7 +88,7 @@ The generator is deterministic, so a failure repeats. Each case names its seed,
 and a seed runs alone:
 
 ```bash
-STRATA_FUZZ_SEED=1337 cargo test --test fuzz
+STRATA_FUZZ_SEED=1337 cargo test fuzz::
 ```
 
 The default seed is fixed, so each run of CI fuzzes the same cases. Give a new

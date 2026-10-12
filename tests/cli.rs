@@ -1,6 +1,6 @@
 //! End-to-end tests over raw-API-shaped fixtures (no network).
 
-mod common;
+use crate::common;
 
 use std::path::{Path, PathBuf};
 use std::process::Command;

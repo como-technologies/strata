@@ -13,7 +13,7 @@ use strata::progress::Progress;
 use strata::render::{self, Format};
 use strata::snapshot::{DRAFT_TEMPLATE, PUBLISHED_TEMPLATE, Snapshot};
 
-mod common;
+use crate::common;
 use common::{
     PROFILE_LISTING, manifest_content, manifest_entity, manifest_route, no_template, no_variables,
     profile_document, serve_profile, snapshot_of,

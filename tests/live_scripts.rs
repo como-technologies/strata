@@ -1,7 +1,7 @@
 //! The scripts of the live example under examples/live/.
 //! No network: every host and every command outside this repository is a recording stand-in.
 
-mod common;
+use crate::common;
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};

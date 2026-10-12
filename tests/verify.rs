@@ -1,6 +1,6 @@
 //! Library-level tests for the operations, with an in-memory Palette API.
 
-mod common;
+use crate::common;
 
 use std::fs;
 use std::path::Path;

@@ -1,7 +1,7 @@
 //! The scripts under scripts/dev/, which only this repository runs.
 //! No network: every host and every command outside this repository is a recording stand-in.
 
-mod common;
+use crate::common;
 
 use std::path::Path;
 use std::process::{Command, Output};

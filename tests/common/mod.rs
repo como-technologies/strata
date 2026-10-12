@@ -28,8 +28,6 @@
 //! A cluster gives each variable its default value, or the value in its `values`; a sensitive
 //! variable always gets SECRET_VALUE, which no document may contain.
 
-#![allow(dead_code)]
-
 use std::fs;
 use std::path::Path;
 use std::process::Command;

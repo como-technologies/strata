@@ -12,7 +12,7 @@ use strata::progress::Progress;
 use strata::render::{self, Format};
 use strata::snapshot::Snapshot;
 
-mod common;
+use crate::common;
 use common::{no_manifests, no_variables, profile_document, serve_profile, snapshot_of, template};
 
 const PROFILE: &str = "64f0000000000000000000d2";
