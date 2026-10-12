@@ -230,8 +230,8 @@ pub struct ClusterVariablesDiff {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct TierDiff {
-    /// `applied`, `running`, `policy`, `shape`, or `labels`. Between two clusters, `applied`
-    /// compares `spcInfraHash` alone: Palette's `spcHash` is its own for each cluster.
+    /// The tier compared. Between two clusters, `applied` compares `spcInfraHash` alone:
+    /// Palette's `spcHash` is its own for each cluster.
     pub tier: Tier,
     /// True when the hashes are equal.
     pub same: bool,
@@ -558,7 +558,7 @@ pub struct PackSide {
     pub registry_uid: String,
     /// The raw digest that fed the upstream hash
     pub upstream: String,
-    /// Which field fed it: `packRef.digest`, `packSummary.digest`, or `none`.
+    /// Which field of Palette fed it: see [`UpstreamSource`].
     pub upstream_source: UpstreamSource,
     /// Hash of the canonical values.
     pub values_hash: String,
