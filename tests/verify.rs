@@ -4098,7 +4098,11 @@ fn list_keeps_the_listing_alone_when_palette_has_no_profile_search() {
     )
     .unwrap();
     assert!(
-        l.profiles.as_ref().unwrap().iter().all(|p| p.scope.is_none()),
+        l.profiles
+            .as_ref()
+            .unwrap()
+            .iter()
+            .all(|p| p.scope.is_none()),
         "a 405 is no search, as a 404 is"
     );
     let l = listing(

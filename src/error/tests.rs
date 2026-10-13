@@ -327,8 +327,8 @@ fn a_transport_error_and_a_body_that_is_not_json_name_the_method_of_the_request(
         }
     }
     // the default POST of an API gives a transport error of a POST
-    let post = crate::api::PaletteApi::post_json(&NoPost, "/v1/x", &serde_json::Value::Null)
-        .unwrap_err();
+    let post =
+        crate::api::PaletteApi::post_json(&NoPost, "/v1/x", &serde_json::Value::Null).unwrap_err();
     assert_eq!(post.to_string(), "POST /v1/x: this API sends no POST");
     assert_eq!(post.to_json()["method"], "POST");
     let not_json = Error::NotJson {
@@ -353,7 +353,10 @@ fn an_empty_list_of_profiles_or_of_registries_reads_none_in_the_message() {
         profile: "nope".into(),
         applied: Vec::new(),
     };
-    assert!(profile.to_string().ends_with("; applied: none"), "{profile}");
+    assert!(
+        profile.to_string().ends_with("; applied: none"),
+        "{profile}"
+    );
     let registry = Error::RegistryNotFound {
         registry: "Mirror".into(),
         available: Vec::new(),
@@ -467,6 +470,9 @@ fn to_json_carries_kind_message_and_the_variant_fields() {
         serde_json::json!(["reg-public", "reg-system"])
     );
     let app = by_kind("app-profile-name-ambiguous");
-    assert_eq!((app["name"].clone(), app["version"].clone()), ("shop".into(), "1.0.0".into()));
+    assert_eq!(
+        (app["name"].clone(), app["version"].clone()),
+        ("shop".into(), "1.0.0".into())
+    );
     assert_eq!(app["uids"], serde_json::json!(["a1", "a2"]));
 }

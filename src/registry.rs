@@ -78,7 +78,9 @@ impl<'a, A: PaletteApi> Registries<'a, A> {
     pub(crate) fn summary(&mut self, kind: RegistryKind) -> Result<Option<&[Value]>> {
         let entries = match self.summaries.entry(kind) {
             Entry::Occupied(e) => e.into_mut(),
-            Entry::Vacant(v) => v.insert(served(self.palette.registry_summary(kind))?.map(take_items)),
+            Entry::Vacant(v) => {
+                v.insert(served(self.palette.registry_summary(kind))?.map(take_items))
+            }
         };
         Ok(entries.as_deref())
     }
@@ -485,7 +487,10 @@ mod tests {
             let err = Registries::new(&refused)
                 .oci_provider_type("reg-zarf")
                 .unwrap_err();
-            assert!(matches!(err, Error::Api { status: s, .. } if s == status), "{err}");
+            assert!(
+                matches!(err, Error::Api { status: s, .. } if s == status),
+                "{err}"
+            );
         }
         // a 404 of the metadata is an error: each Palette has the listing
         let none = Palette::new(MemoryApi::new());

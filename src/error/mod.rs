@@ -126,7 +126,10 @@ pub enum Error {
         profiles: Vec<crate::scope::ScopedUid>,
     },
     /// `cluster:<uid>/<profile>` named a profile the cluster does not run.
-    #[error("cluster '{cluster}' has no applied profile named '{profile}'; applied: {}", list_or_none(applied))]
+    #[error(
+        "cluster '{cluster}' has no applied profile named '{profile}'; applied: {}",
+        list_or_none(applied)
+    )]
     ClusterProfileNotFound {
         /// Cluster uid.
         cluster: String,
@@ -364,7 +367,10 @@ pub enum Error {
         registries: Vec<String>,
     },
     /// A candidate names a registry that is not visible with this key.
-    #[error("no registry named '{registry}' is visible; registries: {}", list_or_none(available))]
+    #[error(
+        "no registry named '{registry}' is visible; registries: {}",
+        list_or_none(available)
+    )]
     RegistryNotFound {
         /// The registry name asked for.
         registry: String,
